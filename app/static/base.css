@@ -37,8 +37,8 @@
 }
 
 /* ═══ The candidate looks — A DECISION AID WITH A DELETION DATE ═══
-   Three looks to compare in the running app; one gets picked and the other two get
-   deleted along with this block, the [data-theme] block in palette.css, the one in
+   Candidate looks to compare in the running app; one gets picked and the rest get
+   deleted along with this block, the [data-theme] blocks in palette.css, the one in
    agent-chat.css, and the toggle on /admin. Selected by data-theme on <html>, from
    a cookie (app/web/config.py). :root above IS "paper-sans", the default.
 
@@ -57,6 +57,20 @@
     --prose: var(--ui);
     --prose-size: 15px;
     --prose-lh: 1.55;
+}
+/* The face plays, all on the half-tint paper (palette.css). Each sets --ui, and
+   --prose follows it through the :root default, so the play shows in the chrome
+   and the prose alike — a face that only appeared in a reply would be judged on
+   a tenth of the pixels it would actually cover. System faces only, same rule as
+   Georgia above; each falls back to the default stack off macOS. */
+:root[data-theme="half-helvetica"] {
+    --ui: "Helvetica Neue", Helvetica, "Segoe UI", Arial, sans-serif;
+}
+:root[data-theme="half-avenir"] {
+    --ui: "Avenir Next", Avenir, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+}
+:root[data-theme="half-seravek"] {
+    --ui: Seravek, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 }
 
 body { background: var(--bg); color: var(--fg); margin: 0; padding: 0; }

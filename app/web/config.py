@@ -131,6 +131,11 @@ THEMES = {
     "classic": "Classic — white paper, one sans face at 15px",
     "paper": "Paper + serif — canary paper, Georgia prose",
     "paper-sans": "Paper + sans — canary paper, sans prose at reading size",
+    "half": "Half tint — the canary at half chroma, same sans",
+    "third": "Third tint — the canary at a third chroma, same sans",
+    "half-helvetica": "Half tint, Helvetica Neue",
+    "half-avenir": "Half tint, Avenir Next",
+    "half-seravek": "Half tint, Seravek",
 }
 
 

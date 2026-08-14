@@ -147,7 +147,7 @@
 
 /* The paper as it was before the canary — a reference to compare against, selected
    by data-theme on <html>. A DECISION AID WITH A DELETION DATE: see the block in
-   base.css. Surfaces ONLY. Every hue above is shared by all three looks, which is
+   base.css. Surfaces ONLY. Every hue above is shared by every look, which is
    why there is no second copy of the states here and must never be one — a theme
    that redefined a verdict colour would make green mean something different
    depending on a cookie.
@@ -161,4 +161,26 @@
     --sunk-deep: #f5f5f6;
     --border: #e9e9eb;
     --border-strong: #d4d4d6;
+}
+
+/* The canary at half and at a third of its chroma — the :root ladder's six values
+   with OKLab a/b scaled by 0.5 and 1/3, lightness untouched, so the card lift the
+   default ladder bought (3.5 L* between --raised and --bg) is identical and only
+   the temperature drops. The prefix match puts every half-* face play on the same
+   paper, so the face is the only thing those looks vary. */
+:root[data-theme^="half"] {
+    --bg: #f6f5f0;
+    --hover: #ebe8e2;
+    --sunk: #f2f1ec;
+    --sunk-deep: #eeede7;
+    --border: #e6e4dc;
+    --border-strong: #d4d2ca;
+}
+:root[data-theme="third"] {
+    --bg: #f6f5f2;
+    --hover: #eae8e4;
+    --sunk: #f2f1ee;
+    --sunk-deep: #eeede9;
+    --border: #e5e4df;
+    --border-strong: #d4d2cd;
 }
