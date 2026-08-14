@@ -152,10 +152,29 @@ function newAssistant() {
   b.appendChild(spinner);
   let think = null, thinkText = null, body = null, tools = null;
   const bodies = [];  // every text region opened, in order — what the swap renders
+  const bodyRaw = new Map();  // region → its raw markdown source, for the final match check
+  const bodyVersion = new Map();  // region → latest render request issued, so a slow
+                                   // response from an earlier chunk can't overwrite a newer one
   const pendingTools = [];  // tool_call disclosures awaiting their tool_result (FIFO)
   log.appendChild(b); scroll();
   function stop() { if (spinner.parentNode) spinner.remove(); }
   function closeRegions() { think = null; thinkText = null; body = null; tools = null; }
+  // Fire-and-forget: a slower response from an earlier, shorter chunk must not clobber
+  // a newer, longer one that already landed — bodyVersion picks the request that wins.
+  async function renderLive(region, raw) {
+    const version = (bodyVersion.get(region) || 0) + 1;
+    bodyVersion.set(region, version);
+    const r = await fetch(`/chat/${SID}/render-markdown`, {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({text: raw}),
+    });
+    if (!r.ok || bodyVersion.get(region) !== version) return;
+    const data = await r.json();
+    if (bodyVersion.get(region) !== version) return;
+    region.innerHTML = data.html;
+    region.classList.remove("ac-streaming");
+    scroll();
+  }
   // The bare name, not the friendly label: the row is furniture, and every row opening
   // the same way is what lets the eye skip the lot. The label is the tooltip, so it
   // costs the page nothing and is still reachable.
@@ -184,10 +203,15 @@ function newAssistant() {
     },
     text(t) {
       stop();
-      // Plain text while the turn is in flight: a half-arrived "[run](htt" would
-      // render as broken markup and flicker on every chunk.
+      // Each event already carries a whole TextBlock (sdk_engine.py), not a token
+      // delta, so there's no half-arrived "[run](htt" to worry about — only whatever
+      // the block itself contains. Re-render the region's full markdown so far on
+      // every chunk; ac-streaming's plain-text fallback covers the request's flight time.
       if (!body) { closeRegions(); body = el("ac-body ac-streaming"); bodies.push(body); b.appendChild(body); }
-      body.textContent += t; scroll();
+      const raw = (bodyRaw.get(body) || "") + t;
+      bodyRaw.set(body, raw);
+      body.textContent = raw; scroll();
+      renderLive(body, raw);
     },
     // The SECOND call is what makes a group: one call keeps the plain row, and the
     // row already on the page moves inside rather than being drawn twice. The count
@@ -225,8 +249,11 @@ function newAssistant() {
       scroll();
     },
     error(t) { stop(); closeRegions(); const e = el("ac-err"); e.textContent = "⚠ " + t; b.appendChild(e); scroll(); },
-    // Turn over: swap the plain text for the server's markdown of the SAME text, so
-    // this bubble matches what a page reload renders. Any mismatch leaves it as text.
+    // Turn over: reconcile against the server's markdown of the SAME stored text, so
+    // this bubble ends up matching what a page reload renders. Each region is already
+    // showing its own live-rendered markdown by now — this is a final consistency
+    // check against the persisted transcript, not the first render. Any mismatch
+    // leaves the region as its last live-rendered (or plain, if that never landed) state.
     async renderStoredMarkdown() {
       if (!bodies.length) return;
       const r = await fetch(`/chat/${SID}/rendered-reply`);
@@ -237,7 +264,7 @@ function newAssistant() {
       // different reply, and swapping the segments that happen to line up would
       // reorder the bubble.
       if (segments.length !== bodies.length) return;
-      if (!bodies.every((d, i) => d.textContent === segments[i].text)) return;
+      if (!bodies.every((d, i) => (bodyRaw.get(d) ?? d.textContent) === segments[i].text)) return;
       bodies.forEach((d, i) => { d.innerHTML = segments[i].html; d.classList.remove("ac-streaming"); });
       scroll();
     },

@@ -125,10 +125,27 @@ def test_the_swap_endpoint_404s_on_an_unknown_session() -> None:
     assert client.get("/chat/nosuchsession/rendered-reply").status_code == 404
 
 
-def test_the_streaming_path_shows_plain_text_until_the_turn_ends() -> None:
-    """Mid-turn chunks land via textContent; only the `done` event asks for HTML."""
+def test_the_streaming_path_renders_each_chunk_and_still_reconciles_at_done() -> None:
+    """Each chunk is a whole TextBlock, re-rendered live; `done` still reconciles."""
     script = _CHAT_TEMPLATE.read_text(encoding="utf-8")
-    assert "body.textContent += t;" in script
     assert "renderStoredMarkdown" in script.split('ev.kind === "done"')[1]
     streaming_text_handler = script.split("    text(t) {")[1].split("},")[0]
-    assert "innerHTML" not in streaming_text_handler
+    assert "renderLive(body, raw)" in streaming_text_handler
+
+
+def test_the_render_markdown_endpoint_renders_with_the_same_sealed_renderer() -> None:
+    sid = open_session_saying("placeholder")
+    text = "**bold**, a [link](http://127.0.0.1:8799/x) and `code`"
+    r = client.post(f"/chat/{sid}/render-markdown", json={"text": text})
+    assert r.json()["html"] == str(render_markdown(text))
+
+
+def test_the_render_markdown_endpoint_escapes_raw_html() -> None:
+    sid = open_session_saying("placeholder")
+    r = client.post(f"/chat/{sid}/render-markdown", json={"text": "<script>alert(1)</script>"})
+    assert "<script>" not in r.json()["html"]
+
+
+def test_the_render_markdown_endpoint_404s_on_an_unknown_session() -> None:
+    r = client.post("/chat/nosuchsession/render-markdown", json={"text": "hi"})
+    assert r.status_code == 404
