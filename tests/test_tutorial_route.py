@@ -44,8 +44,8 @@ def _start_the_tour() -> str:
     return location.rsplit("/", 1)[-1]
 
 
-def test_the_zero_state_offers_the_tour_and_nothing_else() -> None:
-    """One door. A reader with no projects has nothing to judge a blank form against."""
+def test_the_tour_block_offers_only_the_tour() -> None:
+    """The tour markup is its own block: no second door inside it."""
     page = client.get("/")
     assert page.status_code == 200
     assert "New here? Take the guided tour" in page.text
@@ -53,39 +53,42 @@ def test_the_zero_state_offers_the_tour_and_nothing_else() -> None:
     assert 'action="/tutorial"' in page.text
     assert 'class="btn primary" id="tour-cta"' in page.text
 
-    zero_state = page.text.split('id="zero-state"')[1].split("</div>")[0]
-    assert "New project" not in zero_state, "the zero state grew a second door again"
+    tour_state = page.text.split('id="tour-state"')[1].split("</div>")[0]
+    assert "New project" not in tour_state, "the tour block grew a second door"
 
 
 def test_new_project_stays_reachable_from_the_header() -> None:
-    """Removing it from the zero state must not strand the path to a blank project."""
+    """The path to a blank project lives in the header regardless of tour visibility."""
     page = client.get("/")
 
-    header = page.text.split('class="dash-header"')[1].split('id="zero-state"')[0]
+    header = page.text.split('class="dash-header"')[1].split('id="tour-state"')[0]
     assert 'href="/project/new"' in header
     assert "＋ New project" in header
 
 
-def test_the_zero_state_records_only_that_this_browser_started_the_tour() -> None:
-    """No server-side tour state exists, so the page must not imply the person toured."""
+def test_the_tour_visibility_is_decided_client_side_by_this_browser() -> None:
+    """No server-side tour state exists: the page ships both states and lets JS choose."""
     page = client.get("/")
 
+    assert 'id="tour-state" style="display:none;"' in page.text
     assert 'localStorage.setItem(KEY, "1")' in page.text
     assert '"carbonpaper.tour.started"' in page.text
-    # A returning browser gets a quieter button — never a claim about what was finished.
-    assert "Take the guided tour again" in page.text
+    assert 'document.getElementById("tour-state").style.display = ""' in page.text
     for claim in ("you have taken", "you've taken", "tour complete", "already toured"):
         assert claim not in page.text.lower(), claim
 
 
-def test_a_home_page_with_projects_does_not_offer_the_tour(examples_root: Path) -> None:
+def test_a_home_page_with_projects_still_ships_the_tour_markup_hidden(
+    examples_root: Path,
+) -> None:
+    """Tour visibility no longer depends on project count — the browser decides."""
     _make_project(examples_root)
     page = client.get("/")
     assert page.status_code == 200
     assert "already-here" in page.text
     assert "No projects yet" not in page.text
-    assert _CTA not in page.text
-    assert "/tutorial" not in page.text
+    assert _CTA in page.text
+    assert 'id="tour-state" style="display:none;"' in page.text
 
 
 def test_the_route_opens_a_session_bound_to_the_tutorial_agent() -> None:
