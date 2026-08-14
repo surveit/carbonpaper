@@ -228,8 +228,17 @@
    case, so the value cell wraps rather than truncating or scrolling. */
 table.kv { border-collapse: collapse; width: 100%; font-size: 13px; }
 table.kv th {
-    text-align: left; vertical-align: top; font-weight: 600; white-space: nowrap;
+    text-align: left; vertical-align: top; font-weight: 600;
     width: 1%; padding: 5px 14px 5px 0;
+}
+/* The label column stops being one line once a description sits under the name, so
+   it takes a ceiling instead of `nowrap` — a reviewer reading a column name for the
+   first time needs what it means beside it, not behind a hover. */
+table.kv th code { white-space: nowrap; }
+table.kv th .kv-description {
+    display: block; max-width: 22rem; margin-top: 2px;
+    font-weight: 400; font-size: 12px; line-height: 1.35; color: var(--muted);
+    white-space: normal;
 }
 table.kv td.kv-value {
     padding: 5px 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg);
