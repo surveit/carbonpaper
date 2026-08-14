@@ -4,6 +4,8 @@ attached dataset, plus one leftover config that no longer validates — points
 the projects root and the repo root at it, and checks each page renders the truthful state."""
 from __future__ import annotations
 
+import re
+from datetime import datetime, timedelta
 
 import pandas as pd
 import pytest
@@ -23,6 +25,7 @@ from app.core import paths
 from app.core.frames import write_frame_file
 from app.core.persistence import get_store
 from app.evals.store import save_eval_config, save_eval_run
+from app.runtime.run_log import count_events
 from app.services.versioning import WorkflowVersion
 from app.services import workspace
 from stage_seed import add_stage, read_stages, set_stages
@@ -309,6 +312,88 @@ def test_eval_lists_its_runs_in_the_runs_index_table(tmp_path):
     assert ">run id</th>" not in r.text
     assert "20s" in r.text                       # measured off started_at/finished_at
     assert "50.0%" in r.text and "Scored" in r.text
+
+
+# ── A run still in flight: the page reads as in flight, and says nothing else ──
+
+def _save_running_run(run_id: str = "running1", *, seconds_ago: int = 5) -> None:
+    save_eval_run("demo", EvalRun(
+        id=run_id, config="label_check", project="demo",
+        workflow_version="v1", status="running",
+        settings=EvalRunSettings(can_score_declaratively=True,
+                                 frontier=["classify"], blocking_stages=[]),
+        started_at=(datetime.now() - timedelta(seconds=seconds_ago)).isoformat(
+            timespec="seconds"),
+    ))
+
+
+def test_run_page_offers_the_log_panel_before_the_run_has_logged_anything():
+    _save_running_run()
+
+    r = client.get("/project/demo/evals/label_check/runs/running1")
+
+    # The redirect lands here milliseconds after the run started, so the log the
+    # panel tails is still empty — the panel is what shows it filling.
+    assert count_events("demo", "running1") == 0
+    assert 'class="eval-run-log"' in r.text
+    assert 'data-base="/project/demo/evals/label_check/runs/running1"' in r.text
+
+
+def test_a_vetoed_run_still_offers_no_log_panel():
+    save_eval_run("demo", EvalRun(
+        id="vetoed3", config="label_check", project="demo",
+        workflow_version="v1", status="vetoed",
+        settings=EvalRunSettings(can_score_declaratively=False, frontier=["classify"],
+                                 blocking_stages=["aggregate_it"]),
+    ))
+
+    r = client.get("/project/demo/evals/label_check/runs/vetoed3")
+
+    assert 'class="eval-run-log"' not in r.text
+
+
+def test_run_page_claims_no_score_for_a_run_still_executing():
+    _save_running_run("running2")
+
+    r = client.get("/project/demo/evals/label_check/runs/running2")
+
+    assert "still executing" in r.text
+    assert 'class="stat-strip"' not in r.text      # no rows-scored / accuracy tiles
+    assert "eval-rows" not in r.text               # no scored-rows table
+    assert "no result table" not in r.text         # not the vetoed/errored wording
+    assert "No metrics recorded" not in r.text     # nor the finished-with-none wording
+
+
+def test_run_page_counts_the_time_a_run_in_flight_has_been_running():
+    _save_running_run("running3")
+
+    r = client.get("/project/demo/evals/label_check/runs/running3")
+
+    # It has not run, it is running — and the figure has a hook the poller moves.
+    assert re.search(r'running for <span id="eval-run-elapsed">\d+s</span>', r.text)
+
+
+def test_only_a_running_page_polls_for_its_status(tmp_path):
+    _save_running_run("running4")
+    _save_scored_run(tmp_path, _ONE_PASS_ONE_FAIL, run_id="done4")
+
+    live = client.get("/project/demo/evals/label_check/runs/running4")
+    done = client.get("/project/demo/evals/label_check/runs/done4")
+
+    assert "/project/demo/evals/label_check/runs/running4/status" in live.text
+    assert "setInterval" in live.text
+    # A finished run has nothing left to poll for, so no timer is started at all.
+    assert "/project/demo/evals/label_check/runs/done4/status" not in done.text
+    assert "setInterval" not in done.text
+
+
+def test_the_runs_table_words_a_run_in_flight_instead_of_printing_its_token():
+    _save_running_run("running5")
+
+    r = client.get("/project/demo/evals/label_check")
+
+    assert ">Running<" in r.text
+    assert "%" not in r.text.split('class="stages runs-table"')[1].split("</table>")[0]
 
 
 def test_a_run_that_stored_no_accuracy_is_not_given_one(tmp_path):

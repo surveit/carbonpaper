@@ -45,7 +45,8 @@ class EvalRunRow(BaseModel):
 
 # What each stored status means, in the reader's words — beside the score, the way
 # the runs index puts its outcome beside the stage strip.
-_OUTCOME_WORDS = {"scored": "Scored", "vetoed": "Not scorable", "error": "Error"}
+_OUTCOME_WORDS = {"running": "Running", "scored": "Scored",
+                  "vetoed": "Not scorable", "error": "Error"}
 
 
 def build_eval_run_rows(project_id: str, runs: list[EvalRun]) -> list[EvalRunRow]:
@@ -71,7 +72,9 @@ def _build_run_row(
 
 
 def describe_eval_run_duration(run: EvalRun) -> str | None:
-    seconds = measure_elapsed_seconds(run.started_at, run.finished_at, still_running=False)
+    """A run in flight has no `finished_at`, so its elapsed time is measured to now."""
+    seconds = measure_elapsed_seconds(run.started_at, run.finished_at,
+                                      still_running=run.is_running())
     return None if seconds is None else format_duration(seconds)
 
 

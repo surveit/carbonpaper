@@ -3,15 +3,16 @@ production run-lifecycle entry points (enforced by an import-linter contract). E
 other run driver goes through here rather than importing the runner directly."""
 from __future__ import annotations
 
-import threading
-import traceback
+from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Any, Mapping
 
 import pandas as pd
 from pydantic import ValidationError
 
+from app.core.background import run_in_background
 from app.core.errors import RunVersionUnresolvableError
 from app.core.frames import read_frame_column_names
 from app.models import Workflow, WorkflowStage
@@ -220,11 +221,6 @@ def load_pinned_stage_def(
     )
 
 
-def _run_in_background(target: Any, *args: Any) -> None:
-    def _wrapped() -> None:
-        try:
-            target(*args)
-        except Exception:  # noqa: BLE001
-            traceback.print_exc()
-
-    threading.Thread(target=_wrapped, daemon=True).start()
+def _run_in_background(target: Callable[..., object], *args: object) -> None:
+    """The seam a test replaces to run a triggered run inline; a crash prints its traceback."""
+    run_in_background(partial(target, *args))

@@ -11,9 +11,12 @@
   is no "new eval" action here yet. Status is truthful — one word per eval, from
   eval_store.eval_status.
 #}
+{# `running` is not a verdict, so it takes the idle tint a run yet to start takes;
+   the word in the badge is what tells the two apart. #}
 {% set badge_class = {
      "run succeeded": "ok", "stale": "warn", "never run": "pending",
      "no eval dataset yet": "pending", "run errored": "err", "broken": "err",
+     "running": "pending",
    } %}
 {% block section %}
 <div class="sec-head wf-head">

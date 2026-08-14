@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+import threading
+import time
+from datetime import datetime
+
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
 from app.core.errors import EvalNotScorableError
 from app.main import app
-from app.models import parse_stage, EvalConfig, ExpectedOutput, TableRef
+from app.models import parse_stage, EvalConfig, EvalRun, ExpectedOutput, TableRef
 from app.models.schema import TableSchema
 from app.models.stages.input_data import FileFormat
 from app.core import paths
-from app.evals.runner import run_eval
+from app.evals import runner as eval_runner
+from app.evals.runner import run_eval, start_eval_run
 from app.evals.store import load_eval_run, resolve_eval_result_path, save_eval_config
 from app.services.versioning import WorkflowVersion
 from app.services import workspace
@@ -210,6 +215,102 @@ def test_run_eval_raises_when_no_versions_exist_at_all(tmp_path):
         run_eval(demo.name, config)
 
 
+# ── start_eval_run: the score lands on a background thread ───────────────────
+
+def _wait_for_eval_run_status(project_id: str, run_id: str, status: str) -> EvalRun:
+    deadline = time.monotonic() + 30.0
+    while time.monotonic() < deadline:
+        run = load_eval_run(project_id, run_id)
+        if run.status == status:
+            return run
+        time.sleep(0.02)
+    raise AssertionError(f"run {run_id} never reached {status!r}; it is still "
+                         f"{load_eval_run(project_id, run_id).status!r}")
+
+
+def test_start_eval_run_returns_before_the_score_is_in(project, monkeypatch):
+    repo_root, demo, config = project
+    scoring_started, release_scoring = threading.Event(), threading.Event()
+    real_run_subset = eval_runner.run_subset
+
+    def _held_open(*args, **kwargs):
+        scoring_started.set()
+        assert release_scoring.wait(timeout=30), "the test never released the scorer"
+        return real_run_subset(*args, **kwargs)
+
+    monkeypatch.setattr(eval_runner, "run_subset", _held_open)
+
+    run = start_eval_run(demo.name, config)
+
+    # Returned while the work is still held open, carrying nothing it hasn't learned.
+    assert run.status == "running"
+    assert run.metrics == {}
+    assert run.result_ref is None
+    assert run.finished_at is None
+    assert scoring_started.wait(timeout=30), "the scorer never ran"
+    assert load_eval_run(demo.name, run.id).status == "running"
+
+    release_scoring.set()
+    scored = _wait_for_eval_run_status(demo.name, run.id, "scored")
+    assert scored.metrics["rows_scored"] == 4
+    assert scored.metrics["accuracy"] == pytest.approx(0.75)
+    assert scored.finished_at is not None
+
+
+def test_an_unexpected_failure_lands_an_error_run_never_a_stuck_running(project, monkeypatch):
+    repo_root, demo, config = project
+
+    def _falls_over(*args, **kwargs):
+        raise RuntimeError("the executor fell over")
+
+    monkeypatch.setattr(eval_runner, "run_subset", _falls_over)
+
+    run = start_eval_run(demo.name, config)
+    assert run.status == "running"
+
+    errored = _wait_for_eval_run_status(demo.name, run.id, "error")
+    notes = "\n".join(errored.notes)
+    assert "RuntimeError: the executor fell over" in notes
+    assert "Traceback (most recent call last)" in notes
+    assert errored.finished_at is not None
+    assert errored.metrics == {}
+
+
+def test_start_eval_run_raises_when_no_dataset(project):
+    repo_root, demo, config = project
+    with pytest.raises(EvalNotScorableError, match="no dataset"):
+        start_eval_run(demo.name, config.model_copy(update={"table": None}))
+
+
+def test_start_eval_run_raises_when_incompatible(project):
+    repo_root, demo, config = project
+    with pytest.raises(EvalNotScorableError, match="incompatible"):
+        start_eval_run(demo.name, config.model_copy(update={"target_stage": "nonexistent"}))
+
+
+def test_start_eval_run_raises_file_not_found_when_the_version_does_not_exist(project):
+    repo_root, demo, config = project
+    with pytest.raises(FileNotFoundError):
+        start_eval_run(demo.name, config, version_id="nonexistent")
+
+
+def test_two_run_ids_minted_inside_one_clock_tick_differ(monkeypatch):
+    """datetime.now() advances in ~15ms steps on Windows, so two clicks share an instant."""
+    class _StoppedClock:
+        @staticmethod
+        def now():
+            return datetime(2026, 8, 13, 12, 0, 0, 500000)
+
+    monkeypatch.setattr(eval_runner, "_last_minted", datetime.min)
+    monkeypatch.setattr(eval_runner, "datetime", _StoppedClock)
+
+    minted = [eval_runner._mint_run_id() for _ in range(100)]
+
+    assert len(set(minted)) == len(minted)
+    # Still chronological under a plain string sort, which is how runs are ordered.
+    assert sorted(minted) == minted
+
+
 def test_trigger_route_runs_and_redirects_to_the_run(project, monkeypatch):
     repo_root, demo, config = project
     save_eval_config(demo.name, config)
@@ -218,6 +319,41 @@ def test_trigger_route_runs_and_redirects_to_the_run(project, monkeypatch):
     r = TestClient(app).post("/project/demo/evals/label_check/run", follow_redirects=False)
     assert r.status_code == 303
     assert "/project/demo/evals/label_check/runs/" in r.headers["location"]
+
+
+def test_trigger_route_redirects_while_the_score_is_still_held_open(project, monkeypatch):
+    repo_root, demo, config = project
+    save_eval_config(demo.name, config)
+    workspace.set_projects_dir(repo_root)
+    scoring_started, release_scoring = threading.Event(), threading.Event()
+    real_run_subset = eval_runner.run_subset
+
+    def _held_open(*args, **kwargs):
+        scoring_started.set()
+        assert release_scoring.wait(timeout=30), "the test never released the scorer"
+        return real_run_subset(*args, **kwargs)
+
+    monkeypatch.setattr(eval_runner, "run_subset", _held_open)
+    client = TestClient(app)
+
+    r = client.post("/project/demo/evals/label_check/run", follow_redirects=False)
+
+    # The response is in hand while the scorer is still blocked, and the run it
+    # points at reads as in flight rather than as a result.
+    assert r.status_code == 303
+    run_id = r.headers["location"].rsplit("/", 1)[-1]
+    assert scoring_started.wait(timeout=30), "the scorer never ran"
+    assert load_eval_run(demo.name, run_id).status == "running"
+
+    live = client.get(f"/project/demo/evals/label_check/runs/{run_id}/status").json()
+    assert live["status"] == "running"
+    assert live["terminal"] is False
+
+    release_scoring.set()
+    _wait_for_eval_run_status(demo.name, run_id, "scored")
+    done = client.get(f"/project/demo/evals/label_check/runs/{run_id}/status").json()
+    assert done["status"] == "scored"
+    assert done["terminal"] is True
 
 
 def test_trigger_route_400s_when_not_runnable(project, monkeypatch):

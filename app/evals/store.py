@@ -116,6 +116,9 @@ def eval_status(report: CompatibilityReport, runs: list[EvalRun],
     if not runs:
         return "never run"
     latest = runs[0]
+    if latest.is_running():
+        # Before staleness: a run in flight has no verdict to be stale about yet.
+        return "running"
     if latest_version is None or latest.workflow_version != latest_version:
         return "stale"
     if latest.status in ("error", "vetoed"):
