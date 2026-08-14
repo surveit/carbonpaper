@@ -92,6 +92,21 @@
 </div>
 {% endif %}
 
+{# The tour's "started" flag lives in THIS BROWSER's localStorage, not on the server —
+   so this can only reset the browser open on /admin right now, not every browser that
+   has taken the tour. That is why it is a plain button with inline JS, unlike every
+   other action on this page, which is a form posting to the server. #}
+<h2>Guided tour</h2>
+<p class="muted">Resets this browser's "tour already started" flag, so the tour CTA on the projects page offers to take it fresh.</p>
+<button type="button" class="btn" id="reset-tour-btn">Reset guided tour for this browser</button>
+<script>
+document.getElementById("reset-tour-btn").addEventListener("click", function () {
+  if (!confirm("Reset the guided tour for this browser?")) return;
+  try { localStorage.removeItem("carbonpaper.tour.started"); } catch (e) { /* private mode */ }
+  alert("Tour reset for this browser.");
+});
+</script>
+
 <h2>Upload a bundle</h2>
 <p class="muted">A bundle file downloaded from this or another workspace. The upload is rejected whole if it does not parse — a project is never partly written.</p>
 <form method="post" action="/admin/import" enctype="multipart/form-data">

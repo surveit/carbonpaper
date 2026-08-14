@@ -9,6 +9,36 @@
     <a href="/project/new" class="btn primary new-methodology-btn">＋ New project</a>
 </div>
 
+{# Whether THIS BROWSER has started the tour — not a fact about the account, so it is
+   not server-rendered. Server-side both blocks below exist; JS picks which shows,
+   independent of how many projects exist, so the tour can reach a browser that has
+   projects but never took it, and stays gone from one that has. #}
+<div class="empty-state" id="tour-state" style="display:none;">
+    <h2>New here? Take the guided tour</h2>
+    <p class="muted">It seeds a small investigation over sample data, runs it for real, and hands you the record — so the first workflow you read is one you watched run.</p>
+    <form method="post" action="/tutorial" id="tour-form">
+        <button type="submit" class="btn primary" id="tour-cta"
+                title="Seeds a seven-stage workflow over real, sourced advocacy records, and runs it with you.">Take a guided tour on sample data</button>
+    </form>
+</div>
+<script>
+(function () {
+  const KEY = "carbonpaper.tour.started";
+  const form = document.getElementById("tour-form");
+  if (form) {
+    form.addEventListener("submit", function () {
+      try { localStorage.setItem(KEY, "1"); } catch (e) { /* private mode */ }
+    });
+  }
+  let started = false;
+  try { started = localStorage.getItem(KEY) === "1"; } catch (e) { /* ignore */ }
+  if (started) return;
+  document.getElementById("tour-state").style.display = "";
+  const noProjects = document.getElementById("no-projects-state");
+  if (noProjects) noProjects.style.display = "none";
+})();
+</script>
+
 {% if projects %}
 <div class="project-grid">
     {% for m in projects %}
@@ -50,39 +80,9 @@
     {% endfor %}
 </div>
 {% else %}
-{# One door, not two. The tour is the only action here because a reader with no
-   projects has nothing to compare a blank methodology form against; ＋ New project
-   stays in the header above, which is where it lives on every other visit. #}
-<div class="empty-state" id="zero-state">
-    <h2 id="zero-state-heading">New here? Take the guided tour</h2>
-    <p class="muted" id="zero-state-lead">It seeds a small investigation over sample data, runs it for real, and hands you the record — so the first workflow you read is one you watched run.</p>
-    <form method="post" action="/tutorial" id="tour-form">
-        <button type="submit" class="btn primary" id="tour-cta"
-                title="Seeds a seven-stage workflow over real, sourced advocacy records, and runs it with you.">Take a guided tour on sample data</button>
-    </form>
+<div class="empty-state" id="no-projects-state">
+    <h2>No projects yet</h2>
+    <p class="muted">Paste how your investigation works, and it becomes a chain of simple, inspectable steps you can run and rerun.</p>
 </div>
-<script>
-// Whether this BROWSER has started the tour — not whether the person finished it, and
-// not a fact about the account: nothing server-side records either. So a returning
-// browser only gets a quieter tour button, never a page that claims they have toured.
-(function () {
-  const KEY = "carbonpaper.tour.started";
-  const form = document.getElementById("tour-form");
-  if (!form) return;
-  form.addEventListener("submit", function () {
-    try { localStorage.setItem(KEY, "1"); } catch (e) { /* private mode */ }
-  });
-  let started = false;
-  try { started = localStorage.getItem(KEY) === "1"; } catch (e) { /* ignore */ }
-  if (!started) return;
-  document.getElementById("zero-state-heading").textContent =
-    "No projects yet — start your first one";
-  document.getElementById("zero-state-lead").textContent =
-    "Paste how your investigation works, and it becomes a chain of simple, inspectable steps you can run and rerun.";
-  const cta = document.getElementById("tour-cta");
-  cta.className = "btn secondary";
-  cta.textContent = "Take the guided tour again";
-})();
-</script>
 {% endif %}
 {% endblock %}
