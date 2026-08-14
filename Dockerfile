@@ -35,9 +35,9 @@ RUN claude --version
 COPY alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app
-# Mounted at /pitch by app.main. Its own directory because it is not part of the
-# app's own surface — see app/web/config.py's PITCH_DIR.
-COPY pitch ./pitch
+# Served at /intro by app.main. Its own directory because it is not part of the
+# app's own surface — see app/web/config.py's INTRO_DIR.
+COPY intro ./intro
 # Four migrations import scripts.stage_signatures / scripts.stage_description at
 # module level, so alembic cannot even build its revision map without this —
 # the entrypoint's `alembic upgrade head` dies and the machine never boots.
