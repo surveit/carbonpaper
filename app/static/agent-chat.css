@@ -128,9 +128,14 @@
 .ac-tool > summary::-webkit-details-marker { display: none; }
 .ac-tool > summary::before { content: "▸ "; color: var(--border-strong); }
 .ac-tool[open] > summary::before { content: "▾ "; }
-/* The reply is a different kind of thing from the calls above it, and now that
-   neither one is tinted, the gap is the only thing left saying so. */
-.ac-tool + .ac-body { margin-top: 12px; }
+/* A tool call is a different kind of thing from the prose beside it, and now that
+   neither one is tinted, the gap is the only thing left saying so — the same gap on
+   both sides, so the line reads as a break rather than as glued to whichever
+   paragraph happens to sit above it. .ac-body's own top/bottom margins are zeroed
+   (see the :first-child/:last-child rules above), so without this the collapse with
+   .ac-tool's 1px left prose-to-tool at 1px while tool-to-prose stayed 12px. */
+.ac-tool + .ac-body,
+.ac-body + .ac-tool { margin-top: 12px; }
 .ac-tool-json { font-family: var(--mono); font-size: 11px; color: var(--muted);
     background: var(--sunk); border: 1px solid var(--border); border-radius: 6px;
     padding: 6px 9px; margin: 4px 0 6px; white-space: pre-wrap; overflow-x: auto; }
