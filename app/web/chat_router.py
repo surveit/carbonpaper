@@ -211,6 +211,22 @@ async def get_rendered_reply(sid: str) -> RenderedReply:
     ])
 
 
+class RenderMarkdownRequest(BaseModel):
+    text: str
+
+
+class RenderMarkdownReply(BaseModel):
+    html: str
+
+
+@router.post("/chat/{sid}/render-markdown")
+async def render_markdown_text(sid: str, body: RenderMarkdownRequest) -> RenderMarkdownReply:
+    """Renders one already-complete text block, for a client re-rendering it mid-turn."""
+    if not _store.exists(sid):
+        raise HTTPException(status_code=404, detail="Session not found")
+    return RenderMarkdownReply(html=str(render_markdown(body.text)))
+
+
 @router.get("/chat/{sid}/messages")
 async def get_messages(sid: str):
     if not _store.exists(sid):

@@ -43,8 +43,9 @@
    sans: the tool lines, the composer, a table inside a reply. */
 .ac-body { word-wrap: break-word; font-family: var(--prose);
     font-size: var(--prose-size); line-height: var(--prose-lh); }
-/* Assistant replies are rendered markdown; .ac-streaming is the plain-text bubble
-   held mid-turn, before the swap at `done`. A user bubble is always plain text. */
+/* Assistant replies are rendered markdown; .ac-streaming is the plain-text fallback a
+   region shows only for the moment between a chunk landing and its render request
+   returning. A user bubble is always plain text. */
 .ac-body.ac-streaming, .ac-msg.user .ac-body { white-space: pre-wrap; }
 
 /* The column is 720px but the reply is capped tighter: about 72 characters is the
