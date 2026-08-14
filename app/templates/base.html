@@ -1,5 +1,7 @@
 <!doctype html>
-<html lang="en">
+{# data-theme selects one of the candidate looks in palette.css / base.css. A
+   decision aid with a deletion date, not a product feature: see app/web/config.py. #}
+<html lang="en" data-theme="{{ active_theme(request) }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">

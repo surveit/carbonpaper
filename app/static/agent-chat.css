@@ -1,6 +1,8 @@
 /* The agent chat at /chat: the session index, the message log, and the docked composer. */
 
-:root { --chat-column: 720px; }
+:root { --chat-column: 720px; --reply-measure: 32em; }
+/* The old column, for comparison. `none` because the reply used to fill it. */
+:root[data-theme="classic"] { --chat-column: 1080px; --reply-measure: none; }
 
 /* ═══ The session index (chat_index.html) ═══ */
 .ac-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
@@ -21,8 +23,9 @@
 /* --chat-column is the conversation's width wherever it is drawn — the log, the
    composer under it, the attachment row and the popover all read it, so the
    column cannot drift apart from the box you type into. 720px rather than main's
-   1500: at 1080 a reply ran about 115 characters to the line, roughly double what
-   is comfortable to read, and the tour is the longest stretch of prose in the app.
+   1500: at 1080 a reply ran 162 characters to the line (measured, not estimated —
+   the interface sans averages 6.66px a character at 15px), well over twice what is
+   comfortable, and the tour is the longest stretch of prose in the app.
    The composer is fixed to the viewport, so the log's own bottom padding is what
    keeps the last turn clear of it. */
 .ac-log { max-width: var(--chat-column); margin: 0 auto; padding: 8px 0 128px;
@@ -38,8 +41,8 @@
 /* What either party actually said, and the longest stretch of reading in the app —
    so this is the prose face, not the interface one. Everything AROUND it stays
    sans: the tool lines, the composer, a table inside a reply. */
-.ac-body { word-wrap: break-word; font-family: var(--prose); font-size: 16.5px;
-    line-height: 1.62; }
+.ac-body { word-wrap: break-word; font-family: var(--prose);
+    font-size: var(--prose-size); line-height: var(--prose-lh); }
 /* Assistant replies are rendered markdown; .ac-streaming is the plain-text bubble
    held mid-turn, before the swap at `done`. A user bubble is always plain text. */
 .ac-body.ac-streaming, .ac-msg.user .ac-body { white-space: pre-wrap; }
@@ -52,7 +55,7 @@
    against an average of 7.27px measured over real prose at this size — 39% wide.
    `68ch` here renders as 689px, which is 95 characters, not 68. em is off the font
    size, so it does not inherit that lie: 32em is 528px is ~72 characters. */
-.ac-msg.assistant .ac-body { max-width: 32em; }
+.ac-msg.assistant .ac-body { max-width: var(--reply-measure); }
 .ac-msg.assistant .ac-body > :first-child { margin-top: 0; }
 .ac-msg.assistant .ac-body > :last-child { margin-bottom: 0; }
 .ac-msg.assistant .ac-body p,

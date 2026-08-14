@@ -144,3 +144,21 @@
     --verdict-fail-bg: var(--bad-bg);     --verdict-fail-bd: var(--bad-bd);
     --verdict-warn-bg: var(--warn-bg);    --verdict-warn-bd: var(--warn-bd);
 }
+
+/* The paper as it was before the canary — a reference to compare against, selected
+   by data-theme on <html>. A DECISION AID WITH A DELETION DATE: see the block in
+   base.css. Surfaces ONLY. Every hue above is shared by all three looks, which is
+   why there is no second copy of the states here and must never be one — a theme
+   that redefined a verdict colour would make green mean something different
+   depending on a cookie.
+   tests/arch/test_status_colour_contract.py reads the :root block ONLY, so the
+   values it pins _NODE_SURFACE to are the default theme's, not whatever block
+   happens to sit last in this file. */
+:root[data-theme="classic"] {
+    --bg: #fdfdfe;
+    --hover: #f0f1f2;
+    --sunk: #f9f9fa;
+    --sunk-deep: #f5f5f6;
+    --border: #e9e9eb;
+    --border-strong: #d4d4d6;
+}
