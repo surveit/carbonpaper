@@ -21,10 +21,15 @@ from app.tools.tutorial import (
     seed_tutorial_project,
 )
 
+def _render_opening_message(context: BaseModel) -> str:
+    assert isinstance(context, TutorialContext)
+    return TUTORIAL_OPENING_MESSAGE
+
+
 CONFIG = AgentConfig(
     system_prompt=TUTORIAL_SYSTEM_PROMPT,
     context_schema=TutorialContext,
-    canned_opening=TUTORIAL_OPENING_MESSAGE,
+    render_opening_message=_render_opening_message,
     # The tour's turns are short and its tool sequence is dictated by the prompt —
     # there is nothing here for a reasoning block to earn.
     thinking={"type": "disabled"},

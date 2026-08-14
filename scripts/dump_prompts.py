@@ -97,9 +97,8 @@ def render_tutorial_agent() -> str:
         source="app/agents/tutorial/prompt.py · tools: app/tools/tutorial.py",
         model=TUTORIAL_CONFIG.model,
         note=(
-            "The guided tour behind the home zero state. It speaks first: the chat page "
-            "runs one turn on TUTORIAL_OPENING_PROMPT as it loads, and that prompt is "
-            "never stored as a reader message. Read-only — it holds no editing tool."
+            "The guided tour behind the home zero state. Read-only — it holds no "
+            "editing tool."
         ),
         system_prompt=TUTORIAL_CONFIG.system_prompt,
         tools=read_bound_tools(

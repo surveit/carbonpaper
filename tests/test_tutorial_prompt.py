@@ -62,10 +62,10 @@ def _fixture_column_names(fixture: WorkflowFile) -> set[str]:
     }
 
 
-def test_the_prompt_embeds_the_opening_message_the_reader_actually_saw() -> None:
-    """The model has no turn for the canned greeting, so the prompt has to quote it."""
-    assert TUTORIAL_OPENING_MESSAGE in TUTORIAL_SYSTEM_PROMPT
+def test_the_opening_message_ends_on_the_question() -> None:
+    """registry.render_system_prompt re-appends it; this file just owns the words."""
     assert "Ready to get started?" in TUTORIAL_OPENING_MESSAGE
+    assert TUTORIAL_OPENING_MESSAGE not in TUTORIAL_SYSTEM_PROMPT
 
 
 def test_the_prompt_writes_the_product_name_the_page_around_it_writes() -> None:
@@ -89,9 +89,10 @@ def test_the_prompt_says_the_sample_data_is_invented() -> None:
 
 
 def test_the_prompt_covers_the_five_requested_beats() -> None:
-    prompt = TUTORIAL_SYSTEM_PROMPT
+    # "What Carbon Paper is" is the opening message's job now, not the system prompt's.
+    assert "Carbon Paper exists because" in TUTORIAL_OPENING_MESSAGE
 
-    assert "Carbon Paper is" in prompt or "What Carbon Paper is" in prompt
+    prompt = TUTORIAL_SYSTEM_PROMPT
     assert "Seed it" in prompt
     assert "Projects and workflows" in prompt
     assert "review queue" in prompt.lower()
@@ -109,7 +110,7 @@ def test_the_prompt_tells_the_model_not_to_repeat_the_canned_greeting() -> None:
     """No turn exists for the greeting, so the model must be told it already happened."""
     prompt = " ".join(TUTORIAL_SYSTEM_PROMPT.split())
 
-    assert "do not repeat it" in prompt
+    assert "Do not repeat the greeting" in prompt
     assert 'treat it as "yes"' in prompt
 
 
