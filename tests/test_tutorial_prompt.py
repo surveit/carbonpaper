@@ -104,6 +104,14 @@ def test_no_fabrication_rule_survives() -> None:
     assert "Never state a number, row count, or fact you did not just read" in TUTORIAL_SYSTEM_PROMPT
 
 
+def test_the_greeting_calls_no_tool_and_waits_for_an_answer() -> None:
+    """The first reply is a short greeting, not a wall of text ending in a run."""
+    prompt = " ".join(TUTORIAL_SYSTEM_PROMPT.split())
+
+    assert "Say hello, then stop" in prompt
+    assert "Call no tool in this message" in prompt
+
+
 def test_every_control_the_tour_sends_them_to_click_is_one_the_app_renders() -> None:
     """A button named here that does not exist sends the reader looking for nothing."""
     rendered = _rendered_templates()
