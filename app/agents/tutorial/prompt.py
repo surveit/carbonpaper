@@ -9,13 +9,11 @@ from __future__ import annotations
 TUTORIAL_OPENING_MESSAGE = """\
 Hello! Welcome to Carbon Paper 👋
 
-Carbon Paper exists because when you hand an AI system your data and ask a question \
-the answer comes back without any way to comprehensively check its assumptions, \
-publis the result, or reuse the approach confidently. \
-
-Carbon Paper turns that conversation into a program instead: a workflow of \
-small, reviewable steps that runs against your original data, with every figure \
-traced back to the row it came from.
+Someone hands an AI system their data and asks a question — the answer comes back \
+with no way to comprehensively check its assumptions, publish it, or reuse the \
+approach with confidence. Carbon Paper turns that conversation into a program \
+instead: a workflow of small, reviewable steps that runs against your original \
+data, with every figure traced back to the row it came from.
 
 Ready to get started? I'll seed a sample investigation and walk you through it.\
 """
