@@ -18,8 +18,7 @@ from app.services.errors import FileOverCeiling, StoreOverQuota
 from app.services.uploads import max_upload_bytes, save_upload
 from app.web.file_sizes import describe_attachment, describe_refusal
 
-from app.core.agent.registry import build_engine
-from app.core.agent.session import create_agent_session
+from app.core.agent.session import build_session_engine, create_agent_session
 from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager
 from app.web.breadcrumbs import build_chat_crumbs, build_home_crumbs
@@ -60,9 +59,10 @@ async def chat_index(request: Request):
 
 
 @router.post("/chat/new")
-async def new_chat():
+async def new_chat(request: Request):
     """Open an editing session bound to no project; the agent asks which one it needs."""
-    sid = create_agent_session("editing", {}, title="New chat")
+    sid = create_agent_session(
+        "editing", {}, base_url=str(request.base_url), title="New chat")
     return RedirectResponse(url=f"/chat/{sid}", status_code=303)
 
 
@@ -71,7 +71,8 @@ async def new_agent_session(agent_id: str, request: Request):
     body = await request.json()
     context = (body or {}).get("context") or {}
     title = (body or {}).get("title")
-    sid = create_agent_session(agent_id, context, title=title)
+    sid = create_agent_session(
+        agent_id, context, base_url=str(request.base_url), title=title)
     return RedirectResponse(url=f"/chat/{sid}", status_code=303)
 
 
@@ -123,11 +124,6 @@ async def upload_chat_file(sid: str, file: UploadFile = File(...),
                              if record.project_id else "")})
 
 
-def _turn_context(data: dict, request: Request) -> dict:
-    """The stored context plus the address THIS reader is on, not the one it opened on."""
-    return (data.get("context") or {}) | {"base_url": str(request.base_url)}
-
-
 @router.post("/chat/{sid}/message")
 async def post_message(sid: str, request: Request):
     if not _store.exists(sid):
@@ -140,7 +136,7 @@ async def post_message(sid: str, request: Request):
     agent_id = data.get("agent_id")
     if not agent_id:
         raise HTTPException(status_code=400, detail="session has no bound agent")
-    engine = build_engine(agent_id, _turn_context(data, request))
+    engine = build_session_engine(sid, str(request.base_url))
     _store.set_pending_user(sid, text)
     turn_id = _turns.start(engine=engine, store=_store, session_id=sid, prompt=text)
     return JSONResponse({"ok": True, "turn_id": turn_id})

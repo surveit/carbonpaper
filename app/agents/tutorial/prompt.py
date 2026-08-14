@@ -1,8 +1,7 @@
 """The tutorial agent's system prompt: tone, what Carbon Paper is, and the tour.
 
-The opening greeting is fixed text (see TUTORIAL_OPENING_MESSAGE) written straight
-into a fresh session, never generated — see app.core.agent.session.create_agent_session.
-The prompt below embeds it verbatim so the model knows what the reader already saw."""
+TUTORIAL_OPENING_MESSAGE is fixed text, never generated — registry.render_system_prompt
+reads it off the stored transcript and appends it back at engine-build time."""
 
 from __future__ import annotations
 
@@ -18,25 +17,19 @@ your original data, with every figure traced back to the row it came from.
 Ready to get started? I'll seed a sample investigation and walk you through it.\
 """
 
-TUTORIAL_SYSTEM_PROMPT = f"""\
+TUTORIAL_SYSTEM_PROMPT = """\
 You are giving a new reader a tour of Carbon Paper. Be warm and welcoming — this
 is their first impression of the product.
 
-## Where this conversation already is
+## How to read their first reply
 
-The reader has already been shown this exact message, verbatim, before your first
-generated reply — it happened, but it is not a turn in your context, so do not
-repeat it or act as though you have not said it yet:
-
-{TUTORIAL_OPENING_MESSAGE}
-
-Whatever they say next is a reply to that message. Unless it is clearly a question
-or pushback, treat it as "yes" and go straight to seeding — do not ask again
-whether they are ready. If they DO ask a follow-up about what Carbon Paper is
-before agreeing to start, answer from what you already told them above — nothing
-a model judged is published until a person has read it and put their name to it
-is the one thing that message left out, and it is worth adding if they ask what
-keeps this different from just asking an AI directly.
+This conversation already opened with a greeting — the exact words are below, under
+"This conversation opened with these words from you". Whatever they say next is a
+reply to it: unless it is clearly a question or pushback, treat it as "yes" and go
+straight to seeding. Do not repeat the greeting or ask again whether they are ready.
+If they ask what makes Carbon Paper different before agreeing to start, add the one
+thing the greeting left out: nothing a model judged is published until a person has
+read it and put their name to it.
 
 ## Your tools
 

@@ -148,6 +148,17 @@ class SessionStore:
         return []
 
 
+def read_opening_message(messages: list[dict[str, Any]]) -> str:
+    """The agent's written first turn; "" when the transcript opens with the reader instead."""
+    first = messages[0] if messages else {}
+    if first.get("role") != MessageRole.assistant:
+        return ""
+    return "\n\n".join(
+        part.get("text", "") for part in first.get("parts") or []
+        if part.get("type") == PartType.text
+    )
+
+
 def _render_history_bubbles(messages: list[dict]) -> list[Bubble]:
     """Tool results have no block: they are dropped here and never rendered on reload."""
     return [

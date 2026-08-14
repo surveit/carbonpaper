@@ -16,6 +16,7 @@ router = APIRouter()
 async def open_tutorial_session(request: Request):
     # Every link the tour quotes is built from this base_url.
     sid = create_agent_session(
-        "tutorial", {"base_url": str(request.base_url)}, title="Guided tour"
+        "tutorial", {"base_url": str(request.base_url)},
+        base_url=str(request.base_url), title="Guided tour",
     )
     return RedirectResponse(url=f"/chat/{sid}", status_code=303)

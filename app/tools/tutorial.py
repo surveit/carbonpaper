@@ -105,9 +105,9 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialAgentReference:
         eval_id=eval_config.id,
         eval_url=f"{ctx.base_url}project/{name}/evals/{eval_config.id}",
         edit_chat_url=ctx.base_url.rstrip("/") + agent_service.open_agent_chat(
-            "editing", name),
+            "editing", name, ctx.base_url),
         new_project_chat_url=ctx.base_url.rstrip("/")
-        + agent_service.open_unbound_agent_chat("editing"),
+        + agent_service.open_unbound_agent_chat("editing", ctx.base_url),
         mcp_url=f"{ctx.base_url}mcp",
         mcp_command=f"claude mcp add --transport http carbonpaper {ctx.base_url}mcp",
     )
