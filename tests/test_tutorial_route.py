@@ -70,15 +70,29 @@ def test_the_tour_visibility_is_decided_client_side_by_this_browser() -> None:
     """No server-side tour state exists: the page ships both states and lets JS choose."""
     page = client.get("/")
 
-    assert 'id="tour-state" style="display:none;"' in page.text
+    assert 'id="tour-state"' in page.text
+    assert 'id="projects-state"' in page.text
     assert 'localStorage.setItem(KEY, "1")' in page.text
     assert '"carbonpaper.tour.started"' in page.text
-    assert 'document.getElementById("tour-state").style.display = ""' in page.text
+    assert 'document.documentElement.classList.add("tour-unstarted")' in page.text
     for claim in ("you have taken", "you've taken", "tour complete", "already toured"):
         assert claim not in page.text.lower(), claim
 
 
-def test_a_home_page_with_projects_still_ships_the_tour_markup_hidden(
+def test_the_project_list_ships_inside_the_block_the_tour_replaces(
+    examples_root: Path,
+) -> None:
+    """Both list shapes sit inside #projects-state, which is what .tour-unstarted hides."""
+    _make_project(examples_root)
+    with_projects = client.get("/").text
+    assert "already-here" in with_projects.split('id="projects-state"')[1]
+
+    workspace.set_projects_dir(examples_root / "empty")
+    (examples_root / "empty").mkdir()
+    assert "No projects yet" in client.get("/").text.split('id="projects-state"')[1]
+
+
+def test_a_home_page_with_projects_still_ships_the_tour_markup(
     examples_root: Path,
 ) -> None:
     """Tour visibility no longer depends on project count — the browser decides."""
@@ -88,7 +102,7 @@ def test_a_home_page_with_projects_still_ships_the_tour_markup_hidden(
     assert "already-here" in page.text
     assert "No projects yet" not in page.text
     assert _CTA in page.text
-    assert 'id="tour-state" style="display:none;"' in page.text
+    assert 'id="tour-state"' in page.text
 
 
 def test_the_route_opens_a_session_bound_to_the_tutorial_agent() -> None:

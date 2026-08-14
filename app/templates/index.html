@@ -9,11 +9,11 @@
     <a href="/project/new" class="btn primary new-methodology-btn">＋ New project</a>
 </div>
 
-{# Whether THIS BROWSER has started the tour — not a fact about the account, so it is
-   not server-rendered. Server-side both blocks below exist; JS picks which shows,
-   independent of how many projects exist, so the tour can reach a browser that has
-   projects but never took it, and stays gone from one that has. #}
-<div class="empty-state" id="tour-state" style="display:none;">
+{# One door, not two: a browser that has not started the tour gets the tour INSTEAD of
+   the list, whatever it holds. Which of the two that is is a fact about THIS BROWSER,
+   so it is not server-rendered — both blocks ship, the script below stamps the root
+   element, and dashboard.css decides which one paints. #}
+<div class="empty-state" id="tour-state">
     <h2>New here? Take the guided tour</h2>
     <p class="muted">It seeds a small investigation over sample data, runs it for real, and hands you the record — so the first workflow you read is one you watched run.</p>
     <form method="post" action="/tutorial" id="tour-form">
@@ -24,21 +24,17 @@
 <script>
 (function () {
   const KEY = "carbonpaper.tour.started";
-  const form = document.getElementById("tour-form");
-  if (form) {
-    form.addEventListener("submit", function () {
-      try { localStorage.setItem(KEY, "1"); } catch (e) { /* private mode */ }
-    });
-  }
+  document.getElementById("tour-form").addEventListener("submit", function () {
+    try { localStorage.setItem(KEY, "1"); } catch (e) { /* private mode */ }
+  });
   let started = false;
   try { started = localStorage.getItem(KEY) === "1"; } catch (e) { /* ignore */ }
-  if (started) return;
-  document.getElementById("tour-state").style.display = "";
-  const noProjects = document.getElementById("no-projects-state");
-  if (noProjects) noProjects.style.display = "none";
+  // Stamped from here, above the list's own markup, so the list never paints first.
+  if (!started) document.documentElement.classList.add("tour-unstarted");
 })();
 </script>
 
+<div id="projects-state">
 {% if projects %}
 <div class="project-grid">
     {% for m in projects %}
@@ -80,9 +76,10 @@
     {% endfor %}
 </div>
 {% else %}
-<div class="empty-state" id="no-projects-state">
+<div class="empty-state">
     <h2>No projects yet</h2>
     <p class="muted">Paste how your investigation works, and it becomes a chain of simple, inspectable steps you can run and rerun.</p>
 </div>
 {% endif %}
+</div>
 {% endblock %}
