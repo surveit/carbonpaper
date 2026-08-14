@@ -1,9 +1,15 @@
 {# One row rendered as label/value pairs. `columns` are the described columns
    (name, description); `row` maps those same names to the
    display text, or to None for an absent value — which is NOT the same as the
-   empty string, and prints differently. A column with no description shows its
-   name alone. A value that is a web address is rendered as a link: this table is
-   what a reviewer reads to decide, and a source they cannot open is not a source.
+   empty string, and prints differently.
+
+   A described column carries a help marker holding its description. The marker,
+   not the description, is the point: the tooltip used to hang off the whole
+   header cell, so a reader had no way to know there was anything to hover. A
+   column with no description shows its name alone.
+
+   A value that is a web address is rendered as a link: this table is what a
+   reviewer reads to decide, and a source they cannot open is not a source.
    Renders nothing when `columns` is empty. #}
 {% macro kv_table(columns, row) %}
 {% if columns %}
@@ -14,7 +20,8 @@
     <tr>
         <th scope="row">
             <code>{{ column.name }}</code>
-            {% if column.description %}<span class="kv-description">{{ column.description }}</span>{% endif %}
+            {%- if column.description %}<span class="kv-help" title="{{ column.description }}"
+                  aria-label="{{ column.description }}" role="note">?</span>{% endif %}
         </th>
         <td class="kv-value">
             {%- if value is none %}<em>no value</em>
