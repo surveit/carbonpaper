@@ -128,9 +128,9 @@ def serves_an_open_demo() -> bool:
 THEME_COOKIE = "carbonpaper_theme"
 DEFAULT_THEME = "paper-sans"
 THEMES = {
-    "classic": "Classic — white paper, one sans face at 15px",
-    "paper": "Paper + serif — canary paper, Georgia prose",
-    "paper-sans": "Paper + sans — canary paper, sans prose at reading size",
+    "classic": "Classic — white paper, one sans at 15px, 1080px chat",
+    "paper-sans": "Paper — a hint of canary, sans prose at reading size",
+    "sans-display": "Paper + sans plays — same paper, weight and tracking do the work",
 }
 
 

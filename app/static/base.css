@@ -48,11 +48,23 @@
    cannot read from a property — so under "classic" a workflow graph draws its nodes
    on the canary fill while the page around them is white. "Classic" is a reference
    for comparison, not a byte-exact rollback. */
-:root[data-theme="paper"] {
-    /* The one theme with a second FACE. Georgia because a sheet here cannot fetch a
-       font, and it is the only text serif on Windows and macOS both. */
-    --prose: Georgia, "Iowan Old Style", "Times New Roman", serif;
-}
+/* Same paper and the same one sans as the default — the difference is entirely in
+   how the face is USED. Weight and tracking carry the hierarchy instead of size, so
+   headings can stay small; numbers go tabular, which is the one typographic setting
+   a product about rows actually needs, because it makes a column of figures line up
+   on the digit instead of drifting. If this reads as fussy, the default is the
+   restrained version of the same idea and nothing is lost by picking it. */
+/* Size and tracking, NOT weight: an h1 is already bold by default, so a heavier
+   rule here changes nothing on screen, and the next weight up in a system sans is
+   either absent or synthesised into mush. */
+:root[data-theme="sans-display"] h1 { font-size: 34px; letter-spacing: -0.9px; }
+:root[data-theme="sans-display"] h2 { font-size: 20px; letter-spacing: -0.4px; }
+:root[data-theme="sans-display"] .lede { font-weight: 300; font-size: 18px; }
+:root[data-theme="sans-display"] .wordmark { letter-spacing: 0.22em; }
+:root[data-theme="sans-display"] table,
+:root[data-theme="sans-display"] code,
+:root[data-theme="sans-display"] .stat-strip { font-variant-numeric: tabular-nums; }
+
 :root[data-theme="classic"] {
     --prose: var(--ui);
     --prose-size: 15px;

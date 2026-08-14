@@ -20,8 +20,10 @@
        two --sunk levels below it, then the two rule weights. --raised is pure
        white so a card lifts off the canvas without needing a shadow.
 
-       The ladder runs CIE L* 96.5 / 95.1 / 93.7 / 92.1 / 90.5 / 84.2, at an
-       OKLCH chroma of 1.2 rising to 2.2 (x100), on hue 92 — the canary ply.
+       The ladder runs CIE L* 97.6 / 96.5 / 95.4 / 94.0 / 92.3 / 85.2, at an
+       OKLCH chroma of 0.7 rising to 1.3 (x100), on hue 95 — the canary ply, held
+       to a hint of it. An earlier cut sat a full L* lower at nearly double the
+       chroma and read as a colour rather than as paper.
 
        --border does the most work by far — it is drawn 89 times, more than any
        other value in the stylesheet, by every card, table, chip, panel and
@@ -32,8 +34,9 @@
        is the canary ply under it. They were 0.67 L* apart — a contrast ratio of
        1.017, which is a card that cannot be seen against the page it sits on,
        and it is why lifting only the ink never made this feel less flat. They
-       are 3.5 L* apart now, ratio 1.090, so a card lifts on its own with no
-       shadow to fake it.
+       are 2.4 L* apart now, ratio 1.061, so a card lifts on its own with no
+       shadow to fake it. The separation is what this buys; the tint is only how
+       it is bought, and past about 3 L* the page starts reading as coloured.
 
        An all-cream LADDER was tried before and clashed under blue-black text;
        this is not that. Only the canvas and what sits below it carry the tint,
@@ -41,15 +44,21 @@
        the greys stop reading as dead flat. --border-strong is the second rule
        weight, for a card holding its edge under the cursor.
 
-       --fg holds 13.76:1 on this canvas and --muted 5.72:1, both well over the
-       4.5:1 floor tests/arch/test_status_colour_contract.py enforces. */
+       --fg holds 14.13:1 on this canvas and --muted 5.87:1, both well over the
+       4.5:1 floor tests/arch/test_status_colour_contract.py enforces.
+
+       TOO WARM vs TOO DARK are different complaints with different fixes, and it is
+       worth knowing which one you have. Too dark: raise the L*, and the card
+       separation this whole ladder exists for shrinks with it. Too warm: cut the
+       chroma and keep the L*, which costs nothing — #f9f8f5 is this same lightness
+       at a third less of the hue, and is the value to try first. */
     --raised: #ffffff;
-    --bg: #f8f5ec;
-    --hover: #ede8db;
-    --sunk: #f4f1e7;
-    --sunk-deep: #f0ede1;
-    --border: #e8e4d5;
-    --border-strong: #d7d2c2;
+    --bg: #faf8f3;
+    --hover: #f0eee6;
+    --sunk: #f7f5ef;
+    --sunk-deep: #f3f2eb;
+    --border: #ebe9e1;
+    --border-strong: #d7d5cc;
 
     /* ── The ink ──────────────────────────────────────────────────────────
        --on-dark is ink printed on a filled chip or button — a different job

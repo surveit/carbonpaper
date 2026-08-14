@@ -1,6 +1,6 @@
 /* The agent chat at /chat: the session index, the message log, and the docked composer. */
 
-:root { --chat-column: 720px; --reply-measure: 32em; }
+:root { --chat-column: 900px; --reply-measure: 36em; }
 /* The old column, for comparison. `none` because the reply used to fill it. */
 :root[data-theme="classic"] { --chat-column: 1080px; --reply-measure: none; }
 
@@ -25,7 +25,11 @@
    column cannot drift apart from the box you type into. 720px rather than main's
    1500: at 1080 a reply ran 162 characters to the line (measured, not estimated —
    the interface sans averages 6.66px a character at 15px), well over twice what is
-   comfortable, and the tour is the longest stretch of prose in the app.
+   comfortable, and the tour is the longest stretch of prose in the app. 900 rather
+   than the 720 tried first, which was right for the line and wrong for the room:
+   it left a table and a code block squeezed, and the whole page looking like a
+   phone had been pasted onto a monitor. The line is held by --reply-measure
+   instead, which is the thing that was actually too long.
    The composer is fixed to the viewport, so the log's own bottom padding is what
    keeps the last turn clear of it. */
 .ac-log { max-width: var(--chat-column); margin: 0 auto; padding: 8px 0 128px;
@@ -51,10 +55,12 @@
    line a person reads without losing their place, and the width left over goes to
    the things that need it — a table, a code block, a long link — which overflow
    this cap rather than being squeezed to it.
-   NOT in `ch`. That unit is the advance of "0", and Georgia's zero is 10.14px
-   against an average of 7.27px measured over real prose at this size — 39% wide.
-   `68ch` here renders as 689px, which is 95 characters, not 68. em is off the font
-   size, so it does not inherit that lie: 32em is 528px is ~72 characters. */
+   NOT in `ch`. That unit is the advance of "0", which in a proportional face runs
+   far wider than an average character — measured here, 10.14px against 7.27px, so
+   `68ch` renders as 689px, which is 95 characters and not 68. em is off the font
+   size and inherits no such lie: 36em is 594px is 81 characters, measured.
+   81 is at the top of the comfortable band rather than the middle of it, which is
+   deliberate — the first cut of this was 72 and read as cramped on a monitor. */
 .ac-msg.assistant .ac-body { max-width: var(--reply-measure); }
 .ac-msg.assistant .ac-body > :first-child { margin-top: 0; }
 .ac-msg.assistant .ac-body > :last-child { margin-bottom: 0; }
