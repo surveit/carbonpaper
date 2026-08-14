@@ -585,3 +585,4 @@
 {"run_id":"31804903786","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31804903786","created":"2026-08-14T13:30:40Z","branch":"canary-lighter","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"31805061379","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31805061379","created":"2026-08-14T13:31:25Z","branch":"master","event":"push","contracts_kept":14,"findings":[]}
 {"run_id":"31805061379","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31805061379","created":"2026-08-14T13:32:36Z","branch":"master","event":"push","contracts_kept":null,"findings":[]}
+{"run_id":"31806542868","run_url":"https://github.com/surveit/carbonpaper/actions/runs/31806542868","created":"2026-08-14T13:50:28Z","branch":"feat/tutorial-followups","event":"pull_request","contracts_kept":14,"findings":[]}
