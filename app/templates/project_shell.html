@@ -38,7 +38,14 @@
 {% block content %}
 {# The sidebar collapses to a narrow re-open button, so a wide working view (a run,
    a diagram) can have the width back. Purely additive: nothing else about the shell
-   changes, and the state is remembered per project. #}
+   changes, and the state is remembered per project.
+
+   `?nav=0` lands a page already collapsed, for a link handed to someone who has not
+   seen the app: they arrive on the one page they were sent to, with the sections they
+   have no name for yet behind the re-open button. It is the same collapse, so the way
+   back is the button and the trail, and it is not remembered — the next page they open
+   themselves carries the nav. #}
+{% set nav_collapsed = request.query_params.get('nav') == '0' %}
 <style>
   .app-shell.side-collapsed { grid-template-columns: auto minmax(0, 1fr); gap: 14px; }
   /* project-shell.css gives .app-side `display: flex`, and an author display rule beats the
@@ -63,17 +70,17 @@
     .app-side-expand { position: static; }
   }
 </style>
-<div class="app-shell" id="app-shell">
+<div class="app-shell{% if nav_collapsed %} side-collapsed{% endif %}" id="app-shell">
   {# panel-left-open / panel-left-close: the rect is the page, the rule is the
      panel edge, the chevron says which way it goes. #}
-  <button type="button" class="drawer-btn app-side-expand" id="app-side-expand" hidden
+  <button type="button" class="drawer-btn app-side-expand" id="app-side-expand" {% if not nav_collapsed %}hidden{% endif %}
           title="Show the project sidebar" aria-label="Show the project sidebar">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
          stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m14 9 3 3-3 3"/>
     </svg>
   </button>
-  <aside class="app-side" id="app-side">
+  <aside class="app-side" id="app-side" {% if nav_collapsed %}hidden{% endif %}>
     <div class="app-side-head">
       <a class="app-side-brand" href="/project/{{ state.id }}" title="{{ state.meta.display_name }}">
         <span class="app-side-kicker">project</span>
@@ -135,8 +142,11 @@
   }
   collapse.addEventListener('click', () => setCollapsed(true));
   expand.addEventListener('click', () => setCollapsed(false));
-  // Expanded unless this project was explicitly collapsed before.
-  try { if (localStorage.getItem(KEY) === '1') setCollapsed(true); } catch (e) { /* ignore */ }
+  // Expanded unless this project was explicitly collapsed before — and a link that
+  // asked for the collapsed state gets it whatever this reader chose last time.
+  try {
+    if (!{{ nav_collapsed | tojson }} && localStorage.getItem(KEY) === '1') setCollapsed(true);
+  } catch (e) { /* ignore */ }
 })();
 </script>
 {% endblock %}
