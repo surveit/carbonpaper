@@ -168,6 +168,15 @@ def test_versions_page_uses_the_project_shell():
     assert 'href="/project/demo/workflow"' in html  # sibling nav renders
 
 
+def test_nav_zero_lands_the_shell_collapsed():
+    html = client.get("/project/demo/workflow?nav=0").text
+    assert 'class="app-shell side-collapsed"' in html
+    assert 'class="app-side" id="app-side" hidden' in html
+    # The way back is still on the page: the nav is hidden, not dropped.
+    assert 'href="/project/demo/runs"' in html
+    assert 'class="app-shell side-collapsed"' not in client.get("/project/demo/workflow").text
+
+
 def test_new_project_page_shows_mcp_connect():
     resp = client.get("/project/new")
     assert resp.status_code == 200
