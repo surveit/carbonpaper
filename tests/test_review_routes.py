@@ -986,11 +986,15 @@ def test_the_card_renders_the_described_queued_row_and_its_review_section(tmp_pa
     table = card[card.index('<table class="kv">'):card.index("</table>")]
     assert re.findall(r"<code>(\w+)</code>", table) == ["id", "score"]  # `label` is reviewed
 
-    # A declared description becomes the tooltip; `id` declares none and gets none.
-    described = re.search(r'<th[^>]*title="([^"]*)"[^>]*>\s*<code>(\w+)</code>', card)
+    # A declared description hangs off a help marker beside the column name — the
+    # marker is what tells a reviewer there is anything to hover. `id` declares no
+    # description and gets no marker.
+    described = re.search(
+        r'<code>(\w+)</code><span class="kv-help"[^>]*>'
+        r'<span class="kv-tip" role="tooltip">([^<]*)</span>', card)
     assert described is not None
-    assert described.groups() == ("the score this row was labelled from", "score")
-    assert re.search(r'<th[^>]*>\s*<code>id</code>', table) is not None
+    assert described.groups() == ("score", "the score this row was labelled from")
+    assert re.search(r'<code>id</code>\s*</th>', table) is not None
 
     # A reviewed field is labelled with the column it reviews — `label`, the column
     # the value arrived in, never the `human_label` the answer is stored in — and
@@ -1294,6 +1298,45 @@ def test_an_empty_string_cell_is_not_printed_as_a_null(tmp_path, monkeypatch):
     cells = re.findall(r'<td class="kv-value">\s*(.*?)\s*</td>', html, re.DOTALL)
     assert "<em>empty text</em>" in cells
     assert "<em>no value</em>" in cells
+
+
+def _addressed_row_function_stage():
+    code = ("def transform(row):\n"
+            "    return {'id': row['id'], 'flag': row['flag'],\n"
+            "            'note': 'https://example.org/mill-list.pdf'\n"
+            "                    if row['id'] == 'e' else 'see the filing'}")
+    return {"id": "note", "description": "Add notes", "type": "python_row_function",
+            "inputs": [{"id": "load"}],
+            "function": {"kind": "inline", "code": code},
+            "signature": {
+                "form": "extends",
+                "reads": [{"input": "load", "columns": [
+                    {"name": "id", "type": "str", "nullable": True},
+                    {"name": "flag", "type": "bool", "nullable": True},
+                ]}],
+                "adds": [{"name": "note", "type": "str", "nullable": True}],
+            }}
+
+
+def test_a_cell_holding_an_address_is_rendered_as_a_link(tmp_path, monkeypatch):
+    """A reviewer decides against the sources a row names; one they cannot open is not one."""
+    project = "queue_route_addressed_cell"
+    project_dir = tmp_path / project
+    run_id, _fingerprints = _build_and_halt_queue_over(
+        tmp_path, monkeypatch, project,
+        [_empty_string_load_stage(project_dir), _addressed_row_function_stage(),
+         _empty_string_review_stage()],
+    )
+
+    html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
+
+    cells = re.findall(r'<td class="kv-value">\s*(.*?)\s*</td>', html, re.DOTALL)
+    linked = [cell for cell in cells if cell.startswith("<a ")]
+    assert linked == ['<a href="https://example.org/mill-list.pdf" target="_blank" '
+                      'rel="noopener noreferrer">https://example.org/mill-list.pdf</a>']
+    # Prose that merely mentions a source stays prose: a link is only offered where
+    # the whole cell IS the address, so nothing invents one out of a sentence.
+    assert "see the filing" in cells
 
 
 # ── 10. Values a display must not flatten, and the empty context table ──────
