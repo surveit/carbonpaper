@@ -108,8 +108,7 @@ def test_chat_page_renders_the_composer() -> None:
     sid = _new_session({"label": "hello"})
     page = client.get(f"/chat/{sid}")
     assert page.status_code == 200
-    assert f'const SID = "{sid}";' in page.text
-    assert "const MESSAGE_URL = `/chat/${SID}/message`;" in page.text
+    assert f'let SID = "{sid}";' in page.text
     assert 'id="input"' in page.text  # a bound agent keeps the message composer
 
 

@@ -66,11 +66,10 @@
     <a href="/project/{{ state.id }}/runs/new" class="btn primary">▶ Run workflow</a>
     <button type="button" class="btn" id="create-version-btn">Create version</button>
     {% endif %}
-    {# Authoring, in the app: POST opens a chat session bound to this project's editing
-       agent, which is the same agent an MCP client talks to. #}
-    <form method="post" action="/project/{{ state.id }}/edit-agent">
-      <button type="submit" class="btn">✎ Edit with agent</button>
-    </form>
+    {# Authoring, in the app: opens a chat bound to this project's editing agent, which
+       is the same agent an MCP client talks to. Nothing is created by the link itself —
+       see app.services.agent.open_agent_chat. #}
+    <a href="{{ open_agent_chat('editing', state.id) }}" class="btn">✎ Edit with agent</a>
     <a href="/project/{{ state.id }}/runs" class="btn">All runs</a>
   </div>
 </div>
@@ -136,9 +135,7 @@
           <h2>No workflow yet</h2>
           <p class="muted">This workflow is authored stage by stage by the editing agent.
             Stages appear here as they are added.</p>
-          <form method="post" action="/project/{{ state.id }}/edit-agent">
-            <button type="submit" class="btn primary">✎ Edit with agent</button>
-          </form>
+          <a href="{{ open_agent_chat('editing', state.id) }}" class="btn primary">✎ Edit with agent</a>
         </div>
       </div>
       {% endif %}

@@ -147,33 +147,28 @@ def test_the_reference_carries_no_paste_into_your_assistant_message() -> None:
     assert "mcp_ask_your_assistant" not in TutorialAgentReference.model_fields
 
 
-def test_the_seeded_payload_carries_a_chat_the_editing_agent_is_already_waiting_in() -> None:
-    """A link the reader clicks, not a tool call: the session exists before it is offered."""
+def test_the_seeded_payload_carries_a_chat_link_that_creates_nothing_until_clicked() -> None:
+    """A draft: seeding writes no session for either handoff, only a link to one."""
     store = open_session_store()
     before = {s["session_id"] for s in store.list_sessions()}
 
     seeded = _seed_a_tour()
 
-    minted = {s["session_id"] for s in store.list_sessions()} - before
-    # Two: this project's editing chat, and the unbound one a NEW project starts in.
-    assert len(minted) == 2, "one tour, one editing session per handoff"
+    assert {s["session_id"] for s in store.list_sessions()} == before, (
+        "seeding a tour must not materialize either handoff chat")
     for url in (seeded["edit_chat_url"], seeded["new_project_chat_url"]):
-        sid = url.rsplit("/", 1)[-1]
-        assert sid in minted
-        assert url == f"{_BASE_URL}chat/{sid}"
-        # The claim the tour makes when it hands the URL over: it opens.
-        assert TestClient(fastapi_app).get(f"/chat/{sid}").status_code == 200
+        assert url.startswith(f"{_BASE_URL}chat/agent/editing/new")
+        # The claim the tour makes when it hands the URL over: it opens, and opening
+        # it still creates nothing (see test_tutorial_route.py).
+        assert TestClient(fastapi_app).get(
+            url.removeprefix(_BASE_URL.rstrip("/"))).status_code == 200
 
 
-def test_the_new_project_chat_is_bound_to_no_project_so_the_agent_makes_one() -> None:
+def test_the_new_project_chat_names_no_project_so_the_agent_makes_one() -> None:
     """A reader starting their own must not land in the tour's project."""
     seeded = _seed_a_tour()
 
-    session = open_session_store().load(
-        seeded["new_project_chat_url"].rsplit("/", 1)[-1])
-
-    assert session["agent_id"] == "editing"
-    assert session["context"] == {}
+    assert "project_id" not in seeded["new_project_chat_url"]
 
 
 def test_the_eval_url_addresses_the_eval_the_tour_just_seeded() -> None:
@@ -186,21 +181,15 @@ def test_the_eval_url_addresses_the_eval_the_tour_just_seeded() -> None:
     assert TestClient(fastapi_app).get(path).status_code == 200
 
 
-def test_the_link_and_the_button_open_the_same_conversation() -> None:
+def test_the_link_and_the_button_are_the_same_door() -> None:
     """Two doors, one room: the tour's link is not a second, different offer."""
+    from app.services.agent import open_agent_chat
+
     seeded = _seed_a_tour()
     project = seeded["project"]["id"]
-    store = open_session_store()
 
-    linked = store.load(seeded["edit_chat_url"].rsplit("/", 1)[-1])
-    clicked = store.load(
-        TestClient(fastapi_app)
-        .post(f"/project/{project}/edit-agent", follow_redirects=False)
-        .headers["location"].rsplit("/", 1)[-1])
-
-    assert linked["agent_id"] == clicked["agent_id"] == "editing"
-    assert linked["context"] == clicked["context"] == {"project_id": project}
-    assert linked["title"] == clicked["title"]
+    assert seeded["edit_chat_url"] == _BASE_URL.rstrip("/") + open_agent_chat(
+        "editing", project)
 
 
 def test_run_workflow_passes_limits_through_to_the_run_service(

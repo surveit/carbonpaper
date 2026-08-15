@@ -33,5 +33,5 @@ def test_direct_access_to_hidden_session_works() -> None:
 
     response = client.get(f"/chat/{hidden_sid}")
     assert response.status_code == 200
-    assert f'const SID = "{hidden_sid}";' in response.text
+    assert f'let SID = "{hidden_sid}";' in response.text
     assert "Hidden Session" in response.text

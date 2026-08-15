@@ -18,8 +18,9 @@ from app.services.errors import FileOverCeiling, StoreOverQuota
 from app.services.uploads import max_upload_bytes, save_upload
 from app.web.file_sizes import describe_attachment, describe_refusal
 
+from app.core.agent import registry
 from app.core.agent.session import build_session_engine, create_agent_session
-from app.core.agent.store import open_session_store
+from app.core.agent.store import Bubble, MessageRole, ProseBlock, open_session_store
 from app.core.agent.turns import default_turn_manager
 from app.web.breadcrumbs import build_chat_crumbs, build_home_crumbs
 from app.web.config import templates
@@ -58,12 +59,54 @@ async def chat_index(request: Request):
     })
 
 
-@router.post("/chat/new")
-async def new_chat(request: Request):
-    """Open an editing session bound to no project; the agent asks which one it needs."""
+def _draft_title(agent_id: str, context: dict) -> str:
+    if agent_id == "tutorial":
+        return "Guided tour"
+    project_id = context.get("project_id")
+    return f"{agent_id.capitalize()}: {project_id}" if project_id else "New chat"
+
+
+@router.get("/chat/agent/{agent_id}/new", response_class=HTMLResponse)
+async def draft_agent_chat(agent_id: str, request: Request):
+    """Visiting creates nothing; the composer materializes on the first reply."""
+    if not registry.is_registered(agent_id):
+        raise HTTPException(status_code=404, detail="Unknown agent")
+    context = dict(request.query_params) | {"base_url": str(request.base_url)}
+    opening = registry.render_opening_message(agent_id, context)
+    history = [
+        Bubble(role=MessageRole.assistant, blocks=[ProseBlock(kind="text", text=opening)])
+    ] if opening else []
+    title = _draft_title(agent_id, context)
+    return templates.TemplateResponse(request, "chat.html", {
+        "session_id": None,
+        "title": title,
+        "history": history,
+        "pending_user": None,
+        "active_turn": None,
+        "view_only": False,
+        "backend_error": _backend_error(),
+        "crumbs": build_chat_crumbs(title),
+        "session_project": context.get("project_id"),
+        "projects": [p.model_dump() for p in project_service.list_project_listings()],
+        "max_upload_bytes": max_upload_bytes(),
+        # Carried by the page's JS to materialize a real session on first use.
+        "draft_agent_id": agent_id,
+        "draft_context": context,
+        "draft_title": title,
+    })
+
+
+@router.post("/chat/agent/{agent_id}/materialize")
+async def materialize_agent_chat(agent_id: str, request: Request):
+    """Draft page -> real, stored session. See ensureSession() in chat.html."""
+    if not registry.is_registered(agent_id):
+        raise HTTPException(status_code=404, detail="Unknown agent")
+    body = await request.json()
+    context = (body or {}).get("context") or {}
+    title = (body or {}).get("title")
     sid = create_agent_session(
-        "editing", {}, base_url=str(request.base_url), title="New chat")
-    return RedirectResponse(url=f"/chat/{sid}", status_code=303)
+        agent_id, context, base_url=str(request.base_url), title=title)
+    return JSONResponse({"ok": True, "sid": sid})
 
 
 @router.post("/chat/agent/{agent_id}/sessions")

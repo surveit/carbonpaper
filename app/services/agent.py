@@ -1,23 +1,18 @@
-"""Opening a chat with one of the registered agents on a project.
+"""URLs for a chat with one of the registered agents, stated once so 'Edit with agent'
+and the tour's handoff link agree on what they open.
 
-Both the 'Edit with agent' control and the tour's handoff link must land the reader in
-the same conversation, so what that session IS — its agent, its context, its title and
-the page it waits on — is stated once, here.
-"""
+Neither call creates anything: the link opens a draft page, and the reader's first
+reply is what materializes a stored session — see ensureSession() in chat.html."""
 from __future__ import annotations
 
-from app.core.agent.session import create_agent_session
+from urllib.parse import urlencode
 
 
-def open_agent_chat(agent_id: str, project_id: str, base_url: str) -> str:
-    """Returns the new session's page, root-relative: a caller with a base URL prefixes it."""
-    sid = create_agent_session(
-        agent_id, {"project_id": project_id}, base_url=base_url,
-        title=f"{agent_id.capitalize()}: {project_id}")
-    return f"/chat/{sid}"
+def open_agent_chat(agent_id: str, project_id: str) -> str:
+    """Returns the draft page, root-relative: a caller with a base URL prefixes it."""
+    return f"/chat/agent/{agent_id}/new?{urlencode({'project_id': project_id})}"
 
 
-def open_unbound_agent_chat(agent_id: str, base_url: str) -> str:
+def open_unbound_agent_chat(agent_id: str) -> str:
     """No project in context: the agent asks which one, or makes one with create_project."""
-    sid = create_agent_session(agent_id, {}, base_url=base_url, title="New chat")
-    return f"/chat/{sid}"
+    return f"/chat/agent/{agent_id}/new"

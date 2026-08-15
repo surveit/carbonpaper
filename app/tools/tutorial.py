@@ -62,7 +62,7 @@ class TutorialAgentReference(BaseModel):
     # only one that answers here.
     eval_id: str
     eval_url: str
-    # Live the moment this is returned: the editing agent is waiting in that chat.
+    # A draft: nothing is created until the reader actually replies in it.
     edit_chat_url: str
     # The same agent in a chat bound to NO project, for a reader who wants one of their
     # own: it creates the project from their methodology (create_project) rather than
@@ -105,9 +105,9 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialAgentReference:
         eval_id=eval_config.id,
         eval_url=f"{ctx.base_url}project/{name}/evals/{eval_config.id}",
         edit_chat_url=ctx.base_url.rstrip("/") + agent_service.open_agent_chat(
-            "editing", name, ctx.base_url),
+            "editing", name),
         new_project_chat_url=ctx.base_url.rstrip("/")
-        + agent_service.open_unbound_agent_chat("editing", ctx.base_url),
+        + agent_service.open_unbound_agent_chat("editing"),
         mcp_url=f"{ctx.base_url}mcp",
         mcp_command=f"claude mcp add --transport http carbonpaper {ctx.base_url}mcp",
     )
@@ -157,8 +157,7 @@ CREATE_TUTORIAL_PROJECT = ToolProse(
         "version, its `workflow` (every stage's id, type and inputs), the "
         "`input_files` its run needs, `eval_id` and `eval_url`, the URLs of its "
         "workflow, review guide and runs, `edit_chat_url` — a chat with the editing "
-        "agent on THIS "
-        "project, already open and waiting — `new_project_chat_url`, the same agent in a "
+        "agent on THIS project, ready to open — `new_project_chat_url`, the same agent in a "
         "chat bound to no project, which is where a reader starts one of their own — and "
         "`mcp_url` with the `mcp_command` that adds it. Takes no arguments — the "
         "fixture is fixed. If the tutorial project is already in this workspace it is "
