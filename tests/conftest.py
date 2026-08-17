@@ -94,7 +94,10 @@ def offline_llm(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def offline_agent_sdk(monkeypatch):
+def offline_agent_sdk(monkeypatch, request):
+    if request.node.get_closest_marker("live_llm"):
+        return
+
     async def refuse(*, prompt, options):
         raise LLMError(
             "a test reached the live Claude Agent SDK. Ask for the "

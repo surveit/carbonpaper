@@ -32,6 +32,14 @@ def offline_llm():
     yield
 
 
+def test_the_offline_seal_lets_this_tier_reach_the_real_sdk() -> None:
+    # Costs nothing, and fails here rather than 3 model calls deep if the seal widens.
+    import app.core.agent.sdk_engine as sdk_engine
+    from claude_agent_sdk import query
+
+    assert sdk_engine.query is query
+
+
 def test_live_llm_journey_reaches_a_published_artifact(live_project):
     from app.runtime.options import agent_available
     assert agent_available(), (
