@@ -2,6 +2,7 @@
 
 Docs are in `docs/`. Index:
 
+- [getting-started.md](docs/getting-started.md) — `./start`, signing in so the LLM stages run, where state lives.
 - [overview.md](docs/overview.md) — the mission, the locked vocabulary, and the three features.
 - [architecture.md](docs/architecture.md) — the code map: the entrypoints and what each package owns.
 - [models-and-storage.md](docs/models-and-storage.md) — the Pydantic contract and the compiled-stage JSON only the loader reads.

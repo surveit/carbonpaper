@@ -37,9 +37,14 @@ def configure_default_stores() -> None:
 def configure_default_document_store() -> None:
     if is_store_configured():
         return
+    configure_store(SqliteKvStore(str(create_db_directory())))
+
+
+def create_db_directory() -> Path:
+    """sqlite opens no database under a missing directory; alembic needs it made too."""
     db_path = resolve_db_path()
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    configure_store(SqliteKvStore(str(db_path)))
+    return db_path
 
 
 def resolve_db_path() -> Path:

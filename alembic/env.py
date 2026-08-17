@@ -6,13 +6,13 @@ from __future__ import annotations
 from alembic import context
 from sqlalchemy import create_engine
 
-from app.core.store_config import refuse_renamed_env_vars, resolve_db_path
+from app.core.store_config import create_db_directory, refuse_renamed_env_vars
 
 target_metadata = None
 
 
 def run_migrations_online() -> None:
-    engine = create_engine(f"sqlite+pysqlite:///{resolve_db_path()}")
+    engine = create_engine(f"sqlite+pysqlite:///{create_db_directory()}")
     with engine.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
@@ -20,7 +20,7 @@ def run_migrations_online() -> None:
 
 
 def run_migrations_offline() -> None:
-    context.configure(url=f"sqlite+pysqlite:///{resolve_db_path()}",
+    context.configure(url=f"sqlite+pysqlite:///{create_db_directory()}",
                       target_metadata=target_metadata, literal_binds=True)
     with context.begin_transaction():
         context.run_migrations()
