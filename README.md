@@ -1,94 +1,91 @@
 # Carbon Paper — reviewable AI workflows
 
-Run data/OSINT pipelines as **workflows of typed, schema-validated stages** with
-human-review gates and fully persisted runs — testable and reviewable, not a black box.
+Some questions you only ask once. How much did firms spend lobbying about AI last
+year. Which of these 400 contracts name the same shell company. What changed
+between two editions of a public register.
 
-```
-./start
-```
+You are not building a product. You want the answer, and you need it to hold up.
 
-One command from a fresh clone to `http://127.0.0.1:8765`, on a machine that
-brings only `git`, `curl` and `bash`: `./start` installs uv if it is missing,
-builds `.venv` from `uv.lock`, migrates the store, and serves.
-[docs/getting-started.md](docs/getting-started.md) covers signing in so the
-`llm_transform` stages run, and the gates to run before you push.
+Both usual routes fail that. Hand the files to a chat model and a number comes back
+in minutes, but you cannot publish it: the model made judgement calls you never saw,
+over rows you never looked at. Write the analysis yourself and every step is
+checkable, but you have spent two days engineering something you will run twice.
 
-- What & why: [docs/overview.md](docs/overview.md)
-- Code map: [docs/architecture.md](docs/architecture.md)
-- Contributor guide / conventions: [AGENTS.md](AGENTS.md)
+Carbon Paper is the third route. You write down how the investigation works, in
+prose. That becomes a **workflow**: a chain of small named steps running against your
+original files. Most steps are ordinary deterministic code. A step that genuinely
+needs judgement calls a model, and it is the only one that does.
 
-Dependencies are declared in `pyproject.toml` and pinned in `uv.lock` — there is
-no requirements.txt. `uv sync` builds `.venv` from the lock; `--frozen` makes a
-lock that has drifted from `pyproject.toml` an error instead of a re-resolve.
-Underneath `./start`, and for a workflow run with no UI at all:
+Every step is then open to a reader who did not write it:
+
+- it states in plain English what it does, and shows what it changed in your rows
+- a step needing judgement can halt the run and wait for a person to decide
+- every published figure traces back to the source rows it was computed from
+- the whole run exports as a folder that opens in a browser with no app and no network
+
+The walkthrough at **<https://carbonpaper.fly.dev/intro>** follows one question through
+this end to end — 45,061 lobbying filings, a chat model's $499m against the workflow's
+$42.0m, and what the difference was made of. It is served from `intro/` in this repo,
+so a local server has it at `/intro` too.
+
+The goal is not perfect code. It is an answer you can stand behind, a record that
+proves it, and a workflow you can run again when next quarter's file lands.
+
+Try it at **[carbonpaper.fly.dev](https://carbonpaper.fly.dev)** — a public instance
+with no login, so treat anything you put there as public.
+
+## Getting started
+
+Dependencies are declared in `pyproject.toml` and pinned in `uv.lock` — there is no
+requirements.txt. `uv sync` builds `.venv` from the lock; `--frozen` makes a lock that
+has drifted from `pyproject.toml` an error instead of a re-resolve.
 
 ```
 uv sync --frozen
-uv run python -m uvicorn app.main:app --port 8765   # web UI
-uv run python -m app.cli <project>                  # run a project's workflow from the CLI
+uv run python -m uvicorn app.main:app --port 8765
 ```
 
-Local state lives in `~/.carbonpaper/` — `app.db` (the document store), `frames/`
-and `examples/` (the project working copies) — so every checkout and worktree
-reads and writes the one store. `CARBON_PAPER_DB_PATH` and
-`CARBON_PAPER_PROJECTS_DIR` repoint it, which is how the deploy below pins `/data`.
+Steps that call a model need a credential in the server's environment, either
+`ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`. No app module reads them: the Claude
+Code CLI that `claude-agent-sdk` spawns inherits the environment and authenticates from
+it. Without one the server still boots and serves, and `llm_transform` stages are what
+fail.
 
-## Getting a data file in
+**Take the tour first.** A browser that has not run it gets it in place of the project
+list at <http://localhost:8765>. It seeds a seven-stage workflow over real, sourced
+advocacy records and runs it for real, so the first workflow you read is one you
+watched run.
 
-A run reads its inputs off the server's disk by absolute path. A browser hands over
-bytes and never a path, so the run form's Browse… posts the file to the server, which
-stores it under the hash of its own contents and hands the path back. That endpoint is
-plain multipart and takes any caller — an agent that can run `curl` needs no browser:
+### Your own question
 
-```
-curl -F file=@2026-lobbying.csv http://localhost:8765/project/<project>/files
-{"ok":true,"sha256":"a3f9…","filename":"2026-lobbying.csv","bytes":9470974,
- "path":"~/.carbonpaper/files/a3f9…/2026-lobbying.csv"}
-```
+1. **＋ New project**, and paste your write-up of how the investigation works. The
+   data model is generated from it as a live chat turn, and you land on that chat.
+2. Author the stages by talking to the agent in the same chat. The project's five
+   sections — Overview, Document, Terms, Workflow, Runs — are the left sidebar.
+3. **Get your data file onto the server.** A run reads its inputs off the server's
+   disk by absolute path, so the run form's Browse… posts the file and hands the path
+   back. [Getting a data file in](docs/self-hosting.md#getting-a-data-file-in) covers
+   the endpoint, which takes any caller that can run `curl`.
+4. **▶ Run workflow**, from the Workflow section or a stored version's page. The run
+   form is where a version is picked and each input is pointed at its file.
+5. Read the run: the walkthrough, the issue index, and a panel per step showing what
+   that step changed. Then export the review packet and hand it to whoever checks it.
 
-The same bytes sent twice are one copy — one store serves the workspace, beside the
-document store and the frames, and a record says which project claims each file. One
-file may be up to 512MB and the store 4GB in total; `CARBON_PAPER_MAX_UPLOAD_BYTES` and
-`CARBON_PAPER_FILES_QUOTA_BYTES` raise those on a bigger machine, and
-`CARBON_PAPER_FILES_ROOT` repoints the store. The per-file ceiling is what a run can
-load into memory, not what the disk holds — `input_data` hands a csv/json/xlsx source
-to pandas whole.
-
-Nothing authenticates this endpoint, so a hosted instance is one tester's instance.
-
-## Deploying to Fly.io
-
-`Dockerfile` + `fly.toml` describe a single machine with one volume mounted at
-`/data`. The Fly GitHub integration builds the Dockerfile on push, so the repo
-carries no deploy workflow and no token.
-
-State lives on the volume: `CARBON_PAPER_DB_PATH=/data/app.db` (the document
-store) and `CARBON_PAPER_PROJECTS_DIR=/data/projects`. The frame store follows the
-database path's own directory, so `CARBON_PAPER_FRAMES_ROOT` stays unset.
-`CLAUDE_CONFIG_DIR=/data/claude` puts a third store there: the Claude Code CLI
-writes each chat's transcript under its config dir, and a chat resumes by an id
-the document store holds, so leaving the transcripts in the image ended every
-deploy with resume tokens naming sessions the CLI had thrown away.
-`docker-entrypoint.sh` creates the directories, runs `alembic upgrade head`, then
-execs uvicorn on port 8080 — the migration is in the entrypoint rather than a
-`release_command` because a release machine has no volume attached.
-
-One-time setup for a new app:
+Running once from the command line, against the newest stored version:
 
 ```
-fly volumes create carbonpaper_data --size 10 --region iad
-fly secrets set ANTHROPIC_API_KEY=...
+uv run python -m app.cli <project>
 ```
 
-Credentials are a Fly secret, never a repo value and never `[env]` in `fly.toml`.
-No app module reads them: the Claude Code CLI that `claude-agent-sdk` spawns
-inherits the server's environment and authenticates from it, which is the one
-seam either credential goes through. A subscription-authenticated deploy sets
-`CLAUDE_CODE_OAUTH_TOKEN` instead and must NOT also set `ANTHROPIC_API_KEY` —
-the API key outranks the OAuth token in the CLI's auth precedence, so setting
-both silently bills the metered API (see `.github/workflows/live-llm-smoke.yml`,
-which runs on the OAuth token for that reason). Either way it is one
-`fly secrets set`, not a rebuild.
+Local state lives in `~/.carbonpaper/`, so every checkout and worktree reads and writes
+the one store. [docs/self-hosting.md](docs/self-hosting.md) says what is in there and
+how to repoint it.
 
-Without a credential the server still boots and serves; `llm_transform` stages
-are what fail.
+## Where the rest is
+
+- What & why: [docs/overview.md](docs/overview.md) — the mission, the locked
+  vocabulary, and the three features.
+- Code map: [docs/architecture.md](docs/architecture.md)
+- Running your own instance: [docs/self-hosting.md](docs/self-hosting.md) — the file
+  store and its quotas, the environment variables, and the Fly.io deploy.
+- Contributor guide / conventions: [AGENTS.md](AGENTS.md)
