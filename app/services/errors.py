@@ -19,3 +19,7 @@ class SpecMigrationRefused(ValueError):
 
 class CacheArchiveRejected(Exception):
     """A stage-cache export this workspace could not read a single entry of."""
+
+
+class SourceFetchError(RuntimeError):
+    """A fetch connector could not get its bytes. Never softened into an empty frame."""

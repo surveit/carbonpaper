@@ -13,14 +13,14 @@ from typing import Any
 
 import pandas as pd
 
-from app.core.source_files import FileFormat, read_source_file
+from app.core.source_files import FileFormat, read_source_file, resolve_file_format
 from app.models import (
     JSON_COLUMN_TYPE,
     STR_COLUMN_TYPE,
     TableSchema,
     WorkflowStage,
 )
-from app.models.stages.input_data import InputDataStage, XlsxReadParams
+from app.models.stages.input_data import ConnectorKind, InputDataStage, XlsxReadParams
 
 from ..context import RunContext
 from .execution import narrow_stage
@@ -53,12 +53,9 @@ def preflight_input_data(
     if not isinstance(stage, InputDataStage):
         raise TypeError(
             f"stage {stage.id}: the input_data preflight got a {type(stage).__name__}")
-    connector = stage.connector
-    path_param = connector.params.get("path")
-    if not path_param:
-        return ([f"`{stage.id}`: no file bound — supply a run binding, or author "
-                 "an absolute path in the workflow"], None)
-    path = Path(path_param)
+    path = _bound_path(stage)
+    if path is None:
+        return [f"`{stage.id}`: {_unbound_reason(stage)}"], None
     if not path.is_file():
         return ([f"`{stage.id}`: bound file does not exist or is not a file: {path}"], None)
     with path.open("rb") as handle:
@@ -67,18 +64,30 @@ def preflight_input_data(
                 "bytes": path.stat().st_size}
 
 
+def _bound_path(stage: InputDataStage) -> Path | None:
+    """Every connector kind reaches the runtime as a local path; a fetch is resolved before."""
+    path_param = stage.connector.params.get("path")
+    # Absolute: the model rejects a relative path when present.
+    return Path(path_param) if path_param else None
+
+
+def _unbound_reason(stage: InputDataStage) -> str:
+    if stage.connector.kind == ConnectorKind.fetch:
+        return (f"fetch connector for {stage.connector.params.get('url')!r} was not resolved "
+                "before the run — app.services.run.bind_fetched_sources does that at prepare")
+    return "no file bound — supply a run binding, or author an absolute path in the workflow"
+
+
 def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> pd.DataFrame:
     input_stage = narrow_stage(workflow_stage, InputDataStage)
     params = input_stage.connector.params
 
-    if "path" not in params:
+    path = _bound_path(input_stage)
+    if path is None:
         raise ValueError(
-            f"input stage '{input_stage.id}' has no file bound (connector params carry "
-            "no 'path'); runs bind one at prepare_run — subset/eval runs need the "
-            "workflow to author it or a reference override to inject it"
+            f"input stage '{input_stage.id}' has no file bound: {_unbound_reason(input_stage)}"
         )
-    path = Path(params["path"])   # absolute: the model rejects a relative path when present
-    fmt = FileFormat(params.get("format", FileFormat.csv))
+    fmt = _resolve_format(input_stage, path)
     schema = workflow_stage.output_schema  # input_data's produces is non-empty by validation
     xlsx = XlsxReadParams.model_validate(params)
     df = read_source_file(
@@ -104,6 +113,16 @@ def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> pd.DataFr
             df[col] = pd.to_datetime(df[col], errors="coerce")
 
     return df
+
+
+def _resolve_format(stage: InputDataStage, path: Path) -> FileFormat:
+    """A fetch reads its own suffix rather than csv — the model refuses one declaring neither."""
+    declared = stage.connector.params.get("format")
+    if declared:
+        return FileFormat(declared)
+    if stage.connector.kind == ConnectorKind.fetch:
+        return resolve_file_format(str(path))
+    return FileFormat.csv
 
 
 def _read_dtype(
