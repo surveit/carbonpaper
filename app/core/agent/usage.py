@@ -40,6 +40,16 @@ class LlmUsage(BaseModel):
         return total
 
 
+class TurnSpend(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    # When the turn that spent this finished, ISO-8601. Stamped per turn rather than
+    # read off the session's own `created_at`, so a session left open across two days
+    # dates each turn's spend to the day it happened.
+    at: str
+    usage: LlmUsage
+
+
 def _one_model(left: str | None, right: str | None) -> str | None:
     if left and right and left != right:
         raise ValueError(

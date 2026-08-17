@@ -7,11 +7,13 @@ restart mid-turn is out of scope.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from enum import Enum
 from typing import Any, ClassVar, Literal, TypedDict
 
 from pydantic import BaseModel, Field
 
+from app.core.agent.usage import LlmUsage, TurnSpend
 from app.core.persistence import PersistedModel, PersistenceScope
 
 
@@ -65,6 +67,10 @@ class AgentSession(PersistedModel):
     active_turn: str | None = None
     pending_user: str | None = None
     sdk_session_id: str | None = None  # resume token (CLI session to resume)
+    # One entry per turn that reported usage, appended as the turn tears down. A
+    # session written before this field carries none: what those turns cost was
+    # never recorded, which is not the same as their having cost nothing.
+    turn_spend: list[TurnSpend] = Field(default_factory=list)
 
 
 def open_session_store() -> SessionStore:
@@ -118,6 +124,12 @@ class SessionStore:
     def set_resume_token(self, sid: str, token: str) -> None:
         session = AgentSession.load(sid)
         session.sdk_session_id = token
+        session.save()
+
+    def record_turn_spend(self, sid: str, usage: LlmUsage) -> None:
+        session = AgentSession.load(sid)
+        stamp = datetime.now().isoformat(timespec="seconds")
+        session.turn_spend = [*session.turn_spend, TurnSpend(at=stamp, usage=usage)]
         session.save()
 
     def set_pending_user(self, sid: str, text: str | None) -> None:

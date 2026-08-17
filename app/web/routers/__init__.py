@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from app.web.chat_router import router as chat_router
 from app.web.routers import (
     admin, cmdk_palette, editing, evals, files, guide, node, pickers, project, review,
-    review_packet, run_form, run_lineage, run_stage, runs, tutorial,
+    review_packet, run_form, run_lineage, run_stage, runs, spend, tutorial,
 )
 
 
@@ -30,6 +30,7 @@ def include_routers(app: FastAPI) -> None:
     app.include_router(pickers.router)
     app.include_router(cmdk_palette.router)
     app.include_router(admin.router)
+    app.include_router(spend.router)
 
     # The compiler's chat-driven editing entry ('Edit with agent' -> a chat session).
     app.include_router(editing.router)

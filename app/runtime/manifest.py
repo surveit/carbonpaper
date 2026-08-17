@@ -227,6 +227,40 @@ def list_run_entries(project_id: str) -> list[RunEntry]:
     return sorted(entries, key=lambda e: e.run_id)
 
 
+@dataclass
+class StoredRun:
+    """A run entry carrying the two id segments `list_run_entries` already knew from its caller."""
+
+    project: str
+    # The directory the run was written under — `PRODUCTION_RUNS` for a production
+    # run, `eval_run` for an eval's subset run. Both are stored in one collection.
+    area: str
+    entry: RunEntry
+
+
+def list_stored_runs() -> list[StoredRun]:
+    """Every run in the workspace, both areas and all projects — the whole-store scan."""
+    return [
+        _read_stored_run(doc_id)
+        for doc_id in get_store().list_ids(RunManifest.collection)
+    ]
+
+
+def _read_stored_run(doc_id: str) -> StoredRun:
+    project, area, run_id = _split_run_id(doc_id)
+    return StoredRun(project=project, area=area, entry=_read_entry(doc_id, run_id))
+
+
+def _split_run_id(doc_id: str) -> tuple[str, str, str]:
+    """`compose_id` is the only writer of these keys, so a key of another shape is a bug."""
+    segments = doc_id.split("/")
+    if len(segments) != 3:
+        raise ValueError(
+            f"run record '{doc_id}' is not the project/area/run_id key compose_id writes"
+        )
+    return segments[0], segments[1], segments[2]
+
+
 def _read_entry(doc_id: str, run_id: str) -> RunEntry:
     raw = get_store().read_tolerant(RunManifest.collection, doc_id)
     if raw is None:

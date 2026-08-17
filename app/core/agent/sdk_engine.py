@@ -37,10 +37,11 @@ CLI_MODEL = os.environ.get("CARBON_PAPER_CHAT_CLI_MODEL", "sonnet")
 MCP_SERVER_NAME = "tools"
 
 
-def _usage_from_result(msg: Any) -> LlmUsage:
+def _usage_from_result(msg: Any, model: str) -> LlmUsage:
     usage = getattr(msg, "usage", None) or {}
     cost = getattr(msg, "total_cost_usd", None)
     return LlmUsage(
+        model=model,
         # A usage block missing a token field means the turn reported none of
         # that kind; 0 is the true count, not a stand-in for an unknown value.
         input_tokens=int(usage.get("input_tokens", 0) or 0),   # data-default-ok: absent = zero tokens reported
@@ -129,6 +130,10 @@ class ClaudeAgentSdkEngine:
         resume: str | None = None,
     ) -> tuple[list[dict[str, Any]], str | None]:
         del message_history
+        # Cleared before the turn, not carried over: a turn that dies before its
+        # ResultMessage arrives spent an amount nobody reported, and leaving the
+        # previous turn's figure in place would bill it a second time.
+        self.last_usage = None
         assistant_parts: list[dict[str, Any]] = []
         session_id: str | None = None
         async for msg in query(prompt=prompt, options=self._options(resume)):
@@ -191,7 +196,7 @@ class ClaudeAgentSdkEngine:
                 # (do NOT break — breaking aclose()s a still-running generator).
                 # Capture the session id to resume next turn (conversation memory).
                 session_id = getattr(msg, "session_id", None)
-                self.last_usage = _usage_from_result(msg)
+                self.last_usage = _usage_from_result(msg, self._model)
                 # A turn can end in-band with an error (permission denial on a
                 # tool, max_turns exhausted) without query() raising. Surface it
                 # loudly rather than ending on a silent, empty answer.
