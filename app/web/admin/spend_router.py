@@ -1,7 +1,7 @@
 """The model-spend page: one figure for the whole workspace, off the records the
 executor and the chat turn manager already write. Read-only, and its own router
-rather than a route on admin.py, which reaches the platform through four named
-seams and none of them reads a run manifest.
+rather than a route on `workspace_router`, which reaches the platform through
+four named seams and none of them reads a run manifest.
 """
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse
 
 from app.web.breadcrumbs import build_home_crumbs
 from app.web.config import templates
-from app.web.spend import read_workspace_spend
+from app.web.admin.spend import read_workspace_spend
 
 router = APIRouter()
 

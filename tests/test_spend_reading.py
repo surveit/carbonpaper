@@ -11,7 +11,7 @@ from app.main import app
 from app.models.run_manifest import StageRecord
 from app.models.stages.stage_base import StageType
 from app.runtime.manifest import RunManifest, list_stored_runs
-from app.web.spend import (
+from app.web.admin.spend import (
     NO_PROJECT,
     UNRECORDED_MODEL,
     SpendSource,
