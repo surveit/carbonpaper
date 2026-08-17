@@ -5,6 +5,7 @@ worktree under ``.claude/``), whose absolute parts would match ``startswith(".")
 """
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -38,15 +39,11 @@ def scan_all_source() -> list[Path]:
 
 
 def scan_all_text(suffixes: tuple[str, ...]) -> list[Path]:
-    files = sorted(
+    files = [
         path
-        for suffix in suffixes
-        for path in _REPO_ROOT.rglob(f"*{suffix}")
-        if not any(
-            part.startswith(".") or part in _EXEMPT_TEXT_PARTS
-            for part in path.relative_to(_REPO_ROOT).parts
-        )
-    )
+        for path in _walk_pruned(_REPO_ROOT, suffixes, _EXEMPT_TEXT_PARTS)
+        if not _is_exempt(path.name, _EXEMPT_TEXT_PARTS)
+    ]
     if not files:
         raise ValueError(
             f"scan_all_text found no {suffixes} files under {_REPO_ROOT} — the "
@@ -77,12 +74,25 @@ def _resolve_feature_dir(test_file: str) -> Path:
 def _iter_source_under(base: Path) -> Iterator[Path]:
     if not base.exists():
         raise FileNotFoundError(f"architecture test targets a missing path: {base}")
-    for path in sorted(base.rglob("*.py")):
+    for path in _walk_pruned(base, (".py",), _EXEMPT_PARTS):
         if _is_source(path.relative_to(base)):
             yield path
 
 
+def _walk_pruned(base: Path, suffixes: tuple[str, ...], exempt: set[str]) -> list[Path]:
+    found: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(base):
+        # Pruned DURING the walk rather than filtered after it: an rglob from the repo
+        # root descends into .venv and into every sibling worktree under .claude/,
+        # yielding tens of thousands of paths to keep a few hundred.
+        dirnames[:] = [name for name in dirnames if not _is_exempt(name, exempt)]
+        found += [Path(dirpath) / name for name in filenames if name.endswith(suffixes)]
+    return sorted(found)
+
+
 def _is_source(relative_path: Path) -> bool:
-    return not any(
-        part.startswith(".") or part in _EXEMPT_PARTS for part in relative_path.parts
-    )
+    return not any(_is_exempt(part, _EXEMPT_PARTS) for part in relative_path.parts)
+
+
+def _is_exempt(part: str, exempt: set[str]) -> bool:
+    return part.startswith(".") or part in exempt

@@ -1,5 +1,8 @@
-# An un-stubbed `call_llm` raises `LLMError` rather than reaching the real `claude`
-# CLI; a test exercising the LLM boundary must monkeypatch it itself.
+# No test reaches a live model. An un-stubbed `call_llm` raises `LLMError` rather than
+# reaching the real `claude` CLI, and `offline_agent_sdk` below does the same for the
+# chat seam; a test exercising either boundary must monkeypatch it itself. A test that
+# genuinely wants a model is marked `live_llm`, deselected here and run by
+# .github/workflows/live-llm-smoke.yml.
 from __future__ import annotations
 
 from pathlib import Path
@@ -8,6 +11,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
+from app.core.errors import LLMError
 from app.core.stage_cache import ReadOnlyStageCache
 from app.models import Stage, TableSchema, Workflow, WorkflowStage, WorkflowStageInput
 from app.models.stages.signature import promised_output_schema, transform_input_schemas
@@ -87,6 +91,32 @@ def contribution_of(output: StageOutput) -> StageContribution:
 @pytest.fixture(autouse=True)
 def offline_llm(monkeypatch):
     monkeypatch.setattr("app.runtime.options.agent_available", lambda: False)
+
+
+@pytest.fixture(autouse=True)
+def offline_agent_sdk(monkeypatch):
+    async def refuse(*, prompt, options):
+        raise LLMError(
+            "a test reached the live Claude Agent SDK. Ask for the "
+            "`scripted_agent_turn` fixture to complete a turn without a model, or "
+            "mark the test `live_llm` to run it in the smoke workflow."
+        )
+        yield  # never runs: what makes refuse the async generator query() is
+
+    monkeypatch.setattr("app.core.agent.sdk_engine.query", refuse)
+
+
+@pytest.fixture
+def scripted_agent_turn(monkeypatch):
+    """A turn that completes without a model, so what the page draws is assertable."""
+    async def turn(self, prompt, *, message_history, emit, resume=None):
+        return [
+            {"role": "user", "parts": [{"type": "text", "text": prompt}]},
+            {"role": "assistant", "parts": [{"type": "text", "text": "ok"}]},
+        ], None
+
+    monkeypatch.setattr(
+        "app.core.agent.sdk_engine.ClaudeAgentSdkEngine.stream_turn", turn)
 
 
 @pytest.fixture(autouse=True)
