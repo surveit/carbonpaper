@@ -3,6 +3,16 @@
 Run data/OSINT pipelines as **workflows of typed, schema-validated stages** with
 human-review gates and fully persisted runs — testable and reviewable, not a black box.
 
+```
+./start
+```
+
+One command from a fresh clone to `http://127.0.0.1:8765`, on a machine that
+brings only `git`, `curl` and `bash`: `./start` installs uv if it is missing,
+builds `.venv` from `uv.lock`, migrates the store, and serves.
+[docs/getting-started.md](docs/getting-started.md) covers signing in so the
+`llm_transform` stages run, and the gates to run before you push.
+
 - What & why: [docs/overview.md](docs/overview.md)
 - Code map: [docs/architecture.md](docs/architecture.md)
 - Contributor guide / conventions: [AGENTS.md](AGENTS.md)
@@ -10,6 +20,7 @@ human-review gates and fully persisted runs — testable and reviewable, not a b
 Dependencies are declared in `pyproject.toml` and pinned in `uv.lock` — there is
 no requirements.txt. `uv sync` builds `.venv` from the lock; `--frozen` makes a
 lock that has drifted from `pyproject.toml` an error instead of a re-resolve.
+Underneath `./start`, and for a workflow run with no UI at all:
 
 ```
 uv sync --frozen
@@ -32,7 +43,7 @@ plain multipart and takes any caller — an agent that can run `curl` needs no b
 ```
 curl -F file=@2026-lobbying.csv http://localhost:8765/project/<project>/files
 {"ok":true,"sha256":"a3f9…","filename":"2026-lobbying.csv","bytes":9470974,
- "path":"~/.carbonpaper/examples/<project>/files/a3f9…/2026-lobbying.csv"}
+ "path":"~/.carbonpaper/files/a3f9…/2026-lobbying.csv"}
 ```
 
 The same bytes sent twice are one copy — one store serves the workspace, beside the

@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+#
+# From a fresh clone to a running server, in one command.
+#
+# curl and git are the only things the machine has to bring. uv is installed
+# here if it is missing, and uv then fetches its own CPython 3.12 — so the
+# system Python's version never matters. The claude CLI is asked about rather
+# than installed silently: it is a large install, it is often already present
+# from npm, and nothing but llm_transform stages need it.
+set -euo pipefail
+
+PORT="${PORT:-8765}"
+HOST=127.0.0.1
+RELOAD=--reload
+
+UV_INSTALLER=https://astral.sh/uv/install.sh
+CLI_INSTALLER=https://claude.ai/install.sh
+
+main() {
+  cd "$(dirname "${BASH_SOURCE[0]}")"
+  read_options "$@"
+
+  ensure_uv
+  announce "installing dependencies"
+  uv sync --frozen
+
+  # The same line docker-entrypoint.sh runs. On a store that does not exist yet
+  # it creates nothing but the version stamp, which is what keeps the NEXT
+  # migration from replaying history over data this build already wrote.
+  announce "migrating the store"
+  uv run --frozen alembic upgrade head
+
+  offer_claude_cli
+  report_credential
+
+  announce "serving http://$HOST:$PORT"
+  exec uv run --frozen python -m uvicorn app.main:app --host "$HOST" --port "$PORT" $RELOAD
+}
+
+ensure_uv() {
+  add_local_bin_to_path
+  if command -v uv >/dev/null 2>&1; then
+    return
+  fi
+  announce "installing uv into ~/.local/bin"
+  curl -LsSf "$UV_INSTALLER" | sh
+  add_local_bin_to_path
+  command -v uv >/dev/null 2>&1 ||
+    fail "uv installed but is not on PATH — open a new shell and run ./start again"
+}
+
+offer_claude_cli() {
+  # app/core/llm_sdk.py probes ~/.local/bin for the CLI, so a claude that is
+  # installed but off PATH still resolves — hence the second test.
+  if command -v claude >/dev/null 2>&1 || [[ -x "$HOME/.local/bin/claude" ]]; then
+    return
+  fi
+  warn "the claude CLI is missing. llm_transform stages spawn it and will fail; every"
+  warn "other stage type, and the whole UI, work without it."
+  if confirm "install it now from $CLI_INSTALLER?"; then
+    curl -fsSL "$CLI_INSTALLER" | bash
+    add_local_bin_to_path
+  fi
+}
+
+# Which credential the llm_transform stages will reach for, checked without
+# spending anything: `claude auth status` reads the CLI's own login, which is
+# the credential the SDK-spawned CLI ends up using.
+report_credential() {
+  if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+    announce "llm stages: ANTHROPIC_API_KEY (metered api)"
+  elif [[ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; then
+    announce "llm stages: CLAUDE_CODE_OAUTH_TOKEN"
+  elif ! command -v claude >/dev/null 2>&1; then
+    warn "llm stages: no credential and no claude CLI"
+  elif claude auth status --json 2>/dev/null | grep -q '"loggedIn": *true'; then
+    announce "llm stages: signed in to the claude CLI"
+  else
+    warn "llm stages: not signed in. Run 'claude auth login' in another terminal —"
+    warn "the server picks it up on the next run, and needs no restart otherwise."
+  fi
+}
+
+read_options() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -p|--port)   PORT="$2"; shift 2 ;;
+      --host)      HOST="$2"; shift 2 ;;
+      --no-reload) RELOAD=""; shift ;;
+      -h|--help)   print_usage; exit 0 ;;
+      *)           fail "unknown option: $1 (try --help)" ;;
+    esac
+  done
+}
+
+print_usage() {
+  cat <<'USAGE'
+./start                 serve on http://127.0.0.1:8765
+./start -p 9000         a different port
+./start --host 0.0.0.0  a different interface (nothing authenticates the server)
+./start --no-reload     no file watching
+USAGE
+}
+
+add_local_bin_to_path() {
+  case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) PATH="$HOME/.local/bin:$PATH" ;;
+  esac
+}
+
+# No TTY (CI, a pipe) answers no: an unattended run must not block on a prompt.
+confirm() {
+  [[ -t 0 ]] || return 1
+  local answer
+  read -r -p "==> $1 [y/N] " answer
+  [[ "$answer" == [yY]* ]]
+}
+
+announce() { printf '==> %s\n' "$1"; }
+warn()     { printf '!!! %s\n' "$1" >&2; }
+fail()     { warn "$1"; exit 2; }
+
+main "$@"
