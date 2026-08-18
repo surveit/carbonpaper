@@ -16,15 +16,13 @@
 <div class="empty-state" id="tour-state">
     <h2>New here? Take the guided tour</h2>
     <p class="muted">It seeds a small investigation over sample data, runs it for real, and hands you the record — so the first workflow you read is one you watched run.</p>
-    <form method="post" action="/tutorial" id="tour-form">
-        <button type="submit" class="btn primary" id="tour-cta"
-                title="Seeds a seven-stage workflow over real, sourced advocacy records, and runs it with you.">Take a guided tour on sample data</button>
-    </form>
+    <a href="/chat/agent/tutorial/new" class="btn primary" id="tour-cta"
+       title="Seeds a seven-stage workflow over real, sourced advocacy records, and runs it with you.">Take a guided tour on sample data</a>
 </div>
 <script>
 (function () {
   const KEY = "carbonpaper.tour.started";
-  document.getElementById("tour-form").addEventListener("submit", function () {
+  document.getElementById("tour-cta").addEventListener("click", function () {
     try { localStorage.setItem(KEY, "1"); } catch (e) { /* private mode */ }
   });
   let started = false;

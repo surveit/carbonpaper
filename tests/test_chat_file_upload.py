@@ -8,6 +8,7 @@ import hashlib
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.agent.session import create_agent_session
 from app.main import app
 from app.services import workspace
 from app.services.errors import FileNotStoredError
@@ -36,8 +37,8 @@ def project_id(workspace_with_a_project) -> str:
 
 @pytest.fixture
 def session_id(workspace_with_a_project) -> str:
-    resp = client.post("/chat/new", follow_redirects=False)
-    return resp.headers["location"].rsplit("/", 1)[-1]
+    return create_agent_session(
+        "editing", {}, base_url="http://testserver/", title="t")
 
 
 def attach(sid: str, project_id: str = "", name: str = "posts.csv", body: bytes = CSV):

@@ -1,6 +1,8 @@
-"""The tour's door: the home zero state's only CTA and the route behind it.
+"""The tour's door: the home zero state's only CTA, and the draft/materialize routes
+behind it.
 
-Offline throughout — the route opens a session and redirects; no agent turn runs.
+Offline throughout — visiting the draft page runs no agent turn and creates nothing;
+materializing writes a session but still runs no turn.
 """
 from __future__ import annotations
 
@@ -19,6 +21,7 @@ from app.services.methodology import write_methodology
 client = TestClient(app)
 
 _CTA = "Take a guided tour on sample data"
+_DRAFT_URL = "/chat/agent/tutorial/new"
 
 
 @pytest.fixture(autouse=True)
@@ -36,12 +39,17 @@ def _make_project(root: Path, name: str = "already-here") -> None:
     )
 
 
-def _start_the_tour() -> str:
-    r = client.post("/tutorial", follow_redirects=False)
-    assert r.status_code == 303
-    location = r.headers["location"]
-    assert location.startswith("/chat/")
-    return location.rsplit("/", 1)[-1]
+def _materialize_the_tour() -> str:
+    """What the draft page's first reply does — see ensureSession() in chat.html."""
+    client.get(_DRAFT_URL)  # visiting first, as a reader would
+    r = client.post(
+        "/chat/agent/tutorial/sessions",
+        json={"context": {"base_url": "http://testserver/"}, "title": "Guided tour"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["ok"], data
+    return data["sid"]
 
 
 def test_the_tour_block_offers_only_the_tour() -> None:
@@ -50,7 +58,7 @@ def test_the_tour_block_offers_only_the_tour() -> None:
     assert page.status_code == 200
     assert "New here? Take the guided tour" in page.text
     assert _CTA in page.text
-    assert 'action="/tutorial"' in page.text
+    assert f'href="{_DRAFT_URL}"' in page.text
     assert 'class="btn primary" id="tour-cta"' in page.text
 
     tour_state = page.text.split('id="tour-state"')[1].split("</div>")[0]
@@ -105,13 +113,30 @@ def test_a_home_page_with_projects_still_ships_the_tour_markup(
     assert 'id="tour-state"' in page.text
 
 
-def test_the_route_opens_a_session_bound_to_the_tutorial_agent() -> None:
-    sid = _start_the_tour()
+def test_visiting_the_draft_page_creates_nothing() -> None:
+    before = len(_store.list_sessions())
+
+    assert client.get(_DRAFT_URL).status_code == 200
+    assert client.get(_DRAFT_URL).status_code == 200  # a reload, same result
+
+    assert len(_store.list_sessions()) == before
+
+
+def test_the_draft_page_renders_the_greeting_with_no_session_behind_it() -> None:
+    """The reader lands on a greeting, not on an empty box waiting to be typed in."""
+    page = client.get(_DRAFT_URL)
+
+    assert "Welcome to Carbon Paper" in page.text
+    assert page.text.count("Welcome to Carbon Paper") == 1
+
+
+def test_materializing_opens_a_session_bound_to_the_tutorial_agent() -> None:
+    sid = _materialize_the_tour()
     assert _store.load(sid)["agent_id"] == "tutorial"
 
 
-def test_the_session_carries_a_base_url_the_tutorial_context_accepts() -> None:
-    sid = _start_the_tour()
+def test_the_materialized_session_carries_a_base_url_the_tutorial_context_accepts() -> None:
+    sid = _materialize_the_tour()
     context = _store.load(sid)["context"]
 
     assert context["base_url"].endswith("/")
@@ -119,14 +144,14 @@ def test_the_session_carries_a_base_url_the_tutorial_context_accepts() -> None:
 
 
 def test_two_visitors_get_their_own_sessions() -> None:
-    assert _start_the_tour() != _start_the_tour()
+    assert _materialize_the_tour() != _materialize_the_tour()
 
 
-def test_the_seeded_session_already_carries_the_greeting_with_no_model_call() -> None:
-    """Fixed text written at creation, not a live turn: no turn_id exists yet."""
+def test_the_materialized_session_already_carries_the_greeting_with_no_model_call() -> None:
+    """Fixed text written at materialization, not a live turn: no turn_id exists yet."""
     from app.agents.tutorial.prompt import TUTORIAL_OPENING_MESSAGE
 
-    sid = _start_the_tour()
+    sid = _materialize_the_tour()
     data = _store.load(sid)
 
     assert data["active_turn"] is None
@@ -135,29 +160,8 @@ def test_the_seeded_session_already_carries_the_greeting_with_no_model_call() ->
     ]
 
 
-def test_the_tour_page_renders_the_greeting_on_first_load() -> None:
-    """The reader lands on a greeting, not on an empty box waiting to be typed in."""
-    from app.agents.tutorial.prompt import TUTORIAL_OPENING_MESSAGE
-
-    page = client.get(f"/chat/{_start_the_tour()}")
-
-    assert "Welcome to Carbon Paper" in page.text
-    assert "Ready to get started?" in TUTORIAL_OPENING_MESSAGE
-
-
-def test_reloading_the_tour_page_never_duplicates_the_greeting() -> None:
-    """There is no opening turn to re-trigger — the message was written once, at creation."""
-    sid = _start_the_tour()
-
-    client.get(f"/chat/{sid}")
-    page = client.get(f"/chat/{sid}")
-
-    assert page.text.count("Welcome to Carbon Paper") == 1
-    assert len(_store.load(sid)["messages"]) == 1
-
-
 def test_the_open_route_no_longer_exists() -> None:
     """The greeting used to be a live turn started by this route; it is gone with it."""
-    sid = _start_the_tour()
+    sid = _materialize_the_tour()
 
     assert client.post(f"/chat/{sid}/open").status_code == 404

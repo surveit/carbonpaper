@@ -81,9 +81,9 @@ def test_project_shell_has_no_manual_edit_with_agent_control():
 
 
 def test_workflow_section_offers_the_editing_agent():
-    """Authoring has a way in from the app: the POST opens a chat bound to this project."""
+    """Authoring has a way in from the app: a link to a chat bound to this project."""
     r = client.get("/project/demo/workflow")
-    assert 'action="/project/demo/edit-agent"' in r.text
+    assert 'href="/chat/agent/editing/new?project_id=demo"' in r.text
     assert "Edit with agent" in r.text
 
 

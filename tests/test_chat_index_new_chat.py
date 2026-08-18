@@ -28,18 +28,20 @@ def read_current_project(sid: str) -> str | None:
     return next(t for t in tools if t.name == "get_current_project").fn()
 
 
-def open_session(url: str) -> str:
-    response = client.post(url, follow_redirects=False)
-    assert response.status_code == 303, response.text
-    location = response.headers["location"]
-    assert location.startswith("/chat/")
-    return location.removeprefix("/chat/")
+def open_session(agent_id: str, context: dict | None = None) -> str:
+    """What a draft page's first reply does — see ensureSession() in chat.html."""
+    response = client.post(
+        f"/chat/agent/{agent_id}/sessions", json={"context": context or {}})
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["ok"], data
+    return data["sid"]
 
 
 def test_the_index_offers_a_new_chat_without_naming_a_project() -> None:
     create_project("trail", "Follow the filings.", source="test").id
     body = client.get("/chat").text
-    assert 'action="/chat/new"' in body
+    assert 'href="/chat/agent/editing/new"' in body
     assert "New chat" in body
     assert "<select" not in body
     assert "/edit-agent" not in body
@@ -48,12 +50,12 @@ def test_the_index_offers_a_new_chat_without_naming_a_project() -> None:
 def test_the_offer_stands_with_no_projects_at_all() -> None:
     assert list_projects() == []
     body = client.get("/chat").text
-    assert 'action="/chat/new"' in body
+    assert 'href="/chat/agent/editing/new"' in body
     assert "No projects yet" not in body
 
 
-def test_posting_to_chat_new_lands_on_an_editing_session_bound_to_no_project() -> None:
-    sid = open_session("/chat/new")
+def test_materializing_a_bare_context_lands_on_an_editing_session_bound_to_no_project() -> None:
+    sid = open_session("editing")
     data = _store.load(sid)
     assert data["agent_id"] == "editing"
     assert data["context"].get("project_id") is None
@@ -61,16 +63,16 @@ def test_posting_to_chat_new_lands_on_an_editing_session_bound_to_no_project() -
 
 
 def test_a_projectless_session_reports_no_current_project() -> None:
-    assert read_current_project(open_session("/chat/new")) is None
+    assert read_current_project(open_session("editing")) is None
 
 
-def test_a_session_opened_from_a_project_still_reports_that_project() -> None:
+def test_a_session_materialized_with_a_project_still_reports_that_project() -> None:
     name = create_project("trail", "Follow the filings.", source="test").id
-    assert read_current_project(open_session(f"/project/{name}/edit-agent")) == name
+    assert read_current_project(open_session("editing", {"project_id": name})) == name
 
 
 def test_the_editing_engine_builds_for_a_projectless_session() -> None:
     """build_engine validates the context and binds every tool, so not raising is the check."""
-    data = _store.load(open_session("/chat/new"))
+    data = _store.load(open_session("editing"))
     engine = build_engine(data["agent_id"], data["context"] | _READER)
     assert isinstance(engine, ClaudeAgentSdkEngine)
