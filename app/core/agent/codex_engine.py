@@ -5,7 +5,7 @@ import inspect
 import json
 import os
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Literal, TypedDict
 
 from pydantic import BaseModel
 
@@ -16,11 +16,32 @@ from app.core.agent.codex_protocol import (
     CodexRequestId,
     TypeUnsafeCodexJsonObject,
 )
-from app.core.agent.store import TranscriptMessage
+from app.core.agent.store import TranscriptMessage, TranscriptPart
 
 
-type AgentEvent = dict[str, Any]
-type TranscriptPart = dict[str, Any]
+class ProseEvent(TypedDict):
+    kind: Literal["text", "thinking"]
+    text: str
+
+
+class ErrorEvent(TypedDict):
+    kind: Literal["error"]
+    text: str
+
+
+class ToolCallEvent(TypedDict):
+    kind: Literal["tool_call"]
+    name: str
+    args: str
+    label: str
+
+
+class ToolResultEvent(TypedDict):
+    kind: Literal["tool_result"]
+    content: str
+
+
+type AgentEvent = ProseEvent | ErrorEvent | ToolCallEvent | ToolResultEvent
 type EmitEvent = Callable[[AgentEvent], None]
 
 _COMMAND_APPROVAL = "item/commandExecution/requestApproval"
@@ -183,7 +204,7 @@ async def _deny_approval(
 async def _deny_permissions(
     server: CodexAppServer, request_id: CodexRequestId, emit: EmitEvent
 ) -> None:
-    await server.respond(request_id, {"permissions": []})
+    await server.respond(request_id, {"permissions": {}})
     emit({"kind": "error", "text": "Codex permission request denied"})
 
 
@@ -254,7 +275,10 @@ def _emit_turn_failure(message: TypeUnsafeCodexJsonObject, emit: EmitEvent) -> N
 
 
 def _append_prose(
-    kind: str, text: str, assistant_parts: list[TranscriptPart], emit: EmitEvent
+    kind: Literal["text", "thinking"],
+    text: str,
+    assistant_parts: list[TranscriptPart],
+    emit: EmitEvent,
 ) -> None:
     emit({"kind": kind, "text": text})
     assistant_parts.append({"type": kind, "text": text})
@@ -262,7 +286,7 @@ def _append_prose(
 
 def _tool_call_event(
     name: str, args: str, spec: BoundToolSpec | None
-) -> AgentEvent:
+) -> ToolCallEvent:
     return {
         "kind": "tool_call",
         "name": name,

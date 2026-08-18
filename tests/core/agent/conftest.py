@@ -20,6 +20,7 @@ requests_path = Path(sys.argv[1])
 mode = sys.argv[2]
 turn_started = False
 tool_answered = False
+out_of_order_requests = []
 
 
 def send(message):
@@ -53,15 +54,9 @@ for line in sys.stdin:
     if method == "initialize":
         send({"id": message["id"], "result": {"userAgent": "fake-codex"}})
     elif method == "initialized":
-        if mode == "malformed":
-            print("not json", flush=True)
-        elif mode == "invalid_response":
-            send({"id": None, "result": {}})
-        elif mode == "eof":
-            break
-        elif mode == "plain":
+        if mode == "plain":
             tool_answered = True
-        else:
+        elif mode not in {"malformed", "invalid_response", "eof", "out_of_order"}:
             request_methods = {
                 "normal": "item/tool/call",
                 "shell": "item/commandExecution/requestApproval",
@@ -80,6 +75,17 @@ for line in sys.stdin:
                     "arguments": {},
                 },
             })
+    elif mode == "malformed" and method == "pending":
+        print("not json", flush=True)
+    elif mode == "invalid_response" and method == "pending":
+        send({"id": None, "result": {}})
+    elif mode == "eof" and method == "pending":
+        break
+    elif mode == "out_of_order" and method in {"request/first", "request/second"}:
+        out_of_order_requests.append(message)
+        if len(out_of_order_requests) == 2:
+            for request in reversed(out_of_order_requests):
+                send({"id": request["id"], "result": {"method": request["method"]}})
     elif method in {"thread/start", "thread/resume"}:
         send({"id": message["id"], "result": {"thread": {"id": "thread-1"}}})
     elif method == "turn/start":

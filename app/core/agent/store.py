@@ -36,11 +36,33 @@ class ChatBackend(str, Enum):
     codex = "codex"
 
 
-class TranscriptMessage(TypedDict):
-    """One stored transcript message; `role` is a MessageRole value."""
+class TranscriptProsePart(TypedDict):
+    type: Literal["text", "thinking"]
+    text: str
 
-    role: str
-    parts: list[dict[str, Any]]
+
+class TranscriptToolCallPart(TypedDict):
+    type: Literal["tool_call"]
+    name: str
+    args: str
+    label: str
+
+
+class TranscriptToolResultPart(TypedDict):
+    type: Literal["tool_result"]
+    content: str
+
+
+type TranscriptPart = (
+    TranscriptProsePart | TranscriptToolCallPart | TranscriptToolResultPart
+)
+
+
+class TranscriptMessage(TypedDict):
+    """One stored user or assistant message."""
+
+    role: Literal["user", "assistant"]
+    parts: list[TranscriptPart]
 
 
 class ProseBlock(BaseModel):
