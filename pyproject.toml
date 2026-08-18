@@ -35,6 +35,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=8.0",
+    "pytest-xdist>=3.8",        # `pytest -n auto`; the suite is parallel-safe
     "httpx>=0.27",              # fastapi.testclient (starlette TestClient) transport
     "ruff==0.15.20",
     "mypy==2.1.0",

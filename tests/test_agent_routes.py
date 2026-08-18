@@ -47,7 +47,7 @@ def _build_tools(ctx: BaseModel) -> list:
 
 
 @pytest.fixture(autouse=True)
-def register_dummy_agent() -> Iterator[None]:
+def register_dummy_agent(scripted_agent_turn) -> Iterator[None]:
     register(
         "dummy",
         AgentConfig(system_prompt="sp", context_schema=_Ctx),

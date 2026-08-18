@@ -103,9 +103,12 @@ jobs:
       # the colocated app/**/_arch_tests/ architecture checks DO run in CI.
       # --junitxml records which tests failed in a form the recording step below
       # can read; the log itself is not a stable machine-readable record.
+      # -n auto takes the runner's 4 vCPUs (public repo). Workers claim tests in no
+      # fixed order, so a test that needed to follow another fails here rather than
+      # on the machine that later reorders it.
       - run: |
           if [ -d tests ]; then
-            uv run --frozen python -m pytest tests/ app/ --junitxml=junit.xml
+            uv run --frozen python -m pytest tests/ app/ -n auto --junitxml=junit.xml
           else
             echo "::warning::No tests/ directory on this ref — pytest was NOT run."
           fi
