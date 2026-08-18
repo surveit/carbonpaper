@@ -172,6 +172,26 @@ def test_invalid_tool_arguments_return_an_error_content_item(fake_codex_server) 
     asyncio.run(drive())
 
 
+def test_unexpected_dynamic_tool_failure_propagates(fake_codex_server) -> None:
+    def explode() -> str:
+        raise RuntimeError("tool exploded")
+
+    async def drive() -> None:
+        tool = bind_by_schema(
+            name="echo",
+            description="Echo",
+            label="Echoing",
+            json_schema={"type": "object"},
+            fn=explode,
+        )
+        with pytest.raises(RuntimeError, match="tool exploded"):
+            await CodexChatEngine("system", [tool], fake_codex_server.command).stream_turn(
+                "use echo", message_history=None, emit=lambda _event: None, resume=None
+            )
+
+    asyncio.run(drive())
+
+
 @pytest.mark.parametrize(
     ("mode", "expected_result"),
     [

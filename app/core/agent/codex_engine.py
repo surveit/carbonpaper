@@ -7,7 +7,7 @@ import os
 from collections.abc import Callable, Sequence
 from typing import Literal, TypedDict
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.core.agent.bound_tool import BoundToolSpec
 from app.core.agent.codex_protocol import (
@@ -159,7 +159,7 @@ class CodexChatEngine:
         _record_tool_call(name, args_text, spec, assistant_parts, emit)
         try:
             text = await _invoke_tool(spec, arguments)
-        except Exception as exc:  # noqa: BLE001 — dynamic-tool boundary returns the failure to Codex
+        except (CodexProtocolError, ValidationError) as exc:
             await server.respond(request_id, _tool_response(f"ERROR: {exc}", False))
             emit({"kind": "error", "text": f"{type(exc).__name__}: {exc}"})
             return
@@ -188,9 +188,9 @@ class CodexChatEngine:
 
 async def _invoke_tool(spec: BoundToolSpec | None, arguments: object) -> str:
     if spec is None:
-        raise ValueError("Codex requested an unknown dynamic tool")
+        raise CodexProtocolError("Codex requested an unknown dynamic tool")
     if not isinstance(arguments, dict):
-        raise ValueError("Codex dynamic tool arguments must be an object")
+        raise CodexProtocolError("Codex dynamic tool arguments must be an object")
     result = spec.fn(**spec.parse_arguments(arguments))
     if inspect.isawaitable(result):
         result = await result
