@@ -26,10 +26,17 @@ Every step is then open to a reader who did not write it:
 The goal is not perfect code. It is an answer you can stand behind, a record that
 proves it, and a workflow you can run again when next quarter's file lands.
 
-`intro/` walks one lobbying question through all of this, step by step. A local
-server serves it at `/intro`, and the deploy at
-<https://carbonpaper.fly.dev/intro>. That deploy has no login, so treat anything you
-put on it as public.
+## Try it without installing anything
+
+- **[Read one worked through, step by step](https://carbonpaper.fly.dev/intro)** — one
+  lobbying question, from the filings to the published figure. Served from `intro/` in
+  this repo, so a local server has it at `/intro` too.
+- **[Take the guided tour](https://carbonpaper.fly.dev)** — it seeds a seven-stage
+  workflow over real, sourced advocacy records and runs it for real, so the first
+  workflow you read is one you watched run.
+
+That instance has no login and anyone can delete anything on it, so treat what you put
+there as public and keep real work local.
 
 ## Getting started
 
@@ -46,9 +53,8 @@ that call a model — `claude auth login` once is the only part `./start` will n
 for you. [docs/getting-started.md](docs/getting-started.md) covers signing in, the two
 environment variables that override it, and where your state lives.
 
-**Take the tour first.** A browser that has not run it gets it in place of the project
-list. It seeds a seven-stage workflow over real, sourced advocacy records and runs it
-for real, so the first workflow you read is one you watched run.
+Your local server opens on the same tour, in place of the project list, until you have
+taken it once.
 
 ### Your own question
 
