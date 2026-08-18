@@ -41,12 +41,17 @@ there as public and keep real work local.
 ## Getting started
 
 ```
-git clone https://github.com/surveit/carbonpaper && cd carbonpaper && ./start
+git clone --branch production --depth 1 https://github.com/surveit/carbonpaper
+cd carbonpaper && ./start
 ```
 
 That is the whole install. The machine brings `git`, `curl` and `bash`; `./start`
 installs uv if it is missing, builds the venv from `uv.lock`, migrates the store, and
 serves <http://127.0.0.1:8765>. Run it again after a `git pull`.
+
+`production` is the branch the public instance runs, so the code you install is the
+code you just tried. `master` is where work lands and is not promoted until it is
+green.
 
 The server boots and serves with no credential. What fails without one is the steps
 that call a model — `claude auth login` once is the only part `./start` will not do
