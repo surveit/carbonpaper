@@ -7,10 +7,11 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from app.core.agent.registry import build_engine
-from app.core.agent.store import open_session_store
+from app.core.agent.store import ChatBackend, open_session_store
 from app.main import app
 from app.core.agent.sdk_engine import ClaudeAgentSdkEngine
 from app.services.project import create_project, list_projects
+from app.web import chat_router
 from app.tools.editing import EditingContext, make_editing_tools
 
 client = TestClient(app)
@@ -38,19 +39,25 @@ def open_session(agent_id: str, context: dict | None = None) -> str:
     return data["sid"]
 
 
-def test_the_index_offers_a_new_chat_without_naming_a_project() -> None:
+def test_the_index_offers_a_new_chat_without_naming_a_project(monkeypatch) -> None:
+    monkeypatch.setattr(
+        chat_router, "available_chat_backends", lambda: [ChatBackend.claude]
+    )
     create_project("trail", "Follow the filings.", source="test").id
     body = client.get("/chat").text
-    assert 'href="/chat/agent/editing/new"' in body
+    assert 'action="/chat/new"' in body
     assert "New chat" in body
-    assert "<select" not in body
+    assert 'value="claude"' in body
     assert "/edit-agent" not in body
 
 
-def test_the_offer_stands_with_no_projects_at_all() -> None:
+def test_the_offer_stands_with_no_projects_at_all(monkeypatch) -> None:
+    monkeypatch.setattr(
+        chat_router, "available_chat_backends", lambda: [ChatBackend.claude]
+    )
     assert list_projects() == []
     body = client.get("/chat").text
-    assert 'href="/chat/agent/editing/new"' in body
+    assert 'action="/chat/new"' in body
     assert "No projects yet" not in body
 
 
