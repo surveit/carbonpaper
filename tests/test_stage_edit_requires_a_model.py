@@ -62,6 +62,13 @@ def test_adding_an_llm_stage_that_names_a_model_is_accepted(project):
     assert result.ok, result.issues
 
 
+def test_adding_codex_stage_with_tools_is_refused(project):
+    result = add_stage_spec(
+        project, json.dumps(_judge_spec(model="gpt-5.6-terra", tools=["WebSearch"])))
+    assert not result.ok
+    assert any("gpt-5.6-terra" in issue and "llm.tools" in issue for issue in result.issues)
+
+
 def test_a_stage_stored_without_a_model_still_loads(project):
     add_stage(project, _judge_spec())
     workflow = load_workflow_object(project)

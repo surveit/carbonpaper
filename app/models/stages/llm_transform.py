@@ -111,6 +111,31 @@ class LLMConfig(StageConfig):
         ),
     )
 
+    def find_backend_capability_issues(self) -> list[str]:
+        if self.model is None:
+            return []
+        model = LLMModel(self.model)
+        if model.backend != "codex":
+            return []
+        unsupported = []
+        if self.tools is not None:
+            unsupported.append("llm.tools")
+        if self.batch_size != 1:
+            unsupported.append("llm.batch_size")
+        if self.thinking is not None:
+            unsupported.append("llm.thinking")
+        return [
+            f"{model.value} does not support {field} on the codex backend."
+            for field in unsupported
+        ]
+
+    @model_validator(mode="after")
+    def _backend_capabilities_are_supported(self) -> "LLMConfig":
+        issues = self.find_backend_capability_issues()
+        if issues:
+            raise ValueError("; ".join(issues))
+        return self
+
     @model_validator(mode="after")
     def _tools_are_known_names(self) -> "LLMConfig":
         if not self.tools:

@@ -368,13 +368,20 @@ def test_unknown_file_format_rejected(tmp_path):
         Connector.model_validate({"kind": "file", "params": {"path": str(tmp_path / "d.xyz"), "format": "xyz"}})
 
 
-def test_model_enum_accepts_known():
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        ("claude-haiku-4-5", LLMModel.claude_haiku_4_5),
+        ("gpt-5.6-terra", LLMModel.gpt_5_6_terra),
+    ],
+)
+def test_model_enum_accepts_known(model, expected):
     s = m.parse_stage(S(
         id="e", type="llm_transform",
         inputs=[{"id": "a"}],
         signature={"form": "extends", "adds": [{"name": "out", "type": "str", "nullable": True}]},
-        llm={"prompt_template": "p", "model": "claude-haiku-4-5"}))
-    assert s.llm.model == LLMModel.claude_haiku_4_5
+        llm={"prompt_template": "p", "model": model}))
+    assert s.llm.model == expected
 
 
 def test_model_enum_rejects_unknown():
