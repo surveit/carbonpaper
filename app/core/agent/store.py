@@ -16,6 +16,8 @@ from pydantic import BaseModel, Field
 from app.core.agent.usage import LlmUsage, TurnSpend
 from app.core.persistence import PersistedModel, PersistenceScope
 
+type AgentContext = dict[str, Any]
+
 
 class MessageRole(str, Enum):
     user = "user"
@@ -27,6 +29,11 @@ class PartType(str, Enum):
     thinking = "thinking"
     tool_call = "tool_call"
     tool_result = "tool_result"
+
+
+class ChatBackend(str, Enum):
+    claude = "claude"
+    codex = "codex"
 
 
 class TranscriptMessage(TypedDict):
@@ -62,7 +69,8 @@ class AgentSession(PersistedModel):
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
     title: str = "New chat"
     agent_id: str | None = None
-    context: dict[str, Any] = Field(default_factory=dict)
+    backend: ChatBackend = ChatBackend.claude
+    context: AgentContext = Field(default_factory=dict)
     messages: list[dict[str, Any]] = Field(default_factory=list)  # engine-neutral {role, parts} transcript
     active_turn: str | None = None
     pending_user: str | None = None
@@ -83,13 +91,15 @@ class SessionStore:
         *,
         title: str | None = None,
         agent_id: str | None = None,
-        context: dict | None = None,
+        backend: ChatBackend = ChatBackend.claude,
+        context: AgentContext | None = None,
     ) -> str:
         sid = uuid.uuid4().hex[:12]
         AgentSession(
             id=sid,
             title=title or "New chat",
             agent_id=agent_id,
+            backend=backend,
             context=context or {},
         ).save()
         return sid
