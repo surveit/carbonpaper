@@ -1,0 +1,450 @@
+{
+  "case_id": "codonors_2020_democratic_primary",
+  "source": {
+    "repo": "https://github.com/BuzzFeedNews/2019-04-democratic-candidate-codonors",
+    "commit": "380e37bf2fa8cacad80347165ec3e79dbbac51cd",
+    "path": "outputs/candidate-pair-counts.csv"
+  },
+  "inputs": [
+    {
+      "path": "derived/contributions.csv",
+      "sha256": "2ff1fd4b209df799c91cfb6dfc7419a56fc12b8b572837165409dfcd91f8cc6a"
+    },
+    {
+      "path": "inputs/candidates.csv",
+      "sha256": "23fc5ef777019fa3ca0402b28efeab791b08320c8ad8b28d667aff42af532066"
+    },
+    {
+      "path": "inputs/filings.csv",
+      "sha256": "168a2a3e1e2af202c5ec1e04e54aa9ccd678113535dc381cbe78bb0fec1305fd"
+    }
+  ],
+  "brief": "# Shared donors between 2020 Democratic primary candidates\n\n## The story I want to tell\n\nEarly in the 2020 Democratic primary, which candidates were drawing on the same people for\nmoney? For every pair of candidates, I want to know how many individual donors gave to both\nof them. The pairs at the top are the candidates competing for one pool of supporters.\n\n## The output I need\n\nOne row per pair of candidates who share at least one individual donor.\n\n| column | type | meaning |\n|---|---|---|\n| `candidate_x` | str | the alphabetically first candidate of the pair |\n| `candidate_y` | str | the alphabetically second candidate of the pair |\n| `count` | int | how many individual donors gave to both candidates |\n\nEach unordered pair appears once, with the two names in alphabetical order.\n\n## Sort order\n\n`count` descending. Where pairs tie, `candidate_x` ascending, then `candidate_y` ascending.\n\n## Files\n\n- `contributions.csv` - every itemized receipt reported on the 15 committees' April 2019\n  quarterly FEC filings, one row per receipt, 188,107 rows. It is the complete Schedule A of\n  each filing, not a subset. Columns include `filing_id`, `filer_committee_id_number`,\n  `transaction_id`, `entity_type`, `memo_code`, `contribution_date`,\n  `contribution_amount`, `contribution_aggregate`, and the contributor's name, address,\n  city, state, zip, employer and occupation as separate columns.\n- `candidates.csv` - the 15 candidates, each with `Candidate Name`, `Candidate Sex`,\n  `Committee Name` and `committee_id`.\n- `filings.csv` - one row per filing: `Candidate Name`, `committee_id`, `filing_id`,\n  `report_title`, `date_coverage_from`, `date_coverage_to`, `amended`.\n\nSource: Federal Election Commission electronic filings, April 2019 quarterly reports.",
+  "golden": {
+    "columns": [
+      "candidate_x",
+      "candidate_y",
+      "count"
+    ],
+    "rows": [
+      {
+        "candidate_x": "Kamala Harris",
+        "candidate_y": "Pete Buttigieg",
+        "count": "170"
+      },
+      {
+        "candidate_x": "Cory Booker",
+        "candidate_y": "Kamala Harris",
+        "count": "166"
+      },
+      {
+        "candidate_x": "Beto O'Rourke",
+        "candidate_y": "Pete Buttigieg",
+        "count": "144"
+      },
+      {
+        "candidate_x": "Amy Klobuchar",
+        "candidate_y": "Kamala Harris",
+        "count": "141"
+      },
+      {
+        "candidate_x": "Bernie Sanders",
+        "candidate_y": "Elizabeth Warren",
+        "count": "138"
+      },
+      {
+        "candidate_x": "Kamala Harris",
+        "candidate_y": "Kirsten Gillibrand",
+        "count": "130"
+      },
+      {
+        "candidate_x": "Beto O'Rourke",
+        "candidate_y": "Kamala Harris",
+        "count": "128"
+      },
+      {
+        "candidate_x": "Elizabeth Warren",
+        "candidate_y": "Kamala Harris",
+        "count": "121"
+      },
+      {
+        "candidate_x": "Amy Klobuchar",
+        "candidate_y": "Pete Buttigieg",
+        "count": "112"
+      },
+      {
+        "candidate_x": "Cory Booker",
+        "candidate_y": "Kirsten Gillibrand",
+        "count": "80"
+      },
+      {
+        "candidate_x": "Elizabeth Warren",
+        "candidate_y": "Pete Buttigieg",
+        "count": "75"
+      },
+      {
+        "candidate_x": "Amy Klobuchar",
+        "candidate_y": "Kirsten Gillibrand",
+        "count": "72"
+      },
+      {
+        "candidate_x": "Amy Klobuchar",
+        "candidate_y": "Beto O'Rourke",
+        "count": "65"
+      },
+      {
+        "candidate_x": "Bernie Sanders",
+        "candidate_y": "Tulsi Gabbard",
+        "count": "65"
+      },
+      {
+        "candidate_x": "Amy Klobuchar",
+        "candidate_y": "Elizabeth Warren",
+        "count": "52"
+      },
+      {
+        "candidate_x": "Amy Klobuchar",
+        "candidate_y": "Cory Booker",
+        "count": "43"
+      },
+      {
+        "candidate_x": "Jay Inslee",
+        "candidate_y": "Pete Buttigieg",
+        "count": "42"
+      },
+      {
+        "candidate_x": "Beto O'Rourke",
+        "candidate_y": "Elizabeth Warren",
+        "count": "41"
+      },
+      {
+        "candidate_x": "Cory Booker",
+        "candidate_y": "Pete Buttigieg",
+        "count": "40"
+      },
+      {
+        "candidate_x": "Bernie Sanders",
+        "candidate_y": "Kamala Harris",
+        "count": "38"
+      },
+      {
+        "candidate_x": "Beto O'Rourke",
+        "candidate_y": "Cory Booker",
+        "count": "33"
+      },
+      {
+        "candidate_x": "Cory Booker",
+        "candidate_y": "Elizabeth Warren",
+        "count": "32"
+      },
+      {
+        "candidate_x": "Elizabeth Warren",
+        "candidate_y": "Kirsten Gillibrand",
+        "count": "32"
+      },
+      {
+        "candidate_x": "Bernie Sanders",
+        "candidate_y": "Pete Buttigieg",
+        "count": "31"
+      },
+      {
+        "candidate_x": "Elizabeth Warren",
+        "candidate_y": "Jay Inslee",
+        "count": "30"
+      },
+      {
+        "candidate_x": "Beto O'Rourke",
+        "candidate_y": "Kirsten Gillibrand",
+        "count": "27"
+      },
+      {
+        "candidate_x": "Kirsten Gillibrand",
+        "candidate_y": "Pete Buttigieg",
+        "count": "26"
+      },
+      {
+        "candidate_x": "Amy Klobuchar",
+        "candidate_y": "Jay Inslee",
+        "count": "24"
+      },
+      {
+        "candidate_x": "Bernie Sanders",
+        "candidate_y": "Beto O'Rourke",
+        "count": "22"
+      },
+      {
+        "candidate_x": "Jay Inslee",
+        "candidate_y": "Kamala Harris",
+        "count": "22"
+      },
+      {
+        "candidate_x": "Julián Castro",
+        "candidate_y": "Kamala Harris",
+        "count": "20"
+      },
+      {
+        "candidate_x": "Amy Klobuchar",
+        "candidate_y": "John Hickenlooper",
+        "count": "16"
+      },
+      {
+        "candidate_x": "Beto O'Rourke",
+        "candidate_y": "Jay Inslee",
+        "count": "16"
+      },
+      {
+        "candidate_x": "Beto O'Rourke",
+        "candidate_y": "Julián Castro",
+        "count": "15"
+      },
+      {
+        "candidate_x": "John Hickenlooper",
+        "candidate_y": "Kamala Harris",
+        "count": "15"
+      },
+      {
+        "candidate_x": "John Hickenlooper",
+        "candidate_y": "Pete Buttigieg",
+        "count": "15"
+      },
+      {
+        "candidate_x": "Beto O'Rourke",
+        "candidate_y": "John Hickenlooper",
+        "count": "14"
+      },
+      {
+        "candidate_x": "Cory Booker",
+        "candidate_y": "Jay Inslee",
+        "count": "14"
+      },
+      {
+        "candidate_x": "Bernie Sanders",
+        "candidate_y": "Jay Inslee",
+        "count": "13"
+      },
+      {
+        "candidate_x": "Cory Booker",
+        "candidate_y": "John Hickenlooper",
+        "count": "11"
+      },
+      {
+        "candidate_x": "John Hickenlooper",
+        "candidate_y": "Kirsten Gillibrand",
+        "count": "11"
+      },
+      {
+        "candidate_x": "Julián Castro",
+        "candidate_y": "Pete Buttigieg",
+        "count": "11"
+      },
+      {
+        "candidate_x": "Bernie Sanders",
+        "candidate_y": "Cory Booker",
+        "count": "9"
+      },
+      {
+        "candidate_x": "Cory Booker",
+        "candidate_y": "Julián Castro",
+        "count": "9"
+      },
+      {
+        "candidate_x": "Andrew Yang",
+        "candidate_y": "Bernie Sanders",
+        "count": "8"
+      },
+      {
+        "candidate_x": "Jay Inslee",
+        "candidate_y": "Kirsten Gillibrand",
+        "count": "8"
+      },
+      {
+        "candidate_x": "Amy Klobuchar",
+        "candidate_y": "Bernie Sanders",
+        "count": "7"
+      },
+      {
+        "candidate_x": "Amy Klobuchar",
+        "candidate_y": "Julián Castro",
+        "count": "7"
+      },
+      {
+        "candidate_x": "Elizabeth Warren",
+        "candidate_y": "Julián Castro",
+        "count": "7"
+      },
+      {
+        "candidate_x": "Jay Inslee",
+        "candidate_y": "John Hickenlooper",
+        "count": "7"
+      },
+      {
+        "candidate_x": "Elizabeth Warren",
+        "candidate_y": "John Hickenlooper",
+        "count": "6"
+      },
+      {
+        "candidate_x": "Elizabeth Warren",
+        "candidate_y": "Tulsi Gabbard",
+        "count": "6"
+      },
+      {
+        "candidate_x": "Kamala Harris",
+        "candidate_y": "Tulsi Gabbard",
+        "count": "6"
+      },
+      {
+        "candidate_x": "Amy Klobuchar",
+        "candidate_y": "John Delaney",
+        "count": "5"
+      },
+      {
+        "candidate_x": "Julián Castro",
+        "candidate_y": "Kirsten Gillibrand",
+        "count": "5"
+      },
+      {
+        "candidate_x": "Andrew Yang",
+        "candidate_y": "Elizabeth Warren",
+        "count": "4"
+      },
+      {
+        "candidate_x": "Andrew Yang",
+        "candidate_y": "Pete Buttigieg",
+        "count": "4"
+      },
+      {
+        "candidate_x": "Bernie Sanders",
+        "candidate_y": "John Hickenlooper",
+        "count": "4"
+      },
+      {
+        "candidate_x": "Bernie Sanders",
+        "candidate_y": "Kirsten Gillibrand",
+        "count": "4"
+      },
+      {
+        "candidate_x": "John Delaney",
+        "candidate_y": "Kamala Harris",
+        "count": "4"
+      },
+      {
+        "candidate_x": "John Delaney",
+        "candidate_y": "Pete Buttigieg",
+        "count": "4"
+      },
+      {
+        "candidate_x": "Andrew Yang",
+        "candidate_y": "Beto O'Rourke",
+        "count": "3"
+      },
+      {
+        "candidate_x": "Cory Booker",
+        "candidate_y": "John Delaney",
+        "count": "3"
+      },
+      {
+        "candidate_x": "Cory Booker",
+        "candidate_y": "Tulsi Gabbard",
+        "count": "3"
+      },
+      {
+        "candidate_x": "Jay Inslee",
+        "candidate_y": "Julián Castro",
+        "count": "3"
+      },
+      {
+        "candidate_x": "Pete Buttigieg",
+        "candidate_y": "Tulsi Gabbard",
+        "count": "3"
+      },
+      {
+        "candidate_x": "Andrew Yang",
+        "candidate_y": "John Hickenlooper",
+        "count": "2"
+      },
+      {
+        "candidate_x": "Andrew Yang",
+        "candidate_y": "Kamala Harris",
+        "count": "2"
+      },
+      {
+        "candidate_x": "Andrew Yang",
+        "candidate_y": "Tulsi Gabbard",
+        "count": "2"
+      },
+      {
+        "candidate_x": "Bernie Sanders",
+        "candidate_y": "Julián Castro",
+        "count": "2"
+      },
+      {
+        "candidate_x": "John Hickenlooper",
+        "candidate_y": "Julián Castro",
+        "count": "2"
+      },
+      {
+        "candidate_x": "Julián Castro",
+        "candidate_y": "Tulsi Gabbard",
+        "count": "2"
+      },
+      {
+        "candidate_x": "Kirsten Gillibrand",
+        "candidate_y": "Tulsi Gabbard",
+        "count": "2"
+      },
+      {
+        "candidate_x": "Amy Klobuchar",
+        "candidate_y": "Andrew Yang",
+        "count": "1"
+      },
+      {
+        "candidate_x": "Andrew Yang",
+        "candidate_y": "John Delaney",
+        "count": "1"
+      },
+      {
+        "candidate_x": "Beto O'Rourke",
+        "candidate_y": "John Delaney",
+        "count": "1"
+      },
+      {
+        "candidate_x": "Elizabeth Warren",
+        "candidate_y": "John Delaney",
+        "count": "1"
+      },
+      {
+        "candidate_x": "Elizabeth Warren",
+        "candidate_y": "Wayne Messam",
+        "count": "1"
+      },
+      {
+        "candidate_x": "Jay Inslee",
+        "candidate_y": "John Delaney",
+        "count": "1"
+      },
+      {
+        "candidate_x": "John Delaney",
+        "candidate_y": "John Hickenlooper",
+        "count": "1"
+      },
+      {
+        "candidate_x": "John Delaney",
+        "candidate_y": "Kirsten Gillibrand",
+        "count": "1"
+      },
+      {
+        "candidate_x": "Kamala Harris",
+        "candidate_y": "Wayne Messam",
+        "count": "1"
+      }
+    ]
+  },
+  "tolerance": 0.02,
+  "curation_notes": [
+    "DEVIATION: the source's inputs are 15 raw .fec filings, which carbonpaper cannot read - the csv reader takes no separator/header parameters, and .fec is ASCII-28 delimited with several record types of different widths and no header row. The filings were pre-converted to contributions.csv outside carbonpaper, so this case tests the ANALYSIS and not the ingestion. That matters because the subtlest trap in this data lives in the ingestion: FEC counts partnerships and LLCs (entity_type ORG) inside 'individuals itemized', and filtering to entity_type == IND alone undercounts.",
+    "The conversion was verified independently of the notebook: summing SA17A receipts with entity_type in {IND, ORG} and no memo code reproduces each filer's own declared col_a_individuals_itemized total, for all 15 filings, exact to the cent.",
+    "The golden's tie order is arbitrary - it is pandas groupby output order, and 56 of the 82 rows sit in a tie block. Curation re-sorts the tie blocks by candidate_x then candidate_y and the brief states that total order. Row CONTENT is untouched; only rows the source left in an undetermined order were moved.",
+    "tolerance is 0.02, looser than the other cases. The counts depend on how donor identity is constructed from contributor name and address fields, which the brief deliberately does not specify - it is the analytical heart of the case. With 0.02 only counts above 50 get any slack at all (170 gets +/-3.4); everything below is effectively exact.",
+    "Sorting by the same figure the tolerance applies to means a count that shifts can also change rank, so a small identity-rule difference shows up as row differences rather than cell differences. That is the honest reading: the ranking IS the answer."
+  ]
+}

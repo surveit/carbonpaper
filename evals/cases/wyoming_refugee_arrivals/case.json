@@ -1,0 +1,348 @@
+{
+  "case_id": "wyoming_refugee_arrivals",
+  "source": {
+    "repo": "https://github.com/BuzzFeedNews/2015-11-refugees-in-the-united-states",
+    "commit": "f4520fc143a25553d7e61ffb27362148bc90e473",
+    "path": "notebooks/us-refugee-analysis.ipynb",
+    "cell_index": 20
+  },
+  "inputs": [
+    {
+      "path": "data/WRAPS-arrivals-by-destination-2005-2015-clean.csv",
+      "sha256": "539c229a776c80bd0173f662a523dc4d35838d53b4d2f9b46a39a91182a93bb5"
+    },
+    {
+      "path": "data/WRAPS-arrivals-by-religion-2005-2015-clean.csv",
+      "sha256": "ea81d1d308283a99bba93f2cca1fa2fac16d9cd5d76e682d9f6fa0b7a4f3d147"
+    },
+    {
+      "path": "data/census-state-populations.csv",
+      "sha256": "956a3a1a36845c782cd0506253c79a59ca1528dce67431de0083ef7db6a2c1e4"
+    }
+  ],
+  "brief": "# Refugee arrivals by US state, 2005-2015\n\n## The story I want to tell\n\nWhich US states took in the most refugees between 2005 and 2015, relative to how many\npeople live there? Raw arrival counts just track how big a place is, so I need a rate that\nlets me compare a small state against a large one fairly.\n\n## The output I need\n\nOne row per state, ranked by arrivals per 1,000 residents, highest first.\n\n| column | type | meaning |\n|---|---|---|\n| `state` | str | the state the refugees were resettled in |\n| `pop_est_2014` | int | 2014 resident population estimate |\n| `arrivals` | int | total refugee arrivals over the whole 2005-2015 period |\n| `per_1k_residents` | float | `arrivals * 1000 / pop_est_2014` |\n\n## Files\n\n- `WRAPS-arrivals-by-destination-2005-2015-clean.csv` - one row per\n  year / origin country / destination state / destination city, with an `arrivals` count.\n- `census-state-populations.csv` - `state`, `pop_est_2014`.\n- `WRAPS-arrivals-by-religion-2005-2015-clean.csv` - the same arrivals broken down by\n  religion instead of destination. Not needed for the table above; included because it\n  covers the same arrivals and may be useful.\n\nSources: US State Department Refugee Processing Center (WRAPS); US Census Bureau.\n\n## Sort order\n\nRanked by `per_1k_residents`, highest first. Where two states tie, `state` ascending.\n",
+  "golden": {
+    "columns": [
+      "state",
+      "pop_est_2014",
+      "arrivals",
+      "per_1k_residents"
+    ],
+    "rows": [
+      {
+        "state": "North Dakota",
+        "pop_est_2014": "739482",
+        "arrivals": "4457",
+        "per_1k_residents": "6.027192"
+      },
+      {
+        "state": "Idaho",
+        "pop_est_2014": "1634464",
+        "arrivals": "9527",
+        "per_1k_residents": "5.828822"
+      },
+      {
+        "state": "South Dakota",
+        "pop_est_2014": "853175",
+        "arrivals": "4703",
+        "per_1k_residents": "5.512351"
+      },
+      {
+        "state": "Minnesota",
+        "pop_est_2014": "5457173",
+        "arrivals": "27259",
+        "per_1k_residents": "4.995077"
+      },
+      {
+        "state": "Vermont",
+        "pop_est_2014": "626562",
+        "arrivals": "3110",
+        "per_1k_residents": "4.963595"
+      },
+      {
+        "state": "Arizona",
+        "pop_est_2014": "6731484",
+        "arrivals": "29825",
+        "per_1k_residents": "4.430672"
+      },
+      {
+        "state": "Nebraska",
+        "pop_est_2014": "1881503",
+        "arrivals": "8123",
+        "per_1k_residents": "4.317293"
+      },
+      {
+        "state": "Washington",
+        "pop_est_2014": "7061530",
+        "arrivals": "27009",
+        "per_1k_residents": "3.824809"
+      },
+      {
+        "state": "Utah",
+        "pop_est_2014": "2942902",
+        "arrivals": "10758",
+        "per_1k_residents": "3.655575"
+      },
+      {
+        "state": "Kentucky",
+        "pop_est_2014": "4413457",
+        "arrivals": "15695",
+        "per_1k_residents": "3.556169"
+      },
+      {
+        "state": "New Hampshire",
+        "pop_est_2014": "1326813",
+        "arrivals": "4423",
+        "per_1k_residents": "3.333552"
+      },
+      {
+        "state": "Michigan",
+        "pop_est_2014": "9909877",
+        "arrivals": "30772",
+        "per_1k_residents": "3.105185"
+      },
+      {
+        "state": "Colorado",
+        "pop_est_2014": "5355866",
+        "arrivals": "16034",
+        "per_1k_residents": "2.993727"
+      },
+      {
+        "state": "Georgia",
+        "pop_est_2014": "10097343",
+        "arrivals": "27252",
+        "per_1k_residents": "2.698928"
+      },
+      {
+        "state": "Texas",
+        "pop_est_2014": "26956958",
+        "arrivals": "65537",
+        "per_1k_residents": "2.431172"
+      },
+      {
+        "state": "Massachusetts",
+        "pop_est_2014": "6745408",
+        "arrivals": "16214",
+        "per_1k_residents": "2.403709"
+      },
+      {
+        "state": "Oregon",
+        "pop_est_2014": "3970239",
+        "arrivals": "9404",
+        "per_1k_residents": "2.368623"
+      },
+      {
+        "state": "North Carolina",
+        "pop_est_2014": "9943964",
+        "arrivals": "22787",
+        "per_1k_residents": "2.291541"
+      },
+      {
+        "state": "Indiana",
+        "pop_est_2014": "6596855",
+        "arrivals": "13697",
+        "per_1k_residents": "2.076292"
+      },
+      {
+        "state": "Tennessee",
+        "pop_est_2014": "6549352",
+        "arrivals": "13576",
+        "per_1k_residents": "2.072877"
+      },
+      {
+        "state": "New York",
+        "pop_est_2014": "19746227",
+        "arrivals": "39359",
+        "per_1k_residents": "1.993242"
+      },
+      {
+        "state": "Missouri",
+        "pop_est_2014": "6063589",
+        "arrivals": "11974",
+        "per_1k_residents": "1.974738"
+      },
+      {
+        "state": "California",
+        "pop_est_2014": "38802500",
+        "arrivals": "76114",
+        "per_1k_residents": "1.961575"
+      },
+      {
+        "state": "Ohio",
+        "pop_est_2014": "11594163",
+        "arrivals": "22652",
+        "per_1k_residents": "1.953742"
+      },
+      {
+        "state": "Maine",
+        "pop_est_2014": "1330089",
+        "arrivals": "2587",
+        "per_1k_residents": "1.944983"
+      },
+      {
+        "state": "Maryland",
+        "pop_est_2014": "5976407",
+        "arrivals": "11438",
+        "per_1k_residents": "1.913859"
+      },
+      {
+        "state": "Pennsylvania",
+        "pop_est_2014": "12787209",
+        "arrivals": "24389",
+        "per_1k_residents": "1.907297"
+      },
+      {
+        "state": "Iowa",
+        "pop_est_2014": "3107126",
+        "arrivals": "5901",
+        "per_1k_residents": "1.899183"
+      },
+      {
+        "state": "Illinois",
+        "pop_est_2014": "12880580",
+        "arrivals": "23826",
+        "per_1k_residents": "1.849761"
+      },
+      {
+        "state": "Florida",
+        "pop_est_2014": "19893297",
+        "arrivals": "36568",
+        "per_1k_residents": "1.838207"
+      },
+      {
+        "state": "Virginia",
+        "pop_est_2014": "8326289",
+        "arrivals": "14994",
+        "per_1k_residents": "1.800802"
+      },
+      {
+        "state": "Nevada",
+        "pop_est_2014": "2839099",
+        "arrivals": "5065",
+        "per_1k_residents": "1.784017"
+      },
+      {
+        "state": "Rhode Island",
+        "pop_est_2014": "1055173",
+        "arrivals": "1868",
+        "per_1k_residents": "1.770326"
+      },
+      {
+        "state": "Wisconsin",
+        "pop_est_2014": "5757564",
+        "arrivals": "8778",
+        "per_1k_residents": "1.524603"
+      },
+      {
+        "state": "Connecticut",
+        "pop_est_2014": "3596677",
+        "arrivals": "5065",
+        "per_1k_residents": "1.408244"
+      },
+      {
+        "state": "Alaska",
+        "pop_est_2014": "736732",
+        "arrivals": "989",
+        "per_1k_residents": "1.342415"
+      },
+      {
+        "state": "Kansas",
+        "pop_est_2014": "2904021",
+        "arrivals": "3894",
+        "per_1k_residents": "1.340899"
+      },
+      {
+        "state": "New Mexico",
+        "pop_est_2014": "2085572",
+        "arrivals": "1854",
+        "per_1k_residents": "0.888965"
+      },
+      {
+        "state": "Oklahoma",
+        "pop_est_2014": "3878051",
+        "arrivals": "2732",
+        "per_1k_residents": "0.704478"
+      },
+      {
+        "state": "New Jersey",
+        "pop_est_2014": "8938175",
+        "arrivals": "6210",
+        "per_1k_residents": "0.694773"
+      },
+      {
+        "state": "District of Columbia",
+        "pop_est_2014": "658893",
+        "arrivals": "343",
+        "per_1k_residents": "0.520570"
+      },
+      {
+        "state": "Louisiana",
+        "pop_est_2014": "4649676",
+        "arrivals": "2378",
+        "per_1k_residents": "0.511433"
+      },
+      {
+        "state": "South Carolina",
+        "pop_est_2014": "4832482",
+        "arrivals": "1431",
+        "per_1k_residents": "0.296121"
+      },
+      {
+        "state": "Alabama",
+        "pop_est_2014": "4849377",
+        "arrivals": "1386",
+        "per_1k_residents": "0.285810"
+      },
+      {
+        "state": "Delaware",
+        "pop_est_2014": "935614",
+        "arrivals": "82",
+        "per_1k_residents": "0.087643"
+      },
+      {
+        "state": "West Virginia",
+        "pop_est_2014": "1850326",
+        "arrivals": "154",
+        "per_1k_residents": "0.083229"
+      },
+      {
+        "state": "Hawaii",
+        "pop_est_2014": "1419561",
+        "arrivals": "77",
+        "per_1k_residents": "0.054242"
+      },
+      {
+        "state": "Arkansas",
+        "pop_est_2014": "2966369",
+        "arrivals": "111",
+        "per_1k_residents": "0.037419"
+      },
+      {
+        "state": "Mississippi",
+        "pop_est_2014": "2994079",
+        "arrivals": "81",
+        "per_1k_residents": "0.027053"
+      },
+      {
+        "state": "Montana",
+        "pop_est_2014": "1023579",
+        "arrivals": "16",
+        "per_1k_residents": "0.015631"
+      },
+      {
+        "state": "Wyoming",
+        "pop_est_2014": "584153",
+        "arrivals": "0",
+        "per_1k_residents": "0.000000"
+      }
+    ]
+  },
+  "tolerance": 1e-6,
+  "curation_notes": [
+    "Golden is code cell 20 of the notebook at the FINAL commit. The first commit's output is wrong: it was published missing Wyoming and corrected the same day.",
+    "The population CSV at this commit holds 51 rows (50 states + DC). The correction commit deleted Puerto Rico from that file, so the golden covers neither Puerto Rico nor Guam even though Guam appears in the arrivals data.",
+    "The two WRAPS files disagree by 4 arrivals in total (2005: -1, 2009: +5 on the destination side). Unresolved; the golden uses the destination file only.",
+    "The first recorded build predates this brief, which did not then declare the output schema. Its column names differ and it must be re-run for a clean comparison.",
+    "Comparison is POSITIONAL, so the golden's row order is part of the answer and the brief states the sort including its tie-break. No key column is declared."
+  ]
+}

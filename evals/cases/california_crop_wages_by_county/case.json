@@ -1,0 +1,561 @@
+{
+  "case_id": "california_crop_wages_by_county",
+  "source": {
+    "repo": "https://github.com/datadesk/california-crop-production-wages-analysis",
+    "commit": "9c3d76c47ca5497d874f139eaed03ab798cb5b19",
+    "path": "03-analysis.ipynb",
+    "cell_index": 23
+  },
+  "inputs": [
+    {
+      "path": "data/transformed_county.csv",
+      "sha256": "3240c2f6821521649a2d2efbd4ae7f1d5dc9f1b844beb15836bbfe779fe61953"
+    }
+  ],
+  "brief": "# California crop-worker pay by county, 2015\n\n## The story I want to tell\n\nWhich county in California pays its crop workers the most? I have 26 years of Bureau of\nLabor Statistics employment-and-wage data covering every US county, and I want the 2015\npicture for crop production across California, ranked from best-paid to worst-paid.\n\n## The output I need\n\nOne row per California county, for crop production in 2015, ranked by average annual pay,\nhighest first.\n\n| column | type | meaning |\n|---|---|---|\n| `year` | int | the data year |\n| `area_fips` | str | the county's FIPS area code |\n| `area_title` | str | the county's name |\n| `industry_group` | str | the industry group these figures cover |\n| `annual_avg_emplvl` | int | average employment level over the year |\n| `total_annual_wages_2015` | float | total annual wages, in 2015 dollars |\n| `avg_annual_pay_2015` | float | average annual pay, in 2015 dollars |\n\n## Files\n\n- `transformed_county.csv` - one row per year / county / industry group, already adjusted\n  for inflation to 2015 dollars. Columns as above. It covers every US county and two\n  industry groups.\n\nSource: Bureau of Labor Statistics, Quarterly Census of Employment and Wages (QCEW).\n\n## Sort order\n\nRanked by `avg_annual_pay_2015`, highest first, with counties that have no pay figure last.\nWhere two counties tie, `area_fips` ascending.\n",
+  "golden": {
+    "columns": [
+      "year",
+      "area_fips",
+      "area_title",
+      "industry_group",
+      "annual_avg_emplvl",
+      "total_annual_wages_2015",
+      "avg_annual_pay_2015"
+    ],
+    "rows": [
+      {
+        "year": "2015",
+        "area_fips": "06055",
+        "area_title": "Napa County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "4944",
+        "total_annual_wages_2015": "2.073536e+08",
+        "avg_annual_pay_2015": "41940.453277"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06011",
+        "area_title": "Colusa County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "1617",
+        "total_annual_wages_2015": "6.648710e+07",
+        "avg_annual_pay_2015": "41117.560297"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06075",
+        "area_title": "San Francisco County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "99",
+        "total_annual_wages_2015": "3.988242e+06",
+        "avg_annual_pay_2015": "40285.272727"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06049",
+        "area_title": "Modoc County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "186",
+        "total_annual_wages_2015": "7.420400e+06",
+        "avg_annual_pay_2015": "39894.623656"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06007",
+        "area_title": "Butte County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "2818",
+        "total_annual_wages_2015": "1.122079e+08",
+        "avg_annual_pay_2015": "39818.285309"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06085",
+        "area_title": "Santa Clara County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "3522",
+        "total_annual_wages_2015": "1.370775e+08",
+        "avg_annual_pay_2015": "38920.356900"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06001",
+        "area_title": "Alameda County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "231",
+        "total_annual_wages_2015": "8.751965e+06",
+        "avg_annual_pay_2015": "37887.294372"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06041",
+        "area_title": "Marin County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "177",
+        "total_annual_wages_2015": "6.589747e+06",
+        "avg_annual_pay_2015": "37230.209039"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06021",
+        "area_title": "Glenn County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "1018",
+        "total_annual_wages_2015": "3.773587e+07",
+        "avg_annual_pay_2015": "37068.633595"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06063",
+        "area_title": "Plumas County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "20",
+        "total_annual_wages_2015": "7.286920e+05",
+        "avg_annual_pay_2015": "36434.600000"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06069",
+        "area_title": "San Benito County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "1662",
+        "total_annual_wages_2015": "6.017700e+07",
+        "avg_annual_pay_2015": "36207.582431"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06093",
+        "area_title": "Siskiyou County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "416",
+        "total_annual_wages_2015": "1.477448e+07",
+        "avg_annual_pay_2015": "35515.567308"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06103",
+        "area_title": "Tehama County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "1520",
+        "total_annual_wages_2015": "5.335091e+07",
+        "avg_annual_pay_2015": "35099.284211"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06037",
+        "area_title": "Los Angeles County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "4139",
+        "total_annual_wages_2015": "1.437871e+08",
+        "avg_annual_pay_2015": "34739.580817"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06095",
+        "area_title": "Solano County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "1600",
+        "total_annual_wages_2015": "5.493875e+07",
+        "avg_annual_pay_2015": "34336.720625"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06113",
+        "area_title": "Yolo County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "5687",
+        "total_annual_wages_2015": "1.950016e+08",
+        "avg_annual_pay_2015": "34289.012309"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06097",
+        "area_title": "Sonoma County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "4917",
+        "total_annual_wages_2015": "1.671798e+08",
+        "avg_annual_pay_2015": "34000.368517"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06053",
+        "area_title": "Monterey County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "52532",
+        "total_annual_wages_2015": "1.775466e+09",
+        "avg_annual_pay_2015": "33797.802615"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06087",
+        "area_title": "Santa Cruz County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "8185",
+        "total_annual_wages_2015": "2.753654e+08",
+        "avg_annual_pay_2015": "33642.685400"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06013",
+        "area_title": "Contra Costa County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "618",
+        "total_annual_wages_2015": "1.998422e+07",
+        "avg_annual_pay_2015": "32336.917476"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06073",
+        "area_title": "San Diego County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "7825",
+        "total_annual_wages_2015": "2.512324e+08",
+        "avg_annual_pay_2015": "32106.372268"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06023",
+        "area_title": "Humboldt County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "405",
+        "total_annual_wages_2015": "1.290666e+07",
+        "avg_annual_pay_2015": "31868.298765"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06099",
+        "area_title": "Stanislaus County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "11190",
+        "total_annual_wages_2015": "3.564161e+08",
+        "avg_annual_pay_2015": "31851.303306"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06009",
+        "area_title": "Calaveras County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "37",
+        "total_annual_wages_2015": "1.170458e+06",
+        "avg_annual_pay_2015": "31634.000000"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06115",
+        "area_title": "Yuba County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "708",
+        "total_annual_wages_2015": "2.237436e+07",
+        "avg_annual_pay_2015": "31602.197740"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06083",
+        "area_title": "Santa Barbara County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "20436",
+        "total_annual_wages_2015": "6.433053e+08",
+        "avg_annual_pay_2015": "31479.021629"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06027",
+        "area_title": "Inyo County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "30",
+        "total_annual_wages_2015": "9.337200e+05",
+        "avg_annual_pay_2015": "31124.000000"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06081",
+        "area_title": "San Mateo County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "1514",
+        "total_annual_wages_2015": "4.696883e+07",
+        "avg_annual_pay_2015": "31023.005945"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06111",
+        "area_title": "Ventura County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "25916",
+        "total_annual_wages_2015": "7.972466e+08",
+        "avg_annual_pay_2015": "30762.716662"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06077",
+        "area_title": "San Joaquin County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "15163",
+        "total_annual_wages_2015": "4.631388e+08",
+        "avg_annual_pay_2015": "30544.008903"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06061",
+        "area_title": "Placer County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "258",
+        "total_annual_wages_2015": "7.875692e+06",
+        "avg_annual_pay_2015": "30525.937985"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06035",
+        "area_title": "Lassen County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "664",
+        "total_annual_wages_2015": "2.021304e+07",
+        "avg_annual_pay_2015": "30441.319277"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06999",
+        "area_title": "Unknown Or Undefined, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "1179",
+        "total_annual_wages_2015": "3.569092e+07",
+        "avg_annual_pay_2015": "30272.195929"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06059",
+        "area_title": "Orange County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "2173",
+        "total_annual_wages_2015": "6.559736e+07",
+        "avg_annual_pay_2015": "30187.465716"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06079",
+        "area_title": "San Luis Obispo County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "4634",
+        "total_annual_wages_2015": "1.398815e+08",
+        "avg_annual_pay_2015": "30185.918213"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06101",
+        "area_title": "Sutter County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "3939",
+        "total_annual_wages_2015": "1.140642e+08",
+        "avg_annual_pay_2015": "28957.664890"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06067",
+        "area_title": "Sacramento County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "2284",
+        "total_annual_wages_2015": "6.440734e+07",
+        "avg_annual_pay_2015": "28199.360771"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06047",
+        "area_title": "Merced County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "10911",
+        "total_annual_wages_2015": "3.027400e+08",
+        "avg_annual_pay_2015": "27746.313903"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06065",
+        "area_title": "Riverside County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "11690",
+        "total_annual_wages_2015": "3.183831e+08",
+        "avg_annual_pay_2015": "27235.507014"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06019",
+        "area_title": "Fresno County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "44767",
+        "total_annual_wages_2015": "1.211988e+09",
+        "avg_annual_pay_2015": "27073.240445"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06015",
+        "area_title": "Del Norte County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "140",
+        "total_annual_wages_2015": "3.781894e+06",
+        "avg_annual_pay_2015": "27013.528571"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06045",
+        "area_title": "Mendocino County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "1154",
+        "total_annual_wages_2015": "3.101592e+07",
+        "avg_annual_pay_2015": "26876.883882"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06071",
+        "area_title": "San Bernardino County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "1225",
+        "total_annual_wages_2015": "3.270520e+07",
+        "avg_annual_pay_2015": "26698.119184"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06039",
+        "area_title": "Madera County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "9572",
+        "total_annual_wages_2015": "2.550314e+08",
+        "avg_annual_pay_2015": "26643.477852"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06031",
+        "area_title": "Kings County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "3365",
+        "total_annual_wages_2015": "8.870874e+07",
+        "avg_annual_pay_2015": "26362.180684"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06029",
+        "area_title": "Kern County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "56883",
+        "total_annual_wages_2015": "1.491404e+09",
+        "avg_annual_pay_2015": "26218.798024"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06033",
+        "area_title": "Lake County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "237",
+        "total_annual_wages_2015": "5.978368e+06",
+        "avg_annual_pay_2015": "25225.181435"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06107",
+        "area_title": "Tulare County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "32989",
+        "total_annual_wages_2015": "7.985706e+08",
+        "avg_annual_pay_2015": "24207.176786"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06025",
+        "area_title": "Imperial County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "12395",
+        "total_annual_wages_2015": "2.984266e+08",
+        "avg_annual_pay_2015": "24076.370553"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06005",
+        "area_title": "Amador County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "165",
+        "total_annual_wages_2015": "3.908808e+06",
+        "avg_annual_pay_2015": "23689.745455"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06017",
+        "area_title": "El Dorado County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "194",
+        "total_annual_wages_2015": "3.545384e+06",
+        "avg_annual_pay_2015": "18275.175258"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06057",
+        "area_title": "Nevada County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "28",
+        "total_annual_wages_2015": "4.548690e+05",
+        "avg_annual_pay_2015": "16245.321429"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06051",
+        "area_title": "Mono County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "9",
+        "total_annual_wages_2015": "1.132860e+05",
+        "avg_annual_pay_2015": "12587.333333"
+      },
+      {
+        "year": "2015",
+        "area_fips": "06043",
+        "area_title": "Mariposa County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "0",
+        "total_annual_wages_2015": "0.000000e+00",
+        "avg_annual_pay_2015": null
+      },
+      {
+        "year": "2015",
+        "area_fips": "06089",
+        "area_title": "Shasta County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "0",
+        "total_annual_wages_2015": "0.000000e+00",
+        "avg_annual_pay_2015": null
+      },
+      {
+        "year": "2015",
+        "area_fips": "06091",
+        "area_title": "Sierra County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "0",
+        "total_annual_wages_2015": "0.000000e+00",
+        "avg_annual_pay_2015": null
+      },
+      {
+        "year": "2015",
+        "area_fips": "06105",
+        "area_title": "Trinity County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "0",
+        "total_annual_wages_2015": "0.000000e+00",
+        "avg_annual_pay_2015": null
+      },
+      {
+        "year": "2015",
+        "area_fips": "06109",
+        "area_title": "Tuolumne County, California",
+        "industry_group": "crops",
+        "annual_avg_emplvl": "0",
+        "total_annual_wages_2015": "0.000000e+00",
+        "avg_annual_pay_2015": null
+      }
+    ]
+  },
+  "tolerance": 1e-6,
+  "curation_notes": [
+    "The golden cell calls `.head(60)` and rendered 58 rows. Fewer rows than the cap means the cap never bit, so this is the whole answer — the extractor enforces that distinction rather than trusting the call.",
+    "`total_annual_wages_2015` is rendered in scientific notation (2.073536e+08), which is seven significant figures. This case is why `tolerance` is relative above 1.0; an absolute 1e-6 on a 2e8 figure is unsatisfiable.",
+    "The trap this case carries: `area_fips` is a zero-padded 5-digit code and the California filter is a `06` prefix. A build that lets the reader coerce the column to int loses the leading zero and the filter silently matches nothing. The brief declares the OUTPUT type as str but says nothing about how to read the input.",
+    "Verified independently with pandas: filtering the source to industry_group=='crops', year==2015 and an area_fips '06' prefix yields exactly 58 rows, matching the golden.",
+    "5 of the 58 counties carry no average annual pay in the golden — the source leaves those cells empty, and the notebook rendered them as NaN. A build must produce the row with an empty pay figure, not drop it and not fill a zero.",
+    "Comparison is POSITIONAL, so the golden's row order is part of the answer and the brief states the sort including its tie-break. No key column is declared.",
+    "The notebook's rendered index is pandas' own positional integer and carries no meaning, so extraction drops it."
+  ]
+}
