@@ -122,7 +122,7 @@ def read_run_spend(runs: list[RunEntry], names: ProjectNames) -> list[SpendEntry
 def read_session_spend(sessions: list[AgentSession], names: ProjectNames) -> list[SpendEntry]:
     return [
         SpendEntry(
-            at=turn.at,
+            at=turn.created_at,
             source=SpendSource.agent_session,
             project=_project_label(session.context.get("project_id"), names),
             label=session.title,

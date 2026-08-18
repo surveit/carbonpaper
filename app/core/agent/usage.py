@@ -43,10 +43,9 @@ class LlmUsage(BaseModel):
 class TurnSpend(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    # When the turn that spent this finished, ISO-8601. Stamped per turn rather than
-    # read off the session's own `created_at`, so a session left open across two days
-    # dates each turn's spend to the day it happened.
-    at: str
+    # Set by hand, unlike every other `created_at` here: this is a nested model rather
+    # than a PersistedModel, so nothing stamps it. The turn's end, ISO-8601.
+    created_at: str
     usage: LlmUsage
 
 

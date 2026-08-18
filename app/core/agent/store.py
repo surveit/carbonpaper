@@ -129,7 +129,7 @@ class SessionStore:
     def record_turn_spend(self, sid: str, usage: LlmUsage) -> None:
         session = AgentSession.load(sid)
         stamp = datetime.now().isoformat(timespec="seconds")
-        session.turn_spend = [*session.turn_spend, TurnSpend(at=stamp, usage=usage)]
+        session.turn_spend = [*session.turn_spend, TurnSpend(created_at=stamp, usage=usage)]
         session.save()
 
     def set_pending_user(self, sid: str, text: str | None) -> None:
