@@ -9,8 +9,8 @@ from fastapi import FastAPI
 from app.web.admin import spend_router, workspace_router
 from app.web.chat_router import router as chat_router
 from app.web.routers import (
-    admin, cmdk_palette, editing, evals, files, guide, node, pickers, project, review,
-    review_packet, run_form, run_lineage, run_stage, runs, tutorial,
+    cmdk_palette, evals, files, guide, node, pickers, project, review, review_packet,
+    run_form, run_lineage, run_stage, runs,
 )
 
 
