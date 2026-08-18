@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Callable
+from typing import Any, AsyncIterator, Callable
 
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
+    ClaudeSDKError,
     ThinkingConfig,
     query,
     ResultMessage,
@@ -68,6 +69,21 @@ def _format_terminal_error(msg: ResultMessage) -> str:
     if reason:
         detail += f", terminal_reason={reason}"
     return detail
+
+
+async def _query_with_terminal_error(
+    prompt: str, options: ClaudeAgentOptions,
+) -> AsyncIterator[Any]:
+    terminal_error: str | None = None
+    try:
+        async for msg in query(prompt=prompt, options=options):
+            if isinstance(msg, ResultMessage) and getattr(msg, "is_error", False):
+                terminal_error = _format_terminal_error(msg)
+            yield msg
+    except ClaudeSDKError as exc:
+        if terminal_error is None:
+            raise
+        raise ClaudeSDKError(terminal_error) from exc
 
 
 class ClaudeAgentSdkEngine:
@@ -147,7 +163,7 @@ class ClaudeAgentSdkEngine:
         self.last_usage = None
         assistant_parts: list[dict[str, Any]] = []
         session_id: str | None = None
-        async for msg in query(prompt=prompt, options=self._options(resume)):
+        async for msg in _query_with_terminal_error(prompt, self._options(resume)):
             if isinstance(msg, AssistantMessage):
                 for block in msg.content:
                     if isinstance(block, ThinkingBlock):
