@@ -133,11 +133,11 @@
         <div><dt>cost</dt><dd>none</dd></div>
         {% endif %}
     </dl>
-    {% if not (u and u.calls) %}
-    {# `cached_rows` is absent from every manifest written before the runtime
-       counted replays, so the count is stated only where it was taken. #}
+    {% if stage.cached_rows and stage.status in ("ok", "validation_warnings") and not (u and u.calls) %}
+    {# A positive replay count is this run's evidence that cache rows supplied
+       the output; an absent count means no replay conclusion is available. #}
     <p class="muted"><b>Reused, not recomputed.</b>
-        {% if stage.cached_rows %}{{ "{:,}".format(stage.cached_rows) }} of {{ "{:,}".format(stage.output_row_count or 0) }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %} came back from results an earlier run already produced,{% else %}The rows came back from results an earlier run already produced,{% endif %}
+        {{ "{:,}".format(stage.cached_rows) }} of {{ "{:,}".format(stage.output_row_count or 0) }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}{% if stage.output_row_count and stage.output_row_count > 0 %} ({{ ((stage.cached_rows / stage.output_row_count) * 100) | round(0) | int }}%){% endif %} came back from results an earlier run already produced,
         so the model was not called in this run and this run spent nothing on this stage.</p>
     {% endif %}
     {% endif %}
