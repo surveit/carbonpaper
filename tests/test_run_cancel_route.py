@@ -151,6 +151,7 @@ def test_run_detail_page_hides_resume_for_a_completed_run(examples_dir, client):
     page = client.get(f"/project/{PROJ}/runs/{RUN}")
     assert page.status_code == 200
     assert f'action="/project/{PROJ}/runs/{RUN}/resume"' not in page.text
+    assert f'base: "/project/{PROJ}/runs/{RUN}"' in page.text
 
 
 def test_run_detail_page_shows_cancel_button_only_while_running(examples_dir, client):

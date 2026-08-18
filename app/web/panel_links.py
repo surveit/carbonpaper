@@ -53,6 +53,9 @@ class AppPanelLinks:
     def run_log(self, stage_id: str) -> str:
         return f"{self._base}/events?stage={_segment(stage_id)}"
 
+    def run_log_base(self) -> str:
+        return self._base
+
     def guide_stage(self, stage_id: str) -> str:
         return f"#{stage_id}"
 
@@ -126,6 +129,9 @@ class PacketPanelLinks:
         return None
 
     def run_log(self, stage_id: str) -> None:
+        return None
+
+    def run_log_base(self) -> None:
         return None
 
     def guide_stage(self, stage_id: str) -> str:

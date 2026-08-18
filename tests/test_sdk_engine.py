@@ -8,6 +8,7 @@ import json
 from typing import Any
 
 import app.core.agent.sdk_engine as se
+import pytest
 
 
 class _Text:  # stand-ins matching the block interface the engine reads
@@ -132,6 +133,7 @@ def test_stream_turn_surfaces_in_band_result_error(monkeypatch: Any) -> None:
     async def fake_query(*, prompt: str, options: Any) -> Any:
         yield _Asst([_Text("Trying.")])
         yield _ErrResult()
+        raise se.ClaudeSDKError("Claude Code returned an error result: success")
 
     monkeypatch.setattr(se, "query", fake_query)
     monkeypatch.setattr(se, "AssistantMessage", _Asst)
@@ -144,7 +146,8 @@ def test_stream_turn_surfaces_in_band_result_error(monkeypatch: Any) -> None:
 
     events: list[dict[str, Any]] = []
     engine = se.ClaudeAgentSdkEngine(system_prompt="sp", mcp_server=object(), allowed_tools=[])
-    asyncio.run(engine.stream_turn("edit", message_history=[], emit=events.append))
+    with pytest.raises(se.ClaudeSDKError) as exc_info:
+        asyncio.run(engine.stream_turn("edit", message_history=[], emit=events.append))
 
     errors = [e for e in events if e["kind"] == "error"]
     assert len(errors) == 1
@@ -152,6 +155,7 @@ def test_stream_turn_surfaces_in_band_result_error(monkeypatch: Any) -> None:
         "Claude Code terminal error: subtype=authentication_error, "
         "api_error_status=401, terminal_reason=completed"
     )
+    assert str(exc_info.value) == errors[0]["text"]
     assert "secret" not in errors[0]["text"]
 
 

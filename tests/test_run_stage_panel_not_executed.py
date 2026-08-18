@@ -96,3 +96,4 @@ def test_a_production_runs_input_stage_still_shows_its_run_detail(project: Path)
     assert response.status_code == 200
     assert "Not executed in this run" not in response.text
     assert "output data" in response.text  # the run's own output preview
+    assert f'base: "/project/{PROJECT}/runs/{run_id}"' in response.text
