@@ -119,6 +119,27 @@ def test_run_detail_page_offers_resume_for_a_cancelled_run(examples_dir, client)
     assert "Re-run failed stage" not in page.text
 
 
+def test_resume_redirect_polls_past_the_old_terminal_manifest(
+    examples_dir, client, monkeypatch,
+):
+    _write_one_stage_project(examples_dir)
+    _write_manifest(examples_dir, "cancelled")
+    monkeypatch.setattr("app.web.routers.runs.run_service.resume", lambda *_: None)
+
+    response = client.post(
+        f"/project/{PROJ}/runs/{RUN}/resume", follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/project/{PROJ}/runs/{RUN}?resuming=1"
+    page = client.get(response.headers["location"])
+    assert "const RESUMING = true;" in page.text
+    assert "let lastSig = null, timer = null, sawRunning = RUNNING;" in page.text
+    assert "if (!d.terminal) sawRunning = true;" in page.text
+    assert "if (d.terminal && sawRunning)" in page.text
+    assert "setInterval" in page.text
+
+
 def test_run_detail_page_hides_resume_for_a_completed_run(examples_dir, client):
     _write_one_stage_project(examples_dir)
     _write_manifest(examples_dir, "ok")

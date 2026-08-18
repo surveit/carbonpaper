@@ -242,6 +242,7 @@ async def run_detail(request: Request, project_id: str, run_id: str):
             "crumbs": build_run_crumbs(project_id, run_id),
             "project": project_id,
             "run_id": run_id,
+            "is_resuming": request.query_params.get("resuming") == "1",
             "manifest": manifest,
             "mermaid": graph.mermaid,
             "graph_error": graph.error,
@@ -295,7 +296,7 @@ async def resume_run_route(project_id: str, run_id: str):
         return JSONResponse({"detail": "pinned workflow version failed validation",
                              "issues": exc.issues}, status_code=400)
     return RedirectResponse(
-        url=f"/project/{project_id}/runs/{run_id}",
+        url=f"/project/{project_id}/runs/{run_id}?resuming=1",
         status_code=303,
     )
 

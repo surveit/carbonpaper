@@ -423,10 +423,11 @@
   //    and the stage strip with its counts — plus the graph, and reloads once on
   //    the terminal transition (where the CTA itself changes). ──
   const RUNNING = {{ is_running | tojson }};
-  if (RUNNING) {
+  const RESUMING = {{ is_resuming | tojson }};
+  if (RUNNING || RESUMING) {
     const statusUrl = `/project/${encodeURIComponent(PROJECT)}/runs/${encodeURIComponent(RUN_ID)}/status`;
     const mermaidEl = document.querySelector('pre.mermaid');
-    let lastSig = null, timer = null;
+    let lastSig = null, timer = null, sawRunning = RUNNING;
     const $ = id => document.getElementById(id);
 
     function rerenderWorkflow(src) {
@@ -470,7 +471,8 @@
 
       const sig = d.stages.map(s => s.status).join(',');
       if (sig !== lastSig) { lastSig = sig; rerenderWorkflow(d.mermaid); }
-      if (d.terminal) {
+      if (!d.terminal) sawRunning = true;
+      if (d.terminal && sawRunning) {
         if (timer) clearInterval(timer);
         setTimeout(() => location.reload(), 600);
       }
