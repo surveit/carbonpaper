@@ -25,6 +25,31 @@ def test_summed_of_nothing_is_the_zero_instance():
     assert LlmUsage.summed([]) == LlmUsage()
 
 
+def test_summed_keeps_each_unknown_called_metric_null():
+    known = LlmUsage(
+        input_tokens=10,
+        output_tokens=4,
+        cost_usd=0.001,
+        calls=1,
+        model="gpt-5.6-terra",
+    )
+    unknown = LlmUsage(
+        input_tokens=None,
+        output_tokens=None,
+        cost_usd=None,
+        calls=1,
+        model="gpt-5.6-terra",
+    )
+
+    assert LlmUsage.summed([known, unknown]) == LlmUsage(
+        input_tokens=None,
+        output_tokens=None,
+        cost_usd=None,
+        calls=2,
+        model="gpt-5.6-terra",
+    )
+
+
 def test_the_model_survives_being_summed_with_the_zero_usages_beside_it():
     # The batch path lands a chunk's whole usage on its first row and zeroes the rest.
     paid = LlmUsage(cost_usd=0.01, calls=1, model="claude-haiku-4-5")

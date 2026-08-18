@@ -172,19 +172,20 @@ class Agent(Generic[Model]):
             ) from err
         return "Accepted — recorded. You are done; do not restate it."
 
+    def build_submit_answer_spec(self) -> BoundToolSpec:
+        return bind_by_schema(
+            name=SUBMIT_ANSWER_TOOL,
+            description=SUBMIT_ANSWER_DESCRIPTION,
+            fn=self.submit_answer,
+            label="Submitting the answer",
+            json_schema=advertise_more_than_one_argument(
+                self._target_schema.model_json_schema()
+            ),
+        )
+
     def build_engine(self) -> ClaudeAgentSdkEngine:
         # submit_answer validates its own arguments: a rejection is an attempt it counts.
-        specs = [
-            bind_by_schema(
-                name=SUBMIT_ANSWER_TOOL,
-                description=SUBMIT_ANSWER_DESCRIPTION,
-                fn=self.submit_answer,
-                label="Submitting the answer",
-                json_schema=advertise_more_than_one_argument(
-                    self._target_schema.model_json_schema()),
-            ),
-            *self._tools,
-        ]
+        specs = [self.build_submit_answer_spec(), *self._tools]
         server, allowed, _wrapped = build_mcp_server(specs)
         return ClaudeAgentSdkEngine(
             system_prompt=self._system_prompt,
