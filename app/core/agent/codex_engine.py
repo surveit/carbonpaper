@@ -16,6 +16,7 @@ from app.core.agent.codex_protocol import (
     CodexRequestId,
     TypeUnsafeCodexJsonObject,
 )
+from app.core.agent.codex_availability import require_codex_backend
 from app.core.agent.store import TranscriptMessage, TranscriptPart
 
 
@@ -73,6 +74,8 @@ class CodexChatEngine:
         resume: str | None,
     ) -> tuple[list[TranscriptMessage], str | None]:
         del message_history
+        if self._command[:1] == ("codex",):
+            require_codex_backend()
         server = CodexAppServer(self._command, os.environ)
         assistant_parts: list[TranscriptPart] = []
         try:
