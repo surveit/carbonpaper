@@ -75,3 +75,33 @@ def test_invalid_protocol_fails_a_pending_request(
             await server.close()
 
     asyncio.run(drive())
+
+
+@pytest.mark.parametrize(
+    ("mode", "message"),
+    [
+        ("malformed", "invalid JSON"),
+        ("invalid_response", "valid id"),
+        ("eof", "closed stdout"),
+    ],
+)
+def test_terminal_protocol_failure_fails_later_requests(
+    fake_codex_server, mode: str, message: str,
+) -> None:
+    async def drive() -> None:
+        server = CodexAppServer(fake_codex_server.command_for(mode), {})
+        try:
+            await server.initialize()
+            with pytest.raises(CodexProtocolError, match=message):
+                await asyncio.wait_for(server.request("pending", {}), timeout=1)
+            with pytest.raises(CodexProtocolError, match=message):
+                await asyncio.wait_for(server.request("later", {}), timeout=1)
+            assert [request["method"] for request in fake_codex_server.requests] == [
+                "initialize",
+                "initialized",
+                "pending",
+            ]
+        finally:
+            await server.close()
+
+    asyncio.run(drive())
