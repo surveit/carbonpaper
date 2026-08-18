@@ -5,8 +5,11 @@ with asyncio.run (no pytest-asyncio in this repo), mirroring tests/test_sdk_engi
 from __future__ import annotations
 
 import asyncio
+import subprocess
 from typing import Any
 
+from app.core.agent import codex_availability
+from app.core.agent.codex_engine import CodexChatEngine
 from app.core.agent.codex_protocol import CodexProtocolError
 from app.core.agent.store import AgentSession, ProseBlock, SessionStore
 from app.core.agent.turns import TurnManager
@@ -109,6 +112,39 @@ def test_codex_protocol_failures_reach_the_turn_stream() -> None:
 
     assert asyncio.run(_drive()) == [
         {"kind": "error", "text": "CodexProtocolError: invalid app-server message"},
+        {"kind": "done"},
+    ]
+
+
+def test_codex_signout_after_preflight_reaches_the_turn_stream(monkeypatch) -> None:
+    store = SessionStore()
+    sid = store.create()
+    statuses = iter([0, 1])
+    monkeypatch.setattr(codex_availability.shutil, "which", lambda _name: "codex")
+    monkeypatch.setattr(
+        codex_availability.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess([], returncode=next(statuses)),
+    )
+    codex_availability.require_codex_backend()
+
+    async def _drive() -> list[dict[str, Any]]:
+        manager = TurnManager()
+        turn_id = manager.start(
+            engine=CodexChatEngine("system", [], ("codex", "app-server", "--stdio")),
+            store=store,
+            session_id=sid,
+            prompt="hi",
+        )
+        await manager._tasks[turn_id]
+        return manager._turns[turn_id].events
+
+    assert asyncio.run(_drive()) == [
+        {
+            "kind": "error",
+            "text": "CodexBackendUnavailableError: Codex isn't authenticated with a "
+            "ChatGPT subscription. Run `codex login` before starting a chat.",
+        },
         {"kind": "done"},
     ]
 
