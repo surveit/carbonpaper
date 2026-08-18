@@ -6,10 +6,11 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
+from app.web.admin import spend_router, workspace_router
 from app.web.chat_router import router as chat_router
 from app.web.routers import (
-    admin, cmdk_palette, evals, files, guide, node, pickers, project, review,
-    review_packet, run_form, run_lineage, run_stage, runs,
+    cmdk_palette, evals, files, guide, node, pickers, project, review, review_packet,
+    run_form, run_lineage, run_stage, runs,
 )
 
 
@@ -29,7 +30,8 @@ def include_routers(app: FastAPI) -> None:
     app.include_router(guide.router)
     app.include_router(pickers.router)
     app.include_router(cmdk_palette.router)
-    app.include_router(admin.router)
+    app.include_router(workspace_router.router)
+    app.include_router(spend_router.router)
 
     # Interactive, multi-turn chat surface (streaming + persistence) — also where 'Edit
     # with agent' and 'Take a guided tour' open, as draft chats. Separate from the

@@ -206,20 +206,20 @@ wheels = [
 
 [[package]]
 name = "claude-agent-sdk"
-version = "0.2.134"
+version = "0.2.139"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
     { name = "mcp" },
     { name = "sniffio" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/40/4e/4aa8048367c89b9cbb64f4fac58f9f59110f77231d13e728e2844898ea32/claude_agent_sdk-0.2.134.tar.gz", hash = "sha256:acac34b8068dfeb8fceeb8e2e3b3684f146da206094e55a5d34115063f2bafba", size = 312219, upload-time = "2026-08-08T03:00:16.502Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/11/b6/cfcdefed1f866a8ba372ef3884c8020dd54338d15d8b45d5a1ff7432cea1/claude_agent_sdk-0.2.139.tar.gz", hash = "sha256:4395ed541cdd4c13aeb1213b3b414b7e8a94cc060a773137e961882e81c174a7", size = 319519, upload-time = "2026-08-14T22:34:48.038Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6e/75/dc52d7f3632e9a5377487158785495ba5ce009adc292b0b61ffa9ce01e3a/claude_agent_sdk-0.2.134-py3-none-macosx_11_0_arm64.whl", hash = "sha256:5c44159a4a8640edf2634fa9653c40023ed548e24e3aaac01fc3fad85685ed0e", size = 80906236, upload-time = "2026-08-08T03:00:20.156Z" },
-    { url = "https://files.pythonhosted.org/packages/f9/19/289b9cf3f26154084070a40d9ac54fb4f624e4a36afa76529f5bd1d112f6/claude_agent_sdk-0.2.134-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:4d4e583bdd834b05f88678948b263e57aa81f20a0817f3d25adfe9d8edb50966", size = 85996885, upload-time = "2026-08-08T03:00:24.254Z" },
-    { url = "https://files.pythonhosted.org/packages/67/b2/cb099e7b82eb43626e9dcfbf24e09cd760d59ff3b9e498642c4dffa4fa6f/claude_agent_sdk-0.2.134-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:f259671f03823e07544b52ed37e29accd295012e7d9304f5b7c1ec6a3508c758", size = 90326570, upload-time = "2026-08-08T03:00:28.544Z" },
-    { url = "https://files.pythonhosted.org/packages/88/17/59e7a9cc6ebebc9708733a03ddd2b9c90051c7de359686e1e14b1b81d2b1/claude_agent_sdk-0.2.134-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:0cba177a0f234dcdb8dfcdd46803fbe0aadd42fbc5aebba41f65f9d00d05a420", size = 91474377, upload-time = "2026-08-08T03:00:32.869Z" },
-    { url = "https://files.pythonhosted.org/packages/e8/c6/c5dd0c41ad6822218ed5af47961ba9a70c88d82ca0f0ff1d12cb7d37a543/claude_agent_sdk-0.2.134-py3-none-win_amd64.whl", hash = "sha256:e5eb243dc62a6ea624aadb4227eb2d03d40394c9ae8a43cb5a94d8d76cd2def0", size = 90944935, upload-time = "2026-08-08T03:00:37.112Z" },
+    { url = "https://files.pythonhosted.org/packages/ea/7f/f04c33553cbc69bb96d045dc38a6266726fad72130f22f405dfe9eb54bf1/claude_agent_sdk-0.2.139-py3-none-macosx_11_0_arm64.whl", hash = "sha256:cbc50cc475ec633cabfa36347646097e9b1466d53130e4a04a87308ff830c87b", size = 88043656, upload-time = "2026-08-14T22:34:53.027Z" },
+    { url = "https://files.pythonhosted.org/packages/85/d0/a17f5318ca0220479f20fdf83fa54a838a0a13ee203495ff67c72c3f43a7/claude_agent_sdk-0.2.139-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:1c08206b1603444582cd365effaf95d2a8248661f1492281fb2d529b0887c047", size = 93000433, upload-time = "2026-08-14T22:34:58.225Z" },
+    { url = "https://files.pythonhosted.org/packages/c5/2e/5bcec31700d76ad2d5b9fc28521a75a66f464063dac11373cf8d61446a4f/claude_agent_sdk-0.2.139-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:e69ae1a0b2af684c64839cc16e10b70800d9d2f57622b8c0d1739dd878cd7346", size = 97396659, upload-time = "2026-08-14T22:35:03.734Z" },
+    { url = "https://files.pythonhosted.org/packages/c8/7f/582b3c1936c9f4ebc1bdc55a3923f1b680ef3c01928ffff1ea38eb84f637/claude_agent_sdk-0.2.139-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:34b289b3436fe24013f7b9cfe9f0a4e0806917a9ef8bbe829cda9a7b12d41a77", size = 98391889, upload-time = "2026-08-14T22:35:09.683Z" },
+    { url = "https://files.pythonhosted.org/packages/56/54/d94af31d19b4e8d63d1b15002fd333ea77a040b7ab7a388044e511c8f9f6/claude_agent_sdk-0.2.139-py3-none-win_amd64.whl", hash = "sha256:9b76f0ffe216d6ca290d5f4f295ecb030dc496f101986ac99480a89d4abc6426", size = 100746507, upload-time = "2026-08-14T22:35:15.144Z" },
 ]
 
 [[package]]

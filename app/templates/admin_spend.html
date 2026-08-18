@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Model spend{% endblock %}
+{% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
+{% macro tally_rows(tallies, what) %}
+<table class="stages">
+    <thead>
+        <tr><th>{{ what }}</th><th class="spend-num">cost</th><th class="spend-num">calls</th><th class="spend-num">in</th><th class="spend-num">out</th></tr>
+    </thead>
+    <tbody>
+        {% for t in tallies %}
+        <tr>
+            <td>{{ t.label }}</td>
+            <td class="spend-num">${{ "%.2f"|format(t.cost_usd) }}</td>
+            <td class="spend-num">{{ "{:,}".format(t.calls) }}</td>
+            <td class="spend-num">{{ "{:,}".format(t.input_tokens) }}</td>
+            <td class="spend-num">{{ "{:,}".format(t.output_tokens) }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endmacro %}
+{% block content %}
+<div class="dash-header">
+    <div class="dash-header-text">
+        <h1>Model spend</h1>
+        <p class="lede">What the projects this workspace lists have paid Anthropic, totalled off the two records that hold it: each run stage's usage in its run manifest, and each chat turn's usage on its session.</p>
+    </div>
+    <a href="/admin" class="btn">Back to admin</a>
+</div>
+
+<div class="spend-total">
+    <div class="spend-figure">${{ "%.2f"|format(spend.total.cost_usd) }}</div>
+    <div class="spend-figure-note">
+        over {{ "{:,}".format(spend.total.calls) }} calls in {{ "{:,}".format(spend.total.entries) }} run stages and chat turns ·
+        {{ "{:,}".format(spend.total.input_tokens) }} tokens in, {{ "{:,}".format(spend.total.output_tokens) }} out
+    </div>
+</div>
+
+{# The figure above is what was RECORDED. Spend nobody recorded is stated here rather
+   than left to read as zero — a session with no per-turn entry cost something, and
+   this page cannot say what. #}
+{% if spend.unreadable_runs or spend.silent_sessions %}
+<div class="spend-gap">
+    <strong>Not in that figure:</strong>
+    <ul>
+        {% if spend.silent_sessions %}
+        <li>{{ spend.silent_sessions }} chat session{{ "s" if spend.silent_sessions != 1 }} recorded no per-turn spend — every session that ran before this page existed, plus any whose turns reported none. What they cost is not recorded anywhere.</li>
+        {% endif %}
+        {% if spend.unreadable_runs %}
+        <li>{{ spend.unreadable_runs }} run manifest{{ "s" if spend.unreadable_runs != 1 }} this app can no longer parse. Their stages' usage is unread, not zero.</li>
+        {% endif %}
+    </ul>
+</div>
+{% endif %}
+
+<h2>By day</h2>
+{% if spend.by_day %}
+{% set peak = spend.by_day|map(attribute='cost_usd')|max %}
+<div class="spend-chart">
+    {% for day in spend.by_day %}
+    <div class="spend-bar-slot" title="{{ day.label }} — ${{ "%.2f"|format(day.cost_usd) }} over {{ day.entries }} entries">
+        {# No bar at all for a day nothing was recorded on: the bar's min-height would
+           otherwise draw that day a stub, which reads as a small amount. #}
+        {% if day.cost_usd %}<div class="spend-bar" style="height: {{ (100 * day.cost_usd / peak)|round(1) }}%;"></div>{% endif %}
+        <div class="spend-bar-label">{{ day.label[5:] }}</div>
+    </div>
+    {% endfor %}
+</div>
+<p class="muted">Tallest bar: ${{ "%.2f"|format(peak) }}. Every calendar day from {{ spend.by_day[0].label }} to {{ spend.by_day[-1].label }}, so a day with no bar recorded no spend. A run stage is dated by when it started, a chat turn by when it ended.</p>
+{% else %}
+<div class="empty-state">
+    <h2>Nothing recorded yet</h2>
+    <p class="muted">No run stage and no chat turn in this workspace has reported model usage.</p>
+</div>
+{% endif %}
+
+<h2>By source</h2>
+{{ tally_rows(spend.by_source, "source") }}
+
+<h2>By model</h2>
+{{ tally_rows(spend.by_model, "model") }}
+
+<h2>By project</h2>
+{{ tally_rows(spend.by_project, "project") }}
+
+<h2>Dearest {{ spend.biggest|length }}</h2>
+<table class="stages">
+    <thead>
+        <tr><th>when</th><th>source</th><th>project</th><th>what</th><th class="spend-num">cost</th><th>model</th></tr>
+    </thead>
+    <tbody>
+        {% for e in spend.biggest %}
+        <tr>
+            <td class="spend-when">{{ e.at[:16].replace("T", " ") }}</td>
+            <td>{{ e.source.value }}</td>
+            <td>{{ e.project }}</td>
+            <td>{% if e.link %}<a href="{{ e.link }}">{{ e.label }}</a>{% else %}{{ e.label }}{% endif %}</td>
+            <td class="spend-num">${{ "%.2f"|format(e.usage.cost_usd) }}</td>
+            <td class="muted">{{ e.model }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

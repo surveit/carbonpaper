@@ -7,8 +7,9 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from app.core.agent.store import ProseBlock, SessionStore
+from app.core.agent.store import AgentSession, ProseBlock, SessionStore
 from app.core.agent.turns import TurnManager
+from app.core.agent.usage import LlmUsage
 
 
 class _FakeEngine:
@@ -84,3 +85,48 @@ def test_on_done_runs_even_when_the_turn_errors() -> None:
 
     asyncio.run(_drive())
     assert calls == ["done"]  # generation's completion logic runs regardless of outcome
+
+
+class _SpendingEngine(_FakeEngine):
+    def __init__(self, cost_usd: float) -> None:
+        super().__init__([{"role": "assistant", "parts": [{"type": "text", "text": "ok"}]}])
+        self.last_usage = LlmUsage(cost_usd=cost_usd, calls=1, model="claude-sonnet-5")
+
+
+class _RaisingSpendingEngine(_RaisingEngine):
+    def __init__(self, cost_usd: float) -> None:
+        self.last_usage = LlmUsage(cost_usd=cost_usd, calls=1, model="claude-sonnet-5")
+
+
+def _spend_booked(store: SessionStore, sid: str, engine: Any) -> list[float]:
+    async def _drive() -> None:
+        tm = TurnManager()
+        turn_id = tm.start(engine=engine, store=store, session_id=sid, prompt="hi")
+        await tm._tasks[turn_id]
+
+    asyncio.run(_drive())
+    return [turn.usage.cost_usd for turn in AgentSession.load(sid).turn_spend]
+
+
+def test_each_turn_books_what_it_spent_onto_the_session() -> None:
+    store = SessionStore()
+    sid = store.create()
+
+    _spend_booked(store, sid, _SpendingEngine(0.25))
+
+    assert _spend_booked(store, sid, _SpendingEngine(0.50)) == [0.25, 0.50]
+
+
+def test_a_turn_that_errored_still_books_what_it_spent_getting_there() -> None:
+    store = SessionStore()
+    sid = store.create()
+
+    assert _spend_booked(store, sid, _RaisingSpendingEngine(0.10)) == [0.10]
+
+
+def test_an_engine_that_tracks_no_usage_books_nothing() -> None:
+    store = SessionStore()
+    sid = store.create()
+    silent = _FakeEngine([{"role": "assistant", "parts": [{"type": "text", "text": "ok"}]}])
+
+    assert _spend_booked(store, sid, silent) == []
