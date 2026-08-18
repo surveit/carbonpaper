@@ -676,3 +676,4 @@
 {"run_id":"32141507779","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32141507779","created":"2026-08-18T13:18:08Z","branch":"feat/llm-spend-dashboard","event":"pull_request","contracts_kept":14,"findings":[]}
 {"run_id":"32141507779","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32141507779","created":"2026-08-18T13:18:35Z","branch":"feat/llm-spend-dashboard","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"32141655339","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32141655339","created":"2026-08-18T13:19:37Z","branch":"fix/intro-demo-cta","event":"pull_request","contracts_kept":14,"findings":[]}
+{"run_id":"32141655339","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32141655339","created":"2026-08-18T13:20:04Z","branch":"fix/intro-demo-cta","event":"pull_request","contracts_kept":null,"findings":[]}
