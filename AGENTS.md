@@ -15,6 +15,7 @@ Docs are in `docs/`. Index:
 Also `app/AGENTS.md` (web layer), `app/runtime/AGENTS.md` (the Runner), `README.md` (quickstart).
 
 ## Conventions (load-bearing)
+- **Git workflow.** Push every commit and open a pull request for each feature branch.
 - **Never fabricate.** An unsourceable value is `null`/`unknown`; the pipeline fails loudly
   rather than inventing a number, URL, or citation. A requested LLM backend that isn't
   available raises rather than silently substituting another.
