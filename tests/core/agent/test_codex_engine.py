@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
 
 import pytest
 
+from app.core.agent import codex_availability
 from app.core.agent.bound_tool import bind_by_schema, bind_by_signature
 from app.core.agent.codex_engine import AgentEvent, CodexChatEngine
 
@@ -99,6 +101,27 @@ def test_saved_thread_is_resumed(fake_codex_server) -> None:
         methods = [request.get("method") for request in fake_codex_server.requests]
         assert "thread/resume" in methods
         assert "thread/start" not in methods
+
+    asyncio.run(drive())
+
+
+def test_codex_engine_refuses_to_start_when_subscription_is_signed_out(monkeypatch) -> None:
+    monkeypatch.setattr(codex_availability.shutil, "which", lambda _name: "codex")
+    monkeypatch.setattr(
+        codex_availability.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess([], returncode=1),
+    )
+
+    async def drive() -> None:
+        engine = CodexChatEngine("system", [], ("codex", "app-server", "--stdio"))
+        with pytest.raises(
+            codex_availability.CodexBackendUnavailableError,
+            match="isn't authenticated with a ChatGPT subscription",
+        ):
+            await engine.stream_turn(
+                "answer", message_history=None, emit=lambda _event: None, resume=None
+            )
 
     asyncio.run(drive())
 

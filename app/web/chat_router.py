@@ -5,7 +5,6 @@ the registry (app.core.agent.registry) rather than knowing any concrete agent.
 from __future__ import annotations
 
 import json
-import shutil
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
@@ -20,6 +19,7 @@ from app.services.uploads import max_upload_bytes, save_upload
 from app.web.file_sizes import describe_attachment, describe_refusal
 
 from app.core.agent import registry
+from app.core.agent.codex_availability import find_codex_backend_error
 from app.core.agent.session import build_session_engine, create_agent_session
 from app.core.agent.store import (
     Bubble,
@@ -46,21 +46,22 @@ def available_chat_backends() -> list[ChatBackend]:
     backends = []
     if CLI_PATH is not None:
         backends.append(ChatBackend.claude)
-    if shutil.which("codex") is not None:
+    if find_codex_backend_error() is None:
         backends.append(ChatBackend.codex)
     return backends
 
 
 def _backend_error(backend: ChatBackend) -> str | None:
-    if backend in available_chat_backends():
-        return None
     if backend == ChatBackend.claude:
+        if backend in available_chat_backends():
+            return None
         return (
             "The Claude CLI / Agent SDK isn't available. Install it and run "
             "`claude login` so the agent can run."
         )
     if backend == ChatBackend.codex:
-        return "The Codex CLI isn't available. Install it and sign in before starting a chat."
+        error = find_codex_backend_error()
+        return str(error) if error is not None else None
     raise ValueError(f"unknown chat backend: {backend}")
 
 
@@ -123,8 +124,9 @@ async def new_chat(request: Request, backend: str = Form(...)):
         selected_backend = ChatBackend(backend)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail="Unknown chat backend") from exc
-    if selected_backend not in available_chat_backends():
-        raise HTTPException(status_code=409, detail=f"{selected_backend.value} is unavailable")
+    error = _backend_error(selected_backend)
+    if error is not None:
+        raise HTTPException(status_code=409, detail=error)
     sid = create_agent_session(
         "editing", {}, base_url=str(request.base_url), title="New chat", backend=selected_backend
     )
