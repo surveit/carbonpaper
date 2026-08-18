@@ -266,9 +266,8 @@ def _order_diff_columns(
         or by_name[name].changed_cells
     ]
     touched_names = set(touched)
-    return [by_name[name] for name in [
-        *touched, *(name for name in ordered_names if name not in touched_names)
-    ]]
+    remaining = [name for name in ordered_names if name not in touched_names]
+    return [by_name[name] for name in touched + remaining]
 
 
 def _shape_aligned_columns(in_text: pd.DataFrame, out_text: pd.DataFrame) -> list[DiffColumn]:
