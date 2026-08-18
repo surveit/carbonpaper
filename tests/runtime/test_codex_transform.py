@@ -108,6 +108,12 @@ for line in sys.stdin:
             "submit-2",
             {"verdict": "supported", "answer_is_complete": True},
         )
+    elif message.get("id") == "mcp-request-1":
+        send({
+            "method": "item/agentMessage/delta",
+            "params": {"delta": "refusal received"},
+        })
+        send_completed()
     elif message.get("id") in {"submit-1", "submit-2"}:
         send_completed()
 '''
@@ -243,9 +249,14 @@ def test_each_retry_resolves_the_backend_and_records_a_call(
 def test_unexpected_mcp_request_is_rejected_without_invocation(
     monkeypatch: pytest.MonkeyPatch, fake_codex_server: FakeCodexServer,
 ) -> None:
-    with pytest.raises(CodexProtocolError, match="unsupported.*mcpServer"):
-        _run_codex_transform(monkeypatch, fake_codex_server, "mcp")
+    events: list[AgentEvent] = []
 
+    with pytest.raises(CodexProtocolError, match="unsupported.*mcpServer"):
+        _run_codex_transform(
+            monkeypatch, fake_codex_server, "mcp", emit=events.append
+        )
+
+    assert {"kind": "text", "text": "refusal received"} in events
     rejection = next(
         request
         for request in fake_codex_server.requests

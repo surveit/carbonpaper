@@ -23,6 +23,12 @@ from app.core.llm_sdk import run_sync
 
 
 _DYNAMIC_TOOL_CALL = "item/tool/call"
+_AGENT_MESSAGE_DELTA = "item/agentMessage/delta"
+_TURN_COMPLETED = "turn/completed"
+_ERROR_NOTIFICATION = "error"
+_MESSAGE_ID = "id"
+_COMPLETED_STATUS = "completed"
+_CODEX_BACKEND = "codex"
 _REASONING_DELTAS = {
     "item/reasoning/summaryTextDelta",
     "item/reasoning/textDelta",
@@ -37,7 +43,7 @@ def call_codex_transform(
     max_retries: int,
     emit: Callable[[AgentEvent], None] | None,
 ) -> tuple[dict[str, object], LlmUsage]:
-    if model.backend != "codex":
+    if model.backend != _CODEX_BACKEND:
         raise ValueError(f"{model.value} does not select the Codex backend")
     usage_parts: list[LlmUsage] = []
     last_error: CodexProtocolError | GenerationError | OSError | None = None
@@ -72,12 +78,7 @@ async def _run_attempt(
     emit: Callable[[AgentEvent], None] | None,
     usage_parts: list[LlmUsage],
 ) -> dict[str, object]:
-    agent: Agent[BaseModel] = Agent(
-        system_prompt=system_prompt,
-        target_schema=reply_model,
-        task=task,
-        model=model.value,
-    )
+    agent = _build_agent(system_prompt, task, reply_model, model)
     answer_spec = agent.build_submit_answer_spec()
     server = CodexAppServer(command, os.environ)
     try:
@@ -102,12 +103,18 @@ async def _stream_turn(
     answer_spec: BoundToolSpec,
     emit: Callable[[AgentEvent], None] | None,
 ) -> None:
+    rejection: CodexProtocolError | None = None
     while True:
         message = await server.next_message()
         method = _read_string(message, "method")
-        if "id" in message:
-            await _handle_server_request(server, message, method, answer_spec, emit)
+        if _MESSAGE_ID in message:
+            rejected = await _handle_server_request(
+                server, message, method, answer_spec, emit
+            )
+            rejection = rejection or rejected
         elif _handle_notification(message, method, emit):
+            if rejection is not None:
+                raise rejection
             return
 
 
@@ -117,17 +124,18 @@ async def _handle_server_request(
     method: str,
     answer_spec: BoundToolSpec,
     emit: Callable[[AgentEvent], None] | None,
-) -> None:
+) -> CodexProtocolError | None:
     request_id = _read_request_id(message)
     if method != _DYNAMIC_TOOL_CALL:
-        await _reject_server_request(server, request_id, method)
+        return await _reject_server_request(server, request_id, method)
     params = _read_params(message)
     tool_name = _read_string(params, "tool")
     if tool_name != SUBMIT_ANSWER_TOOL:
-        await _reject_server_request(server, request_id, f"tool {tool_name}")
+        return await _reject_server_request(server, request_id, f"tool {tool_name}")
     await _call_submit_answer(
         server, request_id, params.get("arguments"), answer_spec, emit
     )
+    return None
 
 
 async def _call_submit_answer(
@@ -175,10 +183,10 @@ async def _return_tool_error(
 
 async def _reject_server_request(
     server: CodexAppServer, request_id: CodexRequestId, method: str
-) -> None:
+) -> CodexProtocolError:
     text = f"unsupported Codex server request: {method}"
     await server.respond_error(request_id, -32601, text)
-    raise CodexProtocolError(text)
+    return CodexProtocolError(text)
 
 
 def _handle_notification(
@@ -186,13 +194,13 @@ def _handle_notification(
     method: str,
     emit: Callable[[AgentEvent], None] | None,
 ) -> bool:
-    if method == "item/agentMessage/delta":
+    if method == _AGENT_MESSAGE_DELTA:
         _emit(emit, {"kind": "text", "text": _read_delta(message)})
     elif method in _REASONING_DELTAS:
         _emit(emit, {"kind": "thinking", "text": _read_delta(message)})
-    elif method == "error":
+    elif method == _ERROR_NOTIFICATION:
         _emit(emit, {"kind": "error", "text": _read_error_text(message)})
-    elif method == "turn/completed":
+    elif method == _TURN_COMPLETED:
         _check_turn_status(message)
         return True
     else:
@@ -218,6 +226,20 @@ def _build_start_params(
             }
         ],
     }
+
+
+def _build_agent(
+    system_prompt: str,
+    task: str,
+    target_schema: type[BaseModel],
+    model: LLMModel,
+) -> Agent[BaseModel]:
+    return Agent(
+        system_prompt=system_prompt,
+        target_schema=target_schema,
+        task=task,
+        model=model.value,
+    )
 
 
 def _build_turn_params(thread_id: str, task: str) -> TypeUnsafeCodexJsonObject:
@@ -285,7 +307,7 @@ def _check_turn_status(message: TypeUnsafeCodexJsonObject) -> None:
     if not isinstance(turn, dict):
         raise CodexProtocolError("Codex turn completion has no turn object")
     status = _read_string(turn, "status")
-    if status == "completed":
+    if status == _COMPLETED_STATUS:
         return
     if status not in {"failed", "interrupted"}:
         raise CodexProtocolError(f"Codex turn completed with unknown status: {status}")

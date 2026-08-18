@@ -8,7 +8,7 @@ filled in with a zero — see `SpendReading.unreadable_runs` / `.silent_sessions
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import date, timedelta
 from enum import Enum
 
@@ -60,9 +60,9 @@ class SpendEntry(BaseModel):
 
 class SpendTally(BaseModel):
     label: str
-    cost_usd: float
-    input_tokens: int
-    output_tokens: int
+    cost_usd: float | None
+    input_tokens: int | None
+    output_tokens: int | None
     calls: int
     entries: int
 
@@ -73,8 +73,7 @@ class SpendReading(BaseModel):
     by_source: list[SpendTally]
     by_model: list[SpendTally]
     by_project: list[SpendTally]
-    # The largest single entries, newest first among equals — the run stages and
-    # chat turns worth looking at.
+    # Entries with known cost lead; unknown-cost entries remain visible after them.
     biggest: list[SpendEntry]
     # Runs whose manifest this app can no longer parse. Their spend is not in any
     # figure above, so the page says how many rather than implying there are none.
@@ -95,7 +94,7 @@ def read_workspace_spend(*, biggest: int = 25) -> SpendReading:
         by_source=_ranked(entries, lambda e: e.source.value),
         by_model=_ranked(entries, lambda e: e.model),
         by_project=_ranked(entries, lambda e: e.project),
-        biggest=sorted(entries, key=lambda e: (-e.usage.cost_usd, e.at))[:biggest],
+        biggest=_select_entries_to_review(entries, biggest),
         unreadable_runs=sum(1 for run in runs if run.manifest is None),
         silent_sessions=sum(1 for session in sessions if not session.turn_spend),
     )
@@ -137,9 +136,9 @@ def read_session_spend(sessions: list[AgentSession], names: ProjectNames) -> lis
 def tally_spend(label: str, entries: list[SpendEntry]) -> SpendTally:
     return SpendTally(
         label=label,
-        cost_usd=sum(e.usage.cost_usd for e in entries),
-        input_tokens=sum(e.usage.input_tokens for e in entries),
-        output_tokens=sum(e.usage.output_tokens for e in entries),
+        cost_usd=_sum_costs(e.usage.cost_usd for e in entries),
+        input_tokens=_sum_counts(e.usage.input_tokens for e in entries),
+        output_tokens=_sum_counts(e.usage.output_tokens for e in entries),
         calls=sum(e.usage.calls for e in entries),
         entries=len(entries),
     )
@@ -188,9 +187,14 @@ def _entries_in_run(run: RunEntry, names: ProjectNames) -> list[SpendEntry]:
 
 
 def _ranked(entries: list[SpendEntry], key: Callable[[SpendEntry], str]) -> list[SpendTally]:
-    """Dearest first: what a spend page is read for is where the money went."""
+    """Known cost dearest first; unknown cost follows by label."""
     tallies = [tally_spend(label, group) for label, group in _grouped(entries, key)]
-    return sorted(tallies, key=lambda t: -t.cost_usd)
+    known = [tally for tally in tallies if tally.cost_usd is not None]
+    unknown = [tally for tally in tallies if tally.cost_usd is None]
+    return [
+        *sorted(known, key=_build_tally_cost_key),
+        *sorted(unknown, key=lambda tally: tally.label),
+    ]
 
 
 def _grouped(
@@ -201,3 +205,44 @@ def _grouped(
     for entry in entries:
         groups[key(entry)].append(entry)
     return sorted(groups.items())
+
+
+def _select_entries_to_review(
+    entries: list[SpendEntry], limit: int
+) -> list[SpendEntry]:
+    known = [entry for entry in entries if entry.usage.cost_usd is not None]
+    unknown = [entry for entry in entries if entry.usage.cost_usd is None]
+    ordered = [
+        *sorted(known, key=_build_entry_cost_key),
+        *sorted(unknown, key=lambda entry: entry.at, reverse=True),
+    ]
+    return ordered[:limit]
+
+
+def _build_entry_cost_key(entry: SpendEntry) -> tuple[float, str]:
+    cost = entry.usage.cost_usd
+    assert cost is not None
+    return -cost, entry.at
+
+
+def _build_tally_cost_key(tally: SpendTally) -> tuple[float, str]:
+    assert tally.cost_usd is not None
+    return -tally.cost_usd, tally.label
+
+
+def _sum_counts(values: Iterable[int | None]) -> int | None:
+    total = 0
+    for value in values:
+        if value is None:
+            return None
+        total += value
+    return total
+
+
+def _sum_costs(values: Iterable[float | None]) -> float | None:
+    total = 0.0
+    for value in values:
+        if value is None:
+            return None
+        total += value
+    return total

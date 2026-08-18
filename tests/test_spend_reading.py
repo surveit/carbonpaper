@@ -66,6 +66,53 @@ def test_run_stages_and_chat_turns_add_up_to_one_total():
     assert [t.label for t in spend.by_model] == ["claude-opus-5", "claude-sonnet-5"]
 
 
+def test_unknown_metrics_remain_unknown_in_every_tally():
+    usage = LlmUsage(
+        cost_usd=None,
+        calls=1,
+        input_tokens=None,
+        output_tokens=None,
+        model="gpt-5.6-terra",
+    )
+    _store_run(
+        "congresswatch",
+        "20260816T090000",
+        [_stage_record("score", usage, "2026-08-16T09:00:00")],
+    )
+
+    spend = read_workspace_spend()
+
+    assert spend.total.cost_usd is None
+    assert spend.total.input_tokens is None
+    assert spend.total.output_tokens is None
+    assert spend.total.calls == 1
+    assert spend.by_model[0].cost_usd is None
+    assert spend.biggest[0].usage.cost_usd is None
+
+
+def test_admin_page_states_unknown_metrics_without_zeroing_them():
+    usage = LlmUsage(
+        cost_usd=None,
+        calls=1,
+        input_tokens=None,
+        output_tokens=None,
+        model="gpt-5.6-terra",
+    )
+    _store_run(
+        "congresswatch",
+        "20260816T090000",
+        [_stage_record("score", usage, "2026-08-16T09:00:00")],
+    )
+
+    response = TestClient(app, raise_server_exceptions=False).get("/admin/spend")
+
+    assert response.status_code == 200
+    assert "Cost unknown" in response.text
+    assert "input tokens unknown" in response.text
+    assert "output tokens unknown" in response.text
+    assert "$0.00" not in response.text
+
+
 def test_a_session_that_recorded_no_turn_is_counted_not_zeroed():
     SessionStore().create(title="Opened, never answered")
 
