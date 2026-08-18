@@ -91,7 +91,20 @@ def test_the_replayed_run_says_so_where_the_cost_would_be(project: Path) -> None
     assert "stat-strip" in replayed
     assert "Reused, not recomputed" in replayed
     assert "2 of 2 rows (100%)" in replayed
-    assert "the model was not called in this run" in replayed
+    assert "the model was not called for those cached rows" in replayed
+
+
+def test_a_partially_replayed_run_limits_its_no_call_claim_to_cached_rows(project: Path) -> None:
+    _run(project)
+    pd.DataFrame({"x": [1, 2, 3]}).to_csv(project / "rows.csv", index=False)
+
+    html = _panel(_run(project))
+
+    assert "2 of 3 rows (67%)" in html
+    assert "<dt>calls</dt><dd>1</dd>" in html
+    assert "$0.25" in html
+    assert "the model was not called for those cached rows" in html
+    assert "the model was not called in this run" not in html
 
 
 def test_a_restarted_pending_run_does_not_claim_cache_replay(project: Path) -> None:
