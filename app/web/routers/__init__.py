@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from app.web.admin import spend_router, workspace_router
 from app.web.chat_router import router as chat_router
 from app.web.routers import (
-    cmdk_palette, editing, evals, files, guide, node, pickers, project, review,
+    admin, cmdk_palette, editing, evals, files, guide, node, pickers, project, review,
     review_packet, run_form, run_lineage, run_stage, runs, tutorial,
 )
 
@@ -33,13 +33,8 @@ def include_routers(app: FastAPI) -> None:
     app.include_router(workspace_router.router)
     app.include_router(spend_router.router)
 
-    # The compiler's chat-driven editing entry ('Edit with agent' -> a chat session).
-    app.include_router(editing.router)
-
-    # The home zero state's tour entry ('Take a guided tour' -> a chat session).
-    app.include_router(tutorial.router)
-
-    # Interactive, multi-turn chat surface (streaming + persistence). Separate from
-    # the row-mapped llm_transform path; HTTP routes in app/web/chat_router.py, the
-    # engine (session store, turn manager, agent registry) in app/core/agent.
+    # Interactive, multi-turn chat surface (streaming + persistence) — also where 'Edit
+    # with agent' and 'Take a guided tour' open, as draft chats. Separate from the
+    # row-mapped llm_transform path; HTTP routes in app/web/chat_router.py, the engine
+    # (session store, turn manager, agent registry) in app/core/agent.
     app.include_router(chat_router)

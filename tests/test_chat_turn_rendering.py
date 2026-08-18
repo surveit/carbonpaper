@@ -12,6 +12,7 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.agent.session import create_agent_session
 from app.main import app
 from app.services import workspace
 from app.services.project import create_project
@@ -24,12 +25,13 @@ FILE_B = "[file] b.parquet · 2.5MB · in project demo (p1) · sha256 bbb"
 
 
 @pytest.fixture
-def session_id(tmp_path, monkeypatch) -> str:
+def session_id(tmp_path, monkeypatch, scripted_agent_turn) -> str:
     workspace.set_projects_dir(tmp_path)
+    # The turn must complete, or the page draws pending text, not the stored message.
     monkeypatch.setenv("CARBON_PAPER_FILES_ROOT", str(tmp_path / "files"))
     create_project("demo", "A methodology.", source="test")
-    return client.post("/chat/new", follow_redirects=False
-                       ).headers["location"].rsplit("/", 1)[-1]
+    return create_agent_session(
+        "editing", {}, base_url="http://testserver/", title="t")
 
 
 def render(session_id: str, text: str) -> str:

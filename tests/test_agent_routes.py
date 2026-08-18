@@ -47,7 +47,7 @@ def _build_tools(ctx: BaseModel) -> list:
 
 
 @pytest.fixture(autouse=True)
-def register_dummy_agent() -> Iterator[None]:
+def register_dummy_agent(scripted_agent_turn) -> Iterator[None]:
     register(
         "dummy",
         AgentConfig(system_prompt="sp", context_schema=_Ctx),
@@ -58,12 +58,11 @@ def register_dummy_agent() -> Iterator[None]:
 
 
 def _new_session(context: dict) -> str:
-    r = client.post(
-        "/chat/agent/dummy/sessions", json={"context": context}, follow_redirects=False
-    )
-    assert r.status_code == 303
-    assert r.headers["location"].startswith("/chat/")
-    return r.headers["location"].rsplit("/", 1)[-1]
+    r = client.post("/chat/agent/dummy/sessions", json={"context": context})
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["ok"], data
+    return data["sid"]
 
 
 def test_new_agent_session_records_agent_and_context() -> None:
@@ -108,8 +107,7 @@ def test_chat_page_renders_the_composer() -> None:
     sid = _new_session({"label": "hello"})
     page = client.get(f"/chat/{sid}")
     assert page.status_code == 200
-    assert f'const SID = "{sid}";' in page.text
-    assert "const MESSAGE_URL = `/chat/${SID}/message`;" in page.text
+    assert f'let SID = "{sid}";' in page.text
     assert 'id="input"' in page.text  # a bound agent keeps the message composer
 
 

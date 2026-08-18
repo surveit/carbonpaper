@@ -88,12 +88,17 @@
 </div>
 
 <script>
-const SID = {{ session_id | tojson }};
+// null on a draft page (app.web.chat_router.draft_agent_chat): nothing is stored yet,
+// and ensureSession() below is what materializes a real one, on the reader's first
+// reply or attachment.
+let SID = {{ session_id | tojson }};
+const DRAFT_AGENT_ID = {{ draft_agent_id | default(none) | tojson }};
+const DRAFT_CONTEXT = {{ draft_context | default(none) | tojson }};
+const DRAFT_TITLE = {{ draft_title | default(none) | tojson }};
 const SESSION_PROJECT = {{ session_project | tojson }};
 const PROJECTS = {{ projects | tojson }};
 const MAX_UPLOAD_BYTES = {{ max_upload_bytes | tojson }};
 const ACTIVE_TURN = {{ active_turn | tojson }};
-const MESSAGE_URL = `/chat/${SID}/message`;
 const log = document.getElementById("log");
 const input = document.getElementById("input");
 const sendBtn = document.getElementById("send");
@@ -348,11 +353,29 @@ function askWhereItGoes() {
   projectModal.showModal();
 }
 
+// Materializes a real, stored session on first use (see /chat/agent/{id}/sessions) —
+// a no-op once SID is real, so send() and storeFile() can both call this unconditionally.
+async function ensureSession() {
+  if (SID) return SID;
+  const r = await fetch(`/chat/agent/${DRAFT_AGENT_ID}/sessions`, {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({context: DRAFT_CONTEXT, title: DRAFT_TITLE})
+  });
+  const data = await r.json();
+  if (!data.ok) throw new Error(data.error || "could not start this chat");
+  SID = data.sid;
+  history.replaceState(null, "", `/chat/${SID}`);
+  return SID;
+}
+
 async function storeFile(file, projectId) {
+  let sid;
+  try { sid = await ensureSession(); }
+  catch (e) { const b = newAssistant(); b.error(e.message); return; }
   const fd = new FormData();
   fd.append("file", file);
   fd.append("project_id", projectId || "");
-  const r = await fetch(`/chat/${SID}/files`, {method: "POST", body: fd});
+  const r = await fetch(`/chat/${sid}/files`, {method: "POST", body: fd});
   let data = {};
   try { data = await r.json(); } catch (e) { /* leave empty */ }
   if (r.ok && data.ok) { showAttached(data.line); return; }
@@ -415,7 +438,10 @@ async function send() {
   attached = [];
   drawAttached();
   addUser(text);
-  const r = await fetch(MESSAGE_URL, {
+  let sid;
+  try { sid = await ensureSession(); }
+  catch (e) { const b = newAssistant(); b.error(e.message); return; }
+  const r = await fetch(`/chat/${sid}/message`, {
     method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({text})
   });

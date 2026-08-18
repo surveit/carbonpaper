@@ -1,6 +1,4 @@
-{# Starts a chat bound to no project; the agent asks which one when it needs to know.
-   In both `.ac-head`s — the index and a conversation — so leaving one is never the
-   way to start another. #}
-<form class="ac-new" method="post" action="/chat/new">
-  <button type="submit" class="btn primary">＋ New chat</button>
-</form>
+{# A chat bound to no project; the agent asks which one when it needs to know. In both
+   `.ac-head`s — the index and a conversation — so leaving one is never the way to start
+   another. Nothing is created by the link itself — see app.web.chat_router.draft_agent_chat. #}
+<a class="ac-new btn primary" href="/chat/agent/editing/new">＋ New chat</a>

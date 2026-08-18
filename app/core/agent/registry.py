@@ -48,6 +48,10 @@ def register(agent_id: str, config: AgentConfig, build_tools: BuildTools) -> Non
     _registry[agent_id] = (config, build_tools)
 
 
+def is_registered(agent_id: str) -> bool:
+    return agent_id in _registry
+
+
 def render_opening_message(agent_id: str, context: dict[str, Any]) -> str | None:
     """None when the agent waits to be spoken to. See AgentConfig.render_opening_message."""
     config, _build_tools = _registry[agent_id]
