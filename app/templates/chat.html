@@ -9,12 +9,8 @@
 {% macro tool_row(call) %}<details class="ac-tool"><summary title="{{ call.label or call.name }}">Called a tool: {{ call.name }}</summary><pre class="ac-tool-json">{{ call.args }}</pre></details>{% endmacro %}
 {% block content %}
 <div class="ac-head">
-  {% include "_new_chat_button.html" %}
+  <a class="ac-new btn primary" href="/chat">＋ New chat</a>
 </div>
-
-{% if backend_error %}
-  <div class="ac-warn"><strong>Backend unavailable:</strong> {{ backend_error }}</div>
-{% endif %}
 
 <div class="ac-log" id="log">
   {% for b in history %}
@@ -53,6 +49,9 @@
 </div>
 
 <div class="ac-dock">
+{% if backend_error %}
+  <div class="ac-warn"><strong>Backend unavailable:</strong> {{ backend_error }}</div>
+{% endif %}
 {% if view_only %}
   <div class="ac-composer ac-view-only">Read-only generation view — watch it run; there's no agent here to reply to.</div>
 {% else %}
