@@ -1,11 +1,8 @@
-# Self-hosting — the stores, the file endpoint, the deploy
+# Self-hosting — the file endpoint and the deploy
 
-## Where state lives
-
-Local state lives in `~/.carbonpaper/` — `app.db` (the document store), `frames/` and
-`examples/` (the project working copies) — so every checkout and worktree reads and
-writes the one store. `CARBON_PAPER_DB_PATH` and `CARBON_PAPER_PROJECTS_DIR` repoint it,
-which is how the deploy below pins `/data`.
+Running it for yourself is [getting-started.md](getting-started.md), which also says
+what `~/.carbonpaper/` holds and which environment variables repoint it. This covers
+what only a server serving other people needs.
 
 ## Getting a data file in
 

@@ -33,25 +33,22 @@ put on it as public.
 
 ## Getting started
 
-Dependencies are declared in `pyproject.toml` and pinned in `uv.lock` — there is no
-requirements.txt. `uv sync` builds `.venv` from the lock; `--frozen` makes a lock that
-has drifted from `pyproject.toml` an error instead of a re-resolve.
-
 ```
-uv sync --frozen
-uv run python -m uvicorn app.main:app --port 8765
+git clone https://github.com/surveit/carbonpaper && cd carbonpaper && ./start
 ```
 
-Steps that call a model need a credential in the server's environment, either
-`ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`. No app module reads them: the Claude
-Code CLI that `claude-agent-sdk` spawns inherits the environment and authenticates from
-it. Without one the server still boots and serves, and `llm_transform` stages are what
-fail.
+That is the whole install. The machine brings `git`, `curl` and `bash`; `./start`
+installs uv if it is missing, builds the venv from `uv.lock`, migrates the store, and
+serves <http://127.0.0.1:8765>. Run it again after a `git pull`.
+
+The server boots and serves with no credential. What fails without one is the steps
+that call a model — `claude auth login` once is the only part `./start` will not do
+for you. [docs/getting-started.md](docs/getting-started.md) covers signing in, the two
+environment variables that override it, and where your state lives.
 
 **Take the tour first.** A browser that has not run it gets it in place of the project
-list at <http://localhost:8765>. It seeds a seven-stage workflow over real, sourced
-advocacy records and runs it for real, so the first workflow you read is one you
-watched run.
+list. It seeds a seven-stage workflow over real, sourced advocacy records and runs it
+for real, so the first workflow you read is one you watched run.
 
 ### Your own question
 
@@ -68,21 +65,13 @@ watched run.
 5. Read the run: the walkthrough, the issue index, and a panel per step showing what
    that step changed. Then export the review packet and hand it to whoever checks it.
 
-Running once from the command line, against the newest stored version:
-
-```
-uv run python -m app.cli <project>
-```
-
-Local state lives in `~/.carbonpaper/`, so every checkout and worktree reads and writes
-the one store. [docs/self-hosting.md](docs/self-hosting.md) says what is in there and
-how to repoint it.
-
 ## Where the rest is
 
+- Install, signing in, where state lives, the test commands:
+  [docs/getting-started.md](docs/getting-started.md)
 - What & why: [docs/overview.md](docs/overview.md) — the mission, the locked
   vocabulary, and the three features.
 - Code map: [docs/architecture.md](docs/architecture.md)
-- Running your own instance: [docs/self-hosting.md](docs/self-hosting.md) — the file
-  store and its quotas, the environment variables, and the Fly.io deploy.
+- Hosting it for other people: [docs/self-hosting.md](docs/self-hosting.md) — the
+  upload endpoint and its quotas, and the Fly.io deploy.
 - Contributor guide / conventions: [AGENTS.md](AGENTS.md)
