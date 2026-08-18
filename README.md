@@ -12,7 +12,7 @@ over rows you never looked at. Write the analysis yourself and every step is
 checkable, but you have spent two days engineering something you will run twice.
 
 Carbon Paper is the third route. You write down how the investigation works, in
-prose. That becomes a **workflow**: a chain of small named steps running against your
+prose. That becomes a workflow: a chain of small named steps running against your
 original files. Most steps are ordinary deterministic code. A step that genuinely
 needs judgement calls a model, and it is the only one that does.
 
@@ -23,16 +23,13 @@ Every step is then open to a reader who did not write it:
 - every published figure traces back to the source rows it was computed from
 - the whole run exports as a folder that opens in a browser with no app and no network
 
-The walkthrough at **<https://carbonpaper.fly.dev/intro>** follows one question through
-this end to end — 45,061 lobbying filings, a chat model's $499m against the workflow's
-$42.0m, and what the difference was made of. It is served from `intro/` in this repo,
-so a local server has it at `/intro` too.
-
 The goal is not perfect code. It is an answer you can stand behind, a record that
 proves it, and a workflow you can run again when next quarter's file lands.
 
-Try it at **[carbonpaper.fly.dev](https://carbonpaper.fly.dev)** — a public instance
-with no login, so treat anything you put there as public.
+`intro/` walks one lobbying question through all of this, step by step. A local
+server serves it at `/intro`, and the deploy at
+<https://carbonpaper.fly.dev/intro>. That deploy has no login, so treat anything you
+put on it as public.
 
 ## Getting started
 
