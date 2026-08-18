@@ -38,7 +38,7 @@ from .context import RunContext, RunIdentity
 from .stage_output import StageOutput
 from .errors import RunCancelled
 from .manifest import RunManifest, create_run_manifest, write_manifest
-from .run_log import RUN_START, STAGE_DONE, STAGE_START, RunLog
+from .run_log import RUN_START, STAGE_DONE, STAGE_START, RunLog, RunLogFlushError
 from .stages import HANDLERS, HaltForReview, StageHandler
 from .lineage import (
     RowLineage,
@@ -141,13 +141,20 @@ def _execute_stages(
         "kind": RUN_START, "run_id": manifest.run_id, "stage_count": len(ordered),
     })
     try:
-        return _run_ordered_stages(
+        completed = _run_ordered_stages(
             ordered, ctx.attach_run_log(run_log), manifest, run_dir, outputs_so_far
         )
+        try:
+            run_log.close()
+        except RunLogFlushError:
+            completed.status = RunStatus.ERRORS
+            write_manifest(completed)
+            return completed
+        write_manifest(completed)
+        return completed
     finally:
-        # close() writes the terminal run_done marker the SSE tailer stops on —
-        # in a finally, so an exception escaping the loop still ends the stream
-        # instead of leaving a client tailing forever.
+        # An escaping stage error still gets a terminal stream marker. This is
+        # a no-op after the successful-path close above.
         run_log.close()
 
 
@@ -542,7 +549,6 @@ def _finalize_run_manifest(
             record.status for record in manifest.stage_records
         )
 
-    write_manifest(manifest)
     return manifest
 
 

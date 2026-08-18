@@ -12,11 +12,14 @@ from typing import Any
 import pandas as pd
 import pytest
 
+from app.core.errors import PersistenceError, SubsetRunError
+from app.core.run_status import RunStatus
 from app.core.stage_cache import StageCache
 from app.models import parse_stage, Stage, Workflow
 from app.models.stage import StageType
 from app.runtime.context import RunContext, RunIdentity
 from app.runtime.executor import run_subset
+from app.runtime.manifest import read_run_manifest
 from app.runtime.run_log import (
     LEVEL_DETAIL,
     LEVEL_LIFECYCLE,
@@ -24,7 +27,9 @@ from app.runtime.run_log import (
     RUN_DONE,
     SOURCE_CACHED,
     SOURCE_COMPUTED,
+    RunEventChunk,
     RunLog,
+    RunLogFlushError,
     bind_detail_sink,
     emit_llm_detail,
     read_events_since,
@@ -268,3 +273,39 @@ def test_an_event_defaults_to_the_lifecycle_level(tmp_path):
     events = _events("r", log)
     assert [e["kind"] for e in events] == ["stage_start", RUN_DONE]
     assert all(e["level"] == LEVEL_LIFECYCLE for e in events)
+
+
+def test_close_reports_a_persistence_failure(tmp_path, monkeypatch):
+    def fail_save(self):
+        raise PersistenceError("test store is unavailable")
+
+    monkeypatch.setattr(RunEventChunk, "save", fail_save)
+    log = RunLog(PROJECT, "failed-write")
+    log.emit({"kind": "stage_start", "stage": "s"})
+
+    with pytest.raises(RunLogFlushError, match="could not be written"):
+        log.close()
+
+
+def test_a_log_persistence_failure_cannot_finish_a_run_cleanly(tmp_path, monkeypatch):
+    source = parse_stage({
+        "id": "src", "description": "Source", "type": "input_data",
+        "connector": {"kind": "file"},
+        "signature": {"form": "replaces", "produces": [{"name": "x", "type": "int", "nullable": True}]},
+    })
+
+    def fail_save(self):
+        raise PersistenceError("test store is unavailable")
+
+    monkeypatch.setattr(RunEventChunk, "save", fail_save)
+    run_dir = tmp_path / "runs" / "log-failed"
+    with pytest.raises(SubsetRunError, match="did not complete"):
+        run_subset(
+            Workflow(stages=[source, _row_stage()]),
+            injected_outputs={"src": pd.DataFrame({"x": [1]})},
+            stage_ids=["double"], run_dir=run_dir,
+            project_id=run_dir.parent.parent.name,
+        )
+
+    manifest = read_run_manifest(run_dir.parent.parent.name, run_dir.name, run_dir.parent.name)
+    assert manifest.status == RunStatus.ERRORS

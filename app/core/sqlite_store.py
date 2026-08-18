@@ -9,7 +9,7 @@ import sqlite3
 from threading import RLock
 from typing import Any, Iterator
 
-from app.core.errors import DocumentNotFound
+from app.core.errors import DocumentNotFound, PersistenceError
 from app.core.persistence import JsonDict
 
 
@@ -31,13 +31,16 @@ class SqliteKvStore:
         self._conn.commit()
 
     def write(self, collection: str, id: str, data: JsonDict, schema_version: int = 1) -> None:
-        with self._lock:
-            self._conn.execute(
-                "INSERT OR REPLACE INTO documents (collection, id, data, schema_version) "
-                "VALUES (?, ?, ?, ?)",
-                (collection, id, json.dumps(data), schema_version),
-            )
-            self._conn.commit()
+        try:
+            with self._lock:
+                self._conn.execute(
+                    "INSERT OR REPLACE INTO documents (collection, id, data, schema_version) "
+                    "VALUES (?, ?, ?, ?)",
+                    (collection, id, json.dumps(data), schema_version),
+                )
+                self._conn.commit()
+        except sqlite3.Error as exc:
+            raise PersistenceError("SQLite could not write a document") from exc
 
     def read(self, collection: str, id: str) -> JsonDict:
         with self._lock:

@@ -12,6 +12,7 @@ import threading
 from datetime import datetime
 from typing import Any, ClassVar
 
+from app.core.errors import PersistenceError
 from app.core.persistence import JsonDict, PersistedModel, PersistenceScope
 
 # Sentinel pushed by close() to tell the writer thread to drain and stop.
@@ -26,6 +27,10 @@ CHUNK_SIZE = 500
 # How long the writer thread waits for more events before flushing what it has,
 # so a slow run's SSE feed does not stall behind an unfilled chunk.
 _FLUSH_INTERVAL_S = 0.25
+
+
+class RunLogFlushError(RuntimeError):
+    """A run's event history was not durably written before it finished."""
 
 
 class RunEventChunk(PersistedModel):
@@ -84,9 +89,10 @@ class RunLog:
         self._run_id = run_id
         self._q: queue.Queue[Any] = queue.Queue()
         self._closed = False
+        self._failure: PersistenceError | None = None
         # Start the writer BEFORE returning so the first emit() is never lost.
         self._writer = threading.Thread(
-            target=self._drain, name=f"run-log:{run_id}", daemon=True
+            target=self._write_events, name=f"run-log:{run_id}", daemon=True
         )
         self._writer.start()
 
@@ -105,9 +111,17 @@ class RunLog:
         # set), so stamp the lifecycle level here to keep every line uniform.
         self._q.put({"kind": RUN_DONE, "level": LEVEL_LIFECYCLE})
         self._q.put(_STOP)
-        # Bounded join: the writer is daemon, so a stuck flush can never wedge
-        # the run thread's teardown.
         self._writer.join(timeout=5.0)
+        if self._writer.is_alive():
+            raise RunLogFlushError("run event log did not finish writing")
+        if self._failure is not None:
+            raise RunLogFlushError("run event log could not be written") from self._failure
+
+    def _write_events(self) -> None:
+        try:
+            self._drain()
+        except PersistenceError as exc:
+            self._failure = exc
 
     def _drain(self) -> None:
         """Stamp each event, batch, and flush a chunk at a time."""
