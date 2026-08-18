@@ -1,5 +1,5 @@
-"""The fetch connector: what the model refuses at authoring time, and what the run
-service does with a URL — served by a local http server, never the public internet."""
+"""The fetch connector: what the model refuses at authoring time, and what the runtime
+does with a URL — served by a local http server, never the public internet."""
 from __future__ import annotations
 
 import threading
@@ -10,10 +10,11 @@ from typing import Iterator
 
 import pytest
 
-from app.models.stages.input_data import Connector, ConnectorKind
+from app.core.errors import SourceFetchError
+from app.core.fetched_sources import fetched_path_for, resolve_fetched_path
+from app.models.stages.input_data import Connector, ConnectorKind, InputDataStage
 from app.models.workflow import Workflow
-from app.services.errors import SourceFetchError
-from app.services.fetched_sources import bind_fetched_sources, resolve_fetched_path
+from app.runtime.stages.input_data import resolve_source_path
 
 # One EA Funds grant, as their /api/grants endpoint serves it.
 _GRANTS_CSV = (
@@ -22,7 +23,11 @@ _GRANTS_CSV = (
 )
 _OTHER_CSV = "id,fund,grantee,amount,year\nrec9,Animal Welfare Fund,Someone,1,2026\n"
 
-_PROJECT = "ai-money"
+
+
+@pytest.fixture(autouse=True)
+def fetch_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CARBON_PAPER_DB_PATH", str(tmp_path / "store" / "app.db"))
 
 
 class _QuietHandler(SimpleHTTPRequestHandler):
@@ -94,7 +99,7 @@ def test_a_file_connector_still_needs_no_url() -> None:
 def test_fetch_downloads_the_bytes_the_url_serves(served: tuple[str, Path]) -> None:
     base, root = served
     (root / "grants.csv").write_text(_GRANTS_CSV, encoding="utf-8")
-    path = resolve_fetched_path(f"{base}/grants.csv", _PROJECT)
+    path = resolve_fetched_path(f"{base}/grants.csv")
     assert path.read_text(encoding="utf-8") == _GRANTS_CSV
 
 
@@ -103,18 +108,18 @@ def test_a_second_read_holds_the_first_copy(served: tuple[str, Path]) -> None:
     base, root = served
     (root / "grants.csv").write_text(_GRANTS_CSV, encoding="utf-8")
     url = f"{base}/grants.csv"
-    resolve_fetched_path(url, _PROJECT)
+    resolve_fetched_path(url)
     (root / "grants.csv").write_text(_OTHER_CSV, encoding="utf-8")
-    assert resolve_fetched_path(url, _PROJECT).read_text(encoding="utf-8") == _GRANTS_CSV
+    assert resolve_fetched_path(url).read_text(encoding="utf-8") == _GRANTS_CSV
 
 
 def test_refetch_takes_todays_copy(served: tuple[str, Path]) -> None:
     base, root = served
     (root / "grants.csv").write_text(_GRANTS_CSV, encoding="utf-8")
     url = f"{base}/grants.csv"
-    resolve_fetched_path(url, _PROJECT)
+    resolve_fetched_path(url)
     (root / "grants.csv").write_text(_OTHER_CSV, encoding="utf-8")
-    fresh = resolve_fetched_path(url, _PROJECT, refetch=True)
+    fresh = resolve_fetched_path(url, refetch=True)
     assert fresh.read_text(encoding="utf-8") == _OTHER_CSV
 
 
@@ -125,53 +130,63 @@ def test_two_urls_sharing_a_filename_do_not_share_a_copy(served: tuple[str, Path
     (root / "b").mkdir()
     (root / "a" / "grants.csv").write_text(_GRANTS_CSV, encoding="utf-8")
     (root / "b" / "grants.csv").write_text(_OTHER_CSV, encoding="utf-8")
-    first = resolve_fetched_path(f"{base}/a/grants.csv", _PROJECT)
-    second = resolve_fetched_path(f"{base}/b/grants.csv", _PROJECT)
+    first = resolve_fetched_path(f"{base}/a/grants.csv")
+    second = resolve_fetched_path(f"{base}/b/grants.csv")
     assert first.read_text(encoding="utf-8") == _GRANTS_CSV
     assert second.read_text(encoding="utf-8") == _OTHER_CSV
 
 
-def test_a_refused_url_raises_rather_than_binding_nothing(served: tuple[str, Path]) -> None:
+def test_a_refused_url_raises_and_leaves_no_copy(served: tuple[str, Path]) -> None:
     base, _ = served
+    url = f"{base}/absent.csv"
     with pytest.raises(SourceFetchError, match="404"):
-        resolve_fetched_path(f"{base}/absent.csv", _PROJECT)
+        resolve_fetched_path(url)
+    assert not fetched_path_for(url).exists()
 
 
 def test_an_unreachable_host_says_so() -> None:
     with pytest.raises(SourceFetchError, match="could not be reached"):
-        resolve_fetched_path("http://127.0.0.1:1/grants.csv", _PROJECT)
+        resolve_fetched_path("http://127.0.0.1:1/grants.csv")
 
 
-# ─── the binding the runner is handed ────────────────────────────────────────
+# ─── what the runtime resolves a stage to ────────────────────────────────────
 
-def test_binding_gives_every_fetch_stage_a_local_path(served: tuple[str, Path]) -> None:
+def _stage_of(spec: dict[str, object]) -> InputDataStage:
+    stage = Workflow.model_validate({"stages": [spec]}).stages[0]
+    assert isinstance(stage, InputDataStage)
+    return stage
+
+
+def test_a_fetch_stage_resolves_to_the_downloaded_copy(served: tuple[str, Path]) -> None:
     base, root = served
     (root / "grants.csv").write_text(_GRANTS_CSV, encoding="utf-8")
-    workflow = Workflow.model_validate(
-        {"stages": [_fetch_stage("grants", f"{base}/grants.csv")]})
-    bound = bind_fetched_sources(workflow, _PROJECT, None)
-    assert Path(str(bound["grants"]["path"])).read_text(encoding="utf-8") == _GRANTS_CSV
+    path = resolve_source_path(_stage_of(_fetch_stage("grants", f"{base}/grants.csv")))
+    assert path is not None
+    assert path.read_text(encoding="utf-8") == _GRANTS_CSV
 
 
-def test_binding_leaves_a_path_the_caller_already_supplied(served: tuple[str, Path]) -> None:
+def test_a_bound_path_wins_over_the_url(served: tuple[str, Path]) -> None:
     """An operator pointing a fetch stage at a hand-downloaded copy is not overridden."""
     base, root = served
     (root / "grants.csv").write_text(_GRANTS_CSV, encoding="utf-8")
     local = root / "by-hand.csv"
     local.write_text(_OTHER_CSV, encoding="utf-8")
-    workflow = Workflow.model_validate(
-        {"stages": [_fetch_stage("grants", f"{base}/grants.csv")]})
-    bound = bind_fetched_sources(workflow, _PROJECT, {"grants": {"path": str(local)}})
-    assert bound["grants"]["path"] == str(local)
+    spec = _fetch_stage("grants", f"{base}/grants.csv")
+    spec["connector"] = {"kind": "fetch",
+                         "params": {"url": f"{base}/grants.csv", "format": "csv",
+                                    "path": str(local)}}
+    assert resolve_source_path(_stage_of(spec)) == local
+    # Nothing was downloaded to satisfy a stage the operator had already answered.
+    assert not fetched_path_for(f"{base}/grants.csv").exists()
 
 
-def test_binding_touches_no_file_connector() -> None:
-    workflow = Workflow.model_validate({"stages": [{
+def test_an_unbound_file_stage_resolves_to_nothing() -> None:
+    stage = _stage_of({
         "id": "uploaded",
         "type": "input_data",
         "description": "a file the operator binds",
         "connector": {"kind": "file", "params": {}},
         "signature": {"form": "replaces", "reads": [],
                       "produces": [{"name": "id", "type": "str", "nullable": False}]},
-    }]})
-    assert bind_fetched_sources(workflow, _PROJECT, None) == {}
+    })
+    assert resolve_source_path(stage) is None

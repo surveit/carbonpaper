@@ -13,6 +13,8 @@ from typing import Any
 
 import pandas as pd
 
+from app.core.errors import SourceFetchError
+from app.core.fetched_sources import resolve_fetched_path
 from app.core.source_files import FileFormat, read_source_file, resolve_file_format
 from app.models import (
     JSON_COLUMN_TYPE,
@@ -53,9 +55,13 @@ def preflight_input_data(
     if not isinstance(stage, InputDataStage):
         raise TypeError(
             f"stage {stage.id}: the input_data preflight got a {type(stage).__name__}")
-    path = _bound_path(stage)
+    try:
+        path = resolve_source_path(stage)
+    except SourceFetchError as refused:
+        return [f"`{stage.id}`: {refused}"], None
     if path is None:
-        return [f"`{stage.id}`: {_unbound_reason(stage)}"], None
+        return [f"`{stage.id}`: no file bound — supply a run binding, or author an "
+                "absolute path in the workflow"], None
     if not path.is_file():
         return ([f"`{stage.id}`: bound file does not exist or is not a file: {path}"], None)
     with path.open("rb") as handle:
@@ -64,28 +70,29 @@ def preflight_input_data(
                 "bytes": path.stat().st_size}
 
 
-def _bound_path(stage: InputDataStage) -> Path | None:
-    """Every connector kind reaches the runtime as a local path; a fetch is resolved before."""
-    path_param = stage.connector.params.get("path")
-    # Absolute: the model rejects a relative path when present.
-    return Path(path_param) if path_param else None
-
-
-def _unbound_reason(stage: InputDataStage) -> str:
+def resolve_source_path(stage: InputDataStage) -> Path | None:
+    """None means nothing names a source yet, which a run binding can still fix."""
+    params = stage.connector.params
+    # A run binding may point a fetch stage at a hand-downloaded copy, and that wins:
+    # the operator has said which bytes they mean.
+    path_param = params.get("path")
+    if path_param:
+        return Path(path_param)   # absolute: the model rejects a relative path when present
     if stage.connector.kind == ConnectorKind.fetch:
-        return (f"fetch connector for {stage.connector.params.get('url')!r} was not resolved "
-                "before the run — app.services.run.bind_fetched_sources does that at prepare")
-    return "no file bound — supply a run binding, or author an absolute path in the workflow"
+        return resolve_fetched_path(str(params["url"]))   # required on the model
+    return None
 
 
 def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> pd.DataFrame:
     input_stage = narrow_stage(workflow_stage, InputDataStage)
     params = input_stage.connector.params
 
-    path = _bound_path(input_stage)
+    path = resolve_source_path(input_stage)
     if path is None:
         raise ValueError(
-            f"input stage '{input_stage.id}' has no file bound: {_unbound_reason(input_stage)}"
+            f"input stage '{input_stage.id}' has no file bound (connector params carry "
+            "no 'path'); runs bind one at prepare_run — subset/eval runs need the "
+            "workflow to author it or a reference override to inject it"
         )
     fmt = _resolve_format(input_stage, path)
     schema = workflow_stage.output_schema  # input_data's produces is non-empty by validation

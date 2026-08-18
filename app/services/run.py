@@ -17,7 +17,6 @@ from app.core.errors import RunVersionUnresolvableError
 from app.core.frames import read_frame_column_names
 from app.models import Workflow, WorkflowStage
 from app.models.run_manifest import read_run_bindings
-from app.services.fetched_sources import bind_fetched_sources
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.runtime.cancellation import discard_cancel
 from app.runtime.manifest import (
@@ -76,18 +75,14 @@ def _prepare(
     bust_cache: bool,
 ) -> dict[str, Any]:
     workflow_version = resolve_version_id(project_id, version_id)
-    workflow = Workflow(stages=load_version_stages(project_id, workflow_version))
-    # Downloads happen here, not in the runtime: past this line every input_data stage
-    # names a local path, whatever kind of connector authored it.
-    resolved = bind_fetched_sources(workflow, project_id, bindings)
     return prepare_run(
         resolve_runs_dir(project_id),
         project_id,
-        workflow,
+        Workflow(stages=load_version_stages(project_id, workflow_version)),
         workflow_version,
         limits=limits,
         offsets=offsets,
-        bindings=resolved,
+        bindings=bindings,
         bust_cache=bust_cache,
     )
 
