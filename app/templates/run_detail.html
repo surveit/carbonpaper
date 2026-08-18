@@ -428,6 +428,7 @@
     const statusUrl = `/project/${encodeURIComponent(PROJECT)}/runs/${encodeURIComponent(RUN_ID)}/status`;
     const mermaidEl = document.querySelector('pre.mermaid');
     let lastSig = null, timer = null, sawRunning = RUNNING;
+    let hasResumeMarker = RESUMING;
     const $ = id => document.getElementById(id);
 
     function rerenderWorkflow(src) {
@@ -471,7 +472,15 @@
 
       const sig = d.stages.map(s => s.status).join(',');
       if (sig !== lastSig) { lastSig = sig; rerenderWorkflow(d.mermaid); }
-      if (!d.terminal) sawRunning = true;
+      if (!d.terminal) {
+        sawRunning = true;
+        if (hasResumeMarker) {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('resuming');
+          history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+          hasResumeMarker = false;
+        }
+      }
       if (d.terminal && sawRunning) {
         if (timer) clearInterval(timer);
         setTimeout(() => location.reload(), 600);

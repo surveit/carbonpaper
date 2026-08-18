@@ -135,8 +135,12 @@ def test_resume_redirect_polls_past_the_old_terminal_manifest(
     page = client.get(response.headers["location"])
     assert "const RESUMING = true;" in page.text
     assert "let lastSig = null, timer = null, sawRunning = RUNNING;" in page.text
-    assert "if (!d.terminal) sawRunning = true;" in page.text
-    assert "if (d.terminal && sawRunning)" in page.text
+    marker_clear = "url.searchParams.delete('resuming');"
+    terminal_reload = "if (d.terminal && sawRunning)"
+    assert marker_clear in page.text
+    assert "`${url.pathname}${url.search}${url.hash}`" in page.text
+    assert page.text.index(marker_clear) < page.text.index(terminal_reload)
+    assert terminal_reload in page.text
     assert "setInterval" in page.text
 
 
