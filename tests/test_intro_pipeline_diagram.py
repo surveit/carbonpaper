@@ -18,4 +18,8 @@ def test_pipeline_centers_single_line_labels_and_uses_visible_neutral_arrows() -
 def test_pipeline_neutralizes_unfocused_node_borders() -> None:
     page = INTRO_PAGE.read_text(encoding="utf-8")
 
+    assert '.gmodel { fill: #FFFFFF; stroke: #787d86; stroke-width: 2; }' in page
+    assert '.ghuman { fill: #FFFFFF; stroke: #787d86; stroke-width: 2; }' in page
+    assert '.gchoice{ fill: #FFFFFF; stroke: #787d86; stroke-width: 2; }' in page
+    assert '#pipe .node.lit rect { stroke: #1d539c; }' in page
     assert '#pipe.focus .node:not(.lit) rect { stroke: #787d86; }' in page
