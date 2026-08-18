@@ -23,3 +23,4 @@ def test_pipeline_neutralizes_unfocused_node_borders() -> None:
     assert '.gchoice{ fill: #FFFFFF; stroke: #787d86; stroke-width: 2; }' in page
     assert '#pipe .node.lit rect { stroke: #1d539c; }' in page
     assert '#pipe.focus .node:not(.lit) rect { stroke: #787d86; }' in page
+    assert 'markerUnits="userSpaceOnUse"' in page
