@@ -13,7 +13,8 @@ from fastapi.testclient import TestClient
 import app.services.workspace as workspace
 from app.core.agent.usage import LlmUsage
 from app.main import app
-from app.runtime.runner import execute_run
+from app.runtime.manifest import read_run_manifest, write_manifest
+from app.runtime.runner import execute_run, prepare_run
 from app.services import project as project_service
 from app.services import versioning
 from conftest import pinned_stages
@@ -89,8 +90,32 @@ def test_the_replayed_run_says_so_where_the_cost_would_be(project: Path) -> None
     replayed = _panel(_run(project))
     assert "stat-strip" in replayed
     assert "Reused, not recomputed" in replayed
-    assert "2 of 2 rows" in replayed
+    assert "2 of 2 rows (100%)" in replayed
     assert "the model was not called in this run" in replayed
+
+
+def test_a_restarted_pending_run_does_not_claim_cache_replay(project: Path) -> None:
+    _run(project)
+    pending = prepare_run(project / "runs", project.name, *pinned_stages(project))
+
+    html = _panel(pending["run_id"])
+
+    assert "Reused, not recomputed" not in html
+
+
+def test_cache_replay_omits_a_percentage_without_output_rows(project: Path) -> None:
+    _run(project)
+    run_id = _run(project)
+    manifest = read_run_manifest(project.name, run_id)
+    record = manifest.find_stage_record("judge")
+    assert record is not None
+    record.output_row_count = 0
+    write_manifest(manifest)
+
+    html = _panel(run_id)
+
+    assert "2 of 0 rows came back" in html
+    assert "2 of 0 rows (" not in html
 
 
 def test_the_replayed_run_names_the_model_it_did_not_call(project: Path) -> None:
