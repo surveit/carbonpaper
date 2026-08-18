@@ -57,6 +57,15 @@ _LEGACY_PARAMETER_KEYS = {
 # scan and an eval run can never appear in the runs index.
 PRODUCTION_RUNS = "runs"
 
+# The other area: an eval's subset run. `app.evals.store.resolve_eval_run_dir` builds
+# the directory from this, so the name a run is written under and the name a reader
+# filters by are one string.
+EVAL_RUNS = "eval_run"
+
+# Both areas, for a reader totalling a project's whole spend rather than its production
+# runs alone. Ordered as a project accumulates them.
+RUN_AREAS = (PRODUCTION_RUNS, EVAL_RUNS)
+
 # PersistedModel's own fields. A run recorded none of them, so `to_dict` leaves
 # them out of what every reader above this module consumes.
 _STORE_BOOKKEEPING = {"id", "created_at", "updated_at"}
@@ -207,6 +216,11 @@ class RunEntry:
     """One recorded run at BOTH levels; callers disagree on what unreadable means."""
 
     run_id: str
+    # The two id segments the listing already knew: which project's runs it read, and
+    # which area under it. Carried so a reader spanning both can attribute an entry
+    # without re-splitting the store key.
+    project: str
+    area: str
     # `raw` is the stored payload, None when it is not even JSON. `manifest` is
     # that payload typed, None when this model rejects it (a run written before a
     # field was renamed). A caller needing ONE fact takes it off `raw`; one
@@ -215,60 +229,27 @@ class RunEntry:
     manifest: RunManifest | None = None
 
 
-def list_run_entries(project_id: str) -> list[RunEntry]:
-    """This project's PRODUCTION runs, oldest-first by id (a strftime stamp)."""
-    prefix = f"{project_id}/{PRODUCTION_RUNS}/"
+def list_run_entries(project_id: str, area: str = PRODUCTION_RUNS) -> list[RunEntry]:
+    """This project's runs in one area, oldest-first by id (a strftime stamp)."""
+    prefix = f"{project_id}/{area}/"
     # Ids first, then each payload on its own: one unreadable record must not take
     # down the listing of every other run.
     entries = [
-        _read_entry(doc_id, doc_id[len(prefix):])
+        _read_entry(doc_id, doc_id[len(prefix):], project_id, area)
         for doc_id in get_store().list_ids(RunManifest.collection, prefix)
     ]
     return sorted(entries, key=lambda e: e.run_id)
 
 
-@dataclass
-class StoredRun:
-    """A run entry carrying the two id segments `list_run_entries` already knew from its caller."""
-
-    project: str
-    # The directory the run was written under — `PRODUCTION_RUNS` for a production
-    # run, `eval_run` for an eval's subset run. Both are stored in one collection.
-    area: str
-    entry: RunEntry
-
-
-def list_stored_runs() -> list[StoredRun]:
-    """Every run in the workspace, both areas and all projects — the whole-store scan."""
-    return [
-        _read_stored_run(doc_id)
-        for doc_id in get_store().list_ids(RunManifest.collection)
-    ]
-
-
-def _read_stored_run(doc_id: str) -> StoredRun:
-    project, area, run_id = _split_run_id(doc_id)
-    return StoredRun(project=project, area=area, entry=_read_entry(doc_id, run_id))
-
-
-def _split_run_id(doc_id: str) -> tuple[str, str, str]:
-    """`compose_id` is the only writer of these keys, so a key of another shape is a bug."""
-    segments = doc_id.split("/")
-    if len(segments) != 3:
-        raise ValueError(
-            f"run record '{doc_id}' is not the project/area/run_id key compose_id writes"
-        )
-    return segments[0], segments[1], segments[2]
-
-
-def _read_entry(doc_id: str, run_id: str) -> RunEntry:
+def _read_entry(doc_id: str, run_id: str, project_id: str, area: str) -> RunEntry:
     raw = get_store().read_tolerant(RunManifest.collection, doc_id)
     if raw is None:
-        return RunEntry(run_id=run_id)
+        return RunEntry(run_id=run_id, project=project_id, area=area)
     try:
-        return RunEntry(run_id=run_id, raw=raw, manifest=RunManifest.model_validate(raw))
+        return RunEntry(run_id=run_id, project=project_id, area=area, raw=raw,
+                        manifest=RunManifest.model_validate(raw))
     except ValidationError:
-        return RunEntry(run_id=run_id, raw=raw)
+        return RunEntry(run_id=run_id, project=project_id, area=area, raw=raw)
 
 
 def resolve_output_path(run_dir: Path, output_path: str | None) -> Path | None:

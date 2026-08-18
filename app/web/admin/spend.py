@@ -16,8 +16,8 @@ from pydantic import BaseModel
 
 from app.core.agent.store import AgentSession
 from app.core.agent.usage import LlmUsage
-from app.runtime.manifest import PRODUCTION_RUNS, StoredRun, list_stored_runs
-from app.services.project import list_project_listings
+from app.runtime.manifest import PRODUCTION_RUNS, RUN_AREAS, RunEntry, list_run_entries
+from app.services.project import list_project_listings, list_projects
 
 # What a model's name is shown as where the record does not carry one. Every run
 # before the `model` field existed is in this bucket, so it holds real money.
@@ -85,7 +85,7 @@ class SpendReading(BaseModel):
 
 
 def read_workspace_spend(*, biggest: int = 25) -> SpendReading:
-    runs = list_stored_runs()
+    runs = list_every_run_entry()
     sessions = AgentSession.list()
     names = {listing.id: listing.name for listing in list_project_listings()}
     entries = [*read_run_spend(runs, names), *read_session_spend(sessions, names)]
@@ -96,12 +96,22 @@ def read_workspace_spend(*, biggest: int = 25) -> SpendReading:
         by_model=_ranked(entries, lambda e: e.model),
         by_project=_ranked(entries, lambda e: e.project),
         biggest=sorted(entries, key=lambda e: (-e.usage.cost_usd, e.at))[:biggest],
-        unreadable_runs=sum(1 for run in runs if run.entry.manifest is None),
+        unreadable_runs=sum(1 for run in runs if run.manifest is None),
         silent_sessions=sum(1 for session in sessions if not session.turn_spend),
     )
 
 
-def read_run_spend(runs: list[StoredRun], names: ProjectNames) -> list[SpendEntry]:
+def list_every_run_entry() -> list[RunEntry]:
+    """Both areas of every project the workspace lists — a run under an unlisted project is not read."""
+    return [
+        entry
+        for project_id in list_projects()
+        for area in RUN_AREAS
+        for entry in list_run_entries(project_id, area=area)
+    ]
+
+
+def read_run_spend(runs: list[RunEntry], names: ProjectNames) -> list[SpendEntry]:
     return [
         entry
         for run in runs
@@ -157,8 +167,8 @@ def _project_label(project_id: object, names: ProjectNames) -> str:
     return str(project_id) if name in (None, project_id) else f"{name} ({project_id})"
 
 
-def _entries_in_run(run: StoredRun, names: ProjectNames) -> list[SpendEntry]:
-    manifest = run.entry.manifest
+def _entries_in_run(run: RunEntry, names: ProjectNames) -> list[SpendEntry]:
+    manifest = run.manifest
     if manifest is None:
         # Counted as unreadable by the caller; a manifest this app cannot parse
         # states no stage usage to read.
@@ -168,8 +178,8 @@ def _entries_in_run(run: StoredRun, names: ProjectNames) -> list[SpendEntry]:
             at=record.started_at or manifest.started_at,
             source=SpendSource.run,
             project=_project_label(run.project, names),
-            label=f"{run.entry.run_id} · {record.stage_id}",
-            link=f"/runs/{run.entry.run_id}" if run.area == PRODUCTION_RUNS else None,
+            label=f"{run.run_id} · {record.stage_id}",
+            link=f"/runs/{run.run_id}" if run.area == PRODUCTION_RUNS else None,
             usage=record.llm_usage,
         )
         for record in manifest.stage_records

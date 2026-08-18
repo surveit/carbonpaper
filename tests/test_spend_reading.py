@@ -10,7 +10,8 @@ from app.core.run_status import RunStatus, StageStatus
 from app.main import app
 from app.models.run_manifest import StageRecord
 from app.models.stages.stage_base import StageType
-from app.runtime.manifest import RunManifest, list_stored_runs
+from app.services.project import Project
+from app.runtime.manifest import RunManifest
 from app.web.admin.spend import (
     NO_PROJECT,
     UNRECORDED_MODEL,
@@ -31,6 +32,7 @@ def _stage_record(stage_id: str, usage: LlmUsage | None, started_at: str) -> Sta
 
 
 def _store_run(project: str, run_id: str, records: list[StageRecord], area: str = "runs") -> None:
+    Project(id=project, name=project).save()
     RunManifest(
         id=RunManifest.compose_id(project, run_id, area),
         run_id=run_id, started_at="2026-08-16T09:00:00", project=project,
@@ -109,6 +111,15 @@ def test_a_chat_that_names_no_project_is_labelled_rather_than_dropped():
     assert [e.link for e in entries] == [f"/chat/{sid}"]
 
 
+def test_a_run_under_a_project_the_workspace_does_not_list_is_not_read():
+    """The cost of reading per project: runs outliving their project record fall out of the total."""
+    _store_run("congresswatch", "20260816T090000",
+               [_stage_record("score", LlmUsage(cost_usd=1.0, calls=1), "2026-08-16T09:00:00")])
+    Project.delete("congresswatch")
+
+    assert read_workspace_spend().total.cost_usd == 0.0
+
+
 def test_the_admin_page_serves_the_figure():
     _store_run("congresswatch", "20260816T090000",
                [_stage_record("score", LlmUsage(cost_usd=12.34, calls=2), "2026-08-16T09:00:00")])
@@ -117,4 +128,3 @@ def test_the_admin_page_serves_the_figure():
 
     assert r.status_code == 200
     assert "$12.34" in r.text
-    assert len(list_stored_runs()) == 1
