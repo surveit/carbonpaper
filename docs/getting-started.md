@@ -57,15 +57,16 @@ every git worktree reads and writes the one store:
 `./start` runs `alembic upgrade head` on every boot, which is what keeps that
 store current as you pull. `CARBON_PAPER_DB_PATH` and
 `CARBON_PAPER_PROJECTS_DIR` repoint it — that is how the Fly deploy pins
-everything to its volume (see [the README](../README.md)).
+everything to its volume (see [self-hosting.md](self-hosting.md)).
 
 Nothing authenticates the server, so leave it on `127.0.0.1`.
 
 ## Your first run needs a data file
 
 A run reads its inputs off the server's disk by absolute path, so a file has to
-get there first. The run form's Browse… posts it and stores it; the README
-covers the plain-multipart endpoint underneath, which any `curl` can post to.
+get there first. The run form's Browse… posts it and stores it;
+[self-hosting.md](self-hosting.md#getting-a-data-file-in) covers the
+plain-multipart endpoint underneath, which any `curl` can post to.
 
 The product tour on the home page seeds a small worked project instead, if you
 would rather read one than build one.

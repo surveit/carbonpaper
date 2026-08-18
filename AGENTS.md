@@ -10,6 +10,7 @@ Docs are in `docs/`. Index:
 - [llm-transform-output-spec.md](docs/llm-transform-output-spec.md) — what an `llm_transform` reply must carry: 1:1, append-only, 1:N as one array column.
 - [run-and-review-ui.md](docs/run-and-review-ui.md) — the operator screens and the routers, templates and CSS behind them.
 - [visual-language.md](docs/visual-language.md) — where colour comes from, error vs warning, the agent mark, and the arch tests holding each.
+- [self-hosting.md](docs/self-hosting.md) — serving it to other people: the file-upload endpoint and its quotas, and the Fly.io deploy.
 
 Also `app/AGENTS.md` (web layer), `app/runtime/AGENTS.md` (the Runner), `README.md` (quickstart).
 
