@@ -259,8 +259,16 @@ def _order_diff_columns(
     workflow_stage: WorkflowStage, columns: list[DiffColumn]
 ) -> list[DiffColumn]:
     by_name = {column.name: column for column in columns}
-    # The rest hold their input order behind them, dropped ones included.
-    return [by_name[name] for name in order_written_columns_first(workflow_stage, list(by_name))]
+    ordered_names = order_written_columns_first(workflow_stage, list(by_name))
+    touched = [
+        name for name in ordered_names
+        if by_name[name].state is not ColumnDiffState.carried
+        or by_name[name].changed_cells
+    ]
+    touched_names = set(touched)
+    return [by_name[name] for name in [
+        *touched, *(name for name in ordered_names if name not in touched_names)
+    ]]
 
 
 def _shape_aligned_columns(in_text: pd.DataFrame, out_text: pd.DataFrame) -> list[DiffColumn]:
