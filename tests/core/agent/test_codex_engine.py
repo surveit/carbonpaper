@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
 
 import pytest
 
 from app.core.agent.bound_tool import bind_by_schema, bind_by_signature
-from app.core.agent.codex_engine import CodexChatEngine
+from app.core.agent.codex_engine import AgentEvent, CodexChatEngine
 
 
 def test_dynamic_tool_call_streams_call_and_result(fake_codex_server) -> None:
@@ -18,7 +17,7 @@ def test_dynamic_tool_call_streams_call_and_result(fake_codex_server) -> None:
             json_schema={"type": "object"},
             fn=lambda: "ok",
         )
-        events: list[dict[str, Any]] = []
+        events: list[AgentEvent] = []
         messages, token = await CodexChatEngine(
             "system", [tool], fake_codex_server.command
         ).stream_turn(
@@ -106,7 +105,7 @@ def test_saved_thread_is_resumed(fake_codex_server) -> None:
 
 def test_reasoning_and_text_keep_the_existing_event_shapes(fake_codex_server) -> None:
     async def drive() -> None:
-        events: list[dict[str, Any]] = []
+        events: list[AgentEvent] = []
         messages, _token = await CodexChatEngine(
             "system", [], fake_codex_server.command_for("plain")
         ).stream_turn("answer", message_history=[], emit=events.append, resume=None)
@@ -135,7 +134,7 @@ def test_invalid_tool_arguments_return_an_error_content_item(fake_codex_server) 
             parameters={"text": "Text to echo."},
             fn=echo,
         )
-        events: list[dict[str, Any]] = []
+        events: list[AgentEvent] = []
         await CodexChatEngine("system", [tool], fake_codex_server.command).stream_turn(
             "use echo", message_history=None, emit=events.append, resume=None
         )
@@ -155,14 +154,14 @@ def test_invalid_tool_arguments_return_an_error_content_item(fake_codex_server) 
     [
         ("shell", {"decision": "decline"}),
         ("file", {"decision": "decline"}),
-        ("permission", {"permissions": []}),
+        ("permission", {"permissions": {}}),
     ],
 )
 def test_codex_access_requests_are_denied(
     fake_codex_server, mode: str, expected_result: dict[str, object],
 ) -> None:
     async def drive() -> None:
-        events: list[dict[str, Any]] = []
+        events: list[AgentEvent] = []
         await CodexChatEngine(
             "system", [], fake_codex_server.command_for(mode)
         ).stream_turn("answer", message_history=None, emit=events.append, resume=None)
@@ -178,7 +177,7 @@ def test_codex_access_requests_are_denied(
 
 def test_mcp_server_requests_are_not_invoked(fake_codex_server) -> None:
     async def drive() -> None:
-        events: list[dict[str, Any]] = []
+        events: list[AgentEvent] = []
         await CodexChatEngine(
             "system", [], fake_codex_server.command_for("mcp")
         ).stream_turn("answer", message_history=None, emit=events.append, resume=None)

@@ -20,6 +20,28 @@ def test_request_returns_response_with_its_matching_id(fake_codex_server) -> Non
     asyncio.run(drive())
 
 
+def test_concurrent_requests_receive_out_of_order_responses_by_id(
+    fake_codex_server,
+) -> None:
+    async def drive() -> None:
+        server = CodexAppServer(fake_codex_server.command_for("out_of_order"), {})
+        try:
+            await server.initialize()
+            first, second = await asyncio.wait_for(
+                asyncio.gather(
+                    server.request("request/first", {}),
+                    server.request("request/second", {}),
+                ),
+                timeout=1,
+            )
+            assert first == {"method": "request/first"}
+            assert second == {"method": "request/second"}
+        finally:
+            await server.close()
+
+    asyncio.run(drive())
+
+
 def test_server_tool_request_reaches_the_engine(fake_codex_server) -> None:
     async def drive() -> None:
         server = CodexAppServer(fake_codex_server.command, {})
@@ -40,7 +62,7 @@ def test_server_tool_request_reaches_the_engine(fake_codex_server) -> None:
         ("eof", "closed stdout"),
     ],
 )
-def test_invalid_protocol_ends_the_message_stream_loudly(
+def test_invalid_protocol_fails_a_pending_request(
     fake_codex_server, mode: str, message: str,
 ) -> None:
     async def drive() -> None:
@@ -48,7 +70,7 @@ def test_invalid_protocol_ends_the_message_stream_loudly(
         try:
             await server.initialize()
             with pytest.raises(CodexProtocolError, match=message):
-                await asyncio.wait_for(server.next_message(), timeout=1)
+                await asyncio.wait_for(server.request("pending", {}), timeout=1)
         finally:
             await server.close()
 
