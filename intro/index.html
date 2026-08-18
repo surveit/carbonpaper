@@ -153,6 +153,11 @@
   .start { max-width: 34em; margin: 3rem auto 0; padding: 0 2.5rem 6rem; text-align: center; }
   .start .lead { font-size: 1.24rem; margin: 0; }
   .start a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+  .start .cta { display: inline-block; margin-top: 1.4rem; padding: .85rem 1.6rem;
+                font-family: var(--sans); font-size: .95rem; font-weight: 600;
+                color: var(--card); background: var(--accent); border-radius: 8px;
+                text-decoration: none; transition: opacity .2s ease; }
+  .start .cta:hover { opacity: .85; }
 
   /* No JS: every layer stacks and the page still reads top to bottom. */
   .nojs .layer, .nojs .fade, .nojs .pin, .nojs .over {
@@ -438,7 +443,8 @@
 workflow you can run again.</p>
 
 <section class="start">
-  <p class="lead">Try the demo at <a href="https://carbonpaper.fly.dev">carbonpaper.fly.dev</a>.</p>
+  <p class="lead">Run it yourself on the same filings.</p>
+  <a class="cta" href="https://carbonpaper.fly.dev">Try the demo</a>
 </section>
 
 <script>
