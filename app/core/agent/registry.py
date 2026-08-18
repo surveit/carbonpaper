@@ -13,6 +13,10 @@ from pydantic import BaseModel, ConfigDict
 
 from app.core.agent.sdk_engine import MCP_SERVER_NAME, ClaudeAgentSdkEngine, ThinkingConfig
 from app.core.agent.bound_tool import BoundToolSpec
+from app.core.agent.store import AgentContext, ChatBackend
+
+
+type ChatEngine = ClaudeAgentSdkEngine
 
 
 class AgentConfig(BaseModel):
@@ -52,7 +56,7 @@ def is_registered(agent_id: str) -> bool:
     return agent_id in _registry
 
 
-def render_opening_message(agent_id: str, context: dict[str, Any]) -> str | None:
+def render_opening_message(agent_id: str, context: AgentContext) -> str | None:
     """None when the agent waits to be spoken to. See AgentConfig.render_opening_message."""
     config, _build_tools = _registry[agent_id]
     if config.render_opening_message is None:
@@ -61,7 +65,7 @@ def render_opening_message(agent_id: str, context: dict[str, Any]) -> str | None
 
 
 def build_engine(
-    agent_id: str, context: dict[str, Any], *, opening_message: str = ""
+    agent_id: str, context: AgentContext, *, opening_message: str = ""
 ) -> ClaudeAgentSdkEngine:
     config, build_tools = _registry[agent_id]
     ctx = config.context_schema.model_validate(context)
@@ -75,6 +79,25 @@ def build_engine(
         model=config.model,
         thinking=config.thinking,
     )
+
+
+def build_session_engine(
+    agent_id: str,
+    context: AgentContext,
+    backend: ChatBackend,
+    *,
+    opening_message: str = "",
+) -> ChatEngine:
+    if backend == ChatBackend.claude:
+        return build_engine(agent_id, context, opening_message=opening_message)
+    if backend == ChatBackend.codex:
+        return build_codex_engine(agent_id, context)
+    raise ValueError(f"unknown chat backend: {backend}")
+
+
+def build_codex_engine(agent_id: str, context: AgentContext) -> ChatEngine:
+    del agent_id, context
+    raise RuntimeError("Codex chat backend is not available")
 
 
 # A turn is driven by the reader's message alone — the engine drops message_history and
