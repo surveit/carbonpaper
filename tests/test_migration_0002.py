@@ -74,6 +74,21 @@ def test_a_v1_document_validates_under_todays_model_after_upgrading():
     assert document["stages"][2]["join"]["enrich_with"] == {"extra": "extra"}
 
 
+def test_a_reviewed_column_keeps_its_source_constraints_not_just_its_type():
+    """The source's enum and nullability must survive, not just its type."""
+    rev = _load_revision()
+    rev._REVIEWED_COLUMNS_BY_PROJECT["enumproj"] = {"tier": "tier_reviewed"}
+    stages = _v1_stages()
+    tier = {"name": "tier", "type": "str", "nullable": False, "enum": ["T1", "T2"]}
+    stages[3]["inputs"][0]["schema"]["columns"].append(tier)
+    stages[3]["output_schema"]["columns"].append(tier)
+    rev._name_queue_columns(stages[3], "enumproj")
+
+    declared = {c["name"]: c for c in stages[3]["output_schema"]["columns"]}
+    assert declared["tier_reviewed"]["enum"] == ["T1", "T2"]
+    assert declared["tier_reviewed"]["nullable"] is False
+
+
 def test_an_output_column_from_neither_input_is_refused_not_guessed():
     rev = _load_revision()
     stage = _v1_stages()[2]
