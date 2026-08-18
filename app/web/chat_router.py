@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from starlette.concurrency import run_in_threadpool
@@ -96,8 +96,8 @@ async def draft_agent_chat(agent_id: str, request: Request):
     })
 
 
-@router.post("/chat/agent/{agent_id}/materialize")
-async def materialize_agent_chat(agent_id: str, request: Request):
+@router.post("/chat/agent/{agent_id}/sessions")
+async def new_agent_session(agent_id: str, request: Request):
     """Draft page -> real, stored session. See ensureSession() in chat.html."""
     if not registry.is_registered(agent_id):
         raise HTTPException(status_code=404, detail="Unknown agent")
@@ -107,16 +107,6 @@ async def materialize_agent_chat(agent_id: str, request: Request):
     sid = create_agent_session(
         agent_id, context, base_url=str(request.base_url), title=title)
     return JSONResponse({"ok": True, "sid": sid})
-
-
-@router.post("/chat/agent/{agent_id}/sessions")
-async def new_agent_session(agent_id: str, request: Request):
-    body = await request.json()
-    context = (body or {}).get("context") or {}
-    title = (body or {}).get("title")
-    sid = create_agent_session(
-        agent_id, context, base_url=str(request.base_url), title=title)
-    return RedirectResponse(url=f"/chat/{sid}", status_code=303)
 
 
 @router.get("/chat/{sid}", response_class=HTMLResponse)

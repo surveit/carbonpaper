@@ -43,7 +43,7 @@ def _materialize_the_tour() -> str:
     """What the draft page's first reply does — see ensureSession() in chat.html."""
     client.get(_DRAFT_URL)  # visiting first, as a reader would
     r = client.post(
-        "/chat/agent/tutorial/materialize",
+        "/chat/agent/tutorial/sessions",
         json={"context": {"base_url": "http://testserver/"}, "title": "Guided tour"},
     )
     assert r.status_code == 200, r.text

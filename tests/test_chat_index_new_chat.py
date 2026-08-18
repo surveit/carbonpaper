@@ -31,7 +31,7 @@ def read_current_project(sid: str) -> str | None:
 def open_session(agent_id: str, context: dict | None = None) -> str:
     """What a draft page's first reply does — see ensureSession() in chat.html."""
     response = client.post(
-        f"/chat/agent/{agent_id}/materialize", json={"context": context or {}})
+        f"/chat/agent/{agent_id}/sessions", json={"context": context or {}})
     assert response.status_code == 200, response.text
     data = response.json()
     assert data["ok"], data

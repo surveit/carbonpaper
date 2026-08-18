@@ -353,11 +353,11 @@ function askWhereItGoes() {
   projectModal.showModal();
 }
 
-// Materializes a real, stored session on first use (see /chat/agent/{id}/materialize) —
+// Materializes a real, stored session on first use (see /chat/agent/{id}/sessions) —
 // a no-op once SID is real, so send() and storeFile() can both call this unconditionally.
 async function ensureSession() {
   if (SID) return SID;
-  const r = await fetch(`/chat/agent/${DRAFT_AGENT_ID}/materialize`, {
+  const r = await fetch(`/chat/agent/${DRAFT_AGENT_ID}/sessions`, {
     method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({context: DRAFT_CONTEXT, title: DRAFT_TITLE})
   });

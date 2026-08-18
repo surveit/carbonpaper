@@ -58,12 +58,11 @@ def register_dummy_agent(scripted_agent_turn) -> Iterator[None]:
 
 
 def _new_session(context: dict) -> str:
-    r = client.post(
-        "/chat/agent/dummy/sessions", json={"context": context}, follow_redirects=False
-    )
-    assert r.status_code == 303
-    assert r.headers["location"].startswith("/chat/")
-    return r.headers["location"].rsplit("/", 1)[-1]
+    r = client.post("/chat/agent/dummy/sessions", json={"context": context})
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["ok"], data
+    return data["sid"]
 
 
 def test_new_agent_session_records_agent_and_context() -> None:

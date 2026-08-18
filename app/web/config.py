@@ -24,7 +24,6 @@ from app.core.paths import repo_root
 from app.core.utils import abbreviate_count
 from app.web.diagrams import TYPE_LABEL
 from app.web.file_sizes import describe_bytes, read_turn
-from app.services.agent import open_agent_chat, open_unbound_agent_chat
 from app.services.workspace import (
     configure_projects_dir_from_env as configure_projects_dir_from_env,
     projects_dir as projects_dir,
@@ -127,9 +126,6 @@ def serves_an_open_demo() -> bool:
 # FLY_APP_NAME on every machine, so nothing has to be remembered in fly.toml —
 # a deploy that forgot a flag would be a public app quietly claiming privacy.
 templates.env.globals["serves_an_open_demo"] = serves_an_open_demo
-# A draft chat's URL: nothing is created by linking to it. See app.services.agent.
-templates.env.globals["open_agent_chat"] = open_agent_chat
-templates.env.globals["open_unbound_agent_chat"] = open_unbound_agent_chat
 
 templates.env.filters["friendly_time"] = friendly_time
 templates.env.filters["relative_time"] = relative_time

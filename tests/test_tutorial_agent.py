@@ -183,13 +183,15 @@ def test_the_eval_url_addresses_the_eval_the_tour_just_seeded() -> None:
 
 def test_the_link_and_the_button_are_the_same_door() -> None:
     """Two doors, one room: the tour's link is not a second, different offer."""
-    from app.services.agent import open_agent_chat
+    from urllib.parse import urlencode
 
     seeded = _seed_a_tour()
     project = seeded["project"]["id"]
 
-    assert seeded["edit_chat_url"] == _BASE_URL.rstrip("/") + open_agent_chat(
-        "editing", project)
+    assert seeded["edit_chat_url"] == (
+        f"{_BASE_URL.rstrip('/')}/chat/agent/editing/new?"
+        f"{urlencode({'project_id': project})}"
+    )
 
 
 def test_run_workflow_passes_limits_through_to_the_run_service(

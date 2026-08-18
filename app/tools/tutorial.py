@@ -8,13 +8,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from urllib.parse import urlencode
 
 from pydantic import BaseModel
 
 from app.models import EvalConfig
 from app.models.review_guide import ReviewGuideDraft
 from app.services import (
-    agent as agent_service,
     project as project_service,
     run as run_service,
     uploads,
@@ -104,10 +104,11 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialAgentReference:
         runs_url_prefix=f"{ctx.base_url}project/{name}/runs/",
         eval_id=eval_config.id,
         eval_url=f"{ctx.base_url}project/{name}/evals/{eval_config.id}",
-        edit_chat_url=ctx.base_url.rstrip("/") + agent_service.open_agent_chat(
-            "editing", name),
-        new_project_chat_url=ctx.base_url.rstrip("/")
-        + agent_service.open_unbound_agent_chat("editing"),
+        edit_chat_url=(
+            f"{ctx.base_url.rstrip('/')}/chat/agent/editing/new?"
+            f"{urlencode({'project_id': name})}"
+        ),
+        new_project_chat_url=f"{ctx.base_url.rstrip('/')}/chat/agent/editing/new",
         mcp_url=f"{ctx.base_url}mcp",
         mcp_command=f"claude mcp add --transport http carbonpaper {ctx.base_url}mcp",
     )

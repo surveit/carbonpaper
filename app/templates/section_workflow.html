@@ -68,8 +68,8 @@
     {% endif %}
     {# Authoring, in the app: opens a chat bound to this project's editing agent, which
        is the same agent an MCP client talks to. Nothing is created by the link itself —
-       see app.services.agent.open_agent_chat. #}
-    <a href="{{ open_agent_chat('editing', state.id) }}" class="btn">✎ Edit with agent</a>
+       see app.web.chat_router.draft_agent_chat. #}
+    <a href="/chat/agent/editing/new?{{ {'project_id': state.id} | urlencode }}" class="btn">✎ Edit with agent</a>
     <a href="/project/{{ state.id }}/runs" class="btn">All runs</a>
   </div>
 </div>
@@ -135,7 +135,7 @@
           <h2>No workflow yet</h2>
           <p class="muted">This workflow is authored stage by stage by the editing agent.
             Stages appear here as they are added.</p>
-          <a href="{{ open_agent_chat('editing', state.id) }}" class="btn primary">✎ Edit with agent</a>
+          <a href="/chat/agent/editing/new?{{ {'project_id': state.id} | urlencode }}" class="btn primary">✎ Edit with agent</a>
         </div>
       </div>
       {% endif %}
