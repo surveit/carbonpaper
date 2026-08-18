@@ -24,6 +24,7 @@ class CodexAppServer:
             asyncio.Queue()
         )
         self._waiting: dict[CodexRequestId, asyncio.Future[TypeUnsafeCodexJsonObject]] = {}
+        self._terminal_error: CodexProtocolError | None = None
         self._next_id = 1
         self._write_lock = asyncio.Lock()
         self._closing = False
@@ -44,6 +45,8 @@ class CodexAppServer:
     async def request(
         self, method: str, params: Mapping[str, object]
     ) -> TypeUnsafeCodexJsonObject:
+        if self._terminal_error is not None:
+            raise self._terminal_error
         request_id = self._next_id
         self._next_id += 1
         future = asyncio.get_running_loop().create_future()
@@ -119,6 +122,7 @@ class CodexAppServer:
             await stdin.drain()
 
     def _fail(self, error: CodexProtocolError) -> None:
+        self._terminal_error = error
         self._fail_waiting(error)
         self._messages.put_nowait(error)
 
