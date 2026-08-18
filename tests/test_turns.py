@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from app.core.agent.codex_protocol import CodexProtocolError
 from app.core.agent.store import AgentSession, ProseBlock, SessionStore
 from app.core.agent.turns import TurnManager
 from app.core.agent.usage import LlmUsage
@@ -26,6 +27,13 @@ class _FakeEngine:
 class _RaisingEngine:
     async def stream_turn(self, prompt: str, *, message_history: Any, emit: Any, resume: Any):
         raise OSError("connection dropped")
+
+
+class _ProtocolRaisingEngine:
+    async def stream_turn(
+        self, prompt: str, *, message_history: Any, emit: Any, resume: Any
+    ):
+        raise CodexProtocolError("invalid app-server message")
 
 
 def test_start_invokes_on_done_after_the_turn() -> None:
@@ -85,6 +93,24 @@ def test_on_done_runs_even_when_the_turn_errors() -> None:
 
     asyncio.run(_drive())
     assert calls == ["done"]  # generation's completion logic runs regardless of outcome
+
+
+def test_codex_protocol_failures_reach_the_turn_stream() -> None:
+    store = SessionStore()
+    sid = store.create()
+
+    async def _drive() -> list[dict[str, Any]]:
+        manager = TurnManager()
+        turn_id = manager.start(
+            engine=_ProtocolRaisingEngine(), store=store, session_id=sid, prompt="hi"
+        )
+        await manager._tasks[turn_id]
+        return manager._turns[turn_id].events
+
+    assert asyncio.run(_drive()) == [
+        {"kind": "error", "text": "CodexProtocolError: invalid app-server message"},
+        {"kind": "done"},
+    ]
 
 
 class _SpendingEngine(_FakeEngine):

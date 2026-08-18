@@ -11,12 +11,15 @@ from typing import Any, Callable
 from claude_agent_sdk import McpSdkServerConfig, SdkMcpTool, create_sdk_mcp_server, tool
 from pydantic import BaseModel, ConfigDict
 
-from app.core.agent.sdk_engine import MCP_SERVER_NAME, ClaudeAgentSdkEngine, ThinkingConfig
 from app.core.agent.bound_tool import BoundToolSpec
+from app.core.agent.codex_engine import CodexChatEngine
+from app.core.agent.sdk_engine import MCP_SERVER_NAME, ClaudeAgentSdkEngine, ThinkingConfig
 from app.core.agent.store import AgentContext, ChatBackend
 
 
-type ChatEngine = ClaudeAgentSdkEngine
+type ChatEngine = ClaudeAgentSdkEngine | CodexChatEngine
+
+_CODEX_APP_SERVER_COMMAND = ("codex", "app-server", "--stdio")
 
 
 class AgentConfig(BaseModel):
@@ -91,13 +94,20 @@ def build_session_engine(
     if backend == ChatBackend.claude:
         return build_engine(agent_id, context, opening_message=opening_message)
     if backend == ChatBackend.codex:
-        return build_codex_engine(agent_id, context)
+        return build_codex_engine(agent_id, context, opening_message=opening_message)
     raise ValueError(f"unknown chat backend: {backend}")
 
 
-def build_codex_engine(agent_id: str, context: AgentContext) -> ChatEngine:
-    del agent_id, context
-    raise RuntimeError("Codex chat backend is not available")
+def build_codex_engine(
+    agent_id: str, context: AgentContext, *, opening_message: str = ""
+) -> CodexChatEngine:
+    config, build_tools = _registry[agent_id]
+    ctx = config.context_schema.model_validate(context)
+    return CodexChatEngine(
+        render_system_prompt(config, ctx, opening_message),
+        build_tools(ctx),
+        _CODEX_APP_SERVER_COMMAND,
+    )
 
 
 # A turn is driven by the reader's message alone — the engine drops message_history and
