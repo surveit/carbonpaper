@@ -64,7 +64,7 @@
         <option value="">Choose a file…</option>
         {% endif %}
         {% for f in files %}
-        <option value="{{ f.sha256 }}">{{ f.filename }} — {{ f.bytes | filesize }}</option>
+        <option value="{{ f.sha256 }}" data-uploaded-at="{{ f.uploaded_at.isoformat() }}">{{ f.label }}</option>
         {% endfor %}
       </select>
       <button type="button" class="btn browse-btn">Upload file…</button>

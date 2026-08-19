@@ -12,8 +12,19 @@
   function fileOption(file) {
     var option = document.createElement("option");
     option.value = file.sha256;
-    option.textContent = file.filename + " — " + describeBytes(file.bytes);
+    option.dataset.uploadedAt = file.uploaded_at;
+    option.textContent = file.label;
     return option;
+  }
+
+  function insertFileOption(select, file) {
+    var current = select.querySelector('option[value="' + file.sha256 + '"]');
+    if (current) current.remove();
+    var uploadedAt = Date.parse(file.uploaded_at);
+    var before = Array.from(select.querySelectorAll("option[data-uploaded-at]")).find(
+      function (option) { return Date.parse(option.dataset.uploadedAt) < uploadedAt; }
+    );
+    select.insertBefore(fileOption(file), before || null);
   }
 
   function buildRow(template, row, files) {
@@ -68,9 +79,7 @@
 
   function offerEverywhere(form, file, pick) {
     form.querySelectorAll("select.file-pick").forEach(function (select) {
-      if (!select.querySelector('option[value="' + file.sha256 + '"]')) {
-        select.appendChild(fileOption(file));
-      }
+      insertFileOption(select, file);
     });
     pick.value = file.sha256;
     pick.dispatchEvent(new Event("change", { bubbles: true }));

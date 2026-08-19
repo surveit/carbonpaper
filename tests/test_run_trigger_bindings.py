@@ -7,13 +7,15 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 import app.services.run as run_service
 from app.main import app
 from app.services import versioning
 from app.services import workspace
 from app.services.project import save_working_copy_as_version
-from app.services.uploads import save_upload
+from app.services.uploads import list_project_files, save_upload
+from app.web.run_inputs import FileChoice
 from stage_seed import add_stage, read_stage
 from run_seed import read_manifest
 
@@ -131,6 +133,32 @@ def test_new_run_page_shows_one_picker_per_file_input(project, tmp_path):
     assert 'name="binding__load"' in resp.text
     assert str(project / "a.csv") in resp.text   # the authored path, as the blank option
     assert "b.csv" in resp.text                  # and the project's stored file
+
+
+def test_file_picker_lists_newest_upload_first_with_absolute_times(project, tmp_path):
+    _store("older.csv", pd.DataFrame({"name": ["a"], "val": [1]}), tmp_path)
+    _store("newer.csv", pd.DataFrame({"name": ["b"], "val": [2]}), tmp_path)
+    records = {record.filename: record for record in list_project_files("demo")}
+    records["older.csv"].created_at = "2026-07-02T09:05:00"
+    records["older.csv"].save()
+    records["newer.csv"].created_at = "2026-08-19T16:42:00"
+    records["newer.csv"].save()
+
+    body = client.get("/project/demo/runs/new").text
+
+    newer = "Uploaded 19 Aug 2026, 16:42 · newer.csv · 13B"
+    older = "Uploaded 2 Jul 2026, 09:05 · older.csv · 13B"
+    assert body.index(newer) < body.index(older)
+    assert 'data-uploaded-at="2026-08-19T16:42:00"' in body
+
+    files = client.get("/project/demo/run-inputs").json()["files"]
+    assert [file["filename"] for file in files] == ["newer.csv", "older.csv"]
+    assert [file["label"] for file in files] == [newer, older]
+
+
+def test_file_picker_refuses_a_choice_without_an_upload_time():
+    with pytest.raises(ValidationError, match="uploaded_at"):
+        FileChoice.model_validate({"sha256": "abc", "filename": "a.csv", "bytes": 1})
 
 
 # ─── The run form is its own page, not a block on the run history ────────────
