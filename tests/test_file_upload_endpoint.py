@@ -241,3 +241,17 @@ def test_a_run_cannot_bind_a_file_another_project_holds(project):
 def test_a_binding_carries_the_format_the_extension_names(project):
     upload("posts.csv", CSV)
     assert resolve_file_binding("demo", CSV_SHA)["format"] == "csv"
+
+
+def test_a_tsv_upload_binds_as_tsv(project):
+    body = b"name\tval\nx\t1\n"
+    sha256 = upload("posts.tsv", body).json()["sha256"]
+    assert resolve_file_binding("demo", sha256)["format"] == "tsv"
+
+
+def test_a_binding_uses_the_current_filename_not_the_stored_blob_suffix(project):
+    body = b"name,val\nx,1\n"
+    stored_path = upload("posts.tsv", body).json()["path"]
+    sha256 = upload("posts.csv", body).json()["sha256"]
+    binding = resolve_file_binding("demo", sha256)
+    assert binding == {"path": stored_path, "format": "csv"}

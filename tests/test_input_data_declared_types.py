@@ -54,6 +54,61 @@ def test_all_numeric_str_column_stays_str(tmp_path):
     assert list(df["zip"]) == ["90210", "02134"]
 
 
+def test_tab_separated_content_with_a_csv_suffix_loads(tmp_path):
+    path = tmp_path / (
+        "authorcomment_AND_authorAction_Justice_Climat_Lyon - Aug 18, 2026 - 10 19 50 AM.csv"
+    )
+    path.write_text("authorcomment\tauthorAction\nKeep\tEscalate\n", encoding="utf-8")
+    df = _read(path, [
+        {"name": "authorcomment", "type": "str", "nullable": True},
+        {"name": "authorAction", "type": "str", "nullable": True},
+    ])
+    assert list(df.columns) == ["authorcomment", "authorAction"]
+    assert df.to_dict(orient="records") == [
+        {"authorcomment": "Keep", "authorAction": "Escalate"}
+    ]
+
+
+def test_tab_separated_header_may_quote_a_comma(tmp_path):
+    path = _csv(tmp_path, '"author,comment"\tauthorAction\nKeep\tEscalate\n')
+    df = _read(path, [
+        {"name": "author,comment", "type": "str", "nullable": True},
+        {"name": "authorAction", "type": "str", "nullable": True},
+    ])
+    assert df.to_dict(orient="records") == [
+        {"author,comment": "Keep", "authorAction": "Escalate"}
+    ]
+
+
+def test_tsv_format_loads_a_tsv_file(tmp_path):
+    path = tmp_path / "in.tsv"
+    path.write_text("id\tnote\n002\thello, world\n", encoding="utf-8")
+    df = _read(path, [
+        {"name": "id", "type": "str", "nullable": True},
+        {"name": "note", "type": "str", "nullable": True},
+    ], format="tsv")
+    assert df.to_dict(orient="records") == [{"id": "002", "note": "hello, world"}]
+
+
+def test_ordinary_csv_with_a_quoted_comma_is_unchanged(tmp_path):
+    path = _csv(tmp_path, 'name,note\nAlice,"hello, world"\n')
+    df = _read(path, [
+        {"name": "name", "type": "str", "nullable": True},
+        {"name": "note", "type": "str", "nullable": True},
+    ])
+    assert df.to_dict(orient="records") == [{"name": "Alice", "note": "hello, world"}]
+
+
+def test_an_ambiguous_mixed_delimiter_header_fails_loudly(tmp_path):
+    path = _csv(tmp_path, "left,right\tthird\nvalue\n")
+    with pytest.raises(ValueError, match="cannot distinguish comma-separated from tab-separated"):
+        _read(path, [
+            {"name": "left", "type": "str", "nullable": True},
+            {"name": "right", "type": "str", "nullable": True},
+            {"name": "third", "type": "str", "nullable": True},
+        ])
+
+
 # ── Declared dates ───────────────────────────────────────────────────────────
 
 def test_declared_date_column_parses_without_any_param(tmp_path):

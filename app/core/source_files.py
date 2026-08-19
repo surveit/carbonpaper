@@ -23,6 +23,7 @@ from app.core.frames import (
 
 class FileFormat(str, Enum):
     csv = "csv"
+    tsv = "tsv"
     parquet = "parquet"
     json = "json"
     geojson = "geojson"
@@ -33,6 +34,7 @@ class FileFormat(str, Enum):
 # reader as `.json` (both are read line-delimited).
 _FORMAT_BY_SUFFIX: dict[str, FileFormat] = {
     ".csv": FileFormat.csv,
+    ".tsv": FileFormat.tsv,
     ".parquet": FileFormat.parquet,
     ".json": FileFormat.json,
     ".jsonl": FileFormat.json,
@@ -70,6 +72,8 @@ def read_source_file(
     """`dtype` reaches only the formats pandas infers; parquet and geojson carry types."""
     if fmt == FileFormat.csv:
         return read_source_csv(path, dtype=dtype)
+    if fmt == FileFormat.tsv:
+        return read_source_csv(path, dtype=dtype, delimiter="\t")
     if fmt == FileFormat.parquet:
         return read_frame_file(path)
     if fmt == FileFormat.json:
