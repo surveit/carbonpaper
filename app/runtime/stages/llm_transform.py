@@ -167,26 +167,42 @@ def _process_chunk(
     stage_id: str, llm: Any, batch_reply_schema: type, start: int, chunk: list[Row]
 ) -> list[tuple[int, Row]]:
     """A confused reply fails EVERY row of the chunk: the answers that matched are not trusted."""
-    n = len(chunk)
     usages: list[LlmUsage] = []
+    try:
+        by_number, problem = _ask_until_reply_rejoins(
+            stage_id, llm, batch_reply_schema, chunk, usages)
+    except Exception as exc:  # noqa: BLE001 — the chunk's supervisor, mirroring the
+        # per-row one: a backend that never answered fails THESE rows, not the stage.
+        return _emit_failed(start, chunk, usages, str(exc) or type(exc).__name__)
+    if by_number is None:
+        return _emit_failed(start, chunk, usages, problem)
+    return _emit_matched(start, chunk, by_number, usages)
+
+
+def _ask_until_reply_rejoins(
+    stage_id: str,
+    llm: Any,
+    batch_reply_schema: type,
+    chunk: list[Row],
+    usages: list[LlmUsage],
+) -> tuple[dict[int, dict[str, Any]] | None, str]:
+    """Re-asks ONLY a reply the runtime could not rejoin — the one defect no reply schema can state."""
+    n = len(chunk)
     problem = "no reply produced"
     attempts = max(1, (llm.max_retries or 0) + 1)
     for attempt in range(attempts):
         task = _render_batch_task(llm.prompt_data_template, chunk, correction=problem if attempt else None)
-        try:
-            reply = call_llm_batch(
-                stage_id, llm, instructions=llm.prompt_instructions, task=task,
-                reply_schema=batch_reply_schema, usage_out=usages,
-            )
-        except Exception as exc:  # noqa: BLE001 — a chunk that never returns is thrown back, then errored
-            problem = str(exc) or type(exc).__name__
-            continue
+        # A raise propagates: `call_llm_batch` has already retried the backend
+        # `max_retries` times, and re-asking here would square that budget while
+        # telling the model its reply was rejected — which it never made.
+        reply = call_llm_batch(
+            stage_id, llm, instructions=llm.prompt_instructions, task=task,
+            reply_schema=batch_reply_schema, usage_out=usages,
+        )
         by_number, problem = _validate_batch_reply(reply.get("results", []), n)
         if by_number is not None:
-            return _emit_matched(start, chunk, by_number, usages)
-        # anomaly → loop and re-call the model (throw back)
-    return _emit_failed(start, chunk, usages,
-                        f"batched reply invalid after {attempts} attempt(s): {problem}")
+            return by_number, ""
+    return None, f"batched reply invalid after {attempts} attempt(s): {problem}"
 
 
 def _validate_batch_reply(
