@@ -9,7 +9,9 @@ import app.runtime.executor as executor
 import app.runtime.runner as runner
 import app.web.loading as loading
 from app.core.errors import RunVersionUnresolvableError
+from app.core.run_status import StageStatus
 from app.main import app
+from app.runtime.manifest import read_run_manifest, write_manifest
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
 from app.services import run as run_service
@@ -168,6 +170,32 @@ def test_error_in_one_fork_lets_the_independent_fork_finish(tmp_path):
     outputs = tmp_path / "runs" / manifest["run_id"] / "outputs"
     assert (outputs / "good_tail.parquet").exists()
     assert not (outputs / "boom_tail.parquet").exists()
+
+
+def test_write_manifest_merges_parallel_stage_updates(tmp_path):
+    _write_stage(tmp_path, "01_load.json", _load_items_stage(tmp_path))
+    _write_stage(tmp_path, "02_left.json", _passthrough_stage("left", "load"))
+    _write_stage(tmp_path, "03_right.json", _passthrough_stage("right", "load"))
+    _seed_version(tmp_path)
+
+    prepared = prepare_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
+    run_id = prepared["run_id"]
+
+    left_view = read_run_manifest(tmp_path.name, run_id)
+    right_view = read_run_manifest(tmp_path.name, run_id)
+
+    assert left_view.find_stage_record("left") is not None
+    assert right_view.find_stage_record("right") is not None
+
+    left_view.find_stage_record("left").status = StageStatus.OK  # type: ignore[union-attr]
+    right_view.find_stage_record("right").status = StageStatus.OK  # type: ignore[union-attr]
+
+    write_manifest(left_view)
+    write_manifest(right_view)
+
+    merged = read_run_manifest(tmp_path.name, run_id)
+    assert merged.find_stage_record("left").status == StageStatus.OK  # type: ignore[union-attr]
+    assert merged.find_stage_record("right").status == StageStatus.OK  # type: ignore[union-attr]
 
 
 # ── Halt is fork-aware ───────────────────────────────────────────────────────

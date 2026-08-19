@@ -26,6 +26,7 @@ from app.core.persistence import (
     JsonDict,
     PersistedModel,
     PersistenceScope,
+    _now_iso,
     get_store,
 )
 from app.core.run_status import RunStatus, StageStatus
@@ -200,7 +201,16 @@ def create_run_manifest(
 
 def write_manifest(manifest: RunManifest) -> None:
     """The single writer of a run record."""
-    manifest.save()
+    def mutate(current: JsonDict | None, _: int | None) -> tuple[JsonDict, int]:
+        current_manifest = None if current is None else RunManifest.model_validate(current)
+        merged = _merge_run_manifest(current_manifest, manifest)
+        merged.updated_at = _now_iso()
+        return (
+            merged.model_dump(mode="json", **RunManifest.DUMP_OPTS),
+            RunManifest.SCHEMA_VERSION,
+        )
+
+    get_store().update(RunManifest.collection, manifest.id, mutate)
 
 
 def read_run_manifest(project_id: str, run_id: str, area: str = PRODUCTION_RUNS) -> RunManifest:
@@ -209,6 +219,80 @@ def read_run_manifest(project_id: str, run_id: str, area: str = PRODUCTION_RUNS)
         return RunManifest.load(RunManifest.compose_id(project_id, run_id, area))
     except DocumentNotFound as exc:
         raise RunNotFoundError(f"no run '{run_id}' in project '{project_id}'") from exc
+
+
+def _merge_run_manifest(current: RunManifest | None, incoming: RunManifest) -> RunManifest:
+    if current is None:
+        return incoming
+    reopening = _is_reopening_run(current, incoming)
+    merged = incoming.model_copy(deep=True)
+    merged.created_at = current.created_at
+    merged.human_review_queue_stats = {
+        **current.human_review_queue_stats,
+        **incoming.human_review_queue_stats,
+    }
+    merged.dropped_columns = {
+        **current.dropped_columns,
+        **incoming.dropped_columns,
+    }
+    merged.stage_records = _merge_stage_records(
+        current.stage_records, incoming.stage_records, reopening
+    )
+    if (
+        incoming.status == RunStatus.RUNNING
+        and current.status != RunStatus.RUNNING
+        and not reopening
+    ):
+        merged.status = current.status
+        merged.finished_at = current.finished_at
+        merged.halted_at = current.halted_at
+        merged.cancelled_at = current.cancelled_at
+    return merged
+
+
+def _is_reopening_run(current: RunManifest, incoming: RunManifest) -> bool:
+    return bool(incoming.resumed_at and incoming.resumed_at != current.resumed_at)
+
+
+def _merge_stage_records(
+    current: list[StageRecord],
+    incoming: list[StageRecord],
+    reopening: bool,
+) -> list[StageRecord]:
+    current_by_id = {record.stage_id: record for record in current}
+    merged: list[StageRecord] = []
+    for next_record in incoming:
+        prior = current_by_id.get(next_record.stage_id)
+        if prior is None:
+            merged.append(next_record)
+            continue
+        merged.append(_merge_stage_record(prior, next_record, reopening))
+    return merged
+
+
+def _merge_stage_record(
+    current: StageRecord,
+    incoming: StageRecord,
+    reopening: bool,
+) -> StageRecord:
+    if reopening and incoming.status == StageStatus.RUNNING:
+        return incoming
+    if incoming.status == StageStatus.PENDING and current.status != StageStatus.PENDING:
+        return current
+    if (
+        incoming.status == StageStatus.RUNNING
+        and current.status
+        in (
+            StageStatus.OK,
+            StageStatus.VALIDATION_WARNINGS,
+            StageStatus.ERROR,
+            StageStatus.AWAITING_REVIEW,
+            StageStatus.CANCELLED,
+        )
+        and not reopening
+    ):
+        return current
+    return incoming
 
 
 @dataclass

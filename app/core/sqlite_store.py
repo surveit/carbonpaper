@@ -10,7 +10,7 @@ from threading import RLock
 from typing import Any, Iterator
 
 from app.core.errors import DocumentNotFound
-from app.core.persistence import JsonDict
+from app.core.persistence import JsonDict, StoreUpdate
 
 
 class SqliteKvStore:
@@ -32,6 +32,22 @@ class SqliteKvStore:
 
     def write(self, collection: str, id: str, data: JsonDict, schema_version: int = 1) -> None:
         with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO documents (collection, id, data, schema_version) "
+                "VALUES (?, ?, ?, ?)",
+                (collection, id, json.dumps(data), schema_version),
+            )
+            self._conn.commit()
+
+    def update(self, collection: str, id: str, mutate: StoreUpdate) -> None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT data, schema_version FROM documents WHERE collection=? AND id=?",
+                (collection, id),
+            ).fetchone()
+            current = json.loads(row[0]) if row is not None else None
+            current_schema = int(row[1]) if row is not None else None
+            data, schema_version = mutate(current, current_schema)
             self._conn.execute(
                 "INSERT OR REPLACE INTO documents (collection, id, data, schema_version) "
                 "VALUES (?, ?, ?, ?)",
