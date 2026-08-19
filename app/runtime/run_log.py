@@ -10,18 +10,24 @@ import contextvars
 import queue
 import threading
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Iterator
 
 from app.core.persistence import JsonDict, PersistedModel, PersistenceScope
 
 # Sentinel pushed by close() to tell the writer thread to drain and stop.
 _STOP = object()
 
-# Events per stored chunk. A 270k-event run is ~540 documents rather than 270k,
-# and a reader wanting `seq >= n` goes straight to chunk `n // CHUNK_SIZE`
-# because seq is a gapless counter from 0. The open chunk is REWRITTEN on each
-# flush, so a write costs one chunk, never the whole log.
-CHUNK_SIZE = 500
+# Events per stored chunk: enough that a 270k-event run is documents in the
+# thousands rather than 270k, small enough that rewriting the open one on each
+# flush stays cheap. Free to change — a chunk records where it starts, so no
+# reader computes position from this number.
+CHUNK_SIZE = 100
+
+# The most events any chunk has ever held, which is what makes the jump in
+# read_events_since a floor rather than a guess. NEVER lower it below a value
+# CHUNK_SIZE has already been in production, or that jump starts overshooting
+# and a reader silently skips the events it was asked for.
+_WIDEST_CHUNK_SIZE = 500
 
 # How long the writer thread waits for more events before flushing what it has,
 # so a slow run's SSE feed does not stall behind an unfilled chunk. It also sets
@@ -40,6 +46,15 @@ class RunEventChunk(PersistedModel):
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.RUN
 
     events: list[JsonDict] = []
+    # Absent on every chunk written before this field existed. Those were all
+    # written at 500, so their position is still recoverable from the index —
+    # which is the whole reason the fallback below is exact rather than a guess,
+    # and why no migration rewrites them.
+    first_seq: int | None = None
+
+    def resolve_first_seq(self, index: int) -> int:
+        """The seq this chunk's first event carries."""
+        return index * _WIDEST_CHUNK_SIZE if self.first_seq is None else self.first_seq
 
     @staticmethod
     def compose_id(project_id: str, run_id: str, index: int) -> str:
@@ -89,6 +104,8 @@ class RunLog:
         self._run_id = run_id
         self._q: queue.Queue[Any] = queue.Queue()
         self._closed = False
+        # Set by the writer thread before it reads anything; only it touches this.
+        self._open_index = 0
         # Start the writer BEFORE returning so the first emit() is never lost.
         self._writer = threading.Thread(
             target=self._drain, name=f"run-log:{run_id}", daemon=True
@@ -116,9 +133,12 @@ class RunLog:
 
     def _drain(self) -> None:
         """Stamp each event, batch, and flush a chunk at a time."""
-        seq = count_events(self._project, self._run_id)
+        seq, self._open_index = find_log_end(self._project, self._run_id)
         # seq resumes at the run's event count: restarting at 0 would put resumed
-        # events behind a tailer's cursor, which drops every one of them.
+        # events behind a tailer's cursor, which drops every one of them. The open
+        # index is carried rather than computed from seq, so a run resumed after
+        # CHUNK_SIZE changed appends to the chunks it already has instead of
+        # landing past them and leaving a hole the dense walk stops at.
         pending: list[JsonDict] = []
         while True:
             item = self._await_next()
@@ -143,22 +163,26 @@ class RunLog:
             return None
 
     def _flush(self, pending: list[JsonDict]) -> None:
-        """Write `pending` into the chunks it spans, rewriting each whole."""
-        for index, events in _group_by_chunk(pending).items():
-            # Chunk k holds seqs [k*CHUNK_SIZE, (k+1)*CHUNK_SIZE), so a batch
-            # straddling a boundary touches both. Rewriting the open chunk costs
-            # one chunk per flush and never the whole log.
-            chunk = _load_chunk(self._project, self._run_id, index) or RunEventChunk(
-                id=RunEventChunk.compose_id(self._project, self._run_id, index))
-            chunk.events = [*chunk.events, *events]
+        """Append `pending` to the open chunk, rolling to the next as each fills."""
+        remaining = pending
+        while remaining:
+            chunk = _load_chunk(self._project, self._run_id, self._open_index)
+            if chunk is None:
+                chunk = RunEventChunk(
+                    id=RunEventChunk.compose_id(
+                        self._project, self._run_id, self._open_index),
+                    first_seq=int(remaining[0]["seq"]))
+            room = CHUNK_SIZE - len(chunk.events)
+            if room <= 0:
+                # Already at or over the size: a chunk written when CHUNK_SIZE
+                # was larger is full by today's measure, so move past it.
+                self._open_index += 1
+                continue
+            chunk.events = [*chunk.events, *remaining[:room]]
             chunk.save()
-
-
-def _group_by_chunk(events: list[JsonDict]) -> dict[int, list[JsonDict]]:
-    grouped: dict[int, list[JsonDict]] = {}
-    for event in events:
-        grouped.setdefault(int(event["seq"]) // CHUNK_SIZE, []).append(event)
-    return grouped
+            remaining = remaining[room:]
+            if len(chunk.events) >= CHUNK_SIZE:
+                self._open_index += 1
 
 
 def _load_chunk(project_id: str, run_id: str, index: int) -> RunEventChunk | None:
@@ -167,25 +191,41 @@ def _load_chunk(project_id: str, run_id: str, index: int) -> RunEventChunk | Non
 
 def count_events(project_id: str, run_id: str) -> int:
     """How many events this run has already logged."""
-    index = 0
-    # Chunk ids are dense from 0, so walking forward to the first partial one
-    # finds the end without listing anything.
+    logged, _ = find_log_end(project_id, run_id)
+    return logged
+
+
+def find_log_end(project_id: str, run_id: str) -> tuple[int, int]:
+    """How many events this run has logged, and the index of the chunk still open."""
+    index, logged = 0, 0
+    # Chunk ids are dense from 0, so walking to the first missing one finds the
+    # end without listing. The total is READ off the last chunk rather than
+    # multiplied out of the index, which is what lets chunks differ in size.
     while True:
         chunk = _load_chunk(project_id, run_id, index)
         if chunk is None:
-            return index * CHUNK_SIZE
-        if len(chunk.events) < CHUNK_SIZE:
-            return index * CHUNK_SIZE + len(chunk.events)
+            return logged, max(0, index - 1)
+        logged = chunk.resolve_first_seq(index) + len(chunk.events)
         index += 1
+
+
+def read_events_backward(project_id: str, run_id: str) -> Iterator[list[JsonDict]]:
+    """Each stored chunk's events, newest chunk first — for a reader that wants the tail."""
+    _, last = find_log_end(project_id, run_id)
+    for index in range(last, -1, -1):
+        chunk = _load_chunk(project_id, run_id, index)
+        if chunk is not None:
+            yield chunk.events
 
 
 def read_events_since(project_id: str, run_id: str, from_seq: int) -> list[dict[str, Any]]:
     """This run's events with seq >= from_seq, in emission order."""
     out: list[dict[str, Any]] = []
-    # seq is a gapless counter from 0, so the first chunk that can hold
-    # `from_seq` is known by arithmetic — no listing, and no reading of the
-    # chunks before it.
-    index = max(0, from_seq // CHUNK_SIZE)
+    # No chunk has ever held more than _WIDEST_CHUNK_SIZE events, so the chunk
+    # at `from_seq // _WIDEST_CHUNK_SIZE` starts at or before from_seq whatever
+    # mix of sizes the run was written in: the jump is a floor, never an
+    # overshoot. Chunks before it are still never read.
+    index = max(0, from_seq // _WIDEST_CHUNK_SIZE)
     while True:
         chunk = _load_chunk(project_id, run_id, index)
         if chunk is None:
