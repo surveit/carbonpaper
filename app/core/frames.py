@@ -118,13 +118,24 @@ def render_frame_as_csv_text(frame: pd.DataFrame) -> str:
 def read_source_csv(
     path: Path, *, dtype: Any = None, delimiter: str | None = None,
 ) -> pd.DataFrame:
-    separator = delimiter if delimiter is not None else _detect_csv_delimiter(path)
-    return pd.read_csv(path, dtype=dtype, sep=separator)
+    try:
+        return _read_source_csv_with_encoding(path, dtype, delimiter, "utf-8")
+    except UnicodeDecodeError:
+        return _read_source_csv_with_encoding(path, dtype, delimiter, "windows-1252")
 
 
-def _detect_csv_delimiter(path: Path) -> str:
-    with path.open(encoding="utf-8", newline="") as handle:
+def _read_source_csv_with_encoding(
+    path: Path, dtype: Any, delimiter: str | None, encoding: str,
+) -> pd.DataFrame:
+    with path.open(encoding=encoding, errors="strict", newline="") as handle:
         sample = handle.read(65_536)
+    separator = delimiter if delimiter is not None else _detect_csv_delimiter(path, sample)
+    return pd.read_csv(
+        path, dtype=dtype, sep=separator, encoding=encoding, encoding_errors="strict"
+    )
+
+
+def _detect_csv_delimiter(path: Path, sample: str) -> str:
     widths = {
         delimiter: _read_header_width(sample, delimiter)
         for delimiter in (",", "\t")

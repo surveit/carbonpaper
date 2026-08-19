@@ -99,6 +99,55 @@ def test_ordinary_csv_with_a_quoted_comma_is_unchanged(tmp_path):
     assert df.to_dict(orient="records") == [{"name": "Alice", "note": "hello, world"}]
 
 
+def test_windows_1252_csv_with_distinct_punctuation_loads(tmp_path):
+    path = tmp_path / "in.csv"
+    path.write_bytes('name,note\nAndré,“Lyon”\n'.encode("windows-1252"))
+    df = _read(path, [
+        {"name": "name", "type": "str", "nullable": True},
+        {"name": "note", "type": "str", "nullable": True},
+    ])
+    assert df.to_dict(orient="records") == [{"name": "André", "note": "“Lyon”"}]
+
+
+def test_utf8_with_the_same_characters_is_unchanged(tmp_path):
+    path = _csv(tmp_path, 'name,note\nAndré,“Lyon”\n')
+    df = _read(path, [
+        {"name": "name", "type": "str", "nullable": True},
+        {"name": "note", "type": "str", "nullable": True},
+    ])
+    assert df.to_dict(orient="records") == [{"name": "André", "note": "“Lyon”"}]
+
+
+def test_windows_1252_after_the_sample_loads(tmp_path):
+    path = tmp_path / "in.csv"
+    note = "a" * 65_536 + "“Lyon”"
+    path.write_bytes(("name,note\nAlice," + note + "\n").encode("windows-1252"))
+    df = _read(path, [
+        {"name": "name", "type": "str", "nullable": True},
+        {"name": "note", "type": "str", "nullable": True},
+    ])
+    assert df.to_dict(orient="records") == [{"name": "Alice", "note": note}]
+
+
+def test_utf8_character_may_cross_the_sample_boundary(tmp_path):
+    path = tmp_path / "in.csv"
+    scan_bytes = 65_536
+    value = "a" * (scan_bytes - len(b"name\n") - 1) + "€"
+    path.write_text("name\n" + value + "\n", encoding="utf-8")
+    df = _read(path, [{"name": "name", "type": "str", "nullable": True}])
+    assert df.to_dict(orient="records") == [{"name": value}]
+
+
+def test_undefined_windows_1252_byte_fails_loudly(tmp_path):
+    path = tmp_path / "in.csv"
+    path.write_bytes(b"name,note\nAndr\xe9,\x93bad\x81\x94\n")
+    with pytest.raises(UnicodeDecodeError):
+        _read(path, [
+            {"name": "name", "type": "str", "nullable": True},
+            {"name": "note", "type": "str", "nullable": True},
+        ])
+
+
 def test_an_ambiguous_mixed_delimiter_header_fails_loudly(tmp_path):
     path = _csv(tmp_path, "left,right\tthird\nvalue\n")
     with pytest.raises(ValueError, match="cannot distinguish comma-separated from tab-separated"):
