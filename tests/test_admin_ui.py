@@ -28,6 +28,33 @@ def test_admin_page_lists_the_seed_bundle():
     assert r.status_code == 200
     assert "text/html" in r.headers["content-type"]
     assert _BUNDLE in r.text
+    assert "LLM transforms" in r.text
+    assert "claude-haiku-4-5" in r.text
+    assert "gpt-5.6-terra" in r.text
+
+
+def test_admin_updates_the_global_llm_transform_model():
+    r = client.post(
+        "/admin/llm-transform-model",
+        data={"model": "gpt-5.6-terra"},
+        follow_redirects=False,
+    )
+
+    assert r.status_code == 303
+    assert r.headers["location"].startswith("/admin")
+    page = client.get("/admin").text
+    assert '<option value="gpt-5.6-terra" selected>' in page
+
+
+def test_admin_rejects_an_unknown_global_llm_transform_model():
+    r = client.post(
+        "/admin/llm-transform-model",
+        data={"model": "not-a-model"},
+        follow_redirects=False,
+    )
+
+    assert r.status_code == 400
+    assert "not-a-model" in r.json()["detail"]
 
 
 def _loaded_project_id() -> str:

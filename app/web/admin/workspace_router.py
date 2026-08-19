@@ -9,8 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi.responses import RedirectResponse, Response
 from pydantic import ValidationError
 
 from app.seeds.seed import discover_workflow_files
@@ -18,7 +18,6 @@ from app.services import project
 from app.services.project import (
     WorkflowFile, read_project_name, export_project, import_project,
 )
-from app.web.config import templates
 
 router = APIRouter()
 
@@ -43,21 +42,6 @@ def _known_project(project_name: str) -> str:
 
 def _redirect_to_admin(msg: str) -> RedirectResponse:
     return RedirectResponse(url=f"/admin?{urlencode({'msg': msg})}", status_code=303)
-
-
-# ─── Page ────────────────────────────────────────────────────────────────
-
-@router.get("/admin", response_class=HTMLResponse)
-async def admin_index(request: Request, msg: str | None = None):
-    return templates.TemplateResponse(
-        request,
-        "admin.html",
-        {
-            "bundles": [wf_path.stem for wf_path in discover_workflow_files()],
-            "projects": project.list_projects(),
-            "msg": msg,
-        },
-    )
 
 
 # ─── Actions ───────────────────────────────────────────────────────────────

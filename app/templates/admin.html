@@ -13,6 +13,18 @@
 <div class="banner">{{ msg }}</div>
 {% endif %}
 
+<h2>LLM transforms</h2>
+<form method="post" action="/admin/llm-transform-model">
+    <label for="llm-transform-model">Selected model</label>
+    <select id="llm-transform-model" name="model">
+        {% for option in llm_model_options %}
+        <option value="{{ option.value }}"{% if option == llm_transform_settings.selected_model %} selected{% endif %}>{{ option.value }} ({{ option.backend }})</option>
+        {% endfor %}
+    </select>
+    <button type="submit" class="btn">Save</button>
+</form>
+<p class="muted">This workspace setting is stored in the database. Codex selections are subscription-backed and currently test-only.</p>
+
 <h2>Seed bundles</h2>
 {% if bundles %}
 <table class="stages">
