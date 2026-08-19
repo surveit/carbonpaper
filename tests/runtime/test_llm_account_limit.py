@@ -80,9 +80,19 @@ def test_a_row_stage_stops_on_the_first_exhausted_call(exhausted_account):
     assert exhausted_account["n"] <= len(_ROWS)
 
 
-def test_a_batched_stage_stops_rather_than_failing_every_chunk(exhausted_account):
+def test_a_batched_stage_stops_on_the_first_exhausted_chunk(exhausted_account, monkeypatch):
+    """Serial, so the count is exact: how many of a POOL's chunks get away is a race, not a promise."""
+    monkeypatch.setattr(HANDLERS[StageType.llm_transform], "parallelism", 1)
     with pytest.raises(AccountLimitReached):
         HANDLERS[StageType.llm_transform].execute(
             _placed(batch_size=2), as_inputs({"load": _ROWS.copy()}), make_run_context())
-    # Six chunks of two; the ones still queued behind the first failure never ran.
-    assert exhausted_account["n"] < len(_ROWS) // 2
+    assert exhausted_account["n"] == 1
+
+
+def test_a_batched_stage_never_retries_an_exhausted_chunk(exhausted_account):
+    with pytest.raises(AccountLimitReached):
+        HANDLERS[StageType.llm_transform].execute(
+            _placed(batch_size=2), as_inputs({"load": _ROWS.copy()}), make_run_context())
+    # Chunks already dispatched cannot be un-launched, so the bound is the number
+    # of chunks, never the 6 x 4 attempts an unguarded retry loop would spend.
+    assert exhausted_account["n"] <= len(_ROWS) // 2
