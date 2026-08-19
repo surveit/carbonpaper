@@ -67,8 +67,7 @@
         <option value="{{ f.sha256 }}">{{ f.filename }} — {{ f.bytes | filesize }}</option>
         {% endfor %}
       </select>
-      <input type="file" class="file-input" hidden>
-      <button type="button" class="btn browse-btn">Upload…</button>
+      <button type="button" class="btn browse-btn">Upload file…</button>
     </span>
     <label class="run-limit" title="read only the first N rows of this file, for this run">
       <span>first</span>
@@ -108,6 +107,29 @@
     </label>
   </details>
   <button type="submit" class="btn primary">▶ Run workflow</button>
+  {# One dialog serves every row, including rows rebuilt after a version change. #}
+  <dialog class="run-upload-dialog" aria-labelledby="run-upload-title">
+    <div class="run-upload-head">
+      <h2 id="run-upload-title">Upload a data file</h2>
+      <button type="button" class="run-upload-close" aria-label="Close upload dialog">×</button>
+    </div>
+    <p class="run-upload-lede">The file joins this project's files and will be selected
+      for <code class="run-upload-stage"></code>.</p>
+    <button type="button" class="run-upload-drop">
+      <strong>Drop a file here</strong>
+      <span>or choose one from this device</span>
+    </button>
+    <input type="file" class="run-upload-input" hidden>
+    <div class="run-upload-selection" hidden>
+      <strong class="run-upload-filename"></strong>
+      <span class="run-upload-size"></span>
+    </div>
+    <p class="run-upload-error" role="alert" hidden></p>
+    <div class="run-upload-actions">
+      <button type="button" class="btn run-upload-cancel">Cancel</button>
+      <button type="button" class="btn primary run-upload-submit" disabled>Upload file</button>
+    </div>
+  </dialog>
   {# Inert until run_controls.js clones it; a <template>'s fields are not part of
      the form, so the empty stage_id below is never submitted. #}
   <template class="run-input-template">{{ input_row("", "", []) }}</template>
