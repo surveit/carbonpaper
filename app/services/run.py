@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from functools import partial
 from pathlib import Path
 from typing import Any, Mapping
@@ -15,16 +16,26 @@ from pydantic import ValidationError
 from app.core.background import run_in_background
 from app.core.errors import RunVersionUnresolvableError
 from app.core.frames import read_frame_column_names
+from app.core.run_status import RunStatus, StageStatus
 from app.models import Workflow, WorkflowStage
-from app.models.run_manifest import read_run_bindings
+from app.models.run_manifest import (
+    RUN_INTERRUPTED_ERROR_TYPE,
+    StageErrorInfo,
+    StageRecord,
+    read_run_bindings,
+)
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.runtime.manifest import (
     RunEntry as RunEntry,
+    RunManifest,
+    list_all_run_entries,
     list_run_entries as list_run_entries,
     read_run_manifest,
     read_stage_output_frame,
     resolve_output_path,
+    write_manifest,
 )
+from app.runtime.run_log import STAGE_DONE, RunLog
 from app.runtime.runner import prepare_run, resume_run, run_prepared
 from app.runtime.citations import build_row_trace_url as build_row_trace_url
 from app.services.errors import WorkflowLoadError
@@ -35,6 +46,72 @@ from app.services.versioning import (
     resolve_version_id,
 )
 from app.services.workspace import resolve_run_dir, resolve_runs_dir
+
+
+_INTERRUPTED_DURING_STAGE_MESSAGE = (
+    "The server process stopped before this stage finished. "
+    "Carbon Paper cannot recover this stage's result."
+)
+_INTERRUPTED_BEFORE_STAGE_MESSAGE = (
+    "The server process stopped before this stage started. "
+    "Carbon Paper cannot continue the run automatically."
+)
+
+
+def reconcile_interrupted_runs() -> None:
+    for entry in list_all_run_entries():
+        manifest = entry.manifest
+        if manifest is None or manifest.status != RunStatus.RUNNING:
+            continue
+        _record_interrupted_run(manifest)
+
+
+def _record_interrupted_run(manifest: RunManifest) -> None:
+    finished_at = datetime.now().isoformat(timespec="seconds")
+    interrupted = [
+        record for record in manifest.stage_records if record.status == StageStatus.RUNNING
+    ]
+    if not interrupted:
+        interrupted = [
+            record for record in manifest.stage_records
+            if record.status == StageStatus.PENDING
+        ][:1]
+    for record in interrupted:
+        _record_interrupted_stage(record, finished_at)
+    manifest.status = RunStatus.ERRORS
+    manifest.finished_at = finished_at
+    write_manifest(manifest)
+    _append_interruption_events(manifest, interrupted)
+
+
+def _record_interrupted_stage(record: StageRecord, finished_at: str) -> None:
+    started = record.started_at is not None
+    message = _INTERRUPTED_DURING_STAGE_MESSAGE if started else _INTERRUPTED_BEFORE_STAGE_MESSAGE
+    record.status = StageStatus.ERROR
+    if started:
+        record.finished_at = finished_at
+    record.error = StageErrorInfo(
+        type=RUN_INTERRUPTED_ERROR_TYPE,
+        message=message,
+        traceback=None,
+    )
+
+
+def _append_interruption_events(
+    manifest: RunManifest, interrupted: list[StageRecord]
+) -> None:
+    log = RunLog(manifest.project, manifest.run_id)
+    for record in interrupted:
+        if record.started_at is None:
+            continue
+        log.emit({
+            "kind": STAGE_DONE,
+            "stage": record.stage_id,
+            "status": record.status,
+            "rows": record.output_row_count,
+            "error": record.error.message if record.error is not None else None,
+        })
+    log.close()
 
 
 def start_run(

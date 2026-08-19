@@ -36,3 +36,14 @@ def test_lifespan_does_not_overwrite_a_configured_store(monkeypatch, tmp_path):
             assert not (tmp_path / "should_not_be_created.db").exists()
 
     asyncio.run(drive())
+
+
+def test_lifespan_reconciles_interrupted_runs(monkeypatch):
+    calls = []
+    monkeypatch.setattr("app.main.reconcile_interrupted_runs", lambda: calls.append(True))
+
+    async def drive() -> None:
+        async with lifespan(app):
+            assert calls == [True]
+
+    asyncio.run(drive())

@@ -51,6 +51,7 @@ class StageContribution(BaseModel):
 # schema it declares. Nothing was raised: the data is not what the stage says it is,
 # which is the data owner's to fix, not the author of the code's.
 SCHEMA_REFUSAL_ERROR_TYPE = "OutputSchemaViolation"
+RUN_INTERRUPTED_ERROR_TYPE = "RunInterrupted"
 
 
 class StageErrorInfo(BaseModel):
@@ -128,4 +129,3 @@ def read_run_bindings(
     if isinstance(nested, dict) and "run_bindings" in nested:
         return dict(nested["run_bindings"] or {})
     return dict(raw.get("run_bindings") or {})
-

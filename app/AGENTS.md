@@ -76,7 +76,8 @@ The counts are the summary, so a closed panel still says something is wrong.
   message naming which failure it is, because they route to different people: a schema
   refusal (`OutputSchemaViolation`) says the data changed and links the panel's **Data** tab;
   an authored `StepRefused` reads `Input validation failed on <stage id>` and links its
-  **Transform** tab; any other exception is the code's and keeps its type.
+  **Transform** tab; `RunInterrupted` says the server stopped; any other exception is the
+  code's and keeps its type.
   What only a stop carries nests under its own line through the row macro's call block — the
   columns it refused, the reason its author wrote, its traceback, and the stages downstream
   that never ran, read off the pinned version's edges (with no readable version it names none

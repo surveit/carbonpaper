@@ -1,15 +1,14 @@
 """The run page's issue index (app/web/run_issues.py + _run_issues.html).
 ONE list: the stop that ended the run is a line of it like any other. The two
-three failures a stop can be reporting — the stage's output, the input its author
-refused, the code — must still read apart at a glance, because they route to
-different people.
+Four failures a stop can report — output, authored refusal, server interruption,
+or code — must read apart because they route to different people.
 """
 from __future__ import annotations
 
 from typing import Any
 
 from app.models import StepRefused, parse_stage
-from app.models.run_manifest import SCHEMA_REFUSAL_ERROR_TYPE
+from app.models.run_manifest import RUN_INTERRUPTED_ERROR_TYPE, SCHEMA_REFUSAL_ERROR_TYPE
 from app.web.config import templates
 from app.web.panel_links import AppPanelLinks
 from app.web.run_issues import StopKind, build_run_issues
@@ -89,6 +88,17 @@ def _crash(stage_id: str) -> dict[str, Any]:
     )
 
 
+def _interrupted(stage_id: str) -> dict[str, Any]:
+    return _record(
+        stage_id, "error",
+        error={
+            "type": RUN_INTERRUPTED_ERROR_TYPE,
+            "message": "The server process stopped before this stage finished.",
+            "traceback": None,
+        },
+    )
+
+
 REFUSAL_REASON = "the counting steps produced ['manual_merge_rules'], which this workbook has no wording for"
 
 
@@ -126,6 +136,12 @@ def test_an_authored_refusal_is_the_datas_story_not_the_codes():
 
     assert stop.kind is StopKind.refused
     assert stop.error_message == REFUSAL_REASON
+
+
+def test_an_interrupted_run_is_not_reported_as_broken_code():
+    stop = build_run_issues(_manifest(_interrupted("translate")), None).stopped[0]
+
+    assert stop.kind is StopKind.interrupted
 
 
 def test_a_stop_names_the_downstream_stages_that_never_ran():
@@ -237,6 +253,9 @@ def test_each_stop_story_is_worded_apart_in_the_markup():
     assert ("Input validation failed on publish_workbook"
             in _render(_manifest(_refused("publish_workbook"))))
     assert "the code broke" in _render(_manifest(_crash("publish_report")))
+    interrupted = _render(_manifest(_interrupted("translate")))
+    assert "the server stopped before this stage finished" in interrupted
+    assert "the code broke" not in interrupted
 
 
 def test_a_data_refusal_deep_links_the_panels_data_tab():

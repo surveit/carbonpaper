@@ -22,9 +22,10 @@
     {# The description comes from the pinned definition, so a run whose version
        no longer resolves shows no line rather than a guessed one. #}
     {% if stage_def %}<p class="stage-blurb">{{ stage_def.description }}</p>{% endif %}
+    {% set interrupted = stage.error and stage.error.type == 'RunInterrupted' %}
     <p class="stage-facts">
         <span class="run-status status-{{ stage.status }}">{{ stage.status }}</span>
-        <span>{{ stage.elapsed_ms | friendly_duration }} · {{ "{:,}".format(stage.output_row_count or 0) }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}
+        <span>{% if not interrupted %}{{ stage.elapsed_ms | friendly_duration }} · {% endif %}{{ "{:,}".format(stage.output_row_count or 0) }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}
         {%- if stage.llm_usage and stage.llm_usage.calls %} · {{ "{:,}".format(stage.llm_usage.calls) }} model call{% if stage.llm_usage.calls != 1 %}s{% endif %}, {{ stage.llm_usage.cost_usd | usd }}{% endif %}
         {%- if stage.finished_at %} · finished {{ stage.finished_at | friendly_time }}{% endif %}</span>
     </p>

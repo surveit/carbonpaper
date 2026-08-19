@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from app.core.errors import RunVersionUnresolvableError
 from app.core.run_status import RunStatus, StageStatus
+from app.models.run_manifest import RUN_INTERRUPTED_ERROR_TYPE
 from app.services import run as run_service
 from app.web.stage_strip import (
     StageStrip,
@@ -196,12 +197,22 @@ def format_duration(seconds: float) -> str:
 
 
 def describe_run_duration(manifest: Mapping[str, Any]) -> str | None:
+    if _has_interrupted_stage(manifest):
+        return None
     seconds = measure_elapsed_seconds(
         _read_text(manifest.get("started_at")),
         _read_text(manifest.get("finished_at")),
         still_running=manifest.get("status") == RunStatus.RUNNING,
     )
     return None if seconds is None else format_duration(seconds)
+
+
+def _has_interrupted_stage(manifest: Mapping[str, Any]) -> bool:
+    for record in read_stage_records(manifest):
+        error = record.get("error")
+        if isinstance(error, Mapping) and error.get("type") == RUN_INTERRUPTED_ERROR_TYPE:
+            return True
+    return False
 
 
 def read_file_name(path: str) -> str:

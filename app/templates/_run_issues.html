@@ -10,13 +10,12 @@
   href navigate, which is exactly what the packet needs.
 
   A stop — the stage that ENDED the run — is a line of this list like any other,
-  first and marked `stopped`. Its message names WHICH of the three failures it is,
+  first and marked `stopped`. Its message names WHICH of the four failures it is,
   because they route to different people: the stage's output no longer matches what
   it declares (the data owner's), its authored code refused the input it was handed
-  (the author's), or the code broke (the engineer's). The first links the panel's
-  Data tab, the other two its Transform tab. What only a stop has — the columns it
-  refused, the reason its author wrote, the traceback, the stages downstream that
-  never ran — is nested under its own line.
+  (the author's), the server stopped, or the code broke (the engineer's). The first
+  links the panel's Data tab; the others link Transform. What only a stop has nests
+  under its own line.
 
   Drawn with the issue table the Workflow page's compiler warnings also use.
 
@@ -39,6 +38,8 @@
            if stop.kind == 'schema' else
          "Input validation failed on " ~ stop.stage_id
            if stop.kind == 'refused' else
+         "the server stopped before this stage finished"
+           if stop.kind == 'interrupted' else
          "the code broke — raised " ~ stop.error_type ~ " while it ran")) %}
     {% if stop.kind == 'schema' %}
     <ul>{% for issue in stop.issues %}

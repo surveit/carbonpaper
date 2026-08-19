@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from app.core.run_status import StageStatus
 from app.models import StepRefused, WorkflowStage
-from app.models.run_manifest import SCHEMA_REFUSAL_ERROR_TYPE
+from app.models.run_manifest import RUN_INTERRUPTED_ERROR_TYPE, SCHEMA_REFUSAL_ERROR_TYPE
 from app.models.severity import UserFacingErrorSeverity
 from app.web.stage_strip import read_stage_records
 
@@ -21,6 +21,7 @@ from app.web.stage_strip import read_stage_records
 class StopKind(str, Enum):
     schema = "schema"    # the output carries values its declared schema forbids
     refused = "refused"  # authored code raised StepRefused on what it was given
+    interrupted = "interrupted"  # the server process ended before the run completed
     crash = "crash"      # anything else raised, a per-row generation failure included
 
 
@@ -28,6 +29,7 @@ class StopKind(str, Enum):
 _KIND_BY_ERROR_TYPE = {
     SCHEMA_REFUSAL_ERROR_TYPE: StopKind.schema,
     StepRefused.__name__: StopKind.refused,
+    RUN_INTERRUPTED_ERROR_TYPE: StopKind.interrupted,
 }
 
 

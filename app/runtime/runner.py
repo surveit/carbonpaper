@@ -186,6 +186,7 @@ def resume_run(
     # that same manifest via the executor's per-stage merge.
 
     manifest.resumed_at = datetime.now().isoformat(timespec="seconds")
+    manifest.finished_at = None
     # Drop the halt marker the halted run left behind: the run is no longer
     # halted — it is resuming — so a mid-run flush() (which persists status
     # `running`) must not carry `halted_at`, or the run page would show the

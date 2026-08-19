@@ -10,9 +10,11 @@ from pathlib import Path
 
 import pytest
 
+from app.models.run_manifest import RUN_INTERRUPTED_ERROR_TYPE
 from app.web.config import templates
 from app.web.run_header import (
     VersionNote,
+    build_live_view,
     build_run_header,
     choose_run_cta,
     find_halted_stage_ids,
@@ -277,6 +279,23 @@ def test_a_running_run_started_with_an_offset_still_gets_a_duration():
     seconds = measure_elapsed_seconds("2026-07-20T21:00:00+00:00", None,
                                       still_running=True)
     assert seconds is not None and seconds > 0
+
+
+def test_an_interrupted_run_suppresses_the_unknown_overall_duration():
+    manifest = _manifest(
+        "errors",
+        [("translate", "error")],
+        finished_at="2026-07-30T12:05:56",
+    )
+    manifest["stage_records"][0]["error"] = {
+        "type": RUN_INTERRUPTED_ERROR_TYPE,
+        "message": "The server process stopped before this stage finished.",
+        "traceback": None,
+    }
+
+    assert build_live_view(PROJECT, RUN, manifest).duration is None
+    manifest["stage_records"][0]["error"]["type"] = "KeyError"
+    assert build_live_view(PROJECT, RUN, manifest).duration == "1m 00s"
 
 
 @pytest.mark.parametrize("path,expected", [

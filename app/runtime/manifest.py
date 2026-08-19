@@ -1,6 +1,6 @@
 """The run manifest: its shape, minting one, storing it, and reading back the
-frames its stages wrote. The executor (`app.runtime.executor`) is its single
-writer. The per-stage pieces it embeds are `app.models.run_manifest`.
+frames its stages wrote. The executor and startup reconciliation write it through
+`write_manifest`. The per-stage pieces it embeds are `app.models.run_manifest`.
 """
 
 from __future__ import annotations
@@ -239,6 +239,18 @@ def list_run_entries(project_id: str, area: str = PRODUCTION_RUNS) -> list[RunEn
         for doc_id in get_store().list_ids(RunManifest.collection, prefix)
     ]
     return sorted(entries, key=lambda e: e.run_id)
+
+
+def list_all_run_entries(area: str = PRODUCTION_RUNS) -> list[RunEntry]:
+    """Every parseable or unreadable run in `area`, ordered by project then id."""
+    entries = []
+    for doc_id in get_store().list_ids(RunManifest.collection):
+        parts = doc_id.split("/")
+        if len(parts) != 3 or parts[1] != area:
+            continue
+        project_id, _, run_id = parts
+        entries.append(_read_entry(doc_id, run_id, project_id, area))
+    return sorted(entries, key=lambda e: (e.project, e.run_id))
 
 
 def _read_entry(doc_id: str, run_id: str, project_id: str, area: str) -> RunEntry:
