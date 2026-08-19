@@ -398,6 +398,24 @@
     } finally { panel.classList.remove('loading'); }
   }
   window._loadStage = loadStage;
+
+  // The stage strip's squares open the same panel a graph-node click does —
+  // delegated, since the poller replaces their class/title but not the elements.
+  const strip = document.getElementById('stage-strip');
+  if (strip) {
+    const stageIdFrom = target => target.closest('i[data-stage-id]');
+    strip.addEventListener('click', function (e) {
+      const square = stageIdFrom(e.target);
+      if (square) loadStage(square.dataset.stageId, { reveal: true });
+    });
+    strip.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const square = stageIdFrom(e.target);
+      if (!square) return;
+      e.preventDefault();
+      loadStage(square.dataset.stageId, { reveal: true });
+    });
+  }
   // animate:false on both arrival paths — the reader has just landed, so there is no
   // position they were looking at for a scroll to carry them away from.
   if (location.hash) loadStage(decodeURIComponent(location.hash.slice(1)), { animate: false });
@@ -445,6 +463,12 @@
         if (open) focusGraphNode(open, { pulse: false });   // the reader did not move: restore only
       } catch (e) {}
     }
+    function formatProgress(progress) {
+      if (!progress) return '';
+      return progress.total != null
+        ? `${progress.completed}/${progress.total} rows`
+        : `${progress.completed} rows`;
+    }
     function paintStrip(stages, tallies) {
       const strip = $('stage-strip');
       if (strip) {
@@ -452,7 +476,8 @@
           const square = strip.querySelector(`i[data-stage-id="${CSS.escape(s.stage_id)}"]`);
           if (!square) return;
           square.className = 'status-' + s.status;
-          square.title = `${s.stage_id} — ${s.status}`;
+          const progress = formatProgress(s.progress);
+          square.title = progress ? `${s.stage_id} — ${s.status} (${progress})` : `${s.stage_id} — ${s.status}`;
         });
       }
       const counts = $('strip-counts');
@@ -470,7 +495,12 @@
       let d; try { const r = await fetch(statusUrl, { cache: 'no-store' }); if (!r.ok) return; d = await r.json(); } catch (e) { return; }
       const h = d.header;
       const duration = $('run-duration'); if (duration && h.duration) duration.textContent = h.duration;
-      const aside = $('cta-aside'); if (aside) aside.textContent = h.aside || '';
+      const aside = $('cta-aside');
+      if (aside) {
+        const running = d.stages.find(s => s.status === 'running');
+        const progress = running ? formatProgress(running.progress) : '';
+        aside.textContent = progress ? `${h.aside || ''} · ${progress}` : (h.aside || '');
+      }
       paintStrip(d.stages, h.tallies);
 
       const sig = d.stages.map(s => s.status).join(',');

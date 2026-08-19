@@ -37,7 +37,8 @@
 .cta-aside { font-size: .82rem; color: var(--muted); }
 
 /* ── The stage strip (_stage_strip.html): one square per stage in topological
-      order, coloured by status. Status only — the squares are not links.
+      order, coloured by status. On the run page a square opens that stage's
+      panel; the runs-index twin stays status-only.
 
       The squares divide the row's width rather than each claiming 26px, because
       a fixed width silently drops the overflow: the reader counts fewer squares
@@ -48,6 +49,12 @@
 .stage-strip { display: flex; gap: 3px; align-items: flex-end; width: 100%; }
 .stage-strip i { display: block; height: 16px; border-radius: 3px;
     flex: 1 1 0; min-width: 3px; max-width: 26px; }
+/* Only the run page's own strip (id="stage-strip") has a stage panel to open;
+   the runs-index twin renders with no id and stays inert. */
+#stage-strip i { cursor: pointer; }
+#stage-strip i:hover, #stage-strip i:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 1px;
+}
 /* The runs-index twin sits inline in a table cell, so it keeps its intrinsic
    width — the cell, not the strip, decides how much room there is. */
 .stage-strip.compact { display: inline-flex; gap: 2px; width: auto; vertical-align: -2px; }
