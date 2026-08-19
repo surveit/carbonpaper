@@ -5,6 +5,7 @@ import json
 from typing import Any, Callable
 
 import pytest
+from claude_agent_sdk import ClaudeSDKError
 from pydantic import BaseModel
 
 from app.core.agent.agent import Agent
@@ -98,6 +99,41 @@ def test_run_returns_the_submitted_answer_after_a_retry(monkeypatch: Any) -> Non
     monkeypatch.setattr(agent, "build_engine", lambda: fake)
     result = asyncio.run(agent.run())
     assert result == _Point(x=1, y=2)
+
+
+def test_run_returns_an_accepted_answer_after_a_later_sdk_error(
+    monkeypatch: Any,
+) -> None:
+    agent = _agent()
+
+    class _LaterSdkError:
+        async def stream_turn(
+            self, task: str, *, message_history: Any, emit: Any, resume: Any,
+        ) -> tuple[list[Any], None]:
+            agent.submit_answer(x=1, y=2)
+            raise ClaudeSDKError("the model took another turn")
+
+    monkeypatch.setattr(agent, "build_engine", _LaterSdkError)
+
+    assert asyncio.run(agent.run()) == _Point(x=1, y=2)
+
+
+def test_run_propagates_sdk_error_after_a_rejected_answer(monkeypatch: Any) -> None:
+    agent = _agent()
+
+    class _RejectedThenSdkError:
+        async def stream_turn(
+            self, task: str, *, message_history: Any, emit: Any, resume: Any,
+        ) -> tuple[list[Any], None]:
+            with pytest.raises(ValueError):
+                agent.submit_answer(x=1)
+            assert agent.answer is None
+            raise ClaudeSDKError("the model took another turn")
+
+    monkeypatch.setattr(agent, "build_engine", _RejectedThenSdkError)
+
+    with pytest.raises(ClaudeSDKError, match="the model took another turn"):
+        asyncio.run(agent.run())
 
 
 def test_run_raises_when_no_valid_answer_is_submitted(monkeypatch: Any) -> None:

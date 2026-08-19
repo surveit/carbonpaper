@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Generic, TypeVar
 
+from claude_agent_sdk import ClaudeSDKError
 from pydantic import BaseModel, ValidationError
 
 from app.core.agent.diagnostics import AgentRunDiagnostics, summarize_run
@@ -129,11 +130,16 @@ class Agent(Generic[Model]):
             if emit is not None:
                 emit(event)
 
-        await engine.stream_turn(
-            self._task, message_history=None, emit=tee, resume=None
-        )
-        # getattr, not attribute access: a custom engine need not track usage.
-        self._last_usage = getattr(engine, "last_usage", None)
+        try:
+            await engine.stream_turn(
+                self._task, message_history=None, emit=tee, resume=None
+            )
+        except ClaudeSDKError:
+            if self._answer is None:
+                raise
+        finally:
+            # getattr, not attribute access: a custom engine need not track usage.
+            self._last_usage = getattr(engine, "last_usage", None)
         if self._answer is None:
             raise GenerationError(self._summarize_failure(events).render())
         return self._answer
