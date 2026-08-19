@@ -180,6 +180,7 @@
     .step-inner > p { max-width: 42rem; }
     .stage-wrap { display: none; }
     .mobile-frame { display: block; margin-top: 1.2rem; }
+    .mobile-frame:empty { display: none; }
     .static-scene { position: relative; width: 100%; min-height: 0;
                     display: grid; grid-template-columns: 10rem minmax(0, 1fr) 11rem;
                     gap: 1.6rem; align-items: center; }
@@ -192,9 +193,20 @@
     .static-scene .cloud .blob { animation: none; }
     .static-scene .graph-hold { overflow-x: auto; }
     .static-scene .graph-hold svg { min-width: 44rem; }
+    .static-scene.static-solo-q .zone.q { grid-column: 1 / -1; max-width: 20rem; margin: auto; }
+    .static-scene.static-solo-mid .zone.mid,
+    .static-scene.static-solo-out .zone.out { grid-column: 1 / -1; }
+    .static-scene.static-solo-out .out { text-align: center; }
+    .static-scene.static-solo-out .out .fade { position: relative; right: auto; top: auto; transform: none; }
+    .static-scene.static-overlay-only .mid { min-height: 0; }
+    .static-scene.static-overlay-only .over { position: relative; inset: auto !important;
+                                               width: 100% !important; max-width: 100%;
+                                               margin: 0 auto; transform: none !important; }
     .static-scene .node.lit rect { stroke: var(--accent); }
     .static-scene .focus .node, .static-scene .focus .flow { opacity: .24; }
     .static-scene .focus .node.lit, .static-scene .focus .flow.lit { opacity: 1; }
+    .static-scene .static-neutral-focus .node,
+    .static-scene .static-neutral-focus .flow { opacity: 1; }
     .static-scene .flow.lit .gflow { stroke: var(--accent); stroke-width: 2.4; }
     .static-scene .chain .node rect { stroke: var(--accent); }
     .static-scene .recede { opacity: .26; }
@@ -524,6 +536,20 @@ const SCENES = {
   11: {ask: 1, layer: 'graph', out: 'ran', recede: 1, over: '11'},
 };
 
+const STATIC_BEATS = {
+  1: {scene: {ask: 1}},
+  2: {scene: {layer: 'cloud'}},
+  3: null,
+  4: {scene: {out: 'said'}, result: true},
+  5: {scene: {layer: 'graph'}},
+  6: {scene: {layer: 'graph', nodes: ['clean'], pin: '6'}, viewBox: '150 70 220 100'},
+  7: {scene: {layer: 'graph', nodes: ['clean'], pin: '7'}, viewBox: '150 70 220 100'},
+  8: {scene: {layer: 'graph', nodes: ['llm']}, neutralFocus: true},
+  9: {scene: {out: 'ran'}},
+  10: {scene: {layer: 'graph', nodes: ALL_NODES, edges: ALL_EDGES, over: '10'}},
+  11: {scene: {over: '11'}},
+};
+
 function applyScene(stage, scene, markers) {
   const layers = new Map([...stage.querySelectorAll('.layer')].map(el => [el.dataset.layer, el]));
   const fades = new Map([...stage.querySelectorAll('.fade')].map(el => [el.dataset.fade, el]));
@@ -547,6 +573,9 @@ function applyScene(stage, scene, markers) {
   zoneQ.classList.toggle('static-visible', !!scene.ask);
   zoneMid.classList.toggle('static-visible', !!scene.layer);
   zoneOut.classList.toggle('static-visible', !!scene.out);
+  stage.classList.toggle('static-solo-q', !!scene.ask && !scene.layer && !scene.out);
+  stage.classList.toggle('static-solo-mid', !!scene.layer && !scene.ask && !scene.out);
+  stage.classList.toggle('static-solo-out', !!scene.out && !scene.ask && !scene.layer);
 
   const partial = scene.nodes && scene.nodes.length < ALL_NODES.length;
   pipe.classList.toggle('focus', !!partial);
@@ -558,6 +587,18 @@ function applyScene(stage, scene, markers) {
     el.classList.toggle('lit', lit);
     const marker = lit ? markers.lit : markers.base;
     el.querySelector('.gflow').setAttribute('marker-end', `url(#${marker})`);
+  }
+}
+
+function configureStaticBeat(stage, beat) {
+  const pipe = stage.querySelector('[data-pipeline]');
+  pipe.classList.toggle('static-neutral-focus', !!beat.neutralFocus);
+  if (beat.viewBox) pipe.setAttribute('viewBox', beat.viewBox);
+  if (beat.result) stage.querySelector('.tag').textContent = 'model said';
+  if (beat.scene.over && !beat.scene.layer) {
+    const mid = stage.querySelector('.zone.mid');
+    mid.classList.add('static-visible', 'static-overlay-only');
+    mid.append(stage.querySelector(`[data-over="${beat.scene.over}"]`));
   }
 }
 
@@ -579,12 +620,14 @@ function renameStaticMarkers(stage, step) {
 
 function renderStaticScenes() {
   for (const step of document.querySelectorAll('.step')) {
-    const scene = SCENES[Number(step.dataset.step)];
+    const beat = STATIC_BEATS[Number(step.dataset.step)];
+    if (!beat) continue;
     const frame = step.querySelector('.mobile-frame');
     const clone = sourceStage.cloneNode(true);
     clone.classList.add('static-scene');
     const markers = renameStaticMarkers(clone, step.dataset.step);
-    applyScene(clone, scene, markers);
+    applyScene(clone, beat.scene, markers);
+    configureStaticBeat(clone, beat);
     frame.append(clone);
   }
 }
