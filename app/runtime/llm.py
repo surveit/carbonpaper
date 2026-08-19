@@ -8,17 +8,20 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 from pydantic import BaseModel
 
 from app.core.agent.agent import Agent
+from app.core.agent.codex_engine import EmitEvent
 from app.core.agent.usage import LlmUsage
 from app.core.errors import LLMError
+from app.core.llm.options import LLMModel
 from app.core.llm_sdk import run_sync
 from app.core.agent.sdk_engine import ThinkingConfig
 from app.models.stages.llm_transform import LLMConfig, ThinkingMode
 
+from .codex_transform import call_codex_transform
 from .options import (
     DEFAULT_MODEL,
     DEFAULT_TIMEOUT_S,
@@ -89,9 +92,19 @@ def call_llm(
     if not llm_config.prompt_data_template:
         raise LLMError(f"stage {stage_id}: llm_transform has no prompt_data_template")
     task = render_prompt(llm_config.prompt_data_template, input_row)
-    model_name = str(model or llm_config.model or DEFAULT_MODEL)
+    selected_model = _resolve_model(model, llm_config)
+    system_prompt = _compose_system(llm_config.prompt_instructions)
+    if selected_model.backend == "codex":
+        return _run_codex_row(
+            system_prompt,
+            task,
+            reply_model,
+            selected_model,
+            llm_config.max_retries,
+            usage_out,
+        )
     return _run_agent(
-        _compose_system(llm_config.prompt_instructions), task, reply_model, model_name,
+        system_prompt, task, reply_model, str(selected_model),
         llm_config.max_retries, usage_out, tools=llm_config.tools,
         thinking=llm_config.thinking,
     )
@@ -107,10 +120,10 @@ def call_llm_batch(
     model: str | None = None,
     usage_out: list[LlmUsage] | None = None,
 ) -> dict[str, Any]:
-    model_name = str(model or llm_config.model or DEFAULT_MODEL)
+    selected_model = _resolve_model(model, llm_config)
     # No tools by construction: LLMConfig refuses tools with batch_size > 1.
     return _run_agent(
-        _compose_system(instructions), task, reply_schema, model_name,
+        _compose_system(instructions), task, reply_schema, str(selected_model),
         llm_config.max_retries, usage_out, thinking=llm_config.thinking,
     )
 
@@ -123,6 +136,34 @@ def _thinking_config(mode: "ThinkingMode | None") -> ThinkingConfig | None:
 
 def _compose_system(instructions: str) -> str:
     return SYSTEM_PROMPT if not instructions else SYSTEM_PROMPT + "\n\n" + instructions
+
+
+def _resolve_model(model: str | None, llm_config: LLMConfig) -> LLMModel:
+    if model is not None:
+        return LLMModel.parse(model, source="model")
+    return LLMModel(llm_config.model or DEFAULT_MODEL)
+
+
+def _run_codex_row(
+    system_prompt: str,
+    task: str,
+    reply_model: type[BaseModel],
+    model: LLMModel,
+    max_retries: int,
+    usage_out: list[LlmUsage] | None,
+) -> dict[str, Any]:
+    emit_llm_detail(LLM_PROMPT, text=task)
+    emit = cast(EmitEvent | None, _forward_agent_events(current_detail_sink()))
+    reply, usage = call_codex_transform(
+        system_prompt,
+        task,
+        reply_model,
+        model,
+        max_retries,
+        emit,
+    )
+    _record_returned_usage(usage_out, usage)
+    return reply
 
 
 def _run_agent(
@@ -206,3 +247,10 @@ def _record_usage(
     """`model_name` is stamped here because this is where `model or llm.model or DEFAULT_MODEL` resolved."""
     if usage_out is not None and agent.last_usage is not None:
         usage_out.append(agent.last_usage.model_copy(update={"model": model_name}))
+
+
+def _record_returned_usage(
+    usage_out: list[LlmUsage] | None, usage: LlmUsage
+) -> None:
+    if usage_out is not None:
+        usage_out.append(usage)
