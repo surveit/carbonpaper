@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import RedirectResponse
 
 from app.runtime.manifest import RunManifest
-from app.services.run_archive import archive_run, unarchive_run
+from app.services.run_manifest_metadata import archive_run, unarchive_run
 from app.web.project_view import validate_project_or_404
 
 router = APIRouter()

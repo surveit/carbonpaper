@@ -13,11 +13,12 @@ All routes live under `/project/{project}/…`.
 
 - One row per stored run, newest first, drawn from `app.web.run_index`. A run
   whose record will not parse still gets a row, from its id alone.
-- **Archiving** (`app/web/routers/run_archive.py` → `app/services/run_archive.py`)
-  moves a run between the two lists and does nothing else: an `archived_run`
-  record is written beside the run, the run's own manifest is never touched, and
-  the run page, its outputs and the spend it counts toward are unaffected. The
-  runs picker lists the unarchived side.
+- **Archiving** (`app/web/routers/run_archive.py` →
+  `app/services/run_manifest_metadata.py`) moves a run between the two lists and
+  does nothing else: a `run_manifest_metadata` record — what the operator records
+  about a run, as against what the run recorded about itself — carries the flag,
+  the run's own manifest is never touched, and the run page, its outputs and the
+  spend it counts toward are unaffected. The runs picker lists the unarchived side.
 
 ## Run detail page (`run_detail.html`)
 

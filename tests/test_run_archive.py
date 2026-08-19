@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.services import workspace
 from app.services.methodology import write_methodology
+from app.services.run_manifest_metadata import read_run_metadata
 from app.web.run_index import build_run_index_rows, count_archived_runs
 from run_seed import read_manifest, store_manifest, store_manifest_text
 
@@ -85,6 +86,17 @@ def test_archiving_a_run_twice_archives_it_once(project_dir: Path):
 
     assert count_archived_runs(project_dir.name) == 1
     assert run_ids(project_dir, archived=True) == [RUN_ID]
+
+
+def test_a_restored_run_keeps_the_one_record_that_archived_it(project_dir: Path):
+    # Restoring edits the record; it must not delete what else it holds.
+    seed_run(project_dir)
+
+    archive(project_dir)
+    restore(project_dir)
+
+    record, = read_run_metadata(project_dir.name)
+    assert (record.run_id, record.archived) == (RUN_ID, False)
 
 
 def test_archiving_leaves_the_run_record_untouched(project_dir: Path):
