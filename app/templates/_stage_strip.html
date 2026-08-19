@@ -1,8 +1,10 @@
 {#
   STAGE STRIP — one square per stage, in the run's topological order, coloured by
-  that stage's status. Status only: the squares are not links and have no hover
-  panel. It is the run page's progress row and alert strip in one object, and the
-  runs index renders the same strip in its `result` column.
+  that stage's status. It is the run page's progress row and alert strip in one
+  object, and the runs index renders the same strip in its `result` column. On the
+  run page (strip_id set) a square opens that stage's panel, the same jump a graph
+  node gives; the runs-index twin sits in a table row that already links elsewhere,
+  so it stays status-only there.
 
   Context:
     strip       = app.web.stage_strip.StageStrip
@@ -13,7 +15,8 @@
       {% if strip_id %}id="{{ strip_id }}"{% endif %}>
   {%- for square in strip.squares -%}
   <i class="status-{{ square.status }}" data-stage-id="{{ square.stage_id }}"
-     title="{{ square.stage_id }} — {{ square.status }}"></i>
+     title="{{ square.stage_id }} — {{ square.status }}"
+     {% if strip_id %}role="button" tabindex="0"{% endif %}></i>
   {%- endfor -%}
 </span>
 {% if show_counts %}
