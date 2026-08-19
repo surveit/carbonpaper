@@ -91,9 +91,14 @@ stays the source of truth for stage status; this log is only ever the drill-down
   cache answered emits ONE `row_ok` marked `cached` — no `row_start`, no LLM detail,
   because nothing ran.
 - **Detail attribution.** The row driver binds a `DetailSink` ContextVar for the duration of
-  one GROUP of rows, over the input positions that group covers, so `llm.py` can log the prompt/thinking/response several frames down without a
-  log being threaded through every mapper. The binding happens on the worker thread that
-  makes the call — a pool thread starts with an empty context.
+  one GROUP of rows, over the input positions that group covers, so `llm.py` can log the
+  prompt/thinking/response several frames down without a log being threaded through every
+  mapper. The binding happens on the worker thread that makes the call — a pool thread starts
+  with an empty context. Every emitter in `row_events.py` takes `RunLog | None` and no-ops on
+  None, so the driver never branches on whether logging is on.
+- **One function per group.** `_StageExecution.run_group` maps, validates, logs the outcome and
+  records, in that order, as straight-line statements. It is deliberately not composed from
+  wrappers: the order is the content, and nesting hides it.
 
 ## LLM backend (`llm_transform`)
 - `options.py` `require_agent_backend()` raises unless the agent backend can run
