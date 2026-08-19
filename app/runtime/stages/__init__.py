@@ -28,7 +28,7 @@ from .filter_rows import make_filter_mapper
 from .human_review_queue import make_human_review_mapper
 from .input_data import preflight_input_data, read_input_data
 from .join import handle_enrich, handle_expand
-from .llm_transform import make_llm_row_mapper, run_llm_batches
+from .llm_transform import make_llm_batch_mapper, make_llm_row_mapper
 from .publish import handle_publish
 from .python_functions import handle_python_frame_function, make_python_row_mapper
 from .starlark_functions import make_starlark_row_mapper
@@ -56,7 +56,7 @@ HANDLERS: dict[StageType, StageHandler] = {
     StageType.aggregate: FrameTransformHandler(handle_aggregate, caches_frames=False),
     StageType.llm_transform: LLMTransformHandler(
         make_llm_row_mapper,
-        run_llm_batches,
+        make_llm_batch_mapper,
         parallelism=DEFAULT_PARALLEL,
         trims_output_to_declared=True,
     ),

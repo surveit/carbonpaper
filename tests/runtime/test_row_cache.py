@@ -22,9 +22,9 @@ from app.runtime.stages.execution import (
     ROW_USAGE_KEY,
     Row,
     RowMapTransformHandler,
-    _order_by_input_position,
+    _place_group,
 )
-from app.runtime.stages.llm_transform import run_llm_batches
+from app.runtime.stages.llm_transform import make_llm_batch_mapper
 from conftest import as_inputs, make_run_context, place_stage, rows_of
 
 PROJECT = "row-cache-tests"
@@ -416,33 +416,29 @@ def test_batched_path_without_project_scope_calls_the_model_every_time(monkeypat
     assert batches == [[1, 2], [1, 2]]
 
 
-# ── the batched path's scatter back into input order ────────────────────────
+# ── the group's slot fill ────────────────────────────────────────────────────
 
 
-def test_the_scatter_puts_every_row_back_in_its_own_input_position():
-    hits = {0: {"x": 0, "from": "cache"}, 3: {"x": 3, "from": "cache"}}
-    computed = [{"x": 1, "from": "model"}, {"x": 2, "from": "model"}]
+def test_a_group_fills_the_input_positions_it_was_given():
+    results: list[dict | None] = [None] * 4
 
-    rows = _order_by_input_position(_llm_stage(), hits, [1, 2], computed, 4)
+    _place_group(results, (1, 2), [{"x": 1}, {"x": 2}], "score")
 
-    assert [row["x"] for row in rows] == [0, 1, 2, 3]
-    assert [row["from"] for row in rows] == ["cache", "model", "model", "cache"]
+    assert results == [None, {"x": 1}, {"x": 2}, None]
 
 
-def test_the_scatter_refuses_a_result_that_is_not_one_row_per_miss():
-    with pytest.raises(RuntimeError, match="batched execution returned 1 rows"):
-        _order_by_input_position(_llm_stage(), {}, [0, 1], [{"x": 0}], 2)
+def test_a_group_returning_the_wrong_row_count_is_refused():
+    with pytest.raises(RuntimeError, match="returned 1 row\\(s\\) for 2 input row"):
+        _place_group([None, None], (0, 1), [{"x": 0}], "score")
 
 
-def test_run_llm_batches_computes_every_row_it_is_given(monkeypatch):
+def test_the_batch_mapper_computes_every_row_it_is_given(monkeypatch):
     batches: list[list[int]] = []
     _stub_call_llm_batch(monkeypatch, batches)
     stage = _llm_stage(batch_size=2)
-    _run(stage, _src([1, 2]), _ctx(run_id="seed"))
-    batches.clear()
 
-    rows = run_llm_batches(
-        place_stage(stage), as_inputs({"src": _src([1, 2])}), _ctx(run_id="direct"), 1, [0, 1])
+    map_group = make_llm_batch_mapper(place_stage(stage))
+    rows = map_group((0, 1), [{"x": 1}, {"x": 2}])
 
     assert batches == [[1, 2]]
     assert [row["verdict"] for row in rows] == ["v1", "v2"]
@@ -654,3 +650,24 @@ def test_the_batched_key_matches_the_row_path_key(monkeypatch):
 
     recorded = {entry.input_fingerprint for entry in _entries(stage)}
     assert recorded == {compute_row_fingerprint({"x": value}) for value in (1, 2)}
+
+
+def test_a_group_that_completed_stays_cached_when_a_later_group_crashes(monkeypatch):
+    """Incremental durability is not batch-specific code: the record wrapper runs per group."""
+    handler = HANDLERS[StageType.llm_transform]
+
+    def make_crashing_mapper(workflow_stage):
+        def map_group(indices, rows):
+            if 2 in indices:
+                raise RuntimeError("backend went away")
+            return [{**row, "verdict": f"v{row['x']}"} for row in rows]
+
+        return map_group
+
+    monkeypatch.setattr(handler, "make_batch_mapper", make_crashing_mapper)
+    stage = _llm_stage(batch_size=2)
+
+    with pytest.raises(RuntimeError, match="backend went away"):
+        _run(stage, _src([1, 2, 3, 4]), _ctx(run_id="crash"))
+
+    assert {entry.output_row["verdict"] for entry in _entries(stage)} == {"v1", "v2"}

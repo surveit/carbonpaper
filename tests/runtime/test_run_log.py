@@ -32,7 +32,6 @@ from app.runtime.run_log import (
 )
 from app.runtime.stage_output import StageOutput
 from app.runtime.stages import HANDLERS
-from app.runtime.stages.llm_transform import run_llm_batches
 from conftest import as_inputs, make_run_context, place_stage
 
 PROJECT = "run-log-tests"
@@ -151,29 +150,30 @@ def test_a_batched_chunk_binds_the_input_rows_it_actually_covers(tmp_path, monke
         "app.runtime.stages.llm_transform.call_llm_batch", fake_call_llm_batch
     )
     ctx, log = _logged_ctx(tmp_path, "batched")
-    rows = run_llm_batches(
-        place_stage(_llm_stage(batch_size=2)),
-        as_inputs({"src": pd.DataFrame({"x": [7, 8]})}), ctx, 1, [3, 4]
+    stage = _llm_stage(batch_size=2)
+    HANDLERS[StageType(stage.type)].execute(
+        place_stage(stage), as_inputs({"src": pd.DataFrame({"x": [5, 6, 7, 8]})}), ctx
     )
 
-    assert [row["verdict"] for row in rows] == ["a", "b"]
-    prompts = [e for e in _events("batched", log)
-               if e["kind"] == LLM_PROMPT]
-    assert len(prompts) == 1
-    assert prompts[0]["level"] == LEVEL_DETAIL
-    assert prompts[0]["row"] == 3 and prompts[0]["rows"] == [3, 4]
+    prompts = [e for e in _events("batched", log) if e["kind"] == LLM_PROMPT]
+    assert len(prompts) == 2
+    assert all(prompt["level"] == LEVEL_DETAIL for prompt in prompts)
+    covered = sorted((prompt["row"], prompt["rows"]) for prompt in prompts)
+    assert covered == [(0, [0, 1]), (2, [2, 3])]
 
 
 def test_the_batched_path_logs_replayed_and_computed_rows_apart(tmp_path, monkeypatch):
     handler = HANDLERS[StageType.llm_transform]
     handed: list[list[int]] = []
 
-    def fake_run_batches(stage, inputs, ctx, parallelism, positions):
-        handed.append(list(positions))
-        return [{**row, "verdict": f"v{row['x']}"}
-                for row in inputs[stage.inputs[0].id].to_pylist()]
+    def fake_make_batch_mapper(workflow_stage):
+        def map_group(indices, rows):
+            handed.append(list(indices))
+            return [{**row, "verdict": f"v{row['x']}"} for row in rows]
 
-    monkeypatch.setattr(handler, "run_batches", fake_run_batches)
+        return map_group
+
+    monkeypatch.setattr(handler, "make_batch_mapper", fake_make_batch_mapper)
     stage = _llm_stage(batch_size=2)
 
     seed_ctx, seed_log = _logged_ctx(tmp_path, "seed")
