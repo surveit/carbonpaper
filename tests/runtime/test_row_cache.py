@@ -672,11 +672,6 @@ def test_a_group_that_completed_stays_cached_when_a_later_group_crashes(monkeypa
     assert {entry.output_row["verdict"] for entry in _entries(stage)} == {"v1", "v2"}
 
 
-# ── the mapper's output is judged against what the stage says it writes ──────
-# One row can answer presence, nullability, type and enum. Range is a warning
-# and json shape and key uniqueness need the whole column, so `validate_table`
-# still runs over the assembled frame.
-
 _WRONG_TYPE_CODE = "def transform(row):\n    return {**row, 'y': f\"{row['x']}\"}\n"
 
 
@@ -685,7 +680,7 @@ def test_a_row_off_its_own_signature_fails_as_that_row():
 
     errors = out.contribution.row_errors or []
     assert [error["row"] for error in errors] == [0, 1]
-    assert "not of declared type 'int'" in errors[0]["message"]
+    assert "y: Input should be a valid integer" in errors[0]["message"]
 
 
 def test_a_row_off_its_own_signature_is_never_recorded():

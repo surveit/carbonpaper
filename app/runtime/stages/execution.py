@@ -12,8 +12,9 @@ from typing import Any, Callable, NamedTuple, Protocol, TypeVar, runtime_checkab
 
 import pandas as pd
 import pyarrow as pa
+from pydantic import BaseModel
 
-from app.models import TableSchema, WorkflowStage
+from app.models import WorkflowStage
 from app.models.run_manifest import RowError, StageContribution
 from app.models.stages.signature import transform_output_schema
 from app.models.stage import (
@@ -39,7 +40,7 @@ from ..stage_output import StageOutput
 from ..lineage import kept_rows_lineage
 from ..errors import RunCancelled
 from ..run_log import RunLog, bind_detail_sink, unbind_detail_sink
-from ..validation import find_row_issues
+from ..validation import build_row_model, find_row_issues
 from .row_events import (
     emit_cached_row,
     emit_row_outcome,
@@ -278,7 +279,11 @@ def _run_row_mapper(
     map_group = handler.make_group_mapper(workflow_stage, ctx, src)
     caching = _open_row_caching(workflow_stage, ctx)
     execution = _StageExecution(
-        map_group, transform_output_schema(stage), caching, ctx.run_log, stage.id
+        map_group,
+        build_row_model(transform_output_schema(stage), f"{stage.id}_written"),
+        caching,
+        ctx.run_log,
+        stage.id,
     )
     input_rows = list_table_rows(src)
     narrowed_rows = [_narrow_row(row, reads) for row in input_rows]
@@ -532,7 +537,7 @@ class _StageExecution(NamedTuple):
     """What one execution needs to turn a group of input rows into results."""
 
     map_group: GroupMapper
-    written: TableSchema
+    written_model: type[BaseModel]
     caching: _RowCaching | None
     log: RunLog | None
     stage_id: str
@@ -559,7 +564,7 @@ class _StageExecution(NamedTuple):
             unbind_detail_sink(token)
 
         results = [
-            _fail_on_row_issues(_require_a_row(row, self.stage_id), self.written)
+            _fail_on_row_issues(_require_a_row(row, self.stage_id), self.written_model)
             for row in mapped
         ]
         for index, result in zip(indices, results):
@@ -590,10 +595,10 @@ def _require_a_row(row: object, stage_id: str) -> Row | None:
     )
 
 
-def _fail_on_row_issues(row: Row | None, written: TableSchema) -> Row | None:
+def _fail_on_row_issues(row: Row | None, model: type[BaseModel]) -> Row | None:
     if row is None or _blocks_recording(row):
         return row
-    issues = find_row_issues(row, written)
+    issues = find_row_issues(row, model)
     if not issues:
         return row
     return {**row, ROW_ERROR_KEY: "; ".join(issues)}

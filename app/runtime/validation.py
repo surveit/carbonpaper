@@ -13,8 +13,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pyarrow as pa
+from pydantic import BaseModel, ValidationError
 
+from app.core.utils import format_errors
 from app.core.frames import (
+    collapse_null_forms,
     CELL_TYPE_PREDICATES,
     is_schema_type_satisfied_by_arrow_type,
     find_arrow_list_value_type,
@@ -119,45 +122,27 @@ def validate_table(
     return report
 
 
-# ── One row, without a table ─────────────────────────────────────────────────
-# The driver checks each mapped row as the mapper returns it, so a row that does
-# not match what its stage declares it writes fails AS THAT ROW — attributed, in
-# the run log, and kept out of the stage cache — rather than surfacing later as a
-# frame that will not validate, with nothing saying which row caused it.
-#
-# Only the rules one row can answer alone, and only error-severity ones: a range
-# breach is a warning and must not fail a row, while json shape reads the arrow
-# struct type and primary-key uniqueness reads every row. `validate_table` still
-# runs over the assembled frame and still owns all three.
+def build_row_model(schema: TableSchema, name: str) -> type[BaseModel]:
+    """Range is warning-severity on a frame, so it must not fail a row."""
+    return TableSchema(
+        columns=[column.model_copy(update={"range": None}) for column in schema.columns]
+    ).to_pydantic_model(name)
 
 
-def find_row_issues(row: Mapping[str, Any], schema: TableSchema) -> list[str]:
-    """The error-severity rules one row can answer alone; the rest need `validate_table`."""
-    issues: list[str] = []
-    for col in schema.columns:
-        if col.name not in row:
-            issues.append(f"missing column '{col.name}'")
-            continue
-        value = row[col.name]
-        if is_null_form(value):
-            if not col.nullable:
-                issues.append(f"column '{col.name}' is required but has no value")
-            continue
-        issues.extend(_find_cell_issues(value, col))
-    return issues
-
-
-def _find_cell_issues(value: Any, col: Column) -> list[str]:
-    check = _value_check_for(col.type)
-    if check is not None and not check(value):
-        return [
-            f"column '{col.name}' value {value!r} is not of declared type '{col.type}'"
-        ]
-    if col.enum and col.type == STR_COLUMN_TYPE and str(value) not in set(col.enum):
-        return [
-            f"column '{col.name}' value {str(value)!r} is outside enum "
-            f"{sorted(col.enum)}"
-        ]
+def find_row_issues(row: Mapping[str, Any], model: type[BaseModel]) -> list[str]:
+    """Strict, or pydantic coerces '2' into an int column and passes it."""
+    try:
+        model.model_validate(
+            # pydantic does not know pandas' null forms; this codebase reads them all as absent.
+            {
+                name: collapse_null_forms(row[name])
+                for name in model.model_fields
+                if name in row
+            },
+            strict=True,
+        )
+    except ValidationError as err:
+        return format_errors(err)
     return []
 
 
