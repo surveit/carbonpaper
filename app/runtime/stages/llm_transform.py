@@ -37,11 +37,7 @@ from .execution import (
 _ROW_NUMBER_FIELD = "row_number"
 
 
-# Grain and order stay the driver's; what `batch_size` > 1 costs is per-row
-# INDEPENDENCE — the model sees every row in the group.
 class LLMTransformHandler(RowMapTransformHandler):
-    """The one type whose model call takes more than one row."""
-
     def __init__(self, parallelism: int = 1) -> None:
         super().__init__(
             make_llm_row_mapper, parallelism, trims_output_to_declared=True
