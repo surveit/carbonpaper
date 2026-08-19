@@ -16,6 +16,8 @@ from pydantic import BaseModel, Field
 from app.core.agent.usage import LlmUsage, TurnSpend
 from app.core.persistence import PersistedModel, PersistenceScope
 
+type AgentContext = dict[str, Any]
+
 
 class MessageRole(str, Enum):
     user = "user"
@@ -29,11 +31,38 @@ class PartType(str, Enum):
     tool_result = "tool_result"
 
 
-class TranscriptMessage(TypedDict):
-    """One stored transcript message; `role` is a MessageRole value."""
+class ChatBackend(str, Enum):
+    claude = "claude"
+    codex = "codex"
 
-    role: str
-    parts: list[dict[str, Any]]
+
+class TranscriptProsePart(TypedDict):
+    type: Literal["text", "thinking"]
+    text: str
+
+
+class TranscriptToolCallPart(TypedDict):
+    type: Literal["tool_call"]
+    name: str
+    args: str
+    label: str
+
+
+class TranscriptToolResultPart(TypedDict):
+    type: Literal["tool_result"]
+    content: str
+
+
+type TranscriptPart = (
+    TranscriptProsePart | TranscriptToolCallPart | TranscriptToolResultPart
+)
+
+
+class TranscriptMessage(TypedDict):
+    """One stored user or assistant message."""
+
+    role: Literal["user", "assistant"]
+    parts: list[TranscriptPart]
 
 
 class ProseBlock(BaseModel):
@@ -62,7 +91,8 @@ class AgentSession(PersistedModel):
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
     title: str = "New chat"
     agent_id: str | None = None
-    context: dict[str, Any] = Field(default_factory=dict)
+    backend: ChatBackend = ChatBackend.claude
+    context: AgentContext = Field(default_factory=dict)
     messages: list[dict[str, Any]] = Field(default_factory=list)  # engine-neutral {role, parts} transcript
     active_turn: str | None = None
     pending_user: str | None = None
@@ -83,13 +113,15 @@ class SessionStore:
         *,
         title: str | None = None,
         agent_id: str | None = None,
-        context: dict | None = None,
+        backend: ChatBackend = ChatBackend.claude,
+        context: AgentContext | None = None,
     ) -> str:
         sid = uuid.uuid4().hex[:12]
         AgentSession(
             id=sid,
             title=title or "New chat",
             agent_id=agent_id,
+            backend=backend,
             context=context or {},
         ).save()
         return sid

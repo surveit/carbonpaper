@@ -12,6 +12,9 @@ from typing import Any, Awaitable, Callable
 
 from claude_agent_sdk import ClaudeSDKError
 
+from app.core.agent.errors import CodexBackendUnavailableError
+from app.core.agent.codex_protocol import CodexProtocolError
+
 
 class Turn:
     def __init__(self, turn_id: str, session_id: str):
@@ -71,11 +74,11 @@ class TurnManager:
                 # Carry the CLI session forward so the next turn resumes this
                 # conversation (the demo backend returns None — nothing to carry).
                 store.set_resume_token(session_id, resume_token)
-        except (ClaudeSDKError, OSError) as exc:
-            # Expected failure modes of a model turn — a Claude Agent SDK error
-            # (CLI not found, connection dropped, process failure) or a
-            # socket/subprocess error (OSError) — reach the client as an error
-            # event. A genuine bug (KeyError, ValueError, …) is NOT caught here:
+        except (ClaudeSDKError, CodexBackendUnavailableError, CodexProtocolError, OSError) as exc:
+            # Expected failure modes of a model turn — a Claude Agent SDK, Codex
+            # backend/protocol, or socket/subprocess error — reach the
+            # client as an error event. A genuine bug (KeyError, ValueError, …) is
+            # NOT caught here:
             # it propagates and surfaces loudly rather than masquerading as a
             # handled model failure. The `finally` still emits `done`, so the
             # client is never left hanging.

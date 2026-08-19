@@ -11,8 +11,15 @@ from typing import Any, Callable
 from claude_agent_sdk import McpSdkServerConfig, SdkMcpTool, create_sdk_mcp_server, tool
 from pydantic import BaseModel, ConfigDict
 
-from app.core.agent.sdk_engine import MCP_SERVER_NAME, ClaudeAgentSdkEngine, ThinkingConfig
 from app.core.agent.bound_tool import BoundToolSpec
+from app.core.agent.codex_engine import CodexChatEngine
+from app.core.agent.sdk_engine import MCP_SERVER_NAME, ClaudeAgentSdkEngine, ThinkingConfig
+from app.core.agent.store import AgentContext, ChatBackend
+
+
+type ChatEngine = ClaudeAgentSdkEngine | CodexChatEngine
+
+_CODEX_APP_SERVER_COMMAND = ("codex", "app-server", "--stdio")
 
 
 class AgentConfig(BaseModel):
@@ -52,7 +59,7 @@ def is_registered(agent_id: str) -> bool:
     return agent_id in _registry
 
 
-def render_opening_message(agent_id: str, context: dict[str, Any]) -> str | None:
+def render_opening_message(agent_id: str, context: AgentContext) -> str | None:
     """None when the agent waits to be spoken to. See AgentConfig.render_opening_message."""
     config, _build_tools = _registry[agent_id]
     if config.render_opening_message is None:
@@ -61,7 +68,7 @@ def render_opening_message(agent_id: str, context: dict[str, Any]) -> str | None
 
 
 def build_engine(
-    agent_id: str, context: dict[str, Any], *, opening_message: str = ""
+    agent_id: str, context: AgentContext, *, opening_message: str = ""
 ) -> ClaudeAgentSdkEngine:
     config, build_tools = _registry[agent_id]
     ctx = config.context_schema.model_validate(context)
@@ -74,6 +81,32 @@ def build_engine(
         tool_labels={s.name: s.label for s in specs} | config.extra_tool_labels,
         model=config.model,
         thinking=config.thinking,
+    )
+
+
+def build_session_engine(
+    agent_id: str,
+    context: AgentContext,
+    backend: ChatBackend,
+    *,
+    opening_message: str = "",
+) -> ChatEngine:
+    if backend == ChatBackend.claude:
+        return build_engine(agent_id, context, opening_message=opening_message)
+    if backend == ChatBackend.codex:
+        return build_codex_engine(agent_id, context, opening_message=opening_message)
+    raise ValueError(f"unknown chat backend: {backend}")
+
+
+def build_codex_engine(
+    agent_id: str, context: AgentContext, *, opening_message: str = ""
+) -> CodexChatEngine:
+    config, build_tools = _registry[agent_id]
+    ctx = config.context_schema.model_validate(context)
+    return CodexChatEngine(
+        render_system_prompt(config, ctx, opening_message),
+        build_tools(ctx),
+        _CODEX_APP_SERVER_COMMAND,
     )
 
 

@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 
 from starlette.concurrency import run_in_threadpool
@@ -19,8 +19,15 @@ from app.services.uploads import max_upload_bytes, save_upload
 from app.web.file_sizes import describe_attachment, describe_refusal
 
 from app.core.agent import registry
+from app.core.agent.codex_availability import find_codex_backend_error
 from app.core.agent.session import build_session_engine, create_agent_session
-from app.core.agent.store import Bubble, MessageRole, ProseBlock, open_session_store
+from app.core.agent.store import (
+    Bubble,
+    ChatBackend,
+    MessageRole,
+    ProseBlock,
+    open_session_store,
+)
 from app.core.agent.turns import default_turn_manager
 from app.web.breadcrumbs import build_chat_crumbs, build_home_crumbs
 from app.web.config import templates
@@ -35,13 +42,27 @@ _store = open_session_store()
 _turns = default_turn_manager()
 
 
-def _backend_error() -> str | None:
+def available_chat_backends() -> list[ChatBackend]:
+    backends = []
     if CLI_PATH is not None:
-        return None
-    return (
-        "The Claude CLI / Agent SDK isn't available. Install it and run "
-        "`claude login` so the agent can run."
-    )
+        backends.append(ChatBackend.claude)
+    if find_codex_backend_error() is None:
+        backends.append(ChatBackend.codex)
+    return backends
+
+
+def _backend_error(backend: ChatBackend) -> str | None:
+    if backend == ChatBackend.claude:
+        if backend in available_chat_backends():
+            return None
+        return (
+            "The Claude CLI / Agent SDK isn't available. Install it and run "
+            "`claude login` so the agent can run."
+        )
+    if backend == ChatBackend.codex:
+        error = find_codex_backend_error()
+        return str(error) if error is not None else None
+    raise ValueError(f"unknown chat backend: {backend}")
 
 
 @router.get("/chat", response_class=HTMLResponse)
@@ -55,6 +76,7 @@ async def chat_index(request: Request):
             visible_sessions.append(s)
     return templates.TemplateResponse(request, "chat_index.html", {
         "sessions": visible_sessions,
+        "available_backends": available_chat_backends(),
         "crumbs": build_home_crumbs("Chats"),
     })
 
@@ -84,7 +106,7 @@ async def draft_agent_chat(agent_id: str, request: Request):
         "pending_user": None,
         "active_turn": None,
         "view_only": False,
-        "backend_error": _backend_error(),
+        "backend_error": _backend_error(ChatBackend.claude),
         "crumbs": build_chat_crumbs(title),
         "session_project": context.get("project_id"),
         "projects": [p.model_dump() for p in project_service.list_project_listings()],
@@ -94,6 +116,21 @@ async def draft_agent_chat(agent_id: str, request: Request):
         "draft_context": context,
         "draft_title": title,
     })
+
+
+@router.post("/chat/new")
+async def new_chat(request: Request, backend: str = Form(...)):
+    try:
+        selected_backend = ChatBackend(backend)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="Unknown chat backend") from exc
+    error = _backend_error(selected_backend)
+    if error is not None:
+        raise HTTPException(status_code=409, detail=error)
+    sid = create_agent_session(
+        "editing", {}, base_url=str(request.base_url), title="New chat", backend=selected_backend
+    )
+    return RedirectResponse(f"/chat/{sid}", status_code=303)
 
 
 @router.post("/chat/agent/{agent_id}/sessions")
@@ -114,6 +151,7 @@ async def chat_page(request: Request, sid: str):
     if not _store.exists(sid):
         raise HTTPException(status_code=404, detail="Session not found")
     data = _store.load(sid)
+    backend = ChatBackend(data["backend"])
     return templates.TemplateResponse(request, "chat.html", {
         "session_id": sid,
         "title": data.get("title"),
@@ -123,7 +161,7 @@ async def chat_page(request: Request, sid: str):
         # No bound agent → the UI renders and streams the session, but there is no agent to
         # reply to a typed message (post_message 400s), so the composer is hidden.
         "view_only": data.get("agent_id") is None,
-        "backend_error": _backend_error(),
+        "backend_error": _backend_error(backend),
         "crumbs": build_chat_crumbs(data.get("title")),
         # What an attached file needs to know before it is sent: the ceiling, the
         # project this session works on (None until the agent settles one), and the
@@ -169,6 +207,9 @@ async def post_message(sid: str, request: Request):
     agent_id = data.get("agent_id")
     if not agent_id:
         raise HTTPException(status_code=400, detail="session has no bound agent")
+    backend_error = _backend_error(ChatBackend(data["backend"]))
+    if backend_error:
+        raise HTTPException(status_code=409, detail=backend_error)
     engine = build_session_engine(sid, str(request.base_url))
     _store.set_pending_user(sid, text)
     turn_id = _turns.start(engine=engine, store=_store, session_id=sid, prompt=text)

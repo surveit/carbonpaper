@@ -4,7 +4,19 @@
 {% block content %}
 <div class="ac-head">
   <h1>Chats</h1>
-  {% include "_new_chat_button.html" %}
+  {% if available_backends %}
+    <form action="/chat/new" method="post">
+      <label for="chat-backend">Backend</label>
+      <select id="chat-backend" name="backend">
+        {% for backend in available_backends %}
+          <option value="{{ backend.value }}">{{ backend.value | capitalize }}</option>
+        {% endfor %}
+      </select>
+      <button class="ac-new btn primary" type="submit">＋ New chat</button>
+    </form>
+  {% else %}
+    <p class="ac-session-meta">No chat backend is available.</p>
+  {% endif %}
 </div>
 <ul class="ac-sessions">
   {% for s in sessions %}
