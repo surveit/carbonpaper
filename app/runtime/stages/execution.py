@@ -367,6 +367,10 @@ def _narrow_row(row: Row, keep: frozenset[str]) -> Row:
     return {key: value for key, value in row.items() if key in keep}
 
 
+def _narrow_table(table: pa.Table, keep: frozenset[str]) -> pa.Table:
+    return table.select([name for name in table.column_names if name in keep])
+
+
 # ── the row-level cache interceptor ──────────────────────────────────────────
 # Caching is a property of the handler SHAPE, not of any stage type: the one
 # line where per-row compute happens is wrapped, so every row-mapped stage type
@@ -496,22 +500,31 @@ def _run_batched(
     stage = workflow_stage.stage
     src = inputs[workflow_stage.inputs[0].id]
     records = list_table_rows(src)
+    # Narrowed exactly as the row-mapped driver narrows, so a chunk of N rows is
+    # N rows of the shape the row cache already keys and stores. Without this the
+    # key covers every input column, so an edit to a column the signature does
+    # not read — one the prompt therefore cannot reference — re-spends the stage.
+    narrowed = _narrow_table(src, stage.anchor_reads())
+    seen = list_table_rows(narrowed)
     progress = ctx.stage_progress
     caching = _open_row_caching(workflow_stage, ctx)
-    hits = {} if caching is None else _find_cached_rows_by_position(caching, records)
+    hits = {} if caching is None else _find_cached_rows_by_position(caching, seen)
     progress(completed=len(hits), total=len(records))
     misses = [index for index in range(len(records)) if index not in hits]
     emit_batched_row_starts(ctx.run_log, stage.id, hits, misses)
-    computed = _compute_batched_rows(handler, workflow_stage, src, misses, ctx)
+    computed = _compute_batched_rows(handler, workflow_stage, narrowed, misses, ctx)
     # Ordered before recorded: the ordering step is what verifies one computed
     # row per miss, so nothing is pinned against a row it did not come from.
-    rows = _order_by_input_position(stage.id, hits, misses, computed, len(records))
+    mapped = _order_by_input_position(stage.id, hits, misses, computed, len(records))
     if caching is not None:
         for position, row in zip(misses, computed):
-            _record_row_output(caching, records[position], row)
+            _record_row_output(caching, seen[position], row)
     emit_batched_row_outcomes(
         ctx.run_log, stage.id, misses, [row.get(ROW_ERROR_KEY) for row in computed]
     )
+    # Rejoin, as the row-mapped driver does: the model only ever saw the declared
+    # reads, so the columns that merely FLOW come back from the input row here.
+    rows = [{**records[index], **row} for index, row in enumerate(mapped)]
     batched = _finish_batched_frame(rows, handler, workflow_stage)
     return StageOutput(
         _finish_empty_result(batched.table, src, workflow_stage), batched.contribution

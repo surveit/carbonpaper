@@ -598,3 +598,59 @@ def test_a_registered_row_function_may_not_read_past_its_declared_reads():
 
     with pytest.raises(KeyError, match="noise"):
         _run(stage, _noisy_src(["a", "b"]), _ctx())
+
+
+# ── the batched path keys on the declared reads, as the row path does ─────────
+# A batched chunk is N rows of the row path's shape, so an unread column must
+# not reach the key or the entry. Before narrowing it reached both.
+
+
+_NOTE_SCHEMA = {"columns": [{"name": "x", "type": "int", "nullable": True},
+                            {"name": "note", "type": "str", "nullable": True}]}
+
+
+def _src_with_note(values: list[int], notes: list[str]) -> pd.DataFrame:
+    """`note` is neither read by the signature nor injectable by the prompt."""
+    return pd.DataFrame({"x": values, "note": notes})
+
+
+def _run_over_note(stage: Stage, src: pd.DataFrame, ctx) -> StageOutput:
+    """Declares the wider input, so `note` flows to the output rather than being trimmed."""
+    placed = place_stage(stage, src=_NOTE_SCHEMA)
+    out = HANDLERS[StageType(stage.type)].execute(placed, as_inputs({"src": src}), ctx)
+    assert out is not None
+    return out
+
+
+def test_a_batched_entry_survives_an_edit_to_a_column_it_never_read(monkeypatch):
+    batches: list[list[int]] = []
+    _stub_call_llm_batch(monkeypatch, batches)
+    stage = _llm_stage(batch_size=2)
+    _run_over_note(stage, _src_with_note([1, 2], ["draft", "draft"]), _ctx(run_id="run1"))
+    batches.clear()
+
+    out = _run_over_note(stage, _src_with_note([1, 2], ["revised", "revised"]), _ctx(run_id="run2"))
+    assert batches == []
+    assert list(rows_of(out)["verdict"]) == ["v1", "v2"]
+    assert list(rows_of(out)["note"]) == ["revised", "revised"]  # the live value flows
+
+
+def test_a_batched_entry_holds_the_reads_and_the_adds_only(monkeypatch):
+    _stub_call_llm_batch(monkeypatch, [])
+    stage = _llm_stage(batch_size=2)
+    _run_over_note(stage, _src_with_note([1, 2], ["draft", "draft"]), _ctx(run_id="run1"))
+
+    entries = _entries(stage)
+    assert len(entries) == 2
+    assert all(sorted(entry.output_row) == ["verdict", "x"] for entry in entries)
+    assert all(sorted(entry.frozen_input) == ["x"] for entry in entries)
+
+
+def test_the_batched_key_matches_the_row_path_key(monkeypatch):
+    """Both paths fingerprint the same narrowed row, so neither can key on what it did not see."""
+    _stub_call_llm_batch(monkeypatch, [])
+    stage = _llm_stage(batch_size=2)
+    _run_over_note(stage, _src_with_note([1, 2], ["draft", "draft"]), _ctx(run_id="run1"))
+
+    recorded = {entry.input_fingerprint for entry in _entries(stage)}
+    assert recorded == {compute_row_fingerprint({"x": value}) for value in (1, 2)}
