@@ -30,8 +30,10 @@ def test_pipeline_neutralizes_unfocused_node_borders() -> None:
 def test_export_overlay_is_centered_and_above_the_pipeline() -> None:
     page = INTRO_PAGE.read_text(encoding="utf-8")
 
-    assert "11: {ask: 1, layer: 'graph', recede: 1, over: '11'}" in page
-    assert 'z-index: 2;' in page
+    assert "11: {ask: 1, layer: 'graph', out: 'ran', recede: 1, over: '11'}" in page
+    assert "pipe.classList.toggle('recede', !!scene.recede);" in page
+    assert '#pipe.recede { opacity: .26; }' in page
+    assert '.over.on { opacity: 1; visibility: visible; z-index: 3; }' in page
     assert 'data-over="11" style="left: 50%; top: 50%; transform: translate(-50%, -50%);"' in page
 
 

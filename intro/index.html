@@ -92,9 +92,10 @@
   .cloud .tick { font-family: var(--mono); font-size: 16px; fill: var(--muted); }
 
   /* middle, steps 5-11 — the graph and the cards pinned to it */
-  .graph-hold { position: relative; width: 100%; }
-  .graph-hold svg { display: block; width: 100%; height: auto; }
+  .graph-hold { position: relative; width: 100%; isolation: isolate; }
+  .graph-hold svg { display: block; width: 100%; height: auto; position: relative; z-index: 0; }
   #pipe .node, #pipe .flow { transition: opacity .4s ease; }
+  #pipe.recede { opacity: .26; }
   #pipe.focus .node, #pipe.focus .flow { opacity: .24; }
   #pipe.focus .node.lit, #pipe.focus .flow.lit { opacity: 1; }
   #pipe .node.lit rect { stroke: #1d539c; }
@@ -142,8 +143,8 @@
                   color: var(--model); font-weight: 600; }
 
   /* something drawn over the graph, rather than a screenshot of it */
-  .over { position: absolute; opacity: 0; visibility: hidden; transition: opacity .45s ease; }
-  .over.on { opacity: 1; visibility: visible; z-index: 2; }
+  .over { position: absolute; opacity: 0; visibility: hidden; transition: opacity .45s ease; z-index: 1; }
+  .over.on { opacity: 1; visibility: visible; z-index: 3; }
   .over img { display: block; border: 1px solid var(--rule); border-radius: 10px;
               background: var(--card); box-shadow: 0 20px 48px -22px rgba(36,39,43,.4); }
   .pin .cfg { display: grid; grid-template-columns: auto 1fr; gap: .1rem .7rem;
@@ -483,7 +484,7 @@ const SCENES = {
   8:  {ask: 1, layer: 'graph', out: 'said', recede: 1, nodes: ['llm'], pin: '8'},
   9:  {ask: 1, layer: 'graph', out: 'ran'},
   10: {ask: 1, layer: 'graph', out: 'ran', nodes: ALL_NODES, edges: ALL_EDGES, over: '10'},
-  11: {ask: 1, layer: 'graph', recede: 1, over: '11'},
+  11: {ask: 1, layer: 'graph', out: 'ran', recede: 1, over: '11'},
 };
 
 function show(step) {
@@ -503,6 +504,7 @@ function show(step) {
   const partial = scene.nodes && scene.nodes.length < ALL_NODES.length;
   pipe.classList.toggle('focus', !!partial);
   pipe.classList.toggle('chain', !!scene.nodes && !partial);
+  pipe.classList.toggle('recede', !!scene.recede);
   for (const [name, el] of nodes) el.classList.toggle('lit', (scene.nodes || []).includes(name));
   for (const [name, el] of edges) {
     const lit = (scene.edges || []).includes(name);
