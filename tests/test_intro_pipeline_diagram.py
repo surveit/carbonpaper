@@ -82,3 +82,9 @@ def test_mobile_prose_sticks_below_the_visual_band() -> None:
     page = INTRO_PAGE.read_text(encoding="utf-8")
 
     assert '.step-inner { position: sticky; top: calc(min(42svh, 26rem) + 1rem);' in page
+
+
+def test_mobile_steps_have_room_for_sticky_prose_in_landscape() -> None:
+    page = INTRO_PAGE.read_text(encoding="utf-8")
+
+    assert '.step { min-height: max(58svh, 20rem);' in page
