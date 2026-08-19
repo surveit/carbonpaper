@@ -15,16 +15,18 @@ from pydantic import BaseModel
 from app.core.agent.agent import Agent
 from app.core.agent.usage import LlmUsage
 from app.core.errors import LLMError
+from app.core.llm import LLMModel
 from app.core.llm_sdk import run_sync
+from app.core.transform_model_settings import read_transform_model_setting
 from app.core.agent.sdk_engine import ThinkingConfig
 from app.models.stages.llm_transform import LLMConfig, ThinkingMode
 
 from .options import (
-    DEFAULT_MODEL,
     DEFAULT_TIMEOUT_S,
     RESEARCH_MAX_TURNS,
     RESEARCH_TIMEOUT_S,
     require_agent_backend,
+    require_model_backend,
 )
 from .run_log import (
     LLM_ERROR,
@@ -89,7 +91,7 @@ def call_llm(
     if not llm_config.prompt_data_template:
         raise LLMError(f"stage {stage_id}: llm_transform has no prompt_data_template")
     task = render_prompt(llm_config.prompt_data_template, input_row)
-    model_name = str(model or llm_config.model or DEFAULT_MODEL)
+    model_name = _selected_model_name(llm_config, model)
     return _run_agent(
         _compose_system(llm_config.prompt_instructions), task, reply_model, model_name,
         llm_config.max_retries, usage_out, tools=llm_config.tools,
@@ -107,7 +109,7 @@ def call_llm_batch(
     model: str | None = None,
     usage_out: list[LlmUsage] | None = None,
 ) -> dict[str, Any]:
-    model_name = str(model or llm_config.model or DEFAULT_MODEL)
+    model_name = _selected_model_name(llm_config, model)
     # No tools by construction: LLMConfig refuses tools with batch_size > 1.
     return _run_agent(
         _compose_system(instructions), task, reply_schema, model_name,
@@ -119,6 +121,32 @@ def _thinking_config(mode: "ThinkingMode | None") -> ThinkingConfig | None:
     if mode is None:
         return None
     return {"type": "disabled"} if mode == "disabled" else {"type": "adaptive"}
+
+
+def resolve_transform_model(llm_config: LLMConfig) -> LLMModel:
+    model = LLMModel(read_transform_model_setting().model)
+    if model == LLMModel.gpt_5_6_terra:
+        _refuse_codex_unsupported_options(llm_config)
+    return model
+
+
+def _selected_model_name(llm_config: LLMConfig, requested_model: str | None) -> str:
+    selected = resolve_transform_model(llm_config)
+    if requested_model is not None and requested_model != selected.value:
+        raise LLMError(
+            f"LLM-transform model is globally set to {selected.value!r}; callers may not "
+            f"override it with {requested_model!r}"
+        )
+    return selected.value
+
+
+def _refuse_codex_unsupported_options(llm_config: LLMConfig) -> None:
+    if llm_config.tools:
+        raise LLMError("Codex LLM transforms do not support llm.tools")
+    if llm_config.batch_size != 1:
+        raise LLMError("Codex LLM transforms require batch_size=1")
+    if llm_config.thinking is not None:
+        raise LLMError("Codex LLM transforms do not support llm.thinking")
 
 
 def _compose_system(instructions: str) -> str:
@@ -135,7 +163,7 @@ def _run_agent(
     tools: list[str] | None = None,
     thinking: ThinkingMode | None = None,
 ) -> dict[str, Any]:
-    require_agent_backend()
+    _require_selected_backend(LLMModel(model_name))
     emit_llm_detail(LLM_PROMPT, text=task)
     # Captured HERE, on the caller's own thread, so it survives the thread hop
     # inside run_sync; RunLog.emit is itself thread-safe.
@@ -203,6 +231,13 @@ def _forward_agent_events(
 def _record_usage(
     usage_out: list[LlmUsage] | None, agent: Agent[BaseModel], model_name: str
 ) -> None:
-    """`model_name` is stamped here because this is where `model or llm.model or DEFAULT_MODEL` resolved."""
+    """Stamp the workspace-selected model on usage from the completed call."""
     if usage_out is not None and agent.last_usage is not None:
         usage_out.append(agent.last_usage.model_copy(update={"model": model_name}))
+
+
+def _require_selected_backend(model: LLMModel) -> None:
+    if model == LLMModel.gpt_5_6_terra:
+        require_model_backend(model)
+        return
+    require_agent_backend()

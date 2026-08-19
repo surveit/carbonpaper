@@ -13,9 +13,9 @@ from pydantic import BaseModel, ConfigDict
 class LlmUsage(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    input_tokens: int = 0
-    output_tokens: int = 0
-    cost_usd: float = 0.0
+    input_tokens: int | None = 0
+    output_tokens: int | None = 0
+    cost_usd: float | None = 0.0
     calls: int = 0
     # The id the backend was called with, as a string rather than an LLMModel: a run
     # record must stay readable after the deployment narrows its menu, and an enum
@@ -25,9 +25,9 @@ class LlmUsage(BaseModel):
 
     def __add__(self, other: LlmUsage) -> LlmUsage:
         return LlmUsage(
-            input_tokens=self.input_tokens + other.input_tokens,
-            output_tokens=self.output_tokens + other.output_tokens,
-            cost_usd=self.cost_usd + other.cost_usd,
+            input_tokens=_sum_known_counts(self.input_tokens, other.input_tokens),
+            output_tokens=_sum_known_counts(self.output_tokens, other.output_tokens),
+            cost_usd=_sum_known_cost(self.cost_usd, other.cost_usd),
             calls=self.calls + other.calls,
             model=_one_model(self.model, other.model),
         )
@@ -56,3 +56,15 @@ def _one_model(left: str | None, right: str | None) -> str | None:
             "total names one model, so the other model's rows would be attributed to it"
         )
     return left or right
+
+
+def _sum_known_counts(left: int | None, right: int | None) -> int | None:
+    if left is None or right is None:
+        return None
+    return left + right
+
+
+def _sum_known_cost(left: float | None, right: float | None) -> float | None:
+    if left is None or right is None:
+        return None
+    return left + right

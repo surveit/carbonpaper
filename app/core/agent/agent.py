@@ -6,11 +6,13 @@ agent corrects in the same loop. The submitted object is never echoed into the c
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, Callable, Generic, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
 from app.core.agent.diagnostics import AgentRunDiagnostics, summarize_run
+from app.core.agent.codex_engine import CodexChatEngine, is_codex_transform_model
 from app.core.agent.registry import build_mcp_server
 from app.core.agent.bound_tool import BoundToolSpec, bind_by_schema
 from app.core.agent.sdk_engine import CLI_MODEL, ClaudeAgentSdkEngine, ThinkingConfig
@@ -124,14 +126,20 @@ class Agent(Generic[Model]):
         # submitted nothing is built from it.
         events: list[dict[str, Any]] = []
 
-        def tee(event: dict[str, Any]) -> None:
-            events.append(event)
+        def tee(event: Mapping[str, Any]) -> None:
+            recorded = dict(event)
+            events.append(recorded)
             if emit is not None:
-                emit(event)
+                emit(recorded)
 
-        await engine.stream_turn(
-            self._task, message_history=None, emit=tee, resume=None
-        )
+        if isinstance(engine, CodexChatEngine):
+            await engine.stream_turn(
+                self._task, message_history=None, emit=lambda event: tee(event), resume=None
+            )
+        else:
+            await engine.stream_turn(
+                self._task, message_history=None, emit=tee, resume=None
+            )
         # getattr, not attribute access: a custom engine need not track usage.
         self._last_usage = getattr(engine, "last_usage", None)
         if self._answer is None:
@@ -172,7 +180,7 @@ class Agent(Generic[Model]):
             ) from err
         return "Accepted — recorded. You are done; do not restate it."
 
-    def build_engine(self) -> ClaudeAgentSdkEngine:
+    def build_engine(self) -> ClaudeAgentSdkEngine | CodexChatEngine:
         # submit_answer validates its own arguments: a rejection is an attempt it counts.
         specs = [
             bind_by_schema(
@@ -185,6 +193,13 @@ class Agent(Generic[Model]):
             ),
             *self._tools,
         ]
+        if is_codex_transform_model(self._model):
+            return CodexChatEngine(
+                self._system_prompt,
+                specs,
+                ("codex", "app-server", "--stdio"),
+                model=self._model,
+            )
         server, allowed, _wrapped = build_mcp_server(specs)
         return ClaudeAgentSdkEngine(
             system_prompt=self._system_prompt,

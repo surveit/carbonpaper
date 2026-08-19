@@ -18,6 +18,7 @@ from app.core.agent.codex_protocol import (
 )
 from app.core.agent.codex_availability import require_codex_backend
 from app.core.agent.store import TranscriptMessage, TranscriptPart
+from app.core.agent.usage import LlmUsage
 
 
 class ProseEvent(TypedDict):
@@ -53,17 +54,29 @@ _REASONING_DELTAS = {
     "item/reasoning/summaryTextDelta",
     "item/reasoning/textDelta",
 }
+CODEX_TRANSFORM_MODEL = "gpt-5.6-terra"
+
+
+def is_codex_transform_model(model: str) -> bool:
+    return model == CODEX_TRANSFORM_MODEL
 
 
 class CodexChatEngine:
     def __init__(
-        self, system_prompt: str, tools: list[BoundToolSpec], command: Sequence[str]
+        self,
+        system_prompt: str,
+        tools: list[BoundToolSpec],
+        command: Sequence[str],
+        *,
+        model: str | None = None,
     ) -> None:
         self._system_prompt = system_prompt
         self._tools = {tool.name: tool for tool in tools}
         if len(self._tools) != len(tools):
             raise ValueError("Codex dynamic tool names must be unique")
         self._command = tuple(command)
+        self._model = model
+        self.last_usage: LlmUsage | None = None
 
     async def stream_turn(
         self,
@@ -84,6 +97,14 @@ class CodexChatEngine:
             thread_id = await self._open_thread(server, resume)
             await server.request("turn/start", _turn_params(thread_id, prompt))
             await self._stream_events(server, assistant_parts, emit)
+            if self._model is not None:
+                self.last_usage = LlmUsage(
+                    input_tokens=None,
+                    output_tokens=None,
+                    cost_usd=None,
+                    calls=1,
+                    model=self._model,
+                )
         finally:
             await server.close()
         return _build_transcript(prompt, assistant_parts), thread_id
@@ -96,7 +117,7 @@ class CodexChatEngine:
         return _read_thread_id(result)
 
     def _start_params(self) -> TypeUnsafeCodexJsonObject:
-        return {
+        params: TypeUnsafeCodexJsonObject = {
             "baseInstructions": self._system_prompt,
             "developerInstructions": "",
             "sandbox": "read-only",
@@ -111,6 +132,9 @@ class CodexChatEngine:
                 for tool in self._tools.values()
             ],
         }
+        if self._model is not None:
+            params["model"] = self._model
+        return params
 
     async def _stream_events(
         self,
@@ -160,7 +184,7 @@ class CodexChatEngine:
         _record_tool_call(name, args_text, spec, assistant_parts, emit)
         try:
             text = await _invoke_tool(spec, arguments)
-        except (CodexProtocolError, ValidationError) as exc:
+        except (CodexProtocolError, ValidationError, ValueError) as exc:
             await server.respond(request_id, _tool_response(f"ERROR: {exc}", False))
             emit({"kind": "error", "text": f"{type(exc).__name__}: {exc}"})
             return

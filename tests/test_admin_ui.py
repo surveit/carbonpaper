@@ -30,6 +30,40 @@ def test_admin_page_lists_the_seed_bundle():
     assert _BUNDLE in r.text
 
 
+def test_admin_shows_the_global_llm_transform_model() -> None:
+    r = client.get("/admin")
+
+    assert r.status_code == 200
+    assert "LLM-transform model" in r.text
+    assert "claude-haiku-4-5" in r.text
+    assert 'value="claude-haiku-4-5" selected' in r.text
+
+
+def test_admin_persists_the_selected_llm_transform_model(monkeypatch) -> None:
+    from app.web.admin import workspace_router
+
+    monkeypatch.setattr(workspace_router, "find_codex_backend_error", lambda: None)
+
+    r = client.post(
+        "/admin/llm-transform-model",
+        data={"model": "gpt-5.6-terra"},
+        follow_redirects=False,
+    )
+
+    assert r.status_code == 303
+    assert "gpt-5.6-terra" in client.get("/admin").text
+
+
+def test_admin_refuses_an_unknown_llm_transform_model() -> None:
+    r = client.post(
+        "/admin/llm-transform-model",
+        data={"model": "not-a-model"},
+        follow_redirects=False,
+    )
+
+    assert r.status_code == 422
+
+
 def _loaded_project_id() -> str:
     """The bundle's label is not its id, so ask the store which project it became."""
     [record] = project.find_projects_by_name(_BUNDLE)

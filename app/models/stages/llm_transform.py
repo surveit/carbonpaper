@@ -69,10 +69,9 @@ class LLMConfig(StageConfig):
     model: Optional[LLMModel] = Field(
         default=None,
         description=(
-            "Which model answers. Name one on every stage you write: the run records "
-            "it beside the rows, so a reader can see what produced them. A stage that "
-            "names none is answered by whatever the deployment defaults to that day, "
-            "and the write path refuses it."
+            "The model the author requested when defining this stage. The workspace "
+            "LLM-transform setting selects what answers at run time; run provenance "
+            "records that selected model. The write path requires this authored value."
         ),
     )
     temperature: float = 0.0

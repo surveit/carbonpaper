@@ -128,3 +128,24 @@ def test_the_admin_page_serves_the_figure():
 
     assert r.status_code == 200
     assert "$12.34" in r.text
+
+
+def test_unknown_codex_usage_is_shown_as_unknown_not_zero():
+    _store_run("congresswatch", "20260816T090000", [
+        _stage_record(
+            "score",
+            LlmUsage(
+                input_tokens=None, output_tokens=None, cost_usd=None,
+                calls=1, model="gpt-5.6-terra",
+            ),
+            "2026-08-16T09:00:00",
+        ),
+    ])
+
+    spend = read_workspace_spend()
+    page = client.get("/admin/spend")
+
+    assert spend.total.cost_usd is None
+    assert spend.total.input_tokens is None
+    assert page.status_code == 200
+    assert "unknown" in page.text

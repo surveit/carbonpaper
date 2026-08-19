@@ -119,9 +119,9 @@ def find_unnamed_model_issues(candidate: dict) -> list[str]:
     if not isinstance(llm, dict) or llm.get("model"):
         return []
     return [
-        "`llm.model` is required: a run records which model answered its rows, and a "
-        "stage that names none is answered by whatever the deployment defaults to on "
-        f"the day it runs. Name one of {[member.value for member in LLMModel]}."
+        "`llm.model` is required as authored metadata. The workspace LLM-transform "
+        "setting selects the runtime model, while the run records what actually "
+        f"answered. Name one of {[member.value for member in LLMModel]}."
     ]
 
 
