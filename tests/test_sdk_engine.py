@@ -215,6 +215,63 @@ def test_stream_turn_emits_the_cli_init_as_a_system_event_carrying_json(
     assert body["mcp_servers"] == [{"name": "tools", "status": "connected"}]
 
 
+def test_stream_turn_coalesces_thinking_tokens_and_keeps_other_system_events(
+    monkeypatch: Any,
+) -> None:
+    class _System:
+        def __init__(self, subtype: str, data: dict[str, Any]) -> None:
+            self.subtype = subtype
+            self.data = data
+
+    async def fake_query(*, prompt: str, options: Any) -> Any:
+        for token_count in range(50):
+            yield _System("thinking_tokens", {"token_count": token_count})
+        yield _System("api_retry", {"attempt": 2, "delay_ms": 500})
+        yield _System("future_diagnostic", {"detail": "preserve me"})
+        yield _Done()
+
+    monkeypatch.setattr(se, "query", fake_query)
+    monkeypatch.setattr(se, "SystemMessage", _System)
+    monkeypatch.setattr(se, "AssistantMessage", _Asst)
+    monkeypatch.setattr(se, "UserMessage", _User)
+    monkeypatch.setattr(se, "ResultMessage", _Done)
+    monkeypatch.setattr(se, "_THINKING_TOKENS_INTERVAL_S", 3600.0)
+
+    events: list[dict[str, Any]] = []
+    engine = se.ClaudeAgentSdkEngine(
+        system_prompt="sp", mcp_server=object(), allowed_tools=[]
+    )
+    asyncio.run(engine.stream_turn("hi", message_history=[], emit=events.append))
+
+    system = [event for event in events if event["kind"] == "system"]
+    assert [event["subtype"] for event in system] == [
+        "thinking_tokens", "api_retry", "future_diagnostic", "thinking_tokens"
+    ]
+    assert json.loads(system[0]["text"]) == {"token_count": 0}
+    assert json.loads(system[1]["text"]) == {"attempt": 2, "delay_ms": 500}
+    assert json.loads(system[2]["text"]) == {"detail": "preserve me"}
+    assert json.loads(system[3]["text"]) == {"token_count": 49}
+
+
+def test_thinking_token_update_emits_again_after_the_interval() -> None:
+    class _System:
+        subtype = "thinking_tokens"
+
+        def __init__(self, token_count: int) -> None:
+            self.data = {"token_count": token_count}
+
+    times = iter([0.0, 0.5, se._THINKING_TOKENS_INTERVAL_S])
+    events: list[dict[str, Any]] = []
+    telemetry = se._SystemTelemetry(events.append, now=lambda: next(times))
+    messages: list[Any] = [_System(1), _System(2), _System(3)]
+    for message in messages:
+        telemetry.receive(message)
+    telemetry.flush()
+
+    system = [event for event in events if event["kind"] == "system"]
+    assert [json.loads(event["text"])["token_count"] for event in system] == [1, 3]
+
+
 def test_options_disable_every_builtin_tool_by_default() -> None:
     """`allowed_tools` only pre-approves permission; `tools` decides what the turn can see."""
     engine = se.ClaudeAgentSdkEngine(

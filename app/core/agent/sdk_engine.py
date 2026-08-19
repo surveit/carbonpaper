@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from typing import Any, AsyncIterator, Callable
 
 from claude_agent_sdk import (
@@ -163,7 +164,9 @@ class ClaudeAgentSdkEngine:
         self.last_usage = None
         assistant_parts: list[dict[str, Any]] = []
         session_id: str | None = None
-        async for msg in _query_with_terminal_error(prompt, self._options(resume)):
+        async for msg in _stream_messages_with_coalesced_telemetry(
+            prompt, self._options(resume), emit
+        ):
             if isinstance(msg, AssistantMessage):
                 for block in msg.content:
                     if isinstance(block, ThinkingBlock):
@@ -206,18 +209,6 @@ class ClaudeAgentSdkEngine:
                         assistant_parts.append(
                             {"type": "tool_result", "content": content}
                         )
-            elif isinstance(msg, SystemMessage):
-                # The CLI's own account of the turn — the init message carries
-                # which MCP servers connected and which tools the model can
-                # actually see, which is the difference between a model that
-                # declined to call a tool and one that was never offered it.
-                # Not part of the transcript: it is the CLI talking, not the
-                # model. A caller that does not want it drops the unknown kind.
-                emit({
-                    "kind": "system",
-                    "subtype": getattr(msg, "subtype", "") or "",
-                    "text": json.dumps(getattr(msg, "data", None) or {}, default=str),
-                })
             elif isinstance(msg, ResultMessage):
                 # ResultMessage is terminal; let the generator exhaust naturally
                 # (do NOT break — breaking aclose()s a still-running generator).
@@ -234,3 +225,64 @@ class ClaudeAgentSdkEngine:
             {"role": "assistant", "parts": assistant_parts},
         ]
         return transcript, session_id
+
+
+_THINKING_TOKENS_INTERVAL_S = 1.0
+
+
+class _SystemTelemetry:
+    def __init__(
+        self,
+        emit: Callable[[dict[str, Any]], None],
+        now: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._emit = emit
+        self._now = now
+        self._last_thinking_tokens_at: float | None = None
+        self._pending_thinking_tokens: dict[str, Any] | None = None
+
+    def receive(self, msg: SystemMessage) -> None:
+        event = _build_system_event(msg)
+        if event["subtype"] != "thinking_tokens":
+            self._emit(event)
+            return
+        now = self._now()
+        last = self._last_thinking_tokens_at
+        if last is None or now - last >= _THINKING_TOKENS_INTERVAL_S:
+            self._emit(event)
+            self._last_thinking_tokens_at = now
+            self._pending_thinking_tokens = None
+            return
+        self._pending_thinking_tokens = event
+
+    def flush(self) -> None:
+        if self._pending_thinking_tokens is None:
+            return
+        self._emit(self._pending_thinking_tokens)
+        self._pending_thinking_tokens = None
+
+
+async def _stream_messages_with_coalesced_telemetry(
+    prompt: str,
+    options: ClaudeAgentOptions,
+    emit: Callable[[dict[str, Any]], None],
+) -> AsyncIterator[Any]:
+    telemetry = _SystemTelemetry(emit)
+    try:
+        async for msg in _query_with_terminal_error(prompt, options):
+            if isinstance(msg, SystemMessage):
+                telemetry.receive(msg)
+                continue
+            if isinstance(msg, ResultMessage):
+                telemetry.flush()
+            yield msg
+    finally:
+        telemetry.flush()
+
+
+def _build_system_event(msg: SystemMessage) -> dict[str, Any]:
+    return {
+        "kind": "system",
+        "subtype": getattr(msg, "subtype", "") or "",
+        "text": json.dumps(getattr(msg, "data", None) or {}, default=str),
+    }
