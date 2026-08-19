@@ -44,6 +44,8 @@ def call_codex_transform(
     model: LLMModel,
     max_retries: int,
     emit: Callable[[AgentEvent], None] | None,
+    *,
+    usage_out: list[LlmUsage] | None = None,
 ) -> tuple[dict[str, object], LlmUsage]:
     if model.backend != _CODEX_BACKEND:
         raise ValueError(f"{model.value} does not select the Codex backend")
@@ -61,6 +63,7 @@ def call_codex_transform(
                     model,
                     emit,
                     usage_parts,
+                    usage_out,
                 )
             )
         except (CodexProtocolError, GenerationError, OSError) as exc:
@@ -79,6 +82,7 @@ async def _run_attempt(
     model: LLMModel,
     emit: Callable[[AgentEvent], None] | None,
     usage_parts: list[LlmUsage],
+    usage_out: list[LlmUsage] | None,
 ) -> dict[str, object]:
     agent = _build_agent(system_prompt, task, reply_model, model)
     answer_spec = agent.build_submit_answer_spec()
@@ -90,7 +94,7 @@ async def _run_attempt(
         )
         thread_id = _read_thread_id(thread)
         await server.request("turn/start", _build_turn_params(thread_id, task))
-        usage_parts.append(_build_unknown_usage(model))
+        _record_started_call(usage_parts, usage_out, model)
         await _stream_turn(server, answer_spec, emit)
     finally:
         await server.close()
@@ -262,6 +266,17 @@ def _build_unknown_usage(model: LLMModel) -> LlmUsage:
         calls=1,
         model=model.value,
     )
+
+
+def _record_started_call(
+    usage_parts: list[LlmUsage],
+    usage_out: list[LlmUsage] | None,
+    model: LLMModel,
+) -> None:
+    usage = _build_unknown_usage(model)
+    usage_parts.append(usage)
+    if usage_out is not None:
+        usage_out.append(usage)
 
 
 def _read_thread_id(result: TypeUnsafeCodexJsonObject) -> str:

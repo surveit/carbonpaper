@@ -8,6 +8,7 @@ from pydantic import BaseModel
 import app.runtime.llm as llm
 from app.core.errors import LLMError
 from app.core.agent.usage import LlmUsage
+from app.core.llm.options import LLMModel
 from app.models.stages.llm_transform import LLMConfig
 
 
@@ -19,7 +20,7 @@ def _claude_config() -> LLMConfig:
     return LLMConfig(
         prompt_instructions="judge carefully",
         prompt_data_template="Rate: {text}",
-        model="claude-haiku-4-5",
+        model=LLMModel.claude_haiku_4_5,
         max_retries=2,
     )
 
@@ -28,7 +29,7 @@ def _codex_config() -> LLMConfig:
     return LLMConfig(
         prompt_instructions="judge carefully",
         prompt_data_template="Rate: {text}",
-        model="gpt-5.6-terra",
+        model=LLMModel.gpt_5_6_terra,
         max_retries=2,
     )
 
@@ -53,8 +54,12 @@ def test_one_row_codex_model_uses_codex_runner(
         model,
         max_retries: int,
         emit,
+        *,
+        usage_out: list[LlmUsage] | None = None,
     ) -> tuple[dict[str, object], LlmUsage]:
         calls.append((system_prompt, task, reply_model, model, max_retries, emit))
+        if usage_out is not None:
+            usage_out.append(expected_usage)
         return {"verdict": "supported"}, expected_usage
 
     def forbidden_agent(*args, **kwargs):
@@ -209,7 +214,7 @@ def test_codex_override_refuses_controls_the_backend_cannot_apply() -> None:
     config = LLMConfig(
         prompt_instructions="judge carefully",
         prompt_data_template="Rate: {text}",
-        model="claude-haiku-4-5",
+        model=LLMModel.claude_haiku_4_5,
         tools=["WebSearch"],
         thinking="disabled",
     )

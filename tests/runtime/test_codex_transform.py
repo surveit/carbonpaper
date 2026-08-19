@@ -310,6 +310,47 @@ def test_each_retry_resolves_the_backend_and_records_a_call(
     assert usage.cost_usd is None
 
 
+def test_failed_retries_report_each_started_call(
+    monkeypatch: pytest.MonkeyPatch, fake_codex_server: FakeCodexServer,
+) -> None:
+    import app.runtime.codex_transform as codex_transform
+
+    usage_out: list[LlmUsage] = []
+    monkeypatch.setattr(
+        codex_transform,
+        "require_codex_backend",
+        lambda: fake_codex_server.build_command("no_submission"),
+    )
+
+    with pytest.raises(GenerationError, match="submitted no valid Reply"):
+        codex_transform.call_codex_transform(
+            "system",
+            "judge",
+            Reply,
+            LLMModel.gpt_5_6_terra,
+            max_retries=1,
+            emit=None,
+            usage_out=usage_out,
+        )
+
+    assert usage_out == [
+        LlmUsage(
+            input_tokens=None,
+            output_tokens=None,
+            cost_usd=None,
+            calls=1,
+            model="gpt-5.6-terra",
+        ),
+        LlmUsage(
+            input_tokens=None,
+            output_tokens=None,
+            cost_usd=None,
+            calls=1,
+            model="gpt-5.6-terra",
+        ),
+    ]
+
+
 def test_unexpected_mcp_request_is_rejected_without_invocation(
     monkeypatch: pytest.MonkeyPatch, fake_codex_server: FakeCodexServer,
 ) -> None:
@@ -343,7 +384,7 @@ def test_uncooperative_shutdown_preserves_unsupported_mcp_notification(
         asyncio.run(
             asyncio.wait_for(
                 codex_transform._run_attempt(
-                    (), "system", "judge", Reply, LLMModel.gpt_5_6_terra, None, []
+                    (), "system", "judge", Reply, LLMModel.gpt_5_6_terra, None, [], None
                 ),
                 timeout=0.1,
             )

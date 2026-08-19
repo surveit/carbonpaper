@@ -165,15 +165,15 @@ def _run_codex_row(
 ) -> dict[str, Any]:
     emit_llm_detail(LLM_PROMPT, text=task)
     emit = cast(EmitEvent | None, _forward_agent_events(current_detail_sink()))
-    reply, usage = call_codex_transform(
+    reply, _usage = call_codex_transform(
         system_prompt,
         task,
         reply_model,
         model,
         max_retries,
         emit,
+        usage_out=usage_out,
     )
-    _record_returned_usage(usage_out, usage)
     return reply
 
 
@@ -258,10 +258,3 @@ def _record_usage(
     """`model_name` is stamped here because this is where `model or llm.model or DEFAULT_MODEL` resolved."""
     if usage_out is not None and agent.last_usage is not None:
         usage_out.append(agent.last_usage.model_copy(update={"model": model_name}))
-
-
-def _record_returned_usage(
-    usage_out: list[LlmUsage] | None, usage: LlmUsage
-) -> None:
-    if usage_out is not None:
-        usage_out.append(usage)
