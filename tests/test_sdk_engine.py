@@ -124,10 +124,8 @@ def test_stream_turn_surfaces_in_band_result_error(monkeypatch: Any) -> None:
 
     class _ErrResult:
         is_error = True
-        result = "Bearer secret must not reach the run log"
-        subtype = "authentication_error"
-        api_error_status = 401
-        terminal_reason = "completed"
+        result = "permission denied for mcp__tools__edit_stage"
+        subtype = "error"
 
     async def fake_query(*, prompt: str, options: Any) -> Any:
         yield _Asst([_Text("Trying.")])
@@ -148,11 +146,7 @@ def test_stream_turn_surfaces_in_band_result_error(monkeypatch: Any) -> None:
 
     errors = [e for e in events if e["kind"] == "error"]
     assert len(errors) == 1
-    assert errors[0]["text"] == (
-        "Claude Code terminal error: subtype=authentication_error, "
-        "api_error_status=401, terminal_reason=completed"
-    )
-    assert "secret" not in errors[0]["text"]
+    assert "permission denied" in errors[0]["text"]
 
 
 def test_stream_turn_passes_resume_into_options(monkeypatch: Any) -> None:

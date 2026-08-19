@@ -59,17 +59,6 @@ def _stringify(content: Any) -> str:
     return str(content)
 
 
-def _format_terminal_error(msg: ResultMessage) -> str:
-    detail = f"Claude Code terminal error: subtype={getattr(msg, 'subtype', '') or 'unknown'}"
-    status = getattr(msg, "api_error_status", None)
-    reason = getattr(msg, "terminal_reason", None)
-    if status is not None:
-        detail += f", api_error_status={status}"
-    if reason:
-        detail += f", terminal_reason={reason}"
-    return detail
-
-
 class ClaudeAgentSdkEngine:
     def __init__(
         self,
@@ -212,7 +201,12 @@ class ClaudeAgentSdkEngine:
                 # tool, max_turns exhausted) without query() raising. Surface it
                 # loudly rather than ending on a silent, empty answer.
                 if getattr(msg, "is_error", False):
-                    emit({"kind": "error", "text": _format_terminal_error(msg)})
+                    detail = (
+                        getattr(msg, "result", None)
+                        or getattr(msg, "subtype", "")
+                        or "run ended with error"
+                    )
+                    emit({"kind": "error", "text": f"agent run failed: {detail}"})
         transcript = [
             {"role": "user", "parts": [{"type": "text", "text": prompt}]},
             {"role": "assistant", "parts": assistant_parts},
