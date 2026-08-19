@@ -96,6 +96,17 @@ for line in sys.stdin:
                 "method": "mcpServer/elicitation/request",
                 "params": {},
             })
+        elif mode == "lifecycle_notification_then_valid":
+            send({
+                "method": "remoteControl/status/changed",
+                "params": {
+                    "status": "connected",
+                },
+            })
+            send_tool_call(
+                "submit-1",
+                {"verdict": "supported", "answer_is_complete": True},
+            )
         elif mode == "invalid_then_valid":
             send_tool_call("submit-1", {"answer_is_complete": True})
         else:
@@ -263,6 +274,17 @@ def test_unexpected_mcp_request_is_rejected_without_invocation(
         if request.get("id") == "mcp-request-1"
     )
     assert rejection["error"]["code"] == -32601  # type: ignore[index]
+
+
+def test_remote_control_status_notification_is_ignored_before_submit_answer(
+    monkeypatch: pytest.MonkeyPatch, fake_codex_server: FakeCodexServer,
+) -> None:
+    reply, usage = _run_codex_transform(
+        monkeypatch, fake_codex_server, "lifecycle_notification_then_valid"
+    )
+
+    assert reply == {"verdict": "supported"}
+    assert usage.calls == 1
 
 
 def _run_codex_transform(

@@ -26,6 +26,7 @@ _DYNAMIC_TOOL_CALL = "item/tool/call"
 _AGENT_MESSAGE_DELTA = "item/agentMessage/delta"
 _TURN_COMPLETED = "turn/completed"
 _ERROR_NOTIFICATION = "error"
+_REMOTE_CONTROL_STATUS_CHANGED = "remoteControl/status/changed"
 _MESSAGE_ID = "id"
 _COMPLETED_STATUS = "completed"
 _CODEX_BACKEND = "codex"
@@ -200,6 +201,8 @@ def _handle_notification(
         _emit(emit, {"kind": "thinking", "text": _read_delta(message)})
     elif method == _ERROR_NOTIFICATION:
         _emit(emit, {"kind": "error", "text": _read_error_text(message)})
+    elif method == _REMOTE_CONTROL_STATUS_CHANGED:
+        return False
     elif method == _TURN_COMPLETED:
         _check_turn_status(message)
         return True
