@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -174,6 +175,51 @@ class Reply(BaseModel):
     verdict: Literal["supported"]
 
 
+class UncooperativeProcess:
+    def __init__(self) -> None:
+        self.returncode: int | None = None
+        self.stdin = None
+        self.terminated = False
+        self.killed = False
+        self._waiter = asyncio.Event()
+
+    def terminate(self) -> None:
+        self.terminated = True
+
+    def kill(self) -> None:
+        self.killed = True
+
+    async def wait(self) -> int:
+        await self._waiter.wait()
+        return 0
+
+
+class UncooperativeMcpServer:
+    instances: list[UncooperativeMcpServer] = []
+
+    def __init__(self, _command: object, _env: object) -> None:
+        self.process = UncooperativeProcess()
+        self.instances.append(self)
+
+    async def initialize(self) -> None:
+        return None
+
+    async def request(self, method: str, _params: object) -> dict[str, object]:
+        if method == "thread/start":
+            return {"thread": {"id": "thread-1"}}
+        return {"turn": {"id": "turn-1"}}
+
+    async def next_message(self) -> dict[str, object]:
+        return {"method": "mcpServer/startupStatus/updated", "params": {}}
+
+    async def close(self) -> None:
+        from app.core.agent.codex_protocol import CodexAppServer
+
+        server = CodexAppServer((), {})
+        server._process = self.process
+        await server.close()
+
+
 def test_agent_builds_the_shared_submit_answer_spec() -> None:
     agent = Agent(system_prompt="system", target_schema=Reply, task="judge")
 
@@ -283,6 +329,31 @@ def test_unexpected_mcp_request_is_rejected_without_invocation(
         if request.get("id") == "mcp-request-1"
     )
     assert rejection["error"]["code"] == -32601  # type: ignore[index]
+
+
+def test_uncooperative_shutdown_preserves_unsupported_mcp_notification(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.core.agent.codex_protocol as codex_protocol
+    import app.runtime.codex_transform as codex_transform
+
+    UncooperativeMcpServer.instances.clear()
+    monkeypatch.setattr(codex_protocol, "_PROCESS_SHUTDOWN_TIMEOUT_S", 0.001, raising=False)
+    monkeypatch.setattr(codex_transform, "CodexAppServer", UncooperativeMcpServer)
+
+    with pytest.raises(CodexProtocolError, match="mcpServer/startupStatus/updated"):
+        asyncio.run(
+            asyncio.wait_for(
+                codex_transform._run_attempt(
+                    (), "system", "judge", Reply, LLMModel.gpt_5_6_terra, None, []
+                ),
+                timeout=0.1,
+            )
+        )
+
+    process = UncooperativeMcpServer.instances[0].process
+    assert process.terminated
+    assert process.killed
 
 
 def test_remote_control_status_notification_is_ignored_before_submit_answer(
