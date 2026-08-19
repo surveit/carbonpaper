@@ -107,6 +107,15 @@ for line in sys.stdin:
                 "submit-1",
                 {"verdict": "supported", "answer_is_complete": True},
             )
+        elif mode == "thread_started_notification_then_valid":
+            send({
+                "method": "thread/started",
+                "params": {"thread": {"id": "thread-1"}},
+            })
+            send_tool_call(
+                "submit-1",
+                {"verdict": "supported", "answer_is_complete": True},
+            )
         elif mode == "invalid_then_valid":
             send_tool_call("submit-1", {"answer_is_complete": True})
         else:
@@ -281,6 +290,17 @@ def test_remote_control_status_notification_is_ignored_before_submit_answer(
 ) -> None:
     reply, usage = _run_codex_transform(
         monkeypatch, fake_codex_server, "lifecycle_notification_then_valid"
+    )
+
+    assert reply == {"verdict": "supported"}
+    assert usage.calls == 1
+
+
+def test_thread_started_notification_is_ignored_before_submit_answer(
+    monkeypatch: pytest.MonkeyPatch, fake_codex_server: FakeCodexServer,
+) -> None:
+    reply, usage = _run_codex_transform(
+        monkeypatch, fake_codex_server, "thread_started_notification_then_valid"
     )
 
     assert reply == {"verdict": "supported"}
