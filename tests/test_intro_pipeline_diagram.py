@@ -69,6 +69,28 @@ def test_narrow_intro_clones_the_desktop_scene_for_each_step() -> None:
     assert "pipe.dataset.pipeline = 'true';" in page
 
 
+def test_narrow_intro_uses_the_approved_beat_sequence() -> None:
+    page = INTRO_PAGE.read_text(encoding="utf-8")
+
+    assert 'const STATIC_BEATS = {' in page
+    assert "1: {scene: {ask: 1}}" in page
+    assert "2: {scene: {layer: 'cloud'}}" in page
+    assert '3: null' in page
+    assert "4: {scene: {out: 'said'}, result: true}" in page
+    assert "5: {scene: {layer: 'graph'}}" in page
+    assert "6: {scene: {layer: 'graph', nodes: ['clean'], pin: '6'}, viewBox: '150 70 220 100'}" in page
+    assert "7: {scene: {layer: 'graph', nodes: ['clean'], pin: '7'}, viewBox: '150 70 220 100'}" in page
+    assert "8: {scene: {layer: 'graph', nodes: ['llm']}, neutralFocus: true}" in page
+    assert "9: {scene: {out: 'ran'}}" in page
+    assert "10: {scene: {layer: 'graph', nodes: ALL_NODES, edges: ALL_EDGES, over: '10'}}" in page
+    assert "11: {scene: {over: '11'}}" in page
+    assert 'const beat = STATIC_BEATS[Number(step.dataset.step)];' in page
+    assert 'if (!beat) continue;' in page
+    assert 'configureStaticBeat(clone, beat);' in page
+    assert "stage.querySelector('.tag').textContent = 'model said';" in page
+    assert 'mid.append(stage.querySelector(`[data-over="${beat.scene.over}"]`));' in page
+
+
 def test_mobile_respects_reduced_motion() -> None:
     page = INTRO_PAGE.read_text(encoding="utf-8")
 
