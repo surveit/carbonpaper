@@ -1,25 +1,24 @@
 # Carbon Paper — reviewable AI workflows
 
+A chat is a good place to investigate and a terrible place to review. Carbon Paper
+turns open-ended work into a constrained workflow where deterministic steps are
+predictable and judgment calls are visible. The same structure that makes review
+faster makes the investigation easy to rerun and reuse.
+
 Some questions you only ask once. How much did firms spend lobbying about AI last
 year. Which of these 400 contracts name the same shell company. What changed
 between two editions of a public register.
 
 You are not building a product. You want the answer, and you need it to hold up.
 
-Both usual routes fail that. Hand the files to a chat model and a number comes back
-in minutes, but you cannot publish it: the model made judgement calls you never saw,
-over rows you never looked at. Write the analysis yourself and every step is
-checkable, but you have spent two days engineering something you will run twice.
+Carbon Paper turns the investigation's method into a workflow: a chain of small named
+steps running against the original files. Most steps are ordinary deterministic code.
+A step that genuinely needs judgement calls a model, and it is the only one that does.
 
-Carbon Paper is the third route. You write down how the investigation works, in
-prose. That becomes a workflow: a chain of small named steps running against your
-original files. Most steps are ordinary deterministic code. A step that genuinely
-needs judgement calls a model, and it is the only one that does.
-
-Every step is then open to a reader who did not write it:
+Every step is then open to expert review:
 
 - it states in plain English what it does, and shows what it changed in your rows
-- a step needing judgement can halt the run and wait for a person to decide
+- a step needing judgement can halt the run and wait for a reviewer to decide
 - every published figure traces back to the source rows it was computed from
 - the whole run exports as a folder that opens in a browser with no app and no network
 
