@@ -175,7 +175,7 @@
     body { overflow-x: hidden; }
     .scrolly { grid-template-columns: 1fr; gap: 0; padding: 0 1.25rem; }
     .stage-wrap { order: -1; position: sticky; top: 0;
-                  height: clamp(16rem, 42svh, 26rem); z-index: 1; }
+                  height: min(42svh, 26rem); z-index: 1; }
     .stage { min-height: 0; height: 100%; grid-template-columns: 1fr; }
     .mid { min-height: 0; height: 100%; }
     .graph-hold { height: 100%; }
@@ -195,7 +195,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .step-inner, .zone, .layer, .fade, #pipe .node, #pipe .flow, .pin, .over { transition: none; }
+    .step-inner, .zone, .layer, .fade, #pipe .node, #pipe .flow, .pin, .over, .start .cta { transition: none; }
     .cloud .blob { animation: none; }
   }
 </style>
