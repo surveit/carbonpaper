@@ -1,5 +1,11 @@
 # Overview — what this is and why
 
+## Product vision
+A chat is a good place to investigate and a terrible place to review. Carbon Paper
+turns open-ended work into a constrained workflow where deterministic steps are
+predictable and judgment calls are visible. The same structure that makes review
+faster makes the investigation easy to rerun and reuse.
+
 ## Mission
 Serves **journalism and institutional accountability**: finding, verifying, and surfacing
 true things about how power and money work. The standards *are* the product — a fabricated

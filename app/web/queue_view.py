@@ -129,7 +129,7 @@ def build_queue_page(
             None if queue.review_notes_column is None
             else resolve_notes_label(stage_def, queue.review_notes_column)
         ),
-        context_columns=_subtract_reviewed_columns(described.columns, queue),
+        context_columns=_select_context_columns(described.columns, queue),
         schema_note=described.schema_note,
         lineage_note=lineage.note,
         items=items,
@@ -321,11 +321,14 @@ def _build_reviewed_field(
 # ── Describing the queued rows ───────────────────────────────────────────────
 
 
-def _subtract_reviewed_columns(
+def _select_context_columns(
     columns: list[QueuedColumn], queue: QueueConfig
 ) -> list[QueuedColumn]:
     under_review = set(queue.reviewed_columns)
-    return [column for column in columns if column.name not in under_review]
+    if queue.context_columns is None:
+        return [column for column in columns if column.name not in under_review]
+    by_name = {column.name: column for column in columns}
+    return [by_name[name] for name in queue.context_columns if name in by_name]
 
 
 def _find_schema_discrepancy(declared: list[str], present: list[str]) -> str | None:

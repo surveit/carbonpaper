@@ -70,6 +70,11 @@ def test_the_response_names_the_file_for_a_caller_that_is_not_the_browser(projec
     assert body["sha256"] == CSV_SHA
     assert body["filename"] == "posts.csv"
     assert body["bytes"] == len(CSV)
+    assert body["uploaded_at"]
+    assert body["label"].startswith(
+        "Uploaded "
+    )
+    assert body["label"].endswith(f" · posts.csv · {len(CSV)}B")
 
 
 def test_the_returned_path_is_read_back_off_the_record_alone(project):
@@ -241,3 +246,17 @@ def test_a_run_cannot_bind_a_file_another_project_holds(project):
 def test_a_binding_carries_the_format_the_extension_names(project):
     upload("posts.csv", CSV)
     assert resolve_file_binding("demo", CSV_SHA)["format"] == "csv"
+
+
+def test_a_tsv_upload_binds_as_tsv(project):
+    body = b"name\tval\nx\t1\n"
+    sha256 = upload("posts.tsv", body).json()["sha256"]
+    assert resolve_file_binding("demo", sha256)["format"] == "tsv"
+
+
+def test_a_binding_uses_the_current_filename_not_the_stored_blob_suffix(project):
+    body = b"name,val\nx,1\n"
+    stored_path = upload("posts.tsv", body).json()["path"]
+    sha256 = upload("posts.csv", body).json()["sha256"]
+    binding = resolve_file_binding("demo", sha256)
+    assert binding == {"path": stored_path, "format": "csv"}

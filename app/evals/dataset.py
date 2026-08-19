@@ -18,6 +18,8 @@ def read_table_ref(table: TableRef) -> pd.DataFrame:
     path = repo_root() / table.path
     if table.format == FileFormat.csv:
         return read_source_csv(path)
+    if table.format == FileFormat.tsv:
+        return read_source_csv(path, delimiter="\t")
     if table.format == FileFormat.parquet:
         return read_frame_file(path)
     if table.format == FileFormat.json:

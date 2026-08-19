@@ -12,8 +12,23 @@
   function fileOption(file) {
     var option = document.createElement("option");
     option.value = file.sha256;
-    option.textContent = file.filename + " — " + describeBytes(file.bytes);
+    option.dataset.uploadedAt = file.uploaded_at;
+    option.dataset.filename = file.filename;
+    option.dataset.uploadedLabel = file.uploaded_label;
+    option.dataset.sizeLabel = file.size_label;
+    option.textContent = file.label;
     return option;
+  }
+
+  function insertFileOption(select, file) {
+    var current = select.querySelector('option[value="' + file.sha256 + '"]');
+    if (current) current.remove();
+    var uploadedAt = Date.parse(file.uploaded_at);
+    var before = Array.from(select.querySelectorAll("option[data-uploaded-at]")).find(
+      function (option) { return Date.parse(option.dataset.uploadedAt) < uploadedAt; }
+    );
+    select.insertBefore(fileOption(file), before || null);
+    if (window.CarbonFilePicker) window.CarbonFilePicker.refresh(select);
   }
 
   function buildRow(template, row, files) {
@@ -26,6 +41,10 @@
     pick.options[0].textContent = row.authored_path
       ? row.authored_path + " — the path this workflow names"
       : "Choose a file…";
+    pick.options[0].dataset.fileKind = row.authored_path ? "authored" : "empty";
+    pick.options[0].dataset.filename = row.authored_path || "Choose a file…";
+    if (row.authored_path) pick.options[0].dataset.detail = "Workflow path";
+    else delete pick.options[0].dataset.detail;
     files.forEach(function (file) { pick.appendChild(fileOption(file)); });
     node.querySelector(".run-input-name").htmlFor = pick.id;
     node.querySelector(".run-input-name code").textContent = stageId;
@@ -52,6 +71,7 @@
         rows.appendChild(buildRow(template, row, choices.files));
       });
       box.replaceChildren(rows);
+      if (window.CarbonFilePicker) window.CarbonFilePicker.init(box);
     } catch (e) {
       /* Keep the shown fields after a network or parse failure. */
     }
@@ -68,9 +88,7 @@
 
   function offerEverywhere(form, file, pick) {
     form.querySelectorAll("select.file-pick").forEach(function (select) {
-      if (!select.querySelector('option[value="' + file.sha256 + '"]')) {
-        select.appendChild(fileOption(file));
-      }
+      insertFileOption(select, file);
     });
     pick.value = file.sha256;
     pick.dispatchEvent(new Event("change", { bubbles: true }));

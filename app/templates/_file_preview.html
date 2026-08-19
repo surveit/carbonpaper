@@ -1,0 +1,23 @@
+<div class="file-preview-result" data-file-preview-filename="{{ preview.filename }}">
+  <p class="file-preview-facts">
+    <strong>{{ preview.filename }}</strong>
+    <span>{{ preview.format | upper }}</span>
+    <span>{% if preview.row_count > preview.rows | length %}First {{ "{:,}".format(preview.rows | length) }} of {% endif %}{{ "{:,}".format(preview.row_count) }} row{% if preview.row_count != 1 %}s{% endif %}</span>
+  </p>
+  {% if preview.columns %}
+    {% if preview.rows %}
+    <div class="table-scroll file-preview-table"><table class="data-preview">
+      <thead><tr>{% for column in preview.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for row in preview.rows %}
+        <tr>{% for cell in row %}<td class="cell-clip" title="{{ cell }}">{{ cell }}</td>{% endfor %}</tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}
+    <p class="file-preview-empty">This file has columns but no rows.</p>
+    {% endif %}
+  {% else %}
+  <p class="file-preview-empty">This file has no columns or rows.</p>
+  {% endif %}
+</div>

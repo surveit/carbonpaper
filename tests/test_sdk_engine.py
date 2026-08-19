@@ -8,7 +8,6 @@ import json
 from typing import Any
 
 import app.core.agent.sdk_engine as se
-import pytest
 
 
 class _Text:  # stand-ins matching the block interface the engine reads
@@ -17,13 +16,21 @@ class _Text:  # stand-ins matching the block interface the engine reads
 
 
 class _Tool:
-    def __init__(self, name: str, inp: dict[str, Any]) -> None:
-        self.name, self.input = name, inp
+    def __init__(
+        self, name: str, inp: dict[str, Any], tool_use_id: str = "tool-use",
+    ) -> None:
+        self.name, self.input, self.id = name, inp, tool_use_id
 
 
 class _Result:
-    def __init__(self, content: str) -> None:
-        self.content = content
+    def __init__(
+        self,
+        content: str,
+        tool_use_id: str = "tool-use",
+        *,
+        is_error: bool = False,
+    ) -> None:
+        self.content, self.tool_use_id, self.is_error = content, tool_use_id, is_error
 
 
 class _Think:
@@ -89,6 +96,48 @@ def test_stream_turn_maps_blocks_to_normalized_events(monkeypatch: Any) -> None:
     assert tool_call_ev["label"] == "Editing a stage"
 
 
+def test_stream_turn_drops_the_submit_answer_result_before_the_next_turn(
+    monkeypatch: Any,
+) -> None:
+    async def fake_query(*, prompt: str, options: Any) -> Any:
+        yield _Asst([_Tool("mcp__tools__submit_answer", {"x": 1}, "rejected")])
+        yield _User([_Result("Missing y", "rejected", is_error=True)])
+        yield _Asst([_Tool("mcp__tools__submit_answer", {"x": 1}, "accepted")])
+        yield _User([_Result("Accepted", "accepted")])
+        yield _Asst([_Text("I already submitted the answer.")])
+        yield _Done()
+
+    monkeypatch.setattr(se, "query", fake_query)
+    monkeypatch.setattr(se, "AssistantMessage", _Asst)
+    monkeypatch.setattr(se, "UserMessage", _User)
+    monkeypatch.setattr(se, "ResultMessage", _Done)
+    monkeypatch.setattr(se, "TextBlock", _Text)
+    monkeypatch.setattr(se, "ToolUseBlock", _Tool)
+    monkeypatch.setattr(se, "ToolResultBlock", _Result)
+    monkeypatch.setattr(se, "ThinkingBlock", type("Nope", (), {}))
+
+    events: list[dict[str, Any]] = []
+    engine = se.ClaudeAgentSdkEngine(
+        system_prompt="sp",
+        mcp_server=object(),
+        allowed_tools=["mcp__tools__submit_answer"],
+    )
+
+    transcript, _ = asyncio.run(
+        engine.stream_turn("answer", message_history=[], emit=events.append)
+    )
+
+    assert [event["kind"] for event in events] == [
+        "tool_call", "tool_result", "tool_call", "text",
+    ]
+    assert [
+        part["content"]
+        for message in transcript
+        for part in message["parts"]
+        if part["type"] == "tool_result"
+    ] == ["Missing y"]
+
+
 def test_stream_turn_drops_a_thinking_block_carrying_no_text(monkeypatch: Any) -> None:
     """Forwarded, it opens an empty disclosure — indistinguishable from a load failure."""
 
@@ -125,15 +174,12 @@ def test_stream_turn_surfaces_in_band_result_error(monkeypatch: Any) -> None:
 
     class _ErrResult:
         is_error = True
-        result = "Bearer secret must not reach the run log"
-        subtype = "authentication_error"
-        api_error_status = 401
-        terminal_reason = "completed"
+        result = "permission denied for mcp__tools__edit_stage"
+        subtype = "error"
 
     async def fake_query(*, prompt: str, options: Any) -> Any:
         yield _Asst([_Text("Trying.")])
         yield _ErrResult()
-        raise se.ClaudeSDKError("Claude Code returned an error result: success")
 
     monkeypatch.setattr(se, "query", fake_query)
     monkeypatch.setattr(se, "AssistantMessage", _Asst)
@@ -146,17 +192,11 @@ def test_stream_turn_surfaces_in_band_result_error(monkeypatch: Any) -> None:
 
     events: list[dict[str, Any]] = []
     engine = se.ClaudeAgentSdkEngine(system_prompt="sp", mcp_server=object(), allowed_tools=[])
-    with pytest.raises(se.ClaudeSDKError) as exc_info:
-        asyncio.run(engine.stream_turn("edit", message_history=[], emit=events.append))
+    asyncio.run(engine.stream_turn("edit", message_history=[], emit=events.append))
 
     errors = [e for e in events if e["kind"] == "error"]
     assert len(errors) == 1
-    assert errors[0]["text"] == (
-        "Claude Code terminal error: subtype=authentication_error, "
-        "api_error_status=401, terminal_reason=completed"
-    )
-    assert str(exc_info.value) == errors[0]["text"]
-    assert "secret" not in errors[0]["text"]
+    assert "permission denied" in errors[0]["text"]
 
 
 def test_stream_turn_passes_resume_into_options(monkeypatch: Any) -> None:

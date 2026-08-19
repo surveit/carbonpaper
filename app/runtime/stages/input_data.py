@@ -41,7 +41,9 @@ _DATE_TYPES = frozenset({"date", "datetime"})
 # so a cell the sheet marks as text still comes back a number. parquet is read
 # through arrow, which hands pandas an already-typed column; geojson is built
 # from json.loads dicts.
-_INFERRING_FORMATS = frozenset({FileFormat.csv, FileFormat.json, FileFormat.xlsx})
+_INFERRING_FORMATS = frozenset(
+    {FileFormat.csv, FileFormat.tsv, FileFormat.json, FileFormat.xlsx}
+)
 
 
 def preflight_input_data(
@@ -124,7 +126,7 @@ def _text_on_disk_columns(schema: TableSchema | None, fmt: str) -> list[str]:
     # holds one scalar, never a real list or dict, and a date pinned to str is
     # re-read below by pd.to_datetime, which round-trips a genuine Excel date and
     # rescues a compact YYYYMMDD one that inference would call a number.
-    if fmt in (FileFormat.csv, FileFormat.xlsx):
+    if fmt in (FileFormat.csv, FileFormat.tsv, FileFormat.xlsx):
         return [c.name for c in schema.columns
                 if c.type in _TEXT_ON_DISK_TYPES or c.type.startswith("list[")]
     # json (lines) carries real JSON types, so only `str` is pinned: a JSON string

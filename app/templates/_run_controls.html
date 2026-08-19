@@ -49,6 +49,7 @@
   the number is bordered — "first" and "rows" sit outside the field, because a word
   inside a field's frame reads as something the reader may type over.
 #}
+{% from "_file_picker.html" import file_picker %}
 {% macro input_row(stage_id, authored_path, files) %}
 <div class="run-input-row">
   <label class="run-input-name" for="binding__{{ stage_id }}">
@@ -56,17 +57,7 @@
   </label>
   <div class="run-input-controls">
     <span class="path-field">
-      <select id="binding__{{ stage_id }}" name="binding__{{ stage_id }}"
-              class="file-pick" {% if not authored_path %}required{% endif %}>
-        {% if authored_path %}
-        <option value="">{{ authored_path }} — the path this workflow names</option>
-        {% else %}
-        <option value="">Choose a file…</option>
-        {% endif %}
-        {% for f in files %}
-        <option value="{{ f.sha256 }}">{{ f.filename }} — {{ f.bytes | filesize }}</option>
-        {% endfor %}
-      </select>
+      {{ file_picker("binding__" ~ stage_id, authored_path, files) }}
       <button type="button" class="btn browse-btn">Upload file…</button>
     </span>
     <label class="run-limit" title="read only the first N rows of this file, for this run">
@@ -130,11 +121,24 @@
       <button type="button" class="btn primary run-upload-submit" disabled>Upload file</button>
     </div>
   </dialog>
+  <dialog id="run-file-preview" class="file-preview-dialog"
+          aria-labelledby="run-file-preview-title">
+    <div class="file-preview-frame">
+      <div class="file-preview-head">
+        <h2 id="run-file-preview-title" class="file-preview-title">File preview</h2>
+        <button type="button" class="file-preview-close" aria-label="Close file preview">×</button>
+      </div>
+      <div class="file-preview-body" aria-live="polite">
+        <p class="file-preview-loading" role="status">Loading preview…</p>
+      </div>
+    </div>
+  </dialog>
   {# Inert until run_controls.js clones it; a <template>'s fields are not part of
      the form, so the empty stage_id below is never submitted. #}
   <template class="run-input-template">{{ input_row("", "", []) }}</template>
 </form>
 <script src="/static/run_controls.js"></script>
+<script src="/static/file-preview.js"></script>
 {% else %}
 <div class="empty-state">
   <h2>No version to run</h2>

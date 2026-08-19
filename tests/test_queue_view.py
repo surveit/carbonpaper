@@ -25,6 +25,7 @@ def _queue_stage(
     target_spec: dict[str, object] | None = None,
     input_ids: list[str] | None = None,
     reads: list[str] | None = None,
+    context_columns: list[str] | None = None,
 ) -> WorkflowStage:
     added: list[dict[str, object]] = queue_added_columns(target, target_type)
     added[0] = {**added[0], **(target_spec or {})}
@@ -45,7 +46,10 @@ def _queue_stage(
             "id": "review", "description": "Review", "type": "human_review_queue",
             "inputs": inputs,
             "signature": signature,
-            "queue": queue_columns(source=source, target=target),
+            "queue": {
+                **queue_columns(source=source, target=target),
+                **({} if context_columns is None else {"context_columns": context_columns}),
+            },
         },
     ])
     return workflow.find_workflow_stage("review")
@@ -123,6 +127,24 @@ def test_the_context_table_omits_the_columns_under_review():
     page = queue_view.build_queue_page("p", "r", stage, stage.stage.queue, snapshot, None, None)
 
     assert [column.name for column in page.context_columns] == ["id", "score"]
+
+
+def test_declared_context_columns_are_the_ordered_subset_shown():
+    stage = _queue_stage(_LABEL_COLUMNS, context_columns=["score", "id"])
+    snapshot = pd.DataFrame({"id": ["a"], "score": [2], "label": ["high"]})
+
+    page = queue_view.build_queue_page("p", "r", stage, stage.stage.queue, snapshot, None, None)
+
+    assert [column.name for column in page.context_columns] == ["score", "id"]
+
+
+def test_an_empty_context_columns_list_shows_no_noneditable_columns():
+    stage = _queue_stage(_LABEL_COLUMNS, context_columns=[])
+    snapshot = pd.DataFrame({"id": ["a"], "score": [2], "label": ["high"]})
+
+    page = queue_view.build_queue_page("p", "r", stage, stage.stage.queue, snapshot, None, None)
+
+    assert page.context_columns == []
 
 
 # ── The reviewed fields ──────────────────────────────────────────────────────

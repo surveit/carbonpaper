@@ -8,12 +8,11 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, AsyncIterator, Callable
+from typing import Any, Callable
 
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
-    ClaudeSDKError,
     ThinkingConfig,
     query,
     ResultMessage,
@@ -58,32 +57,6 @@ def _stringify(content: Any) -> str:
     if isinstance(content, (list, tuple)):
         return " ".join(c if isinstance(c, str) else str(c) for c in content)
     return str(content)
-
-
-def _format_terminal_error(msg: ResultMessage) -> str:
-    detail = f"Claude Code terminal error: subtype={getattr(msg, 'subtype', '') or 'unknown'}"
-    status = getattr(msg, "api_error_status", None)
-    reason = getattr(msg, "terminal_reason", None)
-    if status is not None:
-        detail += f", api_error_status={status}"
-    if reason:
-        detail += f", terminal_reason={reason}"
-    return detail
-
-
-async def _query_with_terminal_error(
-    prompt: str, options: ClaudeAgentOptions,
-) -> AsyncIterator[Any]:
-    terminal_error: str | None = None
-    try:
-        async for msg in query(prompt=prompt, options=options):
-            if isinstance(msg, ResultMessage) and getattr(msg, "is_error", False):
-                terminal_error = _format_terminal_error(msg)
-            yield msg
-    except ClaudeSDKError as exc:
-        if terminal_error is None:
-            raise
-        raise ClaudeSDKError(terminal_error) from exc
 
 
 class ClaudeAgentSdkEngine:
@@ -162,8 +135,9 @@ class ClaudeAgentSdkEngine:
         # previous turn's figure in place would bill it a second time.
         self.last_usage = None
         assistant_parts: list[dict[str, Any]] = []
+        hidden_tool_result_ids: set[str] = set()
         session_id: str | None = None
-        async for msg in _query_with_terminal_error(prompt, self._options(resume)):
+        async for msg in query(prompt=prompt, options=self._options(resume)):
             if isinstance(msg, AssistantMessage):
                 for block in msg.content:
                     if isinstance(block, ThinkingBlock):
@@ -182,6 +156,8 @@ class ClaudeAgentSdkEngine:
                         # (e.g. "mcp__tools__read_stage"); the friendly label is
                         # keyed by the bare tool name.
                         bare = block.name.rsplit("__", 1)[-1]
+                        if bare == "submit_answer":
+                            hidden_tool_result_ids.add(block.id)
                         label = self._tool_labels.get(bare, bare)
                         emit({
                             "kind": "tool_call",
@@ -198,14 +174,9 @@ class ClaudeAgentSdkEngine:
             elif isinstance(msg, UserMessage):
                 # UserMessage.content may be a bare str (a plain user turn) or a
                 # list of blocks (tool results). We only surface tool results.
-                blocks = msg.content if isinstance(msg.content, list) else []
-                for block in blocks:
-                    if isinstance(block, ToolResultBlock):
-                        content = _stringify(getattr(block, "content", ""))
-                        emit({"kind": "tool_result", "content": content})
-                        assistant_parts.append(
-                            {"type": "tool_result", "content": content}
-                        )
+                _record_tool_results(
+                    msg, emit, assistant_parts, hidden_tool_result_ids
+                )
             elif isinstance(msg, SystemMessage):
                 # The CLI's own account of the turn — the init message carries
                 # which MCP servers connected and which tools the model can
@@ -228,9 +199,33 @@ class ClaudeAgentSdkEngine:
                 # tool, max_turns exhausted) without query() raising. Surface it
                 # loudly rather than ending on a silent, empty answer.
                 if getattr(msg, "is_error", False):
-                    emit({"kind": "error", "text": _format_terminal_error(msg)})
+                    detail = (
+                        getattr(msg, "result", None)
+                        or getattr(msg, "subtype", "")
+                        or "run ended with error"
+                    )
+                    emit({"kind": "error", "text": f"agent run failed: {detail}"})
         transcript = [
             {"role": "user", "parts": [{"type": "text", "text": prompt}]},
             {"role": "assistant", "parts": assistant_parts},
         ]
         return transcript, session_id
+
+
+def _record_tool_results(
+    message: UserMessage,
+    emit: Callable[[dict[str, Any]], None],
+    assistant_parts: list[dict[str, Any]],
+    hidden_tool_result_ids: set[str],
+) -> None:
+    blocks = message.content if isinstance(message.content, list) else []
+    for block in blocks:
+        if not isinstance(block, ToolResultBlock):
+            continue
+        hide = block.tool_use_id in hidden_tool_result_ids
+        hidden_tool_result_ids.discard(block.tool_use_id)
+        if hide and not getattr(block, "is_error", False):
+            continue
+        content = _stringify(getattr(block, "content", ""))
+        emit({"kind": "tool_result", "content": content})
+        assistant_parts.append({"type": "tool_result", "content": content})

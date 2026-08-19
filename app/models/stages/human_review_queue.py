@@ -58,7 +58,7 @@ class QueueSortKey(_Base):
 
 class QueueConfig(StageConfig):
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
-        "filter", "reviewer_instructions", "reviewed_columns",
+        "filter", "reviewer_instructions", "reviewed_columns", "context_columns",
         "verdict_column", "reviewer_column", "reviewed_at_column", "review_notes_column",
     })
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({
@@ -71,6 +71,14 @@ class QueueConfig(StageConfig):
         description=(
             "Each input column the human reviews, mapped to the name of the column this "
             "stage adds carrying the reviewed value: {source column -> reviewed column}."
+        ),
+    )
+    context_columns: Optional[list[str]] = Field(
+        default=None,
+        description=(
+            "Optional ordered input columns shown beside the editable columns. Omit it "
+            "to show every input column the signature reads except reviewed columns; "
+            "use an empty list to show no additional context."
         ),
     )
     verdict_column: str
@@ -136,6 +144,7 @@ class HumanReviewQueueStage(AbstractStage):
             _find_duplicate_added_names(sid, queue)
             + _find_filter_issues(sid, queue, input_schema)
             + _find_sort_issues(sid, queue, input_schema)
+            + _find_context_column_issues(sid, queue, self.signature, input_schema)
             + _find_reviewed_source_issues(sid, queue, input_schema)
             + _find_added_column_collisions(sid, queue, input_schema)
         )
@@ -289,6 +298,42 @@ def _find_sort_issues(sid: str, queue: QueueConfig, input_schema: TableSchema) -
     return issues
 
 
+def _find_context_column_issues(
+    sid: str, queue: QueueConfig, signature: ExtendsSignature,
+    input_schema: TableSchema,
+) -> list[str]:
+    if queue.context_columns is None:
+        return []
+    declared = {column.name for column in input_schema.columns}
+    reviewed = set(queue.reviewed_columns)
+    read = {column.name for entry in signature.reads for column in entry.columns}
+    issues: list[str] = []
+    seen: set[str] = set()
+    for name in queue.context_columns:
+        if name not in declared:
+            issues.append(
+                f"stage '{sid}': queue.context_columns names column '{name}' not in "
+                f"its input schema (declares {sorted(declared)})"
+            )
+        elif name not in read:
+            issues.append(
+                f"stage '{sid}': queue.context_columns names `{name}` but the "
+                "signature does not read it, so the queued row does not carry it"
+            )
+        if name in reviewed:
+            issues.append(
+                f"stage '{sid}': queue.context_columns names reviewed column '{name}' "
+                "— a column cannot be both editable and context"
+            )
+        if name in seen:
+            issues.append(
+                f"stage '{sid}': queue.context_columns names column '{name}' more "
+                "than once"
+            )
+        seen.add(name)
+    return issues
+
+
 def _find_reviewed_source_issues(
     sid: str, queue: QueueConfig, input_schema: TableSchema
 ) -> list[str]:
@@ -398,7 +443,8 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
         min_inputs=1,
         required=["reviewed_columns", "verdict_column", "reviewer_column",
                      "reviewed_at_column"],
-        optional=["filter", "reviewer_instructions", "review_notes_column", "sort",
+        optional=["filter", "reviewer_instructions", "review_notes_column",
+                     "context_columns", "sort",
                      "routing", "conflict_resolution", "estimated_volume_per_week"],
         notes=(
             "Output columns are the input columns PLUS exactly what its `queue` block names: "
@@ -410,9 +456,12 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
             "verdict column nullable. A reviewed column is ADDED beside its source, "
             "never modifying it: name it `reviewed_<source>` and declare it with the "
             "SAME spec, nullability at least as permissive. Its source must be scalar. "
-            "`queue.filter` may reference INPUT columns only. The reviewer sees exactly the "
-            "columns the signature `reads`: they must cover every column `queue.filter` "
-            "tests, and may never be empty. The verdict column holds "
+            "`queue.filter` may reference INPUT columns only. Without "
+            "`queue.context_columns`, the reviewer sees every column the signature `reads` "
+            "except the reviewed columns. When declared, `queue.context_columns` is the "
+            "ordered subset shown beside the reviewed columns; each must be an input column "
+            "the signature reads and none may also be reviewed. Signature reads must cover "
+            "every column `queue.filter` tests, and may never be empty. The verdict column holds "
             "\"approve\", \"modify\", or \"skipped\" (the filter did not select the row), so "
             "a downstream stage wanting only human-sanctioned values filters on != "
             "\"skipped\". `queue.sort` declares the order a human works the queue in; "
