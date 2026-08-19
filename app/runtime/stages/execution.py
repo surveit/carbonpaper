@@ -86,7 +86,15 @@ MakeRowMapper = Callable[[WorkflowStage, RunContext, pa.Table], RowMapper]
 # nothing about caching: which rows it is asked about is the shape's decision
 # (see `_run_batched`).
 RunBatches = Callable[
-    [WorkflowStage, dict[str, pa.Table], RunContext, int, list[int]], list["Row"]
+    [
+        WorkflowStage,
+        dict[str, pa.Table],
+        RunContext,
+        int,
+        list[int],
+        Callable[[list[tuple[int, "Row"]]], None],
+    ],
+    list["Row"],
 ]
 
 # Internal column a row mapper attaches to a row it could not produce (e.g. an
@@ -512,16 +520,13 @@ def _run_batched(
     progress(completed=len(hits), total=len(records))
     misses = [index for index in range(len(records)) if index not in hits]
     emit_batched_row_starts(ctx.run_log, stage.id, hits, misses)
-    computed = _compute_batched_rows(handler, workflow_stage, narrowed, misses, ctx)
-    # Ordered before recorded: the ordering step is what verifies one computed
-    # row per miss, so nothing is pinned against a row it did not come from.
-    mapped = _order_by_input_position(stage.id, hits, misses, computed, len(records))
-    if caching is not None:
-        for position, row in zip(misses, computed):
-            _record_row_output(caching, seen[position], row)
-    emit_batched_row_outcomes(
-        ctx.run_log, stage.id, misses, [row.get(ROW_ERROR_KEY) for row in computed]
+    accept_chunk = _build_completed_chunk_acceptor(
+        caching, seen, misses, ctx.run_log, stage.id
     )
+    computed = _compute_batched_rows(
+        handler, workflow_stage, narrowed, misses, ctx, accept_chunk
+    )
+    mapped = _order_by_input_position(stage.id, hits, misses, computed, len(records))
     # Rejoin, as the row-mapped driver does: the model only ever saw the declared
     # reads, so the columns that merely FLOW come back from the input row here.
     rows = [{**records[index], **row} for index, row in enumerate(mapped)]
@@ -548,6 +553,7 @@ def _compute_batched_rows(
     src: pa.Table,
     misses: list[int],
     ctx: RunContext,
+    accept_chunk: Callable[[list[tuple[int, Row]]], None],
 ) -> list[Row]:
     if not misses:
         return []
@@ -557,7 +563,29 @@ def _compute_batched_rows(
         ctx,
         handler.parallelism,
         misses,
+        accept_chunk,
     )
+
+
+def _build_completed_chunk_acceptor(
+    caching: _RowCaching | None,
+    seen: list[Row],
+    misses: list[int],
+    log: RunLog | None,
+    stage_id: str,
+) -> Callable[[list[tuple[int, Row]]], None]:
+    """`seen` is the narrowed rows: a chunk is recorded under the key its own read columns give."""
+    def accept_chunk(rows: list[tuple[int, Row]]) -> None:
+        positions = [misses[local_index] for local_index, _ in rows]
+        outputs = [row for _, row in rows]
+        if caching is not None:
+            for position, row in zip(positions, outputs):
+                _record_row_output(caching, seen[position], row)
+        emit_batched_row_outcomes(
+            log, stage_id, positions, [row.get(ROW_ERROR_KEY) for row in outputs]
+        )
+
+    return accept_chunk
 
 
 def _order_by_input_position(

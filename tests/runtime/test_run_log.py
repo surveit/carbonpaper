@@ -153,7 +153,11 @@ def test_a_batched_chunk_binds_the_input_rows_it_actually_covers(tmp_path, monke
     ctx, log = _logged_ctx(tmp_path, "batched")
     rows = run_llm_batches(
         place_stage(_llm_stage(batch_size=2)),
-        as_inputs({"src": pd.DataFrame({"x": [7, 8]})}), ctx, 1, [3, 4]
+        as_inputs({"src": pd.DataFrame({"x": [7, 8]})}),
+        ctx,
+        1,
+        [3, 4],
+        lambda rows: None,
     )
 
     assert [row["verdict"] for row in rows] == ["a", "b"]
@@ -168,10 +172,16 @@ def test_the_batched_path_logs_replayed_and_computed_rows_apart(tmp_path, monkey
     handler = HANDLERS[StageType.llm_transform]
     handed: list[list[int]] = []
 
-    def fake_run_batches(stage, inputs, ctx, parallelism, positions):
+    def fake_run_batches(
+        stage, inputs, ctx, parallelism, positions, on_chunk_completed,
+    ):
         handed.append(list(positions))
-        return [{**row, "verdict": f"v{row['x']}"}
-                for row in inputs[stage.inputs[0].id].to_pylist()]
+        rows = [
+            {**row, "verdict": f"v{row['x']}"}
+            for row in inputs[stage.inputs[0].id].to_pylist()
+        ]
+        on_chunk_completed(list(enumerate(rows)))
+        return rows
 
     monkeypatch.setattr(handler, "run_batches", fake_run_batches)
     stage = _llm_stage(batch_size=2)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from threading import get_ident
+
 import pandas as pd
 from conftest import as_inputs, contribution_of, make_run_context, place_stage, rows_of
 
@@ -112,6 +114,34 @@ def test_grain_and_order_preserved_across_chunks(monkeypatch):
     out, labels, ctx = _run(monkeypatch, _clean, batch_size=2)
     assert list(rows_of(out)["post_id"]) == ["a", "b", "c"]         # count + order preserved
     assert not contribution_of(out).row_errors
+
+
+def test_completed_chunks_reach_the_controller_thread(monkeypatch):
+    worker_threads: list[int] = []
+    callback_threads: list[int] = []
+    controller_thread = get_ident()
+
+    def record_worker(*args, **kwargs):
+        worker_threads.append(get_ident())
+        return _clean(*args, **kwargs)
+
+    monkeypatch.setattr(lt, "call_llm_batch", record_worker)
+    stage = place_stage(_stage(batch_size=2), load={"columns": [
+        {"name": "post_id", "type": "str", "nullable": True},
+        {"name": "text", "type": "str", "nullable": True},
+    ]})
+    lt.run_llm_batches(
+        stage,
+        as_inputs({"load": _SRC.copy()}),
+        make_run_context(),
+        parallelism=2,
+        positions=[0, 1, 2],
+        on_chunk_completed=lambda rows: callback_threads.append(get_ident()),
+    )
+
+    assert worker_threads
+    assert all(thread != controller_thread for thread in worker_threads)
+    assert callback_threads == [controller_thread, controller_thread]
 
 
 def test_batched_run_reports_only_user_columns_as_dropped(monkeypatch):

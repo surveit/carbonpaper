@@ -69,6 +69,7 @@ def run_llm_batches(
     ctx: RunContext,
     parallelism: int,
     positions: list[int],
+    on_chunk_completed: Callable[[list[tuple[int, Row]]], None] | None = None,
 ) -> list[Row]:
     stage = narrow_stage(workflow_stage, LLMTransformStage)
     llm = stage.llm
@@ -86,6 +87,7 @@ def run_llm_batches(
         llm.batch_size,
         parallelism,
         process_chunk,
+        on_chunk_completed,
         ctx.stage_progress.advance,
     ):
         results[index] = row
@@ -126,7 +128,8 @@ def _run_chunks(
     size: int,
     parallelism: int,
     process_chunk: Callable[[int, list[Row]], list[tuple[int, Row]]],
-    on_chunk_completed: Callable[[int], None] | None = None,
+    on_chunk_completed: Callable[[list[tuple[int, Row]]], None] | None = None,
+    advance_progress: Callable[[int], None] | None = None,
 ) -> list[tuple[int, Row]]:
     chunks = [
         (start, records[start : start + size]) for start in range(0, len(records), size)
@@ -134,19 +137,52 @@ def _run_chunks(
     computed: list[tuple[int, Row]] = []
     if parallelism > 1 and len(chunks) > 1:
         with ThreadPoolExecutor(max_workers=parallelism) as pool:
-            futures = [pool.submit(process_chunk, start, chunk) for start, chunk in chunks]
+            futures = {
+                pool.submit(process_chunk, start, chunk): (start, len(chunk))
+                for start, chunk in chunks
+            }
             for future in as_completed(futures):
+                start, count = futures[future]
                 result = future.result()
+                _accept_completed_chunk(
+                    result,
+                    start,
+                    count,
+                    on_chunk_completed,
+                    advance_progress,
+                )
                 computed.extend(result)
-                if on_chunk_completed is not None:
-                    on_chunk_completed(len(result))
     else:
         for start, chunk in chunks:
             result = process_chunk(start, chunk)
+            _accept_completed_chunk(
+                result,
+                start,
+                len(chunk),
+                on_chunk_completed,
+                advance_progress,
+            )
             computed.extend(result)
-            if on_chunk_completed is not None:
-                on_chunk_completed(len(result))
     return computed
+
+
+def _accept_completed_chunk(
+    rows: list[tuple[int, Row]],
+    start: int,
+    count: int,
+    on_chunk_completed: Callable[[list[tuple[int, Row]]], None] | None,
+    advance_progress: Callable[[int], None] | None = None,
+) -> None:
+    indices = [index for index, _ in rows]
+    expected = list(range(start, start + count))
+    if indices != expected:
+        raise RuntimeError(
+            f"batched chunk returned row indices {indices}; expected {expected}"
+        )
+    if on_chunk_completed is not None:
+        on_chunk_completed(rows)
+    if advance_progress is not None:
+        advance_progress(len(rows))
 
 
 def _build_batch_reply_schema(stage: LLMTransformStage) -> type:

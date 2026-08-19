@@ -18,13 +18,14 @@ from app.runtime.stage_output import StageOutput
 from app.runtime.stages import HANDLERS
 from app.runtime.stages.execution import (
     ROW_CACHED_KEY,
+    ROW_DEFERRED_KEY,
     ROW_ERROR_KEY,
     ROW_USAGE_KEY,
     Row,
     RowMapTransformHandler,
     _order_by_input_position,
 )
-from app.runtime.stages.llm_transform import run_llm_batches
+from app.runtime.stages.llm_transform import _accept_completed_chunk, run_llm_batches
 from conftest import as_inputs, make_run_context, place_stage, rows_of
 
 PROJECT = "row-cache-tests"
@@ -391,6 +392,43 @@ def test_a_failed_batch_records_nothing(monkeypatch):
     assert _entries(stage) == []  # and nothing pinned
 
 
+def test_completed_chunk_is_cached_before_a_later_chunk_crashes(monkeypatch):
+    handler = HANDLERS[StageType.llm_transform]
+
+    def crash_after_completed_chunk(
+        stage, inputs, ctx, parallelism, positions, on_chunk_completed,
+    ):
+        source_rows = inputs[stage.inputs[0].id].to_pylist()
+        completed = [
+            (0, {**source_rows[0], "verdict": "kept"}),
+            (1, {**source_rows[1], ROW_ERROR_KEY: "failed"}),
+            (2, {**source_rows[2], ROW_DEFERRED_KEY: "waiting"}),
+        ]
+        on_chunk_completed(completed)
+        raise RuntimeError("later chunk crashed")
+
+    monkeypatch.setattr(handler, "run_batches", crash_after_completed_chunk)
+    stage = _llm_stage(batch_size=3)
+
+    with pytest.raises(RuntimeError, match="later chunk crashed"):
+        _run(stage, _src([1, 2, 3, 4]), _ctx(run_id="run1"))
+
+    entries = _entries(stage)
+    assert [entry.frozen_input["x"] for entry in entries] == [1]
+    assert entries[0].output_row["verdict"] == "kept"
+
+
+def test_invalid_completed_chunk_reaches_no_cache_callback():
+    accepted: list[tuple[int, Row]] = []
+
+    with pytest.raises(RuntimeError, match=r"expected \[0, 1\]"):
+        _accept_completed_chunk(
+            [(0, {"x": 1}), (0, {"x": 2})], 0, 2, accepted.extend
+        )
+
+    assert accepted == []
+
+
 def test_batched_bust_cache_skips_the_read_but_re_pins(monkeypatch):
     batches: list[list[int]] = []
     _stub_call_llm_batch(monkeypatch, batches)
@@ -442,7 +480,13 @@ def test_run_llm_batches_computes_every_row_it_is_given(monkeypatch):
     batches.clear()
 
     rows = run_llm_batches(
-        place_stage(stage), as_inputs({"src": _src([1, 2])}), _ctx(run_id="direct"), 1, [0, 1])
+        place_stage(stage),
+        as_inputs({"src": _src([1, 2])}),
+        _ctx(run_id="direct"),
+        1,
+        [0, 1],
+        lambda rows: None,
+    )
 
     assert batches == [[1, 2]]
     assert [row["verdict"] for row in rows] == ["v1", "v2"]
