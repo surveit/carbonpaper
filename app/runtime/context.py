@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from app.core.stage_cache import ReadOnlyStageCache, StageCache, StageCacheEntry
 
 from .run_log import RunLog
+from .progress import StageProgressTracker
 from app.models.run_parameters import RunParameters
 
 
@@ -50,6 +51,7 @@ class RunContext(BaseModel):
     # and nothing here becomes load-bearing. None outside a logged execution
     # (every emit site treats that as "don't log"), never a fabricated sink.
     run_log: RunLog | None = None
+    stage_progress: StageProgressTracker | None = None
 
     @model_validator(mode="after")
     def _a_writable_cache_forbids_queue_auto_approve(self) -> RunContext:
@@ -84,6 +86,12 @@ class RunContext(BaseModel):
 
     def attach_run_log(self, log: RunLog) -> RunContext:
         return self.model_copy(update={"run_log": log})
+
+    def attach_stage_progress(self, progress: StageProgressTracker) -> RunContext:
+        return self.model_copy(update={"stage_progress": progress})
+
+    def get_stage_progress(self) -> StageProgressTracker:
+        return self.stage_progress or StageProgressTracker.detached()
 
     def require_identity(self) -> RunIdentity:
         """This run's (project, run id), for a handler storing a run-scoped record."""

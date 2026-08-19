@@ -153,7 +153,14 @@ async def run_status(project_id: str, run_id: str):
                    "running": _count(StageStatus.RUNNING), "pending": _count(StageStatus.PENDING),
                    "awaiting": _count(StageStatus.AWAITING_REVIEW),
                    "cancelled": _count(StageStatus.CANCELLED)},
-        "stages": [{"stage_id": s["stage_id"], "status": s.get("status")} for s in mstages],
+        "stages": [
+            {
+                "stage_id": s["stage_id"],
+                "status": s.get("status"),
+                "progress": s.get("progress"),
+            }
+            for s in mstages
+        ],
         # The header parts that move while a run is in flight; the run page
         # updates them in place rather than fetching a second endpoint.
         "header": build_live_view(project_id, run_id, manifest).model_dump(),
