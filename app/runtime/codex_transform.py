@@ -90,14 +90,23 @@ async def _run_attempt(
     answer_spec = agent.build_submit_answer_spec()
     server = CodexAppServer(command, os.environ)
     try:
-        await server.initialize()
-        thread = await server.request(
-            "thread/start", _build_start_params(system_prompt, model, answer_spec)
+        await asyncio.wait_for(
+            _run_server_interaction(
+                server,
+                system_prompt,
+                task,
+                model,
+                answer_spec,
+                emit,
+                usage_parts,
+                usage_out,
+            ),
+            timeout=DEFAULT_TIMEOUT_S,
         )
-        thread_id = _read_thread_id(thread)
-        await server.request("turn/start", _build_turn_params(thread_id, task))
-        _record_started_call(usage_parts, usage_out, model)
-        await _stream_turn_with_deadline(server, answer_spec, emit)
+    except TimeoutError as exc:
+        raise GenerationError(
+            f"Codex transform turn timed out after {DEFAULT_TIMEOUT_S} seconds"
+        ) from exc
     finally:
         await server.close()
     answer = agent.answer
@@ -106,19 +115,24 @@ async def _run_attempt(
     return answer.model_dump(mode="json")
 
 
-async def _stream_turn_with_deadline(
+async def _run_server_interaction(
     server: CodexAppServer,
+    system_prompt: str,
+    task: str,
+    model: LLMModel,
     answer_spec: BoundToolSpec,
     emit: Callable[[AgentEvent], None] | None,
+    usage_parts: list[LlmUsage],
+    usage_out: list[LlmUsage] | None,
 ) -> None:
-    try:
-        await asyncio.wait_for(
-            _stream_turn(server, answer_spec, emit), timeout=DEFAULT_TIMEOUT_S
-        )
-    except TimeoutError as exc:
-        raise GenerationError(
-            f"Codex transform turn timed out after {DEFAULT_TIMEOUT_S} seconds"
-        ) from exc
+    await server.initialize()
+    thread = await server.request(
+        "thread/start", _build_start_params(system_prompt, model, answer_spec)
+    )
+    thread_id = _read_thread_id(thread)
+    await server.request("turn/start", _build_turn_params(thread_id, task))
+    _record_started_call(usage_parts, usage_out, model)
+    await _stream_turn(server, answer_spec, emit)
 
 
 async def _stream_turn(

@@ -79,6 +79,8 @@ for line in sys.stdin:
     elif method == "thread/start":
         send({"id": message["id"], "result": {"thread": {"id": "thread-1"}}})
     elif method == "turn/start":
+        if mode == "stalled_turn_start":
+            continue
         send({
             "id": message["id"],
             "result": {"turn": {"id": "turn-1", "status": "inProgress", "items": []}},
@@ -409,6 +411,31 @@ def test_stalled_turn_fails_at_the_row_deadline(
             asyncio.wait_for(
                 codex_transform._run_attempt(
                     fake_codex_server.build_command("stalled"),
+                    "system",
+                    "judge",
+                    Reply,
+                    LLMModel.gpt_5_6_terra,
+                    None,
+                    [],
+                    None,
+                ),
+                timeout=2,
+            )
+        )
+
+
+def test_stalled_turn_start_fails_at_the_row_deadline(
+    monkeypatch: pytest.MonkeyPatch, fake_codex_server: FakeCodexServer,
+) -> None:
+    import app.runtime.codex_transform as codex_transform
+
+    monkeypatch.setattr(codex_transform, "DEFAULT_TIMEOUT_S", 0.1, raising=False)
+
+    with pytest.raises(GenerationError, match="turn timed out after 0.1 seconds"):
+        asyncio.run(
+            asyncio.wait_for(
+                codex_transform._run_attempt(
+                    fake_codex_server.build_command("stalled_turn_start"),
                     "system",
                     "judge",
                     Reply,
