@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from typing import Any, Callable
 
 from claude_agent_sdk import (
@@ -35,6 +36,40 @@ CLI_MODEL = os.environ.get("CARBON_PAPER_CHAT_CLI_MODEL", "sonnet")
 # tool as f"mcp__{MCP_SERVER_NAME}__{tool_name}". Kept here (not in registry) so
 # this module and the registry's server-builder agree without a circular import.
 MCP_SERVER_NAME = "tools"
+
+_THINKING_TOKENS_INTERVAL_S = 1.0
+
+
+class _SystemTelemetry:
+    def __init__(
+        self,
+        emit: Callable[[dict[str, Any]], None],
+        now: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._emit = emit
+        self._now = now
+        self._last_thinking_tokens_at: float | None = None
+        self._pending_thinking_tokens: dict[str, Any] | None = None
+
+    def receive(self, msg: SystemMessage) -> None:
+        event = _build_system_event(msg)
+        if event["subtype"] != "thinking_tokens":
+            self._emit(event)
+            return
+        now = self._now()
+        last = self._last_thinking_tokens_at
+        if last is None or now - last >= _THINKING_TOKENS_INTERVAL_S:
+            self._emit(event)
+            self._last_thinking_tokens_at = now
+            self._pending_thinking_tokens = None
+            return
+        self._pending_thinking_tokens = event
+
+    def flush(self) -> None:
+        if self._pending_thinking_tokens is None:
+            return
+        self._emit(self._pending_thinking_tokens)
+        self._pending_thinking_tokens = None
 
 
 def _usage_from_result(msg: Any, model: str) -> LlmUsage:
@@ -136,6 +171,7 @@ class ClaudeAgentSdkEngine:
         self.last_usage = None
         assistant_parts: list[dict[str, Any]] = []
         session_id: str | None = None
+        system_telemetry = _SystemTelemetry(emit)
         async for msg in query(prompt=prompt, options=self._options(resume)):
             if isinstance(msg, AssistantMessage):
                 for block in msg.content:
@@ -186,12 +222,9 @@ class ClaudeAgentSdkEngine:
                 # declined to call a tool and one that was never offered it.
                 # Not part of the transcript: it is the CLI talking, not the
                 # model. A caller that does not want it drops the unknown kind.
-                emit({
-                    "kind": "system",
-                    "subtype": getattr(msg, "subtype", "") or "",
-                    "text": json.dumps(getattr(msg, "data", None) or {}, default=str),
-                })
+                system_telemetry.receive(msg)
             elif isinstance(msg, ResultMessage):
+                system_telemetry.flush()
                 # ResultMessage is terminal; let the generator exhaust naturally
                 # (do NOT break — breaking aclose()s a still-running generator).
                 # Capture the session id to resume next turn (conversation memory).
@@ -207,8 +240,17 @@ class ClaudeAgentSdkEngine:
                         or "run ended with error"
                     )
                     emit({"kind": "error", "text": f"agent run failed: {detail}"})
+        system_telemetry.flush()
         transcript = [
             {"role": "user", "parts": [{"type": "text", "text": prompt}]},
             {"role": "assistant", "parts": assistant_parts},
         ]
         return transcript, session_id
+
+
+def _build_system_event(msg: SystemMessage) -> dict[str, Any]:
+    return {
+        "kind": "system",
+        "subtype": getattr(msg, "subtype", "") or "",
+        "text": json.dumps(getattr(msg, "data", None) or {}, default=str),
+    }
