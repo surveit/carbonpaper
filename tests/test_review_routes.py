@@ -921,7 +921,7 @@ def test_a_queue_whose_upstream_is_not_an_llm_transform_renders_and_links(tmp_pa
     ]
 
 
-def _described_review_stage():
+def _described_review_stage(context_columns=None):
     return {"id": "review", "description": "Review labels", "type": "human_review_queue",
             "inputs": [{"id": "label"}],
             "signature": {
@@ -945,16 +945,19 @@ def _described_review_stage():
                     {"name": "review_notes", "type": "str", "nullable": True},
                 ],
             },
-            "queue": {**queue_columns(source="label", target="human_label"),
-                      "reviewer_instructions": "Confirm the label against the score."}}
+            "queue": {
+                **queue_columns(source="label", target="human_label"),
+                **({} if context_columns is None else {"context_columns": context_columns}),
+                "reviewer_instructions": "Confirm the label against the score.",
+            }}
 
 
-def _described_queue_html(tmp_path, monkeypatch, project):
+def _described_queue_html(tmp_path, monkeypatch, project, context_columns=None):
     project_dir = tmp_path / project
     run_id, fingerprints = _build_and_halt_queue_over(
         tmp_path, monkeypatch, project,
         [_e2e_load_stage(project_dir), _labelled_row_function_stage(),
-         _described_review_stage()],
+         _described_review_stage(context_columns)],
     )
     html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
     return run_id, fingerprints, html
@@ -1029,6 +1032,17 @@ def test_the_unreviewed_columns_are_labelled_as_what_the_review_is_judged_agains
     assert '<p class="review-section-heading">Context for review</p>' in block
     assert "not under review" not in card
     assert "<details" not in card
+
+
+def test_the_card_shows_only_declared_context_columns(tmp_path, monkeypatch):
+    _run_id, _fingerprints, html = _described_queue_html(
+        tmp_path, monkeypatch, "queue_route_selected_context", ["score"])
+
+    card = _first_card(html)
+    table = card[card.index('<table class="kv">'):card.index("</table>")]
+
+    assert re.findall(r"<code>(\w+)</code>", table) == ["score"]
+    assert "label" in card
 
 
 def test_the_field_rows_render_under_one_heading_with_a_state_machine(tmp_path, monkeypatch):
