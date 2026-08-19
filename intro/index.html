@@ -162,6 +162,7 @@
                 color: var(--card); background: var(--accent); border-radius: 8px;
                 text-decoration: none; transition: opacity .2s ease; }
   .start .cta:hover { opacity: .85; }
+  .mobile-frame { display: none; }
 
   /* No JS: every layer stacks and the page still reads top to bottom. */
   .nojs .layer, .nojs .fade, .nojs .pin, .nojs .over {
@@ -171,13 +172,62 @@
   .nojs .stage { display: block; }
   .nojs .step-inner { opacity: 1; }
 
-  @media (max-width: 1000px) {
-    .scrolly { grid-template-columns: 1fr; gap: 0; padding: 0 1.25rem; }
-    .stage-wrap { position: sticky; top: 0; height: 60vh; }
-    .stage { grid-template-columns: 1fr; }
-    .zone.q, .zone.out { display: none; }
-    .step { min-height: 60vh; }
+  @media (max-width: 1199px) {
+    .scrolly { display: block; max-width: 1180px; padding: 0 1.25rem; }
+    .steps { padding: 1rem 0 4rem; }
+    .step { min-height: 0; display: block; padding: 1.5rem 0; }
+    .step-inner { opacity: 1; transition: none; }
+    .step-inner > p { max-width: 42rem; }
+    .stage-wrap { display: none; }
+    .mobile-frame { display: block; margin-top: 1.2rem; }
+    .mobile-frame:empty { display: none; }
+    .static-scene { position: relative; width: 100%; min-height: 0;
+                    display: grid; grid-template-columns: 10rem minmax(0, 1fr) 11rem;
+                    gap: 1.6rem; align-items: center; }
+    .static-scene .zone { display: none; transition: none; }
+    .static-scene .zone.static-visible { display: block; }
+    .static-scene .mid.static-visible { display: flex; }
+    .static-scene .layer, .static-scene .fade, .static-scene .pin, .static-scene .over,
+    .static-scene .node, .static-scene .flow { transition: none; }
+    .static-scene .mid { min-height: 17rem; }
+    .static-scene .cloud .blob { animation: none; }
+    .static-scene .graph-hold { overflow-x: auto; }
+    .static-scene .graph-hold svg { min-width: 44rem; }
+    .static-scene.static-solo-q .zone.q { grid-column: 1 / -1; max-width: 20rem; margin: auto; }
+    .static-scene.static-solo-mid .zone.mid,
+    .static-scene.static-solo-out .zone.out { grid-column: 1 / -1; }
+    .static-scene.static-solo-out .out { text-align: center; }
+    .static-scene.static-solo-out .out .fade { position: relative; right: auto; top: auto; transform: none; }
+    .static-scene.static-overlay-only .mid { min-height: 0; }
+    .static-scene.static-overlay-only .over { position: relative; inset: auto !important;
+                                               width: 100% !important; max-width: 100%;
+                                               margin: 0 auto; transform: none !important; }
+    .static-scene .node.lit rect { stroke: var(--accent); }
+    .static-scene .focus .node, .static-scene .focus .flow { opacity: .24; }
+    .static-scene .focus .node.lit, .static-scene .focus .flow.lit { opacity: 1; }
+    .static-scene .static-neutral-focus .node,
+    .static-scene .static-neutral-focus .flow { opacity: 1; }
+    .static-scene .flow.lit .gflow { stroke: var(--accent); stroke-width: 2.4; }
+    .static-scene .chain .node rect { stroke: var(--accent); }
+    .static-scene .recede { opacity: .26; }
+    .static-scene .over img { max-width: 100%; height: auto; }
+    .nojs .stage-wrap { display: block; }
+    .nojs .mobile-frame { display: none; }
     header h1 { font-size: 1.9rem; }
+  }
+
+  @media (max-width: 700px) {
+    .static-scene { grid-template-columns: 1fr; gap: 1rem; }
+    .static-scene .out { text-align: left; }
+    .static-scene .out .fade { position: relative; right: auto; top: auto; transform: none; }
+    .static-scene .pin, .static-scene .over { position: relative; inset: auto !important;
+                                               width: 100% !important; max-width: 100%;
+                                               margin-top: 1rem; transform: none !important; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .step-inner, .zone, .layer, .fade, #pipe .node, #pipe .flow, .pin, .over, .start .cta { transition: none; }
+    .cloud .blob { animation: none; }
   }
 </style>
 </head>
@@ -194,51 +244,62 @@
     <section class="step" data-step="1"><div class="step-inner">
       <p class="say">You hand Claude 45,061 lobbying filings and ask what firms spent lobbying
       on artificial intelligence.</p>
+      <div class="mobile-frame"></div>
     </div></section>
 
     <section class="step" data-step="2"><div class="step-inner">
       <p class="say">Claude thought for 7m30s.</p>
+      <div class="mobile-frame"></div>
     </div></section>
 
     <section class="step" data-step="3"><div class="step-inner">
       <p class="say">The answer is $499 million.<sup>*</sup></p>
+      <div class="mobile-frame"></div>
     </div></section>
 
     <section class="step" data-step="4"><div class="step-inner">
       <p class="say">Great. It even says what it considered.</p>
       <p class="sub">But not a publishable number. You can't check all its assumptions. The
       most capable tool ever created, and it runs out of your hands.</p>
+      <div class="mobile-frame"></div>
     </div></section>
 
     <section class="step" data-step="5"><div class="step-inner">
       <p class="say">Take it back. Carbon Paper turns a conversation into a program that runs
       against your original data.</p>
+      <div class="mobile-frame"></div>
     </div></section>
 
     <section class="step" data-step="6"><div class="step-inner">
       <p class="say">Each step is a small pre-defined block, and says in plain English what it
       does...</p>
+      <div class="mobile-frame"></div>
     </div></section>
 
     <section class="step" data-step="7"><div class="step-inner">
       <p class="say">and exactly what it changed.</p>
+      <div class="mobile-frame"></div>
     </div></section>
 
     <section class="step" data-step="8"><div class="step-inner">
       <p class="say">Only one step needs an AI now. The rest is 100% deterministic.</p>
+      <div class="mobile-frame"></div>
     </div></section>
 
     <section class="step" data-step="9"><div class="step-inner">
       <p class="say">Same data with different assumptions gives a different number.</p>
+      <div class="mobile-frame"></div>
     </div></section>
 
     <section class="step" data-step="10"><div class="step-inner">
       <p class="say">Every figure traces back to the row in the source data.</p>
+      <div class="mobile-frame"></div>
     </div></section>
 
     <section class="step" data-step="11"><div class="step-inner">
       <p class="say">Export the whole run and hand it to your fact-checker. It opens
       without Carbon Paper.</p>
+      <div class="mobile-frame"></div>
     </div></section>
   </div>
 
@@ -455,24 +516,12 @@ workflow you can run again.</p>
 </section>
 
 <script>
-document.body.classList.remove('nojs');
+const staticViewport = window.matchMedia('(max-width: 1199px)');
+const sourceStage = document.querySelector('.stage');
+const sourcePipe = sourceStage.querySelector('#pipe');
+const ALL_NODES = [...sourcePipe.querySelectorAll('.node')].map(el => el.dataset.node);
+const ALL_EDGES = [...sourcePipe.querySelectorAll('.flow')].map(el => el.dataset.edge);
 
-const steps = [...document.querySelectorAll('.step')];
-const layers = new Map([...document.querySelectorAll('.layer')].map(el => [el.dataset.layer, el]));
-const fades = new Map([...document.querySelectorAll('.fade')].map(el => [el.dataset.fade, el]));
-const pins = new Map([...document.querySelectorAll('.pin')].map(el => [el.dataset.pin, el]));
-const overs = new Map([...document.querySelectorAll('.over')].map(el => [el.dataset.over, el]));
-const pipe = document.getElementById('pipe');
-const nodes = new Map([...pipe.querySelectorAll('.node')].map(el => [el.dataset.node, el]));
-const edges = new Map([...pipe.querySelectorAll('.flow')].map(el => [el.dataset.edge, el]));
-const zoneQ = document.getElementById('zone-q');
-const zoneOut = document.getElementById('zone-out');
-
-const ALL_NODES = [...nodes.keys()];
-const ALL_EDGES = [...edges.keys()];
-
-// Per step: what the middle holds, which figure is in the right-hand slot, what is lit,
-// what is pinned. `recede` dims the flanks so a detail step gets the whole reader.
 const SCENES = {
   1:  {ask: 1},
   2:  {ask: 1, layer: 'cloud'},
@@ -487,9 +536,32 @@ const SCENES = {
   11: {ask: 1, layer: 'graph', out: 'ran', recede: 1, over: '11'},
 };
 
-function show(step) {
-  const scene = SCENES[step];
-  if (!scene) return;
+const STATIC_BEATS = {
+  1: {scene: {ask: 1}},
+  2: {scene: {layer: 'cloud'}},
+  3: null,
+  4: {scene: {out: 'said'}, result: true},
+  5: {scene: {layer: 'graph'}},
+  6: {scene: {layer: 'graph', nodes: ['clean'], pin: '6'}, viewBox: '150 70 220 100'},
+  7: {scene: {layer: 'graph', nodes: ['clean'], pin: '7'}, viewBox: '150 70 220 100'},
+  8: {scene: {layer: 'graph', nodes: ['llm']}, neutralFocus: true},
+  9: {scene: {out: 'ran'}},
+  10: {scene: {layer: 'graph', nodes: ALL_NODES, edges: ALL_EDGES, over: '10'}},
+  11: {scene: {over: '11'}},
+};
+
+function applyScene(stage, scene, markers) {
+  const layers = new Map([...stage.querySelectorAll('.layer')].map(el => [el.dataset.layer, el]));
+  const fades = new Map([...stage.querySelectorAll('.fade')].map(el => [el.dataset.fade, el]));
+  const pins = new Map([...stage.querySelectorAll('.pin')].map(el => [el.dataset.pin, el]));
+  const overs = new Map([...stage.querySelectorAll('.over')].map(el => [el.dataset.over, el]));
+  const pipe = stage.querySelector('#pipe, [data-pipeline]');
+  const nodes = new Map([...pipe.querySelectorAll('.node')].map(el => [el.dataset.node, el]));
+  const edges = new Map([...pipe.querySelectorAll('.flow')].map(el => [el.dataset.edge, el]));
+  const zoneQ = stage.querySelector('.zone.q');
+  const zoneMid = stage.querySelector('.zone.mid');
+  const zoneOut = stage.querySelector('.zone.out');
+
   for (const [name, el] of layers) el.classList.toggle('on', name === scene.layer);
   for (const [name, el] of pins) el.classList.toggle('on', name === scene.pin);
   for (const [name, el] of overs) el.classList.toggle('on', name === scene.over);
@@ -498,9 +570,13 @@ function show(step) {
   fades.get('ran').classList.toggle('on', scene.out === 'ran');
   zoneQ.classList.toggle('recede', !!scene.recede);
   zoneOut.classList.toggle('recede', !!(scene.recede || scene.recedeOut));
+  zoneQ.classList.toggle('static-visible', !!scene.ask);
+  zoneMid.classList.toggle('static-visible', !!scene.layer);
+  zoneOut.classList.toggle('static-visible', !!scene.out);
+  stage.classList.toggle('static-solo-q', !!scene.ask && !scene.layer && !scene.out);
+  stage.classList.toggle('static-solo-mid', !!scene.layer && !scene.ask && !scene.out);
+  stage.classList.toggle('static-solo-out', !!scene.out && !scene.ask && !scene.layer);
 
-  // Lighting everything is not a focus: step 10 turns the whole chain blue rather than
-  // dimming seven eighths of it to make a point about the eighth.
   const partial = scene.nodes && scene.nodes.length < ALL_NODES.length;
   pipe.classList.toggle('focus', !!partial);
   pipe.classList.toggle('chain', !!scene.nodes && !partial);
@@ -509,9 +585,65 @@ function show(step) {
   for (const [name, el] of edges) {
     const lit = (scene.edges || []).includes(name);
     el.classList.toggle('lit', lit);
-    el.querySelector('.gflow').setAttribute('marker-end', lit ? 'url(#ar-lit)' : 'url(#ar)');
+    const marker = lit ? markers.lit : markers.base;
+    el.querySelector('.gflow').setAttribute('marker-end', `url(#${marker})`);
   }
+}
 
+function configureStaticBeat(stage, beat) {
+  const pipe = stage.querySelector('[data-pipeline]');
+  pipe.classList.toggle('static-neutral-focus', !!beat.neutralFocus);
+  if (beat.viewBox) pipe.setAttribute('viewBox', beat.viewBox);
+  if (beat.result) stage.querySelector('.tag').textContent = 'model said';
+  if (beat.scene.over && !beat.scene.layer) {
+    const mid = stage.querySelector('.zone.mid');
+    mid.classList.add('static-visible', 'static-overlay-only');
+    mid.append(stage.querySelector(`[data-over="${beat.scene.over}"]`));
+  }
+}
+
+function renameStaticMarkers(stage, step) {
+  const markers = {};
+  const pipe = stage.querySelector('#pipe');
+  pipe.dataset.pipeline = 'true';
+  for (const marker of stage.querySelectorAll('marker')) {
+    const name = marker.id === 'ar-lit' ? 'lit' : 'base';
+    const id = `${marker.id}-${step}`;
+    marker.id = id;
+    markers[name] = id;
+  }
+  for (const element of stage.querySelectorAll('[id]')) {
+    if (element.tagName.toLowerCase() !== 'marker') element.removeAttribute('id');
+  }
+  return markers;
+}
+
+function renderStaticScenes() {
+  for (const step of document.querySelectorAll('.step')) {
+    const beat = STATIC_BEATS[Number(step.dataset.step)];
+    if (!beat) continue;
+    const frame = step.querySelector('.mobile-frame');
+    const clone = sourceStage.cloneNode(true);
+    clone.classList.add('static-scene');
+    const markers = renameStaticMarkers(clone, step.dataset.step);
+    applyScene(clone, beat.scene, markers);
+    configureStaticBeat(clone, beat);
+    frame.append(clone);
+  }
+}
+
+if (staticViewport.matches) {
+  document.body.classList.remove('nojs');
+  renderStaticScenes();
+} else {
+document.body.classList.remove('nojs');
+
+const steps = [...document.querySelectorAll('.step')];
+
+function show(step) {
+  const scene = SCENES[step];
+  if (!scene) return;
+  applyScene(sourceStage, scene, {base: 'ar', lit: 'ar-lit'});
   steps.forEach(el => el.classList.toggle('is-active', el.dataset.step === String(step)));
 }
 
@@ -527,6 +659,7 @@ if (SCENES[asked]) {
 } else {
   steps.forEach(el => seen.observe(el));
   show(1);
+}
 }
 </script>
 </body>

@@ -42,10 +42,68 @@ def test_highlighted_arrowheads_use_fixed_size_blue_marker() -> None:
 
     assert page.count('d="M0 0.5 L7.5 4 L0 7.5 z"') == 2
     assert '<path d="M0 0.5 L7.5 4 L0 7.5 z" fill="#1d539c"/>' in page
-    assert "setAttribute('marker-end', lit ? 'url(#ar-lit)' : 'url(#ar)')" in page
+    assert "const marker = lit ? markers.lit : markers.base;" in page
+    assert "setAttribute('marker-end', `url(#${marker})`)" in page
 
 
 def test_nojs_export_overlay_ignores_centering_position() -> None:
     page = INTRO_PAGE.read_text(encoding="utf-8")
 
     assert '.nojs .over { left: auto !important; top: auto !important; transform: none !important; }' in page
+
+
+def test_narrow_intro_clones_the_desktop_scene_for_each_step() -> None:
+    page = INTRO_PAGE.read_text(encoding="utf-8")
+
+    assert page.count('class="mobile-frame"') == 11
+    assert '@media (max-width: 1199px)' in page
+    assert '.stage-wrap { display: none; }' in page
+    assert '.mobile-frame { display: block;' in page
+    assert '.step-inner { opacity: 1; transition: none; }' in page
+    assert '.step-inner > p { max-width: 42rem; }' in page
+    assert 'mobile-pipeline' not in page
+    assert 'mobile-cloud' not in page
+    assert "sourceStage.cloneNode(true)" in page
+    assert 'renderStaticScenes();' in page
+    assert "stage.querySelector('#pipe, [data-pipeline]')" in page
+    assert "pipe.dataset.pipeline = 'true';" in page
+
+
+def test_narrow_intro_uses_the_approved_beat_sequence() -> None:
+    page = INTRO_PAGE.read_text(encoding="utf-8")
+
+    assert 'const STATIC_BEATS = {' in page
+    assert "1: {scene: {ask: 1}}" in page
+    assert "2: {scene: {layer: 'cloud'}}" in page
+    assert '3: null' in page
+    assert "4: {scene: {out: 'said'}, result: true}" in page
+    assert "5: {scene: {layer: 'graph'}}" in page
+    assert "6: {scene: {layer: 'graph', nodes: ['clean'], pin: '6'}, viewBox: '150 70 220 100'}" in page
+    assert "7: {scene: {layer: 'graph', nodes: ['clean'], pin: '7'}, viewBox: '150 70 220 100'}" in page
+    assert "8: {scene: {layer: 'graph', nodes: ['llm']}, neutralFocus: true}" in page
+    assert "9: {scene: {out: 'ran'}}" in page
+    assert "10: {scene: {layer: 'graph', nodes: ALL_NODES, edges: ALL_EDGES, over: '10'}}" in page
+    assert "11: {scene: {over: '11'}}" in page
+    assert 'const beat = STATIC_BEATS[Number(step.dataset.step)];' in page
+    assert 'if (!beat) continue;' in page
+    assert 'configureStaticBeat(clone, beat);' in page
+    assert "stage.querySelector('.tag').textContent = 'model said';" in page
+    assert 'mid.append(stage.querySelector(`[data-over="${beat.scene.over}"]`));' in page
+
+
+def test_mobile_respects_reduced_motion() -> None:
+    page = INTRO_PAGE.read_text(encoding="utf-8")
+
+    assert '@media (prefers-reduced-motion: reduce)' in page
+    assert '.start .cta' in page.split('@media (prefers-reduced-motion: reduce)', 1)[1]
+    assert '.cloud .blob { animation: none; }' in page
+
+
+def test_narrow_intro_does_not_start_scrollytelling_or_crop_the_pipeline() -> None:
+    page = INTRO_PAGE.read_text(encoding="utf-8")
+
+    assert "const staticViewport = window.matchMedia('(max-width: 1199px)');" in page
+    assert 'if (staticViewport.matches) {' in page
+    assert page.index('if (staticViewport.matches) {') < page.index('const seen = new IntersectionObserver')
+    assert 'mobileBox' not in page
+    assert 'mobileViewport' not in page
