@@ -133,5 +133,8 @@ def test_preview_dialog_controller_handles_loading_failure_and_close():
     assert "event.preventDefault()" in script
     assert "event.target === dialog" in script
     assert "activeButton.focus()" in script
-    assert "window.CarbonFilePicker.open(picker)" in script
-    assert "if (!sha256)" in script
+    assert "if (!sha256 ||" in script
+    assert "button.dataset.fileSha" in script
+    assert 'button.getAttribute("aria-disabled") === "true"' in script
+    assert 'activePicker.classList.add("is-previewing")' in script
+    assert 'activePicker.classList.remove("is-previewing")' in script

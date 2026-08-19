@@ -20,6 +20,7 @@
     var body = dialog.querySelector(".file-preview-body");
     var title = dialog.querySelector(".file-preview-title");
     var activeButton = null;
+    var activePicker = null;
     var request = null;
 
     function closeDialog() {
@@ -32,16 +33,13 @@
     }
 
     async function loadPreview(button) {
-      var picker = button.closest("[data-file-picker]");
-      var select = picker && picker.querySelector(".file-picker-native");
-      var sha256 = select && select.value;
+      var sha256 = button.dataset.fileSha;
       var project = form.getAttribute("data-project");
-      if (!sha256) {
-        window.CarbonFilePicker.open(picker);
-        return;
-      }
+      if (!sha256 || button.getAttribute("aria-disabled") === "true") return;
       if (!project) return;
       activeButton = button;
+      activePicker = button.closest("[data-file-picker]");
+      if (activePicker) activePicker.classList.add("is-previewing");
       resetDialog();
       dialog.showModal();
       var controller = new AbortController();
@@ -92,8 +90,10 @@
     dialog.addEventListener("close", function () {
       if (request) request.abort();
       resetDialog();
+      if (activePicker) activePicker.classList.remove("is-previewing");
       if (activeButton && activeButton.isConnected) activeButton.focus();
       activeButton = null;
+      activePicker = null;
     });
   }
 

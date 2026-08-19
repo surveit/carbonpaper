@@ -182,7 +182,8 @@ def test_file_picker_renders_shared_structured_controls(project, tmp_path):
     assert 'class="file-picker" data-file-picker' in body
     assert 'class="file-picker-native file-pick"' in body
     assert 'class="file-picker-trigger"' in body
-    assert 'role="listbox"' in body
+    assert 'class="file-picker-popover" role="dialog"' in body
+    assert 'class="file-picker-list" role="group"' in body
     assert 'data-filename="stories.csv"' in body
     assert 'data-uploaded-label="Uploaded ' in body
     assert 'data-size-label="13B"' in body
@@ -191,10 +192,8 @@ def test_file_picker_renders_shared_structured_controls(project, tmp_path):
     assert "No files match this search." in body
     assert "/static/file-picker.css" in body
     assert "/static/file-picker.js" in body
-    assert 'class="btn file-preview-open" aria-haspopup="listbox"' in body
-    assert 'aria-controls="binding__load__listbox"' in body
-    assert 'aria-label="Choose a project file to preview"' in body
-    assert 'title="Choose a project file to preview"' in body
+    assert 'class="btn file-preview-open"' not in body
+    assert 'aria-controls="binding__load__picker"' in body
 
 
 def test_required_file_picker_keeps_native_form_validation(project):
@@ -228,16 +227,40 @@ def test_shared_file_picker_wires_pointer_keyboard_and_dynamic_refresh():
         encoding="utf-8"
     )
 
-    for key in ("ArrowDown", "ArrowUp", "Home", "End", "Enter", "Escape", "Tab"):
+    for key in ("ArrowDown", "ArrowUp", "Home", "End", "Enter", "Escape"):
         assert f'event.key === "{key}"' in source or f'"{key}"' in source
     assert 'document.addEventListener("click"' in source
     assert "select.tabIndex = -1" in source
     assert 'select.setAttribute("aria-hidden", "true")' in source
     assert "open: function (picker) { openFilePicker(picker, 1); }" in source
-    assert 'preview.setAttribute("aria-haspopup", "dialog")' in source
-    assert 'preview.setAttribute("aria-controls", "run-file-preview")' in source
-    assert 'preview.setAttribute("aria-haspopup", "listbox")' in source
-    assert 'preview.setAttribute("aria-controls", select.id + "__listbox")' in source
+    assert 'row.appendChild(item)' in source
+    assert 'row.appendChild(buildPreviewAction(select, option))' in source
+    assert 'button.dataset.fileSha = option.value' in source
+    assert 'button.setAttribute("aria-haspopup", "dialog")' in source
+    assert 'button.setAttribute("aria-controls", "run-file-preview")' in source
+    assert 'button.setAttribute("aria-disabled", "true")' in source
+    assert 'tooltip.setAttribute("role", "tooltip")' in source
+    assert 'tooltip.textContent = "Only project files can be previewed."' in source
+    assert 'picker.addEventListener("focusout"' in source
+
+
+def test_row_preview_does_not_change_the_selected_file():
+    picker_source = (Path(__file__).parents[1] / "app/static/file-picker.js").read_text(
+        encoding="utf-8"
+    )
+    preview_source = (Path(__file__).parents[1] / "app/static/file-preview.js").read_text(
+        encoding="utf-8"
+    )
+
+    preview_action = picker_source.split("function buildPreviewAction", 1)[1].split(
+        "function buildOption", 1
+    )[0]
+    load_preview = preview_source.split("async function loadPreview", 1)[1].split(
+        "form.addEventListener", 1
+    )[0]
+    assert "chooseOption" not in preview_action
+    assert "select.value" not in load_preview
+    assert "var sha256 = button.dataset.fileSha" in load_preview
 
 
 def test_file_picker_visible_content_cannot_intercept_pointer_clicks():
