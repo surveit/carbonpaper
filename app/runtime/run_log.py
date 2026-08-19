@@ -12,7 +12,10 @@ import threading
 from datetime import datetime
 from typing import Any, ClassVar
 
+from app.core.errors import RunExecutionLeaseLost
 from app.core.persistence import JsonDict, PersistedModel, PersistenceScope
+
+from .run_lease import RunExecutionOwnership, write_with_execution_lease
 
 # Sentinel pushed by close() to tell the writer thread to drain and stop.
 _STOP = object()
@@ -79,11 +82,16 @@ LEVEL_DETAIL = 1
 class RunLog:
     """Any thread may emit(); a single writer thread does the writing."""
 
-    def __init__(self, project_id: str, run_id: str):
+    def __init__(
+        self, project_id: str, run_id: str,
+        ownership: RunExecutionOwnership | None = None,
+    ):
         self._project = project_id
         self._run_id = run_id
         self._q: queue.Queue[Any] = queue.Queue()
         self._closed = False
+        self._ownership = ownership
+        self._error: RunExecutionLeaseLost | None = None
         # Start the writer BEFORE returning so the first emit() is never lost.
         self._writer = threading.Thread(
             target=self._drain, name=f"run-log:{run_id}", daemon=True
@@ -108,6 +116,8 @@ class RunLog:
         # Bounded join: the writer is daemon, so a stuck flush can never wedge
         # the run thread's teardown.
         self._writer.join(timeout=5.0)
+        if self._error is not None:
+            raise self._error
 
     def _drain(self) -> None:
         """Stamp each event, batch, and flush a chunk at a time."""
@@ -125,7 +135,11 @@ class RunLog:
                 })
                 seq += 1
             if pending and (item is None or item is _STOP or len(pending) >= CHUNK_SIZE):
-                self._flush(pending)
+                try:
+                    self._flush(pending)
+                except RunExecutionLeaseLost as exc:
+                    self._error = exc
+                    return
                 pending = []
             if item is _STOP:
                 return
@@ -146,7 +160,10 @@ class RunLog:
             chunk = _load_chunk(self._project, self._run_id, index) or RunEventChunk(
                 id=RunEventChunk.compose_id(self._project, self._run_id, index))
             chunk.events = [*chunk.events, *events]
-            chunk.save()
+            if self._ownership is None:
+                chunk.save()
+            else:
+                write_with_execution_lease(chunk, self._ownership)
 
 
 def _group_by_chunk(events: list[JsonDict]) -> dict[int, list[JsonDict]]:

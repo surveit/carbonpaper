@@ -36,6 +36,13 @@ from app.runtime.manifest import (
     write_manifest,
 )
 from app.runtime.run_log import STAGE_DONE, RunLog
+from app.runtime.run_lease import (
+    RunExecutionOwnership,
+    release_run_execution,
+    require_run_execution,
+    run_with_execution_lease,
+    try_claim_run_execution,
+)
 from app.runtime.runner import prepare_run, resume_run, run_prepared
 from app.runtime.citations import build_row_trace_url as build_row_trace_url
 from app.services.errors import WorkflowLoadError
@@ -61,12 +68,34 @@ _INTERRUPTED_BEFORE_STAGE_MESSAGE = (
 def reconcile_interrupted_runs() -> None:
     for entry in list_all_run_entries():
         manifest = entry.manifest
-        if manifest is None or manifest.status != RunStatus.RUNNING:
+        if (
+            manifest is None
+            or manifest.status != RunStatus.RUNNING
+            or manifest.execution_attempt_id is None
+        ):
             continue
-        _record_interrupted_run(manifest)
+        ownership = try_claim_run_execution(manifest.id)
+        if ownership is None:
+            continue
+        try:
+            _reconcile_claimed_run(manifest.id, ownership)
+        finally:
+            release_run_execution(ownership)
 
 
-def _record_interrupted_run(manifest: RunManifest) -> None:
+def _reconcile_claimed_run(
+    manifest_id: str, ownership: RunExecutionOwnership
+) -> None:
+    manifest = RunManifest.load(manifest_id)
+    if manifest.status != RunStatus.RUNNING:
+        return
+    manifest.record_execution_attempt(ownership.holder)
+    _record_interrupted_run(manifest, ownership)
+
+
+def _record_interrupted_run(
+    manifest: RunManifest, ownership: RunExecutionOwnership
+) -> None:
     finished_at = datetime.now().isoformat(timespec="seconds")
     interrupted = [
         record for record in manifest.stage_records if record.status == StageStatus.RUNNING
@@ -81,7 +110,7 @@ def _record_interrupted_run(manifest: RunManifest) -> None:
     manifest.status = RunStatus.ERRORS
     manifest.finished_at = finished_at
     write_manifest(manifest)
-    _append_interruption_events(manifest, interrupted)
+    _append_interruption_events(manifest, interrupted, ownership)
 
 
 def _record_interrupted_stage(record: StageRecord, finished_at: str) -> None:
@@ -98,9 +127,11 @@ def _record_interrupted_stage(record: StageRecord, finished_at: str) -> None:
 
 
 def _append_interruption_events(
-    manifest: RunManifest, interrupted: list[StageRecord]
+    manifest: RunManifest,
+    interrupted: list[StageRecord],
+    ownership: RunExecutionOwnership,
 ) -> None:
-    log = RunLog(manifest.project, manifest.run_id)
+    log = RunLog(manifest.project, manifest.run_id, ownership)
     for record in interrupted:
         if record.started_at is None:
             continue
@@ -123,8 +154,14 @@ def start_run(
     offsets: dict[str, int] | None = None,
     bust_cache: bool = False,
 ) -> str:
-    prep = _prepare(project_id, version_id, bindings, limits, offsets, bust_cache)
-    _run_in_background(run_prepared, prep)
+    prep = _prepare(
+        project_id, version_id, bindings, limits, offsets, bust_cache,
+        claim_execution=True,
+    )
+    ownership = prep["ownership"]
+    if not isinstance(ownership, RunExecutionOwnership):
+        raise RuntimeError("background run preparation did not claim its execution lease")
+    _run_in_background(run_with_execution_lease, ownership, run_prepared, prep)
     return str(prep["run_id"])
 
 
@@ -138,7 +175,10 @@ def execute(
     bust_cache: bool = False,
 ) -> dict[str, Any]:
     return run_prepared(
-        _prepare(project_id, version_id, bindings, limits, offsets, bust_cache)
+        _prepare(
+            project_id, version_id, bindings, limits, offsets, bust_cache,
+            claim_execution=False,
+        )
     )
 
 
@@ -149,6 +189,8 @@ def _prepare(
     limits: dict[str, int] | None,
     offsets: dict[str, int] | None,
     bust_cache: bool,
+    *,
+    claim_execution: bool,
 ) -> dict[str, Any]:
     workflow_version = resolve_version_id(project_id, version_id)
     return prepare_run(
@@ -160,18 +202,24 @@ def _prepare(
         offsets=offsets,
         bindings=bindings,
         bust_cache=bust_cache,
+        claim_execution=claim_execution,
     )
 
 
 def resume(project_id: str, run_id: str) -> None:
     workflow_version = read_pinned_version(project_id, run_id)
+    workflow = Workflow(stages=load_version_stages(project_id, workflow_version))
+    ownership = require_run_execution(RunManifest.compose_id(project_id, run_id))
     _run_in_background(
+        run_with_execution_lease,
+        ownership,
         resume_run,
         resolve_run_dir(project_id, run_id),
         project_id,
         run_id,
-        Workflow(stages=load_version_stages(project_id, workflow_version)),
+        workflow,
         workflow_version,
+        ownership.holder,
     )
 
 

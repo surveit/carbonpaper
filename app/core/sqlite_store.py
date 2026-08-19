@@ -39,6 +39,61 @@ class SqliteKvStore:
             )
             self._conn.commit()
 
+    def try_claim_lease(
+        self, collection: str, id: str, holder: str, expires_at: str,
+        expired_before: str,
+    ) -> bool:
+        body = json.dumps({"holder": holder, "expires_at": expires_at})
+        with self._lock:
+            cursor = self._conn.execute(
+                "INSERT INTO documents (collection, id, data, schema_version) "
+                "VALUES (?, ?, ?, 1) "
+                "ON CONFLICT(collection, id) DO UPDATE SET data=excluded.data "
+                "WHERE json_extract(documents.data, '$.expires_at')<=?",
+                (collection, id, body, expired_before),
+            )
+            self._conn.commit()
+        return cursor.rowcount == 1
+
+    def renew_lease(
+        self, collection: str, id: str, holder: str, expires_at: str,
+    ) -> bool:
+        body = json.dumps({"holder": holder, "expires_at": expires_at})
+        with self._lock:
+            cursor = self._conn.execute(
+                "UPDATE documents SET data=? WHERE collection=? AND id=? "
+                "AND json_extract(data, '$.holder')=?",
+                (body, collection, id, holder),
+            )
+            self._conn.commit()
+        return cursor.rowcount == 1
+
+    def release_lease(self, collection: str, id: str, holder: str) -> bool:
+        with self._lock:
+            cursor = self._conn.execute(
+                "DELETE FROM documents WHERE collection=? AND id=? "
+                "AND json_extract(data, '$.holder')=?",
+                (collection, id, holder),
+            )
+            self._conn.commit()
+        return cursor.rowcount == 1
+
+    def write_if_lease_held(
+        self, collection: str, id: str, data: JsonDict, schema_version: int,
+        lease_collection: str, lease_id: str, holder: str,
+    ) -> bool:
+        with self._lock:
+            cursor = self._conn.execute(
+                "INSERT OR REPLACE INTO documents (collection, id, data, schema_version) "
+                "SELECT ?, ?, ?, ? WHERE EXISTS ("
+                "SELECT 1 FROM documents WHERE collection=? AND id=? "
+                "AND json_extract(data, '$.holder')=?)",
+                (collection, id, json.dumps(data), schema_version,
+                 lease_collection, lease_id, holder),
+            )
+            self._conn.commit()
+        return cursor.rowcount == 1
+
     def read(self, collection: str, id: str) -> JsonDict:
         with self._lock:
             row = self._conn.execute(

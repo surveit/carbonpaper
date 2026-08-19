@@ -30,6 +30,18 @@ def validate_id(id: str) -> str:
 
 class DocumentStore(Protocol):
     def write(self, collection: str, id: str, data: JsonDict, schema_version: int = 1) -> None: ...
+    def try_claim_lease(
+        self, collection: str, id: str, holder: str, expires_at: str,
+        expired_before: str,
+    ) -> bool: ...
+    def renew_lease(
+        self, collection: str, id: str, holder: str, expires_at: str,
+    ) -> bool: ...
+    def release_lease(self, collection: str, id: str, holder: str) -> bool: ...
+    def write_if_lease_held(
+        self, collection: str, id: str, data: JsonDict, schema_version: int,
+        lease_collection: str, lease_id: str, holder: str,
+    ) -> bool: ...
     def read(self, collection: str, id: str) -> JsonDict: ...
     def read_tolerant(self, collection: str, id: str) -> JsonDict | None: ...
     def exists(self, collection: str, id: str) -> bool: ...
@@ -115,6 +127,20 @@ class PersistedModel(BaseModel):
             schema_version=self.SCHEMA_VERSION,
         )
 
+    def save_if_lease_held(
+        self, lease_collection: str, lease_id: str, holder: str
+    ) -> bool:
+        self.updated_at = _now_iso()
+        return get_store().write_if_lease_held(
+            self.collection,
+            self.id,
+            self.model_dump(mode="json", **self.DUMP_OPTS),
+            self.SCHEMA_VERSION,
+            lease_collection,
+            lease_id,
+            holder,
+        )
+
     @classmethod
     def load(cls, id: str) -> Self:
         return cls.model_validate(get_store().read(cls.collection, id))
@@ -136,4 +162,3 @@ class PersistedModel(BaseModel):
     @classmethod
     def exists(cls, id: str) -> bool:
         return get_store().exists(cls.collection, id)
-

@@ -25,11 +25,13 @@ from app.core.run_status import StageStatus
 from .context import RunContext
 from .executor import _execute_stages, topological_sort
 from .manifest import (
+    RunManifest,
     read_run_manifest,
     create_run_manifest,
     resolve_output_path,
     write_manifest,
 )
+from .run_lease import require_run_execution
 from .stages import PREFLIGHTS
 
 
@@ -60,6 +62,7 @@ def prepare_run(
     offsets: dict[str, int] | None = None,
     bindings: Mapping[StageId, TypeUnsafeUserStageConfigOverride] | None = None,
     bust_cache: bool = False,
+    claim_execution: bool = False,
 ) -> dict[str, Any]:
     """`limits`/`offsets` window each named stage's INPUT rows, not its output; offset applies first."""
     bound, param_sources = workflow.apply_run_bindings(bindings)
@@ -82,6 +85,10 @@ def prepare_run(
     run_dir = runs_dir / run_id
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
     (run_dir / "artifacts").mkdir(parents=True, exist_ok=True)
+    ownership = (
+        require_run_execution(RunManifest.compose_id(project_id, run_id))
+        if claim_execution else None
+    )
 
     # This run's logical identity for cancellation's checkpoints (see
     # app.runtime.cancellation) — read by _execute_stages, never by name of
@@ -106,10 +113,11 @@ def prepare_run(
         project_id=project_id,
         workflow_version=workflow_version,
         input_bindings=input_records,
+        execution_attempt_id=None if ownership is None else ownership.holder,
     )
     write_manifest(manifest)
     return {"run_id": run_id, "run_dir": run_dir, "ctx": ctx,
-            "ordered": ordered, "manifest": manifest}
+            "ordered": ordered, "manifest": manifest, "ownership": ownership}
 
 
 def run_prepared(prep: dict[str, Any]) -> dict[str, Any]:
@@ -141,6 +149,7 @@ def resume_run(
     run_id: str,
     workflow: Workflow,
     workflow_version: str,
+    execution_attempt_id: str | None = None,
 ) -> dict[str, Any]:
     manifest = read_run_manifest(project_id, run_id)
 
@@ -187,6 +196,7 @@ def resume_run(
 
     manifest.resumed_at = datetime.now().isoformat(timespec="seconds")
     manifest.finished_at = None
+    manifest.record_execution_attempt(execution_attempt_id)
     # Drop the halt marker the halted run left behind: the run is no longer
     # halted — it is resuming — so a mid-run flush() (which persists status
     # `running`) must not carry `halted_at`, or the run page would show the

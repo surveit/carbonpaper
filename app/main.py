@@ -23,7 +23,7 @@ from app.web.config import (
 from app.web.errors import install_error_pages
 from app.web.routers import include_routers
 from app.mcp.server import handle_streamable_http, run_session_manager
-from app.web.startup import reconcile_interrupted_runs
+from app.web.startup import maintain_run_reconciliation
 
 # Importing the editing agent's config registers the "editing" agent with the
 # generic agent registry, so build_engine("editing", …) resolves. The registry is
@@ -44,7 +44,6 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # time (the test suite's autouse fixtures) wins over the on-disk defaults —
     # the app never reconfigures a store that's already set.
     configure_default_stores()
-    reconcile_interrupted_runs()
     # The projects root (CARBON_PAPER_PROJECTS_DIR, default ~/.carbonpaper/examples). Read
     # here rather than at import time in app.services.workspace, so the test
     # suite's own set_projects_dir() is never overridden by the environment.
@@ -52,8 +51,9 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # The MCP session manager's task group must run for the server's lifetime —
     # the /mcp endpoint errors without it. A fresh manager per entry keeps this
     # lifespan re-entrant (several TestClient(app) uses in one process).
-    async with run_session_manager():
-        yield
+    async with maintain_run_reconciliation():
+        async with run_session_manager():
+            yield
 
 
 app = FastAPI(title="Workflow", lifespan=lifespan)

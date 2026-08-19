@@ -222,7 +222,8 @@ working copy is not a version). A step no eval targets renders nothing.
 ## Live progress + the stage simulator
 `POST /project/<m>/run` → `prepare_run` (initial `running` manifest) → background thread →
 redirect; `run_detail.html` polls `…/status` every 2s and updates the graph in place, reloading
-once on the terminal transition.
+once on the terminal transition. The background attempt holds a renewable stored lease, so
+another server sharing the database cannot mistake its live run for an interrupted one.
 
 An eval run takes the same shape: `POST …/evals/<id>/run` → `start_eval_run` (validated
 synchronously, so an incompatible eval still answers 400 and an unknown version 404, then an

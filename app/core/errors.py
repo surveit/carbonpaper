@@ -90,6 +90,10 @@ class RunNotFoundError(Exception):
     pass
 
 
+class RunExecutionLeaseLost(RuntimeError):
+    pass
+
+
 class RunManifestNotJson(ValueError):
     pass
 

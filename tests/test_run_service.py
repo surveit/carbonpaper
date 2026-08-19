@@ -6,6 +6,9 @@ import pytest
 
 import app.services.run as run_service
 from app.core.errors import NoVersionToRunError, RunNotFoundError
+from app.core.persistence import get_store
+from app.runtime.manifest import RunManifest
+from app.runtime.run_lease import LEASE_COLLECTION
 from app.services import workspace
 from app.services.project import save_working_copy_as_version
 from app.services.versioning import list_versions
@@ -63,7 +66,11 @@ def test_start_run_returns_run_id_and_writes_ok_manifest(project_dir):
 
     manifest_run = run_id
     assert manifest_exists(manifest_project, manifest_run)
-    assert read_manifest(manifest_project, manifest_run)["status"] == "ok"
+    stored = read_manifest(manifest_project, manifest_run)
+    assert stored["status"] == "ok"
+    assert stored["execution_attempt_id"]
+    assert not get_store().exists(
+        LEASE_COLLECTION, RunManifest.compose_id(_PROJECT, run_id))
 
 
 def test_start_run_pins_requested_version(project_dir):

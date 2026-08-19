@@ -39,6 +39,7 @@ from .stage_output import StageOutput
 from .errors import RunCancelled
 from .manifest import RunManifest, create_run_manifest, write_manifest
 from .run_log import RUN_START, STAGE_DONE, STAGE_START, RunLog
+from .run_lease import RunExecutionOwnership
 from .stages import HANDLERS, HaltForReview, StageHandler
 from .lineage import (
     RowLineage,
@@ -136,7 +137,11 @@ def _execute_stages(
     run_dir: Path,
     outputs_so_far: dict[str, pa.Table],
 ) -> RunManifest:
-    run_log = RunLog(manifest.project, manifest.run_id)
+    ownership = (
+        None if manifest.execution_attempt_id is None
+        else RunExecutionOwnership(manifest.id, manifest.execution_attempt_id)
+    )
+    run_log = RunLog(manifest.project, manifest.run_id, ownership)
     run_log.emit({
         "kind": RUN_START, "run_id": manifest.run_id, "stage_count": len(ordered),
     })

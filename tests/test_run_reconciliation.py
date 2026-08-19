@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
+import pytest
+
+from app.core.errors import RunExecutionLeaseLost
 from app.core.run_status import RunStatus, StageStatus
-from app.models import Workflow
+from app.models import StageType, Workflow
 from app.models.run_manifest import StageErrorInfo, StageRecord
 from app.runtime.manifest import (
     EVAL_RUNS,
@@ -10,11 +15,12 @@ from app.runtime.manifest import (
     write_manifest,
 )
 from app.runtime.run_log import read_events_since
+from app.runtime.run_lease import try_claim_run_execution
 from app.runtime.runner import resume_run
 from app.services.run import reconcile_interrupted_runs
 from app.web.config import templates
 from app.web.panel_links import AppPanelLinks
-from tests.run_seed import store_events
+from run_seed import store_events
 
 
 def test_reconcile_marks_interrupted_stage_and_run_terminal() -> None:
@@ -29,7 +35,7 @@ def test_reconcile_marks_interrupted_stage_and_run_terminal() -> None:
         ],
         finished_at="2026-08-18T21:55:35",
     )
-    write_manifest(manifest)
+    _write_expired(manifest)
     store_events("project", "orphan", [
         {"seq": 0, "ts": "2026-08-18T10:00:00", "level": 0,
          "kind": "run_start", "run_id": "orphan", "stage_count": 3},
@@ -65,6 +71,8 @@ def test_reconcile_marks_interrupted_stage_and_run_terminal() -> None:
         ("run_done", None),
     ]
     assert "elapsed_ms" not in events[2]
+    with pytest.raises(RunExecutionLeaseLost):
+        write_manifest(manifest)
 
 
 def test_reconcile_anchors_a_not_started_run_without_claiming_the_stage_ran() -> None:
@@ -75,7 +83,7 @@ def test_reconcile_anchors_a_not_started_run_without_claiming_the_stage_ran() ->
             _stage("downstream", StageStatus.PENDING),
         ],
     )
-    write_manifest(manifest)
+    _write_expired(manifest)
 
     reconcile_interrupted_runs()
 
@@ -143,7 +151,7 @@ def test_reconcile_is_a_no_op_for_terminal_runs_and_is_idempotent() -> None:
         [_stage("active", StageStatus.RUNNING)],
     )
     write_manifest(terminal)
-    write_manifest(orphan)
+    _write_expired(orphan)
 
     reconcile_interrupted_runs()
     terminal_after_first = read_run_manifest("project", "terminal").model_dump()
@@ -162,7 +170,7 @@ def test_reconcile_does_not_touch_eval_subset_runs() -> None:
         [_stage("active", StageStatus.RUNNING)],
         area=EVAL_RUNS,
     )
-    write_manifest(manifest)
+    _write_expired(manifest)
 
     reconcile_interrupted_runs()
 
@@ -170,6 +178,36 @@ def test_reconcile_does_not_touch_eval_subset_runs() -> None:
     assert loaded.status == RunStatus.RUNNING
     assert loaded.stage_records[0].status == StageStatus.RUNNING
     assert read_events_since("project", "eval-subset", 0) == []
+
+
+def test_reconcile_preserves_a_run_owned_by_another_live_server() -> None:
+    manifest = _manifest(
+        "project", "live", RunStatus.RUNNING,
+        [_stage("active", StageStatus.RUNNING)],
+    )
+    ownership = try_claim_run_execution(manifest.id)
+    assert ownership is not None
+    manifest.record_execution_attempt(ownership.holder)
+    write_manifest(manifest)
+
+    reconcile_interrupted_runs()
+
+    preserved = read_run_manifest("project", "live")
+    assert preserved.status == RunStatus.RUNNING
+    assert preserved.stage_records[0].status == StageStatus.RUNNING
+    assert read_events_since("project", "live", 0) == []
+
+
+def test_reconcile_preserves_an_ownerless_legacy_run() -> None:
+    manifest = _manifest(
+        "project", "legacy", RunStatus.RUNNING,
+        [_stage("active", StageStatus.RUNNING)],
+    )
+    write_manifest(manifest)
+
+    reconcile_interrupted_runs()
+
+    assert read_run_manifest("project", "legacy").status == RunStatus.RUNNING
 
 
 def test_resume_clears_the_prior_finished_at_before_execution(tmp_path, monkeypatch) -> None:
@@ -219,7 +257,7 @@ def _stage(
 ) -> StageRecord:
     return StageRecord(
         stage_id=stage_id,
-        type="input_data",
+        type=StageType.input_data,
         started_at="2026-08-18T10:00:01" if status == StageStatus.RUNNING else None,
         status=status,
         input_validation_report=[],
@@ -230,3 +268,11 @@ def _stage(
         output_path="outputs/complete.parquet" if status == StageStatus.OK else None,
         finished_at=finished_at,
     )
+
+
+def _write_expired(manifest: RunManifest) -> None:
+    ownership = try_claim_run_execution(
+        manifest.id, now=datetime(2020, 1, 1, tzinfo=UTC))
+    assert ownership is not None
+    manifest.record_execution_attempt(ownership.holder)
+    write_manifest(manifest)

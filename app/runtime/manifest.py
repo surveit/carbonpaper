@@ -91,6 +91,7 @@ class RunManifest(PersistedModel):
     # names one.
     project: str
     workflow_version: str | None
+    execution_attempt_id: str | None = None
     # What the caller asked of this run, verbatim — the settings a resume replays.
     # `_lift_legacy_parameters` reads the flat pre-nesting keys off an older
     # manifest into it, so every run on disk still parses.
@@ -155,6 +156,13 @@ class RunManifest(PersistedModel):
         # show a review banner for a halt that no longer holds.
         self.__pydantic_fields_set__.discard("halted_at")
 
+    def record_execution_attempt(self, attempt_id: str | None) -> None:
+        self.execution_attempt_id = attempt_id
+        if attempt_id is None:
+            self.__pydantic_fields_set__.discard("execution_attempt_id")
+        else:
+            self.__pydantic_fields_set__.add("execution_attempt_id")
+
     def find_stage_record(self, stage_id: str) -> StageRecord | None:
         return next((r for r in self.stage_records if r.stage_id == stage_id), None)
 
@@ -178,9 +186,10 @@ def create_run_manifest(
     project_id: str,
     workflow_version: str | None,
     input_bindings: dict[str, dict[str, Any]],
+    execution_attempt_id: str | None = None,
     area: str = PRODUCTION_RUNS,
 ) -> RunManifest:
-    return RunManifest(
+    manifest = RunManifest(
         id=RunManifest.compose_id(project_id, run_id, area),
         run_id=run_id,
         started_at=datetime.now().isoformat(timespec="seconds"),
@@ -196,11 +205,20 @@ def create_run_manifest(
             for s in ordered
         ],
     )
+    manifest.record_execution_attempt(execution_attempt_id)
+    return manifest
 
 
 def write_manifest(manifest: RunManifest) -> None:
     """The single writer of a run record."""
-    manifest.save()
+    if manifest.execution_attempt_id is None:
+        manifest.save()
+        return
+    from .run_lease import RunExecutionOwnership, write_with_execution_lease
+    write_with_execution_lease(
+        manifest,
+        RunExecutionOwnership(manifest.id, manifest.execution_attempt_id),
+    )
 
 
 def read_run_manifest(project_id: str, run_id: str, area: str = PRODUCTION_RUNS) -> RunManifest:

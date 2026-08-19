@@ -18,6 +18,10 @@ the output, write `outputs/<stage>.parquet`, append to the run record.
   verdicts; the second posted verdict replaces the first.
 - **Incremental manifest:** flushed after every stage (`running` → terminal), so the UI
   shows live progress and a run can execute in a background thread (`prepare_run`/`run_prepared`).
+- **Background ownership:** a production background run claims a stored execution lease
+  before its first `running` manifest write. A heartbeat renews it, and the lease token
+  fences both manifest and event-log writes. Another server reconciles the run only after
+  atomically taking over an expired lease; an ownerless legacy run stays untouched.
 - **Row slicing caps what a stage READS, not what it emits:** it is a per-run parameter,
   never part of the workflow. `--limit <id>=<N>` cuts the window off each of that stage's
   INPUT frames before the handler is invoked — so an `llm_transform` under `--limit s=3`

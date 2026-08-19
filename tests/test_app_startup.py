@@ -8,6 +8,7 @@ import asyncio
 import app.core.persistence as persistence
 from app.core.sqlite_store import SqliteKvStore
 from app.main import app, lifespan
+from app.web.startup import maintain_run_reconciliation
 
 
 def test_lifespan_configures_store_from_env(monkeypatch, tmp_path):
@@ -40,10 +41,25 @@ def test_lifespan_does_not_overwrite_a_configured_store(monkeypatch, tmp_path):
 
 def test_lifespan_reconciles_interrupted_runs(monkeypatch):
     calls = []
-    monkeypatch.setattr("app.main.reconcile_interrupted_runs", lambda: calls.append(True))
+    monkeypatch.setattr(
+        "app.web.startup.reconcile_interrupted_runs", lambda: calls.append(True))
 
     async def drive() -> None:
         async with lifespan(app):
             assert calls == [True]
+
+    asyncio.run(drive())
+
+
+def test_lifespan_keeps_checking_for_owners_that_expire_later(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "app.web.startup.reconcile_interrupted_runs", lambda: calls.append(True))
+    monkeypatch.setattr("app.web.startup.RECONCILIATION_INTERVAL_SECONDS", 0.001)
+
+    async def drive() -> None:
+        async with maintain_run_reconciliation():
+            await asyncio.sleep(0.01)
+            assert len(calls) > 1
 
     asyncio.run(drive())
