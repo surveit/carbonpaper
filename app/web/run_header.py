@@ -60,6 +60,10 @@ class RunLiveView(BaseModel):
 
 class RunHeader(BaseModel):
     run_id: str
+    name: str | None
+    editing_name: bool
+    name_edit_url: str
+    name_save_url: str
     started_at: str | None
     is_test_run: bool
     version: VersionNote
@@ -70,12 +74,22 @@ class RunHeader(BaseModel):
 
 
 def build_run_header(
-    project_id: str, run_id: str, run_dir: Path, manifest: Mapping[str, Any]
+    project_id: str,
+    run_id: str,
+    run_dir: Path,
+    manifest: Mapping[str, Any],
+    *,
+    editing_name: bool = False,
 ) -> RunHeader:
     strip = build_stage_strip(manifest)
     cta = choose_run_cta(project_id, run_id, manifest)
+    base = f"/project/{project_id}/runs/{run_id}"
     return RunHeader(
         run_id=run_id,
+        name=_read_text(manifest.get("name")),
+        editing_name=editing_name,
+        name_edit_url=f"{base}?edit_name=1",
+        name_save_url=f"{base}/name",
         started_at=_read_text(manifest.get("started_at")),
         is_test_run=bool(manifest.get("parameters", {}).get("is_test_run")),
         version=read_version_note(project_id, manifest.get("workflow_version")),

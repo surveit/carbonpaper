@@ -91,6 +91,7 @@ class RunManifest(PersistedModel):
     # that cannot name its project has no id to be stored under, and every caller
     # names one.
     project: str
+    name: str | None = None
     workflow_version: str | None
     # What the caller asked of this run, verbatim — the settings a resume replays.
     # `_lift_legacy_parameters` reads the flat pre-nesting keys off an older
@@ -156,6 +157,14 @@ class RunManifest(PersistedModel):
         # show a review banner for a halt that no longer holds.
         self.__pydantic_fields_set__.discard("halted_at")
 
+    def set_name(self, name: str | None) -> None:
+        cleaned = (name or "").strip()
+        self.name = cleaned or None
+        if self.name is None:
+            self.__pydantic_fields_set__.discard("name")
+            return
+        self.__pydantic_fields_set__.add("name")
+
     def find_stage_record(self, stage_id: str) -> StageRecord | None:
         return next((r for r in self.stage_records if r.stage_id == stage_id), None)
 
@@ -177,11 +186,12 @@ def create_run_manifest(
     *,
     run_id: str,
     project_id: str,
+    name: str | None,
     workflow_version: str | None,
     input_bindings: dict[str, dict[str, Any]],
     area: str = PRODUCTION_RUNS,
 ) -> RunManifest:
-    return RunManifest(
+    manifest = RunManifest(
         id=RunManifest.compose_id(project_id, run_id, area),
         run_id=run_id,
         started_at=datetime.now().isoformat(timespec="seconds"),
@@ -197,6 +207,8 @@ def create_run_manifest(
             for s in ordered
         ],
     )
+    manifest.set_name(name)
+    return manifest
 
 
 def write_manifest(manifest: RunManifest) -> None:

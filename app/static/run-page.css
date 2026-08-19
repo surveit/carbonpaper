@@ -19,6 +19,54 @@
       The run's state is not stated in words anywhere; the CTA is how it is read,
       so the CTA is the only large thing here. ── */
 .run-header { margin: 0 0 1.2rem; }
+.run-name-display {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    margin: 0 0 .75rem;
+}
+.run-name-display h1 {
+    margin: 0;
+    font-size: 2rem;
+    line-height: 1.1;
+}
+.run-name-empty { margin-bottom: .9rem; }
+.run-name-edit {
+    display: grid;
+    gap: .35rem;
+    margin: 0 0 .9rem;
+}
+.run-name-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+}
+.run-name-edit-row {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    flex-wrap: wrap;
+}
+.run-name-edit-row input {
+    flex: 1 1 16rem;
+    min-width: 0;
+    padding: 7px 9px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font: inherit;
+    color: var(--fg);
+    background: var(--raised);
+}
+.run-name-edit-row input:focus {
+    outline: none;
+    border-color: var(--focus);
+    box-shadow: 0 0 0 2px var(--focus-halo);
+}
+.run-name-note {
+    margin: 0;
+    font-size: .82rem;
+    color: var(--muted);
+}
 .run-ground { display: flex; flex-wrap: wrap; align-items: center; gap: .45em;
     margin: 0 0 .75rem; font-size: .82rem; color: var(--muted); }
 .run-ground .sep { opacity: .45; }
@@ -193,6 +241,7 @@ table.issue-table { width: 100%; border-collapse: collapse; font-size: .79rem; }
     font-size: .82em; text-decoration: none; }
 .runs-table .open-away:hover { color: var(--accent); }
 .runs-table .run-date, .runs-table .run-duration { white-space: nowrap; }
+.runs-table .run-list-name { margin: 0 0 .2rem; font-weight: 600; color: var(--fg); }
 .runs-table .run-outcome { display: block; margin-top: .35rem; font-size: .78rem; color: var(--muted); }
 .runs-table .run-outcome.status-errors { color: var(--state-failed-ink); }
 .runs-table .run-outcome.status-awaiting_review { color: var(--state-review-ink); }

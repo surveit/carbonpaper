@@ -51,6 +51,7 @@
     {% for r in runs %}
     <tr class="js-run-row" data-href="/project/{{ state.id }}/runs/{{ r.run_id }}">
       <td class="run-date">
+        {%- if r.name %}<div class="run-list-name">{{ r.name }}</div>{% endif %}
         <a href="/project/{{ state.id }}/runs/{{ r.run_id }}" title="run {{ r.run_id }}">
           {%- if r.started_at %}{{ r.started_at | friendly_time }}{% else %}<code>{{ r.run_id }}</code>{% endif -%}
         </a>

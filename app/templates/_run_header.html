@@ -11,11 +11,33 @@
        button at all, only its outputs;
     3. the stage strip and its labelled counts.
 
-  A run has no name (`run_id` IS the start timestamp), so there is no <h1> here.
+  A run may carry an optional human name above the grounding line.
 
   Context: project, run_id, header = app.web.run_header.RunHeader
 #}
 <div class="run-header">
+  {% if header.editing_name %}
+  <form method="post" action="{{ header.name_save_url }}" class="run-name-edit">
+    <label class="run-name-label" for="run-name-input">Name</label>
+    <div class="run-name-edit-row">
+      <input id="run-name-input" name="name" type="text" maxlength="120"
+             value="{{ header.name or '' }}" autofocus>
+      <button type="submit" class="btn secondary sm">Save</button>
+    </div>
+    <p class="run-name-note">Clearing the name removes it.</p>
+  </form>
+  {% elif header.name %}
+  <div class="run-name-display">
+    <h1>{{ header.name }}</h1>
+    <a href="{{ header.name_edit_url }}" class="btn secondary sm run-name-edit-btn"
+       aria-label="Edit run name">✎</a>
+  </div>
+  {% else %}
+  <div class="run-name-display run-name-empty">
+    <a href="{{ header.name_edit_url }}" class="btn secondary sm">Name this run</a>
+  </div>
+  {% endif %}
+
   <p class="run-ground">
     {%- if header.started_at %}<span>started {{ header.started_at | relative_time }}</span>{% endif %}
     {%- if header.live.duration %}<span class="sep">·</span><span>{{ header.live.duration_verb }}

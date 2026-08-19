@@ -16,6 +16,7 @@
 
 /* The two field labels — the version picker's and each input row's name line. */
 .run-version,
+.run-name,
 .run-input-name {
     display: block;
     margin: 0;
@@ -23,11 +24,20 @@
     font-weight: 600;
     color: var(--muted);
 }
-.run-version { display: flex; flex-direction: column; gap: 5px; }
+.run-version,
+.run-name { display: flex; flex-direction: column; gap: 5px; }
 
 /* Full width, not a fixed cap: the option text is a version id AND its message,
    and a truncated message is the one thing this picker exists to read. */
 .run-controls select {
+    padding: 7px 9px;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--fg);
+    background: var(--raised);
+    max-width: 100%;
+}
+.run-name input {
     padding: 7px 9px;
     font-family: inherit;
     font-size: 14px;
@@ -101,6 +111,7 @@
    so the three read as the same kind of control — and the border is what marks a
    thing as typeable, so it goes around the number and nothing else. */
 .run-controls select:not(.file-picker-native),
+.run-controls .run-name input,
 .run-controls .path-field input,
 .run-controls .run-limit input {
     border: 1px solid var(--border);
@@ -108,6 +119,7 @@
 }
 .run-controls .path-field input { padding: 7px 9px; font-size: 14px; }
 .run-controls select:not(.file-picker-native):focus,
+.run-controls .run-name input:focus,
 .run-controls .path-field input:focus,
 .run-controls .run-limit input:focus {
     outline: none;

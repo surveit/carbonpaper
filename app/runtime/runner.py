@@ -56,6 +56,7 @@ def prepare_run(
     project_id: str,
     workflow: Workflow,
     workflow_version: str,
+    name: str | None = None,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
     bindings: Mapping[StageId, TypeUnsafeUserStageConfigOverride] | None = None,
@@ -104,6 +105,7 @@ def prepare_run(
         ctx,
         run_id=run_id,
         project_id=project_id,
+        name=name,
         workflow_version=workflow_version,
         input_bindings=input_records,
     )
@@ -123,6 +125,7 @@ def execute_run(
     project_id: str,
     workflow: Workflow,
     workflow_version: str,
+    name: str | None = None,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
     bindings: Mapping[StageId, TypeUnsafeUserStageConfigOverride] | None = None,
@@ -130,7 +133,7 @@ def execute_run(
 ) -> dict[str, Any]:
     return run_prepared(
         prepare_run(runs_dir, project_id, workflow, workflow_version,
-                    limits=limits, offsets=offsets, bindings=bindings,
+                    name=name, limits=limits, offsets=offsets, bindings=bindings,
                     bust_cache=bust_cache)
     )
 

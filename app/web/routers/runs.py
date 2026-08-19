@@ -61,9 +61,10 @@ async def trigger_run(request: Request, project_id: str):
     try:
         form = await request.form()
         version_id = str(form.get("version_id") or "").strip() or None
+        name = str(form.get("name") or "").strip() or None
         bindings = _collect_bindings(form, project_id)
         limits = _collect_limits(form)
-        run_id = run_service.start_run(project_id, version_id=version_id,
+        run_id = run_service.start_run(project_id, version_id=version_id, name=name,
                                        bindings=bindings, limits=limits,
                                        bust_cache=_read_bust_cache(form))
     except (FileNotStoredError, NoVersionToRunError, MissingInputBindingError,
@@ -249,7 +250,13 @@ async def run_detail(request: Request, project_id: str, run_id: str):
             "event_tail": EVENT_TAIL,
             # The grounding line, the CTA and the stage strip — everything above
             # the graph (app.web.run_header).
-            "header": build_run_header(project_id, run_id, run_dir, manifest),
+            "header": build_run_header(
+                project_id,
+                run_id,
+                run_dir,
+                manifest,
+                editing_name=request.query_params.get("edit_name") == "1",
+            ),
             # What stopped this run, and what else its own records flagged — the
             # index above the graph (app.web.run_issues). Takes the stages the
             # graph already loaded, so the page reads the pinned version once.
@@ -306,6 +313,18 @@ async def cancel_run_route(project_id: str, run_id: str):
     manifest = load_manifest(project_id, run_id)  # 404s if the run doesn't exist
     if manifest.get("status") == RunStatus.RUNNING:
         request_cancel(project_id, run_id)
+    return RedirectResponse(
+        url=f"/project/{project_id}/runs/{run_id}",
+        status_code=303,
+    )
+
+
+@router.post("/project/{project_id}/runs/{run_id}/name")
+async def update_run_name_route(request: Request, project_id: str, run_id: str):
+    validate_project_or_404(project_id)
+    load_manifest(project_id, run_id)
+    form = await request.form()
+    run_service.update_run_name(project_id, run_id, str(form.get("name") or ""))
     return RedirectResponse(
         url=f"/project/{project_id}/runs/{run_id}",
         status_code=303,

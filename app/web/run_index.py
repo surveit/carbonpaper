@@ -18,6 +18,7 @@ from app.web.stage_strip import StageStrip, build_stage_strip, describe_stage_ta
 class RunIndexRow(BaseModel):
     run_id: str
     status: str
+    name: str | None = None
     started_at: str | None = None
     duration: str | None = None
     version: VersionNote | None = None
@@ -69,6 +70,7 @@ def _build_row(
     return RunIndexRow(
         run_id=entry.run_id,
         status=str(manifest.status),
+        name=manifest.name,
         started_at=manifest.started_at,
         duration=describe_run_duration(persisted),
         version=_read_version(project_id, manifest.workflow_version, seen_versions),

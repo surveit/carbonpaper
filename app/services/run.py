@@ -41,12 +41,13 @@ def start_run(
     project_id: str,
     *,
     version_id: str | None = None,
+    name: str | None = None,
     bindings: Mapping[StageId, TypeUnsafeUserStageConfigOverride] | None = None,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
     bust_cache: bool = False,
 ) -> str:
-    prep = _prepare(project_id, version_id, bindings, limits, offsets, bust_cache)
+    prep = _prepare(project_id, version_id, name, bindings, limits, offsets, bust_cache)
     _run_in_background(run_prepared, prep)
     return str(prep["run_id"])
 
@@ -55,19 +56,21 @@ def execute(
     project_id: str,
     *,
     version_id: str | None = None,
+    name: str | None = None,
     bindings: Mapping[StageId, TypeUnsafeUserStageConfigOverride] | None = None,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
     bust_cache: bool = False,
 ) -> dict[str, Any]:
     return run_prepared(
-        _prepare(project_id, version_id, bindings, limits, offsets, bust_cache)
+        _prepare(project_id, version_id, name, bindings, limits, offsets, bust_cache)
     )
 
 
 def _prepare(
     project_id: str,
     version_id: str | None,
+    name: str | None,
     bindings: Mapping[StageId, TypeUnsafeUserStageConfigOverride] | None,
     limits: dict[str, int] | None,
     offsets: dict[str, int] | None,
@@ -79,11 +82,18 @@ def _prepare(
         project_id,
         Workflow(stages=load_version_stages(project_id, workflow_version)),
         workflow_version,
+        name=name,
         limits=limits,
         offsets=offsets,
         bindings=bindings,
         bust_cache=bust_cache,
     )
+
+
+def update_run_name(project_id: str, run_id: str, name: str | None) -> None:
+    manifest = read_run_manifest(project_id, run_id)
+    manifest.set_name(name)
+    manifest.save()
 
 
 def resume(project_id: str, run_id: str) -> None:
