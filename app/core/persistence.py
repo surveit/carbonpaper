@@ -9,12 +9,13 @@ from datetime import datetime, timedelta
 from enum import Enum
 from threading import RLock
 from uuid import uuid4
-from typing import Any, ClassVar, Iterator, Protocol, Self
+from typing import Any, Callable, ClassVar, Iterator, Protocol, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # The one honest dynamic boundary: an arbitrary pydantic model_dump / JSON body.
 JsonDict = dict[str, Any]
+StoreUpdate = Callable[[JsonDict | None, int | None], tuple[JsonDict, int]]
 
 
 def validate_id(id: str) -> str:
@@ -30,6 +31,7 @@ def validate_id(id: str) -> str:
 
 class DocumentStore(Protocol):
     def write(self, collection: str, id: str, data: JsonDict, schema_version: int = 1) -> None: ...
+    def update(self, collection: str, id: str, mutate: StoreUpdate) -> None: ...
     def read(self, collection: str, id: str) -> JsonDict: ...
     def read_tolerant(self, collection: str, id: str) -> JsonDict | None: ...
     def exists(self, collection: str, id: str) -> bool: ...
