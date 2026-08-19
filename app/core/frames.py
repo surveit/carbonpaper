@@ -479,6 +479,24 @@ class FrameStore:
     def exists(self, collection: str, id: str) -> bool:
         return self._path(collection, id).exists()
 
+    def list_ids(self, collection: str, prefix: str = "") -> list[str]:
+        root = self.root / validate_id(collection)
+        if not root.is_dir():
+            return []
+        stored = (path.relative_to(root).with_suffix("").as_posix()
+                  for path in root.rglob(f"*{PARQUET_SUFFIX}"))
+        return sorted(id for id in stored if id.startswith(prefix))
+
+    def read_payload(self, collection: str, id: str) -> bytes | None:
+        path = self._path(collection, id)
+        return path.read_bytes() if path.exists() else None
+
+    def write_payload(self, collection: str, id: str, payload: bytes) -> None:
+        """Verbatim: a payload copied between stores must not be re-encoded on the way."""
+        path = self._path(collection, id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+
     def delete(self, collection: str, id: str) -> None:
         self._path(collection, id).unlink(missing_ok=True)
 

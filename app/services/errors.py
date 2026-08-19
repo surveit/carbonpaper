@@ -35,3 +35,7 @@ class StoreOverQuota(Exception):
 
 class SpecMigrationRefused(ValueError):
     """A stored stage payload whose signature the read-side upgrade cannot determine."""
+
+
+class CacheArchiveRejected(Exception):
+    """A stage-cache export this workspace could not read a single entry of."""

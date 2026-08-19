@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Stage cache{% endblock %}
+{% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
+{% block content %}
+<div class="dash-header">
+    <div class="dash-header-text">
+        <h1>Stage cache</h1>
+        <p class="lede">Carry a project's recorded stage answers to another workspace, so a run started on one machine can be finished on another without paying for the same rows twice.</p>
+    </div>
+    <a href="/admin" class="btn">Back to admin</a>
+</div>
+
+{% if msg %}
+<div class="banner">{{ msg }}</div>
+{% endif %}
+
+<h2>Projects</h2>
+{% if projects %}
+<table class="stages">
+    <thead>
+        <tr><th>project</th><th class="spend-num">cached rows</th><th></th></tr>
+    </thead>
+    <tbody>
+        {% for p in projects %}
+        <tr>
+            <td><a href="/project/{{ p.id }}">{{ p.id }}</a></td>
+            <td class="spend-num">{{ "{:,}".format(p.entry_count) }}</td>
+            <td><a href="/admin/export-cache/{{ p.id }}" class="btn" download>Download cache</a></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+    <h2>No projects yet</h2>
+    <p>There is nothing to export until a project exists and a run has recorded answers.</p>
+</div>
+{% endif %}
+
+<h2>Upload a cache export</h2>
+<p class="muted">Entries are re-keyed onto the destination project and written only where nothing is
+stored — nothing is replaced or deleted. The destination is asked for rather than read from the
+file because uploading a project bundle mints a new project id, which no export mentions.</p>
+{% if projects %}
+<form method="post" action="/admin/import-cache" enctype="multipart/form-data">
+    <input type="file" name="file" accept="application/zip,.zip" required>
+    <label>into
+        <select name="destination" required>
+            {% for p in projects %}<option value="{{ p.id }}">{{ p.id }}</option>{% endfor %}
+        </select>
+    </label>
+    <button type="submit" class="btn">Upload cache</button>
+</form>
+{% else %}
+<p class="muted">No project to import into yet.</p>
+{% endif %}
+{% endblock %}

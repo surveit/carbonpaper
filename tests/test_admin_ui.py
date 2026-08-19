@@ -145,3 +145,50 @@ def test_a_malformed_upload_400s_and_writes_no_project(payload):
     assert r.status_code == 400
     assert "not a valid WorkflowFile document" in r.json()["detail"]
     assert project.list_projects() == []
+
+
+def test_cache_page_lists_projects_with_their_cached_row_count(workspace_root):
+    client.post(f"/admin/load/{_BUNDLE}", follow_redirects=False)
+    project_id = _loaded_project_id()
+
+    r = client.get("/admin/cache")
+
+    assert r.status_code == 200
+    assert project_id in r.text
+    assert "Download cache" in r.text
+
+
+def test_downloading_a_cache_export_serves_a_zip(workspace_root):
+    client.post(f"/admin/load/{_BUNDLE}", follow_redirects=False)
+    project_id = _loaded_project_id()
+
+    r = client.get(f"/admin/export-cache/{project_id}")
+
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/zip"
+    assert project_id in r.headers["content-disposition"]
+
+
+def test_uploading_a_cache_export_reports_what_it_wrote(workspace_root):
+    client.post(f"/admin/load/{_BUNDLE}", follow_redirects=False)
+    project_id = _loaded_project_id()
+    archive = client.get(f"/admin/export-cache/{project_id}").content
+
+    r = client.post(
+        "/admin/import-cache",
+        files={"file": ("cache.zip", archive, "application/zip")},
+        data={"destination": project_id},
+    )
+
+    assert r.status_code == 200
+    assert "Cache import" in r.text
+
+
+def test_a_cache_upload_naming_an_unknown_destination_404s(workspace_root):
+    r = client.post(
+        "/admin/import-cache",
+        files={"file": ("cache.zip", b"not a zip", "application/zip")},
+        data={"destination": "no_such_project"},
+    )
+
+    assert r.status_code == 404
