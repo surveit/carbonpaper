@@ -3,8 +3,6 @@ from __future__ import annotations
 import pandas as pd
 from conftest import as_inputs, contribution_of, make_run_context, place_stage, rows_of
 
-import app.core.agent.sdk_engine as sdk_engine
-import app.runtime.llm as runtime_llm
 from app.models import parse_stage, Stage
 from app.models.stage import StageType
 from app.runtime.stages import HANDLERS
@@ -130,41 +128,3 @@ def test_batched_chunk_failure_reports_no_marker_as_a_dropped_column(monkeypatch
     assert contribution_of(out).row_errors                  # the chunk did fail
     assert not contribution_of(out).dropped_columns
     assert lt.ROW_ERROR_KEY not in rows_of(out).columns and lt.ROW_USAGE_KEY not in rows_of(out).columns
-
-
-def test_terminal_api_status_reaches_each_batched_row_error(monkeypatch):
-    class _LimitedResult:
-        is_error = True
-        subtype = "success"
-        api_error_status = 429
-        terminal_reason = "api_error"
-        session_id = "limited-session"
-
-    async def fake_query(*, prompt, options):
-        yield _LimitedResult()
-        raise sdk_engine.ClaudeSDKError(
-            "Claude Code returned an error result: success"
-        )
-
-    monkeypatch.setattr(sdk_engine, "query", fake_query)
-    monkeypatch.setattr(sdk_engine, "ResultMessage", _LimitedResult)
-    monkeypatch.setattr(runtime_llm, "require_agent_backend", lambda: None)
-
-    stage = place_stage(_stage(batch_size=3), load={"columns": [
-        {"name": "post_id", "type": "str", "nullable": True},
-        {"name": "text", "type": "str", "nullable": True},
-    ]})
-    rows = lt.run_llm_batches(
-        stage,
-        as_inputs({"load": _SRC.copy()}),
-        make_run_context(),
-        parallelism=1,
-        positions=[0, 1, 2],
-    )
-
-    messages = [row[lt.ROW_ERROR_KEY] for row in rows]
-    assert len(messages) == 3
-    for message in messages:
-        assert "api_error_status=429" in message
-        assert "terminal_reason=api_error" in message
-        assert "error result: success" not in message

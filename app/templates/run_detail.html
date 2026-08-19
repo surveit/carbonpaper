@@ -301,7 +301,7 @@
     started = true;
     initRunLog({
       root: holder,
-      base: {{ links.run_log_base() | tojson }},
+      project: {{ project | tojson }}, runId: {{ run_id | tojson }},
       pageSize: {{ event_tail | tojson }},
     });
   }
