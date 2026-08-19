@@ -26,6 +26,7 @@ from app.models.stages.llm_transform import LLMTransformStage
 from app.core.agent.usage import LlmUsage
 from app.core.frames import collapse_null_forms, is_null_form, list_table_rows
 from app.core.stage_cache import StageCache, compute_row_fingerprint
+from app.core.utils import compute_short_hash
 
 from .frame_caching import (
     find_cached_frame,
@@ -37,6 +38,7 @@ from ..cancellation import consume_cancel
 from ..context import RunContext
 from ..stage_output import StageOutput
 from ..lineage import kept_rows_lineage
+from ..llm import resolve_transform_model
 from ..errors import RunCancelled
 from ..run_log import RunLog, bind_row_sink, unbind_detail_sink
 from .row_events import (
@@ -205,9 +207,12 @@ class LLMTransformHandler(RowMapTransformHandler):
         self, workflow_stage: WorkflowStage, inputs: dict[str, pa.Table],
         ctx: RunContext,
     ) -> StageOutput:
-        if narrow_stage(workflow_stage, LLMTransformStage).llm.batch_size > 1:
-            return _run_batched(self, workflow_stage, inputs, ctx)
-        return _run_row_mapper(self, workflow_stage, inputs, ctx)
+        stage = narrow_stage(workflow_stage, LLMTransformStage)
+        selected = resolve_transform_model(stage.llm)
+        stage_ctx = ctx.bind_selected_llm_transform_model(selected)
+        if stage.llm.batch_size > 1:
+            return _run_batched(self, workflow_stage, inputs, stage_ctx)
+        return _run_row_mapper(self, workflow_stage, inputs, stage_ctx)
 
 
 class SourceHandler(StageHandler):
@@ -385,7 +390,7 @@ def _open_row_caching(workflow_stage: WorkflowStage, ctx: RunContext) -> _RowCac
     if ctx.identity is None or ctx.stage_cache is None:
         return None
     project = ctx.identity.project
-    stage_fingerprint = stage.compute_definition_fingerprint()
+    stage_fingerprint = _compute_cache_fingerprint(stage, ctx)
     return _RowCaching(
         project,
         stage.id,
@@ -395,6 +400,14 @@ def _open_row_caching(workflow_stage: WorkflowStage, ctx: RunContext) -> _RowCac
         ),
         ctx.stage_cache if isinstance(ctx.stage_cache, StageCache) else None,
     )
+
+
+def _compute_cache_fingerprint(stage: AbstractStage, ctx: RunContext) -> str:
+    definition = stage.compute_definition_fingerprint()
+    if not isinstance(stage, LLMTransformStage):
+        return definition
+    selected = ctx.require_selected_llm_transform_model()
+    return compute_short_hash(f"{definition}\0{selected.value}")
 
 
 def _find_cached_row(caching: _RowCaching, input_row: Row) -> Row | None:

@@ -60,9 +60,9 @@ class SpendEntry(BaseModel):
 
 class SpendTally(BaseModel):
     label: str
-    cost_usd: float
-    input_tokens: int
-    output_tokens: int
+    cost_usd: float | None
+    input_tokens: int | None
+    output_tokens: int | None
     calls: int
     entries: int
 
@@ -95,7 +95,7 @@ def read_workspace_spend(*, biggest: int = 25) -> SpendReading:
         by_source=_ranked(entries, lambda e: e.source.value),
         by_model=_ranked(entries, lambda e: e.model),
         by_project=_ranked(entries, lambda e: e.project),
-        biggest=sorted(entries, key=lambda e: (-e.usage.cost_usd, e.at))[:biggest],
+        biggest=sorted(entries, key=_spend_order)[:biggest],
         unreadable_runs=sum(1 for run in runs if run.manifest is None),
         silent_sessions=sum(1 for session in sessions if not session.turn_spend),
     )
@@ -137,9 +137,9 @@ def read_session_spend(sessions: list[AgentSession], names: ProjectNames) -> lis
 def tally_spend(label: str, entries: list[SpendEntry]) -> SpendTally:
     return SpendTally(
         label=label,
-        cost_usd=sum(e.usage.cost_usd for e in entries),
-        input_tokens=sum(e.usage.input_tokens for e in entries),
-        output_tokens=sum(e.usage.output_tokens for e in entries),
+        cost_usd=_sum_costs([e.usage.cost_usd for e in entries]),
+        input_tokens=_sum_counts([e.usage.input_tokens for e in entries]),
+        output_tokens=_sum_counts([e.usage.output_tokens for e in entries]),
         calls=sum(e.usage.calls for e in entries),
         entries=len(entries),
     )
@@ -190,7 +190,7 @@ def _entries_in_run(run: RunEntry, names: ProjectNames) -> list[SpendEntry]:
 def _ranked(entries: list[SpendEntry], key: Callable[[SpendEntry], str]) -> list[SpendTally]:
     """Dearest first: what a spend page is read for is where the money went."""
     tallies = [tally_spend(label, group) for label, group in _grouped(entries, key)]
-    return sorted(tallies, key=lambda t: -t.cost_usd)
+    return sorted(tallies, key=_tally_order)
 
 
 def _grouped(
@@ -201,3 +201,25 @@ def _grouped(
     for entry in entries:
         groups[key(entry)].append(entry)
     return sorted(groups.items())
+
+
+def _sum_counts(values: list[int | None]) -> int | None:
+    if any(value is None for value in values):
+        return None
+    return sum(value for value in values if value is not None)
+
+
+def _sum_costs(values: list[float | None]) -> float | None:
+    if any(value is None for value in values):
+        return None
+    return sum(value for value in values if value is not None)
+
+
+def _spend_order(entry: SpendEntry) -> tuple[bool, float, str]:
+    cost = entry.usage.cost_usd
+    return (cost is None, -(cost or 0.0), entry.at)
+
+
+def _tally_order(tally: SpendTally) -> tuple[bool, float]:
+    cost = tally.cost_usd
+    return (cost is None, -(cost or 0.0))

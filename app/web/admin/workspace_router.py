@@ -9,10 +9,13 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
 
+from app.core.agent.codex_availability import find_codex_backend_error
+from app.core.llm import LLMModel
+from app.core.transform_model_settings import read_transform_model_setting, set_transform_model
 from app.seeds.seed import discover_workflow_files
 from app.services import project
 from app.services.project import (
@@ -49,18 +52,35 @@ def _redirect_to_admin(msg: str) -> RedirectResponse:
 
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_index(request: Request, msg: str | None = None):
+    codex_error = find_codex_backend_error()
     return templates.TemplateResponse(
         request,
         "admin.html",
         {
             "bundles": [wf_path.stem for wf_path in discover_workflow_files()],
             "projects": project.list_projects(),
+            "transform_model": read_transform_model_setting().model,
+            "transform_models": list(LLMModel),
+            "codex_error": str(codex_error) if codex_error is not None else None,
             "msg": msg,
         },
     )
 
 
 # ─── Actions ───────────────────────────────────────────────────────────────
+
+@router.post("/admin/llm-transform-model")
+async def update_transform_model(model: str = Form(...)):
+    try:
+        selected = LLMModel.parse(model, source="model")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if selected == LLMModel.gpt_5_6_terra:
+        codex_error = find_codex_backend_error()
+        if codex_error is not None:
+            raise HTTPException(status_code=409, detail=str(codex_error))
+    set_transform_model(selected)
+    return _redirect_to_admin(f"LLM-transform model set to {selected.value}.")
 
 @router.post("/admin/load/{bundle}")
 async def load_bundle(bundle: str):

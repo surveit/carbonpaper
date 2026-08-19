@@ -12,6 +12,7 @@ from app.core.frames import FrameStore, configure_frame_store, is_frame_store_co
 from app.core.paths import CARBON_PAPER_HOME
 from app.core.persistence import configure_store, is_store_configured
 from app.core.sqlite_store import SqliteKvStore
+from app.core.transform_model_settings import initialize_transform_model_setting
 
 _RENAMED_ENV_PREFIX = "CARBONPAPER_"
 _ENV_PREFIX = "CARBON_PAPER_"
@@ -31,6 +32,7 @@ def refuse_renamed_env_vars() -> None:
 
 def configure_default_stores() -> None:
     configure_default_document_store()
+    initialize_transform_model_setting()
     _configure_default_frame_store()
 
 

@@ -15,6 +15,7 @@ from pydantic import create_model
 
 from app.core.agent.usage import LlmUsage
 from app.core.frames import list_table_rows
+from app.core.llm import LLMModel
 from app.models import WorkflowStage
 from app.models.schema import Column, TableSchema
 from app.models.stages.llm_transform import LLMTransformStage
@@ -38,6 +39,7 @@ def make_llm_row_mapper(
     """A row's reply depends only on that row: neither the frame nor the row's position is read."""
     stage = narrow_stage(workflow_stage, LLMTransformStage)
     llm = stage.llm
+    selected_model = ctx.require_selected_llm_transform_model()
 
     # What the model is asked for: the columns the signature adds, compiled to the
     # model the agent must satisfy. Its input columns are rejoined by the driver.
@@ -47,7 +49,14 @@ def make_llm_row_mapper(
     def map_row(row: Row, index: int) -> Row:
         usages: list[LlmUsage] = []
         try:
-            reply = call_llm(stage.id, llm, row, reply_model=reply_model, usage_out=usages)
+            reply = call_llm(
+                stage.id,
+                llm,
+                row,
+                reply_model=reply_model,
+                model=selected_model,
+                usage_out=usages,
+            )
         except Exception as exc:  # noqa: BLE001 — per-row supervisor: tag the row
             # with the ROW_ERROR_KEY sentinel so the map completes (one bad row
             # does not abort the stage); the row driver collects these off the
@@ -72,6 +81,7 @@ def run_llm_batches(
 ) -> list[Row]:
     stage = narrow_stage(workflow_stage, LLMTransformStage)
     llm = stage.llm
+    selected_model = ctx.require_selected_llm_transform_model()
     batch_reply_schema = _build_batch_reply_schema(stage)
 
     src = inputs[workflow_stage.inputs[0].id]
@@ -79,7 +89,7 @@ def run_llm_batches(
 
     results: list[Row | None] = [None] * len(records)
     process_chunk = _build_chunk_processor(
-        stage, llm, batch_reply_schema, positions, ctx.run_log
+        stage, llm, selected_model, batch_reply_schema, positions, ctx.run_log
     )
     for index, row in _run_chunks(records, llm.batch_size, parallelism, process_chunk):
         results[index] = row
@@ -98,6 +108,7 @@ def run_llm_batches(
 def _build_chunk_processor(
     stage: LLMTransformStage,
     llm: Any,
+    selected_model: LLMModel,
     batch_reply_schema: type,
     positions: list[int],
     log: RunLog | None,
@@ -108,7 +119,9 @@ def _build_chunk_processor(
             log, stage.id, tuple(positions[start : start + len(chunk)])
         )
         try:
-            return _process_chunk(stage.id, llm, batch_reply_schema, start, chunk)
+            return _process_chunk(
+                stage.id, llm, selected_model, batch_reply_schema, start, chunk
+            )
         finally:
             unbind_detail_sink(token)
 
@@ -151,7 +164,12 @@ def _build_batch_reply_schema(stage: LLMTransformStage) -> type:
 
 
 def _process_chunk(
-    stage_id: str, llm: Any, batch_reply_schema: type, start: int, chunk: list[Row]
+    stage_id: str,
+    llm: Any,
+    selected_model: LLMModel,
+    batch_reply_schema: type,
+    start: int,
+    chunk: list[Row],
 ) -> list[tuple[int, Row]]:
     """A confused reply fails EVERY row of the chunk: the answers that matched are not trusted."""
     n = len(chunk)
@@ -163,7 +181,7 @@ def _process_chunk(
         try:
             reply = call_llm_batch(
                 stage_id, llm, instructions=llm.prompt_instructions, task=task,
-                reply_schema=batch_reply_schema, usage_out=usages,
+                reply_schema=batch_reply_schema, model=selected_model, usage_out=usages,
             )
         except Exception as exc:  # noqa: BLE001 — a chunk that never returns is thrown back, then errored
             problem = str(exc) or type(exc).__name__

@@ -15,6 +15,9 @@ _ADMIN_SEAMS = {
     "app.seeds",
     "app.services.project",
     "app.core.errors",
+    "app.core.agent.codex_availability",
+    "app.core.llm",
+    "app.core.transform_model_settings",
     "app.web.config",
 }
 

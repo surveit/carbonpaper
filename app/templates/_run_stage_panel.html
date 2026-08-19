@@ -113,10 +113,10 @@
     {% if llm or (u and u.calls) %}
     {% set batch = llm.batch_size if llm else None %}
     <dl class="stat-strip">
-        {# Read off the RUN, never off `stage_def.llm.model`: the definition says which
-           model was asked for and may name none, while the run resolved one and called
-           it. A manifest written before the runtime recorded that says so, rather than
-           borrowing the definition's answer for a call it did not watch. #}
+        {# Read off the RUN, never off `stage_def.llm.model`: the definition carries the
+           author's model request, while the workspace setting selected the model this
+           run called. A manifest written before the runtime recorded that says so,
+           rather than borrowing a label for a call it did not watch. #}
         <div><dt>model</dt><dd>
             {%- if u and u.model %}<code>{{ u.model }}</code>
             {%- elif u and u.calls %}not recorded

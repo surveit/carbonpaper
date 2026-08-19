@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Model spend{% endblock %}
 {% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
+{% macro money(value) %}{% if value is none %}unknown{% else %}${{ "%.2f"|format(value) }}{% endif %}{% endmacro %}
+{% macro count(value) %}{% if value is none %}unknown{% else %}{{ "{:,}".format(value) }}{% endif %}{% endmacro %}
 {% macro tally_rows(tallies, what) %}
 <table class="stages">
     <thead>
@@ -10,10 +12,10 @@
         {% for t in tallies %}
         <tr>
             <td>{{ t.label }}</td>
-            <td class="spend-num">${{ "%.2f"|format(t.cost_usd) }}</td>
+            <td class="spend-num">{{ money(t.cost_usd) }}</td>
             <td class="spend-num">{{ "{:,}".format(t.calls) }}</td>
-            <td class="spend-num">{{ "{:,}".format(t.input_tokens) }}</td>
-            <td class="spend-num">{{ "{:,}".format(t.output_tokens) }}</td>
+            <td class="spend-num">{{ count(t.input_tokens) }}</td>
+            <td class="spend-num">{{ count(t.output_tokens) }}</td>
         </tr>
         {% endfor %}
     </tbody>
@@ -23,16 +25,16 @@
 <div class="dash-header">
     <div class="dash-header-text">
         <h1>Model spend</h1>
-        <p class="lede">What the projects this workspace lists have paid Anthropic, totalled off the two records that hold it: each run stage's usage in its run manifest, and each chat turn's usage on its session.</p>
+        <p class="lede">What the projects this workspace lists recorded for model use, totalled off each run stage's usage in its run manifest and each chat turn's usage on its session.</p>
     </div>
     <a href="/admin" class="btn">Back to admin</a>
 </div>
 
 <div class="spend-total">
-    <div class="spend-figure">${{ "%.2f"|format(spend.total.cost_usd) }}</div>
+    <div class="spend-figure">{{ money(spend.total.cost_usd) }}</div>
     <div class="spend-figure-note">
         over {{ "{:,}".format(spend.total.calls) }} calls in {{ "{:,}".format(spend.total.entries) }} run stages and chat turns ·
-        {{ "{:,}".format(spend.total.input_tokens) }} tokens in, {{ "{:,}".format(spend.total.output_tokens) }} out
+        {{ count(spend.total.input_tokens) }} tokens in, {{ count(spend.total.output_tokens) }} out
     </div>
 </div>
 
@@ -55,10 +57,12 @@
 
 <h2>By day</h2>
 {% if spend.by_day %}
-{% set peak = spend.by_day|map(attribute='cost_usd')|max %}
+{% set known_cost_days = spend.by_day|rejectattr('cost_usd', 'equalto', none)|list %}
+{% if known_cost_days %}
+{% set peak = known_cost_days|map(attribute='cost_usd')|max %}
 <div class="spend-chart">
     {% for day in spend.by_day %}
-    <div class="spend-bar-slot" title="{{ day.label }} — ${{ "%.2f"|format(day.cost_usd) }} over {{ day.entries }} entries">
+    <div class="spend-bar-slot" title="{{ day.label }} — {{ money(day.cost_usd) }} over {{ day.entries }} entries">
         {# No bar at all for a day nothing was recorded on: the bar's min-height would
            otherwise draw that day a stub, which reads as a small amount. #}
         {% if day.cost_usd %}<div class="spend-bar" style="height: {{ (100 * day.cost_usd / peak)|round(1) }}%;"></div>{% endif %}
@@ -67,6 +71,9 @@
     {% endfor %}
 </div>
 <p class="muted">Tallest bar: ${{ "%.2f"|format(peak) }}. Every calendar day from {{ spend.by_day[0].label }} to {{ spend.by_day[-1].label }}, so a day with no bar recorded no spend. A run stage is dated by when it started, a chat turn by when it ended.</p>
+{% else %}
+<p class="muted">Every recorded day has an unknown cost, so this page cannot draw a spend comparison.</p>
+{% endif %}
 {% else %}
 <div class="empty-state">
     <h2>Nothing recorded yet</h2>
@@ -95,7 +102,7 @@
             <td>{{ e.source.value }}</td>
             <td>{{ e.project }}</td>
             <td>{% if e.link %}<a href="{{ e.link }}">{{ e.label }}</a>{% else %}{{ e.label }}{% endif %}</td>
-            <td class="spend-num">${{ "%.2f"|format(e.usage.cost_usd) }}</td>
+            <td class="spend-num">{{ money(e.usage.cost_usd) }}</td>
             <td class="muted">{{ e.model }}</td>
         </tr>
         {% endfor %}

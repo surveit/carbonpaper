@@ -57,7 +57,8 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     add_stage(pdir, _judge_stage())
     workspace.set_projects_dir(tmp_path)
 
-    def fake_call_llm(stage_id, llm, row, reply_model, usage_out):
+    def fake_call_llm(stage_id, llm, row, reply_model, usage_out, model=None):
+        del model
         usage_out.append(LlmUsage(input_tokens=10, output_tokens=5, cost_usd=0.25, calls=1))
         return {"verdict": f"v{row['x']}"}
 

@@ -65,7 +65,7 @@
     {{ stage_eval_check(eval_coverages) }}
     <h3>settings</h3>
     <dl class="kv">
-        <dt>model</dt><dd><code>{{ stage.llm.model }}</code></dd>
+        <dt>authored model</dt><dd><code>{{ stage.llm.model }}</code> <span class="muted">— run provenance names the workspace-selected model that actually answered</span></dd>
         <dt>temperature</dt><dd>{{ stage.llm.temperature }}</dd>
         <dt>response_format</dt><dd>{{ stage.llm.response_format }}</dd>
         {% if stage.llm.max_retries is defined %}<dt>max_retries</dt><dd>{{ stage.llm.max_retries }}</dd>{% endif %}

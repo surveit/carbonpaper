@@ -2,6 +2,8 @@
 `_run_row_mapper` cache wrapper, so both are exercised here."""
 from __future__ import annotations
 
+from threading import Lock
+
 import pandas as pd
 import pytest
 
@@ -11,6 +13,9 @@ from app.core.stage_cache import (
     StageCacheEntry,
     compute_row_fingerprint,
 )
+from app.core.agent.usage import LlmUsage
+from app.core.llm import LLMModel
+from app.core.transform_model_settings import set_transform_model
 from app.models import parse_stage, Stage
 from app.models.stage import StageType
 from app.runtime.context import RunIdentity
@@ -51,7 +56,9 @@ def _row_stage(code: str = _DOUBLING_CODE, *, cache: bool = True) -> Stage:
     })
 
 
-def _llm_stage(*, batch_size: int = 1, instructions: str = "score it") -> Stage:
+def _llm_stage(
+    *, batch_size: int = 1, instructions: str = "score it", tools: list[str] | None = None
+) -> Stage:
     return parse_stage({
         "id": "score", "description": "Score", "type": "llm_transform",
         "inputs": [{"id": "src"}],
@@ -61,7 +68,7 @@ def _llm_stage(*, batch_size: int = 1, instructions: str = "score it") -> Stage:
                        "columns": [{"name": "x", "type": "int", "nullable": True}]}],
             "adds": [{"name": "verdict", "type": "str", "nullable": True}]},
         "llm": {"prompt_instructions": instructions, "prompt_data_template": "{x}",
-                "batch_size": batch_size},
+                "batch_size": batch_size, "tools": tools},
     })
 
 
@@ -84,9 +91,10 @@ def _run(stage: Stage, src: pd.DataFrame, ctx) -> StageOutput:
 
 
 def _entries(stage: Stage) -> list[StageCacheEntry]:
-    return ReadOnlyStageCache().find_entries(
-        PROJECT, stage.id, stage.compute_definition_fingerprint()
-    )
+    return [
+        entry for entry in StageCacheEntry.list()
+        if entry.project == PROJECT and entry.stage_id == stage.id
+    ]
 
 
 # ── python_row_function ──────────────────────────────────────────────────────
@@ -146,6 +154,90 @@ def test_changing_one_row_invalidates_only_that_row():
 
     _counting_row_handler(calls).execute(place_stage(stage), as_inputs({"src": _src([1, 9])}), _ctx(run_id="run2"))
     assert calls == [1, 2, 9]  # row x=1 replayed; only the changed row recomputed
+
+
+def test_changing_the_selected_llm_model_invalidates_cached_rows(monkeypatch):
+    calls: list[str] = []
+
+    def fake_call_llm(stage_id, llm, row, *, reply_model, model=None, usage_out=None):
+        del stage_id, llm, reply_model, usage_out
+        selected = model.value if model is not None else str(read_transform_model_setting().model)
+        calls.append(selected)
+        return {"verdict": f"{selected}:{row['x']}"}
+
+    from app.core.transform_model_settings import read_transform_model_setting
+
+    monkeypatch.setattr("app.runtime.stages.llm_transform.call_llm", fake_call_llm)
+    stage = _llm_stage()
+    set_transform_model(LLMModel.claude_haiku_4_5)
+    first = _run(stage, _src([1]), _ctx(run_id="claude-run"))
+
+    set_transform_model(LLMModel.gpt_5_6_terra)
+    second = _run(stage, _src([1]), _ctx(run_id="codex-run"))
+
+    assert list(rows_of(first)["verdict"]) == ["claude-haiku-4-5:1"]
+    assert list(rows_of(second)["verdict"]) == ["gpt-5.6-terra:1"]
+    assert calls == ["claude-haiku-4-5", "gpt-5.6-terra"]
+
+
+def test_codex_limitations_apply_before_an_llm_cache_hit(monkeypatch):
+    from app.core.errors import LLMError
+
+    _stub_call_llm(monkeypatch, [])
+    stage = _llm_stage(tools=["WebSearch"])
+    set_transform_model(LLMModel.claude_haiku_4_5)
+    _run(stage, _src([1]), _ctx(run_id="claude-run"))
+
+    set_transform_model(LLMModel.gpt_5_6_terra)
+
+    with pytest.raises(LLMError, match="tools"):
+        _run(stage, _src([1]), _ctx(run_id="codex-run"))
+
+
+@pytest.mark.parametrize("batch_size", [1, 2])
+def test_a_stage_keeps_its_selected_model_when_admin_changes_it_mid_execution(
+    monkeypatch, batch_size
+):
+    calls: list[str] = []
+    lock = Lock()
+
+    def fake_call_llm(stage_id, llm, row, *, reply_model, model=None, usage_out=None):
+        del stage_id, llm, reply_model
+        with lock:
+            selected = model.value if model is not None else str(read_transform_model_setting().model)
+            calls.append(selected)
+            if len(calls) == 1:
+                set_transform_model(LLMModel.gpt_5_6_terra)
+        if usage_out is not None:
+            usage_out.append(LlmUsage(calls=1, model=selected))
+        return {"verdict": f"{selected}:{row['x']}"}
+
+    from app.core.transform_model_settings import read_transform_model_setting
+
+    monkeypatch.setattr("app.runtime.stages.llm_transform.call_llm", fake_call_llm)
+    set_transform_model(LLMModel.claude_haiku_4_5)
+
+    if batch_size == 1:
+        _run(_llm_stage(), _src([1, 2]), _ctx(run_id="one-run"))
+    else:
+        def fake_call_llm_batch(stage_id, llm, *, instructions, task, reply_schema, model=None, usage_out=None):
+            del stage_id, llm, instructions, reply_schema
+            with lock:
+                selected = model.value if model is not None else str(read_transform_model_setting().model)
+                calls.append(selected)
+                if len(calls) == 1:
+                    set_transform_model(LLMModel.gpt_5_6_terra)
+            if usage_out is not None:
+                usage_out.append(LlmUsage(calls=1, model=selected))
+            return {"results": [
+                {"row_number": int(line.removeprefix("### item ").split("\n", 1)[0]), "verdict": selected}
+                for line in task.split("\n") if line.startswith("### item ")
+            ]}
+
+        monkeypatch.setattr("app.runtime.stages.llm_transform.call_llm_batch", fake_call_llm_batch)
+        _run(_llm_stage(batch_size=2), _src([1, 2, 3, 4]), _ctx(run_id="one-run"))
+
+    assert set(calls) == {"claude-haiku-4-5"}
 
 
 def test_a_failed_row_is_never_recorded():
@@ -272,7 +364,8 @@ def test_a_post_map_mapper_still_gets_its_post_map_step():
 
 
 def _stub_call_llm(monkeypatch, calls: list[dict]) -> None:
-    def fake_call_llm(stage_id, llm, row, reply_model, usage_out):
+    def fake_call_llm(stage_id, llm, row, reply_model, usage_out, model=None):
+        del model
         calls.append(dict(row))
         return {"verdict": f"v{row['x']}"}
 
@@ -314,7 +407,8 @@ def test_changing_the_prompt_invalidates_every_llm_row(monkeypatch):
 
 
 def test_a_failed_llm_row_is_never_recorded(monkeypatch):
-    def failing_call_llm(stage_id, llm, row, reply_model, usage_out):
+    def failing_call_llm(stage_id, llm, row, reply_model, usage_out, model=None):
+        del model
         raise RuntimeError("model down")
 
     monkeypatch.setattr("app.runtime.stages.llm_transform.call_llm", failing_call_llm)
@@ -327,7 +421,10 @@ def test_a_failed_llm_row_is_never_recorded(monkeypatch):
 
 
 def _stub_call_llm_batch(monkeypatch, batches: list[list[int]]) -> None:
-    def fake_call_llm_batch(stage_id, llm, instructions, task, reply_schema, usage_out):
+    def fake_call_llm_batch(
+        stage_id, llm, instructions, task, reply_schema, usage_out, model=None
+    ):
+        del model
         shown = [
             int(block.splitlines()[1])
             for block in task.split("### item ")[1:]
@@ -380,7 +477,10 @@ def test_batched_misses_that_were_not_adjacent_rejoin_their_own_rows(monkeypatch
 
 
 def test_a_failed_batch_records_nothing(monkeypatch):
-    def failing_call_llm_batch(stage_id, llm, instructions, task, reply_schema, usage_out):
+    def failing_call_llm_batch(
+        stage_id, llm, instructions, task, reply_schema, usage_out, model=None
+    ):
+        del model
         raise RuntimeError("model down")
 
     monkeypatch.setattr(
@@ -442,7 +542,14 @@ def test_run_llm_batches_computes_every_row_it_is_given(monkeypatch):
     batches.clear()
 
     rows = run_llm_batches(
-        place_stage(stage), as_inputs({"src": _src([1, 2])}), _ctx(run_id="direct"), 1, [0, 1])
+        place_stage(stage),
+        as_inputs({"src": _src([1, 2])}),
+        _ctx(run_id="direct").bind_selected_llm_transform_model(
+            LLMModel.claude_haiku_4_5
+        ),
+        1,
+        [0, 1],
+    )
 
     assert batches == [[1, 2]]
     assert [row["verdict"] for row in rows] == ["v1", "v2"]

@@ -13,6 +13,23 @@
 <div class="banner">{{ msg }}</div>
 {% endif %}
 
+<h2>LLM-transform model</h2>
+<p class="muted">This workspace-wide setting is authoritative for every LLM transform. A stage's authored model remains visible in its definition; each run records the model that actually answered. Changes apply to new runs, never a stage already running.</p>
+<form method="post" action="/admin/llm-transform-model">
+    <label for="llm-transform-model">Selected model</label>
+    <select id="llm-transform-model" name="model">
+        {% for model in transform_models %}
+        <option value="{{ model.value }}"{% if model.value == transform_model %} selected{% endif %}>{{ model.value }}{% if model.value == 'gpt-5.6-terra' %} (Codex subscription test){% endif %}</option>
+        {% endfor %}
+    </select>
+    <button type="submit" class="btn">Save model</button>
+</form>
+{% if codex_error %}
+<p class="muted">Codex subscription test is unavailable: {{ codex_error }}</p>
+{% else %}
+<p class="muted">Codex subscription test is available on this machine. Codex transforms support structured answers only: no tools, batches, or thinking setting.</p>
+{% endif %}
+
 <h2>Seed bundles</h2>
 {% if bundles %}
 <table class="stages">

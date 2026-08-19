@@ -7,21 +7,17 @@ import importlib.util
 import os
 import shutil
 
+from app.core.agent.codex_availability import require_codex_backend
 from app.core.errors import LLMError
-from app.core.llm import LLMModel
+from app.core.llm import DEFAULT_TRANSFORM_MODEL, LLMModel
 from app.core.llm_sdk import CLI_PATH
 
 
 # ── Config knobs (env-overridable) ───────────────────────────────────────────
 CLAUDE_BIN = shutil.which("claude") or CLI_PATH
-# What an `llm_transform` naming no model runs on. Pinned like every LLMModel value, and
-# refused at import if the override names something off the menu — a stage that omits
-# `llm.model` records nothing about which model answered, so the default is the only
-# thing left saying what a run's rows were produced by.
-DEFAULT_MODEL = LLMModel.parse(
-    os.environ.get("CARBON_PAPER_LLM_MODEL", LLMModel.claude_haiku_4_5.value),
-    source="CARBON_PAPER_LLM_MODEL",
-)
+# The model materialized into a new workspace's global LLM-transform setting. It is
+# pinned and refused at import when the environment names a model off this menu.
+DEFAULT_MODEL = DEFAULT_TRANSFORM_MODEL
 DEFAULT_PARALLEL = int(os.environ.get("CARBON_PAPER_LLM_PARALLEL", "4"))
 
 DEFAULT_TIMEOUT_S = int(os.environ.get("CARBON_PAPER_LLM_TIMEOUT_S", "180"))
@@ -49,3 +45,10 @@ def require_agent_backend() -> None:
             "or the claude CLI wasn't found. Install both to run "
             "llm_transform stages."
         )
+
+
+def require_model_backend(model: LLMModel) -> None:
+    if model == LLMModel.gpt_5_6_terra:
+        require_codex_backend()
+        return
+    require_agent_backend()

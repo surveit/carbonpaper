@@ -126,7 +126,9 @@ def scripted_agent_turn(monkeypatch):
 def fresh_store():
     from app.core.persistence import configure_store
     from app.core.sqlite_store import SqliteKvStore
+    from app.core.transform_model_settings import initialize_transform_model_setting
     configure_store(SqliteKvStore(":memory:"))
+    initialize_transform_model_setting()
 
 
 @pytest.fixture(autouse=True)

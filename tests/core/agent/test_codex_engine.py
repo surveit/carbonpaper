@@ -92,6 +92,25 @@ def test_new_thread_receives_prompt_safety_and_dynamic_tools(fake_codex_server) 
     asyncio.run(drive())
 
 
+def test_engine_records_unknown_usage_for_a_selected_model(fake_codex_server) -> None:
+    async def drive() -> None:
+        engine = CodexChatEngine(
+            "system", [], fake_codex_server.command, model="gpt-5.6-terra"
+        )
+        await engine.stream_turn(
+            "hello", message_history=None, emit=lambda _event: None, resume=None
+        )
+
+        assert engine.last_usage is not None
+        assert engine.last_usage.model == "gpt-5.6-terra"
+        assert engine.last_usage.calls == 1
+        assert engine.last_usage.input_tokens is None
+        assert engine.last_usage.output_tokens is None
+        assert engine.last_usage.cost_usd is None
+
+    asyncio.run(drive())
+
+
 def test_saved_thread_is_resumed(fake_codex_server) -> None:
     async def drive() -> None:
         await CodexChatEngine("system", [], fake_codex_server.command).stream_turn(

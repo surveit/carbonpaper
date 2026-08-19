@@ -10,16 +10,16 @@ import re
 from app.core.llm import LLMModel
 from app.runtime.options import DEFAULT_MODEL
 
-# `claude-<family>-<major>[-<minor>][-<snapshot date>]`: the published id forms that carry
-# a version. A bare family name (`opus`) fails, as does anything not from this vendor.
-_PINNED_ID = re.compile(r"^claude-[a-z]+(-\d+){1,3}$")
+# The version-bearing forms currently offered by the supported backends. A bare family
+# name (`opus`) fails, as does an alias such as `gpt-5.6`.
+_PINNED_ID = re.compile(r"^(?:claude-[a-z]+(-\d+){1,3}|gpt-\d+\.\d+-[a-z]+)$")
 
 
 def test_every_model_id_names_a_version() -> None:
     unpinned = [member.value for member in LLMModel if not _PINNED_ID.fullmatch(member.value)]
     assert not unpinned, (
         f"LLMModel values that name no version: {unpinned}. A stage may only name a "
-        "pinned id, so what it ran on stays legible after the next Claude release."
+        "pinned id, so what it ran on stays legible after the next model release."
     )
 
 
