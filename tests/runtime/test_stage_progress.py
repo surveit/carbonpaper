@@ -73,6 +73,21 @@ def test_progress_refuses_a_completed_count_past_total():
         StageProgress(completed=3, total=2, unit="rows", updated_at="now")
 
 
+@pytest.mark.parametrize(
+    "update",
+    [
+        {"completed": True, "total": 2, "unit": "rows"},
+        {"completed": 1.0, "total": 2, "unit": "rows"},
+        {"completed": 1, "total": 2.0, "unit": "rows"},
+        {"completed": 1, "total": 2, "unit": " \t"},
+    ],
+)
+def test_progress_callback_refuses_coerced_numbers_and_blank_units(update):
+    _, tracker = _tracker(_row_stage())
+    with pytest.raises(ValidationError):
+        tracker(**update)
+
+
 def test_progress_advance_refuses_a_completed_count_past_total():
     _, tracker = _tracker(_row_stage())
     tracker(completed=1, total=1, unit="rows")
