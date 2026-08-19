@@ -50,6 +50,14 @@ def test_it_profiles_every_column_without_being_told_the_columns(project):
     assert profile.row_count == 4
 
 
+def test_profile_uses_the_current_filename_not_the_stored_blob_suffix(project):
+    body = b"name,val\nx,1\n"
+    sha = store("posts.tsv", body)
+    store("posts.csv", body)
+    profile = shared.profile_file("demo", sha)
+    assert [column.column for column in profile.columns] == ["name", "val"]
+    assert profile.row_count == 1
+
 
 def test_a_repeated_value_carries_its_count(project):
     client = column_of(shared.profile_file("demo", store()), "client")

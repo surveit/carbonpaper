@@ -150,8 +150,8 @@ def list_project_files(project_id: str | None) -> list[UploadedFile]:
 
 def resolve_file_binding(project_id: str, sha256: str) -> TypeUnsafeUserStageConfigOverride:
     """The connector params a run of `project_id` binds for one of its files."""
-    _, path = open_project_file(project_id, sha256)
-    return {"path": str(path), "format": resolve_file_format(str(path)).value}
+    record, path = open_project_file(project_id, sha256)
+    return {"path": str(path), "format": resolve_file_format(record.filename).value}
 
 
 def open_project_file(project_id: str, sha256: str) -> tuple[UploadedFile, Path]:

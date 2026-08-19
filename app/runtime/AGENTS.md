@@ -40,7 +40,7 @@ the output, write `outputs/<stage>.parquet`, append to the run record.
   outputs and continues once cached decisions exist for the pending rows.
 
 ## `stages/` — one module per stage type (`HANDLERS`)
-`input_data` connector `file` (csv/parquet/json/geojson; `_read_geojson` flattens a
+`input_data` connector `file` (csv/tsv/parquet/json/geojson; `_read_geojson` flattens a
 FeatureCollection); `python_row_function`/`python_frame_function`
 (`function: {kind: module|inline}`, row variant mapped per row);
 `starlark_row_function` (`starlark_functions.py`, row-mapped; compiles the stage's

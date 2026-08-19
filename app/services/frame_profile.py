@@ -22,6 +22,7 @@ from app.services.uploads import open_project_file
 # parquet and geojson carry real types, so there is nothing to pin.
 _PROFILE_DTYPE: dict[FileFormat, type | bool | None] = {
     FileFormat.csv: str,
+    FileFormat.tsv: str,
     FileFormat.xlsx: str,
     FileFormat.json: False,
     FileFormat.parquet: None,
@@ -46,7 +47,7 @@ def survey_stored_workbook(
 ) -> list[SheetSurvey]:
     """Refuses a non-xlsx rather than surveying it: no other format has sheets."""
     record, path = open_project_file(project_id, sha256)
-    fmt = resolve_file_format(str(path))
+    fmt = resolve_file_format(record.filename)
     if fmt != FileFormat.xlsx:
         raise ValueError(
             f"'{record.filename}' is a {fmt.value} file, which has one table and no "
@@ -58,8 +59,8 @@ def profile_stored_file(
     project_id: str, sha256: str, columns: list[str] | None, *, max_values: int,
     sheet_name: str | int = 0, header_row: int = 0, first_column: int = 0,
 ) -> TableProfile:
-    _, path = open_project_file(project_id, sha256)
-    fmt = resolve_file_format(str(path))
+    record, path = open_project_file(project_id, sha256)
+    fmt = resolve_file_format(record.filename)
     frame = read_source_file(
         path, fmt, dtype=_PROFILE_DTYPE[fmt], sheet_name=sheet_name,
         header_row=header_row, first_column=first_column,

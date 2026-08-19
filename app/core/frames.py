@@ -4,12 +4,13 @@ knowledge the stage cache and the schema checks key under - null forms, numpy
 scalars, extension dtypes, what a cell's Python type says about it, frame identity."""
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
-from pathlib import Path
-from typing import Any, NamedTuple, cast
+import csv as _csv
 import datetime as _dt
 import json
 import math
+from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
+from typing import Any, NamedTuple, cast
 
 import numpy as np
 import pandas as pd
@@ -114,8 +115,54 @@ def render_frame_as_csv_text(frame: pd.DataFrame) -> str:
 # wrote the file changes nothing about how to read it — `read_frame_file`.
 
 
-def read_source_csv(path: Path, *, dtype: Any = None) -> pd.DataFrame:
-    return pd.read_csv(path, dtype=dtype)
+def read_source_csv(
+    path: Path, *, dtype: Any = None, delimiter: str | None = None,
+) -> pd.DataFrame:
+    try:
+        return _read_source_csv_with_encoding(path, dtype, delimiter, "utf-8")
+    except UnicodeDecodeError:
+        return _read_source_csv_with_encoding(path, dtype, delimiter, "windows-1252")
+
+
+def _read_source_csv_with_encoding(
+    path: Path, dtype: Any, delimiter: str | None, encoding: str,
+) -> pd.DataFrame:
+    with path.open(encoding=encoding, errors="strict", newline="") as handle:
+        sample = handle.read(65_536)
+    separator = delimiter if delimiter is not None else _detect_csv_delimiter(path, sample)
+    return pd.read_csv(
+        path, dtype=dtype, sep=separator, encoding=encoding, encoding_errors="strict"
+    )
+
+
+def _detect_csv_delimiter(path: Path, sample: str) -> str:
+    widths = {
+        delimiter: _read_header_width(sample, delimiter)
+        for delimiter in (",", "\t")
+    }
+    header_delimiters = [
+        delimiter for delimiter, width in widths.items()
+        if width is not None and width > 1
+    ]
+    if len(header_delimiters) == 1:
+        return header_delimiters[0]
+    if not header_delimiters:
+        return ","
+    try:
+        return _csv.Sniffer().sniff(sample, delimiters=",\t").delimiter
+    except _csv.Error as exc:
+        raise ValueError(
+            f"cannot distinguish comma-separated from tab-separated content in {path}"
+        ) from exc
+
+
+def _read_header_width(sample: str, delimiter: str) -> int | None:
+    try:
+        return len(next(_csv.reader(sample.splitlines(), delimiter=delimiter, strict=True)))
+    except StopIteration:
+        return 1
+    except _csv.Error:
+        return None
 
 
 def read_source_json_lines(path: Path, *, dtype: Any = None) -> pd.DataFrame:
@@ -465,5 +512,3 @@ def save_table_or_reject(
         raise FrameNotSerializableError(
             f"{described_as}: output frame could not be written as parquet ({exc})"
         ) from exc
-
-
