@@ -15,6 +15,7 @@ from app.models.stages.aggregate import (
     AGG_FORMULA_COUNT,
     AGG_FORMULA_COUNT_DISTINCT,
     AGG_FORMULA_FIRST,
+    AGG_FORMULA_FIRST_ROW,
     AGG_FORMULA_LIST,
     AggregateStage,
     AggregationOp,
@@ -98,6 +99,8 @@ def _grouped_value(slice_df: pd.DataFrame, group_by: list[str], op: AggregationO
         return grouped.agg(op.formula).rename(out)
     if op.formula == AGG_FORMULA_FIRST:
         return grouped.first().rename(out)
+    if op.formula == AGG_FORMULA_FIRST_ROW:
+        return grouped.agg(lambda values: values.iloc[0]).rename(out)
     if op.formula == AGG_FORMULA_COUNT_DISTINCT:
         # dropna=True is pandas' default, passed explicitly because it is the
         # semantics being chosen: a null is the absence of a value, so it is
@@ -125,6 +128,8 @@ def _whole_frame_value(slice_df: pd.DataFrame, op: AggregationOp) -> Any:
         return getattr(values, op.formula)()
     if op.formula == AGG_FORMULA_FIRST:
         return _first_present(values)
+    if op.formula == AGG_FORMULA_FIRST_ROW:
+        return values.iloc[0]
     if op.formula == AGG_FORMULA_COUNT_DISTINCT:
         return values.nunique(dropna=True)
     if op.formula == AGG_FORMULA_LIST:
