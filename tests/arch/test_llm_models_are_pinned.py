@@ -1,8 +1,4 @@
-"""Architecture: every `LLMModel` value names a model version, and `str(member)` is that
-id — the string handed to the CLI. An unversioned alias (haiku/sonnet/opus) names a
-different model after each Claude release, so every stage naming it would silently move,
-carrying an unchanged definition fingerprint that no longer says what produced its rows.
-"""
+"""Architecture: every `LLMModel` value names a version, and `str(member)` is that id."""
 from __future__ import annotations
 
 import re
@@ -10,13 +6,19 @@ import re
 from app.core.llm import LLMModel
 from app.runtime.options import DEFAULT_MODEL
 
-# `claude-<family>-<major>[-<minor>][-<snapshot date>]`: the published id forms that carry
-# a version. A bare family name (`opus`) fails, as does anything not from this vendor.
-_PINNED_ID = re.compile(r"^claude-[a-z]+(-\d+){1,3}$")
+_CLAUDE_PINNED_ID = re.compile(r"^claude-[a-z]+(-\d+){1,3}$")
+_CODEX_PINNED_ID = re.compile(r"^gpt-\d+\.\d+-terra$")
+
+
+def _names_version(value: str) -> bool:
+    return (
+        _CLAUDE_PINNED_ID.fullmatch(value) is not None
+        or _CODEX_PINNED_ID.fullmatch(value) is not None
+    )
 
 
 def test_every_model_id_names_a_version() -> None:
-    unpinned = [member.value for member in LLMModel if not _PINNED_ID.fullmatch(member.value)]
+    unpinned = [member.value for member in LLMModel if not _names_version(member.value)]
     assert not unpinned, (
         f"LLMModel values that name no version: {unpinned}. A stage may only name a "
         "pinned id, so what it ran on stays legible after the next Claude release."

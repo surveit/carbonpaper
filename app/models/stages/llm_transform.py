@@ -113,6 +113,15 @@ class LLMConfig(StageConfig):
 
     @model_validator(mode="after")
     def _tools_are_known_names(self) -> "LLMConfig":
+        selected_model = (
+            LLMModel.parse(self.model, source="llm.model")
+            if self.model is not None else None
+        )
+        if selected_model is not None and selected_model.backend == "codex":
+            raise ValueError(
+                f"llm.model {selected_model.value} is selected in Admin for now; "
+                "per-stage Codex model dispatch is not enabled on this branch."
+            )
         if not self.tools:
             return self
         unknown = sorted(set(self.tools) - GRANTABLE_TOOLS)
