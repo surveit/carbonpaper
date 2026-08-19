@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any
+from typing import Any, Callable
 
 import app.core.agent.sdk_engine as se
 
@@ -43,6 +43,17 @@ class _User:
 class _Done:
     is_error = False
     session_id = "sess-xyz"
+
+
+def _use_fixed_system_telemetry_clock(monkeypatch: Any) -> None:
+    telemetry_type = se._SystemTelemetry
+
+    def make_telemetry(
+        emit: Callable[[dict[str, Any]], None],
+    ) -> se._SystemTelemetry:
+        return telemetry_type(emit, now=lambda: 0.0)
+
+    monkeypatch.setattr(se, "_SystemTelemetry", make_telemetry)
 
 
 def test_stream_turn_maps_blocks_to_normalized_events(monkeypatch: Any) -> None:
@@ -203,6 +214,104 @@ def test_stream_turn_emits_the_cli_init_as_a_system_event_carrying_json(
     body = json.loads(system_events[0]["text"])
     assert body["tools"] == ["Bash", "mcp__tools__submit_answer"]
     assert body["mcp_servers"] == [{"name": "tools", "status": "connected"}]
+
+
+def test_system_telemetry_limits_thinking_token_updates() -> None:
+    class _System:
+        subtype = "thinking_tokens"
+
+        def __init__(self, token_count: int) -> None:
+            self.data = {"token_count": token_count}
+
+    times = iter([0.0, 0.2, 0.9, 1.0, 1.4, 1.9])
+    events: list[dict[str, Any]] = []
+    telemetry = se._SystemTelemetry(events.append, now=lambda: next(times))
+
+    for token_count in range(1, 7):
+        telemetry.receive(_System(token_count))  # type: ignore[arg-type]
+    telemetry.flush()
+
+    assert [json.loads(event["text"])["token_count"] for event in events] == [1, 4, 6]
+
+
+def test_stream_turn_flushes_latest_thinking_tokens_before_terminal_result(
+    monkeypatch: Any,
+) -> None:
+    timeline: list[tuple[str, Any]] = []
+    _use_fixed_system_telemetry_clock(monkeypatch)
+
+    class _System:
+        def __init__(self, subtype: str, data: dict[str, Any]) -> None:
+            self.subtype = subtype
+            self.data = data
+
+    class _Terminal:
+        is_error = False
+
+        @property
+        def session_id(self) -> str:
+            timeline.append(("terminal", None))
+            return "sess-final"
+
+    async def fake_query(*, prompt: str, options: Any) -> Any:
+        yield _System("thinking_tokens", {"token_count": 1})
+        yield _System("thinking_tokens", {"token_count": 2})
+        yield _System("api_retry", {"attempt": 2, "delay_ms": 500})
+        yield _System("thinking_tokens", {"token_count": 3})
+        yield _Terminal()
+
+    monkeypatch.setattr(se, "query", fake_query)
+    monkeypatch.setattr(se, "SystemMessage", _System)
+    monkeypatch.setattr(se, "AssistantMessage", _Asst)
+    monkeypatch.setattr(se, "UserMessage", _User)
+    monkeypatch.setattr(se, "ResultMessage", _Terminal)
+
+    def record(event: dict[str, Any]) -> None:
+        timeline.append((event["subtype"], json.loads(event["text"])))
+
+    engine = se.ClaudeAgentSdkEngine(
+        system_prompt="sp", mcp_server=object(), allowed_tools=[]
+    )
+    _transcript, session_id = asyncio.run(
+        engine.stream_turn("hi", message_history=[], emit=record)
+    )
+
+    assert session_id == "sess-final"
+    assert timeline == [
+        ("thinking_tokens", {"token_count": 1}),
+        ("api_retry", {"attempt": 2, "delay_ms": 500}),
+        ("thinking_tokens", {"token_count": 3}),
+        ("terminal", None),
+    ]
+
+
+def test_stream_turn_flushes_latest_thinking_tokens_at_stream_end(
+    monkeypatch: Any,
+) -> None:
+    _use_fixed_system_telemetry_clock(monkeypatch)
+
+    class _System:
+        subtype = "thinking_tokens"
+
+        def __init__(self, token_count: int) -> None:
+            self.data = {"token_count": token_count}
+
+    async def fake_query(*, prompt: str, options: Any) -> Any:
+        yield _System(1)
+        yield _System(2)
+
+    monkeypatch.setattr(se, "query", fake_query)
+    monkeypatch.setattr(se, "SystemMessage", _System)
+    monkeypatch.setattr(se, "AssistantMessage", _Asst)
+    monkeypatch.setattr(se, "UserMessage", _User)
+
+    events: list[dict[str, Any]] = []
+    engine = se.ClaudeAgentSdkEngine(
+        system_prompt="sp", mcp_server=object(), allowed_tools=[]
+    )
+    asyncio.run(engine.stream_turn("hi", message_history=[], emit=events.append))
+
+    assert [json.loads(event["text"])["token_count"] for event in events] == [1, 2]
 
 
 def test_options_disable_every_builtin_tool_by_default() -> None:
