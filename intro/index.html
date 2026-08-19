@@ -30,22 +30,21 @@
                                 font-size: .82rem; text-decoration: none; }
   .site-nav > a.nav-action { padding: .58rem .82rem; border-radius: 7px;
                              color: var(--card); background: var(--accent); font-weight: 650; }
-  .hero { max-width: 1180px; margin: 0 auto; padding: 3.75rem 2.5rem 3.25rem;
+  .hero { max-width: 1180px; margin: 0 auto; padding: 2.5rem 2.5rem 2rem;
           scroll-margin-top: 4rem; }
   .eyebrow { margin: 0 0 .85rem; color: var(--accent); font-family: var(--sans);
              font-size: .72rem; font-weight: 750; letter-spacing: .13em;
              text-transform: uppercase; }
-  .hero h1 { max-width: 13em; margin: 0; font-size: clamp(2.45rem, 4.2vw, 4rem);
-             font-weight: 600; line-height: 1.02; letter-spacing: -.03em; }
-  .hero-copy { max-width: 39rem; margin: 1.4rem 0 0; color: var(--muted);
+  .hero h1 { max-width: 15em; margin: 0; font-size: clamp(2.15rem, 3.4vw, 3.25rem);
+             font-weight: 600; line-height: 1.06; letter-spacing: -.03em; }
+  .hero-copy { max-width: 46rem; margin: 1.05rem 0 0; color: var(--muted);
                font-family: var(--sans); font-size: 1.05rem; line-height: 1.65; }
-  .hero-actions { display: flex; flex-wrap: wrap; gap: .8rem; margin-top: 1.65rem; }
+  .hero-actions { display: flex; flex-wrap: wrap; gap: .8rem; margin-top: 1.25rem; }
   .hero-actions a { display: inline-flex; align-items: center; min-height: 2.7rem;
                     padding: .7rem 1rem; border-radius: 8px; font-family: var(--sans);
                     font-size: .87rem; font-weight: 680; text-decoration: none; }
   .hero-actions .primary { color: var(--card); background: var(--accent); }
-  .hero-actions .secondary { border: 1px solid #d5d9df; color: var(--ink); }
-  .trustline { display: flex; flex-wrap: wrap; gap: .35rem 1rem; margin: 1.4rem 0 0;
+  .trustline { display: flex; flex-wrap: wrap; gap: .35rem 1rem; margin: 1.1rem 0 0;
                padding: 0; color: #6b7078; font-family: var(--sans); font-size: .72rem;
                list-style: none; }
   .trustline li::before { content: "✓"; margin-right: .35rem; color: var(--accent);
@@ -213,14 +212,14 @@
     .pin { left: 0 !important; width: 100%; }
     .over { width: 100%; }
     .over img { max-width: 100%; height: auto; }
-    .hero { padding-top: 3rem; }
+    .hero { padding-top: 2.25rem; }
   }
   @media (max-width: 560px) {
     .site-nav { padding: .75rem 1rem; gap: .75rem; }
     .site-nav > a:not(.wordmark):not(.nav-action) { display: none; }
     .site-nav > a.nav-action { padding: .52rem .68rem; }
-    .hero { padding: 2.5rem 1rem 2.25rem; }
-    .hero h1 { font-size: 2.35rem; }
+    .hero { padding: 1.75rem 1rem 1.5rem; }
+    .hero h1 { font-size: 2rem; }
     .story-intro { padding: 1.75rem 1rem .25rem; }
     .story-intro h2 { font-size: 1.7rem; }
   }
@@ -231,20 +230,18 @@
 <div class="nav-shell">
   <nav class="site-nav" aria-label="Carbon Paper">
     <a class="wordmark" href="#top">Carbon<span>Paper</span></a>
-    <a href="#example-packet">See example packet</a>
     <a class="nav-action" href="https://carbonpaper.fly.dev">Try the demo</a>
   </nav>
 </div>
 
 <header class="hero" id="top">
   <p class="eyebrow">Reviewable AI-assisted investigations</p>
-  <h1>Turn an investigation into evidence someone else can verify.</h1>
-  <p class="hero-copy">Build your investigation however you prefer. Carbon Paper reruns it
-  against the original source files, shows what each step changed, and exports a review packet
-  that opens without the app.</p>
+  <h1>Make an investigation ready for review.</h1>
+  <p class="hero-copy">Investigate however you prefer. When the result needs to stand up to
+  review, Carbon Paper turns the method into an explicit workflow, reruns it against the original
+  source files, shows what each step changed, and exports a packet another person can verify.</p>
   <div class="hero-actions">
     <a class="primary" href="https://carbonpaper.fly.dev">Try the demo</a>
-    <a class="secondary" href="#example-packet">See example packet</a>
   </div>
   <ul class="trustline">
     <li>Source-linked results</li>
@@ -600,9 +597,8 @@ if (SCENES[asked]) {
   show(1);
 }
 
-function showPacketOnSmallScreen(event) {
+function showPacketOnSmallScreen() {
   if (!window.matchMedia('(max-width: 1000px)').matches) return;
-  if (event) event.preventDefault();
   show(11);
   if (location.hash !== '#example-packet') {
     history.pushState(null, '', '#example-packet');
@@ -610,9 +606,6 @@ function showPacketOnSmallScreen(event) {
   requestAnimationFrame(() => stageWrap.scrollIntoView({behavior: 'smooth', block: 'center'}));
 }
 
-document.querySelectorAll('a[href="#example-packet"]').forEach(link => {
-  link.addEventListener('click', showPacketOnSmallScreen);
-});
 if (location.hash === '#example-packet') showPacketOnSmallScreen();
 </script>
 </body>
