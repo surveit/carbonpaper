@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, computed_field
+from pydantic import BaseModel
 
 from app.services import uploads
 from app.web.file_sizes import describe_bytes
@@ -20,21 +20,9 @@ class FileChoice(BaseModel):
     filename: str
     bytes: int
     uploaded_at: datetime
-
-    @computed_field
-    @property
-    def label(self) -> str:
-        return f"{self.uploaded_label} · {self.filename} · {self.size_label}"
-
-    @computed_field
-    @property
-    def uploaded_label(self) -> str:
-        return f"Uploaded {format_upload_time(self.uploaded_at)}"
-
-    @computed_field
-    @property
-    def size_label(self) -> str:
-        return describe_bytes(self.bytes)
+    label: str
+    uploaded_label: str
+    size_label: str
 
 
 class UploadedFileChoice(FileChoice):
@@ -66,18 +54,24 @@ def build_run_input_choices(project_id: str, version_id: str | None = None) -> R
 
 
 def build_file_choice(record: uploads.UploadedFile) -> FileChoice:
+    uploaded_at = datetime.fromisoformat(record.created_at)
+    uploaded_label = f"Uploaded {format_upload_time(uploaded_at)}"
+    size_label = describe_bytes(record.byte_count)
     return FileChoice(
         sha256=record.sha256,
         filename=record.filename,
         bytes=record.byte_count,
-        uploaded_at=record.created_at,
+        uploaded_at=uploaded_at,
+        label=f"{uploaded_label} · {record.filename} · {size_label}",
+        uploaded_label=uploaded_label,
+        size_label=size_label,
     )
 
 
 def build_uploaded_file_choice(record: uploads.UploadedFile) -> UploadedFileChoice:
     choice = build_file_choice(record)
     return UploadedFileChoice(
-        **choice.model_dump(exclude={"label"}),
+        **choice.model_dump(),
         path=str(uploads.resolve_stored_path(record)),
     )
 

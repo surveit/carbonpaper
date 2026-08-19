@@ -15,8 +15,8 @@ from app.main import app
 from app.services import versioning
 from app.services import workspace
 from app.services.project import save_working_copy_as_version
-from app.services.uploads import list_project_files, save_upload
-from app.web.run_inputs import FileChoice
+from app.services.uploads import UploadedFile, list_project_files, save_upload
+from app.web.run_inputs import FileChoice, build_file_choice
 from stage_seed import add_stage, read_stage
 from run_seed import read_manifest
 
@@ -160,6 +160,18 @@ def test_file_picker_lists_newest_upload_first_with_absolute_times(project, tmp_
 def test_file_picker_refuses_a_choice_without_an_upload_time():
     with pytest.raises(ValidationError, match="uploaded_at"):
         FileChoice.model_validate({"sha256": "abc", "filename": "a.csv", "bytes": 1})
+
+
+def test_file_picker_refuses_an_invalid_stored_upload_time():
+    record = UploadedFile(
+        sha256="abc",
+        filename="a.csv",
+        byte_count=1,
+        created_at="not-a-time",
+    )
+
+    with pytest.raises(ValueError, match="Invalid isoformat string"):
+        build_file_choice(record)
 
 
 def test_file_picker_renders_shared_structured_controls(project, tmp_path):
