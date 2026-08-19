@@ -7,6 +7,19 @@ reviewing flagged rows, and versioning the workflow itself. Code:
 `versions.html`) + `app/static/{run-status,run-page,node-review,review-queue}.css`.
 All routes live under `/project/{project}/…`.
 
+## Runs index (`section_runs.html`)
+
+`GET /project/{p}/runs`, and the same table at `?archived=1`.
+
+- One row per stored run, newest first, drawn from `app.web.run_index`. A run
+  whose record will not parse still gets a row, from its id alone.
+- **Archiving** (`app/web/routers/run_archive.py` →
+  `app/services/run_manifest_metadata.py`) moves a run between the two lists and
+  does nothing else: a `run_manifest_metadata` record — what the operator records
+  about a run, as against what the run recorded about itself — carries the flag,
+  the run's own manifest is never touched, and the run page, its outputs and the
+  spend it counts toward are unaffected. The runs picker lists the unarchived side.
+
 ## Run detail page (`run_detail.html`)
 
 `GET /project/{p}/runs/{run_id}`.

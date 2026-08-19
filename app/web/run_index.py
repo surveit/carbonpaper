@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from app.core.run_status import RunStatus
 from app.models.run_manifest import UNREADABLE_RUN_STATUS
 from app.runtime.manifest import RunEntry, list_run_entries
+from app.services.run_manifest_metadata import read_archived_run_ids
 from app.web.run_header import VersionNote, describe_run_duration, read_version_note
 from app.web.stage_strip import StageStrip, build_stage_strip, describe_stage_tallies
 
@@ -31,12 +32,19 @@ class RunIndexRow(BaseModel):
     is_test_run: bool = False
 
 
-def build_run_index_rows(project_id: str) -> list[RunIndexRow]:
+def build_run_index_rows(project_id: str, *, archived: bool = False) -> list[RunIndexRow]:
+    """One side of the archive line, never both."""
+    hidden = read_archived_run_ids(project_id)
     seen_versions: dict[str, VersionNote] = {}
     return [
         _build_row(project_id, entry, seen_versions)
         for entry in reversed(list_run_entries(project_id))
+        if (entry.run_id in hidden) is archived
     ]
+
+
+def count_archived_runs(project_id: str) -> int:
+    return len(read_archived_run_ids(project_id))
 
 
 def describe_run_outcome(status: str) -> str:

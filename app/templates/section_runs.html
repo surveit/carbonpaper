@@ -2,7 +2,7 @@
 {#
   RUNS — the runs list.
 
-  Four columns, none of which is the run id: `run_id` IS `started_at` (the same
+  Five columns, none of which is the run id: `run_id` IS `started_at` (the same
   instant, machine-formatted), so it survives as the row's link target and on
   hover rather than as a column of its own.
 
@@ -11,6 +11,13 @@
     duration  how long the run took
     result    the stage strip (the same partial the run page draws), with the
               run's status in words under it
+    (action)  archive this run, or restore it — unlabelled, because the column
+              holds one button and the button says what it does
+
+  ARCHIVED runs are the same table, at ?archived=1, with restore in place of
+  archive. A run is on exactly one of the two lists: archiving hides the row and
+  nothing else — the run page, its outputs, its cost and the overview counts are
+  untouched, which is why this needs no confirmation and no warning.
 
   Configuring a run is a different task from reading the history, and has its own
   fields — it lives on its own page (section_run_new.html), which the "▶ New run"
@@ -18,7 +25,9 @@
 
   Context the route passes:
     state = project.project_state(mdir); section = "runs"
-    runs  = app.web.run_index.build_run_index_rows(state.id) — list of RunIndexRow
+    runs  = app.web.run_index.build_run_index_rows(state.id, archived=…) — RunIndexRow
+    archived_view  = which of the two lists this is
+    archived_count = how many runs the other list holds, when this is the live one
 
   Only manifest-backed runs appear, and a run whose manifest cannot be read says so
   in place of the parts it could not read.
@@ -31,21 +40,34 @@
 {% block section %}
 <div class="sec-head wf-head">
   <div class="wf-head-title">
+    {% if archived_view %}
+    <h1>Archived runs</h1>
+    <p class="lede">Archived runs are kept out of the runs list and nowhere else: each one
+      still opens, still holds its outputs, and still counts toward this project's spend.</p>
+    {% else %}
     <h1>Runs</h1>
     <p class="lede">Each run pins to a workflow <strong>version</strong> and reads its
       snapshot, so a run is reproducible against the exact workflow it executed.</p>
+    {% endif %}
   </div>
-  {% if state.workflow.present %}
   <div class="actions wf-actions">
+    {% if archived_view %}
+    <a href="/project/{{ state.id }}/runs" class="btn">← All runs</a>
+    {% else %}
+    {% if archived_count %}
+    <a href="/project/{{ state.id }}/runs?archived=1" class="btn">Archived ({{ archived_count }})</a>
+    {% endif %}
+    {% if state.workflow.present %}
     <a href="/project/{{ state.id }}/runs/new" class="btn primary">▶ New run</a>
+    {% endif %}
+    {% endif %}
   </div>
-  {% endif %}
 </div>
 
 {% if runs %}
 <table class="stages runs-table">
   <thead>
-    <tr><th>date</th><th>workflow version</th><th>duration</th><th>result</th></tr>
+    <tr><th>date</th><th>workflow version</th><th>duration</th><th>result</th><th></th></tr>
   </thead>
   <tbody>
     {% for r in runs %}
@@ -78,12 +100,27 @@
           {%- if r.outcome %}<span class="run-outcome status-{{ r.status }}">{{ r.outcome }}</span>{% endif %}
         {%- endif %}
       </td>
+      <td class="run-actions">
+        <form method="post"
+              action="/project/{{ state.id }}/runs/{{ r.run_id }}/{% if archived_view %}unarchive{% else %}archive{% endif %}">
+          <button type="submit" class="btn sm"
+                  title="{% if archived_view %}Put this run back in the runs list{% else %}Hide this run from the runs list; it keeps everything it recorded{% endif %}">
+            {%- if archived_view %}Restore{% else %}Archive{% endif -%}
+          </button>
+        </form>
+      </td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
 {# The whole row opens the run, so no one cell has to look like the handle —
    static/row-link.js, delegated from the document for every page drawing this table. #}
+{% elif archived_view %}
+<div class="empty-state">
+  <h2>No archived runs</h2>
+  <p>Archiving a run takes it off the runs list and leaves it otherwise untouched.</p>
+  <a href="/project/{{ state.id }}/runs" class="btn primary">Back to runs</a>
+</div>
 {% else %}
 <div class="empty-state">
   <h2>No runs yet</h2>

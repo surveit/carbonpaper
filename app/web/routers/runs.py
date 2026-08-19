@@ -47,7 +47,7 @@ from app.web.run_events import (
     tail_start_seq,
 )
 from app.web.run_header import build_live_view, build_run_header
-from app.web.run_index import build_run_index_rows
+from app.web.run_index import build_run_index_rows, count_archived_runs
 from app.web.run_issues import build_run_issues
 from app.web.run_stage_panel import resolve_panel_links
 
@@ -116,7 +116,7 @@ def _read_bust_cache(form: FormData) -> bool:
 
 
 @router.get("/project/{project_id}/runs", response_class=HTMLResponse)
-async def runs_index(request: Request, project_id: str):
+async def runs_index(request: Request, project_id: str, archived: bool = False):
     validate_project_or_404(project_id)
     # A stored version that no longer validates raises WorkflowLoadError from
     # any listing/load (shell_state's version count included) and fails this
@@ -127,7 +127,9 @@ async def runs_index(request: Request, project_id: str):
         {
             "state": shell_state(project_id, "runs"),
             "section": "runs",
-            "runs": build_run_index_rows(project_id),
+            "runs": build_run_index_rows(project_id, archived=archived),
+            "archived_view": archived,
+            "archived_count": count_archived_runs(project_id),
         },
     )
 
