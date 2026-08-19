@@ -305,8 +305,7 @@ def _run_row_mapper(
     records = list_table_rows(src)
     seen = [_narrow_row(row, reads) for row in records]
     progress = ctx.stage_progress
-    if progress is not None:
-        progress(completed=0, total=len(records), unit="rows")
+    progress.start(total=len(records))
 
     results: list[Row | None] = [None] * len(records)
     if handler.parallelism > 1 and len(records) > 1:
@@ -324,15 +323,13 @@ def _run_row_mapper(
                     pool.shutdown(wait=False, cancel_futures=True)
                     raise RunCancelled(f"stage {stage.id}: cancelled mid-fan-out")
                 results[futures[future]] = future.result()
-                if progress is not None:
-                    progress.advance()
+                progress.advance()
     else:
         for index, record in enumerate(seen):
             if _consume_cancel(ctx):
                 raise RunCancelled(f"stage {stage.id}: cancelled")
             results[index] = compute_row(record, index)
-            if progress is not None:
-                progress.advance()
+            progress.advance()
 
     out_rows: list[Row] = []
     kept_indices: list[int] = []
@@ -497,12 +494,10 @@ def _run_batched(
     src = inputs[workflow_stage.inputs[0].id]
     records = list_table_rows(src)
     progress = ctx.stage_progress
-    if progress is not None:
-        progress(completed=0, total=len(records), unit="rows")
+    progress.start(total=len(records))
     caching = _open_row_caching(workflow_stage, ctx)
     hits = {} if caching is None else _find_cached_rows_by_position(caching, records)
-    if progress is not None:
-        progress.advance(len(hits))
+    progress.advance(len(hits))
     misses = [index for index in range(len(records)) if index not in hits]
     emit_batched_row_starts(ctx.run_log, stage.id, hits, misses)
     computed = _compute_batched_rows(handler, workflow_stage, src, misses, ctx)

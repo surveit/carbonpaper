@@ -66,7 +66,6 @@ def test_row_progress_is_persisted_when_every_row_comes_from_cache(tmp_path):
     assert record["progress"] | {"updated_at": "ignored"} == {
         "completed": 3,
         "total": 3,
-        "unit": "rows",
         "updated_at": "ignored",
     }
     stored = read_manifest(tmp_path, replayed["run_id"])
@@ -81,11 +80,11 @@ def test_resume_starts_a_new_progress_sequence_for_the_rerun(tmp_path):
         "    from pathlib import Path\n"
         f"    marker = Path({str(marker)!r})\n"
         "    if not marker.exists():\n"
-        "        progress(completed=1, total=2, unit='parts')\n"
+        "        progress(completed=1, total=2)\n"
         "        marker.write_text('retry')\n"
         "        raise RuntimeError('retry me')\n"
-        "    progress(completed=0, total=2, unit='parts')\n"
-        "    progress(completed=2, total=2, unit='parts')\n"
+        "    progress(completed=0, total=2)\n"
+        "    progress(completed=2, total=2)\n"
         "    return df\n"
     )
     add_stage(tmp_path, {

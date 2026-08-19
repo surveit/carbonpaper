@@ -82,7 +82,7 @@ def run_llm_batches(
         stage, llm, batch_reply_schema, positions, ctx.run_log
     )
     on_chunk_completed = (
-        None if ctx.stage_progress is None else ctx.stage_progress.advance
+        ctx.stage_progress.advance if ctx.stage_progress.has_started() else None
     )
     for index, row in _run_chunks(
         records,

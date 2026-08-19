@@ -54,11 +54,7 @@ def handle_python_frame_function(
     fn = _load_python_function(narrow_stage(workflow_stage, PythonFrameFunctionStage))
     # Pass dataframes positionally in declared input order.
     args = [table_to_frame(inputs[ref.id]) for ref in workflow_stage.inputs]
-    kwargs = (
-        {"progress": ctx.get_stage_progress()}
-        if _accepts_progress_callback(fn)
-        else {}
-    )
+    kwargs = {"progress": ctx.stage_progress} if _accepts_progress(fn) else {}
     return StageOutput.from_frame(_require_frame(fn(*args, **kwargs), workflow_stage))
 
 
@@ -92,7 +88,7 @@ def _require_frame(result: Any, workflow_stage: WorkflowStage) -> pd.DataFrame:
     return result
 
 
-def _accepts_progress_callback(fn: Callable[..., Any]) -> bool:
+def _accepts_progress(fn: Callable[..., Any]) -> bool:
     try:
         progress = inspect.signature(fn).parameters.get("progress")
     except (TypeError, ValueError):

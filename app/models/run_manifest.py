@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, TypedDict
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.agent.usage import LlmUsage
 from app.core.run_status import StageStatus
@@ -60,17 +60,11 @@ class StageErrorInfo(BaseModel):
 
 
 class StageProgress(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     completed: int = Field(ge=0, strict=True)
     total: int | None = Field(default=None, ge=0, strict=True)
-    unit: str = Field(min_length=1)
     updated_at: str
-
-    @field_validator("unit")
-    @classmethod
-    def _unit_has_visible_characters(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("progress unit must not be blank")
-        return value
 
     @model_validator(mode="after")
     def _completed_does_not_exceed_total(self) -> StageProgress:

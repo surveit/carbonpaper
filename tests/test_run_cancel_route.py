@@ -110,7 +110,6 @@ def test_run_status_exposes_recorded_stage_progress(examples_dir, client):
     raw["stage_records"][0]["progress"] = {
         "completed": 7,
         "total": 10,
-        "unit": "rows",
         "updated_at": "2026-08-19T12:00:00",
     }
     store_manifest(examples_dir / PROJ, RUN, raw)
@@ -124,7 +123,6 @@ def test_run_status_exposes_recorded_stage_progress(examples_dir, client):
         "progress": {
             "completed": 7,
             "total": 10,
-            "unit": "rows",
             "updated_at": "2026-08-19T12:00:00",
         },
     }]

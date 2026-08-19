@@ -5,46 +5,57 @@ from collections.abc import Callable
 from datetime import datetime
 from threading import Lock
 
+from app.core.latest_value import LatestValueBuffer
 from app.models.run_manifest import StageProgress, StageRecord
 
 
-class StageProgressTracker:
+class StageProgressReporter:
     def __init__(
         self,
-        record: StageRecord | None,
-        flush: Callable[[], None],
+        record: StageRecord | None = None,
+        persist: Callable[[], None] = lambda: None,
         *,
-        flush_interval_seconds: float = 0.5,
+        persist_interval_seconds: float = 0.5,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._record = record
-        self._flush = flush
-        self._flush_interval_seconds = flush_interval_seconds
-        self._clock = clock
         self._progress: StageProgress | None = None if record is None else record.progress
-        self._last_flush: float | None = None
         self._lock = Lock()
+        self._values = LatestValueBuffer(
+            self._persist_progress,
+            interval_seconds=persist_interval_seconds,
+            clock=clock,
+        )
+        self._persist = persist
 
-    @classmethod
-    def detached(cls) -> StageProgressTracker:
-        return cls(None, lambda: None)
+    def __call__(self, *, completed: int, total: int | None) -> None:
+        self.report(completed=completed, total=total)
 
-    def __call__(self, *, completed: int, total: int | None, unit: str) -> None:
-        self.report(completed=completed, total=total, unit=unit)
+    def start(self, *, total: int | None) -> None:
+        with self._lock:
+            self._values.persist_latest()
+            progress = StageProgress(
+                completed=0,
+                total=total,
+                updated_at=datetime.now().isoformat(timespec="seconds"),
+            )
+            self._progress = progress
+            self._values.append(progress)
 
-    def report(self, *, completed: int, total: int | None, unit: str) -> None:
+    def has_started(self) -> bool:
+        with self._lock:
+            return self._progress is not None
+
+    def report(self, *, completed: int, total: int | None) -> None:
         with self._lock:
             progress = StageProgress(
                 completed=completed,
                 total=total,
-                unit=unit,
                 updated_at=datetime.now().isoformat(timespec="seconds"),
             )
             _validate_transition(self._progress, progress)
             self._progress = progress
-            if self._record is not None:
-                self._record.progress = progress
-            self._flush_if_due()
+            self._values.append(progress)
 
     def advance(self, count: int = 1) -> None:
         with self._lock:
@@ -55,28 +66,19 @@ class StageProgressTracker:
             progress = StageProgress(
                 completed=self._progress.completed + count,
                 total=self._progress.total,
-                unit=self._progress.unit,
                 updated_at=datetime.now().isoformat(timespec="seconds"),
             )
             _validate_transition(self._progress, progress)
             self._progress = progress
-            if self._record is not None:
-                self._record.progress = progress
-            self._flush_if_due()
+            self._values.append(progress)
 
-    def flush(self) -> None:
-        with self._lock:
-            self._flush()
-            self._last_flush = self._clock()
+    def persist_latest(self) -> bool:
+        return self._values.persist_latest()
 
-    def _flush_if_due(self) -> None:
-        now = self._clock()
-        if (
-            self._last_flush is None
-            or now - self._last_flush >= self._flush_interval_seconds
-        ):
-            self._flush()
-            self._last_flush = now
+    def _persist_progress(self, progress: StageProgress) -> None:
+        if self._record is not None:
+            self._record.progress = progress
+        self._persist()
 
 
 def _validate_transition(
@@ -84,10 +86,6 @@ def _validate_transition(
 ) -> None:
     if previous is None:
         return
-    if current.unit != previous.unit:
-        raise ValueError(
-            f"progress unit changed from {previous.unit!r} to {current.unit!r}"
-        )
     if current.completed < previous.completed:
         raise ValueError(
             f"progress regressed from {previous.completed} to {current.completed}"
