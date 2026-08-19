@@ -135,6 +135,7 @@ class ClaudeAgentSdkEngine:
         # previous turn's figure in place would bill it a second time.
         self.last_usage = None
         assistant_parts: list[dict[str, Any]] = []
+        hidden_tool_result_ids: set[str] = set()
         session_id: str | None = None
         async for msg in query(prompt=prompt, options=self._options(resume)):
             if isinstance(msg, AssistantMessage):
@@ -155,6 +156,8 @@ class ClaudeAgentSdkEngine:
                         # (e.g. "mcp__tools__read_stage"); the friendly label is
                         # keyed by the bare tool name.
                         bare = block.name.rsplit("__", 1)[-1]
+                        if bare == "submit_answer":
+                            hidden_tool_result_ids.add(block.id)
                         label = self._tool_labels.get(bare, bare)
                         emit({
                             "kind": "tool_call",
@@ -171,14 +174,9 @@ class ClaudeAgentSdkEngine:
             elif isinstance(msg, UserMessage):
                 # UserMessage.content may be a bare str (a plain user turn) or a
                 # list of blocks (tool results). We only surface tool results.
-                blocks = msg.content if isinstance(msg.content, list) else []
-                for block in blocks:
-                    if isinstance(block, ToolResultBlock):
-                        content = _stringify(getattr(block, "content", ""))
-                        emit({"kind": "tool_result", "content": content})
-                        assistant_parts.append(
-                            {"type": "tool_result", "content": content}
-                        )
+                _record_tool_results(
+                    msg, emit, assistant_parts, hidden_tool_result_ids
+                )
             elif isinstance(msg, SystemMessage):
                 # The CLI's own account of the turn — the init message carries
                 # which MCP servers connected and which tools the model can
@@ -212,3 +210,22 @@ class ClaudeAgentSdkEngine:
             {"role": "assistant", "parts": assistant_parts},
         ]
         return transcript, session_id
+
+
+def _record_tool_results(
+    message: UserMessage,
+    emit: Callable[[dict[str, Any]], None],
+    assistant_parts: list[dict[str, Any]],
+    hidden_tool_result_ids: set[str],
+) -> None:
+    blocks = message.content if isinstance(message.content, list) else []
+    for block in blocks:
+        if not isinstance(block, ToolResultBlock):
+            continue
+        hide = block.tool_use_id in hidden_tool_result_ids
+        hidden_tool_result_ids.discard(block.tool_use_id)
+        if hide and not getattr(block, "is_error", False):
+            continue
+        content = _stringify(getattr(block, "content", ""))
+        emit({"kind": "tool_result", "content": content})
+        assistant_parts.append({"type": "tool_result", "content": content})
