@@ -376,18 +376,25 @@ def _fan_out(
                 pool.submit(group_mapping_function, indices, rows): indices
                 for indices, rows in groups
             }
-            for future in as_completed(futures):
-                if _consume_cancel(ctx):
-                    # Drop every group not yet started; groups already dispatched
-                    # (<= parallelism) keep running in their worker threads — a
-                    # blocking call can't be killed — and are joined by the
-                    # `with` block's own shutdown(wait=True) on the way out.
-                    pool.shutdown(wait=False, cancel_futures=True)
-                    raise RunCancelled(f"stage {stage_id}: cancelled mid-fan-out")
-                indices = futures[future]
-                _place_group(results, indices, future.result(), stage_id)
-                completed += len(indices)
-                progress(completed=completed, total=total)
+            try:
+                for future in as_completed(futures):
+                    if _consume_cancel(ctx):
+                        raise RunCancelled(f"stage {stage_id}: cancelled mid-fan-out")
+                    indices = futures[future]
+                    _place_group(results, indices, future.result(), stage_id)
+                    completed += len(indices)
+                    progress(completed=completed, total=total)
+            finally:
+                # Drop every group not yet started. On EVERY exit, not just the
+                # cancel: every group is submitted up front, so `max_workers`
+                # bounds concurrency but not the queue, and the `with` block's
+                # own shutdown(wait=True) would otherwise run the whole backlog
+                # before the exception surfaced — a model call per queued group,
+                # paid for and then dropped, since nobody is left reading the
+                # results. Groups already dispatched (<= parallelism) keep
+                # running in their worker threads, since a blocking call can't
+                # be killed, and are joined on the way out.
+                pool.shutdown(wait=False, cancel_futures=True)
     else:
         for indices, rows in groups:
             if _consume_cancel(ctx):
