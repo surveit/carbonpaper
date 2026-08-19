@@ -108,26 +108,48 @@ def test_progress_refuses_inconsistent_transitions(update, message):
         reporter(**update)
 
 
-def test_progress_persists_the_latest_snapshot_on_demand():
+def test_progress_writes_first_due_and_terminal_snapshots():
     now = [0.0]
     writes: list[int] = []
     record, reporter = _reporter(
         _row_stage(),
         lambda: writes.append(record.progress.completed if record.progress else -1),
-        persist_interval_seconds=0.5,
+        write_interval_seconds=0.5,
         clock=lambda: now[0],
     )
 
     reporter(completed=0, total=3)
     now[0] = 0.1
-    reporter.advance()
+    reporter(completed=1, total=3)
+    assert record.progress is not None
+    assert record.progress.completed == 1
+    assert writes == [0]
     now[0] = 0.6
-    reporter.advance()
-    reporter.advance()
+    reporter(completed=2, total=3)
+    reporter(completed=3, total=3)
 
     assert writes == [0, 2]
-    reporter.persist_latest()
+    reporter.finish()
     assert writes == [0, 2, 3]
+
+
+def test_progress_write_failure_keeps_the_latest_snapshot_retryable():
+    attempts: list[int] = []
+    record = StageRecord.record_with_status(_row_stage(), StageStatus.RUNNING)
+
+    def write_manifest():
+        assert record.progress is not None
+        attempts.append(record.progress.completed)
+        if len(attempts) == 1:
+            raise OSError("disk unavailable")
+
+    reporter = StageProgressReporter(record, write_manifest)
+
+    with pytest.raises(OSError, match="disk unavailable"):
+        reporter(completed=1, total=2)
+    reporter.finish()
+
+    assert attempts == [1, 1]
 
 
 def test_row_mapper_records_each_completed_row_automatically():
@@ -144,7 +166,7 @@ def test_row_mapper_records_each_completed_row_automatically():
         ctx,
     )
 
-    reporter.persist_latest()
+    reporter.finish()
     assert record.progress is not None
     assert record.progress.model_dump(exclude={"updated_at"}) == {
         "completed": 3, "total": 3,
@@ -173,7 +195,7 @@ def test_batched_llm_driver_advances_after_each_completed_chunk(monkeypatch):
     )
 
     assert len(rows) == 3
-    reporter.persist_latest()
+    reporter.finish()
     assert record.progress is not None
     assert record.progress.completed == record.progress.total == 3
 
@@ -192,7 +214,7 @@ def test_frame_function_may_report_progress_through_a_keyword_only_callback():
         place_stage(stage), as_inputs({"src": pd.DataFrame({"x": [1]})}), ctx
     )
 
-    reporter.persist_latest()
+    reporter.finish()
     assert record.progress is not None
     assert record.progress.completed == record.progress.total == 2
 

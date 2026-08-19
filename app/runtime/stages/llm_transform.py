@@ -81,15 +81,12 @@ def run_llm_batches(
     process_chunk = _build_chunk_processor(
         stage, llm, batch_reply_schema, positions, ctx.run_log
     )
-    on_chunk_completed = (
-        ctx.stage_progress.advance if ctx.stage_progress.has_started() else None
-    )
     for index, row in _run_chunks(
         records,
         llm.batch_size,
         parallelism,
         process_chunk,
-        on_chunk_completed,
+        ctx.stage_progress.advance,
     ):
         results[index] = row
 

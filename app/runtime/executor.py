@@ -501,8 +501,7 @@ def _run_stage(
         # fields (status, halt queue info).
         record.elapsed_ms = int((time.perf_counter() - t0) * 1000)
         record.finished_at = datetime.now().isoformat(timespec="seconds")
-        if not progress.persist_latest():
-            _flush_manifest(manifest, records_by_id, ordered, run_dir, RunStatus.RUNNING)
+        progress.finish()
         _emit_stage_done(ctx.run_log, record)
 
     return _StageOutcome.RAN, joins_blocked
