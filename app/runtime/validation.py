@@ -8,13 +8,16 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
 import pyarrow as pa
+from pydantic import BaseModel, ValidationError
 
+from app.core.utils import format_errors
 from app.core.frames import (
+    collapse_null_forms,
     CELL_TYPE_PREDICATES,
     is_schema_type_satisfied_by_arrow_type,
     find_arrow_list_value_type,
@@ -117,6 +120,30 @@ def validate_table(
         _find_undeclared_columns(table.column_names, [c.name for c in columns])
     )
     return report
+
+
+def build_row_model(schema: TableSchema, name: str) -> type[BaseModel]:
+    """Range is warning-severity on a frame, so it must not fail a row."""
+    return TableSchema(
+        columns=[column.model_copy(update={"range": None}) for column in schema.columns]
+    ).to_pydantic_model(name)
+
+
+def find_row_issues(row: Mapping[str, Any], model: type[BaseModel]) -> list[str]:
+    """Strict, or pydantic coerces '2' into an int column and passes it."""
+    try:
+        model.model_validate(
+            # pydantic does not know pandas' null forms; this codebase reads them all as absent.
+            {
+                name: collapse_null_forms(row[name])
+                for name in model.model_fields
+                if name in row
+            },
+            strict=True,
+        )
+    except ValidationError as err:
+        return format_errors(err)
+    return []
 
 
 def _find_missing_declared_columns(present: set[str], columns: list[Column]) -> list[Issue]:

@@ -12,9 +12,11 @@ from typing import Any, Callable, NamedTuple, Protocol, TypeVar, runtime_checkab
 
 import pandas as pd
 import pyarrow as pa
+from pydantic import BaseModel
 
 from app.models import WorkflowStage
 from app.models.run_manifest import RowError, StageContribution
+from app.models.stages.signature import transform_output_schema
 from app.models.stage import (
     AbstractStage,
     StageType,
@@ -38,6 +40,7 @@ from ..stage_output import StageOutput
 from ..lineage import kept_rows_lineage
 from ..errors import RunCancelled
 from ..run_log import RunLog, bind_detail_sink, unbind_detail_sink
+from ..validation import build_row_model, find_row_issues
 from .row_events import (
     emit_cached_row,
     emit_row_outcome,
@@ -114,18 +117,18 @@ class _InternalRowColumn(NamedTuple):
     # reported as a dropped user column (it was collected by the driver or read
     # back by the mapper's own post-map step, not discarded).
     stripped_from_output: bool
-    # Marks a row that is not an output the stage produced, so the row must
-    # never be pinned as its input key's answer.
-    blocks_recording: bool
+    # Marks a row that is not an output the stage produced, so it must never be
+    # pinned as its input key's answer.
+    blocks_caching: bool
 
 
 # The ONE declaration of the internal row columns: `_strip_internal_columns` and
-# `_record_row_output` read the two behaviors off this table.
+# `_cache_row_output` read the two behaviors off this table.
 _INTERNAL_ROW_COLUMNS = (
-    _InternalRowColumn(ROW_ERROR_KEY, stripped_from_output=True, blocks_recording=True),
-    _InternalRowColumn(ROW_USAGE_KEY, stripped_from_output=True, blocks_recording=False),
-    _InternalRowColumn(ROW_DEFERRED_KEY, stripped_from_output=True, blocks_recording=True),
-    _InternalRowColumn(ROW_CACHED_KEY, stripped_from_output=True, blocks_recording=False),
+    _InternalRowColumn(ROW_ERROR_KEY, stripped_from_output=True, blocks_caching=True),
+    _InternalRowColumn(ROW_USAGE_KEY, stripped_from_output=True, blocks_caching=False),
+    _InternalRowColumn(ROW_DEFERRED_KEY, stripped_from_output=True, blocks_caching=True),
+    _InternalRowColumn(ROW_CACHED_KEY, stripped_from_output=True, blocks_caching=False),
 )
 
 
@@ -271,24 +274,28 @@ def _run_row_mapper(
     stage = workflow_stage.stage
     src = inputs[workflow_stage.inputs[0].id]
     reads = stage.anchor_reads()
+    # `map_group` stays bound here: _finish_mapped_frame tests it for the
+    # PostMapRowMapper shape, which _StageExecution would hide.
     map_group = handler.make_group_mapper(workflow_stage, ctx, src)
-    # Log outside cache, so a row the cache answers never reaches the mapper's
-    # lifecycle wrapper and is logged as the replay it is.
     caching = _open_row_caching(workflow_stage, ctx)
-    group_mapping_function = _log_group_lifecycle(map_group, ctx.run_log, stage.id)
+    execution = _StageExecution(
+        map_group,
+        build_row_model(transform_output_schema(stage), f"{stage.id}_written"),
+        caching,
+        ctx.run_log,
+        stage.id,
+    )
     input_rows = list_table_rows(src)
     narrowed_rows = [_narrow_row(row, reads) for row in input_rows]
-    cached_results: list[Row | None] = [None] * len(narrowed_rows)
-    if caching is not None:
-        cached_results = _find_cached_rows(
-            caching, narrowed_rows, ctx.run_log, stage.id
-        )
-        group_mapping_function = _record_computed_rows(
-            caching, group_mapping_function
-        )
+    # Answered before the grouping, so a hit never takes a seat in a model call
+    # and never reaches the mapper — it is logged as the replay it is.
+    cached_results: list[Row | None] = (
+        [None] * len(narrowed_rows)
+        if caching is None
+        else _find_cached_rows(caching, narrowed_rows, ctx.run_log, stage.id)
+    )
     results = _fan_out(
-        handler, group_mapping_function, narrowed_rows, cached_results,
-        workflow_stage, ctx,
+        handler, execution, narrowed_rows, cached_results, workflow_stage, ctx
     )
 
     out_rows: list[Row] = []
@@ -352,7 +359,7 @@ class _RowsInGroupsOfOne:
 
 def _fan_out(
     handler: RowMapTransformHandler,
-    group_mapping_function: GroupMapper,
+    execution: "_StageExecution",
     narrowed_rows: list[Row],
     cached_results: list[Row | None],
     workflow_stage: WorkflowStage,
@@ -373,7 +380,7 @@ def _fan_out(
     if handler.parallelism > 1 and len(groups) > 1:
         with ThreadPoolExecutor(max_workers=handler.parallelism) as pool:
             futures = {
-                pool.submit(group_mapping_function, indices, rows): indices
+                pool.submit(execution.run_group, indices, rows): indices
                 for indices, rows in groups
             }
             try:
@@ -400,7 +407,7 @@ def _fan_out(
             if _consume_cancel(ctx):
                 raise RunCancelled(f"stage {stage_id}: cancelled")
             _place_group(
-                results, indices, group_mapping_function(indices, rows), stage_id
+                results, indices, execution.run_group(indices, rows), stage_id
             )
             completed += len(indices)
             progress(completed=completed, total=total)
@@ -490,14 +497,10 @@ def _find_cached_row(caching: _RowCaching, input_row: Row) -> Row | None:
     return None if recorded is None else {**recorded, ROW_CACHED_KEY: True}
 
 
-def _record_row_output(caching: _RowCaching, input_row: Row, output_row: Row) -> None:
+def _cache_row_output(caching: _RowCaching, input_row: Row, output_row: Row) -> None:
     if caching.writer is None:
         return
-    if any(
-        output_row.get(internal.column) is not None
-        for internal in _INTERNAL_ROW_COLUMNS
-        if internal.blocks_recording
-    ):
+    if _blocks_caching(output_row):
         return
     caching.writer.record(
         project_id=caching.project,
@@ -527,59 +530,86 @@ def _find_cached_rows(
     return cached_results
 
 
-def _record_computed_rows(caching: _RowCaching, map_group: GroupMapper) -> GroupMapper:
-    """Each group is recorded as it lands, so a later group's failure cannot erase it."""
-    def map_group_and_record(
-        indices: Sequence[int], rows: Sequence[Row]
+# ── one group of rows, start to finish ───────────────────────────────────────
+
+
+class _StageExecution(NamedTuple):
+    """What one execution needs to turn a group of input rows into results."""
+
+    map_group: GroupMapper
+    written_model: type[BaseModel]
+    caching: _RowCaching | None
+    log: RunLog | None
+    stage_id: str
+
+    def run_group(
+        self, indices: Sequence[int], rows: Sequence[Row]
     ) -> Sequence[Row | None]:
-        results = map_group(indices, rows)
-        for row, result in zip(rows, results):
-            # A drop is not a recordable output: the store holds output ROWS, so a
-            # replayed drop would be indistinguishable from a miss.
-            if result is not None:
-                _record_row_output(caching, row, result)
-        return results
-
-    return map_group_and_record
-
-
-# ── the run log's row lifecycle ──────────────────────────────────────────────
-
-
-def _log_group_lifecycle(
-    map_group: GroupMapper, log: RunLog | None, stage_id: str
-) -> GroupMapper:
-    if log is None:
-        return map_group
-
-    def map_group_and_log(
-        indices: Sequence[int], rows: Sequence[Row]
-    ) -> Sequence[Row | None]:
+        """Map, validate, log, record. One function because the ORDER is the content."""
         for index in indices:
-            emit_row_start(log, stage_id, index)
-        # Bind the detail sink so the LLM layer, several frames below the mapper,
-        # can attribute its prompt/thinking/response to these (stage, row) pairs
-        # without any of that being threaded through the mapper's signature. This
-        # runs on the worker thread, which is where the bind has to happen: a pool
-        # thread starts with an empty context, so an outer bind would be lost.
-        token = bind_detail_sink(log, stage_id, tuple(indices))
+            emit_row_start(self.log, self.stage_id, index)
+        # Bound here, on the worker thread that makes the call: a pool thread
+        # starts with an empty context, so a bind made outside would be lost. It
+        # lets `llm.py` attribute its prompt/response to these rows several frames
+        # down without a log being threaded through every mapper.
+        token = bind_detail_sink(self.log, self.stage_id, tuple(indices))
         try:
-            results = map_group(indices, rows)
+            mapped = self.map_group(indices, rows)
         except Exception as exc:  # noqa: BLE001 — logged, then re-raised unchanged;
             # the executor's own per-stage handling is untouched.
             for index in indices:
-                emit_row_raised(log, stage_id, index, exc)
+                emit_row_raised(self.log, self.stage_id, index, exc)
             raise
         finally:
             unbind_detail_sink(token)
+
+        results = [
+            _validate_row(_assert_row(row, self.stage_id), self.written_model)
+            for row in mapped
+        ]
         for index, result in zip(indices, results):
             # A dropped row (None) ran to completion — it has no error to report.
             emit_row_outcome(
-                log, stage_id, index, result.get(ROW_ERROR_KEY) if result else None
+                self.log,
+                self.stage_id,
+                index,
+                result.get(ROW_ERROR_KEY) if result else None,
             )
+        if self.caching is not None:
+            for row, result in zip(rows, results):
+                # A drop is not a recordable output: the store holds output ROWS,
+                # so a replayed drop would be indistinguishable from a miss. A row
+                # this function just failed carries _error, which also blocks it.
+                if result is not None:
+                    _cache_row_output(self.caching, row, result)
         return results
 
-    return map_group_and_log
+
+def _assert_row(row: object, stage_id: str) -> Row | None:
+    """Caught the moment the mapper returns, so nothing downstream defends against a non-row."""
+    if row is None or isinstance(row, dict):
+        return row
+    raise ValueError(
+        f"stage {stage_id}: row mapper must return one dict per row, "
+        f"got {type(row).__name__}"
+    )
+
+
+def _validate_row(row: Row | None, model: type[BaseModel]) -> Row | None:
+    if row is None or _blocks_caching(row):
+        return row
+    issues = find_row_issues(row, model)
+    if not issues:
+        return row
+    return {**row, ROW_ERROR_KEY: "; ".join(issues)}
+
+
+def _blocks_caching(row: Row) -> bool:
+    return any(
+        row.get(internal.column) is not None
+        for internal in _INTERNAL_ROW_COLUMNS
+        if internal.blocks_caching
+    )
 
 
 class _MappedRows(NamedTuple):

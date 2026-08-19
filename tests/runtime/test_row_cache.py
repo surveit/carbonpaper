@@ -670,3 +670,30 @@ def test_a_group_that_completed_stays_cached_when_a_later_group_crashes(monkeypa
         _run(stage, _src([1, 2, 3, 4]), _ctx(run_id="crash"))
 
     assert {entry.output_row["verdict"] for entry in _entries(stage)} == {"v1", "v2"}
+
+
+_WRONG_TYPE_CODE = "def transform(row):\n    return {**row, 'y': f\"{row['x']}\"}\n"
+
+
+def test_a_row_off_its_own_signature_fails_as_that_row():
+    out = _run(_row_stage(_WRONG_TYPE_CODE), _src([1, 2]), _ctx())
+
+    errors = out.contribution.row_errors or []
+    assert [error["row"] for error in errors] == [0, 1]
+    assert "y: Input should be a valid integer" in errors[0]["message"]
+
+
+def test_a_row_off_its_own_signature_is_never_recorded():
+    stage = _row_stage(_WRONG_TYPE_CODE)
+    _run(stage, _src([1, 2]), _ctx(run_id="bad"))
+
+    assert _entries(stage) == []
+
+
+def test_a_row_matching_its_signature_is_untouched():
+    stage = _row_stage()
+    out = _run(stage, _src([1, 2]), _ctx())
+
+    assert not out.contribution.row_errors
+    assert list(rows_of(out)["y"]) == [2, 4]
+    assert len(_entries(stage)) == 2
