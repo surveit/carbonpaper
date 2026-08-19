@@ -117,18 +117,18 @@ class _InternalRowColumn(NamedTuple):
     # reported as a dropped user column (it was collected by the driver or read
     # back by the mapper's own post-map step, not discarded).
     stripped_from_output: bool
-    # Marks a row that is not an output the stage produced, so the row must
-    # never be pinned as its input key's answer.
-    blocks_recording: bool
+    # Marks a row that is not an output the stage produced, so it must never be
+    # pinned as its input key's answer.
+    blocks_caching: bool
 
 
 # The ONE declaration of the internal row columns: `_strip_internal_columns` and
-# `_record_row_output` read the two behaviors off this table.
+# `_cache_row_output` read the two behaviors off this table.
 _INTERNAL_ROW_COLUMNS = (
-    _InternalRowColumn(ROW_ERROR_KEY, stripped_from_output=True, blocks_recording=True),
-    _InternalRowColumn(ROW_USAGE_KEY, stripped_from_output=True, blocks_recording=False),
-    _InternalRowColumn(ROW_DEFERRED_KEY, stripped_from_output=True, blocks_recording=True),
-    _InternalRowColumn(ROW_CACHED_KEY, stripped_from_output=True, blocks_recording=False),
+    _InternalRowColumn(ROW_ERROR_KEY, stripped_from_output=True, blocks_caching=True),
+    _InternalRowColumn(ROW_USAGE_KEY, stripped_from_output=True, blocks_caching=False),
+    _InternalRowColumn(ROW_DEFERRED_KEY, stripped_from_output=True, blocks_caching=True),
+    _InternalRowColumn(ROW_CACHED_KEY, stripped_from_output=True, blocks_caching=False),
 )
 
 
@@ -497,10 +497,10 @@ def _find_cached_row(caching: _RowCaching, input_row: Row) -> Row | None:
     return None if recorded is None else {**recorded, ROW_CACHED_KEY: True}
 
 
-def _record_row_output(caching: _RowCaching, input_row: Row, output_row: Row) -> None:
+def _cache_row_output(caching: _RowCaching, input_row: Row, output_row: Row) -> None:
     if caching.writer is None:
         return
-    if _blocks_recording(output_row):
+    if _blocks_caching(output_row):
         return
     caching.writer.record(
         project_id=caching.project,
@@ -564,7 +564,7 @@ class _StageExecution(NamedTuple):
             unbind_detail_sink(token)
 
         results = [
-            _fail_on_row_issues(_require_a_row(row, self.stage_id), self.written_model)
+            _validate_row(_assert_row(row, self.stage_id), self.written_model)
             for row in mapped
         ]
         for index, result in zip(indices, results):
@@ -581,11 +581,11 @@ class _StageExecution(NamedTuple):
                 # so a replayed drop would be indistinguishable from a miss. A row
                 # this function just failed carries _error, which also blocks it.
                 if result is not None:
-                    _record_row_output(self.caching, row, result)
+                    _cache_row_output(self.caching, row, result)
         return results
 
 
-def _require_a_row(row: object, stage_id: str) -> Row | None:
+def _assert_row(row: object, stage_id: str) -> Row | None:
     """Caught the moment the mapper returns, so nothing downstream defends against a non-row."""
     if row is None or isinstance(row, dict):
         return row
@@ -595,8 +595,8 @@ def _require_a_row(row: object, stage_id: str) -> Row | None:
     )
 
 
-def _fail_on_row_issues(row: Row | None, model: type[BaseModel]) -> Row | None:
-    if row is None or _blocks_recording(row):
+def _validate_row(row: Row | None, model: type[BaseModel]) -> Row | None:
+    if row is None or _blocks_caching(row):
         return row
     issues = find_row_issues(row, model)
     if not issues:
@@ -604,11 +604,11 @@ def _fail_on_row_issues(row: Row | None, model: type[BaseModel]) -> Row | None:
     return {**row, ROW_ERROR_KEY: "; ".join(issues)}
 
 
-def _blocks_recording(row: Row) -> bool:
+def _blocks_caching(row: Row) -> bool:
     return any(
         row.get(internal.column) is not None
         for internal in _INTERNAL_ROW_COLUMNS
-        if internal.blocks_recording
+        if internal.blocks_caching
     )
 
 
