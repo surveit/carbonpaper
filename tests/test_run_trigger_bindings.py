@@ -182,7 +182,8 @@ def test_file_picker_renders_shared_structured_controls(project, tmp_path):
     assert 'class="file-picker" data-file-picker' in body
     assert 'class="file-picker-native file-pick"' in body
     assert 'class="file-picker-trigger"' in body
-    assert 'role="listbox"' in body
+    assert 'class="file-picker-popover" role="dialog"' in body
+    assert 'class="file-picker-list" role="group"' in body
     assert 'data-filename="stories.csv"' in body
     assert 'data-uploaded-label="Uploaded ' in body
     assert 'data-size-label="13B"' in body
@@ -191,6 +192,8 @@ def test_file_picker_renders_shared_structured_controls(project, tmp_path):
     assert "No files match this search." in body
     assert "/static/file-picker.css" in body
     assert "/static/file-picker.js" in body
+    assert 'class="btn file-preview-open"' not in body
+    assert 'aria-controls="binding__load__picker"' in body
 
 
 def test_required_file_picker_keeps_native_form_validation(project):
@@ -224,15 +227,53 @@ def test_shared_file_picker_wires_pointer_keyboard_and_dynamic_refresh():
         encoding="utf-8"
     )
 
-    for key in ("ArrowDown", "ArrowUp", "Home", "End", "Enter", "Escape", "Tab"):
+    for key in ("ArrowDown", "ArrowUp", "Home", "End", "Enter", "Escape"):
         assert f'event.key === "{key}"' in source or f'"{key}"' in source
     assert 'document.addEventListener("click"' in source
     assert "select.tabIndex = -1" in source
     assert 'select.setAttribute("aria-hidden", "true")' in source
-    assert (
-        "window.CarbonFilePicker = { init: initFilePickers, refresh: refreshPicker }"
-        in source
+    assert "open: function (picker) { openFilePicker(picker, 1); }" in source
+    assert 'row.appendChild(item)' in source
+    assert 'row.appendChild(buildPreviewAction(select, option))' in source
+    assert 'button.dataset.fileSha = option.value' in source
+    assert 'button.setAttribute("aria-haspopup", "dialog")' in source
+    assert 'button.setAttribute("aria-controls", "run-file-preview")' in source
+    assert 'button.setAttribute("aria-disabled", "true")' in source
+    assert 'tooltip.setAttribute("role", "tooltip")' in source
+    assert 'tooltip.textContent = "Only project files can be previewed."' in source
+    assert 'picker.addEventListener("focusout"' in source
+
+
+def test_row_preview_does_not_change_the_selected_file():
+    picker_source = (Path(__file__).parents[1] / "app/static/file-picker.js").read_text(
+        encoding="utf-8"
     )
+    preview_source = (Path(__file__).parents[1] / "app/static/file-preview.js").read_text(
+        encoding="utf-8"
+    )
+
+    preview_action = picker_source.split("function buildPreviewAction", 1)[1].split(
+        "function buildOption", 1
+    )[0]
+    load_preview = preview_source.split("async function loadPreview", 1)[1].split(
+        "form.addEventListener", 1
+    )[0]
+    assert "chooseOption" not in preview_action
+    assert "select.value" not in load_preview
+    assert "var sha256 = button.dataset.fileSha" in load_preview
+
+
+def test_file_picker_visible_content_cannot_intercept_pointer_clicks():
+    source = (Path(__file__).parents[1] / "app/static/file-picker.css").read_text(
+        encoding="utf-8"
+    )
+
+    value_rule = source.split(".file-picker-value {", 1)[1].split("}", 1)[0]
+    chevron_rule = source.split(".file-picker-chevron {", 1)[1].split("}", 1)[0]
+    assert "pointer-events: none" in value_rule
+    assert "user-select: none" in value_rule
+    assert "pointer-events: none" in chevron_rule
+    assert "user-select: none" in chevron_rule
 
 
 # ─── The run form is its own page, not a block on the run history ────────────
@@ -281,6 +322,14 @@ def test_new_run_page_has_one_shared_upload_dialog(project):
     assert 'class="run-upload-error" role="alert" hidden' in body
     assert 'class="btn primary run-upload-submit" disabled' in body
     assert 'class="file-input"' not in body
+
+
+def test_new_run_page_has_one_shared_file_preview_dialog(project):
+    body = client.get("/project/demo/runs/new").text
+    assert body.count('class="file-preview-dialog"') == 1
+    assert 'aria-labelledby="run-file-preview-title"' in body
+    assert 'class="file-preview-body" aria-live="polite"' in body
+    assert "/static/file-preview.js" in body
 
 
 def test_each_run_input_row_opens_the_shared_upload_dialog(project):

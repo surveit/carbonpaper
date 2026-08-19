@@ -15,20 +15,20 @@
     {% endfor %}
   </select>
   <button type="button" id="{{ name }}__button" class="file-picker-trigger"
-          aria-haspopup="listbox" aria-expanded="false"
-          aria-controls="{{ name }}__listbox" hidden>
+          aria-haspopup="dialog" aria-expanded="false"
+          aria-controls="{{ name }}__picker" hidden>
     <span class="file-picker-value"></span>
     <span class="file-picker-chevron" aria-hidden="true">▾</span>
   </button>
-  <div class="file-picker-popover" hidden>
+  <div id="{{ name }}__picker" class="file-picker-popover" role="dialog"
+       aria-label="Choose a project file" hidden>
     <div class="file-picker-heading">
       <strong>Choose file</strong>
       <span>Uploads newest first</span>
     </div>
     <input type="search" class="file-picker-search" aria-label="Search files"
            placeholder="Search files…" autocomplete="off">
-    <div id="{{ name }}__listbox" class="file-picker-list" role="listbox"
-         aria-label="Project files"></div>
+    <div class="file-picker-list" role="group" aria-label="Project files"></div>
     <p class="file-picker-empty" hidden>No files match this search.</p>
   </div>
 </div>

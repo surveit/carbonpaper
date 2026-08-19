@@ -38,18 +38,48 @@
     closePicker(picker, true);
   }
 
+  function buildPreviewAction(select, option) {
+    var wrap = document.createElement("span");
+    var button = document.createElement("button");
+    var filename = option.dataset.filename || option.textContent;
+    wrap.className = "file-picker-preview-wrap";
+    button.type = "button";
+    button.className = "file-picker-preview file-preview-open";
+    button.textContent = "Preview";
+    if (option.value) {
+      button.dataset.fileSha = option.value;
+      button.setAttribute("aria-label", "Preview " + filename);
+      button.setAttribute("aria-haspopup", "dialog");
+      button.setAttribute("aria-controls", "run-file-preview");
+      wrap.appendChild(button);
+      return wrap;
+    }
+    var tooltip = document.createElement("span");
+    var tooltipId = select.id + "__preview_help";
+    button.setAttribute("aria-disabled", "true");
+    button.setAttribute("aria-label", "Preview unavailable for " + filename);
+    button.setAttribute("aria-describedby", tooltipId);
+    tooltip.id = tooltipId;
+    tooltip.className = "file-picker-tooltip";
+    tooltip.setAttribute("role", "tooltip");
+    tooltip.textContent = "Only project files can be previewed.";
+    wrap.appendChild(button);
+    wrap.appendChild(tooltip);
+    return wrap;
+  }
+
   function buildOption(picker, option) {
+    var row = document.createElement("div");
     var item = document.createElement("button");
+    var select = picker.querySelector(".file-picker-native");
     var record = describeOption(option);
+    row.className = "file-picker-row";
+    row.dataset.search = [record.filename, record.uploaded, record.size, record.meta]
+      .filter(Boolean).join(" ").toLocaleLowerCase();
     item.type = "button";
     item.className = "file-picker-option";
-    item.setAttribute("role", "option");
-    item.setAttribute("aria-selected", String(option.selected));
+    item.setAttribute("aria-current", option.selected ? "true" : "false");
     item.dataset.value = option.value;
-    item.dataset.kind = option.dataset.fileKind || "upload";
-    item.dataset.search = [record.filename, record.uploaded, record.size, record.meta]
-      .filter(Boolean).join(" ").toLocaleLowerCase();
-    item.tabIndex = -1;
     addText(item, "file-picker-option-name", record.filename);
     if (record.size) addText(item, "file-picker-option-size", record.size);
     if (record.uploaded || record.meta) {
@@ -57,7 +87,9 @@
     }
     item.addEventListener("click", function () { chooseOption(picker, option); });
     item.addEventListener("keydown", function (event) { handleOptionKey(picker, event); });
-    return item;
+    row.appendChild(item);
+    row.appendChild(buildPreviewAction(select, option));
+    return row;
   }
 
   function refreshPicker(select) {
@@ -100,15 +132,17 @@
   }
 
   function visibleOptions(picker) {
-    return Array.from(picker.querySelectorAll(".file-picker-option:not([hidden])"));
+    return Array.from(picker.querySelectorAll(
+      ".file-picker-row:not([hidden]) .file-picker-option"
+    ));
   }
 
   function filterOptions(picker) {
     var query = picker.querySelector(".file-picker-search").value.trim().toLocaleLowerCase();
     var matches = 0;
-    picker.querySelectorAll(".file-picker-option").forEach(function (option) {
-      option.hidden = !!query && !option.dataset.search.includes(query);
-      if (!option.hidden) matches += 1;
+    picker.querySelectorAll(".file-picker-row").forEach(function (row) {
+      row.hidden = !!query && !row.dataset.search.includes(query);
+      if (!row.hidden) matches += 1;
     });
     picker.querySelector(".file-picker-empty").hidden = matches !== 0;
   }
@@ -139,8 +173,6 @@
     } else if (event.key === "Escape") {
       event.preventDefault();
       closePicker(picker, true);
-    } else if (event.key === "Tab") {
-      closePicker(picker, false);
     }
   }
 
@@ -152,8 +184,8 @@
     var search = picker.querySelector(".file-picker-search");
     if (!select || !trigger || !list || !search) return;
     trigger.id = select.id + "__button";
-    trigger.setAttribute("aria-controls", select.id + "__listbox");
-    list.id = select.id + "__listbox";
+    trigger.setAttribute("aria-controls", select.id + "__picker");
+    picker.querySelector(".file-picker-popover").id = select.id + "__picker";
     document.querySelectorAll("label").forEach(function (label) {
       if (label.htmlFor === select.id) label.htmlFor = trigger.id;
     });
@@ -194,9 +226,11 @@
       } else if (event.key === "Escape") {
         event.preventDefault();
         closePicker(picker, true);
-      } else if (event.key === "Tab") {
-        closePicker(picker, false);
       }
+    });
+    picker.addEventListener("focusout", function (event) {
+      if (!picker.classList.contains("is-previewing") &&
+          !picker.contains(event.relatedTarget)) closePicker(picker, false);
     });
   }
 
@@ -207,12 +241,18 @@
   }
 
   document.addEventListener("click", function (event) {
-    if (openPicker && !openPicker.contains(event.target)) closePicker(openPicker, false);
+    if (openPicker && !openPicker.classList.contains("is-previewing") &&
+        !openPicker.contains(event.target)) closePicker(openPicker, false);
   });
   document.addEventListener("keydown", function (event) {
-    if (event.key === "Escape" && openPicker) closePicker(openPicker, true);
+    if (event.key === "Escape" && openPicker &&
+        !openPicker.classList.contains("is-previewing")) closePicker(openPicker, true);
   });
   document.addEventListener("DOMContentLoaded", function () { initFilePickers(document); });
 
-  window.CarbonFilePicker = { init: initFilePickers, refresh: refreshPicker };
+  window.CarbonFilePicker = {
+    init: initFilePickers,
+    open: function (picker) { openFilePicker(picker, 1); },
+    refresh: refreshPicker,
+  };
 })();
