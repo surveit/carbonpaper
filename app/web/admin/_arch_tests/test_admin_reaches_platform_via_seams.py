@@ -14,6 +14,7 @@ _GOVERNED = "workspace_router.py"
 _ADMIN_SEAMS = {
     "app.seeds",
     "app.services.project",
+    "app.core.agent",
     "app.core.errors",
     "app.web.config",
 }

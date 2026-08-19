@@ -9,7 +9,7 @@
       <label for="chat-backend">Backend</label>
       <select id="chat-backend" name="backend">
         {% for backend in available_backends %}
-          <option value="{{ backend.value }}">{{ backend.value | capitalize }}</option>
+          <option value="{{ backend.value }}"{% if backend == default_backend %} selected{% endif %}>{{ backend.value | capitalize }}</option>
         {% endfor %}
       </select>
       <button class="ac-new btn primary" type="submit">＋ New chat</button>
