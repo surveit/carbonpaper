@@ -59,6 +59,12 @@ class LLMError(Exception):
     pass
 
 
+class StageWideFailure(Exception):
+    """A failure whose scope is the STAGE, so trying another row cannot help."""
+    # The row driver abandons its fan-out on one instead of tagging every
+    # remaining row with the same message. Subclassed, never raised directly.
+
+
 class DocumentNotFound(Exception):
     """Raised by the strict read path; the tolerant read (`read_tolerant`/`load_or_none`) returns None."""
 
