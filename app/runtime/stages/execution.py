@@ -272,18 +272,24 @@ def _run_row_mapper(
     src = inputs[workflow_stage.inputs[0].id]
     reads = stage.anchor_reads()
     map_group = handler.make_group_mapper(workflow_stage, ctx, src)
-    # The ONE line of compute, optionally routed through the row cache and the
-    # run log. Log outside cache, so a row the cache answers never reaches the
-    # mapper's lifecycle wrapper and is logged as the replay it is.
+    # Log outside cache, so a row the cache answers never reaches the mapper's
+    # lifecycle wrapper and is logged as the replay it is.
     caching = _open_row_caching(workflow_stage, ctx)
-    compute = _log_group_lifecycle(map_group, ctx.run_log, stage.id)
-    records = list_table_rows(src)
-    seen = [_narrow_row(row, reads) for row in records]
-    answered: list[Row | None] = [None] * len(seen)
+    group_mapping_function = _log_group_lifecycle(map_group, ctx.run_log, stage.id)
+    input_rows = list_table_rows(src)
+    narrowed_rows = [_narrow_row(row, reads) for row in input_rows]
+    cached_results: list[Row | None] = [None] * len(narrowed_rows)
     if caching is not None:
-        answered = _find_cached_rows(caching, seen, ctx.run_log, stage.id)
-        compute = _record_computed_rows(caching, compute)
-    results = _fan_out(handler, compute, seen, answered, workflow_stage, ctx)
+        cached_results = _find_cached_rows(
+            caching, narrowed_rows, ctx.run_log, stage.id
+        )
+        group_mapping_function = _record_computed_rows(
+            caching, group_mapping_function
+        )
+    results = _fan_out(
+        handler, group_mapping_function, narrowed_rows, cached_results,
+        workflow_stage, ctx,
+    )
 
     out_rows: list[Row] = []
     kept_indices: list[int] = []
@@ -298,7 +304,7 @@ def _run_row_mapper(
         # Rejoin: under narrowing the mapper only ever saw its declared reads, so
         # the columns that merely FLOW come back from the input row here. The
         # mapper's own keys win — that is what a rewrite or an add is.
-        out_rows.append({**records[index], **result})
+        out_rows.append({**input_rows[index], **result})
         kept_indices.append(index)
     mapped = _finish_mapped_frame(out_rows, handler, map_group, workflow_stage, ctx)
     # The driver, not the stage, knows which input ordinals survived.
@@ -346,23 +352,28 @@ class _RowsInGroupsOfOne:
 
 def _fan_out(
     handler: RowMapTransformHandler,
-    compute: GroupMapper,
-    seen: list[Row],
-    results: list[Row | None],
+    group_mapping_function: GroupMapper,
+    narrowed_rows: list[Row],
+    cached_results: list[Row | None],
     workflow_stage: WorkflowStage,
     ctx: RunContext,
 ) -> list[Row | None]:
-    """Fills the slots the cache left empty, and returns the same list."""
+    """Computes the rows the cache left empty; returns one result per input row."""
     stage_id = workflow_stage.stage.id
-    pending = [index for index, answer in enumerate(results) if answer is None]
-    groups = _split_into_groups(pending, seen, handler.group_size(workflow_stage))
+    results = list(cached_results)
+    total = len(results)
+    pending = [index for index, cached in enumerate(results) if cached is None]
+    groups = _split_into_groups(
+        pending, narrowed_rows, handler.group_size(workflow_stage)
+    )
     progress = ctx.stage_progress
-    completed = len(seen) - len(pending)
-    progress(completed=completed, total=len(seen))
+    # Every row the cache answered is already done, and is never dispatched.
+    completed = total - len(pending)
+    progress(completed=completed, total=total)
     if handler.parallelism > 1 and len(groups) > 1:
         with ThreadPoolExecutor(max_workers=handler.parallelism) as pool:
             futures = {
-                pool.submit(compute, indices, rows): indices
+                pool.submit(group_mapping_function, indices, rows): indices
                 for indices, rows in groups
             }
             for future in as_completed(futures):
@@ -376,24 +387,26 @@ def _fan_out(
                 indices = futures[future]
                 _place_group(results, indices, future.result(), stage_id)
                 completed += len(indices)
-                progress(completed=completed, total=len(seen))
+                progress(completed=completed, total=total)
     else:
         for indices, rows in groups:
             if _consume_cancel(ctx):
                 raise RunCancelled(f"stage {stage_id}: cancelled")
-            _place_group(results, indices, compute(indices, rows), stage_id)
+            _place_group(
+                results, indices, group_mapping_function(indices, rows), stage_id
+            )
             completed += len(indices)
-            progress(completed=completed, total=len(seen))
+            progress(completed=completed, total=total)
     return results
 
 
 def _split_into_groups(
-    pending: list[int], seen: list[Row], size: int
+    pending: list[int], narrowed_rows: list[Row], size: int
 ) -> list[tuple[tuple[int, ...], list[Row]]]:
     """Groups the PENDING positions, so a cache hit never takes a seat in a model call."""
     return [
         (tuple(pending[start : start + size]),
-         [seen[index] for index in pending[start : start + size]])
+         [narrowed_rows[index] for index in pending[start : start + size]])
         for start in range(0, len(pending), size)
     ]
 
@@ -429,9 +442,9 @@ def _narrow_table(table: pa.Table, keep: frozenset[str]) -> pa.Table:
 
 
 # ── the row-level cache interceptor ──────────────────────────────────────────
-# Caching is a property of the handler SHAPE, not of any stage type: the one
-# line where per-row compute happens is wrapped, so every row-mapped stage type
-# is cached by the same code and no stage implements a cache interface. The
+# Caching is a property of the handler SHAPE, not of any stage type: the driver
+# reads before it groups and wraps the mapper to record, so every row-mapped
+# stage type is cached by the same code and no stage implements one. The
 # cache store and its keying live below the seam (app.core.stage_cache); what
 # lives here is one execution's state over it and the two decisions the runtime
 # owns: WHETHER caching applies at all, and whether a given result is one the
@@ -495,21 +508,23 @@ def _without_internal_columns(row: Row) -> Row:
 
 
 def _find_cached_rows(
-    caching: _RowCaching, seen: list[Row], log: RunLog | None, stage_id: str
+    caching: _RowCaching, narrowed_rows: list[Row], log: RunLog | None, stage_id: str
 ) -> list[Row | None]:
     """Answered BEFORE grouping: a hit taking a seat in a model call is a batch paid for and wasted."""
-    answered: list[Row | None] = []
-    for index, row in enumerate(seen):
+    cached_results: list[Row | None] = []
+    for index, row in enumerate(narrowed_rows):
         hit = _find_cached_row(caching, row)
         if hit is not None:
             emit_cached_row(log, stage_id, index)
-        answered.append(hit)
-    return answered
+        cached_results.append(hit)
+    return cached_results
 
 
 def _record_computed_rows(caching: _RowCaching, map_group: GroupMapper) -> GroupMapper:
     """Each group is recorded as it lands, so a later group's failure cannot erase it."""
-    def compute(indices: Sequence[int], rows: Sequence[Row]) -> Sequence[Row | None]:
+    def map_group_and_record(
+        indices: Sequence[int], rows: Sequence[Row]
+    ) -> Sequence[Row | None]:
         results = map_group(indices, rows)
         for row, result in zip(rows, results):
             # A drop is not a recordable output: the store holds output ROWS, so a
@@ -518,7 +533,7 @@ def _record_computed_rows(caching: _RowCaching, map_group: GroupMapper) -> Group
                 _record_row_output(caching, row, result)
         return results
 
-    return compute
+    return map_group_and_record
 
 
 # ── the run log's row lifecycle ──────────────────────────────────────────────
@@ -530,7 +545,9 @@ def _log_group_lifecycle(
     if log is None:
         return map_group
 
-    def compute(indices: Sequence[int], rows: Sequence[Row]) -> Sequence[Row | None]:
+    def map_group_and_log(
+        indices: Sequence[int], rows: Sequence[Row]
+    ) -> Sequence[Row | None]:
         for index in indices:
             emit_row_start(log, stage_id, index)
         # Bind the detail sink so the LLM layer, several frames below the mapper,
@@ -555,7 +572,7 @@ def _log_group_lifecycle(
             )
         return results
 
-    return compute
+    return map_group_and_log
 
 
 class _MappedRows(NamedTuple):
