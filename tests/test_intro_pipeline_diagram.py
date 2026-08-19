@@ -49,3 +49,23 @@ def test_nojs_export_overlay_ignores_centering_position() -> None:
     page = INTRO_PAGE.read_text(encoding="utf-8")
 
     assert '.nojs .over { left: auto !important; top: auto !important; transform: none !important; }' in page
+
+
+def test_mobile_keeps_a_sticky_visual_band_and_crops_detail_stages() -> None:
+    page = INTRO_PAGE.read_text(encoding="utf-8")
+
+    assert '.stage-wrap { order: -1; position: sticky; top: 0;' in page
+    assert '.step-inner { background: var(--card);' in page
+    assert ".pin { left: 50% !important; right: auto !important;" in page
+    assert ".over { left: 50% !important; right: auto !important;" in page
+    assert "mobileBox: '140 54 290 135'" in page
+    assert "mobileBox: '310 54 290 135'" in page
+    assert "const DEFAULT_PIPE_VIEW_BOX = '0 0 1180 250';" in page
+    assert "pipe.setAttribute('viewBox', mobileViewport.matches && scene.mobileBox" in page
+
+
+def test_mobile_respects_reduced_motion() -> None:
+    page = INTRO_PAGE.read_text(encoding="utf-8")
+
+    assert '@media (prefers-reduced-motion: reduce)' in page
+    assert '.cloud .blob { animation: none; }' in page

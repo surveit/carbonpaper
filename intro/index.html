@@ -172,12 +172,31 @@
   .nojs .step-inner { opacity: 1; }
 
   @media (max-width: 1000px) {
+    body { overflow-x: hidden; }
     .scrolly { grid-template-columns: 1fr; gap: 0; padding: 0 1.25rem; }
-    .stage-wrap { position: sticky; top: 0; height: 60vh; }
-    .stage { grid-template-columns: 1fr; }
+    .stage-wrap { order: -1; position: sticky; top: 0;
+                  height: clamp(16rem, 42svh, 26rem); z-index: 1; }
+    .stage { min-height: 0; height: 100%; grid-template-columns: 1fr; }
+    .mid { min-height: 0; height: 100%; }
+    .graph-hold { height: 100%; }
+    .graph-hold svg { width: 100%; height: 55%; position: absolute; top: .5rem; left: 0; }
     .zone.q, .zone.out { display: none; }
-    .step { min-height: 60vh; }
+    .steps { padding: 0 0 22vh; }
+    .step { min-height: 58svh; display: flex; align-items: flex-start; padding: 2rem 0; }
+    .step-inner { background: var(--card); border: 1px solid var(--rule); border-radius: 10px;
+                  padding: 1.15rem 1.2rem; box-shadow: 0 12px 30px -20px rgba(36,39,43,.3); }
+    .pin { left: 50% !important; right: auto !important; top: auto !important; bottom: .75rem;
+           width: min(25rem, calc(100vw - 2.5rem)); max-width: none;
+           max-height: calc(42svh - 1.5rem); transform: translateX(-50%); overflow: auto; z-index: 2; }
+    .over { left: 50% !important; right: auto !important; top: 50% !important;
+            width: min(29rem, calc(100vw - 2.5rem)); transform: translate(-50%, -50%) !important; }
+    .over img { width: 100% !important; max-height: calc(42svh - 1.5rem); object-fit: contain; }
     header h1 { font-size: 1.9rem; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .step-inner, .zone, .layer, .fade, #pipe .node, #pipe .flow, .pin, .over { transition: none; }
+    .cloud .blob { animation: none; }
   }
 </style>
 </head>
@@ -470,6 +489,9 @@ const zoneOut = document.getElementById('zone-out');
 
 const ALL_NODES = [...nodes.keys()];
 const ALL_EDGES = [...edges.keys()];
+const DEFAULT_PIPE_VIEW_BOX = '0 0 1180 250';
+const mobileViewport = window.matchMedia('(max-width: 1000px)');
+let currentStep = 1;
 
 // Per step: what the middle holds, which figure is in the right-hand slot, what is lit,
 // what is pinned. `recede` dims the flanks so a detail step gets the whole reader.
@@ -479,9 +501,9 @@ const SCENES = {
   3:  {ask: 1, layer: 'cloud', out: 'said'},
   4:  {ask: 1, layer: 'cloud', out: 'said'},
   5:  {ask: 1, layer: 'graph', out: 'said', recedeOut: 1},
-  6:  {ask: 1, layer: 'graph', out: 'said', recede: 1, nodes: ['clean'], pin: '6'},
-  7:  {ask: 1, layer: 'graph', out: 'said', recede: 1, nodes: ['clean'], pin: '7'},
-  8:  {ask: 1, layer: 'graph', out: 'said', recede: 1, nodes: ['llm'], pin: '8'},
+  6:  {ask: 1, layer: 'graph', out: 'said', recede: 1, nodes: ['clean'], pin: '6', mobileBox: '140 54 290 135'},
+  7:  {ask: 1, layer: 'graph', out: 'said', recede: 1, nodes: ['clean'], pin: '7', mobileBox: '140 54 290 135'},
+  8:  {ask: 1, layer: 'graph', out: 'said', recede: 1, nodes: ['llm'], pin: '8', mobileBox: '310 54 290 135'},
   9:  {ask: 1, layer: 'graph', out: 'ran'},
   10: {ask: 1, layer: 'graph', out: 'ran', nodes: ALL_NODES, edges: ALL_EDGES, over: '10'},
   11: {ask: 1, layer: 'graph', out: 'ran', recede: 1, over: '11'},
@@ -490,6 +512,10 @@ const SCENES = {
 function show(step) {
   const scene = SCENES[step];
   if (!scene) return;
+  currentStep = step;
+  pipe.setAttribute('viewBox', mobileViewport.matches && scene.mobileBox
+    ? scene.mobileBox
+    : DEFAULT_PIPE_VIEW_BOX);
   for (const [name, el] of layers) el.classList.toggle('on', name === scene.layer);
   for (const [name, el] of pins) el.classList.toggle('on', name === scene.pin);
   for (const [name, el] of overs) el.classList.toggle('on', name === scene.over);
@@ -514,6 +540,8 @@ function show(step) {
 
   steps.forEach(el => el.classList.toggle('is-active', el.dataset.step === String(step)));
 }
+
+mobileViewport.addEventListener('change', () => show(currentStep));
 
 const seen = new IntersectionObserver(entries => {
   for (const entry of entries) if (entry.isIntersecting) show(Number(entry.target.dataset.step));
