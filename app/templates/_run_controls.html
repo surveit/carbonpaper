@@ -121,11 +121,24 @@
       <button type="button" class="btn primary run-upload-submit" disabled>Upload file</button>
     </div>
   </dialog>
+  <dialog id="run-file-preview" class="file-preview-dialog"
+          aria-labelledby="run-file-preview-title">
+    <div class="file-preview-frame">
+      <div class="file-preview-head">
+        <h2 id="run-file-preview-title" class="file-preview-title">File preview</h2>
+        <button type="button" class="file-preview-close" aria-label="Close file preview">×</button>
+      </div>
+      <div class="file-preview-body" aria-live="polite">
+        <p class="file-preview-loading" role="status">Loading preview…</p>
+      </div>
+    </div>
+  </dialog>
   {# Inert until run_controls.js clones it; a <template>'s fields are not part of
      the form, so the empty stage_id below is never submitted. #}
   <template class="run-input-template">{{ input_row("", "", []) }}</template>
 </form>
 <script src="/static/run_controls.js"></script>
+<script src="/static/file-preview.js"></script>
 {% else %}
 <div class="empty-state">
   <h2>No version to run</h2>

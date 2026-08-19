@@ -5,11 +5,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.services.errors import FileNotStoredError
 from app.services.project import project_exists
 from app.services.uploads import delete_file
 from app.web.config import templates
+from app.web.file_preview import build_file_preview
 from app.web.files_view import build_files_view
 from app.web.project_view import shell_state
 
@@ -28,6 +30,21 @@ async def files_page(request: Request, project_id: str):
             "section": "files",
             "files": build_files_view(project_id),
         },
+    )
+
+
+@router.get("/project/{project_id}/files/{sha256}/preview", response_class=HTMLResponse)
+async def preview_project_file(request: Request, project_id: str, sha256: str):
+    if not project_exists(project_id):
+        raise HTTPException(status_code=404, detail=f"No project '{project_id}'")
+    try:
+        preview = await run_in_threadpool(build_file_preview, project_id, sha256)
+    except FileNotStoredError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return templates.TemplateResponse(
+        request, "_file_preview.html", {"preview": preview}
     )
 
 

@@ -191,6 +191,8 @@ def test_file_picker_renders_shared_structured_controls(project, tmp_path):
     assert "No files match this search." in body
     assert "/static/file-picker.css" in body
     assert "/static/file-picker.js" in body
+    assert 'class="btn file-preview-open" aria-haspopup="dialog"' in body
+    assert 'aria-controls="run-file-preview" disabled' in body
 
 
 def test_required_file_picker_keeps_native_form_validation(project):
@@ -281,6 +283,14 @@ def test_new_run_page_has_one_shared_upload_dialog(project):
     assert 'class="run-upload-error" role="alert" hidden' in body
     assert 'class="btn primary run-upload-submit" disabled' in body
     assert 'class="file-input"' not in body
+
+
+def test_new_run_page_has_one_shared_file_preview_dialog(project):
+    body = client.get("/project/demo/runs/new").text
+    assert body.count('class="file-preview-dialog"') == 1
+    assert 'aria-labelledby="run-file-preview-title"' in body
+    assert 'class="file-preview-body" aria-live="polite"' in body
+    assert "/static/file-preview.js" in body
 
 
 def test_each_run_input_row_opens_the_shared_upload_dialog(project):

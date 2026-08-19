@@ -29,6 +29,7 @@
     addText(value, "file-picker-name", record.filename);
     if (record.meta) addText(value, "file-picker-meta", record.meta);
     picker.querySelector(".file-picker-trigger").removeAttribute("aria-invalid");
+    picker.querySelector(".file-preview-open").disabled = !option.value;
   }
 
   function chooseOption(picker, option) {

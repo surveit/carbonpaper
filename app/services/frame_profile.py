@@ -2,6 +2,8 @@
 schema comes from the data rather than from the methodology's prose."""
 from __future__ import annotations
 
+from typing import NamedTuple
+
 import pandas as pd
 import pyarrow as pa
 
@@ -28,6 +30,12 @@ _PROFILE_DTYPE: dict[FileFormat, type | bool | None] = {
     FileFormat.parquet: None,
     FileFormat.geojson: None,
 }
+
+
+class StoredFileFrame(NamedTuple):
+    filename: str
+    format: FileFormat
+    frame: pd.DataFrame
 
 
 def profile_stage_output(
@@ -59,13 +67,24 @@ def profile_stored_file(
     project_id: str, sha256: str, columns: list[str] | None, *, max_values: int,
     sheet_name: str | int = 0, header_row: int = 0, first_column: int = 0,
 ) -> TableProfile:
+    stored = read_stored_file_frame(
+        project_id, sha256, sheet_name=sheet_name, header_row=header_row,
+        first_column=first_column,
+    )
+    return profile_table(frame_to_table(stored.frame), columns, max_values=max_values)
+
+
+def read_stored_file_frame(
+    project_id: str, sha256: str, *, sheet_name: str | int = 0,
+    header_row: int = 0, first_column: int = 0,
+) -> StoredFileFrame:
     record, path = open_project_file(project_id, sha256)
-    fmt = resolve_file_format(record.filename)
+    file_format = resolve_file_format(record.filename)
     frame = read_source_file(
-        path, fmt, dtype=_PROFILE_DTYPE[fmt], sheet_name=sheet_name,
+        path, file_format, dtype=_PROFILE_DTYPE[file_format], sheet_name=sheet_name,
         header_row=header_row, first_column=first_column,
     )
-    return profile_table(frame_to_table(frame), columns, max_values=max_values)
+    return StoredFileFrame(filename=record.filename, format=file_format, frame=frame)
 
 
 def profile_table(
