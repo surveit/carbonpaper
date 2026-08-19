@@ -13,8 +13,9 @@ from typing import Any, Callable, NamedTuple, Protocol, TypeVar, runtime_checkab
 import pandas as pd
 import pyarrow as pa
 
-from app.models import WorkflowStage
+from app.models import TableSchema, WorkflowStage
 from app.models.run_manifest import RowError, StageContribution
+from app.models.stages.signature import transform_output_schema
 from app.models.stage import (
     AbstractStage,
     StageType,
@@ -38,6 +39,7 @@ from ..stage_output import StageOutput
 from ..lineage import kept_rows_lineage
 from ..errors import RunCancelled
 from ..run_log import RunLog, bind_detail_sink, unbind_detail_sink
+from ..validation import find_row_issues
 from .row_events import (
     emit_cached_row,
     emit_row_outcome,
@@ -272,10 +274,18 @@ def _run_row_mapper(
     src = inputs[workflow_stage.inputs[0].id]
     reads = stage.anchor_reads()
     map_group = handler.make_group_mapper(workflow_stage, ctx, src)
-    # Log outside cache, so a row the cache answers never reaches the mapper's
-    # lifecycle wrapper and is logged as the replay it is.
+    # Checked innermost, so a row that does not match the signature is tagged
+    # before the log reports its outcome and before the cache is offered it. Log
+    # outside cache, so a row the cache answers never reaches the mapper's
+    # lifecycle wrapper and is logged as the replay it is. `map_group` itself
+    # stays bound: _finish_mapped_frame tests it for the PostMapRowMapper shape,
+    # which a wrapper would hide.
     caching = _open_row_caching(workflow_stage, ctx)
-    group_mapping_function = _log_group_lifecycle(map_group, ctx.run_log, stage.id)
+    group_mapping_function = _log_group_lifecycle(
+        _validate_mapped_rows(transform_output_schema(stage), map_group),
+        ctx.run_log,
+        stage.id,
+    )
     input_rows = list_table_rows(src)
     narrowed_rows = [_narrow_row(row, reads) for row in input_rows]
     cached_results: list[Row | None] = [None] * len(narrowed_rows)
@@ -448,6 +458,40 @@ def _narrow_table(table: pa.Table, keep: frozenset[str]) -> pa.Table:
     return table.select([name for name in table.column_names if name in keep])
 
 
+# ── what the stage said it writes ────────────────────────────────────────────
+
+
+def _validate_mapped_rows(written: TableSchema, map_group: GroupMapper) -> GroupMapper:
+    """A row off its own signature fails AS that row — reported, and never recorded."""
+    def map_group_and_validate(
+        indices: Sequence[int], rows: Sequence[Row]
+    ) -> Sequence[Row | None]:
+        return [
+            _fail_on_row_issues(result, written)
+            for result in map_group(indices, rows)
+        ]
+
+    return map_group_and_validate
+
+
+def _fail_on_row_issues(row: Row | None, written: TableSchema) -> Row | None:
+    """A non-dict is the driver's error to report; judging it here only worsens the message."""
+    if not isinstance(row, dict) or _blocks_recording(row):
+        return row
+    issues = find_row_issues(row, written)
+    if not issues:
+        return row
+    return {**row, ROW_ERROR_KEY: "; ".join(issues)}
+
+
+def _blocks_recording(row: Row) -> bool:
+    return any(
+        row.get(internal.column) is not None
+        for internal in _INTERNAL_ROW_COLUMNS
+        if internal.blocks_recording
+    )
+
+
 # ── the row-level cache interceptor ──────────────────────────────────────────
 # Caching is a property of the handler SHAPE, not of any stage type: the driver
 # reads before it groups and wraps the mapper to record, so every row-mapped
@@ -493,11 +537,7 @@ def _find_cached_row(caching: _RowCaching, input_row: Row) -> Row | None:
 def _record_row_output(caching: _RowCaching, input_row: Row, output_row: Row) -> None:
     if caching.writer is None:
         return
-    if any(
-        output_row.get(internal.column) is not None
-        for internal in _INTERNAL_ROW_COLUMNS
-        if internal.blocks_recording
-    ):
+    if _blocks_recording(output_row):
         return
     caching.writer.record(
         project_id=caching.project,

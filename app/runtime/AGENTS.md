@@ -122,6 +122,17 @@ stage: the record is `error` with an `OutputSchemaViolation` and downstream stag
 An out-of-`range` number is the deliberate exception, still a warning: a range bounds the
 expected, an enum the possible.
 
+`find_row_issues` is the same rules at ROW grain, run by the row driver on every mapped row
+as its mapper returns it, so a row off its own signature fails AS that row — attributed in
+the run log, reported against a row number, and kept out of the stage cache by the existing
+`_error` guard — instead of surfacing later as a frame that will not validate with nothing
+saying which row caused it. It answers only what one row can: presence, nullability, type,
+enum. Range is a warning and must not fail a row; json shape reads the arrow struct type and
+primary-key uniqueness reads every row, so `validate_table` still owns all three and still
+runs over the assembled frame. An `llm_transform` is already held to its reply model by
+construction, so the check is a second line there and the first one for user-authored code
+(`python_row_function`, `starlark_row_function`), which nothing validated before.
+
 `key_coverage.py` — the one COVERAGE check, on `enrich` and `expand`. Everything in
 `validation.py` asks whether the values present are allowed; this asks which key values
 are missing, in both directions: a reference key no output row carries, and a subject key

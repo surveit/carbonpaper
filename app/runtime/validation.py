@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -117,6 +117,48 @@ def validate_table(
         _find_undeclared_columns(table.column_names, [c.name for c in columns])
     )
     return report
+
+
+# ── One row, without a table ─────────────────────────────────────────────────
+# The driver checks each mapped row as the mapper returns it, so a row that does
+# not match what its stage declares it writes fails AS THAT ROW — attributed, in
+# the run log, and kept out of the stage cache — rather than surfacing later as a
+# frame that will not validate, with nothing saying which row caused it.
+#
+# Only the rules one row can answer alone, and only error-severity ones: a range
+# breach is a warning and must not fail a row, while json shape reads the arrow
+# struct type and primary-key uniqueness reads every row. `validate_table` still
+# runs over the assembled frame and still owns all three.
+
+
+def find_row_issues(row: Mapping[str, Any], schema: TableSchema) -> list[str]:
+    """The error-severity rules one row can answer alone; the rest need `validate_table`."""
+    issues: list[str] = []
+    for col in schema.columns:
+        if col.name not in row:
+            issues.append(f"missing column '{col.name}'")
+            continue
+        value = row[col.name]
+        if is_null_form(value):
+            if not col.nullable:
+                issues.append(f"column '{col.name}' is required but has no value")
+            continue
+        issues.extend(_find_cell_issues(value, col))
+    return issues
+
+
+def _find_cell_issues(value: Any, col: Column) -> list[str]:
+    check = _value_check_for(col.type)
+    if check is not None and not check(value):
+        return [
+            f"column '{col.name}' value {value!r} is not of declared type '{col.type}'"
+        ]
+    if col.enum and col.type == STR_COLUMN_TYPE and str(value) not in set(col.enum):
+        return [
+            f"column '{col.name}' value {str(value)!r} is outside enum "
+            f"{sorted(col.enum)}"
+        ]
+    return []
 
 
 def _find_missing_declared_columns(present: set[str], columns: list[Column]) -> list[Issue]:
