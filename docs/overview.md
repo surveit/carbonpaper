@@ -1,5 +1,11 @@
 # Overview — what this is and why
 
+## Product vision
+AI is making data investigations cheaper to produce; deciding whether they hold up is
+still hard. Carbon Paper is built for the person doing that review. It shows how the
+result was produced and uses deterministic pipelines to rule out entire classes of
+error, so human judgment can focus where it matters.
+
 ## Mission
 Serves **journalism and institutional accountability**: finding, verifying, and surfacing
 true things about how power and money work. The standards *are* the product — a fabricated
