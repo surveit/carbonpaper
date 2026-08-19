@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from collections.abc import Callable, Sequence
@@ -20,6 +21,7 @@ from app.core.agent.usage import LlmUsage
 from app.core.errors import GenerationError
 from app.core.llm.options import LLMModel
 from app.core.llm_sdk import run_sync
+from app.runtime.options import DEFAULT_TIMEOUT_S
 
 
 _DYNAMIC_TOOL_CALL = "item/tool/call"
@@ -95,13 +97,28 @@ async def _run_attempt(
         thread_id = _read_thread_id(thread)
         await server.request("turn/start", _build_turn_params(thread_id, task))
         _record_started_call(usage_parts, usage_out, model)
-        await _stream_turn(server, answer_spec, emit)
+        await _stream_turn_with_deadline(server, answer_spec, emit)
     finally:
         await server.close()
     answer = agent.answer
     if answer is None:
         raise GenerationError(f"Codex transform submitted no valid {reply_model.__name__}.")
     return answer.model_dump(mode="json")
+
+
+async def _stream_turn_with_deadline(
+    server: CodexAppServer,
+    answer_spec: BoundToolSpec,
+    emit: Callable[[AgentEvent], None] | None,
+) -> None:
+    try:
+        await asyncio.wait_for(
+            _stream_turn(server, answer_spec, emit), timeout=DEFAULT_TIMEOUT_S
+        )
+    except TimeoutError as exc:
+        raise GenerationError(
+            f"Codex transform turn timed out after {DEFAULT_TIMEOUT_S} seconds"
+        ) from exc
 
 
 async def _stream_turn(

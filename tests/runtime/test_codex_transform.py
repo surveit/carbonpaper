@@ -117,6 +117,8 @@ for line in sys.stdin:
                 "submit-1",
                 {"verdict": "supported", "answer_is_complete": True},
             )
+        elif mode == "stalled":
+            pass
         elif mode == "invalid_then_valid":
             send_tool_call("submit-1", {"answer_is_complete": True})
         else:
@@ -393,6 +395,31 @@ def test_uncooperative_shutdown_preserves_unsupported_mcp_notification(
     process = UncooperativeMcpServer.instances[0].process
     assert process.terminated
     assert process.killed
+
+
+def test_stalled_turn_fails_at_the_row_deadline(
+    monkeypatch: pytest.MonkeyPatch, fake_codex_server: FakeCodexServer,
+) -> None:
+    import app.runtime.codex_transform as codex_transform
+
+    monkeypatch.setattr(codex_transform, "DEFAULT_TIMEOUT_S", 0.1, raising=False)
+
+    with pytest.raises(GenerationError, match="turn timed out after 0.1 seconds"):
+        asyncio.run(
+            asyncio.wait_for(
+                codex_transform._run_attempt(
+                    fake_codex_server.build_command("stalled"),
+                    "system",
+                    "judge",
+                    Reply,
+                    LLMModel.gpt_5_6_terra,
+                    None,
+                    [],
+                    None,
+                ),
+                timeout=2,
+            )
+        )
 
 
 def test_remote_control_status_notification_is_ignored_before_submit_answer(
