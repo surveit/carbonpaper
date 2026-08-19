@@ -254,7 +254,7 @@
   root._selectTab = function (name) { tab = name; apply(); };
   apply();
 
-  const stage = root.dataset.stage;
+  const meth = root.dataset.project, run = root.dataset.run, stage = root.dataset.stage;
 
   // ── this stage's run log ──
   // Connected on first open, not on panel load: clicking through the graph would
@@ -269,7 +269,7 @@
       if (!logPanel.open) return;
       logPanel.removeEventListener('toggle', start);
       window._stageRunLog = initRunLog({
-        root: logHolder, base: {{ links.run_log_base() | tojson }}, stage: stage,
+        root: logHolder, project: meth, runId: run, stage: stage,
         pageSize: parseInt(logHolder.dataset.tail, 10),
       });
     });
