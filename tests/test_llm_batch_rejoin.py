@@ -128,3 +128,36 @@ def test_batched_chunk_failure_reports_no_marker_as_a_dropped_column(monkeypatch
     assert contribution_of(out).row_errors                  # the chunk did fail
     assert not contribution_of(out).dropped_columns
     assert lt.ROW_ERROR_KEY not in rows_of(out).columns and lt.ROW_USAGE_KEY not in rows_of(out).columns
+
+
+def test_a_backend_failure_is_not_re_asked(monkeypatch):
+    """`call_llm_batch` already retried it; re-asking here would square that budget."""
+    calls = {"n": 0}
+
+    def failing(*a, **k):
+        calls["n"] += 1
+        raise RuntimeError("429 rate_limit_error")
+
+    out, labels, ctx = _run(monkeypatch, failing, max_retries=3)
+
+    assert calls["n"] == 1                                 # one call, not four
+    errors = contribution_of(out).row_errors
+    assert [e["row"] for e in errors] == [0, 1, 2]         # the chunk failed, not the stage
+    assert "429" in errors[0]["message"]
+
+
+def test_a_reply_that_cannot_rejoin_is_still_re_asked(monkeypatch):
+    """The one defect a reply schema cannot state, so the agent's own retry never sees it."""
+    replies = [{"results": [{"row_number": 0, "label": "L0"}]}, None]
+    calls = {"n": 0}
+
+    def confused_then_clean(*a, **k):
+        calls["n"] += 1
+        reply = replies[calls["n"] - 1]
+        return reply if reply is not None else _clean(*a, **k)
+
+    out, labels, ctx = _run(monkeypatch, confused_then_clean, max_retries=1)
+
+    assert calls["n"] == 2
+    assert labels == {"a": "L0", "b": "L1", "c": "L2"}
+    assert not contribution_of(out).row_errors
