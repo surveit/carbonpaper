@@ -68,4 +68,11 @@ def test_mobile_respects_reduced_motion() -> None:
     page = INTRO_PAGE.read_text(encoding="utf-8")
 
     assert '@media (prefers-reduced-motion: reduce)' in page
+    assert '.start .cta' in page.split('@media (prefers-reduced-motion: reduce)', 1)[1]
     assert '.cloud .blob { animation: none; }' in page
+
+
+def test_mobile_visual_band_has_no_minimum_height_floor() -> None:
+    page = INTRO_PAGE.read_text(encoding="utf-8")
+
+    assert 'height: min(42svh, 26rem); z-index: 1;' in page
