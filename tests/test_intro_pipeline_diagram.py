@@ -42,7 +42,8 @@ def test_highlighted_arrowheads_use_fixed_size_blue_marker() -> None:
 
     assert page.count('d="M0 0.5 L7.5 4 L0 7.5 z"') == 2
     assert '<path d="M0 0.5 L7.5 4 L0 7.5 z" fill="#1d539c"/>' in page
-    assert "setAttribute('marker-end', lit ? 'url(#ar-lit)' : 'url(#ar)')" in page
+    assert "const marker = lit ? markers.lit : markers.base;" in page
+    assert "setAttribute('marker-end', `url(#${marker})`)" in page
 
 
 def test_nojs_export_overlay_ignores_centering_position() -> None:
@@ -51,7 +52,7 @@ def test_nojs_export_overlay_ignores_centering_position() -> None:
     assert '.nojs .over { left: auto !important; top: auto !important; transform: none !important; }' in page
 
 
-def test_narrow_intro_places_a_static_visual_with_each_step() -> None:
+def test_narrow_intro_clones_the_desktop_scene_for_each_step() -> None:
     page = INTRO_PAGE.read_text(encoding="utf-8")
 
     assert page.count('class="mobile-frame"') == 11
@@ -59,6 +60,13 @@ def test_narrow_intro_places_a_static_visual_with_each_step() -> None:
     assert '.stage-wrap { display: none; }' in page
     assert '.mobile-frame { display: block;' in page
     assert '.step-inner { opacity: 1; transition: none; }' in page
+    assert '.step-inner > p { max-width: 42rem; }' in page
+    assert 'mobile-pipeline' not in page
+    assert 'mobile-cloud' not in page
+    assert "sourceStage.cloneNode(true)" in page
+    assert 'renderStaticScenes();' in page
+    assert "stage.querySelector('#pipe, [data-pipeline]')" in page
+    assert "pipe.dataset.pipeline = 'true';" in page
 
 
 def test_mobile_respects_reduced_motion() -> None:
@@ -73,7 +81,7 @@ def test_narrow_intro_does_not_start_scrollytelling_or_crop_the_pipeline() -> No
     page = INTRO_PAGE.read_text(encoding="utf-8")
 
     assert "const staticViewport = window.matchMedia('(max-width: 1199px)');" in page
-    assert 'if (!staticViewport.matches) {' in page
-    assert page.index('if (!staticViewport.matches) {') < page.index('const seen = new IntersectionObserver')
+    assert 'if (staticViewport.matches) {' in page
+    assert page.index('if (staticViewport.matches) {') < page.index('const seen = new IntersectionObserver')
     assert 'mobileBox' not in page
     assert 'mobileViewport' not in page
