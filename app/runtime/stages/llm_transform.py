@@ -27,6 +27,7 @@ from .execution import (
     GroupMapper,
     Row,
     RowMapper,
+    RowMapTransformHandler,
     narrow_stage,
 )
 
@@ -34,6 +35,27 @@ from .execution import (
 # Runtime-assigned per chunk (0-based), so it is always a small unique int the
 # model just has to copy; it never touches the input primary key.
 _ROW_NUMBER_FIELD = "row_number"
+
+
+# Grain and order stay the driver's; what `batch_size` > 1 costs is per-row
+# INDEPENDENCE — the model sees every row in the group.
+class LLMTransformHandler(RowMapTransformHandler):
+    """The one type whose model call takes more than one row."""
+
+    def __init__(self, parallelism: int = 1) -> None:
+        super().__init__(
+            make_llm_row_mapper, parallelism, trims_output_to_declared=True
+        )
+
+    def group_size(self, workflow_stage: WorkflowStage) -> int:
+        return narrow_stage(workflow_stage, LLMTransformStage).llm.batch_size
+
+    def make_group_mapper(
+        self, workflow_stage: WorkflowStage, ctx: RunContext, src: pa.Table
+    ) -> GroupMapper:
+        if self.group_size(workflow_stage) == 1:
+            return super().make_group_mapper(workflow_stage, ctx, src)
+        return make_llm_batch_mapper(workflow_stage)
 
 
 # ── batch_size == 1: per-row path (grain + order + independence by construction) ──

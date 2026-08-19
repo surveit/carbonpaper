@@ -32,6 +32,7 @@ from app.runtime.run_log import (
 )
 from app.runtime.stage_output import StageOutput
 from app.runtime.stages import HANDLERS
+from app.runtime.stages import llm_transform
 from conftest import as_inputs, make_run_context, place_stage
 
 PROJECT = "run-log-tests"
@@ -173,7 +174,7 @@ def test_the_batched_path_logs_replayed_and_computed_rows_apart(tmp_path, monkey
 
         return map_group
 
-    monkeypatch.setattr(handler, "make_batch_mapper", fake_make_batch_mapper)
+    monkeypatch.setattr(llm_transform, "make_llm_batch_mapper", fake_make_batch_mapper)
     stage = _llm_stage(batch_size=2)
 
     seed_ctx, seed_log = _logged_ctx(tmp_path, "seed")

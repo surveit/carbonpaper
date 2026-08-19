@@ -21,7 +21,6 @@ from app.models.stage import (
     is_grain_and_order_preserving,
     max_declared_inputs,
 )
-from app.models.stages.llm_transform import LLMTransformStage
 
 from app.core.agent.usage import LlmUsage
 from app.core.frames import collapse_null_forms, is_null_form, list_table_rows
@@ -83,10 +82,6 @@ MakeRowMapper = Callable[[WorkflowStage, RunContext, pa.Table], RowMapper]
 # only a batched `llm_transform` does. A mapper knows nothing about caching:
 # which rows it is asked about is the driver's decision.
 GroupMapper = Callable[[Sequence[int], Sequence["Row"]], "Sequence[Row | None]"]
-
-# Builds the batch mapper for ONE stage execution. Unlike MakeRowMapper it is
-# handed no frame: the driver passes the rows to the mapper itself.
-MakeBatchMapper = Callable[[WorkflowStage], GroupMapper]
 
 # Internal column a row mapper attaches to a row it could not produce (e.g. an
 # llm_transform whose generation failed). The row driver collects these off the
@@ -161,13 +156,6 @@ class StageHandler(ABC):
     def preserves_grain_and_order(self) -> bool: ...
 
 
-class _GroupMapping(NamedTuple):
-    map_group: GroupMapper
-    # Tested for the PostMapRowMapper shape, so it is the mapper itself and not a
-    # wrapper around it — a wrapper would hide the protocol.
-    post_map: object
-
-
 class RowMapTransformHandler(StageHandler):
     def __init__(
         self,
@@ -191,41 +179,14 @@ class RowMapTransformHandler(StageHandler):
         """Rows per mapper call."""
         return 1
 
-    def make_group_mapping(
+    def make_group_mapper(
         self, workflow_stage: WorkflowStage, ctx: RunContext, src: pa.Table
-    ) -> _GroupMapping:
-        map_row = self.make_mapper(workflow_stage, ctx, src)
-        return _GroupMapping(_as_group_mapper(map_row), map_row)
+    ) -> GroupMapper:
+        return _RowsInGroupsOfOne(self.make_mapper(workflow_stage, ctx, src))
 
     @property
     def preserves_grain_and_order(self) -> bool:
         return not self.drops_rows
-
-
-class LLMTransformHandler(RowMapTransformHandler):
-    """batch_size > 1 keeps grain and order but NOT per-row independence: the model sees the group."""
-
-    def __init__(
-        self,
-        make_mapper: MakeRowMapper,
-        make_batch_mapper: MakeBatchMapper,
-        parallelism: int = 1,
-        trims_output_to_declared: bool = False,
-    ) -> None:
-        super().__init__(make_mapper, parallelism, trims_output_to_declared)
-        self.make_batch_mapper = make_batch_mapper
-
-    def group_size(self, workflow_stage: WorkflowStage) -> int:
-        return narrow_stage(workflow_stage, LLMTransformStage).llm.batch_size
-
-    def make_group_mapping(
-        self, workflow_stage: WorkflowStage, ctx: RunContext, src: pa.Table
-    ) -> _GroupMapping:
-        if self.group_size(workflow_stage) == 1:
-            return super().make_group_mapping(workflow_stage, ctx, src)
-        # A batched stage has no per-row mapper, so nothing can carry a post-map step.
-        batch = self.make_batch_mapper(workflow_stage)
-        return _GroupMapping(batch, batch)
 
 
 class SourceHandler(StageHandler):
@@ -310,12 +271,12 @@ def _run_row_mapper(
     stage = workflow_stage.stage
     src = inputs[workflow_stage.inputs[0].id]
     reads = stage.anchor_reads()
-    mapping = handler.make_group_mapping(workflow_stage, ctx, src)
+    map_group = handler.make_group_mapper(workflow_stage, ctx, src)
     # The ONE line of compute, optionally routed through the row cache and the
     # run log. Log outside cache, so a row the cache answers never reaches the
     # mapper's lifecycle wrapper and is logged as the replay it is.
     caching = _open_row_caching(workflow_stage, ctx)
-    compute = _log_group_lifecycle(mapping.map_group, ctx.run_log, stage.id)
+    compute = _log_group_lifecycle(map_group, ctx.run_log, stage.id)
     records = list_table_rows(src)
     seen = [_narrow_row(row, reads) for row in records]
     answered: list[Row | None] = [None] * len(seen)
@@ -339,7 +300,7 @@ def _run_row_mapper(
         # mapper's own keys win — that is what a rewrite or an add is.
         out_rows.append({**records[index], **result})
         kept_indices.append(index)
-    mapped = _finish_mapped_frame(out_rows, handler, mapping.post_map, workflow_stage, ctx)
+    mapped = _finish_mapped_frame(out_rows, handler, map_group, workflow_stage, ctx)
     # The driver, not the stage, knows which input ordinals survived.
     lineage = (
         kept_rows_lineage(workflow_stage.inputs[0].id, kept_indices)
@@ -353,12 +314,26 @@ def _run_row_mapper(
     )
 
 
-def _as_group_mapper(map_row: RowMapper) -> GroupMapper:
-    """A per-row mapper is a group mapper over groups of one."""
-    def map_group(indices: Sequence[int], rows: Sequence[Row]) -> Sequence[Row | None]:
-        return [map_row(row, index) for index, row in zip(indices, rows)]
+class _RowsInGroupsOfOne:
+    """A per-row mapper as a group mapper. An object, not a closure, so a post-map step survives."""
 
-    return map_group
+    def __init__(self, map_row: RowMapper) -> None:
+        self.map_row = map_row
+
+    def __call__(
+        self, indices: Sequence[int], rows: Sequence[Row]
+    ) -> Sequence[Row | None]:
+        return [self.map_row(row, index) for index, row in zip(indices, rows)]
+
+    def finish_mapped_rows(
+        self,
+        workflow_stage: WorkflowStage,
+        rows: Sequence[Row],
+        ctx: RunContext,
+        contribution: StageContribution,
+    ) -> None:
+        if isinstance(self.map_row, PostMapRowMapper):
+            self.map_row.finish_mapped_rows(workflow_stage, rows, ctx, contribution)
 
 
 # ── the fan-out ──────────────────────────────────────────────────────────────
@@ -612,14 +587,14 @@ def _finish_empty_result(
 def _finish_mapped_frame(
     rows: Sequence[Row],
     handler: RowMapTransformHandler,
-    post_map: object,
+    map_group: GroupMapper,
     workflow_stage: WorkflowStage,
     ctx: RunContext,
 ) -> _MappedRows:
     """`finish_mapped_rows` is the last step that sees an internal column: it runs before the strip."""
     contribution = _collect_internal_columns(rows)
-    if isinstance(post_map, PostMapRowMapper):
-        post_map.finish_mapped_rows(workflow_stage, rows, ctx, contribution)
+    if isinstance(map_group, PostMapRowMapper):
+        map_group.finish_mapped_rows(workflow_stage, rows, ctx, contribution)
     return _MappedRows(
         _strip_and_trim(rows, contribution, handler, workflow_stage), contribution
     )

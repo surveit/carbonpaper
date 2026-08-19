@@ -16,6 +16,7 @@ from app.models.stage import StageType
 from app.runtime.context import RunIdentity
 from app.runtime.stage_output import StageOutput
 from app.runtime.stages import HANDLERS
+from app.runtime.stages import llm_transform
 from app.runtime.stages.execution import (
     ROW_CACHED_KEY,
     ROW_ERROR_KEY,
@@ -654,8 +655,6 @@ def test_the_batched_key_matches_the_row_path_key(monkeypatch):
 
 def test_a_group_that_completed_stays_cached_when_a_later_group_crashes(monkeypatch):
     """Incremental durability is not batch-specific code: the record wrapper runs per group."""
-    handler = HANDLERS[StageType.llm_transform]
-
     def make_crashing_mapper(workflow_stage):
         def map_group(indices, rows):
             if 2 in indices:
@@ -664,7 +663,7 @@ def test_a_group_that_completed_stays_cached_when_a_later_group_crashes(monkeypa
 
         return map_group
 
-    monkeypatch.setattr(handler, "make_batch_mapper", make_crashing_mapper)
+    monkeypatch.setattr(llm_transform, "make_llm_batch_mapper", make_crashing_mapper)
     stage = _llm_stage(batch_size=2)
 
     with pytest.raises(RuntimeError, match="backend went away"):
