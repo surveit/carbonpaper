@@ -162,6 +162,7 @@
                 color: var(--card); background: var(--accent); border-radius: 8px;
                 text-decoration: none; transition: opacity .2s ease; }
   .start .cta:hover { opacity: .85; }
+  .mobile-frame { display: none; }
 
   /* No JS: every layer stacks and the page still reads top to bottom. */
   .nojs .layer, .nojs .fade, .nojs .pin, .nojs .over {
@@ -171,27 +172,37 @@
   .nojs .stage { display: block; }
   .nojs .step-inner { opacity: 1; }
 
-  @media (max-width: 1000px) {
-    body { overflow-x: hidden; }
-    .scrolly { grid-template-columns: 1fr; gap: 0; padding: 0 1.25rem; }
-    .stage-wrap { order: -1; position: sticky; top: 0;
-                  height: min(42svh, 26rem); z-index: 1; }
-    .stage { min-height: 0; height: 100%; grid-template-columns: 1fr; }
-    .mid { min-height: 0; height: 100%; }
-    .graph-hold { height: 100%; }
-    .graph-hold svg { width: 100%; height: 55%; position: absolute; top: .5rem; left: 0; }
-    .zone.q, .zone.out { display: none; }
-    .steps { padding: 0 0 22vh; }
-    .step { min-height: max(58svh, 20rem); display: flex; align-items: flex-start; padding: 2rem 0; }
-    .step-inner { position: sticky; top: calc(min(42svh, 26rem) + 1rem);
-                  background: var(--card); border: 1px solid var(--rule); border-radius: 10px;
-                  padding: 1.15rem 1.2rem; box-shadow: 0 12px 30px -20px rgba(36,39,43,.3); }
-    .pin { left: 50% !important; right: auto !important; top: auto !important; bottom: .75rem;
-           width: min(25rem, calc(100vw - 2.5rem)); max-width: none;
-           max-height: calc(42svh - 1.5rem); transform: translateX(-50%); overflow: auto; z-index: 2; }
-    .over { left: 50% !important; right: auto !important; top: 50% !important;
-            width: min(29rem, calc(100vw - 2.5rem)); transform: translate(-50%, -50%) !important; }
-    .over img { width: 100% !important; max-height: calc(42svh - 1.5rem); object-fit: contain; }
+  @media (max-width: 1199px) {
+    .scrolly { display: block; max-width: 42rem; padding: 0 1.25rem; }
+    .steps { padding: 1rem 0 4rem; }
+    .step { min-height: 0; display: block; padding: 1.5rem 0; }
+    .step-inner { opacity: 1; transition: none; }
+    .stage-wrap { display: none; }
+    .mobile-frame { display: block; margin-top: 1.2rem; }
+    .mobile-card { background: var(--card); border: 1px solid var(--rule); border-radius: 10px;
+                   padding: 1rem; box-shadow: 0 12px 30px -20px rgba(36,39,43,.3); }
+    .mobile-files { font-family: var(--sans); font-size: .72rem; color: var(--muted); }
+    .mobile-files span { display: block; border: 1px solid var(--rule); border-radius: 4px;
+                         padding: .25rem .4rem; margin-top: .35rem; }
+    .mobile-cloud { height: 9rem; position: relative; overflow: hidden; }
+    .mobile-cloud span { position: absolute; border-radius: 999px; background: #e6e9ee; }
+    .mobile-cloud span:nth-child(1) { width: 8rem; height: 8rem; left: 20%; top: 1rem; }
+    .mobile-cloud span:nth-child(2) { width: 6rem; height: 6rem; left: 42%; top: 2rem; background: #dfe3e9; }
+    .mobile-cloud span:nth-child(3) { width: 5rem; height: 5rem; left: 58%; top: 3rem; background: #eef0f4; }
+    .mobile-value { text-align: center; font-family: var(--sans); font-size: 2.6rem; font-weight: 600;
+                    font-variant-numeric: tabular-nums; color: var(--accent); }
+    .mobile-value small { display: block; margin-top: .4rem; font-size: .72rem; font-weight: 500;
+                          letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+    .mobile-pipeline { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+    .mobile-pipeline span { padding: .55rem .6rem; border: 1px solid #787d86; border-radius: 6px;
+                            font-family: var(--sans); font-size: .78rem; text-align: center; }
+    .mobile-pipeline span.active { border-color: var(--accent); background: #e8f1fb; }
+    .mobile-note { font-family: var(--sans); font-size: .82rem; line-height: 1.55; color: var(--muted); }
+    .mobile-trace { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center;
+                    font-family: var(--mono); font-size: .72rem; color: var(--muted); }
+    .mobile-trace b { color: var(--ink); }
+    .mobile-packet { font-family: var(--sans); font-size: .8rem; line-height: 1.8; color: var(--muted); }
+    .mobile-packet b { display: block; color: var(--ink); }
     header h1 { font-size: 1.9rem; }
   }
 
@@ -214,51 +225,84 @@
     <section class="step" data-step="1"><div class="step-inner">
       <p class="say">You hand Claude 45,061 lobbying filings and ask what firms spent lobbying
       on artificial intelligence.</p>
+      <div class="mobile-frame"><div class="mobile-card mobile-files">
+        <span>lda_data_Q1_2026.xlsx</span><span>lda_data_Q2_2026.xlsx</span>
+      </div></div>
     </div></section>
 
     <section class="step" data-step="2"><div class="step-inner">
       <p class="say">Claude thought for 7m30s.</p>
+      <div class="mobile-frame"><div class="mobile-card mobile-cloud"><span></span><span></span><span></span></div></div>
     </div></section>
 
     <section class="step" data-step="3"><div class="step-inner">
       <p class="say">The answer is $499 million.<sup>*</sup></p>
+      <div class="mobile-frame"><div class="mobile-card mobile-value">$499m<small>the model said</small></div></div>
     </div></section>
 
     <section class="step" data-step="4"><div class="step-inner">
       <p class="say">Great. It even says what it considered.</p>
       <p class="sub">But not a publishable number. You can't check all its assumptions. The
       most capable tool ever created, and it runs out of your hands.</p>
+      <div class="mobile-frame"><div class="mobile-card mobile-cloud"><span></span><span></span><span></span></div></div>
     </div></section>
 
     <section class="step" data-step="5"><div class="step-inner">
       <p class="say">Take it back. Carbon Paper turns a conversation into a program that runs
       against your original data.</p>
+      <div class="mobile-frame"><div class="mobile-card mobile-pipeline">
+        <span>Load filings</span><span>Clean income</span><span>Is it about AI?</span><span>Review</span>
+        <span>Split in-house</span><span>Outside firms</span><span>In-house lobbying</span><span>Publish results</span>
+      </div></div>
     </div></section>
 
     <section class="step" data-step="6"><div class="step-inner">
       <p class="say">Each step is a small pre-defined block, and says in plain English what it
       does...</p>
+      <div class="mobile-frame"><div class="mobile-card">
+        <div class="mobile-pipeline"><span>Load filings</span><span class="active">Clean income</span><span>Is it about AI?</span><span>Review</span></div>
+        <p class="mobile-note">Reads income and expenses as plain dollar numbers.</p>
+      </div></div>
     </div></section>
 
     <section class="step" data-step="7"><div class="step-inner">
       <p class="say">and exactly what it changed.</p>
+      <div class="mobile-frame"><div class="mobile-card">
+        <div class="mobile-pipeline"><span>Load filings</span><span class="active">Clean income</span><span>Is it about AI?</span><span>Review</span></div>
+        <p class="mobile-note">Adds numeric <code>income_usd</code> and <code>expenses_usd</code> columns without replacing the reported text.</p>
+      </div></div>
     </div></section>
 
     <section class="step" data-step="8"><div class="step-inner">
       <p class="say">Only one step needs an AI now. The rest is 100% deterministic.</p>
+      <div class="mobile-frame"><div class="mobile-card">
+        <div class="mobile-pipeline"><span>Clean income</span><span class="active">Is it about AI?</span><span>Review</span><span>Publish results</span></div>
+        <p class="mobile-note">One prompt decides whether a filing is primarily related to artificial intelligence.</p>
+      </div></div>
     </div></section>
 
     <section class="step" data-step="9"><div class="step-inner">
       <p class="say">Same data with different assumptions gives a different number.</p>
+      <div class="mobile-frame"><div class="mobile-card">
+        <div class="mobile-pipeline"><span>Load filings</span><span>Clean income</span><span>Review</span><span>Publish results</span></div>
+        <div class="mobile-value">$42.0m<small>the run computed</small></div>
+      </div></div>
     </div></section>
 
     <section class="step" data-step="10"><div class="step-inner">
       <p class="say">Every figure traces back to the row in the source data.</p>
+      <div class="mobile-frame"><div class="mobile-card mobile-trace">
+        <b>input_q1_filings row 74</b><span>→</span><span>10 recorded steps</span><span>→</span><b>published claim</b>
+      </div></div>
     </div></section>
 
     <section class="step" data-step="11"><div class="step-inner">
       <p class="say">Export the whole run and hand it to your fact-checker. It opens
       without Carbon Paper.</p>
+      <div class="mobile-frame"><div class="mobile-card mobile-packet">
+        <b>ai_lobbying-20260810T152339/</b>
+        <span>index.html · inputs/ · data/ · stages/ · methodology.md · workflow.json · manifest.json · events.jsonl · checksums.txt</span>
+      </div></div>
     </div></section>
   </div>
 
@@ -475,6 +519,9 @@ workflow you can run again.</p>
 </section>
 
 <script>
+const staticViewport = window.matchMedia('(max-width: 1199px)');
+
+if (!staticViewport.matches) {
 document.body.classList.remove('nojs');
 
 const steps = [...document.querySelectorAll('.step')];
@@ -490,9 +537,6 @@ const zoneOut = document.getElementById('zone-out');
 
 const ALL_NODES = [...nodes.keys()];
 const ALL_EDGES = [...edges.keys()];
-const DEFAULT_PIPE_VIEW_BOX = '0 0 1180 250';
-const mobileViewport = window.matchMedia('(max-width: 1000px)');
-let currentStep = 1;
 
 // Per step: what the middle holds, which figure is in the right-hand slot, what is lit,
 // what is pinned. `recede` dims the flanks so a detail step gets the whole reader.
@@ -502,9 +546,9 @@ const SCENES = {
   3:  {ask: 1, layer: 'cloud', out: 'said'},
   4:  {ask: 1, layer: 'cloud', out: 'said'},
   5:  {ask: 1, layer: 'graph', out: 'said', recedeOut: 1},
-  6:  {ask: 1, layer: 'graph', out: 'said', recede: 1, nodes: ['clean'], pin: '6', mobileBox: '140 54 290 135'},
-  7:  {ask: 1, layer: 'graph', out: 'said', recede: 1, nodes: ['clean'], pin: '7', mobileBox: '140 54 290 135'},
-  8:  {ask: 1, layer: 'graph', out: 'said', recede: 1, nodes: ['llm'], pin: '8', mobileBox: '310 54 290 135'},
+  6:  {ask: 1, layer: 'graph', out: 'said', recede: 1, nodes: ['clean'], pin: '6'},
+  7:  {ask: 1, layer: 'graph', out: 'said', recede: 1, nodes: ['clean'], pin: '7'},
+  8:  {ask: 1, layer: 'graph', out: 'said', recede: 1, nodes: ['llm'], pin: '8'},
   9:  {ask: 1, layer: 'graph', out: 'ran'},
   10: {ask: 1, layer: 'graph', out: 'ran', nodes: ALL_NODES, edges: ALL_EDGES, over: '10'},
   11: {ask: 1, layer: 'graph', out: 'ran', recede: 1, over: '11'},
@@ -513,10 +557,6 @@ const SCENES = {
 function show(step) {
   const scene = SCENES[step];
   if (!scene) return;
-  currentStep = step;
-  pipe.setAttribute('viewBox', mobileViewport.matches && scene.mobileBox
-    ? scene.mobileBox
-    : DEFAULT_PIPE_VIEW_BOX);
   for (const [name, el] of layers) el.classList.toggle('on', name === scene.layer);
   for (const [name, el] of pins) el.classList.toggle('on', name === scene.pin);
   for (const [name, el] of overs) el.classList.toggle('on', name === scene.over);
@@ -542,8 +582,6 @@ function show(step) {
   steps.forEach(el => el.classList.toggle('is-active', el.dataset.step === String(step)));
 }
 
-mobileViewport.addEventListener('change', () => show(currentStep));
-
 const seen = new IntersectionObserver(entries => {
   for (const entry of entries) if (entry.isIntersecting) show(Number(entry.target.dataset.step));
 }, {rootMargin: '-45% 0px -45% 0px'});
@@ -556,6 +594,7 @@ if (SCENES[asked]) {
 } else {
   steps.forEach(el => seen.observe(el));
   show(1);
+}
 }
 </script>
 </body>
