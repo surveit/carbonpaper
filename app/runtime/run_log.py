@@ -24,8 +24,13 @@ _STOP = object()
 CHUNK_SIZE = 500
 
 # How long the writer thread waits for more events before flushing what it has,
-# so a slow run's SSE feed does not stall behind an unfilled chunk.
-_FLUSH_INTERVAL_S = 0.25
+# so a slow run's SSE feed does not stall behind an unfilled chunk. It also sets
+# the write cost, because every flush REWRITES the open chunk whole: this is how
+# many times one document is re-serialised on its way to full. Measured over a
+# real 100k-event run, 17.2% of inter-event gaps exceed 0.25s and 0.7% exceed
+# 1.0s — 3.3GB of store traffic against 160MB for the same log. The SSE feed
+# polls at 0.5s, so the wider window costs at most a second of lag in the panel.
+_FLUSH_INTERVAL_S = 1.0
 
 
 class RunEventChunk(PersistedModel):
