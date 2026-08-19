@@ -5,13 +5,27 @@ import asyncio
 import json
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
-from typing import Any
+from typing import Any, Protocol
 
 from app.core.agent.errors import CodexProtocolError as CodexProtocolError
 
 
 type TypeUnsafeCodexJsonObject = dict[str, Any]
 type CodexRequestId = int | str
+
+
+_PROCESS_SHUTDOWN_TIMEOUT_S = 1
+
+
+class _ProcessToStop(Protocol):
+    @property
+    def returncode(self) -> int | None: ...
+
+    def terminate(self) -> None: ...
+
+    def kill(self) -> None: ...
+
+    async def wait(self) -> int: ...
 
 
 class CodexAppServer:
@@ -81,9 +95,7 @@ class CodexAppServer:
         if process.stdin is not None:
             process.stdin.close()
         if process.returncode is None:
-            with suppress(ProcessLookupError):
-                process.terminate()
-        await process.wait()
+            await _stop_process(process)
         await self._stop_reader()
         self._fail_waiting(CodexProtocolError("Codex app-server closed"))
         self._process = None
@@ -186,3 +198,15 @@ def _resolve_response(
         future.set_exception(CodexProtocolError("Codex app-server response has no object result"))
         return
     future.set_result(result)
+
+
+async def _stop_process(process: _ProcessToStop) -> None:
+    with suppress(ProcessLookupError):
+        process.terminate()
+    try:
+        await asyncio.wait_for(process.wait(), timeout=_PROCESS_SHUTDOWN_TIMEOUT_S)
+    except TimeoutError:
+        with suppress(ProcessLookupError):
+            process.kill()
+        with suppress(TimeoutError):
+            await asyncio.wait_for(process.wait(), timeout=_PROCESS_SHUTDOWN_TIMEOUT_S)

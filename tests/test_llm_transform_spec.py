@@ -96,3 +96,31 @@ def test_timeout_with_empty_message_is_captured_and_labeled(monkeypatch):
     out = _run(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, ctx)
     assert len(rows_of(out)) == 1                                    # not raised; stage completes
     assert contribution_of(out).row_errors == [{"row": 0, "message": "TimeoutError"}]
+
+
+def test_codex_model_refuses_batch_execution_in_stage_config():
+    with pytest.raises(
+        ValidationError,
+        match="gpt-5.6-terra does not support llm.batch_size on the codex backend",
+    ):
+        parse_stage({
+            "id": "score",
+            "description": "score",
+            "type": "llm_transform",
+            "inputs": [{"id": "load"}],
+            "signature": {
+                "form": "extends",
+                "reads": [
+                    {
+                        "input": "load",
+                        "columns": [{"name": "text", "type": "str", "nullable": True}],
+                    },
+                ],
+                "adds": [{"name": "score", "type": "int", "nullable": False}],
+            },
+            "llm": {
+                "prompt_template": "Rate: {text}",
+                "model": "gpt-5.6-terra",
+                "batch_size": 2,
+            },
+        })

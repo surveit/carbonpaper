@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from app.core.agent.usage import LlmUsage
 from app.core.stage_cache import (
     ReadOnlyStageCache,
     StageCache,
@@ -25,7 +26,7 @@ from app.runtime.stages.execution import (
     _order_by_input_position,
 )
 from app.runtime.stages.llm_transform import run_llm_batches
-from conftest import as_inputs, make_run_context, place_stage, rows_of
+from conftest import as_inputs, contribution_of, make_run_context, place_stage, rows_of
 
 PROJECT = "row-cache-tests"
 
@@ -51,7 +52,12 @@ def _row_stage(code: str = _DOUBLING_CODE, *, cache: bool = True) -> Stage:
     })
 
 
-def _llm_stage(*, batch_size: int = 1, instructions: str = "score it") -> Stage:
+def _llm_stage(
+    *,
+    batch_size: int = 1,
+    instructions: str = "score it",
+    model: str = "claude-haiku-4-5",
+) -> Stage:
     return parse_stage({
         "id": "score", "description": "Score", "type": "llm_transform",
         "inputs": [{"id": "src"}],
@@ -61,7 +67,7 @@ def _llm_stage(*, batch_size: int = 1, instructions: str = "score it") -> Stage:
                        "columns": [{"name": "x", "type": "int", "nullable": True}]}],
             "adds": [{"name": "verdict", "type": "str", "nullable": True}]},
         "llm": {"prompt_instructions": instructions, "prompt_data_template": "{x}",
-                "batch_size": batch_size},
+                "batch_size": batch_size, "model": model},
     })
 
 
@@ -321,6 +327,35 @@ def test_a_failed_llm_row_is_never_recorded(monkeypatch):
     stage = _llm_stage()
     _run(stage, _src([1]), _ctx(run_id="run1"))
     assert _entries(stage) == []
+
+
+def test_a_codex_row_records_usage_on_the_computing_run_only(monkeypatch):
+    def fake_call_llm(stage_id, llm, row, reply_model, usage_out):
+        usage_out.append(
+            LlmUsage(
+                input_tokens=None,
+                output_tokens=None,
+                cost_usd=None,
+                calls=1,
+                model="gpt-5.6-terra",
+            )
+        )
+        return {"verdict": f"v{row['x']}"}
+
+    monkeypatch.setattr("app.runtime.stages.llm_transform.call_llm", fake_call_llm)
+    stage = _llm_stage(model="gpt-5.6-terra")
+
+    first = _run(stage, _src([1]), _ctx(run_id="run1"))
+    assert contribution_of(first).llm_usage == LlmUsage(
+        input_tokens=None,
+        output_tokens=None,
+        cost_usd=None,
+        calls=1,
+        model="gpt-5.6-terra",
+    )
+
+    second = _run(stage, _src([1]), _ctx(run_id="run2"))
+    assert contribution_of(second).llm_usage is None
 
 
 # ── llm_transform, batch_size > 1 (the batched path bypasses the row driver) ─

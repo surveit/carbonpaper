@@ -4,6 +4,7 @@ so the id a stage names would stop identifying the model that actually answered.
 deployment narrows or extends this list; the workflow contract (app/models) references it
 so a stage can only name a model the deployment offers."""
 from enum import Enum
+from typing import Literal
 
 
 class LLMModel(str, Enum):
@@ -11,6 +12,11 @@ class LLMModel(str, Enum):
     claude_sonnet_4_6 = "claude-sonnet-4-6"
     claude_sonnet_5 = "claude-sonnet-5"
     claude_opus_5 = "claude-opus-5"
+    gpt_5_6_terra = "gpt-5.6-terra"
+
+    @property
+    def backend(self) -> Literal["claude", "codex"]:
+        return "codex" if self is LLMModel.gpt_5_6_terra else "claude"
 
     def __str__(self) -> str:
         return self.value

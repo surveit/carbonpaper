@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 import app.runtime.stages.llm_transform as lt
+import app.runtime.llm as runtime_llm
 from app.core.agent.usage import LlmUsage
 from app.models import parse_stage, Stage
 from app.models.stage import StageType
@@ -25,6 +26,31 @@ def test_summed_of_nothing_is_the_zero_instance():
     assert LlmUsage.summed([]) == LlmUsage()
 
 
+def test_summed_keeps_each_unknown_called_metric_null():
+    known = LlmUsage(
+        input_tokens=10,
+        output_tokens=4,
+        cost_usd=0.001,
+        calls=1,
+        model="gpt-5.6-terra",
+    )
+    unknown = LlmUsage(
+        input_tokens=None,
+        output_tokens=None,
+        cost_usd=None,
+        calls=1,
+        model="gpt-5.6-terra",
+    )
+
+    assert LlmUsage.summed([known, unknown]) == LlmUsage(
+        input_tokens=None,
+        output_tokens=None,
+        cost_usd=None,
+        calls=2,
+        model="gpt-5.6-terra",
+    )
+
+
 def test_the_model_survives_being_summed_with_the_zero_usages_beside_it():
     # The batch path lands a chunk's whole usage on its first row and zeroes the rest.
     paid = LlmUsage(cost_usd=0.01, calls=1, model="claude-haiku-4-5")
@@ -38,7 +64,7 @@ def test_totalling_two_models_raises_rather_than_keeping_one():
         LlmUsage.summed([haiku, opus])
 
 
-def _llm_stage() -> Stage:
+def _llm_stage(*, model: str | None = None, max_retries: int = 2) -> Stage:
     return parse_stage({
         "id": "classify", "description": "Classify", "type": "llm_transform",
         "inputs": [{"id": "load"}],
@@ -52,7 +78,11 @@ def _llm_stage() -> Stage:
             ],
             "adds": [{"name": "score", "type": "int", "nullable": True}],
         },
-        "llm": {"prompt_template": "{text}"},
+        "llm": {
+            "prompt_template": "{text}",
+            "model": model,
+            "max_retries": max_retries,
+        },
     })
 
 
@@ -160,3 +190,50 @@ def test_failed_row_still_records_the_tokens_it_spent(monkeypatch):
             {"name": "text", "type": "str", "nullable": True}]}), as_inputs({"load": pd.DataFrame({"id": ["r1"], "text": ["a"]})}), ctx)
     assert contribution_of(out).llm_usage == LlmUsage(
         input_tokens=8, output_tokens=0, cost_usd=0.0005, calls=1)
+
+
+def test_failed_codex_row_records_each_started_retry_with_unknown_metrics(monkeypatch):
+    def fail_after_started_calls(*_args, usage_out=None, **_kwargs):
+        assert usage_out is not None
+        usage_out.extend(
+            [
+                LlmUsage(
+                    input_tokens=None,
+                    output_tokens=None,
+                    cost_usd=None,
+                    calls=1,
+                    model="gpt-5.6-terra",
+                ),
+                LlmUsage(
+                    input_tokens=None,
+                    output_tokens=None,
+                    cost_usd=None,
+                    calls=1,
+                    model="gpt-5.6-terra",
+                ),
+            ]
+        )
+        raise RuntimeError("all retries failed")
+
+    monkeypatch.setattr(runtime_llm, "call_codex_transform", fail_after_started_calls)
+    out = HANDLERS[StageType.llm_transform].execute(
+        place_stage(
+            _llm_stage(model="gpt-5.6-terra", max_retries=1),
+            load={
+                "columns": [
+                    {"name": "id", "type": "str", "nullable": True},
+                    {"name": "text", "type": "str", "nullable": True},
+                ]
+            },
+        ),
+        as_inputs({"load": pd.DataFrame({"id": ["r1"], "text": ["a"]})}),
+        make_run_context(),
+    )
+
+    assert contribution_of(out).llm_usage == LlmUsage(
+        input_tokens=None,
+        output_tokens=None,
+        cost_usd=None,
+        calls=2,
+        model="gpt-5.6-terra",
+    )
