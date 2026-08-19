@@ -431,11 +431,14 @@
     let hasResumeMarker = RESUMING;
     const $ = id => document.getElementById(id);
 
-    function rerenderWorkflow(src) {
+    async function rerenderWorkflow(src) {
       if (!mermaidEl || !window.mermaid) return;
       mermaidEl.removeAttribute('data-processed'); mermaidEl.textContent = src;
       try {
-        mermaid.run({ nodes: [mermaidEl] });
+        // mermaid.run() is async — it inserts a placeholder svg synchronously and
+        // replaces it with the finished one later. Awaiting it before _refit() is
+        // what makes _refit() grab THAT element, not one about to be thrown away.
+        await mermaid.run({ nodes: [mermaidEl] });
         // The svg is new: re-measure it, then put the outline back on the open stage.
         if (viewport && viewport._refit) viewport._refit();
         const open = location.hash ? decodeURIComponent(location.hash.slice(1)) : '';
@@ -471,7 +474,7 @@
       paintStrip(d.stages, h.tallies);
 
       const sig = d.stages.map(s => s.status).join(',');
-      if (sig !== lastSig) { lastSig = sig; rerenderWorkflow(d.mermaid); }
+      if (sig !== lastSig) { lastSig = sig; await rerenderWorkflow(d.mermaid); }
       if (!d.terminal) {
         sawRunning = true;
         if (hasResumeMarker) {
