@@ -66,6 +66,27 @@ SYSTEM_PROMPT = (
 )
 
 
+class Deadline:
+    """One unit of work's whole time budget. Every retry inside it spends the same clock."""
+
+    def __init__(self, budget_s: float) -> None:
+        self.budget_s = budget_s
+        self._expires_at = time.monotonic() + budget_s
+
+    def seconds_left(self) -> float:
+        return self._expires_at - time.monotonic()
+
+
+def open_row_deadline(llm_config: LLMConfig) -> Deadline:
+    """A researching row searches and reads before it can answer, so it runs on its own clock."""
+    return Deadline(RESEARCH_TIMEOUT_S if llm_config.tools else DEFAULT_TIMEOUT_S)
+
+
+def open_chunk_deadline() -> Deadline:
+    """No research budget: LLMConfig refuses tools with batch_size > 1."""
+    return Deadline(DEFAULT_TIMEOUT_S)
+
+
 def render_prompt(template: str, row: dict[str, Any]) -> str:
     try:
         return template.format_map(row)
@@ -92,8 +113,8 @@ def call_llm(
     model_name = str(model or llm_config.model or DEFAULT_MODEL)
     return _run_agent(
         _compose_system(llm_config.prompt_instructions), task, reply_model, model_name,
-        llm_config.max_retries, usage_out, tools=llm_config.tools,
-        thinking=llm_config.thinking,
+        llm_config.max_retries, usage_out, open_row_deadline(llm_config),
+        tools=llm_config.tools, thinking=llm_config.thinking,
     )
 
 
@@ -104,14 +125,16 @@ def call_llm_batch(
     instructions: str,
     task: str,
     reply_schema: type[BaseModel],
+    deadline: Deadline,
     model: str | None = None,
     usage_out: list[LlmUsage] | None = None,
 ) -> dict[str, Any]:
+    """`deadline` is the CHUNK's, not this call's: its re-asks share one budget."""
     model_name = str(model or llm_config.model or DEFAULT_MODEL)
     # No tools by construction: LLMConfig refuses tools with batch_size > 1.
     return _run_agent(
         _compose_system(instructions), task, reply_schema, model_name,
-        llm_config.max_retries, usage_out, thinking=llm_config.thinking,
+        llm_config.max_retries, usage_out, deadline, thinking=llm_config.thinking,
     )
 
 
@@ -132,9 +155,11 @@ def _run_agent(
     model_name: str,
     max_retries: int,
     usage_out: list[LlmUsage] | None,
+    deadline: Deadline,
     tools: list[str] | None = None,
     thinking: ThinkingMode | None = None,
 ) -> dict[str, Any]:
+    """Retries SHARE `deadline`: a slow failure spends the budget a fast one leaves for a re-try."""
     require_agent_backend()
     emit_llm_detail(LLM_PROMPT, text=task)
     # Captured HERE, on the caller's own thread, so it survives the thread hop
@@ -142,9 +167,11 @@ def _run_agent(
     forward = _forward_agent_events(current_detail_sink())
     attempts = max(1, (max_retries or 0) + 1)
     researching = bool(tools)
-    timeout_s = RESEARCH_TIMEOUT_S if researching else DEFAULT_TIMEOUT_S
     last_exc: Exception | None = None
     for attempt in range(attempts):
+        timeout_s = deadline.seconds_left()
+        if timeout_s <= 0:
+            break
         agent: Agent[BaseModel] = Agent(
             system_prompt=system_prompt,
             target_schema=target_schema,
@@ -165,9 +192,25 @@ def _run_agent(
             emit_llm_detail(LLM_ERROR, text=str(exc) or type(exc).__name__)
             last_exc = exc
             if attempt + 1 < attempts:
-                time.sleep(min(4.0, 1.0 * (attempt + 1)))
-    assert last_exc is not None  # attempts >= 1, so the loop ran and set this
-    raise last_exc
+                _sleep_before_retry(attempt, deadline)
+    raise _describe_exhausted_budget(last_exc, deadline)
+
+
+def _sleep_before_retry(attempt: int, deadline: Deadline) -> None:
+    """Bounded by what is left: sleeping past the deadline spends the budget on nothing."""
+    time.sleep(max(0.0, min(4.0, 1.0 * (attempt + 1), deadline.seconds_left())))
+
+
+def _describe_exhausted_budget(
+    last_exc: Exception | None, deadline: Deadline
+) -> Exception:
+    """A budget spent without one attempt completing is a timeout, not a silent success."""
+    if last_exc is not None:
+        return last_exc
+    return LLMError(
+        f"the {deadline.budget_s:.0f}s budget for this call was already spent before "
+        "an attempt could run"
+    )
 
 
 def _forward_agent_events(

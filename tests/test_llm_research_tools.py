@@ -111,7 +111,8 @@ def test_research_row_gets_research_budget(monkeypatch):
     )
     assert seen["builtin_tools"] == ["WebSearch"]
     assert seen["max_turns"] == RESEARCH_MAX_TURNS
-    assert seen["timeout"] == RESEARCH_TIMEOUT_S
+    # `wait_for` gets what is LEFT of the row's budget, so it is a hair under it.
+    assert seen["timeout"] == pytest.approx(RESEARCH_TIMEOUT_S, abs=1.0)
 
 
 def test_plain_row_keeps_the_cheap_budget(monkeypatch):
@@ -119,7 +120,7 @@ def test_plain_row_keeps_the_cheap_budget(monkeypatch):
     runtime_llm.call_llm("s1", _config(), {"q": "2+2?"}, reply_model=Reply)
     assert seen["builtin_tools"] == []
     assert seen["max_turns"] is None
-    assert seen["timeout"] == DEFAULT_TIMEOUT_S
+    assert seen["timeout"] == pytest.approx(DEFAULT_TIMEOUT_S, abs=1.0)
 
 
 # ── plumbing: how much the model reasons ─────────────────────────────────────

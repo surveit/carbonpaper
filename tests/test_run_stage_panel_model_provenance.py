@@ -61,7 +61,7 @@ def _build_project(
     add_stage(pdir, _judge_stage())
     workspace.set_projects_dir(tmp_path)
 
-    def fake_call_llm_batch(stage_id, llm, *, instructions, task, reply_schema, usage_out):
+    def fake_call_llm_batch(stage_id, llm, *, instructions, task, reply_schema, usage_out, deadline):
         usage_out.append(LlmUsage(cost_usd=0.25, calls=1, model=answered))
         return {"results": [{"row_number": n, "verdict": f"v{n}"}
                             for n in range(task.count("### item "))]}

@@ -20,7 +20,7 @@ from app.models.schema import Column, TableSchema
 from app.models.stages.llm_transform import LLMTransformStage
 
 from ..context import RunContext
-from ..llm import call_llm, call_llm_batch, render_prompt
+from ..llm import Deadline, call_llm, call_llm_batch, open_chunk_deadline, render_prompt
 from ..run_log import RunLog, bind_detail_sink, unbind_detail_sink
 
 from .execution import ROW_ERROR_KEY, ROW_USAGE_KEY, Row, RowMapper, narrow_stage
@@ -170,7 +170,7 @@ def _process_chunk(
     usages: list[LlmUsage] = []
     try:
         by_number, problem = _ask_until_reply_rejoins(
-            stage_id, llm, batch_reply_schema, chunk, usages)
+            stage_id, llm, batch_reply_schema, chunk, usages, open_chunk_deadline())
     except Exception as exc:  # noqa: BLE001 — the chunk's supervisor, mirroring the
         # per-row one: a backend that never answered fails THESE rows, not the stage.
         return _emit_failed(start, chunk, usages, str(exc) or type(exc).__name__)
@@ -185,19 +185,22 @@ def _ask_until_reply_rejoins(
     batch_reply_schema: type,
     chunk: list[Row],
     usages: list[LlmUsage],
+    deadline: Deadline,
 ) -> tuple[dict[int, dict[str, Any]] | None, str]:
     """Re-asks ONLY a reply the runtime could not rejoin — the one defect no reply schema can state."""
     n = len(chunk)
     problem = "no reply produced"
     attempts = max(1, (llm.max_retries or 0) + 1)
     for attempt in range(attempts):
+        if deadline.seconds_left() <= 0:
+            return None, f"the chunk's {deadline.budget_s:.0f}s budget ran out; last: {problem}"
         task = _render_batch_task(llm.prompt_data_template, chunk, correction=problem if attempt else None)
         # A raise propagates: `call_llm_batch` has already retried the backend
         # `max_retries` times, and re-asking here would square that budget while
         # telling the model its reply was rejected — which it never made.
         reply = call_llm_batch(
             stage_id, llm, instructions=llm.prompt_instructions, task=task,
-            reply_schema=batch_reply_schema, usage_out=usages,
+            reply_schema=batch_reply_schema, usage_out=usages, deadline=deadline,
         )
         by_number, problem = _validate_batch_reply(reply.get("results", []), n)
         if by_number is not None:

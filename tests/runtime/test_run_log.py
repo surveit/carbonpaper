@@ -142,7 +142,7 @@ def test_a_raising_mapper_is_logged_before_it_propagates(tmp_path):
 def test_a_batched_chunk_binds_the_input_rows_it_actually_covers(tmp_path, monkeypatch):
     """Attributed to the input positions the shape handed down, not offsets within the chunk."""
     def fake_call_llm_batch(stage_id, llm_config, *, instructions, task,
-                            reply_schema, model=None, usage_out=None):
+                            reply_schema, deadline, model=None, usage_out=None):
         emit_llm_detail(LLM_PROMPT, text=task)
         return {"results": [{"row_number": 0, "verdict": "a"},
                             {"row_number": 1, "verdict": "b"}]}

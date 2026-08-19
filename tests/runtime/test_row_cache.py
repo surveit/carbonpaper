@@ -327,7 +327,7 @@ def test_a_failed_llm_row_is_never_recorded(monkeypatch):
 
 
 def _stub_call_llm_batch(monkeypatch, batches: list[list[int]]) -> None:
-    def fake_call_llm_batch(stage_id, llm, instructions, task, reply_schema, usage_out):
+    def fake_call_llm_batch(stage_id, llm, instructions, task, reply_schema, usage_out, deadline):
         shown = [
             int(block.splitlines()[1])
             for block in task.split("### item ")[1:]
@@ -380,7 +380,7 @@ def test_batched_misses_that_were_not_adjacent_rejoin_their_own_rows(monkeypatch
 
 
 def test_a_failed_batch_records_nothing(monkeypatch):
-    def failing_call_llm_batch(stage_id, llm, instructions, task, reply_schema, usage_out):
+    def failing_call_llm_batch(stage_id, llm, instructions, task, reply_schema, usage_out, deadline):
         raise RuntimeError("model down")
 
     monkeypatch.setattr(

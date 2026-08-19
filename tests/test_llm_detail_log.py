@@ -112,7 +112,7 @@ def test_a_batched_call_logs_its_chunk_prompt_against_every_row_it_covers(
         llm_module.call_llm_batch(
             "classify", LLMConfig(prompt_data_template="{text}"),
             instructions="score them", task="0. a\n1. b\n2. c",
-            reply_schema=_Reply,
+            reply_schema=_Reply, deadline=llm_module.open_chunk_deadline(),
         )
     finally:
         unbind_detail_sink(token)
