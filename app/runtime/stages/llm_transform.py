@@ -1,34 +1,57 @@
-"""Execution for the llm_transform stage type, split by `batch_size`. Both paths
-hold grain and order; only the per-row path (== 1) also holds per-row
-INDEPENDENCE - a batched call (> 1) shows the model every row in the chunk.
-Replies rejoin by a batch-local 0-based row number the runtime assigns, never
-the input primary key (which the runtime does not require to exist or be unique).
+"""Execution for the llm_transform stage type, split by `batch_size`. Grain and
+order are the driver's; what is lost at > 1 is per-row INDEPENDENCE — a batched
+call shows the model every row in the group. Replies rejoin by a group-local
+0-based row number the runtime assigns, never the input primary key (which the
+runtime does not require to exist or be unique).
 """
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable
+from collections.abc import Sequence
+from typing import Any
 
 import pyarrow as pa
 from pydantic import create_model
 
 from app.core.agent.usage import LlmUsage
-from app.core.frames import list_table_rows
 from app.models import WorkflowStage
 from app.models.schema import Column, TableSchema
 from app.models.stages.llm_transform import LLMTransformStage
 
 from ..context import RunContext
 from ..llm import call_llm, call_llm_batch, render_prompt
-from ..run_log import RunLog, bind_detail_sink, unbind_detail_sink
 
-from .execution import ROW_ERROR_KEY, ROW_USAGE_KEY, Row, RowMapper, narrow_stage
+from .execution import (
+    ROW_ERROR_KEY,
+    ROW_USAGE_KEY,
+    GroupMapper,
+    Row,
+    RowMapper,
+    RowMapTransformHandler,
+    narrow_stage,
+)
 
 # The reply field carrying a batched result's item number — the rejoin handle.
 # Runtime-assigned per chunk (0-based), so it is always a small unique int the
 # model just has to copy; it never touches the input primary key.
 _ROW_NUMBER_FIELD = "row_number"
+
+
+class LLMTransformHandler(RowMapTransformHandler):
+    def __init__(self, parallelism: int = 1) -> None:
+        super().__init__(
+            make_llm_row_mapper, parallelism, trims_output_to_declared=True
+        )
+
+    def group_size(self, workflow_stage: WorkflowStage) -> int:
+        return narrow_stage(workflow_stage, LLMTransformStage).llm.batch_size
+
+    def make_group_mapper(
+        self, workflow_stage: WorkflowStage, ctx: RunContext, src: pa.Table
+    ) -> GroupMapper:
+        if self.group_size(workflow_stage) == 1:
+            return super().make_group_mapper(workflow_stage, ctx, src)
+        return make_llm_batch_mapper(workflow_stage)
 
 
 # ── batch_size == 1: per-row path (grain + order + independence by construction) ──
@@ -63,90 +86,15 @@ def make_llm_row_mapper(
 
 
 # ── batch_size > 1: batched path (grain + order preserved and VERIFIED) ──
-def run_llm_batches(
-    workflow_stage: WorkflowStage,
-    inputs: dict[str, pa.Table],
-    ctx: RunContext,
-    parallelism: int,
-    positions: list[int],
-) -> list[Row]:
+def make_llm_batch_mapper(workflow_stage: WorkflowStage) -> GroupMapper:
+    """One model call per group. The driver owns the grouping, the pool, the cache and the log."""
     stage = narrow_stage(workflow_stage, LLMTransformStage)
-    llm = stage.llm
     batch_reply_schema = _build_batch_reply_schema(stage)
 
-    src = inputs[workflow_stage.inputs[0].id]
-    records: list[Row] = list_table_rows(src)
+    def map_group(indices: Sequence[int], rows: Sequence[Row]) -> Sequence[Row | None]:
+        return _process_chunk(stage.id, stage.llm, batch_reply_schema, list(rows))
 
-    results: list[Row | None] = [None] * len(records)
-    process_chunk = _build_chunk_processor(
-        stage, llm, batch_reply_schema, positions, ctx.run_log
-    )
-    for index, row in _run_chunks(
-        records,
-        llm.batch_size,
-        parallelism,
-        process_chunk,
-        ctx.stage_progress.advance,
-    ):
-        results[index] = row
-
-    # Grain + order guarantee, verified not assumed: exactly one row per input,
-    # every slot filled, in input order. A gap here is a batch-driver bug, raised
-    # loudly — never a result with the wrong row count.
-    if len(results) != len(records) or any(row is None for row in results):
-        raise RuntimeError(
-            f"stage {stage.id}: batched execution did not produce exactly one row "
-            f"per input row ({len(records)} in)"
-        )
-    return [row for row in results if row is not None]
-
-
-def _build_chunk_processor(
-    stage: LLMTransformStage,
-    llm: Any,
-    batch_reply_schema: type,
-    positions: list[int],
-    log: RunLog | None,
-) -> Callable[[int, list[Row]], list[tuple[int, Row]]]:
-    """Bound on the worker thread: a pool thread starts with an empty context, so an outer bind is lost."""
-    def process_chunk(start: int, chunk: list[Row]) -> list[tuple[int, Row]]:
-        token = bind_detail_sink(
-            log, stage.id, tuple(positions[start : start + len(chunk)])
-        )
-        try:
-            return _process_chunk(stage.id, llm, batch_reply_schema, start, chunk)
-        finally:
-            unbind_detail_sink(token)
-
-    return process_chunk
-
-
-def _run_chunks(
-    records: list[Row],
-    size: int,
-    parallelism: int,
-    process_chunk: Callable[[int, list[Row]], list[tuple[int, Row]]],
-    on_chunk_completed: Callable[[int], None] | None = None,
-) -> list[tuple[int, Row]]:
-    chunks = [
-        (start, records[start : start + size]) for start in range(0, len(records), size)
-    ]
-    computed: list[tuple[int, Row]] = []
-    if parallelism > 1 and len(chunks) > 1:
-        with ThreadPoolExecutor(max_workers=parallelism) as pool:
-            futures = [pool.submit(process_chunk, start, chunk) for start, chunk in chunks]
-            for future in as_completed(futures):
-                result = future.result()
-                computed.extend(result)
-                if on_chunk_completed is not None:
-                    on_chunk_completed(len(result))
-    else:
-        for start, chunk in chunks:
-            result = process_chunk(start, chunk)
-            computed.extend(result)
-            if on_chunk_completed is not None:
-                on_chunk_completed(len(result))
-    return computed
+    return map_group
 
 
 def _build_batch_reply_schema(stage: LLMTransformStage) -> type:
@@ -164,8 +112,8 @@ def _build_batch_reply_schema(stage: LLMTransformStage) -> type:
 
 
 def _process_chunk(
-    stage_id: str, llm: Any, batch_reply_schema: type, start: int, chunk: list[Row]
-) -> list[tuple[int, Row]]:
+    stage_id: str, llm: Any, batch_reply_schema: type, chunk: list[Row]
+) -> list[Row]:
     """A confused reply fails EVERY row of the chunk: the answers that matched are not trusted."""
     usages: list[LlmUsage] = []
     try:
@@ -173,10 +121,10 @@ def _process_chunk(
             stage_id, llm, batch_reply_schema, chunk, usages)
     except Exception as exc:  # noqa: BLE001 — the chunk's supervisor, mirroring the
         # per-row one: a backend that never answered fails THESE rows, not the stage.
-        return _emit_failed(start, chunk, usages, str(exc) or type(exc).__name__)
+        return _emit_failed(chunk, usages, str(exc) or type(exc).__name__)
     if by_number is None:
-        return _emit_failed(start, chunk, usages, problem)
-    return _emit_matched(start, chunk, by_number, usages)
+        return _emit_failed(chunk, usages, problem)
+    return _emit_matched(chunk, by_number, usages)
 
 
 def _ask_until_reply_rejoins(
@@ -224,25 +172,22 @@ def _validate_batch_reply(
 
 
 def _emit_matched(
-    start: int, chunk: list[Row], by_number: dict[int, dict[str, Any]], usages: list[LlmUsage]
-) -> list[tuple[int, Row]]:
+    chunk: list[Row], by_number: dict[int, dict[str, Any]], usages: list[LlmUsage]
+) -> list[Row]:
     """Usage is per-call: the whole chunk's usage lands on its first row, the rest carry zero."""
     total = LlmUsage.summed(usages)
-    out: list[tuple[int, Row]] = []
+    out: list[Row] = []
     for offset, row in enumerate(chunk):
         reply_fields = {k: v for k, v in by_number[offset].items() if k != _ROW_NUMBER_FIELD}
         usage = total if offset == 0 else LlmUsage()
-        out.append((start + offset, {**row, **reply_fields, ROW_USAGE_KEY: usage}))
+        out.append({**row, **reply_fields, ROW_USAGE_KEY: usage})
     return out
 
 
-def _emit_failed(
-    start: int, chunk: list[Row], usages: list[LlmUsage], message: str
-) -> list[tuple[int, Row]]:
+def _emit_failed(chunk: list[Row], usages: list[LlmUsage], message: str) -> list[Row]:
     total = LlmUsage.summed(usages)
     return [
-        (start + offset,
-         {**row, ROW_ERROR_KEY: message, ROW_USAGE_KEY: total if offset == 0 else LlmUsage()})
+        {**row, ROW_ERROR_KEY: message, ROW_USAGE_KEY: total if offset == 0 else LlmUsage()}
         for offset, row in enumerate(chunk)
     ]
 

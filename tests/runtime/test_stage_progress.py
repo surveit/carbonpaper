@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from app.core.run_status import StageStatus
 from app.models import parse_stage
+from app.models.stage import StageType
 from app.models.run_manifest import StageProgress, StageRecord
 from app.runtime.progress import StageProgressReporter
 from app.runtime.stages import HANDLERS
@@ -179,22 +180,17 @@ def test_batched_llm_driver_advances_after_each_completed_chunk(monkeypatch):
     reporter(completed=0, total=3)
     ctx = make_run_context().attach_stage_progress(reporter)
 
-    def process_chunk(stage_id, llm, reply_schema, start, chunk):
-        return [
-            (start + index, {**row, "label": f"item-{row['x']}"})
-            for index, row in enumerate(chunk)
-        ]
+    def process_chunk(stage_id, llm, reply_schema, chunk):
+        return [{**row, "label": f"item-{row['x']}"} for row in chunk]
 
     monkeypatch.setattr(llm_transform, "_process_chunk", process_chunk)
-    rows = llm_transform.run_llm_batches(
+    out = HANDLERS[StageType(stage.type)].execute(
         place_stage(stage),
         as_inputs({"src": pd.DataFrame({"x": [1, 2, 3]})}),
         ctx,
-        1,
-        [0, 1, 2],
     )
 
-    assert len(rows) == 3
+    assert out is not None and out.table.num_rows == 3
     reporter.finish()
     assert record.progress is not None
     assert record.progress.completed == record.progress.total == 3

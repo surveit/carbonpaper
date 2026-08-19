@@ -21,7 +21,6 @@ from app.models.stage import (
     is_grain_and_order_preserving,
     max_declared_inputs,
 )
-from app.models.stages.llm_transform import LLMTransformStage
 
 from app.core.agent.usage import LlmUsage
 from app.core.frames import collapse_null_forms, is_null_form, list_table_rows
@@ -38,10 +37,8 @@ from ..context import RunContext
 from ..stage_output import StageOutput
 from ..lineage import kept_rows_lineage
 from ..errors import RunCancelled
-from ..run_log import RunLog, bind_row_sink, unbind_detail_sink
+from ..run_log import RunLog, bind_detail_sink, unbind_detail_sink
 from .row_events import (
-    emit_batched_row_outcomes,
-    emit_batched_row_starts,
     emit_cached_row,
     emit_row_outcome,
     emit_row_raised,
@@ -78,16 +75,13 @@ RowMapper = Callable[[Row, int], "Row | None"]
 # returns still sees one row at a time.
 MakeRowMapper = Callable[[WorkflowStage, RunContext, pa.Table], RowMapper]
 
-# An LLMTransformHandler's batched execution function: the stage's inputs, the
-# run, the driver's parallelism, and the INPUT POSITION of each row it is handed
-# (in the order handed), which is what lets it attribute a chunk's log detail to
-# the rows it actually covers. It computes one raw row per input row it is
-# given — internal columns still attached, nothing stripped or trimmed — and knows
-# nothing about caching: which rows it is asked about is the shape's decision
-# (see `_run_batched`).
-RunBatches = Callable[
-    [WorkflowStage, dict[str, pa.Table], RunContext, int, list[int]], list["Row"]
-]
+# What the driver actually dispatches: a GROUP of rows and their input positions
+# in, one raw row per row in — internal columns still attached, nothing stripped
+# or trimmed, None to drop. Every row-mapped type is driven through this; the
+# group is one row wide unless the stage asks for more (see `group_size`), which
+# only a batched `llm_transform` does. A mapper knows nothing about caching:
+# which rows it is asked about is the driver's decision.
+GroupMapper = Callable[[Sequence[int], Sequence["Row"]], "Sequence[Row | None]"]
 
 # Internal column a row mapper attaches to a row it could not produce (e.g. an
 # llm_transform whose generation failed). The row driver collects these off the
@@ -97,9 +91,7 @@ ROW_ERROR_KEY = "_error"
 
 # Internal column carrying a row's token/cost usage dict (an llm_transform
 # attaches one per row). It is summed onto the stage's StageContribution and the
-# column is then stripped, so usage never reaches stage output. The row driver
-# does both for the stage it maps; a handler that assembles its own frame instead
-# of being row-driven (llm_transform's batched path) does both for itself.
+# column is then stripped, so usage never reaches stage output.
 ROW_USAGE_KEY = "_usage"
 
 # Internal column a row mapper attaches to a row whose value could not be
@@ -110,8 +102,8 @@ ROW_USAGE_KEY = "_usage"
 ROW_DEFERRED_KEY = "_deferred"
 
 # Internal column marking a row the row cache answered rather than the stage
-# computing it. Stamped where the hit is read, so both row-mapped paths carry it;
-# the driver counts them onto the stage's StageContribution. A computed row never
+# computing it. Stamped where the hit is read; the driver counts them onto the
+# stage's StageContribution. A computed row never
 # carries the column, so a stage with no hits reports no count rather than a zero.
 ROW_CACHED_KEY = "_cached"
 
@@ -183,31 +175,18 @@ class RowMapTransformHandler(StageHandler):
     ) -> StageOutput:
         return _run_row_mapper(self, workflow_stage, inputs, ctx)
 
+    def group_size(self, workflow_stage: WorkflowStage) -> int:
+        """Rows per mapper call."""
+        return 1
+
+    def make_group_mapper(
+        self, workflow_stage: WorkflowStage, ctx: RunContext, src: pa.Table
+    ) -> GroupMapper:
+        return _RowsInGroupsOfOne(self.make_mapper(workflow_stage, ctx, src))
+
     @property
     def preserves_grain_and_order(self) -> bool:
         return not self.drops_rows
-
-
-class LLMTransformHandler(RowMapTransformHandler):
-    """batch_size > 1 keeps grain and order but NOT per-row independence: the model sees the chunk."""
-
-    def __init__(
-        self,
-        make_mapper: MakeRowMapper,
-        run_batches: RunBatches,
-        parallelism: int = 1,
-        trims_output_to_declared: bool = False,
-    ) -> None:
-        super().__init__(make_mapper, parallelism, trims_output_to_declared)
-        self.run_batches = run_batches
-
-    def execute(
-        self, workflow_stage: WorkflowStage, inputs: dict[str, pa.Table],
-        ctx: RunContext,
-    ) -> StageOutput:
-        if narrow_stage(workflow_stage, LLMTransformStage).llm.batch_size > 1:
-            return _run_batched(self, workflow_stage, inputs, ctx)
-        return _run_row_mapper(self, workflow_stage, inputs, ctx)
 
 
 class SourceHandler(StageHandler):
@@ -292,47 +271,25 @@ def _run_row_mapper(
     stage = workflow_stage.stage
     src = inputs[workflow_stage.inputs[0].id]
     reads = stage.anchor_reads()
-    map_row = handler.make_mapper(workflow_stage, ctx, src)
-    # The ONE line of per-row compute, optionally routed through the row cache
-    # and the run log. Log outside cache, so a row the cache answers never
-    # reaches the mapper's lifecycle wrapper and is logged as the replay it is.
-    # `map_row` itself stays bound: _finish_mapped_frame tests it for the
-    # PostMapRowMapper shape, which a wrapper would hide.
+    map_group = handler.make_group_mapper(workflow_stage, ctx, src)
+    # Log outside cache, so a row the cache answers never reaches the mapper's
+    # lifecycle wrapper and is logged as the replay it is.
     caching = _open_row_caching(workflow_stage, ctx)
-    compute_row = _log_row_lifecycle(map_row, ctx.run_log, stage.id)
+    group_mapping_function = _log_group_lifecycle(map_group, ctx.run_log, stage.id)
+    input_rows = list_table_rows(src)
+    narrowed_rows = [_narrow_row(row, reads) for row in input_rows]
+    cached_results: list[Row | None] = [None] * len(narrowed_rows)
     if caching is not None:
-        compute_row = _map_row_through_cache(caching, compute_row, ctx.run_log, stage.id)
-    records = list_table_rows(src)
-    seen = [_narrow_row(row, reads) for row in records]
-    progress = ctx.stage_progress
-    completed = 0
-    progress(completed=completed, total=len(records))
-
-    results: list[Row | None] = [None] * len(records)
-    if handler.parallelism > 1 and len(records) > 1:
-        with ThreadPoolExecutor(max_workers=handler.parallelism) as pool:
-            futures = {
-                pool.submit(compute_row, record, index): index
-                for index, record in enumerate(seen)
-            }
-            for future in as_completed(futures):
-                if _consume_cancel(ctx):
-                    # Drop every row not yet started; rows already dispatched
-                    # (<= parallelism) keep running in their worker threads —
-                    # a blocking call can't be killed — and are joined by the
-                    # `with` block's own shutdown(wait=True) on the way out.
-                    pool.shutdown(wait=False, cancel_futures=True)
-                    raise RunCancelled(f"stage {stage.id}: cancelled mid-fan-out")
-                results[futures[future]] = future.result()
-                completed += 1
-                progress(completed=completed, total=len(records))
-    else:
-        for index, record in enumerate(seen):
-            if _consume_cancel(ctx):
-                raise RunCancelled(f"stage {stage.id}: cancelled")
-            results[index] = compute_row(record, index)
-            completed += 1
-            progress(completed=completed, total=len(records))
+        cached_results = _find_cached_rows(
+            caching, narrowed_rows, ctx.run_log, stage.id
+        )
+        group_mapping_function = _record_computed_rows(
+            caching, group_mapping_function
+        )
+    results = _fan_out(
+        handler, group_mapping_function, narrowed_rows, cached_results,
+        workflow_stage, ctx,
+    )
 
     out_rows: list[Row] = []
     kept_indices: list[int] = []
@@ -347,9 +304,9 @@ def _run_row_mapper(
         # Rejoin: under narrowing the mapper only ever saw its declared reads, so
         # the columns that merely FLOW come back from the input row here. The
         # mapper's own keys win — that is what a rewrite or an add is.
-        out_rows.append({**records[index], **result})
+        out_rows.append({**input_rows[index], **result})
         kept_indices.append(index)
-    mapped = _finish_mapped_frame(out_rows, handler, map_row, workflow_stage, ctx)
+    mapped = _finish_mapped_frame(out_rows, handler, map_group, workflow_stage, ctx)
     # The driver, not the stage, knows which input ordinals survived.
     lineage = (
         kept_rows_lineage(workflow_stage.inputs[0].id, kept_indices)
@@ -363,6 +320,119 @@ def _run_row_mapper(
     )
 
 
+class _RowsInGroupsOfOne:
+    """A per-row mapper as a group mapper. An object, not a closure, so a post-map step survives."""
+
+    def __init__(self, map_row: RowMapper) -> None:
+        self.map_row = map_row
+
+    def __call__(
+        self, indices: Sequence[int], rows: Sequence[Row]
+    ) -> Sequence[Row | None]:
+        return [self.map_row(row, index) for index, row in zip(indices, rows)]
+
+    def finish_mapped_rows(
+        self,
+        workflow_stage: WorkflowStage,
+        rows: Sequence[Row],
+        ctx: RunContext,
+        contribution: StageContribution,
+    ) -> None:
+        if isinstance(self.map_row, PostMapRowMapper):
+            self.map_row.finish_mapped_rows(workflow_stage, rows, ctx, contribution)
+
+
+# ── the fan-out ──────────────────────────────────────────────────────────────
+# The ONE thing that differs between a row-at-a-time stage and a batched one:
+# how many rows reach the mapper per call. Everything on either side — the cache
+# lookup, the recording, the row lifecycle, the slot fill, the rejoin — is the
+# same code for both, which is why a batched stage banks each group as it
+# completes without any batch-specific persistence logic.
+
+
+def _fan_out(
+    handler: RowMapTransformHandler,
+    group_mapping_function: GroupMapper,
+    narrowed_rows: list[Row],
+    cached_results: list[Row | None],
+    workflow_stage: WorkflowStage,
+    ctx: RunContext,
+) -> list[Row | None]:
+    """Computes the rows the cache left empty; returns one result per input row."""
+    stage_id = workflow_stage.stage.id
+    results = list(cached_results)
+    total = len(results)
+    pending = [index for index, cached in enumerate(results) if cached is None]
+    groups = _split_into_groups(
+        pending, narrowed_rows, handler.group_size(workflow_stage)
+    )
+    progress = ctx.stage_progress
+    # Every row the cache answered is already done, and is never dispatched.
+    completed = total - len(pending)
+    progress(completed=completed, total=total)
+    if handler.parallelism > 1 and len(groups) > 1:
+        with ThreadPoolExecutor(max_workers=handler.parallelism) as pool:
+            futures = {
+                pool.submit(group_mapping_function, indices, rows): indices
+                for indices, rows in groups
+            }
+            for future in as_completed(futures):
+                if _consume_cancel(ctx):
+                    # Drop every group not yet started; groups already dispatched
+                    # (<= parallelism) keep running in their worker threads — a
+                    # blocking call can't be killed — and are joined by the
+                    # `with` block's own shutdown(wait=True) on the way out.
+                    pool.shutdown(wait=False, cancel_futures=True)
+                    raise RunCancelled(f"stage {stage_id}: cancelled mid-fan-out")
+                indices = futures[future]
+                _place_group(results, indices, future.result(), stage_id)
+                completed += len(indices)
+                progress(completed=completed, total=total)
+    else:
+        for indices, rows in groups:
+            if _consume_cancel(ctx):
+                raise RunCancelled(f"stage {stage_id}: cancelled")
+            _place_group(
+                results, indices, group_mapping_function(indices, rows), stage_id
+            )
+            completed += len(indices)
+            progress(completed=completed, total=total)
+    return results
+
+
+def _split_into_groups(
+    pending: list[int], narrowed_rows: list[Row], size: int
+) -> list[tuple[tuple[int, ...], list[Row]]]:
+    """Groups the PENDING positions, so a cache hit never takes a seat in a model call."""
+    return [
+        (tuple(pending[start : start + size]),
+         [narrowed_rows[index] for index in pending[start : start + size]])
+        for start in range(0, len(pending), size)
+    ]
+
+
+def _place_group(
+    results: list[Row | None],
+    indices: Sequence[int],
+    group: Sequence[Row | None],
+    stage_id: str,
+) -> None:
+    for index, row in zip(indices, _require_one_row_each(group, indices, stage_id)):
+        results[index] = row
+
+
+def _require_one_row_each(
+    group: Sequence[Row | None], indices: Sequence[int], stage_id: str
+) -> Sequence[Row | None]:
+    """Nothing is pinned or placed against a row it did not come from."""
+    if len(group) != len(indices):
+        raise RuntimeError(
+            f"stage {stage_id}: mapper returned {len(group)} row(s) for "
+            f"{len(indices)} input row(s)"
+        )
+    return group
+
+
 def _narrow_row(row: Row, keep: frozenset[str]) -> Row:
     return {key: value for key, value in row.items() if key in keep}
 
@@ -372,9 +442,9 @@ def _narrow_table(table: pa.Table, keep: frozenset[str]) -> pa.Table:
 
 
 # ── the row-level cache interceptor ──────────────────────────────────────────
-# Caching is a property of the handler SHAPE, not of any stage type: the one
-# line where per-row compute happens is wrapped, so every row-mapped stage type
-# is cached by the same code and no stage implements a cache interface. The
+# Caching is a property of the handler SHAPE, not of any stage type: the driver
+# reads before it groups and wraps the mapper to record, so every row-mapped
+# stage type is cached by the same code and no stage implements one. The
 # cache store and its keying live below the seam (app.core.stage_cache); what
 # lives here is one execution's state over it and the two decisions the runtime
 # owns: WHETHER caching applies at all, and whether a given result is one the
@@ -437,144 +507,72 @@ def _without_internal_columns(row: Row) -> Row:
     return {key: value for key, value in row.items() if key not in internal}
 
 
-def _map_row_through_cache(
-    caching: _RowCaching, map_row: RowMapper, log: RunLog | None, stage_id: str
-) -> RowMapper:
-    def compute_row(row: Row, index: int) -> Row | None:
-        cached = _find_cached_row(caching, row)
-        if cached is not None:
+def _find_cached_rows(
+    caching: _RowCaching, narrowed_rows: list[Row], log: RunLog | None, stage_id: str
+) -> list[Row | None]:
+    """Answered BEFORE grouping: a hit taking a seat in a model call is a batch paid for and wasted."""
+    cached_results: list[Row | None] = []
+    for index, row in enumerate(narrowed_rows):
+        hit = _find_cached_row(caching, row)
+        if hit is not None:
             emit_cached_row(log, stage_id, index)
-            return cached
-        result = map_row(row, index)
-        # A drop is not a recordable output: the store holds output ROWS, so a
-        # replayed drop would be indistinguishable from a miss.
-        if result is not None:
-            _record_row_output(caching, row, result)
-        return result
+        cached_results.append(hit)
+    return cached_results
 
-    return compute_row
+
+def _record_computed_rows(caching: _RowCaching, map_group: GroupMapper) -> GroupMapper:
+    """Each group is recorded as it lands, so a later group's failure cannot erase it."""
+    def map_group_and_record(
+        indices: Sequence[int], rows: Sequence[Row]
+    ) -> Sequence[Row | None]:
+        results = map_group(indices, rows)
+        for row, result in zip(rows, results):
+            # A drop is not a recordable output: the store holds output ROWS, so a
+            # replayed drop would be indistinguishable from a miss.
+            if result is not None:
+                _record_row_output(caching, row, result)
+        return results
+
+    return map_group_and_record
 
 
 # ── the run log's row lifecycle ──────────────────────────────────────────────
 
 
-def _log_row_lifecycle(map_row: RowMapper, log: RunLog | None, stage_id: str) -> RowMapper:
+def _log_group_lifecycle(
+    map_group: GroupMapper, log: RunLog | None, stage_id: str
+) -> GroupMapper:
     if log is None:
-        return map_row
+        return map_group
 
-    def compute_row(row: Row, index: int) -> Row | None:
-        emit_row_start(log, stage_id, index)
-        # Bind the detail sink so the LLM layer, several frames below map_row,
-        # can attribute its prompt/thinking/response to this (stage, row)
-        # without any of that being threaded through the mapper's signature.
-        token = bind_row_sink(log, stage_id, index)
+    def map_group_and_log(
+        indices: Sequence[int], rows: Sequence[Row]
+    ) -> Sequence[Row | None]:
+        for index in indices:
+            emit_row_start(log, stage_id, index)
+        # Bind the detail sink so the LLM layer, several frames below the mapper,
+        # can attribute its prompt/thinking/response to these (stage, row) pairs
+        # without any of that being threaded through the mapper's signature. This
+        # runs on the worker thread, which is where the bind has to happen: a pool
+        # thread starts with an empty context, so an outer bind would be lost.
+        token = bind_detail_sink(log, stage_id, tuple(indices))
         try:
-            result = map_row(row, index)
+            results = map_group(indices, rows)
         except Exception as exc:  # noqa: BLE001 — logged, then re-raised unchanged;
             # the executor's own per-stage handling is untouched.
-            emit_row_raised(log, stage_id, index, exc)
+            for index in indices:
+                emit_row_raised(log, stage_id, index, exc)
             raise
         finally:
             unbind_detail_sink(token)
-        # A dropped row (None) ran to completion — it has no error to report.
-        emit_row_outcome(log, stage_id, index, result.get(ROW_ERROR_KEY) if result else None)
-        return result
+        for index, result in zip(indices, results):
+            # A dropped row (None) ran to completion — it has no error to report.
+            emit_row_outcome(
+                log, stage_id, index, result.get(ROW_ERROR_KEY) if result else None
+            )
+        return results
 
-    return compute_row
-
-
-# ── the batched llm_transform path ───────────────────────────────────────────
-# The one row-mapped path the driver above does not run: rows are computed N per
-# model call. Cache resolution is therefore spelled out here, in the SHAPE — the
-# stage's own module is handed the rows to compute and knows nothing about the
-# cache, the key, or what may be recorded.
-
-
-def _run_batched(
-    handler: "LLMTransformHandler",
-    workflow_stage: WorkflowStage,
-    inputs: dict[str, pa.Table],
-    ctx: RunContext,
-) -> StageOutput:
-    """Runs only the rows the cache cannot answer, then reorders them into INPUT order."""
-    stage = workflow_stage.stage
-    src = inputs[workflow_stage.inputs[0].id]
-    records = list_table_rows(src)
-    # Narrowed exactly as the row-mapped driver narrows, so a chunk of N rows is
-    # N rows of the shape the row cache already keys and stores. Without this the
-    # key covers every input column, so an edit to a column the signature does
-    # not read — one the prompt therefore cannot reference — re-spends the stage.
-    narrowed = _narrow_table(src, stage.anchor_reads())
-    seen = list_table_rows(narrowed)
-    progress = ctx.stage_progress
-    caching = _open_row_caching(workflow_stage, ctx)
-    hits = {} if caching is None else _find_cached_rows_by_position(caching, seen)
-    progress(completed=len(hits), total=len(records))
-    misses = [index for index in range(len(records)) if index not in hits]
-    emit_batched_row_starts(ctx.run_log, stage.id, hits, misses)
-    computed = _compute_batched_rows(handler, workflow_stage, narrowed, misses, ctx)
-    # Ordered before recorded: the ordering step is what verifies one computed
-    # row per miss, so nothing is pinned against a row it did not come from.
-    mapped = _order_by_input_position(stage.id, hits, misses, computed, len(records))
-    if caching is not None:
-        for position, row in zip(misses, computed):
-            _record_row_output(caching, seen[position], row)
-    emit_batched_row_outcomes(
-        ctx.run_log, stage.id, misses, [row.get(ROW_ERROR_KEY) for row in computed]
-    )
-    # Rejoin, as the row-mapped driver does: the model only ever saw the declared
-    # reads, so the columns that merely FLOW come back from the input row here.
-    rows = [{**records[index], **row} for index, row in enumerate(mapped)]
-    batched = _finish_batched_frame(rows, handler, workflow_stage)
-    return StageOutput(
-        _finish_empty_result(batched.table, src, workflow_stage), batched.contribution
-    )
-
-
-def _find_cached_rows_by_position(
-    caching: _RowCaching, records: list[Row]
-) -> dict[int, Row]:
-    found: dict[int, Row] = {}
-    for index, record in enumerate(records):
-        cached = _find_cached_row(caching, record)
-        if cached is not None:
-            found[index] = cached
-    return found
-
-
-def _compute_batched_rows(
-    handler: "LLMTransformHandler",
-    workflow_stage: WorkflowStage,
-    src: pa.Table,
-    misses: list[int],
-    ctx: RunContext,
-) -> list[Row]:
-    if not misses:
-        return []
-    return handler.run_batches(
-        workflow_stage,
-        {workflow_stage.inputs[0].id: src.take(misses)},
-        ctx,
-        handler.parallelism,
-        misses,
-    )
-
-
-def _order_by_input_position(
-    stage_id: str,
-    hits: dict[int, Row],
-    misses: list[int],
-    computed: list[Row],
-    row_count: int,
-) -> list[Row]:
-    if len(computed) != len(misses):
-        raise RuntimeError(
-            f"stage {stage_id}: batched execution returned {len(computed)} rows "
-            f"for the {len(misses)} rows it was asked to compute"
-        )
-    by_position = dict(hits)
-    by_position.update(zip(misses, computed))
-    return [by_position[position] for position in range(row_count)]
+    return map_group_and_log
 
 
 class _MappedRows(NamedTuple):
@@ -582,16 +580,6 @@ class _MappedRows(NamedTuple):
 
     table: pa.Table
     contribution: StageContribution
-
-
-def _finish_batched_frame(
-    rows: list[Row], handler: RowMapTransformHandler, workflow_stage: WorkflowStage
-) -> _MappedRows:
-    """No mapper, so no post-map step: collect off the rows, then strip and trim."""
-    contribution = _collect_internal_columns(rows)
-    return _MappedRows(
-        _strip_and_trim(rows, contribution, handler, workflow_stage), contribution
-    )
 
 
 def _finish_empty_result(
@@ -616,14 +604,14 @@ def _finish_empty_result(
 def _finish_mapped_frame(
     rows: Sequence[Row],
     handler: RowMapTransformHandler,
-    map_row: RowMapper,
+    map_group: GroupMapper,
     workflow_stage: WorkflowStage,
     ctx: RunContext,
 ) -> _MappedRows:
     """`finish_mapped_rows` is the last step that sees an internal column: it runs before the strip."""
     contribution = _collect_internal_columns(rows)
-    if isinstance(map_row, PostMapRowMapper):
-        map_row.finish_mapped_rows(workflow_stage, rows, ctx, contribution)
+    if isinstance(map_group, PostMapRowMapper):
+        map_group.finish_mapped_rows(workflow_stage, rows, ctx, contribution)
     return _MappedRows(
         _strip_and_trim(rows, contribution, handler, workflow_stage), contribution
     )

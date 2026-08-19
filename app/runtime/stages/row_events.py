@@ -1,12 +1,9 @@
-"""The run log's row-grain vocabulary, for the two row-driven execution paths.
-
-Both the per-row driver and the batched llm_transform path report the same row
-lifecycle, so the shape of those events is declared once, here, rather than
-twice in `execution.py`.
+"""The run log's row-grain vocabulary, declared here rather than inline in the
+driver that emits it.
 """
 from __future__ import annotations
 
-from typing import Any, Iterable
+from typing import Any
 
 from ..run_log import ROW_ERROR, ROW_OK, ROW_START, SOURCE_CACHED, SOURCE_COMPUTED, RunLog
 
@@ -36,24 +33,3 @@ def emit_cached_row(log: RunLog | None, stage_id: str, index: int) -> None:
         log.emit({
             "kind": ROW_OK, "stage": stage_id, "row": index, "source": SOURCE_CACHED,
         })
-
-
-def emit_batched_row_starts(
-    log: RunLog | None, stage_id: str, hits: Iterable[int], misses: Iterable[int]
-) -> None:
-    if log is None:
-        return
-    for position in sorted(hits):
-        emit_cached_row(log, stage_id, position)
-    for position in misses:
-        emit_row_start(log, stage_id, position)
-
-
-def emit_batched_row_outcomes(
-    log: RunLog | None, stage_id: str, misses: Iterable[int], errors: Iterable[Any]
-) -> None:
-    """`errors` must arrive in `misses` order — the caller has verified one computed row per miss."""
-    if log is None:
-        return
-    for position, error in zip(misses, errors):
-        emit_row_outcome(log, stage_id, position, error)
