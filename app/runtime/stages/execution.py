@@ -13,6 +13,7 @@ from typing import Any, Callable, NamedTuple, Protocol, TypeVar, runtime_checkab
 import pandas as pd
 import pyarrow as pa
 
+from app.core.errors import StageWideFailure
 from app.models import WorkflowStage
 from app.models.run_manifest import RowError, StageContribution
 from app.models.stage import (
@@ -323,7 +324,14 @@ def _run_row_mapper(
                     # `with` block's own shutdown(wait=True) on the way out.
                     pool.shutdown(wait=False, cancel_futures=True)
                     raise RunCancelled(f"stage {stage.id}: cancelled mid-fan-out")
-                results[futures[future]] = future.result()
+                try:
+                    results[futures[future]] = future.result()
+                except StageWideFailure:
+                    # Same shape as the cancel above, for the same reason: every
+                    # row still queued would fail identically, so drop them
+                    # rather than spend a model call each to learn that.
+                    pool.shutdown(wait=False, cancel_futures=True)
+                    raise
                 completed += 1
                 progress(completed=completed, total=len(records))
     else:
