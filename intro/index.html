@@ -30,13 +30,13 @@
                                 font-size: .82rem; text-decoration: none; }
   .site-nav > a.nav-action { padding: .58rem .82rem; border-radius: 7px;
                              color: var(--card); background: var(--accent); font-weight: 650; }
-  .hero { max-width: 1180px; margin: 0 auto; padding: 5rem 2.5rem 4.5rem;
+  .hero { max-width: 1180px; margin: 0 auto; padding: 3.75rem 2.5rem 3.25rem;
           scroll-margin-top: 4rem; }
   .eyebrow { margin: 0 0 .85rem; color: var(--accent); font-family: var(--sans);
              font-size: .72rem; font-weight: 750; letter-spacing: .13em;
              text-transform: uppercase; }
-  .hero h1 { max-width: 12em; margin: 0; font-size: clamp(2.7rem, 5.2vw, 4.85rem);
-             font-weight: 600; line-height: .98; letter-spacing: -.035em; }
+  .hero h1 { max-width: 13em; margin: 0; font-size: clamp(2.45rem, 4.2vw, 4rem);
+             font-weight: 600; line-height: 1.02; letter-spacing: -.03em; }
   .hero-copy { max-width: 39rem; margin: 1.4rem 0 0; color: var(--muted);
                font-family: var(--sans); font-size: 1.05rem; line-height: 1.65; }
   .hero-actions { display: flex; flex-wrap: wrap; gap: .8rem; margin-top: 1.65rem; }
@@ -50,6 +50,12 @@
                list-style: none; }
   .trustline li::before { content: "✓"; margin-right: .35rem; color: var(--accent);
                           font-weight: 800; }
+
+  .story-intro { max-width: 1180px; margin: 0 auto; padding: 2rem 2.5rem .5rem; }
+  .story-intro h2 { margin: 0; font-size: 2rem; font-weight: 600; line-height: 1.15;
+                    letter-spacing: -.02em; }
+  .story-intro p { max-width: 38rem; margin: .7rem 0 0; color: var(--muted);
+                   font-family: var(--sans); font-size: .92rem; line-height: 1.6; }
 
   .scrolly { max-width: 1560px; margin: 0 auto; padding: 0 2.5rem;
              display: grid; grid-template-columns: minmax(0, 20rem) minmax(0, 1fr); gap: 3rem;
@@ -207,14 +213,16 @@
     .pin { left: 0 !important; width: 100%; }
     .over { width: 100%; }
     .over img { max-width: 100%; height: auto; }
-    .hero { padding-top: 3.5rem; }
+    .hero { padding-top: 3rem; }
   }
   @media (max-width: 560px) {
     .site-nav { padding: .75rem 1rem; gap: .75rem; }
     .site-nav > a:not(.wordmark):not(.nav-action) { display: none; }
     .site-nav > a.nav-action { padding: .52rem .68rem; }
-    .hero { padding: 3.5rem 1rem 3rem; }
-    .hero h1 { font-size: 2.7rem; }
+    .hero { padding: 2.5rem 1rem 2.25rem; }
+    .hero h1 { font-size: 2.35rem; }
+    .story-intro { padding: 1.75rem 1rem .25rem; }
+    .story-intro h2 { font-size: 1.7rem; }
   }
 </style>
 </head>
@@ -231,9 +239,9 @@
 <header class="hero" id="top">
   <p class="eyebrow">Reviewable AI-assisted investigations</p>
   <h1>Turn an investigation into evidence someone else can verify.</h1>
-  <p class="hero-copy">Build the workflow in plain language. Carbon Paper reruns it against
-  the original source files, shows what each step changed, and exports a review packet that
-  opens without the app.</p>
+  <p class="hero-copy">Build your investigation however you prefer. Carbon Paper reruns it
+  against the original source files, shows what each step changed, and exports a review packet
+  that opens without the app.</p>
   <div class="hero-actions">
     <a class="primary" href="https://carbonpaper.fly.dev">Try the demo</a>
     <a class="secondary" href="#example-packet">See example packet</a>
@@ -244,6 +252,11 @@
     <li>No code required to review</li>
   </ul>
 </header>
+
+<section class="story-intro" aria-labelledby="how-it-works">
+  <h2 id="how-it-works">How it works</h2>
+  <p>Follow one investigation from an initial answer to a source-linked review packet.</p>
+</section>
 
 <div class="scrolly">
 
