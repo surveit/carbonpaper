@@ -111,6 +111,13 @@ def test_compute_definition_fingerprint_for_queue_reacts_to_reviewer_instruction
     assert base.compute_definition_fingerprint() != changed.compute_definition_fingerprint()
 
 
+def test_compute_definition_fingerprint_for_queue_reacts_to_context_columns():
+    base = _queue_stage()
+    changed = _queue_stage(context_columns=["id"])
+
+    assert base.compute_definition_fingerprint() != changed.compute_definition_fingerprint()
+
+
 def test_compute_definition_fingerprint_for_publish_reacts_to_function_code():
     base = _publish_stage()
     changed = _publish_stage(

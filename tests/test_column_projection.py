@@ -87,12 +87,14 @@ _REVIEW_RECORD_COLUMNS = [
 ]
 
 
-def _queue_stage(output_schema, flt=None):
+def _queue_stage(output_schema, flt=None, context_columns=None):
     queue = queue_columns(source="score", target="final_score")
     # The reviewed column is named `final_score` because that is what these tests
     # declare — the runtime knows no such name of its own.
     if flt is not None:
         queue["filter"] = flt
+    if context_columns is not None:
+        queue["context_columns"] = context_columns
     flowing = {c["name"] for c in _SCORED_COLUMNS}
     outputs = output_schema["columns"] + _REVIEW_RECORD_COLUMNS
     return parse_stage({
@@ -126,6 +128,7 @@ def test_human_review_queue_carries_every_input_column_through(tmp_path):
         output_schema={"columns": [{"name": "evidence_id", "type": "str", "nullable": True},
                                     {"name": "final_score", "type": "int", "nullable": True}]},
         flt="entity_id == 'nope'",  # matches no row, so nothing halts
+        context_columns=["quote"],
     )
     ctx = _queue_test_ctx(tmp_path, "keeps-declared-columns")
     out = HANDLERS[StageType.human_review_queue].execute(

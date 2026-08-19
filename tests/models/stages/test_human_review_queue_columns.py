@@ -138,6 +138,33 @@ def test_a_signature_reading_nothing_is_rejected():
     assert "reads nothing" in _issues(spec=spec)
 
 
+def test_context_columns_must_exist_in_the_input_schema():
+    assert "context_columns names column 'ghost'" in _issues(
+        queue={"context_columns": ["ghost"]})
+
+
+def test_context_columns_must_be_carried_by_the_signature():
+    spec = _stage_spec(queue={"context_columns": ["confidence"]})
+    spec["signature"]["reads"] = reads_of(
+        "src", [c for c in _INPUT_COLUMNS if c["name"] != "confidence"])
+
+    assert "context_columns names `confidence`" in _issues(spec=spec)
+
+
+def test_a_reviewed_column_cannot_also_be_context():
+    assert "cannot be both editable and context" in _issues(
+        queue={"context_columns": ["score"]})
+
+
+def test_a_context_column_cannot_be_named_twice():
+    assert "names column 'claim_id' more than once" in _issues(
+        queue={"context_columns": ["claim_id", "claim_id"]})
+
+
+def test_an_empty_context_columns_list_is_clean():
+    assert _issue_list(queue={"context_columns": []}) == []
+
+
 # ── 2. reviewed source columns ───────────────────────────────────────────────
 
 
