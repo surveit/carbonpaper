@@ -35,6 +35,7 @@ class AggFormula(str, Enum):
     min = "min"
     max = "max"
     first = "first"
+    first_row = "first_row"
     list = "list"
 
 
@@ -88,6 +89,7 @@ class AggregateStage(AbstractStage):
 AGG_FORMULA_COUNT = "count"
 AGG_FORMULA_COUNT_DISTINCT = "count_distinct"
 AGG_FORMULA_FIRST = "first"
+AGG_FORMULA_FIRST_ROW = "first_row"
 AGG_FORMULA_LIST = "list"
 
 
@@ -189,7 +191,7 @@ def compute_aggregate_output_types(
             )
         elif op.formula == AGG_FORMULA_LIST:
             computed[op.output_column] = f"list[{value_type}]" if value_type else None
-        else:  # min / max / first: the value column's own type
+        else:  # min / max / first / first_row: the value column's own type
             computed[op.output_column] = value_type
     return computed
 
@@ -206,14 +208,17 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
         notes=(
             "Output columns are exactly group_by plus each aggregation's output_column — every "
             "other input column is DROPPED, so carry anything needed downstream via "
-            "group_by or a `first` aggregation. An EMPTY group_by reduces the whole frame "
+            "group_by or an aggregation. `first` takes the first NON-NULL value; "
+            "`first_row` takes the first row's value, including NULL. An EMPTY group_by "
+            "reduces the whole frame "
             "to ONE row of just the aggregation outputs — reach for it whenever a stage "
             "boils everything down to published figures. That row comes out even when no "
             "row reaches it, every figure NULL. formula `count` counts ROWS and takes no "
             "value_column; every other formula requires one — `count_distinct` counts "
             "distinct NON-NULL values. Declared output types must match what the formula "
-            "computes: count/count_distinct->int, mean->float, min/max/first->the value "
-            "column's type, list->list[<that type>]."
+            "computes: count/count_distinct->int, mean->float, "
+            "min/max/first/first_row->the value column's type, "
+            "list->list[<that type>]."
         ),
     ),
 }

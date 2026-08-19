@@ -26,7 +26,7 @@ _EMPTY = pd.DataFrame({"firm": pd.Series([], dtype="object"),
                        "amt": pd.Series([], dtype="int64")})
 
 # One aggregation per formula the runtime dispatches on, so the whole-frame path
-# is exercised across all eight rather than on the two the project happens to use.
+# is exercised across all nine rather than on the two the project happens to use.
 _ALL_FORMULAS = [
     {"output_column": "total", "formula": "sum", "value_column": "amt"},
     {"output_column": "avg", "formula": "mean", "value_column": "amt"},
@@ -35,6 +35,7 @@ _ALL_FORMULAS = [
     {"output_column": "lowest", "formula": "min", "value_column": "amt"},
     {"output_column": "highest", "formula": "max", "value_column": "amt"},
     {"output_column": "first_firm", "formula": "first", "value_column": "firm"},
+    {"output_column": "first_row_firm", "formula": "first_row", "value_column": "firm"},
     {"output_column": "all_amts", "formula": "list", "value_column": "amt"},
 ]
 _ALL_PRODUCES = [
@@ -45,6 +46,7 @@ _ALL_PRODUCES = [
     {"name": "lowest", "type": "int", "nullable": True},
     {"name": "highest", "type": "int", "nullable": True},
     {"name": "first_firm", "type": "str", "nullable": True},
+    {"name": "first_row_firm", "type": "str", "nullable": True},
     {"name": "all_amts", "type": "list[int]", "nullable": True},
 ]
 _BIG_N = {"output_column": "big_n", "formula": "count", "where": "amt > 25"}
@@ -100,6 +102,7 @@ def test_the_output_columns_are_the_aggregations_alone():
     ("lowest", 10),
     ("highest", 50),
     ("first_firm", "a"),
+    ("first_row_firm", "a"),
     ("all_amts", [10, 20, 30, 40, 50]),
 ])
 def test_each_formula_reduces_the_whole_frame(column, expected):
