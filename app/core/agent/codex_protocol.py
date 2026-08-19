@@ -5,7 +5,7 @@ import asyncio
 import json
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
-from typing import Any
+from typing import Any, Protocol
 
 from app.core.agent.errors import CodexProtocolError as CodexProtocolError
 
@@ -15,6 +15,17 @@ type CodexRequestId = int | str
 
 
 _PROCESS_SHUTDOWN_TIMEOUT_S = 1
+
+
+class _ProcessToStop(Protocol):
+    @property
+    def returncode(self) -> int | None: ...
+
+    def terminate(self) -> None: ...
+
+    def kill(self) -> None: ...
+
+    async def wait(self) -> int: ...
 
 
 class CodexAppServer:
@@ -189,7 +200,7 @@ def _resolve_response(
     future.set_result(result)
 
 
-async def _stop_process(process: asyncio.subprocess.Process) -> None:
+async def _stop_process(process: _ProcessToStop) -> None:
     with suppress(ProcessLookupError):
         process.terminate()
     try:

@@ -213,11 +213,9 @@ class UncooperativeMcpServer:
         return {"method": "mcpServer/startupStatus/updated", "params": {}}
 
     async def close(self) -> None:
-        from app.core.agent.codex_protocol import CodexAppServer
+        from app.core.agent.codex_protocol import _stop_process
 
-        server = CodexAppServer((), {})
-        server._process = self.process
-        await server.close()
+        await _stop_process(self.process)
 
 
 def test_agent_builds_the_shared_submit_answer_spec() -> None:
