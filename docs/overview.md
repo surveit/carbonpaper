@@ -2,9 +2,9 @@
 
 ## Product vision
 AI is making data investigations cheaper to produce; deciding whether they hold up is
-still hard. Carbon Paper is built for the person doing that review. It shows how the
+still hard. Carbon Paper makes expert review easier. It shows how the
 result was produced and uses deterministic pipelines to rule out entire classes of
-error, so human judgment can focus where it matters.
+error, so experts can focus their judgment where it matters.
 
 ## Mission
 Serves **journalism and institutional accountability**: finding, verifying, and surfacing

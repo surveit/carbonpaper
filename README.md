@@ -1,9 +1,9 @@
 # Carbon Paper — reviewable AI workflows
 
 AI is making data investigations cheaper to produce; deciding whether they hold up is
-still hard. Carbon Paper is built for the person doing that review. It shows how the
+still hard. Carbon Paper makes expert review easier. It shows how the
 result was produced and uses deterministic pipelines to rule out entire classes of
-error, so human judgment can focus where it matters.
+error, so experts can focus their judgment where it matters.
 
 Some questions you only ask once. How much did firms spend lobbying about AI last
 year. Which of these 400 contracts name the same shell company. What changed
@@ -15,10 +15,10 @@ Carbon Paper turns the investigation's method into a workflow: a chain of small 
 steps running against the original files. Most steps are ordinary deterministic code.
 A step that genuinely needs judgement calls a model, and it is the only one that does.
 
-Every step is then open to a reader who did not write it:
+Every step is then open to expert review:
 
 - it states in plain English what it does, and shows what it changed in your rows
-- a step needing judgement can halt the run and wait for a person to decide
+- a step needing judgement can halt the run and wait for a reviewer to decide
 - every published figure traces back to the source rows it was computed from
 - the whole run exports as a folder that opens in a browser with no app and no network
 
