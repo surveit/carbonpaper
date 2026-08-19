@@ -32,6 +32,7 @@ from app.services import run as run_service
 from app.services.run_guide import build_run_guide_view
 from app.services.uploads import resolve_file_binding
 from app.runtime.cancellation import request_cancel
+from app.runtime.manifest import RUN_NAME_MAX_LENGTH, read_run_manifest, write_manifest
 from app.web.breadcrumbs import build_run_crumbs
 from app.web.config import EVENT_TAIL, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
@@ -61,9 +62,10 @@ async def trigger_run(request: Request, project_id: str):
     try:
         form = await request.form()
         version_id = str(form.get("version_id") or "").strip() or None
+        name = _read_name(form)
         bindings = _collect_bindings(form, project_id)
         limits = _collect_limits(form)
-        run_id = run_service.start_run(project_id, version_id=version_id,
+        run_id = run_service.start_run(project_id, version_id=version_id, name=name,
                                        bindings=bindings, limits=limits,
                                        bust_cache=_read_bust_cache(form))
     except (FileNotStoredError, NoVersionToRunError, MissingInputBindingError,
@@ -93,6 +95,10 @@ def _collect_bindings(form: FormData, project_id: str) -> dict[StageId, TypeUnsa
     return bindings
 
 
+def _read_name(form: FormData) -> str:
+    return str(form.get("name") or "").strip()
+
+
 def _collect_limits(form: FormData) -> dict[str, int]:
     limits: dict[str, int] = {}
     for key, value in form.items():
@@ -113,6 +119,18 @@ def _collect_limits(form: FormData) -> dict[str, int]:
 
 def _read_bust_cache(form: FormData) -> bool:
     return "bust_cache" in form
+
+
+@router.post("/project/{project_id}/runs/{run_id}/name")
+async def update_run_name(request: Request, project_id: str, run_id: str):
+    form = await request.form()
+    manifest = read_run_manifest(project_id, run_id)
+    manifest.name = _read_name(form)
+    write_manifest(manifest)
+    return RedirectResponse(
+        url=f"/project/{project_id}/runs/{run_id}",
+        status_code=303,
+    )
 
 
 @router.get("/project/{project_id}/runs", response_class=HTMLResponse)
@@ -260,6 +278,7 @@ async def run_detail(request: Request, project_id: str, run_id: str):
             # The guide rail's stage chips resolve through the same links object
             # the stage panel uses, so the packet can point them at its own pages.
             "links": resolve_panel_links(project_id, run_id),
+            "name_max_length": RUN_NAME_MAX_LENGTH,
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
         },

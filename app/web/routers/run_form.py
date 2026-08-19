@@ -14,6 +14,7 @@ from app.web.file_sizes import describe_refusal
 from app.services.versioning import list_versions
 from app.web.breadcrumbs import build_runs_child_crumbs
 from app.services.project import project_exists
+from app.runtime.manifest import RUN_NAME_MAX_LENGTH
 from app.web.config import templates
 from app.web.project_view import shell_state
 from app.web.run_inputs import build_run_input_choices, build_uploaded_file_choice
@@ -46,6 +47,7 @@ async def run_new(request: Request, project_id: str, version_id: str | None = No
             "versions": versions,
             "selected_version_id": selected,
             "choices": build_run_input_choices(project_id, selected),
+            "run_name_max_length": RUN_NAME_MAX_LENGTH,
             # So Browse… can refuse an oversized pick before spending the upload on it.
             "max_upload_bytes": max_upload_bytes(),
         },

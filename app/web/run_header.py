@@ -60,6 +60,7 @@ class RunLiveView(BaseModel):
 
 class RunHeader(BaseModel):
     run_id: str
+    name: str
     started_at: str | None
     is_test_run: bool
     version: VersionNote
@@ -76,6 +77,7 @@ def build_run_header(
     cta = choose_run_cta(project_id, run_id, manifest)
     return RunHeader(
         run_id=run_id,
+        name=_read_text(manifest.get("name")) or "",
         started_at=_read_text(manifest.get("started_at")),
         is_test_run=bool(manifest.get("parameters", {}).get("is_test_run")),
         version=read_version_note(project_id, manifest.get("workflow_version")),

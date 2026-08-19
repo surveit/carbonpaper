@@ -75,6 +75,13 @@ def test_new_run_page_renders_version_picker_latest_selected(project_two_version
     assert 'name="binding__load"' in resp.text                # inputs share the form
 
 
+def test_new_run_page_puts_the_name_field_before_the_version_picker(project_two_versions):
+    resp = client.get("/project/demo/runs/new")
+
+    assert resp.status_code == 200
+    assert resp.text.index('name="name"') < resp.text.index('name="version_id"')
+
+
 def test_new_run_page_opens_on_the_version_the_link_named(project_two_versions):
     versions = list_versions(project_two_versions.name)  # newest-first
     latest, older = versions[0].version_id, versions[-1].version_id
@@ -180,6 +187,19 @@ def test_posting_the_selected_versions_own_authored_path_is_not_a_binding(
                        follow_redirects=False)
     assert resp.status_code == 303
     assert _manifest(proj)["input_bindings"]["load"]["source"] == "workflow"
+
+
+def test_posted_name_is_stored_on_the_run_manifest(project_two_versions):
+    older = list_versions(project_two_versions.name)[-1].version_id
+
+    resp = client.post(
+        "/project/demo/run",
+        data={"version_id": older, "name": "Funsies!"},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    assert _manifest(project_two_versions)["name"] == "Funsies!"
 
 
 def test_new_run_page_binds_the_named_versions_own_input_paths(

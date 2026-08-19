@@ -56,6 +56,7 @@ def prepare_run(
     project_id: str,
     workflow: Workflow,
     workflow_version: str,
+    name: str = "",
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
     bindings: Mapping[StageId, TypeUnsafeUserStageConfigOverride] | None = None,
@@ -105,6 +106,7 @@ def prepare_run(
         run_id=run_id,
         project_id=project_id,
         workflow_version=workflow_version,
+        name=name,
         input_bindings=input_records,
     )
     write_manifest(manifest)

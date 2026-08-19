@@ -11,11 +11,29 @@
        button at all, only its outputs;
     3. the stage strip and its labelled counts.
 
-  A run has no name (`run_id` IS the start timestamp), so there is no <h1> here.
+  A run can carry an optional name. Closed: show the name as the <h1> and the pencil
+  beside it. Open: replace the heading with the input row and the save button.
 
   Context: project, run_id, header = app.web.run_header.RunHeader
 #}
 <div class="run-header">
+  {% if header.name %}
+  <details class="run-name-editor">
+    <summary class="run-name-summary">
+      <h1 class="run-name">{{ header.name }}</h1>
+      <span class="run-name-pencil" aria-label="Edit run name" title="Edit run name">✎</span>
+    </summary>
+    <form method="post" action="/project/{{ project }}/runs/{{ run_id }}/name" class="run-name-form">
+      <div class="run-name-edit-row">
+        <input type="text" name="name" maxlength="{{ name_max_length }}" value="{{ header.name }}"
+               placeholder="what this run was for">
+        <button type="submit" class="btn">Save</button>
+      </div>
+      <p class="run-name-removal">Clearing the name removes it.</p>
+    </form>
+  </details>
+  {% endif %}
+
   <p class="run-ground">
     {%- if header.started_at %}<span>started {{ header.started_at | relative_time }}</span>{% endif %}
     {%- if header.live.duration %}<span class="sep">·</span><span>{{ header.live.duration_verb }}
@@ -50,6 +68,19 @@
     {%- endif %}{% endfor %}
     <span class="cta-aside" id="cta-aside">{{ header.cta.aside or '' }}</span>
   </div>
+  {% endif %}
+
+  {% if not header.name %}
+  <details class="run-name-editor run-name-editor-empty">
+    <summary class="run-name-summary run-name-summary-empty">Name this run</summary>
+    <form method="post" action="/project/{{ project }}/runs/{{ run_id }}/name" class="run-name-form">
+      <div class="run-name-edit-row">
+        <input type="text" name="name" maxlength="{{ name_max_length }}"
+               placeholder="what this run was for">
+        <button type="submit" class="btn">Save</button>
+      </div>
+    </form>
+  </details>
   {% endif %}
 
   {% with strip = header.strip, show_counts = true, strip_id = 'stage-strip' %}

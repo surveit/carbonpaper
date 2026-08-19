@@ -13,7 +13,7 @@ import pandas as pd
 
 from dataclasses import dataclass
 
-from pydantic import ConfigDict, ValidationError, field_validator, model_validator
+from pydantic import ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from app.core.errors import (
     DocumentNotFound,
@@ -70,6 +70,7 @@ RUN_AREAS = (PRODUCTION_RUNS, EVAL_RUNS)
 # PersistedModel's own fields. A run recorded none of them, so `to_dict` leaves
 # them out of what every reader above this module consumes.
 _STORE_BOOKKEEPING = {"id", "created_at", "updated_at"}
+RUN_NAME_MAX_LENGTH = 80
 
 
 class RunManifest(PersistedModel):
@@ -92,6 +93,7 @@ class RunManifest(PersistedModel):
     # names one.
     project: str
     workflow_version: str | None
+    name: str = Field(default="", max_length=RUN_NAME_MAX_LENGTH)
     # What the caller asked of this run, verbatim — the settings a resume replays.
     # `_lift_legacy_parameters` reads the flat pre-nesting keys off an older
     # manifest into it, so every run on disk still parses.
@@ -178,6 +180,7 @@ def create_run_manifest(
     run_id: str,
     project_id: str,
     workflow_version: str | None,
+    name: str = "",
     input_bindings: dict[str, dict[str, Any]],
     area: str = PRODUCTION_RUNS,
 ) -> RunManifest:
@@ -187,6 +190,7 @@ def create_run_manifest(
         started_at=datetime.now().isoformat(timespec="seconds"),
         project=project_id,
         workflow_version=workflow_version,
+        name=name.strip(),
         parameters=ctx.params,
         input_bindings=input_bindings,
         human_review_queue_stats={},

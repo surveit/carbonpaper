@@ -41,12 +41,13 @@ def start_run(
     project_id: str,
     *,
     version_id: str | None = None,
+    name: str = "",
     bindings: Mapping[StageId, TypeUnsafeUserStageConfigOverride] | None = None,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
     bust_cache: bool = False,
 ) -> str:
-    prep = _prepare(project_id, version_id, bindings, limits, offsets, bust_cache)
+    prep = _prepare(project_id, version_id, name, bindings, limits, offsets, bust_cache)
     _run_in_background(run_prepared, prep)
     return str(prep["run_id"])
 
@@ -55,19 +56,21 @@ def execute(
     project_id: str,
     *,
     version_id: str | None = None,
+    name: str = "",
     bindings: Mapping[StageId, TypeUnsafeUserStageConfigOverride] | None = None,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
     bust_cache: bool = False,
 ) -> dict[str, Any]:
     return run_prepared(
-        _prepare(project_id, version_id, bindings, limits, offsets, bust_cache)
+        _prepare(project_id, version_id, name, bindings, limits, offsets, bust_cache)
     )
 
 
 def _prepare(
     project_id: str,
     version_id: str | None,
+    name: str,
     bindings: Mapping[StageId, TypeUnsafeUserStageConfigOverride] | None,
     limits: dict[str, int] | None,
     offsets: dict[str, int] | None,
@@ -79,6 +82,7 @@ def _prepare(
         project_id,
         Workflow(stages=load_version_stages(project_id, workflow_version)),
         workflow_version,
+        name=name,
         limits=limits,
         offsets=offsets,
         bindings=bindings,
