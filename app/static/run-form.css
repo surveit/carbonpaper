@@ -59,7 +59,6 @@
     flex: 1 1 320px;
     min-width: 0;
 }
-.path-field select { flex: 1 1 auto; min-width: 0; width: 0; }
 .browse-btn { padding: 6px 12px; white-space: nowrap; flex: 0 0 auto; }
 
 /* ─── The row cap ─────────────────────────────────────────────────────────────
@@ -101,14 +100,14 @@
    Select, path field and row cap carry one border, one radius and one focus ring,
    so the three read as the same kind of control — and the border is what marks a
    thing as typeable, so it goes around the number and nothing else. */
-.run-controls select,
+.run-controls select:not(.file-picker-native),
 .run-controls .path-field input,
 .run-controls .run-limit input {
     border: 1px solid var(--border);
     border-radius: 4px;
 }
 .run-controls .path-field input { padding: 7px 9px; font-size: 14px; }
-.run-controls select:focus,
+.run-controls select:not(.file-picker-native):focus,
 .run-controls .path-field input:focus,
 .run-controls .run-limit input:focus {
     outline: none;

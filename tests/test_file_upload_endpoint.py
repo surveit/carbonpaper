@@ -70,6 +70,11 @@ def test_the_response_names_the_file_for_a_caller_that_is_not_the_browser(projec
     assert body["sha256"] == CSV_SHA
     assert body["filename"] == "posts.csv"
     assert body["bytes"] == len(CSV)
+    assert body["uploaded_at"]
+    assert body["label"].startswith(
+        "Uploaded "
+    )
+    assert body["label"].endswith(f" · posts.csv · {len(CSV)}B")
 
 
 def test_the_returned_path_is_read_back_off_the_record_alone(project):
