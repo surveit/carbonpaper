@@ -26,6 +26,7 @@ from claude_agent_sdk import (
 
 # `CLI_PATH` is the located Claude Code CLI (the SDK does not always find it on
 # PATH on Windows — app.core.llm_sdk probes the known install locations).
+from app.core.agent.errors import AccountLimitReached
 from app.core.agent.usage import LlmUsage
 from app.core.llm_sdk import CLI_PATH as _CLI_PATH
 
@@ -35,6 +36,19 @@ CLI_MODEL = os.environ.get("CARBON_PAPER_CHAT_CLI_MODEL", "sonnet")
 # tool as f"mcp__{MCP_SERVER_NAME}__{tool_name}". Kept here (not in registry) so
 # this module and the registry's server-builder agree without a circular import.
 MCP_SERVER_NAME = "tools"
+
+
+def _account_limit_detail(msg: Any) -> str | None:
+    """The CLI's own words for an exhausted allowance, else None."""
+    if getattr(msg, "api_error_status", None) != 429:
+        # Gated on the status, never on the wording: the CLI has already done
+        # whatever retrying was appropriate before it ends a turn on one, so a
+        # 429 reaching here says the ACCOUNT is out, not that this call was
+        # unlucky.
+        return None
+    # Carried through because only the CLI's text says WHICH allowance ran out
+    # and when it resets — the whole of what the reader can act on.
+    return str(getattr(msg, "result", None) or "the account is out of allowance")
 
 
 def _usage_from_result(msg: Any, model: str) -> LlmUsage:
@@ -205,6 +219,12 @@ class ClaudeAgentSdkEngine:
                         or "run ended with error"
                     )
                     emit({"kind": "error", "text": f"agent run failed: {detail}"})
+                    # Raised rather than returned so no caller can mistake it for
+                    # a failure worth another attempt. Usage is already captured
+                    # above, so what this turn spent is still booked.
+                    exhausted = _account_limit_detail(msg)
+                    if exhausted is not None:
+                        raise AccountLimitReached(exhausted)
         transcript = [
             {"role": "user", "parts": [{"type": "text", "text": prompt}]},
             {"role": "assistant", "parts": assistant_parts},

@@ -14,6 +14,7 @@ import pyarrow as pa
 from pydantic import create_model
 
 from app.core.agent.usage import LlmUsage
+from app.core.errors import StageWideFailure
 from app.models import WorkflowStage
 from app.models.schema import Column, TableSchema
 from app.models.stages.llm_transform import LLMTransformStage
@@ -71,6 +72,11 @@ def make_llm_row_mapper(
         usages: list[LlmUsage] = []
         try:
             reply = call_llm(stage.id, llm, row, reply_model=reply_model, usage_out=usages)
+        except StageWideFailure:
+            # Not this row's failure: every remaining row would fail the same
+            # way, so it stops the stage instead of tagging 5,000 rows one at a
+            # time with the same message.
+            raise
         except Exception as exc:  # noqa: BLE001 — per-row supervisor: tag the row
             # with the ROW_ERROR_KEY sentinel so the map completes (one bad row
             # does not abort the stage); the row driver collects these off the
@@ -119,6 +125,8 @@ def _process_chunk(
     try:
         by_number, problem = _ask_until_reply_rejoins(
             stage_id, llm, batch_reply_schema, chunk, usages)
+    except StageWideFailure:
+        raise                       # not this chunk's failure — see map_row's supervisor
     except Exception as exc:  # noqa: BLE001 — the chunk's supervisor, mirroring the
         # per-row one: a backend that never answered fails THESE rows, not the stage.
         return _emit_failed(chunk, usages, str(exc) or type(exc).__name__)
