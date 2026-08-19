@@ -155,16 +155,16 @@ def _validate_no_reference_override_on_target(config: EvalConfig) -> list[str]:
            for ov in config.reference_overrides if ov.stage_id == config.target_stage]
 
 
-# ── Condition 5: the path must preserve grain (or fall back to a code scorer) ─
+# ── Condition 5: the path must preserve grain ────────────────────────────────
 def _resolve_grain_settings(
     config: EvalConfig, workflow: Workflow
 ) -> tuple[EvalRunSettings, list[str]]:
     overrides = [config.override_stage,
                 *(ov.stage_id for ov in config.reference_overrides)]
     settings = resolve_eval_run_settings(workflow, overrides, config.target_stage)
-    if settings.can_score_declaratively or config.code is not None:
+    if settings.can_score_declaratively:
         return settings, []
     return settings, [
         "not scorable row-by-row (blocking stages: "
         + ", ".join(f"`{b}`" for b in settings.blocking_stages)
-        + ") and no code scorer is supplied"]
+        + ")"]

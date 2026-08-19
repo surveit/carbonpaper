@@ -141,9 +141,6 @@
     <p><strong>rollup metrics:</strong>
       {% for m in config.metrics %}<code>{{ m }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
     {% endif %}
-    {% if config.code %}
-    <p><strong>code scorer:</strong> <code>{{ config.code.module }}.{{ config.code.function }}</code></p>
-    {% endif %}
 
     <h3>Pathway</h3>
     <dl class="kv">

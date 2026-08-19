@@ -5,7 +5,6 @@ what the function is shown (a row dict or the whole frame).
 
 from __future__ import annotations
 
-import importlib
 from typing import Any, Callable
 
 import pandas as pd
@@ -33,11 +32,6 @@ CodeCarryingStage = PythonRowFunctionStage | PythonFrameFunctionStage | PublishS
 def _load_python_function(stage: CodeCarryingStage) -> Callable[..., Any]:
     fn_spec = stage.function
     fn_name = fn_spec.function or "transform"
-    if fn_spec.kind == FunctionKind.module:
-        if not fn_spec.module:
-            raise ValueError(f"stage {stage.id}: function.kind=module without module")
-        module = importlib.import_module(fn_spec.module)
-        return getattr(module, fn_name)
     if fn_spec.kind == FunctionKind.inline:
         fn = load_function(fn_spec.code or "", fn_name, "transform")
         if fn is None:

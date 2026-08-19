@@ -1,7 +1,6 @@
 """starlark_row_function stage: the config block, plus write-time validation that
 its inline Starlark compiles and binds the wanted function. Sandboxed inline code
-only — no `kind`/`module`, unlike PythonFunction, since there is no importable
-Starlark module to point at."""
+only — it carries no `kind`, unlike PythonFunction."""
 from __future__ import annotations
 
 from collections.abc import Sequence

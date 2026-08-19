@@ -1,8 +1,8 @@
 """Run one eval against a pinned workflow version and record the result.
 
-v1 scores DECLARATIVELY only -- a path that isn't grain-preserving is recorded as
-`vetoed`. An eval that no longer fits the workflow, or has no dataset, raises
-rather than recording a fake result.
+Scores DECLARATIVELY only: an eval whose path is not grain-preserving, which no
+longer fits the workflow, or which has no dataset raises rather than recording a
+fake result.
 """
 from __future__ import annotations
 
@@ -36,8 +36,7 @@ def run_eval(
 ) -> EvalRun:
     """Blocks until the eval is scored; the returned record is the final one."""
     workflow, run = _mint_eval_run(project_id, config, version_id)
-    final = (_score_run(project_id, config, workflow, run)
-             if run.settings.can_score_declaratively else _veto(run))
+    final = _score_run(project_id, config, workflow, run)
     save_eval_run(project_id, final)
     return final
 
@@ -47,9 +46,6 @@ def start_eval_run(
 ) -> EvalRun:
     """Returns at once with a `running` record; scoring lands on a daemon thread."""
     workflow, run = _mint_eval_run(project_id, config, version_id)
-    if not run.settings.can_score_declaratively:
-        # Nothing executes, so there is nothing to wait on — the veto is the result.
-        run = _veto(run)
     save_eval_run(project_id, run)
     if run.is_running():
         run_in_background(
@@ -140,14 +136,8 @@ def _scored(run: EvalRun, metrics: dict[str, Any], result_ref: str) -> EvalRun:
         "metrics": metrics, "result_ref": result_ref})
 
 
-def _veto(run: EvalRun) -> EvalRun:
-    return _unscored(run, "vetoed", [
-        "path is not grain-preserving, so it can't be scored row-by-row; "
-        f"needs a code scorer for stages {run.settings.blocking_stages}"])
-
-
 def _unscored(
-    run: EvalRun, status: Literal["vetoed", "error"], notes: list[str],
+    run: EvalRun, status: Literal["error"], notes: list[str],
 ) -> EvalRun:
     return run.model_copy(update={
         "status": status, "finished_at": _now(), "notes": notes})

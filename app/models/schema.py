@@ -58,7 +58,6 @@ TypeUnsafeUserStageConfigOverride: TypeAlias = dict[str, Any]
 # config class defined in its own module can use it without a cycle.
 class FunctionKind(str, Enum):
     inline = "inline"
-    module = "module"
 
 
 # ── Column-type vocabulary ───────────────────────────────────────────────────

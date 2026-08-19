@@ -152,7 +152,7 @@ class PythonFunction(StageConfig):
     model_config = ConfigDict(json_schema_extra={"description": PYTHON_FUNCTION_DESCRIPTION})
 
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
-        "kind", "code", "module", "function", "requirements",
+        "kind", "code", "function", "requirements",
     })
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({"summary", "corner_cases"})
 
@@ -179,14 +179,11 @@ class PythonFunction(StageConfig):
             "have a forex conversion table and it will break sums downstream."
         ),
     )
-    module: Optional[str] = None
     function: Optional[str] = None
     requirements: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _kind_fields(self) -> "PythonFunction":
-        if self.kind == FunctionKind.module and not self.module:
-            raise ValueError("function.kind=module needs `module`")
         if self.kind == FunctionKind.inline and not self.code:
             raise ValueError("function.kind=inline needs `code`")
         return self
@@ -205,10 +202,6 @@ def find_python_function_warnings(stage: "CarriesPythonFunctionStage"
     if not (function.summary or "").strip():
         return [warn(stage, "undescribed",
                      "no plain-language description — reviewable only by reading its code")]
-    if function.kind == FunctionKind.module:
-        return [warn(stage, "unreviewable_code",
-                     f"the code lives in module `{function.module}` rather than on the "
-                     f"stage, so the review panel cannot show it")]
     return []
 
 
@@ -255,7 +248,7 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
         requires_inputs=True,
         min_inputs=1,
         required=["kind"],
-        optional=["module", "function", "code", "requirements", "summary"],
+        optional=["function", "code", "requirements", "summary"],
         notes=(
             "Prefer starlark_row_function, which runs sandboxed with no file, network, or "
             "library access — reach for this Python variant only when the transform genuinely "
@@ -276,7 +269,7 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
         requires_inputs=True,
         min_inputs=1,
         required=["kind"],
-        optional=["module", "function", "code", "requirements", "summary"],
+        optional=["function", "code", "requirements", "summary"],
         notes=(
             "The runtime calls `transform(*frames)`: one POSITIONAL parameter per declared "
             "input, in `inputs` order — never by name, never a dict of frames. It receives no "
