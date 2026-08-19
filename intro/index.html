@@ -197,38 +197,46 @@
   .nojs .step-inner { opacity: 1; }
 
   @media (max-width: 1199px) {
-    .scrolly { display: block; max-width: 42rem; padding: 0 1.25rem; }
+    .scrolly { display: block; max-width: 1180px; padding: 0 1.25rem; }
     .steps { padding: 1rem 0 4rem; }
     .step { min-height: 0; display: block; padding: 1.5rem 0; }
     .step-inner { opacity: 1; transition: none; }
+    .step-inner > p { max-width: 42rem; }
     .stage-wrap { display: none; }
     .mobile-frame { display: block; margin-top: 1.2rem; }
-    .mobile-card { background: var(--card); border: 1px solid var(--rule); border-radius: 10px;
-                   padding: 1rem; box-shadow: 0 12px 30px -20px rgba(36,39,43,.3); }
-    .mobile-files { font-family: var(--sans); font-size: .72rem; color: var(--muted); }
-    .mobile-files span { display: block; border: 1px solid var(--rule); border-radius: 4px;
-                         padding: .25rem .4rem; margin-top: .35rem; }
-    .mobile-cloud { height: 9rem; position: relative; overflow: hidden; }
-    .mobile-cloud span { position: absolute; border-radius: 999px; background: #e6e9ee; }
-    .mobile-cloud span:nth-child(1) { width: 8rem; height: 8rem; left: 20%; top: 1rem; }
-    .mobile-cloud span:nth-child(2) { width: 6rem; height: 6rem; left: 42%; top: 2rem; background: #dfe3e9; }
-    .mobile-cloud span:nth-child(3) { width: 5rem; height: 5rem; left: 58%; top: 3rem; background: #eef0f4; }
-    .mobile-value { text-align: center; font-family: var(--sans); font-size: 2.6rem; font-weight: 600;
-                    font-variant-numeric: tabular-nums; color: var(--accent); }
-    .mobile-value small { display: block; margin-top: .4rem; font-size: .72rem; font-weight: 500;
-                          letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-    .mobile-pipeline { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
-    .mobile-pipeline span { padding: .55rem .6rem; border: 1px solid #787d86; border-radius: 6px;
-                            font-family: var(--sans); font-size: .78rem; text-align: center; }
-    .mobile-pipeline span.active { border-color: var(--accent); background: #e8f1fb; }
-    .mobile-note { font-family: var(--sans); font-size: .82rem; line-height: 1.55; color: var(--muted); }
-    .mobile-trace { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center;
-                    font-family: var(--mono); font-size: .72rem; color: var(--muted); }
-    .mobile-trace b { color: var(--ink); }
-    .mobile-packet { font-family: var(--sans); font-size: .8rem; line-height: 1.8; color: var(--muted); }
-    .mobile-packet b { display: block; color: var(--ink); }
+    .static-scene { position: relative; width: 100%; min-height: 0;
+                    display: grid; grid-template-columns: 10rem minmax(0, 1fr) 11rem;
+                    gap: 1.6rem; align-items: center; }
+    .static-scene .zone { display: none; transition: none; }
+    .static-scene .zone.static-visible { display: block; }
+    .static-scene .mid.static-visible { display: flex; }
+    .static-scene .layer, .static-scene .fade, .static-scene .pin, .static-scene .over,
+    .static-scene .node, .static-scene .flow { transition: none; }
+    .static-scene .mid { min-height: 17rem; }
+    .static-scene .cloud .blob { animation: none; }
+    .static-scene .graph-hold { overflow-x: auto; }
+    .static-scene .graph-hold svg { min-width: 44rem; }
+    .static-scene .node.lit rect { stroke: var(--accent); }
+    .static-scene .focus .node, .static-scene .focus .flow { opacity: .24; }
+    .static-scene .focus .node.lit, .static-scene .focus .flow.lit { opacity: 1; }
+    .static-scene .flow.lit .gflow { stroke: var(--accent); stroke-width: 2.4; }
+    .static-scene .chain .node rect { stroke: var(--accent); }
+    .static-scene .recede { opacity: .26; }
+    .static-scene .over img { max-width: 100%; height: auto; }
+    .nojs .stage-wrap { display: block; }
+    .nojs .mobile-frame { display: none; }
     .hero { padding-top: 2.25rem; }
   }
+
+  @media (max-width: 700px) {
+    .static-scene { grid-template-columns: 1fr; gap: 1rem; }
+    .static-scene .out { text-align: left; }
+    .static-scene .out .fade { position: relative; right: auto; top: auto; transform: none; }
+    .static-scene .pin, .static-scene .over { position: relative; inset: auto !important;
+                                               width: 100% !important; max-width: 100%;
+                                               margin-top: 1rem; transform: none !important; }
+  }
+
   @media (max-width: 560px) {
     .site-nav { padding: .75rem 1rem; gap: .75rem; }
     .site-nav > a:not(.wordmark):not(.nav-action) { display: none; }
@@ -276,83 +284,61 @@
     <section class="step" data-step="1"><div class="step-inner">
       <p class="say">You hand Claude 45,061 lobbying filings and ask what firms spent lobbying
       on artificial intelligence.</p>
-      <div class="mobile-frame"><div class="mobile-card mobile-files">
-        <span>lda_data_Q1_2026.xlsx</span><span>lda_data_Q2_2026.xlsx</span>
-      </div></div>
+      <div class="mobile-frame"></div>
     </div></section>
 
     <section class="step" data-step="2"><div class="step-inner">
       <p class="say">Claude thought for 7m30s.</p>
-      <div class="mobile-frame"><div class="mobile-card mobile-cloud"><span></span><span></span><span></span></div></div>
+      <div class="mobile-frame"></div>
     </div></section>
 
     <section class="step" data-step="3"><div class="step-inner">
       <p class="say">The answer is $499 million.<sup>*</sup></p>
-      <div class="mobile-frame"><div class="mobile-card mobile-value">$499m<small>the model said</small></div></div>
+      <div class="mobile-frame"></div>
     </div></section>
 
     <section class="step" data-step="4"><div class="step-inner">
       <p class="say">Great. It even says what it considered.</p>
       <p class="sub">But not a publishable number. You can't check all its assumptions.</p>
-      <div class="mobile-frame"><div class="mobile-card mobile-cloud"><span></span><span></span><span></span></div></div>
+      <div class="mobile-frame"></div>
     </div></section>
 
     <section class="step" data-step="5"><div class="step-inner">
       <p class="say">Carbon Paper turns a conversation into a program that runs against your
       original data.</p>
-      <div class="mobile-frame"><div class="mobile-card mobile-pipeline">
-        <span>Load filings</span><span>Clean income</span><span>Is it about AI?</span><span>Review</span>
-        <span>Split in-house</span><span>Outside firms</span><span>In-house lobbying</span><span>Publish results</span>
-      </div></div>
+      <div class="mobile-frame"></div>
     </div></section>
 
     <section class="step" data-step="6"><div class="step-inner">
       <p class="say">Each step is a small pre-defined block, and says in plain English what it
       does...</p>
-      <div class="mobile-frame"><div class="mobile-card">
-        <div class="mobile-pipeline"><span>Load filings</span><span class="active">Clean income</span><span>Is it about AI?</span><span>Review</span></div>
-        <p class="mobile-note">Reads income and expenses as plain dollar numbers.</p>
-      </div></div>
+      <div class="mobile-frame"></div>
     </div></section>
 
     <section class="step" data-step="7"><div class="step-inner">
       <p class="say">and exactly what it changed.</p>
-      <div class="mobile-frame"><div class="mobile-card">
-        <div class="mobile-pipeline"><span>Load filings</span><span class="active">Clean income</span><span>Is it about AI?</span><span>Review</span></div>
-        <p class="mobile-note">Adds numeric <code>income_usd</code> and <code>expenses_usd</code> columns without replacing the reported text.</p>
-      </div></div>
+      <div class="mobile-frame"></div>
     </div></section>
 
     <section class="step" data-step="8"><div class="step-inner">
       <p class="say">Only one step needs an AI now. The rest is 100% deterministic.</p>
-      <div class="mobile-frame"><div class="mobile-card">
-        <div class="mobile-pipeline"><span>Clean income</span><span class="active">Is it about AI?</span><span>Review</span><span>Publish results</span></div>
-        <p class="mobile-note">One prompt decides whether a filing is primarily related to artificial intelligence.</p>
-      </div></div>
+      <div class="mobile-frame"></div>
     </div></section>
 
     <section class="step" data-step="9"><div class="step-inner">
       <p class="say">Same data with different assumptions gives a different number.</p>
-      <div class="mobile-frame"><div class="mobile-card">
-        <div class="mobile-pipeline"><span>Load filings</span><span>Clean income</span><span>Review</span><span>Publish results</span></div>
-        <div class="mobile-value">$42.0m<small>the run computed</small></div>
-      </div></div>
+      <div class="mobile-frame"></div>
     </div></section>
 
     <section class="step" data-step="10"><div class="step-inner">
       <p class="say">Every figure traces back to the row in the source data.</p>
-      <div class="mobile-frame"><div class="mobile-card mobile-trace">
-        <b>input_q1_filings row 74</b><span>→</span><span>10 recorded steps</span><span>→</span><b>published claim</b>
-      </div></div>
+      <div class="mobile-frame"></div>
     </div></section>
 
     <section class="step" id="example-packet" data-step="11"><div class="step-inner">
       <p class="say">Export the whole run and hand it to your fact-checker. It opens
       without Carbon Paper.</p>
-      <div class="mobile-frame"><div class="mobile-card mobile-packet">
-        <b>ai_lobbying-20260810T152339/</b>
-        <span>index.html · inputs/ · data/ · stages/ · methodology.md · workflow.json · manifest.json · events.jsonl · checksums.txt</span>
-      </div></div>
+      <div class="mobile-frame"></div>
     </div></section>
   </div>
 
@@ -570,25 +556,11 @@ workflow you can run again.</p>
 
 <script>
 const staticViewport = window.matchMedia('(max-width: 1199px)');
+const sourceStage = document.querySelector('.stage');
+const sourcePipe = sourceStage.querySelector('#pipe');
+const ALL_NODES = [...sourcePipe.querySelectorAll('.node')].map(el => el.dataset.node);
+const ALL_EDGES = [...sourcePipe.querySelectorAll('.flow')].map(el => el.dataset.edge);
 
-if (!staticViewport.matches) {
-document.body.classList.remove('nojs');
-
-const steps = [...document.querySelectorAll('.step')];
-const layers = new Map([...document.querySelectorAll('.layer')].map(el => [el.dataset.layer, el]));
-const fades = new Map([...document.querySelectorAll('.fade')].map(el => [el.dataset.fade, el]));
-const pins = new Map([...document.querySelectorAll('.pin')].map(el => [el.dataset.pin, el]));
-const overs = new Map([...document.querySelectorAll('.over')].map(el => [el.dataset.over, el]));
-const pipe = document.getElementById('pipe');
-const nodes = new Map([...pipe.querySelectorAll('.node')].map(el => [el.dataset.node, el]));
-const edges = new Map([...pipe.querySelectorAll('.flow')].map(el => [el.dataset.edge, el]));
-const zoneQ = document.getElementById('zone-q');
-const zoneOut = document.getElementById('zone-out');
-const ALL_NODES = [...nodes.keys()];
-const ALL_EDGES = [...edges.keys()];
-
-// Per step: what the middle holds, which figure is in the right-hand slot, what is lit,
-// what is pinned. `recede` dims the flanks so a detail step gets the whole reader.
 const SCENES = {
   1:  {ask: 1},
   2:  {ask: 1, layer: 'cloud'},
@@ -603,9 +575,18 @@ const SCENES = {
   11: {ask: 1, layer: 'graph', out: 'ran', recede: 1, over: '11'},
 };
 
-function show(step) {
-  const scene = SCENES[step];
-  if (!scene) return;
+function applyScene(stage, scene, markers) {
+  const layers = new Map([...stage.querySelectorAll('.layer')].map(el => [el.dataset.layer, el]));
+  const fades = new Map([...stage.querySelectorAll('.fade')].map(el => [el.dataset.fade, el]));
+  const pins = new Map([...stage.querySelectorAll('.pin')].map(el => [el.dataset.pin, el]));
+  const overs = new Map([...stage.querySelectorAll('.over')].map(el => [el.dataset.over, el]));
+  const pipe = stage.querySelector('#pipe, [data-pipeline]');
+  const nodes = new Map([...pipe.querySelectorAll('.node')].map(el => [el.dataset.node, el]));
+  const edges = new Map([...pipe.querySelectorAll('.flow')].map(el => [el.dataset.edge, el]));
+  const zoneQ = stage.querySelector('.zone.q');
+  const zoneMid = stage.querySelector('.zone.mid');
+  const zoneOut = stage.querySelector('.zone.out');
+
   for (const [name, el] of layers) el.classList.toggle('on', name === scene.layer);
   for (const [name, el] of pins) el.classList.toggle('on', name === scene.pin);
   for (const [name, el] of overs) el.classList.toggle('on', name === scene.over);
@@ -614,9 +595,10 @@ function show(step) {
   fades.get('ran').classList.toggle('on', scene.out === 'ran');
   zoneQ.classList.toggle('recede', !!scene.recede);
   zoneOut.classList.toggle('recede', !!(scene.recede || scene.recedeOut));
+  zoneQ.classList.toggle('static-visible', !!scene.ask);
+  zoneMid.classList.toggle('static-visible', !!scene.layer);
+  zoneOut.classList.toggle('static-visible', !!scene.out);
 
-  // Lighting everything is not a focus: step 10 turns the whole chain blue rather than
-  // dimming seven eighths of it to make a point about the eighth.
   const partial = scene.nodes && scene.nodes.length < ALL_NODES.length;
   pipe.classList.toggle('focus', !!partial);
   pipe.classList.toggle('chain', !!scene.nodes && !partial);
@@ -625,9 +607,51 @@ function show(step) {
   for (const [name, el] of edges) {
     const lit = (scene.edges || []).includes(name);
     el.classList.toggle('lit', lit);
-    el.querySelector('.gflow').setAttribute('marker-end', lit ? 'url(#ar-lit)' : 'url(#ar)');
+    const marker = lit ? markers.lit : markers.base;
+    el.querySelector('.gflow').setAttribute('marker-end', `url(#${marker})`);
   }
+}
 
+function renameStaticMarkers(stage, step) {
+  const markers = {};
+  const pipe = stage.querySelector('#pipe');
+  pipe.dataset.pipeline = 'true';
+  for (const marker of stage.querySelectorAll('marker')) {
+    const name = marker.id === 'ar-lit' ? 'lit' : 'base';
+    const id = `${marker.id}-${step}`;
+    marker.id = id;
+    markers[name] = id;
+  }
+  for (const element of stage.querySelectorAll('[id]')) {
+    if (element.tagName.toLowerCase() !== 'marker') element.removeAttribute('id');
+  }
+  return markers;
+}
+
+function renderStaticScenes() {
+  for (const step of document.querySelectorAll('.step')) {
+    const scene = SCENES[Number(step.dataset.step)];
+    const frame = step.querySelector('.mobile-frame');
+    const clone = sourceStage.cloneNode(true);
+    clone.classList.add('static-scene');
+    const markers = renameStaticMarkers(clone, step.dataset.step);
+    applyScene(clone, scene, markers);
+    frame.append(clone);
+  }
+}
+
+if (staticViewport.matches) {
+  document.body.classList.remove('nojs');
+  renderStaticScenes();
+} else {
+document.body.classList.remove('nojs');
+
+const steps = [...document.querySelectorAll('.step')];
+
+function show(step) {
+  const scene = SCENES[step];
+  if (!scene) return;
+  applyScene(sourceStage, scene, {base: 'ar', lit: 'ar-lit'});
   steps.forEach(el => el.classList.toggle('is-active', el.dataset.step === String(step)));
 }
 
