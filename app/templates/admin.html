@@ -14,7 +14,7 @@
 {% endif %}
 
 <h2>LLM-transform model</h2>
-<p class="muted">This workspace-wide setting is authoritative for every LLM transform. A stage's authored model remains visible in its definition; each run records the model that actually answered.</p>
+<p class="muted">This workspace-wide setting is authoritative for every LLM transform. A stage's authored model remains visible in its definition; each run records the model that actually answered. Changes apply to new runs, never a stage already running.</p>
 <form method="post" action="/admin/llm-transform-model">
     <label for="llm-transform-model">Selected model</label>
     <select id="llm-transform-model" name="model">

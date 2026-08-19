@@ -36,6 +36,7 @@ def test_admin_shows_the_global_llm_transform_model() -> None:
     assert r.status_code == 200
     assert "LLM-transform model" in r.text
     assert "claude-haiku-4-5" in r.text
+    assert "Changes apply to new runs, never a stage already running." in r.text
     assert 'value="claude-haiku-4-5" selected' in r.text
 
 

@@ -84,7 +84,7 @@ def call_llm(
     input_row: dict[str, Any],
     *,
     reply_model: type[BaseModel],
-    model: str | None = None,
+    model: LLMModel | None = None,
     usage_out: list[LlmUsage] | None = None,
 ) -> dict[str, Any]:
     """`usage_out` collects EVERY attempt's usage, failed ones included — those tokens were spent."""
@@ -106,7 +106,7 @@ def call_llm_batch(
     instructions: str,
     task: str,
     reply_schema: type[BaseModel],
-    model: str | None = None,
+    model: LLMModel | None = None,
     usage_out: list[LlmUsage] | None = None,
 ) -> dict[str, Any]:
     model_name = _selected_model_name(llm_config, model)
@@ -130,13 +130,10 @@ def resolve_transform_model(llm_config: LLMConfig) -> LLMModel:
     return model
 
 
-def _selected_model_name(llm_config: LLMConfig, requested_model: str | None) -> str:
-    selected = resolve_transform_model(llm_config)
-    if requested_model is not None and requested_model != selected.value:
-        raise LLMError(
-            f"LLM-transform model is globally set to {selected.value!r}; callers may not "
-            f"override it with {requested_model!r}"
-        )
+def _selected_model_name(llm_config: LLMConfig, selected_model: LLMModel | None) -> str:
+    selected = selected_model or resolve_transform_model(llm_config)
+    if selected == LLMModel.gpt_5_6_terra:
+        _refuse_codex_unsupported_options(llm_config)
     return selected.value
 
 

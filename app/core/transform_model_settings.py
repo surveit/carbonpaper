@@ -6,7 +6,7 @@ from typing import ClassVar
 from pydantic import ValidationError
 
 from app.core.llm import DEFAULT_TRANSFORM_MODEL, LLMModel
-from app.core.persistence import PersistedModel, PersistenceScope
+from app.core.persistence import PersistedModel, PersistenceScope, get_store
 
 
 class TransformModelSetting(PersistedModel):
@@ -16,13 +16,24 @@ class TransformModelSetting(PersistedModel):
     model: LLMModel
 
 
+class TransformModelSettingHistory(PersistedModel):
+    collection: ClassVar[str] = "transform_model_setting_history"
+    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
+
+
 def initialize_transform_model_setting() -> TransformModelSetting:
     settings = _read_settings()
-    if not settings:
-        setting = TransformModelSetting(model=DEFAULT_TRANSFORM_MODEL)
-        setting.save()
+    history = _read_history()
+    if settings:
+        setting = _require_one_setting(settings)
+        _ensure_history(history)
         return setting
-    return _require_one_setting(settings)
+    if history or not get_store().is_empty():
+        raise RuntimeError("global LLM-transform model setting is missing")
+    setting = TransformModelSetting(model=DEFAULT_TRANSFORM_MODEL)
+    setting.save()
+    TransformModelSettingHistory().save()
+    return setting
 
 
 def read_transform_model_setting() -> TransformModelSetting:
@@ -41,6 +52,21 @@ def _read_settings() -> list[TransformModelSetting]:
         return TransformModelSetting.list()
     except ValidationError as exc:
         raise RuntimeError("global LLM-transform model setting is corrupt") from exc
+
+
+def _read_history() -> list[TransformModelSettingHistory]:
+    try:
+        return TransformModelSettingHistory.list()
+    except ValidationError as exc:
+        raise RuntimeError("global LLM-transform model setting history is corrupt") from exc
+
+
+def _ensure_history(history: list[TransformModelSettingHistory]) -> None:
+    if not history:
+        TransformModelSettingHistory().save()
+        return
+    if len(history) != 1:
+        raise RuntimeError("global LLM-transform model setting history is not unique")
 
 
 def _require_one_setting(settings: list[TransformModelSetting]) -> TransformModelSetting:

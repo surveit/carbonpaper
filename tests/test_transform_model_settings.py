@@ -36,3 +36,37 @@ def test_setting_the_global_model_persists_the_selected_model() -> None:
     set_transform_model(LLMModel.gpt_5_6_terra)
 
     assert read_transform_model_setting().model == LLMModel.gpt_5_6_terra
+
+
+def test_initialization_refuses_a_setting_deleted_after_selection() -> None:
+    initialize_transform_model_setting()
+    selected = set_transform_model(LLMModel.gpt_5_6_terra)
+    TransformModelSetting.delete(selected.id)
+
+    with pytest.raises(RuntimeError, match="global LLM-transform model setting is missing"):
+        initialize_transform_model_setting()
+
+
+def test_initialization_refuses_to_materialize_a_setting_in_an_existing_database() -> None:
+    from app.core.persistence import configure_store, get_store
+    from app.core.sqlite_store import SqliteKvStore
+
+    configure_store(SqliteKvStore(":memory:"))
+    get_store().write("unrelated", "record", {})
+
+    with pytest.raises(RuntimeError, match="global LLM-transform model setting is missing"):
+        initialize_transform_model_setting()
+
+
+def test_initialization_refuses_a_corrupt_setting() -> None:
+    from app.core.persistence import get_store
+
+    selected = read_transform_model_setting()
+    get_store().write(
+        TransformModelSetting.collection,
+        selected.id,
+        {**selected.model_dump(mode="json"), "model": "not-a-model"},
+    )
+
+    with pytest.raises(RuntimeError, match="global LLM-transform model setting is corrupt"):
+        initialize_transform_model_setting()

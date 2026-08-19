@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 
 from app.core.stage_cache import StageCache
+from app.core.llm import LLMModel
 from app.models import parse_stage, Stage, Workflow
 from app.models.stage import StageType
 from app.runtime.context import RunContext, RunIdentity
@@ -153,7 +154,10 @@ def test_a_batched_chunk_binds_the_input_rows_it_actually_covers(tmp_path, monke
     ctx, log = _logged_ctx(tmp_path, "batched")
     rows = run_llm_batches(
         place_stage(_llm_stage(batch_size=2)),
-        as_inputs({"src": pd.DataFrame({"x": [7, 8]})}), ctx, 1, [3, 4]
+        as_inputs({"src": pd.DataFrame({"x": [7, 8]})}),
+        ctx.bind_selected_llm_transform_model(LLMModel.claude_haiku_4_5),
+        1,
+        [3, 4],
     )
 
     assert [row["verdict"] for row in rows] == ["a", "b"]

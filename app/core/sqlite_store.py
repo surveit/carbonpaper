@@ -66,6 +66,11 @@ class SqliteKvStore:
             ).fetchone()
         return row is not None
 
+    def is_empty(self) -> bool:
+        with self._lock:
+            row = self._conn.execute("SELECT 1 FROM documents LIMIT 1").fetchone()
+        return row is None
+
     def delete(self, collection: str, id: str) -> None:
         with self._lock:
             self._conn.execute(
