@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, TypedDict
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.agent.usage import LlmUsage
 from app.core.run_status import StageStatus
@@ -59,6 +59,22 @@ class StageErrorInfo(BaseModel):
     traceback: str | None
 
 
+class StageProgress(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    completed: int = Field(ge=0, strict=True)
+    total: int | None = Field(default=None, ge=0, strict=True)
+    updated_at: str
+
+    @model_validator(mode="after")
+    def _completed_does_not_exceed_total(self) -> StageProgress:
+        if self.total is not None and self.completed > self.total:
+            raise ValueError(
+                f"completed progress {self.completed} exceeds total {self.total}"
+            )
+        return self
+
+
 # The stage statuses whose output frame holds what the stage promised. An `error`
 # stage also wrote a frame, but its untouched columns are nulls rather than results.
 FINISHED_STAGE_STATUSES = (StageStatus.OK, StageStatus.VALIDATION_WARNINGS)
@@ -93,6 +109,7 @@ class StageRecord(BaseModel):
     output_path: str | None = None
     queue_path: str | None = None
     finished_at: str | None = None
+    progress: StageProgress | None = None
 
     @classmethod
     def record_with_status(cls, stage: Stage, status: StageStatus) -> StageRecord:
@@ -128,4 +145,3 @@ def read_run_bindings(
     if isinstance(nested, dict) and "run_bindings" in nested:
         return dict(nested["run_bindings"] or {})
     return dict(raw.get("run_bindings") or {})
-

@@ -81,7 +81,13 @@ def run_llm_batches(
     process_chunk = _build_chunk_processor(
         stage, llm, batch_reply_schema, positions, ctx.run_log
     )
-    for index, row in _run_chunks(records, llm.batch_size, parallelism, process_chunk):
+    for index, row in _run_chunks(
+        records,
+        llm.batch_size,
+        parallelism,
+        process_chunk,
+        ctx.stage_progress.advance,
+    ):
         results[index] = row
 
     # Grain + order guarantee, verified not assumed: exactly one row per input,
@@ -120,6 +126,7 @@ def _run_chunks(
     size: int,
     parallelism: int,
     process_chunk: Callable[[int, list[Row]], list[tuple[int, Row]]],
+    on_chunk_completed: Callable[[int], None] | None = None,
 ) -> list[tuple[int, Row]]:
     chunks = [
         (start, records[start : start + size]) for start in range(0, len(records), size)
@@ -129,10 +136,16 @@ def _run_chunks(
         with ThreadPoolExecutor(max_workers=parallelism) as pool:
             futures = [pool.submit(process_chunk, start, chunk) for start, chunk in chunks]
             for future in as_completed(futures):
-                computed.extend(future.result())
+                result = future.result()
+                computed.extend(result)
+                if on_chunk_completed is not None:
+                    on_chunk_completed(len(result))
     else:
         for start, chunk in chunks:
-            computed.extend(process_chunk(start, chunk))
+            result = process_chunk(start, chunk)
+            computed.extend(result)
+            if on_chunk_completed is not None:
+                on_chunk_completed(len(result))
     return computed
 
 

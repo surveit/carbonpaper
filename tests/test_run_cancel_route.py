@@ -14,7 +14,7 @@ from app.main import app
 from app.runtime.cancellation import consume_cancel
 from app.services import workspace
 from stage_seed import add_stage
-from run_seed import store_manifest
+from run_seed import read_manifest, store_manifest
 
 PROJ = "testmeth"
 RUN = "run-0001"
@@ -101,6 +101,31 @@ def test_run_status_counts_include_a_cancelled_stage(examples_dir, client):
     assert counts["total"] == 3
     assert counts["ok"] == 1
     assert counts["pending"] == 1
+
+
+def test_run_status_exposes_recorded_stage_progress(examples_dir, client):
+    _write_one_stage_project(examples_dir)
+    _write_status_manifest(examples_dir, [("load", "running")])
+    raw = read_manifest(examples_dir / PROJ, RUN)
+    raw["stage_records"][0]["progress"] = {
+        "completed": 7,
+        "total": 10,
+        "updated_at": "2026-08-19T12:00:00",
+    }
+    store_manifest(examples_dir / PROJ, RUN, raw)
+
+    response = client.get(f"/project/{PROJ}/runs/{RUN}/status")
+
+    assert response.status_code == 200
+    assert response.json()["stages"] == [{
+        "stage_id": "load",
+        "status": "running",
+        "progress": {
+            "completed": 7,
+            "total": 10,
+            "updated_at": "2026-08-19T12:00:00",
+        },
+    }]
 
 
 def test_run_detail_page_offers_resume_for_a_cancelled_run(examples_dir, client):

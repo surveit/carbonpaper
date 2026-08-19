@@ -39,6 +39,7 @@ from .stage_output import StageOutput
 from .errors import RunCancelled
 from .manifest import RunManifest, create_run_manifest, write_manifest
 from .run_log import RUN_START, STAGE_DONE, STAGE_START, RunLog
+from .progress import StageProgressReporter
 from .stages import HANDLERS, HaltForReview, StageHandler
 from .lineage import (
     RowLineage,
@@ -457,14 +458,21 @@ def _run_stage(
     records_by_id[sid] = record
     _flush_manifest(manifest, records_by_id, ordered, run_dir, RunStatus.RUNNING)
     _emit_stage_start(ctx.run_log, workflow_stage)
+    progress = StageProgressReporter(
+        record,
+        lambda: _flush_manifest(
+            manifest, records_by_id, ordered, run_dir, RunStatus.RUNNING
+        ),
+    )
+    stage_ctx = ctx.attach_stage_progress(progress)
 
     joins_blocked = False
     try:
         inputs_for_stage, window = _gather_stage_inputs(
-            workflow_stage, outputs_so_far, ctx, record)
+            workflow_stage, outputs_so_far, stage_ctx, record)
         handler = _resolve_handler(stage.type)
         try:
-            output = handler.execute(workflow_stage, inputs_for_stage, ctx)
+            output = handler.execute(workflow_stage, inputs_for_stage, stage_ctx)
         except HaltForReview as halt:
             # The halt fires before a frame is returned, so its contribution
             # (the stage's human_review_queue_stats) rides the exception; merge it into the
@@ -493,7 +501,7 @@ def _run_stage(
         # fields (status, halt queue info).
         record.elapsed_ms = int((time.perf_counter() - t0) * 1000)
         record.finished_at = datetime.now().isoformat(timespec="seconds")
-        _flush_manifest(manifest, records_by_id, ordered, run_dir, RunStatus.RUNNING)
+        progress.finish()
         _emit_stage_done(ctx.run_log, record)
 
     return _StageOutcome.RAN, joins_blocked

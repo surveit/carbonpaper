@@ -6,6 +6,7 @@ what the function is shown (a row dict or the whole frame).
 from __future__ import annotations
 
 import importlib
+import inspect
 from typing import Any, Callable
 
 import pandas as pd
@@ -53,7 +54,8 @@ def handle_python_frame_function(
     fn = _load_python_function(narrow_stage(workflow_stage, PythonFrameFunctionStage))
     # Pass dataframes positionally in declared input order.
     args = [table_to_frame(inputs[ref.id]) for ref in workflow_stage.inputs]
-    return StageOutput.from_frame(_require_frame(fn(*args), workflow_stage))
+    kwargs = {"progress": ctx.stage_progress} if _accepts_progress(fn) else {}
+    return StageOutput.from_frame(_require_frame(fn(*args, **kwargs), workflow_stage))
 
 
 def make_python_row_mapper(
@@ -84,3 +86,11 @@ def _require_frame(result: Any, workflow_stage: WorkflowStage) -> pd.DataFrame:
             type(result).__name__,
         )
     return result
+
+
+def _accepts_progress(fn: Callable[..., Any]) -> bool:
+    try:
+        progress = inspect.signature(fn).parameters.get("progress")
+    except (TypeError, ValueError):
+        return False
+    return progress is not None and progress.kind is inspect.Parameter.KEYWORD_ONLY
