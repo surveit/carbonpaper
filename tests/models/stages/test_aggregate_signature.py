@@ -170,12 +170,12 @@ def test_list_op_declared_scalar_rejected():
     assert "regions" in msg and "list[str]" in msg
 
 
-def test_first_row_output_uses_the_value_column_type():
+def test_first_including_null_output_uses_the_value_column_type():
     assert _issues(_aggregate_stage(
         produces=[{"name": "company", "type": "str", "nullable": True},
                   {"name": "first_region", "type": "str", "nullable": True}],
         aggregations=[
-            {"output_column": "first_region", "formula": "first_row",
+            {"output_column": "first_region", "formula": "first_including_null",
              "value_column": "region"},
         ],
     )) == ""
