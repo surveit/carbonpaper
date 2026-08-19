@@ -51,17 +51,14 @@ def test_nojs_export_overlay_ignores_centering_position() -> None:
     assert '.nojs .over { left: auto !important; top: auto !important; transform: none !important; }' in page
 
 
-def test_mobile_keeps_a_sticky_visual_band_and_crops_detail_stages() -> None:
+def test_narrow_intro_places_a_static_visual_with_each_step() -> None:
     page = INTRO_PAGE.read_text(encoding="utf-8")
 
-    assert '.stage-wrap { order: -1; position: sticky; top: 0;' in page
-    assert 'background: var(--card); border: 1px solid var(--rule);' in page
-    assert ".pin { left: 50% !important; right: auto !important;" in page
-    assert ".over { left: 50% !important; right: auto !important;" in page
-    assert "mobileBox: '140 54 290 135'" in page
-    assert "mobileBox: '310 54 290 135'" in page
-    assert "const DEFAULT_PIPE_VIEW_BOX = '0 0 1180 250';" in page
-    assert "pipe.setAttribute('viewBox', mobileViewport.matches && scene.mobileBox" in page
+    assert page.count('class="mobile-frame"') == 11
+    assert '@media (max-width: 1199px)' in page
+    assert '.stage-wrap { display: none; }' in page
+    assert '.mobile-frame { display: block;' in page
+    assert '.step-inner { opacity: 1; transition: none; }' in page
 
 
 def test_mobile_respects_reduced_motion() -> None:
@@ -72,19 +69,11 @@ def test_mobile_respects_reduced_motion() -> None:
     assert '.cloud .blob { animation: none; }' in page
 
 
-def test_mobile_visual_band_has_no_minimum_height_floor() -> None:
+def test_narrow_intro_does_not_start_scrollytelling_or_crop_the_pipeline() -> None:
     page = INTRO_PAGE.read_text(encoding="utf-8")
 
-    assert 'height: min(42svh, 26rem); z-index: 1;' in page
-
-
-def test_mobile_prose_sticks_below_the_visual_band() -> None:
-    page = INTRO_PAGE.read_text(encoding="utf-8")
-
-    assert '.step-inner { position: sticky; top: calc(min(42svh, 26rem) + 1rem);' in page
-
-
-def test_mobile_steps_have_room_for_sticky_prose_in_landscape() -> None:
-    page = INTRO_PAGE.read_text(encoding="utf-8")
-
-    assert '.step { min-height: max(58svh, 20rem);' in page
+    assert "const staticViewport = window.matchMedia('(max-width: 1199px)');" in page
+    assert 'if (!staticViewport.matches) {' in page
+    assert page.index('if (!staticViewport.matches) {') < page.index('const seen = new IntersectionObserver')
+    assert 'mobileBox' not in page
+    assert 'mobileViewport' not in page
