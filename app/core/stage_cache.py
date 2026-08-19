@@ -60,16 +60,26 @@ class StageCacheEntry(PersistedModel):
 #        happens to a column a MAPPER produced, not only one read off disk.
 #   v4 — the frame cache keys on the arrow table rather than a pandas rendering
 #        of it, so the last pandas-sourced hash is gone.
-_CACHE_KEY_VERSION = 4
+CACHE_KEY_VERSION = 4
 
 
 def _build_cache_prefix(project_id: str, stage_id: str, stage_fingerprint: str) -> str:
     """Every id starts with this, so a prefix query and an id cannot disagree about the format."""
-    return f"v{_CACHE_KEY_VERSION}/{project_id}/{stage_id}/{stage_fingerprint}/"
+    return f"v{CACHE_KEY_VERSION}/{project_id}/{stage_id}/{stage_fingerprint}/"
 
 
 def _build_cache_id(project_id: str, stage_id: str, stage_fingerprint: str, input_fingerprint: str) -> str:
     return _build_cache_prefix(project_id, stage_id, stage_fingerprint) + input_fingerprint
+
+
+def rekey_cache_id_to_project(cache_id: str, project_id: str) -> str:
+    """The project segment is SCOPE: what an entry answers is fixed by the two fingerprints."""
+    parts = cache_id.split("/", 2)
+    if len(parts) != 3 or parts[0] != f"v{CACHE_KEY_VERSION}":
+        raise ValueError(
+            f"not a v{CACHE_KEY_VERSION} stage-cache id: {cache_id!r}"
+        )
+    return f"{parts[0]}/{project_id}/{parts[2]}"
 
 
 def _build_frame_cache_id(
@@ -120,6 +130,17 @@ class ReadOnlyStageCache:
             if entry.output_row is not None
         }
 
+    def find_project_entries(self, project_id: str) -> list[StageCacheEntry]:
+        return StageCacheEntry.list(prefix=f"v{CACHE_KEY_VERSION}/{project_id}/")
+
+    def find_project_frame_ids(self, project_id: str) -> list[str]:
+        return get_frame_store().list_ids(
+            CACHED_FRAME_COLLECTION, f"v{CACHE_KEY_VERSION}/{project_id}/"
+        )
+
+    def read_frame_payload(self, cache_id: str) -> bytes | None:
+        return get_frame_store().read_payload(CACHED_FRAME_COLLECTION, cache_id)
+
     def find_cached_frame(
         self,
         project_id: str,
@@ -154,6 +175,32 @@ class StageCache(ReadOnlyStageCache):
             frozen_input=_to_json_safe_row(input_row),
             output_row=None if output_row is None else _to_json_safe_row(output_row),
         ).save()
+
+    def copy_entry_into(self, entry: StageCacheEntry, project_id: str) -> bool:
+        """False means an id already stored — its output may differ from this one, and it wins."""
+        cache_id = _build_cache_id(
+            project_id, entry.stage_id, entry.stage_fingerprint, entry.input_fingerprint
+        )
+        if StageCacheEntry.exists(cache_id):
+            return False
+        StageCacheEntry(
+            id=cache_id,
+            project=project_id,
+            stage_id=entry.stage_id,
+            stage_fingerprint=entry.stage_fingerprint,
+            input_fingerprint=entry.input_fingerprint,
+            frozen_input=entry.frozen_input,
+            output_row=entry.output_row,
+        ).save()
+        return True
+
+    def copy_frame_into(self, cache_id: str, payload: bytes, project_id: str) -> bool:
+        store = get_frame_store()
+        moved = rekey_cache_id_to_project(cache_id, project_id)
+        if store.exists(CACHED_FRAME_COLLECTION, moved):
+            return False
+        store.write_payload(CACHED_FRAME_COLLECTION, moved, payload)
+        return True
 
     def record_frame(
         self,

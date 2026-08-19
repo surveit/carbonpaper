@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Cache import{% endblock %}
+{% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
+{% block content %}
+<div class="dash-header">
+    <div class="dash-header-text">
+        <h1>Cache import</h1>
+        <p class="lede">From <code>{{ report.source_project }}</code> into <code>{{ destination }}</code>.</p>
+    </div>
+    <a href="/admin/cache" class="btn">Back to stage cache</a>
+</div>
+
+{% set total = report.written + report.already_stored %}
+{% if report.reachable %}
+<div class="banner ok">
+    <p><strong>{{ "{:,}".format(report.reachable) }} of {{ "{:,}".format(total) }} imported entries are reachable</strong>
+       from the stages in this project right now.</p>
+</div>
+{% else %}
+<div class="banner bad">
+    <p><strong>None of the {{ "{:,}".format(total) }} imported entries are reachable.</strong>
+       Every stage in this project has a different definition from the one that recorded them, so
+       nothing here will be read and the next run pays for these rows again. The export came from a
+       workspace whose stages differ — match them, or export again from one that does.</p>
+</div>
+{% endif %}
+
+<table class="stages">
+    <thead>
+        <tr><th>channel</th><th class="spend-num">written</th><th class="spend-num">already stored</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>rows</td>
+            <td class="spend-num">{{ "{:,}".format(report.written) }}</td>
+            <td class="spend-num">{{ "{:,}".format(report.already_stored) }}</td>
+        </tr>
+        <tr>
+            <td>frames</td>
+            <td class="spend-num">{{ "{:,}".format(report.frames_written) }}</td>
+            <td class="spend-num">{{ "{:,}".format(report.frames_already_stored) }}</td>
+        </tr>
+    </tbody>
+</table>
+<p class="muted">Nothing was replaced: an id already stored keeps the output it holds.</p>
+
+<h2>By stage</h2>
+<p class="muted">An entry is looked up by its stage's definition fingerprint. A stage edited on
+either machine since the export moves that fingerprint, and its entries are stored but never read.</p>
+<table class="stages">
+    <thead>
+        <tr><th>stage</th><th class="spend-num">imported</th><th class="spend-num">reachable</th><th></th></tr>
+    </thead>
+    <tbody>
+        {% for s in report.stages %}
+        <tr>
+            <td><code>{{ s.stage_id }}</code></td>
+            <td class="spend-num">{{ "{:,}".format(s.imported) }}</td>
+            <td class="spend-num">{{ "{:,}".format(s.reachable) }}</td>
+            <td>
+                {% if s.reachable == s.imported %}<span class="badge ok">definition matches</span>
+                {% elif s.reachable %}<span class="badge warn">definition changed for some</span>
+                {% else %}<span class="badge warn">definition changed</span>{% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

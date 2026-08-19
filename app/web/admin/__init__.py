@@ -1,6 +1,5 @@
 """The workspace admin surface: seed bundles and project export/import
-(`workspace_router`), and what the workspace has spent on models
-(`spend_router` over `spend.py`). Two routers rather than one because
-`workspace_router` may reach the platform only through four named seams, and
-reading a run manifest is not one of them — `_arch_tests/`.
+(`workspace_router`), model spend (`spend_router` over `spend.py`), and moving a
+project's stage cache between workspaces (`cache_router`). Three routers because
+each reaches the platform through its own named seams — `_arch_tests/`.
 """
