@@ -56,10 +56,11 @@ non-unique reference, `expand` allows m:n fan-out); `aggregate`;
 
 **Row caching is a property of the handler SHAPE, not of a stage type.** `RowMapHandler`
 wraps the one line of per-row compute (`execution._open_row_caching`), so `python_row_function`
-and a batch_size-1 `llm_transform` are cached by the same code; for the batched path the
-shape looks every row up, hands `run_llm_batches` only the misses, scatters the computed
-rows back into input order alongside the hits, and records them. No stage module resolves a
-cache. The store is `app.core.stage_cache` — `find_recorded_rows` is one bulk read per
+and a batch_size-1 `llm_transform` are cached by the same code; the batched path narrows to
+the declared reads first, so a chunk is N rows of that same shape — it looks every row up,
+hands `run_llm_batches` only the misses, scatters the computed rows back into input order
+alongside the hits, records them, and rejoins the flowing columns. So both paths key on the
+declared reads and store reads + adds. No stage module resolves a cache. The store is `app.core.stage_cache` — `find_recorded_rows` is one bulk read per
 execution, keyed by (stage-definition fingerprint, input-row fingerprint), and `record`
 needs the write-capable `StageCache` accessor; the runtime holds that execution's state and
 decides only whether caching applies and whether a result may be recorded. A row carrying
