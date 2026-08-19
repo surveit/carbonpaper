@@ -55,7 +55,7 @@ def test_mobile_keeps_a_sticky_visual_band_and_crops_detail_stages() -> None:
     page = INTRO_PAGE.read_text(encoding="utf-8")
 
     assert '.stage-wrap { order: -1; position: sticky; top: 0;' in page
-    assert '.step-inner { background: var(--card);' in page
+    assert 'background: var(--card); border: 1px solid var(--rule);' in page
     assert ".pin { left: 50% !important; right: auto !important;" in page
     assert ".over { left: 50% !important; right: auto !important;" in page
     assert "mobileBox: '140 54 290 135'" in page
@@ -76,3 +76,9 @@ def test_mobile_visual_band_has_no_minimum_height_floor() -> None:
     page = INTRO_PAGE.read_text(encoding="utf-8")
 
     assert 'height: min(42svh, 26rem); z-index: 1;' in page
+
+
+def test_mobile_prose_sticks_below_the_visual_band() -> None:
+    page = INTRO_PAGE.read_text(encoding="utf-8")
+
+    assert '.step-inner { position: sticky; top: calc(min(42svh, 26rem) + 1rem);' in page

@@ -207,7 +207,8 @@
     .zone.q, .zone.out { display: none; }
     .steps { padding: 0 0 22vh; }
     .step { min-height: 58svh; display: flex; align-items: flex-start; padding: 2rem 0; }
-    .step-inner { background: var(--card); border: 1px solid var(--rule); border-radius: 10px;
+    .step-inner { position: sticky; top: calc(min(42svh, 26rem) + 1rem);
+                  background: var(--card); border: 1px solid var(--rule); border-radius: 10px;
                   padding: 1.15rem 1.2rem; box-shadow: 0 12px 30px -20px rgba(36,39,43,.3); }
     .pin { left: 50% !important; right: auto !important; top: auto !important; bottom: .75rem;
            width: min(25rem, calc(100vw - 2.5rem)); max-width: none;
