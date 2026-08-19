@@ -3,6 +3,7 @@ one file PICKER per file-kind input stage. A field carries a stored file's sha25
 a path; blank means run whatever the workflow authored."""
 from __future__ import annotations
 
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -159,6 +160,67 @@ def test_file_picker_lists_newest_upload_first_with_absolute_times(project, tmp_
 def test_file_picker_refuses_a_choice_without_an_upload_time():
     with pytest.raises(ValidationError, match="uploaded_at"):
         FileChoice.model_validate({"sha256": "abc", "filename": "a.csv", "bytes": 1})
+
+
+def test_file_picker_renders_shared_structured_controls(project, tmp_path):
+    _store("stories.csv", pd.DataFrame({"name": ["a"], "val": [1]}), tmp_path)
+
+    body = client.get("/project/demo/runs/new").text
+
+    assert 'class="file-picker" data-file-picker' in body
+    assert 'class="file-picker-native file-pick"' in body
+    assert 'class="file-picker-trigger"' in body
+    assert 'role="listbox"' in body
+    assert 'data-filename="stories.csv"' in body
+    assert 'data-uploaded-label="Uploaded ' in body
+    assert 'data-size-label="13B"' in body
+    assert "Uploads newest first" in body
+    assert 'class="file-picker-search" aria-label="Search files"' in body
+    assert "No files match this search." in body
+    assert "/static/file-picker.css" in body
+    assert "/static/file-picker.js" in body
+
+
+def test_required_file_picker_keeps_native_form_validation(project):
+    stage = read_stage(project, "load")
+    stage["connector"]["params"] = {}
+    add_stage(project, stage)
+    save_working_copy_as_version("demo", message="unbound", reviewer="test")
+
+    body = client.get("/project/demo/runs/new").text
+    picker = body.split('class="file-picker" data-file-picker', 1)[1].split(
+        "</select>", 1
+    )[0]
+
+    assert 'name="binding__load"' in picker
+    assert "required" in picker
+
+
+def test_authored_path_remains_the_blank_file_picker_choice(project):
+    body = client.get("/project/demo/runs/new").text
+    picker = body.split('class="file-picker" data-file-picker', 1)[1].split(
+        "</select>", 1
+    )[0]
+
+    assert 'value="" data-file-kind="authored"' in picker
+    assert f'data-filename="{project / "a.csv"}"' in picker
+    assert "required" not in picker
+
+
+def test_shared_file_picker_wires_pointer_keyboard_and_dynamic_refresh():
+    source = (Path(__file__).parents[1] / "app/static/file-picker.js").read_text(
+        encoding="utf-8"
+    )
+
+    for key in ("ArrowDown", "ArrowUp", "Home", "End", "Enter", "Escape", "Tab"):
+        assert f'event.key === "{key}"' in source or f'"{key}"' in source
+    assert 'document.addEventListener("click"' in source
+    assert "select.tabIndex = -1" in source
+    assert 'select.setAttribute("aria-hidden", "true")' in source
+    assert (
+        "window.CarbonFilePicker = { init: initFilePickers, refresh: refreshPicker }"
+        in source
+    )
 
 
 # ─── The run form is its own page, not a block on the run history ────────────

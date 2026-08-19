@@ -24,8 +24,17 @@ class FileChoice(BaseModel):
     @computed_field
     @property
     def label(self) -> str:
-        return (f"Uploaded {format_upload_time(self.uploaded_at)} · {self.filename} · "
-                f"{describe_bytes(self.bytes)}")
+        return f"{self.uploaded_label} · {self.filename} · {self.size_label}"
+
+    @computed_field
+    @property
+    def uploaded_label(self) -> str:
+        return f"Uploaded {format_upload_time(self.uploaded_at)}"
+
+    @computed_field
+    @property
+    def size_label(self) -> str:
+        return describe_bytes(self.bytes)
 
 
 class UploadedFileChoice(FileChoice):
