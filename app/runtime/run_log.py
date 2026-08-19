@@ -23,10 +23,12 @@ _STOP = object()
 # reader computes position from this number.
 CHUNK_SIZE = 100
 
-# The most events any chunk has ever held, which is what makes the jump in
-# read_events_since a floor rather than a guess. NEVER lower it below a value
-# CHUNK_SIZE has already been in production, or that jump starts overshooting
-# and a reader silently skips the events it was asked for.
+# The most events any chunk has ever held. read_events_since needs a starting
+# index WITHOUT loading chunks to look at their first_seq, and `from_seq // this`
+# is that index: it lands at or before the chunk that holds from_seq whatever mix
+# of sizes a run was written in. NEVER lower it below a value CHUNK_SIZE has
+# already been in production, or the jump overshoots and a reader silently skips
+# the events it was asked for.
 _WIDEST_CHUNK_SIZE = 500
 
 # How long the writer thread waits for more events before flushing what it has,
@@ -46,15 +48,10 @@ class RunEventChunk(PersistedModel):
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.RUN
 
     events: list[JsonDict] = []
-    # Absent on every chunk written before this field existed. Those were all
-    # written at 500, so their position is still recoverable from the index —
-    # which is the whole reason the fallback below is exact rather than a guess,
-    # and why no migration rewrites them.
-    first_seq: int | None = None
-
-    def resolve_first_seq(self, index: int) -> int:
-        """The seq this chunk's first event carries."""
-        return index * _WIDEST_CHUNK_SIZE if self.first_seq is None else self.first_seq
+    # Required, with no default: alembic 0013 backfilled every chunk written
+    # before the field, so one arriving without it is a chunk this process should
+    # refuse rather than place at seq 0 and serve the wrong events for.
+    first_seq: int
 
     @staticmethod
     def compose_id(project_id: str, run_id: str, index: int) -> str:
@@ -205,7 +202,7 @@ def find_log_end(project_id: str, run_id: str) -> tuple[int, int]:
         chunk = _load_chunk(project_id, run_id, index)
         if chunk is None:
             return logged, max(0, index - 1)
-        logged = chunk.resolve_first_seq(index) + len(chunk.events)
+        logged = chunk.first_seq + len(chunk.events)
         index += 1
 
 

@@ -66,5 +66,6 @@ def store_events(project: str | Path, run_id: str, events: list[dict[str, Any]])
     name = _name(project)
     for index, chunk_events in grouped.items():
         RunEventChunk(
-            id=RunEventChunk.compose_id(name, run_id, index), events=chunk_events
+            id=RunEventChunk.compose_id(name, run_id, index), events=chunk_events,
+            first_seq=int(chunk_events[0]["seq"]),
         ).save()

@@ -1,8 +1,8 @@
 """Chunk position is STORED, never computed from CHUNK_SIZE.
 
 `seq // CHUNK_SIZE` used to locate a chunk, so shrinking the constant made every
-chunk written at the old size unreadable. These pin a log written at BOTH sizes,
-which is what a run resumed across the change looks like on disk.
+chunk written at the old size unreadable. These pin a log holding BOTH sizes,
+which is what alembic 0013 leaves behind once a 500-run is resumed.
 """
 from __future__ import annotations
 
@@ -23,23 +23,21 @@ def _event(seq: int, stage: str = "s") -> dict:
     return {"seq": seq, "ts": "2026-08-19T10:00:00.000", "kind": "row_ok", "stage": stage}
 
 
-def _write(index: int, first_seq: int, count: int, *, legacy: bool) -> None:
-    """`legacy` writes the record as it was before first_seq existed — the field absent."""
-    chunk = RunEventChunk(
+def _write(index: int, first_seq: int, count: int) -> None:
+    RunEventChunk(
         id=RunEventChunk.compose_id(PROJECT, RUN, index),
         events=[_event(first_seq + i) for i in range(count)],
-        first_seq=None if legacy else first_seq,
-    )
-    chunk.save()
+        first_seq=first_seq,
+    ).save()
 
 
 def _write_a_resumed_log() -> int:
-    """Two full legacy chunks, then chunks at today's size. Returns the event total."""
-    _write(0, 0, _LEGACY_SIZE, legacy=True)
-    _write(1, _LEGACY_SIZE, _LEGACY_SIZE, legacy=True)
+    """Two chunks at the size 0013 backfilled, then chunks at today's. Returns the total."""
+    _write(0, 0, _LEGACY_SIZE)
+    _write(1, _LEGACY_SIZE, _LEGACY_SIZE)
     seq, index = 2 * _LEGACY_SIZE, 2
     for _ in range(3):
-        _write(index, seq, CHUNK_SIZE, legacy=False)
+        _write(index, seq, CHUNK_SIZE)
         seq += CHUNK_SIZE
         index += 1
     return seq
