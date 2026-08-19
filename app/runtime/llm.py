@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from app.core.agent.agent import Agent
 from app.core.agent.usage import LlmUsage
-from app.core.errors import LLMError
+from app.core.errors import LLMError, StageWideFailure
 from app.core.llm_sdk import run_sync
 from app.core.agent.sdk_engine import ThinkingConfig
 from app.models.stages.llm_transform import LLMConfig, ThinkingMode
@@ -160,6 +160,11 @@ def _run_agent(
             )
             _record_usage(usage_out, agent, model_name)
             return answer.model_dump(mode="json")
+        except StageWideFailure:
+            # Not retryable by construction: the next attempt asks the same
+            # exhausted account the same question. Its usage is still booked.
+            _record_usage(usage_out, agent, model_name)
+            raise
         except Exception as exc:  # noqa: BLE001 — retry any backend failure, record its usage, re-raise the last
             _record_usage(usage_out, agent, model_name)
             emit_llm_detail(LLM_ERROR, text=str(exc) or type(exc).__name__)
