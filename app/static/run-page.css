@@ -193,6 +193,7 @@ table.issue-table { width: 100%; border-collapse: collapse; font-size: .79rem; }
     font-size: .82em; text-decoration: none; }
 .runs-table .open-away:hover { color: var(--accent); }
 .runs-table .run-date, .runs-table .run-duration { white-space: nowrap; }
+.runs-table .run-actions { width: 1%; text-align: right; white-space: nowrap; }
 .runs-table .run-outcome { display: block; margin-top: .35rem; font-size: .78rem; color: var(--muted); }
 .runs-table .run-outcome.status-errors { color: var(--state-failed-ink); }
 .runs-table .run-outcome.status-awaiting_review { color: var(--state-review-ink); }
