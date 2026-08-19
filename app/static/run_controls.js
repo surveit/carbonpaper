@@ -1,25 +1,6 @@
-// Keep the run form's fields in sync with the chosen version, and let each path
-// field's "Browse…" button pick a file with the browser's own native dialog
-// (works on every OS).
-//
-// Two jobs, one file because they share the same fields:
-//
-//  1. Version sync — a workflow version can author different input stages / paths
-//     than another, so when the version <select> changes we refetch that version's
-//     inputs (GET /project/<name>/run-inputs?version_id=) and rebuild the rows.
-//     That is what makes the run form "one page": the version you pick and the
-//     input paths/caps you set always describe the same version.
-//
-//  2. File picker — each row picks from the files the project already holds, and its
-//     value is a file's sha256. Upload… is the way in for one it does not: the native
-//     dialog, then POST /project/<name>/files, then the new file is added to EVERY
-//     row's list (a file belongs to the project, not to the step it arrived for) and
-//     selected in the row that sent it.
+// Keep the run form's fields in sync with the chosen version, and upload files through
+// one dialog shared by every input row.
 (function () {
-  // A rebuilt row is a clone of the form's <template>, which _run_controls.html
-  // renders from the same macro as the server-rendered rows — so there is no
-  // second copy of the markup here to drift. Only the three attributes that carry
-  // the stage's identity, and the path's value, are set.
   function describeBytes(count) {
     var mb = 1024 * 1024;
     if (count >= 1024 * mb) return +(count / (1024 * mb)).toPrecision(3) + "GB";
@@ -42,8 +23,6 @@
     pick.id = "binding__" + stageId;
     pick.name = pick.id;
     pick.required = !row.authored_path;
-    // Blank is "run what the workflow authored", so the first option says which path
-    // that is — a row with none cannot run until something here is chosen.
     pick.options[0].textContent = row.authored_path
       ? row.authored_path + " — the path this workflow names"
       : "Choose a file…";
@@ -66,7 +45,7 @@
           "/run-inputs?version_id=" + encodeURIComponent(select.value),
         { cache: "no-store" }
       );
-      if (!resp.ok) return; // leave the current fields in place on error
+      if (!resp.ok) return;
       var choices = await resp.json();
       var rows = document.createDocumentFragment();
       choices.inputs.forEach(function (row) {
@@ -74,26 +53,19 @@
       });
       box.replaceChildren(rows);
     } catch (e) {
-      /* network/parse error: keep whatever fields are shown */
+      /* Keep the shown fields after a network or parse failure. */
     }
   }
 
-  // ─── Upload a browser-picked file, then select it ───────────────────────
-  // The server refuses the same size; this only saves the reader from watching a
-  // file upload for minutes before being told it was never going to be accepted.
-  function tooLarge(file, form) {
+  function explainOversize(file, form) {
     var ceiling = parseInt(form.getAttribute("data-max-upload-bytes"), 10);
-    if (!ceiling || file.size <= ceiling) return false;
-    alert('"' + file.name + '" is ' + describeBytes(file.size) + ", over the " +
-          describeBytes(ceiling) + " limit for a single input.\n\nThat ceiling is " +
-          "what a run on this machine can load into memory. Cut the file down, or " +
-          "convert it to parquet.");
-    return true;
+    if (!ceiling || file.size <= ceiling) return "";
+    return '"' + file.name + '" is ' + describeBytes(file.size) + ", over the " +
+      describeBytes(ceiling) + " limit for a single input. That ceiling is what a " +
+      "run on this machine can load into memory. Cut the file down, or convert it " +
+      "to parquet.";
   }
 
-  // A file belongs to the project, so a new one joins EVERY row's list — then the row
-  // that sent it selects it. Adding it only where it was uploaded would hide it from
-  // the next step that wants the same file.
   function offerEverywhere(form, file, pick) {
     form.querySelectorAll("select.file-pick").forEach(function (select) {
       if (!select.querySelector('option[value="' + file.sha256 + '"]')) {
@@ -104,60 +76,145 @@
     pick.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
-  async function uploadFile(file, pick, form, project, btn) {
-    var label = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = "Uploading…";
-    try {
-      // No stage id: the server stores the file under its own content hash, so the
-      // same file picked for two stages is one copy that either may bind.
-      var fd = new FormData();
-      fd.append("file", file);
-      var resp = await fetch(
-        "/project/" + encodeURIComponent(project) + "/files",
-        { method: "POST", body: fd }
-      );
-      var data = {};
-      try { data = await resp.json(); } catch (e) { /* leave data empty */ }
-      if (resp.ok && data.ok && data.sha256) {
-        offerEverywhere(form, data, pick);
-      } else {
-        alert("Upload failed: " + (data.error || ("HTTP " + resp.status)) +
-              "\nPlease try again.");
-      }
-    } catch (e) {
-      alert("Upload failed: couldn't reach the server. Please try again.");
-    } finally {
-      btn.disabled = false;
-      btn.textContent = label;
-    }
+  function setDialogError(dialog, message) {
+    var error = dialog.querySelector(".run-upload-error");
+    error.textContent = message;
+    error.hidden = !message;
   }
 
-  // ─── Wire forms ─────────────────────────────────────────────────────────
+  function wireUploadDialog(form, project) {
+    var dialog = form.querySelector(".run-upload-dialog");
+    if (!dialog) return;
+    var fileInput = dialog.querySelector(".run-upload-input");
+    var drop = dialog.querySelector(".run-upload-drop");
+    var submit = dialog.querySelector(".run-upload-submit");
+    var selection = dialog.querySelector(".run-upload-selection");
+    var selectedFile = null;
+    var targetPick = null;
+    var uploadController = null;
+
+    function resetDialog() {
+      selectedFile = null;
+      targetPick = null;
+      fileInput.value = "";
+      selection.hidden = true;
+      setDialogError(dialog, "");
+      submit.disabled = true;
+      submit.textContent = "Upload file";
+      drop.classList.remove("is-dragging");
+      drop.removeAttribute("aria-disabled");
+    }
+
+    function closeDialog() {
+      if (dialog.open) dialog.close();
+    }
+
+    function chooseFile(file) {
+      if (!file || uploadController) return;
+      selectedFile = file;
+      selection.querySelector(".run-upload-filename").textContent = file.name;
+      selection.querySelector(".run-upload-size").textContent = describeBytes(file.size);
+      selection.hidden = false;
+      var sizeError = explainOversize(file, form);
+      setDialogError(dialog, sizeError);
+      submit.disabled = !!sizeError;
+    }
+
+    function openDialog(row) {
+      var pick = row.querySelector("select.file-pick");
+      if (!pick) return;
+      resetDialog();
+      targetPick = pick;
+      dialog.querySelector(".run-upload-stage").textContent =
+        row.querySelector(".run-input-name code").textContent;
+      dialog.showModal();
+    }
+
+    async function uploadFile() {
+      if (!selectedFile || !targetPick || uploadController) return;
+      var file = selectedFile;
+      var pick = targetPick;
+      uploadController = new AbortController();
+      submit.disabled = true;
+      submit.textContent = "Uploading…";
+      drop.setAttribute("aria-disabled", "true");
+      setDialogError(dialog, "");
+      try {
+        var fd = new FormData();
+        fd.append("file", file);
+        var resp = await fetch(
+          "/project/" + encodeURIComponent(project) + "/files",
+          { method: "POST", body: fd, signal: uploadController.signal }
+        );
+        var data = {};
+        try { data = await resp.json(); } catch (e) { /* Leave data empty. */ }
+        if (resp.ok && data.ok && data.sha256) {
+          offerEverywhere(form, data, pick);
+          uploadController = null;
+          closeDialog();
+        } else {
+          setDialogError(dialog, "Upload failed: " +
+            (data.error || ("HTTP " + resp.status)) + ". Please try again.");
+        }
+      } catch (e) {
+        if (e.name !== "AbortError") {
+          setDialogError(dialog,
+            "Upload failed: couldn't reach the server. Please try again.");
+        }
+      } finally {
+        uploadController = null;
+        if (dialog.open) {
+          submit.disabled = !selectedFile;
+          submit.textContent = "Upload file";
+          drop.removeAttribute("aria-disabled");
+        }
+      }
+    }
+
+    form.addEventListener("click", function (event) {
+      var button = event.target.closest(".browse-btn");
+      if (!button || !form.contains(button)) return;
+      event.preventDefault();
+      var row = button.closest(".run-input-row");
+      if (row) openDialog(row);
+    });
+
+    drop.addEventListener("click", function () {
+      if (!uploadController) fileInput.click();
+    });
+    fileInput.addEventListener("change", function () {
+      chooseFile(fileInput.files[0]);
+      fileInput.value = "";
+    });
+    ["dragenter", "dragover"].forEach(function (name) {
+      drop.addEventListener(name, function (event) {
+        event.preventDefault();
+        if (!uploadController) drop.classList.add("is-dragging");
+      });
+    });
+    ["dragleave", "drop"].forEach(function (name) {
+      drop.addEventListener(name, function () { drop.classList.remove("is-dragging"); });
+    });
+    drop.addEventListener("drop", function (event) {
+      event.preventDefault();
+      chooseFile(event.dataTransfer.files[0]);
+    });
+    submit.addEventListener("click", uploadFile);
+    dialog.querySelector(".run-upload-cancel").addEventListener("click", closeDialog);
+    dialog.querySelector(".run-upload-close").addEventListener("click", closeDialog);
+    dialog.addEventListener("click", function (event) {
+      if (event.target === dialog) closeDialog();
+    });
+    dialog.addEventListener("close", function () {
+      if (uploadController) uploadController.abort();
+      resetDialog();
+    });
+  }
+
   document.querySelectorAll("form.run-controls").forEach(function (form) {
     var project = form.getAttribute("data-project");
     var select = form.querySelector('select[name="version_id"]');
     if (select) select.addEventListener("change", function () { refreshInputs(form); });
-
-    // Delegated so buttons/inputs rebuilt by refreshInputs() stay wired.
-    form.addEventListener("click", function (e) {
-      var btn = e.target.closest(".browse-btn");
-      if (!btn || !form.contains(btn)) return;
-      e.preventDefault();
-      var row = btn.closest(".run-input-row");
-      var picker = row && row.querySelector("input.file-input");
-      if (picker) picker.click();  // open the browser's native file dialog
-    });
-
-    form.addEventListener("change", function (e) {
-      var picker = e.target.closest("input.file-input");
-      if (!picker || !form.contains(picker) || !picker.files.length) return;
-      var row = picker.closest(".run-input-row");
-      var pick = row && row.querySelector("select.file-pick");
-      var btn = row && row.querySelector(".browse-btn");
-      var file = picker.files[0];
-      if (pick && btn && !tooLarge(file, form)) uploadFile(file, pick, form, project, btn);
-      picker.value = "";  // let the same file be re-picked later
-    });
+    wireUploadDialog(form, project);
   });
 })();

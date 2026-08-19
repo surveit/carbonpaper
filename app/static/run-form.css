@@ -49,9 +49,7 @@
     gap: 10px;
 }
 
-/* The path field pairs a read-only text input with Browse…, which run_controls.js
-   has open the browser's native file dialog and upload the pick to
-   POST /project/<name>/files, which returns the saved copy's path. */
+/* The path field pairs the project-file picker with the shared upload dialog. */
 /* stretch, not center: the field, its button and the row cap beside them are one
    line of controls, so all three take the row's height rather than three near-misses. */
 .path-field {
@@ -61,11 +59,8 @@
     flex: 1 1 320px;
     min-width: 0;
 }
-.path-field input { flex: 1 1 auto; min-width: 0; }  /* shrink, don't overflow */
-/* Read-only display: set only via Browse…, so it reads as a field, not an input. */
-.path-field input[readonly] { background: var(--sunk-deep); cursor: default; }
+.path-field select { flex: 1 1 auto; min-width: 0; width: 0; }
 .browse-btn { padding: 6px 12px; white-space: nowrap; flex: 0 0 auto; }
-.browse-btn:disabled { opacity: 0.6; cursor: default; }  /* while uploading */
 
 /* ─── The row cap ─────────────────────────────────────────────────────────────
    `first [ N ] rows` — ONLY the number is bordered. The words are the field's units
@@ -152,3 +147,72 @@
     color: var(--fg);
 }
 .run-bust-cache input { flex: 0 0 auto; margin-top: 3px; }
+
+/* ─── File upload ─────────────────────────────────────────────────────── */
+.run-upload-dialog {
+    width: min(520px, calc(100vw - 32px));
+    box-sizing: border-box;
+    padding: 18px;
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    background: var(--raised);
+    color: var(--fg);
+}
+.run-upload-dialog::backdrop { background: var(--scrim); }
+.run-upload-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.run-upload-head h2 { margin: 0; font-size: 1.05rem; }
+.run-upload-close {
+    border: 0;
+    padding: 0 3px;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+}
+.run-upload-close:hover { color: var(--fg); }
+.run-upload-lede { margin: 5px 0 14px; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+.run-upload-drop {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 28px 18px;
+    border: 1px dashed var(--border-strong);
+    border-radius: 8px;
+    background: var(--sunk-deep);
+    color: var(--fg);
+    font: inherit;
+    cursor: pointer;
+}
+.run-upload-drop span { color: var(--muted); font-size: 12.5px; }
+.run-upload-drop:hover,
+.run-upload-drop.is-dragging { border-color: var(--accent); background: var(--raised); }
+.run-upload-drop[aria-disabled="true"] { opacity: 0.6; cursor: default; }
+.run-upload-selection {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 12px;
+    padding: 9px 11px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--raised);
+    font-size: 12.5px;
+}
+.run-upload-selection[hidden] { display: none; }
+.run-upload-filename { min-width: 0; overflow-wrap: anywhere; }
+.run-upload-size { flex: 0 0 auto; color: var(--muted); }
+.run-upload-error { margin: 10px 0 0; color: var(--state-failed-ink); font-size: 12.5px; line-height: 1.45; }
+.run-upload-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+@media (max-width: 560px) {
+    .run-input-controls { display: grid; grid-template-columns: minmax(0, 1fr); }
+    .path-field { flex-basis: auto; }
+    .run-limit { justify-self: start; }
+    .run-upload-actions { flex-direction: column-reverse; }
+    .run-upload-actions .btn { width: 100%; }
+}

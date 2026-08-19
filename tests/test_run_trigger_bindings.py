@@ -171,6 +171,22 @@ def test_new_run_page_labels_the_row_cap_separately(project):
     assert 'for="binding__load"' in resp.text  # the name line labels the path field
 
 
+def test_new_run_page_has_one_shared_upload_dialog(project):
+    body = client.get("/project/demo/runs/new").text
+    assert body.count('class="run-upload-dialog"') == 1
+    assert 'class="run-upload-drop"' in body
+    assert 'class="run-upload-selection" hidden' in body
+    assert 'class="run-upload-error" role="alert" hidden' in body
+    assert 'class="btn primary run-upload-submit" disabled' in body
+    assert 'class="file-input"' not in body
+
+
+def test_each_run_input_row_opens_the_shared_upload_dialog(project):
+    body = client.get("/project/demo/runs/new").text
+    assert 'class="btn browse-btn">Upload file…</button>' in body
+    assert body.count('class="run-upload-dialog"') == 1
+
+
 def _corrupt_version_document_with_relative_path(project):
     from app.core.persistence import get_store
     from app.services.versioning import list_versions
