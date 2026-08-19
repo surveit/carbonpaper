@@ -164,6 +164,12 @@ def _run_agent(
             _record_usage(usage_out, agent, model_name)
             emit_llm_detail(LLM_ERROR, text=str(exc) or type(exc).__name__)
             last_exc = exc
+            if isinstance(exc, TimeoutError):
+                # A call that spent the whole timeout is the only failure re-asking
+                # cannot help: the next attempt gets its own full timeout, so N
+                # retries multiply the wait by N without changing the odds. This is
+                # what bounds a rate-limited row at one timeout instead of four.
+                break
             if attempt + 1 < attempts:
                 time.sleep(min(4.0, 1.0 * (attempt + 1)))
     assert last_exc is not None  # attempts >= 1, so the loop ran and set this
