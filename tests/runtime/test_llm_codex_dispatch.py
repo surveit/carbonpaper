@@ -6,6 +6,7 @@ import pytest
 from pydantic import BaseModel
 
 import app.runtime.llm as llm
+from app.core.errors import LLMError
 from app.core.agent.usage import LlmUsage
 from app.models.stages.llm_transform import LLMConfig
 
@@ -202,3 +203,44 @@ def test_batch_dispatch_stays_on_the_agent_runner(
             None,
         )
     ]
+
+
+def test_codex_override_refuses_controls_the_backend_cannot_apply() -> None:
+    config = LLMConfig(
+        prompt_instructions="judge carefully",
+        prompt_data_template="Rate: {text}",
+        model="claude-haiku-4-5",
+        tools=["WebSearch"],
+        thinking="disabled",
+    )
+
+    with pytest.raises(LLMError) as exc_info:
+        llm.call_llm(
+            "judge",
+            config,
+            {"text": "x"},
+            reply_model=Reply,
+            model="gpt-5.6-terra",
+        )
+
+    assert "gpt-5.6-terra does not support llm.tools" in str(exc_info.value)
+    assert "gpt-5.6-terra does not support llm.thinking" in str(exc_info.value)
+
+
+def test_batch_codex_override_refuses_to_reach_the_agent_runner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def forbidden_agent(*args, **kwargs):
+        raise AssertionError("_run_agent should not run for a Codex batch")
+
+    monkeypatch.setattr(llm, "_run_agent", forbidden_agent)
+
+    with pytest.raises(LLMError, match="gpt-5.6-terra does not support batch execution"):
+        llm.call_llm_batch(
+            "judge",
+            _claude_config(),
+            instructions="judge carefully",
+            task="### item 0\nRate: x",
+            reply_schema=Reply,
+            model="gpt-5.6-terra",
+        )

@@ -1,8 +1,6 @@
 """LLM dispatch for `llm_transform` stages.
 
-The structured-output agent is the only backend: when it is unavailable
-(`options.require_agent_backend`) the call raises rather than fabricating output.
-Called once per row by the row driver, bounded parallelism (4, CARBON_PAPER_LLM_PARALLEL)."""
+Claude uses the structured-output agent; Codex uses its transform backend."""
 
 from __future__ import annotations
 
@@ -93,6 +91,7 @@ def call_llm(
         raise LLMError(f"stage {stage_id}: llm_transform has no prompt_data_template")
     task = render_prompt(llm_config.prompt_data_template, input_row)
     selected_model = _resolve_model(model, llm_config)
+    _require_effective_model_capabilities(selected_model, llm_config)
     system_prompt = _compose_system(llm_config.prompt_instructions)
     if selected_model.backend == "codex":
         return _run_codex_row(
@@ -121,6 +120,7 @@ def call_llm_batch(
     usage_out: list[LlmUsage] | None = None,
 ) -> dict[str, Any]:
     selected_model = _resolve_model(model, llm_config)
+    _require_effective_model_capabilities(selected_model, llm_config, is_batch=True)
     # No tools by construction: LLMConfig refuses tools with batch_size > 1.
     return _run_agent(
         _compose_system(instructions), task, reply_schema, str(selected_model),
@@ -142,6 +142,17 @@ def _resolve_model(model: str | None, llm_config: LLMConfig) -> LLMModel:
     if model is not None:
         return LLMModel.parse(model, source="model")
     return LLMModel(llm_config.model or DEFAULT_MODEL)
+
+
+def _require_effective_model_capabilities(
+    model: LLMModel, llm_config: LLMConfig, *, is_batch: bool = False
+) -> None:
+    effective_config = llm_config.model_copy(update={"model": model})
+    issues = effective_config.find_backend_capability_issues()
+    if is_batch and model.backend == "codex":
+        issues.append(f"{model.value} does not support batch execution on the codex backend.")
+    if issues:
+        raise LLMError("; ".join(issues))
 
 
 def _run_codex_row(
