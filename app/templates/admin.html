@@ -13,6 +13,19 @@
 <div class="banner">{{ msg }}</div>
 {% endif %}
 
+<h2>New chat default</h2>
+<p class="muted">Sets the preselected backend for chats opened after this change. A chat keeps the backend selected when it was created.</p>
+<form method="post" action="/admin/chat-default">
+    <label for="chat-backend">Backend</label>
+    <select id="chat-backend" name="backend">
+        <option value="claude"{% if default_chat_backend == 'claude' %} selected{% endif %}{% if claude_backend_error %} disabled{% endif %}>Claude{% if claude_backend_error %} — unavailable{% endif %}</option>
+        <option value="codex"{% if default_chat_backend == 'codex' %} selected{% endif %}{% if codex_backend_error %} disabled{% endif %}>Codex{% if codex_backend_error %} — unavailable{% endif %}</option>
+    </select>
+    <button type="submit" class="btn">Save default</button>
+</form>
+{% if claude_backend_error %}<p class="muted">Claude: {{ claude_backend_error }}</p>{% endif %}
+{% if codex_backend_error %}<p class="muted">Codex: {{ codex_backend_error }}</p>{% endif %}
+
 <h2>Seed bundles</h2>
 {% if bundles %}
 <table class="stages">

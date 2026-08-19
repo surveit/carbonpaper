@@ -9,10 +9,13 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
 
+from app.core.agent.chat_backend_availability import find_chat_backend_error
+from app.core.agent.chat_defaults import read_default_chat_backend, set_default_chat_backend
+from app.core.agent.store import ChatBackend
 from app.seeds.seed import discover_workflow_files
 from app.services import project
 from app.services.project import (
@@ -56,6 +59,9 @@ async def admin_index(request: Request, msg: str | None = None):
             "bundles": [wf_path.stem for wf_path in discover_workflow_files()],
             "projects": project.list_projects(),
             "msg": msg,
+            "default_chat_backend": read_default_chat_backend(),
+            "claude_backend_error": find_chat_backend_error(ChatBackend.claude),
+            "codex_backend_error": find_chat_backend_error(ChatBackend.codex),
         },
     )
 
@@ -72,6 +78,19 @@ async def load_bundle(bundle: str):
     return _redirect_to_admin(
         f"Loaded '{read_project_name(project_id)}' ({project_id}) from bundle '{bundle}'."
     )
+
+
+@router.post("/admin/chat-default")
+async def set_chat_default(backend: str = Form(...)):
+    try:
+        selected_backend = ChatBackend(backend)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="Unknown chat backend") from exc
+    error = find_chat_backend_error(selected_backend)
+    if error is not None:
+        raise HTTPException(status_code=409, detail=error)
+    set_default_chat_backend(selected_backend)
+    return _redirect_to_admin(f"New chats now default to {selected_backend.value}.")
 
 
 @router.get("/admin/export/{project_name}")

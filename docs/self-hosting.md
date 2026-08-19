@@ -40,6 +40,10 @@ database path's own directory, so `CARBON_PAPER_FRAMES_ROOT` stays unset.
 writes each chat's transcript under its config dir, and a chat resumes by an id
 the document store holds, so leaving the transcripts in the image ended every
 deploy with resume tokens naming sessions the CLI had thrown away.
+`CODEX_HOME=/data/codex` is Codex's config, auth, session, log and standalone
+package home. On a new volume the entrypoint copies the image's installed
+standalone package there before the app starts. The image deliberately does
+not authenticate it; a signed-out deployment leaves Codex unavailable in chat.
 `docker-entrypoint.sh` creates the directories, runs `alembic upgrade head`, then
 execs uvicorn on port 8080 — the migration is in the entrypoint rather than a
 `release_command` because a release machine has no volume attached.
@@ -60,6 +64,11 @@ the API key outranks the OAuth token in the CLI's auth precedence, so setting
 both silently bills the metered API (see `.github/workflows/live-llm-smoke.yml`,
 which runs on the OAuth token for that reason). Either way it is one
 `fly secrets set`, not a rebuild.
+
+To authenticate Codex on Fly, open an SSH console after the first deploy and
+run `codex login --device-auth`; open the printed link on your local browser,
+then enter its one-time code. The login lives under `/data/codex`, so later
+deploys keep it. Do not put a Codex credential in `fly.toml` or the image.
 
 Without a credential the server still boots and serves; `llm_transform` stages
 are what fail.

@@ -17,6 +17,7 @@ from starlette.routing import Route
 
 from app.core.logging_config import configure_app_logging
 from app.core.store_config import configure_default_stores, refuse_renamed_env_vars
+from app.core.agent.chat_defaults import initialize_default_chat_backend
 from app.web.config import (
     INTRO_DIR, STATIC_DIR, RevalidatedStaticFiles, configure_projects_dir_from_env,
 )
@@ -43,6 +44,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # time (the test suite's autouse fixtures) wins over the on-disk defaults —
     # the app never reconfigures a store that's already set.
     configure_default_stores()
+    initialize_default_chat_backend()
     # The projects root (CARBON_PAPER_PROJECTS_DIR, default ~/.carbonpaper/examples). Read
     # here rather than at import time in app.services.workspace, so the test
     # suite's own set_projects_dir() is never overridden by the environment.

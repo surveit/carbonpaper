@@ -20,6 +20,7 @@ from app.web.file_sizes import describe_attachment, describe_refusal
 
 from app.core.agent import registry
 from app.core.agent.codex_availability import find_codex_backend_error
+from app.core.agent.chat_defaults import read_default_chat_backend
 from app.core.agent.session import build_session_engine, create_agent_session
 from app.core.agent.store import (
     Bubble,
@@ -77,6 +78,7 @@ async def chat_index(request: Request):
     return templates.TemplateResponse(request, "chat_index.html", {
         "sessions": visible_sessions,
         "available_backends": available_chat_backends(),
+        "default_backend": read_default_chat_backend(),
         "crumbs": build_home_crumbs("Chats"),
     })
 
@@ -141,8 +143,17 @@ async def new_agent_session(agent_id: str, request: Request):
     body = await request.json()
     context = (body or {}).get("context") or {}
     title = (body or {}).get("title")
+    backend = read_default_chat_backend()
+    error = _backend_error(backend)
+    if error is not None:
+        raise HTTPException(status_code=409, detail=error)
     sid = create_agent_session(
-        agent_id, context, base_url=str(request.base_url), title=title)
+        agent_id,
+        context,
+        base_url=str(request.base_url),
+        title=title,
+        backend=backend,
+    )
     return JSONResponse({"ok": True, "sid": sid})
 
 

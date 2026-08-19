@@ -32,6 +32,14 @@ RUN curl -fsSL https://claude.ai/install.sh | bash
 ENV PATH="/root/.local/bin:${PATH}"
 RUN claude --version
 
+# Codex's supported Linux installer ships a standalone executable, so this
+# image does not need Node.js. The visible command lives outside CODEX_HOME,
+# which is mounted only after the container starts. The entrypoint copies this
+# installed package into a new volume before Codex reads its runtime home.
+RUN mkdir -p /opt/codex \
+    && curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_HOME=/opt/codex CODEX_NON_INTERACTIVE=1 CODEX_INSTALL_DIR=/usr/local/bin sh
+RUN codex --version
+
 COPY alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app
@@ -57,6 +65,7 @@ RUN chmod +x docker-entrypoint.sh
 ENV CARBON_PAPER_DB_PATH=/data/app.db \
     CARBON_PAPER_PROJECTS_DIR=/data/projects \
     CLAUDE_CONFIG_DIR=/data/claude \
+    CODEX_HOME=/data/codex \
     PYTHONUNBUFFERED=1
 
 EXPOSE 8080

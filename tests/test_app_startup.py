@@ -36,3 +36,11 @@ def test_lifespan_does_not_overwrite_a_configured_store(monkeypatch, tmp_path):
             assert not (tmp_path / "should_not_be_created.db").exists()
 
     asyncio.run(drive())
+
+
+def test_lifespan_materializes_the_chat_default() -> None:
+    async def drive() -> None:
+        async with lifespan(app):
+            assert persistence.get_store().list_ids("chat_default")
+
+    asyncio.run(drive())
