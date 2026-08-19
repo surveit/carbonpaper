@@ -1,10 +1,10 @@
 # Overview — what this is and why
 
 ## Product vision
-AI is making data investigations cheaper to produce; deciding whether they hold up is
-still hard. Carbon Paper makes expert review easier. It shows how the
-result was produced and uses deterministic pipelines to rule out entire classes of
-error, so experts can focus their judgment where it matters.
+A chat is a good place to investigate and a terrible place to review. Carbon Paper
+turns open-ended work into a constrained workflow where deterministic steps are
+predictable and judgment calls are visible. The same structure that makes review
+faster makes the investigation easy to rerun and reuse.
 
 ## Mission
 Serves **journalism and institutional accountability**: finding, verifying, and surfacing

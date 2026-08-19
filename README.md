@@ -1,9 +1,9 @@
 # Carbon Paper — reviewable AI workflows
 
-AI is making data investigations cheaper to produce; deciding whether they hold up is
-still hard. Carbon Paper makes expert review easier. It shows how the
-result was produced and uses deterministic pipelines to rule out entire classes of
-error, so experts can focus their judgment where it matters.
+A chat is a good place to investigate and a terrible place to review. Carbon Paper
+turns open-ended work into a constrained workflow where deterministic steps are
+predictable and judgment calls are visible. The same structure that makes review
+faster makes the investigation easy to rerun and reuse.
 
 Some questions you only ask once. How much did firms spend lobbying about AI last
 year. Which of these 400 contracts name the same shell company. What changed
