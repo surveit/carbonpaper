@@ -191,8 +191,10 @@ def test_file_picker_renders_shared_structured_controls(project, tmp_path):
     assert "No files match this search." in body
     assert "/static/file-picker.css" in body
     assert "/static/file-picker.js" in body
-    assert 'class="btn file-preview-open" aria-haspopup="dialog"' in body
-    assert 'aria-controls="run-file-preview" disabled' in body
+    assert 'class="btn file-preview-open" aria-haspopup="listbox"' in body
+    assert 'aria-controls="binding__load__listbox"' in body
+    assert 'aria-label="Choose a project file to preview"' in body
+    assert 'title="Choose a project file to preview"' in body
 
 
 def test_required_file_picker_keeps_native_form_validation(project):
@@ -231,10 +233,24 @@ def test_shared_file_picker_wires_pointer_keyboard_and_dynamic_refresh():
     assert 'document.addEventListener("click"' in source
     assert "select.tabIndex = -1" in source
     assert 'select.setAttribute("aria-hidden", "true")' in source
-    assert (
-        "window.CarbonFilePicker = { init: initFilePickers, refresh: refreshPicker }"
-        in source
+    assert "open: function (picker) { openFilePicker(picker, 1); }" in source
+    assert 'preview.setAttribute("aria-haspopup", "dialog")' in source
+    assert 'preview.setAttribute("aria-controls", "run-file-preview")' in source
+    assert 'preview.setAttribute("aria-haspopup", "listbox")' in source
+    assert 'preview.setAttribute("aria-controls", select.id + "__listbox")' in source
+
+
+def test_file_picker_visible_content_cannot_intercept_pointer_clicks():
+    source = (Path(__file__).parents[1] / "app/static/file-picker.css").read_text(
+        encoding="utf-8"
     )
+
+    value_rule = source.split(".file-picker-value {", 1)[1].split("}", 1)[0]
+    chevron_rule = source.split(".file-picker-chevron {", 1)[1].split("}", 1)[0]
+    assert "pointer-events: none" in value_rule
+    assert "user-select: none" in value_rule
+    assert "pointer-events: none" in chevron_rule
+    assert "user-select: none" in chevron_rule
 
 
 # ─── The run form is its own page, not a block on the run history ────────────

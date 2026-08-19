@@ -29,7 +29,18 @@
     addText(value, "file-picker-name", record.filename);
     if (record.meta) addText(value, "file-picker-meta", record.meta);
     picker.querySelector(".file-picker-trigger").removeAttribute("aria-invalid");
-    picker.querySelector(".file-preview-open").disabled = !option.value;
+    var preview = picker.querySelector(".file-preview-open");
+    if (option.value) {
+      preview.setAttribute("aria-haspopup", "dialog");
+      preview.setAttribute("aria-controls", "run-file-preview");
+      preview.removeAttribute("aria-label");
+      preview.removeAttribute("title");
+    } else {
+      preview.setAttribute("aria-haspopup", "listbox");
+      preview.setAttribute("aria-controls", select.id + "__listbox");
+      preview.setAttribute("aria-label", "Choose a project file to preview");
+      preview.setAttribute("title", "Choose a project file to preview");
+    }
   }
 
   function chooseOption(picker, option) {
@@ -215,5 +226,9 @@
   });
   document.addEventListener("DOMContentLoaded", function () { initFilePickers(document); });
 
-  window.CarbonFilePicker = { init: initFilePickers, refresh: refreshPicker };
+  window.CarbonFilePicker = {
+    init: initFilePickers,
+    open: function (picker) { openFilePicker(picker, 1); },
+    refresh: refreshPicker,
+  };
 })();

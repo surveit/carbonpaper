@@ -36,7 +36,11 @@
       var select = picker && picker.querySelector(".file-picker-native");
       var sha256 = select && select.value;
       var project = form.getAttribute("data-project");
-      if (!sha256 || !project) return;
+      if (!sha256) {
+        window.CarbonFilePicker.open(picker);
+        return;
+      }
+      if (!project) return;
       activeButton = button;
       resetDialog();
       dialog.showModal();

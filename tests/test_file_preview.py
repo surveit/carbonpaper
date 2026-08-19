@@ -133,3 +133,5 @@ def test_preview_dialog_controller_handles_loading_failure_and_close():
     assert "event.preventDefault()" in script
     assert "event.target === dialog" in script
     assert "activeButton.focus()" in script
+    assert "window.CarbonFilePicker.open(picker)" in script
+    assert "if (!sha256)" in script

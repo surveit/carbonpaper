@@ -20,8 +20,10 @@
     <span class="file-picker-value"></span>
     <span class="file-picker-chevron" aria-hidden="true">▾</span>
   </button>
-  <button type="button" class="btn file-preview-open" aria-haspopup="dialog"
-          aria-controls="run-file-preview" disabled>Preview</button>
+  <button type="button" class="btn file-preview-open" aria-haspopup="listbox"
+          aria-controls="{{ name }}__listbox"
+          aria-label="Choose a project file to preview"
+          title="Choose a project file to preview">Preview</button>
   <div class="file-picker-popover" hidden>
     <div class="file-picker-heading">
       <strong>Choose file</strong>
