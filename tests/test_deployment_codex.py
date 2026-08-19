@@ -10,6 +10,7 @@ def test_container_installs_codex_with_the_official_standalone_installer() -> No
     assert "https://chatgpt.com/codex/install.sh" in dockerfile
     assert "CODEX_NON_INTERACTIVE=1" in dockerfile
     assert "CODEX_INSTALL_DIR=/usr/local/bin" in dockerfile
+    assert "CODEX_HOME=/opt/codex" in dockerfile
     assert "RUN codex --version" in dockerfile
 
 
@@ -21,3 +22,4 @@ def test_fly_mounts_the_codex_home_the_cli_reads() -> None:
     assert "CODEX_HOME=/data/codex" in dockerfile
     assert 'CODEX_HOME = "/data/codex"' in fly_config
     assert '"$CODEX_HOME"' in entrypoint
+    assert 'cp -a /opt/codex/packages "$CODEX_HOME/packages"' in entrypoint

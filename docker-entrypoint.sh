@@ -10,6 +10,10 @@ set -e
 
 mkdir -p "$(dirname "$CARBON_PAPER_DB_PATH")" "$CARBON_PAPER_PROJECTS_DIR" "$CLAUDE_CONFIG_DIR" "$CODEX_HOME"
 
+if [ ! -d "$CODEX_HOME/packages/standalone" ]; then
+    cp -a /opt/codex/packages "$CODEX_HOME/packages"
+fi
+
 alembic upgrade head
 
 exec python -m uvicorn app.main:app --host 0.0.0.0 --port 8080

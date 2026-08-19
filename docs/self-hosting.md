@@ -41,8 +41,9 @@ writes each chat's transcript under its config dir, and a chat resumes by an id
 the document store holds, so leaving the transcripts in the image ended every
 deploy with resume tokens naming sessions the CLI had thrown away.
 `CODEX_HOME=/data/codex` is Codex's config, auth, session, log and standalone
-package home. The image installs the Codex CLI but deliberately does not
-authenticate it; a signed-out deployment leaves Codex unavailable in chat.
+package home. On a new volume the entrypoint copies the image's installed
+standalone package there before the app starts. The image deliberately does
+not authenticate it; a signed-out deployment leaves Codex unavailable in chat.
 `docker-entrypoint.sh` creates the directories, runs `alembic upgrade head`, then
 execs uvicorn on port 8080 — the migration is in the entrypoint rather than a
 `release_command` because a release machine has no volume attached.

@@ -34,8 +34,10 @@ RUN claude --version
 
 # Codex's supported Linux installer ships a standalone executable, so this
 # image does not need Node.js. The visible command lives outside CODEX_HOME,
-# which is mounted only after the container starts.
-RUN curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 CODEX_INSTALL_DIR=/usr/local/bin sh
+# which is mounted only after the container starts. The entrypoint copies this
+# installed package into a new volume before Codex reads its runtime home.
+RUN mkdir -p /opt/codex \
+    && curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_HOME=/opt/codex CODEX_NON_INTERACTIVE=1 CODEX_INSTALL_DIR=/usr/local/bin sh
 RUN codex --version
 
 COPY alembic.ini ./
