@@ -48,7 +48,9 @@ STAGE_TYPES: dict[str, StageTypeSpec] = {
 # catalog still SAYS they exist (CODE_EXECUTION_ESCAPE_NOTE), or a model with a
 # step it cannot express would conclude the step is impossible rather than ask.
 # A stored stage of either type keeps loading and running.
-APPROVAL_REQUIRED_TYPES = ("python_row_function", "python_frame_function")
+APPROVAL_REQUIRED_TYPES = (
+    "python_row_function", "python_frame_function", "filter_rows",
+)
 
 # What the authoring prompts list. STAGE_TYPES stays whole: the runtime, the
 # diagrams and the trace all read it for types a stored workflow may still carry.

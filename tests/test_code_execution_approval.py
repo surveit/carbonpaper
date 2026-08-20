@@ -133,3 +133,31 @@ def test_changing_a_stage_INTO_a_gated_type_is_still_refused():
 def test_a_new_stage_is_refused_even_when_others_of_the_type_are_stored():
     stored = {"elsewhere": dict(_FRAME_STAGE, id="elsewhere")}
     assert stage_edit.find_unapproved_code_issues("p1", _FRAME_STAGE, stored) != []
+
+
+# ── filter_rows joins the gate ────────────────────────────────────────────────
+_FILTER_STAGE = {
+    "id": "in_scope", "description": "in_scope", "type": "filter_rows",
+    "inputs": [{"id": "filings"}],
+    "signature": {"form": "extends", "reads": [{"input": "filings", "columns": [
+        {"name": "status", "type": "str", "nullable": False}]}]},
+    "filter": {"summary": "Keeps filings still active.",
+               "code": 'def should_include(row):\n    return row["status"] == "Active"\n'},
+}
+
+
+def test_the_python_filter_is_gated_like_the_other_python_types():
+    assert "filter_rows" in APPROVAL_REQUIRED_TYPES
+    assert stage_edit.find_unapproved_code_issues("p1", _FILTER_STAGE) != []
+
+
+def test_the_sandboxed_filter_is_the_offered_one():
+    assert "starlark_filter_rows" in AUTHORABLE_TYPES
+    assert "filter_rows" not in AUTHORABLE_TYPES
+
+
+def test_publish_is_now_the_only_unsandboxed_type_still_offered():
+    """The burn-down's last step, pinned so finishing it shows up here."""
+    from app.models.stages.stage_types import AUTHORABLE_CODE_CARRYING_TYPES
+    unsandboxed = [t for t in AUTHORABLE_CODE_CARRYING_TYPES if not t.startswith("starlark_")]
+    assert unsandboxed == ["publish"]

@@ -190,7 +190,7 @@ def compute_join_output_types(
 JOIN_SHARED_NOTE = (
     "Takes EXACTLY TWO inputs: inputs[0] is the SUBJECT, inputs[1] is the REFERENCE. "
     "Every subject row survives (unmatched rows carry nulls in the landed columns); "
-    "dropping rows is `filter_rows`' job. `enrich_with` maps each reference column to "
+    "dropping rows is `starlark_filter_rows`' job. `enrich_with` maps each reference column to "
     "the name it lands under, usually the same; a same-named key pair needs no entry. "
     "A join only ADDS: a landed name the subject already carries is refused — pick a "
     "new one (`score: score_r`). The signature adds exactly the landed columns."
