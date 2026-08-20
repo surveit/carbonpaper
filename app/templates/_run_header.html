@@ -18,11 +18,13 @@
 #}
 <div class="run-header">
   <div class="run-title">
-    <h1 class="run-name{% if not header.name %} unnamed{% endif %}">
+    {#- The pencil is INSIDE the heading so it follows the last word of the name
+        rather than dropping below a name that took the whole line. -#}
+    <h2 class="run-name{% if not header.name %} unnamed{% endif %}">
       {{- header.name or (header.started_at | friendly_time if header.started_at else run_id) -}}
-    </h1>
-    <button type="button" class="run-name-edit" aria-label="Rename this run"
-            title="Rename this run">✎</button>
+      <button type="button" class="run-name-edit" aria-label="Rename this run"
+              title="Rename this run">✎</button>
+    </h2>
     <form class="run-name-form" method="post" hidden
           action="/project/{{ project }}/runs/{{ run_id }}/name">
       <input type="text" name="name" value="{{ header.name }}" maxlength="200"
