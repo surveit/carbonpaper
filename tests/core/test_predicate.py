@@ -36,9 +36,60 @@ def test_arithmetic_rejected():
         parse_predicate("a + b > 0")
 
 
-def test_backtick_rejected():
+def test_backtick_quoted_name_resolves_to_one_column():
+    p = parse_predicate("`Opening Text` IS NULL AND `Hit Sentence` IS NOT NULL",
+                        {"Opening Text", "Hit Sentence"})
+    assert p.columns == frozenset({"Opening Text", "Hit Sentence"})
+    df = pd.DataFrame({"Opening Text": [None, "x"], "Hit Sentence": ["a", None]})
+    assert df.eval(p.pandas_expr).tolist() == [True, False]
+
+
+def test_backtick_quoting_survives_the_and_split():
+    """The split is textual, so a name holding ` AND ` has to be hidden before it runs."""
+    p = parse_predicate("`Cats AND Dogs` > 1", {"Cats AND Dogs"})
+    assert p.columns == frozenset({"Cats AND Dogs"})
+    assert pd.DataFrame({"Cats AND Dogs": [0, 2]}).eval(p.pandas_expr).tolist() == [False, True]
+
+
+def test_backticks_cannot_smuggle_syntax_past_the_allowlist():
     with pytest.raises(PredicateError):
-        parse_predicate("`weird name` == 1")
+        parse_predicate("`a`.__class__ == 1", {"a"})
+    with pytest.raises(PredicateError):
+        parse_predicate("`x` + 1 > 0", {"x"})
+
+
+def test_a_quoted_name_must_be_a_column_the_caller_named():
+    """The quoted span is an allowlist lookup, so pandas is never handed loose text."""
+    with pytest.raises(PredicateError, match="is not a column here"):
+        parse_predicate("`__import__('os').system('x')` == 1", {"a"})
+    with pytest.raises(PredicateError, match="is not a column here"):
+        parse_predicate("`Opening Text` IS NULL", {"Hit Sentence"})
+
+
+def test_without_columns_no_quoted_name_is_admitted():
+    """The default fails closed: a caller that names no columns admits no quoting."""
+    with pytest.raises(PredicateError, match="is not a column here"):
+        parse_predicate("`Opening Text` IS NULL")
+    with pytest.raises(PredicateError):
+        parse_predicate("`` == 1")
+
+
+def test_uppercase_not_is_the_dialect():
+    """FIND_ROWS_DESCRIPTION offers `NOT client.str.startswith(...)` as a worked example."""
+    p = parse_predicate("NOT client.str.startswith('The ')")
+    assert p.columns == frozenset({"client"})
+    df = pd.DataFrame({"client": ["The Co", "Acme"]})
+    assert df.eval(p.pandas_expr).tolist() == [False, True]
+
+
+def test_unquoted_name_with_a_space_says_to_quote_it():
+    with pytest.raises(PredicateError, match="written in backticks"):
+        parse_predicate("Opening Text IS NULL")
+
+
+def test_regex_arguments_are_found_through_backticks():
+    p = parse_predicate("`Hit Sentence`.str.contains('[0-9]{4}')", {"Hit Sentence"})
+    assert p.regex_arguments == ("[0-9]{4}",)
 
 
 def test_unary_minus_rejected():

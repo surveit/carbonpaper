@@ -87,7 +87,7 @@ def _reduce_whole_frame(
 def _rows_admitted_by(rows: pd.DataFrame, op: AggregationOp) -> pd.DataFrame:
     if not op.where:
         return rows
-    return rows.query(parse_predicate(op.where).pandas_expr)
+    return rows.query(parse_predicate(op.where, rows.columns).pandas_expr)
 
 
 def _grouped_value(slice_df: pd.DataFrame, group_by: list[str], op: AggregationOp) -> pd.Series:

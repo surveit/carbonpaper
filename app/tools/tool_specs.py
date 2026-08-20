@@ -9,7 +9,11 @@ from app.tools import shared
 from app.tools.shared import MAX_OUTPUT_ROWS, MAX_RUNS_LISTED, MAX_SLEEP_SECONDS
 from app.tools.types import AgentTool, ToolParameterProse
 
-_PROJECT_ID = "The project's name."
+# An id is a stamp, not a label: the prose has to send the model to look one up.
+PROJECT_ID = (
+    "The project's id, from list_projects or get_current_project — an opaque stamp like "
+    "`20260818T090501.047918`, never a name you can guess."
+)
 
 # read_stage_output_rows builds links, so its reader's address is the CALLER's to
 # supply — never something the model is asked for.
@@ -56,7 +60,7 @@ AGENT_TOOLS: dict[str, AgentTool] = {
         fn=shared.approve_code_execution,
         label="Turning on code execution",
         parameters={
-            "project_id": _PROJECT_ID,
+            "project_id": PROJECT_ID,
             "reason": "What the Python step will do, and why no declared stage fits — in the "
                 "words you put to the owner. Stored, so whoever turns this off later can "
                 "see what was agreed to.",
@@ -84,7 +88,7 @@ that too. Approving twice is not an error and does not extend anything.""",
     "read_terms": AgentTool(
         fn=shared.read_terms,
         label="Reading the project's words",
-        parameters={"project_id": _PROJECT_ID},
+        parameters={"project_id": PROJECT_ID},
         description="""\
 The project's agreed vocabulary: its NOUNS (the things its data is about,
 each with the columns it has if it has any) and its VERBS (the acts the
@@ -100,7 +104,7 @@ been agreed yet, not that the project has none.""",
         fn=shared.write_terms,
         label="Storing the project's words",
         parameters={
-            "project_id": _PROJECT_ID,
+            "project_id": PROJECT_ID,
             "terms": "The WHOLE vocabulary — `nouns` and `verbs` both, every time. What you send "
                 "replaces what is stored, so read_terms first and send that back with your "
                 "additions.",
@@ -131,7 +135,7 @@ user before you store them — never invent one to fill the list out.""",
     "get_project_status": AgentTool(
         fn=shared.get_project_status,
         label="Checking the project",
-        parameters={"project_id": _PROJECT_ID},
+        parameters={"project_id": PROJECT_ID},
         description="""\
 One project's full status snapshot: document present?, data-model state
 (generating shows no schemas yet; then unapproved/approved), workflow stage
@@ -154,7 +158,7 @@ not exist.""",
         fn=shared.read_stage,
         label="Reading a stage",
         parameters={
-            "project_id": _PROJECT_ID,
+            "project_id": PROJECT_ID,
             "stage_id": "The stage's id, as read_workflow_summary shows it.",
         },
         description="""\
@@ -164,7 +168,7 @@ Return the JSON of one stage from the workflow. Read before editing.""",
         fn=shared.remove_stage,
         label="Removing a stage",
         parameters={
-            "project_id": _PROJECT_ID,
+            "project_id": PROJECT_ID,
             "stage_id": "The stage to delete. Refused if another stage still lists it in its inputs.",
         },
         description="""\
@@ -178,7 +182,7 @@ remaining stage is allowed.""",
         fn=shared.read_review_guide,
         label="Reading the review guide",
         parameters={
-            "project_id": _PROJECT_ID,
+            "project_id": PROJECT_ID,
             "version_id": "The version whose guide to read.",
         },
         description="""\
@@ -189,7 +193,7 @@ before writing so you amend it rather than replace someone's work.""",
         fn=shared.write_review_guide,
         label="Writing the review guide",
         parameters={
-            "project_id": _PROJECT_ID,
+            "project_id": PROJECT_ID,
             "version_id": "The version this guide describes. The guide is validated against THAT "
                 "version's stages.",
             "guide": "The complete guide: `steps`, each with `title`, `prose` and `stage_ids`, "
@@ -206,7 +210,7 @@ of save_version.""",
         fn=shared.run_stage_tests,
         label="Running the stage's tests",
         parameters={
-            "project_id": _PROJECT_ID,
+            "project_id": PROJECT_ID,
             "stage_id": "One stage to scope the run to. Omit to run every stage with tests.",
         },
         description="""\
@@ -223,7 +227,7 @@ generate_stage_tests), never to bend the test to the code.""",
     "report_compiler_warnings": AgentTool(
         fn=shared.report_compiler_warnings,
         label="Reading the workflow's warnings",
-        parameters={"project_id": _PROJECT_ID},
+        parameters={"project_id": PROJECT_ID},
         description="""\
 Every problem with this workflow: undescribed stages, descriptions no examples
 check, examples that do not pass, code the review panel cannot show, and
@@ -235,7 +239,7 @@ DOES run the examples, but run_stage_tests is what tells you which case failed."
         fn=shared.generate_stage_tests,
         label="Generating the stage's tests",
         parameters={
-            "project_id": _PROJECT_ID,
+            "project_id": PROJECT_ID,
             "stage_id": "The stage to generate tests for.",
         },
         description="""\
@@ -253,7 +257,7 @@ has no output schema.""",
         fn=shared.run_workflow,
         label="Running the workflow",
         parameters={
-            "project_id": _PROJECT_ID,
+            "project_id": PROJECT_ID,
             "version_id": "Omit for the project's newest stored version.",
             "limits": 'Caps how many rows a stage READS: {"<stage id>": N}.',
             "files": 'The stored file each input stage reads for THIS run: '
@@ -283,7 +287,7 @@ the workflow already names the file it reads.""",
         fn=shared.run_workflow_test,
         label="Testing the workflow on real rows",
         parameters={
-            "project_id": _PROJECT_ID,
+            "project_id": PROJECT_ID,
             "limit": "How many rows of the bound source to run on — the run's budget, since every "
                 "LLM stage pays per row. null runs the whole source.",
             "version_id": "Omit for the project's newest stored version.",
@@ -328,7 +332,7 @@ no stored version is a loud error.""",
         fn=shared.list_runs,
         label="Listing the project's runs",
         parameters={
-            "project_id": _PROJECT_ID,
+            "project_id": PROJECT_ID,
             "limit": f"How many of the newest runs to name. Clamped to {MAX_RUNS_LISTED}.",
         },
         description="""\
@@ -342,7 +346,7 @@ listing cut to `limit` reads as the window it is.""",
         fn=shared.get_run_status,
         label="Checking the run",
         parameters={
-            "project_id": _PROJECT_ID,
+            "project_id": PROJECT_ID,
             "run_id": "The run id run_workflow returned.",
         },
         description="""\
@@ -369,7 +373,7 @@ the seconds it slept, which is your ask clamped to the ceiling.""",
     "read_workflow_summary": AgentTool(
         fn=shared.read_workflow_summary,
         label="Reading the workflow",
-        parameters={"project_id": _PROJECT_ID},
+        parameters={"project_id": PROJECT_ID},
         description="""\
 Summarize a project's workflow: each stage's id, type, description, upstream
 input ids, and review state. Read this before editing so you know the current
@@ -379,7 +383,7 @@ shape. Does not return full stage specs — use read_stage for one.""",
         fn=shared.read_stage_output_rows,
         label="Reading the stage's rows",
         parameters={
-            "project_id": _PROJECT_ID,
+            "project_id": PROJECT_ID,
             "run_id": "The run whose stored output you want to read.",
             "stage_id": "The stage whose output rows you want.",
             "limit": f"How many rows to read, from `offset`. Clamped to {MAX_OUTPUT_ROWS}, which "
@@ -408,7 +412,7 @@ results.""",
         fn=shared.profile_stage_output_data_range,
         label="Reading what the stage's columns hold",
         parameters={
-            "project_id": _PROJECT_ID,
+            "project_id": PROJECT_ID,
             "run_id": "The run whose stored output you want to profile.",
             "stage_id": "The stage whose output columns you want.",
             "columns": "The columns to profile — every one you are about to declare.",
@@ -439,7 +443,7 @@ CSV read makes it 2), and a computed column is in no file at all.""",
         fn=shared.move_file_to_project,
         label="Putting the file in the project",
         parameters={
-            "project_id": _PROJECT_ID,
+            "project_id": PROJECT_ID,
             "file_id": "The stored file's file_id, as list_files reported it.",
         },
         description="""\
@@ -449,7 +453,7 @@ Put a file that is in no project into one. Moves no bytes.""",
         fn=shared.profile_file,
         label="Reading what the file holds",
         parameters={
-            "project_id": _PROJECT_ID,
+            "project_id": PROJECT_ID,
             "file_id": "The stored file's file_id, as list_files reported it.",
             "columns": "Which columns to profile. Omit for every column in the file.",
             "max_values": "How many distinct values to show per column, commonest first. "
@@ -483,7 +487,7 @@ header, first column. survey_workbook is how you find out what to pass.""",
         fn=shared.survey_workbook,
         label="Looking over the workbook's sheets",
         parameters={
-            "project_id": _PROJECT_ID,
+            "project_id": PROJECT_ID,
             "file_id": "The stored xlsx's file_id, as list_files reported it.",
             "from_row": "The 0-based sheet row the window starts at. Raise it to look past a "
                      "preamble longer than the window.",

@@ -18,7 +18,12 @@ from app.tools.submitted_stage import (
     add_stages_reporting_drops,
     edit_stage_reporting_drops,
 )
-from app.tools.tool_specs import bind, read_parameter_prose, read_tool_description
+from app.tools.tool_specs import (
+    PROJECT_ID,
+    bind,
+    read_parameter_prose,
+    read_tool_description,
+)
 from app.services.project import Project
 
 
@@ -106,7 +111,7 @@ TOOL_SCHEMAS: dict[str, ToolParameterProse] = {
             "summary of it.",
     },
     "edit_stage": {
-        "project_id": "The project id (call get_current_project first).",
+        "project_id": PROJECT_ID,
         "stage_id": "The id of the stage to change.",
         "changes_json": "A JSON object (encoded as a string) of ONLY the fields to change — a "
             "JSON Merge Patch. Fields you omit are preserved verbatim; a null value "
@@ -115,7 +120,7 @@ TOOL_SCHEMAS: dict[str, ToolParameterProse] = {
             "changes only llm.model. You cannot change a stage's id this way.",
     },
     "add_stage": {
-        "project_id": "The project id (call get_current_project first).",
+        "project_id": PROJECT_ID,
         "stages": "The complete NEW stages: each with id (new and unique — the stage's only "
             "name), description, type, the "
             "config block(s) its type requires (connector / llm / function / ...; "
@@ -124,15 +129,14 @@ TOOL_SCHEMAS: dict[str, ToolParameterProse] = {
             "must already be a stage in this workflow or in this same call.",
     },
     "save_version": {
-        "project_id": "The project id (call get_current_project first).",
+        "project_id": PROJECT_ID,
         "message": "What this version changes and why — shown to the human reviewer "
             "deciding whether to publish it.",
         "parent_version": "The version you started this edit FROM, if you loaded one. Omit otherwise: "
             "nothing is inferred from what else the project has stored.",
     },
     "list_files": {
-        "project_id": "The project whose files to list. Omit for the files that are in no "
-            "project yet.",
+        "project_id": f"{PROJECT_ID} Omit it for the files that are in no project yet.",
     },
     "read_stage_output_rows": read_parameter_prose("read_stage_output_rows"),
 }
