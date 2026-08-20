@@ -106,6 +106,11 @@ def report_compiler_warnings(project_id: str) -> dict[str, Any]:
     return shared.report_compiler_warnings(project_id)
 
 
+@mcp.tool(description=read_tool_description("approve_code_execution"))
+def approve_code_execution(project_id: str, reason: str) -> str:
+    return shared.approve_code_execution(project_id, reason)
+
+
 @mcp.tool(description=read_tool_description("read_terms"))
 def read_terms(project_id: str) -> shared.Terms:
     return shared.read_terms(project_id)

@@ -45,10 +45,19 @@ STAGE_TYPES: dict[str, StageTypeSpec] = {
 # Not a deletion — a stored version holding one must keep loading.
 RETIRED_TYPES = ("python_row_function",)
 
+# Types a project may use only after its owner has approved unsandboxed code
+# execution (app.services.project.has_code_execution_approval). Kept OUT of the
+# catalog every prompt renders, because that catalog is built once per server and
+# cannot vary by project — the refusal happens on WRITE instead, in
+# app.services.stage_edit, where the project is known and the message can say how
+# to turn it on. A stored stage of one of these types keeps loading and running.
+APPROVAL_REQUIRED_TYPES = ("python_frame_function",)
+
 # What the authoring prompts list. STAGE_TYPES stays whole: the runtime, the
 # diagrams and the trace all read it for types a stored workflow may still carry.
 AUTHORABLE_TYPES: dict[str, StageTypeSpec] = {
-    name: spec for name, spec in STAGE_TYPES.items() if name not in RETIRED_TYPES
+    name: spec for name, spec in STAGE_TYPES.items()
+    if name not in RETIRED_TYPES and name not in APPROVAL_REQUIRED_TYPES
 }
 
 # The types whose config carries authored code all owe a plain-language `summary`
@@ -60,5 +69,5 @@ CODE_CARRYING_TYPES = ("python_row_function", "python_frame_function", "publish"
 # The subset a prompt names: a retired type's rule is still enforced on a stored
 # stage, but naming it would advertise a type the catalog no longer offers.
 AUTHORABLE_CODE_CARRYING_TYPES = tuple(
-    name for name in CODE_CARRYING_TYPES if name not in RETIRED_TYPES
+    name for name in CODE_CARRYING_TYPES if name in AUTHORABLE_TYPES
 )

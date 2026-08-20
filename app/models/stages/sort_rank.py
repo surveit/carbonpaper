@@ -186,8 +186,8 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
             "For a column whose ranking is not its alphabetical order, state the order: "
             "`{column: severity_tier, order: [T1, T2, T3]}`. A value outside that list stops "
             "the run — a tier the rule never anticipated must not be silently ranked last.\n"
-            "The runtime records where each row moved from, so sorting does not cost the "
-            "trace. A python_frame_function doing the same sort does."
+            "The runtime records where each row moved from, so sorting does not cost "
+            "the trace — sorting in authored code would."
         ),
     ),
 }

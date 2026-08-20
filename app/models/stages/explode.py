@@ -139,8 +139,8 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
             "A row whose list is empty produces NO output row unless `keep_empty` is set — "
             "set it when a row that found nothing must still reach the output, carrying null.\n"
             "The runtime records which input row each output row came from, so a trace "
-            "crosses this stage. Doing the same unpacking in a python_frame_function "
-            "does not — which is why this type exists."
+            "crosses this stage — which is the reason to unpack here rather than in "
+            "authored code, where the trace would stop."
         ),
     ),
 }

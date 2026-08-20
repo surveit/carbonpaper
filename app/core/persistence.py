@@ -60,7 +60,7 @@ _stamp_lock = RLock()
 _last_stamp: datetime | None = None
 
 
-def _now_iso() -> str:
+def now_iso() -> str:
     # Strictly increasing WITHIN a process only — two processes can still tie in one OS tick.
     global _last_stamp
     with _stamp_lock:
@@ -90,8 +90,8 @@ class PersistedModel(BaseModel):
     )
 
     id: str = Field(default_factory=lambda: uuid4().hex)
-    created_at: str = Field(default_factory=_now_iso)
-    updated_at: str = Field(default_factory=_now_iso)
+    created_at: str = Field(default_factory=now_iso)
+    updated_at: str = Field(default_factory=now_iso)
 
     @model_validator(mode="after")
     def _stamp_one_creation_instant(self) -> Self:
@@ -107,7 +107,7 @@ class PersistedModel(BaseModel):
     DUMP_OPTS: ClassVar[JsonDict] = {}
 
     def save(self) -> None:
-        self.updated_at = _now_iso()
+        self.updated_at = now_iso()
         get_store().write(
             self.collection,
             self.id,

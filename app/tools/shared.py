@@ -23,6 +23,7 @@ from app.core.column_profile import TableProfile
 from app.models.review_guide import ReviewGuideDraft
 from app.models.terms import Terms
 from app.services import (
+    code_approval,
     frame_profile,
     generation,
     project as project_service,
@@ -141,6 +142,17 @@ def report_compiler_warnings(project_id: str) -> dict[str, Any]:
     validate_project_exists(project_id)
     report = stage_tests_service.find_project_compiler_warnings(project_id)
     return {"warnings": [w.model_dump(mode="json") for w in report.warnings]}
+
+
+def approve_code_execution(project_id: str, reason: str) -> str:
+    """Records an answer the OWNER gave. Calling it without one is the misuse to avoid."""
+    validate_project_exists(project_id)
+    record = code_approval.approve_code_execution(project_id, reason)
+    return (
+        f"Code execution is on for this project, approved {record.approved_at}. "
+        f"python_frame_function stages can now be written. It stays on until someone "
+        f"turns it off on the project page — say so, so the owner knows it is standing."
+    )
 
 
 def read_terms(project_id: str) -> Terms:
