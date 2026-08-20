@@ -1,8 +1,4 @@
-"""Shared stage-execution engine, driven both by the production run lifecycle
-(`app/runtime/runner.py`) and by `run_subset` here, the non-production subset
-executor used by evals and previews. This module never creates a production
-run record; that split is what lets an import-linter contract keep evals away
-from the production run entry points."""
+"""docs/architecture.md"""
 
 from __future__ import annotations
 
@@ -73,7 +69,7 @@ def topological_sort(stages: list[WorkflowStage]) -> list[WorkflowStage]:
     return order
 
 
-def run_subset(
+def execute_subset(
     workflow: Workflow,
     *,
     injected_outputs: dict[str, pd.DataFrame],

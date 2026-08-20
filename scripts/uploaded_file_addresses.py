@@ -41,7 +41,7 @@ def move_store_to_record_addresses(root: Path, records: Sequence[StoredFile]) ->
     sources = {record.id: _copy_to_record_address(root, record) for record in records}
     for source in {source for source in sources.values() if source is not None}:
         source.unlink()
-        _remove_if_empty(source.parent)
+        _delete_if_empty(source.parent)
     return [file_id for file_id, source in sources.items() if source is not None]
 
 
@@ -67,7 +67,7 @@ def _find_stored_file(blob_dir: Path) -> Path | None:
     return next((entry for entry in sorted(blob_dir.iterdir()) if entry.is_file()), None)
 
 
-def _remove_if_empty(directory: Path) -> None:
+def _delete_if_empty(directory: Path) -> None:
     # A blob directory holding anything no record named keeps it: those bytes are the
     # only copy, and this migration is not the thing that decides they are rubbish.
     if directory.is_dir() and not any(directory.iterdir()):

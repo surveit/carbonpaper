@@ -30,9 +30,9 @@ from app.core.agent.registry import build_mcp_server
 from app.core.agent.sdk_engine import MCP_SERVER_NAME
 from app.models import SchemaLibrary, Terms
 from app.runtime.llm import SYSTEM_PROMPT as RUNTIME_SYSTEM_PROMPT
-from app.tools.editing import EditingContext, make_editing_tools
+from app.tools.editing import EditingContext, build_editing_tools
 from app.tools.prompt_fragments import render_link_map
-from app.agents.tutorial.config import make_tutorial_tools
+from app.agents.tutorial.config import build_tutorial_tools
 from app.tools.tutorial import TutorialContext
 
 # The generation agents put their input in the TASK (the user message), not the system
@@ -84,7 +84,7 @@ def render_editing_agent() -> str:
         ),
         system_prompt=f"{EDITING_CONFIG.system_prompt}\n\n{render_link_map(_PLACEHOLDER_HOST)}",
         tools=read_bound_tools(
-            make_editing_tools(
+            build_editing_tools(
                 EditingContext(project_id="<project_id>", base_url=_PLACEHOLDER_HOST)
             )
         ),
@@ -102,7 +102,7 @@ def render_tutorial_agent() -> str:
         ),
         system_prompt=TUTORIAL_CONFIG.system_prompt,
         tools=read_bound_tools(
-            make_tutorial_tools(TutorialContext(base_url="http://<host>/"))
+            build_tutorial_tools(TutorialContext(base_url="http://<host>/"))
         ),
     )
 

@@ -164,8 +164,8 @@ not exist.""",
         description="""\
 Return the JSON of one stage from the workflow. Read before editing.""",
     ),
-    "remove_stage": AgentTool(
-        fn=shared.remove_stage,
+    "delete_stage": AgentTool(
+        fn=shared.delete_stage,
         label="Removing a stage",
         parameters={
             "project_id": PROJECT_ID,

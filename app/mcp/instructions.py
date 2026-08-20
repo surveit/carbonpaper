@@ -79,7 +79,7 @@ record, and it returns the project record, whose `id` every other tool takes.
   TERMS      read_terms to see what is agreed, then write_terms once the user has
              agreed the rest. Every later phase writes in those words.
   PLANNING   (no tools — this is where you ask the user)
-  BUILD      add_stage, edit_stage, remove_stage, then generate_stage_tests and
+  BUILD      add_stage, edit_stage, delete_stage, then generate_stage_tests and
              loop edit_stage -> run_stage_tests until they pass. Still BUILD.
              If a write is refused because the step needs unsandboxed Python,
              that refusal names what to try instead. Only if nothing fits, put

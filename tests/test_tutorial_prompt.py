@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 import app
-from app.agents.tutorial.config import make_tutorial_tools
+from app.agents.tutorial.config import build_tutorial_tools
 from app.agents.tutorial.prompt import TUTORIAL_OPENING_MESSAGE, TUTORIAL_SYSTEM_PROMPT
 from app.core.run_status import RunStatus
 from app.models import StageType
@@ -29,14 +29,14 @@ _NAMED_CONTROLS = ("Export review packet",)
 def _tour_tool_names() -> set[str]:
     return {
         spec.name
-        for spec in make_tutorial_tools(TutorialContext(base_url="http://x/"))
+        for spec in build_tutorial_tools(TutorialContext(base_url="http://x/"))
     }
 
 
 def _tour_tool_arguments() -> set[str]:
     return {
         argument
-        for spec in make_tutorial_tools(TutorialContext(base_url="http://x/"))
+        for spec in build_tutorial_tools(TutorialContext(base_url="http://x/"))
         for argument in spec.json_schema.get("properties", {})
     }
 

@@ -66,7 +66,7 @@ class PendingReview:
     row_ordinal: int
 
 
-def make_human_review_mapper(
+def build_human_review_mapper(
     workflow_stage: WorkflowStage, ctx: RunContext, src: pa.Table
 ) -> RowMapper:
     """The callable that decides one row's outcome for one execution of this stage."""

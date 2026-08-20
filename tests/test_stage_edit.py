@@ -200,7 +200,7 @@ def test_add_stage_rejects_duplicate_id(tmp_path: Path) -> None:
 def test_remove_stage_rejected_when_a_downstream_depends_on_it(tmp_path: Path) -> None:
     # score inputs from load, so removing load would leave a dangling edge.
     pdir = _seed(tmp_path)
-    result = stage_edit.remove_stage_spec(pdir, "load")
+    result = stage_edit.delete_stage_spec(pdir, "load")
     assert result.ok is False
     assert any("load" in issue for issue in result.issues)
     assert "load" in stage_edit._current_specs(pdir)
@@ -218,7 +218,7 @@ def test_remove_stage_deletes_the_stage_and_its_file(tmp_path: Path) -> None:
            }}
     assert stage_edit.add_stage_spec(pdir, json.dumps(new)).ok is True
 
-    result = stage_edit.remove_stage_spec(pdir, "score")
+    result = stage_edit.delete_stage_spec(pdir, "score")
     assert result.ok is True and not result.issues
     assert "score" not in stage_edit._current_specs(pdir)
     assert [s["id"] for s in read_stages(pdir)] == ["load"]
@@ -227,7 +227,7 @@ def test_remove_stage_deletes_the_stage_and_its_file(tmp_path: Path) -> None:
 def test_remove_nonexistent_stage_raises(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
     with pytest.raises(FileNotFoundError):
-        stage_edit.remove_stage_spec(pdir, "ghost")
+        stage_edit.delete_stage_spec(pdir, "ghost")
 
 
 # ─── An empty workflow is a legitimate starting state ────────────────────────
@@ -277,7 +277,7 @@ def test_add_stage_still_refuses_when_the_stored_document_is_unparseable() -> No
 def test_remove_stage_on_an_empty_workflow_raises(tmp_path: Path) -> None:
     pdir = _seed_empty(tmp_path)
     with pytest.raises(FileNotFoundError):
-        stage_edit.remove_stage_spec(pdir, "load")
+        stage_edit.delete_stage_spec(pdir, "load")
 
 
 def test_edit_stage_on_an_empty_workflow_raises(tmp_path: Path) -> None:

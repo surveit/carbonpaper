@@ -20,7 +20,7 @@ from app.models import (
     validate_workflow,
 )
 from app.core.persistence import PersistedModel, PersistenceScope
-from app.core.utils import format_errors, generate_word_triplet_id
+from app.core.utils import format_errors, build_word_triplet_id
 from app.services import versioning, workspace
 
 
@@ -65,7 +65,7 @@ class SaveResult(BaseModel):
     version_id: str | None = None
 
 
-def _view(d: Draft) -> DraftView:
+def _build_draft_view(d: Draft) -> DraftView:
     return DraftView(
         id=d.draft_id,
         parent_version=d.parent_version,
@@ -86,7 +86,7 @@ def create_draft(
         if from_version is not None
         else []
     )
-    draft_id = generate_word_triplet_id(_taken(project))
+    draft_id = build_word_triplet_id(_taken(project))
     d = Draft(
         id=_doc_id(project, draft_id),
         draft_id=draft_id,
@@ -94,13 +94,13 @@ def create_draft(
         stages=stages,
     )
     d.save()
-    return _view(d)
+    return _build_draft_view(d)
 
 
 def read_draft(
     name: str, draft_id: str) -> DraftDetail:
     d = _load(workspace.validate_project_id(name), draft_id)
-    return DraftDetail(**_view(d).model_dump(), issues=validate_workflow(d.stages))
+    return DraftDetail(**_build_draft_view(d).model_dump(), issues=validate_workflow(d.stages))
 
 
 def set_draft_stage(
@@ -113,7 +113,7 @@ def set_draft_stage(
     return _describe(d)
 
 
-def remove_draft_stage(
+def delete_draft_stage(
     name: str, draft_id: str, stage_id: str) -> DraftEdit:
     d = _load(workspace.validate_project_id(name), draft_id)
     kept = [s for s in d.stages if s.id != stage_id]

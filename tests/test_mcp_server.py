@@ -69,7 +69,7 @@ def test_mcp_lists_the_authoring_tools(client):
         "read_stage",
         "edit_stage",
         "add_stage",
-        "remove_stage",
+        "delete_stage",
         "generate_stage_tests",
         "run_stage_tests",
         "save_version",
@@ -281,12 +281,12 @@ def test_mcp_remove_stage_returns_ok_and_issues(tmp_path, monkeypatch):
     pdir = tmp_path / project_id
     _store_workflow(pdir)
 
-    removed = server.remove_stage(project_id=project_id, stage_id="untested")
+    removed = server.delete_stage(project_id=project_id, stage_id="untested")
     assert removed == {"ok": True, "issues": []}
     assert "untested" not in {s["id"] for s in read_stages(pdir)}
 
     # `double` still inputs from `load`, so removing `load` is refused with issues.
-    refused = server.remove_stage(project_id=project_id, stage_id="load")
+    refused = server.delete_stage(project_id=project_id, stage_id="load")
     assert refused["ok"] is False and refused["issues"]
     assert "load" in {s["id"] for s in read_stages(pdir)}
 
@@ -298,7 +298,7 @@ def test_mcp_stage_tools_report_an_unknown_stage_id_as_issues(tmp_path, monkeypa
     project_id = "trail"
     _store_workflow(tmp_path / project_id)
 
-    removed = server.remove_stage(project_id=project_id, stage_id="ghost")
+    removed = server.delete_stage(project_id=project_id, stage_id="ghost")
     assert removed["ok"] is False and any("ghost" in i for i in removed["issues"])
 
     edited = server.edit_stage(project_id=project_id, stage_id="ghost", changes_json='{"cache": false}')

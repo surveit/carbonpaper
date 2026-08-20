@@ -23,16 +23,16 @@ from .execution import (
     StageHandler,
     validate_registry_matches_model,
 )
-from .filter_rows import make_filter_mapper
-from .human_review_queue import make_human_review_mapper
+from .filter_rows import build_filter_mapper
+from .human_review_queue import build_human_review_mapper
 from .input_data import preflight_input_data, read_input_data
 from .join import handle_enrich, handle_expand
 from .llm_transform import LLMTransformHandler
 from .publish import handle_publish
 from .reshape import handle_dedupe, handle_explode, handle_sort_rank
-from .python_functions import handle_python_frame_function, make_python_row_mapper
+from .python_functions import handle_python_frame_function, build_python_row_mapper
 from .starlark_filter import make_starlark_filter_mapper
-from .starlark_functions import make_starlark_row_mapper
+from .starlark_functions import build_starlark_row_mapper
 from .union import handle_union
 
 Preflight = Callable[[WorkflowStage], tuple[list[str], dict[str, Any] | None]]
@@ -44,7 +44,7 @@ PREFLIGHTS: dict[StageType, Preflight] = {
 HANDLERS: dict[StageType, StageHandler] = {
     StageType.input_data: SourceHandler(read_input_data),
     # parallelism stays 1: the mapped function is user-authored code, not assumed thread-safe.
-    StageType.python_row_function: RowMapTransformHandler(make_python_row_mapper),
+    StageType.python_row_function: RowMapTransformHandler(build_python_row_mapper),
     StageType.python_frame_function: FrameTransformHandler(handle_python_frame_function),
     # caches_frames=False REFUSES caching whatever the stage declares, which is a
     # stronger statement than `Stage.cache`'s per-type default: the joins
@@ -57,7 +57,7 @@ HANDLERS: dict[StageType, StageHandler] = {
     StageType.aggregate: FrameTransformHandler(handle_aggregate, caches_frames=False),
     StageType.llm_transform: LLMTransformHandler(parallelism=DEFAULT_PARALLEL),
     StageType.human_review_queue: RowMapTransformHandler(
-        make_human_review_mapper,
+        build_human_review_mapper,
         trims_output_to_declared=True,
     ),
     # caches_frames=False: publish is terminal and side-effecting — it writes
@@ -70,11 +70,11 @@ HANDLERS: dict[StageType, StageHandler] = {
     # Row-mapped with drops_rows: the runtime drives the predicate row by row
     # and does the selecting itself, so it holds the input ordinals that
     # survived — this stage's lineage — without the handler reporting them.
-    StageType.filter_rows: RowMapTransformHandler(make_filter_mapper, drops_rows=True),
+    StageType.filter_rows: RowMapTransformHandler(build_filter_mapper, drops_rows=True),
     # parallelism stays 1: matching python_row_function's calling convention. The
     # interpreter handle is this execution's, and Starlark freezes module globals,
     # so nothing crosses rows either way.
-    StageType.starlark_row_function: RowMapTransformHandler(make_starlark_row_mapper),
+    StageType.starlark_row_function: RowMapTransformHandler(build_starlark_row_mapper),
     # drops_rows: same contract as filter_rows — the driver does the selecting,
     # so it holds the surviving input ordinals without the predicate reporting them.
     StageType.starlark_filter_rows: RowMapTransformHandler(

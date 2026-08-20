@@ -1,8 +1,4 @@
-"""Workflow-test seam: run a workflow — any subset of its stages, over any slice of
-its real source — as a REAL run: same `runs/<id>/` directory, manifest, and
-routes as a production run, but marked `RunManifest.is_test_run` and scoped
-read-only. It reaches the shared engine through app.runtime.executor (run_subset),
-never app.runtime.runner."""
+"""docs/architecture.md"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,7 +10,7 @@ from app.core.errors import NoWorkflowTestSourceError, NoWorkflowTestVersionErro
 from app.core.timestamp_ids import mint_timestamp_id
 from app.models import StageType, Workflow, WorkflowStage
 from app.runtime.context import RunContext, RunIdentity
-from app.runtime.executor import run_subset, topological_sort
+from app.runtime.executor import execute_subset, topological_sort
 from app.models.run_parameters import RunParameters
 from app.runtime.stages.input_data import read_input_data
 from app.services.versioning import list_versions, load_version, load_version_stages
@@ -83,7 +79,7 @@ def _run_frontier(
     offsets: dict[str, int],
 ) -> tuple[bool, str | None]:
     try:
-        run_subset(
+        execute_subset(
             workflow, injected_outputs=injected, stage_ids=stage_ids,
             run_dir=run_dir,
             params=RunParameters(limits=limits, offsets=offsets,

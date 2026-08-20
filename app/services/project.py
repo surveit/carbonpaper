@@ -400,8 +400,8 @@ def add_stages(
     return stage_edit.add_stage_specs(_project_to_write(name), stages)
 
 
-def remove_stage(name: str, stage_id: str) -> EditStageResult:
-    return stage_edit.remove_stage_spec(_project_to_write(name), stage_id)
+def delete_stage(name: str, stage_id: str) -> EditStageResult:
+    return stage_edit.delete_stage_spec(_project_to_write(name), stage_id)
 
 
 def read_review_guide(name: str, version_id: str) -> ReviewGuide | None:

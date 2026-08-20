@@ -9,7 +9,7 @@ from app.core.errors import SubsetRunError
 from app.core.frames import table_to_frame
 from app.models import parse_stage, Stage, Workflow
 from app.models.run_parameters import RunParameters
-from app.runtime.executor import run_subset
+from app.runtime.executor import execute_subset
 from app.runtime.lineage import concatenated_inputs_lineage
 
 _NAME_VAL_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": True},
@@ -44,7 +44,7 @@ def _load_stage(sid: str, df: pd.DataFrame, tmp_path) -> Stage:
 def _run(
     stages: list[Stage], tmp_path, name: str, limits: dict[str, int] | None = None,
 ) -> dict[str, pd.DataFrame]:
-    return run_subset(
+    return execute_subset(
         Workflow(stages=stages), injected_outputs={},
         stage_ids=[s.id for s in stages], run_dir=tmp_path / "runs" / name,
         params=RunParameters(limits=limits or {}), project_id=(tmp_path / "runs" / name).parent.parent.name)

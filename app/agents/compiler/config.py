@@ -11,7 +11,7 @@ from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
 from app.models.terms import render_terms
 from app.services import project as project_service
 from app.services import terms as terms_service
-from app.tools.editing import EditingContext, make_editing_tools
+from app.tools.editing import EditingContext, build_editing_tools
 from app.tools.prompt_fragments import render_link_map
 from app.core.agent.registry import AgentConfig, register
 from app.core.agent.bound_tool import BoundToolSpec
@@ -83,7 +83,7 @@ CONFIG = AgentConfig(
 
 def _build_editing_tools(context: BaseModel) -> list[BoundToolSpec]:
     assert isinstance(context, EditingContext)
-    return make_editing_tools(context)
+    return build_editing_tools(context)
 
 
 register("editing", CONFIG, _build_editing_tools)

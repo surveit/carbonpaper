@@ -20,7 +20,7 @@ from app.evals.dataset import read_table_ref
 from app.evals.scoring import score_expected_outputs
 from app.models import EvalConfig, EvalRun, Workflow, WorkflowStage
 from app.core.frames import table_to_frame
-from app.runtime.executor import run_subset
+from app.runtime.executor import execute_subset
 from app.evals.compatibility import CompatibilityReport, validate_eval_compatibility
 from app.evals.dataset_columns import (
     deconflict_column_names,
@@ -94,7 +94,7 @@ def _score_run(
     dataset = read_table_ref(config.table)
     run_dir = resolve_eval_run_dir(project_id, run.id)
     try:
-        outputs = run_subset(
+        outputs = execute_subset(
             workflow, stage_ids=run.settings.frontier, run_dir=run_dir,
             injected_outputs=_build_injected_outputs(config, override, target, dataset),
             project_id=project_id, workflow_version=run.workflow_version)

@@ -1,7 +1,4 @@
-"""Behavior + lineage tests for the explode, dedupe and sort_rank handlers: run
-them for real through run_subset, then prove app.runtime.trace walks back through
-them to the right source row — the thing a python_frame_function doing the same
-work cannot offer."""
+"""explode/dedupe/sort_rank: proves app.runtime.trace walks back to the source row."""
 from __future__ import annotations
 
 import json
@@ -11,7 +8,7 @@ import pytest
 from app.core.errors import SubsetRunError
 from app.core.frames import table_to_frame
 from app.models import parse_stage, Stage, Workflow
-from app.runtime.executor import run_subset
+from app.runtime.executor import execute_subset
 from app.runtime.lineage import EdgeKind
 from app.runtime.trace import trace_row
 
@@ -54,7 +51,7 @@ def _source_stage(sid: str, rows: list[dict], columns: list[dict], tmp_path) -> 
 
 
 def _run(workflow: Workflow, stage_ids: list[str], run_dir):
-    return run_subset(
+    return execute_subset(
         workflow, injected_outputs={}, stage_ids=stage_ids,
         run_dir=run_dir, project_id=run_dir.parent.parent.name)
 

@@ -5,7 +5,7 @@ from typing import Callable
 import pytest
 from pydantic import ValidationError
 
-from app.tools.editing import EditingContext, make_editing_tools
+from app.tools.editing import EditingContext, build_editing_tools
 from app.core.agent.bound_tool import BoundToolSpec
 from app.core.errors import ReviewGuideValidationError
 from app.models.review_guide import ReviewGuideDraft, ReviewGuideStep
@@ -53,7 +53,7 @@ def examples_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _tools(name: str) -> list[BoundToolSpec]:
-    return make_editing_tools(EditingContext(project_id=name, base_url="http://reader.test/"))
+    return build_editing_tools(EditingContext(project_id=name, base_url="http://reader.test/"))
 
 
 def _stage(sid: str, name: str, stype: str, inputs: list[str] | None = None) -> dict:

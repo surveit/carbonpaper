@@ -11,7 +11,7 @@ import pytest
 from app.core.errors import SubsetRunError
 from app.core.frames import table_to_frame
 from app.models import parse_stage, Stage, Workflow
-from app.runtime.executor import run_subset
+from app.runtime.executor import execute_subset
 from app.runtime.trace import trace_row
 
 _FILINGS = [
@@ -53,7 +53,7 @@ def _filter_stage(sid: str, input_id: str, code: str, reads: list[str]) -> Stage
 
 
 def _run(workflow: Workflow, stage_ids: list[str], run_dir):
-    return run_subset(workflow, injected_outputs={}, stage_ids=stage_ids,
+    return execute_subset(workflow, injected_outputs={}, stage_ids=stage_ids,
                       run_dir=run_dir, project_id=run_dir.parent.parent.name)
 
 

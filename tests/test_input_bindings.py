@@ -205,7 +205,7 @@ def test_bound_file_must_exist_before_run_dir(tmp_path):
 
 
 def test_read_input_data_names_the_stage_when_no_path_is_bound(tmp_path):
-    # The handler reached directly (run_subset), skipping prepare_run's preflight.
+    # The handler reached directly (execute_subset), skipping prepare_run's preflight.
     stage = _input_stage("load_lobbying_filings", None)
     with pytest.raises(ValueError, match="load_lobbying_filings"):
         read_input_data(place_stage(stage), ctx=make_run_context())

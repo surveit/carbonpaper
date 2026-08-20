@@ -37,7 +37,7 @@ CONFIG = AgentConfig(
 
 
 
-def make_tutorial_tools(context: BaseModel) -> list[BoundToolSpec]:
+def build_tutorial_tools(context: BaseModel) -> list[BoundToolSpec]:
     # build_engine validated it against CONFIG.context_schema first.
     assert isinstance(context, TutorialContext)
 
@@ -88,4 +88,4 @@ def make_tutorial_tools(context: BaseModel) -> list[BoundToolSpec]:
     ]
 
 
-register("tutorial", CONFIG, make_tutorial_tools)
+register("tutorial", CONFIG, build_tutorial_tools)

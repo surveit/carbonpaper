@@ -231,14 +231,14 @@ def _wait_for_eval_run_status(project_id: str, run_id: str, status: str) -> Eval
 def test_start_eval_run_returns_before_the_score_is_in(project, monkeypatch):
     repo_root, demo, config = project
     scoring_started, release_scoring = threading.Event(), threading.Event()
-    real_run_subset = eval_runner.run_subset
+    real_run_subset = eval_runner.execute_subset
 
     def _held_open(*args, **kwargs):
         scoring_started.set()
         assert release_scoring.wait(timeout=30), "the test never released the scorer"
         return real_run_subset(*args, **kwargs)
 
-    monkeypatch.setattr(eval_runner, "run_subset", _held_open)
+    monkeypatch.setattr(eval_runner, "execute_subset", _held_open)
 
     run = start_eval_run(demo.name, config)
 
@@ -263,7 +263,7 @@ def test_an_unexpected_failure_lands_an_error_run_never_a_stuck_running(project,
     def _falls_over(*args, **kwargs):
         raise RuntimeError("the executor fell over")
 
-    monkeypatch.setattr(eval_runner, "run_subset", _falls_over)
+    monkeypatch.setattr(eval_runner, "execute_subset", _falls_over)
 
     run = start_eval_run(demo.name, config)
     assert run.status == "running"
@@ -326,14 +326,14 @@ def test_trigger_route_redirects_while_the_score_is_still_held_open(project, mon
     save_eval_config(demo.name, config)
     workspace.set_projects_dir(repo_root)
     scoring_started, release_scoring = threading.Event(), threading.Event()
-    real_run_subset = eval_runner.run_subset
+    real_run_subset = eval_runner.execute_subset
 
     def _held_open(*args, **kwargs):
         scoring_started.set()
         assert release_scoring.wait(timeout=30), "the test never released the scorer"
         return real_run_subset(*args, **kwargs)
 
-    monkeypatch.setattr(eval_runner, "run_subset", _held_open)
+    monkeypatch.setattr(eval_runner, "execute_subset", _held_open)
     client = TestClient(app)
 
     r = client.post("/project/demo/evals/label_check/run", follow_redirects=False)

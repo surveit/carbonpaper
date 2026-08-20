@@ -42,7 +42,7 @@ def find_mcp_tools(path: Path) -> list[tuple[str, ast.expr | None, str | None]]:
 def find_editing_tool_names(path: Path) -> list[str]:
     maker = next(
         n for n in ast.parse(path.read_text(encoding="utf-8")).body
-        if isinstance(n, ast.FunctionDef) and n.name == "make_editing_tools"
+        if isinstance(n, ast.FunctionDef) and n.name == "build_editing_tools"
     )
     return [n.name for n in maker.body if isinstance(n, ast.FunctionDef)]
 
@@ -50,7 +50,7 @@ def find_editing_tool_names(path: Path) -> list[str]:
 def find_docstringed_editing_tools(path: Path) -> list[str]:
     maker = next(
         n for n in ast.parse(path.read_text(encoding="utf-8")).body
-        if isinstance(n, ast.FunctionDef) and n.name == "make_editing_tools"
+        if isinstance(n, ast.FunctionDef) and n.name == "build_editing_tools"
     )
     return [
         n.name for n in maker.body
