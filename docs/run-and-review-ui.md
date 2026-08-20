@@ -42,6 +42,11 @@ All routes live under `/project/{project}/…`.
   Resume re-runs any non-complete stage (error + downstream) and **reuses
   completed upstream outputs** — no re-running finished stages, no new LLM calls
   for them. (The same mechanism powers "continue after review".)
+- **Restart run**: the toolbar menu (☰) carries the same `/resume` POST in every
+  run state, including `running` — an executor that dies mid-run leaves the status
+  behind it, and cancel needs a live executor to consume it. Nothing checks whether
+  the run is still executing: a second executor writes the same manifest and the
+  same `outputs/<stage>.parquet`, last write wins.
 
 ### The stage panel (`_run_stage_panel.html`) — one strip of tabs
 

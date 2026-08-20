@@ -169,13 +169,46 @@ def test_resume_redirect_polls_past_the_old_terminal_manifest(
     assert "setInterval" in page.text
 
 
-def test_run_detail_page_hides_resume_for_a_completed_run(examples_dir, client):
+def test_run_detail_page_hides_the_resume_cta_for_a_completed_run(examples_dir, client):
+    """A clean run asks nothing; the menu's Restart is offered in every state, not asked."""
     _write_one_stage_project(examples_dir)
     _write_manifest(examples_dir, "ok")
 
     page = client.get(f"/project/{PROJ}/runs/{RUN}")
     assert page.status_code == 200
-    assert f'action="/project/{PROJ}/runs/{RUN}/resume"' not in page.text
+    assert page.text.count(f'action="/project/{PROJ}/runs/{RUN}/resume"') == 1
+    assert "Resume cancelled run" not in page.text
+    assert "Re-run failed stage" not in page.text
+
+
+@pytest.mark.parametrize("status", ["running", "ok", "errors", "cancelled", "awaiting_review"])
+def test_run_menu_offers_restart_in_every_run_state(examples_dir, client, status):
+    _write_one_stage_project(examples_dir)
+    _write_manifest(examples_dir, status)
+
+    page = client.get(f"/project/{PROJ}/runs/{RUN}")
+    assert page.status_code == 200
+    assert "<h3>Restart run</h3>" in page.text
+    restart_form = page.text.split('class="run-restart-form"')[0].rsplit("<form", 1)[-1]
+    assert f'action="/project/{PROJ}/runs/{RUN}/resume"' in restart_form
+
+
+def test_restarting_drops_a_cancel_the_dead_executor_never_read(
+    examples_dir, client, monkeypatch,
+):
+    """A dead executor leaves the cancel unread; the restarted run must not consume it."""
+    _write_one_stage_project(examples_dir)
+    _write_manifest(examples_dir, "running")
+    client.post(f"/project/{PROJ}/runs/{RUN}/cancel", follow_redirects=False)
+    monkeypatch.setattr("app.services.run.load_version_stages", lambda *a, **k: [])
+    monkeypatch.setattr("app.services.run._run_in_background", lambda *a, **k: None)
+
+    response = client.post(
+        f"/project/{PROJ}/runs/{RUN}/resume", follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert consume_cancel(PROJ, RUN) is False
 
 
 def test_run_detail_page_shows_cancel_button_only_while_running(examples_dir, client):

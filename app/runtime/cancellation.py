@@ -25,6 +25,12 @@ def consume_cancel(project_id: str, run_id: str) -> bool:
         return False
 
 
+def discard_cancel(project_id: str, run_id: str) -> None:
+    """A resume must not be stopped at its first checkpoint by a cancel aimed at the last."""
+    with _lock:
+        _pending.discard((project_id, run_id))
+
+
 def reset() -> None:
     with _lock:
         _pending.clear()
