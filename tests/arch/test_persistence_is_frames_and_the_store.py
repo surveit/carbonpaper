@@ -32,7 +32,6 @@ _ALLOWED_WRITERS: dict[str, str] = {
     # 3. A file the user handed us. Raw bytes we did not author and must not
     # reinterpret — an input CSV, an eval dataset.
     "app/core/files.py": "stages an uploaded or fetched data file",
-    "app/core/fetched_sources.py": "holds the bytes a fetch connector's URL served",
     "app/evals/store.py": "receives an uploaded eval dataset",
 
     # Deleting a project's working-copy DIRECTORY, which still holds its frames

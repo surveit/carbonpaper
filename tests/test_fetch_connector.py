@@ -11,7 +11,8 @@ from typing import Iterator
 import pytest
 
 from app.core.errors import SourceFetchError
-from app.core.fetched_sources import fetched_path_for, resolve_fetched_path
+from app.core.fetched_sources import find_fetched_file, resolve_fetched_path
+from app.core.files import UploadedFile
 from app.models.stages.input_data import Connector, ConnectorKind, InputDataStage
 from app.models.workflow import Workflow
 from app.runtime.stages.input_data import resolve_source_path
@@ -22,12 +23,6 @@ _GRANTS_CSV = (
     "rec6rcTbCtpvrkGF3,Long-Term Future Fund,Katherine (Katie) Dammer,10000,2026\n"
 )
 _OTHER_CSV = "id,fund,grantee,amount,year\nrec9,Animal Welfare Fund,Someone,1,2026\n"
-
-
-
-@pytest.fixture(autouse=True)
-def fetch_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("CARBON_PAPER_DB_PATH", str(tmp_path / "store" / "app.db"))
 
 
 class _QuietHandler(SimpleHTTPRequestHandler):
@@ -113,14 +108,64 @@ def test_a_second_read_holds_the_first_copy(served: tuple[str, Path]) -> None:
     assert resolve_fetched_path(url).read_text(encoding="utf-8") == _GRANTS_CSV
 
 
-def test_refetch_takes_todays_copy(served: tuple[str, Path]) -> None:
+def test_refetch_takes_todays_copy_without_destroying_the_first(
+        served: tuple[str, Path]) -> None:
+    """Two fetches are two records, so the bytes an earlier run read stay readable."""
+    base, root = served
+    (root / "grants.csv").write_text(_GRANTS_CSV, encoding="utf-8")
+    url = f"{base}/grants.csv"
+    first = resolve_fetched_path(url)
+    (root / "grants.csv").write_text(_OTHER_CSV, encoding="utf-8")
+    fresh = resolve_fetched_path(url, refetch=True)
+    assert fresh.read_text(encoding="utf-8") == _OTHER_CSV
+    assert fresh != first
+    assert first.read_text(encoding="utf-8") == _GRANTS_CSV
+
+
+def test_a_fetched_record_carries_the_url_it_came_from(served: tuple[str, Path]) -> None:
+    """What makes "have we fetched this" a lookup rather than a path that happens to exist."""
     base, root = served
     (root / "grants.csv").write_text(_GRANTS_CSV, encoding="utf-8")
     url = f"{base}/grants.csv"
     resolve_fetched_path(url)
-    (root / "grants.csv").write_text(_OTHER_CSV, encoding="utf-8")
-    fresh = resolve_fetched_path(url, refetch=True)
-    assert fresh.read_text(encoding="utf-8") == _OTHER_CSV
+    record = find_fetched_file(url)
+    assert record is not None
+    assert record.source_url == url
+    assert record.filename == "grants.csv"
+
+
+def test_an_uploaded_file_is_not_a_fetched_one(served: tuple[str, Path]) -> None:
+    base, root = served
+    (root / "grants.csv").write_text(_GRANTS_CSV, encoding="utf-8")
+    resolve_fetched_path(f"{base}/grants.csv")
+    assert find_fetched_file(f"{base}/absent-from-the-store.csv") is None
+
+
+def test_the_same_bytes_from_two_urls_are_two_records(served: tuple[str, Path]) -> None:
+    """De-duplication is gone by design: each copy carries its own provenance."""
+    base, root = served
+    (root / "a").mkdir()
+    (root / "b").mkdir()
+    (root / "a" / "grants.csv").write_text(_GRANTS_CSV, encoding="utf-8")
+    (root / "b" / "grants.csv").write_text(_GRANTS_CSV, encoding="utf-8")
+    resolve_fetched_path(f"{base}/a/grants.csv")
+    resolve_fetched_path(f"{base}/b/grants.csv")
+    records = UploadedFile.list()
+    assert len(records) == 2
+    assert len({record.sha256 for record in records}) == 1   # the bytes really are the same
+    assert len({record.id for record in records}) == 2       # and still two copies on disk
+    assert sorted(str(record.source_url) for record in records) == [
+        f"{base}/a/grants.csv", f"{base}/b/grants.csv"]
+
+
+def test_a_held_copy_whose_bytes_are_gone_is_fetched_again(served: tuple[str, Path]) -> None:
+    """A record is not a copy. Returning its path would name a file that is not there."""
+    base, root = served
+    (root / "grants.csv").write_text(_GRANTS_CSV, encoding="utf-8")
+    url = f"{base}/grants.csv"
+    resolve_fetched_path(url).unlink()
+    assert find_fetched_file(url) is None
+    assert resolve_fetched_path(url).read_text(encoding="utf-8") == _GRANTS_CSV
 
 
 def test_two_urls_sharing_a_filename_do_not_share_a_copy(served: tuple[str, Path]) -> None:
@@ -141,7 +186,7 @@ def test_a_refused_url_raises_and_leaves_no_copy(served: tuple[str, Path]) -> No
     url = f"{base}/absent.csv"
     with pytest.raises(SourceFetchError, match="404"):
         resolve_fetched_path(url)
-    assert not fetched_path_for(url).exists()
+    assert UploadedFile.list() == []
 
 
 def test_an_unreachable_host_says_so() -> None:
@@ -177,7 +222,7 @@ def test_a_bound_path_wins_over_the_url(served: tuple[str, Path]) -> None:
                                     "path": str(local)}}
     assert resolve_source_path(_stage_of(spec)) == local
     # Nothing was downloaded to satisfy a stage the operator had already answered.
-    assert not fetched_path_for(f"{base}/grants.csv").exists()
+    assert UploadedFile.list() == []
 
 
 def test_an_unbound_file_stage_resolves_to_nothing() -> None:
