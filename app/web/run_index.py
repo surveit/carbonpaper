@@ -42,9 +42,7 @@ RUN_VIEWS = (RUN_VIEW_PRODUCTION, RUN_VIEW_TEST, RUN_VIEW_ARCHIVED)
 
 
 def build_run_index_rows(project_id: str, *, view: str | None = None) -> list[RunIndexRow]:
-    """`view=None` lists every non-archived run (test runs included) — what a
-    picker or the command palette wants. The runs page instead passes one of
-    RUN_VIEWS to split into a single bucket."""
+    """`view=None` lists every non-archived run; pass a RUN_VIEWS value for one bucket."""
     hidden = read_archived_run_ids(project_id)
     seen_versions: dict[str, VersionNote] = {}
     return [
