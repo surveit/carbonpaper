@@ -226,14 +226,22 @@ table.issue-table { width: 100%; border-collapse: collapse; font-size: .79rem; }
 
 /* Declared widths under a fixed layout. Under `auto` the widest cell in a column
    sets that column's width and takes it from its neighbours: one 600-character
-   version message squeezed the inputs column to a letter per line. */
-.runs-table { table-layout: fixed; }
-.runs-table .col-run { width: 20%; }
-.runs-table .col-inputs { width: 26%; }
-.runs-table .col-version { width: 22%; }
+   version message squeezed the inputs column to a letter per line.
+
+   The action column is the one width in absolute units, and it is the reason: its
+   button is 65px whatever the window does, so a percentage starves it as the window
+   narrows — at 7% it was 55px by 1100px of viewport and the button hung out over the
+   table's edge. The other five stay proportional and keep sizing with the window.
+   The inputs column declares no width, so it is the one that takes up the slack —
+   spare width belongs to the longest filename, not to the button. */
+.runs-table { table-layout: fixed; min-width: 52rem; }
+.runs-table .col-actions { width: 6rem; }
+.runs-table .col-run { width: 19%; }
+.runs-table .col-version { width: 21%; }
 .runs-table .col-took { width: 8%; }
 .runs-table .col-result { width: 17%; }
-.runs-table .col-actions { width: 7%; }
+/* Under 52rem of table the row scrolls rather than crushing the filenames further. */
+.runs-table-scroll { overflow-x: auto; }
 
 /* The run's identity: its name where it has one, and the time it started under it. */
 .run-name-link { display: block; color: var(--fg); font-weight: 600; text-decoration: none; }

@@ -36,7 +36,9 @@
     border: 1px solid var(--border-strong);
     border-radius: 4px;
 }
-.run-name-field .optional { font-weight: 400; text-transform: none; }
+/* Inside a span with the label, or the field's own column layout puts it on a line
+   of its own. */
+.run-name-field .optional { font-weight: 400; color: var(--muted); }
 
 /* Full width, not a fixed cap: the option text is a version id AND its message,
    and a truncated message is the one thing this picker exists to read. */

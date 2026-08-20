@@ -105,6 +105,7 @@
          placeholder="a name, a file or a version message">
   <span class="runs-filter-count" id="runs-filter-count"></span>
 </label>
+<div class="runs-table-scroll">
 <table class="stages runs-table">
   <colgroup>
     <col class="col-run"><col class="col-inputs"><col class="col-version">
@@ -189,6 +190,7 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
 <script src="/static/runs-filter.js"></script>
 {# The whole row opens the run, so no one cell has to look like the handle —
    static/row-link.js, delegated from the document for every page drawing this table.

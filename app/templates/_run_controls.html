@@ -76,9 +76,9 @@
 {% if versions %}
 <form action="/project/{{ state.id }}/run" method="post" class="run-controls"
       data-project="{{ state.id }}" data-max-upload-bytes="{{ max_upload_bytes }}">
-  <label class="run-name-field">name <span class="optional">optional</span>
-    <input type="text" name="name" maxlength="200" autocomplete="off"
-           placeholder="what this run is for">
+  <label class="run-name-field">
+    <span>name <span class="optional">optional</span></span>
+    <input type="text" name="name" maxlength="200" autocomplete="off">
   </label>
   <label class="run-version">version
     <select name="version_id">
