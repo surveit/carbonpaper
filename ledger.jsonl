@@ -984,3 +984,4 @@
 {"run_id":"32360438412","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32360438412","created":"2026-08-20T10:46:02Z","branch":"fix/breadcrumb-hide-deleted-projects","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"32360738650","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32360738650","created":"2026-08-20T10:49:12Z","branch":"master","event":"push","contracts_kept":14,"findings":[]}
 {"run_id":"32360738650","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32360738650","created":"2026-08-20T10:49:42Z","branch":"master","event":"push","contracts_kept":null,"findings":[]}
+{"run_id":"32361317777","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32361317777","created":"2026-08-20T10:56:19Z","branch":"run-view-filter","event":"pull_request","contracts_kept":14,"findings":[]}
