@@ -28,8 +28,7 @@ _CLEANED = [*_LOADED, {"name": "doubled", "type": "int", "nullable": True}]
 _FLAGGED = [*_CLEANED, {"name": "big", "type": "bool", "nullable": True}]
 _TOTALLED = [*_FLAGGED, {"name": "total", "type": "int", "nullable": True}]
 
-# One fully-computing run's probe count over `_ROWS`: a row-mapped stage's body
-# runs once per row, a frame-shaped stage's once for the whole frame.
+# probe count: row-mapped runs once per row; frame-shaped runs once for the frame.
 _EVERYTHING_COMPUTED = Counter({"clean": 3, "flag": 3, "totals": 1})
 _NOTHING_COMPUTED: Counter[str] = Counter()
 
@@ -231,8 +230,7 @@ def test_editing_the_frame_stages_body_invalidates_only_the_frame_stage(tmp_path
     _publish_a_version(tmp_path)
     first = _run_and_read(tmp_path)
     _run_and_read(tmp_path)
-    # An unedited `totals` replays — otherwise the count below could not tell an
-    # invalidation apart from a frame stage that simply always recomputes.
+    # An unedited `totals` replays, else this count can't tell invalidation from always-recompute.
     assert _invocations(probe) == _EVERYTHING_COMPUTED
 
     _write_project(tmp_path, totals_edit="\n# a comment the cache must notice\n")

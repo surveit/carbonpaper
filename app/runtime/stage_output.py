@@ -18,9 +18,7 @@ from .lineage import RowLineage
 @dataclass(frozen=True)
 class StageOutput:
     table: pa.Table
-    # What this stage owes the manifest — token usage, per-row errors, dropped
-    # columns, queue counts. Empty rather than None: every reader merges it
-    # unconditionally instead of testing for absence first.
+    # Empty, never None: every reader merges it unconditionally, skipping an absence check.
     contribution: StageContribution = field(default_factory=StageContribution)
     # Which input rows each output row came from, where the handler's shape
     # knows it (a filter, a join, an aggregate). None means "not reported",
