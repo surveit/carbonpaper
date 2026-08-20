@@ -29,6 +29,22 @@ from app.models.stages.warnings import CompilerWarning, warn
 # module load, so source whose body calls `refuse()` fails to load unless the
 # name is already bound — even though this stub is never actually called.
 
+# Stated ONCE and rendered into every Starlark surface: the two stage types'
+# `code` descriptions and their authoring notes. `is` earns its place because it
+# is the one limit that bites idiomatic Python rather than reaching outside the
+# sandbox — 22 of the 24 filter predicates in the store compiled unchanged, and
+# `stated is None` was one of the two that did not.
+STARLARK_LANGUAGE_NOTE = (
+    "Starlark is Python's syntax without imports, file or network access, classes, "
+    "`while`, try/except, or `is` — compare with `==`, including against None. "
+    "Recursion runs but is bounded by a call-stack limit, so it cannot loop forever."
+)
+
+_VALUE_MARSHALLING_NOTE = (
+    "Values arrive as strings, numbers, booleans, None, lists and dicts; dates and "
+    "timestamps as ISO-8601 strings and every missing value as None."
+)
+
 _FUNCTION_DESCRIPTION = (
     "Name of the function to call within `code`, defaulting to `transform`. `code` "
     "says what is defined; this says which name in it to call — set it only when the "
@@ -39,14 +55,8 @@ _CODE_DESCRIPTION = (
     "Inline Starlark defining `function` (default `transform`): `def transform(row): "
     "...`, one row dict in, one row dict out, and the returned dict IS the output row "
     "(a key you do not return is absent — carry columns through with `return "
-    "dict(row, key=value)`). Starlark is Python's syntax without imports, file or network "
-    "access, classes, `while`, or try/except. Recursion is not rejected — a "
-    "self-terminating recursive function runs — but is bounded by a call-stack limit "
-    "(`Starlark call stack overflow`), so it cannot loop forever the way an unbounded "
-    "`while` would. Row values arrive as "
-    "strings, numbers, booleans, None, lists and dicts; dates and timestamps arrive "
-    "as ISO-8601 strings and every missing value arrives as None. Call "
-    "`refuse(\"reason\")` to decline a row you cannot honestly process; call "
+    "dict(row, key=value)`). " + STARLARK_LANGUAGE_NOTE + " " + _VALUE_MARSHALLING_NOTE +
+    " Call `refuse(\"reason\")` to decline a row you cannot honestly process; call "
     "`fail(\"reason\")` only for a bug. Module-level variables are frozen after "
     "load — keep state in locals."
 )
@@ -57,13 +67,13 @@ def _refuse_stub(reason: str) -> None:
     return None
 
 
-def validate_starlark_function_code(code: str, function: str | None) -> None:
+def validate_starlark_function_code(
+    code: str, function: str | None, default_name: str = DEFAULT_FUNCTION_NAME,
+    return_hint: str = "a row dict",
+) -> None:
     """Raise ValueError unless executing `code` binds `function` to a function."""
-    wanted = function or DEFAULT_FUNCTION_NAME
-    candidates = (
-        (wanted,) if wanted == DEFAULT_FUNCTION_NAME
-        else (wanted, DEFAULT_FUNCTION_NAME)
-    )
+    wanted = function or default_name
+    candidates = (wanted,) if wanted == default_name else (wanted, default_name)
     try:
         module = compile_starlark_module(code, {REFUSE_BUILTIN: _refuse_stub})
         bound = find_bound_function(module, candidates)
@@ -77,7 +87,7 @@ def validate_starlark_function_code(code: str, function: str | None) -> None:
     if bound is None:
         raise ValueError(
             f"Starlark code must define `def {wanted}(row): ...` at the top level — "
-            f"the runtime calls {wanted}(row) per row"
+            f"the runtime calls {wanted}(row) per row and expects {return_hint} back"
         )
 
 
@@ -139,14 +149,12 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
         required=["code"],
         optional=["function", "summary"],
         notes=(
-            "Starlark is Python's syntax minus imports, file and network access, classes, "
-            "while, and try/except, so the step cannot read or write anything outside "
-            "its row. Recursion runs but is bounded by a call-stack limit, so it cannot "
-            "loop forever. `transform(row)` is handed a plain dict and must return a "
+            STARLARK_LANGUAGE_NOTE +
+            " The step cannot read or write anything outside its row. "
+            "`transform(row)` is handed a plain dict and must return a "
             "plain dict, and that dict IS the output row: a key you do not return is "
             "absent, so carry columns through explicitly (`return dict(row, key=value)`). "
-            "Values arrive as strings, numbers, booleans, None, lists and dicts; dates "
-            "and timestamps as ISO-8601 strings, every missing value as None. An integer "
+            + _VALUE_MARSHALLING_NOTE + " An integer "
             "beyond 2**63-1 stops the step rather than losing precision. Call "
             "`refuse(\"reason\")` to decline a row you cannot honestly process. "
             "Module-level variables freeze after load — keep state in locals."
