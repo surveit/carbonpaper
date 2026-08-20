@@ -29,6 +29,7 @@ from .input_data import preflight_input_data, read_input_data
 from .join import handle_enrich, handle_expand
 from .llm_transform import LLMTransformHandler
 from .publish import handle_publish
+from .reshape import handle_dedupe, handle_explode, handle_sort_rank
 from .python_functions import handle_python_frame_function, make_python_row_mapper
 from .starlark_functions import make_starlark_row_mapper
 from .union import handle_union
@@ -73,6 +74,12 @@ HANDLERS: dict[StageType, StageHandler] = {
     # interpreter handle is this execution's, and Starlark freezes module globals,
     # so nothing crosses rows either way.
     StageType.starlark_row_function: RowMapTransformHandler(make_starlark_row_mapper),
+    # caches_frames=False: all three are bounded vectorised pandas primitives,
+    # same reasoning as the joins/aggregate above — hashing the input to look for
+    # a hit costs more than the operation a hit would skip.
+    StageType.explode: FrameTransformHandler(handle_explode, caches_frames=False),
+    StageType.dedupe: FrameTransformHandler(handle_dedupe, caches_frames=False),
+    StageType.sort_rank: FrameTransformHandler(handle_sort_rank, caches_frames=False),
 }
 
 # A mis-shaped registration (e.g. a frame handler for a type the model declares

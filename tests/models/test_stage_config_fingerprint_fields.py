@@ -8,12 +8,15 @@ from typing import get_args
 from app.models.stage import PythonFunction, Stage
 from app.models.stages.stage_base import AbstractStage
 from app.models.stages.aggregate import AggregateConfig
+from app.models.stages.dedupe import DedupeConfig
+from app.models.stages.explode import ExplodeConfig
 from app.models.stages.human_review_queue import QueueConfig
 from app.models.stages.input_data import Connector
 from app.models.stages.join import JoinConfig
 from app.models.stages.llm_transform import LLMConfig
 from app.models.stages.filter_rows import FilterConfig
 from app.models.stages.publish import PublishConfig
+from app.models.stages.sort_rank import SortRankConfig
 from app.models.stages.starlark import StarlarkFunction
 from app.models.stages.union import UnionConfig
 
@@ -22,6 +25,7 @@ from app.models.stages.union import UnionConfig
 _CONFIG_CLASSES = [
     Connector, LLMConfig, PythonFunction, JoinConfig, AggregateConfig, QueueConfig,
     PublishConfig, UnionConfig, FilterConfig, StarlarkFunction,
+    ExplodeConfig, DedupeConfig, SortRankConfig,
 ]
 
 

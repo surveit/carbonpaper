@@ -77,6 +77,13 @@ class StageType(str, Enum):
     union = "union"
     filter_rows = "filter_rows"
     starlark_row_function = "starlark_row_function"
+    # Three declared reshapes, each recording per-row provenance the runtime works
+    # out itself — which is what separates them from a python_frame_function doing
+    # the same pandas call and taking the trace with it.
+    explode = "explode"
+    dedupe = "dedupe"
+    sort_rank = "sort_rank"
+
 
 
 # The stage types that guarantee output row i came from input row i — 1:1 and in

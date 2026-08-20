@@ -75,6 +75,12 @@ JSON_COLUMN_TYPE = "json"
 LIST_JSON_COLUMN_TYPE = "list[json]"
 
 
+def find_list_element_type(t: str) -> str | None:
+    """None when `t` is not a list type — the caller decides whether that is an error."""
+    m = _LIST_RE.match(t)
+    return m.group(1).strip() if m else None
+
+
 def is_valid_column_type(t: str) -> bool:
     if not isinstance(t, str):
         return False

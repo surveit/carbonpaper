@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from app.models.stages.aggregate import STAGE_TYPE_SPECS as _AGGREGATE
 from app.models.stages.code import STAGE_TYPE_SPECS as _CODE
+from app.models.stages.dedupe import STAGE_TYPE_SPECS as _DEDUPE
+from app.models.stages.explode import STAGE_TYPE_SPECS as _EXPLODE
 from app.models.stages.filter_rows import STAGE_TYPE_SPECS as _FILTER_ROWS
 from app.models.stages.human_review_queue import STAGE_TYPE_SPECS as _HUMAN_REVIEW_QUEUE
 from app.models.stages.input_data import STAGE_TYPE_SPECS as _INPUT_DATA
@@ -14,6 +16,7 @@ from app.models.stages.join import STAGE_TYPE_SPECS as _JOIN
 from app.models.stages.llm_transform import STAGE_TYPE_SPECS as _LLM_TRANSFORM
 from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.publish import STAGE_TYPE_SPECS as _PUBLISH
+from app.models.stages.sort_rank import STAGE_TYPE_SPECS as _SORT_RANK
 from app.models.stages.starlark import STAGE_TYPE_SPECS as _STARLARK
 from app.models.stages.union import STAGE_TYPE_SPECS as _UNION
 
@@ -30,6 +33,9 @@ STAGE_TYPES: dict[str, StageTypeSpec] = {
     **_UNION,
     **_FILTER_ROWS,
     **_STARLARK,
+    **_EXPLODE,
+    **_DEDUPE,
+    **_SORT_RANK,
 }
 
 # Types that still LOAD and RUN but are no longer offered for authoring, so the
