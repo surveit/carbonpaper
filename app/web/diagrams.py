@@ -28,6 +28,9 @@ TYPE_CLASS = {
     # Row-set operations: union stacks frames, filter_rows drops subject rows.
     "union": "rowset",
     "filter_rows": "rowset",
+    "explode": "rowset",
+    "dedupe": "rowset",
+    "sort_rank": "rowset",
 }
 
 TYPE_GLYPH = {
@@ -43,6 +46,9 @@ TYPE_GLYPH = {
     "publish": "📤",
     "union": "➕",
     "filter_rows": "🔽",
+    "explode": "🌱",
+    "dedupe": "🧹",
+    "sort_rank": "🔢",
 }
 
 # What the type tag SAYS. The slug is the id the config, the manifest and the
@@ -63,6 +69,9 @@ TYPE_LABEL = {
     "publish": "publish",
     "union": "union",
     "filter_rows": "filter rows",
+    "explode": "explode",
+    "dedupe": "dedupe",
+    "sort_rank": "sort and rank",
 }
 
 

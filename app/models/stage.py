@@ -29,6 +29,8 @@ from app.models.stages.code import (
     PythonFunction,
     PythonRowFunctionStage,
 )
+from app.models.stages.dedupe import DedupeConfig, DedupeStage
+from app.models.stages.explode import ExplodeConfig, ExplodeStage
 from app.models.stages.filter_rows import FilterConfig, FilterRowsStage
 from app.models.stages.human_review_queue import HumanReviewQueueStage, QueueConfig
 from app.models.stages.input_data import Connector, InputDataStage
@@ -41,6 +43,7 @@ from app.models.stages.signature import (  # noqa: F401  (re-exported: the stage
     ReplacesSignature,
     TransformSignature,
 )
+from app.models.stages.sort_rank import SortRankConfig, SortRankStage
 from app.models.stages.starlark import StarlarkFunction, StarlarkRowFunctionStage
 from app.models.stages.union import UnionConfig, UnionStage
 from app.core.utils import format_errors
@@ -65,6 +68,9 @@ Stage = Annotated[
         UnionStage,
         FilterRowsStage,
         StarlarkRowFunctionStage,
+        ExplodeStage,
+        DedupeStage,
+        SortRankStage,
     ],
     Field(discriminator="type"),
 ]
@@ -139,6 +145,9 @@ class StageDraft(AuthoredStageFields):
     union: Optional[UnionConfig] = None
     filter: Optional[FilterConfig] = None
     starlark: Optional[StarlarkFunction] = None
+    explode: Optional[ExplodeConfig] = None
+    dedupe: Optional[DedupeConfig] = None
+    sort_rank: Optional[SortRankConfig] = None
 
     def to_stage_spec(self) -> dict[str, Any]:
         return self.model_dump(exclude_unset=True, by_alias=True)
