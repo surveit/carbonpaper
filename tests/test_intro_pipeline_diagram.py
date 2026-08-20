@@ -7,8 +7,10 @@ INTRO_PAGE = Path("intro/index.html")
 def test_pipeline_centers_single_line_labels_and_uses_visible_neutral_arrows() -> None:
     page = INTRO_PAGE.read_text(encoding="utf-8")
 
-    assert page.count('class="gname"') == 8
-    assert page.count('y="121" text-anchor="middle"') == 6
+    # Three copies of the pipeline diagram: the desktop scrolly stage plus the two
+    # mobile clones (beats 5 and 8) reused via the .pipeline class.
+    assert page.count('class="gname"') == 24
+    assert page.count('y="121" text-anchor="middle"') == 18
     assert 'x="926" y="77" text-anchor="middle">Outside firms' in page
     assert 'x="926" y="167" text-anchor="middle">In-house lobbying' in page
     assert '.gflow  { stroke: #9aa1ab; stroke-width: 1.3; fill: none; }' in page
@@ -22,8 +24,8 @@ def test_pipeline_neutralizes_unfocused_node_borders() -> None:
     assert '.gmodel { fill: #FFFFFF; stroke: #787d86; stroke-width: 2; }' in page
     assert '.ghuman { fill: #FFFFFF; stroke: #787d86; stroke-width: 2; }' in page
     assert '.gchoice{ fill: #FFFFFF; stroke: #787d86; stroke-width: 2; }' in page
-    assert '#pipe .node.lit rect { stroke: #1d539c; }' in page
-    assert '#pipe.focus .node:not(.lit) rect { stroke: #787d86; }' in page
+    assert '.pipeline .node.lit rect { stroke: #1d539c; }' in page
+    assert '.pipeline.focus .node:not(.lit) rect { stroke: #787d86; }' in page
     assert 'markerUnits="userSpaceOnUse"' in page
 
 
@@ -32,7 +34,7 @@ def test_export_overlay_is_centered_and_above_the_pipeline() -> None:
 
     assert "11: {ask: 1, layer: 'graph', out: 'ran', recede: 1, over: '11'}" in page
     assert "pipe.classList.toggle('recede', !!scene.recede);" in page
-    assert '#pipe.recede { opacity: .26; }' in page
+    assert '.pipeline.recede { opacity: .26; }' in page
     assert '.over.on { opacity: 1; visibility: visible; z-index: 3; }' in page
     assert 'data-over="11" style="left: 50%; top: 50%; transform: translate(-50%, -50%);"' in page
 
@@ -40,7 +42,9 @@ def test_export_overlay_is_centered_and_above_the_pipeline() -> None:
 def test_highlighted_arrowheads_use_fixed_size_blue_marker() -> None:
     page = INTRO_PAGE.read_text(encoding="utf-8")
 
-    assert page.count('d="M0 0.5 L7.5 4 L0 7.5 z"') == 2
+    # The two mobile pipeline clones (beats 5 and 8) each carry their own neutral
+    # arrowhead marker, on top of the desktop stage's neutral and lit markers.
+    assert page.count('d="M0 0.5 L7.5 4 L0 7.5 z"') == 4
     assert '<path d="M0 0.5 L7.5 4 L0 7.5 z" fill="#1d539c"/>' in page
     assert "setAttribute('marker-end', lit ? 'url(#ar-lit)' : 'url(#ar)')" in page
 
