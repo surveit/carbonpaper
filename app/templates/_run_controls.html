@@ -1,5 +1,8 @@
 {#
   RUN CONTROLS — one form that configures AND launches a run:
+    · a `name` field: what this run is FOR, in the launcher's own words. Optional, and
+      first, because it is the only field whose answer the launcher already has in mind;
+      it is stored beside the manifest and editable afterwards on the run page.
     · a version_id <select>: every stored version newest-first, `selected_version_id`
       pre-selected — the latest unless the link that reached this page named one
       (the version page's "Run this version" does)
@@ -73,6 +76,10 @@
 {% if versions %}
 <form action="/project/{{ state.id }}/run" method="post" class="run-controls"
       data-project="{{ state.id }}" data-max-upload-bytes="{{ max_upload_bytes }}">
+  <label class="run-name-field">name <span class="optional">optional</span>
+    <input type="text" name="name" maxlength="200" autocomplete="off"
+           placeholder="what this run is for">
+  </label>
   <label class="run-version">version
     <select name="version_id">
       {% for v in versions %}

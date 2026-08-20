@@ -19,6 +19,24 @@
       The run's state is not stated in words anywhere; the CTA is how it is read,
       so the CTA is the only large thing here. ── */
 .run-header { margin: 0 0 1.2rem; }
+
+/* The run's name and the pencil that edits it. The pencil sits against the name
+   rather than out at the margin, so it reads as belonging to the word it changes. */
+.run-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem; margin: 0 0 .5rem; }
+.run-name { margin: 0; font-size: 1.5rem; line-height: 1.25; }
+/* An unnamed run's heading is its start time — a fact, not a title, so it is not
+   styled as one. */
+.run-name.unnamed { font-size: 1.15rem; font-weight: 600; color: var(--muted); }
+.run-name-edit { font: inherit; font-size: .95rem; line-height: 1; padding: 3px 6px;
+    color: var(--muted); background: none; border: 1px solid transparent; border-radius: 4px;
+    cursor: pointer; }
+.run-name-edit:hover { color: var(--accent); border-color: var(--border); background: var(--raised); }
+.run-title.editing .run-name, .run-title.editing .run-name-edit { display: none; }
+.run-name-form { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; width: 100%; }
+.run-name-form input { flex: 1 1 20rem; min-width: 0; font: inherit; padding: 6px 9px;
+    color: var(--fg); background: var(--raised); border: 1px solid var(--border-strong);
+    border-radius: 4px; }
+.run-name-hint { flex-basis: 100%; margin: 0; font-size: .78rem; color: var(--muted); }
 .run-ground { display: flex; flex-wrap: wrap; align-items: center; gap: .45em;
     margin: 0 0 .75rem; font-size: .82rem; color: var(--muted); }
 .run-ground .sep { opacity: .45; }
@@ -200,7 +218,58 @@ table.issue-table { width: 100%; border-collapse: collapse; font-size: .79rem; }
     font-size: .82em; text-decoration: none; }
 .runs-table .open-away:hover { color: var(--accent); }
 .runs-table .run-date, .runs-table .run-duration { white-space: nowrap; }
-.runs-table .run-actions { width: 1%; text-align: right; white-space: nowrap; }
+.runs-table .run-actions { text-align: right; white-space: nowrap; }
+
+/* Declared widths under a fixed layout. Under `auto` the widest cell in a column
+   sets that column's width and takes it from its neighbours: one 600-character
+   version message squeezed the inputs column to a letter per line. */
+.runs-table { table-layout: fixed; }
+.runs-table .col-run { width: 20%; }
+.runs-table .col-inputs { width: 26%; }
+.runs-table .col-version { width: 22%; }
+.runs-table .col-took { width: 8%; }
+.runs-table .col-result { width: 17%; }
+.runs-table .col-actions { width: 7%; }
+
+/* The run's identity: its name where it has one, and the time it started under it. */
+.run-name-link { display: block; color: var(--fg); font-weight: 600; text-decoration: none; }
+/* An unnamed run's link is its start time — a fact, not a title. */
+.run-name-link.unnamed { font-weight: 500; white-space: nowrap; }
+.run-name-link:hover { color: var(--accent); }
+.run-when { display: block; margin-top: .15rem; font-size: .76rem; color: var(--muted);
+    white-space: nowrap; }
+.run-chips { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .3rem; }
+
+/* The inputs cell: the files the run read, one per line, unbulleted because the
+   reader scans it for a filename rather than reading a list. `.input-siblings` is
+   the only link in it — it narrows the table to the runs that read the same bytes,
+   so it is tinted while the filenames beside it are not. */
+.runs-table .run-inputs { font-size: .82rem; }
+.input-list { margin: 0; padding: 0; list-style: none; }
+.input-list li { overflow-wrap: anywhere; margin-bottom: .2rem; }
+.input-hash { font-size: .72rem; background: var(--sunk-deep); color: var(--muted);
+    padding: 0 4px; border-radius: 3px; }
+.input-siblings { display: inline-block; margin-top: .25rem; font-size: .78rem; color: var(--accent); }
+.filter-note { font-size: .85rem; color: var(--muted); margin: 0 0 .9rem; }
+
+/* Two lines, unclamped, and the full message on hover: 25 of one real store's 95
+   version messages run past 140 characters, and one of them sets its row's height. */
+.runs-table .version-msg { display: -webkit-box; -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical; overflow: hidden; color: var(--fg); text-decoration: none; }
+.runs-table .version-msg:hover { color: var(--accent); }
+
+.runs-table .run-took { white-space: nowrap; }
+.run-elapsed { display: block; }
+.run-cost { display: block; margin-top: .2rem; font-size: .78rem; color: var(--muted); }
+
+/* A stage strip longer than its column wraps rather than running under the next
+   cell: a workflow here reaches 29 stages. */
+.runs-table .stage-strip.compact { flex-wrap: wrap; row-gap: 3px; }
+
+.runs-filter { display: flex; align-items: center; gap: .5rem; margin: 0 0 .8rem;
+    font-size: .85rem; color: var(--muted); }
+.runs-filter input { font: inherit; padding: 5px 9px; min-width: 20rem; color: var(--fg);
+    background: var(--raised); border: 1px solid var(--border-strong); border-radius: 4px; }
 .runs-table .run-outcome { display: block; margin-top: .35rem; font-size: .78rem; color: var(--muted); }
 .runs-table .run-outcome.status-errors { color: var(--state-failed-ink); }
 .runs-table .run-outcome.status-awaiting_review { color: var(--state-review-ink); }

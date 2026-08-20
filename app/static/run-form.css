@@ -14,7 +14,9 @@
 }
 .run-controls > .btn.primary { align-self: flex-start; margin-top: 2px; }
 
-/* The two field labels — the version picker's and each input row's name line. */
+/* The three field labels — the name field's, the version picker's, and each input
+   row's name line. */
+.run-name-field,
 .run-version,
 .run-input-name {
     display: block;
@@ -23,7 +25,18 @@
     font-weight: 600;
     color: var(--muted);
 }
-.run-version { display: flex; flex-direction: column; gap: 5px; }
+.run-version,
+.run-name-field { display: flex; flex-direction: column; gap: 5px; }
+.run-name-field input {
+    padding: 7px 9px;
+    font: inherit;
+    font-weight: 400;
+    color: var(--fg);
+    background: var(--raised);
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+}
+.run-name-field .optional { font-weight: 400; text-transform: none; }
 
 /* Full width, not a fixed cap: the option text is a version id AND its message,
    and a truncated message is the one thing this picker exists to read. */

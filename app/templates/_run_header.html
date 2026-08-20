@@ -1,6 +1,9 @@
 {#
-  RUN HEADER — three elements, in this order:
+  RUN HEADER — four elements, in this order:
 
+    0. the heading: the name the operator gave this run, with a pencil that swaps it
+       for an input. Saving a blank name clears it. A run with no name shows its start
+       time instead, which is what the run id already is;
     1. the grounding line: when it started, how long it took, the run id, the
        version it pinned — named by its message, or by its id when it carries no
        message — and (for a test run) a chip whose tooltip carries what a test
@@ -11,11 +14,24 @@
        button at all, only its outputs;
     3. the stage strip and its labelled counts.
 
-  A run has no name (`run_id` IS the start timestamp), so there is no <h1> here.
-
   Context: project, run_id, header = app.web.run_header.RunHeader
 #}
 <div class="run-header">
+  <div class="run-title">
+    <h1 class="run-name{% if not header.name %} unnamed{% endif %}">
+      {{- header.name or (header.started_at | friendly_time if header.started_at else run_id) -}}
+    </h1>
+    <button type="button" class="run-name-edit" aria-label="Rename this run"
+            title="Rename this run">✎</button>
+    <form class="run-name-form" method="post" hidden
+          action="/project/{{ project }}/runs/{{ run_id }}/name">
+      <input type="text" name="name" value="{{ header.name }}" maxlength="200"
+             autocomplete="off" placeholder="what this run is for" aria-label="Run name">
+      <button type="submit" class="btn primary">Save</button>
+      <p class="run-name-hint">Save it empty to remove the name.</p>
+    </form>
+  </div>
+  <script src="/static/run-name.js"></script>
   <p class="run-ground">
     {%- if header.started_at %}<span>started {{ header.started_at | relative_time }}</span>{% endif %}
     {%- if header.live.duration %}<span class="sep">·</span><span>{{ header.live.duration_verb }}
