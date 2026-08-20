@@ -112,7 +112,7 @@ def test_a_limit_cuts_the_same_window_off_every_input_of_a_union(tmp_path):
         "id": "u", "description": "u", "type": "union",
         "inputs": [{"id": "left"},
                    {"id": "right"}],
-        "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]},
+        "signature": {"form": "extends", "reads": [], "adds": [], "rewrites": []},
         "union": {},
     })
 
@@ -127,7 +127,7 @@ def test_union_lineage_counts_from_the_first_row_the_stage_actually_read():
         "id": "u", "description": "u", "type": "union",
         "inputs": [{"id": "left"},
                    {"id": "right"}],
-        "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]}, "union": {},
+        "signature": {"form": "extends", "reads": [], "adds": [], "rewrites": []}, "union": {},
     })
     inputs = {"left": _rows("l", 2), "right": _rows("r", 2)}
 

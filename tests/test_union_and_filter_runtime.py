@@ -18,7 +18,7 @@ def _union_stage(sid: str, input_ids: list[str]) -> Stage:
     return parse_stage({
         "id": sid, "description": sid, "type": "union",
         "inputs": [{"id": i} for i in input_ids],
-        "signature": {"form": "replaces", "produces": _AB_SCHEMA["columns"]},
+        "signature": {"form": "extends", "reads": [], "adds": [], "rewrites": []},
         "union": {},
     })
 

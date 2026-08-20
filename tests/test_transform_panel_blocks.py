@@ -38,7 +38,7 @@ def _seed_project(root: Path) -> None:
         "id": "all_filings", "description": "Every filing", "type": "union",
         "inputs": [{"id": "load"},
                    {"id": "load_more"}],
-        "signature": {"form": "replaces", "produces": _SCHEMA["columns"]},
+        "signature": {"form": "extends", "reads": [], "adds": [], "rewrites": []},
         "union": {},
     })
     add_stage(compiled, {

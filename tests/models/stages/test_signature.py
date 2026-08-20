@@ -386,26 +386,32 @@ def test_aggregate_signature_must_tell_the_config_story():
     assert "emits `total` but the signature's produces omits it" in msg
 
 
-def test_union_signature_reads_nothing_and_produces_from_every_input():
-    spec = {
+def _union_spec(**signature):
+    return {
         "id": "all_bills",
         "description": "All bills",
         "type": "union",
         "inputs": [{"id": "house"}, {"id": "senate"}],
         "union": {},
-        "signature": {
-            "form": "replaces",
-            "reads": [
-                {
-                    "input": "house",
-                    "columns": [{"name": "price", "type": "str", "nullable": True}],
-                },
-            ],
-            "produces": _EDGE["columns"],
-        },
+        "signature": {"form": "extends", "reads": [], "adds": [], "rewrites": [],
+                      **signature},
     }
-    msg = _issues(spec)
-    assert "signature reads must be empty" in msg
+
+
+@pytest.mark.parametrize("field, entries", [
+    ("reads", [{"input": "house",
+                "columns": [{"name": "price", "type": "str", "nullable": True}]}]),
+    ("adds", [{"name": "extra", "type": "str", "nullable": True}]),
+    ("rewrites", [{"name": "price", "type": "str", "nullable": True}]),
+])
+def test_a_union_signature_declares_nothing(field, entries):
+    """Its output IS the shared input schema, so anything written here is a second copy."""
+    msg = _issues(_union_spec(**{field: entries}))
+    assert "signature declares nothing" in msg and field in msg
+
+
+def test_a_union_signature_that_declares_nothing_is_accepted():
+    assert parse_stage(_union_spec()).signature.form == "extends"
 
 
 def test_review_queue_add_outside_the_review_columns_rejected():

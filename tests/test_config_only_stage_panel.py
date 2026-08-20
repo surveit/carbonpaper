@@ -28,7 +28,7 @@ def _seed_project(root: Path) -> None:
          "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _SCHEMA["columns"]}},
         {"id": "both", "description": "Both quarters", "type": "union",
          "inputs": [{"id": "q1"}, {"id": "q2"}],
-         "signature": {"form": "replaces", "produces": _SCHEMA["columns"]}, "union": {}},
+         "signature": {"form": "extends", "reads": [], "adds": [], "rewrites": []}, "union": {}},
         {"id": "score", "description": "Score", "type": "llm_transform",
          "inputs": [{"id": "both"}],
          "signature": {
