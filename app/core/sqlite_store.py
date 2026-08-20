@@ -7,10 +7,10 @@ from __future__ import annotations
 import json
 import sqlite3
 from threading import RLock
-from typing import Any, Iterator
+from typing import Any, Iterator, Mapping
 
 from app.core.errors import DocumentNotFound
-from app.core.persistence import JsonDict
+from app.core.persistence import JsonDict, JsonScalar
 
 
 class SqliteKvStore:
@@ -100,6 +100,29 @@ class SqliteKvStore:
                 f"SELECT {columns} FROM documents WHERE collection=? ORDER BY id",
                 (collection,),
             ).fetchall()
+
+    def find(
+        self, collection: str, fields: Mapping[str, JsonScalar]
+    ) -> Iterator[tuple[str, JsonDict]]:
+        # None matches a stored null and an absent key alike: json_extract cannot tell them apart.
+        tests: list[str] = ["collection=?"]
+        params: list[JsonScalar] = [collection]
+        for name, value in fields.items():
+            path = f"$.{name}"
+            if value is None:
+                tests.append("json_extract(data, ?) IS NULL")
+                params.append(path)
+            else:
+                tests.append("json_extract(data, ?) = ?")
+                params.extend((path, value))
+        with self._lock:
+            rows = self._conn.execute(
+                f"SELECT id, data FROM documents WHERE {' AND '.join(tests)} ORDER BY id",
+                params,
+            ).fetchall()
+        for row_id, data in rows:
+            body: JsonDict = json.loads(data)
+            yield str(row_id), body
 
     def list_ids(self, collection: str, prefix: str = "") -> list[str]:
         return [str(row[0]) for row in self._scan("id", collection, prefix)]

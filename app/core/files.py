@@ -123,12 +123,7 @@ def resolve_stored_path(record: UploadedFile) -> Path:
 
 def list_project_files(project_id: str | None) -> list[UploadedFile]:
     """One project's files, or those in no project when `project_id` is None."""
-    held = [record for record in UploadedFile.list() if record.project_id == project_id]
-    # A full scan. The store selects by id prefix only, and an id here is opaque and
-    # unprefixed — a file may arrive in no project and be moved into one, which a
-    # project-prefixed id could not survive without being re-keyed. Fine at a
-    # workspace's worth of files, not at thousands.
-    return _sorted_newest_first(held)
+    return _sorted_newest_first(UploadedFile.find(project_id=project_id))
 
 
 def open_project_file(project_id: str, file_id: str) -> tuple[UploadedFile, Path]:

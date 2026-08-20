@@ -9,12 +9,14 @@ from datetime import datetime, timedelta
 from enum import Enum
 from threading import RLock
 from uuid import uuid4
-from typing import Any, ClassVar, Iterator, Protocol, Self
+from typing import Any, ClassVar, Iterator, Mapping, Protocol, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # The one honest dynamic boundary: an arbitrary pydantic model_dump / JSON body.
 JsonDict = dict[str, Any]
+# What a stored field can be compared against: a JSON scalar, never a list or object.
+JsonScalar = str | int | float | bool | None
 
 
 def validate_id(id: str) -> str:
@@ -34,6 +36,9 @@ class DocumentStore(Protocol):
     def read_tolerant(self, collection: str, id: str) -> JsonDict | None: ...
     def exists(self, collection: str, id: str) -> bool: ...
     def delete(self, collection: str, id: str) -> None: ...
+    def find(
+        self, collection: str, fields: Mapping[str, JsonScalar]
+    ) -> Iterator[tuple[str, JsonDict]]: ...
     def list_ids(self, collection: str, prefix: str = "") -> list[str]: ...
     def read_all(self, collection: str, prefix: str = "") -> Iterator[tuple[str, JsonDict]]: ...
 
@@ -80,7 +85,7 @@ class PersistenceScope(str, Enum):
 
 
 class PersistedModel(BaseModel):
-    """list() selects by id PREFIX only, so a per-project record must compose id as project/local."""
+    """list() selects on an id PREFIX; find() selects on stored fields, so an id may stay opaque."""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -125,6 +130,12 @@ class PersistedModel(BaseModel):
         return cls.model_validate(data) if data is not None else None
 
     @classmethod
+    def find(cls, **fields: JsonScalar) -> list[Self]:
+        """Matches on the STORED json, so an enum field takes its value and not the member."""
+        return [cls.model_validate(data) for _, data
+                in get_store().find(cls.collection, cls._resolve_stored_keys(fields))]
+
+    @classmethod
     def list(cls, prefix: str = "") -> list[Self]:
         return [cls.model_validate(data)
                 for _, data in get_store().read_all(cls.collection, prefix)]
@@ -136,4 +147,19 @@ class PersistedModel(BaseModel):
     @classmethod
     def exists(cls, id: str) -> bool:
         return get_store().exists(cls.collection, id)
+
+    @classmethod
+    def _resolve_stored_keys(cls, fields: Mapping[str, JsonScalar]) -> dict[str, JsonScalar]:
+        # An unknown name would match nothing rather than fail, so it raises here.
+        unknown = sorted(set(fields) - set(cls.model_fields))
+        if unknown:
+            raise ValueError(f"{cls.__name__} has no field(s) {unknown}")
+        if not cls.DUMP_OPTS.get("by_alias"):
+            return dict(fields)
+        return {cls._read_dump_key(name): value for name, value in fields.items()}
+
+    @classmethod
+    def _read_dump_key(cls, name: str) -> str:
+        field = cls.model_fields[name]
+        return field.serialization_alias or field.alias or name
 
