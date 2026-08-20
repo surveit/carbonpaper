@@ -34,11 +34,13 @@ _COLUMNS = [
     {"name": "tier", "type": "str", "nullable": False},
     {"name": "issues", "type": "list[str]", "nullable": True},
 ]
-_EXPLODED_COLUMNS = [
-    dict(column, type="str") if column["name"] == "issues" else column
-    for column in _COLUMNS
-]
 _FLAT_COLUMNS = [column for column in _COLUMNS if column["name"] != "issues"]
+_ISSUES_COLUMN = next(c for c in _COLUMNS if c["name"] == "issues")
+
+
+def _reads(input_id: str, names: list[str], columns=None) -> list[dict]:
+    by_name = {c["name"]: c for c in (columns or _COLUMNS)}
+    return [{"input": input_id, "columns": [by_name[name] for name in names]}]
 
 
 def _source_stage(sid: str, rows: list[dict], columns: list[dict], tmp_path) -> Stage:
@@ -62,7 +64,10 @@ def _explode_stage(sid: str, input_id: str, **config) -> Stage:
     return parse_stage({
         "id": sid, "description": sid, "type": "explode",
         "inputs": [{"id": input_id}],
-        "signature": {"form": "replaces", "produces": _EXPLODED_COLUMNS},
+        # Extends, not replaces: every other column flows through untouched, and the
+        # one write is `issues` narrowing from list[str] to the element type.
+        "signature": {"form": "extends", "reads": _reads(input_id, ["issues"]),
+                      "rewrites": [dict(_ISSUES_COLUMN, type="str")]},
         "explode": {"column": "issues", **config},
     })
 
@@ -109,7 +114,8 @@ def _dedupe_stage(sid: str, input_id: str, **config) -> Stage:
     return parse_stage({
         "id": sid, "description": sid, "type": "dedupe",
         "inputs": [{"id": input_id}],
-        "signature": {"form": "replaces", "produces": _FLAT_COLUMNS},
+        "signature": {"form": "extends",
+                      "reads": _reads(input_id, ["client", "amount_usd"])},
         "dedupe": {"keys": ["client"], **config},
     })
 
@@ -151,13 +157,12 @@ def test_dedupe_keep_first_refuses_a_by_column(tmp_path):
 # ── sort_rank ─────────────────────────────────────────────────────────────────
 def _sort_rank_stage(sid: str, input_id: str, keys: list[dict], rank_column=None,
                      columns=None) -> Stage:
-    produces = list(columns or _FLAT_COLUMNS)
-    if rank_column:
-        produces = produces + [{"name": rank_column, "type": "int", "nullable": False}]
+    adds = [{"name": rank_column, "type": "int", "nullable": False}] if rank_column else []
     return parse_stage({
         "id": sid, "description": sid, "type": "sort_rank",
         "inputs": [{"id": input_id}],
-        "signature": {"form": "replaces", "produces": produces},
+        "signature": {"form": "extends", "adds": adds,
+                      "reads": _reads(input_id, [k["column"] for k in keys], columns)},
         "sort_rank": {"keys": keys, **({"rank_column": rank_column} if rank_column else {})},
     })
 
@@ -214,3 +219,68 @@ def test_trace_follows_a_row_to_where_the_sort_moved_it_from(tmp_path):
 def _traced_source_ordinals(run_dir, stage_id: str, row: int) -> list[int]:
     steps = trace_row(run_dir, stage_id, row).steps
     return sorted(step.row_ordinal for step in steps if step.stage_id == "filings")
+
+
+# ── what the extends signatures refuse ────────────────────────────────────────
+# Each of these was unexpressible while the three types declared `replaces`: a
+# signature restating the whole schema says nothing about which columns the rule
+# consults, so nothing could disagree with it.
+def _explode_signature(input_id: str, **signature) -> dict:
+    return {
+        "id": "issues", "description": "issues", "type": "explode",
+        "inputs": [{"id": input_id}], "explode": {"column": "issues"},
+        "signature": {"form": "extends", "reads": _reads(input_id, ["issues"]), **signature},
+    }
+
+
+def test_explode_refuses_a_signature_that_does_not_rewrite_the_exploded_column():
+    with pytest.raises(ValueError, match="signature rewrites must declare it"):
+        parse_stage(_explode_signature("filings", rewrites=[]))
+
+
+def test_explode_refuses_a_signature_that_adds_a_column():
+    with pytest.raises(ValueError, match="explode adds no column"):
+        parse_stage(_explode_signature(
+            "filings", rewrites=[dict(_ISSUES_COLUMN, type="str")],
+            adds=[{"name": "issue_rank", "type": "int", "nullable": False}]))
+
+
+def test_explode_refuses_a_column_its_input_supplies_as_a_scalar(tmp_path):
+    scalar_issues = [dict(c, type="str") for c in _COLUMNS]
+    workflow_stages = [
+        _source_stage("filings", _FILINGS, scalar_issues, tmp_path),
+        parse_stage(_explode_signature("filings", rewrites=[dict(_ISSUES_COLUMN, type="str")])),
+    ]
+    with pytest.raises(ValueError, match="not a list"):
+        Workflow(stages=workflow_stages)
+
+
+def test_dedupe_refuses_a_signature_that_writes(tmp_path):
+    with pytest.raises(ValueError, match="never adds or rewrites"):
+        parse_stage({
+            "id": "latest", "description": "latest", "type": "dedupe",
+            "inputs": [{"id": "filings"}], "dedupe": {"keys": ["client"]},
+            "signature": {"form": "extends", "reads": _reads("filings", ["client"]),
+                          "adds": [{"name": "kept", "type": "bool", "nullable": False}]},
+        })
+
+
+def test_sort_rank_refuses_an_add_when_no_rank_column_is_named():
+    with pytest.raises(ValueError, match="only when `rank_column` names one"):
+        parse_stage({
+            "id": "ranked", "description": "ranked", "type": "sort_rank",
+            "inputs": [{"id": "filings"}], "sort_rank": {"keys": [{"column": "amount_usd"}]},
+            "signature": {"form": "extends", "reads": _reads("filings", ["amount_usd"]),
+                          "adds": [{"name": "rank", "type": "int", "nullable": False}]},
+        })
+
+
+def test_sort_rank_refuses_a_rank_column_that_is_not_an_int():
+    with pytest.raises(ValueError, match="a 1-based position is 'int'"):
+        parse_stage({
+            "id": "ranked", "description": "ranked", "type": "sort_rank",
+            "inputs": [{"id": "filings"}],
+            "sort_rank": {"keys": [{"column": "amount_usd"}], "rank_column": "rank"},
+            "signature": {"form": "extends", "reads": _reads("filings", ["amount_usd"]),
+                          "adds": [{"name": "rank", "type": "str", "nullable": False}]},
+        })

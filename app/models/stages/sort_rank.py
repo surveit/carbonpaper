@@ -1,17 +1,16 @@
-"""sort_rank stage: the config block, plus column validation — every sort key and
-the added rank column must resolve against the input, and the signature's
-`produces` is that input's schema plus the rank column."""
+"""sort_rank stage: the config block, plus validation that every sort key resolves
+against the input and that the signature writes nothing but the rank column."""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar, Literal, Optional, Sequence
 
 from pydantic import Field, model_validator
 
-from app.models.schema import Column, StageConfig, TableSchema, _Base
+from app.models.schema import StageConfig, _Base
 from app.models.stages.stage_base import AbstractStage, StageInput, StageType
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
 from app.models.stages.stage_type_spec import StageTypeSpec
-from app.models.stages.signature import ReplacesSignature
+from app.models.stages.signature import ExtendsSignature
 
 if TYPE_CHECKING:
     from app.models.workflow_stage import WorkflowStageInput
@@ -68,7 +67,7 @@ class SortRankStage(AbstractStage):
     sort_rank: SortRankConfig
     # Exactly one input: ordering one frame's rows against each other.
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
-    signature: ReplacesSignature
+    signature: ExtendsSignature
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"sort_rank": self.sort_rank}
@@ -78,10 +77,8 @@ class SortRankStage(AbstractStage):
     ) -> list[str]:
         return find_sort_rank_column_issues(self, inputs)
 
-    def find_signature_schema_issues(
-        self, inputs: Sequence["WorkflowStageInput"]
-    ) -> list[str]:
-        return find_sort_rank_signature_issues(self, inputs)
+    def find_signature_config_issues(self) -> list[str]:
+        return find_sort_rank_signature_issues(self)
 
 
 def find_sort_rank_column_issues(
@@ -102,46 +99,46 @@ def find_sort_rank_column_issues(
     return issues
 
 
-def find_sort_rank_signature_issues(
-    stage: "SortRankStage", inputs: Sequence["WorkflowStageInput"]
-) -> list[str]:
-    """Sorting rewrites no cell: produces is the input's schema, plus the rank column if named."""
-    upstream = inputs[0].table_schema
+def find_sort_rank_signature_issues(stage: "SortRankStage") -> list[str]:
+    """Ordering rewrites no cell, so the only write it may declare is the rank column."""
+    signature = stage.signature
     rank_column = stage.sort_rank.rank_column
-    produced = {column.name: column for column in stage.signature.produces}
     issues = [
-        f"stage '{stage.id}': signature produces vs input `{inputs[0].id}` — {reason}"
-        for reason in TableSchema(
-            columns=[c for c in stage.signature.produces if c.name != rank_column]
-        ).find_unsatisfied_columns(upstream)
-    ]
+        f"stage '{stage.id}': sort_rank changes no cell — its signature declares "
+        f"reads and, when `rank_column` is set, that one add; never rewrites"
+    ] if signature.rewrites else []
+    added = {column.name: column for column in signature.adds}
     if rank_column is None:
+        issues.extend(
+            f"stage '{stage.id}': signature adds '{name}', but sort_rank adds a column "
+            f"only when `rank_column` names one"
+            for name in sorted(added)
+        )
         return issues
-    declared = produced.get(rank_column)
+    declared = added.get(rank_column)
     if declared is None:
         issues.append(
             f"stage '{stage.id}': sort_rank adds column '{rank_column}', which signature "
-            f"produces does not declare"
+            f"adds does not declare"
         )
     elif declared.type != RANK_COLUMN_TYPE:
         issues.append(
-            f"stage '{stage.id}': signature produces rank column '{rank_column}' as "
+            f"stage '{stage.id}': signature adds rank column '{rank_column}' as "
             f"{declared.type!r} — a 1-based position is {RANK_COLUMN_TYPE!r}"
         )
+    issues.extend(
+        f"stage '{stage.id}': signature adds '{name}', which sort_rank does not produce "
+        f"— it orders rows and adds only '{rank_column}'"
+        for name in sorted(set(added) - {rank_column})
+    )
     return issues
 
-
-def find_rank_column(stage: "SortRankStage") -> Column | None:
-    name = stage.sort_rank.rank_column
-    if name is None:
-        return None
-    return next((c for c in stage.signature.produces if c.name == name), None)
 
 # Authoring copy for this module's stage type(s); assembled into STAGE_TYPES.
 STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
     "sort_rank": StageTypeSpec(
         summary="Order rows by stated keys, optionally numbering them 1..n in a new column.",
-        signature_form="replaces",
+        signature_form="extends",
         blocks=["sort_rank"],
         requires_inputs=True,
         min_inputs=1,

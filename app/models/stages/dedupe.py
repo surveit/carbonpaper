@@ -1,7 +1,6 @@
-"""dedupe stage: the config block, plus column validation — `keys` and the
-tie-breaking `by` column must resolve against the input, and the signature's
-`produces` must be satisfied by that input, since every surviving row is an
-input row unchanged."""
+"""dedupe stage: the config block, plus validation that `keys` and the tie-breaking
+`by` column resolve against the input, and that the signature writes nothing —
+a survivor is an input row untouched."""
 from __future__ import annotations
 
 from enum import Enum
@@ -9,11 +8,11 @@ from typing import TYPE_CHECKING, ClassVar, Literal, Optional, Sequence
 
 from pydantic import Field, model_validator
 
-from app.models.schema import StageConfig, TableSchema
+from app.models.schema import StageConfig
 from app.models.stages.stage_base import AbstractStage, StageInput, StageType
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
 from app.models.stages.stage_type_spec import StageTypeSpec
-from app.models.stages.signature import ReplacesSignature
+from app.models.stages.signature import ExtendsSignature
 
 if TYPE_CHECKING:
     from app.models.workflow_stage import WorkflowStageInput
@@ -65,7 +64,7 @@ class DedupeStage(AbstractStage):
     dedupe: DedupeConfig
     # Exactly one input: collapsing duplicates within one frame. Two is a join.
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
-    signature: ReplacesSignature
+    signature: ExtendsSignature
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"dedupe": self.dedupe}
@@ -75,10 +74,14 @@ class DedupeStage(AbstractStage):
     ) -> list[str]:
         return find_dedupe_column_issues(self, inputs)
 
-    def find_signature_schema_issues(
-        self, inputs: Sequence["WorkflowStageInput"]
-    ) -> list[str]:
-        return find_dedupe_signature_issues(self, inputs)
+    def find_signature_config_issues(self) -> list[str]:
+        signature = self.signature
+        if not (signature.adds or signature.rewrites):
+            return []
+        return [
+            f"stage '{self.id}': dedupe keeps a subset of its input's rows unchanged — "
+            f"its signature declares reads only, never adds or rewrites"
+        ]
 
 
 def find_dedupe_column_issues(
@@ -98,21 +101,11 @@ def find_dedupe_column_issues(
     return issues
 
 
-def find_dedupe_signature_issues(
-    stage: "DedupeStage", inputs: Sequence["WorkflowStageInput"]
-) -> list[str]:
-    """A survivor is an input row untouched, so its input must satisfy every produced column."""
-    produced = TableSchema(columns=stage.signature.produces)
-    return [
-        f"stage '{stage.id}': signature produces vs input `{inputs[0].id}` — {reason}"
-        for reason in produced.find_unsatisfied_columns(inputs[0].table_schema)
-    ]
-
 # Authoring copy for this module's stage type(s); assembled into STAGE_TYPES.
 STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
     "dedupe": StageTypeSpec(
         summary="Collapse rows that agree on `keys` to one, choosing the survivor by a stated rule.",
-        signature_form="replaces",
+        signature_form="extends",
         blocks=["dedupe"],
         requires_inputs=True,
         min_inputs=1,
