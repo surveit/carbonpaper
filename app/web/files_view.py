@@ -7,6 +7,7 @@ from collections import defaultdict
 from pydantic import BaseModel
 
 from app.core.persistence import JsonDict
+from app.models.run_manifest import read_input_bindings
 from app.runtime.manifest import list_run_entries
 from app.core import files as file_store
 from app.web.file_sizes import describe_bytes
@@ -69,9 +70,7 @@ def _read_input_hashes(manifest: JsonDict | None) -> list[str]:
     if manifest is None:
         # An unreadable manifest costs this run's rows a mention, not the page.
         return []
-    bindings = manifest.get("input_bindings") or {}
-    return [binding["sha256"] for binding in bindings.values()
-            if isinstance(binding, dict) and binding.get("sha256")]
+    return [b.sha256 for b in read_input_bindings(manifest) if b.sha256]
 
 
 def _build_row(record: file_store.UploadedFile, run_ids: list[str]) -> FileRow:

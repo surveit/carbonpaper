@@ -2,17 +2,37 @@
 {#
   RUNS — the runs list.
 
-  Five columns, none of which is the run id: `run_id` IS `started_at` (the same
+  Six columns, none of which is the run id: `run_id` IS `started_at` (the same
   instant, machine-formatted), so it survives as the row's link target and on
   hover rather than as a column of its own.
 
-    date      when the run started, in the reader's own timezone
+    run       the name the operator gave the run, with the start time under it. An
+              unnamed run shows only the start time, in the reader's own timezone.
+              Under either: a `test run` chip, and a `capped` chip for a run that
+              read a slice of its input rather than the whole of it
+    inputs    the files this run actually read, off its own manifest, with the size
+              beside each. Two runs on one version are comparable only if they read
+              the same bytes, so this sits beside the version rather than on the run
+              page alone
     version   the version this run pinned, linked, labelled by its message
-    duration  how long the run took
+    took      elapsed, and under it what the run spent on model calls
     result    the stage strip (the same partial the run page draws), with the
               run's status in words under it
     (action)  archive this run, or restore it — unlabelled, because the column
               holds one button and the button says what it does
+
+  A filename repeats across re-exports, so where one name in this project covers
+  more than one set of bytes the cell shows the hash too — the name alone would say
+  two different runs read the same file.
+
+  `?inputs=<key>` narrows the list to the runs that read the same set of files; each
+  inputs cell links to its own key when more than one run shares it. The Filter box
+  above the table is a separate, client-side narrowing over what is already on the
+  page (runs-filter.js), matching name, filename and version message.
+
+  Fixed layout with declared column widths: under `auto`, the widest cell in a column
+  sets that column's width and takes it from its neighbours, and a version message
+  runs to hundreds of characters.
 
   The view picker splits runs into three mutually exclusive buckets — production
   (the default), test, and archived — with restore in place of archive on the
@@ -26,9 +46,10 @@
 
   Context the route passes:
     state = project.project_state(mdir); section = "runs"
-    runs  = app.web.run_index.build_run_index_rows(state.id, view=…) — RunIndexRow
+    runs  = app.web.run_index.build_run_index_rows(state.id, view=…, input_key=…)
     view  = which of RUN_VIEWS this is ("production" | "test" | "archived")
     view_counts = {view: row count}, for the picker's labels
+    input_filter = the ?inputs= key the rows were narrowed to, or "" 
 
   Only manifest-backed runs appear, and a run whose manifest cannot be read says so
   in place of the parts it could not read.
@@ -72,36 +93,84 @@
   </div>
 </div>
 
+{% if input_filter %}
+<p class="filter-note">Showing the {{ runs | length }} run{{ '' if runs | length == 1 else 's' }}
+  that read the same files.
+  <a href="/project/{{ state.id }}/runs{% if view %}?view={{ view }}{% endif %}">Show all runs</a></p>
+{% endif %}
+
 {% if runs %}
+<label class="runs-filter">Filter
+  <input type="search" id="runs-filter" autocomplete="off"
+         placeholder="a name, a file or a version message">
+  <span class="runs-filter-count" id="runs-filter-count"></span>
+</label>
+<div class="runs-table-scroll">
 <table class="stages runs-table">
+  <colgroup>
+    <col class="col-run"><col class="col-inputs"><col class="col-version">
+    <col class="col-took"><col class="col-result"><col class="col-actions">
+  </colgroup>
   <thead>
-    <tr><th>date</th><th>workflow version</th><th>duration</th><th>result</th><th></th></tr>
+    <tr><th>run</th><th>inputs</th><th>workflow version</th><th>took</th><th>result</th><th></th></tr>
   </thead>
   <tbody>
     {% for r in runs %}
-    <tr class="js-run-row" data-href="/project/{{ state.id }}/runs/{{ r.run_id }}">
-      <td class="run-date">
-        <a href="/project/{{ state.id }}/runs/{{ r.run_id }}" title="run {{ r.run_id }}">
-          {%- if r.started_at %}{{ r.started_at | friendly_time }}{% else %}<code>{{ r.run_id }}</code>{% endif -%}
+    <tr class="js-run-row" data-href="/project/{{ state.id }}/runs/{{ r.run_id }}"
+        data-search="{{ (r.name ~ ' ' ~ (r.started_at or r.run_id) ~ ' ' ~ (r.version.message if r.version and r.version.message else '') ~ ' ' ~ (r.inputs | map(attribute='filename') | join(' '))) | lower }}">
+      <td class="run-ident">
+        <a class="run-name-link{% if not r.name %} unnamed{% endif %}"
+           href="/project/{{ state.id }}/runs/{{ r.run_id }}" title="run {{ r.run_id }}">
+          {%- if r.name %}{{ r.name }}
+          {%- elif r.started_at %}{{ r.started_at | friendly_time }}
+          {%- else %}<code>{{ r.run_id }}</code>{% endif -%}
         </a>
-        {%- if r.is_test_run %} <span class="flagchip"
-          title="A workflow test, not a production run: its numbers are not the project's output.">test run</span>
+        {%- if r.name and r.started_at %}<span class="run-when">{{ r.started_at | friendly_time }}</span>{% endif %}
+        {%- if r.is_test_run or r.row_caps %}
+        <span class="run-chips">
+          {%- if r.is_test_run %}<span class="flagchip"
+            title="A workflow test, not a production run: its numbers are not the project's output.">test run</span>{% endif %}
+          {%- if r.row_caps %}<span class="capchip"
+            title="This run read a slice, not the whole input: {{ r.row_caps }}">capped</span>{% endif %}
+        </span>
         {%- endif %}
+      </td>
+      <td class="run-input-files">
+        {%- if r.inputs %}
+        <ul class="input-list">
+          {%- for i in r.inputs %}
+          <li title="{{ i.stage_id }} read {{ i.filename }}{% if i.sha256 %} — sha256 {{ i.sha256 }}{% endif %}">
+            {{ i.filename }}
+            {%- if i.hash_disambiguates %} <code class="input-hash">{{ i.sha256[:8] }}</code>{% endif %}
+            {%- if i.size %} <span class="muted">{{ i.size }}</span>{% endif %}
+          </li>
+          {%- endfor %}
+        </ul>
+        {%- if r.runs_on_these_inputs > 1 and not input_filter %}
+        <a class="input-siblings"
+           href="/project/{{ state.id }}/runs?{% if view %}view={{ view }}&amp;{% endif %}inputs={{ r.input_key }}"
+           title="list only the runs that read these same files">{{ r.runs_on_these_inputs }} runs on these inputs</a>
+        {%- endif %}
+        {%- else %}<span class="muted">no bound files</span>{% endif %}
       </td>
       <td>
         {%- if r.version is none %}<span class="muted">(manifest unreadable)</span>
         {%- elif r.version.error %}<span class="unresolved" title="{{ r.version.error }}">version
           {% if r.version.version_id %}<code>{{ r.version.version_id }}</code>{% endif %} could not be read</span>
         {%- elif r.version.version_id %}
+        <a class="version-msg" target="_blank" rel="noopener"
+           href="/project/{{ state.id }}/workflow/version/{{ r.version.version_id }}"
+           title="{% if r.version.message %}{{ r.version.message }} — {% endif %}open version {{ r.version.version_id }} in a new tab">
           {%- if r.version.message %}“{{ r.version.message }}”
-          {%- else %}<code>{{ r.version.version_id }}</code> <span class="muted">(no message)</span>{% endif %}
-          <a class="open-away" target="_blank" rel="noopener"
-             href="/project/{{ state.id }}/workflow/version/{{ r.version.version_id }}"
-             title="open version {{ r.version.version_id }} in a new tab">↗</a>
+          {%- else %}<code>{{ r.version.version_id }}</code> <span class="muted">(no message)</span>{% endif -%}
+        </a>
         {%- else %}<span class="unresolved">no workflow version recorded</span>
         {%- endif %}
       </td>
-      <td class="run-duration">{% if r.duration %}{{ r.duration }}{% endif %}</td>
+      <td class="run-took">
+        {%- if r.duration %}<span class="run-elapsed">{{ r.duration }}</span>{% endif %}
+        {%- if r.cost_usd %}<span class="run-cost" title="what this run spent on model calls">{{ r.cost_usd | usd }}</span>{% endif %}
+      </td>
       <td title="{{ r.result_summary }}">
         {%- if r.strip is none %}<span class="muted">(manifest unreadable)</span>
         {%- else %}{% with strip = r.strip, show_counts = false, strip_id = none %}{% include "_stage_strip.html" %}{% endwith %}
@@ -121,8 +190,17 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
+<script src="/static/runs-filter.js"></script>
 {# The whole row opens the run, so no one cell has to look like the handle —
-   static/row-link.js, delegated from the document for every page drawing this table. #}
+   static/row-link.js, delegated from the document for every page drawing this table.
+   A click that lands on a link is that link's, so the inputs cell narrows the list
+   rather than opening the run. #}
+{% elif input_filter %}
+<div class="empty-state">
+  <h2>No runs read those files</h2>
+  <a href="/project/{{ state.id }}/runs" class="btn primary">Show all runs</a>
+</div>
 {% elif view == "archived" %}
 <div class="empty-state">
   <h2>No archived runs</h2>

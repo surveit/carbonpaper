@@ -29,6 +29,7 @@ from app.runtime.manifest import (
 from app.runtime.runner import prepare_run, resume_run, run_prepared
 from app.runtime.citations import build_row_trace_url as build_row_trace_url
 from app.services.errors import WorkflowLoadError
+from app.services.run_manifest_metadata import name_run
 from app.services.versioning import (
     WorkflowVersion,
     load_version,
@@ -46,10 +47,15 @@ def start_run(
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
     bust_cache: bool = False,
+    name: str = "",
 ) -> str:
     prep = _prepare(project_id, version_id, bindings, limits, offsets, bust_cache)
+    run_id = str(prep["run_id"])
+    # Named before execution, so the redirect lands on a named page.
+    if name.strip():
+        name_run(project_id, run_id, name)
     _run_in_background(run_prepared, prep)
-    return str(prep["run_id"])
+    return run_id
 
 
 def execute(

@@ -98,8 +98,8 @@ table.data-preview.selectable tbody tr:hover { background: var(--hover); }
 /* What the run returned — in memory, saved nowhere. */
 .scratch-result {
     margin: 12px 0;
-    border: 1px solid var(--fold-bd);
-    background: var(--fold-bg);
+    border: 1px solid var(--border);
+    background: var(--sunk);
     border-radius: 6px;
     padding: 10px 12px;
 }
@@ -108,7 +108,7 @@ table.data-preview.selectable tbody tr:hover { background: var(--hover); }
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.4px;
-    color: var(--fold-ink);
+    color: var(--muted);
     margin-bottom: 6px;
 }
 .scratch-result .scratch-head.err { color: var(--bad-ink); }

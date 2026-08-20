@@ -71,7 +71,8 @@ async def trigger_run(request: Request, project_id: str):
         limits = _collect_limits(form)
         run_id = run_service.start_run(project_id, version_id=version_id,
                                        bindings=bindings, limits=limits,
-                                       bust_cache=_read_bust_cache(form))
+                                       bust_cache=_read_bust_cache(form),
+                                       name=str(form.get("name") or ""))
     except (FileNotStoredError, NoVersionToRunError, MissingInputBindingError,
             ValueError) as exc:
         # ValueError here is limit/offset validation failures raised by _collect_limits,
@@ -122,7 +123,8 @@ def _read_bust_cache(form: FormData) -> bool:
 
 
 @router.get("/project/{project_id}/runs", response_class=HTMLResponse)
-async def runs_index(request: Request, project_id: str, view: str = RUN_VIEW_PRODUCTION):
+async def runs_index(request: Request, project_id: str,
+                     view: str = RUN_VIEW_PRODUCTION, inputs: str = ""):
     validate_project_or_404(project_id)
     if view not in RUN_VIEWS:
         raise HTTPException(status_code=400, detail=f"unknown runs view '{view}'")
@@ -135,9 +137,10 @@ async def runs_index(request: Request, project_id: str, view: str = RUN_VIEW_PRO
         {
             "state": shell_state(project_id, "runs"),
             "section": "runs",
-            "runs": build_run_index_rows(project_id, view=view),
+            "runs": build_run_index_rows(project_id, view=view, input_key=inputs),
             "view": view,
             "view_counts": count_runs_by_view(project_id),
+            "input_filter": inputs,
         },
     )
 

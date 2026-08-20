@@ -1,8 +1,4 @@
-"""What the OPERATOR records about a run, beside the run's own manifest: today,
-whether the runs index hides it. The manifest itself is the executor's to write
-(`app.runtime.manifest`), which is why this is a record of its own — and why a run
-keeps every number it reported whatever is written here.
-"""
+"""What the OPERATOR records about a run, beside the manifest the executor owns."""
 
 from __future__ import annotations
 
@@ -20,14 +16,36 @@ class RunManifestMetadata(PersistedModel):
     project_id: str
     run_id: str
     archived: bool = False
+    # Empty is unnamed; clearing returns it there.
+    name: str = ""
 
 
 def archive_run(project_id: str, run_id: str) -> None:
-    _record_archived(project_id, run_id, archived=True)
+    record = _open_record(project_id, run_id)
+    record.archived = True
+    record.save()
 
 
 def unarchive_run(project_id: str, run_id: str) -> None:
-    _record_archived(project_id, run_id, archived=False)
+    record = _open_record(project_id, run_id)
+    record.archived = False
+    record.save()
+
+
+def name_run(project_id: str, run_id: str, name: str) -> None:
+    """A blank name clears it; the record stays, so an archived run stays archived."""
+    record = _open_record(project_id, run_id)
+    record.name = name.strip()
+    record.save()
+
+
+def read_run_names(project_id: str) -> dict[str, str]:
+    return {r.run_id: r.name for r in read_run_metadata(project_id) if r.name}
+
+
+def read_run_name(project_id: str, run_id: str) -> str:
+    record = _find_record(project_id, run_id)
+    return record.name if record else ""
 
 
 def read_archived_run_ids(project_id: str) -> set[str]:
@@ -38,21 +56,17 @@ def read_run_metadata(project_id: str) -> list[RunManifestMetadata]:
     return RunManifestMetadata.list(f"{validate_project_id(project_id)}/")
 
 
-def _record_archived(project_id: str, run_id: str, *, archived: bool) -> None:
-    # Edited in place, so whatever else the record holds survives a trip through
-    # the archive and back.
-    record = _find_record(project_id, run_id)
-    if record is None:
-        record = RunManifestMetadata(
-            id=f"{validate_project_id(project_id)}/{uuid4().hex}",
-            project_id=project_id,
-            run_id=run_id,
-        )
-    record.archived = archived
-    record.save()
+def _open_record(project_id: str, run_id: str) -> RunManifestMetadata:
+    # Reused, not replaced: a rename must not drop an archive flag.
+    return _find_record(project_id, run_id) or RunManifestMetadata(
+        id=f"{validate_project_id(project_id)}/{uuid4().hex}",
+        project_id=project_id,
+        run_id=run_id,
+    )
 
 
 def _find_record(project_id: str, run_id: str) -> RunManifestMetadata | None:
-    return next(
-        (r for r in read_run_metadata(project_id) if r.run_id == run_id), None
+    found = RunManifestMetadata.find(
+        project_id=validate_project_id(project_id), run_id=run_id
     )
+    return found[0] if found else None

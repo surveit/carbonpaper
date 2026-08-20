@@ -1,15 +1,12 @@
-"""Archiving a run and restoring one: the two POSTs behind the runs index's per-row
-action. What archiving hides is the row — the run keeps every byte it wrote, and the
-run page still serves it. Listing runs is app.web.routers.runs.
-"""
+"""The operator's writes about a run: its name, and whether the index hides it."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Form, HTTPException
 from fastapi.responses import RedirectResponse
 
 from app.runtime.manifest import RunManifest
-from app.services.run_manifest_metadata import archive_run, unarchive_run
+from app.services.run_manifest_metadata import archive_run, name_run, unarchive_run
 from app.web.project_view import validate_project_or_404
 
 router = APIRouter()
@@ -28,6 +25,15 @@ async def unarchive_project_run(project_id: str, run_id: str):
     unarchive_run(project_id, run_id)
     return RedirectResponse(
         url=f"/project/{project_id}/runs?view=archived", status_code=303
+    )
+
+
+@router.post("/project/{project_id}/runs/{run_id}/name")
+async def name_project_run(project_id: str, run_id: str, name: str = Form(default="")):
+    _refuse_unrecorded_run(validate_project_or_404(project_id), run_id)
+    name_run(project_id, run_id, name)
+    return RedirectResponse(
+        url=f"/project/{project_id}/runs/{run_id}", status_code=303
     )
 
 

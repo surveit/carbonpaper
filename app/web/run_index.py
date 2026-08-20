@@ -1,26 +1,41 @@
-"""The runs index rows: when a run happened, the version it pinned, how long it
-took, and how it came out (the same stage strip the run page draws, under the
-run's outcome in words). The run id is no longer a column — it is the row's
-link target."""
+"""One row per run: what it was called, what it read, what it pinned, took and cost."""
 
 from __future__ import annotations
 
+import hashlib
+import json
+from collections import Counter, defaultdict
+from collections.abc import Iterable
 
 from pydantic import BaseModel
 
 from app.core.run_status import RunStatus
-from app.models.run_manifest import UNREADABLE_RUN_STATUS
-from app.runtime.manifest import RunEntry, list_run_entries
-from app.services.run_manifest_metadata import read_archived_run_ids
+from app.models.run_manifest import UNREADABLE_RUN_STATUS, InputBinding, read_input_bindings
+from app.runtime.manifest import RunEntry, RunManifest, list_run_entries
+from app.services.run_manifest_metadata import read_archived_run_ids, read_run_names
+from app.web.file_sizes import describe_bytes
 from app.web.run_header import VersionNote, describe_run_duration, read_version_note
 from app.web.stage_strip import StageStrip, build_stage_strip, describe_stage_counts
+
+
+class RunInputCell(BaseModel):
+    stage_id: str
+    filename: str
+    size: str
+    sha256: str | None = None
+    # One filename over two sets of bytes: the name alone is not an identity.
+    hash_disambiguates: bool = False
 
 
 class RunIndexRow(BaseModel):
     run_id: str
     status: str
+    # Empty when never named; the row falls back to `started_at`.
+    name: str = ""
     started_at: str | None = None
     duration: str | None = None
+    # Summed over the stage records; 0.0 is a run that called no model.
+    cost_usd: float = 0.0
     version: VersionNote | None = None
     strip: StageStrip | None = None
     # The strip's counts in words, for the result cell's tooltip: the squares
@@ -30,6 +45,12 @@ class RunIndexRow(BaseModel):
     # manifest that could not be read — that cell states the unreadability instead.
     outcome: str = ""
     is_test_run: bool = False
+    inputs: list[RunInputCell] = []
+    # Empty when the run read every input whole.
+    row_caps: str = ""
+    # Empty for a run that bound no file — no inputs is not an input set.
+    input_key: str = ""
+    runs_on_these_inputs: int = 1
 
 
 # The runs index's three mutually exclusive buckets. Archived takes priority over
@@ -41,15 +62,14 @@ RUN_VIEW_ARCHIVED = "archived"
 RUN_VIEWS = (RUN_VIEW_PRODUCTION, RUN_VIEW_TEST, RUN_VIEW_ARCHIVED)
 
 
-def build_run_index_rows(project_id: str, *, view: str | None = None) -> list[RunIndexRow]:
-    """`view=None` lists every non-archived run; pass a RUN_VIEWS value for one bucket."""
-    hidden = read_archived_run_ids(project_id)
-    seen_versions: dict[str, VersionNote] = {}
-    return [
-        _build_row(project_id, entry, seen_versions)
-        for entry in reversed(list_run_entries(project_id))
-        if _matches_view(entry, hidden, view)
-    ]
+def build_run_index_rows(
+    project_id: str, *, view: str | None = None, input_key: str | None = None
+) -> list[RunIndexRow]:
+    """`view=None` lists every non-archived run; `input_key` narrows to one input SET."""
+    rows = _build_every_row(project_id, view)
+    if not input_key:
+        return rows
+    return [row for row in rows if row.input_key == input_key]
 
 
 def count_archived_runs(project_id: str) -> int:
@@ -62,6 +82,65 @@ def count_runs_by_view(project_id: str) -> dict[str, int]:
     for entry in list_run_entries(project_id):
         counts[_run_view(entry, hidden)] += 1
     return counts
+
+
+def describe_run_outcome(status: str) -> str:
+    return _OUTCOME_WORDS.get(status, status)
+
+
+def compose_input_key(bindings: list[InputBinding]) -> str:
+    """The identity of a run's input SET: which stage read which bytes."""
+    if not bindings:
+        return ""
+    # Hashed where preflight recorded one, path otherwise.
+    payload = sorted((b.stage_id, b.sha256 or f"path:{b.path}") for b in bindings)
+    return hashlib.sha256(json.dumps(payload).encode()).hexdigest()[:16]
+
+
+def find_ambiguous_filenames(bindings: Iterable[list[InputBinding]]) -> set[str]:
+    """The filenames this project has bound to more than one set of bytes."""
+    hashes_by_name: dict[str, set[str]] = defaultdict(set)
+    for run_bindings in bindings:
+        for binding in run_bindings:
+            if binding.sha256:
+                hashes_by_name[binding.filename].add(binding.sha256)
+    return {name for name, hashes in hashes_by_name.items() if len(hashes) > 1}
+
+
+# Keyed by the stored string, which is what a manifest carries and what the row
+# holds — an enum-keyed lookup would miss every one of them.
+_OUTCOME_WORDS = {
+    RunStatus.RUNNING.value: "In progress",
+    RunStatus.OK.value: "Complete",
+    RunStatus.WARNINGS.value: "Complete, with warnings",
+    RunStatus.ERRORS.value: "Error",
+    RunStatus.AWAITING_REVIEW.value: "Awaiting review",
+    RunStatus.CANCELLED.value: "Cancelled",
+}
+
+
+class _IndexContext(BaseModel):
+    project_id: str
+    names: dict[str, str]
+    ambiguous_filenames: set[str]
+    run_counts: Counter[str]
+    seen_versions: dict[str, VersionNote] = {}
+
+
+def _build_every_row(project_id: str, view: str | None) -> list[RunIndexRow]:
+    hidden = read_archived_run_ids(project_id)
+    entries = [
+        entry for entry in reversed(list_run_entries(project_id))
+        if _matches_view(entry, hidden, view)
+    ]
+    bindings = {entry.run_id: read_input_bindings(entry.raw or {}) for entry in entries}
+    context = _IndexContext(
+        project_id=project_id,
+        names=read_run_names(project_id),
+        ambiguous_filenames=find_ambiguous_filenames(bindings.values()),
+        run_counts=Counter(compose_input_key(b) for b in bindings.values()),
+    )
+    return [_build_row(entry, bindings[entry.run_id], context) for entry in entries]
 
 
 def _matches_view(entry: RunEntry, hidden: set[str], view: str | None) -> bool:
@@ -78,50 +157,58 @@ def _run_view(entry: RunEntry, hidden: set[str]) -> str:
     return RUN_VIEW_PRODUCTION
 
 
-def describe_run_outcome(status: str) -> str:
-    return _OUTCOME_WORDS.get(status, status)
-
-
-# Keyed by the stored string, which is what a manifest carries and what the row
-# holds — an enum-keyed lookup would miss every one of them.
-_OUTCOME_WORDS = {
-    RunStatus.RUNNING.value: "In progress",
-    RunStatus.OK.value: "Complete",
-    RunStatus.WARNINGS.value: "Complete, with warnings",
-    RunStatus.ERRORS.value: "Error",
-    RunStatus.AWAITING_REVIEW.value: "Awaiting review",
-    RunStatus.CANCELLED.value: "Cancelled",
-}
-
-
 def _build_row(
-    project_id: str, entry: RunEntry, seen_versions: dict[str, VersionNote]
+    entry: RunEntry, bindings: list[InputBinding], context: _IndexContext
 ) -> RunIndexRow:
+    name = context.names.get(entry.run_id, "")
     if entry.manifest is None:
         # An identity-only row rather than counts it never read, so one unreadable
         # run never takes the index down with it. No test-run filter here on
         # purpose: the index LISTS test runs (flagged), the dashboard count omits them.
-        return RunIndexRow(run_id=entry.run_id, status=UNREADABLE_RUN_STATUS)
+        return RunIndexRow(run_id=entry.run_id, status=UNREADABLE_RUN_STATUS, name=name)
     manifest = entry.manifest
     persisted = manifest.to_dict()
     strip = build_stage_strip(persisted)
+    input_key = compose_input_key(bindings)
     return RunIndexRow(
         run_id=entry.run_id,
         status=str(manifest.status),
+        name=name,
         started_at=manifest.started_at,
         duration=describe_run_duration(persisted),
-        version=_read_version(project_id, manifest.workflow_version, seen_versions),
+        cost_usd=total_run_cost(manifest),
+        version=_read_version(context, manifest.workflow_version),
         strip=strip,
         result_summary=describe_stage_counts(strip),
         outcome=describe_run_outcome(str(manifest.status)),
         is_test_run=manifest.parameters.is_test_run,
+        inputs=[_build_input_cell(b, context.ambiguous_filenames) for b in bindings],
+        row_caps=describe_row_caps(manifest.parameters.limits),
+        input_key=input_key,
+        runs_on_these_inputs=context.run_counts[input_key],
     )
 
 
-def _read_version(
-    project_id: str, version_id: str | None, seen: dict[str, VersionNote]
-) -> VersionNote:
+def total_run_cost(manifest: RunManifest) -> float:
+    return sum(r.llm_usage.cost_usd for r in manifest.stage_records if r.llm_usage)
+
+
+def describe_row_caps(limits: dict[str, int]) -> str:
+    return ", ".join(f"{stage_id} ≤ {cap:,} rows" for stage_id, cap in sorted(limits.items()))
+
+
+def _build_input_cell(binding: InputBinding, ambiguous: set[str]) -> RunInputCell:
+    return RunInputCell(
+        stage_id=binding.stage_id,
+        filename=binding.filename,
+        size=describe_bytes(binding.bytes) if binding.bytes is not None else "",
+        sha256=binding.sha256,
+        hash_disambiguates=bool(binding.sha256) and binding.filename in ambiguous,
+    )
+
+
+def _read_version(context: _IndexContext, version_id: str | None) -> VersionNote:
     key = version_id or ""
-    if key not in seen:
-        seen[key] = read_version_note(project_id, version_id)
-    return seen[key]
+    if key not in context.seen_versions:
+        context.seen_versions[key] = read_version_note(context.project_id, version_id)
+    return context.seen_versions[key]

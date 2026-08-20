@@ -165,7 +165,7 @@ table.data-preview td.cell-clip.expanded {
     overflow: visible;
     text-overflow: clip;
     overflow-wrap: anywhere;
-    background: var(--fold-bg);
+    background: var(--sunk);
     cursor: zoom-out;
 }
 table.data-preview th {
