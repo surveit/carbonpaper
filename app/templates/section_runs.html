@@ -14,9 +14,10 @@
     (action)  archive this run, or restore it — unlabelled, because the column
               holds one button and the button says what it does
 
-  ARCHIVED runs are the same table, at ?archived=1, with restore in place of
-  archive. A run is on exactly one of the two lists: archiving hides the row and
-  nothing else — the run page, its outputs, its cost and the overview counts are
+  The view picker splits runs into three mutually exclusive buckets — production
+  (the default), test, and archived — with restore in place of archive on the
+  archived view. Archiving hides a run from the other two buckets and nothing
+  else: the run page, its outputs, its cost and the overview counts are
   untouched, which is why this needs no confirmation and no warning.
 
   Configuring a run is a different task from reading the history, and has its own
@@ -25,9 +26,9 @@
 
   Context the route passes:
     state = project.project_state(mdir); section = "runs"
-    runs  = app.web.run_index.build_run_index_rows(state.id, archived=…) — RunIndexRow
-    archived_view  = which of the two lists this is
-    archived_count = how many runs the other list holds, when this is the live one
+    runs  = app.web.run_index.build_run_index_rows(state.id, view=…) — RunIndexRow
+    view  = which of RUN_VIEWS this is ("production" | "test" | "archived")
+    view_counts = {view: row count}, for the picker's labels
 
   Only manifest-backed runs appear, and a run whose manifest cannot be read says so
   in place of the parts it could not read.
@@ -40,10 +41,14 @@
 {% block section %}
 <div class="sec-head wf-head">
   <div class="wf-head-title">
-    {% if archived_view %}
+    {% if view == "archived" %}
     <h1>Archived runs</h1>
-    <p class="lede">Archived runs are kept out of the runs list and nowhere else: each one
+    <p class="lede">Archived runs are kept out of the other views and nowhere else: each one
       still opens, still holds its outputs, and still counts toward this project's spend.</p>
+    {% elif view == "test" %}
+    <h1>Test runs</h1>
+    <p class="lede">A workflow test, not a production run: its numbers are not this
+      project's output.</p>
     {% else %}
     <h1>Runs</h1>
     <p class="lede">Each run pins to a workflow <strong>version</strong> and reads its
@@ -51,15 +56,18 @@
     {% endif %}
   </div>
   <div class="actions wf-actions">
-    {% if archived_view %}
-    <a href="/project/{{ state.id }}/runs" class="btn">← All runs</a>
-    {% else %}
-    {% if archived_count %}
-    <a href="/project/{{ state.id }}/runs?archived=1" class="btn">Archived ({{ archived_count }})</a>
-    {% endif %}
+    <label class="runs-view-picker">Show
+      <select onchange="location.href='/project/{{ state.id }}/runs?view=' + this.value">
+        <option value="production" {% if view == "production" %}selected{% endif %}>
+          Production ({{ view_counts.production }})</option>
+        <option value="test" {% if view == "test" %}selected{% endif %}>
+          Test runs ({{ view_counts.test }})</option>
+        <option value="archived" {% if view == "archived" %}selected{% endif %}>
+          Archived ({{ view_counts.archived }})</option>
+      </select>
+    </label>
     {% if state.workflow.present %}
     <a href="/project/{{ state.id }}/runs/new" class="btn primary">▶ New run</a>
-    {% endif %}
     {% endif %}
   </div>
 </div>
@@ -102,10 +110,10 @@
       </td>
       <td class="run-actions">
         <form method="post"
-              action="/project/{{ state.id }}/runs/{{ r.run_id }}/{% if archived_view %}unarchive{% else %}archive{% endif %}">
+              action="/project/{{ state.id }}/runs/{{ r.run_id }}/{% if view == "archived" %}unarchive{% else %}archive{% endif %}">
           <button type="submit" class="btn sm"
-                  title="{% if archived_view %}Put this run back in the runs list{% else %}Hide this run from the runs list; it keeps everything it recorded{% endif %}">
-            {%- if archived_view %}Restore{% else %}Archive{% endif -%}
+                  title="{% if view == 'archived' %}Put this run back in its view{% else %}Hide this run from every view; it keeps everything it recorded{% endif %}">
+            {%- if view == "archived" %}Restore{% else %}Archive{% endif -%}
           </button>
         </form>
       </td>
@@ -115,10 +123,16 @@
 </table>
 {# The whole row opens the run, so no one cell has to look like the handle —
    static/row-link.js, delegated from the document for every page drawing this table. #}
-{% elif archived_view %}
+{% elif view == "archived" %}
 <div class="empty-state">
   <h2>No archived runs</h2>
-  <p>Archiving a run takes it off the runs list and leaves it otherwise untouched.</p>
+  <p>Archiving a run takes it off the other views and leaves it otherwise untouched.</p>
+  <a href="/project/{{ state.id }}/runs" class="btn primary">Back to runs</a>
+</div>
+{% elif view == "test" %}
+<div class="empty-state">
+  <h2>No test runs</h2>
+  <p>A workflow test runs the pipeline without counting toward this project's output.</p>
   <a href="/project/{{ state.id }}/runs" class="btn primary">Back to runs</a>
 </div>
 {% else %}

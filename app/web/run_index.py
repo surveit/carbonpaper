@@ -32,19 +32,50 @@ class RunIndexRow(BaseModel):
     is_test_run: bool = False
 
 
-def build_run_index_rows(project_id: str, *, archived: bool = False) -> list[RunIndexRow]:
-    """One side of the archive line, never both."""
+# The runs index's three mutually exclusive buckets. Archived takes priority over
+# test — archiving is an explicit action that pulls a run off every other list,
+# so an archived test run shows only under RUN_VIEW_ARCHIVED.
+RUN_VIEW_PRODUCTION = "production"
+RUN_VIEW_TEST = "test"
+RUN_VIEW_ARCHIVED = "archived"
+RUN_VIEWS = (RUN_VIEW_PRODUCTION, RUN_VIEW_TEST, RUN_VIEW_ARCHIVED)
+
+
+def build_run_index_rows(project_id: str, *, view: str | None = None) -> list[RunIndexRow]:
+    """`view=None` lists every non-archived run; pass a RUN_VIEWS value for one bucket."""
     hidden = read_archived_run_ids(project_id)
     seen_versions: dict[str, VersionNote] = {}
     return [
         _build_row(project_id, entry, seen_versions)
         for entry in reversed(list_run_entries(project_id))
-        if (entry.run_id in hidden) is archived
+        if _matches_view(entry, hidden, view)
     ]
 
 
 def count_archived_runs(project_id: str) -> int:
     return len(read_archived_run_ids(project_id))
+
+
+def count_runs_by_view(project_id: str) -> dict[str, int]:
+    hidden = read_archived_run_ids(project_id)
+    counts = {view: 0 for view in RUN_VIEWS}
+    for entry in list_run_entries(project_id):
+        counts[_run_view(entry, hidden)] += 1
+    return counts
+
+
+def _matches_view(entry: RunEntry, hidden: set[str], view: str | None) -> bool:
+    if view is None:
+        return entry.run_id not in hidden
+    return _run_view(entry, hidden) == view
+
+
+def _run_view(entry: RunEntry, hidden: set[str]) -> str:
+    if entry.run_id in hidden:
+        return RUN_VIEW_ARCHIVED
+    if entry.manifest is not None and entry.manifest.parameters.is_test_run:
+        return RUN_VIEW_TEST
+    return RUN_VIEW_PRODUCTION
 
 
 def describe_run_outcome(status: str) -> str:
