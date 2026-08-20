@@ -152,6 +152,48 @@ def test_noun_led_words_are_marked_by_hand_only() -> None:
     assert marked == {"stage", "row"}, "a noun_led mark is a human decision, not a scan output"
 
 
+def test_build_snapshot_merges_a_plural_noun_and_field_into_the_singular(tmp_path: Path) -> None:
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "m.py").write_text(
+        "from dataclasses import dataclass\n\n\n"
+        "@dataclass\nclass Row:\n    row: int = 0\n\n\n"
+        "@dataclass\nclass Rows:\n    rows: list = None\n",
+        encoding="utf-8",
+    )
+    snapshot = build_snapshot(tmp_path)
+    assert "rows" not in snapshot.words
+    assert snapshot.words["row"].noun == 2
+    assert snapshot.words["row"].field == 2
+    assert snapshot.sighting("row", Role.FIELD) is not None
+
+
+def test_build_snapshot_does_not_merge_a_plural_verb_conjugation(tmp_path: Path) -> None:
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "m.py").write_text(
+        "def _tests_shape(self) -> bool:\n    return True\n", encoding="utf-8"
+    )
+    snapshot = build_snapshot(tmp_path)
+    assert "test" not in snapshot.words
+    assert snapshot.words["tests"].verb == 1
+
+
+def test_build_snapshot_does_not_merge_a_short_false_plural(tmp_path: Path) -> None:
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "m.py").write_text(
+        "def as_dict() -> dict:\n    return {}\n\n\nclass A(Enum):\n    pass\n", encoding="utf-8"
+    )
+    snapshot = build_snapshot(tmp_path)
+    assert snapshot.words["a"].verb == 0
+    assert snapshot.words["as"].verb == 1
+
+
+def test_build_snapshot_leaves_an_unmatched_plural_alone(tmp_path: Path) -> None:
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "m.py").write_text("def status_summary() -> str:\n    return ''\n", encoding="utf-8")
+    snapshot = build_snapshot(tmp_path)
+    assert "status" in snapshot.words
+
+
 def test_split_words_handles_both_casings() -> None:
     assert split_words("WorkflowStageInput") == ["workflow", "stage", "input"]
     assert split_words("output_schema") == ["output", "schema"]
