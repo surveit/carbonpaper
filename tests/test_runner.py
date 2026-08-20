@@ -10,7 +10,7 @@ from app.services import run as run_service
 from app.core.run_status import RunStatus
 from app.models import parse_stage, Workflow
 from app.runtime.runner import execute_run, resume_run
-from app.runtime.executor import _raise_if_run_failed, run_subset
+from app.runtime.executor import _raise_if_run_failed, execute_subset
 from app.runtime.manifest import RunManifest
 from app.runtime.trace import trace_row
 from app.runtime.stages import llm_transform as lt
@@ -436,7 +436,7 @@ def test_llm_generation_failure_surfaces_as_error_status_not_raised(tmp_path, mo
 
 
 def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch):
-    # run_subset backs eval/preview runs (app/evals/runner.py).
+    # execute_subset backs eval/preview runs (app/evals/runner.py).
     def boom(stage_id, llm_config, row, **kw):
         raise RuntimeError("boom")
 
@@ -467,7 +467,7 @@ def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch)
     injected_outputs = {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}
 
     with pytest.raises(SubsetRunError) as exc_info:
-        run_subset(
+        execute_subset(
             workflow, injected_outputs=injected_outputs, stage_ids=["score"],
             run_dir=tmp_path / "runs" / "subset1", project_id=(tmp_path / "runs" / "subset1").parent.parent.name)
 
@@ -477,7 +477,7 @@ def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch)
 
 
 def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_error(tmp_path):
-    # run_subset saves as it goes, so the partial work is on disk at the error.
+    # execute_subset saves as it goes, so the partial work is on disk at the error.
     load = parse_stage({
         "id": "load", "description": "Load items", "type": "input_data",
         "connector": {"kind": "file"},
@@ -505,7 +505,7 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
     run_dir = tmp_path / "runs" / "partial"
 
     with pytest.raises(SubsetRunError):
-        run_subset(
+        execute_subset(
             workflow, injected_outputs=injected, stage_ids=["clean", "score"],
             run_dir=run_dir, project_id=(run_dir).parent.parent.name)
 

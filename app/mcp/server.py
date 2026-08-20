@@ -143,9 +143,9 @@ def add_stage(project_id: str, stages: list[SubmittedStage]) -> dict[str, Any]:
     return add_stages_reporting_drops(project_id, stages)
 
 
-@mcp.tool(description=read_tool_description("remove_stage"))
-def remove_stage(project_id: str, stage_id: str) -> dict[str, Any]:
-    return shared.remove_stage(project_id, stage_id)
+@mcp.tool(description=read_tool_description("delete_stage"))
+def delete_stage(project_id: str, stage_id: str) -> dict[str, Any]:
+    return shared.delete_stage(project_id, stage_id)
 
 
 @mcp.tool(description=read_tool_description("save_version"))

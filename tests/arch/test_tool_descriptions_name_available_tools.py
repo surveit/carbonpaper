@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import re
 
-from app.tools.editing import EditingContext, make_editing_tools
+from app.tools.editing import EditingContext, build_editing_tools
 from app.tools.tool_specs import find_tool_names
 
 # Tool names are lowercase identifiers, and so are the parameter/field names the prose
@@ -23,7 +23,7 @@ def find_mcp_descriptions() -> dict[str, str]:
 
 
 def find_editing_descriptions() -> dict[str, str]:
-    bound = make_editing_tools(EditingContext(project_id="any", base_url="http://reader.test/"))
+    bound = build_editing_tools(EditingContext(project_id="any", base_url="http://reader.test/"))
     return {spec.name: spec.description for spec in bound}
 
 

@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from ..context import RunContext
 
 
-def make_starlark_row_mapper(
+def build_starlark_row_mapper(
     workflow_stage: WorkflowStage, ctx: RunContext, src: pa.Table
 ) -> RowMapper:
     """Compile once; the mapper sees one marshalled row and nothing else."""

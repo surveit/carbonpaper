@@ -11,7 +11,7 @@ from app.core.agent.store import open_session_store
 from app.main import app
 from app.core.agent.sdk_engine import ClaudeAgentSdkEngine
 from app.services.project import create_project, list_projects
-from app.tools.editing import EditingContext, make_editing_tools
+from app.tools.editing import EditingContext, build_editing_tools
 
 client = TestClient(app)
 _store = open_session_store()
@@ -24,7 +24,7 @@ _READER = {"base_url": "http://testserver/"}
 def read_current_project(sid: str) -> str | None:
     """What the session's own stored context binds `get_current_project` to."""
     context = (_store.load(sid).get("context") or {}) | _READER
-    tools = make_editing_tools(EditingContext.model_validate(context))
+    tools = build_editing_tools(EditingContext.model_validate(context))
     return next(t for t in tools if t.name == "get_current_project").fn()
 
 

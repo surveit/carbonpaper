@@ -1,5 +1,5 @@
 """Behavior + lineage tests for the union and filter_rows handlers: run them for
-real through run_subset (so the run record + outputs/*.parquet land
+real through execute_subset (so the run record + outputs/*.parquet land
 exactly like a production run), then prove app.runtime.trace can walk through
 them to the correct source row."""
 from __future__ import annotations
@@ -11,7 +11,7 @@ from app.core.errors import SubsetRunError
 from app.core.frames import table_to_frame
 from app.models import parse_stage, Stage, Workflow
 from app.models.run_parameters import RunParameters
-from app.runtime.executor import run_subset
+from app.runtime.executor import execute_subset
 from app.runtime.trace import trace_row
 
 _AB_SCHEMA = {"columns": [{"name": "a", "type": "str", "nullable": True}, {"name": "b", "type": "int", "nullable": True}]}
@@ -37,7 +37,7 @@ def _filter_stage(sid: str, input_id: str, predicate_code: str) -> Stage:
 
 
 def _load_stage(sid: str, df: pd.DataFrame, tmp_path) -> Stage:
-    """Real, not injected: run_subset persists an output only for a stage it actually executes."""
+    """Real, not injected: execute_subset persists an output only for a stage it actually executes."""
     path = tmp_path / f"{sid}.csv"
     df.to_csv(path, index=False)
     return parse_stage({
@@ -58,7 +58,7 @@ def test_union_concatenates_two_inputs_in_declared_order(tmp_path):
     union = _union_stage("u", ["left", "right"])
     workflow = Workflow(stages=[load_left, load_right, union])
 
-    outputs = run_subset(
+    outputs = execute_subset(
         workflow, injected_outputs={},
         stage_ids=["left", "right", "u"], run_dir=tmp_path / "runs" / "r1", project_id=(tmp_path / "runs" / "r1").parent.parent.name)
 
@@ -76,7 +76,7 @@ def test_filter_rows_keeps_true_rows_in_order_with_columns_unchanged(tmp_path):
     filt = _filter_stage("f", "src", "def should_include(row): return row['b'] > 0")
     workflow = Workflow(stages=[load, filt])
 
-    outputs = run_subset(
+    outputs = execute_subset(
         workflow, injected_outputs={},
         stage_ids=["src", "f"], run_dir=tmp_path / "runs" / "r2", project_id=(tmp_path / "runs" / "r2").parent.parent.name)
 
@@ -100,7 +100,7 @@ def test_a_filter_that_keeps_nothing_still_feeds_its_downstream_a_valid_frame(tm
     })
     workflow = Workflow(stages=[load, filt, tag])
 
-    outputs = run_subset(
+    outputs = execute_subset(
         workflow, injected_outputs={},
         stage_ids=["src", "f", "tag"], run_dir=tmp_path / "runs" / "r_empty",
         project_id=(tmp_path / "runs" / "r_empty").parent.parent.name)
@@ -117,7 +117,7 @@ def test_filter_rows_non_bool_return_is_a_loud_error(tmp_path):
     workflow = Workflow(stages=[load, filt])
 
     with pytest.raises(SubsetRunError) as exc_info:
-        run_subset(
+        execute_subset(
             workflow, injected_outputs={},
             stage_ids=["src", "f"], run_dir=tmp_path / "runs" / "r3", project_id=(tmp_path / "runs" / "r3").parent.parent.name)
     assert "should_include" in str(exc_info.value)
@@ -134,7 +134,7 @@ def test_trace_walks_through_filter_rows_to_the_right_source_row(tmp_path):
     workflow = Workflow(stages=[load, filt])
     run_dir = tmp_path / "runs" / "trace_filter"
 
-    run_subset(
+    execute_subset(
         workflow, injected_outputs={},
         stage_ids=["src", "f"], run_dir=run_dir, project_id=(run_dir).parent.parent.name)
 
@@ -158,7 +158,7 @@ def test_trace_walks_through_union_to_the_right_source_row_in_the_right_input(tm
     workflow = Workflow(stages=[load_left, load_right, union])
     run_dir = tmp_path / "runs" / "trace_union"
 
-    run_subset(
+    execute_subset(
         workflow, injected_outputs={},
         stage_ids=["left", "right", "u"], run_dir=run_dir, project_id=(run_dir).parent.parent.name)
 
@@ -188,7 +188,7 @@ def test_trace_follows_lineage_after_a_limit_caps_what_the_filter_reads(tmp_path
     workflow = Workflow(stages=[load, filt])
     run_dir = tmp_path / "runs" / "trace_filter_limit"
 
-    outputs = run_subset(
+    outputs = execute_subset(
         workflow, injected_outputs={},
         stage_ids=["src", "f"], run_dir=run_dir, params=RunParameters(limits={"f": 2}), project_id=(run_dir).parent.parent.name)
 
@@ -215,7 +215,7 @@ def test_a_row_mapper_that_may_not_drop_still_rejects_a_none_row(tmp_path):
     workflow = Workflow(stages=[load, mapper])
 
     with pytest.raises(SubsetRunError) as exc_info:
-        run_subset(
+        execute_subset(
             workflow, injected_outputs={},
             stage_ids=["src", "m"], run_dir=tmp_path / "runs" / "none_row",
             project_id=(tmp_path / "runs" / "none_row").parent.parent.name)

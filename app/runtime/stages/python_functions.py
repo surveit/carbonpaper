@@ -58,7 +58,7 @@ def handle_python_frame_function(
     return StageOutput.from_frame(_require_frame(fn(*args, **kwargs), workflow_stage))
 
 
-def make_python_row_mapper(
+def build_python_row_mapper(
     workflow_stage: WorkflowStage, ctx: RunContext, src: pa.Table
 ) -> RowMapper:
     """One dict in, one dict out: shown neither the frame nor a row's position in it."""

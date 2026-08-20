@@ -16,7 +16,7 @@ from app.core.stage_cache import StageCache
 from app.models import parse_stage, Stage, Workflow
 from app.models.stage import StageType
 from app.runtime.context import RunContext, RunIdentity
-from app.runtime.executor import run_subset
+from app.runtime.executor import execute_subset
 from app.runtime.run_log import (
     LEVEL_DETAIL,
     LEVEL_LIFECYCLE,
@@ -174,7 +174,7 @@ def test_the_batched_path_logs_replayed_and_computed_rows_apart(tmp_path, monkey
 
         return map_group
 
-    monkeypatch.setattr(llm_transform, "make_llm_batch_mapper", fake_make_batch_mapper)
+    monkeypatch.setattr(llm_transform, "build_llm_batch_mapper", fake_make_batch_mapper)
     stage = _llm_stage(batch_size=2)
 
     seed_ctx, seed_log = _logged_ctx(tmp_path, "seed")
@@ -201,7 +201,7 @@ def test_a_run_writes_its_lifecycle_spine_to_the_run_dir(tmp_path):
         },
     })
     run_dir = tmp_path / "runs" / "subset1"
-    run_subset(
+    execute_subset(
         Workflow(stages=[source, _row_stage()]),
         injected_outputs={"src": pd.DataFrame({"x": [1, 2]})},
         stage_ids=["double"], run_dir=run_dir, project_id=run_dir.parent.parent.name,

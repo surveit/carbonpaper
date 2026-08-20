@@ -25,8 +25,8 @@ from app.services import project as project_service
 from app.services.uploads import resolve_file_binding
 from app.services.loader import load_workflow
 from app.runtime.trace import trace_row, trace_to_dict
-from app.tools.editing import EditingContext, make_editing_tools
-from app.agents.tutorial.config import make_tutorial_tools
+from app.tools.editing import EditingContext, build_editing_tools
+from app.agents.tutorial.config import build_tutorial_tools
 from app.tools.tutorial import TutorialAgentReference, TutorialContext
 from app.services.methodology import exists as methodology_exists
 
@@ -44,7 +44,7 @@ _EXPECTED_TOOLS = {
 
 def _tools() -> list[SdkMcpTool[Any]]:
     _server, _allowed, wrapped = build_mcp_server(
-        make_tutorial_tools(TutorialContext(base_url=_BASE_URL))
+        build_tutorial_tools(TutorialContext(base_url=_BASE_URL))
     )
     return wrapped
 
@@ -72,7 +72,7 @@ def test_build_engine_resolves_tutorial_with_only_the_tour_tools() -> None:
 
 def test_the_tutorial_agent_gets_none_of_the_editing_tools() -> None:
     editing = {
-        spec.name for spec in make_editing_tools(EditingContext(project_id="anything", base_url="http://reader.test/"))
+        spec.name for spec in build_editing_tools(EditingContext(project_id="anything", base_url="http://reader.test/"))
     }
     engine = build_engine("tutorial", {"base_url": _BASE_URL})
     bare = {name.rsplit("__", 1)[-1] for name in engine._allowed_tools}
@@ -81,7 +81,7 @@ def test_the_tutorial_agent_gets_none_of_the_editing_tools() -> None:
     # The overlap is the shared read-and-run tools; nothing that edits a workflow.
     assert bare & editing == {"read_workflow_summary", "read_stage_output_rows",
                               "run_workflow", "get_run_status", "sleep"}
-    for editing_only in ("add_stage", "edit_stage", "remove_stage", "save_version",
+    for editing_only in ("add_stage", "edit_stage", "delete_stage", "save_version",
                          "create_draft", "set_draft_stage", "write_review_guide"):
         assert editing_only not in bare
 

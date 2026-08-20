@@ -113,7 +113,7 @@ def delete_file(project_id: str | None, file_id: str) -> None:
     UploadedFile.delete(record.id)
     if path.is_file():
         path.unlink()
-    _remove_if_empty(path.parent)
+    _delete_if_empty(path.parent)
 
 
 def resolve_stored_path(record: UploadedFile) -> Path:
@@ -153,7 +153,7 @@ def measure_files_used_bytes() -> int:
     return sum(record.byte_count for record in UploadedFile.list())
 
 
-def _remove_if_empty(directory: Path) -> None:
+def _delete_if_empty(directory: Path) -> None:
     if directory.is_dir() and not any(directory.iterdir()):
         directory.rmdir()
 

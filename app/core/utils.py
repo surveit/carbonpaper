@@ -18,7 +18,7 @@ _THINGS = ("brook", "cove", "delta", "dune", "fern", "glen", "knoll", "lamp",
            "mesa", "pond", "reef", "ridge", "shoal", "vale", "wharf", "yard")
 
 
-def generate_word_triplet_id(taken: set[str], rng: random.Random | None = None) -> str:
+def build_word_triplet_id(taken: set[str], rng: random.Random | None = None) -> str:
     rng = rng or random.Random()
     for _ in range(10_000):
         candidate = "-".join(

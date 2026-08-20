@@ -9,7 +9,7 @@ from typing import Any, Callable
 
 from app.models import SchemaLibrary, Terms
 from app.services import workspace
-from app.tools.editing import EditingContext, make_editing_tools
+from app.tools.editing import EditingContext, build_editing_tools
 from app.tools.submitted_stage import SubmittedStage
 
 _EXPECTED_TOOL_NAMES = {
@@ -21,7 +21,7 @@ _EXPECTED_TOOL_NAMES = {
     "read_stage",
     "edit_stage",
     "add_stage",
-    "remove_stage",
+    "delete_stage",
     "save_version",
     "read_review_guide",
     "write_review_guide",
@@ -45,7 +45,7 @@ _EXPECTED_TOOL_NAMES = {
 
 
 def test_editing_tools_factory_yields_expected_tool_names() -> None:
-    tools = make_editing_tools(EditingContext(project_id="alpha", base_url="http://reader.test/"))
+    tools = build_editing_tools(EditingContext(project_id="alpha", base_url="http://reader.test/"))
     assert {spec.name for spec in tools} == _EXPECTED_TOOL_NAMES
 
 
@@ -84,4 +84,4 @@ def test_creating_a_project_does_not_rebind_the_session(tmp_path) -> None:
 
 
 def _tools_of(ctx: EditingContext) -> dict[str, Callable[..., Any]]:
-    return {spec.name: spec.fn for spec in make_editing_tools(ctx)}
+    return {spec.name: spec.fn for spec in build_editing_tools(ctx)}

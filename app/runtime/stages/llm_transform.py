@@ -41,7 +41,7 @@ _ROW_NUMBER_FIELD = "row_number"
 class LLMTransformHandler(RowMapTransformHandler):
     def __init__(self, parallelism: int = 1) -> None:
         super().__init__(
-            make_llm_row_mapper, parallelism, trims_output_to_declared=True
+            build_llm_row_mapper, parallelism, trims_output_to_declared=True
         )
 
     def group_size(self, workflow_stage: WorkflowStage) -> int:
@@ -52,11 +52,11 @@ class LLMTransformHandler(RowMapTransformHandler):
     ) -> GroupMapper:
         if self.group_size(workflow_stage) == 1:
             return super().make_group_mapper(workflow_stage, ctx, src)
-        return make_llm_batch_mapper(workflow_stage)
+        return build_llm_batch_mapper(workflow_stage)
 
 
 # ── batch_size == 1: per-row path (grain + order + independence by construction) ──
-def make_llm_row_mapper(
+def build_llm_row_mapper(
     workflow_stage: WorkflowStage, ctx: RunContext, src: pa.Table
 ) -> RowMapper:
     """A row's reply depends only on that row: neither the frame nor the row's position is read."""
@@ -92,7 +92,7 @@ def make_llm_row_mapper(
 
 
 # ── batch_size > 1: batched path (grain + order preserved and VERIFIED) ──
-def make_llm_batch_mapper(workflow_stage: WorkflowStage) -> GroupMapper:
+def build_llm_batch_mapper(workflow_stage: WorkflowStage) -> GroupMapper:
     """One model call per group. The driver owns the grouping, the pool, the cache and the log."""
     stage = narrow_stage(workflow_stage, LLMTransformStage)
     batch_reply_schema = _build_batch_reply_schema(stage)

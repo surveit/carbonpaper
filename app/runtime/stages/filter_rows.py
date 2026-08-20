@@ -29,7 +29,7 @@ def _load_predicate(
     return fn
 
 
-def make_filter_mapper(
+def build_filter_mapper(
     workflow_stage: WorkflowStage, ctx: RunContext, src: pa.Table
 ) -> RowMapper:
     """Resolve the predicate once, then decide one row at a time."""

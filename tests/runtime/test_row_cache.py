@@ -25,7 +25,7 @@ from app.runtime.stages.execution import (
     RowMapTransformHandler,
     _place_group,
 )
-from app.runtime.stages.llm_transform import make_llm_batch_mapper
+from app.runtime.stages.llm_transform import build_llm_batch_mapper
 from conftest import as_inputs, make_run_context, place_stage, rows_of
 
 PROJECT = "row-cache-tests"
@@ -438,7 +438,7 @@ def test_the_batch_mapper_computes_every_row_it_is_given(monkeypatch):
     _stub_call_llm_batch(monkeypatch, batches)
     stage = _llm_stage(batch_size=2)
 
-    map_group = make_llm_batch_mapper(place_stage(stage))
+    map_group = build_llm_batch_mapper(place_stage(stage))
     rows = map_group((0, 1), [{"x": 1}, {"x": 2}])
 
     assert batches == [[1, 2]]
@@ -663,7 +663,7 @@ def test_a_group_that_completed_stays_cached_when_a_later_group_crashes(monkeypa
 
         return map_group
 
-    monkeypatch.setattr(llm_transform, "make_llm_batch_mapper", make_crashing_mapper)
+    monkeypatch.setattr(llm_transform, "build_llm_batch_mapper", make_crashing_mapper)
     stage = _llm_stage(batch_size=2)
 
     with pytest.raises(RuntimeError, match="backend went away"):

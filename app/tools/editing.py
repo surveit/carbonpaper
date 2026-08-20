@@ -33,7 +33,7 @@ class EditingContext(BaseModel):
     base_url: str
 
 
-def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
+def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
     base = ctx.base_url.rstrip("/")
 
     def get_current_project() -> str | None:
@@ -85,7 +85,7 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         )
         for fn in tools
     ] + bind(
-        "list_projects", "read_workflow_summary", "read_stage", "remove_stage",
+        "list_projects", "read_workflow_summary", "read_stage", "delete_stage",
         "read_terms", "write_terms",
         "read_review_guide", "write_review_guide",
         "get_project_status", "generate_stage_tests",
@@ -98,7 +98,7 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
 
 # ── tool input schemas + display labels ──────────────────────────────────────
 # What each argument of THIS surface's own tools IS, keyed by tool __name__ and
-# verified against make_editing_tools above. What each argument TAKES is read off the
+# verified against build_editing_tools above. What each argument TAKES is read off the
 # closure's signature. Empty dict = the tool takes no arguments. A tool with a shared
 # body reads its prose from app.tools.tool_specs instead, so it is absent here.
 TOOL_SCHEMAS: dict[str, ToolParameterProse] = {

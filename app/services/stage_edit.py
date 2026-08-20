@@ -260,7 +260,7 @@ def _add_new_stage(project_id: str, specs: dict[str, dict], spec: dict) -> EditS
     return _apply(project_id, specs, stage_id, spec)
 
 
-def remove_stage_spec(project_id: str, stage_id: str) -> EditStageResult:
+def delete_stage_spec(project_id: str, stage_id: str) -> EditStageResult:
     specs = _current_specs(project_id)
     if stage_id not in specs:
         raise FileNotFoundError(f"no stage '{stage_id}' in project '{project_id}'")

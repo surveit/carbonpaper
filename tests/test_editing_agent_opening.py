@@ -9,7 +9,7 @@ from app.core.agent.session import create_agent_session
 from app.core.agent.store import open_session_store
 from app.services import project as project_service
 from app.services import workspace
-from app.tools.editing import EditingContext, make_editing_tools
+from app.tools.editing import EditingContext, build_editing_tools
 
 _store = open_session_store()
 
@@ -24,7 +24,7 @@ _WAYS_IN = (
 # Each clause of the project-bound message, and the tools that make it true. A clause
 # whose tools this agent no longer binds is an offer it cannot keep.
 _OFFERS = {
-    "Add, edit or remove stages.": ("add_stage", "edit_stage", "remove_stage"),
+    "Add, edit or remove stages.": ("add_stage", "edit_stage", "delete_stage"),
     "Run it — all of it, or a slice of rows as a test": (
         "run_workflow", "run_workflow_test"),
     "read the rows each stage produced": ("read_stage_output_rows",),
@@ -47,7 +47,7 @@ def _make_project(tmp_path) -> str:
 
 def _bound_tool_names() -> set[str]:
     context = EditingContext(project_id="anything", base_url=_BASE_URL)
-    return {spec.name for spec in make_editing_tools(context)}
+    return {spec.name for spec in build_editing_tools(context)}
 
 
 def test_a_blank_chat_opens_on_all_three_ways_in() -> None:

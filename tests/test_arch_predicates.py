@@ -57,7 +57,7 @@ def test_find_production_run_imports_flags_both_runner_import_forms_not_the_exec
     import_form = tmp_path / "import_form.py"
     import_form.write_text("import app.runtime.runner\n", encoding="utf-8")
     clean = tmp_path / "clean.py"
-    clean.write_text("from app.runtime.executor import run_subset\n", encoding="utf-8")
+    clean.write_text("from app.runtime.executor import execute_subset\n", encoding="utf-8")
 
     assert find_production_run_imports([from_form]) == [from_form.as_posix()]
     assert find_production_run_imports([import_form]) == [import_form.as_posix()]

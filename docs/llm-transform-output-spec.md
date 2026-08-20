@@ -46,7 +46,7 @@ prompt never hand-writes — and never drifts from — an output shape.
 - **The reply spec is `signature.adds`, read directly.** Both execution paths in
   `app/runtime/stages/llm_transform.py` build
   `TableSchema(columns=signature.adds)` and compile it with `to_pydantic_model`:
-  `make_llm_row_mapper` for `batch_size: 1`, and `_build_batch_reply_schema` for
+  `build_llm_row_mapper` for `batch_size: 1`, and `_build_batch_reply_schema` for
   the batched path, where each item additionally carries the runtime-assigned
   `row_number` that rejoins it to its row. The type, nullability, enum, numeric
   range and recursive `json` shape already declared on each added column

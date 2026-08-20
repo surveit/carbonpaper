@@ -105,10 +105,10 @@ def test_set_stage_rejects_unknown_connector_kind(examples: Path) -> None:
 def test_remove_stage(examples: Path) -> None:
     draft = drafts.create_draft("demo")
     drafts.set_draft_stage("demo", draft.id, json.dumps(_STAGE))
-    out = drafts.remove_draft_stage("demo", draft.id, "load")
+    out = drafts.delete_draft_stage("demo", draft.id, "load")
     assert out.stage_ids == []
     with pytest.raises(ValueError):
-        drafts.remove_draft_stage("demo", draft.id, "load")
+        drafts.delete_draft_stage("demo", draft.id, "load")
 
 
 def test_unknown_and_malformed_draft_ids_fail_loudly(examples: Path) -> None:

@@ -114,9 +114,9 @@ def read_stage(project_id: str, stage_id: str) -> str:
     return project_service.read_stage(project_id, stage_id)
 
 
-def remove_stage(project_id: str, stage_id: str) -> dict[str, Any]:
+def delete_stage(project_id: str, stage_id: str) -> dict[str, Any]:
     try:
-        result = project_service.remove_stage(project_id, stage_id)
+        result = project_service.delete_stage(project_id, stage_id)
     except STAGE_TOOL_ERRORS as exc:
         return {"ok": False, "issues": [str(exc)]}
     return {"ok": result.ok, "issues": result.issues}
@@ -197,7 +197,7 @@ def list_files(project_id: str | None, file_upload_url: str) -> ProjectFilesView
         file_upload_url=file_upload_url,
         max_bytes=file_store.max_upload_bytes(),
         remaining_bytes=max(file_store.files_quota_bytes() - used, 0),
-        files=[_view(record) for record in file_store.list_project_files(project_id)],
+        files=[_build_stored_file_view(record) for record in file_store.list_project_files(project_id)],
     )
 
 
@@ -230,7 +230,7 @@ def profile_stage_output_data_range(
     return {"ok": True, **profile.model_dump()}
 
 
-def _view(record: file_store.UploadedFile) -> StoredFileView:
+def _build_stored_file_view(record: file_store.UploadedFile) -> StoredFileView:
     return StoredFileView(file_id=record.id, filename=record.filename,
                           bytes=record.byte_count, added=record.created_at)
 
@@ -238,7 +238,7 @@ def _view(record: file_store.UploadedFile) -> StoredFileView:
 def move_file_to_project(project_id: str, file_id: str) -> StoredFileView:
     """Move a file that is in no project into one. Moves no bytes."""
     validate_project_exists(project_id)
-    return _view(file_store.move_file_to_project(file_id, project_id))
+    return _build_stored_file_view(file_store.move_file_to_project(file_id, project_id))
 
 
 def run_workflow(
