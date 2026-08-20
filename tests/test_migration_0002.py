@@ -129,8 +129,7 @@ def test_a_record_already_naming_its_columns_is_not_a_decision_anyone_owes(
 def test_a_v1_queue_with_no_decision_recorded_is_still_refused(tmp_path, monkeypatch):
     db_path = _store_holding(tmp_path, monkeypatch, _v1_stages(), schema_version=1)
 
-    # Not the class `_load_revision` returns: alembic loads its own copy of the file,
-    # so the name is what identifies it. The message is asserted below.
+    # alembic loads its own copy of the file, so the NAME identifies the class.
     with pytest.raises(Exception, match=r"human decision.*\['proj'\]") as refusal:
         _upgrade_store_to("0002")
 
