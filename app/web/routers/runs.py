@@ -87,15 +87,15 @@ async def trigger_run(request: Request, project_id: str):
 
 
 def _collect_bindings(form: FormData, project_id: str) -> dict[StageId, TypeUnsafeUserStageConfigOverride]:
-    """`binding__<stage>` carries a stored file's sha256; blank means run what the
+    """`binding__<stage>` carries a stored file's id; blank means run what the
     workflow authored."""
     bindings: dict[StageId, TypeUnsafeUserStageConfigOverride] = {}
     for key, value in form.items():
         if not key.startswith("binding__"):
             continue
-        sha256 = str(value).strip()
-        if sha256:
-            bindings[key[len("binding__"):]] = resolve_file_binding(project_id, sha256)
+        file_id = str(value).strip()
+        if file_id:
+            bindings[key[len("binding__"):]] = resolve_file_binding(project_id, file_id)
     return bindings
 
 

@@ -11,7 +11,7 @@
 
   function fileOption(file) {
     var option = document.createElement("option");
-    option.value = file.sha256;
+    option.value = file.file_id;
     option.dataset.uploadedAt = file.uploaded_at;
     option.dataset.filename = file.filename;
     option.dataset.uploadedLabel = file.uploaded_label;
@@ -21,7 +21,7 @@
   }
 
   function insertFileOption(select, file) {
-    var current = select.querySelector('option[value="' + file.sha256 + '"]');
+    var current = select.querySelector('option[value="' + file.file_id + '"]');
     if (current) current.remove();
     var uploadedAt = Date.parse(file.uploaded_at);
     var before = Array.from(select.querySelectorAll("option[data-uploaded-at]")).find(
@@ -90,7 +90,7 @@
     form.querySelectorAll("select.file-pick").forEach(function (select) {
       insertFileOption(select, file);
     });
-    pick.value = file.sha256;
+    pick.value = file.file_id;
     pick.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
@@ -166,7 +166,7 @@
         );
         var data = {};
         try { data = await resp.json(); } catch (e) { /* Leave data empty. */ }
-        if (resp.ok && data.ok && data.sha256) {
+        if (resp.ok && data.ok && data.file_id) {
           offerEverywhere(form, data, pick);
           uploadController = null;
           closeDialog();

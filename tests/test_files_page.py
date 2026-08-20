@@ -83,12 +83,12 @@ def test_unknown_project_404s(project_id):
 # ─── Deleting ────────────────────────────────────────────────────────────────
 
 def test_deleting_takes_the_filename_back(project_id):
-    store(project_id)
-    resp = client.post(f"/project/{project_id}/files/{CSV_SHA}/delete",
+    record = store(project_id)
+    resp = client.post(f"/project/{project_id}/files/{record.id}/delete",
                        data={"confirm": "posts.csv"}, follow_redirects=False)
     assert resp.status_code == 303
     assert list_project_files(project_id) == []
-    assert not (files_root() / CSV_SHA).exists()  # bytes and their dir both gone
+    assert not (files_root() / record.id).exists()  # bytes and their dir both gone
 
 
 def test_the_delete_button_starts_disabled(project_id):
@@ -101,27 +101,27 @@ def test_the_delete_button_starts_disabled(project_id):
 
 
 def test_a_wrong_confirmation_deletes_nothing(project_id):
-    store(project_id)
-    resp = client.post(f"/project/{project_id}/files/{CSV_SHA}/delete",
+    record = store(project_id)
+    resp = client.post(f"/project/{project_id}/files/{record.id}/delete",
                        data={"confirm": "posts"}, follow_redirects=False)
     assert resp.status_code == 400
     assert [r.filename for r in list_project_files(project_id)] == ["posts.csv"]
-    assert (files_root() / CSV_SHA / "posts.csv").is_file()
+    assert (files_root() / record.id / "posts.csv").is_file()
 
 
-def test_deleting_leaves_bytes_another_project_still_holds(project_id):
+def test_deleting_leaves_the_same_bytes_another_project_holds_its_own_copy_of(project_id):
     other = create_project("other", "Another methodology.", source="test").id
-    store(project_id)
-    store(other)
-    client.post(f"/project/{project_id}/files/{CSV_SHA}/delete",
+    mine = store(project_id)
+    theirs = store(other)
+    client.post(f"/project/{project_id}/files/{mine.id}/delete",
                 data={"confirm": "posts.csv"})
-    # Content addressing means one blob serves both, so deleting one hold on it must not
-    # empty the other project.
+    # Each record owns its bytes outright, so a delete takes exactly one copy and the
+    # other project keeps a file it never has to share.
     assert list_project_files(project_id) == []
-    assert [r.filename for r in list_project_files(other)] == ["posts.csv"]
-    assert (files_root() / CSV_SHA / "posts.csv").is_file()
+    assert not (files_root() / mine.id).exists()
+    assert (files_root() / theirs.id / "posts.csv").is_file()
 
 
 def test_deleting_a_file_this_project_does_not_hold_404s(project_id):
-    assert client.post(f"/project/{project_id}/files/{'0' * 64}/delete",
+    assert client.post(f"/project/{project_id}/files/{'0' * 32}/delete",
                        data={"confirm": "anything"}).status_code == 404

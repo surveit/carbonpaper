@@ -150,7 +150,7 @@ async def upload_chat_file(sid: str, file: UploadFile = File(...),
     # The line the conversation carries. The agent never sees the bytes and never sees
     # this page — it sees the next turn's text, so what the reader is shown and what the
     # agent is told have to be the same sentence.
-    return JSONResponse({"ok": True, "sha256": record.sha256, "filename": record.filename,
+    return JSONResponse({"ok": True, "file_id": record.id, "filename": record.filename,
                          "bytes": record.byte_count, "project_id": record.project_id,
                          "line": describe_attachment(
                              record, project_service.read_project_name(record.project_id)

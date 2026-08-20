@@ -47,7 +47,7 @@
     button.className = "file-picker-preview file-preview-open";
     button.textContent = "Preview";
     if (option.value) {
-      button.dataset.fileSha = option.value;
+      button.dataset.fileId = option.value;
       button.setAttribute("aria-label", "Preview " + filename);
       button.setAttribute("aria-haspopup", "dialog");
       button.setAttribute("aria-controls", "run-file-preview");

@@ -158,9 +158,9 @@ def write_terms(project_id: str, terms: Terms) -> Terms:
 
 
 class StoredFileView(BaseModel):
-    """One file a project holds; `sha256` is what names it to run_workflow."""
+    """One file a project holds; `file_id` is what names it to run_workflow."""
 
-    sha256: str
+    file_id: str
     filename: str
     bytes: int
     added: str
@@ -190,20 +190,20 @@ def list_files(project_id: str | None, file_upload_url: str) -> ProjectFilesView
 
 
 def profile_file(
-    project_id: str, sha256: str, columns: list[str] | None = None, max_values: int = 20,
+    project_id: str, file_id: str, columns: list[str] | None = None, max_values: int = 20,
     sheet_name: str | int = 0, header_row: int = 0, first_column: int = 0,
 ) -> TableProfile:
     validate_project_exists(project_id)
     return frame_profile.profile_stored_file(
-        project_id, sha256, columns, max_values=max_values, sheet_name=sheet_name,
+        project_id, file_id, columns, max_values=max_values, sheet_name=sheet_name,
         header_row=header_row, first_column=first_column)
 
 
 def survey_workbook(
-    project_id: str, sha256: str, from_row: int = 0,
+    project_id: str, file_id: str, from_row: int = 0,
 ) -> list[SheetSurvey]:
     validate_project_exists(project_id)
-    return frame_profile.survey_stored_workbook(project_id, sha256, from_row=from_row)
+    return frame_profile.survey_stored_workbook(project_id, file_id, from_row=from_row)
 
 
 def profile_stage_output_data_range(
@@ -219,14 +219,14 @@ def profile_stage_output_data_range(
 
 
 def _view(record: file_store.UploadedFile) -> StoredFileView:
-    return StoredFileView(sha256=record.sha256, filename=record.filename,
+    return StoredFileView(file_id=record.id, filename=record.filename,
                           bytes=record.byte_count, added=record.created_at)
 
 
-def move_file_to_project(project_id: str, sha256: str) -> StoredFileView:
+def move_file_to_project(project_id: str, file_id: str) -> StoredFileView:
     """Move a file that is in no project into one. Moves no bytes."""
     validate_project_exists(project_id)
-    return _view(file_store.move_file_to_project(sha256, project_id))
+    return _view(file_store.move_file_to_project(file_id, project_id))
 
 
 def run_workflow(
@@ -236,11 +236,11 @@ def run_workflow(
     files: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     validate_project_exists(project_id)
-    # A stage id -> sha256 map, resolved here to the path-and-format params a run
+    # A stage id -> file id map, resolved here to the path-and-format params a run
     # binds. Resolving it before start_run means an unknown file id fails naming
     # itself, rather than as a missing-input refusal from preflight.
-    bindings = {stage_id: uploads.resolve_file_binding(project_id, sha256)
-                for stage_id, sha256 in (files or {}).items()}
+    bindings = {stage_id: uploads.resolve_file_binding(project_id, file_id)
+                for stage_id, file_id in (files or {}).items()}
     run_id = run_service.start_run(
         project_id, version_id=version_id or None, limits=limits,
         bindings=bindings or None

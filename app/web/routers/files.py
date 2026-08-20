@@ -33,12 +33,12 @@ async def files_page(request: Request, project_id: str):
     )
 
 
-@router.get("/project/{project_id}/files/{sha256}/preview", response_class=HTMLResponse)
-async def preview_project_file(request: Request, project_id: str, sha256: str):
+@router.get("/project/{project_id}/files/{file_id}/preview", response_class=HTMLResponse)
+async def preview_project_file(request: Request, project_id: str, file_id: str):
     if not project_exists(project_id):
         raise HTTPException(status_code=404, detail=f"No project '{project_id}'")
     try:
-        preview = await run_in_threadpool(build_file_preview, project_id, sha256)
+        preview = await run_in_threadpool(build_file_preview, project_id, file_id)
     except FileNotStoredError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
@@ -48,8 +48,8 @@ async def preview_project_file(request: Request, project_id: str, sha256: str):
     )
 
 
-@router.post("/project/{project_id}/files/{sha256}/delete")
-async def delete_project_file(project_id: str, sha256: str, confirm: str = Form("")):
+@router.post("/project/{project_id}/files/{file_id}/delete")
+async def delete_project_file(project_id: str, file_id: str, confirm: str = Form("")):
     """Deleting is the one thing here that cannot be undone, so it takes a POST and a
     typed confirmation."""
     if not project_exists(project_id):
@@ -57,18 +57,18 @@ async def delete_project_file(project_id: str, sha256: str, confirm: str = Form(
     # The filename, typed. A run that read this file keeps its manifest either way, but
     # re-running it stops working the moment the bytes go — so this asks for a deliberate
     # act rather than a click that a mis-aimed cursor can make.
-    if confirm.strip() != _filename_of(project_id, sha256):
+    if confirm.strip() != _filename_of(project_id, file_id):
         raise HTTPException(status_code=400,
                             detail="type the file's name to confirm the delete")
     try:
-        delete_file(project_id, sha256)
+        delete_file(project_id, file_id)
     except FileNotStoredError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return RedirectResponse(url=f"/project/{project_id}/files", status_code=303)
 
 
-def _filename_of(project_id: str, sha256: str) -> str:
-    row = next((r for r in build_files_view(project_id).rows if r.sha256 == sha256), None)
+def _filename_of(project_id: str, file_id: str) -> str:
+    row = next((r for r in build_files_view(project_id).rows if r.file_id == file_id), None)
     if row is None:
-        raise HTTPException(status_code=404, detail=f"no file {sha256!r} in this project")
+        raise HTTPException(status_code=404, detail=f"no file {file_id!r} in this project")
     return row.filename

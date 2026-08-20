@@ -16,7 +16,8 @@ _MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
 
 
 class FileChoice(BaseModel):
-    sha256: str
+    # The value the picker submits: the record, not the bytes it holds.
+    file_id: str
     filename: str
     bytes: int
     uploaded_at: datetime
@@ -58,7 +59,7 @@ def build_file_choice(record: file_store.UploadedFile) -> FileChoice:
     uploaded_label = f"Uploaded {format_upload_time(uploaded_at)}"
     size_label = describe_bytes(record.byte_count)
     return FileChoice(
-        sha256=record.sha256,
+        file_id=record.id,
         filename=record.filename,
         bytes=record.byte_count,
         uploaded_at=uploaded_at,

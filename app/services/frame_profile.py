@@ -51,10 +51,10 @@ def profile_stage_output(
 
 
 def survey_stored_workbook(
-    project_id: str, sha256: str, *, from_row: int = 0,
+    project_id: str, file_id: str, *, from_row: int = 0,
 ) -> list[SheetSurvey]:
     """Refuses a non-xlsx rather than surveying it: no other format has sheets."""
-    record, path = open_project_file(project_id, sha256)
+    record, path = open_project_file(project_id, file_id)
     fmt = resolve_file_format(record.filename)
     if fmt != FileFormat.xlsx:
         raise ValueError(
@@ -64,21 +64,21 @@ def survey_stored_workbook(
 
 
 def profile_stored_file(
-    project_id: str, sha256: str, columns: list[str] | None, *, max_values: int,
+    project_id: str, file_id: str, columns: list[str] | None, *, max_values: int,
     sheet_name: str | int = 0, header_row: int = 0, first_column: int = 0,
 ) -> TableProfile:
     stored = read_stored_file_frame(
-        project_id, sha256, sheet_name=sheet_name, header_row=header_row,
+        project_id, file_id, sheet_name=sheet_name, header_row=header_row,
         first_column=first_column,
     )
     return profile_table(frame_to_table(stored.frame), columns, max_values=max_values)
 
 
 def read_stored_file_frame(
-    project_id: str, sha256: str, *, sheet_name: str | int = 0,
+    project_id: str, file_id: str, *, sheet_name: str | int = 0,
     header_row: int = 0, first_column: int = 0,
 ) -> StoredFileFrame:
-    record, path = open_project_file(project_id, sha256)
+    record, path = open_project_file(project_id, file_id)
     file_format = resolve_file_format(record.filename)
     frame = read_source_file(
         path, file_format, dtype=_PROFILE_DTYPE[file_format], sheet_name=sheet_name,

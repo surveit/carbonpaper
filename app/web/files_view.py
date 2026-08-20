@@ -13,6 +13,8 @@ from app.web.file_sizes import describe_bytes
 
 
 class FileRow(BaseModel):
+    # The handle a link carries; the hash is shown beside it as evidence about the bytes.
+    file_id: str
     sha256: str
     filename: str
     size: str
@@ -55,6 +57,8 @@ def count_runs_by_file(project_id: str) -> dict[str, list[str]]:
     runs = defaultdict(list)
     # Off each run's own manifest, because that is where what a run ACTUALLY read is
     # recorded — the version it pinned may since have been edited to name another file.
+    # A manifest names the BYTES it read, not the record it read them from, so two
+    # records holding identical bytes each count every run over either of them.
     for entry in list_run_entries(project_id):
         for sha256 in _read_input_hashes(entry.raw):
             runs[sha256].append(entry.run_id)
@@ -72,6 +76,7 @@ def _read_input_hashes(manifest: JsonDict | None) -> list[str]:
 
 def _build_row(record: file_store.UploadedFile, run_ids: list[str]) -> FileRow:
     return FileRow(
+        file_id=record.id,
         sha256=record.sha256,
         filename=record.filename,
         size=describe_bytes(record.byte_count),

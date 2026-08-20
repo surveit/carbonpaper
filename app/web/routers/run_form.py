@@ -75,7 +75,7 @@ async def upload_file(project_id: str, file: UploadFile = File(...)):
     except (FileOverCeiling, StoreOverQuota) as exc:
         # The wording names the limit and what to do; run_controls.js shows it verbatim.
         return JSONResponse({"ok": False, "error": describe_refusal(exc)}, status_code=400)
-    # `sha256` is what a caller keeps — it names the file for a later run and is the
-    # integrity check on the bytes it just sent. The picker label is generated on the
-    # server, so an immediately inserted option matches the next page render.
+    # `file_id` is what a caller keeps — it names this stored file for a later run. The
+    # picker label is generated on the server, so an immediately inserted option matches
+    # the next page render.
     return JSONResponse(build_uploaded_file_choice(record).model_dump(mode="json"))

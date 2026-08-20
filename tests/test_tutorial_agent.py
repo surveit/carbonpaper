@@ -93,9 +93,9 @@ def test_the_seeded_project_keeps_no_path_of_its_own(projects_root: Path) -> Non
     assert seeded["project"]["id"] in project_service.list_projects()
     files = seeded["input_files"]
     assert set(files) == {"lobbying_filings", "public_commitments"}
-    # A sha256 the project holds, not a path baked into the workflow.
-    assert all(resolve_file_binding(seeded["project"]["id"], sha)["path"]
-               for sha in files.values())
+    # A file the project holds, named by its record id, not a path baked into the workflow.
+    assert all(resolve_file_binding(seeded["project"]["id"], file_id)["path"]
+               for file_id in files.values())
 
     sources = [s for s in load_workflow(seeded["project"]["id"])
                if isinstance(s, InputDataStage)]

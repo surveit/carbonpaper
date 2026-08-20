@@ -228,7 +228,7 @@ has no output schema.""",
             "version_id": "Omit for the project's newest stored version.",
             "limits": 'Caps how many rows a stage READS: {"<stage id>": N}.',
             "files": 'The stored file each input stage reads for THIS run: '
-                '{"<stage id>": "<sha256 from list_files>"}.',
+                '{"<stage id>": "<file_id from list_files>"}.',
         },
         description="""\
 Start a REAL production run of the project's stored workflow and return
@@ -246,7 +246,7 @@ the spend of a stage that already ran — a cap on a stage downstream of a model
 step does not stop that model step reading everything. Omit it for a full run.
 
 `files` binds a stored file to an input step for this run only:
-{"<input stage id>": "<sha256 from list_files>"}. A sha256 the project does not
+{"<input stage id>": "<file_id from list_files>"}. A file_id the project does not
 hold is a loud error naming itself, not a silent unbound input. Omit it where
 the workflow already names the file it reads.""",
     ),
@@ -411,7 +411,7 @@ CSV read makes it 2), and a computed column is in no file at all.""",
         label="Putting the file in the project",
         parameters={
             "project_id": _PROJECT_ID,
-            "sha256": "The stored file's sha256, as list_files reported it.",
+            "file_id": "The stored file's file_id, as list_files reported it.",
         },
         description="""\
 Put a file that is in no project into one. Moves no bytes.""",
@@ -421,7 +421,7 @@ Put a file that is in no project into one. Moves no bytes.""",
         label="Reading what the file holds",
         parameters={
             "project_id": _PROJECT_ID,
-            "sha256": "The stored file's sha256, as list_files reported it.",
+            "file_id": "The stored file's file_id, as list_files reported it.",
             "columns": "Which columns to profile. Omit for every column in the file.",
             "max_values": "How many distinct values to show per column, commonest first. "
                 "`truncated` says whether there were more.",
@@ -430,7 +430,7 @@ Put a file that is in no project into one. Moves no bytes.""",
             "first_column": "xlsx only: the 0-based column the table starts at.",
         },
         description="""\
-What a stored file holds, by the `sha256` list_files gave it.
+What a stored file holds, by the `file_id` list_files gave it.
 
 Returns `row_count` and, per column, `null_count`, `distinct_count` (the TRUE
 count of distinct non-null values), `values` (commonest first with their counts,
@@ -455,7 +455,7 @@ header, first column. survey_workbook is how you find out what to pass.""",
         label="Looking over the workbook's sheets",
         parameters={
             "project_id": _PROJECT_ID,
-            "sha256": "The stored xlsx's sha256, as list_files reported it.",
+            "file_id": "The stored xlsx's file_id, as list_files reported it.",
             "from_row": "The 0-based sheet row the window starts at. Raise it to look past a "
                      "preamble longer than the window.",
         },
@@ -572,7 +572,7 @@ records no ancestor — nothing is inferred from what else the project has store
 The working copy is strict-loaded first, so an invalid workflow comes back as
 {ok: False, issues} and no version is written.""",
     "list_files": """\
-The files a project holds, each with the `sha256` run_workflow's `files` binds.
+The files a project holds, each with the `file_id` run_workflow's `files` binds.
 `project_id` null lists the files that are in no project yet.
 
 Also returns `file_upload_url`: POST a file there as multipart form data to add

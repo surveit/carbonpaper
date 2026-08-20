@@ -59,7 +59,7 @@ def _store(name: str, frame: pd.DataFrame, tmp_path) -> str:
     else:
         frame.to_csv(path, index=False)
     with path.open("rb") as handle:
-        return save_upload(name, handle, "demo").sha256
+        return save_upload(name, handle, "demo").id
 
 
 def _manifest(proj):
@@ -68,17 +68,17 @@ def _manifest(proj):
 
 
 def test_a_picked_file_becomes_run_binding(project, tmp_path):
-    sha = _store("b.csv", pd.DataFrame({"name": ["z"], "val": [9]}), tmp_path)
+    file_id = _store("b.csv", pd.DataFrame({"name": ["z"], "val": [9]}), tmp_path)
     resp = client.post("/project/demo/run",
-                       data={"binding__load": sha}, follow_redirects=False)
+                       data={"binding__load": file_id}, follow_redirects=False)
     assert resp.status_code == 303
     assert _manifest(project)["input_bindings"]["load"]["source"] == "run"
 
 
 def test_binding_carries_the_bound_files_own_format(project, tmp_path):
-    sha = _store("b.parquet", pd.DataFrame({"name": ["z"], "val": [9]}), tmp_path)
+    file_id = _store("b.parquet", pd.DataFrame({"name": ["z"], "val": [9]}), tmp_path)
     resp = client.post("/project/demo/run",
-                       data={"binding__load": sha}, follow_redirects=False)
+                       data={"binding__load": file_id}, follow_redirects=False)
     assert resp.status_code == 303
     manifest = _manifest(project)
     assert manifest["parameters"]["run_bindings"]["load"]["format"] == "parquet"
@@ -89,17 +89,17 @@ def test_binding_a_file_with_an_unreadable_extension_returns_400(project, tmp_pa
     path = tmp_path / "b.rtf"
     path.write_text("not a table", encoding="utf-8")
     with path.open("rb") as handle:
-        sha = save_upload("b.rtf", handle, "demo").sha256
+        file_id = save_upload("b.rtf", handle, "demo").id
     resp = client.post("/project/demo/run",
-                       data={"binding__load": sha}, follow_redirects=False)
+                       data={"binding__load": file_id}, follow_redirects=False)
     assert resp.status_code == 400
     assert ".rtf" in resp.json()["detail"]
     assert not (project / "runs").exists()
 
 
-def test_a_sha256_this_project_does_not_hold_returns_400(project):
+def test_a_file_id_this_project_does_not_hold_returns_400(project):
     resp = client.post("/project/demo/run",
-                       data={"binding__load": "0" * 64}, follow_redirects=False)
+                       data={"binding__load": "0" * 32}, follow_redirects=False)
     assert resp.status_code == 400
     assert "has no file" in resp.json()["detail"]
     assert not (project / "runs").exists()
@@ -159,7 +159,7 @@ def test_file_picker_lists_newest_upload_first_with_absolute_times(project, tmp_
 
 def test_file_picker_refuses_a_choice_without_an_upload_time():
     with pytest.raises(ValidationError, match="uploaded_at"):
-        FileChoice.model_validate({"sha256": "abc", "filename": "a.csv", "bytes": 1})
+        FileChoice.model_validate({"file_id": "abc", "filename": "a.csv", "bytes": 1})
 
 
 def test_file_picker_refuses_an_invalid_stored_upload_time():
@@ -235,7 +235,7 @@ def test_shared_file_picker_wires_pointer_keyboard_and_dynamic_refresh():
     assert "open: function (picker) { openFilePicker(picker, 1); }" in source
     assert 'row.appendChild(item)' in source
     assert 'row.appendChild(buildPreviewAction(select, option))' in source
-    assert 'button.dataset.fileSha = option.value' in source
+    assert 'button.dataset.fileId = option.value' in source
     assert 'button.setAttribute("aria-haspopup", "dialog")' in source
     assert 'button.setAttribute("aria-controls", "run-file-preview")' in source
     assert 'button.setAttribute("aria-disabled", "true")' in source
@@ -260,7 +260,7 @@ def test_row_preview_does_not_change_the_selected_file():
     )[0]
     assert "chooseOption" not in preview_action
     assert "select.value" not in load_preview
-    assert "var sha256 = button.dataset.fileSha" in load_preview
+    assert "var fileId = button.dataset.fileId" in load_preview
 
 
 def test_file_picker_visible_content_cannot_intercept_pointer_clicks():

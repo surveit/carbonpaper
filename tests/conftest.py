@@ -136,6 +136,13 @@ def fresh_frame_store(tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def fresh_file_store(tmp_path, monkeypatch):
+    monkeypatch.setenv("CARBON_PAPER_FILES_ROOT", str(tmp_path / "files"))
+    # files_root() reads the environment, not the in-memory store `fresh_store` swaps in,
+    # so without this an uploading test writes into the machine's real store.
+
+
+@pytest.fixture(autouse=True)
 def fresh_workspace(tmp_path):
     from app.services.workspace import set_projects_dir
     set_projects_dir(tmp_path / "examples")
