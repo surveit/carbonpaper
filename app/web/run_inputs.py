@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from app.services import uploads
+from app.core import files as file_store
 from app.web.file_sizes import describe_bytes
 from app.web.loading import list_file_inputs
 
@@ -16,7 +16,8 @@ _MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
 
 
 class FileChoice(BaseModel):
-    sha256: str
+    # The value the picker submits: the record, not the bytes it holds.
+    file_id: str
     filename: str
     bytes: int
     uploaded_at: datetime
@@ -49,16 +50,16 @@ def build_run_input_choices(project_id: str, version_id: str | None = None) -> R
         inputs=[InputRow(stage_id=row["stage_id"], authored_path=row["path"])
                 for row in list_file_inputs(project_id, version_id)],
         files=[build_file_choice(record)
-               for record in uploads.list_project_files(project_id)],
+               for record in file_store.list_project_files(project_id)],
     )
 
 
-def build_file_choice(record: uploads.UploadedFile) -> FileChoice:
+def build_file_choice(record: file_store.UploadedFile) -> FileChoice:
     uploaded_at = datetime.fromisoformat(record.created_at)
     uploaded_label = f"Uploaded {format_upload_time(uploaded_at)}"
     size_label = describe_bytes(record.byte_count)
     return FileChoice(
-        sha256=record.sha256,
+        file_id=record.id,
         filename=record.filename,
         bytes=record.byte_count,
         uploaded_at=uploaded_at,
@@ -68,11 +69,11 @@ def build_file_choice(record: uploads.UploadedFile) -> FileChoice:
     )
 
 
-def build_uploaded_file_choice(record: uploads.UploadedFile) -> UploadedFileChoice:
+def build_uploaded_file_choice(record: file_store.UploadedFile) -> UploadedFileChoice:
     choice = build_file_choice(record)
     return UploadedFileChoice(
         **choice.model_dump(),
-        path=str(uploads.resolve_stored_path(record)),
+        path=str(file_store.resolve_stored_path(record)),
     )
 
 

@@ -10,8 +10,8 @@ import pandas as pd
 import pytest
 
 from app.services import workspace
-from app.services.errors import FileNotStoredError
-from app.services.uploads import save_upload
+from app.core.errors import FileNotStoredError
+from app.core.files import save_upload
 from app.tools import shared
 
 # Four filings by one registrant, verbatim from the quarterly export. `income` is what
@@ -35,7 +35,7 @@ def project(tmp_path, monkeypatch):
 
 
 def store(name: str = "lda_q1.csv", body: bytes = FILINGS) -> str:
-    return save_upload(name, io.BytesIO(body), "demo").sha256
+    return save_upload(name, io.BytesIO(body), "demo").id
 
 
 def column_of(profile, name: str):
@@ -50,13 +50,15 @@ def test_it_profiles_every_column_without_being_told_the_columns(project):
     assert profile.row_count == 4
 
 
-def test_profile_uses_the_current_filename_not_the_stored_blob_suffix(project):
+def test_the_same_bytes_sent_twice_are_two_files_each_read_as_its_own_name(project):
     body = b"name,val\nx,1\n"
-    sha = store("posts.tsv", body)
-    store("posts.csv", body)
-    profile = shared.profile_file("demo", sha)
-    assert [column.column for column in profile.columns] == ["name", "val"]
-    assert profile.row_count == 1
+    csv = store("posts.csv", body)
+    tsv = store("posts.tsv", body)
+    assert csv != tsv
+    # Each record owns its own bytes and its own name, so the comma-separated read is
+    # right for one and wrong for the other — which only two records can express.
+    assert [c.column for c in shared.profile_file("demo", csv).columns] == ["name", "val"]
+    assert [c.column for c in shared.profile_file("demo", tsv).columns] == ["name,val"]
 
 
 def test_a_repeated_value_carries_its_count(project):
@@ -129,8 +131,8 @@ def test_a_file_the_project_does_not_hold_is_refused(project):
 
 
 def test_a_file_in_no_project_is_not_readable_until_one_takes_it(project, tmp_path):
-    """Scoping is by (sha256, project): the bytes exist, but no project holds them yet."""
-    loose = save_upload("dropped.csv", io.BytesIO(FILINGS), None).sha256
+    """Scoping is by the record: the bytes exist, but no project holds them yet."""
+    loose = save_upload("dropped.csv", io.BytesIO(FILINGS), None).id
     with pytest.raises(FileNotStoredError, match="has no file"):
         shared.profile_file("demo", loose)
     shared.move_file_to_project("demo", loose)
@@ -138,11 +140,11 @@ def test_a_file_in_no_project_is_not_readable_until_one_takes_it(project, tmp_pa
 
 
 def test_a_record_whose_bytes_are_gone_says_so_rather_than_failing_on_the_read(project):
-    from app.services.uploads import files_root
-    sha = store()
-    (files_root() / sha / "lda_q1.csv").unlink()
+    from app.core.files import files_root
+    file_id = store()
+    (files_root() / file_id / "lda_q1.csv").unlink()
     with pytest.raises(FileNotStoredError, match="not on disk"):
-        shared.profile_file("demo", sha)
+        shared.profile_file("demo", file_id)
 
 
 def test_a_missing_project_is_refused_before_the_file_is_looked_up(project):
@@ -172,7 +174,7 @@ def _workbook(tmp_path):
 
 def store_workbook(tmp_path) -> str:
     with _workbook(tmp_path).open("rb") as handle:
-        return save_upload("book.xlsx", handle, "demo").sha256
+        return save_upload("book.xlsx", handle, "demo").id
 
 
 def test_the_survey_names_every_sheet(project, tmp_path):
@@ -236,7 +238,7 @@ def _long_preamble_workbook(tmp_path) -> Path:
 
 def store_long(tmp_path) -> str:
     with _long_preamble_workbook(tmp_path).open("rb") as handle:
-        return save_upload("long.xlsx", handle, "demo").sha256
+        return save_upload("long.xlsx", handle, "demo").id
 
 
 def test_a_preamble_longer_than_the_window_hides_the_header(project, tmp_path):

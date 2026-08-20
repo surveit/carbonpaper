@@ -38,7 +38,7 @@
   clone passes an empty one and run_controls.js sets all three.
 
   The field is a PICKER over the files this project already holds, and its value is a
-  file's sha256 — not a path. Blank means "run whatever the workflow authored", which is
+  stored file's id — not a path. Blank means "run whatever the workflow authored", which is
   why a row with an authored path is not required. Upload… is for a file the project does
   not hold yet: run_controls.js POSTs it to /project/<name>/files and selects it here.
 

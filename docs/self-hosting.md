@@ -8,17 +8,21 @@ what only a server serving other people needs.
 
 A run reads its inputs off the server's disk by absolute path. A browser hands over
 bytes and never a path, so the run form's Browse… posts the file to the server, which
-stores it under the hash of its own contents and hands the path back. That endpoint is
-plain multipart and takes any caller — an agent that can run `curl` needs no browser:
+stores it in a directory named by the record it writes for it, and hands the path back.
+That endpoint is plain multipart and takes any caller — an agent that can run `curl`
+needs no browser:
 
 ```
 curl -F file=@2026-lobbying.csv http://localhost:8765/project/<project>/files
-{"ok":true,"sha256":"a3f9…","filename":"2026-lobbying.csv","bytes":9470974,
- "path":"~/.carbonpaper/examples/<project>/files/a3f9…/2026-lobbying.csv"}
+{"ok":true,"file_id":"c41d…","filename":"2026-lobbying.csv","bytes":9470974,
+ "path":"~/.carbonpaper/files/c41d…/2026-lobbying.csv"}
 ```
 
-The same bytes sent twice are one copy — one store serves the workspace, beside the
-document store and the frames, and a record says which project claims each file. One
+`file_id` is what names this file to a later run — `run_workflow`'s `files`, and the
+run form's picker. The same bytes sent twice are two records over two copies: each send
+keeps its own account of where the file came from and when, which one shared copy could
+not. One store serves the workspace, beside the document store and the frames, and a
+record says which project claims each file. One
 file may be up to 512MB and the store 4GB in total; `CARBON_PAPER_MAX_UPLOAD_BYTES` and
 `CARBON_PAPER_FILES_QUOTA_BYTES` raise those on a bigger machine, and
 `CARBON_PAPER_FILES_ROOT` repoints the store. The per-file ceiling is what a run can

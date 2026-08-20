@@ -1,7 +1,7 @@
 """POST /project/{name}/files — one multipart endpoint behind the run form's Browse…
 button and reachable by any HTTP caller. The browser hands over bytes and never a
-path, so the server saves them in the workspace's one content-addressed store and
-answers with the record: the sha256 naming the file, and the path a run reads it from."""
+path, so the server saves them in the workspace's one store and answers with the
+record: the file id naming it, and the path a run reads it from."""
 from __future__ import annotations
 
 import hashlib
@@ -13,17 +13,17 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import workspace
-from app.services.errors import FileNotStoredError
-from app.services.uploads import (
+from app.core.errors import FileNotStoredError
+from app.core.files import (
     UploadedFile,
     move_file_to_project,
     files_root,
     list_project_files,
     max_upload_bytes,
-    resolve_file_binding,
     resolve_stored_path,
     save_upload,
 )
+from app.services.uploads import resolve_file_binding
 
 client = TestClient(app)
 
@@ -55,19 +55,19 @@ def upload(name: str, body: bytes, project_name: str = "demo"):
     )
 
 
-def test_upload_saves_under_the_content_hash_and_returns_the_path(project):
+def test_upload_saves_under_the_records_id_and_returns_the_path(project):
     body = upload("posts.csv", CSV).json()
     assert body["ok"] is True
     saved = Path(body["path"])
-    assert saved == (files_root() / CSV_SHA / "posts.csv").resolve()
+    assert saved == (files_root() / body["file_id"] / "posts.csv").resolve()
     assert saved.read_bytes() == CSV  # bytes landed intact
 
 
 def test_the_response_names_the_file_for_a_caller_that_is_not_the_browser(project):
     body = upload("posts.csv", CSV).json()
-    # An agent that can run curl gets what it needs to name the file later, and the
-    # hash to check the bytes it just sent against — no HTML, no path parsing.
-    assert body["sha256"] == CSV_SHA
+    # An agent that can run curl gets what it needs to name the file later — no HTML,
+    # no path parsing.
+    assert body["file_id"] == _only_record().id
     assert body["filename"] == "posts.csv"
     assert body["bytes"] == len(CSV)
     assert body["uploaded_at"]
@@ -80,7 +80,7 @@ def test_the_response_names_the_file_for_a_caller_that_is_not_the_browser(projec
 def test_the_returned_path_is_read_back_off_the_record_alone(project):
     upload("posts.csv", CSV)
     record = _only_record()
-    assert resolve_stored_path(record) == (files_root() / CSV_SHA / "posts.csv").resolve()
+    assert resolve_stored_path(record) == (files_root() / record.id / "posts.csv").resolve()
 
 
 def test_the_stored_filename_keeps_the_extension_a_binding_reads_the_format_from(project):
@@ -91,11 +91,14 @@ def test_the_stored_filename_keeps_the_extension_a_binding_reads_the_format_from
     assert saved.name == "2026-lobbying.xlsx"
 
 
-def test_same_bytes_twice_is_one_copy(project):
-    first = upload("posts.csv", CSV).json()["path"]
-    second = upload("posts.csv", CSV).json()["path"]
-    assert first == second
-    assert [p.name for p in (files_root() / CSV_SHA).iterdir()] == ["posts.csv"]
+def test_same_bytes_twice_is_two_records_over_two_copies(project):
+    """Sending the same file again is a second arrival, free to have come from elsewhere."""
+    first = upload("posts.csv", CSV).json()
+    second = upload("posts.csv", CSV).json()
+    assert first["file_id"] != second["file_id"]
+    assert first["path"] != second["path"]
+    for body in (first, second):
+        assert Path(body["path"]).read_bytes() == CSV
 
 
 def test_different_bytes_do_not_overwrite_each_other(project):
@@ -114,30 +117,33 @@ def test_no_temp_file_is_left_behind(project):
 def test_the_record_names_the_file_the_human_picked(project):
     upload("posts.csv", CSV)
     record = _only_record()
+    # The hash is still recorded — as evidence about the bytes, not as their address.
     assert record.sha256 == CSV_SHA
     assert record.filename == "posts.csv"
     assert record.byte_count == len(CSV)
 
 
-def test_re_picking_the_same_bytes_keeps_the_first_arrival_time(project):
+def test_re_picking_the_same_bytes_is_a_second_arrival_with_its_own_time(project):
     upload("posts.csv", CSV)
     first = _only_record()
     upload("renamed.csv", CSV)
-    again = _only_record()
-    assert again.created_at == first.created_at  # same bytes, first seen once
-    assert again.filename == "renamed.csv"       # the latest pick names it
-    assert again.updated_at > first.updated_at
+    again = next(r for r in UploadedFile.list() if r.id != first.id)
+    # Two arrivals of one file are two events. Collapsing them lost which upload a run
+    # read and where each came from, which is the whole reason the record is the address.
+    assert again.created_at > first.created_at
+    assert (first.filename, again.filename) == ("posts.csv", "renamed.csv")
+    assert again.sha256 == first.sha256
 
 
 def test_filename_is_basename_sanitized(project):
-    # A crafted name must not escape the hash dir it is written to.
+    # A crafted name must not escape the directory it is written to.
     saved = Path(upload("../../etc/evil.csv", b"x").json()["path"])
     assert saved.parent.parent == files_root().resolve()
     assert saved.name == "evil.csv"
 
 
 def test_a_nameless_upload_still_stores(project):
-    # Path("..").name is "..", which would climb out of the hash dir.
+    # Path("..").name is "..", which would climb out of the record's directory.
     saved = Path(upload("..", b"x").json()["path"])
     assert saved.name == "upload.dat"
     assert saved.parent.parent == files_root().resolve()
@@ -174,13 +180,12 @@ def test_the_quota_spans_projects_because_one_store_does(project, monkeypatch):
     assert upload("b.csv", b"b" * 80, project_name="other").status_code == 400
 
 
-def test_re_sending_bytes_the_store_already_holds_is_allowed_at_quota(project, monkeypatch):
+def test_re_sending_bytes_the_store_already_holds_spends_the_quota_again(project, monkeypatch):
     monkeypatch.setenv("CARBON_PAPER_FILES_QUOTA_BYTES", "100")
-    first = upload("a.csv", b"a" * 80).json()["path"]
-    # Same bytes: content addressing means this costs no disk, so the quota must not
-    # refuse it — the reader would be told to delete a file to re-pick what is there.
-    again = upload("a.csv", b"a" * 80)
-    assert again.status_code == 200 and again.json()["path"] == first
+    assert upload("a.csv", b"a" * 80).status_code == 200
+    # A second copy lands on disk, so the same bytes again cost the same 80 bytes. The
+    # store buys provenance with disk, and the quota reports what is actually spent.
+    assert upload("a.csv", b"a" * 80).status_code == 400
 
 
 def test_a_limit_that_is_not_a_positive_number_fails_loudly(project, monkeypatch):
@@ -206,11 +211,11 @@ def test_an_upload_through_a_project_route_is_claimed_by_that_project(project):
     assert list_project_files(None) == []
 
 
-def test_two_projects_sending_the_same_bytes_share_one_copy_and_hold_two_claims(project):
+def test_two_projects_sending_the_same_bytes_each_get_their_own_copy(project):
     demo = Path(upload("posts.csv", CSV, project_name="demo").json()["path"])
     other = Path(upload("posts.csv", CSV, project_name="other").json()["path"])
-    assert demo == other  # one blob on disk
-    assert {r.project_id for r in UploadedFile.list()} == {"demo", "other"}  # two claims
+    assert demo != other  # a copy each: deleting one cannot empty the other
+    assert {r.project_id for r in UploadedFile.list()} == {"demo", "other"}
 
 
 def test_a_file_can_arrive_before_any_project_owns_it(project):
@@ -223,7 +228,7 @@ def test_a_file_can_arrive_before_any_project_owns_it(project):
 def test_claiming_moves_no_bytes(project):
     record = save_upload("posts.csv", io.BytesIO(CSV))
     before = resolve_stored_path(record)
-    claimed = move_file_to_project(CSV_SHA, "demo")
+    claimed = move_file_to_project(record.id, "demo")
     assert claimed.project_id == "demo"
     assert resolve_stored_path(claimed) == before  # the path never depended on the project
     assert list_project_files(None) == []
@@ -231,32 +236,35 @@ def test_claiming_moves_no_bytes(project):
 
 
 def test_claiming_a_file_no_project_is_missing_fails_loudly(project):
-    upload("posts.csv", CSV)  # already claimed by demo
+    file_id = upload("posts.csv", CSV).json()["file_id"]  # already claimed by demo
     with pytest.raises(FileNotStoredError, match="outside a project"):
-        move_file_to_project(CSV_SHA, "other")
+        move_file_to_project(file_id, "other")
 
 
 def test_a_run_cannot_bind_a_file_another_project_holds(project):
-    upload("posts.csv", CSV, project_name="demo")
-    assert resolve_file_binding("demo", CSV_SHA)["path"].endswith("posts.csv")
+    file_id = upload("posts.csv", CSV, project_name="demo").json()["file_id"]
+    assert resolve_file_binding("demo", file_id)["path"].endswith("posts.csv")
     with pytest.raises(FileNotStoredError, match="has no file"):
-        resolve_file_binding("other", CSV_SHA)
+        resolve_file_binding("other", file_id)
 
 
 def test_a_binding_carries_the_format_the_extension_names(project):
-    upload("posts.csv", CSV)
-    assert resolve_file_binding("demo", CSV_SHA)["format"] == "csv"
+    file_id = upload("posts.csv", CSV).json()["file_id"]
+    assert resolve_file_binding("demo", file_id)["format"] == "csv"
 
 
 def test_a_tsv_upload_binds_as_tsv(project):
     body = b"name\tval\nx\t1\n"
-    sha256 = upload("posts.tsv", body).json()["sha256"]
-    assert resolve_file_binding("demo", sha256)["format"] == "tsv"
+    file_id = upload("posts.tsv", body).json()["file_id"]
+    assert resolve_file_binding("demo", file_id)["format"] == "tsv"
 
 
-def test_a_binding_uses_the_current_filename_not_the_stored_blob_suffix(project):
+def test_one_files_bytes_sent_again_under_another_name_binds_as_that_other_name(project):
     body = b"name,val\nx,1\n"
-    stored_path = upload("posts.tsv", body).json()["path"]
-    sha256 = upload("posts.csv", body).json()["sha256"]
-    binding = resolve_file_binding("demo", sha256)
-    assert binding == {"path": stored_path, "format": "csv"}
+    tsv = upload("posts.tsv", body).json()
+    csv = upload("posts.csv", body).json()
+    # Two records over identical bytes, each read as the format its own name says.
+    assert resolve_file_binding("demo", tsv["file_id"]) == {"path": tsv["path"],
+                                                           "format": "tsv"}
+    assert resolve_file_binding("demo", csv["file_id"]) == {"path": csv["path"],
+                                                           "format": "csv"}

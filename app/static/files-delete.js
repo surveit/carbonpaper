@@ -42,7 +42,7 @@
       confirmField.placeholder = filename;
       gateSubmit();
       form.action = "/project/" + encodeURIComponent(project) + "/files/" +
-        button.getAttribute("data-sha256") + "/delete";
+        button.getAttribute("data-file-id") + "/delete";
       modal.showModal();
       confirmField.focus();
     });

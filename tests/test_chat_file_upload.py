@@ -11,9 +11,9 @@ from fastapi.testclient import TestClient
 from app.core.agent.session import create_agent_session
 from app.main import app
 from app.services import workspace
-from app.services.errors import FileNotStoredError
+from app.core.errors import FileNotStoredError
 from app.services.project import create_project
-from app.services.uploads import UploadedFile, list_project_files
+from app.core.files import UploadedFile, list_project_files
 from app.tools import shared
 
 client = TestClient(app)
@@ -61,19 +61,20 @@ def test_a_file_with_no_project_stays_unclaimed(session_id):
 
 
 def test_the_line_says_where_the_file_went(session_id, project_id):
-    claimed = attach(session_id, project_id=project_id).json()["line"]
+    body = attach(session_id, project_id=project_id).json()
     # The name is for whoever reads the conversation; the id is what run_workflow takes,
     # so the line carries both rather than making one of them guess.
-    assert claimed == (f"[file] posts.csv · 13B · in project demo ({project_id}) · "
-                       f"sha256 {CSV_SHA}")
+    assert body["line"] == (f"[file] posts.csv · 13B · in project demo ({project_id}) · "
+                            f"file id {body['file_id']}")
 
 
 def test_the_line_says_when_it_went_nowhere(session_id):
     assert "not in a project yet" in attach(session_id).json()["line"]
 
 
-def test_the_line_carries_the_sha_run_workflow_binds(session_id, project_id):
-    assert CSV_SHA in attach(session_id, project_id=project_id).json()["line"]
+def test_the_line_carries_the_file_id_run_workflow_binds(session_id, project_id):
+    body = attach(session_id, project_id=project_id).json()
+    assert body["file_id"] in body["line"]
     # The agent reads this text and nothing else about the file, so what it needs to
     # start a run has to be in the sentence.
 
@@ -123,21 +124,22 @@ def test_the_picker_names_the_project_it_offers(session_id, project_id):
 # ─── The agent's side: adopting a file that arrived before any project ───────
 
 def test_the_agent_can_see_what_has_no_home(session_id):
-    attach(session_id)
-    assert [f.sha256 for f in shared.list_files(None, "http://x/files").files] == [CSV_SHA]
+    file_id = attach(session_id).json()["file_id"]
+    listed = shared.list_files(None, "http://x/files").files
+    assert [f.file_id for f in listed] == [file_id]
 
 
 def test_adopting_gives_it_one_and_moves_no_bytes(session_id, project_id):
-    attach(session_id)
+    file_id = attach(session_id).json()["file_id"]
     before = client.get(f"/chat/{session_id}")  # the page still renders mid-flight
     assert before.status_code == 200
-    adopted = shared.move_file_to_project(project_id, CSV_SHA)
+    adopted = shared.move_file_to_project(project_id, file_id)
     assert adopted.filename == "posts.csv"
     assert list_project_files(None) == []
     assert [r.filename for r in list_project_files(project_id)] == ["posts.csv"]
 
 
 def test_adopting_something_already_owned_fails_loudly(session_id, project_id):
-    attach(session_id, project_id=project_id)
+    file_id = attach(session_id, project_id=project_id).json()["file_id"]
     with pytest.raises(FileNotStoredError, match="outside a project"):
-        shared.move_file_to_project(project_id, CSV_SHA)
+        shared.move_file_to_project(project_id, file_id)

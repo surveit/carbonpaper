@@ -20,8 +20,8 @@ from app.web.file_sizes import read_turn
 
 client = TestClient(app)
 
-FILE_A = "[file] a.csv · 13B · in project demo (p1) · sha256 aaa"
-FILE_B = "[file] b.parquet · 2.5MB · in project demo (p1) · sha256 bbb"
+FILE_A = "[file] a.csv · 13B · in project demo (p1) · file id aaa"
+FILE_B = "[file] b.parquet · 2.5MB · in project demo (p1) · file id bbb"
 
 
 @pytest.fixture

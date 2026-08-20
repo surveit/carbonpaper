@@ -73,7 +73,7 @@ def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path)
     assert uploaded.status_code == 200, uploaded.text
     resp = client.post(
         f"/project/{journey_project.name}/run",
-        data={"binding__load": uploaded.json()["sha256"]},
+        data={"binding__load": uploaded.json()["file_id"]},
         follow_redirects=False,
     )
     assert resp.status_code == 303, resp.text

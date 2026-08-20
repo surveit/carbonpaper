@@ -33,9 +33,9 @@
     }
 
     async function loadPreview(button) {
-      var sha256 = button.dataset.fileSha;
+      var fileId = button.dataset.fileId;
       var project = form.getAttribute("data-project");
-      if (!sha256 || button.getAttribute("aria-disabled") === "true") return;
+      if (!fileId || button.getAttribute("aria-disabled") === "true") return;
       if (!project) return;
       activeButton = button;
       activePicker = button.closest("[data-file-picker]");
@@ -47,7 +47,7 @@
       try {
         var response = await fetch(
           "/project/" + encodeURIComponent(project) + "/files/" +
-            encodeURIComponent(sha256) + "/preview",
+            encodeURIComponent(fileId) + "/preview",
           { cache: "no-store", signal: controller.signal }
         );
         if (!response.ok) throw new Error("HTTP " + response.status);

@@ -12,12 +12,12 @@ from urllib.parse import urlencode
 
 from pydantic import BaseModel
 
+from app.core import files as file_store
 from app.models import EvalConfig
 from app.models.review_guide import ReviewGuideDraft
 from app.services import (
     project as project_service,
     run as run_service,
-    uploads,
     workspace,
 )
 from app.services.project import Project, WorkflowFile, import_project
@@ -115,11 +115,11 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialAgentReference:
 
 
 def _store_tour_files(project_id: str) -> dict[str, str]:
-    """stage id -> sha256, stored the way an upload is so the tour shows the real flow."""
+    """stage id -> file id, stored the way an upload is so the tour shows the real flow."""
     stored = {}
     for stage_id, path in _CSV_BY_STAGE_ID.items():
         with path.open("rb") as handle:
-            stored[stage_id] = uploads.save_upload(path.name, handle, project_id).sha256
+            stored[stage_id] = file_store.save_upload(path.name, handle, project_id).id
     return stored
 
 

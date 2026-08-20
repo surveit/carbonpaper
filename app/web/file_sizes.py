@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from app.services.errors import FileOverCeiling, StoreOverQuota
-from app.services.uploads import UploadedFile
+from app.core.errors import FileOverCeiling, StoreOverQuota
+from app.core.files import UploadedFile
 
 _KILOBYTE = 1024
 _MEGABYTE = 1024 * _KILOBYTE
@@ -43,9 +43,9 @@ def describe_attachment(record: UploadedFile, project_name: str = "") -> str:
             else f"in project {project_name or record.project_id} ({record.project_id})")
     # One sentence for both: the agent reads the turn's text and never the page, so a
     # card saying one thing while the model is told another is two records of one
-    # event. sha256 is in it because that is what run_workflow's `files` takes.
+    # event. The file id is in it because that is what run_workflow's `files` takes.
     return (f"[file] {record.filename} · {describe_bytes(record.byte_count)} · "
-            f"{home} · sha256 {record.sha256}")
+            f"{home} · file id {record.id}")
 
 
 # What describe_attachment writes, so the two stay in step: a change to the sentence is a
@@ -79,6 +79,6 @@ def read_turn(text: str) -> ChatTurn:
 
 def _read_attachment(line: str) -> Attachment:
     name, _, rest = line[len(ATTACHMENT_PREFIX):].partition(_FIELD_SEPARATOR)
-    # Only the size rides on the chip. The project and the sha256 stay in the text, which
+    # Only the size rides on the chip. The project and the file id stay in the text, which
     # is what the agent reads — on screen they would turn a chip into a paragraph.
     return Attachment(name=name, meta=rest.partition(_FIELD_SEPARATOR)[0])

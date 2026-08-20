@@ -2,6 +2,8 @@
 # including by low-level modules, so an app import here would risk a cycle.
 from __future__ import annotations
 
+from pathlib import Path
+
 
 class StageNotInRun(ValueError):
     pass
@@ -114,3 +116,23 @@ class PredicateError(ValueError):
 
 class NoRowsToSelectFrom(Exception):
     """No finished run holds the rows a stage's examples would be selected from."""
+
+
+class FileNotStoredError(Exception):
+    """A file id the project has no stored bytes for."""
+
+
+class FileOverCeiling(Exception):
+    """Carries the numbers, not a sentence — a surface writes the sentence."""
+
+    def __init__(self, *, ceiling: int) -> None:
+        self.ceiling = ceiling
+        super().__init__(f"file over the {ceiling}-byte ceiling")
+
+
+class StoreOverQuota(Exception):
+    """Carries the numbers, not a sentence — a surface writes the sentence."""
+
+    def __init__(self, *, used: int, quota: int, sent: int, root: Path) -> None:
+        self.used, self.quota, self.sent, self.root = used, quota, sent, root
+        super().__init__(f"store would reach {used} bytes, over the {quota}-byte limit")

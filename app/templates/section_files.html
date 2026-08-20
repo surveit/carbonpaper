@@ -58,7 +58,7 @@
       <td class="files-act">
         {# The row carries what the dialog needs to say; one dialog serves every row. #}
         <button type="button" class="files-trash" title="Delete {{ row.filename }}"
-                data-sha256="{{ row.sha256 }}" data-filename="{{ row.filename }}"
+                data-file-id="{{ row.file_id }}" data-filename="{{ row.filename }}"
                 data-runs="{{ row.run_count }}" aria-label="Delete {{ row.filename }}">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

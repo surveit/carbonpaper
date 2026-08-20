@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import workspace
-from app.services.uploads import save_upload
+from app.core.files import save_upload
 from app.web.file_preview import build_file_preview
 from app.web.loading import PREVIEW_ROWS_SHOWN
 
@@ -25,18 +25,18 @@ def project(tmp_path, monkeypatch):
 
 
 def store(name: str, body: bytes, project_id: str = "demo") -> str:
-    return save_upload(name, io.BytesIO(body), project_id).sha256
+    return save_upload(name, io.BytesIO(body), project_id).id
 
 
-def preview_url(sha256: str, project_id: str = "demo") -> str:
-    return f"/project/{project_id}/files/{sha256}/preview"
+def preview_url(file_id: str, project_id: str = "demo") -> str:
+    return f"/project/{project_id}/files/{file_id}/preview"
 
 
 def test_preview_reads_the_file_into_a_typed_bounded_view(project):
     rows = "\n".join(f"row-{index}" for index in range(PREVIEW_ROWS_SHOWN + 1))
-    sha256 = store("stories.csv", f"name\n{rows}\n".encode())
+    file_id = store("stories.csv", f"name\n{rows}\n".encode())
 
-    preview = build_file_preview("demo", sha256)
+    preview = build_file_preview("demo", file_id)
 
     assert preview.filename == "stories.csv"
     assert preview.format == "csv"
@@ -47,9 +47,9 @@ def test_preview_reads_the_file_into_a_typed_bounded_view(project):
 
 
 def test_preview_endpoint_renders_the_measured_shape(project):
-    sha256 = store("stories.csv", b"name,count\nalpha,2\nbeta,3\n")
+    file_id = store("stories.csv", b"name,count\nalpha,2\nbeta,3\n")
 
-    response = client.get(preview_url(sha256))
+    response = client.get(preview_url(file_id))
 
     assert response.status_code == 200
     assert "stories.csv" in response.text
@@ -60,18 +60,18 @@ def test_preview_endpoint_renders_the_measured_shape(project):
 
 
 def test_preview_keeps_zero_padded_text(project):
-    sha256 = store("filings.csv", b"filing_id\n002\n010\n")
+    file_id = store("filings.csv", b"filing_id\n002\n010\n")
 
-    preview = build_file_preview("demo", sha256)
+    preview = build_file_preview("demo", file_id)
 
     assert preview.rows == [["002"], ["010"]]
 
 
 def test_preview_endpoint_names_a_bounded_result(project):
     values = "\n".join(str(index) for index in range(PREVIEW_ROWS_SHOWN + 1))
-    sha256 = store("long.csv", f"value\n{values}\n".encode())
+    file_id = store("long.csv", f"value\n{values}\n".encode())
 
-    body = client.get(preview_url(sha256)).text
+    body = client.get(preview_url(file_id)).text
 
     assert f"First {PREVIEW_ROWS_SHOWN} of {PREVIEW_ROWS_SHOWN + 1} rows" in body
     assert f'title="{PREVIEW_ROWS_SHOWN - 1}"' in body
@@ -79,12 +79,12 @@ def test_preview_endpoint_names_a_bounded_result(project):
 
 
 def test_preview_endpoint_escapes_file_data(project):
-    sha256 = store(
+    file_id = store(
         "<script>alert(1)<script>.csv",
         b'name\n"<img src=x onerror=alert(1)>"\n',
     )
 
-    body = client.get(preview_url(sha256)).text
+    body = client.get(preview_url(file_id)).text
 
     assert "<script>alert(1)" not in body
     assert "<img src=x" not in body
@@ -93,27 +93,27 @@ def test_preview_endpoint_escapes_file_data(project):
 
 
 def test_preview_endpoint_refuses_another_projects_file(project):
-    sha256 = store("other.csv", b"name\nother\n", "other")
+    file_id = store("other.csv", b"name\nother\n", "other")
 
-    response = client.get(preview_url(sha256))
+    response = client.get(preview_url(file_id))
 
     assert response.status_code == 404
     assert "has no file" in response.text
 
 
 def test_preview_endpoint_refuses_an_unknown_format(project):
-    sha256 = store("notes.txt", b"not a supported table")
+    file_id = store("notes.txt", b"not a supported table")
 
-    response = client.get(preview_url(sha256))
+    response = client.get(preview_url(file_id))
 
     assert response.status_code == 422
     assert "cannot tell what format" in response.text
 
 
 def test_preview_endpoint_has_an_empty_file_state(project):
-    sha256 = store("empty.csv", b"name,count\n")
+    file_id = store("empty.csv", b"name,count\n")
 
-    body = client.get(preview_url(sha256)).text
+    body = client.get(preview_url(file_id)).text
 
     assert "0 rows" in body
     assert "This file has columns but no rows." in body
@@ -133,8 +133,8 @@ def test_preview_dialog_controller_handles_loading_failure_and_close():
     assert "event.preventDefault()" in script
     assert "event.target === dialog" in script
     assert "activeButton.focus()" in script
-    assert "if (!sha256 ||" in script
-    assert "button.dataset.fileSha" in script
+    assert "if (!fileId ||" in script
+    assert "button.dataset.fileId" in script
     assert 'button.getAttribute("aria-disabled") === "true"' in script
     assert 'activePicker.classList.add("is-previewing")' in script
     assert 'activePicker.classList.remove("is-previewing")' in script

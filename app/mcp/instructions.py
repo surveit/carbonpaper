@@ -94,11 +94,11 @@ names the runs someone else started. Publishing is a
 human's mark that they have looked at a version; it does not gate what a run may execute.
 
 An input step reads a file the project holds. list_files(project_id) is what it holds, and
-run_workflow's `files` binds one to a step by the sha256 it gives. To upload a file, POST
+run_workflow's `files` binds one to a step by the file_id it gives. To upload a file, POST
 to the returned file_upload_url. list_files(null) is the files in no project, and
 move_file_to_project puts one in.
 
-profile_file(project_id, sha256) is what that file HOLDS. Declare an input step's schema
+profile_file(project_id, file_id) is what that file HOLDS. Declare an input step's schema
 from it rather than from asking someone to describe their own file — they answer from
 memory, and the profile is the file. It reads only a file the project holds, so a listed
 file in no project is moved in first. On an xlsx, call survey_workbook first: it names

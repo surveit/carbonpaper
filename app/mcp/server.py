@@ -176,8 +176,8 @@ def run_workflow(
 
 
 @mcp.tool(description=read_tool_description("move_file_to_project"))
-def move_file_to_project(project_id: str, sha256: str) -> shared.StoredFileView:
-    return shared.move_file_to_project(project_id, sha256)
+def move_file_to_project(project_id: str, file_id: str) -> shared.StoredFileView:
+    return shared.move_file_to_project(project_id, file_id)
 
 
 @mcp.tool(description=read_tool_description("run_workflow_test"))
@@ -201,11 +201,11 @@ def profile_stage_output_data_range(
 
 @mcp.tool(description=read_tool_description("profile_file"))
 def profile_file(
-    project_id: str, sha256: str, columns: list[str] | None = None, max_values: int = 20,
+    project_id: str, file_id: str, columns: list[str] | None = None, max_values: int = 20,
     sheet_name: str | int = 0, header_row: int = 0, first_column: int = 0,
 ) -> dict[str, Any]:
     try:
-        profile = shared.profile_file(project_id, sha256, columns, max_values,
+        profile = shared.profile_file(project_id, file_id, columns, max_values,
                                       sheet_name, header_row, first_column)
     except _RUN_TOOL_ERRORS as exc:
         return {"ok": False, "error": str(exc)}
@@ -213,9 +213,9 @@ def profile_file(
 
 
 @mcp.tool(description=read_tool_description("survey_workbook"))
-def survey_workbook(project_id: str, sha256: str, from_row: int = 0) -> dict[str, Any]:
+def survey_workbook(project_id: str, file_id: str, from_row: int = 0) -> dict[str, Any]:
     try:
-        sheets = shared.survey_workbook(project_id, sha256, from_row)
+        sheets = shared.survey_workbook(project_id, file_id, from_row)
     except _RUN_TOOL_ERRORS as exc:
         return {"ok": False, "error": str(exc)}
     return {"ok": True, "sheets": [sheet._asdict() for sheet in sheets]}
