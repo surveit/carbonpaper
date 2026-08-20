@@ -30,108 +30,96 @@
         <p class="field-column-heading">Columns to review</p>
         {% for field in page.reviewed_fields %}
         {% set field_id = 'rf-' ~ item.input_fingerprint ~ '-' ~ field.target %}
-        {# The upstream value is what this stage received for the column; `prefill` is
-           what the field opens with — the reviewer's own recorded value once this row
-           has been decided. Each field is decided one at a time: `data-state` says
-           which state a field is in, and the stylesheet renders that state. Whether
-           the record departs from the received value is settled in the view model
-           (`departs_from_received`), where both are in hand in one spelling. #}
+        {# The control is LIVE from the moment the card renders, holding `prefill` —
+           what this stage received for the column, or the reviewer's own recorded
+           value once the row has been decided. A field nobody touches submits exactly
+           what it displays, which settles `approve` server-side; touching one flips
+           `data-dirty`, which is what reveals the struck prefill and the Revert
+           beside it and what turns the card's CTA into a change. `upstream_text` is
+           named separately only where the record departs from it. #}
         {% set upstream_text = item.upstream_text.get(field.target) %}
         {% set prefill = item.prefill.get(field.target) %}
         {% set prefill_text = '' if prefill is none else prefill %}
-        <div class="reviewed-field" data-state="{{ 'locked' if item.prior_decision else 'start' }}">
-            <label {% if field.description %}title="{{ field.description }}"{% endif %}>{{ field.source }}</label>
-            <span class="field-value" id="{{ field_id }}-value" data-expanded="false">
-                {% if item.departs_from_received.get(field.target) %}
-                <span class="received-was"><s>{% if upstream_text is none or upstream_text == '' %}<em>no value</em>{% else %}{{ upstream_text }}{% endif %}</s>&nbsp;→</span>
+        {% set unset_option = field.nullable or prefill is none %}
+        <div class="reviewed-field" data-dirty="false" data-control="{{ field.control }}"
+             data-target="{{ field.target }}" data-prefill="{{ prefill_text }}">
+            <label class="field-name" for="{{ field_id }}"
+                   {% if field.description %}title="{{ field.description }}"{% endif %}>{{ field.source }}</label>
+            {% if field.control == 'radio' %}
+            {# One name per field per card, so two cards' groups never join. The label
+               is the hit target and the input itself is off-screen: the pill IS the
+               control, and a native radio dot beside it would be a second one. #}
+            <span class="radio-group" role="group" aria-label="{{ field.source }}">
+                {% if unset_option %}
+                <input type="radio" name="{{ field_id }}" id="{{ field_id }}-unset" value=""
+                       {% if prefill is none %}checked{% endif %}>
+                <label class="unset" for="{{ field_id }}-unset">— unset —</label>
                 {% endif %}
-                <span class="prefill-was"><s>{% if prefill is none %}<em>unset</em>{% else %}{{ prefill }}{% endif %}</s>&nbsp;→</span>
-                <strong class="current-value">{% if prefill is none %}<em>unset</em>{% else %}{{ prefill }}{% endif %}</strong>
-                {% if item.prior_decision %}
-                <span class="received-value">received: {% if upstream_text is none or upstream_text == '' %}<em>no value</em>{% else %}{{ upstream_text }}{% endif %}</span>
-                {% endif %}
+                {% for option in field.options %}
+                <input type="radio" name="{{ field_id }}" id="{{ field_id }}-{{ loop.index }}"
+                       value="{{ option }}" {% if option == prefill %}checked{% endif %}>
+                <label for="{{ field_id }}-{{ loop.index }}">{{ option }}</label>
+                {% endfor %}
             </span>
-            {# Revealed only for a value the script measures as overflowing its clamp;
-               a control that never does anything is worse than no control. #}
-            <button type="button" class="field-expand-toggle" hidden
-                    aria-expanded="false" aria-controls="{{ field_id }}-value"
-                    aria-label="Expand {{ field.source }}" data-field-expand>Show more</button>
-            {# The markers above change by `display` alone, which announces nothing;
-               the script writes this region on every state change. #}
+            {% elif field.control == 'select' %}
+            <select class="field-control" id="{{ field_id }}">
+                {% if unset_option %}
+                <option value="" {% if prefill is none %}selected{% endif %}>— unset —</option>
+                {% endif %}
+                {% for option in field.options %}
+                <option value="{{ option }}" {% if option == prefill %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+            </select>
+            {% elif field.control == 'textarea' %}
+            <textarea class="field-control" id="{{ field_id }}" rows="3">{{ prefill_text }}</textarea>
+            {% else %}
+            <input class="field-control" type="{{ field.control }}" id="{{ field_id }}"
+                   value="{{ prefill_text }}"
+                   {% if field.step %}step="{{ field.step }}"{% endif %}
+                   {% if field.minimum is not none %}min="{{ field.minimum }}"{% endif %}
+                   {% if field.maximum is not none %}max="{{ field.maximum }}"{% endif %}>
+            {% endif %}
+            {# What the control opened on, struck once it no longer holds it. Rendered
+               unconditionally and hidden by `data-dirty`, because the reviewer edits
+               after the server is done rendering. #}
+            <span class="field-revert">
+                <span class="prefill-was">was <s>{% if prefill is none %}<em>unset</em>{% else %}{{ prefill }}{% endif %}</s></span>
+                <button type="button" class="btn-field" data-field-revert
+                        aria-label="Revert {{ field.source }}" aria-controls="{{ field_id }}">↩ Revert</button>
+            </span>
+            {# Only where the record departs from what the stage produced: everywhere
+               else the control above is already showing that value. #}
+            {% if item.departs_from_received.get(field.target) %}
+            <span class="received-value">received: {% if upstream_text is none or upstream_text == '' %}<em>no value</em>{% else %}{{ upstream_text }}{% endif %}</span>
+            {% endif %}
+            {# `data-dirty` changes by `display` alone, which announces nothing. #}
             <span class="field-state-note" role="status" data-state-note></span>
-            {# State first, then the actions that alter it — at a fixed position
-               regardless of the value's length, unlike the marker this replaced
-               inside `.field-value`. #}
-            <span class="field-decision-row">
-                <span class="field-state">
-                    <span class="state-approved">✓ approved</span>
-                    <span class="state-modified">✎ modified</span>
-                </span>
-                <span class="field-ctas">
-                    <button type="button" class="btn-field" data-field-approve
-                            aria-label="Approve {{ field.source }}">Approve</button>
-                    <button type="button" class="btn-field" data-field-edit
-                            aria-label="Change {{ field.source }}" aria-controls="{{ field_id }}">Change</button>
-                    <button type="button" class="btn-field" data-field-revert
-                            aria-label="Revert {{ field.source }}" aria-controls="{{ field_id }}">Revert</button>
-                </span>
-            </span>
-            <span class="field-editor">
-                {# The label above is not `for` this control: it is `display: none` in
-                   every state but `editing`, so the control names itself. #}
-                {% if field.control == 'select' %}
-                <select id="{{ field_id }}" data-target="{{ field.target }}"
-                        aria-label="{{ field.source }}"
-                        data-prefill="{{ prefill_text }}">
-                    {% if field.nullable or prefill is none %}
-                    <option value="" {% if prefill is none %}selected{% endif %}>— unset —</option>
-                    {% endif %}
-                    {% for option in field.options %}
-                    <option value="{{ option }}" {% if option == prefill %}selected{% endif %}>{{ option }}</option>
-                    {% endfor %}
-                </select>
-                {% elif field.control == 'textarea' %}
-                <textarea id="{{ field_id }}" data-target="{{ field.target }}"
-                          aria-label="{{ field.source }}"
-                          data-prefill="{{ prefill_text }}" rows="3">{{ prefill_text }}</textarea>
-                {% else %}
-                <input type="{{ field.control }}" id="{{ field_id }}" data-target="{{ field.target }}"
-                       aria-label="{{ field.source }}"
-                       data-prefill="{{ prefill_text }}"
-                       value="{{ prefill_text }}"
-                       {% if field.step %}step="{{ field.step }}"{% endif %}
-                       {% if field.minimum is not none %}min="{{ field.minimum }}"{% endif %}
-                       {% if field.maximum is not none %}max="{{ field.maximum }}"{% endif %}>
-                {% endif %}
-                <button type="button" class="btn-field" data-field-save
-                        aria-label="Save {{ field.source }}">Save</button>
-                <button type="button" class="btn-field" data-field-cancel
-                        aria-label="Cancel {{ field.source }}">Cancel</button>
-                <span class="match-hint">same value — saves as approved</span>
-            </span>
         </div>
         {% endfor %}
         </div>
         {% if review_notes_column %}
         <label class="review-notes">
             <span>{{ page.review_notes_label }}</span>
-            {# `readonly`, never `disabled`: the reviewer must still be able to select
-               and copy the note they recorded, and a decided card's box is frozen only
-               until "Change my review" lifts it. #}
-            <textarea rows="2" data-role="notes" {% if item.prior_decision %}readonly{% endif %}
+            {# Live on a decided card too: the note is part of what the CTA re-records,
+               and editing it alone is enough to re-arm the button. #}
+            <textarea rows="2" data-role="notes"
                       placeholder="Include any reasoning or citations for your decision">{{ item.prior_decision.review_notes if item.prior_decision and item.prior_decision.review_notes else '' }}</textarea>
         </label>
         {% endif %}
-        {# The gate says why Submit is disabled, so the button points at it — one id
-           per card, off the same fingerprint `field_id` is built from. #}
+        {# The gate says what the CTA is about to record, so the button points at it —
+           one id per card, off the same fingerprint `field_id` is built from. #}
         {% set gate_id = 'gate-' ~ item.input_fingerprint %}
+        {% set columns = page.reviewed_fields | length %}
         <div class="decision-controls">
-            {% if item.prior_decision %}
-            <button type="button" class="btn unlock-review" data-unlock>Change my review</button>
-            {% endif %}
-            <button type="submit" class="btn primary" aria-describedby="{{ gate_id }}"
-                    {% if item.prior_decision %}hidden{% else %}disabled{% endif %}>Submit</button>
-            <span class="decide-gate" id="{{ gate_id }}" role="status" {% if item.prior_decision %}hidden{% endif %}>0 of {{ page.reviewed_fields | length }} column{{ 's' if page.reviewed_fields | length != 1 }} decided</span>
+            {# One button, and its WORD is the whole safeguard against recording a
+               verdict nobody meant: `approve` and `modify` are told apart here and
+               nowhere else on the card, so the script rewrites this text on every
+               edit. A decided card whose values still stand has nothing to post and
+               says so. #}
+            <button type="submit" class="btn cta {{ '' if item.prior_decision else 'approve' }}"
+                    aria-describedby="{{ gate_id }}" data-cta
+                    {% if item.prior_decision %}disabled{% endif %}>{% if item.prior_decision %}✓ Recorded{% else %}✓ Approve{% endif %}</button>
+            <span class="decide-gate" id="{{ gate_id }}" role="status">{% if item.prior_decision %}recorded as it stands — edit a column to record a change{% else %}{{ columns }} column{{ 's' if columns != 1 }} · nothing changed{% endif %}</span>
         </div>
     </form>
     {# Below the controls, so recording a decision adds nothing above the place

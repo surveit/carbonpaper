@@ -93,14 +93,20 @@
     margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border);
 }
 /* Companion to `.btn { display: inline-block }`: without it that rule beats the
-   UA's [hidden] rule and a decided card shows Submit beside Change my review. */
+   UA's [hidden] rule. */
 .decision-controls [hidden] { display: none; }
-/* Secondary by omission of .primary: a decided card is not asking for input. */
-.btn.unlock-review { border-style: dashed; }
-.btn.approve { background: var(--good-bg); color: var(--good-ink); border-color: var(--good-bd); }
-.btn.reject  { background: var(--bad-bg); color: var(--bad-ink); border-color: var(--bad-bd); }
-.btn.modify  { background: var(--warn-bg); color: var(--warn-ink); border-color: var(--warn-bd); }
-.btn.selected { box-shadow: inset 0 0 0 2px currentColor; }
+/* The card's one button, carrying the hue of the verdict it is about to record —
+   the same green and amber the rail and the chip spend on a decision already
+   taken. It is NOT --accent: the CTA blue says "do this next" without saying
+   which of two things is about to happen, and which one is the whole question
+   here. Disabled is a decided card with nothing left to post. */
+.btn.cta.approve { background: var(--good-bg); color: var(--good-ink); border-color: var(--good-bd); }
+.btn.cta.approve:hover { background: color-mix(in srgb, var(--good-bd) 16%, var(--good-bg)); }
+.btn.cta.modify { background: var(--warn-bg); color: var(--warn-ink); border-color: var(--warn-bd); }
+.btn.cta.modify:hover { background: color-mix(in srgb, var(--warn-bd) 16%, var(--warn-bg)); }
+.btn.cta { font-weight: 600; }
+.btn.cta:disabled { opacity: 0.55; cursor: default; font-weight: 400; }
+.btn.cta:disabled:hover { background: var(--raised); }
 
 /* Reviewer-name gate: nothing in .queue-items renders until this carries a name. */
 .reviewer-gate {
@@ -121,87 +127,93 @@
     letter-spacing: .04em; color: var(--muted);
 }
 
-/* One row per reviewed field. `data-state` is the single source of truth:
-   each rule below renders one state by hiding what that state does not show. */
+/* One row per reviewed field, with a LIVE control. `data-dirty` is the single
+   source of truth: it says whether the control still holds the value it opened
+   on, and every rule below renders that answer. */
 .reviewed-fields { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .reviewed-fields .field-column-heading {
     margin: 0; padding-bottom: 6px; border-bottom: 1px dashed var(--border);
     font-size: 12px; font-weight: 600; text-transform: uppercase;
     letter-spacing: .04em; color: var(--muted);
 }
-/* Column name, then value, then controls left-aligned beneath it — never pinned
-   to the far edge of a wide card, where a short value leaves them out of reach. */
+/* Column name, then the control, then what it was — left-aligned, never pinned
+   to the far edge of a wide card where a short value leaves them out of reach.
+   The left rail is the field's own state and is the widest edge on the row, so
+   an edited field is findable while scrolling a card at speed. */
 .reviewed-field {
     display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
-    padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px;
+    padding: 6px 8px; border: 1px solid var(--border); border-left: 3px solid var(--border);
+    border-radius: 4px;
 }
-.reviewed-field label { font-weight: 600; font-size: 13px; }
-.reviewed-field .field-value {
-    display: block; font-size: 14px; line-height: 1.4em; overflow-wrap: anywhere;
+.reviewed-field[data-dirty="true"] {
+    border-left-color: var(--warn-bd);
+    background: color-mix(in srgb, var(--warn-bg) 30%, var(--raised));
 }
-/* Clamped to ~4 lines by default; the toggle below flips `data-expanded` to
-   release it. The clip is visual only — the full text stays in the DOM. */
-.reviewed-field .field-value[data-expanded="false"] { max-height: 5.6em; overflow: hidden; }
-.reviewed-field .field-value[data-expanded="true"] { max-height: none; overflow: visible; }
-.field-expand-toggle {
-    border: none; background: none; padding: 0; font: inherit; font-size: 12px;
-    color: var(--accent); cursor: pointer;
+.reviewed-field .field-name { font-weight: 600; font-size: 13px; }
+.reviewed-field .field-control {
+    padding: 5px 8px; border: 1px solid var(--border-strong); border-radius: 3px;
+    font: inherit; font-size: 14px; background: var(--raised);
 }
-.field-expand-toggle:hover { text-decoration: underline; }
-.reviewed-field .field-ctas { display: inline-flex; gap: 6px; }
+/* A str column holds prose of unknown length, so its control spans the field —
+   a number, a date and a select are each their own natural width. The control is
+   on the card at rest now, so its resting width is what the reviewer reads the
+   value at, not only what they type into.
+   There is no global box-sizing reset, so these two carry their own: `width: 100%`
+   on a padded, bordered control otherwise measures past the field and scrolls the
+   card sideways. */
+.reviewed-field input.field-control[type="text"],
+.reviewed-field textarea.field-control { width: 100%; box-sizing: border-box; }
+/* Grown by the script as the reviewer types (queue.html's `growTextarea`); it
+   never shrinks back below the `rows` the template opened it on. */
+.reviewed-field textarea.field-control { resize: vertical; }
+
+/* A two-value vocabulary, rendered as pills. The input is off-screen rather than
+   hidden, so it stays focusable and arrow-key navigable; the label is the whole
+   hit target, and a native radio dot beside it would be a second control saying
+   the same thing. */
+.radio-group { display: flex; flex-wrap: wrap; gap: 6px; }
+.radio-group input {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.radio-group label {
+    display: inline-block; padding: 5px 12px; border: 1px solid var(--border-strong);
+    border-radius: 14px; font-size: 13px; font-weight: 400; line-height: 1.25;
+    background: var(--raised); cursor: pointer;
+}
+.radio-group label:hover { border-color: var(--accent); background: var(--hover); }
+/* The chosen option is the only filled thing on the row, so which one is selected
+   survives a glance down a card of several fields. */
+.radio-group input:checked + label {
+    background: var(--accent); color: var(--on-dark); border-color: var(--accent);
+    font-weight: 600;
+}
+.radio-group input:focus-visible + label { outline: 2px solid var(--focus); outline-offset: 2px; }
+.radio-group label.unset { font-style: italic; color: var(--muted); }
+.radio-group input:checked + label.unset { color: var(--on-dark); }
+
+/* What the control opened on, and the way back to it. Shown only once the field
+   no longer holds that value — a Revert that reverts nothing is a control that
+   never does anything, which is worse than no control. */
+.reviewed-field .field-revert {
+    display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px;
+}
+.reviewed-field[data-dirty="false"] .field-revert { display: none; }
 .btn-field {
     border: 1px solid var(--border-strong); border-radius: 3px; background: var(--raised);
     font: inherit; font-size: 12px; padding: 3px 10px; cursor: pointer;
 }
 .btn-field:hover { border-color: var(--accent); }
-/* Groups the state marker with the decision buttons at a fixed position below
-   the value, whatever its length, with clear space above so the row never
-   reads as part of the value's own block. */
-.reviewed-field .field-decision-row {
-    display: inline-flex; align-items: center; gap: 10px; margin-top: 8px;
-}
-.reviewed-field .field-editor { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.reviewed-field .field-editor input, .reviewed-field .field-editor select {
-    padding: 5px 8px; border: 1px solid var(--border); border-radius: 3px; font: inherit; font-size: 14px;
-}
-/* Grown by the script as the reviewer types (queue.html's `growTextarea`); it
-   never shrinks back below the `rows` the template opened it on. */
-.reviewed-field .field-editor textarea {
-    padding: 5px 8px; border: 1px solid var(--border); border-radius: 3px; font: inherit;
-    font-size: 14px; width: 100%; resize: vertical;
-}
-.field-state .state-approved { color: var(--good-ink); font-size: 12px; }
-.field-state .state-modified { color: var(--warn-ink); font-size: 12px; }
-.prefill-was, .received-was { color: var(--muted); }
-/* What the stage produced, named as such. It stands in for the struck-through
-   pair while a decided card is unlocked: those render only in `locked`, and the
-   context table above never carries a column that is under review. */
+.prefill-was { font-size: 12px; color: var(--muted); }
+/* What the stage produced, named as such — rendered only where the record departs
+   from it, because everywhere else the control above is already showing it. */
 .received-value { font-size: 12px; color: var(--muted); }
-/* Announced, never shown: the markers beside it change by `display` alone, which
-   reaches no screen reader. The script writes this on every state change. */
+/* Announced, never shown: `data-dirty` changes by `display` alone, which reaches
+   no screen reader. The script writes this on every edit. */
 .field-state-note {
     position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
     border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
 }
-.match-hint { font-size: 12px; color: var(--muted); }
-.field-editor:not([data-match="true"]) .match-hint { display: none; }
-
-.reviewed-field:not([data-state="start"]) [data-field-approve] { display: none; }
-.reviewed-field[data-state="editing"] [data-field-edit] { display: none; }
-.reviewed-field[data-state="locked"] [data-field-edit] { display: none; }
-.reviewed-field[data-state="start"] [data-field-revert] { display: none; }
-.reviewed-field[data-state="editing"] [data-field-revert] { display: none; }
-.reviewed-field[data-state="locked"] [data-field-revert] { display: none; }
-.reviewed-field:not([data-state="editing"]) .field-editor { display: none; }
-.reviewed-field[data-state="editing"] .field-ctas { display: none; }
-.reviewed-field[data-state="editing"] .current-value { display: none; }
-.reviewed-field[data-state="editing"] .field-state { display: none; }
-.reviewed-field:not([data-state="approved"]) .state-approved { display: none; }
-.reviewed-field:not([data-state="modified"]) .state-modified { display: none; }
-.reviewed-field:not([data-state="modified"]) .prefill-was { display: none; }
-.reviewed-field:not([data-state="locked"]) .received-was { display: none; }
-.reviewed-field[data-state="locked"] .received-value { display: none; }
-.reviewed-field[data-state="locked"] .field-ctas { display: none; }
 
 .decide-gate { font-size: 13px; color: var(--muted); }
 
@@ -214,12 +226,6 @@
 .review-notes textarea {
     padding: 6px 8px; border: 1px solid var(--border); border-radius: 3px;
     font: inherit; font-size: 13px; resize: vertical;
-}
-/* A recorded note reads as text, not as a field asking to be filled — but stays
-   a textarea, so it is still selectable and still what the submit posts. */
-.review-notes textarea[readonly] {
-    padding-left: 0; border-color: transparent; background: none;
-    color: var(--muted); resize: none;
 }
 
 .queue-card .queued-row { margin: 8px 0; }

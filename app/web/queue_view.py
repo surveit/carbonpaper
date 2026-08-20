@@ -285,14 +285,29 @@ _CONTROL_BY_COLUMN_TYPE: dict[str, str] = {
 _STEP_BY_COLUMN_TYPE: dict[str, str] = {"int": "1", "float": "any"}
 # The select vocabulary of a column type that has one without declaring an `enum`.
 _OPTIONS_BY_COLUMN_TYPE: dict[str, list[str]] = {"bool": ["true", "false"]}
+# A vocabulary this short renders as radios instead of a select: reaching an option
+# then costs one click rather than the two a native select spends opening and
+# choosing, and the whole vocabulary sits on the card unopened. A NULLABLE column is
+# excluded because its "— unset —" makes a third option, and the saving is only worth
+# the width while every option fits on one line.
+_RADIO_OPTION_COUNT = 2
 
 
 def _resolve_control(column: Column, multiline: bool) -> str | None:
-    if column.enum is not None:
+    options = _resolve_options(column)
+    if options is not None:
+        if len(options) == _RADIO_OPTION_COUNT and not column.nullable:
+            return "radio"
         return "select"
     if column.type == STR_COLUMN_TYPE and multiline:
         return "textarea"
     return _CONTROL_BY_COLUMN_TYPE.get(column.type)
+
+
+def _resolve_options(column: Column) -> list[str] | None:
+    if column.enum is not None:
+        return list(column.enum)
+    return _OPTIONS_BY_COLUMN_TYPE.get(column.type)
 
 
 def _build_reviewed_field(
@@ -309,7 +324,7 @@ def _build_reviewed_field(
             ),
         )
     low, high = column.resolve_numeric_bounds()
-    options = column.enum if column.enum is not None else _OPTIONS_BY_COLUMN_TYPE.get(column.type)
+    options = _resolve_options(column)
     return ReviewedField(
         source=source, target=target, control=control, nullable=column.nullable,
         step=_STEP_BY_COLUMN_TYPE.get(column.type), minimum=low, maximum=high,

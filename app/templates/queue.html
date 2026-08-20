@@ -74,6 +74,14 @@
   const TOTAL = {{ page.total | tojson }};
   const REVIEWER_KEY = 'carbon_paper.reviewer';
 
+  // The CTA's word IS the verdict the reviewer is about to record, so every state
+  // the card can be in names one here rather than assembling a sentence at the
+  // call site.
+  const CTA_WORDS = {
+    approve: '✓ Approve', modify: '✎ Submit change', modifyMany: '✎ Submit changes',
+    recorded: '✓ Recorded', updateApprove: '✓ Update', updateModify: '✎ Update',
+  };
+
   const nameInput = document.getElementById('reviewer-name');
   const hint = document.getElementById('reviewer-hint');
   const queueItems = document.getElementById('queue-items');
@@ -89,9 +97,10 @@
 
   // Every card, held out of layout until its page is asked for. The pager, not
   // the list, is what a card's current state is read from and written to.
+  const shippedCards = Array.from(
+    document.getElementById('queue-cards').content.querySelectorAll('.queue-card'));
   const pager = createQueuePager(
-    Array.from(document.getElementById('queue-cards').content.querySelectorAll('.queue-card'))
-      .map((card) => ({ fingerprint: card.dataset.inputFingerprint, card: card })),
+    shippedCards.map((card) => ({ fingerprint: card.dataset.inputFingerprint, card: card })),
     QUEUE_PAGE_SIZE
   );
   let currentPage = 0;
@@ -100,49 +109,8 @@
     currentPage = pager.clampPage(index);
     queueItems.replaceChildren(...pager.cardsOnPage(currentPage));
     renderPager();
-    syncFieldOverflow(queueItems);
     // The reviewer works a page top-down, so a page change lands them at its top.
     if (scroll && pagers.length) pagers[0].scrollIntoView({ block: 'start' });
-  }
-
-  // A detached or hidden ancestor lays out at zero height, so a value's overflow
-  // can only be measured once its card is attached AND visible. Accepts a card,
-  // a single field, or any container of `.reviewed-field`s. Re-measuring must
-  // never collapse a field the reviewer already opened while it still overflows.
-  function syncFieldOverflow(root) {
-    const fields = root.classList && root.classList.contains('reviewed-field')
-      ? [root] : root.querySelectorAll('.reviewed-field');
-    fields.forEach(function (field) {
-      const value = field.querySelector('.field-value');
-      const toggle = field.querySelector('[data-field-expand]');
-      if (!value || !toggle) return;
-      const wasExpanded = value.dataset.expanded === 'true';
-      // Measured against the clamped height, never the reviewer's open state —
-      // a forced synchronous read, so the browser never paints this mid-flip.
-      value.dataset.expanded = 'false';
-      const overflowing = value.scrollHeight > value.clientHeight + 1;
-      toggle.hidden = !overflowing;
-      if (overflowing && wasExpanded) expandField(value, toggle);
-      else collapseField(value, toggle);
-    });
-  }
-
-  function collapseField(value, toggle) {
-    value.dataset.expanded = 'false';
-    toggle.setAttribute('aria-expanded', 'false');
-    toggle.textContent = 'Show more';
-  }
-
-  function expandField(value, toggle) {
-    value.dataset.expanded = 'true';
-    toggle.setAttribute('aria-expanded', 'true');
-    toggle.textContent = 'Show less';
-  }
-
-  function toggleFieldExpand(button) {
-    const value = fieldOf(button).querySelector('.field-value');
-    if (value.dataset.expanded === 'true') collapseField(value, button);
-    else expandField(value, button);
   }
 
   // The controls describe the WHOLE queue and appear only when it runs past one
@@ -166,9 +134,6 @@
   function syncReviewerGate() {
     const name = reviewerName();
     queueItems.hidden = !name;
-    // `showPage` ran once at load while this was still hidden, which measures
-    // zero height — re-sync now that the gate opens the list into layout.
-    if (name) syncFieldOverflow(queueItems);
     renderPager();
     hint.textContent = name
       ? 'Decisions are recorded against this name.'
@@ -181,6 +146,7 @@
   }
 
   showPage(0);
+  shippedCards.forEach(function (card) { rememberRecorded(card); syncCard(card); });
   nameInput.value = localStorage.getItem(REVIEWER_KEY) || '';
   syncReviewerGate();
   // Reveal as soon as there is a name, but hide (and forget) only once the
@@ -191,38 +157,110 @@
   });
   nameInput.addEventListener('blur', syncReviewerGate);
 
-  // A value's line count depends on the card's width, so a viewport resize can
-  // both create and remove overflow. `resize` fires continuously during a
-  // drag, so this is debounced rather than measuring every frame.
-  let resizeSyncTimer = null;
-  window.addEventListener('resize', function () {
-    clearTimeout(resizeSyncTimer);
-    resizeSyncTimer = setTimeout(function () { syncFieldOverflow(queueItems); }, 150);
-  });
+  // ── One field ──────────────────────────────────────────────────────────────
+  // Every control is live from the moment the card renders, so a field has one
+  // question, asked here: does it still hold the value it opened on. Everything
+  // the card shows about a decision — the struck prefill, the Revert, the CTA's
+  // word — is that answer rendered.
+
+  function fieldOf(el) { return el.closest('.reviewed-field'); }
+
+  function currentValue(field) {
+    if (field.dataset.control === 'radio') {
+      const checked = field.querySelector('input[type="radio"]:checked');
+      return checked ? checked.value : '';
+    }
+    return field.querySelector('.field-control').value;
+  }
+
+  function revertField(field) {
+    if (field.dataset.control === 'radio') {
+      field.querySelectorAll('input[type="radio"]').forEach(function (option) {
+        option.checked = option.value === field.dataset.prefill;
+      });
+    } else {
+      field.querySelector('.field-control').value = field.dataset.prefill;
+    }
+    syncCard(field.closest('.queue-card'));
+  }
+
+  // Grows to fit a pasted paragraph as the reviewer types; never shrinks below
+  // the `rows` the template opened it on, so deleting text keeps the box put.
+  function growTextarea(el) {
+    if (el.tagName !== 'TEXTAREA') return;
+    if (el.scrollHeight > el.clientHeight) el.style.height = `${el.scrollHeight}px`;
+  }
+
+  function announceField(field) {
+    const note = field.querySelector('[data-state-note]');
+    if (!note) return;
+    const label = field.querySelector('.field-name');
+    const name = label ? label.textContent.trim() : field.dataset.target;
+    note.textContent = field.dataset.dirty === 'true'
+      ? `${name}: changed from ${field.dataset.prefill || 'unset'}`
+      : `${name}: unchanged`;
+  }
+
+  // ── One card ───────────────────────────────────────────────────────────────
 
   function readValues(card, key) {
     const values = {};
-    card.querySelectorAll('[data-target]').forEach(function (el) {
-      values[el.dataset.target] = key === 'value' ? el.value : el.dataset[key];
+    card.querySelectorAll('.reviewed-field').forEach(function (field) {
+      values[field.dataset.target] =
+        key === 'value' ? currentValue(field) : field.dataset.prefill;
     });
     return values;
   }
 
+  // What a decided card would re-post. Held on the element so an edit made after
+  // the decision can be told from the decision itself, which is the difference
+  // between a dead "Recorded" and a live "Update".
+  function snapshotCard(card) {
+    const notes = card.querySelector('[data-role="notes"]');
+    return JSON.stringify([readValues(card, 'value'), notes ? notes.value : null]);
+  }
+
+  function rememberRecorded(card) {
+    if (card.classList.contains('decided')) card.dataset.recorded = snapshotCard(card);
+  }
+
+  function syncCard(card) {
+    const fields = Array.from(card.querySelectorAll('.reviewed-field'));
+    fields.forEach(function (field) {
+      field.dataset.dirty = currentValue(field) === field.dataset.prefill ? 'false' : 'true';
+      announceField(field);
+    });
+    const changed = fields.filter(function (f) { return f.dataset.dirty === 'true'; }).length;
+    const decided = card.classList.contains('decided');
+    const settled = decided && card.dataset.recorded === snapshotCard(card);
+    const cta = card.querySelector('[data-cta]');
+    cta.disabled = settled;
+    cta.className = 'btn cta' + (settled ? '' : changed ? ' modify' : ' approve');
+    cta.textContent = settled ? CTA_WORDS.recorded
+      : decided ? (changed ? CTA_WORDS.updateModify : CTA_WORDS.updateApprove)
+      : changed ? (changed === 1 ? CTA_WORDS.modify : CTA_WORDS.modifyMany)
+      : CTA_WORDS.approve;
+    card.querySelector('.decide-gate').textContent = settled
+      ? 'recorded as it stands — edit a column to record a change'
+      : `${fields.length} column${fields.length === 1 ? '' : 's'} · ` +
+        (changed ? `${changed} changed` : 'nothing changed');
+  }
+
   // The verdict is settled server-side from submitted vs pre-filled values, so
   // the page posts what it was showing rather than naming a verdict itself.
-  async function submitDecision(card, values) {
+  async function submitDecision(card) {
     if (!reviewerName()) {
       nameInput.focus();
       return;
     }
     // Held shut across the round trip: a second click would record the row twice
     // and count it twice, which can reveal "Resume run" over an unreviewed queue.
-    const submit = card.querySelector('button[type="submit"]');
-    if (submit) submit.disabled = true;
+    const cta = card.querySelector('[data-cta]');
+    cta.disabled = true;
     const fd = new FormData();
     fd.append('input_fingerprint', card.dataset.inputFingerprint);
     fd.append('reviewer', reviewerName());
-    fd.append('reviewed_values', JSON.stringify(values));
+    fd.append('reviewed_values', JSON.stringify(readValues(card, 'value')));
     fd.append('prefilled_values', JSON.stringify(readValues(card, 'prefill')));
     const notes = card.querySelector('[data-role="notes"]');
     if (notes) fd.append('review_notes', notes.value);
@@ -230,7 +268,7 @@
     const r = await fetch(DECIDE_URL, { method: 'POST', body: fd });
     if (!r.ok) {
       alert(`Failed: ${r.status} ${await r.text()}`);
-      if (submit) submit.disabled = false;
+      syncCard(card);
       return;
     }
     // A reviewer changing their own recorded decision reviews no new row.
@@ -266,157 +304,47 @@
     // undecided then.
     pager.replaceCard(card.dataset.inputFingerprint, fresh);
     card.replaceWith(fresh);
-    syncFieldOverflow(fresh);
+    rememberRecorded(fresh);
+    syncCard(fresh);
+    focusNextUndecided(fresh);
   }
 
-  // `data-state` says which state a field is in and the stylesheet renders that
-  // state; the value a field displays and submits is written here, in
-  // `showCurrentValue` and on the control. In `start` the control still holds its
-  // prefill, so Approve needs no value work, and an approved field submits exactly
-  // the value it displayed — which settles `approve` server-side.
-  const STATE_NOTES = {
-    start: 'not yet decided', approved: 'approved', modified: 'modified',
-    editing: 'open for a new value', locked: 'recorded',
-  };
-  // Cancel returns a field to the state the editor opened from; a second open
-  // would otherwise return it to `editing`, which no control leaves.
-  const EDIT_RETURN_STATES = ['start', 'approved', 'modified'];
-
-  function fieldOf(el) { return el.closest('.reviewed-field'); }
-  function controlOf(field) { return field.querySelector('[data-target]'); }
-
-  function setFieldState(field, state) {
-    field.dataset.state = state;
-    announceFieldState(field, state);
-    syncDecideGate(field.closest('.queue-card'));
-    // `editing` hides the value, `locked` shows different children — the
-    // value's height is not constant across states, so overflow is re-measured.
-    syncFieldOverflow(field);
-  }
-
-  function announceFieldState(field, state) {
-    const note = field.querySelector('[data-state-note]');
-    if (!note) return;
-    const label = field.querySelector('label');
-    note.textContent = `${label ? label.textContent.trim() : ''}: ${STATE_NOTES[state] || state}`;
-  }
-
-  function syncDecideGate(card) {
-    const fields = card.querySelectorAll('.reviewed-field');
-    const decided = Array.from(fields).filter(function (f) {
-      return f.dataset.state === 'approved' || f.dataset.state === 'modified';
-    }).length;
-    const submit = card.querySelector('button[type="submit"]');
-    if (submit) submit.disabled = decided < fields.length;
-    const gate = card.querySelector('.decide-gate');
-    if (gate) {
-      gate.textContent =
-        `${decided} of ${fields.length} column${fields.length === 1 ? '' : 's'} decided`;
-    }
-  }
-
-  function showCurrentValue(field, value) {
-    const shown = field.querySelector('.current-value');
-    if (value === '') { shown.innerHTML = '<em>unset</em>'; } else { shown.textContent = value; }
-  }
-
-  function openEditor(field) {
-    const control = controlOf(field);
-    field.dataset.editReturn = field.dataset.state;
-    field.dataset.editValue = control.value;
-    setFieldState(field, 'editing');
-    syncMatchHint(field);
-    control.focus();
-    growTextarea(control);
-  }
-
-  // Grows to fit a pasted paragraph as the reviewer types; never shrinks below
-  // the `rows` the template opened it on, so deleting text keeps the box put.
-  function growTextarea(el) {
-    if (el.tagName !== 'TEXTAREA') return;
-    if (el.scrollHeight > el.clientHeight) el.style.height = `${el.scrollHeight}px`;
-  }
-
-  function syncMatchHint(field) {
-    const control = controlOf(field);
-    field.querySelector('.field-editor').dataset.match =
-      control.value === control.dataset.prefill ? 'true' : 'false';
-  }
-
-  function saveEdit(field) {
-    const control = controlOf(field);
-    showCurrentValue(field, control.value);
-    setFieldState(field, control.value === control.dataset.prefill ? 'approved' : 'modified');
-  }
-
-  function cancelEdit(field) {
-    const control = controlOf(field);
-    control.value = field.dataset.editValue;
-    const back = field.dataset.editReturn;
-    setFieldState(field, EDIT_RETURN_STATES.indexOf(back) === -1 ? 'start' : back);
-  }
-
-  function revertField(field) {
-    const control = controlOf(field);
-    control.value = control.dataset.prefill;
-    showCurrentValue(field, control.dataset.prefill);
-    setFieldState(field, 'start');
-  }
-
-  // A decided card records no new decision until the reviewer asks to change
-  // it: unlocking returns every field to `start`, so each must be decided
-  // again before the gate lets a new submit through. It submits nothing.
-  function unlockCard(button) {
-    const card = button.closest('.queue-card');
-    card.querySelectorAll('.reviewed-field').forEach(function (field) {
-      field.dataset.state = 'start';
-      announceFieldState(field, 'start');
-      syncFieldOverflow(field);
-    });
-    const notes = card.querySelector('[data-role="notes"]');
-    if (notes) notes.readOnly = false;
-    button.hidden = true;
-    card.querySelector('button[type="submit"]').hidden = false;
-    const gate = card.querySelector('.decide-gate');
-    if (gate) gate.hidden = false;
-    syncDecideGate(card);
+  // The reviewer works the page top-down, and the row they just finished is the
+  // one thing on it they are done with.
+  function focusNextUndecided(from) {
+    const cards = Array.from(queueItems.querySelectorAll('.queue-card'));
+    const next = cards.slice(cards.indexOf(from) + 1)
+      .find(function (card) { return !card.classList.contains('decided'); });
+    if (next) next.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 
   document.addEventListener('click', function (ev) {
     const step = ev.target.closest('[data-page-step]');
     if (step) { showPage(currentPage + Number(step.dataset.pageStep), { scroll: true }); return; }
-    const unlock = ev.target.closest('[data-unlock]');
-    if (unlock) { unlockCard(unlock); return; }
-    const approve = ev.target.closest('[data-field-approve]');
-    if (approve) { setFieldState(fieldOf(approve), 'approved'); return; }
-    const edit = ev.target.closest('[data-field-edit]');
-    if (edit) { openEditor(fieldOf(edit)); return; }
-    const save = ev.target.closest('[data-field-save]');
-    if (save) { saveEdit(fieldOf(save)); return; }
-    const cancel = ev.target.closest('[data-field-cancel]');
-    if (cancel) { cancelEdit(fieldOf(cancel)); return; }
     const revert = ev.target.closest('[data-field-revert]');
-    if (revert) { revertField(fieldOf(revert)); return; }
-    const expand = ev.target.closest('[data-field-expand]');
-    if (expand) toggleFieldExpand(expand);
+    if (revert) revertField(fieldOf(revert));
+  });
+
+  document.addEventListener('change', function (ev) {
+    const card = ev.target.closest('.queue-card');
+    if (card) syncCard(card);
   });
 
   document.addEventListener('input', function (ev) {
-    const field = fieldOf(ev.target);
-    if (field && field.dataset.state === 'editing' && ev.target.matches('[data-target]')) {
-      syncMatchHint(field);
-      growTextarea(ev.target);
-    }
+    const card = ev.target.closest('.queue-card');
+    if (!card) return;
+    growTextarea(ev.target);
+    syncCard(card);
   });
 
   document.addEventListener('submit', function (ev) {
     const form = ev.target.closest('.review-form');
     if (!form) return;
     ev.preventDefault();
-    const submit = form.querySelector('button[type="submit"]');
-    if (submit && (submit.disabled || submit.hidden)) return;
+    const cta = form.querySelector('[data-cta]');
+    if (cta && cta.disabled) return;
     const card = form.closest('.queue-card');
-    if (card) submitDecision(card, readValues(card, 'value'));
+    if (card) submitDecision(card);
   });
 })();
 </script>
