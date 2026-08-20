@@ -132,10 +132,18 @@ CODE_EXECUTION_REFUSAL = (
 )
 
 
-def find_unapproved_code_issues(project_id: str, candidate: dict) -> list[str]:
-    """Enforced on write, not on the model — on load it would refuse every stage stored before."""
+def find_unapproved_code_issues(
+    project_id: str, candidate: dict, stored: dict[str, dict] | None = None
+) -> list[str]:
+    """Gates INTRODUCING one of these types, never maintaining a stage that already is one."""
     stage_type = candidate.get("type")
     if stage_type not in APPROVAL_REQUIRED_TYPES:
+        return []
+    # A stored stage of this type keeps loading and running, so it must stay
+    # editable: generating its tests, fixing its summary, correcting its code.
+    # Refusing that would strand every project holding one — and the approval it
+    # would ask for was already given, or predates the gate.
+    if (stored or {}).get(candidate.get("id", ""), {}).get("type") == stage_type:
         return []
     if has_code_execution_approval(project_id):
         return []
@@ -165,7 +173,7 @@ def _apply(project_id: str, specs: dict[str, dict], stage_id: str, candidate: di
     issues = validate_workflow_draft(list(resulting.values()))
     issues += find_description_issues(candidate)
     issues += find_unnamed_model_issues(candidate)
-    issues += find_unapproved_code_issues(project_id, candidate)
+    issues += find_unapproved_code_issues(project_id, candidate, specs)
     if issues:
         return EditStageResult(ok=False, issues=issues)
 

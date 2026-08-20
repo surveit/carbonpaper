@@ -92,17 +92,16 @@ def test_add_stage_then_save_creates_an_unpublished_version(examples_root: Path)
     stage = {
         "id": "score",
         "description": "Score rows",
-        "type": "python_row_function",
+        "type": "starlark_row_function",
         "inputs": [{"id": "load"}],
         "signature": {"form": "extends",
                       "reads": [{"input": "load", "columns": [
                           {"name": "id", "type": "str", "nullable": False}]}],
                       "adds": [{"name": "score", "type": "float", "nullable": True}]},
-        "function": {
-            "kind": "inline",
+        "starlark": {
             "summary": "Scores every row 1.0, which is what a fixture needs and no more.",
             "corner_cases": [],
-            "code": "def transform(row): return {'score': 1.0}",
+            "code": "def transform(row):\n    return {'score': 1.0}\n",
         },
     }
 

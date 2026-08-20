@@ -17,6 +17,7 @@ from app.models.stages.signature import (
     SIGNATURE_CONTRACT_NOTE as SIGNATURE_CONTRACT_NOTE,
 )
 from app.models.stages.stage_types import (
+    APPROVAL_REQUIRED_TYPES,
     AUTHORABLE_CODE_CARRYING_TYPES as AUTHORABLE_CODE_CARRYING_TYPES,
     AUTHORABLE_TYPES,
     CODE_CARRYING_TYPES,
@@ -182,7 +183,30 @@ def _names(types: list[StageType]) -> str:
 
 def render_type_catalog(indent: str = "    ") -> str:
     """The authorable types, rendered identically on every authoring surface."""
-    return "\n".join(_render_type(name, indent) for name in AUTHORABLE_TYPES)
+    return "\n".join(
+        [_render_type(name, indent) for name in AUTHORABLE_TYPES]
+        + ["", CODE_EXECUTION_ESCAPE_NOTE]
+    )
+
+
+# The catalog says these EXIST without offering them. Without it a model holding a
+# step none of the above expresses concludes the step is impossible, and the
+# approval path — the whole point of withholding rather than deleting them — is
+# never reached. It does not repeat the warning: the refusal on write carries that,
+# in front of the actual stage.
+CODE_EXECUTION_ESCAPE_NOTE = (
+    "Two more types exist and are deliberately not listed above, because a project only "
+    "gets them once its owner has turned on code execution: "
+    + ", ".join(f"`{name}`" for name in APPROVAL_REQUIRED_TYPES) + ". They "
+    "run Python unsandboxed — files, network, installing packages — and the frame one "
+    "also ends the row trace, so a figure downstream of it cannot be walked back. "
+    "Everything above beats both; between the two, the row one keeps the trace.\n"
+    "Do not assume you may use one, and do not write one to find out. If a step "
+    "genuinely needs Python, tell the project's owner in plain words what it will do and "
+    "why nothing above fits, ask whether to turn code execution on, and WAIT for their "
+    "answer. Only if they say yes, call `approve_code_execution`."
+)
+
 
 
 def _render_type(stage_type: str, indent: str) -> str:

@@ -25,9 +25,23 @@ _FRAME_STAGE = {
 
 
 # ── withheld from the catalog, but never from the runtime ─────────────────────
-def test_the_catalog_no_longer_offers_the_frame_function():
-    assert "python_frame_function" not in AUTHORABLE_TYPES
-    assert "python_frame_function" not in render_type_catalog()
+def test_the_catalog_no_longer_offers_the_python_types():
+    for name in APPROVAL_REQUIRED_TYPES:
+        assert name not in AUTHORABLE_TYPES
+        assert f"- {name} —" not in render_type_catalog()
+
+
+def test_the_catalog_still_says_they_exist_and_how_to_ask():
+    """The door needs a doorbell: withheld silently, a stuck model concludes it is impossible."""
+    catalog = render_type_catalog()
+    for name in APPROVAL_REQUIRED_TYPES:
+        assert name in catalog, name
+    assert "approve_code_execution" in catalog
+    assert "WAIT for their answer" in catalog
+
+
+def test_the_catalog_says_the_row_type_is_the_safer_of_the_two():
+    assert "the row one keeps the trace" in render_type_catalog()
 
 
 def test_the_type_still_exists_so_stored_workflows_keep_loading():
@@ -56,6 +70,11 @@ def test_the_refusal_says_what_to_try_instead_and_how_to_turn_it_on():
         assert expected in refusal, expected
     # The reader is told the two costs, not just that it is blocked.
     assert "network" in refusal and "trace stops at it" in refusal
+
+
+def test_a_python_row_function_is_gated_too():
+    row_stage = dict(_FRAME_STAGE, type="python_row_function")
+    assert stage_edit.find_unapproved_code_issues("some-project", row_stage) != []
 
 
 def test_a_sandboxed_stage_is_never_gated():
@@ -96,3 +115,21 @@ def test_approving_twice_keeps_the_first_answer(fresh_store):
     again = code_approval.approve_code_execution("p1", "a different reason")
     assert again.approved_at == first.approved_at
     assert again.reason == "the original reason"
+
+
+# ── maintaining a stage that already exists ───────────────────────────────────
+def test_a_stage_already_of_this_type_stays_editable_without_approval():
+    """Refusing this would strand every project holding one — 492 stages do."""
+    stored = {"reshape": dict(_FRAME_STAGE, description="the old description")}
+    edited = dict(_FRAME_STAGE, description="a corrected description")
+    assert stage_edit.find_unapproved_code_issues("p1", edited, stored) == []
+
+
+def test_changing_a_stage_INTO_a_gated_type_is_still_refused():
+    stored = {"reshape": dict(_FRAME_STAGE, type="starlark_row_function")}
+    assert stage_edit.find_unapproved_code_issues("p1", _FRAME_STAGE, stored) != []
+
+
+def test_a_new_stage_is_refused_even_when_others_of_the_type_are_stored():
+    stored = {"elsewhere": dict(_FRAME_STAGE, id="elsewhere")}
+    assert stage_edit.find_unapproved_code_issues("p1", _FRAME_STAGE, stored) != []

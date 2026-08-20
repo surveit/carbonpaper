@@ -9,7 +9,7 @@ from app.models.stages.code import (
 from app.models.stages.stage_types import (
     AUTHORABLE_CODE_CARRYING_TYPES,
     STAGE_TYPES,
-    RETIRED_TYPES,
+    APPROVAL_REQUIRED_TYPES,
 )
 
 
@@ -75,11 +75,18 @@ def test_each_governed_type_is_marked_where_the_shared_note_is_stated():
             assert f"`{stage_type}`" in prompt, stage_type
 
 
-def test_a_retired_type_is_offered_by_neither_prompt():
-    # It still loads and runs; advertising it would invite authoring a new one.
+def test_a_withheld_type_is_named_but_never_offered_as_an_entry():
+    """Named so a stuck model asks; never an entry, or it reads as available."""
     for prompt in _authoring_prompts():
-        for stage_type in RETIRED_TYPES:
-            assert stage_type not in prompt, stage_type
+        for stage_type in APPROVAL_REQUIRED_TYPES:
+            assert stage_type in prompt, stage_type
+            assert f"- {stage_type} —" not in prompt, stage_type
+
+
+def test_both_prompts_say_how_a_withheld_type_is_turned_on():
+    for prompt in _authoring_prompts():
+        assert "approve_code_execution" in prompt
+        assert "WAIT for their answer" in prompt
 
 
 def test_no_type_note_still_carries_the_shared_text():

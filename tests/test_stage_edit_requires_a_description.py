@@ -11,6 +11,7 @@ import json
 import pytest
 
 from app.models.stages.code import SUMMARY_DESCRIPTION, SUMMARY_MAX_CHARS
+from app.services.code_approval import approve_code_execution
 from app.services.stage_edit import add_stage_spec, edit_stage_spec
 
 _SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}]}
@@ -38,6 +39,9 @@ def _source_spec():
 @pytest.fixture
 def project(tmp_path):
     name = tmp_path.name
+    # These stages are python_row_function on purpose — the rule under test binds
+    # code-carrying types, and an unapproved project is refused before reaching it.
+    approve_code_execution(name, "fixture: the rule under test is about code stages")
     assert add_stage_spec(name, json.dumps(_source_spec())).ok
     return name
 

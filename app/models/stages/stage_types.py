@@ -40,24 +40,21 @@ STAGE_TYPES: dict[str, StageTypeSpec] = {
     **_SORT_RANK,
 }
 
-# Types that still LOAD and RUN but are no longer offered for authoring, so the
-# prompts stop advertising them: starlark_row_function does the same job sandboxed.
-# Not a deletion — a stored version holding one must keep loading.
-RETIRED_TYPES = ("python_row_function",)
-
 # Types a project may use only after its owner has approved unsandboxed code
-# execution (app.services.project.has_code_execution_approval). Kept OUT of the
-# catalog every prompt renders, because that catalog is built once per server and
-# cannot vary by project — the refusal happens on WRITE instead, in
-# app.services.stage_edit, where the project is known and the message can say how
-# to turn it on. A stored stage of one of these types keeps loading and running.
-APPROVAL_REQUIRED_TYPES = ("python_frame_function",)
+# execution (app.services.code_approval). Withheld from the catalog every prompt
+# renders, because that catalog is built once per SERVER and cannot vary by
+# project — the refusal happens on WRITE instead, in app.services.stage_edit,
+# where the project is known and the message can say how to turn it on. The
+# catalog still SAYS they exist (CODE_EXECUTION_ESCAPE_NOTE), or a model with a
+# step it cannot express would conclude the step is impossible rather than ask.
+# A stored stage of either type keeps loading and running.
+APPROVAL_REQUIRED_TYPES = ("python_row_function", "python_frame_function")
 
 # What the authoring prompts list. STAGE_TYPES stays whole: the runtime, the
 # diagrams and the trace all read it for types a stored workflow may still carry.
 AUTHORABLE_TYPES: dict[str, StageTypeSpec] = {
     name: spec for name, spec in STAGE_TYPES.items()
-    if name not in RETIRED_TYPES and name not in APPROVAL_REQUIRED_TYPES
+    if name not in APPROVAL_REQUIRED_TYPES
 }
 
 # The types whose config carries authored code all owe a plain-language `summary`
@@ -66,8 +63,9 @@ AUTHORABLE_TYPES: dict[str, StageTypeSpec] = {
 CODE_CARRYING_TYPES = ("python_row_function", "python_frame_function", "publish",
                        "filter_rows", "starlark_row_function", "starlark_filter_rows")
 
-# The subset a prompt names: a retired type's rule is still enforced on a stored
-# stage, but naming it would advertise a type the catalog no longer offers.
+# The subset a prompt states the code-description rule for: a withheld type's rule
+# is still enforced on a stored stage, but stating it beside the offered types
+# would read as an invitation to author one.
 AUTHORABLE_CODE_CARRYING_TYPES = tuple(
     name for name in CODE_CARRYING_TYPES if name in AUTHORABLE_TYPES
 )
