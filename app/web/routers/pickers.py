@@ -34,7 +34,14 @@ async def projects_picker(request: Request, current: str = ""):
             # Names only, never the home page's ProjectCard: a card computes each
             # project's whole status (every stored version loaded), so one unreadable
             # version would take the switcher down on every page that draws it.
+            #
+            # list_project_listings() reads the record store, which outlives a deleted
+            # project's workspace dir by design (delete_project() docstring) so a
+            # re-created project can reuse its stored documents. project_exists()
+            # checks the workspace dir, so it's what tells a deleted project apart
+            # from a live one here.
             for listing in list_project_listings()
+            if project_exists(listing.id)
         ],
     ))
 
