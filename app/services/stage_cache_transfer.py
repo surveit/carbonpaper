@@ -28,7 +28,7 @@ class CacheArchiveManifest(BaseModel):
     frame_count: int
 
 
-class StageImportTally(BaseModel):
+class StageImportCount(BaseModel):
     stage_id: str
     imported: int
     reachable: int
@@ -43,7 +43,7 @@ class CacheImportReport(BaseModel):
     frames_written: int
     frames_already_stored: int
     reachable: int
-    stages: list[StageImportTally]
+    stages: list[StageImportCount]
 
 
 def export_stage_cache(project_id: str) -> bytes:
@@ -87,7 +87,7 @@ def import_stage_cache(archive: bytes, destination_project_id: str) -> CacheImpo
         frames_written=frames_written,
         frames_already_stored=len(frames) - frames_written,
         reachable=_count_reachable(entries, destination_project_id),
-        stages=_tally_stages(entries, destination_project_id),
+        stages=_count_stages(entries, destination_project_id),
     )
 
 
@@ -106,7 +106,7 @@ def _count_reachable(entries: list[StageCacheEntry], project_id: str) -> int:
     return sum((entry.stage_id, entry.stage_fingerprint) in live for entry in entries)
 
 
-def _tally_stages(entries: list[StageCacheEntry], project_id: str) -> list[StageImportTally]:
+def _count_stages(entries: list[StageCacheEntry], project_id: str) -> list[StageImportCount]:
     live = _find_live_fingerprints(project_id)
     imported = Counter(entry.stage_id for entry in entries)
     reachable = Counter(
@@ -114,7 +114,7 @@ def _tally_stages(entries: list[StageCacheEntry], project_id: str) -> list[Stage
         if (entry.stage_id, entry.stage_fingerprint) in live
     )
     return [
-        StageImportTally(stage_id=stage_id, imported=count, reachable=reachable[stage_id])
+        StageImportCount(stage_id=stage_id, imported=count, reachable=reachable[stage_id])
         for stage_id, count in sorted(imported.items())
     ]
 

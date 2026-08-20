@@ -32,11 +32,11 @@ def build_row_diff(
 ) -> RowDiff:
     if parent_row is None:
         state = CellDiffState.added if is_origin else CellDiffState.carried
-        return _tally([
+        return _count_fields([
             RowField(name=str(name), state=state, text=_render(value), was=None)
             for name, value in row.items()
         ])
-    return _tally(
+    return _count_fields(
         [_compare_field(str(name), value, parent_row) for name, value in row.items()]
         + [
             RowField(name=str(name), state=CellDiffState.dropped,
@@ -71,7 +71,7 @@ def _compare_field(name: str, value: Any, parent_row: dict[str, Any]) -> RowFiel
     return RowField(name=name, state=CellDiffState.changed, text=text, was=was)
 
 
-def _tally(fields: list[RowField]) -> RowDiff:
+def _count_fields(fields: list[RowField]) -> RowDiff:
     def count(state: CellDiffState) -> int:
         return sum(1 for field in fields if field.state is state)
 

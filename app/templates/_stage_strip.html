@@ -21,8 +21,8 @@
 </span>
 {% if show_counts %}
 <div class="strip-counts" id="strip-counts">
-  {%- for tally in strip.tallies %}
-  <span><i class="status-{{ tally.status }}"></i>{{ tally.count }} {{ tally.label }}</span>
+  {%- for status_count in strip.counts %}
+  <span><i class="status-{{ status_count.status }}"></i>{{ status_count.count }} {{ status_count.label }}</span>
   {%- endfor %}
 </div>
 {% endif %}

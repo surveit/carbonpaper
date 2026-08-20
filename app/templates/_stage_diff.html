@@ -14,7 +14,7 @@
                     tinted and labelled as dropped.
    The header is ONE horizontal axis, identical for either shape: the input
    frames stacked vertically, a bracket gathering them where there is more than
-   one, a rail carrying the tally of what the stage did to the frame, then the
+   one, a rail carrying the count labels of what the stage did to the frame, then the
    output frame. The output is a sibling of the input stack, so a second input
    lengthens the stack without moving the output. Each frame unit names its part
    in words (base input / reference input / output, so the base reads without
@@ -39,17 +39,17 @@
     · {% endif -%}
     <a href="{{ links.stage_csv(frame_id) }}">⬇ CSV</a></span></span>
 {%- endmacro %}
-{# The axis: the input stack → the rail → the output. `tally` is the list of
-   things the stage did that its own shape measured, in one vocabulary — the
+{# The axis: the input stack → the rail → the output. `count_labels` is the list
+   of things the stage did that its own shape measured, in one vocabulary — the
    template renders it the same way whichever shape produced it. #}
-{% macro diff_head(inputs, output_id, output_rows, tally) -%}
+{% macro diff_head(inputs, output_id, output_rows, count_labels) -%}
 <div class="preview-head diff-head"><span class="diff-flow">
     <span class="diff-inputs">
     {%- for frame in inputs %}{{ frame_unit(frame.role, frame.stage_id, frame.rows_total,
         'diff-frame-base' if loop.first else 'diff-frame-ref') }}
     {%- endfor %}</span>
     {%- if inputs | length > 1 %}<span class="diff-brace" aria-hidden="true"></span>{% endif %}
-    <span class="diff-rail"><span class="diff-tally">{{ tally | join(' · ') }}</span>
+    <span class="diff-rail"><span class="diff-count-labels">{{ count_labels | join(' · ') }}</span>
     <span class="diff-arrow" aria-hidden="true">→</span></span>
     <span class="diff-outputs">{{ frame_unit('output', output_id, output_rows, 'diff-frame-out') }}</span>
 </span></div>
@@ -62,7 +62,7 @@
 {%- else %}{{ text | truncate(240) }}{% endif %}</td>
 {%- endmacro %}
 <div class="preview-block stage-diff">
-  {{ diff_head(diff.inputs, stage.stage_id, diff.output_rows, diff.tally) }}
+  {{ diff_head(diff.inputs, stage.stage_id, diff.output_rows, diff.count_labels) }}
 {% if diff.kind == 'filter_rows' %}
   {% if diff.input_total > diff.rows | length %}
   <p class="muted">showing the first {{ diff.rows | length }} of {{ "{:,}".format(diff.input_total) }} input rows{% if diff.dropped_beyond_window %} — {{ "{:,}".format(diff.dropped_beyond_window) }} dropped row{% if diff.dropped_beyond_window != 1 %}s{% endif %} fall{% if diff.dropped_beyond_window == 1 %}s{% endif %} beyond them{% endif %}</p>

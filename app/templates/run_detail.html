@@ -484,7 +484,7 @@
         ? `${progress.completed}/${progress.total} rows`
         : `${progress.completed} rows`;
     }
-    function paintStrip(stages, tallies) {
+    function paintStrip(stages, statusCounts) {
       const strip = $('stage-strip');
       if (strip) {
         stages.forEach(function (s) {
@@ -497,7 +497,7 @@
       }
       const counts = $('strip-counts');
       if (counts) {
-        counts.replaceChildren(...tallies.map(function (t) {
+        counts.replaceChildren(...statusCounts.map(function (t) {
           const span = document.createElement('span');
           const dot = document.createElement('i');
           dot.className = 'status-' + t.status;
@@ -516,7 +516,7 @@
         const progress = running ? formatProgress(running.progress) : '';
         aside.textContent = progress ? `${h.aside || ''} · ${progress}` : (h.aside || '');
       }
-      paintStrip(d.stages, h.tallies);
+      paintStrip(d.stages, h.counts);
 
       const sig = d.stages.map(s => s.status).join(',');
       if (sig !== lastSig) { lastSig = sig; await rerenderWorkflow(d.mermaid); }

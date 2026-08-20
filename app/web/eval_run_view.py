@@ -80,7 +80,7 @@ def describe_eval_run_duration(run: EvalRun) -> str | None:
 
 # ── One run's scored rows ────────────────────────────────────────────────────
 
-class CheckTally(BaseModel):
+class CheckCount(BaseModel):
     """`matched` counts every scored row, not only the ones the table below shows."""
 
     column: str
@@ -103,7 +103,7 @@ class ScoredRow(BaseModel):
 class EvalRowsView(BaseModel):
     """`rows` is empty whenever `error` is set — an unreadable table scores nothing."""
 
-    checks: list[CheckTally]
+    checks: list[CheckCount]
     input_columns: list[str]
     rows: list[ScoredRow]
     rows_total: int
@@ -127,7 +127,7 @@ def build_eval_rows(result_path: Path, dataset: TableRef | None) -> EvalRowsView
     return _assemble_view(result, checks, inputs, input_error)
 
 
-class ScoreTally(BaseModel):
+class ScoreCount(BaseModel):
     """What the badge needs off a result table, without building every row."""
 
     passed: int
@@ -135,7 +135,7 @@ class ScoreTally(BaseModel):
     columns: list[str]
 
 
-def tally_scored_rows(result_path: Path) -> ScoreTally | None:
+def count_scored_rows(result_path: Path) -> ScoreCount | None:
     """None where the table will not read or scored no check — the caller then states nothing."""
     try:
         result = read_frame_file(result_path)
@@ -145,7 +145,7 @@ def tally_scored_rows(result_path: Path) -> ScoreTally | None:
     if not checks:
         return None
     verdicts = _read_row_verdicts(result, checks)
-    return ScoreTally(passed=sum(1 for verdict in verdicts if verdict),
+    return ScoreCount(passed=sum(1 for verdict in verdicts if verdict),
                       total=len(verdicts), columns=checks)
 
 
@@ -172,7 +172,7 @@ def _assemble_view(
     text = render_frame_as_text(result.head(shown))
     input_text = None if inputs is None else render_frame_as_text(inputs.head(shown))
     return EvalRowsView(
-        checks=[CheckTally(column=check, matched=int(result[f"{check}{_MATCH}"].sum()))
+        checks=[CheckCount(column=check, matched=int(result[f"{check}{_MATCH}"].sum()))
                 for check in checks],
         input_columns=[] if input_text is None else [str(c) for c in input_text.columns],
         rows=[

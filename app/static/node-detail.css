@@ -116,7 +116,7 @@ table.data-preview.scratch th { background: var(--hover); }
 
 /* The diff header (app/templates/_stage_diff.html): ONE horizontal axis — the
    input frames stacked vertically, a bracket gathering them where there is more
-   than one, a rail carrying the tally of what the stage did, then the output
+   than one, a rail carrying the count labels of what the stage did, then the output
    frame. The row never wraps and every item starts at the top, so a second input
    lengthens the input stack downward and leaves the output where it was. The
    base input takes a solid left rule and a reference input a dashed one, but the
@@ -161,7 +161,7 @@ table.data-preview.scratch th { background: var(--hover); }
 }
 .diff-frame-id { font-size: 11.5px; }
 .diff-frame-meta { font-size: 11px; font-weight: 400; color: var(--muted); }
-/* The rail: the tally rides above a line that runs left-to-right into the
+/* The rail: the count labels ride above a line that runs left-to-right into the
    arrowhead. Its top padding drops it to the height of the first frame's text. */
 .diff-rail {
     display: flex;
@@ -174,7 +174,7 @@ table.data-preview.scratch th { background: var(--hover); }
     text-transform: none;
     color: var(--muted);
 }
-.diff-tally {
+.diff-count-labels {
     font-size: 11px;
     font-weight: 600;
     text-align: center;

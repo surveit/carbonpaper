@@ -179,12 +179,12 @@ def test_the_counts_name_all_seven_stage_statuses(tmp_path: Path):
 
     header = build_run_header(PROJECT, RUN, tmp_path / PROJECT / "runs" / RUN, manifest)
 
-    assert [(t.status, t.count) for t in header.strip.tallies] == [
+    assert [(t.status, t.count) for t in header.strip.counts] == [
         ("ok", 1), ("validation_warnings", 1), ("running", 1),
         ("awaiting_review", 1), ("error", 1), ("cancelled", 1), ("pending", 1),
     ]
     # A pending stage's label says WHY it has not run, which is read off the run.
-    assert header.strip.tallies[-1].label == "not reached"
+    assert header.strip.counts[-1].label == "not reached"
 
 
 # ─── Provenance and duration: absent stays absent ───────────────────────────

@@ -15,7 +15,7 @@ from app.core.run_status import RunStatus, StageStatus
 from app.services import run as run_service
 from app.web.stage_strip import (
     StageStrip,
-    StatusTally,
+    StatusCount,
     build_stage_strip,
     count_stage_status,
     read_stage_records,
@@ -55,7 +55,7 @@ class RunLiveView(BaseModel):
     duration: str | None
     duration_verb: str
     aside: str | None
-    tallies: list[StatusTally]
+    counts: list[StatusCount]
 
 
 class RunHeader(BaseModel):
@@ -223,7 +223,7 @@ def _build_live_view(
         duration=describe_run_duration(manifest),
         duration_verb="running" if running else "ran",
         aside=cta.aside,
-        tallies=strip.tallies,
+        counts=strip.counts,
     )
 
 

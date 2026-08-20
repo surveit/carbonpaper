@@ -42,7 +42,7 @@
 
       The squares divide the row's width rather than each claiming 26px, because
       a fixed width silently drops the overflow: the reader counts fewer squares
-      than the tally beneath claims, with no sign any are missing. They grow to
+      than the count beneath claims, with no sign any are missing. They grow to
       26px and no further, so a short workflow looks as it always did. Below
       ~3px each the row can still overflow — that is 60+ stages in the narrowest
       column, and the floor is what keeps a single failed stage visible. ── */

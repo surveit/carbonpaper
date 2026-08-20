@@ -436,9 +436,9 @@ def test_filter_rows_counts_the_drops_beyond_the_shown_window(tmp_path: Path) ->
     assert diff.dropped_total == 1 and diff.dropped_beyond_window == 1
 
 
-# ─── the rail tally: one vocabulary, and only the metrics the shape measured ─
+# ─── count_labels: one vocabulary, only the metrics the shape measured ───────
 
-def test_a_row_aligned_tally_names_the_columns_and_the_changed_cells(tmp_path: Path) -> None:
+def test_a_row_aligned_count_labels_names_the_columns_and_the_changed_cells(tmp_path: Path) -> None:
     _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}))
     out_rel = _write_output(tmp_path, "classify", pd.DataFrame(
         {"name": ["A", "b"], "label": ["x", "y"]}))
@@ -448,10 +448,10 @@ def test_a_row_aligned_tally_names_the_columns_and_the_changed_cells(tmp_path: P
     diff = _diff(tmp_path, _row_stage(out_columns), out_rel)
 
     assert diff is not None
-    assert diff.tally == ["+1 col", "−1 col", "1 cell changed"]
+    assert diff.count_labels == ["+1 col", "−1 col", "1 cell changed"]
 
 
-def test_a_row_aligned_tally_states_the_zero_change_it_measured(tmp_path: Path) -> None:
+def test_a_row_aligned_count_labels_states_the_zero_change_it_measured(tmp_path: Path) -> None:
     frame = pd.DataFrame({"name": ["a", "b"], "val": [1, 2]})
     _write_output(tmp_path, LOAD_ID, frame)
     out_rel = _write_output(tmp_path, "classify", frame.copy())
@@ -460,10 +460,10 @@ def test_a_row_aligned_tally_states_the_zero_change_it_measured(tmp_path: Path) 
 
     assert diff is not None
     # Nothing moved, and the rail still says something true rather than nothing.
-    assert diff.tally == ["0 cells changed"]
+    assert diff.count_labels == ["0 cells changed"]
 
 
-def test_a_filter_tally_reports_rows_and_never_a_metric_it_did_not_measure(
+def test_a_filter_count_labels_reports_rows_and_never_a_metric_it_did_not_measure(
     tmp_path: Path,
 ) -> None:
     _write_output(tmp_path, LOAD_ID, pd.DataFrame(
@@ -474,8 +474,8 @@ def test_a_filter_tally_reports_rows_and_never_a_metric_it_did_not_measure(
     diff = _diff(tmp_path, _filter_stage(), out_rel)
 
     assert diff is not None
-    assert diff.tally == ["−2 rows"]
-    assert not any("cell" in part or "col" in part for part in diff.tally)
+    assert diff.count_labels == ["−2 rows"]
+    assert not any("cell" in part or "col" in part for part in diff.count_labels)
 
 
 def test_a_filter_that_dropped_nothing_says_so_rather_than_nothing(tmp_path: Path) -> None:
@@ -487,7 +487,7 @@ def test_a_filter_that_dropped_nothing_says_so_rather_than_nothing(tmp_path: Pat
     diff = _diff(tmp_path, _filter_stage(), out_rel)
 
     assert diff is not None
-    assert diff.tally == ["0 rows dropped"]
+    assert diff.count_labels == ["0 rows dropped"]
 
 
 def test_both_shapes_expose_the_output_row_count_under_one_name(tmp_path: Path) -> None:

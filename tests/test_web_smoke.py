@@ -251,7 +251,7 @@ def test_cmdk_palette_sends_a_stage_to_the_run_being_read(demo_project, monkeypa
         RunIndexRow(run_id="20260813T090000", status="errors", outcome="Error",
                     strip=StageStrip(squares=[StageSquare(stage_id="load", status="ok"),
                                               StageSquare(stage_id="gone", status="pending")],
-                                     tallies=[]))])
+                                     counts=[]))])
     rows = client.get("/cmdk_palette/index",
                       params={"project_id": "demo", "run": "20260813T090000"}).json()["rows"]
     stages = [row for row in rows if row["kind"] == "stage"]

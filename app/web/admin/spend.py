@@ -58,7 +58,7 @@ class SpendEntry(BaseModel):
         return self.usage.model or UNRECORDED_MODEL
 
 
-class SpendTally(BaseModel):
+class SpendCount(BaseModel):
     label: str
     cost_usd: float
     input_tokens: int
@@ -68,11 +68,11 @@ class SpendTally(BaseModel):
 
 
 class SpendReading(BaseModel):
-    total: SpendTally
-    by_day: list[SpendTally]
-    by_source: list[SpendTally]
-    by_model: list[SpendTally]
-    by_project: list[SpendTally]
+    total: SpendCount
+    by_day: list[SpendCount]
+    by_source: list[SpendCount]
+    by_model: list[SpendCount]
+    by_project: list[SpendCount]
     # The largest single entries, newest first among equals — the run stages and
     # chat turns worth looking at.
     biggest: list[SpendEntry]
@@ -90,8 +90,8 @@ def read_workspace_spend(*, biggest: int = 25) -> SpendReading:
     names = {listing.id: listing.name for listing in list_project_listings()}
     entries = [*read_run_spend(runs, names), *read_session_spend(sessions, names)]
     return SpendReading(
-        total=tally_spend("everything", entries),
-        by_day=_daily_tallies(entries),
+        total=count_spend("everything", entries),
+        by_day=_daily_counts(entries),
         by_source=_ranked(entries, lambda e: e.source.value),
         by_model=_ranked(entries, lambda e: e.model),
         by_project=_ranked(entries, lambda e: e.project),
@@ -134,8 +134,8 @@ def read_session_spend(sessions: list[AgentSession], names: ProjectNames) -> lis
     ]
 
 
-def tally_spend(label: str, entries: list[SpendEntry]) -> SpendTally:
-    return SpendTally(
+def count_spend(label: str, entries: list[SpendEntry]) -> SpendCount:
+    return SpendCount(
         label=label,
         cost_usd=sum(e.usage.cost_usd for e in entries),
         input_tokens=sum(e.usage.input_tokens for e in entries),
@@ -145,12 +145,12 @@ def tally_spend(label: str, entries: list[SpendEntry]) -> SpendTally:
     )
 
 
-def _daily_tallies(entries: list[SpendEntry]) -> list[SpendTally]:
+def _daily_counts(entries: list[SpendEntry]) -> list[SpendCount]:
     """Every calendar day in the span, so a quiet week reads as a gap rather than as adjacency."""
     by_day = dict(_grouped(entries, lambda e: e.day))
     if not by_day:
         return []
-    return [tally_spend(day, by_day.get(day, []))
+    return [count_spend(day, by_day.get(day, []))
             for day in _days_spanned(min(by_day), max(by_day))]
 
 
@@ -187,10 +187,10 @@ def _entries_in_run(run: RunEntry, names: ProjectNames) -> list[SpendEntry]:
     ]
 
 
-def _ranked(entries: list[SpendEntry], key: Callable[[SpendEntry], str]) -> list[SpendTally]:
+def _ranked(entries: list[SpendEntry], key: Callable[[SpendEntry], str]) -> list[SpendCount]:
     """Dearest first: what a spend page is read for is where the money went."""
-    tallies = [tally_spend(label, group) for label, group in _grouped(entries, key)]
-    return sorted(tallies, key=lambda t: -t.cost_usd)
+    counts = [count_spend(label, group) for label, group in _grouped(entries, key)]
+    return sorted(counts, key=lambda c: -c.cost_usd)
 
 
 def _grouped(

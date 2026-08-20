@@ -19,7 +19,7 @@ from .lineage import RowLineage
 class StageOutput:
     table: pa.Table
     # What this stage owes the manifest — token usage, per-row errors, dropped
-    # columns, queue tallies. Empty rather than None: every reader merges it
+    # columns, queue counts. Empty rather than None: every reader merges it
     # unconditionally instead of testing for absence first.
     contribution: StageContribution = field(default_factory=StageContribution)
     # Which input rows each output row came from, where the handler's shape

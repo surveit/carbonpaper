@@ -90,7 +90,7 @@
   const resumeForm = document.getElementById('resume-run');
   const pagers = document.querySelectorAll('.queue-pager');
 
-  // The tally of recorded decisions, seeded from the server's count. Not read off
+  // The count of recorded decisions, seeded from the server's count. Not read off
   // the cards: only the card just decided is re-rendered, so the DOM holds the
   // state the page opened on for every other row.
   let reviewedCount = {{ page.reviewed_count | tojson }};
