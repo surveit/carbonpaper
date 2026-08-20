@@ -35,7 +35,13 @@ jobs:
       contents: write
       issues: write
     steps:
+      # head.sha, not the default merge ref, so the added-comment-length diff below
+      # compares this PR's own commits (see tests/arch/test_report_jobs_scan_the_pr_head.py).
+      # fetch-depth: 0 so that diff's merge-base against the PR base sha resolves.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
       # uv project mode: `uv sync --frozen` installs the exact pins in uv.lock
       # into .venv and fails rather than re-resolving if the lock has drifted
       # from pyproject.toml. setup-uv owns the dependency cache (enable-cache),
@@ -53,6 +59,15 @@ jobs:
       - run: uv sync --frozen
       - id: ruff
         run: uv run --frozen ruff check .
+      # Diff-scoped: only lines this push/PR adds are checked, never the existing tree —
+      # see docs/no-long-comments-policy.md. base is the PR's fork point, or the
+      # previous master commit on a direct push to master.
+      - id: comment-length
+        if: always() && steps.ruff.conclusion != 'skipped'
+        run: |
+          uv run --frozen python scripts/check_added_comment_length.py \
+            --base ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }} \
+            --head HEAD
       # Architecture boundaries: contracts live in pyproject [tool.importlinter].
       # PYTHONPATH=. lets grimp import the `app` package (run from source, not installed).
       # `tee` keeps the human-readable output in the log while saving the
