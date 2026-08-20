@@ -27,7 +27,7 @@ async def unarchive_project_run(project_id: str, run_id: str):
     _refuse_unrecorded_run(validate_project_or_404(project_id), run_id)
     unarchive_run(project_id, run_id)
     return RedirectResponse(
-        url=f"/project/{project_id}/runs?archived=1", status_code=303
+        url=f"/project/{project_id}/runs?view=archived", status_code=303
     )
 
 

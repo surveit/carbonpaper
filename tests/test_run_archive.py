@@ -12,7 +12,7 @@ from app.main import app
 from app.services import workspace
 from app.services.methodology import write_methodology
 from app.services.run_manifest_metadata import read_run_metadata
-from app.web.run_index import build_run_index_rows, count_archived_runs
+from app.web.run_index import RUN_VIEW_ARCHIVED, build_run_index_rows, count_archived_runs
 from run_seed import read_manifest, store_manifest, store_manifest_text
 
 client = TestClient(app)
@@ -48,8 +48,8 @@ def restore(project_dir: Path, run_id: str = RUN_ID):
                        follow_redirects=False)
 
 
-def run_ids(project_dir: Path, *, archived: bool = False) -> list[str]:
-    return [row.run_id for row in build_run_index_rows(project_dir.name, archived=archived)]
+def run_ids(project_dir: Path, *, view: str | None = None) -> list[str]:
+    return [row.run_id for row in build_run_index_rows(project_dir.name, view=view)]
 
 
 def test_an_archived_run_leaves_the_runs_list(project_dir: Path):
@@ -66,7 +66,7 @@ def test_an_archived_run_is_on_the_archived_list(project_dir: Path):
 
     archive(project_dir)
 
-    assert run_ids(project_dir, archived=True) == [RUN_ID]
+    assert run_ids(project_dir, view=RUN_VIEW_ARCHIVED) == [RUN_ID]
 
 
 def test_restoring_puts_the_run_back_on_the_runs_list(project_dir: Path):
@@ -75,7 +75,7 @@ def test_restoring_puts_the_run_back_on_the_runs_list(project_dir: Path):
 
     restore(project_dir)
 
-    assert (run_ids(project_dir), run_ids(project_dir, archived=True)) == ([RUN_ID], [])
+    assert (run_ids(project_dir), run_ids(project_dir, view=RUN_VIEW_ARCHIVED)) == ([RUN_ID], [])
 
 
 def test_archiving_a_run_twice_archives_it_once(project_dir: Path):
@@ -85,7 +85,7 @@ def test_archiving_a_run_twice_archives_it_once(project_dir: Path):
     archive(project_dir)
 
     assert count_archived_runs(project_dir.name) == 1
-    assert run_ids(project_dir, archived=True) == [RUN_ID]
+    assert run_ids(project_dir, view=RUN_VIEW_ARCHIVED) == [RUN_ID]
 
 
 def test_a_restored_run_keeps_the_one_record_that_archived_it(project_dir: Path):
@@ -114,7 +114,7 @@ def test_a_run_whose_record_will_not_parse_can_still_be_archived(project_dir: Pa
 
     assert archive(project_dir).status_code == 303
     assert run_ids(project_dir) == []
-    assert run_ids(project_dir, archived=True) == [RUN_ID]
+    assert run_ids(project_dir, view=RUN_VIEW_ARCHIVED) == [RUN_ID]
 
 
 def test_archiving_a_run_the_project_never_recorded_is_a_404(project_dir: Path):
@@ -133,20 +133,20 @@ def test_one_project_archiving_a_run_does_not_hide_anothers(project_dir: Path, t
     assert run_ids(other) == [RUN_ID]
 
 
-def test_the_runs_page_offers_the_archived_list_only_once_something_is_on_it(project_dir: Path):
+def test_the_view_picker_counts_the_archived_run(project_dir: Path):
     seed_run(project_dir)
-    assert "?archived=1" not in client.get(f"/project/{project_dir.name}/runs").text
+    assert "Archived (0)" in client.get(f"/project/{project_dir.name}/runs").text
 
     archive(project_dir)
 
     assert "Archived (1)" in client.get(f"/project/{project_dir.name}/runs").text
 
 
-def test_the_archived_page_offers_restore_in_place_of_archive(project_dir: Path):
+def test_the_archived_view_offers_restore_in_place_of_archive(project_dir: Path):
     seed_run(project_dir)
     archive(project_dir)
 
-    page = client.get(f"/project/{project_dir.name}/runs?archived=1").text
+    page = client.get(f"/project/{project_dir.name}/runs?view=archived").text
 
     assert f"/runs/{RUN_ID}/unarchive" in page
     assert f"/runs/{RUN_ID}/archive" not in page
