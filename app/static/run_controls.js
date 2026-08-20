@@ -71,6 +71,11 @@
         rows.appendChild(buildRow(template, row, choices.files));
       });
       box.replaceChildren(rows);
+      // A carried cap names a stage of the version it was copied from; on another
+      // version prepare_run refuses it, and no field here could take it back off.
+      form.querySelectorAll("input.js-carried-limit").forEach(function (input) {
+        input.remove();
+      });
       if (window.CarbonFilePicker) window.CarbonFilePicker.init(box);
     } catch (e) {
       /* Keep the shown fields after a network or parse failure. */

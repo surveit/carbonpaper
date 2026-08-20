@@ -18,6 +18,11 @@
       reviewer's time on rows that have both.
     · ▶ Run workflow
 
+  A DUPLICATE (the run page's Duplicate run, ?from_run=<run_id>) opens this same form
+  on the copied run's settings: its name and version, each row's file and row cap, its
+  cache choice, and its caps on stages with no row of their own as hidden fields. It
+  fills the form in and stops there — the reader submits it.
+
   Version and inputs belong together: different versions can author different input
   stages/paths, so the fields describe whichever version is picked. When the version
   changes, run_controls.js refetches that version's inputs
@@ -31,6 +36,9 @@
     selected_version_id = which of them the picker opens on (None with no versions)
     choices = run_inputs.build_run_input_choices(state.id, selected_version_id) —
               .inputs (one row per file input) and .files (what every row may pick from)
+              `.carried_limits`/`.bust_cache` are a duplicate's settings that no
+              input row holds
+    copied_name = the duplicated run's name, or "" 
     max_upload_bytes = uploads.max_upload_bytes() — the ceiling Upload… checks a pick
                        against before sending it; the server refuses the same size
 #}
@@ -53,20 +61,21 @@
   inside a field's frame reads as something the reader may type over.
 #}
 {% from "_file_picker.html" import file_picker %}
-{% macro input_row(stage_id, authored_path, files) %}
+{% macro input_row(stage_id, authored_path, files, selected_file_id=None, limit=None) %}
 <div class="run-input-row">
   <label class="run-input-name" for="binding__{{ stage_id }}">
     <code>{{ stage_id }}</code> — data file
   </label>
   <div class="run-input-controls">
     <span class="path-field">
-      {{ file_picker("binding__" ~ stage_id, authored_path, files) }}
+      {{ file_picker("binding__" ~ stage_id, authored_path, files, selected_file_id) }}
       <button type="button" class="btn browse-btn">Upload file…</button>
     </span>
     <label class="run-limit" title="read only the first N rows of this file, for this run">
       <span>first</span>
       <input type="number" name="limit__{{ stage_id }}" min="0" step="1"
-             inputmode="numeric" placeholder="all">
+             inputmode="numeric" placeholder="all"
+             {% if limit is not none %}value="{{ limit }}"{% endif %}>
       <span>rows</span>
     </label>
   </div>
@@ -78,7 +87,8 @@
       data-project="{{ state.id }}" data-max-upload-bytes="{{ max_upload_bytes }}">
   <label class="run-name-field">
     <span>name <span class="optional">optional</span></span>
-    <input type="text" name="name" maxlength="200" autocomplete="off">
+    <input type="text" name="name" maxlength="200" autocomplete="off"
+           value="{{ copied_name | default('', true) }}">
   </label>
   <label class="run-version">version
     <select name="version_id">
@@ -87,8 +97,14 @@
       {% endfor %}
     </select>
   </label>
+  {# A cap the copied run set on a stage with no row here — it caps file inputs.
+     run_controls.js drops these when the version changes: they name that version's
+     stages, and prepare_run refuses a limit on a stage id it does not have. #}
+  {% for stage_id, cap in choices.carried_limits.items() %}
+  <input type="hidden" class="js-carried-limit" name="limit__{{ stage_id }}" value="{{ cap }}">
+  {% endfor %}
   <div class="run-inputs">
-    {% for row in choices.inputs %}{{ input_row(row.stage_id, row.authored_path, choices.files) }}{% endfor %}
+    {% for row in choices.inputs %}{{ input_row(row.stage_id, row.authored_path, choices.files, row.selected_file_id, row.limit) }}{% endfor %}
   </div>
   {# The one place a file leaves the reader's machine, so the one place the strip's
      standing fact is worth repeating in the specific. #}
@@ -96,10 +112,11 @@
   <p class="demo-upload-note">Open demo — this file becomes readable by every visitor and
     by any stage anyone writes. Upload only what can be made public.</p>
   {% endif %}
-  <details class="run-advanced">
+  <details class="run-advanced"{% if choices.bust_cache %} open{% endif %}>
     <summary>Advanced</summary>
     <label class="run-bust-cache">
-      <input type="checkbox" name="bust_cache" value="on">
+      <input type="checkbox" name="bust_cache" value="on"
+             {% if choices.bust_cache %}checked{% endif %}>
       <span>Do not use row-level cache (e.g. recompute rows that LLM has already
         processed, or require human review on the same data they already approved)</span>
     </label>

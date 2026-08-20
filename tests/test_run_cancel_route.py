@@ -72,7 +72,8 @@ def _write_one_stage_project(examples_dir: Path) -> None:
     add_stage(proj_dir, stage)
 
 
-def _write_status_manifest(examples_dir: Path, stage_statuses: list[tuple[str, str]]) -> Path:
+def _write_status_manifest(examples_dir: Path, stage_statuses: list[tuple[str, str]],
+                           status: str = "cancelled") -> Path:
     run_dir = examples_dir / PROJ / "runs" / RUN
     run_dir.mkdir(parents=True, exist_ok=True)
     stages: list[dict[str, object]] = [
@@ -81,7 +82,7 @@ def _write_status_manifest(examples_dir: Path, stage_statuses: list[tuple[str, s
          "output_row_count": 0}
         for sid, status in stage_statuses]
     store_manifest(run_dir.parent.parent, run_dir.name, {"run_id": RUN, "started_at": RUN, "project": PROJ,
-                    "workflow_version": RUN, "status": "cancelled",
+                    "workflow_version": RUN, "status": status,
                     "human_review_queue_stats": {}, "stage_records": stages})
     return run_dir
 
@@ -170,25 +171,50 @@ def test_resume_redirect_polls_past_the_old_terminal_manifest(
 
 
 def test_run_detail_page_hides_the_resume_cta_for_a_completed_run(examples_dir, client):
-    """A clean run asks nothing; the menu's Restart is offered in every state, not asked."""
+    """A clean run asks nothing of the reader, and has nothing for Restart to run."""
     _write_one_stage_project(examples_dir)
-    _write_manifest(examples_dir, "ok")
+    _write_status_manifest(examples_dir, [("load", "ok")], "ok")
 
     page = client.get(f"/project/{PROJ}/runs/{RUN}")
     assert page.status_code == 200
-    assert page.text.count(f'action="/project/{PROJ}/runs/{RUN}/resume"') == 1
+    assert f'action="/project/{PROJ}/runs/{RUN}/resume"' not in page.text
     assert "Resume cancelled run" not in page.text
     assert "Re-run failed stage" not in page.text
 
 
-@pytest.mark.parametrize("status", ["running", "ok", "errors", "cancelled", "awaiting_review"])
-def test_run_menu_offers_restart_in_every_run_state(examples_dir, client, status):
+@pytest.mark.parametrize("status", ["running", "errors", "cancelled", "awaiting_review"])
+def test_run_menu_offers_restart_while_a_stage_is_left_to_run(examples_dir, client, status):
     _write_one_stage_project(examples_dir)
-    _write_manifest(examples_dir, status)
+    _write_status_manifest(examples_dir, [("load", "ok"), ("score", "pending")], status)
 
     page = client.get(f"/project/{PROJ}/runs/{RUN}")
     assert page.status_code == 200
     assert "<h3>Restart run</h3>" in page.text
+    restart_form = page.text.split('class="run-restart-form"')[0].rsplit("<form", 1)[-1]
+    assert f'action="/project/{PROJ}/runs/{RUN}/resume"' in restart_form
+
+
+def test_restart_goes_inert_once_every_stage_has_completed(examples_dir, client):
+    """A resume would run none of them, and a control that changes nothing reads as
+    a broken one."""
+    _write_one_stage_project(examples_dir)
+    _write_status_manifest(
+        examples_dir, [("load", "ok"), ("score", "validation_warnings")], "ok")
+
+    page = client.get(f"/project/{PROJ}/runs/{RUN}")
+    assert page.status_code == 200
+    assert f'action="/project/{PROJ}/runs/{RUN}/resume"' not in page.text
+    assert "Every stage completed" in page.text
+    assert f'href="/project/{PROJ}/runs/new?from_run={RUN}"' in page.text
+
+
+def test_a_running_run_is_offered_restart_whatever_its_stages_say(examples_dir, client):
+    """The zombie case: a dead executor leaves `running` behind, and Cancel needs one."""
+    _write_one_stage_project(examples_dir)
+    _write_status_manifest(examples_dir, [("load", "ok")], "running")
+
+    page = client.get(f"/project/{PROJ}/runs/{RUN}")
+    assert "last write wins" in page.text
     restart_form = page.text.split('class="run-restart-form"')[0].rsplit("<form", 1)[-1]
     assert f'action="/project/{PROJ}/runs/{RUN}/resume"' in restart_form
 
