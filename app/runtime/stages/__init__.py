@@ -74,9 +74,12 @@ HANDLERS: dict[StageType, StageHandler] = {
     # interpreter handle is this execution's, and Starlark freezes module globals,
     # so nothing crosses rows either way.
     StageType.starlark_row_function: RowMapTransformHandler(make_starlark_row_mapper),
-    # caches_frames=False: all three are bounded vectorised pandas primitives,
-    # same reasoning as the joins/aggregate above — hashing the input to look for
-    # a hit costs more than the operation a hit would skip.
+    # caches_frames=False for a stronger reason than the joins/aggregate above:
+    # the frame cache stores a stage's TABLE, not its lineage sidecar, so a hit
+    # replays the rows without the provenance the handler worked out. The trace
+    # then finds no sidecar and, these types not being grain-and-order
+    # preserving, stops rather than crossing — dark exactly where these types
+    # exist to keep it lit. Cheap enough that opting in would never pay anyway.
     StageType.explode: FrameTransformHandler(handle_explode, caches_frames=False),
     StageType.dedupe: FrameTransformHandler(handle_dedupe, caches_frames=False),
     StageType.sort_rank: FrameTransformHandler(handle_sort_rank, caches_frames=False),
