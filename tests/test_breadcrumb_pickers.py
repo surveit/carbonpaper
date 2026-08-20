@@ -105,3 +105,16 @@ def test_the_project_rung_reads_as_the_name_and_switches_on_the_id(project: Path
 
     assert "Congress roster" in body
     assert 'aria-current="true"' in body
+
+
+def test_the_project_picker_omits_a_deleted_project(project: Path) -> None:
+    """A record can outlive its workspace dir (delete_project() keeps the store row)."""
+    project_service.Project(id="demo", name="demo").save()
+    project_service.Project(id="gone", name="gone", title="Deleted project").save()
+    trail = breadcrumbs.build_section_crumbs("demo", label="Runs")
+    rung = trail[1]
+
+    body = client.get(rung.picker, params={"current": rung.picker_current}).text
+
+    assert "demo" in body
+    assert "Deleted project" not in body
