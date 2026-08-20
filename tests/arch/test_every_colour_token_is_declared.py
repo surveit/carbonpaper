@@ -1,8 +1,4 @@
-"""Architecture: every `var(--token)` the app reads resolves to a token something
-declares. An undeclared one is not a fallback — the whole declaration is dropped, so
-the border is 0px and the background transparent, and the use site reads fine in a
-diff. Six were live when this rule landed, over five files.
-"""
+"""Architecture: every `var(--token)` resolves to a token something declares."""
 from __future__ import annotations
 
 import re
@@ -15,8 +11,7 @@ _SCANNED_SUFFIXES = {".css", ".html", ".js"}
 _VENDORED = {f"static/{name}" for name in VENDORED_SRI}
 
 _DECLARED = re.compile(r"(--[A-Za-z0-9_-]+)\s*:")
-# The name only; `var(--x, fallback)` still has to name a token that exists, because
-# the fallback is what a reader never sees when the token is simply missing.
+# `var(--x, fallback)` still has to name a token that exists.
 _REFERENCED = re.compile(r"var\(\s*(--[A-Za-z0-9_-]+)")
 
 

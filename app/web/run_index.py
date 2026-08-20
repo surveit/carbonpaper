@@ -1,7 +1,4 @@
-"""The runs index rows: when a run happened, the name it was given, what it read,
-whether it read all of it, the version it pinned, what it took, and how it came out
-(the same stage strip the run page draws, under the run's outcome in words). The run
-id is no longer a column — it is the row's link target."""
+"""One row per run: what it was called, what it read, what it pinned, took and cost."""
 
 from __future__ import annotations
 
@@ -26,22 +23,18 @@ class RunInputCell(BaseModel):
     filename: str
     size: str
     sha256: str | None = None
-    # Two runs can bind the same filename to different bytes — a re-export under the
-    # name it had before. Where that happened the name alone is not an identity, and
-    # the row shows the hash beside it.
+    # One filename over two sets of bytes: the name alone is not an identity.
     hash_disambiguates: bool = False
 
 
 class RunIndexRow(BaseModel):
     run_id: str
     status: str
-    # What the operator called this run, empty when they never named it. The row falls
-    # back to `started_at`, which is what the run id already is.
+    # Empty when never named; the row falls back to `started_at`.
     name: str = ""
     started_at: str | None = None
     duration: str | None = None
-    # Summed over the stage records. 0.0 for a run that called no model, which is the
-    # true figure — every LLM call a run made is in the manifest it wrote.
+    # Summed over the stage records; 0.0 is a run that called no model.
     cost_usd: float = 0.0
     version: VersionNote | None = None
     strip: StageStrip | None = None
@@ -53,13 +46,9 @@ class RunIndexRow(BaseModel):
     outcome: str = ""
     is_test_run: bool = False
     inputs: list[RunInputCell] = []
-    # Which stages read only their first N rows, in words. Empty when the run read
-    # every input whole — two runs are not comparable across this, and nothing else
-    # on the row says it.
+    # Empty when the run read every input whole.
     row_caps: str = ""
-    # Identifies the SET of files this run read, so runs over the same bytes can be
-    # listed together. Empty for a run that bound no file: those are not "the same
-    # inputs", they are no inputs, and are never grouped.
+    # Empty for a run that bound no file — no inputs is not an input set.
     input_key: str = ""
     runs_on_these_inputs: int = 1
 
@@ -103,8 +92,7 @@ def compose_input_key(bindings: list[InputBinding]) -> str:
     """The identity of a run's input SET: which stage read which bytes."""
     if not bindings:
         return ""
-    # The hash where preflight recorded one and the path otherwise, so a run from
-    # before hashing still groups with itself and never with a different file.
+    # Hashed where preflight recorded one, path otherwise.
     payload = sorted((b.stage_id, b.sha256 or f"path:{b.path}") for b in bindings)
     return hashlib.sha256(json.dumps(payload).encode()).hexdigest()[:16]
 

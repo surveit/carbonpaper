@@ -51,9 +51,7 @@ def start_run(
 ) -> str:
     prep = _prepare(project_id, version_id, bindings, limits, offsets, bust_cache)
     run_id = str(prep["run_id"])
-    # Written before execution starts, so the run is already named on the page the
-    # launcher is redirected to. It lives beside the manifest, not in it, because the
-    # executor rewrites the manifest after every stage.
+    # Named before execution, so the redirect lands on a named page.
     if name.strip():
         name_run(project_id, run_id, name)
     _run_in_background(run_prepared, prep)

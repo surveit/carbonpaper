@@ -61,8 +61,7 @@ class RunLiveView(BaseModel):
 
 class RunHeader(BaseModel):
     run_id: str
-    # The operator's name for this run, empty when they have not given it one. The
-    # heading falls back to the start time, which is what the run id already is.
+    # Empty when unnamed; the heading falls back to the start time.
     name: str
     started_at: str | None
     is_test_run: bool

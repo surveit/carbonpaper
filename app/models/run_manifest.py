@@ -154,8 +154,7 @@ class InputBinding(BaseModel):
     stage_id: str
     path: str
     filename: str
-    # Absent from a manifest written before preflight streamed them: None means the
-    # measurement was never taken, not that the file was empty.
+    # None where preflight never measured it, not zero.
     sha256: str | None = None
     bytes: int | None = None
     source: str | None = None

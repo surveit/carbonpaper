@@ -1,5 +1,4 @@
-"""Naming a run: where the name is written, what clearing it leaves behind, and that
-naming and archiving — two writes to one record — do not overwrite each other."""
+"""Naming a run: where the name is written, and what a rename leaves alone."""
 from __future__ import annotations
 
 import json
@@ -23,9 +22,7 @@ client = TestClient(app)
 GOLDENS = Path(__file__).parent / "goldens"
 
 RUN_ID = "20260101T000000"
-# The names an operator actually typed on this project, read off the run records the
-# earlier build left behind: they describe the INPUT and the CAP, which is what the
-# row could not say for itself.
+# A name really typed on this project, read off its stored run records.
 A_REAL_NAME = "SMOKE: consolidated 4-file input, relevance capped at 25"
 
 

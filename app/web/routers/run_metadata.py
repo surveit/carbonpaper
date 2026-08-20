@@ -1,8 +1,4 @@
-"""What an OPERATOR writes about a run rather than what the executor recorded: its
-name, and whether the runs index hides it. What archiving hides is the row — the run
-keeps every byte it wrote, and the run page still serves it. Listing runs is
-app.web.routers.runs.
-"""
+"""The operator's writes about a run: its name, and whether the index hides it."""
 
 from __future__ import annotations
 

@@ -1,8 +1,4 @@
-"""What the OPERATOR records about a run, beside the run's own manifest: the name
-they gave it, and whether the runs index hides it. The manifest itself is the
-executor's to write (`app.runtime.manifest`), which is why this is a record of its
-own — and why a run keeps every number it reported whatever is written here.
-"""
+"""What the OPERATOR records about a run, beside the manifest the executor owns."""
 
 from __future__ import annotations
 
@@ -20,9 +16,7 @@ class RunManifestMetadata(PersistedModel):
     project_id: str
     run_id: str
     archived: bool = False
-    # Empty is the unnamed state, which is what a run starts in and what clearing the
-    # field returns it to. Never None: nothing distinguishes "never named" from "named
-    # and then cleared", and no reader asks.
+    # Empty is unnamed; clearing returns it there.
     name: str = ""
 
 
@@ -72,6 +66,7 @@ def _open_record(project_id: str, run_id: str) -> RunManifestMetadata:
 
 
 def _find_record(project_id: str, run_id: str) -> RunManifestMetadata | None:
-    return next(
-        (r for r in read_run_metadata(project_id) if r.run_id == run_id), None
+    found = RunManifestMetadata.find(
+        project_id=validate_project_id(project_id), run_id=run_id
     )
+    return found[0] if found else None
