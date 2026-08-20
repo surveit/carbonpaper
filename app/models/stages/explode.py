@@ -22,8 +22,9 @@ class ExplodeConfig(StageConfig):
 
     column: str = Field(
         description=(
-            "The `list[X]` column to unpack. Each element becomes its own output row, "
-            "carrying a copy of every other column from the row it came from."
+            "The `list[X]` column to unpack: a real array at rest (a JSON list), never a "
+            "delimited string. Each element becomes its own output row, carrying a copy of "
+            "every other column from the row it came from."
         )
     )
     keep_empty: bool = Field(
@@ -123,13 +124,18 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
         required=["column"],
         optional=["keep_empty"],
         notes=(
-            "This is how a 1:N model transform becomes rows. An llm_transform returns its "
-            "many findings as ONE list column on the row it read; explode turns that column "
-            "into a row each, so every finding gets its own row to be reviewed, filtered and "
-            "published on. Takes exactly ONE input.\n"
-            "`column` must be a `list[X]` column. The signature READS it and REWRITES that "
-            "one column to `X` — the element type. It adds nothing: every other column is "
-            "copied onto each output row unchanged, so none of them is declared.\n"
+            "This is how many-things-on-one-row becomes many rows: a source column that "
+            "already holds an array, a starlark step that split a field, or — most often — "
+            "an llm_transform, which returns its many findings as ONE list column on the "
+            "row it read. Whatever put it there, explode turns that column into a row each, "
+            "so every element gets its own row to be reviewed, filtered and published on. "
+            "Takes exactly ONE input.\n"
+            "`column` must be DECLARED `list[X]`, and hold a real array at rest — a JSON "
+            "list, not a delimited string. Explode does not split text: to unpack "
+            "`\"TAX,ENERGY\"` give it a starlark_row_function that returns a list first.\n"
+            "The signature READS that column and REWRITES it to `X` — the element type. It "
+            "adds nothing: every other column is copied onto each output row unchanged, so "
+            "none of them is declared.\n"
             "A row whose list is empty produces NO output row unless `keep_empty` is set — "
             "set it when a row that found nothing must still reach the output, carrying null.\n"
             "The runtime records which input row each output row came from, so a trace "

@@ -192,15 +192,34 @@ def test_sort_rank_refuses_a_value_its_stated_order_does_not_rank(tmp_path):
         _run(workflow, ["filings", "ranked"], tmp_path / "runs" / "r")
 
 
-def test_sort_rank_refuses_a_null_in_a_sort_key(tmp_path):
+def _nullable_tier():
     rows = _FILINGS[:2] + [dict(_FILINGS[2], tier=None)]
-    columns = [dict(c, nullable=True) if c["name"] == "tier" else c for c in _FLAT_COLUMNS]
+    return rows, [dict(c, nullable=True) if c["name"] == "tier" else c for c in _FLAT_COLUMNS]
+
+
+def test_sort_rank_refuses_a_nullable_key_that_does_not_place_its_nulls(tmp_path):
+    rows, columns = _nullable_tier()
+    with pytest.raises(ValueError, match="set `nulls` on that key"):
+        Workflow(stages=[
+            _source_stage("filings", rows, columns, tmp_path),
+            _sort_rank_stage("ranked", "filings", [{"column": "tier"}], columns=columns),
+        ])
+
+
+@pytest.mark.parametrize(
+    "nulls,expected",
+    [("last", ["F-1002", "F-1001", "F-1003"]), ("first", ["F-1003", "F-1002", "F-1001"])],
+)
+def test_sort_rank_places_nulls_where_the_key_says(tmp_path, nulls, expected):
+    rows, columns = _nullable_tier()
     workflow = Workflow(stages=[
         _source_stage("filings", rows, columns, tmp_path),
-        _sort_rank_stage("ranked", "filings", [{"column": "tier"}], columns=columns),
+        _sort_rank_stage("ranked", "filings",
+                         [{"column": "tier", "nulls": nulls}], columns=columns),
     ])
-    with pytest.raises(SubsetRunError, match="1 of 3 rows hold no value"):
-        _run(workflow, ["filings", "ranked"], tmp_path / "runs" / "r")
+    out = table_to_frame(_run(workflow, ["filings", "ranked"], tmp_path / "runs" / "r")["ranked"])
+
+    assert list(out["filing_id"]) == expected
 
 
 def test_trace_follows_a_row_to_where_the_sort_moved_it_from(tmp_path):

@@ -2,6 +2,7 @@
 against the input and that the signature writes nothing but the rank column."""
 from __future__ import annotations
 
+from enum import Enum
 from typing import TYPE_CHECKING, ClassVar, Literal, Optional, Sequence
 
 from pydantic import Field, model_validator
@@ -18,6 +19,11 @@ if TYPE_CHECKING:
 RANK_COLUMN_TYPE = "int"
 
 
+class NullPlacement(str, Enum):
+    first = "first"
+    last = "last"
+
+
 class SortKey(_Base):
     column: str
     descending: bool = Field(
@@ -30,6 +36,16 @@ class SortKey(_Base):
             "severity tiers, priority bands, a scale from `critical` to `routine`. List "
             "the values first-to-last. A value the column holds but this list omits is "
             "refused at run time rather than sorted to an end and quietly ranked."
+        ),
+    )
+
+    nulls: Optional[NullPlacement] = Field(
+        default=None,
+        description=(
+            "Where rows holding no value in this column go. Leave it unset for a column "
+            "that cannot be null. Setting it is how a nullable column becomes sortable: "
+            "unset, a null stops the run rather than being placed somewhere the rule "
+            "never chose."
         ),
     )
 
@@ -91,12 +107,26 @@ def find_sort_rank_column_issues(
         for key in config.keys
         if key.column not in cols
     ]
+    issues.extend(_find_unplaced_null_issues(stage, inputs))
     if config.rank_column and config.rank_column in cols:
         issues.append(
             f"stage '{stage.id}': sort_rank.rank_column '{config.rank_column}' already "
             f"exists on its input — a rank is a new column, never an overwrite"
         )
     return issues
+
+
+def _find_unplaced_null_issues(
+    stage: "SortRankStage", inputs: Sequence["WorkflowStageInput"]
+) -> list[str]:
+    """Caught at authoring time, so a nullable key never reaches a run undecided."""
+    nullable = {c.name for c in inputs[0].table_schema.columns if c.nullable}
+    return [
+        f"stage '{stage.id}': sort_rank orders by '{key.column}', which its input may "
+        f"leave null — set `nulls` on that key to say whether those rows lead or trail"
+        for key in stage.sort_rank.keys
+        if key.column in nullable and key.nulls is None
+    ]
 
 
 def find_sort_rank_signature_issues(stage: "SortRankStage") -> list[str]:
@@ -152,6 +182,7 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
             "This stage ONLY orders. Working out the columns you rank on — a flag, a score, a "
             "band — is a starlark_row_function ahead of it. Two stages, because a reviewer "
             "checking the ordering rule should not have to read the scoring rule to find it.\n"
+            "A key on a column its input may leave null must say where those rows go — `nulls: last`. Without it the stage is refused when it is saved, not when it runs.\n"
             "For a column whose ranking is not its alphabetical order, state the order: "
             "`{column: severity_tier, order: [T1, T2, T3]}`. A value outside that list stops "
             "the run — a tier the rule never anticipated must not be silently ranked last.\n"

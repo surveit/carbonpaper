@@ -14,7 +14,7 @@ from app.models import WorkflowStage
 from app.models.errors import StepRefused
 from app.models.stages.dedupe import DedupeKeep, DedupeStage
 from app.models.stages.explode import ExplodeStage
-from app.models.stages.sort_rank import SortKey, SortRankStage
+from app.models.stages.sort_rank import NullPlacement, SortKey, SortRankStage
 
 from ..context import RunContext
 from ..lineage import EdgeKind, RowLineage, RowParent, single_parent_lineage
@@ -53,7 +53,7 @@ def handle_dedupe(
     config = stage.dedupe
     table = inputs[input_id]
 
-    ranked = _ranking_for_keep(table, config.keep, config.by, stage.id)
+    ranked = _ranking_for_keep(table, config.keep, config.by)
     groups = _group_members(table, config.keys, ranked)
     survivors = [members[0] for members in groups]
     return StageOutput(
@@ -98,12 +98,11 @@ def _in_declared_column_order(table: pa.Table, names: Sequence[str]) -> pa.Table
 
 # ── dedupe ───────────────────────────────────────────────────────────────────
 def _ranking_for_keep(
-    table: pa.Table, keep: DedupeKeep, by: str | None, stage_id: str
+    table: pa.Table, keep: DedupeKeep, by: str | None
 ) -> pa.Array | None:
     """Each row's position in the keep order, so the survivor is the group's minimum."""
     if keep == DedupeKeep.first:
         return None
-    _refuse_null_ordering_values(table, [by], stage_id, "dedupe.by")
     direction = "ascending" if keep == DedupeKeep.lowest else "descending"
     return pc.sort_indices(table, sort_keys=[(by, direction)])
 
@@ -124,20 +123,20 @@ def _group_members(
 def _sorted_row_indices(
     table: pa.Table, keys: Sequence[SortKey], stage_id: str
 ) -> pa.Array:
-    _refuse_null_ordering_values(
-        table, [key.column for key in keys], stage_id, "sort_rank.keys")
     ranked = table
-    sort_keys: list[tuple[str, str]] = []
+    sort_keys: list[tuple[str, str, str]] = []
     for position, key in enumerate(keys):
+        placement = "at_start" if key.nulls == NullPlacement.first else "at_end"
         if key.order is None:
-            sort_keys.append((key.column, "descending" if key.descending else "ascending"))
+            direction = "descending" if key.descending else "ascending"
+            sort_keys.append((key.column, direction, placement))
             continue
         # Applied as a position rather than a comparison on the values, so the
         # sort never falls back to ordering the strings against each other.
         name = f"_trace_reshape_key{position}"
         ranked = ranked.append_column(
             name, _positions_in_stated_order(table.column(key.column), key, stage_id))
-        sort_keys.append((name, "ascending"))
+        sort_keys.append((name, "ascending", placement))
     return pc.sort_indices(ranked, sort_keys=sort_keys)
 
 
@@ -146,7 +145,10 @@ def _positions_in_stated_order(
 ) -> pa.Array:
     stated = pa.array([str(v) for v in key.order or ()], pa.string())
     positions = pc.index_in(pc.cast(values, pa.string()), value_set=stated)
-    unranked = pc.unique(pc.filter(values, pc.is_null(positions))).to_pylist()
+    # A null value carries its own placement, so only a PRESENT value that the
+    # stated order does not name is unranked.
+    unmatched = pc.and_(pc.is_null(positions), pc.is_valid(values))
+    unranked = pc.unique(pc.filter(values, unmatched)).to_pylist()
     if unranked:
         raise StepRefused(
             f"stage {stage_id}: column `{key.column}` holds {sorted(map(str, unranked))}, "
@@ -155,20 +157,3 @@ def _positions_in_stated_order(
             f"it had been."
         )
     return positions
-
-
-def _refuse_null_ordering_values(
-    table: pa.Table, columns: Sequence[str | None], stage_id: str, field: str
-) -> None:
-    """A null cannot be ordered against a value, and arrow would place it silently."""
-    for column in columns:
-        if column is None:
-            continue
-        missing = pc.sum(pc.is_null(table.column(column))).as_py() or 0
-        if missing:
-            raise StepRefused(
-                f"stage {stage_id}: {field} orders rows by `{column}`, but {missing} of "
-                f"{table.num_rows} rows hold no value there — nothing says where those "
-                f"rows belong. Give them a value, or drop them with a filter_rows, ahead "
-                f"of this stage."
-            )

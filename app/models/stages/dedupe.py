@@ -98,7 +98,17 @@ def find_dedupe_column_issues(
         issues.append(COLUMN_ISSUE.format(
             sid=stage.id, field="dedupe.by", col=dedupe.by, cols=sorted(cols)
         ))
+    elif dedupe.by and _is_nullable(inputs, dedupe.by):
+        issues.append(
+            f"stage '{stage.id}': dedupe picks the survivor by '{dedupe.by}', which its "
+            f"input may leave null — a row with no value there cannot win or lose, so "
+            f"the rule has not decided. Give it a value, or key on a column that has one"
+        )
     return issues
+
+
+def _is_nullable(inputs: Sequence["WorkflowStageInput"], name: str) -> bool:
+    return any(c.name == name and c.nullable for c in inputs[0].table_schema.columns)
 
 
 # Authoring copy for this module's stage type(s); assembled into STAGE_TYPES.
