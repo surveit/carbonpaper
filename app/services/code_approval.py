@@ -27,11 +27,13 @@ CODE_EXECUTION_WARNING = (
 
 
 class CodeExecutionApproval(PersistedModel):
-    """`id` is the project id: one standing answer per project, not a log of them."""
-
     collection: ClassVar[str] = "code_execution_approval"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
 
+    # The key this is looked up by, as a FIELD — the id stays the opaque uuid it
+    # defaults to. There is one record per approved project, so the lookup below
+    # scans the collection rather than selecting on an id prefix.
+    project_id: str
     approved_at: str
     # Why the owner was asked, in the words of whoever asked. Kept so the person
     # revoking later can see what they said yes to.
@@ -39,11 +41,13 @@ class CodeExecutionApproval(PersistedModel):
 
 
 def has_code_execution_approval(project_id: str) -> bool:
-    return CodeExecutionApproval.load_or_none(project_id) is not None
+    return read_code_execution_approval(project_id) is not None
 
 
 def read_code_execution_approval(project_id: str) -> CodeExecutionApproval | None:
-    return CodeExecutionApproval.load_or_none(project_id)
+    return next(
+        (r for r in CodeExecutionApproval.list() if r.project_id == project_id), None
+    )
 
 
 def approve_code_execution(project_id: str, reason: str) -> CodeExecutionApproval:
@@ -53,11 +57,11 @@ def approve_code_execution(project_id: str, reason: str) -> CodeExecutionApprova
             "approving code execution needs the reason the owner was asked for it — "
             "what the step will do, and why no declared stage fits"
         )
-    standing = CodeExecutionApproval.load_or_none(project_id)
+    standing = read_code_execution_approval(project_id)
     if standing is not None:
         return standing
     record = CodeExecutionApproval(
-        id=project_id, approved_at=now_iso(), reason=reason.strip()
+        project_id=project_id, approved_at=now_iso(), reason=reason.strip()
     )
     record.save()
     return record
@@ -65,5 +69,6 @@ def approve_code_execution(project_id: str, reason: str) -> CodeExecutionApprova
 
 def withdraw_code_execution_approval(project_id: str) -> None:
     """Stages already stored keep running — this only stops NEW ones being written."""
-    if CodeExecutionApproval.load_or_none(project_id) is not None:
-        CodeExecutionApproval.delete(project_id)
+    standing = read_code_execution_approval(project_id)
+    if standing is not None:
+        CodeExecutionApproval.delete(standing.id)
