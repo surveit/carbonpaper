@@ -89,6 +89,13 @@ Also `app/AGENTS.md` (web layer), `app/runtime/AGENTS.md` (the Runner), `README.
   N ways, and every branch conflicts when the first copy merges. If you hit a red master
   mid-task, keep working on your branch — do not fold a trunk fix into it. The fix belongs to
   one agent dedicated to it, as a single-commit PR off master, merged as soon as checks pass.
+- **A newly added comment or docstring carries at most one short sentence.** CI diffs
+  every push/PR against its base and fails on any *added* comment/docstring over 100
+  characters that isn't a tool directive (`# noqa`, `# type: ignore`, ...) or a bare link
+  to `docs/*.md` or a GitHub issue — see `docs/no-long-comments-policy.md` and
+  `scripts/check_added_comment_length.py`. Diff-scoped on purpose: existing code is never
+  swept, and there is no exception list to grow. The default is still no comment at all;
+  name the thing instead of explaining it.
 - **Planning docs stay out of the repo.** Design specs, implementation/execution plans,
   brainstorming or "rethink" notes, and refactor/migration roadmaps are ephemeral working
   artifacts — keep them in scratch or the PR description, never commit them. Committed docs
