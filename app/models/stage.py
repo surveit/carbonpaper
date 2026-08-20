@@ -85,6 +85,11 @@ _MODEL_BY_TYPE: dict[StageType, type[AbstractStage]] = {
 }
 
 
+def find_cache_ignored_reason(stage_type: StageType) -> str | None:
+    """Why this type ignores `cache`, in its own words. None where it honours one."""
+    return _MODEL_BY_TYPE[stage_type].CACHE_IGNORED_BECAUSE
+
+
 def max_declared_inputs(stage_type: StageType) -> int | None:
     """The `inputs` cap this type's model enforces; None where it takes any number."""
     caps = [

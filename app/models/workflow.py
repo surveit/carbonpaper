@@ -17,7 +17,7 @@ from app.models.schema import (
     TypeUnsafeUserStageConfigOverride,
     _Base,
 )
-from app.models.stage import Stage, StageType
+from app.models.stage import Stage, StageType, find_cache_ignored_reason
 from app.models.stages.input_data import Connector, InputDataStage
 from app.models.stages.signature import find_signature_issues, promised_output_schema
 from app.models.workflow_stage import WorkflowStage, WorkflowStageInput
@@ -312,8 +312,19 @@ def validate_workflow(stages: list[Stage]) -> list[str]:
 
 
 def validate_workflow_draft(stages: list[dict[str, Any]]) -> list[str]:
+    """Stricter than loading one: a stored workflow already carrying a dead `cache` runs."""
     try:
-        Workflow.model_validate({"stages": list(stages)})
-        return []
+        workflow = Workflow.model_validate({"stages": list(stages)})
     except ValidationError as err:
         return format_errors(err)
+    return [issue for stage in workflow.stages for issue in find_dead_cache_flag_issues(stage)]
+
+
+def find_dead_cache_flag_issues(stage: Stage) -> list[str]:
+    reason = find_cache_ignored_reason(stage.type)
+    if not stage.cache or reason is None:
+        return []
+    return [
+        f"stage '{stage.id}': `cache` is set, but `{stage.type}` never consults one — "
+        f"{reason}. Leave it off."
+    ]

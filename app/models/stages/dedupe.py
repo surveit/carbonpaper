@@ -61,6 +61,9 @@ class DedupeConfig(StageConfig):
 
 class DedupeStage(AbstractStage):
     type: Literal[StageType.dedupe]
+    CACHE_IGNORED_BECAUSE: ClassVar[str] = (
+        "the cache stores a table, not the lineage sidecar this type works out, so a hit would replay the rows without their provenance"
+    )
     dedupe: DedupeConfig
     # Exactly one input: collapsing duplicates within one frame. Two is a join.
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)

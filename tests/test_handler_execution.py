@@ -325,16 +325,21 @@ def test_frame_handler_receives_frames():
 
 def _registry(llm_shape):
     frame = FrameTransformHandler(apply=lambda stage, inputs, ctx: StageOutput.from_frame(pd.DataFrame()))
+    # The types the model says never consult `cache` must register as refusing it.
+    uncached = FrameTransformHandler(
+        apply=lambda stage, inputs, ctx: StageOutput.from_frame(pd.DataFrame()),
+        caches_frames=False,
+    )
     return {
         StageType.input_data: SourceHandler(read=lambda stage, ctx: pd.DataFrame()),
         StageType.python_row_function: RowMapTransformHandler(make_mapper=lambda s, c, src: lambda r, i: r),
         StageType.llm_transform: llm_shape,
         StageType.python_frame_function: frame,
-        StageType.enrich: frame,
-        StageType.expand: frame,
-        StageType.aggregate: frame,
+        StageType.enrich: uncached,
+        StageType.expand: uncached,
+        StageType.aggregate: uncached,
         StageType.human_review_queue: RowMapTransformHandler(make_mapper=lambda s, c, src: lambda r, i: r),
-        StageType.publish: frame,
+        StageType.publish: uncached,
     }
 
 
@@ -346,4 +351,14 @@ def test_check_registry_accepts_shapes_matching_the_model():
 def test_check_registry_rejects_shape_disagreeing_with_model():
     bad = _registry(FrameTransformHandler(apply=lambda stage, inputs, ctx: pd.DataFrame()))
     with pytest.raises(RuntimeError, match="is registered as"):
+        validate_registry_matches_model(bad)
+
+
+def test_check_registry_rejects_a_type_that_would_read_a_cache_the_model_denies():
+    """Otherwise a type could quietly start honouring `cache` that authoring still refuses."""
+    bad = _registry(RowMapTransformHandler(make_mapper=lambda s, c, src: lambda r, i: r))
+    bad[StageType.aggregate] = FrameTransformHandler(
+        apply=lambda stage, inputs, ctx: StageOutput.from_frame(pd.DataFrame())
+    )
+    with pytest.raises(RuntimeError, match="CACHE_IGNORED_BECAUSE"):
         validate_registry_matches_model(bad)

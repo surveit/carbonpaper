@@ -106,6 +106,7 @@ def is_grain_and_order_preserving(stage_type: StageType) -> bool:
     return stage_type in _GRAIN_AND_ORDER_PRESERVING_TYPES
 
 
+
 # ── Shared blocks ────────────────────────────────────────────────────────────
 class ReviewConfig(_Base):
     when: Optional[str] = None
@@ -166,6 +167,8 @@ class AuthoredStageFields(_Base):
     # it governs WHETHER the cache is consulted, not WHAT the stage computes, so
     # flipping it must never invalidate an entry already recorded.
     cache: bool = False
+    # Why this type ignores `cache`; the refusal quotes it. None means it honours one.
+    CACHE_IGNORED_BECAUSE: ClassVar[Optional[str]] = None
     compiler_notes: list[str] = Field(default_factory=list)
 
     # The authored contract of what this stage reads and writes, per input —

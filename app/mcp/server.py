@@ -173,9 +173,10 @@ def run_workflow(
     version_id: str | None = None,
     limits: dict[str, int] | None = None,
     files: dict[str, str] | None = None,
+    bust_cache: bool = False,
 ) -> dict[str, Any]:
     try:
-        return shared.run_workflow(project_id, version_id, limits, files)
+        return shared.run_workflow(project_id, version_id, limits, files, bust_cache)
     except _RUN_TOOL_ERRORS as exc:
         return {"ok": False, "error": str(exc)}
 

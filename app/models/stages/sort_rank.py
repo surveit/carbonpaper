@@ -80,6 +80,9 @@ class SortRankConfig(StageConfig):
 
 class SortRankStage(AbstractStage):
     type: Literal[StageType.sort_rank]
+    CACHE_IGNORED_BECAUSE: ClassVar[str] = (
+        "the cache stores a table, not the lineage sidecar this type works out, so a hit would replay the rows without their provenance"
+    )
     sort_rank: SortRankConfig
     # Exactly one input: ordering one frame's rows against each other.
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)

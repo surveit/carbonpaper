@@ -262,6 +262,10 @@ has no output schema.""",
             "limits": 'Caps how many rows a stage READS: {"<stage id>": N}.',
             "files": 'The stored file each input stage reads for THIS run: '
                 '{"<stage id>": "<file_id from list_files>"}.',
+            "bust_cache": "Recompute every stage instead of replaying what a previous run "
+                "cached. Costs whatever the cached stages cost the first time — on an "
+                "`llm_transform` that is real money. Use it to check a result is "
+                "reproducible, not as a matter of course.",
         },
         description="""\
 Start a REAL production run of the project's stored workflow and return

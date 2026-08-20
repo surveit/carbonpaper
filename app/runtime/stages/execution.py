@@ -20,6 +20,7 @@ from app.models.stages.signature import transform_output_schema
 from app.models.stage import (
     AbstractStage,
     StageType,
+    find_cache_ignored_reason,
     is_grain_and_order_preserving,
     max_declared_inputs,
 )
@@ -262,6 +263,23 @@ def validate_registry_matches_model(handlers: dict[StageType, StageHandler]) -> 
                 f"model caps `inputs` at {max_declared_inputs(stage_type)} — declare "
                 f"max_length=1"
             )
+        reads_cache = _reads_the_cache_flag(handler)
+        declared_reason = find_cache_ignored_reason(stage_type)
+        if reads_cache != (declared_reason is None):
+            raise RuntimeError(
+                f"stage type {stage_type.value!r} is registered as "
+                f"{type(handler).__name__} (reads `cache`={reads_cache}), but its model "
+                f"declares CACHE_IGNORED_BECAUSE={declared_reason!r}"
+            )
+
+
+def _reads_the_cache_flag(handler: StageHandler) -> bool:
+    """A source recomputes; a frame handler may refuse; a row mapper always consults."""
+    if isinstance(handler, SourceHandler):
+        return False
+    if isinstance(handler, FrameTransformHandler):
+        return handler.caches_frames
+    return True
 
 
 def _run_row_mapper(

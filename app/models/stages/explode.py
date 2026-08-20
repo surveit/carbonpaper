@@ -40,6 +40,9 @@ class ExplodeConfig(StageConfig):
 
 class ExplodeStage(AbstractStage):
     type: Literal[StageType.explode]
+    CACHE_IGNORED_BECAUSE: ClassVar[str] = (
+        "the cache stores a table, not the lineage sidecar this type works out, so a hit would replay the rows without their provenance"
+    )
     explode: ExplodeConfig
     # Exactly one input: unpacking a column of one frame. Combining two is a join.
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)

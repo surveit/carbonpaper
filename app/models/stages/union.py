@@ -23,6 +23,9 @@ class UnionConfig(StageConfig):
 
 class UnionStage(AbstractStage):
     type: Literal[StageType.union]
+    CACHE_IGNORED_BECAUSE: ClassVar[str] = (
+        "concatenation costs less than hashing its own input would"
+    )
     union: UnionConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=2)
     signature: ReplacesSignature
