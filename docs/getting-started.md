@@ -78,9 +78,15 @@ uv run --frozen python -m pytest tests/ app/    # what CI runs
 uv run --frozen ruff check
 uv run --frozen mypy
 uv run --frozen lint-imports                    # the layering contracts
+uv run --frozen python scripts/check_added_comment_length.py
 uv run --frozen python -m app.cli <project>     # run a workflow without the UI
 ```
 
 `pytest tests/` alone misses the arch tests that live beside the code they
 guard, in `app/**/_arch_tests/` — hence both paths. [AGENTS.md](../AGENTS.md)
 has the conventions those tests enforce.
+
+The comment-length check reads a diff, so it is a script and not a test: with
+no arguments it compares `HEAD` against `origin/master`, which is what CI
+compares. It reads committed history, not the working tree, so run it AFTER
+committing. See [no-long-comments-policy.md](no-long-comments-policy.md).
