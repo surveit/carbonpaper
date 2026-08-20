@@ -3,11 +3,15 @@ version declares, and the project's stored files every row may pick from."""
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel
 
 from app.core import files as file_store
+from app.models.run_parameters import RunParameters
+from app.models.schema import StageId
+from app.runtime.manifest import RunManifest
 from app.web.file_sizes import describe_bytes
 from app.web.loading import list_file_inputs
 
@@ -36,6 +40,9 @@ class InputRow(BaseModel):
     # What the workflow itself names, if anything. A row that has one runs without a
     # pick; a row that does not cannot run until something is chosen.
     authored_path: str
+    # Set only by a duplicate: the file and row cap the run being copied used.
+    selected_file_id: str | None = None
+    limit: int | None = None
 
 
 class RunInputChoices(BaseModel):
@@ -43,15 +50,53 @@ class RunInputChoices(BaseModel):
     # Project-wide, not per row: a file is not tied to the step it was first read by,
     # so every row offers the same list and the reader picks.
     files: list[FileChoice]
+    # A duplicate's row caps on stages with no row here; the form carries them hidden.
+    carried_limits: dict[StageId, int] = {}
+    bust_cache: bool = False
 
 
-def build_run_input_choices(project_id: str, version_id: str | None = None) -> RunInputChoices:
+def build_run_input_choices(
+    project_id: str, version_id: str | None = None, copy_of: RunManifest | None = None
+) -> RunInputChoices:
+    params = copy_of.parameters if copy_of else RunParameters()
+    picks = _match_recorded_files(project_id, params)
+    rows = [InputRow(stage_id=row["stage_id"], authored_path=row["path"],
+                     selected_file_id=picks.get(row["stage_id"]),
+                     limit=params.limits.get(row["stage_id"]))
+            for row in list_file_inputs(project_id, version_id)]
+    shown = {row.stage_id for row in rows}
     return RunInputChoices(
-        inputs=[InputRow(stage_id=row["stage_id"], authored_path=row["path"])
-                for row in list_file_inputs(project_id, version_id)],
+        inputs=rows,
         files=[build_file_choice(record)
                for record in file_store.list_project_files(project_id)],
+        carried_limits={stage_id: cap for stage_id, cap in params.limits.items()
+                        if stage_id not in shown},
+        bust_cache=params.bust_cache,
     )
+
+
+def _match_recorded_files(
+    project_id: str, params: RunParameters
+) -> dict[StageId, str]:
+    """A binding records the path it read; the picker's value is the record that owns it."""
+    id_by_key: dict[str, str] = {}
+    for record in file_store.list_project_files(project_id):
+        for key in _name_the_record(record):
+            id_by_key[key] = record.id
+    picks: dict[StageId, str] = {}
+    for stage_id, override in params.run_bindings.items():
+        path = override.get("path")
+        if not isinstance(path, str):
+            continue
+        file_id = id_by_key.get(path) or id_by_key.get(Path(path).parent.name)
+        if file_id is not None:
+            picks[stage_id] = file_id
+    return picks
+
+
+def _name_the_record(record: file_store.UploadedFile) -> tuple[str, str, str]:
+    # A file's directory was keyed by sha256 before it was keyed by record id.
+    return (str(file_store.resolve_stored_path(record)), record.id, record.sha256)
 
 
 def build_file_choice(record: file_store.UploadedFile) -> FileChoice:

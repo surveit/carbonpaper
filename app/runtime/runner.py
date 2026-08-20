@@ -179,8 +179,10 @@ def resume_run(
     # Replayed wholesale: the recorded parameters ARE what a resume must execute
     # under — the same row windows, the same refusal to read the cache — rather
     # than quietly reusing what the halted run skipped.
-    ctx = RunContext.for_workflow_run(
-        run_dir, project_id, run_id, manifest.parameters)
+    build_context = (RunContext.for_workflow_test_run if manifest.parameters.is_test_run
+                     else RunContext.for_workflow_run)
+    # Auto-approve is legal only against the read-only cache a test run ran under.
+    ctx = build_context(run_dir, project_id, run_id, manifest.parameters)
     # The run's telemetry (human_review_queue_stats/dropped_columns) already lives on the
     # loaded manifest, not the context; a resumed run keeps accumulating onto
     # that same manifest via the executor's per-stage merge.
