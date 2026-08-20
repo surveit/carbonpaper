@@ -69,4 +69,4 @@ def test_a_tinted_control_does_not_inherit_the_paper_hover() -> None:
 def test_the_scan_finds_the_tinted_controls_it_is_meant_to_guard() -> None:
     tinted = find_tinted_variants()
     assert len(tinted) >= 4, f"only found {tinted} — the parser has drifted from the CSS"
-    assert ".btn.approve" in tinted, f"the approve button is not being seen: {sorted(tinted)}"
+    assert ".btn.cta.approve" in tinted, f"the approve button is not being seen: {sorted(tinted)}"
