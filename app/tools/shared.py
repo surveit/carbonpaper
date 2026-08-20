@@ -246,6 +246,7 @@ def run_workflow(
     version_id: str | None = None,
     limits: dict[str, int] | None = None,
     files: dict[str, str] | None = None,
+    bust_cache: bool = False,
 ) -> dict[str, Any]:
     validate_project_exists(project_id)
     # A stage id -> file id map, resolved here to the path-and-format params a run
@@ -255,7 +256,7 @@ def run_workflow(
                 for stage_id, file_id in (files or {}).items()}
     run_id = run_service.start_run(
         project_id, version_id=version_id or None, limits=limits,
-        bindings=bindings or None
+        bindings=bindings or None, bust_cache=bust_cache,
     )
     status = run_service.read_run_status(project_id, run_id)["status"]
     return {"run_id": run_id, "status": status}

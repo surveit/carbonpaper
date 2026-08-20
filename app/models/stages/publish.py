@@ -48,6 +48,9 @@ class PublishStage(CarriesPythonFunctionStage):
     REQUIRES_OUTPUT_SCHEMA: ClassVar[bool] = False
 
     type: Literal[StageType.publish]
+    CACHE_IGNORED_BECAUSE: ClassVar[str] = (
+        "publish writes the artifacts a reader opens, and a replayed frame would skip the write"
+    )
     publish: PublishConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)
     signature: ReplacesSignature

@@ -76,10 +76,16 @@ class JoinStage(AbstractStage):
 
 class EnrichStage(JoinStage):
     type: Literal[StageType.enrich]
+    CACHE_IGNORED_BECAUSE: ClassVar[str] = (
+        "a vectorised join costs less than hashing its own input would"
+    )
 
 
 class ExpandStage(JoinStage):
     type: Literal[StageType.expand]
+    CACHE_IGNORED_BECAUSE: ClassVar[str] = (
+        "a vectorised join costs less than hashing its own input would"
+    )
 
 
 ENRICH_WITH_REWRITE_ISSUE = (

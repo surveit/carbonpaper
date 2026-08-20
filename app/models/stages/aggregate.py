@@ -64,6 +64,9 @@ class AggregateConfig(StageConfig):
 
 class AggregateStage(AbstractStage):
     type: Literal[StageType.aggregate]
+    CACHE_IGNORED_BECAUSE: ClassVar[str] = (
+        "a vectorised aggregation costs less than hashing its own input would"
+    )
     aggregate: AggregateConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
     signature: ReplacesSignature

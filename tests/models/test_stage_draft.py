@@ -11,7 +11,8 @@ import pytest
 from pydantic import ValidationError
 
 from app.models import StageDraft, parse_stage
-from app.models.stage import SERVER_OWNED_STAGE_FIELDS, Stage, AuthoredStageFields
+from app.models.workflow import parse_workflow, validate_workflow_draft
+from app.models.stage import AuthoredStageFields, SERVER_OWNED_STAGE_FIELDS, Stage, StageType, find_cache_ignored_reason
 from app.seeds.seed import discover_workflow_files
 
 # Every member of the `Stage` union, read off the union itself so a new stage
@@ -141,3 +142,41 @@ def test_stage_keeps_the_server_owned_fields_the_draft_never_declares():
     assert stage.source is not None
     assert "dropped_server_owned_fields" not in type(stage).model_fields
     assert "dropped_server_owned_fields" not in StageDraft.model_fields
+
+
+# ── `cache` on a type that never consults one ────────────────────────────────
+@pytest.mark.parametrize("stage_type", [
+    "input_data", "enrich", "expand", "aggregate", "publish", "union",
+    "explode", "dedupe", "sort_rank",
+])
+def test_every_type_that_ignores_cache_says_why(stage_type):
+    reason = find_cache_ignored_reason(StageType(stage_type))
+    assert reason and not reason.endswith("."), "a clause the refusal reads into a sentence"
+
+
+@pytest.mark.parametrize("stage_type", [
+    "llm_transform", "python_row_function", "python_frame_function",
+    "human_review_queue", "filter_rows", "starlark_row_function", "starlark_filter_rows",
+])
+def test_the_types_that_spend_per_row_honour_cache(stage_type):
+    assert find_cache_ignored_reason(StageType(stage_type)) is None
+
+
+_DEAD_CACHE_STAGE = {
+    "id": "src", "type": "input_data", "description": "Source", "inputs": [],
+    "cache": True, "connector": {"kind": "file", "params": {"format": "csv"}},
+    "signature": {"form": "replaces", "reads": [], "produces": [
+        {"name": "a", "type": "str", "nullable": False, "description": "A col."}]},
+}
+
+
+def test_authoring_refuses_a_cache_flag_the_type_ignores():
+    issues = validate_workflow_draft([_DEAD_CACHE_STAGE])
+    assert issues and "never consults one" in issues[0]
+    assert "reads its input afresh" in issues[0], "the refusal quotes the type's own reason"
+
+
+def test_a_workflow_already_carrying_one_still_loads():
+    """Save is stricter than load: refusing here would strand every project that has one."""
+    workflow = parse_workflow([_DEAD_CACHE_STAGE])
+    assert workflow.stages[0].cache is True

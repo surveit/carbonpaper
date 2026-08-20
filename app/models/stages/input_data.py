@@ -56,6 +56,9 @@ class Connector(StageConfig):
 
 class InputDataStage(AbstractStage):
     type: Literal[StageType.input_data]
+    CACHE_IGNORED_BECAUSE: ClassVar[str] = (
+        "a source reads its input afresh every run, so there is nothing to replay"
+    )
     connector: Connector
     # The root of the schema graph: no inputs, so `produces` IS the declaration
     # of what the source supplies — the degenerate replaces form.

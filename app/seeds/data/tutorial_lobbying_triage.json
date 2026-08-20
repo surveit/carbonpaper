@@ -12,7 +12,6 @@
       "type": "input_data",
       "description": "What Each Client Paid to Ask Government For",
       "inputs": [],
-      "cache": true,
       "compiler_notes": [],
       "signature": {
         "form": "replaces",
@@ -74,7 +73,6 @@
       "type": "input_data",
       "description": "What Each Client Promised in Public",
       "inputs": [],
-      "cache": true,
       "compiler_notes": [
         "One row per organisation, which is what lets the join downstream be an enrich (many-to-one, verified) rather than an expand: a repeated client here fails the run."
       ],
@@ -288,7 +286,6 @@
           "id": "public_commitments"
         }
       ],
-      "cache": true,
       "compiler_notes": [
         "enrich, not expand: the commitments file is one row per organisation, so a repeated client is a data error the runtime should fail the run on rather than silently multiplying filings.",
         "A LEFT join, so no filing is dropped. A filing whose client has no commitment row survives carrying nulls in both landed columns, and its ABSENT second parent is what the run's lineage view shows — a null here means 'no row matched', which the next step reads as an absence rather than as a judgment.",
@@ -565,7 +562,6 @@
           "id": "review_contradictions"
         }
       ],
-      "cache": true,
       "compiler_notes": [
         "The document says this is a reading aid, not a verdict — no score, ranking or recommendation column is rendered. A row that contradicts shows the two texts the judgment was made from and adds nothing.",
         "What is printed is reviewed_judgment, the label as the reviewer left it. The model's ai_judgment is read too, but only to say what a reviewer changed it FROM — nothing on this page claims a contradiction the model alone asserted.",
