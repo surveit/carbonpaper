@@ -35,7 +35,7 @@ _ALLOWLIST: Mapping[str, int] = {
     "app/evals/runner.py": 3,
     "app/evals/scoring.py": 3,
     "app/runtime/executor.py": 2,
-    "app/runtime/lineage.py": 2,
+    "app/runtime/lineage.py": 1,
     "app/runtime/manifest.py": 1,
     "app/runtime/preview.py": 1,
     "app/runtime/stage_output.py": 1,

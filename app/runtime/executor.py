@@ -19,7 +19,7 @@ import pyarrow as pa
 from app.core.errors import SubsetRunError
 from app.core.frames import (
     frame_to_table,
-    write_frame_file,
+    write_frame_table,
     write_frame_table_with_csv_fallback,
 )
 from app.models import StageType, Workflow, WorkflowStage
@@ -321,7 +321,7 @@ def _take_row_window(
 
 
 def _persist_row_lineage(lineage: RowLineage, sid: str, run_dir: Path) -> None:
-    write_frame_file(lineage.to_frame(), lineage_sidecar_path(run_dir, sid))
+    write_frame_table(lineage.to_table(), lineage_sidecar_path(run_dir, sid))
 
 
 def _stage_row_lineage(

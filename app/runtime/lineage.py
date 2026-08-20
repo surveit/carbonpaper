@@ -22,6 +22,16 @@ TRACE_SOURCE_ROW_KEY = "_trace_source_row"
 TRACE_EDGE_KIND_KEY = "_trace_edge_kind"
 TRACE_SOURCE_COLUMNS_KEY = "_trace_source_columns"
 
+# Pinned, not inferred. Left to arrow, an empty sidecar types every column
+# `null` and an all-empty column-list types its element `null`, so sidecars of
+# the same shape end up with schemas that will not concatenate or read together.
+LINEAGE_SCHEMA = pa.schema([
+    (TRACE_SOURCE_STAGE_KEY, pa.list_(pa.string())),
+    (TRACE_SOURCE_ROW_KEY, pa.list_(pa.int64())),
+    (TRACE_EDGE_KIND_KEY, pa.list_(pa.string())),
+    (TRACE_SOURCE_COLUMNS_KEY, pa.list_(pa.list_(pa.string()))),
+])
+
 
 class EdgeKind(str, Enum):
     # An enrich's subject row, and the reference row merged into it.
@@ -64,18 +74,15 @@ class RowLineage:
             for entry in self.parents
         ])
 
-    def to_frame(self) -> pd.DataFrame:
-        return pd.DataFrame({
-            TRACE_SOURCE_STAGE_KEY: pd.Series(
-                [[p.stage_id for p in entry] for entry in self.parents], dtype=object),
-            TRACE_SOURCE_ROW_KEY: pd.Series(
-                [[p.row_ordinal for p in entry] for entry in self.parents], dtype=object),
-            TRACE_EDGE_KIND_KEY: pd.Series(
-                [[str(p.kind) for p in entry] for entry in self.parents], dtype=object),
-            TRACE_SOURCE_COLUMNS_KEY: pd.Series(
-                [[list(p.columns or ()) for p in entry] for entry in self.parents],
-                dtype=object),
-        })
+    def to_table(self) -> pa.Table:
+        """Raises rather than writing a sidecar arrow would type differently from its siblings."""
+        return pa.table({
+            TRACE_SOURCE_STAGE_KEY: [[p.stage_id for p in entry] for entry in self.parents],
+            TRACE_SOURCE_ROW_KEY: [[p.row_ordinal for p in entry] for entry in self.parents],
+            TRACE_EDGE_KIND_KEY: [[str(p.kind) for p in entry] for entry in self.parents],
+            TRACE_SOURCE_COLUMNS_KEY: [
+                [list(p.columns or ()) for p in entry] for entry in self.parents],
+        }, schema=LINEAGE_SCHEMA)
 
     @classmethod
     def from_table(cls, table: pa.Table) -> "RowLineage":
