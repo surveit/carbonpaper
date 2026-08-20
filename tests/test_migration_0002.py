@@ -6,17 +6,21 @@ models, so a widened required field passes everything and still orphans the stor
 from __future__ import annotations
 
 import importlib.util
+import json
+import sqlite3
 from pathlib import Path
 from typing import Any
 
 import pytest
+from alembic import command
+from alembic.config import Config
 
 from app.models.workflow import parse_workflow
 from conftest import drop_input_schemas
 from scripts.stage_signatures import add_signature
 
-_REVISION = (Path(__file__).resolve().parents[1]
-             / "alembic/versions/0002_name_queue_and_join_columns.py")
+_ALEMBIC_DIRECTORY = Path(__file__).resolve().parents[1] / "alembic"
+_REVISION = _ALEMBIC_DIRECTORY / "versions/0002_name_queue_and_join_columns.py"
 
 
 def _load_revision() -> Any:
@@ -56,11 +60,89 @@ def _v1_stages() -> list[dict[str, Any]]:
     ]
 
 
+def _v2_stages() -> list[dict[str, Any]]:
+    """The shape current code writes: named columns, and no stored schema to read them off."""
+    return [
+        {"id": "src", "description": "Source", "type": "input_data",
+         "connector": {"kind": "file", "params": {"format": "csv"}}, "inputs": []},
+        {"id": "ref", "description": "Reference", "type": "input_data",
+         "connector": {"kind": "file", "params": {"format": "csv"}}, "inputs": []},
+        {"id": "joined", "description": "Join", "type": "enrich",
+         "inputs": [{"id": "src"}, {"id": "ref"}],
+         "join": {"keys": [{"left": "id", "right": "id"}],
+                  "enrich_with": {"extra": "extra"}}},
+        {"id": "gate", "description": "Review", "type": "human_review_queue",
+         "inputs": [{"id": "joined"}],
+         "queue": {"reviewer_instructions": "Confirm each row.",
+                   "reviewed_columns": {"verdict": "reviewed_verdict"},
+                   "verdict_column": "review_verdict", "reviewer_column": "reviewer",
+                   "reviewed_at_column": "reviewed_at"}},
+    ]
+
+
+def _upgrade_store_to(revision: str) -> None:
+    config = Config()
+    config.set_main_option("script_location", str(_ALEMBIC_DIRECTORY))
+    command.upgrade(config, revision)
+
+
+def _store_holding(
+    tmp_path, monkeypatch, stages: list[dict[str, Any]], schema_version: int
+) -> Path:
+    db_path = tmp_path / "app.db"
+    monkeypatch.setenv("CARBON_PAPER_DB_PATH", str(db_path))
+    _upgrade_store_to("0001")
+    connection = sqlite3.connect(db_path)
+    try:
+        connection.execute(
+            "INSERT INTO documents (collection, id, data, schema_version) VALUES (?,?,?,?)",
+            ("workflow_version", "proj/v1", json.dumps({"stages": stages}), schema_version),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    return db_path
+
+
+def _stored_version(db_path: Path) -> tuple[str, int]:
+    connection = sqlite3.connect(db_path)
+    try:
+        row = connection.execute(
+            "SELECT data, schema_version FROM documents WHERE id='proj/v1'").fetchone()
+    finally:
+        connection.close()
+    return str(row[0]), int(row[1])
+
+
+def test_a_record_already_naming_its_columns_is_not_a_decision_anyone_owes(
+        tmp_path, monkeypatch):
+    """The live store's one version: written by current code, so 0002 has nothing to do."""
+    db_path = _store_holding(tmp_path, monkeypatch, _v2_stages(), schema_version=4)
+    before = _stored_version(db_path)
+
+    _upgrade_store_to("0002")
+
+    # Untouched, schema_version included — 0002's own stamp of 2 would walk it backwards.
+    assert _stored_version(db_path) == before
+
+
+def test_a_v1_queue_with_no_decision_recorded_is_still_refused(tmp_path, monkeypatch):
+    db_path = _store_holding(tmp_path, monkeypatch, _v1_stages(), schema_version=1)
+
+    # alembic loads its own copy of the file, so the NAME identifies the class.
+    with pytest.raises(Exception, match=r"human decision.*\['proj'\]") as refusal:
+        _upgrade_store_to("0002")
+
+    assert type(refusal.value).__name__ == "UnmigratableRecord"
+    # Refused, not half-done: the record is still v1, waiting for the entry to be added.
+    assert _stored_version(db_path)[1] == 1
+
+
 def test_a_v1_document_validates_under_todays_model_after_upgrading():
     rev = _load_revision()
     rev._REVIEWED_COLUMNS_BY_PROJECT["proj"] = {"verdict": "verdict_reviewed"}
     document = {"stages": _v1_stages()}
-    rev._upgrade_document(document, "proj")
+    rev._name_stage_columns(rev._find_unnamed_stages(document), "proj")
 
     # 0002 brings the document to ITS shape; 0006's synthesis carries it the rest
     # of the way, as a store crossing both revisions would be.
