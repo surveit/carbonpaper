@@ -4,8 +4,11 @@ from datetime import datetime, timedelta
 import pytest
 
 from app.core.errors import DocumentNotFound
+from pydantic import Field
+
 from app.core.persistence import (
     PersistedModel,
+    get_store,
     now_iso,
     configure_store,
     validate_id,
@@ -116,6 +119,46 @@ def test_list_ids_empty_collection(store):
     assert store.list_ids("nothing") == []
 
 
+def test_find_selects_on_a_stored_field(store):
+    store.write("run", "p/1", {"status": "ok"})
+    store.write("run", "p/2", {"status": "error"})
+    assert dict(store.find("run", {"status": "ok"})) == {"p/1": {"status": "ok"}}
+
+
+def test_find_ands_the_fields(store):
+    store.write("run", "p/1", {"status": "ok", "reviewer": "shuhan"})
+    store.write("run", "p/2", {"status": "ok", "reviewer": "someone else"})
+    assert list(store.find("run", {"status": "ok", "reviewer": "shuhan"})) == [
+        ("p/1", {"status": "ok", "reviewer": "shuhan"})
+    ]
+
+
+def test_find_stays_inside_its_collection(store):
+    store.write("run", "p/1", {"status": "ok"})
+    store.write("draft", "p/1", {"status": "ok"})
+    assert [id_ for id_, _ in store.find("run", {"status": "ok"})] == ["p/1"]
+
+
+def test_find_on_none_matches_a_stored_null_and_an_absent_key(store):
+    store.write("uploaded_file", "1", {"project_id": None})
+    store.write("uploaded_file", "2", {})
+    store.write("uploaded_file", "3", {"project_id": "demo"})
+    assert [id_ for id_, _ in store.find("uploaded_file", {"project_id": None})] == ["1", "2"]
+
+
+def test_find_without_fields_reads_the_whole_collection(store):
+    store.write("run", "p/1", {"status": "ok"})
+    store.write("run", "p/2", {"status": "error"})
+    assert [id_ for id_, _ in store.find("run", {})] == ["p/1", "p/2"]
+
+
+def test_find_matches_a_field_holding_a_json_path(store):
+    """The field name is a bound parameter, so a quote in a value cannot reach the SQL."""
+    store.write("run", "p/1", {"status": "' OR 1=1 --"})
+    store.write("run", "p/2", {"status": "ok"})
+    assert [id_ for id_, _ in store.find("run", {"status": "' OR 1=1 --"})] == ["p/1"]
+
+
 class _Widget(PersistedModel):
     collection = "widget"
     name: str
@@ -190,6 +233,30 @@ def test_list_returns_all_typed(configured):
     _Widget(id="b", name="y").save()
     names = sorted(w.name for w in _Widget.list())
     assert names == ["x", "y"]
+
+
+def test_find_returns_typed_records(configured):
+    _Widget(id="a", name="x", count=1).save()
+    _Widget(id="b", name="y", count=2).save()
+    found = _Widget.find(count=2)
+    assert [(w.id, w.name) for w in found] == [("b", "y")]
+
+
+def test_find_on_an_unknown_field_raises_rather_than_matching_nothing(configured):
+    with pytest.raises(ValueError, match="no field"):
+        _Widget.find(nmae="x")
+
+
+class _Aliased(PersistedModel):
+    collection = "aliased"
+    DUMP_OPTS = {"by_alias": True}
+    kind: str = Field(alias="type")
+
+
+def test_find_queries_the_alias_a_by_alias_record_was_stored_under(configured):
+    _Aliased(id="a", type="row").save()
+    assert get_store().read("aliased", "a")["type"] == "row"
+    assert [r.id for r in _Aliased.find(kind="row")] == ["a"]
 
 
 def test_delete_and_exists(configured):

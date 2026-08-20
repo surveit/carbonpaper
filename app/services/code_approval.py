@@ -30,9 +30,7 @@ class CodeExecutionApproval(PersistedModel):
     collection: ClassVar[str] = "code_execution_approval"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
 
-    # The key this is looked up by, as a FIELD — the id stays the opaque uuid it
-    # defaults to. There is one record per approved project, so the lookup below
-    # scans the collection rather than selecting on an id prefix.
+    # One record per approved project, found on this FIELD — the id stays an opaque uuid.
     project_id: str
     approved_at: str
     # Why the owner was asked, in the words of whoever asked. Kept so the person
@@ -45,9 +43,7 @@ def has_code_execution_approval(project_id: str) -> bool:
 
 
 def read_code_execution_approval(project_id: str) -> CodeExecutionApproval | None:
-    return next(
-        (r for r in CodeExecutionApproval.list() if r.project_id == project_id), None
-    )
+    return next(iter(CodeExecutionApproval.find(project_id=project_id)), None)
 
 
 def approve_code_execution(project_id: str, reason: str) -> CodeExecutionApproval:
