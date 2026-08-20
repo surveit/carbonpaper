@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from app.core.frames import read_frame_table
+from app.core.frames import read_frame_table, write_frame_table
 
 from conftest import as_inputs, place_stage, rows_of
 from app.models import parse_stage
@@ -106,7 +106,7 @@ def test_the_sidecar_round_trips_through_parquet(tmp_path):
     lineage = handle_aggregate(
         place_stage(_stage([_TOTAL, _BIG_N], [_TOTAL_COL, _BIG_N_COL])), as_inputs({"filings": FILINGS}), None).lineage
     path = tmp_path / "sidecar.parquet"
-    lineage.to_frame().to_parquet(path, index=False)
+    write_frame_table(lineage.to_table(), path)
     assert RowLineage.from_table(read_frame_table(path)) == lineage
 
 

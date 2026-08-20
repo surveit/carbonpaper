@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from app.core.frames import write_frame_table
 from app.runtime.lineage import lineage_sidecar_path
 from app.runtime.trace import (
     _is_row_preserving,
@@ -25,8 +26,8 @@ def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1") -> Path:
         rel = f"outputs/{spec['id']}.parquet"
         spec["df"].to_parquet(run_dir / rel, index=False)
         if spec.get("lineage") is not None:
-            spec["lineage"].to_frame().to_parquet(
-                lineage_sidecar_path(run_dir, spec["id"]), index=False
+            write_frame_table(
+                spec["lineage"].to_table(), lineage_sidecar_path(run_dir, spec["id"])
             )
         records.append({
             "stage_id": spec["id"],
