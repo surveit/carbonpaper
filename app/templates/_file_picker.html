@@ -1,4 +1,4 @@
-{% macro file_picker(name, authored_path, files) %}
+{% macro file_picker(name, authored_path, files, selected_sha256=None) %}
 <div class="file-picker" data-file-picker>
   <select id="{{ name }}" name="{{ name }}" class="file-picker-native file-pick"
           {% if not authored_path %}required{% endif %}>
@@ -9,7 +9,8 @@
     <option value="" data-file-kind="empty" data-filename="Choose a file…"></option>
     {% endif %}
     {% for f in files %}
-    <option value="{{ f.sha256 }}" data-uploaded-at="{{ f.uploaded_at.isoformat() }}"
+    <option value="{{ f.sha256 }}"{% if f.sha256 == selected_sha256 %} selected{% endif %}
+            data-uploaded-at="{{ f.uploaded_at.isoformat() }}"
             data-filename="{{ f.filename }}" data-uploaded-label="{{ f.uploaded_label }}"
             data-size-label="{{ f.size_label }}">{{ f.label }}</option>
     {% endfor %}

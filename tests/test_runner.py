@@ -671,6 +671,31 @@ def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
     assert list(out["name"]) == ["bound-row"]
 
 
+def test_resume_of_a_test_run_keeps_the_read_only_cache_it_ran_under(tmp_path):
+    """Auto-approve is legal only against a read-only cache: a production context dies."""
+    _make_project(tmp_path)
+    version_id = _seed_version(tmp_path)
+    run_id = "20260101T000000"
+    run_dir = tmp_path / "runs" / run_id
+    (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
+    store_manifest(run_dir.parent.parent, run_id, {
+        "run_id": run_id, "started_at": run_id, "project": tmp_path.name,
+        "workflow_version": version_id, "status": "cancelled",
+        "parameters": {"is_test_run": True, "queue_auto_approve": True},
+        "human_review_queue_stats": {},
+        "stage_records": [{"stage_id": "load", "type": "input_data",
+                           "description": "Load items", "status": "pending",
+                           "input_validation_report": [],
+                           "output_validation_report": None, "output_row_count": 0}],
+    })
+
+    result = resume_run(run_dir, tmp_path.name, run_id, *resumed_stages(tmp_path, run_id))
+
+    [record] = result["stage_records"]
+    assert record["status"] == "ok", record.get("error")
+    assert result["parameters"]["is_test_run"] is True
+
+
 def test_the_documented_cli_runs_a_project_with_nothing_configured(
     tmp_path, monkeypatch, projects_root
 ):

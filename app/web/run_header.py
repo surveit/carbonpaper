@@ -58,6 +58,13 @@ class RunLiveView(BaseModel):
     tallies: list[StatusTally]
 
 
+class RestartOffer(BaseModel):
+    """`note` says what Restart would do here; with `offered` false it says why not."""
+
+    offered: bool
+    note: str
+
+
 class RunHeader(BaseModel):
     run_id: str
     started_at: str | None
@@ -67,6 +74,7 @@ class RunHeader(BaseModel):
     cta: RunCta
     artifacts: list[ArtifactLink]
     live: RunLiveView
+    restart: RestartOffer
 
 
 def build_run_header(
@@ -83,6 +91,7 @@ def build_run_header(
         cta=cta,
         artifacts=list_artifact_links(project_id, run_id, run_dir, manifest),
         live=_build_live_view(manifest, strip, cta),
+        restart=describe_restart(manifest),
     )
 
 
@@ -114,6 +123,29 @@ def choose_run_cta(
     # Finished clean: nothing is asked of the reader. Its outputs are not an action
     # and are not rendered as one — they are their own section on the run page.
     return RunCta()
+
+
+def describe_restart(manifest: Mapping[str, Any]) -> RestartOffer:
+    if manifest.get("status") == RunStatus.RUNNING:
+        return RestartOffer(offered=True, note=_RESTART_WHILE_RUNNING)
+    waiting = count_stages_to_rerun(manifest)
+    # `records and` — a manifest carrying none has not been read as "every stage
+    # completed": a resume walks the VERSION's stages, so it would run all of them.
+    if read_stage_records(manifest) and not waiting:
+        return RestartOffer(offered=False, note=_RESTART_HAS_NOTHING_TO_DO)
+    done = _count_completed(manifest)
+    stages = f"{waiting} stage{'' if waiting == 1 else 's'}"
+    if not done:
+        return RestartOffer(offered=True,
+                            note=f"Runs all {stages} — none of them completed.")
+    return RestartOffer(offered=True, note=(
+        f"Runs the {stages} that have not completed and reuses the {done} that "
+        f"{'has' if done == 1 else 'have'}."
+    ))
+
+
+def count_stages_to_rerun(manifest: Mapping[str, Any]) -> int:
+    return len(read_stage_records(manifest)) - _count_completed(manifest)
 
 
 def find_halted_stage_ids(manifest: Mapping[str, Any]) -> list[str]:
@@ -301,10 +333,26 @@ def _describe_what_the_review_releases(
     return f"{waiting} stage{plural} run{'s' if waiting == 1 else ''} once {subject} decided"
 
 
-def _describe_cache_reuse(manifest: Mapping[str, Any]) -> str:
-    done = count_stage_status(manifest, StageStatus.OK) + count_stage_status(
+_RESTART_WHILE_RUNNING = (
+    "Runs every stage that has not completed. This run's status says it is still "
+    "executing, and nothing here checks whether that is true: if it is, both "
+    "executors write this run's stage records and the last write wins."
+)
+
+_RESTART_HAS_NOTHING_TO_DO = (
+    "Every stage completed, so a restart would run none of them. Duplicate run "
+    "opens the run form on this run's version, files and row limits."
+)
+
+
+def _count_completed(manifest: Mapping[str, Any]) -> int:
+    return count_stage_status(manifest, StageStatus.OK) + count_stage_status(
         manifest, StageStatus.VALIDATION_WARNINGS
     )
+
+
+def _describe_cache_reuse(manifest: Mapping[str, Any]) -> str:
+    done = _count_completed(manifest)
     return _CACHE_NOTE.format(done=done, s="" if done == 1 else "s")
 
 

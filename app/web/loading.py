@@ -21,7 +21,7 @@ from app.models import (
 )
 from app.models.stages.llm_transform import LLMTransformStage
 from app.runtime.stages.human_review_queue import QueueFingerprints
-from app.runtime.manifest import read_run_manifest, resolve_output_path
+from app.runtime.manifest import RunManifest, read_run_manifest, resolve_output_path
 from app.services.run import resolve_version
 from app.services.loader import (
     StageEntry,
@@ -134,8 +134,12 @@ def list_file_inputs(project_id: str, version_id: str | None = None) -> list[dic
 # ─── Runs & manifests ────────────────────────────────────────────────────────
 
 def load_manifest(project_id: str, run_id: str) -> dict[str, Any]:
+    return load_run_record(project_id, run_id).to_dict()
+
+
+def load_run_record(project_id: str, run_id: str) -> RunManifest:
     try:
-        return read_run_manifest(project_id, run_id).to_dict()
+        return read_run_manifest(project_id, run_id)
     except RunNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Run not found") from exc
 

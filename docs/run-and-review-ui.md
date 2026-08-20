@@ -42,11 +42,19 @@ All routes live under `/project/{project}/…`.
   Resume re-runs any non-complete stage (error + downstream) and **reuses
   completed upstream outputs** — no re-running finished stages, no new LLM calls
   for them. (The same mechanism powers "continue after review".)
-- **Restart run**: the toolbar menu (☰) carries the same `/resume` POST in every
-  run state, including `running` — an executor that dies mid-run leaves the status
-  behind it, and cancel needs a live executor to consume it. Nothing checks whether
-  the run is still executing: a second executor writes the same manifest and the
-  same `outputs/<stage>.parquet`, last write wins.
+- **Restart run**: the toolbar menu (☰) carries the same `/resume` POST whatever the
+  run's status says, including `running` — an executor that dies mid-run leaves the
+  status behind it, and cancel needs a live executor to consume it. Nothing checks
+  whether the run is still executing: a second executor writes the same manifest and
+  the same `outputs/<stage>.parquet`, last write wins. It goes inert once every stage
+  has completed, since a resume would then run none of them
+  (`run_header.describe_restart`).
+- **Duplicate run**: the same menu links `/runs/new?from_run=<run_id>`, which opens
+  the run form on that run's version, file picks and row caps
+  (`run_inputs.build_run_input_choices`). It pre-fills only — the reader submits it.
+  What it could not carry is stated above the form: a file the project no longer
+  holds, a row cap on a stage that is not a file input, and that duplicating a test
+  run produces a production run.
 
 ### The stage panel (`_run_stage_panel.html`) — one strip of tabs
 

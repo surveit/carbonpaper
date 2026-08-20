@@ -186,18 +186,28 @@
 
   <div class="run-audit-menu" id="audit-menu" hidden>
     {# Here rather than in the CTA row because the row carries the ONE action this
-       run's state calls for, and this one is offered in every state — including
-       `running`, where the state is exactly what the reader is refusing to believe:
-       an executor that died mid-run leaves the status behind it, and until now the
-       page's only offer was a Cancel no executor was left to consume. #}
+       run's state calls for, while these two are offered whatever it says —
+       including `running`, which is the state the reader is refusing to believe: an
+       executor that died mid-run leaves it behind, and the page's only other offer
+       is a Cancel no executor is left to consume.
+
+       Restart goes inert once every stage has completed rather than posting a resume
+       that would run nothing: a control that returns you to the same page unchanged
+       reads as a broken control. That is the case Duplicate answers. #}
     <h3>Restart run</h3>
-    <p class="lede">Re-runs every stage that has not completed and reuses the ones that
-      have. Nothing here checks whether this run is already executing: if it is, both
-      executors write this run's stage records, and the last write wins.</p>
+    <p class="lede">{{ header.restart.note }}</p>
+    {% if header.restart.offered %}
     <form method="post" action="/project/{{ project }}/runs/{{ run_id }}/resume"
           class="run-restart-form">
       <button type="submit" class="btn">↻ Restart run</button>
     </form>
+    {% endif %}
+
+    <h3>Duplicate run</h3>
+    <p class="lede">Opens the run form with this run's version, file picks and row
+      limits already chosen. Nothing runs until you submit it.</p>
+    <p class="run-restart-form"><a class="btn"
+       href="/project/{{ project }}/runs/new?from_run={{ run_id }}">⧉ Duplicate run</a></p>
 
     <h3>Raw manifest</h3>
     <details class="raw-yaml"><summary>Show</summary><pre>{{ manifest | tojson(indent=2) }}</pre></details>

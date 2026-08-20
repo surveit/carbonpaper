@@ -15,6 +15,11 @@
       reviewer's time on rows that have both.
     · ▶ Run workflow
 
+  A DUPLICATE (the run page's Duplicate run, ?from_run=<run_id>) opens this same form
+  on the copied run's version, with each row's picker on the file it read, its row cap
+  filled in, and bust_cache ticked if that run set it. What could NOT be copied is
+  stated above the form; the reader submits it, so nothing here launches anything.
+
   Version and inputs belong together: different versions can author different input
   stages/paths, so the fields describe whichever version is picked. When the version
   changes, run_controls.js refetches that version's inputs
@@ -28,6 +33,8 @@
     selected_version_id = which of them the picker opens on (None with no versions)
     choices = run_inputs.build_run_input_choices(state.id, selected_version_id) —
               .inputs (one row per file input) and .files (what every row may pick from)
+              `.copied` is set only by a duplicate — what it carried over and what
+              it could not
     max_upload_bytes = uploads.max_upload_bytes() — the ceiling Upload… checks a pick
                        against before sending it; the server refuses the same size
 #}
@@ -50,20 +57,21 @@
   inside a field's frame reads as something the reader may type over.
 #}
 {% from "_file_picker.html" import file_picker %}
-{% macro input_row(stage_id, authored_path, files) %}
+{% macro input_row(stage_id, authored_path, files, selected_sha256=None, limit=None) %}
 <div class="run-input-row">
   <label class="run-input-name" for="binding__{{ stage_id }}">
     <code>{{ stage_id }}</code> — data file
   </label>
   <div class="run-input-controls">
     <span class="path-field">
-      {{ file_picker("binding__" ~ stage_id, authored_path, files) }}
+      {{ file_picker("binding__" ~ stage_id, authored_path, files, selected_sha256) }}
       <button type="button" class="btn browse-btn">Upload file…</button>
     </span>
     <label class="run-limit" title="read only the first N rows of this file, for this run">
       <span>first</span>
       <input type="number" name="limit__{{ stage_id }}" min="0" step="1"
-             inputmode="numeric" placeholder="all">
+             inputmode="numeric" placeholder="all"
+             {% if limit is not none %}value="{{ limit }}"{% endif %}>
       <span>rows</span>
     </label>
   </div>
@@ -71,6 +79,32 @@
 {% endmacro %}
 
 {% if versions %}
+{# What a duplicate copied, said out loud: the form otherwise looks like any other
+   new run, and a pick the reader did not make is one they have to be told about —
+   especially the two that silently differ from the run being copied. #}
+{% if choices.copied %}
+{% set copied = choices.copied %}
+<div class="run-copied" id="run-copied">
+  <p>Copied from run <a href="/project/{{ state.id }}/runs/{{ copied.run_id }}"><code>{{ copied.run_id }}</code></a>:
+    its version, {{ copied.picks }} file pick{{ '' if copied.picks == 1 else 's' }}
+    and {{ copied.limits }} row limit{{ '' if copied.limits == 1 else 's' }}. Nothing runs until you submit.</p>
+  {% if copied.files_not_copied %}
+  <p class="banner banner-warn">⚠ {{ copied.files_not_copied | length }} file pick{{ '' if copied.files_not_copied | length == 1 else 's' }}
+    could not be copied — this project no longer holds the file that run read, or the
+    selected version has no such input:
+    {% for stage_id in copied.files_not_copied %}<code>{{ stage_id }}</code> {% endfor %}</p>
+  {% endif %}
+  {% if copied.limits_not_copied %}
+  <p class="banner banner-warn">⚠ That run capped rows on
+    {% for stage_id, cap in copied.limits_not_copied.items() %}<code>{{ stage_id }}</code> at {{ cap }}{{ ', ' if not loop.last }}{% endfor %} —
+    this form caps file inputs only, so those caps are NOT set here.</p>
+  {% endif %}
+  {% if copied.was_test_run %}
+  <p class="banner banner-warn">⚠ That was a test run. This form launches production
+    runs, so this one writes the stage cache and halts on a human review queue.</p>
+  {% endif %}
+</div>
+{% endif %}
 <form action="/project/{{ state.id }}/run" method="post" class="run-controls"
       data-project="{{ state.id }}" data-max-upload-bytes="{{ max_upload_bytes }}">
   <label class="run-version">version
@@ -81,7 +115,7 @@
     </select>
   </label>
   <div class="run-inputs">
-    {% for row in choices.inputs %}{{ input_row(row.stage_id, row.authored_path, choices.files) }}{% endfor %}
+    {% for row in choices.inputs %}{{ input_row(row.stage_id, row.authored_path, choices.files, row.selected_sha256, row.limit) }}{% endfor %}
   </div>
   {# The one place a file leaves the reader's machine, so the one place the strip's
      standing fact is worth repeating in the specific. #}
@@ -89,10 +123,11 @@
   <p class="demo-upload-note">Open demo — this file becomes readable by every visitor and
     by any stage anyone writes. Upload only what can be made public.</p>
   {% endif %}
-  <details class="run-advanced">
+  <details class="run-advanced"{% if choices.copied and choices.copied.bust_cache %} open{% endif %}>
     <summary>Advanced</summary>
     <label class="run-bust-cache">
-      <input type="checkbox" name="bust_cache" value="on">
+      <input type="checkbox" name="bust_cache" value="on"
+             {% if choices.copied and choices.copied.bust_cache %}checked{% endif %}>
       <span>Do not use row-level cache (e.g. recompute rows that LLM has already
         processed, or require human review on the same data they already approved)</span>
     </label>

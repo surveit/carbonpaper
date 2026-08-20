@@ -16,15 +16,22 @@ from app.web.breadcrumbs import build_runs_child_crumbs
 from app.services.project import project_exists
 from app.web.config import templates
 from app.web.project_view import shell_state
+from app.web.loading import load_run_record
 from app.web.run_inputs import build_run_input_choices, build_uploaded_file_choice
 
 router = APIRouter()
 
 
 @router.get("/project/{project_id}/runs/new", response_class=HTMLResponse)
-async def run_new(request: Request, project_id: str, version_id: str | None = None):
+async def run_new(request: Request, project_id: str, version_id: str | None = None,
+                  from_run: str | None = None):
     if not project_exists(project_id):
         raise HTTPException(status_code=404, detail=f"No project '{project_id}'")
+    # ?from_run= is the run page's Duplicate: the form opens on that run's version,
+    # files and row limits. It only PRE-FILLS — the reader still submits — so a run
+    # whose settings no longer resolve is reported in the form, not launched.
+    copy_of = load_run_record(project_id, from_run) if from_run else None
+    version_id = version_id or (copy_of.workflow_version if copy_of else None)
     # Every stored version is runnable (resolve_version_id reads no publication
     # state), so the picker offers all of them newest-first. Registered ahead of
     # /runs/{run_id}, which would otherwise match "new" as a run id.
@@ -45,7 +52,7 @@ async def run_new(request: Request, project_id: str, version_id: str | None = No
             "crumbs": build_runs_child_crumbs(project_id, label="New run"),
             "versions": versions,
             "selected_version_id": selected,
-            "choices": build_run_input_choices(project_id, selected),
+            "choices": build_run_input_choices(project_id, selected, copy_of),
             # So Browse… can refuse an oversized pick before spending the upload on it.
             "max_upload_bytes": max_upload_bytes(),
         },
