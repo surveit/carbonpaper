@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import urllib.error
 import urllib.request
+from collections.abc import Mapping
 from pathlib import Path
 from typing import BinaryIO
 from urllib.parse import urlparse
@@ -27,10 +28,13 @@ _READ_TIMEOUT_SECONDS = 300
 _FALLBACK_FILENAME = "fetched.dat"
 
 
-def resolve_fetched_path(url: str, *, refetch: bool = False) -> Path:
+def resolve_fetched_path(url: str, *, refetch: bool = False,
+                         headers: Mapping[str, str] | None = None) -> Path:
     """The held copy's path; `refetch` takes today's bytes as a second record beside it."""
     held = None if refetch else find_fetched_file(url)
-    return resolve_stored_path(held if held is not None else _fetch_into_store(url))
+    if held is not None:
+        return resolve_stored_path(held)
+    return resolve_stored_path(_fetch_into_store(url, headers or {}))
 
 
 def find_fetched_file(url: str) -> UploadedFile | None:
@@ -46,8 +50,8 @@ def find_fetched_file(url: str) -> UploadedFile | None:
     return None
 
 
-def _fetch_into_store(url: str) -> UploadedFile:
-    with _open_stream(url) as response:
+def _fetch_into_store(url: str, headers: Mapping[str, str]) -> UploadedFile:
+    with _open_stream(url, headers) as response:
         return _save_under_store_limits(url, response)
 
 
@@ -67,9 +71,10 @@ def _save_under_store_limits(url: str, response: BinaryIO) -> UploadedFile:
         ) from no_room
 
 
-def _open_stream(url: str) -> BinaryIO:
+def _open_stream(url: str, headers: Mapping[str, str]) -> BinaryIO:
     """urlopen's own errors name neither the URL nor what wanted it."""
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    sent = {"User-Agent": USER_AGENT, **headers}   # last wins: a stage may name its own agent
+    request = urllib.request.Request(url, headers=sent)
     try:
         return urllib.request.urlopen(request, timeout=_READ_TIMEOUT_SECONDS)
     except urllib.error.HTTPError as refused:

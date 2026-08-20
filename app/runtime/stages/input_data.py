@@ -79,7 +79,10 @@ def resolve_source_path(stage: InputDataStage) -> Path | None:
     if path_param:
         return Path(path_param)   # absolute: the model rejects a relative path when present
     if stage.connector.kind == ConnectorKind.fetch:
-        return resolve_fetched_path(str(params["url"]))   # required on the model
+        # url is required on the model, and headers there are already str -> str with no
+        # line break in either half, so nothing here re-checks them.
+        headers: dict[str, str] = params.get("headers") or {}
+        return resolve_fetched_path(str(params["url"]), headers=headers)
     return None
 
 

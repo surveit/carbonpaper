@@ -38,7 +38,12 @@ class Connector(StageConfig):
             "starting a run. Never invent a path. "
             "For kind=fetch: params.url is the REQUIRED http(s) address the run "
             "downloads, plus params.format, which is itself required unless the URL "
-            "path ends in a known extension. Never invent a URL."
+            "path ends in a known extension. Never invent a URL. "
+            "params.headers is an optional mapping of header name to a LITERAL string "
+            "value sent with the request, for an endpoint that authenticates — e.g. "
+            "{\"Authorization\": \"Token abc123\"}. That value is STORED IN THIS STAGE'S "
+            "CONFIG, which is versioned and travels in a project export, so put nothing "
+            "there you would not ship with the workflow. Never invent a credential."
         ),
     )
     refresh: str = "ad_hoc"
@@ -54,6 +59,7 @@ class Connector(StageConfig):
             _refuse_unusable_path(params.get("path"))
         if self.kind == ConnectorKind.fetch:
             _refuse_unusable_url(params.get("url"), fmt)
+            _refuse_unusable_headers(params.get("headers"))
         return self
 
 
@@ -79,6 +85,32 @@ def _refuse_unusable_url(url: Any, fmt: Any) -> None:
             "returns. An endpoint that serves csv from a path with no extension is the "
             "usual case — declare the format rather than letting the read guess."
         )
+
+
+def _refuse_unusable_headers(headers: Any) -> None:
+    """A header is foreign text put into a request: CR or LF in either half injects more."""
+    if headers is None:
+        return
+    if not isinstance(headers, dict):
+        raise ValueError(
+            f"connector params.headers must be a mapping of header name to value, got "
+            f"{type(headers).__name__}")
+    for name, value in headers.items():
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError(f"connector params.headers has a blank or non-text name: {name!r}")
+        if not isinstance(value, str):
+            raise ValueError(
+                f"connector params.headers[{name!r}] must be a literal string value, got "
+                f"{type(value).__name__}")
+        _refuse_header_line_break(name, name)
+        _refuse_header_line_break(name, value)
+
+
+def _refuse_header_line_break(name: str, text: str) -> None:
+    if "\r" in text or "\n" in text:
+        raise ValueError(
+            f"connector params.headers[{name!r}] holds a line break, which would inject "
+            "further headers into the request")
 
 
 def _suffix_format(url: str) -> FileFormat | None:
@@ -130,6 +162,10 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
             "params.format is required unless the URL path ends in a known "
             "extension — an endpoint like /api/grants says nothing about what it "
             "returns. Never invent a URL. "
+            "An endpoint that authenticates takes params.headers, a mapping of "
+            "header name to a literal string value (e.g. Authorization: Token "
+            "abc123). The value is stored in the stage config, which is versioned "
+            "and travels in a project export. Never invent a credential. "
             "For format=xlsx, optional params select the sheet and skip leading "
             "rows or columns: sheet_name (name or 0-based position, default first "
             "sheet), header_row (0-based index of the header row, default 0) and "

@@ -3,10 +3,10 @@ does with a URL — served by a local http server, never the public internet."""
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable, Iterator
 from functools import partial
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-from typing import Iterator
 
 import pytest
 
@@ -30,19 +30,44 @@ class _QuietHandler(SimpleHTTPRequestHandler):
         return
 
 
+class _EchoHeadersHandler(BaseHTTPRequestHandler):
+    """Answers with the request headers it received, so a test reads what really went out."""
+
+    def do_GET(self) -> None:
+        payload = "".join(f"{name}: {value}\n" for name, value in self.headers.items())
+        body = payload.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format: str, *args: object) -> None:
+        return
+
+
+def _serve(handler: Callable[..., BaseHTTPRequestHandler]) -> Iterator[str]:
+    server = HTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 @pytest.fixture
 def served(tmp_path: Path) -> Iterator[tuple[str, Path]]:
     """A real http server, so the fetch runs over a socket rather than against a mock."""
     root = tmp_path / "served"
     root.mkdir()
-    server = HTTPServer(("127.0.0.1", 0), partial(_QuietHandler, directory=str(root)))
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        yield f"http://127.0.0.1:{server.server_port}", root
-    finally:
-        server.shutdown()
-        server.server_close()
+    for base in _serve(partial(_QuietHandler, directory=str(root))):
+        yield base, root
+
+
+@pytest.fixture
+def echoing() -> Iterator[str]:
+    yield from _serve(_EchoHeadersHandler)
 
 
 def _fetch_stage(stage_id: str, url: str) -> dict[str, object]:
@@ -235,3 +260,71 @@ def test_an_unbound_file_stage_resolves_to_nothing() -> None:
                       "produces": [{"name": "id", "type": "str", "nullable": False}]},
     })
     assert resolve_source_path(stage) is None
+
+
+# ─── headers ─────────────────────────────────────────────────────────────────
+
+def test_authored_headers_reach_the_server(echoing: str) -> None:
+    """The CourtListener shape: an endpoint that answers only to an Authorization token."""
+    path = resolve_fetched_path(f"{echoing}/api/grants.csv",
+                                headers={"Authorization": "Token abc123"})
+    assert "Authorization: Token abc123" in path.read_text(encoding="utf-8")
+
+
+def test_a_stage_sends_the_headers_it_authored(echoing: str) -> None:
+    spec = _fetch_stage("grants", f"{echoing}/api/grants.csv")
+    spec["connector"] = {"kind": "fetch",
+                         "params": {"url": f"{echoing}/api/grants.csv", "format": "csv",
+                                    "headers": {"Authorization": "Token abc123"}}}
+    path = resolve_source_path(_stage_of(spec))
+    assert path is not None
+    assert "Authorization: Token abc123" in path.read_text(encoding="utf-8")
+
+
+def test_a_fetch_without_headers_still_says_who_is_calling(echoing: str) -> None:
+    path = resolve_fetched_path(f"{echoing}/api/grants.csv")
+    assert "User-Agent: carbon-paper" in path.read_text(encoding="utf-8")
+
+
+def test_an_authored_header_overrides_the_default_user_agent(echoing: str) -> None:
+    path = resolve_fetched_path(f"{echoing}/api/grants.csv",
+                                headers={"User-Agent": "a-named-research-bot"})
+    body = path.read_text(encoding="utf-8")
+    assert "User-Agent: a-named-research-bot" in body
+    assert "carbon-paper" not in body
+
+
+@pytest.mark.parametrize("injected", ["Token a\r\nX-Admin: yes", "Token a\nX-Admin: yes"])
+def test_a_line_break_in_a_header_value_is_refused(injected: str) -> None:
+    """A value carrying CR or LF would append headers of its own to the request."""
+    with pytest.raises(ValueError, match="line break"):
+        Connector(kind=ConnectorKind.fetch,
+                  params={"url": "https://example.org/grants.csv",
+                          "headers": {"Authorization": injected}})
+
+
+def test_a_line_break_in_a_header_name_is_refused() -> None:
+    with pytest.raises(ValueError, match="line break"):
+        Connector(kind=ConnectorKind.fetch,
+                  params={"url": "https://example.org/grants.csv",
+                          "headers": {"Authorization\r\nX-Admin": "yes"}})
+
+
+def test_a_header_value_that_is_not_a_literal_string_is_refused() -> None:
+    with pytest.raises(ValueError, match="must be a literal string value"):
+        Connector(kind=ConnectorKind.fetch,
+                  params={"url": "https://example.org/grants.csv",
+                          "headers": {"X-Limit": 10}})
+
+
+def test_headers_that_are_not_a_mapping_are_refused() -> None:
+    with pytest.raises(ValueError, match="must be a mapping"):
+        Connector(kind=ConnectorKind.fetch,
+                  params={"url": "https://example.org/grants.csv",
+                          "headers": ["Authorization: Token abc123"]})
+
+
+def test_a_fetch_needs_no_headers() -> None:
+    connector = Connector(kind=ConnectorKind.fetch,
+                          params={"url": "https://example.org/grants.csv"})
+    assert "headers" not in connector.params
