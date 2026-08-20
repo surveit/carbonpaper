@@ -31,6 +31,7 @@ from .llm_transform import LLMTransformHandler
 from .publish import handle_publish
 from .reshape import handle_dedupe, handle_explode, handle_sort_rank
 from .python_functions import handle_python_frame_function, make_python_row_mapper
+from .starlark_filter import make_starlark_filter_mapper
 from .starlark_functions import make_starlark_row_mapper
 from .union import handle_union
 
@@ -74,6 +75,10 @@ HANDLERS: dict[StageType, StageHandler] = {
     # interpreter handle is this execution's, and Starlark freezes module globals,
     # so nothing crosses rows either way.
     StageType.starlark_row_function: RowMapTransformHandler(make_starlark_row_mapper),
+    # drops_rows: same contract as filter_rows — the driver does the selecting,
+    # so it holds the surviving input ordinals without the predicate reporting them.
+    StageType.starlark_filter_rows: RowMapTransformHandler(
+        make_starlark_filter_mapper, drops_rows=True),
     # caches_frames=False for a stronger reason than the joins/aggregate above:
     # the frame cache stores a stage's TABLE, not its lineage sidecar, so a hit
     # replays the rows without the provenance the handler worked out. The trace

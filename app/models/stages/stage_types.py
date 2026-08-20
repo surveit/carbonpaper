@@ -18,6 +18,7 @@ from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.publish import STAGE_TYPE_SPECS as _PUBLISH
 from app.models.stages.sort_rank import STAGE_TYPE_SPECS as _SORT_RANK
 from app.models.stages.starlark import STAGE_TYPE_SPECS as _STARLARK
+from app.models.stages.starlark_filter import STAGE_TYPE_SPECS as _STARLARK_FILTER
 from app.models.stages.union import STAGE_TYPE_SPECS as _UNION
 
 # app.agents.compiler.prompt and app.mcp.server render this into their system
@@ -33,6 +34,7 @@ STAGE_TYPES: dict[str, StageTypeSpec] = {
     **_UNION,
     **_FILTER_ROWS,
     **_STARLARK,
+    **_STARLARK_FILTER,
     **_EXPLODE,
     **_DEDUPE,
     **_SORT_RANK,
@@ -53,7 +55,7 @@ AUTHORABLE_TYPES: dict[str, StageTypeSpec] = {
 # and `corner_cases`, refused on write by app.services.stage_edit; their specs carry
 # the contract notes, pinned by tests/test_stage_type_notes.py.
 CODE_CARRYING_TYPES = ("python_row_function", "python_frame_function", "publish",
-                       "filter_rows", "starlark_row_function")
+                       "filter_rows", "starlark_row_function", "starlark_filter_rows")
 
 # The subset a prompt names: a retired type's rule is still enforced on a stored
 # stage, but naming it would advertise a type the catalog no longer offers.
