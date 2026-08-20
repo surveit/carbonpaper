@@ -142,6 +142,25 @@ def test_the_view_picker_counts_the_archived_run(project_dir: Path):
     assert "Archived (1)" in client.get(f"/project/{project_dir.name}/runs").text
 
 
+def test_an_empty_view_keeps_the_way_back_to_a_full_one(project_dir: Path):
+    """The picker is the only route off an empty view, so it outlives the table."""
+    seed_run(project_dir)
+
+    page = client.get(f"/project/{project_dir.name}/runs?view=archived").text
+
+    assert "No archived runs" in page
+    assert 'class="runs-toolbar"' in page
+    assert "Production (1)" in page
+    assert 'id="runs-filter"' not in page  # nothing listed to filter
+
+
+def test_a_project_with_no_runs_at_all_shows_no_view_picker(project_dir: Path):
+    page = client.get(f"/project/{project_dir.name}/runs").text
+
+    assert "No runs yet" in page
+    assert 'class="runs-toolbar"' not in page
+
+
 def test_the_archived_view_offers_restore_in_place_of_archive(project_dir: Path):
     seed_run(project_dir)
     archive(project_dir)

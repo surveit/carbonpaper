@@ -80,22 +80,38 @@
     {% endif %}
   </div>
   <div class="actions wf-actions">
-    <label class="runs-view-label" for="runs-view">Show</label>
-    {% call picker("Show runs", size="sm") %}
-    <select id="runs-view" class="picker-native runs-view-select"
-            onchange="location.href='/project/{{ state.id }}/runs?view=' + this.value">
-      {% for choice in view_choices %}
-      <option value="{{ choice.view }}" data-name="{{ choice.label }}"
-              data-side="{{ choice.count }}"
-              {% if view == choice.view %}selected{% endif %}>{{ choice.label }} ({{ choice.count }})</option>
-      {% endfor %}
-    </select>
-    {% endcall %}
     {% if state.workflow.present %}
     <a href="/project/{{ state.id }}/runs/new" class="btn primary">▶ New run</a>
     {% endif %}
   </div>
 </div>
+
+{# The controls belong to the table, not to the page: which runs are listed, and
+   which of those are on screen. They stay on an empty view — a reader who lands on
+   an empty Archived needs the way back — and go only when the project has no runs
+   at all, where the zero state does the talking. #}
+{% if view_choices | sum(attribute="count") %}
+<div class="runs-toolbar">
+  <label class="runs-view-label" for="runs-view">Show</label>
+  {% call picker("Show runs", size="sm") %}
+  <select id="runs-view" class="picker-native runs-view-select"
+          onchange="location.href='/project/{{ state.id }}/runs?view=' + this.value">
+    {% for choice in view_choices %}
+    <option value="{{ choice.view }}" data-name="{{ choice.label }}"
+            data-side="{{ choice.count }}"
+            {% if view == choice.view %}selected{% endif %}>{{ choice.label }} ({{ choice.count }})</option>
+    {% endfor %}
+  </select>
+  {% endcall %}
+  {% if runs %}
+  <label class="runs-filter">Filter
+    <input type="search" id="runs-filter" autocomplete="off"
+           placeholder="a name, a file or a version message">
+    <span class="runs-filter-count" id="runs-filter-count"></span>
+  </label>
+  {% endif %}
+</div>
+{% endif %}
 
 {% if input_filter %}
 <p class="filter-note">Showing the {{ runs | length }} run{{ '' if runs | length == 1 else 's' }}
@@ -104,11 +120,6 @@
 {% endif %}
 
 {% if runs %}
-<label class="runs-filter">Filter
-  <input type="search" id="runs-filter" autocomplete="off"
-         placeholder="a name, a file or a version message">
-  <span class="runs-filter-count" id="runs-filter-count"></span>
-</label>
 <div class="runs-table-scroll">
 <table class="stages runs-table">
   <colgroup>
