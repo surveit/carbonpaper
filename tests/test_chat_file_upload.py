@@ -11,9 +11,9 @@ from fastapi.testclient import TestClient
 from app.core.agent.session import create_agent_session
 from app.main import app
 from app.services import workspace
-from app.services.errors import FileNotStoredError
+from app.core.errors import FileNotStoredError
 from app.services.project import create_project
-from app.services.uploads import UploadedFile, list_project_files
+from app.core.files import UploadedFile, list_project_files
 from app.tools import shared
 
 client = TestClient(app)

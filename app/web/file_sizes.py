@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from app.services.errors import FileOverCeiling, StoreOverQuota
-from app.services.uploads import UploadedFile
+from app.core.errors import FileOverCeiling, StoreOverQuota
+from app.core.files import UploadedFile
 
 _KILOBYTE = 1024
 _MEGABYTE = 1024 * _KILOBYTE

@@ -11,9 +11,10 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import workspace
-from app.services import uploads
-from app.services.errors import FileNotStoredError, StoreOverQuota
-from app.services.uploads import files_root, resolve_file_binding, save_upload
+from app.core import files as file_store
+from app.core.errors import FileNotStoredError, StoreOverQuota
+from app.core.files import files_root, save_upload
+from app.services.uploads import resolve_file_binding
 from app.tools import shared
 
 client = TestClient(app)
@@ -110,8 +111,8 @@ def test_one_blob_in_two_projects_is_weighed_once(project, tmp_path):
     (tmp_path / "other").mkdir(parents=True)
     save_upload("posts.csv", io.BytesIO(CSV), "demo")
     save_upload("posts.csv", io.BytesIO(CSV), "other")
-    assert len(uploads.UploadedFile.list()) == 2
-    assert uploads.measure_files_used_bytes() == len(CSV)
+    assert len(file_store.UploadedFile.list()) == 2
+    assert file_store.measure_files_used_bytes() == len(CSV)
 
 
 def test_what_is_used_is_read_off_the_records_not_the_disk(project):
@@ -120,7 +121,7 @@ def test_what_is_used_is_read_off_the_records_not_the_disk(project):
     orphan = files_root() / ("f" * 64)
     orphan.mkdir(parents=True)
     (orphan / "stray.csv").write_bytes(b"x" * 4096)
-    assert uploads.measure_files_used_bytes() == len(CSV)
+    assert file_store.measure_files_used_bytes() == len(CSV)
 
 
 def test_the_arriving_file_counts_against_the_quota_before_it_has_a_record(
@@ -150,5 +151,5 @@ def test_the_same_bytes_under_a_new_name_do_not_land_twice(project):
     # The record still shows the name they last picked, and the path still resolves to
     # the one file that exists — renaming it would strand a manifest holding the old one.
     assert again.filename == "posts-renamed.csv"
-    assert uploads.resolve_stored_path(again).name == "posts.csv"
-    assert uploads.resolve_stored_path(again).is_file()
+    assert file_store.resolve_stored_path(again).name == "posts.csv"
+    assert file_store.resolve_stored_path(again).is_file()

@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from app.core.persistence import JsonDict
 from app.runtime.manifest import list_run_entries
-from app.services import uploads
+from app.core import files as file_store
 from app.web.file_sizes import describe_bytes
 
 
@@ -36,8 +36,8 @@ class FilesView(BaseModel):
 
 def build_files_view(project_id: str) -> FilesView:
     reads = count_runs_by_file(project_id)
-    records = uploads.list_project_files(project_id)
-    used, quota = uploads.measure_files_used_bytes(), uploads.files_quota_bytes()
+    records = file_store.list_project_files(project_id)
+    used, quota = file_store.measure_files_used_bytes(), file_store.files_quota_bytes()
     return FilesView(
         rows=[_build_row(record, reads.get(record.sha256, [])) for record in records],
         # Summed off the records, not the disk: the disk is shared, and one project's
@@ -46,7 +46,7 @@ def build_files_view(project_id: str) -> FilesView:
         used=describe_bytes(used),
         quota=describe_bytes(quota),
         used_percent=min(used / quota * 100, 100) if quota else 100,
-        max_upload=describe_bytes(uploads.max_upload_bytes()),
+        max_upload=describe_bytes(file_store.max_upload_bytes()),
     )
 
 
@@ -70,7 +70,7 @@ def _read_input_hashes(manifest: JsonDict | None) -> list[str]:
             if isinstance(binding, dict) and binding.get("sha256")]
 
 
-def _build_row(record: uploads.UploadedFile, run_ids: list[str]) -> FileRow:
+def _build_row(record: file_store.UploadedFile, run_ids: list[str]) -> FileRow:
     return FileRow(
         sha256=record.sha256,
         filename=record.filename,

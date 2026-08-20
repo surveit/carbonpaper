@@ -10,8 +10,8 @@ import pandas as pd
 import pytest
 
 from app.services import workspace
-from app.services.errors import FileNotStoredError
-from app.services.uploads import save_upload
+from app.core.errors import FileNotStoredError
+from app.core.files import save_upload
 from app.tools import shared
 
 # Four filings by one registrant, verbatim from the quarterly export. `income` is what
@@ -138,7 +138,7 @@ def test_a_file_in_no_project_is_not_readable_until_one_takes_it(project, tmp_pa
 
 
 def test_a_record_whose_bytes_are_gone_says_so_rather_than_failing_on_the_read(project):
-    from app.services.uploads import files_root
+    from app.core.files import files_root
     sha = store()
     (files_root() / sha / "lda_q1.csv").unlink()
     with pytest.raises(FileNotStoredError, match="not on disk"):

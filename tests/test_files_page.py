@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.services import workspace
 from app.services.project import create_project
-from app.services.uploads import files_root, list_project_files, save_upload
+from app.core.files import files_root, list_project_files, save_upload
 from run_seed import store_manifest
 
 client = TestClient(app)

@@ -20,6 +20,7 @@ from fastapi.responses import (
 )
 
 from app.core.errors import (
+    FileNotStoredError,
     MissingInputBindingError,
     NoVersionToRunError,
     RunVersionUnresolvableError,
@@ -27,7 +28,7 @@ from app.core.errors import (
 from app.core.run_status import RunStatus, StageStatus
 from app.models import WorkflowStage
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
-from app.services.errors import FileNotStoredError, WorkflowLoadError
+from app.services.errors import WorkflowLoadError
 from app.services import run as run_service
 from app.services.run_guide import build_run_guide_view
 from app.services.uploads import resolve_file_binding

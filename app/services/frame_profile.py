@@ -15,7 +15,7 @@ from app.core.column_profile import (
 )
 from app.core.frames import frame_to_table, table_to_frame
 from app.services.run import read_stage_output
-from app.services.uploads import open_project_file
+from app.core.files import open_project_file
 
 # What the profile read pins per format. A source file is read so that NOTHING is
 # coerced — `str` keeps a zero-padded "002" out of the integer 2, `False` is pandas'

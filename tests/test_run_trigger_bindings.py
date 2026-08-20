@@ -15,7 +15,7 @@ from app.main import app
 from app.services import versioning
 from app.services import workspace
 from app.services.project import save_working_copy_as_version
-from app.services.uploads import UploadedFile, list_project_files, save_upload
+from app.core.files import UploadedFile, list_project_files, save_upload
 from app.web.run_inputs import FileChoice, build_file_choice
 from stage_seed import add_stage, read_stage
 from run_seed import read_manifest

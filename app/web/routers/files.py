@@ -7,9 +7,9 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.concurrency import run_in_threadpool
 
-from app.services.errors import FileNotStoredError
+from app.core.errors import FileNotStoredError
 from app.services.project import project_exists
-from app.services.uploads import delete_file
+from app.core.files import delete_file
 from app.web.config import templates
 from app.web.file_preview import build_file_preview
 from app.web.files_view import build_files_view

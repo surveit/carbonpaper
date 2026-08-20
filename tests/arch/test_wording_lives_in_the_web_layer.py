@@ -5,7 +5,7 @@ from pathlib import Path
 
 # `describe` means one thing: take a value and reform the language around it. That is
 # presentation, so it belongs where a reader is. Sizes are the case that forced the
-# rule — app/services/uploads.py raises FileOverCeiling and StoreOverQuota carrying byte
+# rule — app/core/files.py raises FileOverCeiling and StoreOverQuota carrying byte
 # counts, and app/web/file_sizes.py turns those into "over the 512MB limit", so one
 # refusal reads differently in a JSON body, a chat bubble and a page without the service
 # knowing any of them exist.

@@ -11,12 +11,14 @@ from typing import Any
 from pydantic import BaseModel
 
 from app.core.errors import (
+    FileNotStoredError,
     MissingInputBindingError,
     NoVersionToRunError,
     NoWorkflowTestVersionError,
     RunNotFoundError,
 )
 from app.core.frames import convert_row_to_json_cells, list_rows
+from app.core import files as file_store
 from app.models.run_manifest import FINISHED_STAGE_STATUSES, UNREADABLE_RUN_STATUS
 from app.core.source_files import SheetSurvey
 from app.core.column_profile import TableProfile
@@ -33,7 +35,7 @@ from app.services import (
     workflow_test as workflow_test_service,
     workspace,
 )
-from app.services.errors import FileNotStoredError, WorkflowLoadError
+from app.services.errors import WorkflowLoadError
 from app.services.project import Project, ProjectListing
 from app.services.versioning import ReviewGuide
 
@@ -178,12 +180,12 @@ def list_files(project_id: str | None, file_upload_url: str) -> ProjectFilesView
     if project_id is not None:
         validate_project_exists(project_id)
     # file_upload_url is the caller's: only it knows the address it was reached on.
-    used = uploads.measure_files_used_bytes()
+    used = file_store.measure_files_used_bytes()
     return ProjectFilesView(
         file_upload_url=file_upload_url,
-        max_bytes=uploads.max_upload_bytes(),
-        remaining_bytes=max(uploads.files_quota_bytes() - used, 0),
-        files=[_view(record) for record in uploads.list_project_files(project_id)],
+        max_bytes=file_store.max_upload_bytes(),
+        remaining_bytes=max(file_store.files_quota_bytes() - used, 0),
+        files=[_view(record) for record in file_store.list_project_files(project_id)],
     )
 
 
@@ -216,7 +218,7 @@ def profile_stage_output_data_range(
     return {"ok": True, **profile.model_dump()}
 
 
-def _view(record: uploads.UploadedFile) -> StoredFileView:
+def _view(record: file_store.UploadedFile) -> StoredFileView:
     return StoredFileView(sha256=record.sha256, filename=record.filename,
                           bytes=record.byte_count, added=record.created_at)
 
@@ -224,7 +226,7 @@ def _view(record: uploads.UploadedFile) -> StoredFileView:
 def move_file_to_project(project_id: str, sha256: str) -> StoredFileView:
     """Move a file that is in no project into one. Moves no bytes."""
     validate_project_exists(project_id)
-    return _view(uploads.move_file_to_project(sha256, project_id))
+    return _view(file_store.move_file_to_project(sha256, project_id))
 
 
 def run_workflow(

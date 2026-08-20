@@ -13,17 +13,17 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import workspace
-from app.services.errors import FileNotStoredError
-from app.services.uploads import (
+from app.core.errors import FileNotStoredError
+from app.core.files import (
     UploadedFile,
     move_file_to_project,
     files_root,
     list_project_files,
     max_upload_bytes,
-    resolve_file_binding,
     resolve_stored_path,
     save_upload,
 )
+from app.services.uploads import resolve_file_binding
 
 client = TestClient(app)
 

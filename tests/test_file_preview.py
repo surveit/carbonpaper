@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import workspace
-from app.services.uploads import save_upload
+from app.core.files import save_upload
 from app.web.file_preview import build_file_preview
 from app.web.loading import PREVIEW_ROWS_SHOWN
 

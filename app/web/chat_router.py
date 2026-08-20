@@ -14,8 +14,8 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.llm_sdk import CLI_PATH
 from app.services import project as project_service
-from app.services.errors import FileOverCeiling, StoreOverQuota
-from app.services.uploads import max_upload_bytes, save_upload
+from app.core.errors import FileOverCeiling, StoreOverQuota
+from app.core.files import max_upload_bytes, save_upload
 from app.web.file_sizes import describe_attachment, describe_refusal
 
 from app.core.agent import registry
