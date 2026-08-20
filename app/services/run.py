@@ -18,6 +18,7 @@ from app.core.frames import read_frame_column_names
 from app.models import Workflow, WorkflowStage
 from app.models.run_manifest import read_run_bindings
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
+from app.runtime.cancellation import discard_cancel
 from app.runtime.manifest import (
     RunEntry as RunEntry,
     list_run_entries as list_run_entries,
@@ -88,6 +89,7 @@ def _prepare(
 
 def resume(project_id: str, run_id: str) -> None:
     workflow_version = read_pinned_version(project_id, run_id)
+    discard_cancel(project_id, run_id)
     _run_in_background(
         resume_run,
         resolve_run_dir(project_id, run_id),

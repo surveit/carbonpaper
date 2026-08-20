@@ -84,6 +84,7 @@
   .run-audit-menu > h3 { font-size: 12px; margin: 1.1rem 0 .15rem; }
   .run-audit-menu > h3:first-child { margin-top: 0; }
   .run-audit-menu > p.lede { font-size: .78rem; margin: 0 0 .5rem; }
+  .run-restart-form { margin: 0 0 .2rem; }
   /* The first section carries no rule: a divider at the top of the column
      separates the page from nothing. */
   #run-overview-section { margin-top: 0; border-top: 0; padding-top: 0; }
@@ -175,8 +176,8 @@
        class="btn-icon js-packet-icon" aria-hidden="true">📦</span> Export review packet</a>
   {% endif %}
   <button type="button" class="drawer-btn" id="audit-menu-btn" aria-expanded="false"
-          aria-controls="audit-menu" title="Raw manifest and run log"
-          aria-label="Raw manifest and run log">
+          aria-controls="audit-menu" title="Restart run, raw manifest, run log"
+          aria-label="Restart run, raw manifest, run log">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
          stroke-width="2" stroke-linecap="round" aria-hidden="true">
       <path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/>
@@ -184,6 +185,20 @@
   </button>
 
   <div class="run-audit-menu" id="audit-menu" hidden>
+    {# Here rather than in the CTA row because the row carries the ONE action this
+       run's state calls for, and this one is offered in every state — including
+       `running`, where the state is exactly what the reader is refusing to believe:
+       an executor that died mid-run leaves the status behind it, and until now the
+       page's only offer was a Cancel no executor was left to consume. #}
+    <h3>Restart run</h3>
+    <p class="lede">Re-runs every stage that has not completed and reuses the ones that
+      have. Nothing here checks whether this run is already executing: if it is, both
+      executors write this run's stage records, and the last write wins.</p>
+    <form method="post" action="/project/{{ project }}/runs/{{ run_id }}/resume"
+          class="run-restart-form">
+      <button type="submit" class="btn">↻ Restart run</button>
+    </form>
+
     <h3>Raw manifest</h3>
     <details class="raw-yaml"><summary>Show</summary><pre>{{ manifest | tojson(indent=2) }}</pre></details>
 
