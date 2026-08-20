@@ -92,6 +92,16 @@ def _filter_stage() -> Stage:
     })
 
 
+def _starlark_filter_stage() -> Stage:
+    return parse_stage({
+        "id": "keep", "description": "Keep", "type": "starlark_filter_rows",
+        "inputs": [{"id": LOAD_ID}],
+        "starlark_filter": {
+            "code": "def should_include(row):\n    return row['val'] != None\n"},
+        "signature": {"form": "extends", "reads": reads_of(LOAD_ID, _IN_COLUMNS)},
+    })
+
+
 def _write_output(run_dir: Path, stage_id: str, df: pd.DataFrame) -> str:
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
     rel = f"outputs/{stage_id}.parquet"
@@ -635,3 +645,19 @@ def test_a_filter_whose_sidecar_ordinals_do_not_increase_yields_no_diff(tmp_path
     _write_lineage(tmp_path, "keep", kept=[1, 0])
 
     assert _diff(tmp_path, _filter_stage(), out_rel) is None
+
+
+def test_the_sandboxed_filter_gets_the_same_dropped_rows_view(tmp_path: Path) -> None:
+    """It had no diff at all until the type was wired into FILTER_TYPES."""
+    _write_output(tmp_path, LOAD_ID, pd.DataFrame(
+        {"name": ["a", "b", "c", "d"], "val": [1, 2, 3, 4]}))
+    out_rel = _write_output(tmp_path, "keep", pd.DataFrame(
+        {"name": ["a", "c"], "val": [1, 3]}))
+    _write_lineage(tmp_path, "keep", kept=[0, 2])
+
+    diff = _diff(tmp_path, _starlark_filter_stage(), out_rel)
+
+    assert diff is not None and diff.kind == FILTER_ROWS_KIND
+    assert diff.dropped_total == 2 and diff.kept_total == 2
+    assert [row.dropped for row in diff.rows] == [False, True, False, True]
+    assert [row.output_ordinal for row in diff.rows] == [0, None, 1, None]

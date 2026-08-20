@@ -62,7 +62,7 @@ def test_the_words_are_agreed_before_the_plan_is_written() -> None:
 
 def test_a_verb_may_not_restate_a_word_the_app_already_spends() -> None:
     # The examples are the app's real stage types, so a renamed type fails here.
-    for stage_type in ("aggregate", "filter_rows", "enrich"):
+    for stage_type in ("aggregate", "starlark_filter_rows", "enrich"):
         assert stage_type in AUTHORING_LIFECYCLE_GUIDANCE, stage_type
         assert stage_type in AUTHORABLE_TYPES, stage_type
 

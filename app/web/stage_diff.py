@@ -1,7 +1,7 @@
 """Stage-aware diff for the run stage panel and the full-rows page: a 1:1
 stage's INPUT frame as the base, with what the stage did to it painted over —
 cells changed, columns dropped (still drawn, carrying the input value) or added
-— and a filter_rows stage's dropped rows read off its lineage sidecar. Anything
+— and a filter stage's dropped rows read off its lineage sidecar. Anything
 unverifiable yields None and the caller shows the plain output view."""
 
 from __future__ import annotations
@@ -52,6 +52,13 @@ ROW_ALIGNED_TYPES: frozenset[StageType] = frozenset(
 # full-rows page) pass their own. Counts in the header always cover the whole
 # frame; only the rows drawn are capped — aligned windows the OUTPUT frame,
 # filter windows the INPUT frame, so dropped rows appear in place among the kept.
+
+# Both filters drop rows the same way and the runtime records the same lineage for
+# each, so the review surface owes them the same view: which rows went, in place
+# among the ones that stayed.
+FILTER_TYPES: frozenset[StageType] = frozenset(
+    {StageType.filter_rows, StageType.starlark_filter_rows}
+)
 
 ROW_ALIGNED_KIND = "row_aligned"
 FILTER_ROWS_KIND = "filter_rows"
@@ -188,7 +195,7 @@ def build_stage_diff(
     if input_df is None or output_df is None:
         return None
     inputs = _shape_input_frames(run_dir, input_ids, output_by_id, len(input_df))
-    if stage_def.type == StageType.filter_rows:
+    if stage_def.type in FILTER_TYPES:
         return _build_filter_rows_diff(
             stage_def.id, inputs, run_dir, input_df, output_df, rows_shown
         )
@@ -219,7 +226,7 @@ def _shape_reference_frame(
 
 def _resolve_diff_input_ids(workflow_stage: WorkflowStage) -> Optional[list[str]]:
     stage_def = workflow_stage.stage
-    if stage_def.type not in ROW_ALIGNED_TYPES and stage_def.type != StageType.filter_rows:
+    if stage_def.type not in ROW_ALIGNED_TYPES and stage_def.type not in FILTER_TYPES:
         return None
     # enrich takes two inputs and diffs against inputs[0], its SUBJECT: that is
     # the frame its output is row-aligned with, while inputs[1] is a reference
