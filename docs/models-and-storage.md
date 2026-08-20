@@ -55,3 +55,30 @@ A project's state lives in exactly two places:
 `app/` writes a file except frames, an export the user downloads, and a file the
 user uploaded. What is left on disk under a project is `code/`, `data/` and
 `runs/<id>/{outputs, artifacts, queue}` — frames and the files around them.
+
+## Migrations replay, so every revision must be a no-op at head
+
+`./start` runs `alembic upgrade head` on boot. A store created by
+`configure_default_document_store` — the CLI's, the MCP server's, a test's — carries no
+`alembic_version` row, because nothing but alembic writes one. Alembic therefore reads
+it as being at the baseline and replays `0001` onward over data current code already
+wrote.
+
+That replay is the normal path, not an edge case, so the invariant every revision owes
+is: **running it over a store already at head changes nothing.** A revision earns that
+by recognising a record whose new shape is already present and skipping it — not
+rewriting it, since a rewrite also re-stamps `schema_version` and walks a record
+backwards to the version that revision wrote.
+
+`tests/test_migration_replay.py` holds it. The store it upgrades is seeded through the
+same service calls the app uses — `create_project`, `add_stages`,
+`save_working_copy_as_version`, `save_upload` — so the documents under test are whatever
+today's models write, and a model change moves the fixture with it. After
+`upgrade head` every document must be byte-identical, `schema_version` included, the
+uploaded bytes must be where they were, and `alembic_version` must read head.
+
+The alternative considered and rejected was stamping a newly created store at head so
+the replay never happens. Alembic already writes `alembic_version` after its own
+upgrade, so the stamp was only ever missing for a store born outside alembic — and
+guessing which stores those are has a false positive that skips real migrations and
+strands data, where a replay only costs a wasted scan.
