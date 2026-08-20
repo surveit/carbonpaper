@@ -132,8 +132,8 @@
           <td>{{ check.tolerance if check.tolerance is not none else '—' }}</td>
           {# Off this run's own result table. A rule the run did not score — the
              config changed since — gets a dash, never a borrowed count. #}
-          <td>{% set tally = (rows.checks if rows else []) | selectattr('column', 'equalto', check.output_column) | first %}
-            {%- if tally %}{{ "{:,}".format(tally.matched) }} / {{ "{:,}".format(rows.rows_total) }}
+          <td>{% set check_count = (rows.checks if rows else []) | selectattr('column', 'equalto', check.output_column) | first %}
+            {%- if check_count %}{{ "{:,}".format(check_count.matched) }} / {{ "{:,}".format(rows.rows_total) }}
             {%- elif run.is_running() %}<span class="muted">not scored yet</span>
             {%- else %}<span class="muted">not scored in this run</span>{% endif %}</td>
         </tr>

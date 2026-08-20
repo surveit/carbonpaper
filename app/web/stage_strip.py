@@ -18,7 +18,7 @@ class StageSquare(BaseModel):
     status: str
 
 
-class StatusTally(BaseModel):
+class StatusCount(BaseModel):
     status: str
     label: str
     count: int
@@ -26,7 +26,7 @@ class StatusTally(BaseModel):
 
 class StageStrip(BaseModel):
     squares: list[StageSquare]
-    tallies: list[StatusTally]
+    counts: list[StatusCount]
 
 
 def build_stage_strip(manifest: Mapping[str, Any]) -> StageStrip:
@@ -39,7 +39,7 @@ def build_stage_strip(manifest: Mapping[str, Any]) -> StageStrip:
     ]
     return StageStrip(
         squares=squares,
-        tallies=_build_tallies(squares, manifest.get("status")),
+        counts=_build_counts(squares, manifest.get("status")),
     )
 
 
@@ -49,11 +49,11 @@ def describe_stage_status(status: str, run_status: object) -> str:
         stage_status = StageStatus(status)
     except ValueError:
         return ""
-    return _read_tally_label(stage_status, run_status)
+    return _read_count_label(stage_status, run_status)
 
 
-def describe_stage_tallies(strip: StageStrip) -> str:
-    return " · ".join(f"{tally.count} {tally.label}" for tally in strip.tallies)
+def describe_stage_counts(strip: StageStrip) -> str:
+    return " · ".join(f"{c.count} {c.label}" for c in strip.counts)
 
 
 def read_stage_records(manifest: Mapping[str, Any]) -> list[Mapping[str, Any]]:
@@ -84,7 +84,7 @@ _PENDING_LABEL_OTHERWISE = "never ran"
 # Display order for the counts: what finished, then what is in flight, then what
 # needs a human, then what went wrong, then what never ran. Every one of the
 # seven stage statuses appears, so a count can never go missing.
-_TALLY_ORDER = (
+_COUNT_ORDER = (
     StageStatus.OK,
     StageStatus.VALIDATION_WARNINGS,
     StageStatus.RUNNING,
@@ -95,22 +95,22 @@ _TALLY_ORDER = (
 )
 
 
-def _build_tallies(
+def _build_counts(
     squares: Sequence[StageSquare], run_status: object
-) -> list[StatusTally]:
+) -> list[StatusCount]:
     counts = Counter(square.status for square in squares)
     return [
-        StatusTally(
+        StatusCount(
             status=str(status),
             count=counts[str(status)],
-            label=_read_tally_label(status, run_status),
+            label=_read_count_label(status, run_status),
         )
-        for status in _TALLY_ORDER
+        for status in _COUNT_ORDER
         if counts[str(status)]
     ]
 
 
-def _read_tally_label(status: StageStatus, run_status: object) -> str:
+def _read_count_label(status: StageStatus, run_status: object) -> str:
     if status is not StageStatus.PENDING:
         return _STATUS_LABEL[status]
     stopped_by = next((s for s in _PENDING_LABEL if s == run_status), None)

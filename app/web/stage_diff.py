@@ -63,7 +63,7 @@ FILTER_TYPES: frozenset[StageType] = frozenset(
 ROW_ALIGNED_KIND = "row_aligned"
 FILTER_ROWS_KIND = "filter_rows"
 
-# U+2212, not the hyphen: the tally sets it beside `+` in the same line of text.
+# U+2212, not the hyphen: the count sits beside `+` in the same line of text.
 MINUS = "−"
 
 # What the header calls each input frame. The BASE is the frame the table below
@@ -128,7 +128,7 @@ class RowAlignedDiff:
         return self.rows_total
 
     @property
-    def tally(self) -> list[str]:
+    def count_labels(self) -> list[str]:
         parts = []
         if self.added_column_names:
             parts.append("+" + _render_count(len(self.added_column_names), "col"))
@@ -168,7 +168,7 @@ class FilterRowsDiff:
         return self.kept_total
 
     @property
-    def tally(self) -> list[str]:
+    def count_labels(self) -> list[str]:
         if not self.dropped_total:
             return [_render_count(0, "row") + " dropped"]
         return [MINUS + _render_count(self.dropped_total, "row")]

@@ -35,7 +35,7 @@ from app.services.versioning import list_versions, load_version_stages
 from app.services.project import find_workspace_project_ids, has_document, read_project_name
 from app.services.terms import count_nouns
 from app.services.workspace import resolve_run_dir
-from app.web.project_cards import ProjectCard, tally_runs
+from app.web.project_cards import ProjectCard, count_runs
 
 
 # ─── Projects & stages ──────────────────────────────────────────────────
@@ -50,7 +50,7 @@ def _build_project_card(project_id: str) -> ProjectCard | None:
     has_workflow = n_stages > 0
     n_schemas = count_nouns(project_id)
     has_schemas = n_schemas > 0
-    runs = tally_runs(project_id)
+    runs = count_runs(project_id)
     carries_document = has_document(project_id)
     if not (has_workflow or has_schemas or carries_document):
         return None

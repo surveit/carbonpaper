@@ -99,10 +99,7 @@ class RunManifest(PersistedModel):
     # a byte count streamed at prepare time). A RESULT, not a parameter: it records
     # what the run found, not what it was asked for.
     input_bindings: dict[str, dict[str, Any]] = {}
-    # The live human_review_queue tallies. Required, unlike the override maps
-    # above: the key was renamed out of an older on-disk vocabulary, so a default
-    # would let a pre-rename manifest parse and then report an empty tally for a
-    # run that actually queued items. `create_run_manifest` always sets it.
+    # Required, no default: it would let a pre-rename manifest parse silently, hiding queued items.
     human_review_queue_stats: dict[str, QueueStats]
     dropped_columns: dict[str, list[str]] = {}
     status: RunStatus

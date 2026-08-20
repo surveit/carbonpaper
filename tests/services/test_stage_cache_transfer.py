@@ -16,7 +16,7 @@ from app.models.stages.signature import ReplacesSignature
 from app.services import loader, project
 from app.services.loader import save_stages
 from app.services.stage_cache_transfer import (
-    CacheArchiveRejected, StageImportTally, count_cached_entries, export_stage_cache,
+    CacheArchiveRejected, StageImportCount, count_cached_entries, export_stage_cache,
     import_stage_cache,
 )
 
@@ -159,7 +159,7 @@ def test_entries_matching_a_live_stage_definition_count_as_reachable(destination
     report = import_stage_cache(export_stage_cache(_SOURCE), destination_project)
 
     assert report.reachable == 1
-    assert report.stages == [StageImportTally(stage_id=stage_id, imported=1, reachable=1)]
+    assert report.stages == [StageImportCount(stage_id=stage_id, imported=1, reachable=1)]
 
 
 def test_entries_from_an_edited_stage_import_but_are_not_reachable(destination_project):

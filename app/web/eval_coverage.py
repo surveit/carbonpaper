@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from app.models import EvalConfig, EvalRun
 from app.evals.store import list_eval_configs, list_eval_runs, resolve_eval_result_path
-from app.web.eval_run_view import tally_scored_rows
+from app.web.eval_run_view import count_scored_rows
 
 CoverageStatus = Literal["checked", "mismatches", "stale"]
 
@@ -71,16 +71,16 @@ def _build_coverage(
 ) -> EvalCoverage | None:
     assert run.result_ref is not None  # _latest_scored_run required one
     # None where the result table will not read: the badge is then absent, never guessed.
-    tally = tally_scored_rows(resolve_eval_result_path(project_id, run.result_ref))
-    if tally is None:
+    score = count_scored_rows(resolve_eval_result_path(project_id, run.result_ref))
+    if score is None:
         return None
     return EvalCoverage(
-        status=_judge(run, version_id, tally.passed, tally.total),
+        status=_judge(run, version_id, score.passed, score.total),
         eval_name=config.name,
         href=f"/project/{project_id}/evals/{config.id}/runs/{run.id}",
-        columns=tally.columns,
-        rows_total=tally.total,
-        rows_passed=tally.passed,
+        columns=score.columns,
+        rows_total=score.total,
+        rows_passed=score.passed,
         scored_version=run.workflow_version,
     )
 

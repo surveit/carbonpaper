@@ -196,7 +196,7 @@ def test_the_raw_rows_view_leads_with_the_same_columns(run_ctx) -> None:
     assert header.index(">label<") < header.index(">name<") < header.index(">junk<")
 
 
-def test_the_rail_tallies_what_the_stage_did_in_one_line(run_ctx) -> None:
+def test_the_rail_states_the_counts_of_what_the_stage_did_in_one_line(run_ctx) -> None:
     _pdir, run_id = run_ctx
     strip = _diff_head(_panel(run_id, CLASSIFY_ID))
     # classify adds `label` and uppercases one name.
@@ -284,7 +284,7 @@ def test_an_unread_reference_frame_shows_no_row_count_rather_than_a_guess(run_ct
     assert "0 rows" not in strip
 
 
-def test_the_filter_header_folds_its_tallies_into_the_frames_and_the_rail(run_ctx) -> None:
+def test_the_filter_header_folds_its_counts_into_the_frames_and_the_rail(run_ctx) -> None:
     _pdir, run_id = run_ctx
     strip = _diff_head(_panel(run_id, KEEP_ID))
     # 3 in, 1 dropped by the stage, 2 out — the shape of the transform, in place.
@@ -299,12 +299,12 @@ def test_the_filter_rail_reports_no_metric_the_filter_never_measured(run_ctx) ->
     assert "cells changed" not in strip and "cols" not in strip
 
 
-def test_both_shapes_put_their_tally_in_the_same_slot(run_ctx) -> None:
+def test_both_shapes_put_their_count_labels_in_the_same_slot(run_ctx) -> None:
     _pdir, run_id = run_ctx
     for stage_id in (CLASSIFY_ID, ROUTE_ID, KEEP_ID):
         strip = _diff_head(_panel(run_id, stage_id))
         assert strip.count('class="diff-rail"') == 1
-        assert strip.count('class="diff-tally"') == 1
+        assert strip.count('class="diff-count-labels"') == 1
         # …and the shape-specific sentences that used to sit there are gone.
         assert "output as a diff against its input" not in strip
         assert "dropped rows shown in place" not in strip

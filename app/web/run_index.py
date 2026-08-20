@@ -13,7 +13,7 @@ from app.models.run_manifest import UNREADABLE_RUN_STATUS
 from app.runtime.manifest import RunEntry, list_run_entries
 from app.services.run_manifest_metadata import read_archived_run_ids
 from app.web.run_header import VersionNote, describe_run_duration, read_version_note
-from app.web.stage_strip import StageStrip, build_stage_strip, describe_stage_tallies
+from app.web.stage_strip import StageStrip, build_stage_strip, describe_stage_counts
 
 
 class RunIndexRow(BaseModel):
@@ -112,7 +112,7 @@ def _build_row(
         duration=describe_run_duration(persisted),
         version=_read_version(project_id, manifest.workflow_version, seen_versions),
         strip=strip,
-        result_summary=describe_stage_tallies(strip),
+        result_summary=describe_stage_counts(strip),
         outcome=describe_run_outcome(str(manifest.status)),
         is_test_run=manifest.parameters.is_test_run,
     )

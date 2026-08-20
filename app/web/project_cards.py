@@ -1,4 +1,4 @@
-"""What one home-page project card says: its headline state and its run tallies."""
+"""What one home-page project card says: its headline state and its run counts."""
 from __future__ import annotations
 
 import enum
@@ -65,7 +65,7 @@ class ProjectCard:
 
 
 @dataclass(frozen=True)
-class RunTally:
+class RunCount:
     real: int
     tests: int
     # IN_PROGRESS for a project that has yet to produce a real run: it is still
@@ -73,7 +73,7 @@ class RunTally:
     headline: ProjectStatus
 
 
-def tally_runs(project_id: str) -> RunTally:
+def count_runs(project_id: str) -> RunCount:
     real = tests = 0
     headline: ProjectStatus | None = None
     for entry in reversed(list_run_entries(project_id)):
@@ -90,7 +90,7 @@ def tally_runs(project_id: str) -> RunTally:
         real += 1
         if headline is None:
             headline = _read_headline(manifest)
-    return RunTally(real=real, tests=tests,
+    return RunCount(real=real, tests=tests,
                     headline=headline or ProjectStatus.IN_PROGRESS)
 
 
