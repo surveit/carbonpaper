@@ -47,10 +47,13 @@ def upgrade() -> None:
     for doc_id, data in rows:
         document = json.loads(data)
         project = str(doc_id).split("/")[0]
-        if project not in _REVIEWED_COLUMNS_BY_PROJECT and _has_queue(document):
+        unnamed = _find_unnamed_stages(document)
+        if not unnamed:
+            continue
+        if project not in _REVIEWED_COLUMNS_BY_PROJECT and _holds_a_queue(unnamed):
             undecided.add(project)
             continue
-        _upgrade_document(document, project)
+        _name_stage_columns(unnamed, project)
         connection.exec_driver_sql(
             "UPDATE documents SET data=?, schema_version=2 "
             "WHERE collection='workflow_version' AND id=?",
@@ -70,15 +73,30 @@ def downgrade() -> None:
     raise NotImplementedError("0002 is not reversible: v1 carried no column names")
 
 
-def _has_queue(document: dict[str, Any]) -> bool:
-    return any(stage.get("type") == _QUEUE for stage in document.get("stages", []))
+def _find_unnamed_stages(document: dict[str, Any]) -> list[dict[str, Any]]:
+    # A stage this revision already named carries the key it adds, so a record written
+    # after it is not a decision anyone still owes. Reading one again would also fail:
+    # both branches below read schemas that later revisions dropped from the payload.
+    return [stage for stage in document.get("stages", []) if _is_unnamed(stage)]
 
 
-def _upgrade_document(document: dict[str, Any], project: str) -> None:
-    for stage in document.get("stages", []):
+def _is_unnamed(stage: dict[str, Any]) -> bool:
+    if stage.get("type") == _QUEUE:
+        return "reviewed_columns" not in (stage.get("queue") or {})
+    if stage.get("type") in _JOINS:
+        return "enrich_with" not in (stage.get("join") or {})
+    return False
+
+
+def _holds_a_queue(stages: list[dict[str, Any]]) -> bool:
+    return any(stage.get("type") == _QUEUE for stage in stages)
+
+
+def _name_stage_columns(stages: list[dict[str, Any]], project: str) -> None:
+    for stage in stages:
         if stage.get("type") == _QUEUE:
             _name_queue_columns(stage, project)
-        elif stage.get("type") in _JOINS:
+        else:
             _name_brought_columns(stage)
 
 
