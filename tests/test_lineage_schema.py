@@ -1,6 +1,4 @@
-"""Every lineage sidecar carries one schema, whatever its content. Arrow would
-otherwise type an empty sidecar's columns `null`, and an all-empty column list's
-element `null`, so sidecars of the same shape would not read or concatenate together."""
+"""One schema on every sidecar, whatever its content."""
 from __future__ import annotations
 
 import pyarrow as pa

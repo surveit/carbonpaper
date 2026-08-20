@@ -22,9 +22,7 @@ TRACE_SOURCE_ROW_KEY = "_trace_source_row"
 TRACE_EDGE_KIND_KEY = "_trace_edge_kind"
 TRACE_SOURCE_COLUMNS_KEY = "_trace_source_columns"
 
-# Pinned, not inferred. Left to arrow, an empty sidecar types every column
-# `null` and an all-empty column-list types its element `null`, so sidecars of
-# the same shape end up with schemas that will not concatenate or read together.
+# Pinned: left to infer, an empty sidecar types every column `null`.
 LINEAGE_SCHEMA = pa.schema([
     (TRACE_SOURCE_STAGE_KEY, pa.list_(pa.string())),
     (TRACE_SOURCE_ROW_KEY, pa.list_(pa.int64())),
