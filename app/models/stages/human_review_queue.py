@@ -248,7 +248,7 @@ def _find_unread_column_issues(
             f"reviewer needs to see"
         ]
     try:
-        tested = set(parse_predicate(queue.filter).columns) if queue.filter else set()
+        tested = set(parse_predicate(queue.filter, read).columns) if queue.filter else set()
     except PredicateError:
         tested = set()  # _find_filter_issues already reports the bad predicate
     return [

@@ -6,10 +6,18 @@ Anything else raises `PredicateError` rather than reaching `.eval()`/`.query()`.
 from __future__ import annotations
 
 import ast
+import keyword
 import re
 from dataclasses import dataclass
+from typing import Collection, Mapping
 
 from app.core.errors import PredicateError
+
+# A quoted name is an allowlist lookup against the caller's columns.
+_BACKTICK_QUOTED = re.compile(r"`([^`]*)`")
+
+# What an unquoted `Opening Text` looks like by the time it fails to parse.
+_ADJACENT_NAMES = re.compile(r"\b([A-Za-z_]\w*)[ \t]+([A-Za-z_]\w*)\b")
 
 # Comparison operators the grammar admits — deliberately excludes In/NotIn/
 # Is/IsNot: our dialect has no membership or identity tests.
@@ -31,27 +39,94 @@ _STRING_METHODS = frozenset({
 })
 _ALLOWED_ATTRIBUTES = _COLUMN_METHODS | _STRING_ACCESSOR | _STRING_METHODS
 
+# The `.str` methods whose first argument pandas reads as a regular expression.
+_REGEX_METHODS = frozenset({"contains", "match", "fullmatch"})
+
 
 @dataclass(frozen=True)
 class ParsedPredicate:
     columns: frozenset[str]
     pandas_expr: str
+    # `pandas_expr` may hold backticks, which `ast` cannot read.
+    regex_arguments: tuple[str, ...]
 
 
-def parse_predicate(expr: str) -> ParsedPredicate:
-    pandas_expr = _normalize(expr)
+def parse_predicate(expr: str, columns: Collection[str] = ()) -> ParsedPredicate:
+    """Without `columns` no backtick-quoted name is admitted, so the default fails closed."""
+    bare_expr, quoted = _replace_backtick_quoted_names(expr, frozenset(columns))
+    normalized = _normalize(bare_expr)
     try:
-        tree = ast.parse(pandas_expr, mode="eval")
+        tree = ast.parse(normalized, mode="eval")
     except SyntaxError as exc:
-        raise PredicateError(
-            f"filter is not valid: {expr!r} (not parseable as a Python expression: {exc})"
-        ) from exc
+        raise PredicateError(_say_why_it_will_not_parse(expr, normalized, exc)) from exc
     _validate_node(tree.body, expr)
-    columns = frozenset(
-        node.id for node in ast.walk(tree)
+    read = frozenset(
+        quoted.get(node.id, node.id) for node in ast.walk(tree)
         if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)
     )
-    return ParsedPredicate(columns=columns, pandas_expr=pandas_expr)
+    return ParsedPredicate(
+        columns=read,
+        pandas_expr=_restore_backtick_quoting(normalized, quoted),
+        regex_arguments=tuple(find_regex_arguments(tree)),
+    )
+
+
+def find_regex_arguments(tree: ast.AST) -> list[str]:
+    """The patterns this filter will hand a regex engine, in source order."""
+    return [
+        node.args[0].value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in _REGEX_METHODS
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and isinstance(node.args[0].value, str)
+    ]
+
+
+def _replace_backtick_quoted_names(
+    expr: str, columns: frozenset[str]
+) -> tuple[str, dict[str, str]]:
+    """A quoted name that is not a column of the caller's is refused before anything parses."""
+    prefix = "_quoted"
+    while prefix in expr:
+        prefix += "_"
+    quoted: dict[str, str] = {}
+
+    def _take(match: re.Match[str]) -> str:
+        name = match.group(1)
+        if name not in columns:
+            raise PredicateError(
+                f"filter is not valid: {expr!r} (`{name}` is not a column here"
+                + (f" — this reads {sorted(columns)})" if columns else
+                   ", and this filter is read where no column list is known, so a "
+                   "backtick-quoted name cannot be resolved at all)")
+            )
+        placeholder = f"{prefix}{len(quoted)}"
+        quoted[placeholder] = name
+        return placeholder
+
+    return _BACKTICK_QUOTED.sub(_take, expr), quoted
+
+
+def _restore_backtick_quoting(normalized: str, quoted: Mapping[str, str]) -> str:
+    """Longest first, so `_quoted1` cannot eat the head of `_quoted11`."""
+    for placeholder, name in sorted(quoted.items(), key=lambda item: -len(item[0])):
+        normalized = normalized.replace(placeholder, f"`{name}`")
+    return normalized
+
+
+def _say_why_it_will_not_parse(expr: str, normalized: str, exc: SyntaxError) -> str:
+    for match in _ADJACENT_NAMES.finditer(normalized):
+        left, right = match.group(1), match.group(2)
+        if keyword.iskeyword(left) or keyword.iskeyword(right):
+            continue
+        return (
+            f"filter is not valid: {expr!r} (`{left} {right}` reads as two names — a column "
+            f"whose name holds a space is written in backticks, as `{left} {right}`)"
+        )
+    return f"filter is not valid: {expr!r} (not parseable as a Python expression: {exc})"
 
 
 def _normalize(expr: str) -> str:
@@ -61,6 +136,7 @@ def _normalize(expr: str) -> str:
     e = e.replace(" IS NULL", ".isna()")
     e = re.sub(r"\btrue\b", "True", e, flags=re.IGNORECASE)
     e = re.sub(r"\bfalse\b", "False", e, flags=re.IGNORECASE)
+    e = re.sub(r"\bNOT\b", "not", e)
 
     def _split_wrap(s: str, sep: str, joiner: str) -> str:
         parts = [p.strip() for p in re.split(rf"\s+{sep}\s+", s)]

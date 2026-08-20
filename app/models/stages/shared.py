@@ -61,7 +61,7 @@ def find_predicate_column_issues(
     expr: str, *, stage_id: str, field: str, cols: set[str]
 ) -> list[str]:
     try:
-        referenced = parse_predicate(expr).columns
+        referenced = parse_predicate(expr, cols).columns
     except PredicateError as exc:
         return [f"stage '{stage_id}': {field}: {exc}"]
     return [

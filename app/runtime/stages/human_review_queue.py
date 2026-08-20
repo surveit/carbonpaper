@@ -156,7 +156,7 @@ def _compute_queueable_mask(src: pd.DataFrame, flt: str | None, sid: str) -> lis
     """A filter that will not evaluate must raise: defaulting the mask would skip review unnoticed."""
     if not flt:
         return [True] * len(src)
-    parsed = parse_predicate(flt)
+    parsed = parse_predicate(flt, src.columns)
     try:
         # eval of a comparison yields a bool Series; the explicit dtype=bool
         # conversion makes that a checked fact (anything else lands in the

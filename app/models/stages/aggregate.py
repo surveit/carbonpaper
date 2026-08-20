@@ -129,20 +129,20 @@ def find_aggregate_signature_issues(
     aggregate = stage.aggregate
     input_id = inputs[0].id
 
-    consumed = set(aggregate.group_by)
-    consumed.update(op.value_column for op in aggregate.aggregations if op.value_column)
-    for op in aggregate.aggregations:
-        if op.where:
-            try:
-                consumed.update(parse_predicate(op.where).columns)
-            except PredicateError:
-                pass  # find_aggregate_column_issues already reports the bad predicate
     declared = {
         column.name
         for entry in signature.reads
         if entry.input == input_id
         for column in entry.columns
     }
+    consumed = set(aggregate.group_by)
+    consumed.update(op.value_column for op in aggregate.aggregations if op.value_column)
+    for op in aggregate.aggregations:
+        if op.where:
+            try:
+                consumed.update(parse_predicate(op.where, declared).columns)
+            except PredicateError:
+                pass  # find_aggregate_column_issues already reports the bad predicate
     issues = [
         f"stage '{stage.id}': signature reads `{name}` but the aggregate config "
         f"never consumes it"

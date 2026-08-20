@@ -28,7 +28,10 @@ say something true about.
   amount > 1000 AND status == 'open'
   memo.str.contains('[0-9]{{4}}')
   NOT client.str.startswith('The ')
+  `Opening Text` IS NULL AND `Hit Sentence` IS NOT NULL
 
+A column whose name holds a space, a dot or a bracket goes in `backticks`, as the last
+example does — unquoted, its name reads as two things and the filter is refused.
 A column, a comparison, IS NULL / IS NOT NULL, AND / OR / NOT, and on a text column
 `.str.contains` / `.str.startswith` / `.str.endswith` / `.str.match` / `.str.fullmatch`
 and the `.str.is*` tests. `contains`, `match` and `fullmatch` read their argument as a

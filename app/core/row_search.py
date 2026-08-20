@@ -5,7 +5,6 @@ Who supplies the frame, and which run it came from, is the caller's business.
 """
 from __future__ import annotations
 
-import ast
 from dataclasses import dataclass
 from typing import Any
 
@@ -21,9 +20,6 @@ from app.core.predicate import ParsedPredicate, parse_predicate
 # One search's ceiling. A reader of the answer reads every row it holds, so a wide
 # answer costs the context the rest of the work needs; narrow the filter instead.
 MAX_MATCHES = 20
-
-# The `.str` methods whose first argument pandas reads as a regular expression.
-_REGEX_METHODS = frozenset({"contains", "match", "fullmatch"})
 
 
 class MatchedRow(BaseModel):
@@ -77,8 +73,8 @@ class InputRows:
         return convert_row_to_json_cells(list_rows(self.frame.iloc[[row]])[0])
 
     def _parse_against_the_frame(self, filter_expr: str) -> ParsedPredicate:
-        parsed = parse_predicate(filter_expr)
         held = {str(name) for name in self.frame.columns}
+        parsed = parse_predicate(filter_expr, held)
         unknown = sorted(parsed.columns - held)
         if unknown:
             raise ValueError(
@@ -91,7 +87,7 @@ class InputRows:
 
 def refuse_a_pattern_the_scan_cannot_run(parsed: ParsedPredicate) -> None:
     """A pattern RE2 refuses drops pandas onto a backtracking engine — see #620."""
-    for pattern in _find_regex_arguments(parsed.pandas_expr):
+    for pattern in parsed.regex_arguments:
         try:
             # One row, not an empty array: with nothing to match, RE2 is never
             # asked to compile the pattern and every pattern looks valid.
@@ -100,16 +96,3 @@ def refuse_a_pattern_the_scan_cannot_run(parsed: ParsedPredicate) -> None:
             raise ValueError(
                 f"the pattern {pattern!r} cannot be searched for: {exc}"
             ) from exc
-
-
-def _find_regex_arguments(pandas_expr: str) -> list[str]:
-    return [
-        node.args[0].value
-        for node in ast.walk(ast.parse(pandas_expr, mode="eval"))
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr in _REGEX_METHODS
-        and node.args
-        and isinstance(node.args[0], ast.Constant)
-        and isinstance(node.args[0].value, str)
-    ]
