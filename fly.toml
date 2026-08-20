@@ -36,6 +36,29 @@ primary_region = "iad"
   CARBON_PAPER_PROJECTS_DIR = "/data/projects"
   CLAUDE_CONFIG_DIR = "/data/claude"
 
+# The two below buy headroom for spawning the Claude Code CLI on two SHARED vCPUs.
+# A row's LLM call is a subprocess, and the SDK waits for that process to answer an
+# `initialize` handshake before any model call happens; when the boot itself is
+# starved, the wait expires and the row fails with "Control request timeout:
+# initialize", which reads like a model or rate-limit error and is neither.
+#
+# Measured on this machine 2026-08-19 while a run was in flight: /proc/pressure/cpu
+# `some avg300=92.91`, meaning something was stalled on CPU 93% of the time, with
+# 36% of wall clock taken as hypervisor steal and a load average of 15 on 2 cores.
+# Memory, disk and IO were all idle — this is CPU and nothing else.
+#
+# Parallelism is set here rather than lowered in app/runtime/options.py because 4 is
+# right for a developer machine and wrong only for this one: the problem is two
+# shared vCPUs, not the number itself.
+#
+# The timeout has no code-side setting to lower it to. claude_agent_sdk reads
+# CLAUDE_CODE_STREAM_CLOSE_TIMEOUT (milliseconds) straight from the environment in
+# client.py and floors the result at 60s; it is not a ClaudeAgentOptions field, so
+# an environment variable is the only seam. It only governs how long a starved boot
+# is given before it is abandoned, so a healthy machine never spends it.
+  CARBON_PAPER_LLM_PARALLEL = "2"
+  CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = "300000"
+
 # One machine, one volume. The document store is SQLite on this volume and the
 # projects/frames trees are plain files beside it, so a second machine would be a
 # second, diverging workspace — not a replica.
