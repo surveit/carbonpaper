@@ -122,9 +122,9 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
         required=["keys"],
         optional=["keep", "by"],
         notes=(
-            "Takes exactly ONE input, and never alters a row: the output is a SUBSET of "
-            "the input rows, so `produces` restates the columns the workflow carries on "
-            "and reads nothing.\n"
+            "Takes exactly ONE input and never alters a row: the output is a SUBSET of "
+            "the input's rows, so the signature READS the columns the rule consults — "
+            "`keys`, and `by` — and writes nothing.\n"
             "Say WHY one duplicate wins. `keep: highest, by: filed_at` keeps the latest "
             "filing and says so in the config, where a reviewer reads it. `keep: first` "
             "depends on the order the rows happen to arrive in, so it states nothing a "

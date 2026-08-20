@@ -23,7 +23,9 @@ from app.models import (
     stage_to_json,
     validate_named_schema,
 )
-from app.services import generation, methodology, project, terms, versioning
+from app.services import (
+    code_approval, generation, methodology, project, terms, versioning,
+)
 from app.services.loader import list_parsed_stages, resolve_function_code
 from app.services.workspace import LOADER_BOOKKEEPING_KEYS
 from app.web.breadcrumbs import build_home_crumbs, build_version_crumbs
@@ -57,6 +59,13 @@ async def index(request: Request):
         "index.html",
         {"projects": list_projects()},
     )
+
+
+@router.post("/project/{project_name}/code-execution/withdraw")
+async def withdraw_code_execution(project_name: str):
+    """Only stops NEW python stages being written; ones already stored keep running."""
+    code_approval.withdraw_code_execution_approval(validate_project_or_404(project_name))
+    return RedirectResponse(f"/project/{project_name}", status_code=303)
 
 
 @router.post("/project/{project_name}/delete")

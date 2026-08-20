@@ -52,6 +52,35 @@ def find_tool_names() -> set[str]:
 # ── the tools whose body lives here ──────────────────────────────────────────
 
 AGENT_TOOLS: dict[str, AgentTool] = {
+    "approve_code_execution": AgentTool(
+        fn=shared.approve_code_execution,
+        label="Turning on code execution",
+        parameters={
+            "project_id": _PROJECT_ID,
+            "reason": "What the Python step will do, and why no declared stage fits — in the "
+                "words you put to the owner. Stored, so whoever turns this off later can "
+                "see what was agreed to.",
+        },
+        description="""Turn on unsandboxed Python (`python_frame_function`) for this project.
+
+DO NOT CALL THIS TO ASK. It records an answer the owner has ALREADY GIVEN,
+in this conversation, in reply to the warning. Calling it before they have
+answered turns on code execution on their machine without their consent.
+
+The order is: try the declared stages first — `explode` then a
+`starlark_row_function` covers most of what this type used to be reached
+for, and `dedupe`, `sort_rank`, `aggregate`, `enrich`, `expand` and `union`
+cover the reshapes. Only if none fits, tell the owner plainly what the step
+will do, that Carbon Paper is not built for arbitrary code execution, that
+the step runs on their machine with their permissions and can read files
+and reach the network, and that a trace stops at it. Then ask. Then wait.
+
+If they say yes, call this. If they say no, or say nothing, do not call it
+— say what you cannot build and stop.
+
+It stays on for the WHOLE project until a person turns it off, so tell them
+that too. Approving twice is not an error and does not extend anything.""",
+    ),
     "read_terms": AgentTool(
         fn=shared.read_terms,
         label="Reading the project's words",

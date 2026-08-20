@@ -81,6 +81,10 @@ record, and it returns the project record, whose `id` every other tool takes.
   PLANNING   (no tools — this is where you ask the user)
   BUILD      add_stage, edit_stage, remove_stage, then generate_stage_tests and
              loop edit_stage -> run_stage_tests until they pass. Still BUILD.
+             If a write is refused because the step needs unsandboxed Python,
+             that refusal names what to try instead. Only if nothing fits, put
+             it to the user in their words, wait for their answer, and call
+             approve_code_execution once they have said yes.
   TEST_RUN   save_version, then run_workflow_test against it. Read that output.
              What it finds sends you back to BUILD, and you run again.
   REVIEW     write_review_guide for that version (read_review_guide shows what a

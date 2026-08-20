@@ -24,10 +24,10 @@ _LOAD = {
     "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _CLAIM["columns"]},
 }
 _CLEAN = {
-    "id": "clean", "description": "Clean", "type": "python_row_function",
+    "id": "clean", "description": "Clean", "type": "starlark_row_function",
     "inputs": [{"id": "load"}],
-    "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
-                 "code": "def transform(row):\n    return {**row, 'cleaned': True}\n"},
+    "starlark": {"summary": "Test fixture step.", "corner_cases": [],
+                 "code": "def transform(row):\n    return dict(row, cleaned=True)\n"},
     "signature": {
         "form": "extends",
         "reads": [{"input": "load", "columns": _CLAIM["columns"]}],
@@ -44,10 +44,10 @@ _SCORE_UNADDITIVE = {
     "llm": {"prompt_data_template": "judge {amount}"},
 }
 _RANK = {
-    "id": "rank", "description": "Rank", "type": "python_row_function",
+    "id": "rank", "description": "Rank", "type": "starlark_row_function",
     "inputs": [{"id": "score"}],
-    "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
-                 "code": "def transform(row):\n    return {**row, 'rank': 1}\n"},
+    "starlark": {"summary": "Test fixture step.", "corner_cases": [],
+                 "code": "def transform(row):\n    return dict(row, rank=1)\n"},
     "signature": {
         "form": "extends",
         "reads": [
@@ -60,7 +60,7 @@ _RANK = {
     },
 }
 _REPORT = {
-    "id": "report", "description": "Report", "type": "python_row_function",
+    "id": "report", "description": "Report", "type": "starlark_row_function",
     "inputs": [{"id": "rank"}],
     "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                  "code": "def transform(row):\n    return {**row, 'note': 'x'}\n"},

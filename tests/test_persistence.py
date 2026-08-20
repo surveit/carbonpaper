@@ -6,7 +6,7 @@ import pytest
 from app.core.errors import DocumentNotFound
 from app.core.persistence import (
     PersistedModel,
-    _now_iso,
+    now_iso,
     configure_store,
     validate_id,
 )
@@ -163,7 +163,7 @@ def test_two_records_written_in_the_same_second_order_deterministically(configur
 
 def test_consecutive_stamps_strictly_increase():
     """The Windows wall clock ticks every ~15.6ms, so `datetime.now()` alone repeats."""
-    stamps = [_now_iso() for _ in range(1000)]
+    stamps = [now_iso() for _ in range(1000)]
 
     assert all(a < b for a, b in zip(stamps, stamps[1:]))
 
@@ -172,7 +172,7 @@ def test_concurrent_stampers_never_produce_the_same_stamp():
     stampers, per_stamper = 8, 200
 
     def stamp_many(_stamper: int) -> list[str]:
-        return [_now_iso() for _ in range(per_stamper)]
+        return [now_iso() for _ in range(per_stamper)]
 
     with ThreadPoolExecutor(max_workers=stampers) as pool:
         stamps = [s for f in [pool.submit(stamp_many, n) for n in range(stampers)]
