@@ -1,36 +1,31 @@
+{#
+  The project-file picker: the shared dropdown over the files this project holds,
+  plus the Preview button each file row carries (static/file-preview.js registers
+  it and owns the dialog it opens).
+
+  The select's value is a stored file's id, never a path. Blank means "read whatever
+  the workflow authored", which is why a row with an authored path is not required.
+  `selected_file_id` opens the picker on a file already chosen — a duplicated run
+  arrives with its original's files bound.
+#}
+{% from "_picker.html" import picker %}
 {% macro file_picker(name, authored_path, files, selected_file_id=None) %}
-<div class="file-picker" data-file-picker>
-  <select id="{{ name }}" name="{{ name }}" class="file-picker-native file-pick"
-          {% if not authored_path %}required{% endif %}>
-    {% if authored_path %}
-    <option value="" data-file-kind="authored" data-filename="{{ authored_path }}"
-            data-detail="Workflow path">{{ authored_path }}</option>
-    {% else %}
-    <option value="" data-file-kind="empty" data-filename="Choose a file…"></option>
-    {% endif %}
-    {% for f in files %}
-    <option value="{{ f.file_id }}"{% if f.file_id == selected_file_id %} selected{% endif %}
-            data-uploaded-at="{{ f.uploaded_at.isoformat() }}"
-            data-filename="{{ f.filename }}" data-uploaded-label="{{ f.uploaded_label }}"
-            data-size-label="{{ f.size_label }}">{{ f.label }}</option>
-    {% endfor %}
-  </select>
-  <button type="button" id="{{ name }}__button" class="file-picker-trigger"
-          aria-haspopup="dialog" aria-expanded="false"
-          aria-controls="{{ name }}__picker" hidden>
-    <span class="file-picker-value"></span>
-    <span class="file-picker-chevron" aria-hidden="true">▾</span>
-  </button>
-  <div id="{{ name }}__picker" class="file-picker-popover" role="dialog"
-       aria-label="Choose a project file" hidden>
-    <div class="file-picker-heading">
-      <strong>Choose file</strong>
-      <span>Uploads newest first</span>
-    </div>
-    <input type="search" class="file-picker-search" aria-label="Search files"
-           placeholder="Search files…" autocomplete="off">
-    <div class="file-picker-list" role="group" aria-label="Project files"></div>
-    <p class="file-picker-empty" hidden>No files match this search.</p>
-  </div>
-</div>
+{% call picker("Choose file", hint="Uploads newest first", search_label="Search files") %}
+<select id="{{ name }}" name="{{ name }}" class="picker-native file-pick"
+        data-picker-row-action="file-preview"
+        {% if not authored_path %}required{% endif %}>
+  {% if authored_path %}
+  <option value="" data-file-kind="authored" data-name="{{ authored_path }}"
+          data-meta="Workflow path">{{ authored_path }}</option>
+  {% else %}
+  <option value="" data-file-kind="empty" data-name="Choose a file…"></option>
+  {% endif %}
+  {% for f in files %}
+  <option value="{{ f.file_id }}"{% if f.file_id == selected_file_id %} selected{% endif %}
+          data-uploaded-at="{{ f.uploaded_at.isoformat() }}"
+          data-name="{{ f.filename }}" data-meta="{{ f.uploaded_label }}"
+          data-side="{{ f.size_label }}">{{ f.label }}</option>
+  {% endfor %}
+</select>
+{% endcall %}
 {% endmacro %}

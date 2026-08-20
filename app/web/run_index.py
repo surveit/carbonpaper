@@ -60,6 +60,17 @@ RUN_VIEW_PRODUCTION = "production"
 RUN_VIEW_TEST = "test"
 RUN_VIEW_ARCHIVED = "archived"
 RUN_VIEWS = (RUN_VIEW_PRODUCTION, RUN_VIEW_TEST, RUN_VIEW_ARCHIVED)
+_RUN_VIEW_LABELS = {
+    RUN_VIEW_PRODUCTION: "Production",
+    RUN_VIEW_TEST: "Test runs",
+    RUN_VIEW_ARCHIVED: "Archived",
+}
+
+
+class RunViewChoice(BaseModel):
+    view: str
+    label: str
+    count: int
 
 
 def build_run_index_rows(
@@ -76,7 +87,15 @@ def count_archived_runs(project_id: str) -> int:
     return len(read_archived_run_ids(project_id))
 
 
-def count_runs_by_view(project_id: str) -> dict[str, int]:
+def build_run_view_choices(project_id: str) -> list[RunViewChoice]:
+    counts = _count_runs_by_view(project_id)
+    return [
+        RunViewChoice(view=view, label=_RUN_VIEW_LABELS[view], count=counts[view])
+        for view in RUN_VIEWS
+    ]
+
+
+def _count_runs_by_view(project_id: str) -> dict[str, int]:
     hidden = read_archived_run_ids(project_id)
     counts = {view: 0 for view in RUN_VIEWS}
     for entry in list_run_entries(project_id):

@@ -136,5 +136,5 @@ def test_preview_dialog_controller_handles_loading_failure_and_close():
     assert "if (!fileId ||" in script
     assert "button.dataset.fileId" in script
     assert 'button.getAttribute("aria-disabled") === "true"' in script
-    assert 'activePicker.classList.add("is-previewing")' in script
-    assert 'activePicker.classList.remove("is-previewing")' in script
+    assert 'activePicker.classList.add("is-action-open")' in script
+    assert 'activePicker.classList.remove("is-action-open")' in script

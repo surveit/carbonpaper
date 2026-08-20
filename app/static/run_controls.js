@@ -13,9 +13,9 @@
     var option = document.createElement("option");
     option.value = file.file_id;
     option.dataset.uploadedAt = file.uploaded_at;
-    option.dataset.filename = file.filename;
-    option.dataset.uploadedLabel = file.uploaded_label;
-    option.dataset.sizeLabel = file.size_label;
+    option.dataset.name = file.filename;
+    option.dataset.meta = file.uploaded_label;
+    option.dataset.side = file.size_label;
     option.textContent = file.label;
     return option;
   }
@@ -28,7 +28,7 @@
       function (option) { return Date.parse(option.dataset.uploadedAt) < uploadedAt; }
     );
     select.insertBefore(fileOption(file), before || null);
-    if (window.CarbonFilePicker) window.CarbonFilePicker.refresh(select);
+    if (window.CarbonPicker) window.CarbonPicker.refresh(select);
   }
 
   function buildRow(template, row, files) {
@@ -42,9 +42,9 @@
       ? row.authored_path + " — the path this workflow names"
       : "Choose a file…";
     pick.options[0].dataset.fileKind = row.authored_path ? "authored" : "empty";
-    pick.options[0].dataset.filename = row.authored_path || "Choose a file…";
-    if (row.authored_path) pick.options[0].dataset.detail = "Workflow path";
-    else delete pick.options[0].dataset.detail;
+    pick.options[0].dataset.name = row.authored_path || "Choose a file…";
+    if (row.authored_path) pick.options[0].dataset.meta = "Workflow path";
+    else delete pick.options[0].dataset.meta;
     files.forEach(function (file) { pick.appendChild(fileOption(file)); });
     node.querySelector(".run-input-name").htmlFor = pick.id;
     node.querySelector(".run-input-name code").textContent = stageId;
@@ -76,7 +76,7 @@
       form.querySelectorAll("input.js-carried-limit").forEach(function (input) {
         input.remove();
       });
-      if (window.CarbonFilePicker) window.CarbonFilePicker.init(box);
+      if (window.CarbonPicker) window.CarbonPicker.init(box);
     } catch (e) {
       /* Keep the shown fields after a network or parse failure. */
     }

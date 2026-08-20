@@ -214,6 +214,9 @@ table.issue-table { width: 100%; border-collapse: collapse; font-size: .79rem; }
    leaves the page is the version's `↗`. The result cell's squares carry the
    colour; `.run-outcome` under them carries what the colours say, tinted only
    for the two states that ask the reader for something. ── */
+/* "Show" names the picker beside it; what is being shown is on the trigger. */
+.runs-view-label { color: var(--muted); font-size: 13px; }
+
 .runs-table td { vertical-align: top; }
 .runs-table tbody tr[data-href] { cursor: pointer; }
 .runs-table tbody tr[data-href]:hover { background: var(--hover); }

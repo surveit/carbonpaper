@@ -52,7 +52,7 @@ from app.web.run_index import (
     RUN_VIEW_PRODUCTION,
     RUN_VIEWS,
     build_run_index_rows,
-    count_runs_by_view,
+    build_run_view_choices,
 )
 from app.web.run_issues import build_run_issues
 from app.web.run_stage_panel import resolve_panel_links
@@ -139,7 +139,7 @@ async def runs_index(request: Request, project_id: str,
             "section": "runs",
             "runs": build_run_index_rows(project_id, view=view, input_key=inputs),
             "view": view,
-            "view_counts": count_runs_by_view(project_id),
+            "view_choices": build_run_view_choices(project_id),
             "input_filter": inputs,
         },
     )

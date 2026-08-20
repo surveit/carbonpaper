@@ -1,4 +1,5 @@
 {% extends "project_shell.html" %}
+{% from "_picker.html" import picker %}
 {#
   RUNS — the runs list.
 
@@ -48,7 +49,9 @@
     state = project.project_state(mdir); section = "runs"
     runs  = app.web.run_index.build_run_index_rows(state.id, view=…, input_key=…)
     view  = which of RUN_VIEWS this is ("production" | "test" | "archived")
-    view_counts = {view: row count}, for the picker's labels
+    view_choices = app.web.run_index.build_run_view_choices(state.id) — one
+            RunViewChoice per bucket, in RUN_VIEWS order, carrying its label
+            and how many runs are in it
     input_filter = the ?inputs= key the rows were narrowed to, or "" 
 
   Only manifest-backed runs appear, and a run whose manifest cannot be read says so
@@ -77,16 +80,17 @@
     {% endif %}
   </div>
   <div class="actions wf-actions">
-    <label class="runs-view-picker">Show
-      <select onchange="location.href='/project/{{ state.id }}/runs?view=' + this.value">
-        <option value="production" {% if view == "production" %}selected{% endif %}>
-          Production ({{ view_counts.production }})</option>
-        <option value="test" {% if view == "test" %}selected{% endif %}>
-          Test runs ({{ view_counts.test }})</option>
-        <option value="archived" {% if view == "archived" %}selected{% endif %}>
-          Archived ({{ view_counts.archived }})</option>
-      </select>
-    </label>
+    <label class="runs-view-label" for="runs-view">Show</label>
+    {% call picker("Show runs", size="sm") %}
+    <select id="runs-view" class="picker-native runs-view-select"
+            onchange="location.href='/project/{{ state.id }}/runs?view=' + this.value">
+      {% for choice in view_choices %}
+      <option value="{{ choice.view }}" data-name="{{ choice.label }}"
+              data-side="{{ choice.count }}"
+              {% if view == choice.view %}selected{% endif %}>{{ choice.label }} ({{ choice.count }})</option>
+      {% endfor %}
+    </select>
+    {% endcall %}
     {% if state.workflow.present %}
     <a href="/project/{{ state.id }}/runs/new" class="btn primary">▶ New run</a>
     {% endif %}
