@@ -17,7 +17,7 @@
     color: var(--muted); margin: 0 0 6px;
 }
 .reviewer-instructions .instructions-text {
-    background: var(--fold-bg); border: 1px solid var(--fold-bd); padding: 12px 14px;
+    background: var(--sunk); border: 1px solid var(--border); padding: 12px 14px;
     border-radius: 4px; white-space: pre-wrap; margin: 0;
     font: inherit; color: var(--fg);
 }

@@ -43,7 +43,7 @@
 .run-ground .run-id { font-size: .74rem; background: var(--sunk-deep); color: var(--muted);
     padding: 1px 6px; border-radius: 3px; }
 .run-ground .unresolved { color: var(--state-warn-ink); cursor: help; }
-.run-ground .flagchip { background: var(--infer-bg); color: var(--infer-ink); border: 1px solid var(--infer-bd);
+.run-ground .flagchip { background: var(--state-idle-bg); color: var(--state-idle-ink); border: 1px solid var(--state-idle);
     padding: 1px 7px; border-radius: 3px; font-size: .74rem; cursor: help; }
 .cta-row { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin: 0 0 .85rem; }
 .cta-row form { margin: 0; }
@@ -273,7 +273,7 @@ table.issue-table { width: 100%; border-collapse: collapse; font-size: .79rem; }
 .runs-table .run-outcome { display: block; margin-top: .35rem; font-size: .78rem; color: var(--muted); }
 .runs-table .run-outcome.status-errors { color: var(--state-failed-ink); }
 .runs-table .run-outcome.status-awaiting_review { color: var(--state-review-ink); }
-.runs-table .flagchip { background: var(--infer-bg); color: var(--infer-ink); border: 1px solid var(--infer-bd);
+.runs-table .flagchip { background: var(--state-idle-bg); color: var(--state-idle-ink); border: 1px solid var(--state-idle);
     padding: 1px 7px; border-radius: 3px; font-size: .74rem; cursor: help; white-space: nowrap; }
 .runs-table .unresolved { color: var(--state-warn-ink); cursor: help; }
 
