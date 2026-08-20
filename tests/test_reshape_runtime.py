@@ -1,7 +1,4 @@
-"""Behavior + lineage tests for the explode, dedupe and sort_rank handlers: run
-them for real through execute_subset, then prove app.runtime.trace walks back through
-them to the right source row — the thing a python_frame_function doing the same
-work cannot offer."""
+"""explode/dedupe/sort_rank: proves app.runtime.trace walks back to the source row."""
 from __future__ import annotations
 
 import json

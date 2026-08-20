@@ -66,6 +66,16 @@ capping the rows a stage READS (cut off its inputs before its handler runs);
 `field_checks`. `stages/` — one module per type. `llm.py`/`options.py` — the agent
 backend (no fallback). `preview.py` — scratch re-runs.
 
+**`executor.py` is the shared engine both paths call, and the one that never creates
+a production run.** `runner.py` drives it for every production run. `execute_subset`
+is the other entry: no `Run` record, used by evals (`app/evals/runner.py`) and by
+workflow tests (`app/services/workflow_test.py`) to execute a real subset of stages
+over a real slice of source data — same `runs/<id>/` shape, manifest marked
+`is_test_run`, read-only. `runner.py` is import-linter-gated to `app.services.run`
+alone, so evals and workflow tests structurally cannot reach it and must go through
+`execute_subset` instead — the enforced half of the split; nothing yet stops
+production code from calling `execute_subset` too, it simply doesn't.
+
 Stage handlers register under a *shape* (`app/runtime/stages/execution.py`):
 `RowMapHandler` (the runtime maps a per-row function over the stage's single
 input and reassembles results in input order — the function never sees the

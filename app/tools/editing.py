@@ -96,11 +96,7 @@ def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
     )
 
 
-# ── tool input schemas + display labels ──────────────────────────────────────
-# What each argument of THIS surface's own tools IS, keyed by tool __name__ and
-# verified against build_editing_tools above. What each argument TAKES is read off the
-# closure's signature. Empty dict = the tool takes no arguments. A tool with a shared
-# body reads its prose from app.tools.tool_specs instead, so it is absent here.
+# Empty dict = no args. A shared-body tool's prose lives in app.tools.tool_specs instead.
 TOOL_SCHEMAS: dict[str, ToolParameterProse] = {
     "get_current_project": {},
     "create_project": {

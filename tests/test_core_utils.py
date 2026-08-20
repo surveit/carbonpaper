@@ -1,6 +1,4 @@
-"""app.core.utils — small dependency-free helpers. build_word_triplet_id's
-own contract: three hyphen-joined parts, and a seeded generator avoids ids
-already in `taken`."""
+"""build_word_triplet_id: three hyphen-joined parts; a seeded generator skips `taken`."""
 from __future__ import annotations
 
 import random

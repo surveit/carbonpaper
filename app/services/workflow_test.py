@@ -1,8 +1,4 @@
-"""Workflow-test seam: run a workflow — any subset of its stages, over any slice of
-its real source — as a REAL run: same `runs/<id>/` directory, manifest, and
-routes as a production run, but marked `RunManifest.is_test_run` and scoped
-read-only. It reaches the shared engine through app.runtime.executor (execute_subset),
-never app.runtime.runner."""
+"""docs/architecture.md"""
 from __future__ import annotations
 
 from pathlib import Path
