@@ -3,10 +3,11 @@ writers never read raw JSON. See docs/architecture.md for the packet's shape."""
 from __future__ import annotations
 
 from enum import Enum
-from pathlib import PurePath
 from typing import Any
 
 from pydantic import BaseModel
+
+from app.models.run_manifest import InputBinding, read_input_bindings
 
 # A stage that never executed has no output file; the packet says so rather than
 # writing an empty CSV that would read as "this stage produced nothing".
@@ -24,15 +25,6 @@ class ValidationView(BaseModel):
     ok: bool
     rows: int | None
     issues: list[IssueView]
-
-
-class InputBindingView(BaseModel):
-    stage_id: str
-    path: str
-    filename: str
-    sha256: str | None
-    bytes: int | None
-    source: str | None
 
 
 class StageView(BaseModel):
@@ -62,7 +54,7 @@ class RunView(BaseModel):
     halted_at: list[str]
     dropped_columns: dict[str, list[str]]
     stages: list[StageView]
-    inputs: list[InputBindingView]
+    inputs: list[InputBinding]
 
 
 def build_run_view(
@@ -81,7 +73,7 @@ def build_run_view(
         halted_at=[str(s) for s in manifest.get("halted_at") or []],
         dropped_columns=_read_dropped_columns(manifest),
         stages=_build_stage_views(manifest, definition_error),
-        inputs=_build_input_views(manifest),
+        inputs=read_input_bindings(manifest),
     )
 
 
@@ -144,28 +136,6 @@ def _build_issue_view(issue: dict[str, Any]) -> IssueView:
         severity=str(issue.get("severity") or ""),
         column=_read_optional_str(issue, "column"),
         message=str(issue.get("message") or ""),
-    )
-
-
-def _build_input_views(manifest: dict[str, Any]) -> list[InputBindingView]:
-    bindings = manifest.get("input_bindings") or {}
-    return [
-        _build_input_view(str(stage_id), binding)
-        for stage_id, binding in sorted(bindings.items())
-        if isinstance(binding, dict)
-    ]
-
-
-def _build_input_view(stage_id: str, binding: dict[str, Any]) -> InputBindingView:
-    size = binding.get("bytes")
-    path = str(binding.get("path") or "")
-    return InputBindingView(
-        stage_id=stage_id,
-        path=path,
-        filename=PurePath(path).name,
-        sha256=_read_optional_str(binding, "sha256"),
-        bytes=int(size) if isinstance(size, int) else None,
-        source=_read_optional_str(binding, "source"),
     )
 
 

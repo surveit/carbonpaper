@@ -12,7 +12,8 @@ from app.core.run_status import StageStatus
 from app.services.methodology import read_methodology
 from app.services.workspace import resolve_project_dir
 from app.services.review_packet.checksums import compute_sha256
-from app.services.review_packet.views import InputBindingView, RunView, StageView
+from app.models.run_manifest import InputBinding
+from app.services.review_packet.views import RunView, StageView
 
 DATA_DIR = "data"
 RAW_DIR = "data/raw"
@@ -182,7 +183,7 @@ def _write_csv(root: Path, source: Path, stage_id: str, report: DataReport) -> N
 
 
 def _copy_input_file(
-    root: Path, binding: InputBindingView, project_id: str, index: int, report: DataReport
+    root: Path, binding: InputBinding, project_id: str, index: int, report: DataReport
 ) -> None:
     recorded = Path(binding.path)
     relative = f"{INPUTS_DIR}/{index:02d}-{binding.stage_id}{recorded.suffix}"
@@ -201,7 +202,7 @@ def _copy_input_file(
     _copy_file(source, root / relative, relative, report)
 
 
-def _locate_input(binding: InputBindingView, project_id: str) -> Path | None:
+def _locate_input(binding: InputBinding, project_id: str) -> Path | None:
     """Where the run read it, or where the project moved it to — never a same-named guess."""
     recorded = Path(binding.path)
     if recorded.is_file():

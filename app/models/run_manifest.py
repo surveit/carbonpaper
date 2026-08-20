@@ -5,6 +5,7 @@ payload. The manifest itself is a stored record — `app.runtime.manifest`.
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import PurePath
 from typing import Any, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -145,3 +146,42 @@ def read_run_bindings(
     if isinstance(nested, dict) and "run_bindings" in nested:
         return dict(nested["run_bindings"] or {})
     return dict(raw.get("run_bindings") or {})
+
+
+class InputBinding(BaseModel):
+    """One file a run read, as its preflight recorded it."""
+
+    stage_id: str
+    path: str
+    filename: str
+    # Absent from a manifest written before preflight streamed them: None means the
+    # measurement was never taken, not that the file was empty.
+    sha256: str | None = None
+    bytes: int | None = None
+    source: str | None = None
+
+
+def read_input_bindings(raw: dict[str, Any]) -> list[InputBinding]:
+    bindings = raw.get("input_bindings") or {}
+    return [
+        _read_one_binding(str(stage_id), binding)
+        for stage_id, binding in sorted(bindings.items())
+        if isinstance(binding, dict)
+    ]
+
+
+def _read_one_binding(stage_id: str, binding: dict[str, Any]) -> InputBinding:
+    path = str(binding.get("path") or "")
+    size = binding.get("bytes")
+    return InputBinding(
+        stage_id=stage_id,
+        path=path,
+        filename=PurePath(path).name,
+        sha256=_read_optional_text(binding.get("sha256")),
+        bytes=size if isinstance(size, int) else None,
+        source=_read_optional_text(binding.get("source")),
+    )
+
+
+def _read_optional_text(value: Any) -> str | None:
+    return str(value) if value else None

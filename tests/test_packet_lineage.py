@@ -256,7 +256,7 @@ def test_a_moved_project_still_ships_the_inputs_its_run_read(tmp_path):
     from app.services import workspace
     from app.services.review_packet.checksums import compute_sha256
     from app.services.review_packet.data import _locate_input
-    from app.services.review_packet.views import InputBindingView
+    from app.models.run_manifest import InputBinding
 
     # The new home IS the workspace root now — that is what "the project moved" means.
     workspace.set_projects_dir(tmp_path / "new_home")
@@ -264,8 +264,8 @@ def test_a_moved_project_still_ships_the_inputs_its_run_read(tmp_path):
     moved = tmp_path / "new_home" / "demo" / "data" / "aliases.csv"
     moved.write_text("name,stands_for\na,A\n", encoding="utf-8")
 
-    def binding(sha: str | None) -> InputBindingView:
-        return InputBindingView(
+    def binding(sha: str | None) -> InputBinding:
+        return InputBinding(
             stage_id="input_aliases", path="/gone/demo/data/aliases.csv",
             filename="aliases.csv", sha256=sha, bytes=moved.stat().st_size, source="workflow",
         )
