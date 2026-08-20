@@ -84,6 +84,7 @@ def build_snapshot(root: Path) -> LexiconSnapshot:
                 role = _record_function(node, seen, site)
                 functions += role is not None
                 accessors += role is Role.ACCESSOR
+    _merge_plural_variants(seen, sightings)
     words = {
         word: WordRoles(
             verb=counts[Role.VERB],
@@ -100,6 +101,28 @@ def build_snapshot(root: Path) -> LexiconSnapshot:
         types=types,
         sightings=dict(sorted(sightings.items())),
     )
+
+
+_PLURAL_MERGED_ROLES = (Role.NOUN, Role.FIELD)
+
+
+def _merge_plural_variants(seen: dict[str, Counter[Role]], sightings: dict[str, Sighting]) -> None:
+    """Merges NOUN/FIELD counts only: an English plural noun is unambiguous, but a
+    VERB ending in "s" is usually third-person conjugation of a DIFFERENT word
+    (`_tests_shape` means "it tests", not the plural of "test") and must not merge.
+    """
+    for plural in list(seen):
+        singular = plural[:-1]
+        if not plural.endswith("s") or len(singular) < 3 or singular not in seen:
+            continue
+        for role in _PLURAL_MERGED_ROLES:
+            seen[singular][role] += seen[plural].pop(role, 0)
+            plural_key, singular_key = f"{plural}:{role.value}", f"{singular}:{role.value}"
+            if plural_key in sightings:
+                sightings.setdefault(singular_key, sightings[plural_key])
+                del sightings[plural_key]
+        if not seen[plural]:
+            del seen[plural]
 
 
 def find_scanned_files(root: Path) -> list[Path]:
