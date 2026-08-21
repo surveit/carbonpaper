@@ -30,8 +30,7 @@ class ClaimShape(PersistedModel):
     collection: ClassVar[str] = "claim_shape"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
 
-    # No stage and no column: a shape is written before any stage exists, so it says
-    # what the evidence will look like rather than where it will come from.
+    # Authored before any stage exists, so it declares no stage and no column.
     says: str
     table_schema: TableSchema
     requires: UniverseRequirement
