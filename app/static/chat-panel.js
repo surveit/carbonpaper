@@ -442,6 +442,43 @@ window.ChatPanel.mount = function (root) {
     connect(data.turn_id, 0);
   }
 
+  // ── Keeping the reader's place ──────────────────────────────────────────────
+  // The rail re-mounts on every page, so without this a reader who follows a link out of a
+  // reply is dropped at the bottom of the transcript and has to find their way back. The
+  // panel is the same object either side of the navigation; only the DOM is new.
+  //
+  // "bottom" rather than a number when they were already there: a turn that finished while
+  // the page was loading must not leave them stranded above its reply.
+  // Read per call, not captured: a draft page has no SID until the reader first replies.
+  function placeKey() { return `chat-panel:place:${SID}`; }
+
+  function readingPlace() {
+    if (log.scrollHeight - log.scrollTop - log.clientHeight < 120) return "bottom";
+    return String(Math.round(log.scrollTop));
+  }
+
+  function rememberReadingPlace() {
+    if (!SID || log.scrollHeight <= log.clientHeight) return;
+    try { sessionStorage.setItem(placeKey(), readingPlace()); } catch (e) { /* private mode */ }
+  }
+
+  function restoreReadingPlace() {
+    let place = null;
+    try { place = SID && sessionStorage.getItem(placeKey()); } catch (e) { /* private mode */ }
+    if (place === null || place === "bottom") { log.scrollTop = log.scrollHeight; return; }
+    log.scrollTop = Number(place);
+  }
+
+  // rAF-coalesced: a scroll fires per frame and this writes to storage.
+  let placePending = false;
+  log.addEventListener("scroll", () => {
+    if (placePending) return;
+    placePending = true;
+    requestAnimationFrame(() => { placePending = false; rememberReadingPlace(); });
+  }, {passive: true});
+  // The last scroll event can lose the race with the navigation that follows a click.
+  window.addEventListener("pagehide", rememberReadingPlace);
+
   // A textarea keeps the height it was given, so every edit re-measures: collapse it, then
   // take what the text needs — scrollHeight is content + padding, and the border is the part
   // the box does not report. On the page the dock is fixed over the log, so the log's own
@@ -473,7 +510,7 @@ window.ChatPanel.mount = function (root) {
   }
 
   log.querySelectorAll(".ac-msg.assistant .ac-body").forEach(markHandovers);
-  log.scrollTop = log.scrollHeight;
+  restoreReadingPlace();
   // Reattach to a turn already running on the server. `from=0` replays it whole: the store
   // holds a turn's blocks only once it has finished, so mid-turn the buffer is the transcript.
   if (cfg.active_turn) connect(cfg.active_turn, 0);

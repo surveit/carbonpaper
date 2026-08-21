@@ -5,6 +5,10 @@
 // The panel does not survive a page load and does not need to: the turn is a detached task
 // on the server with a replayable buffer (app/core/agent/turns.py), so this remounts on
 // every page and the panel reattaches to whatever is still running.
+//
+// Whether the rail is there, and the request for its contents, are both decided in <head>
+// (_chat_rail_head.html). What is left here runs at DOMContentLoaded, because it needs the
+// markup: filling the column in, and the two controls that change which state it is in.
 window.ChatRail = window.ChatRail || {};
 
 (function () {
@@ -12,7 +16,6 @@ window.ChatRail = window.ChatRail || {};
   const TITLE_KEY = "chat-rail:title";
   const OPEN_KEY = "chat-rail:open";
 
-  function read(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
   function write(key, value) { try { localStorage.setItem(key, value); } catch (e) { /* private mode */ } }
   function forget() {
     try { [KEY, TITLE_KEY, OPEN_KEY].forEach((k) => localStorage.removeItem(k)); } catch (e) { /* private mode */ }
@@ -28,53 +31,59 @@ window.ChatRail = window.ChatRail || {};
   };
 
   document.addEventListener("DOMContentLoaded", function () {
+    const opening = window.ChatRail.opening || {};
     const rail = document.getElementById("chat-rail");
     const tab = document.getElementById("chat-rail-tab");
-    if (!rail || !tab) return;
-    // The chat page draws its own panel, so the rail stays out of its way rather than
-    // showing the same conversation twice.
-    if (document.querySelector(".chat-host-page")) return;
+    // No session, or the chat page's own panel — <head> drew neither state, so there is
+    // nothing here to fill in.
+    if (!rail || !tab || !opening.sid) return;
+    const sid = opening.sid;
+    const shown = document.documentElement.classList;
 
-    const sid = read(KEY);
-    if (!sid) return;
-    const name = read(TITLE_KEY) || "Conversation";
+    const name = opening.title || "Conversation";
     rail.querySelector(".js-rail-title").textContent = name;
-    rail.querySelector(".chat-rail-open").href = `/chat/${sid}`;
+    rail.querySelector(".chat-rail-open-page").href = `/chat/${sid}`;
     tab.textContent = name;
 
     function show(open) {
-      rail.hidden = !open;
-      tab.hidden = open;
-      document.body.classList.toggle("chat-rail-open", open);
+      shown.toggle("chat-rail-open", open);
+      shown.toggle("chat-rail-shut", !open);
       write(OPEN_KEY, open ? "1" : "0");
     }
 
-    let loaded = false;
+    let pending = opening.panel;
     async function load() {
-      if (loaded) return;
-      const r = await fetch(`/chat/${sid}/panel`);
+      if (!pending) return;
+      const response = pending;
+      pending = null;
+      const r = await response;
       // A session the store no longer has is a stale id, not an error to show: drop it and
       // leave the page as if the rail had never been asked for.
-      if (!r.ok) { forget(); rail.remove(); tab.remove(); document.body.classList.remove("chat-rail-open"); return; }
+      if (!r.ok) { forget(); shown.remove("chat-rail-open", "chat-rail-shut"); return; }
       const panel = rail.querySelector(".js-rail-panel");
       panel.innerHTML = await r.text();
       panel.dataset.chatPanel = "";
-      loaded = true;
       // The stored title is what the reader last saw it called; the panel carries the
       // current one, so a renamed session corrects itself on the next page.
       const cfg = JSON.parse(panel.querySelector(".js-chat-config").textContent);
-      if (cfg.title) { write(TITLE_KEY, cfg.title); rail.querySelector(".js-rail-title").textContent = cfg.title; tab.textContent = cfg.title; }
+      if (cfg.title && cfg.title !== name) {
+        write(TITLE_KEY, cfg.title);
+        rail.querySelector(".js-rail-title").textContent = cfg.title;
+        tab.textContent = cfg.title;
+      }
       window.ChatPanel.mount(panel);
     }
 
-    tab.addEventListener("click", () => { show(true); load(); });
+    tab.addEventListener("click", () => {
+      show(true);
+      // Shut at <head> time means no request was made, so opening asks for it now.
+      if (!pending && !rail.querySelector(".js-chat-config")) pending = fetch(`/chat/${sid}/panel`);
+      load();
+    });
     // Shut, not dismissed: the tab stays, because the conversation is still theirs to come
     // back to. What ends it is opening a different one, which overwrites the id above.
     rail.querySelector(".js-rail-close").addEventListener("click", () => show(false));
 
-    // Shut is remembered, so a reader who closed the rail is not handed it back on every page.
-    const wasOpen = read(OPEN_KEY) !== "0";
-    show(wasOpen);
-    if (wasOpen) load();
+    load();
   });
 })();

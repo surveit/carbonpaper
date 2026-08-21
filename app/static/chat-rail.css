@@ -6,15 +6,24 @@
 
 /* Fixed rather than a grid column: base.html's <main> is a scrolling document with no
  * height contract, and the rail has to be full-height with its own scroll. body's padding
- * is what keeps the page out from under it, so the header stops at the rail's edge too. */
+ * is what keeps the page out from under it, so the header stops at the rail's edge too.
+ *
+ * The GROUND IS THE CANVAS, not a card. --raised is the white ply a card is printed on;
+ * 400px of it full height is a second canvas beside the first, and the page reads as
+ * having gone pale down one side. The border and the shut tab are the separation instead. */
 .chat-rail {
     position: fixed; top: 0; right: 0; bottom: 0; width: var(--chat-rail-w);
-    display: flex; flex-direction: column; min-height: 0; z-index: 50;
-    background: var(--raised); border-left: 1px solid var(--border);
+    flex-direction: column; min-height: 0; z-index: 50;
+    background: var(--bg); border-left: 1px solid var(--border);
 }
-body.chat-rail-open { padding-right: var(--chat-rail-w); }
-/* The author `display` above beats the UA's `[hidden] { display: none }`. */
-.chat-rail[hidden] { display: none; }
+
+/* Both states are decided in <head> (see _chat_rail_head.html), so the column is reserved
+ * in the first layout rather than appearing a reflow later. No class = no conversation to
+ * carry, and neither the rail nor its tab is drawn. */
+.chat-rail, .chat-rail-tab { display: none; }
+.chat-rail-open .chat-rail { display: flex; }
+.chat-rail-open body { padding-right: var(--chat-rail-w); }
+.chat-rail-shut .chat-rail-tab { display: block; }
 
 .chat-rail-head {
     display: flex; align-items: center; gap: 8px; flex: 0 0 auto;
@@ -24,12 +33,12 @@ body.chat-rail-open { padding-right: var(--chat-rail-w); }
     font-size: 12.5px; font-weight: 600; margin-right: auto;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.chat-rail-open, .chat-rail-x {
+.chat-rail-open-page, .chat-rail-x {
     color: var(--muted); text-decoration: none; cursor: pointer;
     background: none; border: 0; font: inherit; line-height: 1; padding: 2px 4px;
 }
 .chat-rail-x { font-size: 17px; }
-.chat-rail-open:hover, .chat-rail-x:hover { color: var(--fg); }
+.chat-rail-open-page:hover, .chat-rail-x:hover { color: var(--fg); }
 
 /* Shut, the conversation is one vertical tab against the right edge — the only thing left
  * saying it is still there. Turned sideways because the page is the wide thing here. */
@@ -52,8 +61,10 @@ body.chat-rail-open { padding-right: var(--chat-rail-w); }
  * scoped reset rather than a width per box: every rule below inherits the fix. */
 .chat-host-rail, .chat-host-rail *, .chat-rail-head { box-sizing: border-box; }
 .chat-host-rail .ac-log { flex: 1 1 auto; overflow-y: auto; min-height: 0; padding: 14px 14px 18px; gap: 20px; }
-.chat-host-rail .ac-dock { position: static; flex: 0 0 auto; }
+.chat-host-rail .ac-dock { position: static; flex: 0 0 auto; background: none; }
 .chat-host-rail .ac-composer { padding: 10px 12px; --ac-control: 36px; }
+/* The one white ply in here: the box you write on. */
+.chat-host-rail .ac-input { background: var(--raised); }
 .chat-host-rail .ac-attached { padding: 8px 12px 0; }
 .chat-host-rail .ac-warn { margin: 10px 12px 0; }
 .chat-host-rail .ac-msg.user { max-width: 88%; }
@@ -64,6 +75,6 @@ body.chat-rail-open { padding-right: var(--chat-rail-w); }
 /* Below this the rail would be most of the screen, so the conversation is the full page at
  * /chat/<id> instead, reached from Chats in the header. */
 @media (max-width: 860px) {
-    .chat-rail, .chat-rail-tab { display: none; }
-    body.chat-rail-open { padding-right: 0; }
+    .chat-rail-open .chat-rail, .chat-rail-shut .chat-rail-tab { display: none; }
+    .chat-rail-open body { padding-right: 0; }
 }

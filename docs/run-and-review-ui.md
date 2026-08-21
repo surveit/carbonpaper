@@ -256,14 +256,23 @@ The chat is a panel, not a page, and two hosts draw the same partial:
 
 - `chat.html` at `/chat/{sid}` — the full-width page.
 - `_chat_rail.html`, included from `base.html`, so every page but the review
-  packet can hold one. `static/chat-rail.js` reads the open session id out of
-  `localStorage`, fetches `GET /chat/{sid}/panel`, and mounts it. No other route
-  is handed any chat state.
+  packet can hold one. Which session is open lives in `localStorage` and the
+  panel arrives from `GET /chat/{sid}/panel`. No other route is handed any chat
+  state.
+
+Two scripts, and the split matters. `_chat_rail_head.html` runs inline in
+`<head>`: it stamps `chat-rail-open` or `chat-rail-shut` on `<html>` so the page
+**lays out with the column already reserved**, and it starts the panel fetch
+there rather than after the foot scripts. Left to `DOMContentLoaded` both cost a
+visible reflow — `main` from 1440 to 1040 and every mermaid diagram re-laying
+out — which read as the rail taking seconds to arrive when the fetch itself is
+about 3ms. `static/chat-rail.js` then fills the reserved column in.
 
 The rail does not survive a page load and does not need to. A turn is a detached
 task with a replayable event buffer (`app/core/agent/turns.py`), so the panel
-re-mounts on the next page and reattaches at `?from=0`. Following a link out of a
-reply therefore costs the reader nothing.
+re-mounts on the next page and reattaches at `?from=0`. The reader's place in the
+transcript is kept in `sessionStorage` and restored on mount, so following a link
+out of a reply costs neither the conversation nor their position in it.
 
 `static/chat-panel.js` is the client, scoped to a root element rather than the
 document — every hook is a `js-` class, since an id would collide between two

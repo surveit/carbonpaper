@@ -14,6 +14,7 @@ _GOVERNED = (
     "web/chat_router.py",
     "templates/_chat_panel.html",
     "templates/_chat_rail.html",
+    "templates/_chat_rail_head.html",
     "templates/base.html",
     "static/chat-panel.js",
     "static/chat-rail.js",
