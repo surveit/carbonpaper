@@ -10,7 +10,8 @@ from threading import RLock
 from typing import Any, Iterator, Mapping
 
 from app.core.errors import DocumentNotFound
-from app.core.persistence import JsonDict, JsonScalar, RunLease
+from app.core.json_types import JsonDict, JsonScalar
+from app.core.run_lease import RunLease
 from app.core.ids import ID
 
 
@@ -179,6 +180,15 @@ class SqliteKvStore:
             )
             self._conn.commit()
 
+    def expire_lease(self, lease: RunLease) -> None:
+        """Shutdown, not death: the tenure ends now so a successor need not wait out the TTL."""
+        with self._lock:
+            self._conn.execute(
+                "UPDATE run_lease SET expires_at = unixepoch() - 1 WHERE run_id=? AND fence=?",
+                (lease.run_id, lease.fence),
+            )
+            self._conn.commit()
+
     def read_lease(self, run_id: ID) -> RunLease | None:
         with self._lock:
             row = self._conn.execute(
@@ -197,8 +207,9 @@ class SqliteKvStore:
     ) -> bool:
         """The fence, atomic under `_lock`: False means the lease moved on, so this write is refused."""
         with self._lock:
+            # Fence match, deliberately not expiry — docs/run-leases.md
             held = self._conn.execute(
-                "SELECT 1 FROM run_lease WHERE run_id=? AND fence=? AND expires_at > unixepoch()",
+                "SELECT 1 FROM run_lease WHERE run_id=? AND fence=?",
                 (lease.run_id, lease.fence),
             ).fetchone()
             if held is None:

@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import logging
+import threading
 
 from app.core.background import run_in_background
 from app.core.errors import DocumentNotFound, RunVersionUnresolvableError
-from app.core.persistence import RunLease, get_store
+from app.core.persistence import get_store
+from app.core.run_lease import RunLease
 from app.core.run_status import RunStatus
 from app.services.errors import WorkflowLoadError
 from app.services.run import (
@@ -21,26 +23,45 @@ logger = logging.getLogger(__name__)
 # Tenures, not automatic restarts: docs/run-leases.md
 MAX_TENURES = 3
 
+# Named once per process, not once per sweep.
+_reported_ownerless: set[str] = set()
+
 # A run that cannot execute again at all; one must not stop the sweep reaching the rest.
 _UNRESTARTABLE = (
     DocumentNotFound, OSError, RunVersionUnresolvableError, ValueError, WorkflowLoadError,
 )
 
 
+# Why periodic and not a boot hook: docs/run-leases.md
+SWEEP_EVERY_SECONDS = 30
+
+
+def watch_for_interrupted_runs(stop: threading.Event) -> None:
+    """Boot hook. Sweeps now, then keeps sweeping — a tenure expires long after any boot."""
+    run_in_background(lambda: _sweep_until(stop))
+
+
 def restart_interrupted_runs() -> None:
-    """Boot hook. Serialized on one thread: N runs restarting at once is what exhausts memory."""
+    """One sweep. Serialized: N runs restarting at once is what exhausts memory."""
     runs = load_production_runs()
     _report_ownerless_runs(runs)
     interrupted = find_interrupted_runs(runs)
     if not interrupted:
         return
     logger.info("restarting %d interrupted run(s)", len(interrupted))
-    run_in_background(lambda: _restart_each(interrupted))
+    _restart_each(interrupted)
+
+
+def _sweep_until(stop: threading.Event) -> None:
+    restart_interrupted_runs()
+    while not stop.wait(SWEEP_EVERY_SECONDS):
+        restart_interrupted_runs()
 
 
 def _report_ownerless_runs(runs: list[RunManifest]) -> None:
     """Naming them is the whole remedy: restarting one would assume what killed it."""
-    ownerless = find_ownerless_runs(runs)
+    ownerless = [m for m in find_ownerless_runs(runs) if m.id not in _reported_ownerless]
+    _reported_ownerless.update(m.id for m in ownerless)
     if ownerless:
         logger.warning(
             "%d run(s) say `running` but never held a lease, so nothing proves their "

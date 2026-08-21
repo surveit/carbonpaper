@@ -5,7 +5,8 @@ import threading
 
 import pytest
 
-from app.core.persistence import RunLease, configure_store, get_store
+from app.core.persistence import configure_store, get_store
+from app.core.run_lease import RunLease
 from app.core.run_status import RunStatus
 from app.core.sqlite_store import SqliteKvStore
 

@@ -6,7 +6,7 @@ from collections import defaultdict
 
 from pydantic import BaseModel
 
-from app.core.persistence import JsonDict
+from app.core.json_types import JsonDict
 from app.models.run_manifest import read_input_bindings
 from app.runtime.manifest import list_run_entries
 from app.core import files as file_store

@@ -15,9 +15,11 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, Response
 from starlette.routing import Route
 
+import threading
+
 from app.core.logging_config import configure_app_logging
 from app.core.store_config import configure_default_stores, refuse_renamed_env_vars
-from app.web.startup import restart_interrupted_runs
+from app.web.startup import end_tenures_on_shutdown, watch_for_interrupted_runs
 from app.web.config import (
     INTRO_DIR, STATIC_DIR, RevalidatedStaticFiles, configure_projects_dir_from_env,
 )
@@ -48,13 +50,18 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # here rather than at import time in app.services.workspace, so the test
     # suite's own set_projects_dir() is never overridden by the environment.
     configure_projects_dir_from_env()
-    restart_interrupted_runs()   # docs/run-leases.md
+    stop_sweeping = threading.Event()
+    watch_for_interrupted_runs(stop_sweeping)   # docs/run-leases.md
 
     # The MCP session manager's task group must run for the server's lifetime —
     # the /mcp endpoint errors without it. A fresh manager per entry keeps this
     # lifespan re-entrant (several TestClient(app) uses in one process).
-    async with run_session_manager():
-        yield
+    try:
+        async with run_session_manager():
+            yield
+    finally:
+        stop_sweeping.set()
+        end_tenures_on_shutdown()
 
 
 app = FastAPI(title="Workflow", lifespan=lifespan)

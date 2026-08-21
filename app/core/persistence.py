@@ -9,16 +9,14 @@ from datetime import datetime, timedelta
 from enum import Enum
 from threading import RLock
 from uuid import uuid4
-from typing import Any, ClassVar, Iterator, Mapping, Protocol, Self
+from typing import ClassVar, Iterator, Mapping, Protocol, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.ids import ID
+from app.core.json_types import JsonDict, JsonScalar
+from app.core.run_lease import RunLeaseStore
 
-# The one honest dynamic boundary: an arbitrary pydantic model_dump / JSON body.
-JsonDict = dict[str, Any]
-# What a stored field can be compared against: a JSON scalar, never a list or object.
-JsonScalar = str | int | float | bool | None
 
 
 def validate_id(id: ID) -> ID:
@@ -30,18 +28,6 @@ def validate_id(id: ID) -> ID:
     if any(part in ("", "..") for part in id.split("/")):
         raise ValueError(f"unsafe id (empty or '..' segment): {id!r}")
     return id
-
-
-class RunLease(BaseModel):
-    """`fence` rises per claim, never per renewal, so it names one executor's TENURE."""
-
-
-    model_config = ConfigDict(frozen=True)
-
-    run_id: ID
-    executor_id: str
-    fence: int
-    expires_at: int
 
 
 class DocumentStore(Protocol):
@@ -56,26 +42,20 @@ class DocumentStore(Protocol):
     def list_ids(self, collection: str, prefix: str = "") -> list[ID]: ...
     def read_all(self, collection: str, prefix: str = "") -> Iterator[tuple[str, JsonDict]]: ...
 
-    # docs/run-leases.md
-    def claim_lease(self, run_id: ID, executor_id: str, ttl_seconds: int) -> RunLease | None: ...
-    def renew_lease(self, lease: RunLease, ttl_seconds: int) -> RunLease | None: ...
-    def release_lease(self, lease: RunLease) -> None: ...
-    def read_lease(self, run_id: ID) -> RunLease | None: ...
-    def store_now(self) -> int: ...
-    def write_if_held(
-        self, collection: str, id: ID, data: JsonDict, lease: RunLease, schema_version: int = 1
-    ) -> bool: ...
+
+class Store(DocumentStore, RunLeaseStore, Protocol):
+    """One handle, because the fence reads a lease and writes a document in one transaction."""
 
 
-_store: DocumentStore | None = None
+_store: Store | None = None
 
 
-def configure_store(store: DocumentStore) -> None:
+def configure_store(store: Store) -> None:
     global _store
     _store = store
 
 
-def get_store() -> DocumentStore:
+def get_store() -> Store:
     if _store is None:
         raise RuntimeError("document store not configured; call configure_store() first")
     return _store

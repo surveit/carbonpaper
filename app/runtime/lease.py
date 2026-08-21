@@ -11,7 +11,8 @@ from typing import Iterator
 from uuid import uuid4
 
 from app.core.ids import ID
-from app.core.persistence import RunLease, get_store
+from app.core.persistence import get_store
+from app.core.run_lease import RunLease
 from app.runtime.errors import RunLeaseLost
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,8 @@ class _Held:
 
 
 _held: ContextVar[_Held | None] = ContextVar("held_run_lease", default=None)
+_live: set[RunLease] = set()
+_live_lock = threading.Lock()
 
 
 @contextmanager
@@ -43,12 +46,16 @@ def hold(run_id: ID) -> Iterator[RunLease]:
     held = _Held(lease=lease, lost=threading.Event())
     stop = threading.Event()
     token = _held.set(held)
+    with _live_lock:
+        _live.add(lease)
     threading.Thread(target=_keep_renewing, args=(held, stop), daemon=True).start()
     try:
         yield lease
     finally:
         stop.set()
         _held.reset(token)
+        with _live_lock:
+            _live.discard(lease)
         get_store().release_lease(lease)
 
 
@@ -72,3 +79,12 @@ def _keep_renewing(held: _Held, stop: threading.Event) -> None:
             logger.warning("lost the execution lease on run %s", held.lease.run_id)
             held.lost.set()
             return
+
+
+def end_tenures_on_shutdown() -> None:
+    """A replaced process ends its tenures rather than leaving a successor to wait out the TTL."""
+    with _live_lock:
+        ending = list(_live)
+    for lease in ending:
+        logger.info("ending tenure on run %s for shutdown", lease.run_id)
+        get_store().expire_lease(lease)

@@ -1,6 +1,8 @@
 """A deploy kills the thread executing a run; what the reader sees. docs/run-leases.md"""
 from __future__ import annotations
 
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -11,6 +13,8 @@ from app.core.run_status import RunStatus, StageStatus
 from app.models.stage import StageType
 from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform as lt
+from app.services import run_recovery
+from app.services.run import end_tenures_on_shutdown
 from app.services.run_recovery import (
     MAX_TENURES,
     find_interrupted_runs,
@@ -30,12 +34,15 @@ _SCORED = [*_LOADED, {"name": "label", "type": "str", "nullable": True}]
 class _Calls:
     """The model seam. `fault` fires on the (1-based) call named by `fail_on`."""
 
-    def __init__(self, fail_on: int | None = None, fault: BaseException | None = None):
+    def __init__(self, fail_on=None, fault=None, before_fault=None):
         self.n, self.fail_on, self.fault = 0, fail_on, fault
+        self.before_fault = before_fault
 
     def __call__(self, stage_id, llm, row, *, reply_model, usage_out=None, **kw):
         self.n += 1
         if self.n == self.fail_on and self.fault is not None:
+            if self.before_fault is not None:
+                self.before_fault()
             raise self.fault
         return {"label": f"L-{row['text']}"}
 
@@ -100,13 +107,16 @@ def _expire_the_lease(run_key: str) -> None:
     store._conn.commit()
 
 
-def _kill_a_run_mid_stage(tmp_path: Path) -> tuple[str, str]:
+def _kill_a_run_mid_stage(tmp_path: Path, *, end_tenures: bool = False) -> tuple[str, str]:
     """Run until the 6th model call, then die the way a replaced process does."""
     project = _project_dir(tmp_path)
     _write_project(project)
     # Its own context: undoing these must not also undo the autouse fixtures.
     with pytest.MonkeyPatch.context() as kill:
-        kill.setattr(lt, "call_llm", _Calls(fail_on=6, fault=KeyboardInterrupt()))
+        # SIGTERM arrives while the run still executes; the thread then dies unwinding nothing.
+        kill.setattr(lt, "call_llm", _Calls(
+            fail_on=6, fault=KeyboardInterrupt(),
+            before_fault=end_tenures_on_shutdown if end_tenures else None))
         kill.setattr(type(get_store()), "release_lease", lambda self, lease: None)
         workflow, version = pinned_stages(project)
         from app.runtime.runner import execute_run
@@ -134,7 +144,7 @@ def test_a_killed_run_is_restarted_and_finishes(tmp_path, monkeypatch):
 
 
 def test_a_live_tenure_is_left_to_the_executor_that_holds_it(tmp_path, monkeypatch):
-    """The unexpired case: someone may still be running this, so it is not ours to take."""
+    """A boot cannot tell a run it orphaned from one a live peer is executing, so it waits."""
     run_id, _ = _kill_a_run_mid_stage(tmp_path)
 
     never = _Calls()
@@ -144,6 +154,50 @@ def test_a_live_tenure_is_left_to_the_executor_that_holds_it(tmp_path, monkeypat
 
     assert never.n == 0
     assert read_manifest(_project_dir(tmp_path), run_id)["status"] == RunStatus.RUNNING
+
+
+def test_a_shutdown_ends_the_tenure_so_the_next_boot_restarts_at_once(tmp_path, monkeypatch):
+    """The deploy case. Without this the run waits out the full TTL before anyone may take it."""
+    run_id, run_key = _kill_a_run_mid_stage(tmp_path, end_tenures=True)
+
+    assert [m.run_id for m, _ in find_interrupted_runs(load_production_runs())] == [run_id], (
+        "a run whose process announced its own shutdown should be restartable immediately")
+    restarted = _Calls()
+    monkeypatch.setattr(lt, "call_llm", restarted)
+    restart_interrupted_runs()
+
+    assert read_manifest(_project_dir(tmp_path), run_id)["status"] == RunStatus.OK
+
+
+def test_the_sweep_keeps_running_after_boot(tmp_path, monkeypatch):
+    """A tenure expires minutes after a boot, so a boot-only sweep would never see it."""
+    run_id, run_key = _kill_a_run_mid_stage(tmp_path)
+    monkeypatch.setattr(lt, "call_llm", _Calls())
+    monkeypatch.setattr(run_recovery, "SWEEP_EVERY_SECONDS", 0.05)
+
+    stop = threading.Event()
+    with pytest.MonkeyPatch.context() as real_thread:
+        real_thread.setattr(run_recovery, "run_in_background", _in_a_thread)
+        run_recovery.watch_for_interrupted_runs(stop)
+        _expire_the_lease(run_key)                     # AFTER the first sweep has come and gone
+        finished = _wait_until(
+            lambda: read_manifest(_project_dir(tmp_path), run_id)["status"] == RunStatus.OK)
+        stop.set()
+
+    assert finished, "the run was still `running` — the sweep stopped after boot"
+
+
+def _in_a_thread(work):
+    threading.Thread(target=work, daemon=True).start()
+
+
+def _wait_until(done, timeout: float = 10.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if done():
+            return True
+        time.sleep(0.05)
+    return False
 
 
 def test_a_run_that_never_held_a_lease_is_surfaced_not_restarted(tmp_path, monkeypatch):
