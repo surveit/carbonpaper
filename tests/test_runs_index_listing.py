@@ -148,3 +148,23 @@ def test_an_unresolvable_pinned_version_says_so_instead_of_a_message(runs_root: 
 def test_no_runs_dir_lists_nothing(tmp_path: Path):
     workspace.set_projects_dir(tmp_path)
     assert build_run_index_rows("nothing_here") == []
+
+
+def test_file_sha256_narrows_to_runs_that_read_it(runs_root: Path):
+    read_it = _current_manifest()
+    other_file = _current_manifest()
+    other_file["input_bindings"]["load"]["sha256"] = "a" * 64
+    other_file["input_bindings"]["load"]["path"] = "other.csv"
+    _write_run(runs_root, "20260101T000000", read_it)
+    _write_run(runs_root, "20260101T000001", other_file)
+
+    sha256 = read_it["input_bindings"]["load"]["sha256"]
+    rows = build_run_index_rows("demo", file_sha256=sha256)
+
+    assert [row.run_id for row in rows] == ["20260101T000000"]
+
+
+def test_file_sha256_that_no_run_read_lists_nothing(runs_root: Path):
+    _write_run(runs_root, "20260101T000000", _current_manifest())
+
+    assert build_run_index_rows("demo", file_sha256="not" * 20) == []

@@ -21,7 +21,6 @@ class FileRow(BaseModel):
     size: str
     added: str
     run_count: int
-    last_run_id: str | None
 
 
 class FilesView(BaseModel):
@@ -81,5 +80,4 @@ def _build_row(record: file_store.UploadedFile, run_ids: list[str]) -> FileRow:
         size=describe_bytes(record.byte_count),
         added=record.created_at,
         run_count=len(run_ids),
-        last_run_id=run_ids[-1] if run_ids else None,
     )
