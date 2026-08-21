@@ -1,4 +1,5 @@
 {% extends "project_shell.html" %}
+{% from "_picker.html" import picker %}
 {#
   ONE EVAL — what it checks, whether it still fits the workflow, and every run of it.
 
@@ -37,11 +38,14 @@
 {% if has_eval_dataset and report.ok %}
 {% if versions %}
 <form action="/project/{{ project }}/evals/{{ config.id }}/run" method="post" class="eval-run-form">
-  <select name="version_id">
+  {% call picker("Choose version", size="sm") %}
+  <select name="version_id" id="eval-run-version" class="picker-native">
     {% for v in versions %}
-    <option value="{{ v.version_id }}">{{ v.version_id }}{% if not v.published %} · unpublished{% endif %}</option>
+    <option value="{{ v.version_id }}" data-name="{{ v.version_id }}"
+            {% if not v.published %}data-side="unpublished"{% endif %}>{{ v.version_id }}{% if not v.published %} · unpublished{% endif %}</option>
     {% endfor %}
   </select>
+  {% endcall %}
   <button type="submit" class="btn primary">▶ Run eval</button>
 </form>
 {% else %}
