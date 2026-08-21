@@ -21,6 +21,10 @@ class CitationMismatch(ValueError):
     """A publish stage cited a cell for a value that cell does not hold."""
 
 
+class ClaimNotEstablished(ValueError):
+    """The stage a claim shape is bound to cannot supply the one cell it declares."""
+
+
 class NoVersionToRunError(Exception):
     """No stored version at all; a named version_id with no document raises FileNotFoundError."""
 
