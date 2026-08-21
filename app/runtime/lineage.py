@@ -21,6 +21,7 @@ TRACE_SOURCE_STAGE_KEY = "_trace_source_stage"
 TRACE_SOURCE_ROW_KEY = "_trace_source_row"
 TRACE_EDGE_KIND_KEY = "_trace_edge_kind"
 TRACE_SOURCE_COLUMNS_KEY = "_trace_source_columns"
+TRACE_SOURCE_FILE_KEY = "_trace_source_file"
 
 # Pinned: left to infer, an empty sidecar types every column `null`.
 LINEAGE_SCHEMA = pa.schema([
@@ -28,6 +29,7 @@ LINEAGE_SCHEMA = pa.schema([
     (TRACE_SOURCE_ROW_KEY, pa.list_(pa.int64())),
     (TRACE_EDGE_KIND_KEY, pa.list_(pa.string())),
     (TRACE_SOURCE_COLUMNS_KEY, pa.list_(pa.list_(pa.string()))),
+    (TRACE_SOURCE_FILE_KEY, pa.list_(pa.string())),
 ])
 
 
@@ -47,6 +49,10 @@ class RowParent:
     # narrowed to particular columns — true of a filter or union row, which
     # passed through whole, and of any producer that does not attribute.
     columns: tuple[str, ...] | None = None
+    # Set only where the row came from OUTSIDE the run: the file a source stage
+    # read it from, when that stage read more than one. `row_ordinal` is then the
+    # row's place in THAT file, and `stage_id` is the source stage's own id.
+    source_file: str | None = None
 
 
 @dataclass(frozen=True)
@@ -68,9 +74,15 @@ class RowLineage:
         if offset == 0:
             return self
         return RowLineage([
-            [RowParent(p.stage_id, p.row_ordinal + offset, p.kind, p.columns) for p in entry]
+            [RowParent(p.stage_id, p.row_ordinal + offset, p.kind, p.columns, p.source_file)
+             for p in entry]
             for entry in self.parents
         ])
+
+    def sliced(self, start: int, length: int | None) -> "RowLineage":
+        """For a stage whose rows come from outside the run: a window CUTS them, never moves them."""
+        end = len(self.parents) if length is None else start + length
+        return RowLineage(self.parents[start:end])
 
     def to_table(self) -> pa.Table:
         """Raises rather than writing a sidecar arrow would type differently from its siblings."""
@@ -80,6 +92,8 @@ class RowLineage:
             TRACE_EDGE_KIND_KEY: [[str(p.kind) for p in entry] for entry in self.parents],
             TRACE_SOURCE_COLUMNS_KEY: [
                 [list(p.columns or ()) for p in entry] for entry in self.parents],
+            TRACE_SOURCE_FILE_KEY: [
+                [p.source_file or "" for p in entry] for entry in self.parents],
         }, schema=LINEAGE_SCHEMA)
 
     @classmethod
@@ -91,21 +105,26 @@ class RowLineage:
         row_cells = _column_cells(table, TRACE_SOURCE_ROW_KEY)
         kind_cells = _column_cells(table, TRACE_EDGE_KIND_KEY)
         column_cells = _column_cells(table, TRACE_SOURCE_COLUMNS_KEY)
+        file_cells = _column_cells(table, TRACE_SOURCE_FILE_KEY)
         return cls([
-            _read_parents(stage_cells[i], row_cells[i], kind_cells[i], column_cells[i])
+            _read_parents(stage_cells[i], row_cells[i], kind_cells[i], column_cells[i],
+                          file_cells[i])
             for i in range(table.num_rows)
         ])
 
 
-def _read_parents(stages: Any, rows: Any, kinds: Any, columns: Any) -> list[RowParent]:
+def _read_parents(stages: Any, rows: Any, kinds: Any, columns: Any,
+                  files: Any = None) -> list[RowParent]:
     stage_ids, row_ordinals = _as_list(stages), _as_list(rows)
     kind_names, column_names = _as_list(kinds), _as_list(columns)
+    filenames = _as_list(files)
     return [
         RowParent(
             stage_id=str(stage_ids[k]),
             row_ordinal=int(row_ordinals[k]),
             kind=str(kind_names[k]) if k < len(kind_names) else EdgeKind.direct.value,
             columns=_columns_or_none(column_names[k]) if k < len(column_names) else None,
+            source_file=str(filenames[k]) or None if k < len(filenames) else None,
         )
         for k in range(min(len(stage_ids), len(row_ordinals)))
     ]

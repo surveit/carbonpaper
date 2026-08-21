@@ -28,6 +28,7 @@ from app.models.stages.input_data import (
 )
 
 from ..context import RunContext
+from ..lineage import RowLineage, RowParent
 from ..stage_output import StageOutput
 from .execution import narrow_stage
 
@@ -95,7 +96,24 @@ def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> StageOutp
         return StageOutput.from_frame(frames[0])
     # concat_tables, never pd.concat: pandas unions the columns and pads the gap with
     # nulls, so a file missing a column would read as one that reported nothing.
-    return StageOutput(concat_tables([frame_to_table(frame) for frame in frames]))
+    return StageOutput(
+        concat_tables([frame_to_table(frame) for frame in frames]),
+        lineage=_which_file_each_row_came_from(
+            input_stage.id, bound, [len(frame) for frame in frames]),
+    )
+
+
+def _which_file_each_row_came_from(
+    stage_id: str, bound: list[str], rows_per_file: list[int]
+) -> RowLineage:
+    """`row_ordinal` counts within the file, so it is the row a reader would find there."""
+    return RowLineage([
+        # stage_id is the source stage's own: these rows have no parent stage, and what
+        # a reader asks at the end of a trace is which FILE, not which step.
+        [RowParent(stage_id, row, source_file=path)]
+        for path, rows in zip(bound, rows_per_file)
+        for row in range(rows)
+    ])
 
 
 def _read_one_file(

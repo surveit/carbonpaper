@@ -331,6 +331,10 @@ def _stage_row_lineage(
 ) -> RowLineage | None:
     """None means output row i is input row i, so the trace needs no help crossing this stage."""
     if output.lineage is not None:
+        # A stage with no inputs originates its rows, so the window cuts what it
+        # loaded; for the rest the window moved the INPUT rows the lineage names.
+        if not workflow_stage.inputs:
+            return output.lineage.sliced(window.start, window.cap)
         return output.lineage.shifted(window.start)
     if workflow_stage.stage.type == StageType.union:
         return concatenated_inputs_lineage(workflow_stage, inputs, window.start)

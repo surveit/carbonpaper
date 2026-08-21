@@ -90,3 +90,22 @@ def test_every_missing_file_is_named_rather_than_only_the_first(tmp_path):
     assert record is None
     assert len(issues) == 2
     assert "gone.csv" in issues[0] and "also-gone.csv" in issues[1]
+
+
+def test_each_row_records_the_file_it_was_read_from(tmp_path):
+    output = read_input_data(
+        place_stage(_stage({"paths": _three_months(tmp_path), "format": "csv"})),
+        ctx=make_run_context())
+    assert output.lineage is not None
+    origins = [entry[0] for entry in output.lineage.parents]
+    assert [PurePath(p.source_file or "").name for p in origins] == [
+        "jun.csv", "jul.csv", "aug.csv"]
+    # Within its own file, so it is the row a reader would find by opening that file.
+    assert [p.row_ordinal for p in origins] == [0, 0, 0]
+
+
+def test_one_bound_file_records_no_row_provenance_because_there_is_no_choice(tmp_path):
+    one = _write_csv(tmp_path, "jun.csv", pd.DataFrame({"month": ["jun"], "reach": [11]}))
+    output = read_input_data(place_stage(_stage({"path": one, "format": "csv"})),
+                             ctx=make_run_context())
+    assert output.lineage is None
