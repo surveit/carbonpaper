@@ -48,11 +48,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # here rather than at import time in app.services.workspace, so the test
     # suite's own set_projects_dir() is never overridden by the environment.
     configure_projects_dir_from_env()
+    restart_interrupted_runs()   # docs/run-leases.md
+
     # The MCP session manager's task group must run for the server's lifetime —
     # the /mcp endpoint errors without it. A fresh manager per entry keeps this
     # lifespan re-entrant (several TestClient(app) uses in one process).
-    restart_interrupted_runs()   # docs/run-leases.md
-
     async with run_session_manager():
         yield
 
