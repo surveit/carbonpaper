@@ -18,11 +18,13 @@ from scripts.lexicon import (
     Role,
     WordRoles,
     build_snapshot,
+    find_new_verb_uses,
     find_ratchet_breaks,
     find_role_gains,
     find_scanned_files,
     is_accessor,
     main,
+    read_registry,
     render_markdown,
     split_words,
 )
@@ -139,17 +141,80 @@ def test_noun_led_word_growing_its_verb_count_breaks_the_ratchet() -> None:
 # --- the committed registry matches the tree it describes ------------------------
 
 
-def read_registry() -> LexiconSnapshot:
-    return LexiconSnapshot.model_validate_json((_REPO_ROOT / "lexicon.json").read_text(encoding="utf-8"))
-
-
 def test_noun_led_ratchet_holds(snapshot: LexiconSnapshot) -> None:
-    assert find_ratchet_breaks(snapshot, read_registry()) == []
+    assert find_ratchet_breaks(snapshot, read_registry(_REPO_ROOT)) == []
 
 
 def test_noun_led_words_are_marked_by_hand_only() -> None:
-    marked = {word for word, roles in read_registry().words.items() if roles.noun_led}
+    marked = {word for word, roles in read_registry(_REPO_ROOT).words.items() if roles.noun_led}
     assert marked == {"stage", "row"}, "a noun_led mark is a human decision, not a scan output"
+
+
+# --- new-verb-use check: wider than the ratchet, but never blocking -------------
+
+
+def test_first_verb_use_of_a_noun_only_word_is_flagged() -> None:
+    base = LexiconSnapshot(words={"figure": WordRoles(noun=12)}, functions=1, accessors=0, types=1)
+    head = LexiconSnapshot(words={"figure": WordRoles(noun=12, verb=1)}, functions=1, accessors=0, types=1)
+    assert find_new_verb_uses(head, base) == ["figure (verb 0 → 1)"]
+
+
+def test_word_already_holding_verb_is_not_reflagged() -> None:
+    base = LexiconSnapshot(words={"run": WordRoles(verb=3, noun=1)}, functions=1, accessors=0, types=1)
+    head = LexiconSnapshot(words={"run": WordRoles(verb=9, noun=1)}, functions=1, accessors=0, types=1)
+    assert find_new_verb_uses(head, base) == []
+
+
+def test_noun_led_word_growing_its_verb_count_is_not_double_flagged_here() -> None:
+    """`stage` already carries verb debt on base, so the ratchet test owns this case."""
+    base = LexiconSnapshot(words={"stage": WordRoles(verb=15, noun_led=True)}, functions=1, accessors=0, types=1)
+    head = LexiconSnapshot(words={"stage": WordRoles(verb=16)}, functions=1, accessors=0, types=1)
+    assert find_new_verb_uses(head, base) == []
+
+
+def test_brand_new_word_is_not_flagged() -> None:
+    """A word absent from base is `find_role_gains` territory, not this check."""
+    base = LexiconSnapshot(words={}, functions=0, accessors=0, types=0)
+    head = LexiconSnapshot(words={"sidecar": WordRoles(verb=1)}, functions=1, accessors=0, types=0)
+    assert find_new_verb_uses(head, base) == []
+
+
+def test_pre_existing_drift_against_the_committed_registry_does_not_refire() -> None:
+    """Diffing HEAD against itself must be silent — the check compares to BASE, not `lexicon.json`."""
+    registry = read_registry(_REPO_ROOT)
+    assert find_new_verb_uses(registry, registry) == []
+
+
+def test_check_new_verbs_exits_nonzero_on_a_finding(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    base_path, head_path = tmp_path / "base.json", tmp_path / "head.json"
+    base_path.write_text(
+        LexiconSnapshot(words={"figure": WordRoles(noun=1)}, functions=1, accessors=0, types=1).model_dump_json(),
+        encoding="utf-8",
+    )
+    head_path.write_text(
+        LexiconSnapshot(
+            words={"figure": WordRoles(noun=1, verb=1)}, functions=1, accessors=0, types=1
+        ).model_dump_json(),
+        encoding="utf-8",
+    )
+    exit_code = main(["--check-new-verbs", str(head_path), str(base_path)])
+    assert exit_code == 1
+    assert "figure" in capsys.readouterr().out
+
+
+def test_check_new_verbs_is_silent_and_zero_on_no_finding(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    same_path = tmp_path / "same.json"
+    same_path.write_text(
+        LexiconSnapshot(words={"run": WordRoles(verb=1)}, functions=1, accessors=0, types=1).model_dump_json(),
+        encoding="utf-8",
+    )
+    exit_code = main(["--check-new-verbs", str(same_path), str(same_path)])
+    assert exit_code == 0
+    assert capsys.readouterr().out == ""
 
 
 def test_build_snapshot_merges_a_plural_noun_and_field_into_the_singular(tmp_path: Path) -> None:

@@ -237,6 +237,18 @@ jobs:
           marker: "<!-- lexicon-report -->"
           body-file: lexicon-body.md
 
+      # Wider than the noun-led ratchet in tests/test_lexicon.py: that one only guards the
+      # two words a human has hand-marked `noun_led`, so it needs someone to notice a new
+      # noun-only word before it can be protected. This checks every word BASE already
+      # established as non-verb, so it catches the case the ratchet structurally can't — a
+      # first bad verb use of a word nobody has flagged yet. Diffed against BASE, not
+      # `lexicon.json`: the registry lags `app/`, so comparing to it would flag every PR for
+      # pre-existing drift instead of only what that PR introduces. `reports` carries no
+      # required-status-check, so a red step here surfaces the finding without blocking.
+      - name: New verb usage of an established word (non-blocking)
+        if: always() && steps.lexicon.conclusion == 'success'
+        run: uv run --frozen python -m scripts.lexicon --check-new-verbs head-lexicon.json base-lexicon.json
+
       # Wider and noisier than the lexicon report by design: comment prose is ~2,900 of
       # the ~3,400 words here, and a new word in a sentence is usually just a sentence.
       # A distinct report, and a distinct comment, precisely so the two firing rates can
