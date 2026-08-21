@@ -109,3 +109,45 @@ def test_one_bound_file_records_no_row_provenance_because_there_is_no_choice(tmp
     output = read_input_data(place_stage(_stage({"path": one, "format": "csv"})),
                              ctx=make_run_context())
     assert output.lineage is None
+
+
+def test_the_trace_names_the_file_the_origin_row_was_read_from(tmp_path):
+    from app.runtime.trace import trace_row
+    from test_trace_helpers import write_run
+
+    output = read_input_data(
+        place_stage(_stage({"paths": _three_months(tmp_path), "format": "csv"})),
+        ctx=make_run_context())
+    run_dir = write_run(tmp_path / "runs", [{
+        "id": "load", "type": "input_data", "parents": [],
+        "df": table_to_frame(output.table), "lineage": output.lineage,
+    }])
+
+    step = trace_row(run_dir, "load", 1).steps[0]
+    assert PurePath(step.source_file or "").name == "jul.csv"
+    # Row 1 of the concatenation is row 0 of the file it came from.
+    assert step.source_row == 0
+
+
+def test_the_lineage_page_states_the_file_on_the_origin_row(tmp_path):
+    from app.runtime.trace import trace_row, trace_to_dict
+    from app.web.panel_links import AppPanelLinks
+    from app.web.trace_view import build_trace_view
+    from test_trace_helpers import write_run
+
+    output = read_input_data(
+        place_stage(_stage({"paths": _three_months(tmp_path), "format": "csv"})),
+        ctx=make_run_context())
+    run_dir = write_run(tmp_path / "runs", [{
+        "id": "load", "type": "input_data", "parents": [],
+        "df": table_to_frame(output.table), "lineage": output.lineage,
+    }])
+
+    view = build_trace_view(
+        trace_to_dict(trace_row(run_dir, "load", 2)), {},
+        AppPanelLinks("demo", "T1"))
+    origin = view["nodes"][0]
+    # The name alone reaches the page; the absolute path stays in the manifest.
+    assert origin["source_file"] == "aug.csv"
+    assert "/" not in origin["source_file"]
+    assert origin["source_row"] == 0

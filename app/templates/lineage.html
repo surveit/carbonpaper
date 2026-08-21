@@ -284,8 +284,13 @@ function renderRowTab(n){
           ? `unmarked: this row summarizes ${fanInOf(n)}, so no single row precedes it.`
           : (V.upstream.truncated
               ? `unmarked: the walk stopped here, so which stage added what is unknown.`
-              : `the origin row, read from the source — nothing precedes it.`))}</p>
+              : originText(n)))}</p>
     <table class="lin-row">${shown.map(fieldRow).join('')}</table>`;
+}
+function originText(n){
+  if(!n.source_file) return `the origin row, read from the source — nothing precedes it.`;
+  return `the origin row, read from <code>${esc(n.source_file)}</code> at its row `
+    + `${n.source_row} — nothing precedes it.`;
 }
 async function renderTransformTab(n){
   const body = document.getElementById('pbody');

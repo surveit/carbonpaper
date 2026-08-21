@@ -44,6 +44,9 @@ class StageTransform:
     # for a trace of its own, which is how the reader promotes a branch onto the
     # spine; the walk itself stays a single chain (see `Trace.steps`).
     branches: list[RowParent] = field(default_factory=list)
+    # `row_ordinal` counts across the concatenation; `source_row` counts within the file.
+    source_file: str | None = None
+    source_row: int | None = None
 
 
 @dataclass
@@ -282,6 +285,8 @@ def trace_row_from(frames: RunFrames, stage_id: str, row_ordinal: int) -> Trace:
             columns_new=_new_columns(table, parent_table),
             origin=_origin(stage_type),
             branches=branches,
+            source_file=spine.source_file if spine else None,
+            source_row=spine.row_ordinal if spine and spine.source_file else None,
         ))
 
         next_hop = _advance(
@@ -314,6 +319,8 @@ def trace_to_dict(trace: Trace) -> dict[str, Any]:
                 "row": step.row,
                 "columns_new": step.columns_new,
                 "origin": step.origin,
+                "source_file": step.source_file,
+                "source_row": step.source_row,
                 "branches": [
                     {
                         "stage_id": branch.stage_id,
