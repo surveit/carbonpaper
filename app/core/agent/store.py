@@ -214,7 +214,15 @@ def _blocks_in_turn_order(message: dict) -> list[ProseBlock | ToolBlock | Offers
             _append_prose(blocks, "text", part.get("text", ""))
         elif part_type == PartType.thinking:
             _append_prose(blocks, "thinking", part.get("text", ""))
-    return blocks
+    return _drop_superseded_offers(blocks)
+
+
+def _drop_superseded_offers(
+    blocks: list[ProseBlock | ToolBlock | OffersBlock],
+) -> list[ProseBlock | ToolBlock | OffersBlock]:
+    """A turn offers one set of next steps; a second call replaces the first."""
+    newest = next((b for b in reversed(blocks) if isinstance(b, OffersBlock)), None)
+    return [b for b in blocks if not isinstance(b, OffersBlock) or b is newest]
 
 
 def _append_tool_call(blocks: list[ProseBlock | ToolBlock | OffersBlock], call: ToolCall) -> None:

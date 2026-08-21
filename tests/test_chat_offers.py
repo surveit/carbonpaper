@@ -14,6 +14,7 @@ from app.core.agent.store import (
     _blocks_in_turn_order,
 )
 from app.main import app
+from app.tools.tutorial import offer_next_steps
 
 client = TestClient(app)
 
@@ -41,7 +42,7 @@ def test_any_other_tool_is_left_as_the_tool_call_it_is() -> None:
 
 
 def test_arguments_that_are_not_offerable_draw_as_an_ordinary_tool_row() -> None:
-    """A model that called it wrongly gets the tool's own error back, and the reader sees the call."""
+    """An AI model that called it wrongly gets the error back, and the reader sees the call."""
     assert _read_offered_steps(OFFER_NEXT_STEPS, {"options": ["only one"]}) is None
 
 
@@ -61,3 +62,27 @@ def test_the_tour_opens_on_buttons_rather_than_a_blank_box() -> None:
 
     for option in TUTORIAL_OPENING_OFFERS:
         assert f'class="ac-offer">{option}</button>' in page
+
+
+def test_a_turn_that_offered_twice_shows_only_what_it_offered_last() -> None:
+    """Seen in the tour: after the first call it wrote a second summary and offered again."""
+    superseded = ["Open the queue", "Read the workflow"]
+
+    blocks = _blocks_in_turn_order(
+        {"role": "assistant", "parts": [
+            {"type": "text", "text": "It stopped for a person."},
+            {"type": "offer", "options": superseded},
+            {"type": "text", "text": "Where it stands, again."},
+            {"type": "offer", "options": _OPTIONS},
+        ]}
+    )
+
+    assert [b for b in blocks if isinstance(b, OffersBlock)] == [OffersBlock(options=_OPTIONS)]
+
+
+def test_what_comes_back_names_the_words_shown_and_ends_the_turn() -> None:
+    result = offer_next_steps(_OPTIONS)
+
+    for option in _OPTIONS:
+        assert option in result
+    assert "ends here" in result

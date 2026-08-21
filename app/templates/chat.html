@@ -164,7 +164,7 @@ function newAssistant() {
   const spinner = el("ac-spinner",
     '<span class="ac-dot"></span><span class="ac-dot"></span><span class="ac-dot"></span><span class="ac-sp-label">thinking…</span>');
   b.appendChild(spinner);
-  let think = null, thinkText = null, body = null, tools = null;
+  let think = null, thinkText = null, body = null, tools = null, offerRow = null;
   const bodies = [];  // every text region opened, in order — what the swap renders
   const bodyRaw = new Map();  // region → its raw markdown source, for the final match check
   const bodyVersion = new Map();  // region → latest render request issued, so a slow
@@ -265,13 +265,16 @@ function newAssistant() {
     // Buttons, not a tool row: the arguments are sentences the reader may send.
     offers(options) {
       stop(); closeRegions();
-      const row = el("ac-offers");
+      // The row this turn already has, if any: a second call replaces what the first
+      // offered rather than stacking a second set of buttons under it.
+      if (!offerRow) { offerRow = el("ac-offers"); b.appendChild(offerRow); }
+      offerRow.replaceChildren();
       options.forEach((option) => {
         const button = document.createElement("button");
         button.type = "button"; button.className = "ac-offer"; button.textContent = option;
-        row.appendChild(button);
+        offerRow.appendChild(button);
       });
-      b.appendChild(row); scroll();
+      scroll();
     },
     error(t) { stop(); closeRegions(); const e = el("ac-err"); e.textContent = "⚠ " + t; b.appendChild(e); scroll(); },
     // Turn over: reconcile against the server's markdown of the SAME stored text, so

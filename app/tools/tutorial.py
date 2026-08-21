@@ -151,9 +151,13 @@ def _is_on_disk(project_id: str) -> bool:
     return (workspace.projects_dir() / project_id).is_dir() and methodology.exists(project_id)
 
 
-def offer_next_steps(options: list[str]) -> NextSteps:
-    """The call itself is what the page draws; what comes back only tells the model it landed."""
-    return NextSteps(options=options)
+def offer_next_steps(options: list[str]) -> str:
+    """An echo reads as "carry on": the AI model wrote a second summary and offered again."""
+    shown = " | ".join(NextSteps(options=options).options)
+    return (
+        f"Drawn under this turn as buttons: {shown}. The turn ends here — write "
+        f"nothing after this and do not call this again."
+    )
 
 
 # Not in tool_specs: everything there is offered over MCP, where nothing draws a button.
@@ -163,6 +167,9 @@ OFFER_NEXT_STEPS = ToolProse(
             "voice: \"Open the review queue\", not \"Open the queue for them\".",
     },
     description="""Offer the reader replies to click instead of typing.
+
+Call it ONCE, as the last thing in a turn, and write nothing after it: it is
+how the turn ends.
 
 Each option is drawn as a button under this turn, and clicking one sends that
 option's exact words as their next message — so these are not a menu you may

@@ -36,7 +36,7 @@ class AgentConfig(BaseModel):
     # Labels for tools this agent does not own — e.g. the CLI's own ToolSearch
     # built-in, which has no BoundToolSpec here but still renders in the chat.
     extra_tool_labels: dict[str, str] = {}
-    # The first assistant turn, stored with no model call. None waits to be spoken to.
+    # The first assistant turn, stored with no AI model call. None waits to be spoken to.
     render_opening_turn: Callable[[BaseModel], OpeningTurn] | None = None
     # Prose only this session's context can supply, appended to system_prompt. What
     # it says is the agent's business; returning "" appends nothing, not a heading
