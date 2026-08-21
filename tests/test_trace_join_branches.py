@@ -7,8 +7,8 @@ import pandas as pd
 from conftest import as_inputs, place_stage, rows_of
 from app.models import parse_stage
 from app.runtime.lineage import (
+    explicit_lineage,
     EdgeKind,
-    RowLineage,
     RowParent,
 )
 from app.runtime.stages.join import handle_enrich, handle_expand
@@ -26,7 +26,7 @@ JOINED = pd.DataFrame({
 
 
 def _join_run(tmp_path):
-    lineage = RowLineage([
+    lineage = explicit_lineage([
         [RowParent("filings", 0), RowParent("contracts", 0)],
         [RowParent("filings", 1)],
     ])
@@ -72,7 +72,7 @@ def test_an_unmatched_row_has_one_parent_and_no_branch(tmp_path):
 
 
 def test_spine_follows_the_right_side_when_only_it_matched(tmp_path):
-    lineage = RowLineage([[RowParent("contracts", 0)]])
+    lineage = explicit_lineage([[RowParent("contracts", 0)]])
     run_dir = write_run(tmp_path, [
         {"id": "filings", "type": "input_data", "parents": [], "df": FILINGS},
         {"id": "contracts", "type": "input_data", "parents": [], "df": CONTRACTS},
@@ -87,7 +87,7 @@ def test_spine_follows_the_right_side_when_only_it_matched(tmp_path):
 
 
 def test_contribution_parents_are_never_walked_into(tmp_path):
-    lineage = RowLineage([[
+    lineage = explicit_lineage([[
         RowParent("filings", 0, EdgeKind.contribution.value),
         RowParent("filings", 1, EdgeKind.contribution.value),
     ]])

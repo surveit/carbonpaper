@@ -214,7 +214,7 @@ class RunFrames:
         lineage = self._sidecar(stage_id)
         if lineage is None or not 0 <= row_ordinal < len(lineage):
             return None
-        return list(lineage.parents[row_ordinal])
+        return lineage.parents_of(row_ordinal)
 
     def _sidecar(self, stage_id: str) -> RowLineage | None:
         if stage_id not in self._sidecars:

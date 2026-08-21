@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 import app.runtime.trace as trace_module
-from app.runtime.lineage import RowLineage, RowParent
+from app.runtime.lineage import RowParent, explicit_lineage
 from app.runtime.trace import RunFrames, trace_row, trace_row_from, trace_to_dict
 from test_trace_helpers import write_run
 
@@ -17,7 +17,7 @@ def _filtered_run(tmp_path):
     return write_run(tmp_path, [
         {"id": "seeds", "type": "input_data", "parents": [], "df": seeds},
         {"id": "kept", "type": "filter_rows", "parents": ["seeds"], "df": kept,
-         "lineage": RowLineage([[RowParent("seeds", 0)], [RowParent("seeds", 2)]])},
+         "lineage": explicit_lineage([[RowParent("seeds", 0)], [RowParent("seeds", 2)]])},
     ])
 
 

@@ -40,7 +40,7 @@ from .stages import HANDLERS, HaltForReview, StageHandler
 from .lineage import (
     RowLineage,
     concatenated_inputs_lineage,
-    kept_rows_lineage,
+    contiguous_parent_lineage,
     lineage_sidecar_path,
 )
 from app.models.severity import UserFacingErrorSeverity
@@ -341,8 +341,7 @@ def _sliced_input_lineage(
     if not stage.is_grain_and_order_preserving or len(workflow_stage.inputs) != 1:
         return None
     rows = 0 if output is None else len(output)
-    return kept_rows_lineage(
-        workflow_stage.inputs[0].id, list(range(window.start, window.start + rows)))
+    return contiguous_parent_lineage(workflow_stage.inputs[0].id, window.start, rows)
 
 
 def _persist_stage_output(output: pa.Table, sid: str, run_dir: Path, record: StageRecord) -> Path:

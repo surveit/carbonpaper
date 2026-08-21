@@ -143,7 +143,7 @@ def test_a_lineage_page_reaches_the_rest_of_the_packet_by_relative_path(tmp_path
 
 
 def _demo_run(tmp_path):
-    from app.runtime.lineage import RowLineage, RowParent
+    from app.runtime.lineage import RowParent, explicit_lineage
     from test_trace_helpers import write_run
 
     source = pd.DataFrame({"client": ["a", "b"], "spend": [1, 2]})
@@ -153,7 +153,7 @@ def _demo_run(tmp_path):
         # a fan-in, so the page carries a contributor link to follow.
         {"id": "totals", "type": "aggregate", "parents": ["source"],
          "df": pd.DataFrame({"client": ["a", "b"], "total": [1, 1]}),
-         "lineage": RowLineage([
+         "lineage": explicit_lineage([
              [RowParent("source", 0, kind="contribution")],
              [RowParent("source", 1, kind="contribution")],
          ])},

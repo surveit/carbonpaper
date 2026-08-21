@@ -409,9 +409,10 @@ def _read_kept_ordinals(
     # A filter's row has exactly one parent, in the input being diffed. A row
     # with two (a join) or none (an unmatched subject) is a different shape, and
     # this pane states nothing about it.
-    if not all(len(entry) == 1 and entry[0].stage_id == input_id for entry in lineage.parents):
+    parents = lineage.parents
+    if not all(len(entry) == 1 and entry[0].stage_id == input_id for entry in parents):
         return None
-    kept = [entry[0].row_ordinal for entry in lineage.parents]
+    kept = [entry[0].row_ordinal for entry in parents]
     if any(ordinal < 0 or ordinal >= rows_in for ordinal in kept):
         return None
     if any(later <= earlier for earlier, later in zip(kept, kept[1:])):
