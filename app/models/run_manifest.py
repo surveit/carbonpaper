@@ -162,11 +162,26 @@ class InputBinding(BaseModel):
 
 
 def read_input_bindings(raw: dict[str, Any]) -> list[InputBinding]:
+    """One entry per FILE, so a stage that read several contributes several."""
     bindings = raw.get("input_bindings") or {}
     return [
-        _read_one_binding(str(stage_id), binding)
+        _read_one_binding(str(stage_id), one_file)
         for stage_id, binding in sorted(bindings.items())
         if isinstance(binding, dict)
+        for one_file in _read_files_of(binding)
+    ]
+
+
+def _read_files_of(binding: dict[str, Any]) -> list[dict[str, Any]]:
+    """`files` is a stage that read several; without it the record IS the one file."""
+    files = binding.get("files")
+    if not isinstance(files, list):
+        return [binding]
+    return [
+        # `source` sits on the stage's record, not on each file — every file an input
+        # read was bound the same way, so each entry carries the stage's answer.
+        {**one_file, "source": binding.get("source")}
+        for one_file in files if isinstance(one_file, dict)
     ]
 
 

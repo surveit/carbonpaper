@@ -22,12 +22,17 @@
 
   function insertFileOption(select, file) {
     var current = select.querySelector('option[value="' + file.file_id + '"]');
+    var wasChosen = !!current && current.selected;
     if (current) current.remove();
     var uploadedAt = Date.parse(file.uploaded_at);
     var before = Array.from(select.querySelectorAll("option[data-uploaded-at]")).find(
       function (option) { return Date.parse(option.dataset.uploadedAt) < uploadedAt; }
     );
-    select.insertBefore(fileOption(file), before || null);
+    var option = fileOption(file);
+    // Re-sending bytes the project already holds must not quietly unbind the row
+    // that was already reading them.
+    option.selected = wasChosen;
+    select.insertBefore(option, before || null);
     if (window.CarbonPicker) window.CarbonPicker.refresh(select);
   }
 
@@ -38,13 +43,12 @@
     pick.id = "binding__" + stageId;
     pick.name = pick.id;
     pick.required = !row.authored_path;
-    pick.options[0].textContent = row.authored_path
-      ? row.authored_path + " — the path this workflow names"
-      : "Choose a file…";
-    pick.options[0].dataset.fileKind = row.authored_path ? "authored" : "empty";
-    pick.options[0].dataset.name = row.authored_path || "Choose a file…";
-    if (row.authored_path) pick.options[0].dataset.meta = "Workflow path";
-    else delete pick.options[0].dataset.meta;
+    // The field takes several files, so it holds no blank option: nothing selected is
+    // the blank, and the placeholder the trigger shows meanwhile lives on the select.
+    pick.replaceChildren();
+    pick.dataset.emptyName = row.authored_path || "Choose a file…";
+    if (row.authored_path) pick.dataset.emptyMeta = "Workflow path";
+    else delete pick.dataset.emptyMeta;
     files.forEach(function (file) { pick.appendChild(fileOption(file)); });
     node.querySelector(".run-input-name").htmlFor = pick.id;
     node.querySelector(".run-input-name code").textContent = stageId;
@@ -95,7 +99,11 @@
     form.querySelectorAll("select.file-pick").forEach(function (select) {
       insertFileOption(select, file);
     });
-    pick.value = file.file_id;
+    // Added to what the row already holds, not put in its place: uploading the third
+    // month of an export is meant to leave the first two bound.
+    var option = pick.querySelector('option[value="' + file.file_id + '"]');
+    if (pick.multiple && option) option.selected = true;
+    else pick.value = file.file_id;
     pick.dispatchEvent(new Event("change", { bubbles: true }));
   }
 

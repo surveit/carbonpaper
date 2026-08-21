@@ -1,0 +1,92 @@
+"""One input stage reading several files of one shape, concatenated in bound order."""
+from __future__ import annotations
+
+from pathlib import PurePath
+
+import pandas as pd
+import pytest
+
+from app.core.errors import FrameConcatMismatchError
+from app.core.frames import table_to_frame
+from app.models import Stage, parse_stage
+from app.runtime.stages.input_data import preflight_input_data, read_input_data
+from conftest import make_run_context, place_stage
+
+_COLUMNS = [{"name": "month", "type": "str", "nullable": True},
+            {"name": "reach", "type": "int", "nullable": True}]
+
+
+def _stage(params: dict) -> Stage:
+    return parse_stage({
+        "id": "load", "description": "load", "type": "input_data",
+        "connector": {"kind": "file", "params": params},
+        "signature": {"form": "replaces", "produces": _COLUMNS},
+    })
+
+
+def _write_csv(tmp_path, name: str, frame: pd.DataFrame) -> str:
+    path = tmp_path / name
+    frame.to_csv(path, index=False)
+    return str(path)
+
+
+def _three_months(tmp_path) -> list[str]:
+    return [
+        _write_csv(tmp_path, "jun.csv", pd.DataFrame({"month": ["jun"], "reach": [11]})),
+        _write_csv(tmp_path, "jul.csv", pd.DataFrame({"month": ["jul"], "reach": [22]})),
+        _write_csv(tmp_path, "aug.csv", pd.DataFrame({"month": ["aug"], "reach": [33]})),
+    ]
+
+
+def _read(params: dict) -> pd.DataFrame:
+    output = read_input_data(place_stage(_stage(params)), ctx=make_run_context())
+    return table_to_frame(output.table)
+
+
+def test_several_files_are_read_as_one_table_in_the_order_they_were_bound(tmp_path):
+    frame = _read({"paths": _three_months(tmp_path), "format": "csv"})
+    assert list(frame["month"]) == ["jun", "jul", "aug"]
+    assert list(frame["reach"]) == [11, 22, 33]
+
+
+def test_binding_one_file_through_paths_reads_the_same_rows_as_binding_it_through_path(tmp_path):
+    one = _write_csv(tmp_path, "jun.csv", pd.DataFrame({"month": ["jun"], "reach": [11]}))
+    assert _read({"paths": [one], "format": "csv"}).equals(
+        _read({"path": one, "format": "csv"}))
+
+
+def test_a_file_missing_a_column_is_refused_rather_than_padded_with_nulls(tmp_path):
+    paths = [
+        _write_csv(tmp_path, "jun.csv", pd.DataFrame({"month": ["jun"], "reach": [11]})),
+        _write_csv(tmp_path, "jul.csv", pd.DataFrame({"month": ["jul"]})),
+    ]
+    with pytest.raises(FrameConcatMismatchError) as refusal:
+        _read({"paths": paths, "format": "csv"})
+    assert "reach" in str(refusal.value)
+
+
+def test_the_preflight_weighs_every_bound_file(tmp_path):
+    issues, record = preflight_input_data(place_stage(_stage(
+        {"paths": _three_months(tmp_path), "format": "csv"})))
+    assert issues == []
+    assert record is not None
+    assert [PurePath(f["path"]).name for f in record["files"]] == ["jun.csv", "jul.csv", "aug.csv"]
+    assert len({f["sha256"] for f in record["files"]}) == 3
+    assert all(f["bytes"] > 0 for f in record["files"])
+
+
+def test_one_bound_file_keeps_the_flat_record_a_manifest_has_always_carried(tmp_path):
+    one = _write_csv(tmp_path, "jun.csv", pd.DataFrame({"month": ["jun"], "reach": [11]}))
+    _issues, record = preflight_input_data(place_stage(_stage({"path": one, "format": "csv"})))
+    assert record is not None and "files" not in record
+    assert record["path"] == one
+
+
+def test_every_missing_file_is_named_rather_than_only_the_first(tmp_path):
+    present = _write_csv(tmp_path, "jun.csv", pd.DataFrame({"month": ["jun"], "reach": [11]}))
+    issues, record = preflight_input_data(place_stage(_stage(
+        {"paths": [present, str(tmp_path / "gone.csv"), str(tmp_path / "also-gone.csv")],
+         "format": "csv"})))
+    assert record is None
+    assert len(issues) == 2
+    assert "gone.csv" in issues[0] and "also-gone.csv" in issues[1]

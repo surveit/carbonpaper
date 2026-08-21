@@ -12,6 +12,7 @@ from app.models import StageType, Workflow, WorkflowStage
 from app.runtime.context import RunContext, RunIdentity
 from app.runtime.executor import execute_subset, topological_sort
 from app.models.run_parameters import RunParameters
+from app.core.frames import table_to_frame
 from app.runtime.stages.input_data import read_input_data
 from app.services.versioning import list_versions, load_version, load_version_stages
 from app.services.workspace import resolve_run_dir
@@ -140,9 +141,10 @@ def _read_source_slices(
     # than a fabricated cwd sentinel.
     ctx = RunContext.for_stages_outside_a_run(None)
     executing_ids = {stage.id for stage in executing}
-    end = None if limit is None else offset + limit
     return {
-        source.id: read_input_data(source, ctx).iloc[offset:end]
+        # Sliced on the arrow table, so a source reading several files is windowed
+        # across the concatenation rather than per file.
+        source.id: table_to_frame(read_input_data(source, ctx).table.slice(offset, limit))
         for source in sources
         if source.id not in executing_ids
     }

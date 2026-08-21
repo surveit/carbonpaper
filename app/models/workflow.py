@@ -280,11 +280,21 @@ def _merge_connector_params(
     try:
         connector = Connector.model_validate({
             **stage.connector.model_dump(),
-            "params": {**stage.connector.params, **binding},
+            "params": _overridden_params(stage.connector.params, binding),
         })
     except ValidationError as err:
         raise ValueError(f"binding for `{stage.id}` is invalid: {err}") from err
     return stage.model_copy(update={"connector": connector})
+
+
+def _overridden_params(
+    authored: dict[str, Any], binding: Mapping[str, Any]
+) -> dict[str, Any]:
+    """A None in the binding REMOVES the authored key, so a run can name a param off."""
+    merged = {**authored, **binding}
+    # Overriding one of two params that contradict each other has to be able to take
+    # the other one away; leaving it would hand the model a pair it must refuse.
+    return {key: value for key, value in merged.items() if value is not None}
 
 
 def parse_workflow(stages: list[dict[str, Any]]) -> Workflow:

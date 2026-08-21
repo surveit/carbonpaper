@@ -207,7 +207,7 @@ def test_run_inputs_endpoint_returns_the_selected_versions_inputs(
     latest = client.get(f"/project/demo/run-inputs?version_id={latest}").json()
     assert latest["inputs"] == [
         {"stage_id": "load", "authored_path": str(proj / "b.csv"),
-         "selected_file_id": None, "limit": None}]
+         "selected_file_ids": [], "limit": None}]
     older = client.get(f"/project/demo/run-inputs?version_id={older}").json()
     assert older["inputs"][0]["authored_path"] == str(proj / "a.csv")
     # The files are project-wide, so both answers carry the same list.

@@ -33,7 +33,9 @@ class Connector(StageConfig):
             "ABSOLUTE path to the data file, plus optional params.format "
             "(csv/tsv/parquet/json/geojson/xlsx). If the source material does not state "
             "where the file lives, OMIT path entirely — the user binds a file when "
-            "starting a run. Never invent a path."
+            "starting a run. Never invent a path. params.paths is the same thing for a "
+            "source that arrives split across several files of one shape: the run reads "
+            "them in order and concatenates. Never author both."
         ),
     )
     refresh: str = "ad_hoc"
@@ -42,16 +44,40 @@ class Connector(StageConfig):
     @model_validator(mode="after")
     def _params_for_kind(self) -> "Connector":
         if self.kind == ConnectorKind.file:
-            path = (self.params or {}).get("path")
-            if path is not None:
-                if not isinstance(path, str) or not path.strip():
-                    raise ValueError("connector params.path must be a non-empty string when present")
-                if not Path(path).is_absolute():
-                    raise ValueError(f"connector params.path must be an ABSOLUTE path, got {path!r}")
-            fmt = (self.params or {}).get("format")
+            params = self.params or {}
+            _refuse_both_path_forms(params)
+            if params.get("path") is not None:
+                _refuse_unusable_path(params["path"], "params.path")
+            for position, path in enumerate(params.get("paths") or []):
+                _refuse_unusable_path(path, f"params.paths[{position}]")
+            fmt = params.get("format")
             if fmt is not None and fmt not in {f.value for f in FileFormat}:
                 raise ValueError(f"unknown file format {fmt!r}")
         return self
+
+
+def read_connector_paths(params: dict[str, Any]) -> list[str]:
+    """Every file this connector reads, in order — [] when nothing is bound yet."""
+    if params.get("paths") is not None:
+        return list(params["paths"])
+    return [params["path"]] if params.get("path") is not None else []
+
+
+def _refuse_both_path_forms(params: dict[str, Any]) -> None:
+    if params.get("path") is not None and params.get("paths") is not None:
+        raise ValueError(
+            "connector params carry both path and paths; one file goes in path, "
+            "several in paths, never both")
+    paths = params.get("paths")
+    if paths is not None and (not isinstance(paths, list) or not paths):
+        raise ValueError("connector params.paths must be a non-empty list when present")
+
+
+def _refuse_unusable_path(path: Any, named: str) -> None:
+    if not isinstance(path, str) or not path.strip():
+        raise ValueError(f"connector {named} must be a non-empty string when present")
+    if not Path(path).is_absolute():
+        raise ValueError(f"connector {named} must be an ABSOLUTE path, got {path!r}")
 
 
 class InputDataStage(AbstractStage):

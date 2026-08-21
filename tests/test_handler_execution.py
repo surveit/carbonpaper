@@ -312,7 +312,7 @@ def test_each_shape_reports_the_preservation_its_calling_convention_gives_it():
 
 
 def test_source_handler_reads_without_frames():
-    handler = SourceHandler(read=lambda stage, ctx: pd.DataFrame({"k": ["a"]}))
+    handler = SourceHandler(read=lambda stage, ctx: StageOutput.from_frame(pd.DataFrame({"k": ["a"]})))
     out = handler.execute(place_stage(_row_stage()), as_inputs({}), make_run_context())
     assert list(rows_of(out)["k"]) == ["a"]
 

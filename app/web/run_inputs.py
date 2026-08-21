@@ -13,6 +13,7 @@ from app.models.run_parameters import RunParameters
 from app.models.schema import StageId
 from app.runtime.manifest import RunManifest
 from app.web.file_sizes import describe_bytes
+from app.models.stages.input_data import read_connector_paths
 from app.web.loading import list_file_inputs
 
 _MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -40,8 +41,8 @@ class InputRow(BaseModel):
     # What the workflow itself names, if anything. A row that has one runs without a
     # pick; a row that does not cannot run until something is chosen.
     authored_path: str
-    # Set only by a duplicate: the file and row cap the run being copied used.
-    selected_file_id: str | None = None
+    # Set only by a duplicate: the files and row cap the run being copied used.
+    selected_file_ids: list[str] = []
     limit: int | None = None
 
 
@@ -61,7 +62,7 @@ def build_run_input_choices(
     params = copy_of.parameters if copy_of else RunParameters()
     picks = _match_recorded_files(project_id, params)
     rows = [InputRow(stage_id=row["stage_id"], authored_path=row["path"],
-                     selected_file_id=picks.get(row["stage_id"]),
+                     selected_file_ids=picks.get(row["stage_id"], []),
                      limit=params.limits.get(row["stage_id"]))
             for row in list_file_inputs(project_id, version_id)]
     shown = {row.stage_id for row in rows}
@@ -77,21 +78,27 @@ def build_run_input_choices(
 
 def _match_recorded_files(
     project_id: str, params: RunParameters
-) -> dict[StageId, str]:
-    """A binding records the path it read; the picker's value is the record that owns it."""
+) -> dict[StageId, list[str]]:
+    """A binding records the paths it read; the picker's values are the records owning them."""
     id_by_key: dict[str, str] = {}
     for record in file_store.list_project_files(project_id):
         for key in _name_the_record(record):
             id_by_key[key] = record.id
-    picks: dict[StageId, str] = {}
+    picks: dict[StageId, list[str]] = {}
     for stage_id, override in params.run_bindings.items():
-        path = override.get("path")
-        if not isinstance(path, str):
-            continue
-        file_id = id_by_key.get(path) or id_by_key.get(Path(path).parent.name)
-        if file_id is not None:
-            picks[stage_id] = file_id
+        chosen = [file_id for path in read_connector_paths(dict(override))
+                  # A file the project no longer holds cannot be pre-picked, and
+                  # dropping it silently is what leaves the rest of them offered.
+                  if (file_id := _match_one_path(id_by_key, path)) is not None]
+        if chosen:
+            picks[stage_id] = chosen
     return picks
+
+
+def _match_one_path(id_by_key: dict[str, str], path: object) -> str | None:
+    if not isinstance(path, str):
+        return None
+    return id_by_key.get(path) or id_by_key.get(Path(path).parent.name)
 
 
 def _name_the_record(record: file_store.UploadedFile) -> tuple[str, str, str]:

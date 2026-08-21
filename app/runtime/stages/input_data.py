@@ -13,6 +13,7 @@ from typing import Any
 
 import pandas as pd
 
+from app.core.frames import concat_tables, frame_to_table
 from app.core.source_files import FileFormat, read_source_file
 from app.models import (
     JSON_COLUMN_TYPE,
@@ -20,9 +21,14 @@ from app.models import (
     TableSchema,
     WorkflowStage,
 )
-from app.models.stages.input_data import InputDataStage, XlsxReadParams
+from app.models.stages.input_data import (
+    InputDataStage,
+    XlsxReadParams,
+    read_connector_paths,
+)
 
 from ..context import RunContext
+from ..stage_output import StageOutput
 from .execution import narrow_stage
 
 # Column types a text-on-disk file (csv) stores as text and that something
@@ -53,31 +59,48 @@ def preflight_input_data(
     if not isinstance(stage, InputDataStage):
         raise TypeError(
             f"stage {stage.id}: the input_data preflight got a {type(stage).__name__}")
-    connector = stage.connector
-    path_param = connector.params.get("path")
-    if not path_param:
+    bound = read_connector_paths(stage.connector.params)
+    if not bound:
         return ([f"`{stage.id}`: no file bound — supply a run binding, or author "
                  "an absolute path in the workflow"], None)
-    path = Path(path_param)
-    if not path.is_file():
-        return ([f"`{stage.id}`: bound file does not exist or is not a file: {path}"], None)
+    missing = [path for path in bound if not Path(path).is_file()]
+    if missing:
+        return ([f"`{stage.id}`: bound file does not exist or is not a file: {path}"
+                 for path in missing], None)
+    weighed = [_weigh_file(Path(path)) for path in bound]
+    # One file keeps the record it has always had, so nothing that reads a manifest
+    # has to learn a new shape to go on answering about single-file runs.
+    return [], weighed[0] if len(weighed) == 1 else {"files": weighed}
+
+
+def _weigh_file(path: Path) -> dict[str, Any]:
     with path.open("rb") as handle:
         digest = hashlib.file_digest(handle, "sha256")
-    return [], {"path": str(path), "sha256": digest.hexdigest(),
-                "bytes": path.stat().st_size}
+    return {"path": str(path), "sha256": digest.hexdigest(), "bytes": path.stat().st_size}
 
 
-def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> pd.DataFrame:
+def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> StageOutput:
     input_stage = narrow_stage(workflow_stage, InputDataStage)
     params = input_stage.connector.params
 
-    if "path" not in params:
+    bound = read_connector_paths(params)
+    if not bound:
         raise ValueError(
             f"input stage '{input_stage.id}' has no file bound (connector params carry "
             "no 'path'); runs bind one at prepare_run — subset/eval runs need the "
             "workflow to author it or a reference override to inject it"
         )
-    path = Path(params["path"])   # absolute: the model rejects a relative path when present
+    frames = [_read_one_file(Path(path), workflow_stage, params) for path in bound]
+    if len(frames) == 1:
+        return StageOutput.from_frame(frames[0])
+    # concat_tables, never pd.concat: pandas unions the columns and pads the gap with
+    # nulls, so a file missing a column would read as one that reported nothing.
+    return StageOutput(concat_tables([frame_to_table(frame) for frame in frames]))
+
+
+def _read_one_file(
+    path: Path, workflow_stage: WorkflowStage, params: dict[str, Any]
+) -> pd.DataFrame:
     fmt = FileFormat(params.get("format", FileFormat.csv))
     schema = workflow_stage.output_schema  # input_data's produces is non-empty by validation
     xlsx = XlsxReadParams.model_validate(params)

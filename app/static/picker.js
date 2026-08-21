@@ -6,6 +6,10 @@
 // the reader picks by, falling back to the option's text), data-side (a short
 // right-aligned note) and data-meta (a second line under the name).
 //
+// A `multiple` select toggles instead of choosing, and stays open. It carries no
+// blank option: nothing selected IS the blank, and the trigger reads data-empty-name
+// / data-empty-meta off the select while it lasts.
+//
 // A row may carry one extra button beside its option — a preview, say. The builder
 // for it is registered under a name by whoever owns that action
 // (CarbonPicker.rowActions), and a select asks for it with data-picker-row-action.
@@ -30,11 +34,31 @@
     };
   }
 
+  function selectedOptions(select) {
+    return Array.from(select.selectedOptions || []);
+  }
+
+  function describeSelection(select) {
+    var chosen = selectedOptions(select);
+    if (!select.multiple) {
+      return describeOption(select.options[select.selectedIndex] || select.options[0]);
+    }
+    if (chosen.length === 0) {
+      return { name: select.dataset.emptyName || "Choose…",
+               meta: select.dataset.emptyMeta || "", side: "" };
+    }
+    if (chosen.length === 1) return describeOption(chosen[0]);
+    return {
+      name: chosen.length + " files",
+      meta: chosen.map(function (option) { return describeOption(option).name; }).join(", "),
+      side: "",
+    };
+  }
+
   function renderValue(picker) {
     var select = picker.querySelector(".picker-native");
     var value = picker.querySelector(".picker-value");
-    var option = select.options[select.selectedIndex] || select.options[0];
-    var record = describeOption(option);
+    var record = describeSelection(select);
     var note = [record.meta, record.side].filter(Boolean).join(" · ");
     value.replaceChildren();
     addText(value, "picker-name", record.name);
@@ -44,9 +68,23 @@
 
   function chooseOption(picker, option) {
     var select = picker.querySelector(".picker-native");
+    if (select.multiple) {
+      // selectedOptions is in list order, not click order, so what the trigger
+      // reads left to right is the order the form submits and the run reads.
+      option.selected = !option.selected;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      markChosen(picker, option);
+      renderValue(picker);
+      return;
+    }
     select.value = option.value;
     select.dispatchEvent(new Event("change", { bubbles: true }));
     closePicker(picker, true);
+  }
+
+  function markChosen(picker, option) {
+    var item = picker.querySelector('.picker-option[data-value="' + option.value + '"]');
+    if (item) item.setAttribute("aria-current", option.selected ? "true" : "false");
   }
 
   function buildRowAction(select, option) {
@@ -185,7 +223,12 @@
     trigger.hidden = false;
     picker.classList.add("is-ready");
     refreshPicker(select);
-    select.addEventListener("change", function () { refreshPicker(select); });
+    // A multiple select re-renders its own rows as they toggle; rebuilding the list
+    // here would drop the reader's focus and search mid-selection.
+    select.addEventListener("change", function () {
+      if (select.multiple) renderValue(picker);
+      else refreshPicker(select);
+    });
     select.addEventListener("invalid", function (event) {
       event.preventDefault();
       trigger.setAttribute("aria-invalid", "true");

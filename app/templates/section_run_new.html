@@ -24,9 +24,10 @@
 <div class="sec-head wf-head">
   <div class="wf-head-title">
     <h1>Run the workflow</h1>
-    <p class="lede">Pick the <strong>version</strong> to pin the run to, bind a file to
-      each input, and cap how many rows it reads. The run reads that version's snapshot,
-      so it is reproducible against the exact workflow it executed.</p>
+    <p class="lede">Pick the <strong>version</strong> to pin the run to, bind the file
+      each input reads, and cap how many rows it reads. An input given several files of
+      one shape reads them as one table, in the order shown. The run reads that version's
+      snapshot, so it is reproducible against the exact workflow it executed.</p>
   </div>
   <div class="actions wf-actions">
     <a href="/project/{{ state.id }}/runs" class="btn">All runs</a>

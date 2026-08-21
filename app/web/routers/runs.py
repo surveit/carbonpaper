@@ -31,7 +31,7 @@ from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.services.errors import WorkflowLoadError
 from app.services import run as run_service
 from app.services.run_guide import build_run_guide_view
-from app.services.uploads import resolve_file_binding
+from app.services.uploads import resolve_files_binding
 from app.runtime.cancellation import request_cancel
 from app.web.breadcrumbs import build_run_crumbs
 from app.web.config import EVENT_TAIL, templates
@@ -88,15 +88,13 @@ async def trigger_run(request: Request, project_id: str):
 
 
 def _collect_bindings(form: FormData, project_id: str) -> dict[StageId, TypeUnsafeUserStageConfigOverride]:
-    """`binding__<stage>` carries a stored file's id; blank means run what the
-    workflow authored."""
+    """`binding__<stage>` repeats once per file; none means run what the workflow authored."""
     bindings: dict[StageId, TypeUnsafeUserStageConfigOverride] = {}
-    for key, value in form.items():
-        if not key.startswith("binding__"):
-            continue
-        file_id = str(value).strip()
-        if file_id:
-            bindings[key[len("binding__"):]] = resolve_file_binding(project_id, file_id)
+    for key in {key for key in form.keys() if key.startswith("binding__")}:
+        file_ids = [str(value).strip() for value in form.getlist(key)]
+        chosen = [file_id for file_id in file_ids if file_id]
+        if chosen:
+            bindings[key[len("binding__"):]] = resolve_files_binding(project_id, chosen)
     return bindings
 
 
