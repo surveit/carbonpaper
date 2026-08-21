@@ -91,8 +91,6 @@ def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> StageOutp
             "workflow to author it or a reference override to inject it"
         )
     frames = [_read_one_file(Path(path), workflow_stage, params) for path in bound]
-    if len(frames) == 1:
-        return StageOutput.from_frame(frames[0])
     # pd.concat pads a missing column with nulls; concat_tables refuses and names it.
     return StageOutput(
         concat_tables([frame_to_table(frame) for frame in frames]),

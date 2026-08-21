@@ -104,11 +104,14 @@ def test_each_row_records_the_file_it_was_read_from(tmp_path):
     assert [p.row_ordinal for p in origins] == [0, 0, 0]
 
 
-def test_one_bound_file_records_no_row_provenance_because_there_is_no_choice(tmp_path):
+def test_one_bound_file_records_its_name_too_rather_than_being_a_special_case(tmp_path):
     one = _write_csv(tmp_path, "jun.csv", pd.DataFrame({"month": ["jun"], "reach": [11]}))
     output = read_input_data(place_stage(_stage({"path": one, "format": "csv"})),
                              ctx=make_run_context())
-    assert output.lineage is None
+    assert output.lineage is not None
+    origin = output.lineage.parents[0][0]
+    assert PurePath(origin.source_file or "").name == "jun.csv"
+    assert origin.row_ordinal == 0
 
 
 def test_the_trace_names_the_file_the_origin_row_was_read_from(tmp_path):

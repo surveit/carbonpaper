@@ -22,6 +22,8 @@ body{display:flex;flex-direction:column;overflow:hidden}
 .lin-head{flex:none;padding:12px 22px;border-bottom:1px solid var(--border);background:var(--raised)}
 .lin-head h1{font-size:17px;margin:0 0 2px}
 .lin-sub{color:var(--muted);font-size:12.5px}
+.lin-source{color:var(--info-ink);font-size:12.5px;font-weight:600}
+.lin-source code{background:var(--info-bg);padding:1px 5px;border-radius:4px}
 .lin-split{flex:1;min-height:0;display:grid;grid-template-columns:minmax(400px,1fr) minmax(480px,1.1fr)}
 .lin-story{overflow:auto;padding:16px 20px 40px}
 .lin-side{min-height:0;border-left:1px solid var(--border);background:var(--raised);
@@ -155,7 +157,9 @@ function verb(n){
   if(k==='union') return `carry through ${sid}`;
   if(k==='filter_rows') return `keep the row through ${sid}`;
   if(k==='aggregate') return `run aggregation ${sid}`;
-  if(k==='source') return `read ${sid}`;
+  if(k==='source') return n.source_file
+    ? `read ${sid} from <span class="sid">${esc(n.source_file)}</span>`
+    : `read ${sid}`;
   return sid;
 }
 // What the step did to the row, off the same compare the panel shows.
@@ -289,8 +293,8 @@ function renderRowTab(n){
 }
 function originText(n){
   if(!n.source_file) return `the origin row, read from the source — nothing precedes it.`;
-  return `the origin row, read from <code>${esc(n.source_file)}</code> at its row `
-    + `${n.source_row} — nothing precedes it.`;
+  return `the origin row — row ${n.source_row} of <code>${esc(n.source_file)}</code> as it `
+    + `sits in that file. Nothing precedes it.`;
 }
 async function renderTransformTab(n){
   const body = document.getElementById('pbody');
@@ -318,7 +322,11 @@ function render(){
   const n = V.nodes[sel];
   document.getElementById('ptype').textContent = `${n.stage_type_label} · step ${n.step} of ${V.nodes.length}`;
   document.getElementById('ptitle').innerHTML =
-    `<code>${esc(n.stage_id)}</code> <span class="lin-sub">row ${n.row_ordinal}</span>`;
+    `<code>${esc(n.stage_id)}</code> <span class="lin-sub">row ${n.row_ordinal}</span>`
+    + (n.source_file
+        ? ` <span class="lin-source">from <code>${esc(n.source_file)}</code>`
+          + ` row ${n.source_row}</span>`
+        : '');
   const back = document.getElementById('back');
   back.href = n.links.stage;
   back.title = `open ${n.stage_id} in this run's stage panel`;
