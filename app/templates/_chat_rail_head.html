@@ -1,0 +1,28 @@
+{# Runs in <head>, before the first paint, and does two things nothing later can:
+
+   1. Stamps the rail's state on <html>, so the page LAYS OUT with the column already
+      reserved. Left to DOMContentLoaded it measured ~300ms of full-width page followed
+      by a reflow — main 1440 -> 1040 and every mermaid diagram re-laying out, which
+      reads as the rail taking seconds to arrive when the panel itself fetches in 3ms.
+   2. Starts that fetch here rather than after the foot scripts, so it flies alongside
+      parsing instead of queueing behind it.
+
+   Inline and duplicated in no other file: a <script src> could not beat the paint. #}
+<script>
+window.ChatRail = window.ChatRail || {};
+(function () {
+  var sid = null, open = true, title = null;
+  try {
+    sid = localStorage.getItem("chat-rail:session");
+    open = localStorage.getItem("chat-rail:open") !== "0";
+    title = localStorage.getItem("chat-rail:title");
+  } catch (e) { /* private mode: no rail, and nothing breaks */ }
+  window.ChatRail.opening = {sid: sid, open: open, title: title, panel: null};
+  if (!sid) return;
+  // The chat page draws its own panel. It is the one page whose address says so, and
+  // asking here costs nothing — the alternative is reserving a column it then removes.
+  if (/^\/chat\//.test(location.pathname)) return;
+  document.documentElement.classList.add(open ? "chat-rail-open" : "chat-rail-shut");
+  if (open) window.ChatRail.opening.panel = fetch("/chat/" + sid + "/panel");
+})();
+</script>

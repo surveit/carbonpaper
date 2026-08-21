@@ -32,6 +32,11 @@ body.chat-page { height: 100dvh; display: flex; flex-direction: column; overflow
 body.chat-page > main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
     padding: 12px 0 0; }
 
+/* The panel's own root, in either host. Both put it inside a flex column that owns the
+   viewport — `main` on the chat page, the rail's aside beside one — and the log below is
+   what scrolls, so this has to pass the height through rather than stack to its content. */
+.chat-panel { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+
 /* ═══ The transcript (chat.html) ═══ */
 /* --chat-column is the conversation's width wherever it is drawn — the log, the
    composer under it, the attachment row and the popover all read it, so the
@@ -69,6 +74,25 @@ body.chat-page > main { flex: 1 1 auto; min-height: 0; display: flex; flex-direc
 .ac-msg.assistant .ac-body ul, .ac-msg.assistant .ac-body ol { padding-left: 22px; }
 .ac-msg.assistant .ac-body li { margin: 6px 0; }
 .ac-msg.assistant .ac-body a { color: var(--info-bd); }
+/* A link the agent put on a line of its own is a HANDOVER — the page it wants opened —
+   as against a link inside a sentence, which is a citation. chat-panel.js marks the first
+   kind and only when it points back at this app, so what is drawn as somewhere to go is
+   always somewhere the reader can come back from. Same shape in the rail and on the page:
+   what changes between them is only that in the rail the conversation survives the trip. */
+.ac-msg.assistant .ac-body a.ac-goto {
+    display: flex; align-items: center; gap: 8px; padding: 8px 11px;
+    border: 1px solid var(--accent); border-radius: 8px; color: var(--accent-deep);
+    text-decoration: none; font-family: var(--ui); font-size: 13px; font-weight: 600;
+    /* An autolinked URL is one unbreakable word, and a flex item will not shrink below
+       that on its own — so in a 400px rail the card scrolls the whole log sideways. */
+    min-width: 0; overflow-wrap: anywhere;
+}
+.ac-msg.assistant .ac-body a.ac-goto::before {
+    content: "→"; color: var(--accent); font-weight: 400; flex: 0 0 auto; align-self: flex-start;
+}
+.ac-msg.assistant .ac-body a.ac-goto:hover { background: var(--sunk); border-color: var(--accent-deep); }
+.ac-msg.assistant .ac-body a.ac-goto:visited { color: var(--muted); border-color: var(--border-strong); }
+.ac-msg.assistant .ac-body a.ac-goto:visited::before { color: var(--muted); }
 .ac-msg.assistant .ac-body code { font-family: var(--mono); font-size: 13px;
     background: var(--sunk-deep); border: 1px solid var(--border); border-radius: 4px;
     padding: 1px 4px; }

@@ -10,6 +10,8 @@
        stage node. Loaded for EVERY page (not per-diagram-page) so a page that
        renders the graph can never miss it; see static/diagram_nodes.js. #}
     <script src="/static/diagram_nodes.js"></script>
+    {# Before the first paint: it reserves the rail's column and starts its fetch. #}
+    {% include "_chat_rail_head.html" %}
     {% block head_extra %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
@@ -37,6 +39,12 @@
     <script src="/static/breadcrumbs.js"></script>
     <script src="/static/demo-notice.js"></script>
     <script src="/static/picker.js"></script>
+    {# The conversation follows the reader between pages, so like ⌘K below it the rail is
+       part of the shell rather than something each page remembers to offer. chat-panel.js
+       mounts a panel wherever one is drawn; chat-rail.js is what puts one here. #}
+    {% include "_chat_rail.html" %}
+    <script src="/static/chat-panel.js"></script>
+    <script src="/static/chat-rail.js"></script>
     {# ⌘K from anywhere, so the shell is in the shell rather than on the pages it
        reaches. See static/cmdk-palette.js. #}
     {% include "_cmdk_palette.html" %}

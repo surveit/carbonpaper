@@ -1,0 +1,98 @@
+{# The conversation itself — log, composer, attach — with NO page around it.
+
+   Rendered two ways from one file: chat.html includes it, and GET /chat/<sid>/panel
+   returns it on its own for app/static/chat-rail.js to drop into the rail. It must
+   therefore claim nothing global: every hook the client binds is a `js-` class, since
+   an id would collide the moment a page held two of these, and the panel's own root
+   is supplied by whichever host is drawing it (`[data-chat-panel]`).
+
+   Nothing here knows which agent is on the other end. See docs/run-and-review-ui.md. #}
+{# A turn naming a file draws as a card; every other turn is its own text. The TEXT is
+   what the agent reads either way — this is only how the page draws it. #}
+{% macro turn_body(text) %}{% set turn = text | turn %}{% if turn.files %}<div class="ac-files">{% for file in turn.files %}<div class="ac-body ac-file"><span class="ac-file-icon" aria-hidden="true">▤</span><span class="ac-file-name">{{ file.name }}</span><span class="ac-file-meta">{{ file.meta }}</span></div>{% endfor %}</div>{% endif %}{% if turn.said or not turn.files %}<div class="ac-body">{{ turn.said if turn.files else text }}</div>{% endif %}{% endmacro %}
+{# A call and its arguments. Its own macro because a run of calls nests these inside one
+   disclosure, and the two shapes have to draw the individual call identically. #}
+{# Replies the reader may click instead of typing: the agent's own words, sent as the
+   reader's next message. Only the newest turn's are live — see agent-chat.css. #}
+{% macro offer_row(options) %}<div class="ac-offers">{% for option in options %}{% if option.url %}<a class="ac-offer ac-offer-link" href="{{ option.url }}" target="_blank" rel="noopener">{{ option.text }}<span class="ac-offer-arrow" aria-hidden="true">↗</span></a>{% else %}<button type="button" class="ac-offer">{{ option.text }}</button>{% endif %}{% endfor %}</div>{% endmacro %}
+{% macro tool_row(call) %}<details class="ac-tool"><summary title="{{ call.label or call.name }}">Called a tool: {{ call.name }}</summary><pre class="ac-tool-json">{{ call.args }}</pre></details>{% endmacro %}
+{# Read once by mount() in chat-panel.js. A JSON island rather than a run of `const`
+   declarations, because the rail's copy arrives as markup and never executes. #}
+<script type="application/json" class="js-chat-config">{{ config.model_dump(mode="json") | tojson }}</script>
+
+{% if backend_error %}
+  <div class="ac-warn"><strong>Backend unavailable:</strong> {{ backend_error }}</div>
+{% endif %}
+
+<div class="ac-log js-chat-log">
+  {% for b in history %}
+    {% if b.role == "user" %}
+      <div class="ac-msg user"><div class="ac-role">you</div>
+        {% for blk in b.blocks %}{{ turn_body(blk.text) }}{% endfor %}
+      </div>
+    {% else %}
+      <div class="ac-msg assistant">
+        <div class="ac-role">assistant</div>
+        {# Blocks in the order the turn produced them, so a reload reads the way the
+           live stream did: what it said before a tool call sits above that call. #}
+        {% for blk in b.blocks %}
+          {% if blk.kind == "tool" %}
+            {% if blk.calls | length == 1 %}
+              {{ tool_row(blk.calls[0]) }}
+            {% else %}
+              <details class="ac-tool ac-tools"><summary title="{{ blk.calls | map(attribute='name') | unique | join(', ') }}">Called {{ blk.calls | length }} tools</summary><div class="ac-tools-body">{% for call in blk.calls %}{{ tool_row(call) }}{% endfor %}</div></details>
+            {% endif %}
+          {% elif blk.kind == "offers" %}
+            {{ offer_row(blk.options) }}
+          {% elif blk.kind == "thinking" %}
+            {% if blk.text.strip() %}
+              <details class="ac-think"><summary>💭 thinking</summary><div class="ac-think-text">{{ blk.text }}</div></details>
+            {% endif %}
+          {% else %}
+            {# The markdown filter returns Markup from app.web.markdown_render — the only
+               thing on this page allowed past autoescape. User bubbles stay escaped text. #}
+            <div class="ac-body">{{ blk.text | markdown }}</div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endfor %}
+  {% if pending_user %}
+    <div class="ac-msg user"><div class="ac-role">you</div>{{ turn_body(pending_user) }}</div>
+  {% endif %}
+</div>
+
+<div class="ac-dock">
+{% if view_only %}
+  <div class="ac-composer ac-view-only">Read-only generation view — watch it run; there's no agent here to reply to.</div>
+{% else %}
+  {# The attached file, before it is sent. Empty until something is picked or dropped. #}
+  <div class="ac-attached js-chat-attached" hidden></div>
+  {# A <dialog>, not a panel: it blocks, so the question cannot be answered by
+     ignoring it, and Escape or the scrim cancels the attach. Native gives us the focus
+     trap and the Escape key. Only opens when the session has no project and the
+     workspace has one — with no project anywhere there is nothing to ask. #}
+  <dialog class="ac-modal js-chat-project-modal">
+    <h2>Where should this file go?</h2>
+    <p class="ac-modal-lede">Files belong to a project, not to a conversation. This also
+      sets the project this session works on.</p>
+    {# The last point before the bytes go: attach() holds the file until a choice is
+       clicked, so Escape here still costs nothing. #}
+    {% if serves_an_open_demo() %}
+    <p class="demo-upload-note">Open demo — whichever you pick, this file becomes readable
+      by every visitor and by any stage anyone writes. Upload only what can be made public.</p>
+    {% endif %}
+    <button type="button" class="ac-choice ac-choice-new" data-project="">
+      <strong>New project</strong>
+      <span class="ac-muted">· the agent reads the file and sets one up</span></button>
+    <div class="js-chat-project-choices"></div>
+  </dialog>
+  <div class="ac-composer">
+    <button type="button" class="ac-clip js-chat-clip" title="Attach a data file">📎</button>
+    <input type="file" class="js-chat-file" hidden />
+    <textarea class="ac-input js-chat-input" rows="1" autocomplete="off"
+      placeholder="Message… (Enter to send, Shift+Enter for a new line)"></textarea>
+    <button class="ac-send js-chat-send">Send</button>
+  </div>
+{% endif %}
+</div>

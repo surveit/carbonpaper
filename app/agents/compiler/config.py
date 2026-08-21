@@ -69,6 +69,7 @@ Publishing a version stays yours. Say what you want changed."""
 CONFIG = AgentConfig(
     system_prompt=EDITING_SYSTEM_PROMPT,
     context_schema=EditingContext,
+    display_name="Editing",
     # The CLI's own built-in, which loads a deferred MCP tool's schema before first
     # use — it renders in the chat but is not one of this agent's tools.
     extra_tool_labels={"ToolSearch": "Looking up a tool"},

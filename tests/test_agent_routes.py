@@ -6,6 +6,7 @@ register a throwaway agent rather than depending on the editing agent.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,6 +17,8 @@ from app.core.agent import registry
 from app.core.agent.registry import AgentConfig, register
 from app.core.agent.bound_tool import bind_by_signature
 from app.main import app
+
+_CHAT_CLIENT = Path(__file__).resolve().parents[1] / "app/static/chat-panel.js"
 
 client = TestClient(app)
 
@@ -50,7 +53,7 @@ def _build_tools(ctx: BaseModel) -> list:
 def register_dummy_agent(scripted_agent_turn) -> Iterator[None]:
     register(
         "dummy",
-        AgentConfig(system_prompt="sp", context_schema=_Ctx),
+        AgentConfig(system_prompt="sp", context_schema=_Ctx, display_name="Dummy"),
         _build_tools,
     )
     yield
@@ -107,8 +110,8 @@ def test_chat_page_renders_the_composer() -> None:
     sid = _new_session({"label": "hello"})
     page = client.get(f"/chat/{sid}")
     assert page.status_code == 200
-    assert f'let SID = "{sid}";' in page.text
-    assert 'id="input"' in page.text  # a bound agent keeps the message composer
+    assert f'"session_id": "{sid}"' in page.text
+    assert "js-chat-input" in page.text  # a bound agent keeps the message composer
 
 
 def test_chat_page_hides_composer_for_view_only_session() -> None:
@@ -116,6 +119,9 @@ def test_chat_page_hides_composer_for_view_only_session() -> None:
     sid = _store.create(title="Generation", agent_id=None, context={"phase": "workflow"})
     page = client.get(f"/chat/{sid}")
     assert page.status_code == 200
-    assert 'id="input"' not in page.text        # no message box on a view-only session
+    assert "js-chat-input" not in page.text     # no message box on a view-only session
     assert "read-only" in page.text.lower()      # copy explains why
-    assert "EventSource(" in page.text           # but it can still watch the live turn
+
+    # Both halves: either alone would pass with the live turn gone.
+    assert "/static/chat-panel.js" in page.text
+    assert "EventSource(" in _CHAT_CLIENT.read_text(encoding="utf-8")

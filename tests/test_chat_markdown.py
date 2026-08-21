@@ -15,7 +15,7 @@ from app.web.markdown_render import render_markdown
 
 client = TestClient(app)
 
-_CHAT_TEMPLATE = Path(__file__).resolve().parents[1] / "app/templates/chat.html"
+_CHAT_CLIENT = Path(__file__).resolve().parents[1] / "app/static/chat-panel.js"
 
 
 def open_session_saying(text: str) -> str:
@@ -42,14 +42,21 @@ def test_a_bare_url_renders_as_an_anchor() -> None:
     assert '<a href="http://127.0.0.1:8799/p/demo/workflow" target="_blank"' in body
 
 
-def test_every_link_opens_in_a_new_tab_so_the_conversation_survives_the_click() -> None:
-    """An in-app link too: the run page is where the reader goes, the chat is what they lose."""
+def test_every_link_is_rendered_to_open_in_a_new_tab() -> None:
+    """The safe default; static/chat-panel.js drops it for a link back into this app."""
     rendered = str(render_markdown(
         "[the run](/project/demo/runs/7) and [the guide](https://example.org/g)"
     ))
 
     assert rendered.count('target="_blank"') == 2
     assert rendered.count('rel="noopener noreferrer"') == 2
+
+
+def test_the_client_is_what_keeps_an_in_app_link_in_this_tab() -> None:
+    """Grounded against the shipped client, since nothing else here executes it."""
+    client_source = _CHAT_CLIENT.read_text(encoding="utf-8")
+    assert 'querySelectorAll("a[target=_blank]")' in client_source
+    assert 'a.removeAttribute("target")' in client_source
 
 
 def test_raw_html_in_assistant_text_is_escaped_not_executed() -> None:
@@ -127,7 +134,7 @@ def test_the_swap_endpoint_404s_on_an_unknown_session() -> None:
 
 def test_the_streaming_path_renders_each_chunk_and_still_reconciles_at_done() -> None:
     """Each chunk is a whole TextBlock, re-rendered live; `done` still reconciles."""
-    script = _CHAT_TEMPLATE.read_text(encoding="utf-8")
+    script = _CHAT_CLIENT.read_text(encoding="utf-8")
     assert "renderStoredMarkdown" in script.split('ev.kind === "done"')[1]
     streaming_text_handler = script.split("    text(t) {")[1].split("},")[0]
     assert "renderLive(body, raw)" in streaming_text_handler

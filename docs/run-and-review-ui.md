@@ -250,6 +250,69 @@ reviewing a run's flagged rows.
 - `POST /project/{p}/version` freezes the working copy into a `Version` document
   (in the store); `GET /project/{p}/versions` lists the frozen versions.
 
+## The conversation, on every page (`_chat_panel.html`, `_chat_rail.html`)
+
+The chat is a panel, not a page, and two hosts draw the same partial:
+
+- `chat.html` at `/chat/{sid}` — the full-width page.
+- `_chat_rail.html`, included from `base.html`, so every page but the review
+  packet can hold one. Which session is open lives in `localStorage` and the
+  panel arrives from `GET /chat/{sid}/panel`. No other route is handed any chat
+  state.
+
+The two things the rail remembers have different lifetimes on purpose. **Which**
+conversation, and whether it is shut, are the reader's and go in `localStorage`;
+**where** they had got to in it belongs to one view and goes in `sessionStorage`.
+Per-tab for the first was tried and reverted: a tab opened from outside the
+browser inherits no session storage, and links arrive that way constantly — from
+another app, a bookmark, a restored window — so the rail was absent on most
+arrivals, which is the one thing it exists not to be. A cold tab having no
+reading place is not the same problem: the reader has not read anything in it
+yet, so the newest turn is the right place to start.
+
+Two scripts, and the split matters. `_chat_rail_head.html` runs inline in
+`<head>`: it stamps `chat-rail-open` or `chat-rail-shut` on `<html>` so the page
+**lays out with the column already reserved**, and it starts the panel fetch
+there rather than after the foot scripts. Left to `DOMContentLoaded` both cost a
+visible reflow — `main` from 1440 to 1040 and every mermaid diagram re-laying
+out — which read as the rail taking seconds to arrive when the fetch itself is
+about 3ms. `static/chat-rail.js` then fills the reserved column in.
+
+`lineage.html` includes both scripts itself. It is standalone by necessity — the
+same template is also written into a review packet as a file in a zip — so it
+guards them on `offline`, which is what tells the two renders apart.
+
+The rail does not survive a page load and does not need to. A turn is a detached
+task with a replayable event buffer (`app/core/agent/turns.py`), so the panel
+re-mounts on the next page and reattaches at `?from=0`.
+
+The reader's place is kept in `sessionStorage` as **which message they were
+reading and how far into it**, not a scroll offset: the page draws the transcript
+at 1280px and the rail at 400, so the same offset is a different part of the
+conversation. Both hosts store it against whichever box actually scrolls — the
+log in the rail, the document on the page.
+
+`static/chat-panel.js` is the client, scoped to a root element rather than the
+document — every hook is a `js-` class, since an id would collide between two
+panels. It makes two decisions about every link in a reply, both from one
+question — is this link back into this app?
+
+- **Where it opens.** `markdown_render` marks every link `target="_blank"`, which
+  was right while the chat was a page you lost by clicking anything on it. The
+  client drops it again for an in-app link: the rail carries the conversation
+  across an in-app navigation, and a new tab is now the only thing that still
+  loses it. Undone in the browser rather than at the renderer because origin is a
+  fact about the browser, which a server behind a proxy does not have. An
+  external link keeps its new tab.
+- **How it is drawn.** An in-app link that is a whole paragraph on its own is a
+  handover — the page the agent wants opened — and is drawn as a target
+  (`.ac-goto`). A link inside a sentence is a citation and stays inline. Nothing
+  is intercepted and no agent knows either decision happened.
+
+Neither host names an agent. What a surface calls one is
+`AgentConfig.display_name`, and `tests/arch/test_chat_rail_names_no_agent.py`
+fails a build where a chat host learns an agent id.
+
 ## Where to confirm visually
 
 Some states only render during a live run (spinner, yellow in-progress

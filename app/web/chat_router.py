@@ -14,6 +14,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.llm_sdk import CLI_PATH
 from app.services import project as project_service
+from app.services.project import ProjectListing
 from app.core.errors import FileOverCeiling, StoreOverQuota
 from app.core.files import max_upload_bytes, save_upload
 from app.web.file_sizes import describe_attachment, describe_refusal
@@ -52,6 +53,40 @@ def _backend_error() -> str | None:
     )
 
 
+class ChatPanelConfig(BaseModel):
+    """Everything the panel's client needs before it can mount. See static/chat-panel.js."""
+
+    title: str | None
+    session_id: str | None
+    # None until the agent settles one; that is what makes an attachment ask where it goes.
+    session_project: str | None
+    projects: list[ProjectListing]
+    max_upload_bytes: int
+    active_turn: str | None
+    # A draft page stores nothing until the reader replies; these three materialize it.
+    draft_agent_id: str | None = None
+    draft_context: dict[str, str] | None = None
+
+
+def _read_panel_context(sid: str, data: dict) -> dict:
+    """The panel renders identically wherever it is drawn, so both hosts read this."""
+    return {
+        "history": _store.history_view(sid),
+        "pending_user": data.get("pending_user"),
+        # No bound agent: post_message 400s, so there is no composer to draw.
+        "view_only": data.get("agent_id") is None,
+        "backend_error": _backend_error(),
+        "config": ChatPanelConfig(
+            title=data.get("title"),
+            session_id=sid,
+            session_project=(data.get("context") or {}).get("project_id"),
+            projects=project_service.list_project_listings(),
+            max_upload_bytes=max_upload_bytes(),
+            active_turn=data.get("active_turn"),
+        ),
+    }
+
+
 @router.get("/chat", response_class=HTMLResponse)
 async def chat_index(request: Request):
     all_sessions = _store.list_sessions()
@@ -77,10 +112,10 @@ def _draft_opening_bubble(opening: registry.OpeningTurn) -> Bubble:
 
 
 def _draft_title(agent_id: str, context: dict) -> str:
-    if agent_id == "tutorial":
-        return "Guided tour"
+    """The agent says what it is called; app.web holds no agent's name. registry.display_name."""
+    name = registry.read_display_name(agent_id)
     project_id = context.get("project_id")
-    return f"{agent_id.capitalize()}: {project_id}" if project_id else "New chat"
+    return f"{name}: {project_id}" if project_id else name
 
 
 @router.get("/chat/agent/{agent_id}/new", response_class=HTMLResponse)
@@ -93,21 +128,22 @@ async def draft_agent_chat(agent_id: str, request: Request):
     history = [_draft_opening_bubble(opening)] if opening and opening.text else []
     title = _draft_title(agent_id, context)
     return templates.TemplateResponse(request, "chat.html", {
-        "session_id": None,
-        "title": title,
         "history": history,
         "pending_user": None,
-        "active_turn": None,
         "view_only": False,
         "backend_error": _backend_error(),
+        "title": title,
         "crumbs": build_chat_crumbs(title),
-        "session_project": context.get("project_id"),
-        "projects": [p.model_dump() for p in project_service.list_project_listings()],
-        "max_upload_bytes": max_upload_bytes(),
-        # Carried by the page's JS to materialize a real session on first use.
-        "draft_agent_id": agent_id,
-        "draft_context": context,
-        "draft_title": title,
+        "config": ChatPanelConfig(
+            title=title,
+            session_id=None,
+            session_project=context.get("project_id"),
+            projects=project_service.list_project_listings(),
+            max_upload_bytes=max_upload_bytes(),
+            active_turn=None,
+            draft_agent_id=agent_id,
+            draft_context=context,
+        ),
     })
 
 
@@ -130,23 +166,19 @@ async def chat_page(request: Request, sid: str):
         raise HTTPException(status_code=404, detail="Session not found")
     data = _store.load(sid)
     return templates.TemplateResponse(request, "chat.html", {
-        "session_id": sid,
+        **_read_panel_context(sid, data),
         "title": data.get("title"),
-        "history": _store.history_view(sid),
-        "pending_user": data.get("pending_user"),
-        "active_turn": data.get("active_turn"),
-        # No bound agent → the UI renders and streams the session, but there is no agent to
-        # reply to a typed message (post_message 400s), so the composer is hidden.
-        "view_only": data.get("agent_id") is None,
-        "backend_error": _backend_error(),
         "crumbs": build_chat_crumbs(data.get("title")),
-        # What an attached file needs to know before it is sent: the ceiling, the
-        # project this session works on (None until the agent settles one), and the
-        # projects it could be given to.
-        "session_project": (data.get("context") or {}).get("project_id"),
-        "projects": [p.model_dump() for p in project_service.list_project_listings()],
-        "max_upload_bytes": max_upload_bytes(),
     })
+
+
+@router.get("/chat/{sid}/panel", response_class=HTMLResponse)
+async def chat_panel(request: Request, sid: str):
+    """The panel with no page around it, for a host that has its own. static/chat-rail.js."""
+    if not _store.exists(sid):
+        raise HTTPException(status_code=404, detail="Session not found")
+    return templates.TemplateResponse(
+        request, "_chat_panel.html", _read_panel_context(sid, _store.load(sid)))
 
 
 @router.post("/chat/{sid}/files")

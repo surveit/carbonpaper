@@ -40,10 +40,11 @@ def _open_with(context: BaseModel) -> OpeningTurn:
 @pytest.fixture(autouse=True)
 def throwaway_agents() -> Iterator[None]:
     """Registered per test rather than leaning on editing/tutorial copy, which owns its own wording."""
-    register("silent", AgentConfig(system_prompt="sp", context_schema=_Ctx), _no_tools)
+    register("silent", AgentConfig(system_prompt="sp", context_schema=_Ctx, display_name="Silent"), _no_tools)
     register(
         "greeter",
-        AgentConfig(system_prompt="sp", context_schema=_Ctx, render_opening_turn=_open_with),
+        AgentConfig(system_prompt="sp", context_schema=_Ctx, display_name="Greeter",
+                    render_opening_turn=_open_with),
         _no_tools,
     )
     yield

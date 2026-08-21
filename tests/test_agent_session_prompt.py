@@ -48,7 +48,7 @@ def dummy_agent() -> Iterator[None]:
 
 # ── the generic hook ─────────────────────────────────────────────────────────
 def test_an_agent_with_no_hook_is_handed_its_static_prompt_unchanged() -> None:
-    config = AgentConfig(system_prompt="sp", context_schema=_Ctx)
+    config = AgentConfig(system_prompt="sp", context_schema=_Ctx, display_name="Bare")
     assert render_system_prompt(config, _Ctx(label="anything")) == "sp"
 
 
@@ -56,6 +56,7 @@ def test_the_hook_reads_the_validated_context_and_its_answer_is_appended() -> No
     config = AgentConfig(
         system_prompt="sp",
         context_schema=_Ctx,
+        display_name="Bare",
         render_session_prompt=_render_label,
     )
     assert render_system_prompt(config, _Ctx(label="ONE")) == "sp\n\nwords for ONE"
@@ -64,7 +65,8 @@ def test_the_hook_reads_the_validated_context_and_its_answer_is_appended() -> No
 def test_a_hook_with_nothing_to_say_appends_nothing_at_all() -> None:
     # Not even the separator: a blank tail reads as a section the agent was denied.
     config = AgentConfig(
-        system_prompt="sp", context_schema=_Ctx, render_session_prompt=lambda ctx: ""
+        system_prompt="sp", context_schema=_Ctx, display_name="Bare",
+        render_session_prompt=lambda ctx: ""
     )
     assert render_system_prompt(config, _Ctx(label="anything")) == "sp"
 
@@ -75,6 +77,7 @@ def test_build_engine_hands_the_appended_prompt_to_the_engine(dummy_agent) -> No
         AgentConfig(
             system_prompt="sp",
             context_schema=_Ctx,
+            display_name="Bare",
             render_session_prompt=_render_label,
         ),
         _no_tools,
