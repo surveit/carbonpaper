@@ -154,6 +154,34 @@ def find_ratchet_breaks(head: LexiconSnapshot, registry: LexiconSnapshot) -> lis
     ]
 
 
+_NON_VERB_ROLES = {Role.NOUN, Role.FIELD, Role.ACCESSOR}
+
+
+def find_new_verb_uses(head: LexiconSnapshot, base: LexiconSnapshot) -> list[str]:
+    """A word BASE never used as a verb just led a function name for the first time on HEAD.
+
+    Wider than `find_ratchet_breaks`: fires on every established non-verb word, not only the
+    two a human has hand-marked `noun_led`. A first verb use is either a real new capability
+    or the wrong word choice, and only a human can tell which — so this stays out of the
+    required suite and feeds a non-blocking check instead. Diffs against BASE, not the
+    committed registry: `lexicon.json` is a `noun_led`-ratchet snapshot, not kept current
+    with `app/`, so diffing against it would flag pre-existing drift on every PR instead of
+    only what that PR introduces.
+    """
+    return [
+        f"{word} (verb 0 → {roles.verb})"
+        for word, roles in head.words.items()
+        if roles.verb > 0
+        and (known := base.words.get(word)) is not None
+        and Role.VERB not in known.held()
+        and known.held() & _NON_VERB_ROLES
+    ]
+
+
+def read_registry(root: Path = _REPO_ROOT) -> LexiconSnapshot:
+    return LexiconSnapshot.model_validate_json((root / "lexicon.json").read_text(encoding="utf-8"))
+
+
 class SourceLinks(BaseModel):
     """Where to point a sighting. Absent means render plain text — never a guessed URL."""
 
@@ -330,12 +358,24 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--repo", help="OWNER/NAME, to link each sighting at --sha")
     parser.add_argument("--sha", help="commit the links resolve against; both or neither")
+    parser.add_argument(
+        "--check-new-verbs",
+        nargs=2,
+        metavar=("HEAD_JSON", "BASE_JSON"),
+        help="exit 1 if HEAD_JSON leads a function with a word BASE_JSON never held as a verb",
+    )
     args = parser.parse_args(argv)
     if args.markdown:
         links = _read_links(args.repo, args.sha)  # bad arguments fail before any file is read
         head, base = (LexiconSnapshot.model_validate_json(Path(p).read_text(encoding="utf-8")) for p in args.markdown)
         print(render_markdown(head, base, links))
         return 0
+    if args.check_new_verbs:
+        head, base = (LexiconSnapshot.model_validate_json(Path(p).read_text(encoding="utf-8")) for p in args.check_new_verbs)
+        new_verbs = find_new_verb_uses(head, base)
+        for line in new_verbs:
+            print(line)
+        return 1 if new_verbs else 0
     snapshot = build_snapshot(args.root)
     if args.registry:
         snapshot = snapshot.model_copy(update={"sightings": {}})
