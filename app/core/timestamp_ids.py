@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from app.core.ids import ID
+
 # Fixed width, so an ordinary string sort over ids is chronological — the property
 # app.services.versioning's version list and app.services.project's newest-run lookup
 # both read by. Ids already on disk carry the older second-resolution form
@@ -17,5 +19,5 @@ from datetime import datetime
 _ID_FORMAT = "%Y%m%dT%H%M%S.%f"
 
 
-def mint_timestamp_id() -> str:
+def mint_timestamp_id() -> ID:
     return datetime.now().strftime(_ID_FORMAT)

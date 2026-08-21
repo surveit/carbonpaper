@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from app.core.agent.usage import LlmUsage, TurnSpend
 from app.core.persistence import PersistedModel, PersistenceScope
+from app.core.ids import ID
 
 
 class MessageRole(str, Enum):
@@ -61,12 +62,13 @@ class AgentSession(PersistedModel):
     collection: ClassVar[str] = "agent_session"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
     title: str = "New chat"
-    agent_id: str | None = None
+    agent_id: ID | None = None
     context: dict[str, Any] = Field(default_factory=dict)
     messages: list[dict[str, Any]] = Field(default_factory=list)  # engine-neutral {role, parts} transcript
     active_turn: str | None = None
     pending_user: str | None = None
-    sdk_session_id: str | None = None  # resume token (CLI session to resume)
+    sdk_session_id: ID | None = None  # resume token (CLI session to resume)
+
     # One entry per turn that reported usage, appended as the turn tears down. A
     # session written before this field carries none: what those turns cost was
     # never recorded, which is not the same as their having cost nothing.
@@ -82,58 +84,58 @@ class SessionStore:
         self,
         *,
         title: str | None = None,
-        agent_id: str | None = None,
+        agent_id: ID | None = None,
         context: dict | None = None,
     ) -> str:
-        sid = uuid.uuid4().hex[:12]
+        session_id = uuid.uuid4().hex[:12]
         AgentSession(
-            id=sid,
+            id=session_id,
             title=title or "New chat",
             agent_id=agent_id,
             context=context or {},
         ).save()
-        return sid
+        return session_id
 
-    def exists(self, sid: str) -> bool:
-        return AgentSession.exists(sid)
+    def exists(self, session_id: ID) -> bool:
+        return AgentSession.exists(session_id)
 
-    def load(self, sid: str) -> dict:
-        session = AgentSession.load(sid)
+    def load(self, session_id: ID) -> dict:
+        session = AgentSession.load(session_id)
         return {"session_id": session.id, **session.model_dump(exclude={"id"})}
 
-    def load_messages(self, sid: str) -> list[dict[str, Any]]:
+    def load_messages(self, session_id: ID) -> list[dict[str, Any]]:
         """Always empty: cross-turn memory comes from the CLI resume token, not from a replayed transcript."""
-        del sid
+        del session_id
         return []
 
-    def append_messages(self, sid: str, messages: list[dict[str, Any]]) -> None:
+    def append_messages(self, session_id: ID, messages: list[dict[str, Any]]) -> None:
         """A turn contributes its own messages; the earlier turns stay on the page."""
-        session = AgentSession.load(sid)
+        session = AgentSession.load(session_id)
         session.messages = [*session.messages, *messages]
         session.pending_user = None
         session.save()
 
-    def set_active_turn(self, sid: str, turn_id: str | None) -> None:
-        session = AgentSession.load(sid)
+    def set_active_turn(self, session_id: ID, turn_id: ID | None) -> None:
+        session = AgentSession.load(session_id)
         session.active_turn = turn_id
         session.save()
 
-    def resume_token(self, sid: str) -> str | None:
-        return AgentSession.load(sid).sdk_session_id
+    def resume_token(self, session_id: ID) -> str | None:
+        return AgentSession.load(session_id).sdk_session_id
 
-    def set_resume_token(self, sid: str, token: str) -> None:
-        session = AgentSession.load(sid)
+    def set_resume_token(self, session_id: ID, token: str) -> None:
+        session = AgentSession.load(session_id)
         session.sdk_session_id = token
         session.save()
 
-    def record_turn_spend(self, sid: str, usage: LlmUsage) -> None:
-        session = AgentSession.load(sid)
+    def record_turn_spend(self, session_id: ID, usage: LlmUsage) -> None:
+        session = AgentSession.load(session_id)
         stamp = datetime.now().isoformat(timespec="seconds")
         session.turn_spend = [*session.turn_spend, TurnSpend(created_at=stamp, usage=usage)]
         session.save()
 
-    def set_pending_user(self, sid: str, text: str | None) -> None:
-        session = AgentSession.load(sid)
+    def set_pending_user(self, session_id: ID, text: str | None) -> None:
+        session = AgentSession.load(session_id)
         session.pending_user = text
         session.save()
 
@@ -146,12 +148,12 @@ class SessionStore:
             for s in newest_first
         ]
 
-    def history_view(self, sid: str) -> list[Bubble]:
-        return _render_history_bubbles(AgentSession.load(sid).messages)
+    def history_view(self, session_id: ID) -> list[Bubble]:
+        return _render_history_bubbles(AgentSession.load(session_id).messages)
 
-    def read_last_reply_texts(self, sid: str) -> list[str]:
+    def read_last_reply_texts(self, session_id: ID) -> list[str]:
         """The newest reply's text blocks in turn order; empty when it only called tools."""
-        for bubble in reversed(self.history_view(sid)):
+        for bubble in reversed(self.history_view(session_id)):
             if bubble.role == MessageRole.assistant:
                 return [
                     b.text for b in bubble.blocks

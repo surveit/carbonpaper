@@ -13,13 +13,15 @@ from typing import Any, ClassVar, Iterator, Mapping, Protocol, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.core.ids import ID
+
 # The one honest dynamic boundary: an arbitrary pydantic model_dump / JSON body.
 JsonDict = dict[str, Any]
 # What a stored field can be compared against: a JSON scalar, never a list or object.
 JsonScalar = str | int | float | bool | None
 
 
-def validate_id(id: str) -> str:
+def validate_id(id: ID) -> ID:
     """``:`` is tested directly, not via ``Path.is_absolute()``, which lets ``C:/x`` pass on Linux."""
     if not id or id != id.strip():
         raise ValueError(f"empty or untrimmed id: {id!r}")
@@ -31,15 +33,15 @@ def validate_id(id: str) -> str:
 
 
 class DocumentStore(Protocol):
-    def write(self, collection: str, id: str, data: JsonDict, schema_version: int = 1) -> None: ...
-    def read(self, collection: str, id: str) -> JsonDict: ...
-    def read_tolerant(self, collection: str, id: str) -> JsonDict | None: ...
-    def exists(self, collection: str, id: str) -> bool: ...
-    def delete(self, collection: str, id: str) -> None: ...
+    def write(self, collection: str, id: ID, data: JsonDict, schema_version: int = 1) -> None: ...
+    def read(self, collection: str, id: ID) -> JsonDict: ...
+    def read_tolerant(self, collection: str, id: ID) -> JsonDict | None: ...
+    def exists(self, collection: str, id: ID) -> bool: ...
+    def delete(self, collection: str, id: ID) -> None: ...
     def find(
         self, collection: str, fields: Mapping[str, JsonScalar]
     ) -> Iterator[tuple[str, JsonDict]]: ...
-    def list_ids(self, collection: str, prefix: str = "") -> list[str]: ...
+    def list_ids(self, collection: str, prefix: str = "") -> list[ID]: ...
     def read_all(self, collection: str, prefix: str = "") -> Iterator[tuple[str, JsonDict]]: ...
 
 
@@ -94,7 +96,7 @@ class PersistedModel(BaseModel):
         populate_by_name=True,
     )
 
-    id: str = Field(default_factory=lambda: uuid4().hex)
+    id: ID = Field(default_factory=lambda: uuid4().hex)
     created_at: str = Field(default_factory=now_iso)
     updated_at: str = Field(default_factory=now_iso)
 
@@ -121,11 +123,11 @@ class PersistedModel(BaseModel):
         )
 
     @classmethod
-    def load(cls, id: str) -> Self:
+    def load(cls, id: ID) -> Self:
         return cls.model_validate(get_store().read(cls.collection, id))
 
     @classmethod
-    def load_or_none(cls, id: str) -> Self | None:
+    def load_or_none(cls, id: ID) -> Self | None:
         data = get_store().read_tolerant(cls.collection, id)
         return cls.model_validate(data) if data is not None else None
 
@@ -141,11 +143,11 @@ class PersistedModel(BaseModel):
                 for _, data in get_store().read_all(cls.collection, prefix)]
 
     @classmethod
-    def delete(cls, id: str) -> None:
+    def delete(cls, id: ID) -> None:
         get_store().delete(cls.collection, id)
 
     @classmethod
-    def exists(cls, id: str) -> bool:
+    def exists(cls, id: ID) -> bool:
         return get_store().exists(cls.collection, id)
 
     @classmethod

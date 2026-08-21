@@ -10,6 +10,7 @@ from app.models.tool_schema_prompts import (
     REVIEW_GUIDE_DRAFT_DESCRIPTION,
     REVIEW_GUIDE_STEP_DESCRIPTION,
 )
+from app.core.ids import ID
 
 # A step a journalist will actually skim is short.
 PROSE_MAX_CHARS = 255
@@ -30,7 +31,7 @@ class ReviewGuideStep(_Base):
             "reader could disagree with."
         ),
     )
-    stage_ids: list[str]
+    stage_ids: list[ID]
     # OPTIONAL HERE, and must stay so: every guide stored before this field existed
     # parses through PersistedModel.load's extra="forbid" model_validate, and a required
     # field would orphan all of them. Such a guide renders its data link with the size

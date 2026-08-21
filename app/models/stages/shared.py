@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Mapping, Sequence
 
 from app.core.errors import PredicateError
 from app.core.predicate import parse_predicate
+from app.core.ids import ID
 
 if TYPE_CHECKING:
     from app.models.schema import TableSchema
@@ -58,7 +59,7 @@ def _signature_column_names(stage: "AbstractStage") -> list[str]:
 
 
 def find_predicate_column_issues(
-    expr: str, *, stage_id: str, field: str, cols: set[str]
+    expr: str, *, stage_id: ID, field: str, cols: set[str]
 ) -> list[str]:
     try:
         referenced = parse_predicate(expr, cols).columns
@@ -82,7 +83,7 @@ OUTPUT_TYPE_ISSUE = (
 
 
 def find_declared_vs_computed_issues(
-    stage_id: str, block_name: str, declared: "TableSchema", computed: Mapping[str, str | None]
+    stage_id: ID, block_name: str, declared: "TableSchema", computed: Mapping[str, str | None]
 ) -> list[str]:
     """Nullability/enum/range are deliberately not compared — they are claims about data, not shape."""
     issues: list[str] = []

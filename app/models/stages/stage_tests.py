@@ -26,6 +26,7 @@ from app.models.tool_schema_prompts import (
     STAGE_TEST_DESCRIPTION,
     STARLARK_ROW_FUNCTION_STAGE_TEST_DESCRIPTION,
 )
+from app.core.ids import ID
 
 # One row: column name → cell value. WHICH columns is not knowable here — it comes
 # from the stage's own declared schema, checked at validate_test_rows — so this is a
@@ -53,7 +54,7 @@ _OneInputRow: TypeAlias = Annotated[
 # `row` is a position in that run's output for `input`, narrowed to what the step reads.
 class RowSelection(_Base):
     input: StageId
-    run_id: str
+    run_id: ID
     row: int = Field(ge=0)
     filter: str
     # How many rows the filter selected, out of how many it read. A case whose filter

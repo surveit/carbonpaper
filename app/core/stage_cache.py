@@ -20,6 +20,7 @@ from app.core.frames import (
 )
 from app.core.persistence import JsonDict, PersistedModel, PersistenceScope
 from app.core.utils import compute_short_hash
+from app.core.ids import ID
 
 # The frame-store collection a whole-frame cache payload is filed under, keyed
 # by the same `_build_cache_id` composite as the entry itself. A frame is far
@@ -36,7 +37,7 @@ class StageCacheEntry(PersistedModel):
     SCHEMA_VERSION: ClassVar[int] = 2
 
     project: str
-    stage_id: str
+    stage_id: ID
     stage_fingerprint: str
     input_fingerprint: str
     frozen_input: JsonDict
@@ -63,16 +64,16 @@ class StageCacheEntry(PersistedModel):
 CACHE_KEY_VERSION = 4
 
 
-def _build_cache_prefix(project_id: str, stage_id: str, stage_fingerprint: str) -> str:
+def _build_cache_prefix(project_id: ID, stage_id: ID, stage_fingerprint: str) -> str:
     """Every id starts with this, so a prefix query and an id cannot disagree about the format."""
     return f"v{CACHE_KEY_VERSION}/{project_id}/{stage_id}/{stage_fingerprint}/"
 
 
-def _build_cache_id(project_id: str, stage_id: str, stage_fingerprint: str, input_fingerprint: str) -> str:
+def _build_cache_id(project_id: ID, stage_id: ID, stage_fingerprint: str, input_fingerprint: str) -> ID:
     return _build_cache_prefix(project_id, stage_id, stage_fingerprint) + input_fingerprint
 
 
-def rekey_cache_id_to_project(cache_id: str, project_id: str) -> str:
+def rekey_cache_id_to_project(cache_id: ID, project_id: ID) -> str:
     """The project segment is SCOPE: what an entry answers is fixed by the two fingerprints."""
     parts = cache_id.split("/", 2)
     if len(parts) != 3 or parts[0] != f"v{CACHE_KEY_VERSION}":
@@ -83,8 +84,8 @@ def rekey_cache_id_to_project(cache_id: str, project_id: str) -> str:
 
 
 def _build_frame_cache_id(
-    project_id: str, stage_id: str, stage_fingerprint: str, input_tables: Sequence[pa.Table]
-) -> str:
+    project_id: ID, stage_id: ID, stage_fingerprint: str, input_tables: Sequence[pa.Table]
+) -> ID:
     return _build_cache_id(
         project_id, stage_id, stage_fingerprint, compute_tables_fingerprint(input_tables)
     )
@@ -108,21 +109,21 @@ def _to_json_safe_row(row: Mapping[str, object]) -> JsonDict:
 
 class ReadOnlyStageCache:
     def get(
-        self, project_id: str, stage_id: str, stage_fingerprint: str, input_fingerprint: str
+        self, project_id: ID, stage_id: ID, stage_fingerprint: str, input_fingerprint: str
     ) -> StageCacheEntry | None:
         return StageCacheEntry.load_or_none(
             _build_cache_id(project_id, stage_id, stage_fingerprint, input_fingerprint)
         )
 
     def find_entries(
-        self, project_id: str, stage_id: str, stage_fingerprint: str
+        self, project_id: ID, stage_id: ID, stage_fingerprint: str
     ) -> list[StageCacheEntry]:
         return StageCacheEntry.list(
             prefix=_build_cache_prefix(project_id, stage_id, stage_fingerprint)
         )
 
     def find_recorded_rows(
-        self, project_id: str, stage_id: str, stage_fingerprint: str
+        self, project_id: ID, stage_id: ID, stage_fingerprint: str
     ) -> dict[str, JsonDict]:
         return {
             entry.input_fingerprint: entry.output_row
@@ -130,21 +131,21 @@ class ReadOnlyStageCache:
             if entry.output_row is not None
         }
 
-    def find_project_entries(self, project_id: str) -> list[StageCacheEntry]:
+    def find_project_entries(self, project_id: ID) -> list[StageCacheEntry]:
         return StageCacheEntry.list(prefix=f"v{CACHE_KEY_VERSION}/{project_id}/")
 
-    def find_project_frame_ids(self, project_id: str) -> list[str]:
+    def find_project_frame_ids(self, project_id: ID) -> list[ID]:
         return get_frame_store().list_ids(
             CACHED_FRAME_COLLECTION, f"v{CACHE_KEY_VERSION}/{project_id}/"
         )
 
-    def read_frame_payload(self, cache_id: str) -> bytes | None:
+    def read_frame_payload(self, cache_id: ID) -> bytes | None:
         return get_frame_store().read_payload(CACHED_FRAME_COLLECTION, cache_id)
 
     def find_cached_frame(
         self,
-        project_id: str,
-        stage_id: str,
+        project_id: ID,
+        stage_id: ID,
         stage_fingerprint: str,
         input_tables: Sequence[pa.Table],
     ) -> pa.Table | None:
@@ -159,8 +160,8 @@ class StageCache(ReadOnlyStageCache):
     def record(
         self,
         *,
-        project_id: str,
-        stage_id: str,
+        project_id: ID,
+        stage_id: ID,
         stage_fingerprint: str,
         input_fingerprint: str,
         input_row: Mapping[str, object],
@@ -176,7 +177,7 @@ class StageCache(ReadOnlyStageCache):
             output_row=None if output_row is None else _to_json_safe_row(output_row),
         ).save()
 
-    def copy_entry_into(self, entry: StageCacheEntry, project_id: str) -> bool:
+    def copy_entry_into(self, entry: StageCacheEntry, project_id: ID) -> bool:
         """False means an id already stored — its output may differ from this one, and it wins."""
         cache_id = _build_cache_id(
             project_id, entry.stage_id, entry.stage_fingerprint, entry.input_fingerprint
@@ -194,7 +195,7 @@ class StageCache(ReadOnlyStageCache):
         ).save()
         return True
 
-    def copy_frame_into(self, cache_id: str, payload: bytes, project_id: str) -> bool:
+    def copy_frame_into(self, cache_id: ID, payload: bytes, project_id: ID) -> bool:
         store = get_frame_store()
         moved = rekey_cache_id_to_project(cache_id, project_id)
         if store.exists(CACHED_FRAME_COLLECTION, moved):
@@ -205,8 +206,8 @@ class StageCache(ReadOnlyStageCache):
     def record_frame(
         self,
         *,
-        project_id: str,
-        stage_id: str,
+        project_id: ID,
+        stage_id: ID,
         stage_fingerprint: str,
         input_tables: Sequence[pa.Table],
         table: pa.Table,

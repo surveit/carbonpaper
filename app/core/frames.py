@@ -22,6 +22,7 @@ import pyarrow.parquet as pq
 from app.core.errors import FrameConcatMismatchError, FrameNotSerializableError
 from app.core.persistence import validate_id
 from app.core.utils import compute_short_hash
+from app.core.ids import ID
 
 # The on-disk extension for a frame file, named so every reader that
 # distinguishes a parquet output from a csv one (by `Path.suffix`) compares
@@ -458,17 +459,17 @@ class FrameStore:
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
 
-    def _path(self, collection: str, id: str) -> Path:
+    def _path(self, collection: str, id: ID) -> Path:
         validate_id(collection)
         validate_id(id)
         return self.root / collection / f"{id}.parquet"
 
-    def load_table(self, collection: str, id: str) -> pa.Table | None:
+    def load_table(self, collection: str, id: ID) -> pa.Table | None:
         path = self._path(collection, id)
         return read_frame_table(path) if path.exists() else None
 
     def save_table(
-        self, collection: str, id: str, table: pa.Table, *, overwrite: bool = True
+        self, collection: str, id: ID, table: pa.Table, *, overwrite: bool = True
     ) -> None:
         path = self._path(collection, id)
         if path.exists() and not overwrite:
@@ -476,10 +477,10 @@ class FrameStore:
         path.parent.mkdir(parents=True, exist_ok=True)
         write_frame_table(table, path)
 
-    def exists(self, collection: str, id: str) -> bool:
+    def exists(self, collection: str, id: ID) -> bool:
         return self._path(collection, id).exists()
 
-    def list_ids(self, collection: str, prefix: str = "") -> list[str]:
+    def list_ids(self, collection: str, prefix: str = "") -> list[ID]:
         root = self.root / validate_id(collection)
         if not root.is_dir():
             return []
@@ -487,17 +488,17 @@ class FrameStore:
                   for path in root.rglob(f"*{PARQUET_SUFFIX}"))
         return sorted(id for id in stored if id.startswith(prefix))
 
-    def read_payload(self, collection: str, id: str) -> bytes | None:
+    def read_payload(self, collection: str, id: ID) -> bytes | None:
         path = self._path(collection, id)
         return path.read_bytes() if path.exists() else None
 
-    def write_payload(self, collection: str, id: str, payload: bytes) -> None:
+    def write_payload(self, collection: str, id: ID, payload: bytes) -> None:
         """Verbatim: a payload copied between stores must not be re-encoded on the way."""
         path = self._path(collection, id)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(payload)
 
-    def delete(self, collection: str, id: str) -> None:
+    def delete(self, collection: str, id: ID) -> None:
         self._path(collection, id).unlink(missing_ok=True)
 
 
@@ -520,7 +521,7 @@ def is_frame_store_configured() -> bool:
 
 
 def save_table_or_reject(
-    collection: str, id: str, table: pa.Table, *, described_as: str
+    collection: str, id: ID, table: pa.Table, *, described_as: str
 ) -> None:
     store = get_frame_store()
     try:

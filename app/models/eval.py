@@ -14,6 +14,7 @@ from pydantic import AfterValidator, Field, field_validator, model_validator
 
 from app.models.schema import _Base
 from app.models.table import TableRef
+from app.core.ids import ID
 
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
@@ -30,7 +31,7 @@ SlugId = Annotated[str, AfterValidator(_validate_slug)]
 # ── Overrides ────────────────────────────────────────────────────────────────
 class StageOutputOverride(_Base):
     """Injecting `table` cuts `stage_id` and everything upstream of it out of the run."""
-    stage_id: str
+    stage_id: ID
     table: TableRef
 
 

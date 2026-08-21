@@ -33,6 +33,7 @@ from app.models.stages.signature import (
 from app.models.stages.stage_tests import StageTest, validate_stage_tests
 from app.models.stages.warnings import CompilerWarning
 from app.core.utils import compute_short_hash
+from app.core.ids import ID
 
 if TYPE_CHECKING:
     # app.models.stages.code imports this module, so the reference stays lazy.
@@ -151,7 +152,7 @@ STAGE_DESCRIPTION_DESCRIPTION = (
 
 # ── The shared field list ────────────────────────────────────────────────────
 class AuthoredStageFields(_Base):
-    id: str = Field(max_length=STAGE_ID_MAX_CHARS, description=STAGE_ID_DESCRIPTION)
+    id: ID = Field(max_length=STAGE_ID_MAX_CHARS, description=STAGE_ID_DESCRIPTION)
     type: StageType
     description: str = Field(
         max_length=STAGE_DESCRIPTION_MAX_CHARS, description=STAGE_DESCRIPTION_DESCRIPTION
@@ -191,7 +192,7 @@ class AuthoredStageFields(_Base):
         return [{"id": item} if isinstance(item, str) else item for item in v]
 
     @property
-    def input_ids(self) -> list[str]:
+    def input_ids(self) -> list[ID]:
         return [ref.id for ref in self.inputs]
 
 

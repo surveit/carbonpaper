@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Literal
 
 from app.models.severity import UserFacingErrorSeverity
 from app.models.schema import _Base
+from app.core.ids import ID
 
 if TYPE_CHECKING:
     from app.models.stages.stage_base import AbstractStage
@@ -38,7 +39,7 @@ SEVERITY: dict[str, UserFacingErrorSeverity] = {
 
 class CompilerWarning(_Base):
     kind: WarningKind
-    stage_id: str
+    stage_id: ID
     detail: str
 
     @property

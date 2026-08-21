@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.core.agent.sdk_engine import MCP_SERVER_NAME, ClaudeAgentSdkEngine, ThinkingConfig
 from app.core.agent.bound_tool import BoundToolSpec
+from app.core.ids import ID
 
 
 class AgentConfig(BaseModel):
@@ -44,15 +45,15 @@ BuildTools = Callable[[BaseModel], list[BoundToolSpec]]
 _registry: dict[str, tuple[AgentConfig, BuildTools]] = {}
 
 
-def register(agent_id: str, config: AgentConfig, build_tools: BuildTools) -> None:
+def register(agent_id: ID, config: AgentConfig, build_tools: BuildTools) -> None:
     _registry[agent_id] = (config, build_tools)
 
 
-def is_registered(agent_id: str) -> bool:
+def is_registered(agent_id: ID) -> bool:
     return agent_id in _registry
 
 
-def render_opening_message(agent_id: str, context: dict[str, Any]) -> str | None:
+def render_opening_message(agent_id: ID, context: dict[str, Any]) -> str | None:
     """None when the agent waits to be spoken to. See AgentConfig.render_opening_message."""
     config, _build_tools = _registry[agent_id]
     if config.render_opening_message is None:
@@ -61,7 +62,7 @@ def render_opening_message(agent_id: str, context: dict[str, Any]) -> str | None
 
 
 def build_engine(
-    agent_id: str, context: dict[str, Any], *, opening_message: str = ""
+    agent_id: ID, context: dict[str, Any], *, opening_message: str = ""
 ) -> ClaudeAgentSdkEngine:
     config, build_tools = _registry[agent_id]
     ctx = config.context_schema.model_validate(context)
