@@ -495,8 +495,7 @@ def _run_stage(
             workflow_stage, window, record, output, inputs_for_stage, outputs_so_far,
             run_dir, manifest)
     except RunLeaseLost:
-        # Not this stage's failure, and not recordable: the fence refuses every write
-        # from here, so recording it would raise again from inside the handler.
+        # Not this stage's failure, and unrecordable: docs/run-leases.md
         raise
     except Exception as exc:  # noqa: BLE001 — the runner's contract is to
         # record ANY stage failure in the manifest and keep running

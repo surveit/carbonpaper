@@ -1,9 +1,4 @@
-"""Holding a run's execution lease for as long as this process executes it.
-
-The lease answers one question — is anyone still executing this run — and it answers it
-the same way on one machine or twenty. `hold` binds it to the executing thread so
-`write_manifest` can fence every write without threading a token through the executor.
-"""
+"""docs/run-leases.md"""
 from __future__ import annotations
 
 import logging
@@ -21,14 +16,11 @@ from app.runtime.errors import RunLeaseLost
 
 logger = logging.getLogger(__name__)
 
-# Long on purpose. A short lease costs a false takeover of a healthy run; a long one costs
-# only how late a dead run is noticed. This machine has been measured at 36% CPU steal,
-# which stalls a heartbeat thread for far longer than scheduling alone would.
+# Long on purpose — docs/run-leases.md
 LEASE_TTL_SECONDS = 90
 _RENEW_EVERY_SECONDS = 20
 
-# Identifies the process, so a lease read back names who holds it. Not a claim of
-# uniqueness: the fence, not this, is what makes a takeover safe.
+# Names who holds a lease when one is read back; the fence is what makes takeover safe.
 EXECUTOR_ID = f"{os.getpid()}-{uuid4().hex[:8]}"
 
 

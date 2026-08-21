@@ -1,9 +1,4 @@
-"""Restarting runs whose executor died, at boot.
-
-A killed executor leaves the record saying `running`, which is TRUE. So nothing here
-writes a terminal status except `_abandon`; the rest restarts the work. The lease is what
-makes that safe on any number of machines — only an EXPIRED tenure is restarted.
-"""
+"""Restarting runs whose executor died, at boot. docs/run-leases.md"""
 from __future__ import annotations
 
 import logging
@@ -23,13 +18,10 @@ from app.services.run import (
 
 logger = logging.getLogger(__name__)
 
-# Tenures, not automatic restarts: a human pressing Restart takes one too. A run picked
-# up this many times that finished none of them is killing its own process — an OOM on a
-# large frame restarts into the same OOM, spending a model call every boot.
+# Tenures, not automatic restarts: docs/run-leases.md
 MAX_TENURES = 3
 
-# A run that cannot execute again at all: its version no longer loads, or its record or
-# directory is gone. One of these must not stop the sweep from reaching the rest.
+# A run that cannot execute again at all; one must not stop the sweep reaching the rest.
 _UNRESTARTABLE = (
     DocumentNotFound, OSError, RunVersionUnresolvableError, ValueError, WorkflowLoadError,
 )
@@ -56,8 +48,6 @@ def _report_ownerless_runs(runs: list[RunManifest]) -> None:
             len(ownerless), ", ".join(f"{m.project}/{m.run_id}" for m in ownerless))
 
 
-# A record with NO lease predates leasing, so nothing ever proved its executor dead;
-# `find_ownerless_runs` surfaces those, and only a human clears them.
 def find_interrupted_runs(runs: list[RunManifest]) -> list[tuple[RunManifest, RunLease]]:
     """A `running` record whose lease has expired: its executor is provably gone."""
     now = get_store().store_now()

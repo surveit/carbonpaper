@@ -1,9 +1,4 @@
-"""A deploy kills the thread executing a run. What the reader sees afterwards.
-
-The record is left saying `running`, which is TRUE, so recovery restarts the work rather
-than writing a terminal status. What licenses the restart is the run's EXPIRED lease, not
-an assumption about how many machines are serving.
-"""
+"""A deploy kills the thread executing a run; what the reader sees. docs/run-leases.md"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -106,13 +101,10 @@ def _expire_the_lease(run_key: str) -> None:
 
 
 def _kill_a_run_mid_stage(tmp_path: Path) -> tuple[str, str]:
-    # `release_lease` is stubbed for the kill: a daemon thread dying with its process
-    # never unwinds, so the lease it held is left behind — the state the sweep reads.
     """Run until the 6th model call, then die the way a replaced process does."""
     project = _project_dir(tmp_path)
     _write_project(project)
-    # Its own context, NOT the test's monkeypatch: undoing these must not also undo the
-    # autouse fixtures, which would put the restart back on a real thread mid-assert.
+    # Its own context: undoing these must not also undo the autouse fixtures.
     with pytest.MonkeyPatch.context() as kill:
         kill.setattr(lt, "call_llm", _Calls(fail_on=6, fault=KeyboardInterrupt()))
         kill.setattr(type(get_store()), "release_lease", lambda self, lease: None)

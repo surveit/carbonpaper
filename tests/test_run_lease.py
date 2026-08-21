@@ -1,9 +1,4 @@
-"""The lease, at the level the rest of the system depends on it.
-
-Two executors must never both execute one run, and the loser's writes must be REFUSED
-rather than merely discouraged — a wedged process notices nothing, so cooperation cannot
-be the mechanism. The run-level behaviour this buys is in test_run_recovery.py.
-"""
+"""Two executors must never both execute one run. docs/run-leases.md"""
 from __future__ import annotations
 
 import threading

@@ -51,9 +51,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # The MCP session manager's task group must run for the server's lifetime —
     # the /mcp endpoint errors without it. A fresh manager per entry keeps this
     # lifespan re-entrant (several TestClient(app) uses in one process).
-    # A deploy replaces this process mid-run and the run's thread dies with it. Picking
-    # those back up is what keeps a deploy from being something a run page ever shows.
-    restart_interrupted_runs()
+    restart_interrupted_runs()   # docs/run-leases.md
+
     async with run_session_manager():
         yield
 

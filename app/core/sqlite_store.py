@@ -140,9 +140,7 @@ class SqliteKvStore:
             body: JsonDict = json.loads(data)
             yield str(row_id), body
 
-    # --- execution leases ----------------------------------------------------
-    # Every deadline is computed by SQLite, so executors are compared against one
-    # clock and skew between their hosts cannot expire a live lease.
+    # --- execution leases: docs/run-leases.md --------------------------------
 
     def claim_lease(self, run_id: ID, executor_id: str, ttl_seconds: int) -> RunLease | None:
         """None when a live lease is held by someone else. One statement, so two racers cannot tie."""
