@@ -15,14 +15,17 @@ def resolve_files_binding(
     if not file_ids:
         raise ValueError("a file binding names at least one file, and this one names none")
     opened = [open_project_file(project_id, file_id) for file_id in file_ids]
+    filenames = [record.filename for record, _path in opened]
+    refuse_files_of_more_than_one_format(filenames)
     return {
         "paths": [str(path) for _record, path in opened],
-        "format": _one_shared_format([record.filename for record, _path in opened]).value,
+        # Reading the first alone is what the refusal above makes safe.
+        "format": resolve_file_format(filenames[0]).value,
     }
 
 
-def _one_shared_format(filenames: Sequence[str]) -> FileFormat:
-    """Read as one table, so one reader — a mixed set is refused rather than half-read."""
+def refuse_files_of_more_than_one_format(filenames: Sequence[str]) -> None:
+    """They become ONE table, so one reader; a mixed set has no single answer."""
     by_format: dict[FileFormat, list[str]] = {}
     for filename in filenames:
         by_format.setdefault(resolve_file_format(filename), []).append(filename)
@@ -32,4 +35,3 @@ def _one_shared_format(filenames: Sequence[str]) -> FileFormat:
             + "; ".join(f"{fmt.value} — {', '.join(names)}"
                         for fmt, names in sorted(by_format.items()))
         )
-    return next(iter(by_format))
