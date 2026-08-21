@@ -268,11 +268,19 @@ visible reflow — `main` from 1440 to 1040 and every mermaid diagram re-laying
 out — which read as the rail taking seconds to arrive when the fetch itself is
 about 3ms. `static/chat-rail.js` then fills the reserved column in.
 
+`lineage.html` includes both scripts itself. It is standalone by necessity — the
+same template is also written into a review packet as a file in a zip — so it
+guards them on `offline`, which is what tells the two renders apart.
+
 The rail does not survive a page load and does not need to. A turn is a detached
 task with a replayable event buffer (`app/core/agent/turns.py`), so the panel
-re-mounts on the next page and reattaches at `?from=0`. The reader's place in the
-transcript is kept in `sessionStorage` and restored on mount, so following a link
-out of a reply costs neither the conversation nor their position in it.
+re-mounts on the next page and reattaches at `?from=0`.
+
+The reader's place is kept in `sessionStorage` as **which message they were
+reading and how far into it**, not a scroll offset: the page draws the transcript
+at 1280px and the rail at 400, so the same offset is a different part of the
+conversation. Both hosts store it against whichever box actually scrolls — the
+log in the rail, the document on the page.
 
 `static/chat-panel.js` is the client, scoped to a root element rather than the
 document — every hook is a `js-` class, since an id would collide between two

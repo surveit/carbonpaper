@@ -16,6 +16,7 @@ _GOVERNED = (
     "templates/_chat_rail.html",
     "templates/_chat_rail_head.html",
     "templates/base.html",
+    "templates/lineage.html",
     "static/chat-panel.js",
     "static/chat-rail.js",
     "static/chat-rail.css",

@@ -444,39 +444,78 @@ window.ChatPanel.mount = function (root) {
 
   // ── Keeping the reader's place ──────────────────────────────────────────────
   // The rail re-mounts on every page, so without this a reader who follows a link out of a
-  // reply is dropped at the bottom of the transcript and has to find their way back. The
-  // panel is the same object either side of the navigation; only the DOM is new.
+  // reply is dropped at the bottom of the transcript and has to find their way back.
   //
-  // "bottom" rather than a number when they were already there: a turn that finished while
-  // the page was loading must not leave them stranded above its reply.
+  // The place is WHICH MESSAGE they were reading, not a pixel offset, because the two hosts
+  // are different widths: the same transcript is 1280px wide on the page and 400 in the
+  // rail, so the same offset is a different part of the conversation. An index survives the
+  // trip, and survives a turn being appended while they were away.
+  const PLACE_MARGIN = 4;
+
   // Read per call, not captured: a draft page has no SID until the reader first replies.
   function placeKey() { return `chat-panel:place:${SID}`; }
 
+  // Where the scrollbox's own top edge is on screen — the line a message is "at the top" of.
+  function scrollboxTop() { return ownsItsScrollbox() ? log.getBoundingClientRect().top : 0; }
+  function ownsItsScrollbox() { return scroller() === log; }
+
+  function scrollToEnd() {
+    if (ownsItsScrollbox()) log.scrollTop = log.scrollHeight;
+    else window.scrollTo(0, document.body.scrollHeight);
+  }
+
+  // "<index>:<fraction>" — which message, and how far down it. The fraction rather than a
+  // pixel offset for the same reason as the index: at 400px a reply is several times taller
+  // than the same reply at 1280, so only its own height is a unit both hosts share.
+  //
+  // "bottom" when they were already there: a turn that finished while the page was loading
+  // must not leave them stranded above its reply.
   function readingPlace() {
-    if (log.scrollHeight - log.scrollTop - log.clientHeight < 120) return "bottom";
-    return String(Math.round(log.scrollTop));
+    const box = scroller();
+    const height = ownsItsScrollbox() ? log.clientHeight : window.innerHeight;
+    if (box.scrollHeight - box.scrollTop - height < 120) return "bottom";
+    const top = scrollboxTop();
+    const reading = [...log.children].findIndex(
+      (msg) => msg.getBoundingClientRect().bottom > top + PLACE_MARGIN);
+    if (reading < 0) return "bottom";
+    const rect = log.children[reading].getBoundingClientRect();
+    const into = rect.height ? (top - rect.top) / rect.height : 0;
+    return `${reading}:${Math.min(Math.max(into, 0), 1).toFixed(3)}`;
   }
 
   function rememberReadingPlace() {
-    if (!SID || log.scrollHeight <= log.clientHeight) return;
+    if (!SID || !log.children.length) return;
     try { sessionStorage.setItem(placeKey(), readingPlace()); } catch (e) { /* private mode */ }
   }
 
   function restoreReadingPlace() {
     let place = null;
     try { place = SID && sessionStorage.getItem(placeKey()); } catch (e) { /* private mode */ }
-    if (place === null || place === "bottom") { log.scrollTop = log.scrollHeight; return; }
-    log.scrollTop = Number(place);
+    // Nothing remembered: a rail is arriving fresh beside a page and should show the newest
+    // turn, but the chat PAGE is a document, and yanking a document on load is the browser's
+    // call rather than ours.
+    if (place === null) { if (ownsItsScrollbox()) scrollToEnd(); return; }
+    const [index, into] = place.split(":");
+    const reading = log.children[Number(index)];
+    if (place === "bottom" || !reading) { scrollToEnd(); return; }
+    const rect = reading.getBoundingClientRect();
+    const delta = rect.top - scrollboxTop() + (Number(into) || 0) * rect.height;
+    if (ownsItsScrollbox()) log.scrollTop += delta;
+    else window.scrollBy(0, delta);
   }
 
   // rAF-coalesced: a scroll fires per frame and this writes to storage.
   let placePending = false;
-  log.addEventListener("scroll", () => {
+  function notePlaceSoon() {
     if (placePending) return;
     placePending = true;
     requestAnimationFrame(() => { placePending = false; rememberReadingPlace(); });
-  }, {passive: true});
-  // The last scroll event can lose the race with the navigation that follows a click.
+  }
+  log.addEventListener("scroll", notePlaceSoon, {passive: true});
+  // Whichever box is the scrollbox has to be the one listened to, and on the page that is
+  // the document. The last event can also lose the race with the navigation a click starts,
+  // which is what pagehide is for.
+  document.addEventListener("scroll", notePlaceSoon, {passive: true});
   window.addEventListener("pagehide", rememberReadingPlace);
 
   // A textarea keeps the height it was given, so every edit re-measures: collapse it, then
