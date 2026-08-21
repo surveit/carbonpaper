@@ -13,14 +13,16 @@ from typing import Any
 
 import pandas as pd
 
-from app.core.source_files import FileFormat, read_source_file
+from app.core.errors import SourceFetchError
+from app.core.fetched_sources import resolve_fetched_path
+from app.core.source_files import FileFormat, read_source_file, resolve_file_format
 from app.models import (
     JSON_COLUMN_TYPE,
     STR_COLUMN_TYPE,
     TableSchema,
     WorkflowStage,
 )
-from app.models.stages.input_data import InputDataStage, XlsxReadParams
+from app.models.stages.input_data import ConnectorKind, InputDataStage, XlsxReadParams
 
 from ..context import RunContext
 from .execution import narrow_stage
@@ -53,12 +55,13 @@ def preflight_input_data(
     if not isinstance(stage, InputDataStage):
         raise TypeError(
             f"stage {stage.id}: the input_data preflight got a {type(stage).__name__}")
-    connector = stage.connector
-    path_param = connector.params.get("path")
-    if not path_param:
-        return ([f"`{stage.id}`: no file bound — supply a run binding, or author "
-                 "an absolute path in the workflow"], None)
-    path = Path(path_param)
+    try:
+        path = resolve_source_path(stage)
+    except SourceFetchError as refused:
+        return [f"`{stage.id}`: {refused}"], None
+    if path is None:
+        return [f"`{stage.id}`: no file bound — supply a run binding, or author an "
+                "absolute path in the workflow"], None
     if not path.is_file():
         return ([f"`{stage.id}`: bound file does not exist or is not a file: {path}"], None)
     with path.open("rb") as handle:
@@ -67,18 +70,34 @@ def preflight_input_data(
                 "bytes": path.stat().st_size}
 
 
+def resolve_source_path(stage: InputDataStage) -> Path | None:
+    """None means nothing names a source yet, which a run binding can still fix."""
+    params = stage.connector.params
+    # A run binding may point a fetch stage at a hand-downloaded copy, and that wins:
+    # the operator has said which bytes they mean.
+    path_param = params.get("path")
+    if path_param:
+        return Path(path_param)   # absolute: the model rejects a relative path when present
+    if stage.connector.kind == ConnectorKind.fetch:
+        # url is required on the model, and headers there are already str -> str with no
+        # line break in either half, so nothing here re-checks them.
+        headers: dict[str, str] = params.get("headers") or {}
+        return resolve_fetched_path(str(params["url"]), headers=headers)
+    return None
+
+
 def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> pd.DataFrame:
     input_stage = narrow_stage(workflow_stage, InputDataStage)
     params = input_stage.connector.params
 
-    if "path" not in params:
+    path = resolve_source_path(input_stage)
+    if path is None:
         raise ValueError(
             f"input stage '{input_stage.id}' has no file bound (connector params carry "
             "no 'path'); runs bind one at prepare_run — subset/eval runs need the "
             "workflow to author it or a reference override to inject it"
         )
-    path = Path(params["path"])   # absolute: the model rejects a relative path when present
-    fmt = FileFormat(params.get("format", FileFormat.csv))
+    fmt = _resolve_format(input_stage, path)
     schema = workflow_stage.output_schema  # input_data's produces is non-empty by validation
     xlsx = XlsxReadParams.model_validate(params)
     df = read_source_file(
@@ -104,6 +123,16 @@ def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> pd.DataFr
             df[col] = pd.to_datetime(df[col], errors="coerce")
 
     return df
+
+
+def _resolve_format(stage: InputDataStage, path: Path) -> FileFormat:
+    """A fetch reads its own suffix rather than csv — the model refuses one declaring neither."""
+    declared = stage.connector.params.get("format")
+    if declared:
+        return FileFormat(declared)
+    if stage.connector.kind == ConnectorKind.fetch:
+        return resolve_file_format(str(path))
+    return FileFormat.csv
 
 
 def _read_dtype(

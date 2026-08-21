@@ -31,7 +31,7 @@ _ALLOWED_WRITERS: dict[str, str] = {
 
     # 3. A file the user handed us. Raw bytes we did not author and must not
     # reinterpret — an input CSV, an eval dataset.
-    "app/core/files.py": "stages and content-addresses an uploaded data file",
+    "app/core/files.py": "stages an uploaded or fetched data file",
     "app/evals/store.py": "receives an uploaded eval dataset",
 
     # Deleting a project's working-copy DIRECTORY, which still holds its frames
