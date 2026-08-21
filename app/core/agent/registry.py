@@ -33,6 +33,8 @@ class AgentConfig(BaseModel):
     thinking: ThinkingConfig | None = None
     model: str = "sonnet"
     context_schema: type[BaseModel]
+    # What a surface calls this agent: a rail header, a new session's title.
+    display_name: str
     # Labels for tools this agent does not own — e.g. the CLI's own ToolSearch
     # built-in, which has no BoundToolSpec here but still renders in the chat.
     extra_tool_labels: dict[str, str] = {}
@@ -56,6 +58,11 @@ def register(agent_id: ID, config: AgentConfig, build_tools: BuildTools) -> None
 
 def is_registered(agent_id: ID) -> bool:
     return agent_id in _registry
+
+
+def read_display_name(agent_id: ID) -> str:
+    config, _build_tools = _registry[agent_id]
+    return config.display_name
 
 
 def render_opening_turn(agent_id: ID, context: dict[str, Any]) -> OpeningTurn | None:

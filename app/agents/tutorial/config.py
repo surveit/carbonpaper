@@ -36,6 +36,7 @@ def _render_opening_turn(context: BaseModel) -> OpeningTurn:
 CONFIG = AgentConfig(
     system_prompt=TUTORIAL_SYSTEM_PROMPT,
     context_schema=TutorialContext,
+    display_name="Guided tour",
     render_opening_turn=_render_opening_turn,
     # The tour's turns are short and its tool sequence is dictated by the prompt —
     # there is nothing here for a reasoning block to earn.

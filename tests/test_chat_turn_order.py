@@ -14,7 +14,7 @@ from app.web.chat_router import _store
 
 client = TestClient(app)
 
-_CHAT_TEMPLATE = Path(__file__).resolve().parents[1] / "app/templates/chat.html"
+_CHAT_CLIENT = Path(__file__).resolve().parents[1] / "app/static/chat-panel.js"
 
 
 def _session_replying(parts: list[dict]) -> str:
@@ -63,7 +63,7 @@ def test_a_tool_result_gets_no_block_of_its_own() -> None:
 
 def test_the_streaming_client_closes_its_open_region_on_a_tool_call() -> None:
     """The same rule live: a tool call ends the text region, so the next chunk opens a new one."""
-    script = _CHAT_TEMPLATE.read_text(encoding="utf-8")
+    script = _CHAT_CLIENT.read_text(encoding="utf-8")
 
     tool_handler = script.split("    tool(name, args, label) {")[1].split("},")[0]
     assert "closeRegions()" in tool_handler

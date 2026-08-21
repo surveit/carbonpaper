@@ -15,7 +15,7 @@ from app.web.markdown_render import render_markdown
 
 client = TestClient(app)
 
-_CHAT_TEMPLATE = Path(__file__).resolve().parents[1] / "app/templates/chat.html"
+_CHAT_CLIENT = Path(__file__).resolve().parents[1] / "app/static/chat-panel.js"
 
 
 def open_session_saying(text: str) -> str:
@@ -127,7 +127,7 @@ def test_the_swap_endpoint_404s_on_an_unknown_session() -> None:
 
 def test_the_streaming_path_renders_each_chunk_and_still_reconciles_at_done() -> None:
     """Each chunk is a whole TextBlock, re-rendered live; `done` still reconciles."""
-    script = _CHAT_TEMPLATE.read_text(encoding="utf-8")
+    script = _CHAT_CLIENT.read_text(encoding="utf-8")
     assert "renderStoredMarkdown" in script.split('ev.kind === "done"')[1]
     streaming_text_handler = script.split("    text(t) {")[1].split("},")[0]
     assert "renderLive(body, raw)" in streaming_text_handler

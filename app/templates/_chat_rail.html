@@ -1,0 +1,20 @@
+{# The chat, docked to the right of every page. In base.html rather than on the pages
+   that want one, on the same reasoning as the ⌘K palette: a conversation the reader
+   carries between pages cannot be a thing individual pages remember to offer.
+
+   Empty markup. Which session is open lives in localStorage and the panel arrives from
+   GET /chat/<sid>/panel, so no route below this hands a page any chat state — see
+   static/chat-rail.js. #}
+<aside class="chat-rail" id="chat-rail" hidden aria-label="Conversation">
+  <div class="chat-rail-head">
+    <span class="chat-rail-title js-rail-title"></span>
+    <a class="chat-rail-open" href="#" title="Open this conversation on its own page">↗</a>
+    <button type="button" class="chat-rail-x js-rail-close"
+            title="Close the conversation" aria-label="Close the conversation">×</button>
+  </div>
+  <div class="chat-panel chat-host-rail js-rail-panel"></div>
+</aside>
+{# The way back in, and the only thing on screen when the rail is shut. Hidden too until
+   there is a conversation to re-open — a reader who has never opened one is not offered
+   a tab that would show them nothing. #}
+<button type="button" class="chat-rail-tab" id="chat-rail-tab" hidden></button>

@@ -1,0 +1,69 @@
+/* The chat docked to the right of every page — the rail itself, its shut tab, and what a
+ * 400px column has to take back from the conversation styles agent-chat.css writes for a
+ * 1280px page. Those stay the page's; everything here is scoped to .chat-host-rail. */
+
+:root { --chat-rail-w: 400px; }
+
+/* Fixed rather than a grid column: base.html's <main> is a scrolling document with no
+ * height contract, and the rail has to be full-height with its own scroll. body's padding
+ * is what keeps the page out from under it, so the header stops at the rail's edge too. */
+.chat-rail {
+    position: fixed; top: 0; right: 0; bottom: 0; width: var(--chat-rail-w);
+    display: flex; flex-direction: column; min-height: 0; z-index: 50;
+    background: var(--raised); border-left: 1px solid var(--border);
+}
+body.chat-rail-open { padding-right: var(--chat-rail-w); }
+/* The author `display` above beats the UA's `[hidden] { display: none }`. */
+.chat-rail[hidden] { display: none; }
+
+.chat-rail-head {
+    display: flex; align-items: center; gap: 8px; flex: 0 0 auto;
+    padding: 10px 12px; border-bottom: 1px solid var(--border);
+}
+.chat-rail-title {
+    font-size: 12.5px; font-weight: 600; margin-right: auto;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.chat-rail-open, .chat-rail-x {
+    color: var(--muted); text-decoration: none; cursor: pointer;
+    background: none; border: 0; font: inherit; line-height: 1; padding: 2px 4px;
+}
+.chat-rail-x { font-size: 17px; }
+.chat-rail-open:hover, .chat-rail-x:hover { color: var(--fg); }
+
+/* Shut, the conversation is one vertical tab against the right edge — the only thing left
+ * saying it is still there. Turned sideways because the page is the wide thing here. */
+.chat-rail-tab {
+    position: fixed; top: 96px; right: 0; z-index: 50;
+    writing-mode: vertical-rl; font: inherit; font-size: 11.5px; letter-spacing: .04em;
+    max-height: 260px; overflow: hidden; padding: 12px 5px; cursor: pointer;
+    color: var(--muted); background: var(--raised);
+    border: 1px solid var(--border); border-right: 0; border-radius: 6px 0 0 6px;
+}
+.chat-rail-tab:hover { color: var(--fg); border-color: var(--border-strong); }
+
+/* ═══ The panel, at 400px instead of 1280 ═══ */
+/* The page's conversation styles are written against --chat-column and a composer fixed to
+ * the viewport. Both are page facts, so the rail takes them back here rather than either
+ * surface's rules being the odd one out in agent-chat.css. */
+.chat-host-rail { --chat-column: 100%; display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+/* base.css declares no global box-sizing, so `max-width: 100%` plus padding is 100% PLUS the
+ * padding — the log came out 28px wider than the rail holding it and scrolled sideways. A
+ * scoped reset rather than a width per box: every rule below inherits the fix. */
+.chat-host-rail, .chat-host-rail *, .chat-rail-head { box-sizing: border-box; }
+.chat-host-rail .ac-log { flex: 1 1 auto; overflow-y: auto; min-height: 0; padding: 14px 14px 18px; gap: 20px; }
+.chat-host-rail .ac-dock { position: static; flex: 0 0 auto; }
+.chat-host-rail .ac-composer { padding: 10px 12px; --ac-control: 36px; }
+.chat-host-rail .ac-attached { padding: 8px 12px 0; }
+.chat-host-rail .ac-warn { margin: 10px 12px 0; }
+.chat-host-rail .ac-msg.user { max-width: 88%; }
+/* A reply carries tables the column cannot hold at this width. `display: block` is what
+ * gives a table its own scrollbar; without it the whole rail scrolls sideways instead. */
+.chat-host-rail .ac-msg.assistant .ac-body table { display: block; max-width: 100%; overflow-x: auto; }
+
+/* Below this the rail would be most of the screen, so the conversation is the full page at
+ * /chat/<id> instead, reached from Chats in the header. */
+@media (max-width: 860px) {
+    .chat-rail, .chat-rail-tab { display: none; }
+    body.chat-rail-open { padding-right: 0; }
+}

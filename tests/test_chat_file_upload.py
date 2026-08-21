@@ -93,15 +93,15 @@ def test_an_unknown_session_404s(workspace_with_a_project):
 
 def test_the_page_carries_what_an_attachment_needs(session_id, project_id):
     page = client.get(f"/chat/{session_id}").text
-    assert 'id="clip"' in page          # the attach control
-    assert 'id="project-modal"' in page  # and the question, for a session with no project
+    assert 'js-chat-clip' in page            # the attach control
+    assert 'js-chat-project-modal' in page   # and the question, for a session with no project
 
 
 def test_the_question_blocks_rather_than_sitting_beside_the_composer(session_id):
     page = client.get(f"/chat/{session_id}").text
     # A panel above the composer is answerable by ignoring it, and this decides where a
     # file lands. <dialog> brings the focus trap and Escape with it.
-    assert '<dialog class="ac-modal" id="project-modal">' in page
+    assert '<dialog class="ac-modal js-chat-project-modal">' in page
 
 
 def test_new_project_leads_the_choices(session_id):
@@ -110,7 +110,7 @@ def test_new_project_leads_the_choices(session_id):
     # value is blank, so the file lands in no project and the agent creates one and
     # moves it in — nothing in the browser can, since a project needs a methodology.
     assert 'data-project="">\n      <strong>New project</strong>' in page
-    assert page.index("ac-choice-new") < page.index('id="project-choices"')
+    assert page.index("ac-choice-new") < page.index("js-chat-project-choices")
 
 
 def test_the_picker_names_the_project_it_offers(session_id, project_id):

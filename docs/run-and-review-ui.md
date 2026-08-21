@@ -250,6 +250,31 @@ reviewing a run's flagged rows.
 - `POST /project/{p}/version` freezes the working copy into a `Version` document
   (in the store); `GET /project/{p}/versions` lists the frozen versions.
 
+## The conversation, on every page (`_chat_panel.html`, `_chat_rail.html`)
+
+The chat is a panel, not a page, and two hosts draw the same partial:
+
+- `chat.html` at `/chat/{sid}` — the full-width page.
+- `_chat_rail.html`, included from `base.html`, so every page but the review
+  packet can hold one. `static/chat-rail.js` reads the open session id out of
+  `localStorage`, fetches `GET /chat/{sid}/panel`, and mounts it. No other route
+  is handed any chat state.
+
+The rail does not survive a page load and does not need to. A turn is a detached
+task with a replayable event buffer (`app/core/agent/turns.py`), so the panel
+re-mounts on the next page and reattaches at `?from=0`. Following a link out of a
+reply therefore costs the reader nothing.
+
+`static/chat-panel.js` is the client, scoped to a root element rather than the
+document — every hook is a `js-` class, since an id would collide between two
+panels. It marks a same-origin link that is a whole paragraph as a handover
+(`.ac-goto`), which styles the gesture both agents already make; nothing is
+intercepted and no agent knows.
+
+Neither host names an agent. What a surface calls one is
+`AgentConfig.display_name`, and `tests/arch/test_chat_rail_names_no_agent.py`
+fails a build where a chat host learns an agent id.
+
 ## Where to confirm visually
 
 Some states only render during a live run (spinner, yellow in-progress
