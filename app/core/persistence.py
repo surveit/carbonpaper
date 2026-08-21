@@ -32,6 +32,18 @@ def validate_id(id: ID) -> ID:
     return id
 
 
+class RunLease(BaseModel):
+    """`fence` rises per claim, never per renewal, so it names one executor's TENURE."""
+
+
+    model_config = ConfigDict(frozen=True)
+
+    run_id: ID
+    executor_id: str
+    fence: int
+    expires_at: int
+
+
 class DocumentStore(Protocol):
     def write(self, collection: str, id: ID, data: JsonDict, schema_version: int = 1) -> None: ...
     def read(self, collection: str, id: ID) -> JsonDict: ...
@@ -43,6 +55,18 @@ class DocumentStore(Protocol):
     ) -> Iterator[tuple[str, JsonDict]]: ...
     def list_ids(self, collection: str, prefix: str = "") -> list[ID]: ...
     def read_all(self, collection: str, prefix: str = "") -> Iterator[tuple[str, JsonDict]]: ...
+
+    # Leases share this seam rather than getting their own handle: `write_if_held` has to
+    # decide a document write against lease state in one transaction, which two handles
+    # over two connections could not do.
+    def claim_lease(self, run_id: ID, executor_id: str, ttl_seconds: int) -> RunLease | None: ...
+    def renew_lease(self, lease: RunLease, ttl_seconds: int) -> RunLease | None: ...
+    def release_lease(self, lease: RunLease) -> None: ...
+    def read_lease(self, run_id: ID) -> RunLease | None: ...
+    def store_now(self) -> int: ...
+    def write_if_held(
+        self, collection: str, id: ID, data: JsonDict, lease: RunLease, schema_version: int = 1
+    ) -> bool: ...
 
 
 _store: DocumentStore | None = None

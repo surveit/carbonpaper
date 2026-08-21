@@ -33,6 +33,10 @@ class RunCancelled(Exception):
     """An internal control signal the runner catches to stop the run; never shown as an error."""
 
 
+class RunLeaseLost(Exception):
+    """Another executor took this run over. Stop: every write from here is refused anyway."""
+
+
 # Raised BEFORE the frame is coerced to arrow, so the caller can tell an authored
 # function that returned the wrong thing from one that refused: a refusal raises
 # StepRefused and satisfies an expected-failure test, this does not.

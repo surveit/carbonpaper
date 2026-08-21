@@ -37,6 +37,7 @@ from .frame_caching import (
     record_frame_output,
 )
 from ..cancellation import consume_cancel
+from ..lease import validate_still_held
 from ..context import RunContext
 from ..stage_output import StageOutput
 from ..lineage import kept_rows_lineage
@@ -430,6 +431,7 @@ def _fan_out(
             }
             try:
                 for future in as_completed(futures):
+                    validate_still_held()
                     if _consume_cancel(ctx):
                         raise RunCancelled(f"stage {stage_id}: cancelled mid-fan-out")
                     indices = futures[future]
@@ -449,6 +451,7 @@ def _fan_out(
                 pool.shutdown(wait=False, cancel_futures=True)
     else:
         for indices, rows in groups:
+            validate_still_held()
             if _consume_cancel(ctx):
                 raise RunCancelled(f"stage {stage_id}: cancelled")
             _place_group(

@@ -17,6 +17,7 @@ from starlette.routing import Route
 
 from app.core.logging_config import configure_app_logging
 from app.core.store_config import configure_default_stores, refuse_renamed_env_vars
+from app.web.startup import restart_interrupted_runs
 from app.web.config import (
     INTRO_DIR, STATIC_DIR, RevalidatedStaticFiles, configure_projects_dir_from_env,
 )
@@ -50,6 +51,9 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # The MCP session manager's task group must run for the server's lifetime —
     # the /mcp endpoint errors without it. A fresh manager per entry keeps this
     # lifespan re-entrant (several TestClient(app) uses in one process).
+    # A deploy replaces this process mid-run and the run's thread dies with it. Picking
+    # those back up is what keeps a deploy from being something a run page ever shows.
+    restart_interrupted_runs()
     async with run_session_manager():
         yield
 

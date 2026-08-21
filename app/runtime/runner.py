@@ -22,9 +22,11 @@ from app.models.run_parameters import RunParameters
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.core.run_status import StageStatus
 
+from . import lease
 from .context import RunContext
 from .executor import _execute_stages, topological_sort
 from .manifest import (
+    RunManifest,
     read_run_manifest,
     create_run_manifest,
     resolve_output_path,
@@ -113,9 +115,11 @@ def prepare_run(
 
 
 def run_prepared(prep: dict[str, Any]) -> dict[str, Any]:
-    manifest = _execute_stages(prep["ordered"], prep["ctx"], prep["manifest"],
-                               prep["run_dir"], outputs_so_far={})
-    return manifest.to_dict()
+    manifest: RunManifest = prep["manifest"]
+    with lease.hold(manifest.id):
+        executed = _execute_stages(prep["ordered"], prep["ctx"], manifest,
+                                   prep["run_dir"], outputs_so_far={})
+    return executed.to_dict()
 
 
 def execute_run(
@@ -194,4 +198,5 @@ def resume_run(
     # "halted for review" banner and queue links while the stage re-runs. The
     # loop re-adds `halted_at` if a stage halts again; otherwise it stays gone.
     manifest.clear_halt()
-    return _execute_stages(ordered, ctx, manifest, run_dir, outputs_so_far).to_dict()
+    with lease.hold(manifest.id):
+        return _execute_stages(ordered, ctx, manifest, run_dir, outputs_so_far).to_dict()

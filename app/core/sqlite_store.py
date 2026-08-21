@@ -10,7 +10,7 @@ from threading import RLock
 from typing import Any, Iterator, Mapping
 
 from app.core.errors import DocumentNotFound
-from app.core.persistence import JsonDict, JsonScalar
+from app.core.persistence import JsonDict, JsonScalar, RunLease
 from app.core.ids import ID
 
 
@@ -28,6 +28,13 @@ class SqliteKvStore:
             "  data TEXT NOT NULL,"
             "  schema_version INTEGER NOT NULL DEFAULT 1,"
             "  PRIMARY KEY (collection, id))"
+        )
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS run_lease ("
+            "  run_id TEXT PRIMARY KEY,"
+            "  executor_id TEXT NOT NULL,"
+            "  fence INTEGER NOT NULL,"
+            "  expires_at INTEGER NOT NULL)"
         )
         self._conn.commit()
 
@@ -132,3 +139,83 @@ class SqliteKvStore:
         for row_id, data in self._scan("id, data", collection, prefix):
             body: JsonDict = json.loads(data)
             yield str(row_id), body
+
+    # --- execution leases ----------------------------------------------------
+    # Every deadline is computed by SQLite, so executors are compared against one
+    # clock and skew between their hosts cannot expire a live lease.
+
+    def claim_lease(self, run_id: ID, executor_id: str, ttl_seconds: int) -> RunLease | None:
+        """None when a live lease is held by someone else. One statement, so two racers cannot tie."""
+        with self._lock:
+            row = self._conn.execute(
+                "INSERT INTO run_lease (run_id, executor_id, fence, expires_at) "
+                "VALUES (?, ?, 1, unixepoch() + ?) "
+                "ON CONFLICT(run_id) DO UPDATE SET "
+                "  executor_id = excluded.executor_id,"
+                "  fence = run_lease.fence + 1,"
+                "  expires_at = excluded.expires_at "
+                "WHERE run_lease.expires_at <= unixepoch() "
+                "RETURNING run_id, executor_id, fence, expires_at",
+                (run_id, executor_id, ttl_seconds),
+            ).fetchone()
+            self._conn.commit()
+        return _read_lease_row(row)
+
+    def renew_lease(self, lease: RunLease, ttl_seconds: int) -> RunLease | None:
+        """None once taken over — the holder's signal to stop. Renewing never moves the fence."""
+        with self._lock:
+            row = self._conn.execute(
+                "UPDATE run_lease SET expires_at = unixepoch() + ? "
+                "WHERE run_id=? AND executor_id=? AND fence=? "
+                "RETURNING run_id, executor_id, fence, expires_at",
+                (ttl_seconds, lease.run_id, lease.executor_id, lease.fence),
+            ).fetchone()
+            self._conn.commit()
+        return _read_lease_row(row)
+
+    def release_lease(self, lease: RunLease) -> None:
+        """Only our own tenure: a lease already taken over belongs to someone still using it."""
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM run_lease WHERE run_id=? AND fence=?", (lease.run_id, lease.fence)
+            )
+            self._conn.commit()
+
+    def read_lease(self, run_id: ID) -> RunLease | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT run_id, executor_id, fence, expires_at FROM run_lease WHERE run_id=?",
+                (run_id,),
+            ).fetchone()
+        return _read_lease_row(row)
+
+    def store_now(self) -> int:
+        """The clock every lease deadline is set by, so a reader never compares its own."""
+        with self._lock:
+            return int(self._conn.execute("SELECT unixepoch()").fetchone()[0])
+
+    def write_if_held(
+        self, collection: str, id: ID, data: JsonDict, lease: RunLease, schema_version: int = 1
+    ) -> bool:
+        """The fence, atomic under `_lock`: False means the lease moved on, so this write is refused."""
+        with self._lock:
+            held = self._conn.execute(
+                "SELECT 1 FROM run_lease WHERE run_id=? AND fence=? AND expires_at > unixepoch()",
+                (lease.run_id, lease.fence),
+            ).fetchone()
+            if held is None:
+                return False
+            self._conn.execute(
+                "INSERT OR REPLACE INTO documents (collection, id, data, schema_version) "
+                "VALUES (?, ?, ?, ?)",
+                (collection, id, json.dumps(data), schema_version),
+            )
+            self._conn.commit()
+        return True
+
+
+def _read_lease_row(row: tuple[Any, ...] | None) -> RunLease | None:
+    if row is None:
+        return None
+    return RunLease(run_id=str(row[0]), executor_id=str(row[1]),
+                    fence=int(row[2]), expires_at=int(row[3]))

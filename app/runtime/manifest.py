@@ -27,13 +27,16 @@ from app.core.persistence import (
     PersistedModel,
     PersistenceScope,
     get_store,
+    now_iso,
 )
 from app.core.run_status import RunStatus, StageStatus
 from app.models import WorkflowStage
-from app.models.run_manifest import QueueStats, StageRecord
+from app.models.run_manifest import QueueStats, StageErrorInfo, StageRecord
 from app.models.run_parameters import RunParameters
 
+from . import lease as lease_module
 from .context import RunContext
+from .errors import RunLeaseLost
 
 
 # ─── The stored run manifest ─────────────────────────────────────────────────
@@ -196,8 +199,36 @@ def create_run_manifest(
 
 
 def write_manifest(manifest: RunManifest) -> None:
-    """The single writer of a run record."""
-    manifest.save()
+    """The single writer of a run record, and so the one place the lease fence is applied."""
+    lease = lease_module.current()
+    if lease is None:
+        manifest.save()
+        return
+    manifest.updated_at = now_iso()
+    held = get_store().write_if_held(
+        manifest.collection, manifest.id,
+        manifest.model_dump(mode="json", **manifest.DUMP_OPTS), lease,
+        schema_version=manifest.SCHEMA_VERSION,
+    )
+    if not held:
+        raise RunLeaseLost(
+            f"run {manifest.id} was taken over by another executor; this write is refused"
+        )
+
+
+def mark_abandoned(manifest: RunManifest, detail: str) -> None:
+    """A stage left `running` by a dead executor carries the reason; silence spins the page forever."""
+    manifest.status = RunStatus.ERRORS
+    manifest.finished_at = datetime.now().isoformat(timespec="seconds")
+    for record in manifest.stage_records:
+        if record.status != StageStatus.RUNNING:
+            continue
+        record.status = StageStatus.ERROR
+        record.error = StageErrorInfo(
+            type="RunAbandoned", message=f"Run abandoned: {detail}.", traceback=None
+        )
+        record.add_note(f"Run abandoned: {detail}.")
+    write_manifest(manifest)
 
 
 def read_run_manifest(project_id: str, run_id: str, area: str = PRODUCTION_RUNS) -> RunManifest:

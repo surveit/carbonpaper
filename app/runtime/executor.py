@@ -31,9 +31,10 @@ from app.models.run_parameters import RunParameters
 from app.core.run_status import RunStatus, StageStatus
 
 from .cancellation import consume_cancel
+from .lease import validate_still_held
 from .context import RunContext, RunIdentity
 from .stage_output import StageOutput
-from .errors import RunCancelled
+from .errors import RunCancelled, RunLeaseLost
 from .manifest import RunManifest, create_run_manifest, write_manifest
 from .run_log import RUN_START, STAGE_DONE, STAGE_START, RunLog
 from .progress import StageProgressReporter
@@ -173,6 +174,7 @@ def _run_ordered_stages(
         # before checking whether it's a resume-skip), consume a pending cancel
         # message and, if there was one, stop. No exception, no record written
         # here — the stage simply never starts, so it stays `pending` below.
+        validate_still_held()
         if _consume_cancel(ctx):
             cancelled = True
             cancel_at_index = idx
@@ -492,6 +494,10 @@ def _run_stage(
         joins_blocked = _finalize_stage_output(
             workflow_stage, window, record, output, inputs_for_stage, outputs_so_far,
             run_dir, manifest)
+    except RunLeaseLost:
+        # Not this stage's failure, and not recordable: the fence refuses every write
+        # from here, so recording it would raise again from inside the handler.
+        raise
     except Exception as exc:  # noqa: BLE001 — the runner's contract is to
         # record ANY stage failure in the manifest and keep running
         # independent forks rather than crash the whole run.
