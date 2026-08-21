@@ -16,15 +16,17 @@ window.ChatRail = window.ChatRail || {};
   const TITLE_KEY = "chat-rail:title";
   const OPEN_KEY = "chat-rail:open";
 
-  function write(key, value) { try { sessionStorage.setItem(key, value); } catch (e) { /* private mode */ } }
+  function write(key, value) { try { localStorage.setItem(key, value); } catch (e) { /* private mode */ } }
   function forget() {
-    try { [KEY, TITLE_KEY, OPEN_KEY].forEach((k) => sessionStorage.removeItem(k)); } catch (e) { /* private mode */ }
+    try { [KEY, TITLE_KEY, OPEN_KEY].forEach((k) => localStorage.removeItem(k)); } catch (e) { /* private mode */ }
   }
 
-  // sessionStorage, not local: the rail is what THIS TAB is working in. Shared across tabs,
-  // opening a chat in one silently changes what the other is carrying, and a link opened in a
-  // new tab gets the rail but not the reader's place in it — two halves of one state with
-  // different lifetimes. Per-tab, a new tab simply starts with no conversation.
+  // localStorage, and NOT sessionStorage, though that leaves the two halves of this with
+  // different lifetimes. A tab opened from outside the browser inherits no session storage,
+  // and links arrive that way constantly — from another app, a bookmark, a restored window.
+  // Per-tab the rail is therefore absent on most arrivals, which is the one thing it exists
+  // not to be. WHICH conversation is the reader's; WHERE they had got to in it belongs to
+  // the view, and stays per-tab in chat-panel.js.
   //
   // Called by the full chat page, which is the only surface that opens a session. Opening one
   // there is what puts it in the rail everywhere else. The title comes along so the shut tab

@@ -13,9 +13,9 @@ window.ChatRail = window.ChatRail || {};
 (function () {
   var sid = null, open = true, title = null;
   try {
-    sid = sessionStorage.getItem("chat-rail:session");
-    open = sessionStorage.getItem("chat-rail:open") !== "0";
-    title = sessionStorage.getItem("chat-rail:title");
+    sid = localStorage.getItem("chat-rail:session");
+    open = localStorage.getItem("chat-rail:open") !== "0";
+    title = localStorage.getItem("chat-rail:title");
   } catch (e) { /* private mode: no rail, and nothing breaks */ }
   window.ChatRail.opening = {sid: sid, open: open, title: title, panel: null};
   if (!sid) return;

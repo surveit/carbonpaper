@@ -256,14 +256,19 @@ The chat is a panel, not a page, and two hosts draw the same partial:
 
 - `chat.html` at `/chat/{sid}` — the full-width page.
 - `_chat_rail.html`, included from `base.html`, so every page but the review
-  packet can hold one. Which session is open lives in that tab's
-  `sessionStorage` and the panel arrives from `GET /chat/{sid}/panel`. No other
-  route is handed any chat state.
+  packet can hold one. Which session is open lives in `localStorage` and the
+  panel arrives from `GET /chat/{sid}/panel`. No other route is handed any chat
+  state.
 
-Everything the rail remembers is per-tab: which conversation, whether it is
-shut, and where the reader had got to in it. `localStorage` would share the
-first two across tabs while the third stayed per-tab, so a link opened in a new
-tab arrived with the rail but not the reader's place in it.
+The two things the rail remembers have different lifetimes on purpose. **Which**
+conversation, and whether it is shut, are the reader's and go in `localStorage`;
+**where** they had got to in it belongs to one view and goes in `sessionStorage`.
+Per-tab for the first was tried and reverted: a tab opened from outside the
+browser inherits no session storage, and links arrive that way constantly — from
+another app, a bookmark, a restored window — so the rail was absent on most
+arrivals, which is the one thing it exists not to be. A cold tab having no
+reading place is not the same problem: the reader has not read anything in it
+yet, so the newest turn is the right place to start.
 
 Two scripts, and the split matters. `_chat_rail_head.html` runs inline in
 `<head>`: it stamps `chat-rail-open` or `chat-rail-shut` on `<html>` so the page
