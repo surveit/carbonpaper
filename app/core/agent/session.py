@@ -4,7 +4,9 @@ where every turn runs on the engine `build_session_engine` returns.
 """
 from __future__ import annotations
 
-from app.core.agent.registry import build_engine, render_opening_message
+from typing import Any
+
+from app.core.agent.registry import OpeningTurn, build_engine, render_opening_turn
 from app.core.agent.sdk_engine import ClaudeAgentSdkEngine
 from app.core.agent.store import open_session_store, read_opening_message
 from app.core.ids import ID
@@ -19,12 +21,20 @@ def create_agent_session(
     session_id = _store.create(
         title=title or f"Agent: {agent_id}", agent_id=agent_id, context=context
     )
-    opening = render_opening_message(agent_id, _turn_context(context, base_url))
-    if opening:
+    opening = render_opening_turn(agent_id, _turn_context(context, base_url))
+    if opening and opening.text:
         _store.append_messages(
-            session_id, [{"role": "assistant", "parts": [{"type": "text", "text": opening}]}]
+            session_id, [{"role": "assistant", "parts": _opening_parts(opening)}]
         )
     return session_id
+
+
+def _opening_parts(opening: OpeningTurn) -> list[dict[str, Any]]:
+    """The offers ride the same turn, so the page draws them wherever it draws the words."""
+    parts: list[dict[str, Any]] = [{"type": "text", "text": opening.text}]
+    if opening.offers:
+        parts.append({"type": "offer", "options": opening.offers})
+    return parts
 
 
 def build_session_engine(session_id: ID, base_url: str) -> ClaudeAgentSdkEngine:

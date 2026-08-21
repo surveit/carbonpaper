@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Any, ClassVar, Literal, TypedDict
+from typing import Annotated, Any, ClassVar, Literal, TypedDict
 
 from pydantic import BaseModel, Field
 
@@ -28,6 +28,7 @@ class PartType(str, Enum):
     thinking = "thinking"
     tool_call = "tool_call"
     tool_result = "tool_result"
+    offer = "offer"
 
 
 class TranscriptMessage(TypedDict):
@@ -53,9 +54,25 @@ class ToolBlock(BaseModel):
     calls: list[ToolCall]
 
 
+# Drawn as buttons, not a tool row: each option is a message the reader may send.
+OFFER_NEXT_STEPS = "offer_next_steps"
+
+
+class NextSteps(BaseModel):
+    """What one turn offers as the reader's next message, in the reader's own voice."""
+
+    options: list[Annotated[str, Field(min_length=1, max_length=70)]] = Field(
+        min_length=2, max_length=4)
+
+
+class OffersBlock(BaseModel):
+    kind: Literal["offers"] = "offers"
+    options: list[str]
+
+
 class Bubble(BaseModel):
     role: MessageRole
-    blocks: list[ProseBlock | ToolBlock]
+    blocks: list[ProseBlock | ToolBlock | OffersBlock]
 
 
 class AgentSession(PersistedModel):
@@ -182,12 +199,14 @@ def _render_history_bubbles(messages: list[dict]) -> list[Bubble]:
     ]
 
 
-def _blocks_in_turn_order(message: dict) -> list[ProseBlock | ToolBlock]:
+def _blocks_in_turn_order(message: dict) -> list[ProseBlock | ToolBlock | OffersBlock]:
     """Reading order is the order the turn produced, so text after a tool call renders after it."""
-    blocks: list[ProseBlock | ToolBlock] = []
+    blocks: list[ProseBlock | ToolBlock | OffersBlock] = []
     for part in message.get("parts") or []:
         part_type = part.get("type")
-        if part_type == PartType.tool_call:
+        if part_type == PartType.offer:
+            blocks.append(OffersBlock(options=part.get("options") or []))
+        elif part_type == PartType.tool_call:
             _append_tool_call(blocks, ToolCall(
                 name=part.get("name", ""), args=part.get("args", ""),
                 label=part.get("label") or part.get("name", "")))
@@ -198,7 +217,7 @@ def _blocks_in_turn_order(message: dict) -> list[ProseBlock | ToolBlock]:
     return blocks
 
 
-def _append_tool_call(blocks: list[ProseBlock | ToolBlock], call: ToolCall) -> None:
+def _append_tool_call(blocks: list[ProseBlock | ToolBlock | OffersBlock], call: ToolCall) -> None:
     """One block per RUN of a kind, as for prose: calls with no prose between them share a block."""
     previous = blocks[-1] if blocks else None
     if isinstance(previous, ToolBlock):
@@ -207,7 +226,8 @@ def _append_tool_call(blocks: list[ProseBlock | ToolBlock], call: ToolCall) -> N
         blocks.append(ToolBlock(calls=[call]))
 
 
-def _append_prose(blocks: list[ProseBlock | ToolBlock], kind: Literal["text", "thinking"],
+def _append_prose(blocks: list[ProseBlock | ToolBlock | OffersBlock],
+                  kind: Literal["text", "thinking"],
                   text: str) -> None:
     """One block per RUN of a kind: the split the live stream renders, and the swap compares."""
     previous = blocks[-1] if blocks else None

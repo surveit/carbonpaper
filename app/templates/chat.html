@@ -1,11 +1,17 @@
 {% extends "base.html" %}
 {% block title %}{{ title }}{% endblock %}
+{# The conversation owns the viewport: the log scrolls inside it and the composer is
+   the column's last row rather than a bar across the window. See agent-chat.css. #}
+{% block body_class %}chat-page{% endblock %}
 {% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
 {# A turn naming a file draws as a card; every other turn is its own text. The TEXT is
    what the agent reads either way — this is only how the page draws it. #}
 {% macro turn_body(text) %}{% set turn = text | turn %}{% if turn.files %}<div class="ac-files">{% for file in turn.files %}<div class="ac-body ac-file"><span class="ac-file-icon" aria-hidden="true">▤</span><span class="ac-file-name">{{ file.name }}</span><span class="ac-file-meta">{{ file.meta }}</span></div>{% endfor %}</div>{% endif %}{% if turn.said or not turn.files %}<div class="ac-body">{{ turn.said if turn.files else text }}</div>{% endif %}{% endmacro %}
 {# A call and its arguments. Its own macro because a run of calls nests these inside one
    disclosure, and the two shapes have to draw the individual call identically. #}
+{# Replies the reader may click instead of typing: the agent's own words, sent as the
+   reader's next message. Only the newest turn's are live — see agent-chat.css. #}
+{% macro offer_row(options) %}<div class="ac-offers">{% for option in options %}<button type="button" class="ac-offer">{{ option }}</button>{% endfor %}</div>{% endmacro %}
 {% macro tool_row(call) %}<details class="ac-tool"><summary title="{{ call.label or call.name }}">Called a tool: {{ call.name }}</summary><pre class="ac-tool-json">{{ call.args }}</pre></details>{% endmacro %}
 {% block content %}
 <div class="ac-head">
@@ -34,6 +40,8 @@
             {% else %}
               <details class="ac-tool ac-tools"><summary title="{{ blk.calls | map(attribute='name') | unique | join(', ') }}">Called {{ blk.calls | length }} tools</summary><div class="ac-tools-body">{% for call in blk.calls %}{{ tool_row(call) }}{% endfor %}</div></details>
             {% endif %}
+          {% elif blk.kind == "offers" %}
+            {{ offer_row(blk.options) }}
           {% elif blk.kind == "thinking" %}
             {% if blk.text.strip() %}
               <details class="ac-think"><summary>💭 thinking</summary><div class="ac-think-text">{{ blk.text }}</div></details>
@@ -105,7 +113,9 @@ const sendBtn = document.getElementById("send");
 let streaming = false;
 
 function el(cls, html) { const d = document.createElement("div"); d.className = cls; if (html !== undefined) d.innerHTML = html; return d; }
-function scroll() { window.scrollTo(0, document.body.scrollHeight); }
+// The log is the scrolling element now, not the window: the composer under it is the
+// column's last row and does not move.
+function scroll() { log.scrollTop = log.scrollHeight; }
 function fmtJson(s) { try { return JSON.stringify(JSON.parse(s), null, 2); } catch (e) { return s || ""; } }
 function toolPre(text) { const p = document.createElement("pre"); p.className = "ac-tool-json"; p.textContent = fmtJson(text); return p; }
 
@@ -252,6 +262,17 @@ function newAssistant() {
       }
       scroll();
     },
+    // Buttons, not a tool row: the arguments are sentences the reader may send.
+    offers(options) {
+      stop(); closeRegions();
+      const row = el("ac-offers");
+      options.forEach((option) => {
+        const button = document.createElement("button");
+        button.type = "button"; button.className = "ac-offer"; button.textContent = option;
+        row.appendChild(button);
+      });
+      b.appendChild(row); scroll();
+    },
     error(t) { stop(); closeRegions(); const e = el("ac-err"); e.textContent = "⚠ " + t; b.appendChild(e); scroll(); },
     // Turn over: reconcile against the server's markdown of the SAME stored text, so
     // this bubble ends up matching what a page reload renders. Each region is already
@@ -286,6 +307,7 @@ function connect(turnId, fromIndex) {
     else if (ev.kind === "text") bubble.text(ev.text);
     else if (ev.kind === "tool_call") bubble.tool(ev.name, ev.args, ev.label);
     else if (ev.kind === "tool_result") bubble.toolResult(ev.content);
+    else if (ev.kind === "offer") bubble.offers(ev.options);
     else if (ev.kind === "error") bubble.error(ev.text);
     else if (ev.kind === "done") { bubble.stop(); es.close(); streaming = false; if (sendBtn) sendBtn.disabled = false; if (input) input.focus(); bubble.renderStoredMarkdown(); }
   };
@@ -437,28 +459,36 @@ async function send() {
   input.value = "";
   attached = [];
   drawAttached();
+  sendText(text);
+}
+
+async function sendText(text) {
+  if (!text || streaming) return;
+  // Claimed here rather than when the stream opens: two quick clicks on the offers are
+  // two turns, and the second is not one the reader asked for.
+  streaming = true;
   addUser(text);
   let sid;
   try { sid = await ensureSession(); }
-  catch (e) { const b = newAssistant(); b.error(e.message); return; }
+  catch (e) { streaming = false; const b = newAssistant(); b.error(e.message); return; }
   const r = await fetch(`/chat/${sid}/message`, {
     method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({text})
   });
   const data = await r.json();
-  if (!data.ok) { const b = newAssistant(); b.error(data.error || "request failed"); return; }
+  if (!data.ok) {
+    streaming = false;
+    const b = newAssistant(); b.error(data.error || "request failed"); return;
+  }
   connect(data.turn_id, 0);
 }
 
 // A textarea keeps the height it was given, so every edit re-measures: collapse it, then take
 // what the text needs — scrollHeight is content + padding, and the border is the part the box
-// does not report. The dock is fixed, so the log's padding follows it up: the message being
-// typed must not cover the reply it is answering.
-const dock = document.querySelector(".ac-dock");
+// does not report.
 function fitComposer() {
   input.style.height = "auto";
   input.style.height = input.scrollHeight + (input.offsetHeight - input.clientHeight) + "px";
-  log.style.paddingBottom = (dock.offsetHeight + 24) + "px";
 }
 
 // The composer exists only when a real agent is bound; a view-only generation session has
@@ -468,8 +498,18 @@ if (input && sendBtn) {
   input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
   input.addEventListener("input", fitComposer);
   window.addEventListener("resize", fitComposer);
+  // Delegated, so a turn that has just streamed its offers is wired like one the page
+  // rendered. A click sends those words and leaves a half-typed draft where it is.
+  log.addEventListener("click", (e) => {
+    const offer = e.target.closest(".ac-offer");
+    if (offer) sendText(offer.textContent);
+  });
   fitComposer();
 }
+
+// The newest turn, which is what a reader coming back is looking for. The log scrolls
+// on its own now, so landing at the top would open every session at its greeting.
+scroll();
 
 // Reattach to an in-flight turn after navigating away and back.
 if (ACTIVE_TURN) connect(ACTIVE_TURN, 0);

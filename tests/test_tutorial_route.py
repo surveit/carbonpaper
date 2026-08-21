@@ -149,14 +149,20 @@ def test_two_visitors_get_their_own_sessions() -> None:
 
 def test_the_materialized_session_already_carries_the_greeting_with_no_model_call() -> None:
     """Fixed text written at materialization, not a live turn: no turn_id exists yet."""
-    from app.agents.tutorial.prompt import TUTORIAL_OPENING_MESSAGE
+    from app.agents.tutorial.prompt import (
+        TUTORIAL_OPENING_MESSAGE,
+        TUTORIAL_OPENING_OFFERS,
+    )
 
     sid = _materialize_the_tour()
     data = _store.load(sid)
 
     assert data["active_turn"] is None
     assert data["messages"] == [
-        {"role": "assistant", "parts": [{"type": "text", "text": TUTORIAL_OPENING_MESSAGE}]}
+        {"role": "assistant", "parts": [
+            {"type": "text", "text": TUTORIAL_OPENING_MESSAGE},
+            {"type": "offer", "options": TUTORIAL_OPENING_OFFERS},
+        ]}
     ]
 
 

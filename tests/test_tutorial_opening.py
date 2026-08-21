@@ -51,4 +51,4 @@ def test_the_model_is_told_the_greeting_it_opened_with() -> None:
 
 def test_the_hook_the_tutorial_agent_registered_is_the_one_that_runs() -> None:
     # Without this, every test above would pass on an agent carrying no hook.
-    assert TUTORIAL_CONFIG.render_opening_message is not None
+    assert TUTORIAL_CONFIG.render_opening_turn is not None

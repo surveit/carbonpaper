@@ -13,6 +13,7 @@ from urllib.parse import urlencode
 from pydantic import BaseModel
 
 from app.core import files as file_store
+from app.core.agent.store import NextSteps
 from app.models import EvalConfig
 from app.models.review_guide import ReviewGuideDraft
 from app.services import (
@@ -148,6 +149,32 @@ def _find_reusable_tour_project() -> str | None:
 def _is_on_disk(project_id: str) -> bool:
     """A project the workspace can run — not merely an id the store knows."""
     return (workspace.projects_dir() / project_id).is_dir() and methodology.exists(project_id)
+
+
+def offer_next_steps(options: list[str]) -> NextSteps:
+    """The call itself is what the page draws; what comes back only tells the model it landed."""
+    return NextSteps(options=options)
+
+
+# Not in tool_specs: everything there is offered over MCP, where nothing draws a button.
+OFFER_NEXT_STEPS = ToolProse(
+    parameters={
+        "options": "Two to four replies, each at most 70 characters, in the reader's own "
+            "voice: \"Open the review queue\", not \"Open the queue for them\".",
+    },
+    description="""Offer the reader replies to click instead of typing.
+
+Each option is drawn as a button under this turn, and clicking one sends that
+option's exact words as their next message — so these are not a menu you may
+narrow the conversation to. The reader can still type anything, and whatever
+comes back is an ordinary turn.
+
+Offer only steps you can carry out when one comes back, and never one that just
+ends the conversation.
+
+    offer_next_steps(options=["Open the review queue",
+                              "Trace a published figure back to its row"])""",
+)
 
 
 CREATE_TUTORIAL_PROJECT = ToolProse(
