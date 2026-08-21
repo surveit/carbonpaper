@@ -431,8 +431,6 @@ def _fan_out(
             }
             try:
                 for future in as_completed(futures):
-                    # Cancel first: every instruction before it is a wider window for the
-                    # pool to dispatch another chunk, and that costs a model call.
                     if _consume_cancel(ctx):
                         raise RunCancelled(f"stage {stage_id}: cancelled mid-fan-out")
                     validate_still_held()
