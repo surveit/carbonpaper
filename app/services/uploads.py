@@ -1,4 +1,4 @@
-"""The connector params a run binds for the file(s) the store holds."""
+"""The connector params a run binds for the files the store holds."""
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -8,30 +8,21 @@ from app.core.source_files import FileFormat, resolve_file_format
 from app.models.schema import TypeUnsafeUserStageConfigOverride
 
 
-def resolve_file_binding(project_id: str, file_id: str) -> TypeUnsafeUserStageConfigOverride:
-    """The connector params a run of `project_id` binds for one of its files."""
-    record, path = open_project_file(project_id, file_id)
-    return {"path": str(path), "format": resolve_file_format(record.filename).value}
-
-
 def resolve_files_binding(
     project_id: str, file_ids: Sequence[str]
 ) -> TypeUnsafeUserStageConfigOverride:
-    """Several files read as one table. One file keeps `path`, so its cache key does not move."""
+    """The files an input reads this run, in the order given; they become one table."""
     if not file_ids:
         raise ValueError("a file binding names at least one file, and this one names none")
-    if len(file_ids) == 1:
-        return resolve_file_binding(project_id, file_ids[0])
     opened = [open_project_file(project_id, file_id) for file_id in file_ids]
     return {
-        # None takes an authored `path` off; one file still emits `path` alone.
-        "path": None,
         "paths": [str(path) for _record, path in opened],
-        "format": _one_format([record.filename for record, _path in opened]).value,
+        "format": _one_shared_format([record.filename for record, _path in opened]).value,
     }
 
 
-def _one_format(filenames: Sequence[str]) -> FileFormat:
+def _one_shared_format(filenames: Sequence[str]) -> FileFormat:
+    """Read as one table, so one reader — a mixed set is refused rather than half-read."""
     by_format: dict[FileFormat, list[str]] = {}
     for filename in filenames:
         by_format.setdefault(resolve_file_format(filename), []).append(filename)

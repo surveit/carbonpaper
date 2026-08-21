@@ -23,7 +23,7 @@ from app.core.files import (
     resolve_stored_path,
     save_upload,
 )
-from app.services.uploads import resolve_file_binding
+from app.services.uploads import resolve_files_binding
 
 client = TestClient(app)
 
@@ -243,20 +243,20 @@ def test_claiming_a_file_no_project_is_missing_fails_loudly(project):
 
 def test_a_run_cannot_bind_a_file_another_project_holds(project):
     file_id = upload("posts.csv", CSV, project_name="demo").json()["file_id"]
-    assert resolve_file_binding("demo", file_id)["path"].endswith("posts.csv")
+    assert resolve_files_binding("demo", [file_id])["paths"][0].endswith("posts.csv")
     with pytest.raises(FileNotStoredError, match="has no file"):
-        resolve_file_binding("other", file_id)
+        resolve_files_binding("other", [file_id])
 
 
 def test_a_binding_carries_the_format_the_extension_names(project):
     file_id = upload("posts.csv", CSV).json()["file_id"]
-    assert resolve_file_binding("demo", file_id)["format"] == "csv"
+    assert resolve_files_binding("demo", [file_id])["format"] == "csv"
 
 
 def test_a_tsv_upload_binds_as_tsv(project):
     body = b"name\tval\nx\t1\n"
     file_id = upload("posts.tsv", body).json()["file_id"]
-    assert resolve_file_binding("demo", file_id)["format"] == "tsv"
+    assert resolve_files_binding("demo", [file_id])["format"] == "tsv"
 
 
 def test_one_files_bytes_sent_again_under_another_name_binds_as_that_other_name(project):
@@ -264,7 +264,15 @@ def test_one_files_bytes_sent_again_under_another_name_binds_as_that_other_name(
     tsv = upload("posts.tsv", body).json()
     csv = upload("posts.csv", body).json()
     # Two records over identical bytes, each read as the format its own name says.
-    assert resolve_file_binding("demo", tsv["file_id"]) == {"path": tsv["path"],
-                                                           "format": "tsv"}
-    assert resolve_file_binding("demo", csv["file_id"]) == {"path": csv["path"],
-                                                           "format": "csv"}
+    assert resolve_files_binding("demo", [tsv["file_id"]]) == {"paths": [tsv["path"]],
+                                                               "format": "tsv"}
+    assert resolve_files_binding("demo", [csv["file_id"]]) == {"paths": [csv["path"]],
+                                                               "format": "csv"}
+
+
+def test_files_of_two_formats_are_refused_rather_than_half_read(project):
+    """They become ONE table, so one reader — a mixed set has no single answer."""
+    csv = upload("posts.csv", b"a,b\n1,2\n").json()
+    tsv = upload("other.tsv", b"a\tb\n1\t2\n").json()
+    with pytest.raises(ValueError, match="share a format"):
+        resolve_files_binding("demo", [csv["file_id"], tsv["file_id"]])

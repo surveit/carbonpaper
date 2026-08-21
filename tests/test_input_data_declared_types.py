@@ -13,6 +13,7 @@ import pytest
 from app.core.frames import table_to_frame
 from app.models import Stage
 from app.models.stage import parse_stage
+from app.models.stages.input_data import FileConnectorParams
 from app.runtime.stages.input_data import read_input_data
 from conftest import make_run_context, place_stage
 
@@ -323,7 +324,7 @@ def test_typed_formats_do_not_get_a_pinned_dtype(fmt):
     from app.models import TableSchema
 
     schema = TableSchema.model_validate({"columns": [{"name": "id", "type": "str", "nullable": True}]})
-    assert _read_dtype(schema, fmt, {}) is None
+    assert _read_dtype(schema, fmt, FileConnectorParams()) is None
 
 
 # ── xlsx: a workbook types its cells, pd.read_excel re-guesses them ──────────

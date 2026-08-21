@@ -8,18 +8,18 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.source_files import FileFormat, read_source_file
-from app.models.stages.input_data import XlsxReadParams
+from app.models.stages.input_data import FileConnectorParams
 
 
-def _read_xlsx(path: Path, params: XlsxReadParams) -> object:
+def _read_xlsx(path: Path, params: FileConnectorParams) -> object:
     """The unpacking read_input_data does, so these cases exercise the real call."""
     return read_source_file(
         path, FileFormat.xlsx, sheet_name=params.sheet_name, header_row=params.header_row,
         first_column=params.first_column, source_row_column=params.source_row_column)
 
 
-def _params(**kwargs: object) -> XlsxReadParams:
-    return XlsxReadParams.model_validate(kwargs)
+def _params(**kwargs: object) -> FileConnectorParams:
+    return FileConnectorParams.model_validate(kwargs)
 
 
 def _write(tmp_path: Path, rows: list[list[object]], sheets: dict[str, list[list[object]]] | None = None) -> Path:

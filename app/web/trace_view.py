@@ -47,8 +47,8 @@ def _transform_of(workflow_stage: WorkflowStage | None) -> dict[str, Any]:
         return {"kind": "unknown", "detail": None}
     stage = workflow_stage.stage
     if isinstance(stage, InputDataStage):
-        path = stage.connector.params.get("path")
-        src = path or (stage.source.doc if stage.source else None)
+        named = ", ".join(stage.connector.params.paths)
+        src = named or (stage.source.doc if stage.source else None)
         return {"kind": "source", "detail": src or "originates the rows"}
     if isinstance(stage, (PythonRowFunctionStage, PythonFrameFunctionStage)):
         # Full source: the whole module file for a module ref, the inline code

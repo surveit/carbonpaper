@@ -252,7 +252,7 @@ def run_workflow(
     # A stage id -> file id map, resolved here to the path-and-format params a run
     # binds. Resolving it before start_run means an unknown file id fails naming
     # itself, rather than as a missing-input refusal from preflight.
-    bindings = {stage_id: uploads.resolve_file_binding(project_id, file_id)
+    bindings = {stage_id: uploads.resolve_files_binding(project_id, [file_id])
                 for stage_id, file_id in (files or {}).items()}
     run_id = run_service.start_run(
         project_id, version_id=version_id or None, limits=limits,

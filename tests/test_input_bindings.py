@@ -23,7 +23,7 @@ _X_SCHEMA = {"columns": [{"name": "x", "type": "int", "nullable": True}]}
 
 
 def _input_stage(stage_id: str, path: str | None) -> Stage:
-    params: dict = {"path": path, "format": "csv"} if path else {}
+    params: dict = {"paths": [path], "format": "csv"} if path else {}
     return parse_stage({
         "id": stage_id, "description": stage_id, "type": "input_data",
         "connector": {"kind": "file", "params": params},
@@ -56,7 +56,7 @@ def test_run_binding_overrides_workflow_params(tmp_path):
     authored, bound = str(tmp_path / "a.csv"), str(tmp_path / "b.csv")
     stages, sources = apply_run_bindings(
         [_input_stage("load", authored)], {"load": {"path": bound}})
-    assert stages[0].connector.params["path"] == bound
+    assert stages[0].connector.params.paths == [bound]
     assert sources == {"load": "run"}
 
 
@@ -64,15 +64,25 @@ def test_workflow_params_used_when_no_binding(tmp_path):
     authored = str(tmp_path / "a.csv")
     stages, sources = apply_run_bindings([_input_stage("load", authored)], None)
     assert sources == {"load": "workflow"}
-    assert stages[0].connector.params["path"] == authored
+    assert stages[0].connector.params.paths[0] == authored
 
 
 def test_binding_merges_over_params(tmp_path):
     bound = str(tmp_path / "b.parquet")
     stages, _ = apply_run_bindings(
         [_input_stage("load", str(tmp_path / "a.csv"))],
+        {"load": {"paths": [bound], "format": "parquet"}})
+    assert stages[0].connector.params.paths == [bound]
+    assert stages[0].connector.params.format == "parquet"
+
+
+def test_a_rerun_replaying_an_old_runs_binding_still_names_its_file(tmp_path):
+    """A manifest written before an input could read several files recorded `path`."""
+    bound = str(tmp_path / "b.parquet")
+    stages, _ = apply_run_bindings(
+        [_input_stage("load", str(tmp_path / "a.csv"))],
         {"load": {"path": bound, "format": "parquet"}})
-    assert stages[0].connector.params == {"path": bound, "format": "parquet"}
+    assert stages[0].connector.params.paths == [bound]
 
 
 def test_invalid_merged_params_rejected_naming_the_stage(tmp_path):
@@ -104,7 +114,7 @@ def test_original_stages_untouched(tmp_path):
     authored = str(tmp_path / "a.csv")
     original = _input_stage("load", authored)
     apply_run_bindings([original], {"load": {"path": str(tmp_path / "b.csv")}})
-    assert original.connector.params["path"] == authored
+    assert original.connector.params.paths == [authored]
 
 
 # ── validate_stages_ready: stage-owned preflight, aggregated loudly ────────────

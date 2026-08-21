@@ -22,11 +22,7 @@ from app.models import (
     TableSchema,
     WorkflowStage,
 )
-from app.models.stages.input_data import (
-    InputDataStage,
-    XlsxReadParams,
-    read_connector_paths,
-)
+from app.models.stages.input_data import FileConnectorParams, InputDataStage
 
 from ..context import RunContext
 from ..lineage import RowLineage, RowParent
@@ -61,15 +57,15 @@ def preflight_input_data(
     if not isinstance(stage, InputDataStage):
         raise TypeError(
             f"stage {stage.id}: the input_data preflight got a {type(stage).__name__}")
-    bound = read_connector_paths(stage.connector.params)
-    if not bound:
+    paths = stage.connector.params.paths
+    if not paths:
         return ([f"`{stage.id}`: no file bound — supply a run binding, or author "
                  "an absolute path in the workflow"], None)
-    missing = [path for path in bound if not Path(path).is_file()]
+    missing = [path for path in paths if not Path(path).is_file()]
     if missing:
         return ([f"`{stage.id}`: bound file does not exist or is not a file: {path}"
                  for path in missing], None)
-    weighed = [_weigh_file(Path(path)) for path in bound]
+    weighed = [_weigh_file(Path(path)) for path in paths]
     # One file keeps the flat record every manifest has carried.
     return [], weighed[0] if len(weighed) == 1 else {"files": weighed}
 
@@ -84,67 +80,66 @@ def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> StageOutp
     input_stage = narrow_stage(workflow_stage, InputDataStage)
     params = input_stage.connector.params
 
-    bound = read_connector_paths(params)
-    if not bound:
+    paths = params.paths
+    if not paths:
         raise ValueError(
             f"input stage '{input_stage.id}' has no file bound (connector params carry "
-            "no 'path'); runs bind one at prepare_run — subset/eval runs need the "
-            "workflow to author it or a reference override to inject it"
+            "no 'paths'); runs bind them at prepare_run — subset/eval runs need the "
+            "workflow to author them or a reference override to inject them"
         )
-    frames = [_read_one_file(Path(path), workflow_stage, params) for path in bound]
-    _refuse_files_that_disagree(bound, [list(frame.columns) for frame in frames])
+    frames = [_read_one_file(Path(path), workflow_stage, params) for path in paths]
+    _refuse_files_that_disagree(paths, [list(frame.columns) for frame in frames])
     # pd.concat pads a missing column with nulls; concat_tables refuses and names it.
     return StageOutput(
         concat_tables([frame_to_table(frame) for frame in frames]),
         lineage=_which_file_each_row_came_from(
-            input_stage.id, bound, [len(frame) for frame in frames]),
+            input_stage.id, paths, [len(frame) for frame in frames]),
     )
 
 
 def _refuse_files_that_disagree(
-    bound: list[str], columns_per_file: list[list[str]]
+    paths: list[str], columns_per_file: list[list[str]]
 ) -> None:
     """concat_tables refuses this too, but by table ordinal — only here are they named files."""
     first = set(columns_per_file[0])
-    for path, columns in zip(bound[1:], columns_per_file[1:]):
+    for path, columns in zip(paths[1:], columns_per_file[1:]):
         if set(columns) ^ first:
             raise FrameConcatMismatchError(
                 f"'{PurePath(path).name}' does not carry the same columns as "
-                f"'{PurePath(bound[0]).name}': "
-                f"only in '{PurePath(bound[0]).name}' {sorted(first - set(columns))}, "
+                f"'{PurePath(paths[0]).name}': "
+                f"only in '{PurePath(paths[0]).name}' {sorted(first - set(columns))}, "
                 f"only in '{PurePath(path).name}' {sorted(set(columns) - first)}"
             )
 
 
 def _which_file_each_row_came_from(
-    stage_id: str, bound: list[str], rows_per_file: list[int]
+    stage_id: str, paths: list[str], rows_per_file: list[int]
 ) -> RowLineage:
     """`row_ordinal` counts within the file, so it is the row a reader would find there."""
     return RowLineage([
         # No parent stage: what a reader asks here is which FILE, not which step.
         [RowParent(stage_id, row, source_file=path)]
-        for path, rows in zip(bound, rows_per_file)
+        for path, rows in zip(paths, rows_per_file)
         for row in range(rows)
     ])
 
 
 def _read_one_file(
-    path: Path, workflow_stage: WorkflowStage, params: dict[str, Any]
+    path: Path, workflow_stage: WorkflowStage, params: FileConnectorParams
 ) -> pd.DataFrame:
-    fmt = FileFormat(params.get("format", FileFormat.csv))
+    fmt = params.format or FileFormat.csv
     schema = workflow_stage.output_schema  # input_data's produces is non-empty by validation
-    xlsx = XlsxReadParams.model_validate(params)
     df = read_source_file(
         path, fmt,
         dtype=_read_dtype(schema, fmt, params),
-        sheet_name=xlsx.sheet_name,
-        header_row=xlsx.header_row,
-        first_column=xlsx.first_column,
-        source_row_column=xlsx.source_row_column,
+        sheet_name=params.sheet_name,
+        header_row=params.header_row,
+        first_column=params.first_column,
+        source_row_column=params.source_row_column,
     )
 
     # Optional list-column splitting (e.g., "[a, b]" → ["a", "b"])
-    for col in params.get("list_columns", []):
+    for col in params.list_columns:
         if col in df.columns:
             df[col] = df[col].apply(_parse_list_cell)
 
@@ -160,13 +155,13 @@ def _read_one_file(
 
 
 def _read_dtype(
-    schema: TableSchema | None, fmt: str, params: dict[str, Any]
+    schema: TableSchema | None, fmt: str, params: FileConnectorParams
 ) -> dict[Hashable, Any] | None:
     """Keyed `Hashable`, not `str`: pandas' `dtype=` Mapping key is invariant, so dict[str, …] fails."""
     pinned: dict[Hashable, Any] = {name: str for name in _text_on_disk_columns(schema, fmt)}
     # An explicit `dtype` param wins per column name: the author's declaration of how
     # to READ the file beats what we infer from the declaration of what it CONTAINS.
-    pinned.update(params.get("dtype") or {})
+    pinned.update(params.dtype or {})
     return pinned or None
 
 
@@ -191,8 +186,10 @@ def _text_on_disk_columns(schema: TableSchema | None, fmt: str) -> list[str]:
     return []
 
 
-def _date_columns(schema: TableSchema | None, fmt: str, params: dict[str, Any]) -> list[str]:
-    columns = list(params.get("parse_dates", []))
+def _date_columns(
+    schema: TableSchema | None, fmt: str, params: FileConnectorParams
+) -> list[str]:
+    columns = list(params.parse_dates)
     # Only formats pandas type-infers contribute declared columns — parquet and
     # geojson carry real types already.
     if schema is None or fmt not in _INFERRING_FORMATS:

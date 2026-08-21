@@ -366,7 +366,7 @@ def _corrupt_version_document_with_relative_path(project):
     version_id = list_versions(project.name)[0].version_id
     store = get_store()
     doc = store.read("workflow_version", f"{project.name}/{version_id}")
-    doc["stages"][0]["connector"]["params"]["path"] = "relative/a.csv"
+    doc["stages"][0]["connector"]["params"]["paths"] = ["relative/a.csv"]
     store.write("workflow_version", f"{project.name}/{version_id}", doc)
     return version_id
 

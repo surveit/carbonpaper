@@ -45,7 +45,7 @@ def _load_stage(workflow) -> Any:
 
 
 def _connector_path(workflow) -> str:
-    return _load_stage(workflow).connector.params["path"]
+    return _load_stage(workflow).connector.params.paths[0]
 
 
 def test_a_bound_path_is_what_the_panel_shows(project, tmp_path):
@@ -57,7 +57,7 @@ def test_a_bound_path_is_what_the_panel_shows(project, tmp_path):
     workflow = run_service.load_run_workflow("demo", manifest)
 
     assert _connector_path(workflow) == str(bound)
-    assert _load_stage(workflow).connector.params["format"] == "parquet"
+    assert _load_stage(workflow).connector.params.format == "parquet"
 
 
 def test_the_pinned_stage_def_carries_the_binding_too(project, tmp_path):
@@ -69,7 +69,7 @@ def test_the_pinned_stage_def_carries_the_binding_too(project, tmp_path):
     pinned = run_service.load_pinned_stage_def("demo", manifest, "load")
 
     assert pinned.error is None
-    assert pinned.workflow_stage.stage.connector.params["path"] == str(bound)
+    assert pinned.workflow_stage.stage.connector.params.paths == [str(bound)]
 
 
 def test_a_legacy_flat_manifest_is_read_the_same_way(project, tmp_path):

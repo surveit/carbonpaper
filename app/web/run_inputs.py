@@ -13,7 +13,6 @@ from app.models.run_parameters import RunParameters
 from app.models.schema import StageId
 from app.runtime.manifest import RunManifest
 from app.web.file_sizes import describe_bytes
-from app.models.stages.input_data import read_connector_paths
 from app.web.loading import list_file_inputs
 
 _MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -86,7 +85,7 @@ def _match_recorded_files(
             id_by_key[key] = record.id
     picks: dict[StageId, list[str]] = {}
     for stage_id, override in params.run_bindings.items():
-        chosen = [file_id for path in read_connector_paths(dict(override))
+        chosen = [file_id for path in (dict(override).get("paths") or [])
                   # A file the project no longer holds cannot be pre-picked.
                   if (file_id := _match_one_path(id_by_key, path)) is not None]
         if chosen:
