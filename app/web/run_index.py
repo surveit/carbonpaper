@@ -25,6 +25,15 @@ class RunInputCell(BaseModel):
     sha256: str | None = None
     # One filename over two sets of bytes: the name alone is not an identity.
     hash_disambiguates: bool = False
+    # How many of the file's rows this run read, when it did not read them all.
+    row_cap: int | None = None
+
+
+class StageRowCap(BaseModel):
+    """A cap on a stage that bound no file — its rows come from upstream, not disk."""
+
+    stage_id: str
+    cap: int
 
 
 class RunIndexRow(BaseModel):
@@ -46,8 +55,8 @@ class RunIndexRow(BaseModel):
     outcome: str = ""
     is_test_run: bool = False
     inputs: list[RunInputCell] = []
-    # Empty when the run read every input whole.
-    row_caps: str = ""
+    # Caps naming a stage that bound no file — no input line can carry them.
+    stage_caps: list[StageRowCap] = []
     # Empty for a run that bound no file — no inputs is not an input set.
     input_key: str = ""
     runs_on_these_inputs: int = 1
@@ -201,8 +210,11 @@ def _build_row(
         result_summary=describe_stage_counts(strip),
         outcome=describe_run_outcome(str(manifest.status)),
         is_test_run=manifest.parameters.is_test_run,
-        inputs=[_build_input_cell(b, context.ambiguous_filenames) for b in bindings],
-        row_caps=describe_row_caps(manifest.parameters.limits),
+        inputs=[
+            _build_input_cell(b, context.ambiguous_filenames, manifest.parameters.limits)
+            for b in bindings
+        ],
+        stage_caps=find_unbound_stage_caps(manifest.parameters.limits, bindings),
         input_key=input_key,
         runs_on_these_inputs=context.run_counts[input_key],
     )
@@ -212,17 +224,28 @@ def total_run_cost(manifest: RunManifest) -> float:
     return sum(r.llm_usage.cost_usd for r in manifest.stage_records if r.llm_usage)
 
 
-def describe_row_caps(limits: dict[str, int]) -> str:
-    return ", ".join(f"{stage_id} ≤ {cap:,} rows" for stage_id, cap in sorted(limits.items()))
+def find_unbound_stage_caps(
+    limits: dict[str, int], bindings: list[InputBinding]
+) -> list[StageRowCap]:
+    """A cap on a file input rides that file's line; the rest have nowhere else to go."""
+    bound = {binding.stage_id for binding in bindings}
+    return [
+        StageRowCap(stage_id=stage_id, cap=cap)
+        for stage_id, cap in sorted(limits.items())
+        if stage_id not in bound
+    ]
 
 
-def _build_input_cell(binding: InputBinding, ambiguous: set[str]) -> RunInputCell:
+def _build_input_cell(
+    binding: InputBinding, ambiguous: set[str], limits: dict[str, int]
+) -> RunInputCell:
     return RunInputCell(
         stage_id=binding.stage_id,
         filename=binding.filename,
         size=describe_bytes(binding.bytes) if binding.bytes is not None else "",
         sha256=binding.sha256,
         hash_disambiguates=bool(binding.sha256) and binding.filename in ambiguous,
+        row_cap=limits.get(binding.stage_id),
     )
 
 

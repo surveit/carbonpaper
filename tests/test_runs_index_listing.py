@@ -65,6 +65,30 @@ def test_valid_and_legacy_manifests_listed_side_by_side(runs_root: Path):
     assert legacy.outcome == ""
 
 
+def test_a_cap_rides_the_file_it_windows(runs_root: Path):
+    """A cap on a stage that bound a file is a fact about that file's line."""
+    manifest = _current_manifest()
+    manifest["limit_overrides"] = {"load": 50}
+    _write_run(runs_root, "20260101T000000", manifest)
+
+    row = build_run_index_rows("demo")[0]
+
+    assert [(i.stage_id, i.row_cap) for i in row.inputs] == [("load", 50)]
+    assert row.stage_caps == []
+
+
+def test_a_cap_on_a_stage_that_bound_no_file_takes_a_line_of_its_own(runs_root: Path):
+    """Its rows come from the stage above it, so no filename can carry the number."""
+    manifest = _current_manifest()
+    manifest["limit_overrides"] = {"relevance_classify": 25}
+    _write_run(runs_root, "20260101T000000", manifest)
+
+    row = build_run_index_rows("demo")[0]
+
+    assert [i.row_cap for i in row.inputs] == [None]
+    assert [(c.stage_id, c.cap) for c in row.stage_caps] == [("relevance_classify", 25)]
+
+
 def test_unparseable_json_is_corrupt_not_zero(runs_root: Path):
     store_manifest_text(runs_root.parent, "20260101T000002", "{ not json")
 
