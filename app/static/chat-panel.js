@@ -451,6 +451,11 @@ window.ChatPanel.mount = function (root) {
   // rail, so the same offset is a different part of the conversation. An index survives the
   // trip, and survives a turn being appended while they were away.
   const PLACE_MARGIN = 4;
+  // Tight, and deliberately not the 120px nearBottom() follows a live turn by. That asks
+  // "are they keeping up"; this asks "were they at the end" — and at 120 the whole last
+  // screenful of a short conversation is recorded as the end, so a reader on the
+  // second-to-last message is dropped past it on the next page.
+  const AT_END = 8;
 
   // Read per call, not captured: a draft page has no SID until the reader first replies.
   function placeKey() { return `chat-panel:place:${SID}`; }
@@ -473,7 +478,7 @@ window.ChatPanel.mount = function (root) {
   function readingPlace() {
     const box = scroller();
     const height = ownsItsScrollbox() ? log.clientHeight : window.innerHeight;
-    if (box.scrollHeight - box.scrollTop - height < 120) return "bottom";
+    if (box.scrollHeight - box.scrollTop - height < AT_END) return "bottom";
     const top = scrollboxTop();
     const reading = [...log.children].findIndex(
       (msg) => msg.getBoundingClientRect().bottom > top + PLACE_MARGIN);
@@ -487,6 +492,10 @@ window.ChatPanel.mount = function (root) {
     if (!SID || !log.children.length) return;
     try { sessionStorage.setItem(placeKey(), readingPlace()); } catch (e) { /* private mode */ }
   }
+
+  // What restore left the scrollbox at, so `load` can tell "nothing has moved" from "the
+  // reader has taken over" without having to guess at intent.
+  let restoredTo = null;
 
   function restoreReadingPlace() {
     let place = null;
@@ -502,7 +511,18 @@ window.ChatPanel.mount = function (root) {
     const delta = rect.top - scrollboxTop() + (Number(into) || 0) * rect.height;
     if (ownsItsScrollbox()) log.scrollTop += delta;
     else window.scrollBy(0, delta);
+    restoredTo = ownsItsScrollbox() ? log.scrollTop : window.scrollY;
   }
+
+  // Anything that lands after mount and changes a height above the reader — a late image, a
+  // diagram the page draws for itself — moves the transcript out from under the place we
+  // just restored. Re-anchoring on load costs one measurement and is a no-op when nothing
+  // moved. Skipped the moment the reader scrolls for themselves, so it cannot fight them.
+  window.addEventListener("load", () => {
+    const now = ownsItsScrollbox() ? log.scrollTop : window.scrollY;
+    if (restoredTo === null || Math.abs(now - restoredTo) > 1) return;
+    restoreReadingPlace();
+  });
 
   // rAF-coalesced: a scroll fires per frame and this writes to storage.
   let placePending = false;
