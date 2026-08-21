@@ -144,7 +144,8 @@ def test_the_lineage_page_states_the_file_on_the_origin_row(tmp_path):
     run_dir = write_run(tmp_path / "runs", [{
         "id": "load", "type": "input_data", "parents": [],
         "df": table_to_frame(output.table), "lineage": output.lineage,
-    }])
+    }], input_bindings={"load": {"source": "run", "files": [
+        {"path": path} for path in _three_months(tmp_path)]}})
 
     view = build_trace_view(
         trace_to_dict(trace_row(run_dir, "load", 2)), {},
@@ -153,4 +154,6 @@ def test_the_lineage_page_states_the_file_on_the_origin_row(tmp_path):
     # The name alone reaches the page; the absolute path stays in the manifest.
     assert origin["source_file"] == "aug.csv"
     assert "/" not in origin["source_file"]
-    assert origin["source_row"] == 0
+    # Row 2 of the stage is row 0 of the third file, and the page says why they differ.
+    assert (origin["source_row"], origin["row_ordinal"]) == (0, 2)
+    assert origin["source_file_count"] == 3

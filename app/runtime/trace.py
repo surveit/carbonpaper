@@ -6,6 +6,7 @@ where a row has several parents, stopping where it cannot cross (`_split_spine`)
 from __future__ import annotations
 
 import math
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path, PurePath
 from typing import Any
@@ -21,6 +22,7 @@ from app.runtime.lineage import (
     RowParent,
     lineage_sidecar_path,
 )
+from app.models.run_manifest import read_input_bindings
 from app.runtime.manifest import read_run_manifest, resolve_output_path
 
 
@@ -47,6 +49,8 @@ class StageTransform:
     # `row_ordinal` counts across the concatenation; `source_row` counts within the file.
     source_file: str | None = None
     source_row: int | None = None
+    # How many files the stage read; None where the manifest did not record any binding.
+    source_file_count: int | None = None
 
 
 @dataclass
@@ -68,6 +72,10 @@ class Trace:
 def _load_manifest(run_dir: Path) -> dict[str, Any]:
     """The run's recorded manifest, found by the (project, run id) its dir names."""
     return read_run_manifest(run_dir.parent.parent.name, run_dir.name).to_dict()
+
+
+def _count_files_read(manifest: dict[str, Any]) -> Counter[str]:
+    return Counter(binding.stage_id for binding in read_input_bindings(manifest))
 
 
 def _stages_by_id(manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -249,6 +257,7 @@ def trace_row_from(frames: RunFrames, stage_id: str, row_ordinal: int) -> Trace:
     run_dir = frames.run_dir
     manifest = _load_manifest(run_dir)
     by_id = _stages_by_id(manifest)
+    files_read = _count_files_read(manifest)
     if stage_id not in by_id:
         raise StageNotInRun(f"stage {stage_id!r} not in run {run_dir.name}")
 
@@ -287,6 +296,7 @@ def trace_row_from(frames: RunFrames, stage_id: str, row_ordinal: int) -> Trace:
             branches=branches,
             source_file=spine.source_file if spine else None,
             source_row=spine.row_ordinal if spine and spine.source_file else None,
+            source_file_count=files_read.get(sid),
         ))
 
         next_hop = _advance(
@@ -321,6 +331,7 @@ def trace_to_dict(trace: Trace) -> dict[str, Any]:
                 "origin": step.origin,
                 "source_file": step.source_file,
                 "source_row": step.source_row,
+                "source_file_count": step.source_file_count,
                 "branches": [
                     {
                         "stage_id": branch.stage_id,

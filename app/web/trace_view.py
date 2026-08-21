@@ -121,6 +121,7 @@ def _build_node(
         # The name alone; where it sat on disk is the manifest's business.
         "source_file": _source_filename(step),
         "source_row": step.get("source_row"),
+        "source_file_count": step.get("source_file_count"),
         "role": _role_of(i, len(chrono), truncated),
         "columns_new": step["columns_new"],
         "row": step["row"],
