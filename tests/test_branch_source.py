@@ -1,16 +1,15 @@
-"""Arm ids come from tree position, and the instrumented source runs in both interpreters."""
+"""Arm ids come from tree position, and the rewrite runs in both interpreters."""
 from __future__ import annotations
 
-import json
-import os
 from pathlib import Path
-
-import pytest
 
 from app.core.branch_source import RECORDER_NAME, find_branch_arms, instrument_branches
 from app.runtime.branches import BRANCH_SCHEMA, BranchRecorder, RowBranches
 from app.runtime.code import load_function
 from app.runtime.starlark_code import compile_starlark_function
+
+# Verbatim from the venezuela_lobbying_q1_q2_2026 example.
+_STAGE_CODE = Path(__file__).resolve().parent / "fixtures" / "stage_code"
 
 ELIF_CHAIN = """
 def transform(row):
@@ -25,14 +24,16 @@ def transform(row):
     return dict(row, k=k)
 """
 
-GUARDS = """
+ONE_LINER = """
 def transform(row):
-    try:
-        n = int(row["n"])
-    except ValueError:
-        raise StepRefused("not a number")
-    return dict(row, n=n)
+    if row["a"]: k = "a"
+    else: k = "b"
+    return dict(row, k=k)
 """
+
+
+def stage_code(name: str) -> str:
+    return (_STAGE_CODE / f"{name}.txt").read_text(encoding="utf-8")
 
 
 def test_an_elif_chain_names_every_arm_by_its_position() -> None:
@@ -49,63 +50,90 @@ def test_reformatting_moves_the_line_but_not_the_id() -> None:
 
 
 def test_a_handler_is_an_arm_so_a_guard_that_never_fired_is_still_named() -> None:
-    assert [arm.id for arm in find_branch_arms(GUARDS)] == [
-        "transform/0:try", "transform/0:except0",
+    assert [arm.id for arm in find_branch_arms(stage_code("read_reported_money"))] == [
+        "_read_money/0:if", "_read_money/2:if", "_read_money/3:try",
+        "_read_money/3:except0", "_read_money/4:if",
     ]
 
 
-def test_an_arm_with_nowhere_to_insert_is_not_offered() -> None:
-    assert find_branch_arms("def transform(row):\n    if row['a']: return row\n    return row") == []
+def test_an_arm_sharing_its_header_line_is_still_offered() -> None:
+    assert [arm.id for arm in find_branch_arms(ONE_LINER)] == [
+        "transform/0:if", "transform/0:else",
+    ]
 
 
-def test_the_instrumented_source_opens_each_arm_with_a_recorder_call() -> None:
+def test_a_one_line_arm_records_like_any_other() -> None:
+    recorder = BranchRecorder()
+    transform = load_function(ONE_LINER, "transform", "transform", recorder)
+    assert transform is not None
+    transform({"a": 1})
+    recorder.close_row(0)
+    transform({"a": 0})
+    recorder.close_row(1)
+    assert recorder.arms_for(0) == ("transform/0:if",)
+    assert recorder.arms_for(1) == ("transform/0:else",)
+
+
+def test_a_predicate_with_no_statement_branch_offers_no_arms() -> None:
+    assert find_branch_arms(stage_code("venezuela_rows")) == []
+
+
+def test_instrumenting_changes_which_arms_are_seen_and_nothing_else() -> None:
+    """The claim the whole design rests on: the rewrite observes, it does not alter."""
+    rows = [{"a": 1, "b": 0, "c": 0}, {"a": 0, "b": 1, "c": 0},
+            {"a": 0, "b": 0, "c": 1}, {"a": 0, "b": 0, "c": 0}]
+    plain = load_function(ELIF_CHAIN, "transform", "transform")
+    recorder = BranchRecorder()
+    watched = load_function(ELIF_CHAIN, "transform", "transform", recorder)
+    assert plain is not None and watched is not None
+    assert [plain(dict(row)) for row in rows] == [watched(dict(row)) for row in rows]
+
+
+def test_the_rewrite_opens_each_arm_exactly_once() -> None:
     text, arms = instrument_branches(ELIF_CHAIN)
     assert text.count(f'{RECORDER_NAME}("') == len(arms) == 4
-    assert 'if row["a"]:\n        record_branch' in text
-
-
-def _stage(name: str, key: str) -> str:
-    path = Path(os.path.expanduser(
-        "~/.carbonpaper/examples/venezuela_lobbying_q1_q2_2026/compiled")) / f"{name}.json"
-    if not path.exists():
-        pytest.skip("the stored example project is not on this machine")
-    return json.loads(path.read_text(encoding="utf-8"))[key]["code"]
 
 
 def test_a_python_row_function_records_one_arm_per_call_it_makes() -> None:
     recorder = BranchRecorder()
-    transform = load_function(_stage("read_reported_money", "function"),
-                              "transform", "transform", recorder)
+    transform = load_function(stage_code("read_reported_money"), "transform", "transform", recorder)
     assert transform is not None
     transform({"income": "45000", "expenses": None, "filing_uuid": "f1"})
-    recorder.close_row()
-    collected = recorder.collected()
-    assert collected is not None
+    recorder.close_row(0)
     # `_read_money` runs once per money column, so one row takes two arms.
-    assert collected.taken == [("_read_money/3:try", "_read_money/0:if")]
+    assert recorder.arms_for(0) == ("_read_money/3:try", "_read_money/0:if")
 
 
 def test_a_starlark_row_function_records_through_the_real_interpreter() -> None:
     recorder = BranchRecorder()
-    handle = compile_starlark_function(_stage("decide_inclusion", "starlark"),
-                                       "transform", "transform", recorder)
+    handle = compile_starlark_function(
+        stage_code("decide_inclusion"), "transform", "transform", recorder)
     assert handle is not None
-    for issues in ("Venezuela sanctions", "Steel tariffs"):
+    for index, issues in enumerate(("Venezuela sanctions", "Steel tariffs")):
         handle({"issue_codes": "ENG", "specific_issues": issues, "exception_reason": None})
-        recorder.close_row()
-    collected = recorder.collected()
-    assert collected is not None
-    assert collected.taken == [("transform/3:if",), ("transform/3:else",)]
+        recorder.close_row(index)
+    assert recorder.arms_for(0) == ("transform/3:if",)
+    assert recorder.arms_for(1) == ("transform/3:else",)
+    assert recorder.arms_for(2) is None
+
+
+def test_a_starlark_stage_computes_the_same_values_instrumented_or_not() -> None:
+    code = stage_code("split_paid_from_in_house")
+    row = {"type": "1st Quarter - Report", "registrant_org": "A LLC", "client_org": "B Corp"}
+    plain = compile_starlark_function(code, "transform", "transform")
+    watched = compile_starlark_function(code, "transform", "transform", BranchRecorder())
+    assert plain is not None and watched is not None
+    assert plain(dict(row)) == watched(dict(row))
 
 
 def test_no_recorder_leaves_the_authors_own_source_running() -> None:
-    transform = load_function(GUARDS, "transform", "transform")
+    transform = load_function(ELIF_CHAIN, "transform", "transform")
     assert transform is not None
-    assert transform({"n": "7"})["n"] == 7
+    assert transform({"a": 1, "b": 0, "c": 0})["k"] == "a"
 
 
-def test_a_branch_sidecar_carries_one_schema_however_empty(tmp_path) -> None:
+def test_a_branch_sidecar_carries_one_schema_however_empty() -> None:
     assert RowBranches([]).to_table().schema.equals(BRANCH_SCHEMA)
-    populated = RowBranches([("transform/0:if",), ()]).to_table()
+    populated = RowBranches([("transform/0:if",), (), None]).to_table()
     assert populated.schema.equals(BRANCH_SCHEMA)
-    assert RowBranches.from_table(populated).taken == [("transform/0:if",), ()]
+    assert RowBranches.from_table(populated).taken == [("transform/0:if",), (), None]

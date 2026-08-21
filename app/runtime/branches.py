@@ -11,46 +11,47 @@ BRANCH_ARMS_KEY = "_branch_arms"
 # Pinned: left to infer, an empty sidecar types its column `null`.
 BRANCH_SCHEMA = pa.schema([(BRANCH_ARMS_KEY, pa.list_(pa.string()))])
 
+# None where the run never executed that row; taking no arm is a different thing.
+ArmsTaken = tuple[str, ...] | None
+
 
 @dataclass(frozen=True)
 class RowBranches:
-    """Entry i is the arms output row i took, in the order the code reached them."""
+    """Entry i belongs to output row i."""
 
-    taken: list[tuple[str, ...]] = field(default_factory=list)
+    taken: list[ArmsTaken] = field(default_factory=list)
 
     def __len__(self) -> int:
         return len(self.taken)
 
     def to_table(self) -> pa.Table:
-        return pa.table({BRANCH_ARMS_KEY: [list(arms) for arms in self.taken]},
-                        schema=BRANCH_SCHEMA)
+        return pa.table(
+            {BRANCH_ARMS_KEY: [None if arms is None else list(arms) for arms in self.taken]},
+            schema=BRANCH_SCHEMA,
+        )
 
     @classmethod
     def from_table(cls, table: pa.Table) -> "RowBranches":
         cells = table.column(BRANCH_ARMS_KEY).to_pylist()
-        return cls([tuple(cell or ()) for cell in cells])
+        return cls([None if cell is None else tuple(cell) for cell in cells])
 
 
 class BranchRecorder:
-    """One per stage execution. The row driver reads and clears it after every row."""
+    """One per stage execution, keyed by INPUT ordinal so an unrun row is absent, not empty."""
 
     def __init__(self) -> None:
         self._taken: list[str] = []
-        self._rows: list[tuple[str, ...]] = []
+        self._by_input: dict[int, tuple[str, ...]] = {}
 
     def record(self, arm_id: str) -> None:
         self._taken.append(arm_id)
 
-    def close_row(self) -> None:
-        self._rows.append(tuple(self._taken))
+    def close_row(self, index: int) -> None:
+        self._by_input[index] = tuple(self._taken)
         self._taken.clear()
 
-    def drop_row(self) -> None:
-        """A row a filter dropped has no output row to hang its arms on."""
-        self._taken.clear()
-
-    def collected(self) -> RowBranches | None:
-        return RowBranches(self._rows) if self._rows else None
+    def arms_for(self, index: int) -> ArmsTaken:
+        return self._by_input.get(index)
 
 
 def branch_sidecar_path(run_dir: Path, stage_id: str) -> Path:

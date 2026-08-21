@@ -5,6 +5,7 @@ import ast
 from dataclasses import dataclass
 
 RECORDER_NAME = "record_branch"
+_INDENT = 4
 
 
 @dataclass(frozen=True)
@@ -16,67 +17,92 @@ class BranchArm:
 
 
 @dataclass(frozen=True)
-class _Site:
+class _Opening:
     arm: BranchArm
-    insert_at: int
+    at_line: int
     indent: int
+    # Set where the arm's body shares its header's line, so the line is split first.
+    split_column: int | None
 
 
 def find_branch_arms(source: str) -> list[BranchArm]:
-    return [site.arm for site in _sites(source)]
+    return [opening.arm for opening in _openings(source)]
 
 
 def instrument_branches(source: str) -> tuple[str, list[BranchArm]]:
     """The same source with a recorder call opening each arm; valid python AND starlark."""
-    sites = _sites(source)
+    openings = _openings(source)
     lines = source.split("\n")
-    for site in sorted(sites, key=lambda s: s.insert_at, reverse=True):
-        lines.insert(site.insert_at, " " * site.indent + f'{RECORDER_NAME}("{site.arm.id}")')
-    return "\n".join(lines), [site.arm for site in sites]
+    for opening in sorted(openings, key=lambda o: o.at_line, reverse=True):
+        lines[opening.at_line:opening.at_line + 1] = _opened(lines[opening.at_line], opening)
+    return "\n".join(lines), [opening.arm for opening in openings]
 
 
-def _sites(source: str) -> list[_Site]:
-    found: list[_Site] = []
+def _opened(line: str, opening: _Opening) -> list[str]:
+    call = " " * opening.indent + f'{RECORDER_NAME}("{opening.arm.id}")'
+    if opening.split_column is None:
+        return [call, line]
+    # `if x: y = 1` — the header keeps its line, the body moves down under the call.
+    return [line[:opening.split_column].rstrip(), call,
+            " " * opening.indent + line[opening.split_column:].lstrip()]
+
+
+def _openings(source: str) -> list[_Opening]:
+    lines = source.split("\n")
+    found: list[_Opening] = []
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.FunctionDef):
-            _walk_body(node.body, node.name, found)
-    return sorted(found, key=lambda s: s.arm.line)
+            _walk_body(node.body, node.name, lines, found)
+    return sorted(found, key=lambda o: (o.arm.line, o.arm.id))
 
 
-def _walk_body(body: list[ast.stmt], path: str, found: list[_Site]) -> None:
+def _walk_body(
+    body: list[ast.stmt], path: str, lines: list[str], found: list[_Opening]
+) -> None:
     for index, node in enumerate(body):
         if isinstance(node, ast.If):
-            _walk_if(node, f"{path}/{index}", found)
+            _walk_if(node, f"{path}/{index}", lines, found)
         elif isinstance(node, ast.Try):
-            _walk_try(node, f"{path}/{index}", found)
+            _walk_try(node, f"{path}/{index}", lines, found)
 
 
-def _walk_if(node: ast.If, base: str, found: list[_Site], arm: str = "if") -> None:
-    _open(node.body, f"{base}:{arm}", node.lineno, found)
+def _walk_if(
+    node: ast.If, base: str, lines: list[str], found: list[_Opening], arm: str = "if"
+) -> None:
+    _open(node.body, f"{base}:{arm}", lines, found)
     if not node.orelse:
         return
     if len(node.orelse) == 1 and isinstance(node.orelse[0], ast.If):
-        _walk_if(node.orelse[0], base, found, _next_elif(arm))
+        _walk_if(node.orelse[0], base, lines, found, _next_elif(arm))
         return
-    _open(node.orelse, f"{base}:else", node.lineno, found)
+    _open(node.orelse, f"{base}:else", lines, found)
 
 
 def _next_elif(arm: str) -> str:
     return "elif0" if arm == "if" else f"elif{int(arm.removeprefix('elif')) + 1}"
 
 
-def _walk_try(node: ast.Try, base: str, found: list[_Site]) -> None:
-    _open(node.body, f"{base}:try", node.lineno, found)
+def _walk_try(node: ast.Try, base: str, lines: list[str], found: list[_Opening]) -> None:
+    _open(node.body, f"{base}:try", lines, found)
     for position, handler in enumerate(node.handlers):
-        _open(handler.body, f"{base}:except{position}", handler.lineno, found)
+        _open(handler.body, f"{base}:except{position}", lines, found)
     if node.orelse:
-        _open(node.orelse, f"{base}:else", node.lineno, found)
+        _open(node.orelse, f"{base}:else", lines, found)
 
 
-def _open(body: list[ast.stmt], arm_id: str, header_line: int, found: list[_Site]) -> None:
+def _open(
+    body: list[ast.stmt], arm_id: str, lines: list[str], found: list[_Opening]
+) -> None:
     first = body[0]
-    # Nowhere to insert, so the arm is not offered at all.
-    if first.lineno == header_line:
-        return
-    found.append(_Site(BranchArm(arm_id, first.lineno), first.lineno - 1, first.col_offset))
-    _walk_body(body, arm_id, found)
+    line = lines[first.lineno - 1]
+    header = line[:first.col_offset]
+    # Anything but whitespace before the body means it shares its header's line.
+    shares_header_line = bool(header.strip())
+    found.append(_Opening(
+        arm=BranchArm(arm_id, first.lineno),
+        at_line=first.lineno - 1,
+        indent=(len(header) - len(header.lstrip()) + _INDENT) if shares_header_line
+        else first.col_offset,
+        split_column=first.col_offset if shares_header_line else None,
+    ))
+    _walk_body(body, arm_id, lines, found)

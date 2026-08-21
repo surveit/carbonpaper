@@ -1,0 +1,29 @@
+def transform(row):
+    return {
+        **row,
+        "income_usd": _read_money(row["income"], "income", row["filing_uuid"]),
+        "expenses_usd": _read_money(row["expenses"], "expenses", row["filing_uuid"]),
+    }
+
+
+def _read_money(value, field, filing_uuid):
+    if value is None or value != value:
+        return 0.0
+    text = str(value).strip()
+    if text == "" or text == "None":
+        return 0.0
+    try:
+        amount = float(text)
+    except ValueError:
+        raise StepRefused(
+            f"filing {filing_uuid}: {field} reads {text!r}, which is not a number. "
+            "Reading it as zero would enter the published totals as if the filing had "
+            "reported nothing, so this is a question for a person."
+        )
+    if amount < 0:
+        raise StepRefused(
+            f"filing {filing_uuid}: {field} reports {text!r}, a negative amount. Nothing in "
+            "the filing says whether it is a refund, a correction or an error, and counting "
+            "it, dropping it and subtracting it are three different published totals."
+        )
+    return amount

@@ -1,0 +1,8 @@
+def transform(row):
+    if row["type"].startswith("Registration"):
+        filing_class = "registration"
+    elif row["registrant_org"] == row["client_org"]:
+        filing_class = "in_house"
+    else:
+        filing_class = "external_paid"
+    return dict(row, filing_class=filing_class)
