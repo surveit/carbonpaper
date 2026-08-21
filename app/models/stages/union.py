@@ -84,8 +84,8 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
             "No configuration — pass `union: {}`. Every input must declare an IDENTICAL "
             "schema (same columns, same types); a mismatch is refused when the stage is "
             "saved, naming the differing columns. Concatenates the inputs in declared "
-            "order. Its signature declares NOTHING — `reads`, `adds` and `rewrites` all "
-            "empty: the output IS that shared schema, so restating it is a second copy."
+            "order. Return `[]` for `reads`, `adds` and `rewrites` — a union cannot "
+            "change data."
         ),
     ),
 }
