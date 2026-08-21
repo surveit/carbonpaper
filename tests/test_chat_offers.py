@@ -80,9 +80,9 @@ def test_a_turn_that_offered_twice_shows_only_what_it_offered_last() -> None:
     assert [b for b in blocks if isinstance(b, OffersBlock)] == [OffersBlock(options=_OPTIONS)]
 
 
-def test_what_comes_back_names_the_words_shown_and_ends_the_turn() -> None:
+def test_what_comes_back_names_the_words_shown_and_closes_the_turn() -> None:
     result = offer_next_steps(_OPTIONS)
 
     for option in _OPTIONS:
         assert option in result
-    assert "ends here" in result
+    assert "Nothing follows this." in result

@@ -154,10 +154,7 @@ def _is_on_disk(project_id: str) -> bool:
 def offer_next_steps(options: list[str]) -> str:
     """An echo reads as "carry on": the AI model wrote a second summary and offered again."""
     shown = " | ".join(NextSteps(options=options).options)
-    return (
-        f"Drawn under this turn as buttons: {shown}. The turn ends here — write "
-        f"nothing after this and do not call this again."
-    )
+    return f"Drawn under this turn as buttons: {shown}. Nothing follows this."
 
 
 # Not in tool_specs: everything there is offered over MCP, where nothing draws a button.
@@ -168,8 +165,11 @@ OFFER_NEXT_STEPS = ToolProse(
     },
     description="""Offer the reader replies to click instead of typing.
 
-Call it ONCE, as the last thing in a turn, and write nothing after it: it is
-how the turn ends.
+Call it ONCE, when everything you meant to say is said. A turn cannot end on
+a call, so close with one short sentence addressed to the reader — "Say the
+word and I'll run it." Never a stage direction: not "(End of turn)", not
+"(waiting for your choice)", not "pick one above". The reader can see the
+buttons; a line about them is a line about the furniture.
 
 Each option is drawn as a button under this turn, and clicking one sends that
 option's exact words as their next message — so these are not a menu you may

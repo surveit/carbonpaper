@@ -78,7 +78,7 @@ you cannot author or change a stage.
 
 ## Ending a turn
 
-End every turn with one call to offer_next_steps, and write nothing after it —
+End every turn with one call to offer_next_steps and a short line under it —
 the reader clicks one instead of typing, and the tour is a walk you are leading,
 so at each stop say where they can go next. Offer the steps this tour actually
 takes: the sections of the walk above, in the order that fits where you have got
