@@ -149,13 +149,32 @@ def read_run_bindings(
     return dict(raw.get("run_bindings") or {})
 
 
+class ReadFile(BaseModel):
+    """One file a stage read, as its preflight weighed it."""
+
+    path: str
+    sha256: str
+    bytes: int
+
+    @property
+    def filename(self) -> str:
+        return PurePath(self.path).name
+
+
+class StageInputRecord(BaseModel):
+    """What one input stage read this run — the shape a manifest carries under its id."""
+
+    files: list[ReadFile]
+    source: str | None = None
+
+
 class InputBinding(BaseModel):
-    """One file a run read, as its preflight recorded it."""
+    """One file a run read, flattened out of its stage's record."""
 
     stage_id: ID
     path: str
     filename: str
-    # None where preflight never measured it, not zero.
+    # None where an older manifest recorded no measurement, not zero.
     sha256: str | None = None
     bytes: int | None = None
     source: str | None = None
@@ -163,38 +182,41 @@ class InputBinding(BaseModel):
 
 def read_input_bindings(raw: dict[str, Any]) -> list[InputBinding]:
     """One entry per FILE, so a stage that read several contributes several."""
-    bindings = raw.get("input_bindings") or {}
+    recorded = raw.get("input_bindings") or {}
     return [
-        _read_one_binding(str(stage_id), one_file)
-        for stage_id, binding in sorted(bindings.items())
-        if isinstance(binding, dict)
-        for one_file in _read_files_of(binding)
+        binding
+        for stage_id, record in sorted(recorded.items())
+        if isinstance(record, dict)
+        for binding in _read_one_stages_files(str(stage_id), record)
     ]
 
 
-def _read_files_of(binding: dict[str, Any]) -> list[dict[str, Any]]:
-    """`files` is a stage that read several; without it the record IS the one file."""
-    files = binding.get("files")
-    if not isinstance(files, list):
-        return [binding]
+def _read_one_stages_files(stage_id: ID, record: dict[str, Any]) -> list[InputBinding]:
+    files, source = _files_and_source(record)
     return [
         # `source` sits on the stage's record; every file it read was bound the same way.
-        {**one_file, "source": binding.get("source")}
-        for one_file in files if isinstance(one_file, dict)
+        InputBinding(stage_id=stage_id, path=f.path, filename=f.filename,
+                     sha256=f.sha256, bytes=f.bytes, source=source)
+        for f in files
     ]
 
 
-def _read_one_binding(stage_id: ID, binding: dict[str, Any]) -> InputBinding:
-    path = str(binding.get("path") or "")
-    size = binding.get("bytes")
-    return InputBinding(
-        stage_id=stage_id,
-        path=path,
-        filename=PurePath(path).name,
-        sha256=_read_optional_text(binding.get("sha256")),
-        bytes=size if isinstance(size, int) else None,
-        source=_read_optional_text(binding.get("source")),
-    )
+def _files_and_source(record: dict[str, Any]) -> tuple[list[ReadFile], str | None]:
+    """`files` is the shape written today; a manifest without it is a run from before it."""
+    source = _read_optional_text(record.get("source"))
+    if "files" in record:
+        return StageInputRecord.model_validate(record).files, source
+    return _read_pre_files_record(record), source
+
+
+def _read_pre_files_record(record: dict[str, Any]) -> list[ReadFile]:
+    """A run recorded before an input could read several files: the record IS the one file."""
+    path = str(record.get("path") or "")
+    if not path:
+        return []
+    size = record.get("bytes")
+    return [ReadFile(path=path, sha256=str(record.get("sha256") or ""),
+                     bytes=size if isinstance(size, int) else 0)]
 
 
 def _read_optional_text(value: Any) -> str | None:

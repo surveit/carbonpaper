@@ -88,7 +88,7 @@ def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path)
     manifest = read_manifest(journey_project, run_id)
     binding = manifest["input_bindings"]["load"]
     assert binding["source"] == "run"
-    assert binding["sha256"]
+    assert binding["files"][0]["sha256"]
 
     # The published artifact exists on disk and the artifact route serves it.
     artifact = journey_project / "runs" / run_id / "artifacts" / "report" / "totals.csv"

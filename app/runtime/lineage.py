@@ -22,6 +22,7 @@ TRACE_SOURCE_ROW_KEY = "_trace_source_row"
 TRACE_EDGE_KIND_KEY = "_trace_edge_kind"
 TRACE_SOURCE_COLUMNS_KEY = "_trace_source_columns"
 TRACE_SOURCE_FILE_KEY = "_trace_source_file"
+TRACE_SOURCE_SHA_KEY = "_trace_source_sha"
 
 # Pinned: left to infer, an empty sidecar types every column `null`.
 LINEAGE_SCHEMA = pa.schema([
@@ -30,6 +31,7 @@ LINEAGE_SCHEMA = pa.schema([
     (TRACE_EDGE_KIND_KEY, pa.list_(pa.string())),
     (TRACE_SOURCE_COLUMNS_KEY, pa.list_(pa.list_(pa.string()))),
     (TRACE_SOURCE_FILE_KEY, pa.list_(pa.string())),
+    (TRACE_SOURCE_SHA_KEY, pa.list_(pa.string())),
 ])
 
 
@@ -51,6 +53,7 @@ class RowParent:
     columns: tuple[str, ...] | None = None
     # The file a source stage read this row from; `row_ordinal` counts within it.
     source_file: str | None = None
+    source_file_sha: str | None = None
 
 
 @dataclass(frozen=True)
@@ -72,7 +75,8 @@ class RowLineage:
         if offset == 0:
             return self
         return RowLineage([
-            [RowParent(p.stage_id, p.row_ordinal + offset, p.kind, p.columns, p.source_file)
+            [RowParent(p.stage_id, p.row_ordinal + offset, p.kind, p.columns,
+                       p.source_file, p.source_file_sha)
              for p in entry]
             for entry in self.parents
         ])
@@ -92,6 +96,8 @@ class RowLineage:
                 [list(p.columns or ()) for p in entry] for entry in self.parents],
             TRACE_SOURCE_FILE_KEY: [
                 [p.source_file or "" for p in entry] for entry in self.parents],
+            TRACE_SOURCE_SHA_KEY: [
+                [p.source_file_sha or "" for p in entry] for entry in self.parents],
         }, schema=LINEAGE_SCHEMA)
 
     @classmethod
@@ -104,18 +110,19 @@ class RowLineage:
         kind_cells = _column_cells(table, TRACE_EDGE_KIND_KEY)
         column_cells = _column_cells(table, TRACE_SOURCE_COLUMNS_KEY)
         file_cells = _column_cells(table, TRACE_SOURCE_FILE_KEY)
+        sha_cells = _column_cells(table, TRACE_SOURCE_SHA_KEY)
         return cls([
             _read_parents(stage_cells[i], row_cells[i], kind_cells[i], column_cells[i],
-                          file_cells[i])
+                          file_cells[i], sha_cells[i])
             for i in range(table.num_rows)
         ])
 
 
 def _read_parents(stages: Any, rows: Any, kinds: Any, columns: Any,
-                  files: Any = None) -> list[RowParent]:
+                  files: Any = None, shas: Any = None) -> list[RowParent]:
     stage_ids, row_ordinals = _as_list(stages), _as_list(rows)
     kind_names, column_names = _as_list(kinds), _as_list(columns)
-    filenames = _as_list(files)
+    filenames, digests = _as_list(files), _as_list(shas)
     return [
         RowParent(
             stage_id=str(stage_ids[k]),
@@ -123,6 +130,7 @@ def _read_parents(stages: Any, rows: Any, kinds: Any, columns: Any,
             kind=str(kind_names[k]) if k < len(kind_names) else EdgeKind.direct.value,
             columns=_columns_or_none(column_names[k]) if k < len(column_names) else None,
             source_file=str(filenames[k]) or None if k < len(filenames) else None,
+            source_file_sha=str(digests[k]) or None if k < len(digests) else None,
         )
         for k in range(min(len(stage_ids), len(row_ordinals)))
     ]

@@ -77,11 +77,11 @@ def test_the_preflight_weighs_every_bound_file(tmp_path):
     assert all(f["bytes"] > 0 for f in record["files"])
 
 
-def test_one_bound_file_keeps_the_flat_record_a_manifest_has_always_carried(tmp_path):
+def test_one_bound_file_is_recorded_in_the_same_shape_as_several(tmp_path):
     one = _write_csv(tmp_path, "jun.csv", pd.DataFrame({"month": ["jun"], "reach": [11]}))
-    _issues, record = preflight_input_data(place_stage(_stage({"path": one, "format": "csv"})))
-    assert record is not None and "files" not in record
-    assert record["path"] == one
+    _issues, record = preflight_input_data(place_stage(_stage({"paths": [one], "format": "csv"})))
+    assert record is not None
+    assert [f["path"] for f in record["files"]] == [one]
 
 
 def test_every_missing_file_is_named_rather_than_only_the_first(tmp_path):
@@ -147,7 +147,8 @@ def test_the_lineage_page_states_the_file_on_the_origin_row(tmp_path):
         "id": "load", "type": "input_data", "parents": [],
         "df": table_to_frame(output.table), "lineage": output.lineage,
     }], input_bindings={"load": {"source": "run", "files": [
-        {"path": path} for path in _three_months(tmp_path)]}})
+        {"path": path, "sha256": "0" * 64, "bytes": 1}
+        for path in _three_months(tmp_path)]}})
 
     view = build_trace_view(
         trace_to_dict(trace_row(run_dir, "load", 2)), {},
@@ -159,3 +160,32 @@ def test_the_lineage_page_states_the_file_on_the_origin_row(tmp_path):
     # Row 2 of the stage is row 0 of the third file, and the page says why they differ.
     assert (origin["source_row"], origin["row_ordinal"]) == (0, 2)
     assert origin["source_file_count"] == 3
+
+
+def test_each_row_carries_the_sha_of_the_file_it_came_from(tmp_path):
+    """A filename is what someone typed; the sha is what joins the row to the bytes."""
+    output = read_input_data(
+        place_stage(_stage({"paths": _three_months(tmp_path), "format": "csv"})),
+        ctx=make_run_context())
+    assert output.lineage is not None
+    shas = [entry[0].source_file_sha for entry in output.lineage.parents]
+    assert all(sha and len(sha) == 64 for sha in shas)
+    assert len(set(shas)) == 3
+
+
+def test_a_row_cap_on_a_source_stage_cuts_its_lineage_rather_than_moving_it(tmp_path):
+    """A stage with no inputs originates its rows, so `--offset` cannot renumber them."""
+    from app.runtime.executor import _RowWindow, _stage_row_lineage
+
+    output = read_input_data(
+        place_stage(_stage({"paths": _three_months(tmp_path), "format": "csv"})),
+        ctx=make_run_context())
+    windowed = _stage_row_lineage(
+        place_stage(_stage({"paths": _three_months(tmp_path), "format": "csv"})),
+        output, {}, _RowWindow(start=1, cap=1))
+
+    assert windowed is not None and len(windowed) == 1
+    # The second of the three files, at ITS row 0 — not row 0 shifted to row 1.
+    origin = windowed.parents[0][0]
+    assert PurePath(origin.source_file or "").name == "jul.csv"
+    assert origin.row_ordinal == 0

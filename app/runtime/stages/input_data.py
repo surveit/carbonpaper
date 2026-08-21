@@ -22,6 +22,7 @@ from app.models import (
     TableSchema,
     WorkflowStage,
 )
+from app.models.run_manifest import ReadFile, StageInputRecord
 from app.models.stages.input_data import FileConnectorParams, InputDataStage
 
 from ..context import RunContext
@@ -65,15 +66,15 @@ def preflight_input_data(
     if missing:
         return ([f"`{stage.id}`: bound file does not exist or is not a file: {path}"
                  for path in missing], None)
-    weighed = [_weigh_file(Path(path)) for path in paths]
-    # One file keeps the flat record every manifest has carried.
-    return [], weighed[0] if len(weighed) == 1 else {"files": weighed}
+    read = StageInputRecord(files=[_weigh_file(Path(path)) for path in paths])
+    return [], read.model_dump(mode="json")
 
 
-def _weigh_file(path: Path) -> dict[str, Any]:
+def _weigh_file(path: Path) -> ReadFile:
     with path.open("rb") as handle:
         digest = hashlib.file_digest(handle, "sha256")
-    return {"path": str(path), "sha256": digest.hexdigest(), "bytes": path.stat().st_size}
+    return ReadFile(path=str(path), sha256=digest.hexdigest(),
+                    bytes=path.stat().st_size)
 
 
 def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> StageOutput:
@@ -93,7 +94,8 @@ def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> StageOutp
     return StageOutput(
         concat_tables([frame_to_table(frame) for frame in frames]),
         lineage=_which_file_each_row_came_from(
-            input_stage.id, paths, [len(frame) for frame in frames]),
+            input_stage.id, [_weigh_file(Path(path)) for path in paths],
+            [len(frame) for frame in frames]),
     )
 
 
@@ -113,13 +115,13 @@ def _refuse_files_that_disagree(
 
 
 def _which_file_each_row_came_from(
-    stage_id: str, paths: list[str], rows_per_file: list[int]
+    stage_id: str, read: list[ReadFile], rows_per_file: list[int]
 ) -> RowLineage:
     """`row_ordinal` counts within the file, so it is the row a reader would find there."""
     return RowLineage([
         # No parent stage: what a reader asks here is which FILE, not which step.
-        [RowParent(stage_id, row, source_file=path)]
-        for path, rows in zip(paths, rows_per_file)
+        [RowParent(stage_id, row, source_file=one.path, source_file_sha=one.sha256)]
+        for one, rows in zip(read, rows_per_file)
         for row in range(rows)
     ])
 

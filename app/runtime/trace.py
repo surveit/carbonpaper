@@ -8,7 +8,7 @@ from __future__ import annotations
 import math
 from collections import Counter
 from dataclasses import dataclass, field
-from pathlib import Path, PurePath
+from pathlib import Path
 from typing import Any
 
 import pyarrow as pa
@@ -184,22 +184,13 @@ def _summarizes_message(contributors: int) -> str:
             "of them — open the contributors to go further")
 
 
-def _originates_message(hops: list[RowParent] | None) -> str:
-    """A source that read several files recorded which one; one that read a single file did not."""
-    origin = next((hop for hop in hops or [] if hop.source_file), None)
-    if origin is None:
-        return "input_data stage — the rows originate here"
-    return (f"input_data stage — the rows originate here, this one at row "
-            f"{origin.row_ordinal} of {PurePath(origin.source_file or '').name}")
-
-
 def _advance(
     frames: RunFrames, by_id: dict[str, dict[str, Any]], sid: str, stage_type: str, r: int,
     table: pa.Table, parents: list[str], spine: RowParent | None,
     hops: list[RowParent] | None = None,
 ) -> tuple[str, int] | TraceEnd:
     if stage_type == StageType.input_data:
-        return TraceEnd(True, sid, _originates_message(hops))
+        return TraceEnd(True, sid, "input_data stage — the rows originate here")
     if spine is not None:
         return _advance_via_lineage(frames, by_id, sid, spine)
     if hops is not None:

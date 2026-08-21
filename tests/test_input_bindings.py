@@ -130,10 +130,10 @@ def test_ready_stage_yields_provenance_record(tmp_path):
     data = tmp_path / "a.csv"
     pd.DataFrame({"x": [1]}).to_csv(data, index=False)
     records = _ready([_input_stage("load", str(data))], {"load": "workflow"})
-    assert records["load"]["path"] == str(data)
+    assert records["load"]["files"][0]["path"] == str(data)
     assert records["load"]["source"] == "workflow"
-    assert records["load"]["sha256"] == hashlib.sha256(data.read_bytes()).hexdigest()
-    assert records["load"]["bytes"] == data.stat().st_size
+    assert records["load"]["files"][0]["sha256"] == hashlib.sha256(data.read_bytes()).hexdigest()
+    assert records["load"]["files"][0]["bytes"] == data.stat().st_size
 
 
 def test_connectorless_stage_has_no_preflight(tmp_path):
@@ -174,10 +174,10 @@ def test_run_binding_recorded_with_hash_and_source(tmp_path):
 
     assert manifest["status"] == "ok"
     rec = manifest["input_bindings"]["load"]
-    assert rec["path"] == str(other)
+    assert rec["files"][0]["path"] == str(other)
     assert rec["source"] == "run"
-    assert rec["sha256"] == hashlib.sha256(other.read_bytes()).hexdigest()
-    assert rec["bytes"] == other.stat().st_size
+    assert rec["files"][0]["sha256"] == hashlib.sha256(other.read_bytes()).hexdigest()
+    assert rec["files"][0]["bytes"] == other.stat().st_size
     out = pd.read_parquet(tmp_path / "runs" / manifest["run_id"] / "outputs" / "load.parquet")
     assert list(out["val"]) == [9]                     # read the BOUND file
 
@@ -187,7 +187,7 @@ def test_workflow_path_recorded_as_workflow_source(tmp_path):
     manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
     rec = manifest["input_bindings"]["load"]
     assert rec["source"] == "workflow"
-    assert rec["path"] == str(data)
+    assert rec["files"][0]["path"] == str(data)
 
 
 def test_unbound_input_leaves_no_run_dir(tmp_path):
