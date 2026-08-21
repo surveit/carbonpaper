@@ -140,10 +140,10 @@ def test_find_stays_inside_its_collection(store):
 
 
 def test_find_on_none_matches_a_stored_null_and_an_absent_key(store):
-    store.write("uploaded_file", "1", {"project_id": None})
-    store.write("uploaded_file", "2", {})
-    store.write("uploaded_file", "3", {"project_id": "demo"})
-    assert [id_ for id_, _ in store.find("uploaded_file", {"project_id": None})] == ["1", "2"]
+    store.write("draft", "1", {"project_id": None})
+    store.write("draft", "2", {})
+    store.write("draft", "3", {"project_id": "demo"})
+    assert [id_ for id_, _ in store.find("draft", {"project_id": None})] == ["1", "2"]
 
 
 def test_find_without_fields_reads_the_whole_collection(store):
@@ -339,3 +339,66 @@ def test_persistedmodel_config_mirrors_base():
     from app.core.persistence import PersistedModel
     for key in ("extra", "use_enum_values", "validate_default", "populate_by_name"):
         assert PersistedModel.model_config.get(key) == _Base.model_config.get(key)
+
+
+# --- a record stored as a real table of real columns, not a blob row -----------
+
+
+def test_a_columnized_record_lands_in_its_own_table(configured):
+    from app.core.files import UploadedFile
+    from app.core.persistence import get_store
+    UploadedFile(id="a", sha256="e3b0c442", filename="posts.csv", byte_count=1024).save()
+
+    store = get_store()
+    rows = store._conn.execute("SELECT filename, byte_count FROM uploaded_file").fetchall()
+    assert rows == [("posts.csv", 1024)]
+    assert store._conn.execute(
+        "SELECT count(*) FROM documents WHERE collection='uploaded_file'").fetchone()[0] == 0
+
+
+def test_a_columnized_record_round_trips(configured):
+    from app.core.files import UploadedFile
+    UploadedFile(id="a", sha256="e3b0c442", filename="posts.csv", byte_count=1024).save()
+    got = UploadedFile.load("a")
+    assert (got.sha256, got.filename, got.byte_count, got.project_id) == (
+        "e3b0c442", "posts.csv", 1024, None)
+
+
+def test_byte_count_is_stored_as_an_integer_not_text(configured):
+    """The blob store held every value as JSON text; a column has a type the database enforces."""
+    from app.core.files import UploadedFile
+    from app.core.persistence import get_store
+    UploadedFile(id="a", sha256="e3b0c442", filename="posts.csv", byte_count=1024).save()
+    typed = get_store()._conn.execute(
+        "SELECT typeof(byte_count) FROM uploaded_file").fetchone()[0]
+    assert typed == "integer"
+
+
+def test_find_on_a_columnized_record_selects_on_the_column(configured):
+    from app.core.files import UploadedFile
+    UploadedFile(id="a", sha256="e3b0c442", filename="posts.csv", byte_count=1024).save()
+    UploadedFile(id="b", sha256="e3b0c442", filename="posts.csv", byte_count=1024,
+                 project_id="demo").save()
+    assert [r.id for r in UploadedFile.find(project_id=None)] == ["a"]
+    assert [r.id for r in UploadedFile.find(project_id="demo")] == ["b"]
+
+
+def test_the_table_refuses_a_record_missing_a_required_field(configured):
+    """The blob store accepted any dict; NOT NULL is the database checking what pydantic checks."""
+    import sqlite3
+    from app.core.persistence import get_store
+    with pytest.raises(sqlite3.IntegrityError):
+        get_store().write("uploaded_file", "a", {"project_id": None})
+
+
+def test_a_record_whose_shape_moved_without_a_migration_fails_loudly(configured):
+    from app.core.errors import TableSchemaMismatch
+    from app.core.persistence import get_store
+    from app.core.table_spec import Column, TableSpec
+    store = get_store()
+    moved = TableSpec(table="uploaded_file", columns=[
+        Column(name="id", sql_type="TEXT PRIMARY KEY", nullable=False, is_json=False),
+        Column(name="renamed", sql_type="TEXT", nullable=False, is_json=False)])
+    store._conn.execute("CREATE TABLE uploaded_file (id TEXT PRIMARY KEY, other TEXT)")
+    with pytest.raises(TableSchemaMismatch, match="no migration moved"):
+        store._ensure_table(moved)

@@ -56,6 +56,24 @@ A project's state lives in exactly two places:
 user uploaded. What is left on disk under a project is `code/`, `data/` and
 `runs/<id>/{outputs, artifacts, queue}` — frames and the files around them.
 
+### A record may be stored as a table of columns instead
+
+`uploaded_file` is stored as its own table of real typed columns; every other
+collection is still a JSON blob row in `documents`. A record opts in with
+`STORED_AS_TABLE = True`, and `app/core/table_spec.py` reads the column layout off
+its pydantic fields — the table cannot drift from the model by hand.
+
+The engine may not import a record to ask for that layout: `app.core.sqlite_store`
+sits below `app.models`, and below `app.core.persistence` too (both contracts are in
+`pyproject.toml`). So the record registers its `TableSpec` into `persistence` when
+pydantic finishes building the class, and the engine reads that registry. Nothing in
+the `DocumentStore` protocol changes, and no call site changes.
+
+When a table's columns and its record's fields disagree, the store raises
+`TableSchemaMismatch` rather than reading a stale shape — that is the signal a
+migration is missing. `find()` on a columnized collection becomes a plain `WHERE` on
+a real column; on every other collection it stays a `json_extract` predicate.
+
 ## Migrations replay, so every revision must be a no-op at head
 
 `./start` runs `alembic upgrade head` on boot. A store created by

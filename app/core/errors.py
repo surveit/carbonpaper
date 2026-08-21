@@ -71,6 +71,10 @@ class DocumentNotFound(Exception):
     """Raised by the strict read path; the tolerant read (`read_tolerant`/`load_or_none`) returns None."""
 
 
+class TableSchemaMismatch(Exception):
+    """A columnized record's fields and its table's columns disagree — a migration is missing."""
+
+
 class FrameNotSerializableError(Exception):
     """A dtype/shape parquet cannot represent. A disk/OS error is NOT reported this way — it propagates."""
 
