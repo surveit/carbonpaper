@@ -1,0 +1,11 @@
+def transform(row):
+    codes = row["issue_codes"] or ""
+    issues = row["specific_issues"] or ""
+    names_venezuela = "venezuela" in codes.lower() or "venezuela" in issues.lower()
+    if names_venezuela:
+        basis = "issue text"
+    elif row["exception_reason"]:
+        basis = "reporter exception"
+    else:
+        basis = None
+    return dict(row, inclusion_basis=basis)

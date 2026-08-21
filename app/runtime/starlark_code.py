@@ -2,12 +2,15 @@
 authored code can see — and how it refuses a row — is settled here."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 import starlark
 
 from app.core.starlark_source import REFUSE_BUILTIN, compile_starlark_module, find_bound_function
+from app.core.branch_source import RECORDER_NAME, instrument_branches
 from app.models.errors import StepRefused
+
+from .branches import BranchRecorder
 
 # REFUSE_BUILTIN (imported above) is the builtin an author calls to refuse a
 # row. Injected as a Python callable that raises StepRefused; the Rust frames
@@ -49,9 +52,14 @@ class StarlarkFunctionHandle:
 
 
 def compile_starlark_function(
-    source: str, function_name: str, default_name: str
+    source: str, function_name: str, default_name: str,
+    recorder: BranchRecorder | None = None,
 ) -> StarlarkFunctionHandle | None:
-    module = compile_starlark_module(source, {REFUSE_BUILTIN: _refuse})
+    builtins: dict[str, Callable[..., object]] = {REFUSE_BUILTIN: _refuse}
+    if recorder is not None:
+        source, _ = instrument_branches(source)
+        builtins[RECORDER_NAME] = recorder.record
+    module = compile_starlark_module(source, builtins)
     bound = find_bound_function(module, (function_name, default_name))
     if bound is None:
         return None

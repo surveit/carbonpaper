@@ -1,0 +1,2 @@
+def should_include(row):
+    return row["inclusion_basis"] in ("issue text", "reporter exception")
