@@ -79,11 +79,10 @@ Also `app/AGENTS.md` (web layer), `app/runtime/AGENTS.md` (the Runner), `README.
   makes the id move when the value does. The record then has two identities that must agree,
   nothing checks that they do, and re-keying it means deleting and re-writing the row rather
   than editing a field. Leave `id` alone and let it default to `uuid4().hex`; the real key
-  goes in FIELDS, which is what a lookup filters on.
-  The one composition allowed is the SCOPE PREFIX the store requires: `list()` selects by id
-  prefix only, so a per-project record is `f"{project}/{opaque}"` — project, then something
-  meaningless. `StageCacheEntry` is the deliberate exception and the only one: a cache entry
-  IS its content hash, so its id is built from the fingerprints it looks up by.
+  goes in FIELDS, which is what a lookup filters on — `find()` selects on stored fields, so
+  a scope has no reason to be smuggled into the id. `StageCacheEntry` is the deliberate
+  exception and the only one: a cache entry IS its content hash, so its id is built from the
+  fingerprints it looks up by.
 - **When master is red, do not fix it unless that fix is your whole task.** A trunk breakage
   is shared state: parallel sessions each patching it on their own branches fork the same fix
   N ways, and every branch conflicts when the first copy merges. If you hit a red master
