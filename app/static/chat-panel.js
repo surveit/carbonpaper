@@ -40,20 +40,11 @@ window.ChatPanel.mount = function (root) {
 
   function toolPre(text) { const p = document.createElement("pre"); p.className = "ac-tool-json"; p.textContent = fmtJson(text); return p; }
 
-  // The log scrolls itself in the rail and the window scrolls it on the page, so ask which
-  // box actually overflows. Following only when the reader is ALREADY at the bottom is what
-  // keeps a streaming reply from yanking a page they scrolled up to read.
-  function scroller() { return log.scrollHeight > log.clientHeight + 1 ? log : document.scrollingElement; }
-  function nearBottom(box) {
-    const height = box === log ? box.clientHeight : window.innerHeight;
-    return box.scrollHeight - box.scrollTop - height < 120;
-  }
-  function scroll() {
-    const box = scroller();
-    if (!nearBottom(box)) return;
-    if (box === log) log.scrollTop = log.scrollHeight;
-    else window.scrollTo(0, document.body.scrollHeight);
-  }
+  // The log is the scrolling element in both hosts. Following only when the reader is
+  // ALREADY near the bottom is what keeps a streaming reply from yanking a transcript they
+  // scrolled up to read.
+  function nearBottom() { return log.scrollHeight - log.scrollTop - log.clientHeight < 120; }
+  function scroll() { if (nearBottom()) log.scrollTop = log.scrollHeight; }
 
   // Two decisions about a link in a reply, both answered by the same question.
   function isInThisApp(a) {
@@ -484,14 +475,9 @@ window.ChatPanel.mount = function (root) {
   // Read per call, not captured: a draft page has no SID until the reader first replies.
   function placeKey() { return `chat-panel:place:${SID}`; }
 
-  // Where the scrollbox's own top edge is on screen — the line a message is "at the top" of.
-  function scrollboxTop() { return ownsItsScrollbox() ? log.getBoundingClientRect().top : 0; }
-  function ownsItsScrollbox() { return scroller() === log; }
-
-  function scrollToEnd() {
-    if (ownsItsScrollbox()) log.scrollTop = log.scrollHeight;
-    else window.scrollTo(0, document.body.scrollHeight);
-  }
+  // Where the log's own top edge is on screen — the line a message is "at the top" of.
+  function scrollboxTop() { return log.getBoundingClientRect().top; }
+  function scrollToEnd() { log.scrollTop = log.scrollHeight; }
 
   // "<index>:<fraction>" — which message, and how far down it. The fraction rather than a
   // pixel offset for the same reason as the index: at 400px a reply is several times taller
@@ -500,9 +486,7 @@ window.ChatPanel.mount = function (root) {
   // "bottom" when they were already there: a turn that finished while the page was loading
   // must not leave them stranded above its reply.
   function readingPlace() {
-    const box = scroller();
-    const height = ownsItsScrollbox() ? log.clientHeight : window.innerHeight;
-    if (box.scrollHeight - box.scrollTop - height < AT_END) return "bottom";
+    if (log.scrollHeight - log.scrollTop - log.clientHeight < AT_END) return "bottom";
     const top = scrollboxTop();
     const reading = [...log.children].findIndex(
       (msg) => msg.getBoundingClientRect().bottom > top + PLACE_MARGIN);
@@ -527,15 +511,14 @@ window.ChatPanel.mount = function (root) {
     // Nothing remembered: a rail is arriving fresh beside a page and should show the newest
     // turn, but the chat PAGE is a document, and yanking a document on load is the browser's
     // call rather than ours.
-    if (place === null) { if (ownsItsScrollbox()) scrollToEnd(); return; }
+    if (place === null) { scrollToEnd(); return; }
     const [index, into] = place.split(":");
     const reading = log.children[Number(index)];
     if (place === "bottom" || !reading) { scrollToEnd(); return; }
     const rect = reading.getBoundingClientRect();
     const delta = rect.top - scrollboxTop() + (Number(into) || 0) * rect.height;
-    if (ownsItsScrollbox()) log.scrollTop += delta;
-    else window.scrollBy(0, delta);
-    restoredTo = ownsItsScrollbox() ? log.scrollTop : window.scrollY;
+    log.scrollTop += delta;
+    restoredTo = log.scrollTop;
   }
 
   // Anything that lands after mount and changes a height above the reader — a late image, a
@@ -543,8 +526,7 @@ window.ChatPanel.mount = function (root) {
   // just restored. Re-anchoring on load costs one measurement and is a no-op when nothing
   // moved. Skipped the moment the reader scrolls for themselves, so it cannot fight them.
   window.addEventListener("load", () => {
-    const now = ownsItsScrollbox() ? log.scrollTop : window.scrollY;
-    if (restoredTo === null || Math.abs(now - restoredTo) > 1) return;
+    if (restoredTo === null || Math.abs(log.scrollTop - restoredTo) > 1) return;
     restoreReadingPlace();
   });
 
@@ -556,23 +538,17 @@ window.ChatPanel.mount = function (root) {
     requestAnimationFrame(() => { placePending = false; rememberReadingPlace(); });
   }
   log.addEventListener("scroll", notePlaceSoon, {passive: true});
-  // Whichever box is the scrollbox has to be the one listened to, and on the page that is
-  // the document. The last event can also lose the race with the navigation a click starts,
-  // which is what pagehide is for.
-  document.addEventListener("scroll", notePlaceSoon, {passive: true});
+  // The last scroll event loses the race with the navigation a click starts, which is what
+  // pagehide is for.
   window.addEventListener("pagehide", rememberReadingPlace);
 
   // A textarea keeps the height it was given, so every edit re-measures: collapse it, then
   // take what the text needs — scrollHeight is content + padding, and the border is the part
-  // the box does not report. On the page the dock is fixed over the log, so the log's own
-  // padding follows it up; in the rail the dock is a flex row below the log and takes its
-  // own space, which is why the clearance is asked of the layout rather than assumed.
-  const dock = root.querySelector(".ac-dock");
+  // the box does not report.
   function fitComposer() {
     if (!input) return;
     input.style.height = "auto";
     input.style.height = input.scrollHeight + (input.offsetHeight - input.clientHeight) + "px";
-    if (getComputedStyle(dock).position === "fixed") log.style.paddingBottom = (dock.offsetHeight + 24) + "px";
   }
 
   // The composer exists only when a real agent is bound; a view-only generation session has

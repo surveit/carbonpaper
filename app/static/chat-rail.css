@@ -55,13 +55,13 @@
 /* The page's conversation styles are written against --chat-column and a composer fixed to
  * the viewport. Both are page facts, so the rail takes them back here rather than either
  * surface's rules being the odd one out in agent-chat.css. */
-.chat-host-rail { --chat-column: 100%; display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+.chat-host-rail { --chat-column: 100%; }
 /* base.css declares no global box-sizing, so `max-width: 100%` plus padding is 100% PLUS the
  * padding — the log came out 28px wider than the rail holding it and scrolled sideways. A
  * scoped reset rather than a width per box: every rule below inherits the fix. */
 .chat-host-rail, .chat-host-rail *, .chat-rail-head { box-sizing: border-box; }
 .chat-host-rail .ac-log { flex: 1 1 auto; overflow-y: auto; min-height: 0; padding: 14px 14px 18px; gap: 20px; }
-.chat-host-rail .ac-dock { position: static; flex: 0 0 auto; background: none; }
+.chat-host-rail .ac-dock { background: none; }
 .chat-host-rail .ac-composer { padding: 10px 12px; --ac-control: 36px; }
 /* The one white ply in here: the box you write on. */
 .chat-host-rail .ac-input { background: var(--raised); }

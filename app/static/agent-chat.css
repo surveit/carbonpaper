@@ -32,6 +32,11 @@ body.chat-page { height: 100dvh; display: flex; flex-direction: column; overflow
 body.chat-page > main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
     padding: 12px 0 0; }
 
+/* The panel's own root, in either host. Both put it inside a flex column that owns the
+   viewport — `main` on the chat page, the rail's aside beside one — and the log below is
+   what scrolls, so this has to pass the height through rather than stack to its content. */
+.chat-panel { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+
 /* ═══ The transcript (chat.html) ═══ */
 /* --chat-column is the conversation's width wherever it is drawn — the log, the
    composer under it, the attachment row and the popover all read it, so the
