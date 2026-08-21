@@ -29,9 +29,9 @@ def store_manifest_text(project: str | Path, run_id: str, text: str) -> None:
     """Store raw TEXT, so a test can plant a payload that is not even JSON."""
     key = _key(project, run_id)
     get_store().write(COLLECTION, key, {})
-    get_store()._conn.execute(  # type: ignore[attr-defined]
-        "UPDATE documents SET data=? WHERE collection=? AND id=?", (text, COLLECTION, key))
-    get_store()._conn.commit()  # type: ignore[attr-defined]
+    with get_store()._engine.begin() as connection:  # type: ignore[attr-defined]
+        connection.exec_driver_sql(
+            "UPDATE documents SET data=? WHERE collection=? AND id=?", (text, COLLECTION, key))
 
 
 def manifest_exists(project: str | Path, run_id: str) -> bool:

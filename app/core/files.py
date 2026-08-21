@@ -48,6 +48,7 @@ class UploadedFile(PersistedModel):
 
     collection: ClassVar[str] = "uploaded_file"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
+    STORED_AS_TABLE: ClassVar[bool] = True
 
     sha256: str
     filename: str

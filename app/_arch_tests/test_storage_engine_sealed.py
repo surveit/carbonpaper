@@ -20,3 +20,15 @@ def test_sqlite3_imported_only_by_the_store() -> None:
         "every other module persists via PersistedModel / FrameStore:\n  "
         + "\n  ".join(offenders)
     )
+
+
+def test_sqlalchemy_imported_only_by_the_store_and_the_tables() -> None:
+    offenders = check_no_import(
+        find_governed_files(__file__),
+        "sqlalchemy",
+        allow={"app/core/sqlite_store.py", "app/core/table_spec.py"},
+    )
+    assert not offenders, (
+        "sqlalchemy is the storage engine: only the store executes it and only "
+        "table_spec declares tables with it:\n  " + "\n  ".join(offenders)
+    )

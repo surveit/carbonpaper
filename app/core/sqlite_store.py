@@ -1,16 +1,19 @@
-"""The SQLite ``DocumentStore``, sealed as the only module that imports ``sqlite3``
-(``app/_arch_tests/test_storage_engine_sealed.py``). Nothing but a composition root
-names it: everything else speaks the protocol in ``app.core.persistence``.
-"""
+"""The SQLite ``DocumentStore``. See docs/models-and-storage.md."""
 from __future__ import annotations
 
 import json
-import sqlite3
 from threading import RLock
 from typing import Any, Iterator, Mapping
 
+from sqlalchemy import create_engine, delete, insert, select
+from sqlalchemy.engine import Row
+from sqlalchemy.pool import StaticPool
+
 from app.core.errors import DocumentNotFound
 from app.core.persistence import JsonDict, JsonScalar
+from app.core.table_spec import (
+    DOCUMENTS, BlobRows, ColumnRows, StoredTable, find_table,
+)
 
 
 class SqliteKvStore:
@@ -18,116 +21,109 @@ class SqliteKvStore:
 
     def __init__(self, db_path: str) -> None:
         self._lock = RLock()
-        self._conn = sqlite3.connect(db_path, check_same_thread=False)
-        self._conn.execute("PRAGMA journal_mode=WAL")
-        self._conn.execute(
-            "CREATE TABLE IF NOT EXISTS documents ("
-            "  collection TEXT NOT NULL,"
-            "  id TEXT NOT NULL,"
-            "  data TEXT NOT NULL,"
-            "  schema_version INTEGER NOT NULL DEFAULT 1,"
-            "  PRIMARY KEY (collection, id))"
-        )
-        self._conn.commit()
+        url = "sqlite://" if db_path == ":memory:" else f"sqlite:///{db_path}"
+        # The only pool under which ":memory:" is ONE database, not one per connection.
+        self._engine = create_engine(
+            url, poolclass=StaticPool, connect_args={"check_same_thread": False})
+        with self._engine.begin() as connection:
+            connection.exec_driver_sql("PRAGMA journal_mode=WAL")
+        DOCUMENTS.create(self._engine, checkfirst=True)
+        self._created: set[str] = {DOCUMENTS.name}
 
     def write(self, collection: str, id: str, data: JsonDict, schema_version: int = 1) -> None:
-        with self._lock:
-            self._conn.execute(
-                "INSERT OR REPLACE INTO documents (collection, id, data, schema_version) "
-                "VALUES (?, ?, ?, ?)",
-                (collection, id, json.dumps(data), schema_version),
-            )
-            self._conn.commit()
+        stored = self._stored(collection)
+        statement = insert(stored.table).prefix_with("OR REPLACE").values(
+            **stored.build_row(id, data, schema_version))
+        with self._lock, self._engine.begin() as connection:
+            connection.execute(statement)
 
     def read(self, collection: str, id: str) -> JsonDict:
-        with self._lock:
-            row = self._conn.execute(
-                "SELECT data FROM documents WHERE collection=? AND id=?", (collection, id)
-            ).fetchone()
+        stored = self._stored(collection)
+        row = self._select_one(stored, id)
         if row is None:
             raise DocumentNotFound(f"{collection}/{id}")
-        parsed: JsonDict = json.loads(row[0])
-        return parsed
-
-    def schema_version(self, collection: str, id: str) -> int:
-        with self._lock:
-            row = self._conn.execute(
-                "SELECT schema_version FROM documents WHERE collection=? AND id=?",
-                (collection, id),
-            ).fetchone()
-        if row is None:
-            raise DocumentNotFound(f"{collection}/{id}")
-        return int(row[0])
-
-    def exists(self, collection: str, id: str) -> bool:
-        with self._lock:
-            row = self._conn.execute(
-                "SELECT 1 FROM documents WHERE collection=? AND id=?", (collection, id)
-            ).fetchone()
-        return row is not None
-
-    def delete(self, collection: str, id: str) -> None:
-        with self._lock:
-            self._conn.execute(
-                "DELETE FROM documents WHERE collection=? AND id=?", (collection, id)
-            )
-            self._conn.commit()
+        # Not the tolerant path: a corrupt blob raises here rather than reading as missing.
+        return stored.read_body(row)
 
     def read_tolerant(self, collection: str, id: str) -> JsonDict | None:
-        with self._lock:
-            row = self._conn.execute(
-                "SELECT data FROM documents WHERE collection=? AND id=?", (collection, id)
-            ).fetchone()
+        stored = self._stored(collection)
+        row = self._select_one(stored, id)
         if row is None:
             return None
         try:
-            parsed: JsonDict = json.loads(row[0])
+            return stored.read_body(row)
         except json.JSONDecodeError:
             return None
-        return parsed
 
-    def _scan(self, columns: str, collection: str, prefix: str) -> list[tuple[Any, ...]]:
-        """`columns` is interpolated into the SQL: an internal literal only, never user input."""
-        with self._lock:
-            if prefix:
-                hi = prefix[:-1] + chr(ord(prefix[-1]) + 1)
-                return self._conn.execute(
-                    f"SELECT {columns} FROM documents "
-                    "WHERE collection=? AND id>=? AND id<? ORDER BY id",
-                    (collection, prefix, hi),
-                ).fetchall()
-            return self._conn.execute(
-                f"SELECT {columns} FROM documents WHERE collection=? ORDER BY id",
-                (collection,),
-            ).fetchall()
+    def schema_version(self, collection: str, id: str) -> int:
+        stored = self._stored(collection)
+        statement = select(stored.table.c.schema_version).where(
+            *stored.scope(), stored.table.c.id == id)
+        row = self._fetch_one(statement)
+        if row is None:
+            raise DocumentNotFound(f"{collection}/{id}")
+        return int(row.schema_version)
+
+    def exists(self, collection: str, id: str) -> bool:
+        stored = self._stored(collection)
+        statement = select(stored.table.c.id).where(*stored.scope(), stored.table.c.id == id)
+        return self._fetch_one(statement) is not None
+
+    def delete(self, collection: str, id: str) -> None:
+        stored = self._stored(collection)
+        statement = delete(stored.table).where(*stored.scope(), stored.table.c.id == id)
+        with self._lock, self._engine.begin() as connection:
+            connection.execute(statement)
 
     def find(
         self, collection: str, fields: Mapping[str, JsonScalar]
     ) -> Iterator[tuple[str, JsonDict]]:
-        # None matches a stored null and an absent key alike: json_extract cannot tell them apart.
-        tests: list[str] = ["collection=?"]
-        params: list[JsonScalar] = [collection]
-        for name, value in fields.items():
-            path = f"$.{name}"
-            if value is None:
-                tests.append("json_extract(data, ?) IS NULL")
-                params.append(path)
-            else:
-                tests.append("json_extract(data, ?) = ?")
-                params.extend((path, value))
-        with self._lock:
-            rows = self._conn.execute(
-                f"SELECT id, data FROM documents WHERE {' AND '.join(tests)} ORDER BY id",
-                params,
-            ).fetchall()
-        for row_id, data in rows:
-            body: JsonDict = json.loads(data)
-            yield str(row_id), body
+        stored = self._stored(collection)
+        tests = [stored.match(name, value) for name, value in fields.items()]
+        yield from self._read_rows(stored, self._rows_query(stored).where(*tests))
 
     def list_ids(self, collection: str, prefix: str = "") -> list[str]:
-        return [str(row[0]) for row in self._scan("id", collection, prefix)]
+        stored = self._stored(collection)
+        statement = select(stored.table.c.id).where(
+            *stored.scope(), *_prefix_tests(stored, prefix)).order_by(stored.table.c.id)
+        with self._lock, self._engine.connect() as connection:
+            return [str(row.id) for row in connection.execute(statement)]
 
     def read_all(self, collection: str, prefix: str = "") -> Iterator[tuple[str, JsonDict]]:
-        for row_id, data in self._scan("id, data", collection, prefix):
-            body: JsonDict = json.loads(data)
-            yield str(row_id), body
+        stored = self._stored(collection)
+        query = self._rows_query(stored).where(*_prefix_tests(stored, prefix))
+        yield from self._read_rows(stored, query)
+
+    def _stored(self, collection: str) -> StoredTable:
+        """Which table this collection lives in, and how a row of it maps to a document."""
+        table = find_table(collection)
+        if table is None:
+            return BlobRows(collection)
+        if table.name not in self._created:
+            table.create(self._engine, checkfirst=True)
+            self._created.add(table.name)
+        return ColumnRows(table)
+
+    def _rows_query(self, stored: StoredTable) -> Any:
+        return select(stored.table).where(*stored.scope()).order_by(stored.table.c.id)
+
+    def _select_one(self, stored: StoredTable, id: str) -> Row[Any] | None:
+        return self._fetch_one(self._rows_query(stored).where(stored.table.c.id == id))
+
+    def _fetch_one(self, statement: Any) -> Row[Any] | None:
+        with self._lock, self._engine.connect() as connection:
+            return connection.execute(statement).fetchone()
+
+    def _read_rows(
+        self, stored: StoredTable, statement: Any
+    ) -> Iterator[tuple[str, JsonDict]]:
+        with self._lock, self._engine.connect() as connection:
+            rows = connection.execute(statement).fetchall()
+        for row in rows:
+            yield str(row.id), stored.read_body(row)
+
+
+def _prefix_tests(stored: StoredTable, prefix: str) -> list[Any]:
+    if not prefix:
+        return []
+    return [stored.table.c.id.startswith(prefix)]

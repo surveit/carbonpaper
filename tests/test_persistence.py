@@ -93,11 +93,10 @@ def test_read_tolerant_missing_returns_none(store):
 
 
 def test_read_tolerant_corrupt_returns_none(store):
-    store._conn.execute(
-        "INSERT INTO documents (collection, id, data) VALUES (?, ?, ?)",
-        ("run", "proj/bad", "{not json"),
-    )
-    store._conn.commit()
+    with store._engine.begin() as connection:
+        connection.exec_driver_sql(
+            "INSERT INTO documents (collection, id, data) VALUES (?, ?, ?)",
+            ("run", "proj/bad", "{not json"))
     assert store.read_tolerant("run", "proj/bad") is None
 
 
@@ -140,10 +139,10 @@ def test_find_stays_inside_its_collection(store):
 
 
 def test_find_on_none_matches_a_stored_null_and_an_absent_key(store):
-    store.write("uploaded_file", "1", {"project_id": None})
-    store.write("uploaded_file", "2", {})
-    store.write("uploaded_file", "3", {"project_id": "demo"})
-    assert [id_ for id_, _ in store.find("uploaded_file", {"project_id": None})] == ["1", "2"]
+    store.write("draft", "1", {"project_id": None})
+    store.write("draft", "2", {})
+    store.write("draft", "3", {"project_id": "demo"})
+    assert [id_ for id_, _ in store.find("draft", {"project_id": None})] == ["1", "2"]
 
 
 def test_find_without_fields_reads_the_whole_collection(store):
@@ -339,3 +338,74 @@ def test_persistedmodel_config_mirrors_base():
     from app.core.persistence import PersistedModel
     for key in ("extra", "use_enum_values", "validate_default", "populate_by_name"):
         assert PersistedModel.model_config.get(key) == _Base.model_config.get(key)
+
+
+# --- a record stored as a real table of real columns, not a blob row -----------
+
+
+def test_a_columnized_record_lands_in_its_own_table(configured):
+    from app.core.files import UploadedFile
+    from app.core.persistence import get_store
+    UploadedFile(id="a", sha256="e3b0c442", filename="posts.csv", byte_count=1024).save()
+
+    with get_store()._engine.connect() as connection:
+        rows = connection.exec_driver_sql(
+            "SELECT filename, byte_count FROM uploaded_file").fetchall()
+        blobs = connection.exec_driver_sql(
+            "SELECT count(*) FROM documents WHERE collection='uploaded_file'").scalar()
+    assert rows == [("posts.csv", 1024)]
+    assert blobs == 0
+
+
+def test_a_columnized_record_round_trips(configured):
+    from app.core.files import UploadedFile
+    UploadedFile(id="a", sha256="e3b0c442", filename="posts.csv", byte_count=1024).save()
+    got = UploadedFile.load("a")
+    assert (got.sha256, got.filename, got.byte_count, got.project_id) == (
+        "e3b0c442", "posts.csv", 1024, None)
+
+
+def test_byte_count_is_stored_as_an_integer_not_text(configured):
+    """The blob store held every value as JSON text; a column has a type the database keeps."""
+    from app.core.files import UploadedFile
+    from app.core.persistence import get_store
+    UploadedFile(id="a", sha256="e3b0c442", filename="posts.csv", byte_count=1024).save()
+    with get_store()._engine.connect() as connection:
+        typed = connection.exec_driver_sql(
+            "SELECT typeof(byte_count) FROM uploaded_file").scalar()
+    assert typed == "integer"
+
+
+def test_find_on_a_columnized_record_selects_on_the_column(configured):
+    from app.core.files import UploadedFile
+    UploadedFile(id="a", sha256="e3b0c442", filename="posts.csv", byte_count=1024).save()
+    UploadedFile(id="b", sha256="e3b0c442", filename="posts.csv", byte_count=1024,
+                 project_id="demo").save()
+    assert [r.id for r in UploadedFile.find(project_id=None)] == ["a"]
+    assert [r.id for r in UploadedFile.find(project_id="demo")] == ["b"]
+
+
+def test_find_on_an_unknown_column_raises(configured):
+    from app.core.files import UploadedFile
+    with pytest.raises((KeyError, ValueError)):
+        UploadedFile.find(nmae="x")
+
+
+def test_the_table_refuses_a_record_missing_a_required_field(configured):
+    """The blob store accepted any dict; NOT NULL is the database keeping the model's word."""
+    from sqlalchemy.exc import IntegrityError
+    from app.core.persistence import get_store
+    with pytest.raises(IntegrityError):
+        get_store().write("uploaded_file", "a", {"project_id": None})
+
+
+def test_the_table_is_generated_from_the_model(configured):
+    """One definition: adding a pydantic field is what adds the column."""
+    from app.core.files import UploadedFile
+    from app.core.table_spec import find_table
+    table = find_table(UploadedFile.collection)
+    declared = {name for name in UploadedFile.model_fields}
+    assert declared <= {column.name for column in table.c}
+    assert table.c["byte_count"].type.python_type is int
+    assert table.c["project_id"].nullable is True
+    assert table.c["filename"].nullable is False

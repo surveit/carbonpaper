@@ -13,6 +13,8 @@ from typing import Any, ClassVar, Iterator, Mapping, Protocol, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.core.table_spec import build_table
+
 # The one honest dynamic boundary: an arbitrary pydantic model_dump / JSON body.
 JsonDict = dict[str, Any]
 # What a stored field can be compared against: a JSON scalar, never a list or object.
@@ -105,11 +107,20 @@ class PersistedModel(BaseModel):
         return self
     collection: ClassVar[str]
     SCOPE: ClassVar[PersistenceScope]
+    # Opt in to a table of real columns instead of a blob row in `documents`.
+    STORED_AS_TABLE: ClassVar[bool] = False
     SCHEMA_VERSION: ClassVar[int] = 1
     # Extra model_dump kwargs a subclass needs to preserve exact on-disk shape
     # (e.g. {"by_alias": True, "exclude_none": True} for a stage-bearing record).
     # Must not include "mode" — that is fixed to "json".
     DUMP_OPTS: ClassVar[JsonDict] = {}
+
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        # Not __init_subclass__: model_fields is only built once pydantic finishes the class.
+        super().__pydantic_init_subclass__(**kwargs)
+        if cls.STORED_AS_TABLE:
+            build_table(cls.collection, dict(cls.model_fields))
 
     def save(self) -> None:
         self.updated_at = now_iso()
