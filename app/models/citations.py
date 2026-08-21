@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from app.core.ids import ID
 
 
-class Citation(BaseModel):
+class CitedValue(BaseModel):
     stage_id: ID
     row_ordinal: int
     column: str

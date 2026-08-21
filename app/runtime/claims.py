@@ -1,4 +1,4 @@
-"""Establishing a claim: read the one cell its shape is bound to, and check it."""
+"""Making a claim: read the one stage output cell its shape names, and check it."""
 from __future__ import annotations
 
 import pyarrow as pa
@@ -12,21 +12,21 @@ from .validation import validate_table
 CLAIM_PHASE = "claim"
 
 
-def establish_claim(
+def make_claim(
     shape: ClaimShape, stage_id: str, column: str, table: pa.Table, run_id: str
 ) -> Claim:
-    """The cell is read, never asserted, so there is no value here to disagree with it."""
+    """The cell is read, never asserted, so no value here can disagree with it."""
     return Claim(
         shape_id=shape.id,
         run_id=run_id,
         cites=StageCellCitation(
             stage_id=stage_id, column=column,
-            value=read_bound_cell(shape, stage_id, column, table),
+            value=read_stage_output_cell(shape, stage_id, column, table),
         ),
     )
 
 
-def read_bound_cell(shape: ClaimShape, stage_id: str, column: str, table: pa.Table) -> str:
+def read_stage_output_cell(shape: ClaimShape, stage_id: str, column: str, table: pa.Table) -> str:
     validate_frame_is_one_row(shape, stage_id, table)
     validate_column_is_present(shape, stage_id, column, table)
     validate_cell_satisfies_the_shape(shape, stage_id, column, table)

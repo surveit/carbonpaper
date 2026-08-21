@@ -10,7 +10,7 @@ import pytest
 
 from app.core.errors import CitationMismatch, RowOutOfRange, StageNotInRun
 from app.models import parse_stage, Stage
-from app.models.citations import Citation, CitedRow
+from app.models.citations import CitedValue, CitedRow
 from app.runtime.citations import CitationProvider
 from app.runtime.context import RunContext
 from app.runtime.stages.publish import handle_publish
@@ -52,7 +52,7 @@ def test_a_citation_records_the_cell_the_name_and_where_it_sits():
         "count_client_figures", 0, "external_spend", 4461000.0,
         label="Total external spend",
     )
-    assert provider.citations == [Citation(
+    assert provider.citations == [CitedValue(
         stage_id="count_client_figures", row_ordinal=0, column="external_spend",
         label="Total external spend", value="4461000.0",
     )]

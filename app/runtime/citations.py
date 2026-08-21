@@ -13,7 +13,7 @@ import pyarrow as pa
 
 from app.core.errors import CitationMismatch, RowOutOfRange, StageNotInRun
 from app.core.persistence import PersistedModel, PersistenceScope
-from app.models.citations import Citation, CitedRow
+from app.models.citations import CitedValue, CitedRow
 
 
 def build_row_trace_url(project_id: str, run_id: str, stage_id: str, row_ordinal: int) -> str:
@@ -37,7 +37,7 @@ class CitationProvider:
     tables: Mapping[str, pa.Table]
     # `frozen` stops these being rebound, not written, which is what lets the
     # provider handed to authored code come back carrying what that code said.
-    citations: list[Citation] = field(default_factory=list)
+    citations: list[CitedValue] = field(default_factory=list)
     cited_rows: list[CitedRow] = field(default_factory=list)
 
     def cite_value(
@@ -51,7 +51,7 @@ class CitationProvider:
                 f"but that cell holds {cell!r} — publish renders what a stage computed, "
                 f"so a value it does not hold was made up in publish"
             )
-        self.citations.append(Citation(
+        self.citations.append(CitedValue(
             stage_id=stage_id, row_ordinal=row_ordinal, column=column,
             label=label, value=render_cell(cell),
         ))
@@ -115,7 +115,7 @@ class StageCitations(PersistedModel):
     collection: ClassVar[str] = "run_citations"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.RUN
 
-    citations: list[Citation] = []
+    citations: list[CitedValue] = []
     cited_rows: list[CitedRow] = []
 
     @staticmethod
@@ -133,7 +133,7 @@ def save_citations(
     ).save()
 
 
-def read_citations(project_id: str, run_id: str) -> list[Citation]:
+def read_citations(project_id: str, run_id: str) -> list[CitedValue]:
     """Every value this run's publish stages cited. Empty where none declared a provider."""
     return [c for saved in _saved(project_id, run_id) for c in saved.citations]
 

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel
 
@@ -34,8 +34,15 @@ class ClaimShape(PersistedModel):
     importance: ClaimImportance
 
 
-class StageCellCitation(BaseModel):
-    stage_id: str
+class Citation(BaseModel):
+    """Where a claim's evidence is, and what is there. `kind` is what widens it later."""
+
+    kind: str
+
+
+class StageCellCitation(Citation):
+    kind: Literal["stage_cell"] = "stage_cell"
+    stage_id: ID
     # The column in the SOURCE, which need not share the name the shape declares.
     column: str
     value: str
@@ -45,6 +52,6 @@ class Claim(PersistedModel):
     collection: ClassVar[str] = "claim"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
 
-    shape_id: str
-    run_id: str
+    shape_id: ID
+    run_id: ID
     cites: StageCellCitation

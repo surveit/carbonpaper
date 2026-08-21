@@ -22,7 +22,7 @@ class CitationMismatch(ValueError):
 
 
 class ClaimNotEstablished(ValueError):
-    """The stage a claim shape is bound to cannot supply the one cell it declares."""
+    """The stage named for a claim cannot supply the one cell its shape declares."""
 
 
 class NoVersionToRunError(Exception):
