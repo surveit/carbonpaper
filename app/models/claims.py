@@ -23,7 +23,7 @@ class ClaimShape(PersistedModel):
     collection: ClassVar[str] = "claim_shape"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
 
-    project: str
+    project_id: str
     # Authored before any stage exists, so it declares no stage and no column.
     label: str
     table_schema: TableSchema

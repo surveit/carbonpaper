@@ -8,9 +8,9 @@ _MONEY = TableSchema(columns=[Column(name="total_income_usd", type="float", null
 _LABEL = "Total paid to outside lobbying firms to lobby on Venezuela"
 
 
-def _shape(project: str, label: str = _LABEL, table_schema: TableSchema = _MONEY) -> ClaimShape:
+def _shape(project_id: str, label: str = _LABEL, table_schema: TableSchema = _MONEY) -> ClaimShape:
     return ClaimShape(
-        project=project,
+        project_id=project_id,
         label=label,
         table_schema=table_schema,
         requires=DataUniverseRequirement.closed,
@@ -27,7 +27,7 @@ def test_a_shape_survives_the_store():
 def test_shapes_are_found_by_their_project():
     _shape("venezuela_lobbying_q1_q2_2026").save()
     _shape("palm_oil_mill_register", "Mills in the register").save()
-    found = ClaimShape.find(project="palm_oil_mill_register")
+    found = ClaimShape.find(project_id="palm_oil_mill_register")
     assert [shape.label for shape in found] == ["Mills in the register"]
 
 
