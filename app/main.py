@@ -19,7 +19,7 @@ import threading
 
 from app.core.logging_config import configure_app_logging
 from app.core.store_config import configure_default_stores, refuse_renamed_env_vars
-from app.web.startup import end_tenures_on_shutdown, watch_for_interrupted_runs
+from app.web.startup import expire_tenures_on_shutdown, watch_for_interrupted_runs
 from app.web.config import (
     INTRO_DIR, STATIC_DIR, RevalidatedStaticFiles, configure_projects_dir_from_env,
 )
@@ -61,7 +61,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
             yield
     finally:
         stop_sweeping.set()
-        end_tenures_on_shutdown()
+        expire_tenures_on_shutdown()
 
 
 app = FastAPI(title="Workflow", lifespan=lifespan)

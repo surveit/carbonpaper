@@ -13,7 +13,7 @@ from app.core.json_types import JsonDict
 
 
 class RunLease(BaseModel):
-    """`fence` rises per claim, never per renewal, so it names one executor's TENURE."""
+    """`fence` rises each time the lease is taken, never on renewal: it names one TENURE."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -26,7 +26,7 @@ class RunLease(BaseModel):
 class RunLeaseStore(Protocol):
     """Served by the document store's own handle, because `write_if_held` spans both."""
 
-    def claim_lease(self, run_id: ID, executor_id: str, ttl_seconds: int) -> RunLease | None: ...
+    def take_lease(self, run_id: ID, executor_id: str, ttl_seconds: int) -> RunLease | None: ...
     def renew_lease(self, lease: RunLease, ttl_seconds: int) -> RunLease | None: ...
     def release_lease(self, lease: RunLease) -> None: ...
     def expire_lease(self, lease: RunLease) -> None: ...

@@ -143,7 +143,7 @@ class SqliteKvStore:
 
     # --- execution leases: docs/run-leases.md --------------------------------
 
-    def claim_lease(self, run_id: ID, executor_id: str, ttl_seconds: int) -> RunLease | None:
+    def take_lease(self, run_id: ID, executor_id: str, ttl_seconds: int) -> RunLease | None:
         """None when a live lease is held by someone else. One statement, so two racers cannot tie."""
         with self._lock:
             row = self._conn.execute(

@@ -40,7 +40,7 @@ _live_lock = threading.Lock()
 @contextmanager
 def hold(run_id: ID) -> Iterator[RunLease]:
     """Claim, heartbeat until the body exits, release. Raises RunLeaseLost if someone holds it."""
-    lease = get_store().claim_lease(run_id, EXECUTOR_ID, LEASE_TTL_SECONDS)
+    lease = get_store().take_lease(run_id, EXECUTOR_ID, LEASE_TTL_SECONDS)
     if lease is None:
         raise RunLeaseLost(f"run {run_id} is already being executed by another process")
     held = _Held(lease=lease, lost=threading.Event())
@@ -81,7 +81,7 @@ def _keep_renewing(held: _Held, stop: threading.Event) -> None:
             return
 
 
-def end_tenures_on_shutdown() -> None:
+def expire_tenures_on_shutdown() -> None:
     """A replaced process ends its tenures rather than leaving a successor to wait out the TTL."""
     with _live_lock:
         ending = list(_live)

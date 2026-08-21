@@ -19,7 +19,7 @@ below needs the lease and the document in one transaction on one connection.
 | `fence` | rises on every claim, never on a renewal, so it names one executor's **tenure** |
 | `expires_at` | unix seconds, always computed by SQLite |
 
-`claim_lease` is a single `INSERT … ON CONFLICT DO UPDATE … WHERE expires_at <=
+`take_lease` is a single `INSERT … ON CONFLICT DO UPDATE … WHERE expires_at <=
 unixepoch() RETURNING …`. The insert wins when no row exists, the update fires only when
 the stored tenure has expired, and the statement returns nothing when neither happened.
 Two racing claimants cannot both receive a lease.
@@ -41,7 +41,7 @@ wrong about liveness stays survivable rather than becoming corruption.
 It tests the fence and deliberately not the clock. An expired tenure nobody has claimed
 has no rival writer, so refusing its holder would stop a process from recording what it is
 still doing — including a process on its way down. What must be refused is a *superseded*
-tenure, and a claim is the only thing that supersedes one.
+tenure, and taking the lease is the only thing that supersedes one.
 
 `write_manifest` applies the fence to every run-record write, reading the held lease from
 a `ContextVar` rather than taking it as an argument. Nothing outside a production run
@@ -73,7 +73,7 @@ most of its TTL left. `watch_for_interrupted_runs` sweeps at boot and then every
 ## Shutdown closes the common case immediately
 
 Waiting out the TTL is correct but slow, and the overwhelmingly common interruption is a
-deploy — where the process *knows* it is going away. `end_tenures_on_shutdown`, called from
+deploy — where the process *knows* it is going away. `expire_tenures_on_shutdown`, called from
 the lifespan's shutdown path, expires the leases this process holds instead of deleting
 them: expired means "restartable now", deleted would mean "never proven dead".
 

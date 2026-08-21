@@ -26,14 +26,14 @@ def _expire_every_lease(store: SqliteKvStore) -> None:
 
 
 def test_only_one_of_two_executors_claims_a_run(store):
-    first = store.claim_lease(_RUN, "exec-A", 90)
-    second = store.claim_lease(_RUN, "exec-B", 90)
+    first = store.take_lease(_RUN, "exec-A", 90)
+    second = store.take_lease(_RUN, "exec-B", 90)
     assert first is not None
     assert second is None, "a live lease was handed to a second executor"
 
 
 def test_a_renewal_holds_the_same_tenure(store):
-    claimed = store.claim_lease(_RUN, "exec-A", 90)
+    claimed = store.take_lease(_RUN, "exec-A", 90)
     renewed = store.renew_lease(claimed, 90)
     assert renewed is not None
     assert renewed.fence == claimed.fence, (
@@ -41,17 +41,17 @@ def test_a_renewal_holds_the_same_tenure(store):
 
 
 def test_a_takeover_needs_the_tenure_to_have_expired(store):
-    store.claim_lease(_RUN, "exec-A", 90)
-    assert store.claim_lease(_RUN, "exec-B", 90) is None
+    store.take_lease(_RUN, "exec-A", 90)
+    assert store.take_lease(_RUN, "exec-B", 90) is None
     _expire_every_lease(store)
-    taken = store.claim_lease(_RUN, "exec-B", 90)
+    taken = store.take_lease(_RUN, "exec-B", 90)
     assert taken is not None and taken.fence == 2
 
 
 def test_the_superseded_executor_cannot_renew_or_write(store):
-    stale = store.claim_lease(_RUN, "exec-A", 90)
+    stale = store.take_lease(_RUN, "exec-A", 90)
     _expire_every_lease(store)
-    store.claim_lease(_RUN, "exec-B", 90)
+    store.take_lease(_RUN, "exec-B", 90)
 
     assert store.renew_lease(stale, 90) is None, "a superseded executor renewed its lease"
     assert store.write_if_held("run", _RUN, {"status": "errors"}, stale) is False, (
@@ -59,15 +59,15 @@ def test_the_superseded_executor_cannot_renew_or_write(store):
 
 
 def test_the_holder_writes_and_the_document_lands(store):
-    held = store.claim_lease(_RUN, "exec-A", 90)
+    held = store.take_lease(_RUN, "exec-A", 90)
     assert store.write_if_held("run", _RUN, {"status": "running"}, held) is True
     assert store.read("run", _RUN) == {"status": "running"}
 
 
 def test_release_is_scoped_to_the_tenure_that_holds_it(store):
-    stale = store.claim_lease(_RUN, "exec-A", 90)
+    stale = store.take_lease(_RUN, "exec-A", 90)
     _expire_every_lease(store)
-    successor = store.claim_lease(_RUN, "exec-B", 90)
+    successor = store.take_lease(_RUN, "exec-B", 90)
 
     store.release_lease(stale)
     assert store.read_lease(_RUN) == successor, (
@@ -83,7 +83,7 @@ def test_racing_threads_produce_exactly_one_winner(store):
 
     def claim() -> None:
         barrier.wait()
-        got = get_store().claim_lease(_RUN, "exec", 90)
+        got = get_store().take_lease(_RUN, "exec", 90)
         if got is not None:
             winners.append(got)
 
@@ -109,7 +109,7 @@ def test_a_manifest_write_inside_a_lost_tenure_is_refused(store, tmp_path):
     with lease.hold(_RUN):
         write_manifest(manifest)                       # ours: lands
         _expire_every_lease(store)
-        store.claim_lease(_RUN, "exec-B", 90)          # taken over under us
+        store.take_lease(_RUN, "exec-B", 90)          # taken over under us
         with pytest.raises(RunLeaseLost):
             write_manifest(manifest)
 
@@ -122,7 +122,7 @@ def test_a_checkpoint_stops_the_executor_once_the_heartbeat_notices(store):
     with lease.hold(_RUN):
         lease.validate_still_held()                       # held: no objection
         _expire_every_lease(store)
-        store.claim_lease(_RUN, "exec-B", 90)
+        store.take_lease(_RUN, "exec-B", 90)
         lease.validate_still_held()                       # the heartbeat has not run yet
         held = lease._held.get()
         assert held is not None

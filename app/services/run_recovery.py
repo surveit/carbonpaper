@@ -20,7 +20,7 @@ from app.services.run import (
 
 logger = logging.getLogger(__name__)
 
-# Tenures, not automatic restarts: docs/run-leases.md
+# Tenures, not automatic resumes: docs/run-leases.md
 MAX_TENURES = 3
 
 # Named once per process, not once per sweep.
@@ -41,31 +41,31 @@ def watch_for_interrupted_runs(stop: threading.Event) -> None:
     run_in_background(lambda: _sweep_until(stop))
 
 
-def restart_interrupted_runs() -> None:
-    """One sweep. Serialized: N runs restarting at once is what exhausts memory."""
+def resume_interrupted_runs() -> None:
+    """One sweep. Serialized: N runs resuming at once is what exhausts memory."""
     runs = load_production_runs()
     _report_ownerless_runs(runs)
     interrupted = find_interrupted_runs(runs)
     if not interrupted:
         return
-    logger.info("restarting %d interrupted run(s)", len(interrupted))
-    _restart_each(interrupted)
+    logger.info("resuming %d interrupted run(s)", len(interrupted))
+    _resume_each(interrupted)
 
 
 def _sweep_until(stop: threading.Event) -> None:
-    restart_interrupted_runs()
+    resume_interrupted_runs()
     while not stop.wait(SWEEP_EVERY_SECONDS):
-        restart_interrupted_runs()
+        resume_interrupted_runs()
 
 
 def _report_ownerless_runs(runs: list[RunManifest]) -> None:
-    """Naming them is the whole remedy: restarting one would assume what killed it."""
+    """Naming them is the whole remedy: resuming one would assume what killed it."""
     ownerless = [m for m in find_ownerless_runs(runs) if m.id not in _reported_ownerless]
     _reported_ownerless.update(m.id for m in ownerless)
     if ownerless:
         logger.warning(
             "%d run(s) say `running` but never held a lease, so nothing proves their "
-            "executor died; left alone for a human to restart or cancel: %s",
+            "executor died; left alone for a human to resume or cancel: %s",
             len(ownerless), ", ".join(f"{m.project}/{m.run_id}" for m in ownerless))
 
 
@@ -96,23 +96,22 @@ def _read_expired_lease(manifest: RunManifest, now: int) -> RunLease | None:
     return held if held is not None and held.expires_at <= now else None
 
 
-def _restart_each(interrupted: list[tuple[RunManifest, RunLease]]) -> None:
+def _resume_each(interrupted: list[tuple[RunManifest, RunLease]]) -> None:
     for manifest, held in interrupted:
         if held.fence >= MAX_TENURES:
             _abandon(manifest, held.fence)
         else:
-            _restart(manifest)
+            _resume_one(manifest)
 
 
-def _restart(manifest: RunManifest) -> None:
-    logger.info("restarting run %s of %s", manifest.run_id, manifest.project)
+def _resume_one(manifest: RunManifest) -> None:
+    logger.info("resuming run %s of %s", manifest.run_id, manifest.project)
     try:
         resume_now(manifest.project, manifest.run_id)
     except RunLeaseLost:
-        # Claimed between the sweep's read and the resume's claim. Theirs, then.
-        logger.info("run %s was claimed by another executor first", manifest.run_id)
+        logger.info("run %s was taken by another executor first", manifest.run_id)
     except _UNRESTARTABLE as exc:
-        logger.warning("could not restart run %s: %s", manifest.run_id, exc)
+        logger.warning("could not resume run %s: %s", manifest.run_id, exc)
 
 
 def _abandon(manifest: RunManifest, tenures: int) -> None:

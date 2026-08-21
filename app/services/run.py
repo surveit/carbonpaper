@@ -30,7 +30,7 @@ from app.runtime.manifest import (
     resolve_output_path,
 )
 from app.runtime import lease
-from app.runtime.lease import end_tenures_on_shutdown as end_tenures_on_shutdown
+from app.runtime.lease import expire_tenures_on_shutdown as expire_tenures_on_shutdown
 from app.runtime.errors import RunLeaseLost as RunLeaseLost
 from app.runtime.runner import prepare_run, resume_run, run_prepared
 from app.runtime.citations import build_row_trace_url as build_row_trace_url

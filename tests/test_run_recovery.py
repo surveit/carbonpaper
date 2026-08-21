@@ -14,13 +14,13 @@ from app.models.stage import StageType
 from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform as lt
 from app.services import run_recovery
-from app.services.run import end_tenures_on_shutdown
+from app.services.run import expire_tenures_on_shutdown
 from app.services.run_recovery import (
     MAX_TENURES,
     find_interrupted_runs,
     find_ownerless_runs,
     load_production_runs,
-    restart_interrupted_runs,
+    resume_interrupted_runs,
 )
 from conftest import pinned_stages
 from run_seed import read_manifest
@@ -81,7 +81,7 @@ def one_row_at_a_time():
 
 
 @pytest.fixture(autouse=True)
-def restart_inline(monkeypatch):
+def resume_inline(monkeypatch):
     """The sweep's own thread is not the behaviour under test; its decisions are."""
     monkeypatch.setattr("app.services.run_recovery.run_in_background",
                         lambda work: work())
@@ -100,7 +100,7 @@ def _sqlite() -> SqliteKvStore:
 
 
 def _expire_the_lease(run_key: str) -> None:
-    """Time passing. The sweep restarts an EXPIRED tenure, never a live one."""
+    """Time passing. The sweep resumes an EXPIRED tenure, never a live one."""
     store = _sqlite()
     store._conn.execute(
         "UPDATE run_lease SET expires_at = unixepoch() - 1 WHERE run_id=?", (run_key,))
@@ -116,7 +116,7 @@ def _kill_a_run_mid_stage(tmp_path: Path, *, end_tenures: bool = False) -> tuple
         # SIGTERM arrives while the run still executes; the thread then dies unwinding nothing.
         kill.setattr(lt, "call_llm", _Calls(
             fail_on=6, fault=KeyboardInterrupt(),
-            before_fault=end_tenures_on_shutdown if end_tenures else None))
+            before_fault=expire_tenures_on_shutdown if end_tenures else None))
         kill.setattr(type(get_store()), "release_lease", lambda self, lease: None)
         workflow, version = pinned_stages(project)
         from app.runtime.runner import execute_run
@@ -127,20 +127,20 @@ def _kill_a_run_mid_stage(tmp_path: Path, *, end_tenures: bool = False) -> tuple
     return run_id, f"{project.name}/runs/{run_id}"
 
 
-def test_a_killed_run_is_restarted_and_finishes(tmp_path, monkeypatch):
+def test_a_killed_run_is_resumed_and_finishes(tmp_path, monkeypatch):
     run_id, run_key = _kill_a_run_mid_stage(tmp_path)
     assert read_manifest(_project_dir(tmp_path), run_id)["status"] == RunStatus.RUNNING
     _expire_the_lease(run_key)
 
-    restarted = _Calls()
-    monkeypatch.setattr(lt, "call_llm", restarted)
-    restart_interrupted_runs()
+    resumed = _Calls()
+    monkeypatch.setattr(lt, "call_llm", resumed)
+    resume_interrupted_runs()
 
     after = read_manifest(_project_dir(tmp_path), run_id)
     assert after["status"] == RunStatus.OK
     assert {r["stage_id"]: r["status"] for r in after["stage_records"]} == {
         "load": StageStatus.OK, "score": StageStatus.OK}
-    assert restarted.n == 3, "the row cache should have spared the five rows already scored"
+    assert resumed.n == 3, "the row cache should have spared the five rows already scored"
 
 
 def test_a_live_tenure_is_left_to_the_executor_that_holds_it(tmp_path, monkeypatch):
@@ -150,21 +150,21 @@ def test_a_live_tenure_is_left_to_the_executor_that_holds_it(tmp_path, monkeypat
     never = _Calls()
     monkeypatch.setattr(lt, "call_llm", never)
     assert find_interrupted_runs(load_production_runs()) == []
-    restart_interrupted_runs()
+    resume_interrupted_runs()
 
     assert never.n == 0
     assert read_manifest(_project_dir(tmp_path), run_id)["status"] == RunStatus.RUNNING
 
 
-def test_a_shutdown_ends_the_tenure_so_the_next_boot_restarts_at_once(tmp_path, monkeypatch):
+def test_a_shutdown_ends_the_tenure_so_the_next_boot_resumes_at_once(tmp_path, monkeypatch):
     """The deploy case. Without this the run waits out the full TTL before anyone may take it."""
     run_id, run_key = _kill_a_run_mid_stage(tmp_path, end_tenures=True)
 
     assert [m.run_id for m, _ in find_interrupted_runs(load_production_runs())] == [run_id], (
-        "a run whose process announced its own shutdown should be restartable immediately")
-    restarted = _Calls()
-    monkeypatch.setattr(lt, "call_llm", restarted)
-    restart_interrupted_runs()
+        "a run whose process announced its own shutdown should be resumable immediately")
+    resumed = _Calls()
+    monkeypatch.setattr(lt, "call_llm", resumed)
+    resume_interrupted_runs()
 
     assert read_manifest(_project_dir(tmp_path), run_id)["status"] == RunStatus.OK
 
@@ -200,7 +200,7 @@ def _wait_until(done, timeout: float = 10.0) -> bool:
     return False
 
 
-def test_a_run_that_never_held_a_lease_is_surfaced_not_restarted(tmp_path, monkeypatch):
+def test_a_run_that_never_held_a_lease_is_surfaced_not_resumed(tmp_path, monkeypatch):
     """Records predating the lease. Nothing proved their executor dead, so a human decides."""
     run_id, run_key = _kill_a_run_mid_stage(tmp_path)
     _sqlite()._conn.execute("DELETE FROM run_lease WHERE run_id=?", (run_key,))
@@ -208,7 +208,7 @@ def test_a_run_that_never_held_a_lease_is_surfaced_not_restarted(tmp_path, monke
 
     never = _Calls()
     monkeypatch.setattr(lt, "call_llm", never)
-    restart_interrupted_runs()
+    resume_interrupted_runs()
 
     assert never.n == 0
     assert [m.run_id for m in find_ownerless_runs(load_production_runs())] == [run_id]
@@ -226,7 +226,7 @@ def test_the_run_is_never_marked_dead_on_the_way(tmp_path, monkeypatch):
     monkeypatch.setattr(manifest_module, "write_manifest",
                         lambda m: (seen.append(m.status), real(m))[1])
     monkeypatch.setattr(lt, "call_llm", _Calls())
-    restart_interrupted_runs()
+    resume_interrupted_runs()
 
     assert RunStatus.ERRORS not in seen and RunStatus.CANCELLED not in seen
 
@@ -242,7 +242,7 @@ def test_a_run_that_keeps_dying_is_abandoned_and_says_so(tmp_path, monkeypatch):
 
     never = _Calls()
     monkeypatch.setattr(lt, "call_llm", never)
-    restart_interrupted_runs()
+    resume_interrupted_runs()
 
     after = read_manifest(_project_dir(tmp_path), run_id)
     assert after["status"] == RunStatus.ERRORS

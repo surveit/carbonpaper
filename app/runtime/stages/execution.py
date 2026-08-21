@@ -431,9 +431,11 @@ def _fan_out(
             }
             try:
                 for future in as_completed(futures):
-                    validate_still_held()
+                    # Cancel first: every instruction before it is a wider window for the
+                    # pool to dispatch another chunk, and that costs a model call.
                     if _consume_cancel(ctx):
                         raise RunCancelled(f"stage {stage_id}: cancelled mid-fan-out")
+                    validate_still_held()
                     indices = futures[future]
                     _place_group(results, indices, future.result(), stage_id)
                     completed += len(indices)
@@ -451,9 +453,9 @@ def _fan_out(
                 pool.shutdown(wait=False, cancel_futures=True)
     else:
         for indices, rows in groups:
-            validate_still_held()
             if _consume_cancel(ctx):
                 raise RunCancelled(f"stage {stage_id}: cancelled")
+            validate_still_held()
             _place_group(
                 results, indices, execution.run_group(indices, rows), stage_id
             )
