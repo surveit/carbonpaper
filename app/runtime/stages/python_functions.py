@@ -21,17 +21,20 @@ from app.models.stages.code import (
 )
 from app.models.stages.publish import PublishStage
 
+from ..branches import BranchRecorder
 from ..code import load_function
 from ..context import RunContext
 from ..stage_output import StageOutput
-from .execution import Row, RowMapper, narrow_stage
+from .execution import RecordingRowMapper, Row, RowMapper, narrow_stage
 
 
 # The three types whose behaviour is a `function` block.
 CodeCarryingStage = PythonRowFunctionStage | PythonFrameFunctionStage | PublishStage
 
 
-def _load_python_function(stage: CodeCarryingStage) -> Callable[..., Any]:
+def _load_python_function(
+    stage: CodeCarryingStage, recorder: BranchRecorder | None = None
+) -> Callable[..., Any]:
     fn_spec = stage.function
     fn_name = fn_spec.function or "transform"
     if fn_spec.kind == FunctionKind.module:
@@ -40,7 +43,7 @@ def _load_python_function(stage: CodeCarryingStage) -> Callable[..., Any]:
         module = importlib.import_module(fn_spec.module)
         return getattr(module, fn_name)
     if fn_spec.kind == FunctionKind.inline:
-        fn = load_function(fn_spec.code or "", fn_name, "transform")
+        fn = load_function(fn_spec.code or "", fn_name, "transform", recorder)
         if fn is None:
             raise ValueError(f"Inline function 'transform' not defined for stage {stage.id}")
         return fn
@@ -63,7 +66,8 @@ def build_python_row_mapper(
 ) -> RowMapper:
     """One dict in, one dict out: shown neither the frame nor a row's position in it."""
     stage = narrow_stage(workflow_stage, PythonRowFunctionStage)
-    fn = _load_python_function(stage)
+    recorder = BranchRecorder()
+    fn = _load_python_function(stage, recorder)
 
     def map_row(row: Row, index: int) -> Row:
         result = fn(row)
@@ -74,7 +78,7 @@ def build_python_row_mapper(
             )
         return result
 
-    return map_row
+    return RecordingRowMapper(map_row, recorder)
 
 
 def _require_frame(result: Any, workflow_stage: WorkflowStage) -> pd.DataFrame:

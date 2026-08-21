@@ -66,10 +66,10 @@ def test_a_one_line_branch_records_like_any_other() -> None:
     recorder = BranchRecorder()
     transform = load_function(ONE_LINER, "transform", "transform", recorder)
     assert transform is not None
-    transform({"a": 1})
-    recorder.close_row(0)
-    transform({"a": 0})
-    recorder.close_row(1)
+    for index, a in enumerate((1, 0)):
+        recorder.open_row(index)
+        transform({"a": a})
+        recorder.close_row()
     assert recorder.branches_for(0) == ("transform/0:if",)
     assert recorder.branches_for(1) == ("transform/0:else",)
 
@@ -86,7 +86,12 @@ def test_instrumenting_changes_which_branches_are_seen_and_nothing_else() -> Non
     recorder = BranchRecorder()
     watched = load_function(ELIF_CHAIN, "transform", "transform", recorder)
     assert plain is not None and watched is not None
-    assert [plain(dict(row)) for row in rows] == [watched(dict(row)) for row in rows]
+    observed = []
+    for index, row in enumerate(rows):
+        recorder.open_row(index)
+        observed.append(watched(dict(row)))
+        recorder.close_row()
+    assert [plain(dict(row)) for row in rows] == observed
 
 
 def test_the_rewrite_opens_each_branch_exactly_once() -> None:
@@ -98,8 +103,9 @@ def test_a_python_row_function_records_one_branch_per_call_it_makes() -> None:
     recorder = BranchRecorder()
     transform = load_function(stage_code("read_reported_money"), "transform", "transform", recorder)
     assert transform is not None
+    recorder.open_row(0)
     transform({"income": "45000", "expenses": None, "filing_uuid": "f1"})
-    recorder.close_row(0)
+    recorder.close_row()
     # `_read_money` runs once per money column, so one row takes two branches.
     assert recorder.branches_for(0) == ("_read_money/3:try", "_read_money/0:if")
 
@@ -110,8 +116,9 @@ def test_a_starlark_row_function_records_through_the_real_interpreter() -> None:
         stage_code("decide_inclusion"), "transform", "transform", recorder)
     assert handle is not None
     for index, issues in enumerate(("Venezuela sanctions", "Steel tariffs")):
+        recorder.open_row(index)
         handle({"issue_codes": "ENG", "specific_issues": issues, "exception_reason": None})
-        recorder.close_row(index)
+        recorder.close_row()
     assert recorder.branches_for(0) == ("transform/3:if",)
     assert recorder.branches_for(1) == ("transform/3:else",)
     assert recorder.branches_for(2) is None
@@ -120,10 +127,13 @@ def test_a_starlark_row_function_records_through_the_real_interpreter() -> None:
 def test_a_starlark_stage_computes_the_same_values_instrumented_or_not() -> None:
     code = stage_code("split_paid_from_in_house")
     row = {"type": "1st Quarter - Report", "registrant_org": "A LLC", "client_org": "B Corp"}
+    recorder = BranchRecorder()
     plain = compile_starlark_function(code, "transform", "transform")
-    watched = compile_starlark_function(code, "transform", "transform", BranchRecorder())
+    watched = compile_starlark_function(code, "transform", "transform", recorder)
     assert plain is not None and watched is not None
+    recorder.open_row(0)
     assert plain(dict(row)) == watched(dict(row))
+    recorder.close_row()
 
 
 def test_no_recorder_leaves_the_authors_own_source_running() -> None:

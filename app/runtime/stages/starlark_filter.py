@@ -14,8 +14,9 @@ from app.models.stages.starlark_filter import (
     StarlarkFilterRowsStage,
 )
 
+from ..branches import BranchRecorder
 from ..starlark_code import compile_starlark_function
-from .execution import Row, RowMapper, narrow_stage
+from .execution import RecordingRowMapper, Row, RowMapper, narrow_stage
 from .starlark_marshal import marshal_row_for_starlark
 
 if TYPE_CHECKING:
@@ -30,7 +31,9 @@ def make_starlark_filter_mapper(
     block = stage.starlark_filter
     sid = stage.id
     function_name = block.function or DEFAULT_PREDICATE_NAME
-    handle = compile_starlark_function(block.code, function_name, DEFAULT_PREDICATE_NAME)
+    recorder = BranchRecorder()
+    handle = compile_starlark_function(
+        block.code, function_name, DEFAULT_PREDICATE_NAME, recorder)
     if handle is None:
         raise ValueError(
             f"starlark_filter_rows stage {sid}: code does not define `{function_name}`"
@@ -45,4 +48,4 @@ def make_starlark_filter_mapper(
             )
         return row if result else None
 
-    return keep_or_drop
+    return RecordingRowMapper(keep_or_drop, recorder)
