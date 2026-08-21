@@ -266,10 +266,10 @@ def test_add_stage_still_refuses_when_the_existing_workflow_is_unloadable() -> N
 def test_add_stage_still_refuses_when_the_stored_document_is_unparseable() -> None:
     """A corrupt payload raises rather than reading as an empty workflow."""
     get_store().write(WorkingCopy.collection, "zeta", {})
-    get_store()._conn.execute(  # type: ignore[attr-defined]
-        "UPDATE documents SET data='{not json' WHERE collection=? AND id=?",
-        (WorkingCopy.collection, "zeta"),
-    )
+    with get_store()._engine.begin() as connection:  # type: ignore[attr-defined]
+        connection.exec_driver_sql(
+            "UPDATE documents SET data='{not json' WHERE collection=? AND id=?",
+            (WorkingCopy.collection, "zeta"))
     with pytest.raises(json.JSONDecodeError):
         stage_edit.add_stage_spec("zeta", json.dumps(_FIRST_STAGE))
 

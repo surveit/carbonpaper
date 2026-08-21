@@ -44,8 +44,9 @@ the typed `Stage` objects this loader returns.
 
 A project's state lives in exactly two places:
 
-- **The document store** (`app/core/persistence.py`), a SQLite key-value table
-  keyed `(collection, id)`. Every stored record is a `PersistedModel`: the
+- **The document store** (`app/core/persistence.py`), SQLite reached through
+  SQLAlchemy Core: a blob table keyed `(collection, id)`, plus a table per columnized
+  record (see below). Every stored record is a `PersistedModel`: the
   methodology, the working copy, each `workflow_version`, a run's record and its
   chunked event log, the review-queue fingerprints, the review decisions, the
   terms, and the uploaded-file index.
@@ -55,6 +56,26 @@ A project's state lives in exactly two places:
 `app/` writes a file except frames, an export the user downloads, and a file the
 user uploaded. What is left on disk under a project is `code/`, `data/` and
 `runs/<id>/{outputs, artifacts, queue}` — frames and the files around them.
+
+### A record may be stored as a table of columns instead
+
+`uploaded_file` is stored as its own table of typed columns; every other collection is
+still a JSON blob row in `documents`. A record opts in with `STORED_AS_TABLE = True`, and
+`app/core/table_spec.py` builds a SQLAlchemy `Table` from its pydantic fields.
+
+**The model is the one definition.** A column's name, type and nullability are read off
+the field, so a table cannot drift from its record by hand. `MetaData` is the registry —
+constructing the `Table` is what puts it there — and `alembic/env.py` points
+`target_metadata` at it, so `alembic revision --autogenerate` writes the DDL. Autogenerate
+never writes a data move; that half of a revision stays hand-written.
+
+Autogenerate only sees a record some module in `env.py` imports.
+
+`documents` is a `Table` too, so both shapes go through one statement builder:
+`BlobRows` maps a collection onto a row of `documents`, `ColumnRows` maps it onto its own
+table. `BlobRows` is deleted when the last collection gets columns. `find()` on a
+columnized collection is a `WHERE` on a real column; on every other one it is a
+`json_extract` predicate.
 
 ## Migrations replay, so every revision must be a no-op at head
 

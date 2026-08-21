@@ -27,12 +27,12 @@ _SOURCE_COLUMNS = [
     {"name": "score", "type": "int", "nullable": True},
 ]
 
+# UploadedFile is absent on purpose: it is a table, and checked separately below.
 _SEEDED_COLLECTIONS = sorted({
     project_service.Project.collection,
     Methodology.collection,
     WorkingCopy.collection,
     WorkflowVersion.collection,
-    file_store.UploadedFile.collection,
 })
 
 
@@ -40,13 +40,16 @@ def test_replaying_every_revision_over_a_current_store_rewrites_nothing(tmp_path
     db_path = _open_file_backed_store(tmp_path, monkeypatch)
     _seed_store_through_the_app()
     documents, stored_files = _read_documents(db_path), _read_stored_files()
+    uploaded = _read_uploaded_file_table(db_path)
     assert sorted({collection for collection, _, _, _ in documents}) == _SEEDED_COLLECTIONS
+    assert uploaded, "the seed writes a file, so its table must hold a row to compare"
     # The state the store is really in: written by this build, met by alembic later.
     assert _read_stamped_revision(db_path) is None
 
     _upgrade_to_head()
 
     assert _read_documents(db_path) == documents
+    assert _read_uploaded_file_table(db_path) == uploaded
     assert _read_stored_files() == stored_files
     assert _read_stamped_revision(db_path) == _head_revision()
 
@@ -94,6 +97,15 @@ def _read_documents(db_path: Path) -> list[tuple[str, str, str, int]]:
         return connection.execute(
             "SELECT collection, id, data, schema_version FROM documents "
             "ORDER BY collection, id").fetchall()
+    finally:
+        connection.close()
+
+
+def _read_uploaded_file_table(db_path: Path) -> list[tuple]:
+    connection = sqlite3.connect(db_path)
+    try:
+        return connection.execute(
+            f"SELECT * FROM {file_store.UploadedFile.collection} ORDER BY id").fetchall()
     finally:
         connection.close()
 
