@@ -594,7 +594,7 @@ def test_a_union_gets_no_diff(tmp_path: Path) -> None:
         "inputs": [{"id": LOAD_ID},
                    {"id": "more"}],
         "union": {},
-        "signature": {"form": "replaces", "produces": _IN_COLUMNS},
+        "signature": {"form": "extends", "reads": [], "adds": [], "rewrites": []},
     })
     _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a"], "val": [1]}))
     out_rel = _write_output(tmp_path, "both", pd.DataFrame({"name": ["a"], "val": [1]}))
