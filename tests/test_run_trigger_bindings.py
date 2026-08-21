@@ -15,7 +15,7 @@ from app.main import app
 from app.services import versioning
 from app.services import workspace
 from app.services.project import save_working_copy_as_version
-from app.core.files import UploadedFile, list_project_files, save_upload
+from app.core.files import ProjectFile, list_project_files, save_upload
 from app.core.frames import read_frame_table
 from app.web.run_inputs import FileChoice, build_file_choice
 from stage_seed import add_stage, read_stage
@@ -164,7 +164,7 @@ def test_file_picker_refuses_a_choice_without_an_upload_time():
 
 
 def test_file_picker_refuses_an_invalid_stored_upload_time():
-    record = UploadedFile(
+    record = ProjectFile(
         sha256="abc",
         filename="a.csv",
         byte_count=1,

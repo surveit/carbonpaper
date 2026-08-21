@@ -3,6 +3,7 @@ that holds each file, and the two size limits that keep a run loadable and the v
 from filling."""
 from __future__ import annotations
 
+import enum
 import hashlib
 import os
 import tempfile
@@ -38,14 +39,20 @@ _DEFAULT_MAX_UPLOAD_BYTES = 512 * _MEGABYTE
 _DEFAULT_FILES_QUOTA_BYTES = 4 * _GIGABYTE
 
 
+class FileStatus(enum.StrEnum):
+    OPEN = "open"
+    CLOSED = "closed"
+    SAMPLED = "sampled"
+
+
 # The record's own `id` addresses the bytes: they sit in a directory of that name, alone.
 # `sha256` is EVIDENCE about them, never their address — two sends of identical bytes are
 # two records over two copies, each free to say where and when it came from. That costs
 # the disk one copy per send and is what buys the provenance. `project_id` is None for a
 # file that arrived before any project existed — `move_file_to_project` fills it in,
 # moving nothing on disk.
-class UploadedFile(PersistedModel):
-    """One stored file. `id` names the bytes' directory; `sha256` is what they hashed to."""
+class ProjectFile(PersistedModel):
+    """One project's file. `id` names the bytes' directory; `sha256` is what they hashed to."""
 
     collection: ClassVar[str] = "uploaded_file"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
@@ -54,6 +61,8 @@ class UploadedFile(PersistedModel):
     filename: str
     byte_count: int
     project_id: ID | None = None
+    status: FileStatus = FileStatus.OPEN
+    lineage: str = ""
 
 
 def files_root() -> Path:
@@ -70,7 +79,7 @@ def files_quota_bytes() -> int:
     return _read_byte_limit("CARBON_PAPER_FILES_QUOTA_BYTES", _DEFAULT_FILES_QUOTA_BYTES)
 
 
-def save_upload(filename: str, src: BinaryIO, project_id: ID | None = None) -> UploadedFile:
+def save_upload(filename: str, src: BinaryIO, project_id: ID | None = None) -> ProjectFile:
     """Store an uploaded file and return its record; `project_id` None puts it in no project."""
     root = files_root()
     # The stream is written to a temp file in the same dir first and moved into
@@ -81,8 +90,8 @@ def save_upload(filename: str, src: BinaryIO, project_id: ID | None = None) -> U
     root.mkdir(parents=True, exist_ok=True)
     staged, digest, byte_count = _write_to_temp_file(root, src, max_upload_bytes())
     _refuse_upload_over_quota(root, staged, byte_count)
-    record = UploadedFile(sha256=digest, filename=_safe_filename(filename),
-                          byte_count=byte_count, project_id=project_id)
+    record = ProjectFile(sha256=digest, filename=_safe_filename(filename),
+                        byte_count=byte_count, project_id=project_id)
     (root / record.id).mkdir(parents=True, exist_ok=True)
     staged.replace(resolve_stored_path(record))
     # Saved only once the bytes are in place: a record whose bytes are missing is what
@@ -91,9 +100,9 @@ def save_upload(filename: str, src: BinaryIO, project_id: ID | None = None) -> U
     return record
 
 
-def move_file_to_project(file_id: ID, project_id: ID) -> UploadedFile:
+def move_file_to_project(file_id: ID, project_id: ID) -> ProjectFile:
     """Move a file with no project into one. Moves no bytes — the record is the address."""
-    record = UploadedFile.load_or_none(file_id)
+    record = ProjectFile.load_or_none(file_id)
     if record is None or record.project_id is not None:
         raise FileNotStoredError(
             f"no file {file_id!r} outside a project — it is either already in one, or was "
@@ -103,33 +112,46 @@ def move_file_to_project(file_id: ID, project_id: ID) -> UploadedFile:
     return record
 
 
+def update_investigation(project_id: ID, file_id: ID, status: FileStatus, lineage: str) -> ProjectFile:
+    """Set this project's status/lineage note for one file."""
+    record = ProjectFile.load_or_none(file_id)
+    if record is None or record.project_id != project_id:
+        raise FileNotStoredError(
+            f"no file {file_id!r} in project '{project_id}' — list its files, upload this "
+            "one, or move it in if it is not in a project yet")
+    record.status = status
+    record.lineage = lineage
+    record.save()
+    return record
+
+
 def delete_file(project_id: ID | None, file_id: ID) -> None:
     """Delete one file: its record, and the bytes that record alone owns."""
-    record = UploadedFile.load_or_none(file_id)
+    record = ProjectFile.load_or_none(file_id)
     if record is None or record.project_id != project_id:
         raise FileNotStoredError(
             f"no file {file_id!r} in {project_id or 'the files outside a project'} — "
             "nothing to delete")
     path = resolve_stored_path(record)
-    UploadedFile.delete(record.id)
+    ProjectFile.delete(record.id)
     if path.is_file():
         path.unlink()
     _delete_if_empty(path.parent)
 
 
-def resolve_stored_path(record: UploadedFile) -> Path:
+def resolve_stored_path(record: ProjectFile) -> Path:
     """The record owns its directory, so its `filename` is the only file inside it."""
     return (files_root() / record.id / record.filename).resolve()
 
 
-def list_project_files(project_id: ID | None) -> list[UploadedFile]:
+def list_project_files(project_id: ID | None) -> list[ProjectFile]:
     """One project's files, or those in no project when `project_id` is None."""
-    return _sorted_newest_first(UploadedFile.find(project_id=project_id))
+    return _sorted_newest_first(ProjectFile.find(project_id=project_id))
 
 
-def open_project_file(project_id: ID, file_id: ID) -> tuple[UploadedFile, Path]:
+def open_project_file(project_id: ID, file_id: ID) -> tuple[ProjectFile, Path]:
     """The record and the readable path, or loud — never a path whose bytes are gone."""
-    record = UploadedFile.load_or_none(file_id)
+    record = ProjectFile.load_or_none(file_id)
     if record is None or record.project_id != project_id:
         raise FileNotStoredError(
             f"project '{project_id}' has no file {file_id!r} — list its files, upload this "
@@ -146,7 +168,7 @@ def open_project_file(project_id: ID, file_id: ID) -> tuple[UploadedFile, Path]:
 
 def measure_files_used_bytes() -> int:
     """What the store weighs, read off the records rather than by walking the disk."""
-    return sum(record.byte_count for record in UploadedFile.list())
+    return sum(record.byte_count for record in ProjectFile.list())
 
 
 def _delete_if_empty(directory: Path) -> None:
@@ -154,7 +176,7 @@ def _delete_if_empty(directory: Path) -> None:
         directory.rmdir()
 
 
-def _sorted_newest_first(records: list[UploadedFile]) -> list[UploadedFile]:
+def _sorted_newest_first(records: list[ProjectFile]) -> list[ProjectFile]:
     return sorted(records, key=lambda record: record.created_at, reverse=True)
 
 

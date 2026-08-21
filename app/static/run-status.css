@@ -22,6 +22,14 @@
 .run-status.status-corrupt,
 .run-status.status-unknown { background: var(--sunk-deep); color: var(--muted); border-color: var(--border); }
 
+/* File investigation status, on the Files page's status <select>. Open is a file still
+   under active review — the idle tint, same "not yet a verdict" reading run-status gives
+   a still-running stage. Closed is done. Sampled is flagged for a closer look, so it
+   takes the review hue rather than either verdict colour. */
+.status-select.status-open { background: var(--state-idle-bg); color: var(--state-idle-ink); border-color: var(--state-idle); }
+.status-select.status-closed { background: var(--state-done-bg); color: var(--state-done-ink); border-color: var(--state-done); }
+.status-select.status-sampled { background: var(--state-review-bg); color: var(--state-review-ink); border-color: var(--state-review); }
+
 /* Run summary cards */
 .run-summary {
     display: grid;

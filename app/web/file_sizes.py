@@ -5,7 +5,7 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from app.core.errors import FileOverCeiling, StoreOverQuota
-from app.core.files import UploadedFile
+from app.core.files import ProjectFile
 
 _KILOBYTE = 1024
 _MEGABYTE = 1024 * _KILOBYTE
@@ -37,7 +37,7 @@ def describe_refusal(exc: FileOverCeiling | StoreOverQuota) -> str:
             "CARBON_PAPER_FILES_QUOTA_BYTES.")
 
 
-def describe_attachment(record: UploadedFile, project_name: str = "") -> str:
+def describe_attachment(record: ProjectFile, project_name: str = "") -> str:
     """The one sentence a chat shows for an attached file AND sends to the agent."""
     home = ("not in a project yet" if not record.project_id
             else f"in project {project_name or record.project_id} ({record.project_id})")

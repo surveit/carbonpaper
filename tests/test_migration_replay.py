@@ -32,7 +32,7 @@ _SEEDED_COLLECTIONS = sorted({
     Methodology.collection,
     WorkingCopy.collection,
     WorkflowVersion.collection,
-    file_store.UploadedFile.collection,
+    file_store.ProjectFile.collection,
 })
 
 
@@ -70,7 +70,7 @@ def _seed_store_through_the_app() -> str:
     return project_id
 
 
-def _stage_drafts(upload: file_store.UploadedFile) -> list[StageDraft]:
+def _stage_drafts(upload: file_store.ProjectFile) -> list[StageDraft]:
     return [
         StageDraft.model_validate({
             "id": "rows", "description": "Load the scored rows", "type": "input_data",

@@ -13,7 +13,7 @@ from app.main import app
 from app.services import workspace
 from app.core.errors import FileNotStoredError
 from app.services.project import create_project
-from app.core.files import UploadedFile, list_project_files
+from app.core.files import ProjectFile, list_project_files
 from app.tools import shared
 
 client = TestClient(app)
@@ -84,7 +84,7 @@ def test_an_oversized_file_is_refused_and_stored_nowhere(session_id, monkeypatch
     resp = attach(session_id, body=b"x" * 9)
     assert resp.status_code == 400
     assert "over the 8B limit" in resp.json()["error"]
-    assert UploadedFile.list() == []
+    assert ProjectFile.list() == []
 
 
 def test_an_unknown_session_404s(workspace_with_a_project):
