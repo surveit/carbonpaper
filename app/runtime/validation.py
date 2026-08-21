@@ -67,7 +67,7 @@ class Issue:
 @dataclass
 class ValidationReport:
     stage_id: str
-    phase: str       # "input" | "output"
+    phase: str       # "input" | "output" | "claim"
     rows: int = 0
     issues: list[Issue] = field(default_factory=list)
 

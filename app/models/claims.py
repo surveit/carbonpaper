@@ -1,8 +1,10 @@
-"""What a project intends to claim, declared with the methodology before any stage exists."""
+"""What a project intends to claim, and what one run established."""
 from __future__ import annotations
 
 from enum import Enum
 from typing import ClassVar
+
+from pydantic import BaseModel
 
 from app.core.persistence import PersistedModel, PersistenceScope
 from app.models.schema import TableSchema
@@ -30,3 +32,19 @@ class ClaimShape(PersistedModel):
     table_schema: TableSchema
     requires: DataUniverseRequirement
     importance: ClaimImportance
+
+
+class StageCellCitation(BaseModel):
+    stage_id: str
+    # The column in the SOURCE, which need not share the name the shape declares.
+    column: str
+    value: str
+
+
+class Claim(PersistedModel):
+    collection: ClassVar[str] = "claim"
+    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
+
+    shape_id: str
+    run_id: str
+    cites: StageCellCitation
