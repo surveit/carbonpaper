@@ -10,8 +10,10 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from app.core.frames import table_to_frame
 from app.models import Stage
 from app.models.stage import parse_stage
+from app.models.stages.input_data import FileConnectorParams
 from app.runtime.stages.input_data import read_input_data
 from conftest import make_run_context, place_stage
 
@@ -25,7 +27,8 @@ def _stage(path: Path, columns: list[dict], **params: object) -> Stage:
 
 
 def _read(path: Path, columns: list[dict], **params: object) -> pd.DataFrame:
-    return read_input_data(place_stage(_stage(path, columns, **params)), ctx=make_run_context())
+    output = read_input_data(place_stage(_stage(path, columns, **params)), ctx=make_run_context())
+    return table_to_frame(output.table)
 
 
 def _csv(tmp_path: Path, text: str) -> Path:
@@ -281,6 +284,7 @@ def test_missing_output_schema_falls_back_to_plain_inference(tmp_path):
     stage = stage.model_copy(
         update={"signature": stage.signature.model_copy(update={"produces": []})})
     df = read_input_data(place_stage(stage), ctx=make_run_context())
+    df = table_to_frame(df.table)
     assert list(df["id"]) == [2]
 
 
@@ -320,7 +324,7 @@ def test_typed_formats_do_not_get_a_pinned_dtype(fmt):
     from app.models import TableSchema
 
     schema = TableSchema.model_validate({"columns": [{"name": "id", "type": "str", "nullable": True}]})
-    assert _read_dtype(schema, fmt, {}) is None
+    assert _read_dtype(schema, fmt, FileConnectorParams()) is None
 
 
 # ── xlsx: a workbook types its cells, pd.read_excel re-guesses them ──────────

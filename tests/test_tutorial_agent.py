@@ -22,7 +22,7 @@ from app.core.agent.store import open_session_store
 from app.main import app as fastapi_app
 from app.models.stages.input_data import InputDataStage
 from app.services import project as project_service
-from app.services.uploads import resolve_file_binding
+from app.services.uploads import resolve_files_binding
 from app.services.loader import load_workflow
 from app.runtime.trace import trace_row, trace_to_dict
 from app.tools.editing import EditingContext, build_editing_tools
@@ -95,12 +95,12 @@ def test_the_seeded_project_keeps_no_path_of_its_own(projects_root: Path) -> Non
     files = seeded["input_files"]
     assert set(files) == {"lobbying_filings", "public_commitments"}
     # A file the project holds, named by its record id, not a path baked into the workflow.
-    assert all(resolve_file_binding(seeded["project"]["id"], file_id)["path"]
+    assert all(resolve_files_binding(seeded["project"]["id"], [file_id])["paths"]
                for file_id in files.values())
 
     sources = [s for s in load_workflow(seeded["project"]["id"])
                if isinstance(s, InputDataStage)]
-    assert [s.connector.params.get("path") for s in sources] == [None, None]
+    assert [s.connector.params.paths for s in sources] == [[], []]
 
 
 def test_a_second_tour_reuses_the_project_the_first_one_seeded(projects_root: Path) -> None:

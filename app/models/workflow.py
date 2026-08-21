@@ -18,7 +18,11 @@ from app.models.schema import (
     _Base,
 )
 from app.models.stage import Stage, StageType, find_cache_ignored_reason
-from app.models.stages.input_data import Connector, InputDataStage
+from app.models.stages.input_data import (
+    LEGACY_SINGLE_PATH_KEY,
+    Connector,
+    InputDataStage,
+)
 from app.models.stages.signature import find_signature_issues, promised_output_schema
 from app.models.workflow_stage import WorkflowStage, WorkflowStageInput
 from app.core.utils import format_errors
@@ -280,11 +284,22 @@ def _merge_connector_params(
     try:
         connector = Connector.model_validate({
             **stage.connector.model_dump(),
-            "params": {**stage.connector.params, **binding},
+            "params": {**stage.connector.params.model_dump(), **_as_current_binding(binding)},
         })
     except ValidationError as err:
         raise ValueError(f"binding for `{stage.id}` is invalid: {err}") from err
     return stage.model_copy(update={"connector": connector})
+
+
+def _as_current_binding(binding: Mapping[str, Any]) -> dict[str, Any]:
+    """A re-run replays the bindings its manifest recorded, and an old one names `path`."""
+    if LEGACY_SINGLE_PATH_KEY not in binding:
+        return dict(binding)
+    # Folded here, not in the model: merged it would look like the refused both-keys shape.
+    folded = dict(binding)
+    legacy = folded.pop(LEGACY_SINGLE_PATH_KEY)
+    folded["paths"] = [legacy] if legacy is not None else []
+    return folded
 
 
 def parse_workflow(stages: list[dict[str, Any]]) -> Workflow:

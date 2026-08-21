@@ -10,7 +10,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections.abc import Sequence
 from typing import Any, Callable, NamedTuple, Protocol, TypeVar, runtime_checkable
 
-import pandas as pd
 import pyarrow as pa
 from pydantic import BaseModel
 
@@ -196,7 +195,7 @@ class RowMapTransformHandler(StageHandler):
 
 class SourceHandler(StageHandler):
     def __init__(
-        self, read: Callable[[WorkflowStage, RunContext], pd.DataFrame]
+        self, read: Callable[[WorkflowStage, RunContext], StageOutput]
     ) -> None:
         self.read = read
 
@@ -204,7 +203,7 @@ class SourceHandler(StageHandler):
         self, workflow_stage: WorkflowStage, inputs: dict[str, pa.Table],
         ctx: RunContext,
     ) -> StageOutput:
-        return StageOutput.from_frame(self.read(workflow_stage, ctx))
+        return self.read(workflow_stage, ctx)
 
     @property
     def preserves_grain_and_order(self) -> bool:

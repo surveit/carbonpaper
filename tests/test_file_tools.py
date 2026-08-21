@@ -14,7 +14,7 @@ from app.services import workspace
 from app.core import files as file_store
 from app.core.errors import FileNotStoredError, StoreOverQuota
 from app.core.files import files_root, save_upload
-from app.services.uploads import resolve_file_binding
+from app.services.uploads import resolve_files_binding
 from app.tools import shared
 
 client = TestClient(app)
@@ -78,8 +78,8 @@ def test_remaining_bytes_floors_at_zero(project, monkeypatch):
 
 def test_a_stored_file_resolves_to_the_params_a_run_binds(project):
     record = store("posts.csv")
-    binding = resolve_file_binding("demo", record.id)
-    assert binding["path"] == str(
+    binding = resolve_files_binding("demo", [record.id])
+    assert binding["paths"][0] == str(
         (files_root() / record.id / "posts.csv").resolve())
     # The format comes off the stored name's extension, so a binding cannot leave a
     # csv to be read by whatever format the workflow authored.
@@ -90,14 +90,14 @@ def test_a_stored_file_resolves_to_the_params_a_run_binds(project):
 
 def test_an_unknown_file_id_fails_naming_itself(project):
     with pytest.raises(FileNotStoredError, match="has no file"):
-        resolve_file_binding("demo", "0" * 32)
+        resolve_files_binding("demo", ["0" * 32])
 
 
 def test_a_files_own_sha256_no_longer_names_it_to_a_run(project):
     """The hash addressed the bytes until this store held provenance; now the record does."""
     store("posts.csv")
     with pytest.raises(FileNotStoredError, match="has no file"):
-        resolve_file_binding("demo", CSV_SHA)
+        resolve_files_binding("demo", [CSV_SHA])
 
 
 def test_a_record_whose_bytes_are_gone_fails_before_the_run_starts(project):
@@ -106,7 +106,7 @@ def test_a_record_whose_bytes_are_gone_fails_before_the_run_starts(project):
     # Worse than no record: the run would bind a path and fail at preflight, naming a
     # file the caller was just told the project had.
     with pytest.raises(FileNotStoredError, match="bytes are not on disk"):
-        resolve_file_binding("demo", record.id)
+        resolve_files_binding("demo", [record.id])
 
 
 def test_an_unknown_project_is_loud(project):

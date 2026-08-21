@@ -25,7 +25,6 @@ _MAY_IMPORT_PANDAS: Mapping[str, str] = {
     "app/runtime/stages/join.py": "pd.merge, including its m:1 validation",
     "app/runtime/stages/human_review_queue.py": "queue stats and the pending-review scan",
     "app/runtime/stages/input_data.py": "reads csv/xlsx/json-lines, which carry no types",
-    "app/runtime/stages/execution.py": "types the source reader a SourceHandler is built from",
     # ── files that hold characters rather than types ─────────────────────────
     "app/core/source_files.py": "profiles an uploaded csv/xlsx before a schema exists",
     "app/core/row_search.py": "searches cells of a frame a reviewer is looking at",

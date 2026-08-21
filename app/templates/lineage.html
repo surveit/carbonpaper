@@ -8,6 +8,7 @@
 {% if not offline %}<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>{% endif %}
 {# standalone page (does not extend base.html), so it loads the node dispatcher itself #}
 <script src="{{ static_root | default("/static/", true) }}diagram_nodes.js"></script>
+<script src="{{ static_root | default("/static/", true) }}tooltip.js"></script>
 {% if not offline %}<script src="{{ static_root | default("/static/", true) }}breadcrumbs.js" defer></script>
 {# Served live this page is part of the app, so the conversation follows the reader here as
    it does everywhere else. Written into a review packet it is a file in a zip: no server to
@@ -22,6 +23,9 @@ body{display:flex;flex-direction:column;overflow:hidden}
 .lin-head{flex:none;padding:12px 22px;border-bottom:1px solid var(--border);background:var(--raised)}
 .lin-head h1{font-size:17px;margin:0 0 2px}
 .lin-sub{color:var(--muted);font-size:12.5px}
+.lin-source{color:var(--info-ink);font-size:12.5px;font-weight:600}
+.lin-source code{background:var(--info-bg);padding:1px 5px;border-radius:4px}
+.lin-became{color:var(--muted);font-size:12.5px}
 .lin-split{flex:1;min-height:0;display:grid;grid-template-columns:minmax(400px,1fr) minmax(480px,1.1fr)}
 .lin-story{overflow:auto;padding:16px 20px 40px}
 .lin-side{min-height:0;border-left:1px solid var(--border);background:var(--raised);
@@ -155,7 +159,9 @@ function verb(n){
   if(k==='union') return `carry through ${sid}`;
   if(k==='filter_rows') return `keep the row through ${sid}`;
   if(k==='aggregate') return `run aggregation ${sid}`;
-  if(k==='source') return `read ${sid}`;
+  if(k==='source') return n.source_file
+    ? `read ${sid} from <span class="sid">${esc(n.source_file)}</span>`
+    : `read ${sid}`;
   return sid;
 }
 // What the step did to the row, off the same compare the panel shows.
@@ -278,14 +284,37 @@ function renderRowTab(n){
     </div>` : '';
   return `${picker}
     ${saidOf(n, touched)}
-    <p class="lin-base">${n.base
-      ? `compared against its parent, <code>${esc(n.base.stage_id)}</code> row ${n.base.row_ordinal}.`
-      : (fanInOf(n)
-          ? `unmarked: this row summarizes ${fanInOf(n)}, so no single row precedes it.`
-          : (V.upstream.truncated
-              ? `unmarked: the walk stopped here, so which stage added what is unknown.`
-              : `the origin row, read from the source — nothing precedes it.`))}</p>
+    ${baseLine(n)}
     <table class="lin-row">${shown.map(fieldRow).join('')}</table>`;
+}
+// What this row was compared against. The origin says nothing when the title above
+// already names the file it was read from.
+function baseLine(n){
+  const text = n.base
+    ? `compared against its parent, <code>${esc(n.base.stage_id)}</code> row ${n.base.row_ordinal}.`
+    : (fanInOf(n)
+        ? `unmarked: this row summarizes ${fanInOf(n)}, so no single row precedes it.`
+        : (V.upstream.truncated
+            ? `unmarked: the walk stopped here, so which stage added what is unknown.`
+            : (n.source_file ? '' : `the origin row, read from the source — nothing precedes it.`)));
+  return text ? `<p class="lin-base">${text}</p>` : '';
+}
+// The file and both row numbers, in that order: the file row is where the row really
+// sits, and the stage's own number is what it became on the way in.
+function sourceTitle(n){
+  if(!n.source_file) return `<span class="lin-sub">row ${n.row_ordinal}</span>`;
+  const named = `<span class="lin-source"><code>${esc(n.source_file)}</code>`
+    + ` row ${n.source_row}</span>`;
+  if(n.source_row === n.row_ordinal) return named;
+  return named + `<span class="lin-became has-tip" data-tip="${esc(becameWhy(n))}"`
+    + ` tabindex="0">, became row ${n.row_ordinal}</span>`;
+}
+function becameWhy(n){
+  return n.source_file_count > 1
+    ? `This run read ${n.source_file_count} files into ${n.stage_id}, which numbers its rows `
+      + `across all of them. Row ${n.source_row} of ${n.source_file} is its row ${n.row_ordinal}.`
+    : `${n.stage_id} numbers its rows from the start of what this run read, which is not `
+      + `the start of the file.`;
 }
 async function renderTransformTab(n){
   const body = document.getElementById('pbody');
@@ -313,7 +342,7 @@ function render(){
   const n = V.nodes[sel];
   document.getElementById('ptype').textContent = `${n.stage_type_label} · step ${n.step} of ${V.nodes.length}`;
   document.getElementById('ptitle').innerHTML =
-    `<code>${esc(n.stage_id)}</code> <span class="lin-sub">row ${n.row_ordinal}</span>`;
+    `<code>${esc(n.stage_id)}</code> ${sourceTitle(n)}`;
   const back = document.getElementById('back');
   back.href = n.links.stage;
   back.title = `open ${n.stage_id} in this run's stage panel`;

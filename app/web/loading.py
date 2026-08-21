@@ -125,7 +125,8 @@ def list_file_inputs(project_id: str, version_id: str | None = None) -> list[dic
     stages = load_version_stages(project_id, version_id)
     return [
         {"stage_id": s.id,
-         "path": str((s.connector.params or {}).get("path") or "")}
+         # The form shows one authored line; several authored files read as one thing.
+         "path": ", ".join(s.connector.params.paths)}
         for s in stages
         if s.type == StageType.input_data and s.connector.kind == "file"
     ]

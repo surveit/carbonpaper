@@ -5,23 +5,33 @@
 
   The select's value is a stored file's id, never a path. Blank means "read whatever
   the workflow authored", which is why a row with an authored path is not required.
-  `selected_file_id` opens the picker on a file already chosen — a duplicated run
+  `selected_file_ids` opens the picker on files already chosen — a duplicated run
   arrives with its original's files bound.
+
+  `multiple` is for an input reading a source that arrived split across several files
+  of one shape: the field submits its name once per file and the run concatenates them
+  in the order shown. A multiple select carries no blank option — nothing selected IS
+  blank — so the placeholder the trigger shows meanwhile travels as data-empty-name.
 #}
 {% from "_picker.html" import picker %}
-{% macro file_picker(name, authored_path, files, selected_file_id=None) %}
+{% macro file_picker(name, authored_path, files, selected_file_ids=(), multiple=False) %}
 {% call picker("Choose file", hint="Uploads newest first", search_label="Search files") %}
 <select id="{{ name }}" name="{{ name }}" class="picker-native file-pick"
         data-picker-row-action="file-preview"
+        {% if multiple %}multiple
+        data-empty-name="{{ authored_path or 'Choose a file…' }}"
+        {% if authored_path %}data-empty-meta="Workflow path"{% endif %}{% endif %}
         {% if not authored_path %}required{% endif %}>
+  {% if not multiple %}
   {% if authored_path %}
   <option value="" data-file-kind="authored" data-name="{{ authored_path }}"
           data-meta="Workflow path">{{ authored_path }}</option>
   {% else %}
   <option value="" data-file-kind="empty" data-name="Choose a file…"></option>
   {% endif %}
+  {% endif %}
   {% for f in files %}
-  <option value="{{ f.file_id }}"{% if f.file_id == selected_file_id %} selected{% endif %}
+  <option value="{{ f.file_id }}"{% if f.file_id in selected_file_ids %} selected{% endif %}
           data-uploaded-at="{{ f.uploaded_at.isoformat() }}"
           data-name="{{ f.filename }}" data-meta="{{ f.uploaded_label }}"
           data-side="{{ f.size_label }}">{{ f.label }}</option>

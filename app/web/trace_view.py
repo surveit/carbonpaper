@@ -7,6 +7,7 @@ so real fan-in slots in without reshaping this contract.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from pathlib import PurePath
 from typing import Any
 
 from app.models import WorkflowStage
@@ -46,8 +47,8 @@ def _transform_of(workflow_stage: WorkflowStage | None) -> dict[str, Any]:
         return {"kind": "unknown", "detail": None}
     stage = workflow_stage.stage
     if isinstance(stage, InputDataStage):
-        path = stage.connector.params.get("path")
-        src = path or (stage.source.doc if stage.source else None)
+        named = ", ".join(stage.connector.params.paths)
+        src = named or (stage.source.doc if stage.source else None)
         return {"kind": "source", "detail": src or "originates the rows"}
     if isinstance(stage, (PythonRowFunctionStage, PythonFrameFunctionStage)):
         # Full source: the whole module file for a module ref, the inline code
@@ -117,6 +118,10 @@ def _build_node(
         # what the panel prints, so both surfaces name a type the same way.
         "stage_type_label": label_stage_type(step["stage_type"]),
         "origin": step["origin"],
+        # The name alone; where it sat on disk is the manifest's business.
+        "source_file": _source_filename(step),
+        "source_row": step.get("source_row"),
+        "source_file_count": step.get("source_file_count"),
         "role": _role_of(i, len(chrono), truncated),
         "columns_new": step["columns_new"],
         "row": step["row"],
@@ -138,6 +143,11 @@ def _build_node(
             asdict(group) for group in _group_contributors(_contributions(step), links)
         ],
     }
+
+
+def _source_filename(step: dict[str, Any]) -> str | None:
+    read_from = step.get("source_file")
+    return PurePath(read_from).name if read_from else None
 
 
 def _contributions(step: dict[str, Any]) -> list[dict[str, Any]]:

@@ -16,6 +16,7 @@ from app.services import versioning
 from app.services import workspace
 from app.services.project import save_working_copy_as_version
 from app.core.files import UploadedFile, list_project_files, save_upload
+from app.core.frames import read_frame_table
 from app.web.run_inputs import FileChoice, build_file_choice
 from stage_seed import add_stage, read_stage
 from run_seed import read_manifest
@@ -209,13 +210,35 @@ def test_required_file_picker_keeps_native_form_validation(project):
     assert "required" in picker
 
 
-def test_authored_path_remains_the_blank_file_picker_choice(project):
+def test_the_authored_path_is_what_the_picker_reads_while_nothing_is_bound(project):
     body = client.get("/project/demo/runs/new").text
     picker = body.split('class="picker" data-picker', 1)[1].split("</select>", 1)[0]
 
-    assert 'value="" data-file-kind="authored"' in picker
-    assert f'data-name="{project / "a.csv"}"' in picker
+    # No blank option: nothing selected IS the blank.
+    assert "multiple" in picker
+    assert 'value=""' not in picker
+    assert f'data-empty-name="{project / "a.csv"}"' in picker
     assert "required" not in picker
+
+
+def test_binding_several_files_to_one_input_records_the_paths_it_read(project, tmp_path):
+    ids = [_store("jun.csv", pd.DataFrame({"name": ["a"], "val": [1]}), tmp_path),
+           _store("jul.csv", pd.DataFrame({"name": ["b"], "val": [2]}), tmp_path)]
+    resp = client.post("/project/demo/run",
+                       data={"binding__load": ids}, follow_redirects=False)
+    assert resp.status_code == 303, resp.text
+    record = _manifest(project)["input_bindings"]["load"]
+    assert [Path(f["path"]).name for f in record["files"]] == ["jun.csv", "jul.csv"]
+    assert record["source"] == "run"
+
+
+def test_the_rows_of_every_bound_file_reach_the_stage_output(project, tmp_path):
+    ids = [_store("jun.csv", pd.DataFrame({"name": ["a"], "val": [1]}), tmp_path),
+           _store("jul.csv", pd.DataFrame({"name": ["b"], "val": [2]}), tmp_path)]
+    client.post("/project/demo/run", data={"binding__load": ids}, follow_redirects=False)
+    run_dir = sorted((project / "runs").iterdir())[-1]
+    rows = read_frame_table(run_dir / "outputs" / "load.parquet").to_pylist()
+    assert [row["name"] for row in rows] == ["a", "b"]
 
 
 def test_shared_picker_wires_pointer_keyboard_and_dynamic_refresh():
@@ -241,8 +264,8 @@ def test_shared_picker_wires_pointer_keyboard_and_dynamic_refresh():
     assert 'button.setAttribute("aria-haspopup", "dialog")' in preview
     assert 'button.setAttribute("aria-controls", "run-file-preview")' in preview
     assert 'button.setAttribute("aria-disabled", "true")' in preview
-    assert 'tooltip.setAttribute("role", "tooltip")' in preview
-    assert 'tooltip.textContent = "Only project files can be previewed."' in preview
+    # static/tooltip.js owns the node this opens, including its role.
+    assert 'button.setAttribute("data-tip", "Only project files can be previewed.")' in preview
 
 
 def test_row_preview_does_not_change_the_selected_file():
@@ -343,7 +366,7 @@ def _corrupt_version_document_with_relative_path(project):
     version_id = list_versions(project.name)[0].version_id
     store = get_store()
     doc = store.read("workflow_version", f"{project.name}/{version_id}")
-    doc["stages"][0]["connector"]["params"]["path"] = "relative/a.csv"
+    doc["stages"][0]["connector"]["params"]["paths"] = ["relative/a.csv"]
     store.write("workflow_version", f"{project.name}/{version_id}", doc)
     return version_id
 

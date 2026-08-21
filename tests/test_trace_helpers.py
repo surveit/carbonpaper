@@ -18,7 +18,8 @@ from app.runtime.trace import (
 from run_seed import store_manifest
 
 
-def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1") -> Path:
+def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1",
+              input_bindings: dict | None = None) -> Path:
     run_dir = tmp_path / run_id
     (run_dir / "outputs").mkdir(parents=True)
     records = []
@@ -43,7 +44,8 @@ def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1") -> Path:
         })
     store_manifest(run_dir.parent.parent, run_dir.name, {"run_id": run_id, "started_at": run_id, "project": tmp_path.parent.name,
                     "workflow_version": run_id, "status": "ok",
-                    "human_review_queue_stats": {}, "stage_records": records})
+                    "human_review_queue_stats": {}, "stage_records": records,
+                    "input_bindings": input_bindings or {}})
     return run_dir
 
 

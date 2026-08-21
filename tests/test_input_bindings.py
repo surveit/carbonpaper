@@ -23,7 +23,7 @@ _X_SCHEMA = {"columns": [{"name": "x", "type": "int", "nullable": True}]}
 
 
 def _input_stage(stage_id: str, path: str | None) -> Stage:
-    params: dict = {"path": path, "format": "csv"} if path else {}
+    params: dict = {"paths": [path], "format": "csv"} if path else {}
     return parse_stage({
         "id": stage_id, "description": stage_id, "type": "input_data",
         "connector": {"kind": "file", "params": params},
@@ -56,7 +56,7 @@ def test_run_binding_overrides_workflow_params(tmp_path):
     authored, bound = str(tmp_path / "a.csv"), str(tmp_path / "b.csv")
     stages, sources = apply_run_bindings(
         [_input_stage("load", authored)], {"load": {"path": bound}})
-    assert stages[0].connector.params["path"] == bound
+    assert stages[0].connector.params.paths == [bound]
     assert sources == {"load": "run"}
 
 
@@ -64,15 +64,25 @@ def test_workflow_params_used_when_no_binding(tmp_path):
     authored = str(tmp_path / "a.csv")
     stages, sources = apply_run_bindings([_input_stage("load", authored)], None)
     assert sources == {"load": "workflow"}
-    assert stages[0].connector.params["path"] == authored
+    assert stages[0].connector.params.paths[0] == authored
 
 
 def test_binding_merges_over_params(tmp_path):
     bound = str(tmp_path / "b.parquet")
     stages, _ = apply_run_bindings(
         [_input_stage("load", str(tmp_path / "a.csv"))],
+        {"load": {"paths": [bound], "format": "parquet"}})
+    assert stages[0].connector.params.paths == [bound]
+    assert stages[0].connector.params.format == "parquet"
+
+
+def test_a_rerun_replaying_an_old_runs_binding_still_names_its_file(tmp_path):
+    """A manifest written before an input could read several files recorded `path`."""
+    bound = str(tmp_path / "b.parquet")
+    stages, _ = apply_run_bindings(
+        [_input_stage("load", str(tmp_path / "a.csv"))],
         {"load": {"path": bound, "format": "parquet"}})
-    assert stages[0].connector.params == {"path": bound, "format": "parquet"}
+    assert stages[0].connector.params.paths == [bound]
 
 
 def test_invalid_merged_params_rejected_naming_the_stage(tmp_path):
@@ -104,7 +114,7 @@ def test_original_stages_untouched(tmp_path):
     authored = str(tmp_path / "a.csv")
     original = _input_stage("load", authored)
     apply_run_bindings([original], {"load": {"path": str(tmp_path / "b.csv")}})
-    assert original.connector.params["path"] == authored
+    assert original.connector.params.paths == [authored]
 
 
 # ── validate_stages_ready: stage-owned preflight, aggregated loudly ────────────
@@ -120,10 +130,10 @@ def test_ready_stage_yields_provenance_record(tmp_path):
     data = tmp_path / "a.csv"
     pd.DataFrame({"x": [1]}).to_csv(data, index=False)
     records = _ready([_input_stage("load", str(data))], {"load": "workflow"})
-    assert records["load"]["path"] == str(data)
+    assert records["load"]["files"][0]["path"] == str(data)
     assert records["load"]["source"] == "workflow"
-    assert records["load"]["sha256"] == hashlib.sha256(data.read_bytes()).hexdigest()
-    assert records["load"]["bytes"] == data.stat().st_size
+    assert records["load"]["files"][0]["sha256"] == hashlib.sha256(data.read_bytes()).hexdigest()
+    assert records["load"]["files"][0]["bytes"] == data.stat().st_size
 
 
 def test_connectorless_stage_has_no_preflight(tmp_path):
@@ -164,10 +174,10 @@ def test_run_binding_recorded_with_hash_and_source(tmp_path):
 
     assert manifest["status"] == "ok"
     rec = manifest["input_bindings"]["load"]
-    assert rec["path"] == str(other)
+    assert rec["files"][0]["path"] == str(other)
     assert rec["source"] == "run"
-    assert rec["sha256"] == hashlib.sha256(other.read_bytes()).hexdigest()
-    assert rec["bytes"] == other.stat().st_size
+    assert rec["files"][0]["sha256"] == hashlib.sha256(other.read_bytes()).hexdigest()
+    assert rec["files"][0]["bytes"] == other.stat().st_size
     out = pd.read_parquet(tmp_path / "runs" / manifest["run_id"] / "outputs" / "load.parquet")
     assert list(out["val"]) == [9]                     # read the BOUND file
 
@@ -177,7 +187,7 @@ def test_workflow_path_recorded_as_workflow_source(tmp_path):
     manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
     rec = manifest["input_bindings"]["load"]
     assert rec["source"] == "workflow"
-    assert rec["path"] == str(data)
+    assert rec["files"][0]["path"] == str(data)
 
 
 def test_unbound_input_leaves_no_run_dir(tmp_path):

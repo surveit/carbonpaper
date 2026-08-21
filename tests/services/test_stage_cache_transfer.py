@@ -11,7 +11,7 @@ import pytest
 
 from app.core.stage_cache import CACHE_KEY_VERSION, StageCacheEntry
 from app.models import Column, StageType
-from app.models.stages.input_data import Connector, ConnectorKind, InputDataStage
+from app.models.stages.input_data import Connector, ConnectorKind, InputDataStage, FileConnectorParams, FileFormat
 from app.models.stages.signature import ReplacesSignature
 from app.services import loader, project
 from app.services.loader import save_stages
@@ -136,7 +136,8 @@ def destination_project() -> str:
         "destination", "Trace the shell companies.", source="test").id
     save_stages(project_id, [InputDataStage(
         id="load_entities", description="Load Entities", type=StageType.input_data,
-        connector=Connector(kind=ConnectorKind.file, params={"format": "csv"}),
+        connector=Connector(kind=ConnectorKind.file,
+                            params=FileConnectorParams(format=FileFormat.csv)),
         signature=ReplacesSignature(produces=[
             Column(name="entity_id", type="str", nullable=False),
         ]),

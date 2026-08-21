@@ -422,32 +422,45 @@ def test_inputs_bare_id_shorthand_normalises_to_a_ref():
     assert s.input_ids == ["a"]
 
 
-def test_file_connector_without_path_is_valid():
+def test_file_connector_without_paths_is_valid():
     c = Connector.model_validate({"kind": "file", "params": {}})
-    assert c.params.get("path") is None
+    assert c.params.paths == []
 
 
 def test_file_connector_relative_path_rejected(tmp_path):
     with pytest.raises(ValidationError, match="ABSOLUTE"):
-        Connector.model_validate({"kind": "file", "params": {"path": "data/items.csv"}})
+        Connector.model_validate({"kind": "file", "params": {"paths": ["data/items.csv"]}})
 
 
 def test_file_connector_absolute_path_valid(tmp_path):
     p = str(tmp_path / "items.csv")
+    c = Connector.model_validate({"kind": "file", "params": {"paths": [p]}})
+    assert c.params.paths == [p]
+
+
+def test_a_stage_stored_before_paths_existed_reads_its_path_as_paths(tmp_path):
+    p = str(tmp_path / "items.csv")
     c = Connector.model_validate({"kind": "file", "params": {"path": p}})
-    assert c.params["path"] == p
+    assert c.params.paths == [p]
+
+
+def test_params_carrying_both_path_and_paths_are_refused_rather_than_picking_one(tmp_path):
+    """Dropping either silently would change which files the run reads."""
+    with pytest.raises(ValidationError, match="both"):
+        Connector.model_validate({"kind": "file", "params": {
+            "path": str(tmp_path / "a.csv"), "paths": [str(tmp_path / "b.csv")]}})
 
 
 def test_file_connector_empty_path_rejected():
     with pytest.raises(ValidationError):
-        Connector.model_validate({"kind": "file", "params": {"path": ""}})
+        Connector.model_validate({"kind": "file", "params": {"paths": [""]}})
 
 
 def test_file_connector_rejects_unknown_format(tmp_path):
-    with pytest.raises(ValidationError, match="unknown file format"):
+    with pytest.raises(ValidationError, match="'csv', 'tsv'"):
         m.parse_stage(S(id="load", type="input_data",
                                  connector={"kind": "file",
-                                            "params": {"path": str(tmp_path / "d.csv"), "format": "invented"}}))
+                                            "params": {"paths": [str(tmp_path / "d.csv")], "format": "invented"}}))
 
 
 def test_unknown_keys_rejected():

@@ -21,9 +21,10 @@
         <dt>kind</dt><dd><code>{{ stage.connector.kind }}</code></dd>
         <dt>refresh</dt><dd>{{ stage.connector.refresh }}</dd>
     </dl>
-    {% if stage.connector.params %}
+    {% set params = stage.connector.params.model_dump(exclude_defaults=True) %}
+    {% if params %}
     <h3>params</h3>
-    <pre class="yaml-block">{{ stage.connector.params | tojson(indent=2) }}</pre>
+    <pre class="yaml-block">{{ params | tojson(indent=2) }}</pre>
     {% endif %}
     {% if stage.connector.notes %}
     <h3>notes</h3>
