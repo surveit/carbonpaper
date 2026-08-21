@@ -11,8 +11,9 @@ from app.core.starlark_source import DEFAULT_FUNCTION_NAME
 from app.models import WorkflowStage
 from app.models.stages.starlark import StarlarkRowFunctionStage
 
+from ..branches import BranchRecorder
 from ..starlark_code import compile_starlark_function
-from .execution import Row, RowMapper, narrow_stage
+from .execution import RecordingRowMapper, Row, RowMapper, narrow_stage
 from .starlark_marshal import marshal_row_for_starlark
 
 if TYPE_CHECKING:
@@ -29,7 +30,9 @@ def build_starlark_row_mapper(
     block = starlark_stage.starlark
     sid = starlark_stage.id
     function_name = block.function or DEFAULT_FUNCTION_NAME
-    handle = compile_starlark_function(block.code, function_name, DEFAULT_FUNCTION_NAME)
+    recorder = BranchRecorder()
+    handle = compile_starlark_function(
+        block.code, function_name, DEFAULT_FUNCTION_NAME, recorder)
     if handle is None:
         raise ValueError(
             f"starlark_row_function stage {sid}: code does not define "
@@ -45,4 +48,4 @@ def build_starlark_row_mapper(
             )
         return result
 
-    return map_row
+    return RecordingRowMapper(map_row, recorder)

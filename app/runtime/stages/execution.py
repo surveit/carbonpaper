@@ -28,6 +28,7 @@ from app.models.stage import (
 from app.core.agent.usage import LlmUsage
 from app.core.frames import collapse_null_forms, is_null_form, list_table_rows
 from app.core.stage_cache import StageCache, compute_row_fingerprint
+from ..branches import BranchRecorder
 
 from .frame_caching import (
     find_cached_frame,
@@ -332,6 +333,7 @@ def _run_row_mapper(
         out_rows.append({**input_rows[index], **result})
         kept_indices.append(index)
     mapped = _finish_mapped_frame(out_rows, handler, map_group, workflow_stage, ctx)
+    recorder = map_group.branch_recorder if isinstance(map_group, _RowsInGroupsOfOne) else None
     # The driver, not the stage, knows which input ordinals survived.
     lineage = (
         kept_rows_lineage(workflow_stage.inputs[0].id, kept_indices)
@@ -342,7 +344,19 @@ def _run_row_mapper(
         _finish_empty_result(mapped.table, src, workflow_stage),
         mapped.contribution,
         lineage,
+        recorder.rows_kept(kept_indices) if recorder else None,
     )
+
+
+class RecordingRowMapper:
+    """A row mapper plus the recorder its stage's code reports into."""
+
+    def __init__(self, map_row: RowMapper, recorder: BranchRecorder) -> None:
+        self.map_row = map_row
+        self.branch_recorder = recorder
+
+    def __call__(self, row: Row, index: int) -> Row | None:
+        return self.map_row(row, index)
 
 
 class _RowsInGroupsOfOne:
@@ -350,11 +364,24 @@ class _RowsInGroupsOfOne:
 
     def __init__(self, map_row: RowMapper) -> None:
         self.map_row = map_row
+        self.branch_recorder = (
+            map_row.branch_recorder if isinstance(map_row, RecordingRowMapper) else None
+        )
 
     def __call__(
         self, indices: Sequence[int], rows: Sequence[Row]
     ) -> Sequence[Row | None]:
-        return [self.map_row(row, index) for index, row in zip(indices, rows)]
+        mapped: list[Row | None] = []
+        for index, row in zip(indices, rows):
+            if self.branch_recorder is not None:
+                self.branch_recorder.open_row(index)
+            try:
+                mapped.append(self.map_row(row, index))
+            finally:
+                # Left open, a raising row would lend its branches to the next.
+                if self.branch_recorder is not None:
+                    self.branch_recorder.close_row()
+        return mapped
 
     def finish_mapped_rows(
         self,

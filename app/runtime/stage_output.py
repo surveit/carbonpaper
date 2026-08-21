@@ -12,6 +12,7 @@ import pyarrow as pa
 from app.core.frames import frame_to_table
 from app.models.run_manifest import StageContribution
 
+from .branches import RowBranches
 from .lineage import RowLineage
 
 
@@ -24,6 +25,8 @@ class StageOutput:
     # knows it (a filter, a join, an aggregate). None means "not reported",
     # which is distinct from an empty lineage claiming no row had a parent.
     lineage: RowLineage | None = None
+    # Which branch of its code each row took; None where nothing ran.
+    branches: RowBranches | None = None
 
     @classmethod
     def from_frame(

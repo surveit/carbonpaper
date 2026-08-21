@@ -13,6 +13,7 @@ import pandas as pd
 import pyarrow as pa
 
 from app.core.errors import SubsetRunError
+from app.runtime.branches import RowBranches, branch_sidecar_path
 from app.core.frames import (
     frame_to_table,
     write_frame_table,
@@ -320,6 +321,10 @@ def _persist_row_lineage(lineage: RowLineage, sid: str, run_dir: Path) -> None:
     write_frame_table(lineage.to_table(), lineage_sidecar_path(run_dir, sid))
 
 
+def _persist_row_branches(branches: RowBranches, sid: str, run_dir: Path) -> None:
+    write_frame_table(branches.to_table(), branch_sidecar_path(run_dir, sid))
+
+
 def _stage_row_lineage(
     workflow_stage: WorkflowStage, output: StageOutput,
     inputs: dict[str, pa.Table], window: _RowWindow,
@@ -378,6 +383,8 @@ def _finalize_stage_output(
         table = _take_row_window(table, window, "loaded from the source", record)
     if lineage is not None:
         _persist_row_lineage(lineage, sid, run_dir)
+    if output.branches is not None:
+        _persist_row_branches(output.branches, sid, run_dir)
 
     out_rep = validate_table(
         table, workflow_stage.output_schema, stage_id=sid, phase="output")

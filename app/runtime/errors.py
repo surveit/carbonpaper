@@ -43,3 +43,7 @@ class AuthoredFrameExpected(TypeError):
         super().__init__(message)
         # The type name alone, so a caller can report the return without the stage prefix.
         self.returned = returned
+
+
+class BranchRecordingError(RuntimeError):
+    """The driver mispaired a row; a branch would be attributed to the wrong one."""

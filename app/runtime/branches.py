@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pyarrow as pa
 
+from .errors import BranchRecordingError
+
 BRANCHES_KEY = "_branches"
 
 # Pinned: left to infer, an empty sidecar types its column `null`.
@@ -37,21 +39,39 @@ class RowBranches:
 
 
 class BranchRecorder:
-    """One per stage execution, keyed by INPUT ordinal so an unrun row is absent, not empty."""
+    """One per stage execution. A row must be open to record into, and open exactly once."""
 
     def __init__(self) -> None:
+        self._open_row: int | None = None
         self._taken: list[str] = []
         self._by_input: dict[int, tuple[str, ...]] = {}
 
+    def open_row(self, index: int) -> None:
+        if self._open_row is not None:
+            raise BranchRecordingError(f"row {self._open_row} was never closed")
+        self._open_row = index
+        self._taken.clear()
+
     def record(self, branch_id: str) -> None:
+        if self._open_row is None:
+            raise BranchRecordingError(f"branch {branch_id!r} reported outside a row")
         self._taken.append(branch_id)
 
-    def close_row(self, index: int) -> None:
-        self._by_input[index] = tuple(self._taken)
+    def close_row(self) -> None:
+        if self._open_row is None:
+            raise BranchRecordingError("no row is open")
+        self._by_input[self._open_row] = tuple(self._taken)
+        self._open_row = None
         self._taken.clear()
 
     def branches_for(self, index: int) -> BranchesTaken:
         return self._by_input.get(index)
+
+    def rows_kept(self, kept_indices: list[int]) -> RowBranches | None:
+        """Reindexed onto OUTPUT rows. None where the code never branched at all."""
+        if not any(self._by_input.values()):
+            return None
+        return RowBranches([self._by_input.get(index) for index in kept_indices])
 
 
 def branch_sidecar_path(run_dir: Path, stage_id: str) -> Path:

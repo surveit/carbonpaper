@@ -12,17 +12,18 @@ import pyarrow as pa
 from app.models import WorkflowStage
 from app.models.stages.filter_rows import FilterRowsStage
 
+from ..branches import BranchRecorder
 from ..code import load_function
 from ..context import RunContext
-from .execution import Row, RowMapper, narrow_stage
+from .execution import RecordingRowMapper, Row, RowMapper, narrow_stage
 
 
 def _load_predicate(
-    filter_stage: FilterRowsStage,
+    filter_stage: FilterRowsStage, recorder: BranchRecorder | None = None,
 ) -> Callable[[dict[str, Any]], object]:
     cfg = filter_stage.filter
     fn_name = cfg.function or "should_include"
-    fn = load_function(cfg.code, fn_name, "should_include")
+    fn = load_function(cfg.code, fn_name, "should_include", recorder)
     if fn is None:
         raise ValueError(
             f"inline 'should_include' not defined for stage {filter_stage.id}")
@@ -34,7 +35,8 @@ def build_filter_mapper(
 ) -> RowMapper:
     """Resolve the predicate once, then decide one row at a time."""
     filter_stage = narrow_stage(workflow_stage, FilterRowsStage)
-    predicate = _load_predicate(filter_stage)
+    recorder = BranchRecorder()
+    predicate = _load_predicate(filter_stage, recorder)
     sid = filter_stage.id
 
     def keep_or_drop(row: Row, index: int) -> Row | None:
@@ -46,4 +48,4 @@ def build_filter_mapper(
             )
         return row if result else None
 
-    return keep_or_drop
+    return RecordingRowMapper(keep_or_drop, recorder)
