@@ -1,0 +1,40 @@
+/* The app's one tooltip. `data-tip="…"` on any element; static/tooltip.js does the rest.
+ *
+ * ONE node, on <body>, positioned in viewport coordinates. A tooltip drawn as a child of
+ * its trigger is clipped by every ancestor with overflow:hidden — which here is every
+ * table, the picker popover, the run-log panel and the diagram viewport — and cannot flip
+ * when it would run off the window. That is the whole reason this costs JavaScript.
+ *
+ * A `data-tip` is never where a fact LIVES. It does not print, a find-in-page does not
+ * reach it, and a review packet is read by someone who may do both. Put the fact on the
+ * page and let the tooltip explain it.
+ */
+.tooltip {
+    position: fixed;
+    z-index: 9999;
+    max-width: 22rem;
+    padding: 6px 9px;
+    border: 1px solid var(--border-strong);
+    border-radius: 5px;
+    background: var(--fg);
+    color: var(--on-dark);
+    font-family: var(--ui);
+    font-size: 12px;
+    line-height: 1.4;
+    box-shadow: 0 2px 10px var(--shadow);
+    /* visibility, not display: the node is measured before it is placed, and a
+       display:none node has no width to measure. */
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-2px);
+    transition: opacity 90ms ease, transform 90ms ease;
+    pointer-events: none;
+}
+.tooltip.is-open { opacity: 1; visibility: visible; transform: translateY(0); }
+
+/* The marker for prose that carries an explanation rather than a control that carries a
+   name: a dotted underline says "there is more here" without spending a glyph on it. */
+.has-tip {
+    border-bottom: 1px dotted var(--border-strong);
+    cursor: help;
+}

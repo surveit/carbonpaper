@@ -1025,8 +1025,7 @@ def test_the_card_renders_the_described_queued_row_and_its_review_section(tmp_pa
     # marker is what tells a reviewer there is anything to hover. `id` declares no
     # description and gets no marker.
     described = re.search(
-        r'<code>(\w+)</code><span class="kv-help"[^>]*>'
-        r'<span class="kv-tip" role="tooltip">([^<]*)</span>', card)
+        r'<code>(\w+)</code><span class="kv-help"[^>]*data-tip="([^"]*)"', card)
     assert described is not None
     assert described.groups() == ("score", "the score this row was labelled from")
     assert re.search(r'<code>id</code>\s*</th>', table) is not None

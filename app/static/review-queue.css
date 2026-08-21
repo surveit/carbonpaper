@@ -237,14 +237,9 @@ table.kv th {
     text-align: left; vertical-align: top; font-weight: 600; white-space: nowrap;
     width: 1%; padding: 5px 14px 5px 0;
 }
-/* The column's description, on hover or keyboard focus. Drawn here rather than left
-   to the browser's `title`: a native tooltip waits about a second, cannot be styled
-   down to something this quiet, and never opens for a keyboard. The marker is a bare
-   `?` — enough to say there is something to hover, and nothing more. */
-table.kv th { position: relative; }
-/* Quietened by COLOUR, not by size: --muted against the name's --fg is what keeps it
-   off the eye, so the glyph stays legible and the padding gives it a hit box wider
-   than itself. It is the hover target, so it has to be reachable. */
+/* The marker for the column's description, which static/tooltip.js opens. Quietened by
+   COLOUR, not by size: --muted against the name's --fg is what keeps it off the eye, so
+   the glyph stays legible and the padding gives it a hit box wider than itself. */
 table.kv th .kv-help {
     display: inline-block; margin-left: 1px; padding: 1px 4px;
     font-weight: 600; font-size: 11px; line-height: 1; color: var(--muted);
@@ -252,20 +247,6 @@ table.kv th .kv-help {
 }
 table.kv th .kv-help::before { content: "?"; }
 table.kv th .kv-help:hover, table.kv th .kv-help:focus { color: var(--accent); }
-/* Flush under the marker, not floated off it: a gap the pointer has to cross drops
-   the hover and takes the tooltip with it. */
-table.kv th .kv-tip {
-    display: none; position: absolute; z-index: 20; left: 0; top: 100%;
-    width: max-content; max-width: 26rem; padding: 6px 9px;
-    border: 1px solid var(--border-strong); border-radius: 4px;
-    background: var(--raised); box-shadow: 0 2px 8px var(--shadow);
-    font-weight: 400; font-size: 12px; line-height: 1.4; color: var(--fg);
-    white-space: normal; text-transform: none; letter-spacing: normal; cursor: auto;
-}
-/* Plain `:focus`, not `:focus-visible` — the marker has no click behaviour telling a
-   pointer press apart from a tab. */
-table.kv th .kv-help:hover .kv-tip,
-table.kv th .kv-help:focus .kv-tip { display: block; }
 table.kv td.kv-value {
     padding: 5px 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg);
 }

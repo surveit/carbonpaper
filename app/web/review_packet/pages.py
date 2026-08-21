@@ -59,7 +59,9 @@ _STATIC_HREF = re.compile(r'rel="stylesheet" href="/static/([^"]+)"')
 # index initializes mermaid with startOnLoad false.
 NODE_SCRIPT = "diagram_nodes.js"
 VIEWPORT_SCRIPT = "diagram_viewport.js"
-DIAGRAM_SCRIPTS = (NODE_SCRIPT, VIEWPORT_SCRIPT)
+# The shared tooltip, vendored so a packet page's `data-tip` opens offline like the app's.
+TOOLTIP_SCRIPT = "tooltip.js"
+DIAGRAM_SCRIPTS = (NODE_SCRIPT, VIEWPORT_SCRIPT, TOOLTIP_SCRIPT)
 
 # The tokenizer and its caller, vendored so a stage page colours its code offline.
 # The theme rides in the concatenated stylesheet, which already follows the app's

@@ -22,7 +22,7 @@
             <code>{{ column.name }}</code>
             {%- if column.description %}<span class="kv-help" tabindex="0"
                   aria-label="what {{ column.name }} holds"
-                  ><span class="kv-tip" role="tooltip">{{ column.description }}</span></span>{% endif %}
+                  data-tip="{{ column.description }}"></span>{% endif %}
         </th>
         <td class="kv-value">
             {%- if value is none %}<em>no value</em>

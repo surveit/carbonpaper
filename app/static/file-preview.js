@@ -21,17 +21,10 @@
       wrap.appendChild(button);
       return wrap;
     }
-    var tooltip = document.createElement("span");
-    var tooltipId = select.id + "__preview_help";
     button.setAttribute("aria-disabled", "true");
     button.setAttribute("aria-label", "Preview unavailable for " + filename);
-    button.setAttribute("aria-describedby", tooltipId);
-    tooltip.id = tooltipId;
-    tooltip.className = "picker-action-tooltip";
-    tooltip.setAttribute("role", "tooltip");
-    tooltip.textContent = "Only project files can be previewed.";
+    button.setAttribute("data-tip", "Only project files can be previewed.");
     wrap.appendChild(button);
-    wrap.appendChild(tooltip);
     return wrap;
   }
 

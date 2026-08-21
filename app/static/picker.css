@@ -215,32 +215,6 @@
     cursor: not-allowed;
     opacity: 0.55;
 }
-.picker-action-tooltip {
-    position: absolute;
-    z-index: 2;
-    top: calc(100% + 4px);
-    right: 0;
-    width: 210px;
-    box-sizing: border-box;
-    padding: 6px 8px;
-    border: 1px solid var(--border-strong);
-    border-radius: 5px;
-    background: var(--fg);
-    color: var(--raised);
-    font-size: 11.5px;
-    line-height: 1.35;
-    opacity: 0;
-    pointer-events: none;
-    transform: translateY(-2px);
-    transition: opacity 100ms ease, transform 100ms ease;
-    visibility: hidden;
-}
-.picker-row-action:hover .picker-action-tooltip,
-.picker-row-action:focus-within .picker-action-tooltip {
-    opacity: 1;
-    transform: translateY(0);
-    visibility: visible;
-}
 .picker-empty {
     margin: 0;
     padding: 16px 10px;

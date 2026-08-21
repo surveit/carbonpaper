@@ -264,8 +264,8 @@ def test_shared_picker_wires_pointer_keyboard_and_dynamic_refresh():
     assert 'button.setAttribute("aria-haspopup", "dialog")' in preview
     assert 'button.setAttribute("aria-controls", "run-file-preview")' in preview
     assert 'button.setAttribute("aria-disabled", "true")' in preview
-    assert 'tooltip.setAttribute("role", "tooltip")' in preview
-    assert 'tooltip.textContent = "Only project files can be previewed."' in preview
+    # static/tooltip.js owns the node this opens, including its role.
+    assert 'button.setAttribute("data-tip", "Only project files can be previewed.")' in preview
 
 
 def test_row_preview_does_not_change_the_selected_file():
