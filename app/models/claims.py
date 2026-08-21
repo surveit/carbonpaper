@@ -6,7 +6,7 @@ from typing import ClassVar, Literal
 
 from pydantic import BaseModel
 
-from app.core.persistence import PersistedModel, PersistenceScope
+from app.core.persistence import JsonScalar, PersistedModel, PersistenceScope
 from app.models.schema import TableSchema
 from app.core.ids import ID
 
@@ -35,17 +35,25 @@ class ClaimShape(PersistedModel):
 
 
 class Citation(BaseModel):
-    """Where a claim's evidence is, and what is there. `kind` is what widens it later."""
+    """Where the evidence sits. The kind decides what else a citation carries."""
 
     kind: str
 
 
-class StageCellCitation(Citation):
-    kind: Literal["stage_cell"] = "stage_cell"
+class StageOutputCellCitation(Citation):
+    kind: Literal["stage_output_cell"] = "stage_output_cell"
     stage_id: ID
+    row_ordinal: int
     # The column in the SOURCE, which need not share the name the shape declares.
     column: str
-    value: str
+    value: JsonScalar
+
+
+class StageOutputRowCitation(Citation):
+    # A row pointed at with no value of its own — the show-the-work link.
+    kind: Literal["stage_output_row"] = "stage_output_row"
+    stage_id: ID
+    row_ordinal: int
 
 
 class Claim(PersistedModel):
@@ -54,4 +62,4 @@ class Claim(PersistedModel):
 
     shape_id: ID
     run_id: ID
-    cites: StageCellCitation
+    citation: StageOutputCellCitation
