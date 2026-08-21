@@ -12,9 +12,11 @@ from typing import Any, Awaitable, Callable
 
 from claude_agent_sdk import ClaudeSDKError
 
+from app.core.ids import ID
+
 
 class Turn:
-    def __init__(self, turn_id: str, session_id: str):
+    def __init__(self, turn_id: ID, session_id: ID):
         self.id = turn_id
         self.session_id = session_id
         self.events: list[dict[str, Any]] = []
@@ -47,7 +49,7 @@ class TurnManager:
         self._turns: dict[str, Turn] = {}
         self._tasks: dict[str, asyncio.Task] = {}
 
-    def start(self, *, engine, store, session_id: str, prompt: str,
+    def start(self, *, engine, store, session_id: ID, prompt: str,
               on_done: Callable[[], Awaitable[None]] | None = None) -> str:
         turn_id = uuid.uuid4().hex[:12]
         turn = Turn(turn_id, session_id)
@@ -95,7 +97,7 @@ class TurnManager:
             turn.emit({"kind": "done"})
             turn.finish()
 
-    async def stream(self, turn_id: str, from_index: int = 0):
+    async def stream(self, turn_id: ID, from_index: int = 0):
         turn = self._turns.get(turn_id)
         if turn is None:
             yield {"kind": "error",
@@ -112,7 +114,7 @@ class TurnManager:
             await turn.wait()
 
 
-def _record_turn_spend(engine, store, session_id: str) -> None:
+def _record_turn_spend(engine, store, session_id: ID) -> None:
     """Called in teardown, so a turn that errored still books what it spent getting there."""
     usage = getattr(engine, "last_usage", None)  # a custom engine need not track usage
     if usage is not None:

@@ -7,26 +7,29 @@ from __future__ import annotations
 from app.core.agent.registry import build_engine, render_opening_message
 from app.core.agent.sdk_engine import ClaudeAgentSdkEngine
 from app.core.agent.store import open_session_store, read_opening_message
+from app.core.ids import ID
 
 _store = open_session_store()
 
 
 def create_agent_session(
-    agent_id: str, context: dict, *, base_url: str, title: str | None = None
+    agent_id: ID, context: dict, *, base_url: str, title: str | None = None
 ) -> str:
     """An agent that opens with a message has it stored here, before any turn runs."""
-    sid = _store.create(title=title or f"Agent: {agent_id}", agent_id=agent_id, context=context)
+    session_id = _store.create(
+        title=title or f"Agent: {agent_id}", agent_id=agent_id, context=context
+    )
     opening = render_opening_message(agent_id, _turn_context(context, base_url))
     if opening:
         _store.append_messages(
-            sid, [{"role": "assistant", "parts": [{"type": "text", "text": opening}]}]
+            session_id, [{"role": "assistant", "parts": [{"type": "text", "text": opening}]}]
         )
-    return sid
+    return session_id
 
 
-def build_session_engine(sid: str, base_url: str) -> ClaudeAgentSdkEngine:
+def build_session_engine(session_id: ID, base_url: str) -> ClaudeAgentSdkEngine:
     """The opening message comes off the stored transcript, so page and model read the same words."""
-    data = _store.load(sid)
+    data = _store.load(session_id)
     return build_engine(
         data["agent_id"],
         _turn_context(data.get("context") or {}, base_url),

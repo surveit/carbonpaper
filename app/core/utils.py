@@ -10,6 +10,8 @@ import random
 
 from pydantic import ValidationError
 
+from app.core.ids import ID
+
 _ADJECTIVES = ("amber", "brisk", "calm", "dusky", "eager", "fresh", "glad", "keen",
                "lucid", "mellow", "noble", "plain", "quiet", "rapid", "solid", "tidy")
 _ANIMALS = ("badger", "crane", "finch", "gecko", "heron", "ibis", "lynx", "marmot",
@@ -18,7 +20,7 @@ _THINGS = ("brook", "cove", "delta", "dune", "fern", "glen", "knoll", "lamp",
            "mesa", "pond", "reef", "ridge", "shoal", "vale", "wharf", "yard")
 
 
-def build_word_triplet_id(taken: set[str], rng: random.Random | None = None) -> str:
+def build_word_triplet_id(taken: set[str], rng: random.Random | None = None) -> ID:
     rng = rng or random.Random()
     for _ in range(10_000):
         candidate = "-".join(

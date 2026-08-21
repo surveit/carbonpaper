@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from app.core.column_profile import TableProfile
 from app.core.frames import convert_row_to_json_cells, list_rows
 from app.core.predicate import ParsedPredicate, parse_predicate
+from app.core.ids import ID
 
 # One search's ceiling. A reader of the answer reads every row it holds, so a wide
 # answer costs the context the rest of the work needs; narrow the filter instead.
@@ -38,8 +39,8 @@ class RowMatches(BaseModel):
 
 @dataclass(frozen=True)
 class InputRows:
-    input_id: str
-    run_id: str
+    input_id: ID
+    run_id: ID
     frame: pd.DataFrame
     profile: TableProfile
 

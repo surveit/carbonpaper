@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from app.core.ids import ID
+
 
 class ValueCount(BaseModel):
     value: str
@@ -28,8 +30,8 @@ class ColumnProfile(BaseModel):
 
 
 class StageOutputProfile(BaseModel):
-    run_id: str
-    stage_id: str
+    run_id: ID
+    stage_id: ID
     row_count: int
     columns: list[ColumnProfile]
 

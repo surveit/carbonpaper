@@ -11,6 +11,7 @@ from typing import Any, Iterator, Mapping
 
 from app.core.errors import DocumentNotFound
 from app.core.persistence import JsonDict, JsonScalar
+from app.core.ids import ID
 
 
 class SqliteKvStore:
@@ -30,7 +31,7 @@ class SqliteKvStore:
         )
         self._conn.commit()
 
-    def write(self, collection: str, id: str, data: JsonDict, schema_version: int = 1) -> None:
+    def write(self, collection: str, id: ID, data: JsonDict, schema_version: int = 1) -> None:
         with self._lock:
             self._conn.execute(
                 "INSERT OR REPLACE INTO documents (collection, id, data, schema_version) "
@@ -39,7 +40,7 @@ class SqliteKvStore:
             )
             self._conn.commit()
 
-    def read(self, collection: str, id: str) -> JsonDict:
+    def read(self, collection: str, id: ID) -> JsonDict:
         with self._lock:
             row = self._conn.execute(
                 "SELECT data FROM documents WHERE collection=? AND id=?", (collection, id)
@@ -49,7 +50,7 @@ class SqliteKvStore:
         parsed: JsonDict = json.loads(row[0])
         return parsed
 
-    def schema_version(self, collection: str, id: str) -> int:
+    def schema_version(self, collection: str, id: ID) -> int:
         with self._lock:
             row = self._conn.execute(
                 "SELECT schema_version FROM documents WHERE collection=? AND id=?",
@@ -59,21 +60,21 @@ class SqliteKvStore:
             raise DocumentNotFound(f"{collection}/{id}")
         return int(row[0])
 
-    def exists(self, collection: str, id: str) -> bool:
+    def exists(self, collection: str, id: ID) -> bool:
         with self._lock:
             row = self._conn.execute(
                 "SELECT 1 FROM documents WHERE collection=? AND id=?", (collection, id)
             ).fetchone()
         return row is not None
 
-    def delete(self, collection: str, id: str) -> None:
+    def delete(self, collection: str, id: ID) -> None:
         with self._lock:
             self._conn.execute(
                 "DELETE FROM documents WHERE collection=? AND id=?", (collection, id)
             )
             self._conn.commit()
 
-    def read_tolerant(self, collection: str, id: str) -> JsonDict | None:
+    def read_tolerant(self, collection: str, id: ID) -> JsonDict | None:
         with self._lock:
             row = self._conn.execute(
                 "SELECT data FROM documents WHERE collection=? AND id=?", (collection, id)
@@ -124,7 +125,7 @@ class SqliteKvStore:
             body: JsonDict = json.loads(data)
             yield str(row_id), body
 
-    def list_ids(self, collection: str, prefix: str = "") -> list[str]:
+    def list_ids(self, collection: str, prefix: str = "") -> list[ID]:
         return [str(row[0]) for row in self._scan("id", collection, prefix)]
 
     def read_all(self, collection: str, prefix: str = "") -> Iterator[tuple[str, JsonDict]]:

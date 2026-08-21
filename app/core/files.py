@@ -12,6 +12,7 @@ from typing import BinaryIO, ClassVar
 from app.core.errors import FileNotStoredError, FileOverCeiling, StoreOverQuota
 from app.core.persistence import PersistedModel, PersistenceScope
 from app.core.store_config import resolve_db_path
+from app.core.ids import ID
 
 # How much of an upload is held in memory at once while it is written and hashed.
 _CHUNK_BYTES = 1024 * 1024
@@ -52,7 +53,7 @@ class UploadedFile(PersistedModel):
     sha256: str
     filename: str
     byte_count: int
-    project_id: str | None = None
+    project_id: ID | None = None
 
 
 def files_root() -> Path:
@@ -69,7 +70,7 @@ def files_quota_bytes() -> int:
     return _read_byte_limit("CARBON_PAPER_FILES_QUOTA_BYTES", _DEFAULT_FILES_QUOTA_BYTES)
 
 
-def save_upload(filename: str, src: BinaryIO, project_id: str | None = None) -> UploadedFile:
+def save_upload(filename: str, src: BinaryIO, project_id: ID | None = None) -> UploadedFile:
     """Store an uploaded file and return its record; `project_id` None puts it in no project."""
     root = files_root()
     # The stream is written to a temp file in the same dir first and moved into
@@ -90,7 +91,7 @@ def save_upload(filename: str, src: BinaryIO, project_id: str | None = None) -> 
     return record
 
 
-def move_file_to_project(file_id: str, project_id: str) -> UploadedFile:
+def move_file_to_project(file_id: ID, project_id: ID) -> UploadedFile:
     """Move a file with no project into one. Moves no bytes — the record is the address."""
     record = UploadedFile.load_or_none(file_id)
     if record is None or record.project_id is not None:
@@ -102,7 +103,7 @@ def move_file_to_project(file_id: str, project_id: str) -> UploadedFile:
     return record
 
 
-def delete_file(project_id: str | None, file_id: str) -> None:
+def delete_file(project_id: ID | None, file_id: ID) -> None:
     """Delete one file: its record, and the bytes that record alone owns."""
     record = UploadedFile.load_or_none(file_id)
     if record is None or record.project_id != project_id:
@@ -121,12 +122,12 @@ def resolve_stored_path(record: UploadedFile) -> Path:
     return (files_root() / record.id / record.filename).resolve()
 
 
-def list_project_files(project_id: str | None) -> list[UploadedFile]:
+def list_project_files(project_id: ID | None) -> list[UploadedFile]:
     """One project's files, or those in no project when `project_id` is None."""
     return _sorted_newest_first(UploadedFile.find(project_id=project_id))
 
 
-def open_project_file(project_id: str, file_id: str) -> tuple[UploadedFile, Path]:
+def open_project_file(project_id: ID, file_id: ID) -> tuple[UploadedFile, Path]:
     """The record and the readable path, or loud — never a path whose bytes are gone."""
     record = UploadedFile.load_or_none(file_id)
     if record is None or record.project_id != project_id:

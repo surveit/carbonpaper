@@ -3,9 +3,11 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from app.core.ids import ID
+
 
 class Citation(BaseModel):
-    stage_id: str
+    stage_id: ID
     row_ordinal: int
     column: str
     label: str  # what the artifact calls this value
@@ -14,5 +16,5 @@ class Citation(BaseModel):
 
 class CitedRow(BaseModel):
     # A row claimed with no value — a table row's show-the-work link.
-    stage_id: str
+    stage_id: ID
     row_ordinal: int

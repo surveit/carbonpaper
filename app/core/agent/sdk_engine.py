@@ -29,6 +29,7 @@ from claude_agent_sdk import (
 from app.core.agent.errors import AccountLimitReached
 from app.core.agent.usage import LlmUsage
 from app.core.llm_sdk import CLI_PATH as _CLI_PATH
+from app.core.ids import ID
 
 CLI_MODEL = os.environ.get("CARBON_PAPER_CHAT_CLI_MODEL", "sonnet")
 
@@ -149,8 +150,8 @@ class ClaudeAgentSdkEngine:
         # previous turn's figure in place would bill it a second time.
         self.last_usage = None
         assistant_parts: list[dict[str, Any]] = []
-        hidden_tool_result_ids: set[str] = set()
-        session_id: str | None = None
+        hidden_tool_result_ids: set[ID] = set()
+        session_id: ID | None = None
         async for msg in query(prompt=prompt, options=self._options(resume)):
             if isinstance(msg, AssistantMessage):
                 for block in msg.content:
@@ -236,7 +237,7 @@ def _record_tool_results(
     message: UserMessage,
     emit: Callable[[dict[str, Any]], None],
     assistant_parts: list[dict[str, Any]],
-    hidden_tool_result_ids: set[str],
+    hidden_tool_result_ids: set[ID],
 ) -> None:
     blocks = message.content if isinstance(message.content, list) else []
     for block in blocks:

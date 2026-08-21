@@ -42,7 +42,7 @@ At most {MAX_MATCHES} rows come back per call; the counts are over everything.""
 
 
 def build_find_rows_tool(sources: dict[StageId, InputRows]) -> BoundToolSpec:
-    def find_rows(input: str, filter: str) -> RowMatches:
+    def find_rows(input: StageId, filter: str) -> RowMatches:
         source = sources.get(input)
         if source is None:
             raise ValueError(

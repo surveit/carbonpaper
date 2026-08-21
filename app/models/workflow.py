@@ -22,16 +22,17 @@ from app.models.stages.input_data import Connector, InputDataStage
 from app.models.stages.signature import find_signature_issues, promised_output_schema
 from app.models.workflow_stage import WorkflowStage, WorkflowStageInput
 from app.core.utils import format_errors
+from app.core.ids import ID
 
 
 # Ordering and cycle detection read a stage's id and its upstream ids and nothing
 # else, so they hold a submitted draft and a stored stage alike, and hand back what
 # they were given.
 class StageInGraph(Protocol):
-    id: str
+    id: ID
 
     @property
-    def input_ids(self) -> list[str]: ...
+    def input_ids(self) -> list[ID]: ...
 
 
 _StageT = TypeVar("_StageT", bound=StageInGraph)
@@ -194,7 +195,7 @@ def _resolve_inputs(
 
 
 def _require_upstream_output(
-    stage: Stage, upstream_id: str, outputs: dict[str, Optional[TableSchema]]
+    stage: Stage, upstream_id: ID, outputs: dict[str, Optional[TableSchema]]
 ) -> TableSchema:
     if upstream_id not in outputs:
         raise ValueError(
@@ -242,7 +243,7 @@ class Workflow(_Base):
     def list_workflow_stages(self) -> list[WorkflowStage]:
         return self._resolved_stages
 
-    def find_workflow_stage(self, stage_id: str) -> WorkflowStage:
+    def find_workflow_stage(self, stage_id: ID) -> WorkflowStage:
         workflow_stage = self.index_workflow_stages_by_id().get(stage_id)
         if workflow_stage is None:
             raise KeyError(f"no stage `{stage_id}` in this workflow")

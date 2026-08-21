@@ -15,6 +15,7 @@ from app.core.run_status import StageStatus
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.models.stage import Stage
 from app.models.stages.stage_base import StageType
+from app.core.ids import ID
 
 
 class QueueStats(TypedDict):
@@ -88,7 +89,7 @@ UNREADABLE_RUN_STATUS = "corrupt"
 class StageRecord(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    stage_id: str
+    stage_id: ID
     type: StageType
     started_at: str | None = None
     status: StageStatus
@@ -151,7 +152,7 @@ def read_run_bindings(
 class InputBinding(BaseModel):
     """One file a run read, as its preflight recorded it."""
 
-    stage_id: str
+    stage_id: ID
     path: str
     filename: str
     # None where preflight never measured it, not zero.
@@ -169,7 +170,7 @@ def read_input_bindings(raw: dict[str, Any]) -> list[InputBinding]:
     ]
 
 
-def _read_one_binding(stage_id: str, binding: dict[str, Any]) -> InputBinding:
+def _read_one_binding(stage_id: ID, binding: dict[str, Any]) -> InputBinding:
     path = str(binding.get("path") or "")
     size = binding.get("bytes")
     return InputBinding(

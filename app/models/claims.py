@@ -6,6 +6,7 @@ from typing import ClassVar
 
 from app.core.persistence import PersistedModel, PersistenceScope
 from app.models.schema import TableSchema
+from app.core.ids import ID
 
 
 class ClaimImportance(str, Enum):
@@ -23,7 +24,7 @@ class ClaimShape(PersistedModel):
     collection: ClassVar[str] = "claim_shape"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
 
-    project_id: str
+    project_id: ID
     # Authored before any stage exists, so it declares no stage and no column.
     label: str
     table_schema: TableSchema
