@@ -13,7 +13,7 @@ from urllib.parse import urlencode
 from pydantic import BaseModel
 
 from app.core import files as file_store
-from app.core.agent.store import NextSteps
+from app.core.agent.store import NextSteps, Offer
 from app.models import EvalConfig
 from app.models.review_guide import ReviewGuideDraft
 from app.services import (
@@ -151,17 +151,23 @@ def _is_on_disk(project_id: str) -> bool:
     return (workspace.projects_dir() / project_id).is_dir() and methodology.exists(project_id)
 
 
-def offer_next_steps(options: list[str]) -> str:
+def offer_next_steps(options: list[Offer]) -> str:
     """An echo reads as "carry on": the AI model wrote a second summary and offered again."""
-    shown = " | ".join(NextSteps(options=options).options)
+    shown = " | ".join(_describe_offer(o) for o in NextSteps(options=options).options)
     return f"Drawn under this turn as buttons: {shown}. Nothing follows this."
+
+
+def _describe_offer(offer: Offer) -> str:
+    return f"{offer.text} -> {offer.url}" if offer.url else offer.text
 
 
 # Not in tool_specs: everything there is offered over MCP, where nothing draws a button.
 OFFER_NEXT_STEPS = ToolProse(
     parameters={
-        "options": "Two to four replies, each at most 70 characters, in the reader's own "
-            "voice: \"Open the review queue\", not \"Open the queue for them\".",
+        "options": "Two to four of them. Each is `text` — at most 70 characters, in the "
+            "reader's own voice: \"Open the review queue\", not \"Open the queue for them\" "
+            "— and, for a step that is go-and-look-at-a-page, a `url`: the path of a URL a "
+            "tool gave you, which opens in a new tab instead of replying to you.",
     },
     description="""Offer the reader replies to click instead of typing.
 
@@ -179,8 +185,10 @@ comes back is an ordinary turn.
 Offer only steps you can carry out when one comes back, and never one that just
 ends the conversation.
 
-    offer_next_steps(options=["Open the review queue",
-                              "Trace a published figure back to its row"])""",
+    offer_next_steps(options=[
+        {"text": "Open the review queue", "url": "/project/<id>/runs/<id>/queue/<stage>"},
+        {"text": "Trace a published figure back to its row"},
+    ])""",
 )
 
 

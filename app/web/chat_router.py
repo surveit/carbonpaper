@@ -23,6 +23,7 @@ from app.core.agent.session import build_session_engine, create_agent_session
 from app.core.agent.store import (
     Bubble,
     MessageRole,
+    Offer,
     OffersBlock,
     ProseBlock,
     ToolBlock,
@@ -71,7 +72,7 @@ def _draft_opening_bubble(opening: registry.OpeningTurn) -> Bubble:
     blocks: list[ProseBlock | ToolBlock | OffersBlock] = [
         ProseBlock(kind="text", text=opening.text)]
     if opening.offers:
-        blocks.append(OffersBlock(options=opening.offers))
+        blocks.append(OffersBlock(options=[Offer(text=t) for t in opening.offers]))
     return Bubble(role=MessageRole.assistant, blocks=blocks)
 
 

@@ -11,7 +11,7 @@
    disclosure, and the two shapes have to draw the individual call identically. #}
 {# Replies the reader may click instead of typing: the agent's own words, sent as the
    reader's next message. Only the newest turn's are live — see agent-chat.css. #}
-{% macro offer_row(options) %}<div class="ac-offers">{% for option in options %}<button type="button" class="ac-offer">{{ option }}</button>{% endfor %}</div>{% endmacro %}
+{% macro offer_row(options) %}<div class="ac-offers">{% for option in options %}{% if option.url %}<a class="ac-offer ac-offer-link" href="{{ option.url }}" target="_blank" rel="noopener">{{ option.text }}<span class="ac-offer-arrow" aria-hidden="true">↗</span></a>{% else %}<button type="button" class="ac-offer">{{ option.text }}</button>{% endif %}{% endfor %}</div>{% endmacro %}
 {% macro tool_row(call) %}<details class="ac-tool"><summary title="{{ call.label or call.name }}">Called a tool: {{ call.name }}</summary><pre class="ac-tool-json">{{ call.args }}</pre></details>{% endmacro %}
 {% block content %}
 <div class="ac-head">
@@ -117,6 +117,24 @@ function el(cls, html) { const d = document.createElement("div"); d.className = 
 // column's last row and does not move.
 function scroll() { log.scrollTop = log.scrollHeight; }
 function fmtJson(s) { try { return JSON.stringify(JSON.parse(s), null, 2); } catch (e) { return s || ""; } }
+// The same two shapes the offer_row macro draws, so a turn reads the same live as on
+// reload: a link goes to a page and never replies, and says so with the arrow.
+function offerControl(option) {
+  if (!option.url) {
+    const button = document.createElement("button");
+    button.type = "button"; button.className = "ac-offer"; button.textContent = option.text;
+    return button;
+  }
+  const link = document.createElement("a");
+  link.className = "ac-offer ac-offer-link"; link.href = option.url;
+  link.target = "_blank"; link.rel = "noopener";
+  link.textContent = option.text;
+  const arrow = el("ac-offer-arrow", "↗");
+  arrow.setAttribute("aria-hidden", "true");
+  link.appendChild(arrow);
+  return link;
+}
+
 function toolPre(text) { const p = document.createElement("pre"); p.className = "ac-tool-json"; p.textContent = fmtJson(text); return p; }
 
 // Mirrors app.web.file_sizes.render_attachment, so a turn looks the same the moment it
@@ -269,11 +287,7 @@ function newAssistant() {
       // offered rather than stacking a second set of buttons under it.
       if (!offerRow) { offerRow = el("ac-offers"); b.appendChild(offerRow); }
       offerRow.replaceChildren();
-      options.forEach((option) => {
-        const button = document.createElement("button");
-        button.type = "button"; button.className = "ac-offer"; button.textContent = option;
-        offerRow.appendChild(button);
-      });
+      options.forEach((option) => offerRow.appendChild(offerControl(option)));
       scroll();
     },
     error(t) { stop(); closeRegions(); const e = el("ac-err"); e.textContent = "⚠ " + t; b.appendChild(e); scroll(); },
@@ -504,7 +518,8 @@ if (input && sendBtn) {
   // Delegated, so a turn that has just streamed its offers is wired like one the page
   // rendered. A click sends those words and leaves a half-typed draft where it is.
   log.addEventListener("click", (e) => {
-    const offer = e.target.closest(".ac-offer");
+    // A button only: an anchor offer is a link, and opening it is the whole of it.
+    const offer = e.target.closest("button.ac-offer");
     if (offer) sendText(offer.textContent);
   });
   fitComposer();

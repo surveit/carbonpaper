@@ -20,7 +20,7 @@ class OpeningTurn(BaseModel):
     """An agent's written first turn: what it says, and what it offers as a reply."""
 
     text: str
-    # Empty leaves the reader to type.
+    # Empty leaves the reader to type. Replies: an authored turn links to nothing.
     offers: list[str] = []
 
 

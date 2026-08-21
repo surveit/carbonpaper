@@ -9,9 +9,10 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Any, ClassVar, Literal, TypedDict
+from typing import Any, ClassVar, Literal, TypedDict
+from urllib.parse import urlsplit, urlunsplit
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.agent.usage import LlmUsage, TurnSpend
 from app.core.persistence import PersistedModel, PersistenceScope
@@ -58,16 +59,40 @@ class ToolBlock(BaseModel):
 OFFER_NEXT_STEPS = "offer_next_steps"
 
 
+class Offer(BaseModel):
+    """A reply the reader may click. Carrying a url it opens that page instead."""
+
+    text: str = Field(min_length=1, max_length=70)
+    url: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_a_bare_reply(cls, data: Any) -> Any:
+        # A written offer is a plain string: it replies, so it carries no url.
+        return {"text": data} if isinstance(data, str) else data
+
+    @field_validator("url")
+    @classmethod
+    def _keep_only_the_path(cls, url: str | None) -> str | None:
+        # Whatever host was written, the button goes to a page in this app.
+        if url is None:
+            return None
+        parts = urlsplit(url)
+        path = urlunsplit(("", "", parts.path, parts.query, parts.fragment))
+        if not path.startswith("/"):
+            raise ValueError(f"a link offer takes a path in this app, not {url!r}")
+        return path
+
+
 class NextSteps(BaseModel):
     """What one turn offers as the reader's next message, in the reader's own voice."""
 
-    options: list[Annotated[str, Field(min_length=1, max_length=70)]] = Field(
-        min_length=2, max_length=4)
+    options: list[Offer] = Field(min_length=2, max_length=4)
 
 
 class OffersBlock(BaseModel):
     kind: Literal["offers"] = "offers"
-    options: list[str]
+    options: list[Offer]
 
 
 class Bubble(BaseModel):
