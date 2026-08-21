@@ -1,0 +1,49 @@
+{#
+  THE DROPDOWN. A native <select> the caller owns, wrapped in the chrome that
+  replaces it: a trigger reading like a row of the list, and a popover holding the
+  options as rows with room for more than one line each.
+
+  The caller passes the <select> itself as the macro's body, so it keeps its own
+  name, id, validation and change handler — the picker never becomes the form's
+  field, it only writes the reader's choice back to the one that is. Give the
+  select `class="picker-native"` and an id: static/picker.js hangs the trigger's
+  id, the popover's id and any <label for> off it.
+
+  An option is described to the reader by data-name (the line it is picked by,
+  falling back to the option's own text), data-side (a short right-aligned note)
+  and data-meta (a second line under the name).
+
+  Only a list long enough to hunt through gets `search_label` — a search field over
+  three options is furniture. A select naming a `data-picker-row-action` (a builder
+  registered in CarbonPicker.rowActions) gets that button on every row.
+
+  `size="sm"` is the toolbar size: it sits beside a heading and a .btn, so it takes
+  only the width its longest option needs and keeps its note on the trigger's one
+  line, where a form row's picker gives that note a line of its own.
+
+  Until picker.js runs, the select is what the reader sees, and it still works.
+#}
+{% macro picker(heading, hint="", search_label="", size="") %}
+<div class="picker{% if size %} {{ size }}{% endif %}" data-picker>
+  {{ caller() }}
+  <button type="button" class="picker-trigger" aria-haspopup="dialog"
+          aria-expanded="false" hidden>
+    <span class="picker-value"></span>
+    <span class="picker-chevron" aria-hidden="true">▾</span>
+  </button>
+  <div class="picker-popover" role="dialog" aria-label="{{ heading }}" hidden>
+    <div class="picker-heading">
+      <strong>{{ heading }}</strong>
+      {%- if hint %}<span>{{ hint }}</span>{% endif %}
+    </div>
+    {%- if search_label %}
+    <input type="search" class="picker-search" aria-label="{{ search_label }}"
+           placeholder="{{ search_label }}…" autocomplete="off">
+    {%- endif %}
+    <div class="picker-list" role="group" aria-label="{{ heading }}"></div>
+    {%- if search_label %}
+    <p class="picker-empty" hidden>Nothing matches this search.</p>
+    {%- endif %}
+  </div>
+</div>
+{% endmacro %}

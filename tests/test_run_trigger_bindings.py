@@ -179,21 +179,21 @@ def test_file_picker_renders_shared_structured_controls(project, tmp_path):
 
     body = client.get("/project/demo/runs/new").text
 
-    assert 'class="file-picker" data-file-picker' in body
-    assert 'class="file-picker-native file-pick"' in body
-    assert 'class="file-picker-trigger"' in body
-    assert 'class="file-picker-popover" role="dialog"' in body
-    assert 'class="file-picker-list" role="group"' in body
-    assert 'data-filename="stories.csv"' in body
-    assert 'data-uploaded-label="Uploaded ' in body
-    assert 'data-size-label="13B"' in body
+    assert 'class="picker" data-picker' in body
+    assert 'class="picker-native file-pick"' in body
+    assert 'data-picker-row-action="file-preview"' in body
+    assert 'class="picker-trigger"' in body
+    assert 'class="picker-popover" role="dialog"' in body
+    assert 'class="picker-list" role="group"' in body
+    assert 'data-name="stories.csv"' in body
+    assert 'data-meta="Uploaded ' in body
+    assert 'data-side="13B"' in body
     assert "Uploads newest first" in body
-    assert 'class="file-picker-search" aria-label="Search files"' in body
-    assert "No files match this search." in body
-    assert "/static/file-picker.css" in body
-    assert "/static/file-picker.js" in body
+    assert 'class="picker-search" aria-label="Search files"' in body
+    assert "Nothing matches this search." in body
+    assert "/static/picker.css" in body
+    assert "/static/picker.js" in body
     assert 'class="btn file-preview-open"' not in body
-    assert 'aria-controls="binding__load__picker"' in body
 
 
 def test_required_file_picker_keeps_native_form_validation(project):
@@ -203,9 +203,7 @@ def test_required_file_picker_keeps_native_form_validation(project):
     save_working_copy_as_version("demo", message="unbound", reviewer="test")
 
     body = client.get("/project/demo/runs/new").text
-    picker = body.split('class="file-picker" data-file-picker', 1)[1].split(
-        "</select>", 1
-    )[0]
+    picker = body.split('class="picker" data-picker', 1)[1].split("</select>", 1)[0]
 
     assert 'name="binding__load"' in picker
     assert "required" in picker
@@ -213,17 +211,18 @@ def test_required_file_picker_keeps_native_form_validation(project):
 
 def test_authored_path_remains_the_blank_file_picker_choice(project):
     body = client.get("/project/demo/runs/new").text
-    picker = body.split('class="file-picker" data-file-picker', 1)[1].split(
-        "</select>", 1
-    )[0]
+    picker = body.split('class="picker" data-picker', 1)[1].split("</select>", 1)[0]
 
     assert 'value="" data-file-kind="authored"' in picker
-    assert f'data-filename="{project / "a.csv"}"' in picker
+    assert f'data-name="{project / "a.csv"}"' in picker
     assert "required" not in picker
 
 
-def test_shared_file_picker_wires_pointer_keyboard_and_dynamic_refresh():
-    source = (Path(__file__).parents[1] / "app/static/file-picker.js").read_text(
+def test_shared_picker_wires_pointer_keyboard_and_dynamic_refresh():
+    source = (Path(__file__).parents[1] / "app/static/picker.js").read_text(
+        encoding="utf-8"
+    )
+    preview = (Path(__file__).parents[1] / "app/static/file-preview.js").read_text(
         encoding="utf-8"
     )
 
@@ -232,28 +231,27 @@ def test_shared_file_picker_wires_pointer_keyboard_and_dynamic_refresh():
     assert 'document.addEventListener("click"' in source
     assert "select.tabIndex = -1" in source
     assert 'select.setAttribute("aria-hidden", "true")' in source
-    assert "open: function (picker) { openFilePicker(picker, 1); }" in source
-    assert 'row.appendChild(item)' in source
-    assert 'row.appendChild(buildPreviewAction(select, option))' in source
-    assert 'button.dataset.fileId = option.value' in source
-    assert 'button.setAttribute("aria-haspopup", "dialog")' in source
-    assert 'button.setAttribute("aria-controls", "run-file-preview")' in source
-    assert 'button.setAttribute("aria-disabled", "true")' in source
-    assert 'tooltip.setAttribute("role", "tooltip")' in source
-    assert 'tooltip.textContent = "Only project files can be previewed."' in source
+    assert "api.open = function (picker) { openPopover(picker, 1); };" in source
+    assert 'trigger.setAttribute("aria-controls", select.id + "__picker")' in source
+    assert "row.appendChild(item)" in source
+    assert "if (action) row.appendChild(action)" in source
     assert 'picker.addEventListener("focusout"' in source
+    assert 'api.rowActions["file-preview"] = buildPreviewAction' in preview
+    assert "button.dataset.fileId = option.value" in preview
+    assert 'button.setAttribute("aria-haspopup", "dialog")' in preview
+    assert 'button.setAttribute("aria-controls", "run-file-preview")' in preview
+    assert 'button.setAttribute("aria-disabled", "true")' in preview
+    assert 'tooltip.setAttribute("role", "tooltip")' in preview
+    assert 'tooltip.textContent = "Only project files can be previewed."' in preview
 
 
 def test_row_preview_does_not_change_the_selected_file():
-    picker_source = (Path(__file__).parents[1] / "app/static/file-picker.js").read_text(
-        encoding="utf-8"
-    )
     preview_source = (Path(__file__).parents[1] / "app/static/file-preview.js").read_text(
         encoding="utf-8"
     )
 
-    preview_action = picker_source.split("function buildPreviewAction", 1)[1].split(
-        "function buildOption", 1
+    preview_action = preview_source.split("function buildPreviewAction", 1)[1].split(
+        "function wirePreviewDialog", 1
     )[0]
     load_preview = preview_source.split("async function loadPreview", 1)[1].split(
         "form.addEventListener", 1
@@ -263,13 +261,13 @@ def test_row_preview_does_not_change_the_selected_file():
     assert "var fileId = button.dataset.fileId" in load_preview
 
 
-def test_file_picker_visible_content_cannot_intercept_pointer_clicks():
-    source = (Path(__file__).parents[1] / "app/static/file-picker.css").read_text(
+def test_picker_visible_content_cannot_intercept_pointer_clicks():
+    source = (Path(__file__).parents[1] / "app/static/picker.css").read_text(
         encoding="utf-8"
     )
 
-    value_rule = source.split(".file-picker-value {", 1)[1].split("}", 1)[0]
-    chevron_rule = source.split(".file-picker-chevron {", 1)[1].split("}", 1)[0]
+    value_rule = source.split(".picker-value {", 1)[1].split("}", 1)[0]
+    chevron_rule = source.split(".picker-chevron {", 1)[1].split("}", 1)[0]
     assert "pointer-events: none" in value_rule
     assert "user-select: none" in value_rule
     assert "pointer-events: none" in chevron_rule

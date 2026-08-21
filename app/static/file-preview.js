@@ -1,5 +1,40 @@
-// Load a selected project file into the run form's one shared preview dialog.
+// Load a selected project file into the run form's one shared preview dialog, and
+// give every file row in a picker the button that opens it.
 (function () {
+  // The picker builds its rows from the select's options and knows nothing about
+  // files, so the button a file row carries is registered here, where the dialog
+  // it opens lives. Only a stored project file has something to show: the option
+  // standing for the workflow-authored path has no id to fetch, and says so.
+  function buildPreviewAction(select, option) {
+    var wrap = document.createElement("span");
+    var button = document.createElement("button");
+    var filename = option.dataset.name || option.textContent.trim();
+    wrap.className = "picker-row-action";
+    button.type = "button";
+    button.className = "picker-action file-preview-open";
+    button.textContent = "Preview";
+    if (option.value) {
+      button.dataset.fileId = option.value;
+      button.setAttribute("aria-label", "Preview " + filename);
+      button.setAttribute("aria-haspopup", "dialog");
+      button.setAttribute("aria-controls", "run-file-preview");
+      wrap.appendChild(button);
+      return wrap;
+    }
+    var tooltip = document.createElement("span");
+    var tooltipId = select.id + "__preview_help";
+    button.setAttribute("aria-disabled", "true");
+    button.setAttribute("aria-label", "Preview unavailable for " + filename);
+    button.setAttribute("aria-describedby", tooltipId);
+    tooltip.id = tooltipId;
+    tooltip.className = "picker-action-tooltip";
+    tooltip.setAttribute("role", "tooltip");
+    tooltip.textContent = "Only project files can be previewed.";
+    wrap.appendChild(button);
+    wrap.appendChild(tooltip);
+    return wrap;
+  }
+
   function showMessage(body, message, className, role) {
     var status = document.createElement("p");
     status.className = className;
@@ -38,8 +73,8 @@
       if (!fileId || button.getAttribute("aria-disabled") === "true") return;
       if (!project) return;
       activeButton = button;
-      activePicker = button.closest("[data-file-picker]");
-      if (activePicker) activePicker.classList.add("is-previewing");
+      activePicker = button.closest("[data-picker]");
+      if (activePicker) activePicker.classList.add("is-action-open");
       resetDialog();
       dialog.showModal();
       var controller = new AbortController();
@@ -90,12 +125,14 @@
     dialog.addEventListener("close", function () {
       if (request) request.abort();
       resetDialog();
-      if (activePicker) activePicker.classList.remove("is-previewing");
+      if (activePicker) activePicker.classList.remove("is-action-open");
       if (activeButton && activeButton.isConnected) activeButton.focus();
       activeButton = null;
       activePicker = null;
     });
   }
 
+  var api = window.CarbonPicker = window.CarbonPicker || { rowActions: {} };
+  api.rowActions["file-preview"] = buildPreviewAction;
   document.querySelectorAll("form.run-controls").forEach(wirePreviewDialog);
 })();

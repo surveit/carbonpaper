@@ -280,9 +280,15 @@ table.issue-table { width: 100%; border-collapse: collapse; font-size: .79rem; }
    cell: a workflow here reaches 29 stages. */
 .runs-table .stage-strip.compact { flex-wrap: wrap; row-gap: 3px; }
 
-.runs-filter { display: flex; align-items: center; gap: .5rem; margin: 0 0 .8rem;
+/* The table's own controls: what is listed, then what of it is on screen. */
+.runs-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem 1rem;
+    margin: 0 0 .8rem; }
+.runs-filter { display: flex; align-items: center; gap: .5rem; margin: 0;
     font-size: .85rem; color: var(--muted); }
-.runs-filter input { font: inherit; padding: 5px 9px; min-width: 20rem; color: var(--fg);
+.runs-view-label { font-size: .85rem; color: var(--muted); }
+/* Padded to the picker's height beside it: two controls on one line that are a
+   few pixels apart read as a mistake rather than as a pair. */
+.runs-filter input { font: inherit; padding: 7px 9px; min-width: 20rem; color: var(--fg);
     background: var(--raised); border: 1px solid var(--border-strong); border-radius: 4px; }
 .runs-table .run-outcome { display: block; margin-top: .35rem; font-size: .78rem; color: var(--muted); }
 .runs-table .run-outcome.status-errors { color: var(--state-failed-ink); }
@@ -290,11 +296,15 @@ table.issue-table { width: 100%; border-collapse: collapse; font-size: .79rem; }
 .runs-table .flagchip { background: var(--state-idle-bg); color: var(--state-idle-ink); border: 1px solid var(--state-idle);
     padding: 1px 7px; border-radius: 3px; font-size: .74rem; cursor: help; white-space: nowrap; }
 .runs-table .unresolved { color: var(--state-warn-ink); cursor: help; }
-/* Quieter than the test-run chip beside it, and hue-free: a row cap is a fact about
-   what the run read, not a claim about how it went. */
-.runs-table .capchip { background: var(--sunk-deep); color: var(--muted);
-    border: 1px solid var(--border); padding: 1px 7px; border-radius: 3px;
-    font-size: .74rem; cursor: help; white-space: nowrap; }
+/* A row cap says how much of its input a stage read, so it rides the input: on the
+   file's own line where a file was bound, and on a line of its own where none was.
+   Hue-free and unbordered — a fact about what the run read, not a claim about how it
+   went, and it is read beside the filename rather than spotted across the row. */
+.row-cap { color: var(--muted); white-space: nowrap; }
+.stage-cap { display: block; margin-top: .35rem; color: var(--muted); font-size: .78rem;
+    line-height: 1.35; }
+.stage-cap code { font-size: .74rem; background: var(--sunk-deep); padding: 0 4px;
+    border-radius: 3px; }
 
 /* ── The NAV spine and the WORK surface, as COLUMNS. The spine is the run walkthrough,
       so a version carrying none leaves the work surface the whole width rather than a

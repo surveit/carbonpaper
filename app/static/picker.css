@@ -1,13 +1,14 @@
-/* Shared project-file picker: a native select owns form state; this control gives
-   its file records enough room for filename, upload time and size. */
-.file-picker {
+/* THE DROPDOWN (templates/_picker.html, static/picker.js): a native select owns the
+   form state; this control gives each option room for a name, a right-aligned note
+   and a second line, which an <option> cannot hold. */
+.picker {
     position: relative;
     display: flex;
     align-items: stretch;
     flex: 1 1 auto;
     min-width: 0;
 }
-.file-picker.is-ready .file-picker-native {
+.picker.is-ready .picker-native {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -17,7 +18,7 @@
     clip-path: inset(50%);
     white-space: nowrap;
 }
-.file-picker-trigger {
+.picker-trigger {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -36,23 +37,23 @@
     text-align: left;
     cursor: pointer;
 }
-.file-picker-trigger:hover,
-.file-picker.is-open .file-picker-trigger {
+.picker-trigger:hover,
+.picker.is-open .picker-trigger {
     border-color: var(--border-strong);
     background: var(--hover);
 }
-.file-picker-trigger:focus-visible {
+.picker-trigger:focus-visible {
     outline: none;
     border-color: var(--focus);
     box-shadow: 0 0 0 2px var(--focus-halo);
 }
-.file-picker-trigger[aria-invalid="true"] { border-color: var(--bad-bd); }
-.file-picker-value {
+.picker-trigger[aria-invalid="true"] { border-color: var(--bad-bd); }
+.picker-value {
     min-width: 0;
     pointer-events: none;
     user-select: none;
 }
-.file-picker-name {
+.picker-name {
     display: block;
     overflow: hidden;
     color: var(--fg);
@@ -62,7 +63,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.file-picker-meta {
+.picker-meta {
     display: block;
     margin-top: 2px;
     overflow: hidden;
@@ -72,7 +73,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.file-picker-chevron {
+.picker-chevron {
     flex: 0 0 auto;
     color: var(--muted);
     font-size: 11px;
@@ -80,8 +81,8 @@
     user-select: none;
     transition: transform 120ms ease;
 }
-.file-picker.is-open .file-picker-chevron { transform: rotate(180deg); }
-.file-picker-popover {
+.picker.is-open .picker-chevron { transform: rotate(180deg); }
+.picker-popover {
     position: absolute;
     z-index: 20;
     top: calc(100% + 5px);
@@ -95,7 +96,7 @@
     background: var(--raised);
     box-shadow: 0 10px 28px var(--shadow);
 }
-.file-picker-heading {
+.picker-heading {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
@@ -104,12 +105,12 @@
     color: var(--muted);
     font-size: 11.5px;
 }
-.file-picker-heading strong {
+.picker-heading strong {
     color: var(--fg);
     font-size: 12px;
     font-weight: 600;
 }
-.file-picker-search {
+.picker-search {
     width: 100%;
     box-sizing: border-box;
     margin-bottom: 6px;
@@ -121,19 +122,19 @@
     font: inherit;
     font-size: 12.5px;
 }
-.file-picker-search:focus {
+.picker-search:focus {
     outline: none;
     border-color: var(--focus);
     box-shadow: 0 0 0 2px var(--focus-halo);
 }
-.file-picker-list {
+.picker-list {
     display: flex;
     flex-direction: column;
     gap: 2px;
     max-height: 320px;
     overflow-y: auto;
 }
-.file-picker-row {
+.picker-row {
     position: relative;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -141,14 +142,14 @@
     border-radius: 5px;
     background: var(--raised);
 }
-.file-picker-row[hidden] { display: none; }
-.file-picker-row:hover,
-.file-picker-row:focus-within {
+.picker-row[hidden] { display: none; }
+.picker-row:hover,
+.picker-row:focus-within {
     z-index: 1;
     border-color: var(--border);
     background: var(--hover);
 }
-.file-picker-option {
+.picker-option {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 3px 14px;
@@ -163,16 +164,16 @@
     text-align: left;
     cursor: pointer;
 }
-.file-picker-option:hover,
-.file-picker-option:focus-visible {
+.picker-option:hover,
+.picker-option:focus-visible {
     outline: none;
     background: var(--sunk);
 }
-.file-picker-option[aria-current="true"] {
+.picker-option[aria-current="true"] {
     box-shadow: inset 3px 0 0 var(--accent);
     background: var(--sunk);
 }
-.file-picker-option-name {
+.picker-option-name {
     min-width: 0;
     overflow: hidden;
     font-size: 13.5px;
@@ -180,18 +181,18 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.file-picker-option-size {
+.picker-option-side {
     color: var(--muted);
     font-size: 12px;
     white-space: nowrap;
 }
-.file-picker-option-time {
+.picker-option-meta {
     grid-column: 1 / -1;
     color: var(--muted);
     font-size: 11.5px;
 }
-.file-picker-preview-wrap { position: relative; display: flex; }
-.file-picker-preview {
+.picker-row-action { position: relative; display: flex; }
+.picker-action {
     align-self: stretch;
     min-width: 74px;
     border: 0;
@@ -203,18 +204,18 @@
     font-size: 12px;
     cursor: pointer;
 }
-.file-picker-preview:hover,
-.file-picker-preview:focus-visible {
+.picker-action:hover,
+.picker-action:focus-visible {
     outline: none;
     background: var(--sunk);
     color: var(--fg);
 }
-.file-picker-preview[aria-disabled="true"] {
+.picker-action[aria-disabled="true"] {
     color: var(--muted);
     cursor: not-allowed;
     opacity: 0.55;
 }
-.file-picker-tooltip {
+.picker-action-tooltip {
     position: absolute;
     z-index: 2;
     top: calc(100% + 4px);
@@ -234,21 +235,32 @@
     transition: opacity 100ms ease, transform 100ms ease;
     visibility: hidden;
 }
-.file-picker-preview-wrap:hover .file-picker-tooltip,
-.file-picker-preview-wrap:focus-within .file-picker-tooltip {
+.picker-row-action:hover .picker-action-tooltip,
+.picker-row-action:focus-within .picker-action-tooltip {
     opacity: 1;
     transform: translateY(0);
     visibility: visible;
 }
-.file-picker-empty {
+.picker-empty {
     margin: 0;
     padding: 16px 10px;
     color: var(--muted);
     font-size: 12.5px;
     text-align: center;
 }
-.file-picker-empty[hidden] { display: none; }
+.picker-empty[hidden] { display: none; }
+
+/* The toolbar size, beside a heading rather than under one: it takes the width of
+   its longest option instead of the row's, and spends one line, not two — a note
+   short enough for this size follows the name rather than sitting under it. */
+.picker.sm { flex: 0 0 auto; }
+.picker.sm .picker-trigger { gap: 8px; min-height: 0; padding: 8px 12px; }
+.picker.sm .picker-value { display: flex; align-items: baseline; gap: 7px; }
+.picker.sm .picker-name { font-weight: 500; }
+.picker.sm .picker-meta { margin-top: 0; }
+.picker.sm .picker-popover { width: max-content; min-width: 200px; }
 
 @media (max-width: 560px) {
-    .file-picker-popover { min-width: 100%; }
+    .picker-popover { min-width: 100%; }
+    .picker.sm .picker-popover { min-width: 200px; }
 }
