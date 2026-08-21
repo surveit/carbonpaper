@@ -214,8 +214,7 @@ def test_the_authored_path_is_what_the_picker_reads_while_nothing_is_bound(proje
     body = client.get("/project/demo/runs/new").text
     picker = body.split('class="picker" data-picker', 1)[1].split("</select>", 1)[0]
 
-    # The field takes several files, so it holds no blank option — nothing selected
-    # IS the blank, and the placeholder rides on the select instead.
+    # No blank option: nothing selected IS the blank.
     assert "multiple" in picker
     assert 'value=""' not in picker
     assert f'data-empty-name="{project / "a.csv"}"' in picker

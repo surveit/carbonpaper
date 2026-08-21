@@ -24,9 +24,7 @@ def resolve_files_binding(
         return resolve_file_binding(project_id, file_ids[0])
     opened = [open_project_file(project_id, file_id) for file_id in file_ids]
     return {
-        # None takes an authored single `path` back off, which the model refuses to
-        # hold beside `paths`. A one-file binding keeps emitting `path` and nothing
-        # else, so its stage fingerprint — and the cache under it — does not move.
+        # None takes an authored `path` off; one file still emits `path` alone.
         "path": None,
         "paths": [str(path) for _record, path in opened],
         "format": _one_format([record.filename for record, _path in opened]).value,

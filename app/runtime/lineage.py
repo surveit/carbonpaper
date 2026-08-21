@@ -49,9 +49,7 @@ class RowParent:
     # narrowed to particular columns — true of a filter or union row, which
     # passed through whole, and of any producer that does not attribute.
     columns: tuple[str, ...] | None = None
-    # Set only where the row came from OUTSIDE the run: the file a source stage
-    # read it from, when that stage read more than one. `row_ordinal` is then the
-    # row's place in THAT file, and `stage_id` is the source stage's own id.
+    # The file a source stage read this row from; `row_ordinal` counts within it.
     source_file: str | None = None
 
 

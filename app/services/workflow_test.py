@@ -142,8 +142,7 @@ def _read_source_slices(
     ctx = RunContext.for_stages_outside_a_run(None)
     executing_ids = {stage.id for stage in executing}
     return {
-        # Sliced on the arrow table, so a source reading several files is windowed
-        # across the concatenation rather than per file.
+        # Windowed across the concatenation, not per file.
         source.id: table_to_frame(read_input_data(source, ctx).table.slice(offset, limit))
         for source in sources
         if source.id not in executing_ids

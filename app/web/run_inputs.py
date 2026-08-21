@@ -87,8 +87,7 @@ def _match_recorded_files(
     picks: dict[StageId, list[str]] = {}
     for stage_id, override in params.run_bindings.items():
         chosen = [file_id for path in read_connector_paths(dict(override))
-                  # A file the project no longer holds cannot be pre-picked, and
-                  # dropping it silently is what leaves the rest of them offered.
+                  # A file the project no longer holds cannot be pre-picked.
                   if (file_id := _match_one_path(id_by_key, path)) is not None]
         if chosen:
             picks[stage_id] = chosen

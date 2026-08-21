@@ -25,10 +25,6 @@ _OWNERS: frozenset[str] = frozenset({"app/core/frames.py"})
 # count is per module rather than a bare name so the burn-down is measurable
 # while it is in progress — a module going 20 → 8 registers instead of looking
 # untouched until its last signature goes.
-#
-# 71 signatures across 23 modules to burn down, `app/core/frames.py` excluded as
-# the owner. It was 154 across 33 before arrow became the wire format: every stage
-# handler stopped naming pandas in its signature, and the executor went 13 → 2.
 _ALLOWLIST: Mapping[str, int] = {
     "app/core/source_files.py": 5,
     "app/evals/dataset.py": 1,

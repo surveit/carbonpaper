@@ -69,8 +69,7 @@ def preflight_input_data(
         return ([f"`{stage.id}`: bound file does not exist or is not a file: {path}"
                  for path in missing], None)
     weighed = [_weigh_file(Path(path)) for path in bound]
-    # One file keeps the record it has always had, so nothing that reads a manifest
-    # has to learn a new shape to go on answering about single-file runs.
+    # One file keeps the flat record every manifest has carried.
     return [], weighed[0] if len(weighed) == 1 else {"files": weighed}
 
 
@@ -94,8 +93,7 @@ def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> StageOutp
     frames = [_read_one_file(Path(path), workflow_stage, params) for path in bound]
     if len(frames) == 1:
         return StageOutput.from_frame(frames[0])
-    # concat_tables, never pd.concat: pandas unions the columns and pads the gap with
-    # nulls, so a file missing a column would read as one that reported nothing.
+    # pd.concat pads a missing column with nulls; concat_tables refuses and names it.
     return StageOutput(
         concat_tables([frame_to_table(frame) for frame in frames]),
         lineage=_which_file_each_row_came_from(
@@ -108,8 +106,7 @@ def _which_file_each_row_came_from(
 ) -> RowLineage:
     """`row_ordinal` counts within the file, so it is the row a reader would find there."""
     return RowLineage([
-        # stage_id is the source stage's own: these rows have no parent stage, and what
-        # a reader asks at the end of a trace is which FILE, not which step.
+        # No parent stage: what a reader asks here is which FILE, not which step.
         [RowParent(stage_id, row, source_file=path)]
         for path, rows in zip(bound, rows_per_file)
         for row in range(rows)

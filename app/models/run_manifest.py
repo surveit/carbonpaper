@@ -178,8 +178,7 @@ def _read_files_of(binding: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(files, list):
         return [binding]
     return [
-        # `source` sits on the stage's record, not on each file — every file an input
-        # read was bound the same way, so each entry carries the stage's answer.
+        # `source` sits on the stage's record; every file it read was bound the same way.
         {**one_file, "source": binding.get("source")}
         for one_file in files if isinstance(one_file, dict)
     ]

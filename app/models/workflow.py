@@ -292,8 +292,7 @@ def _overridden_params(
 ) -> dict[str, Any]:
     """A None in the binding REMOVES the authored key, so a run can name a param off."""
     merged = {**authored, **binding}
-    # Overriding one of two params that contradict each other has to be able to take
-    # the other one away; leaving it would hand the model a pair it must refuse.
+    # A run naming `paths` must be able to take an authored `path` away.
     return {key: value for key, value in merged.items() if value is not None}
 
 
