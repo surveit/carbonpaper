@@ -30,7 +30,7 @@ def _open_in_a_new_tab(
     options: OptionsDict,
     env: Any,
 ) -> str:
-    """Every link, in-app ones included: the conversation is the thing being navigated away from."""
+    """The safe default, relaxed for in-app links by readyReplyLinks in static/chat-panel.js."""
     tokens[index].attrSet("target", "_blank")
     # noreferrer as well as noopener, so an external host is not told where the reader came from.
     tokens[index].attrSet("rel", "noopener noreferrer")

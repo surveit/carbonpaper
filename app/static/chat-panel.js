@@ -55,17 +55,41 @@ window.ChatPanel.mount = function (root) {
     else window.scrollTo(0, document.body.scrollHeight);
   }
 
-  // A link the agent wrote on a line of its own is a handover — the thing it wants opened —
-  // so it is drawn as a target rather than as underlined words inside a sentence. Same-origin
-  // only: an outside link is a citation, and following one is not moving around this app.
-  // Nothing is intercepted; the anchor navigates, and the rail remounts on the page it lands
-  // on. That is why this needs no tool and no agent knows it happened.
+  // Two decisions about a link in a reply, both answered by the same question.
+  function isInThisApp(a) {
+    try { return new URL(a.href, location.href).origin === location.origin; }
+    catch (e) { return false; }
+  }
+
+  // WHERE IT OPENS. app.web.markdown_render marks every link target="_blank", which was
+  // right while the chat was a page you lost by clicking anything on it. The rail is the
+  // change that makes it wrong: an in-app link is no longer navigating away from the
+  // conversation, and a new tab is the one thing that still loses it — a tab opened this way
+  // carries no reading place, and the panel it lands beside is a second copy, not this one.
+  // Undone here rather than at the renderer because origin is a fact about the browser, and
+  // the server behind a proxy does not have it. An external link keeps its new tab.
+  function keepInAppLinksInPlace(region) {
+    region.querySelectorAll("a[target=_blank]").forEach((a) => {
+      if (!isInThisApp(a)) return;
+      a.removeAttribute("target");
+      a.removeAttribute("rel");
+    });
+  }
+
+  // HOW IT IS DRAWN. A link the agent wrote on a line of its own is a handover — the thing it
+  // wants opened — so it is drawn as a target rather than as underlined words inside a
+  // sentence. An outside link is a citation, and following one is not moving around this app.
   function markHandovers(region) {
     region.querySelectorAll("p > a:only-child").forEach((a) => {
       if (a.parentNode.textContent.trim() !== a.textContent.trim()) return;
-      if (new URL(a.href, location.href).origin !== location.origin) return;
+      if (!isInThisApp(a)) return;
       a.classList.add("ac-goto");
     });
+  }
+
+  function readyReplyLinks(region) {
+    keepInAppLinksInPlace(region);
+    markHandovers(region);
   }
 
   // Mirrors app.web.file_sizes.render_attachment, so a turn looks the same the moment it
@@ -135,7 +159,7 @@ window.ChatPanel.mount = function (root) {
       const data = await r.json();
       if (bodyVersion.get(region) !== version) return;
       region.innerHTML = data.html;
-      markHandovers(region);
+      readyReplyLinks(region);
       region.classList.remove("ac-streaming");
       scroll();
     }
@@ -239,7 +263,7 @@ window.ChatPanel.mount = function (root) {
         // reorder the bubble.
         if (segments.length !== bodies.length) return;
         if (!bodies.every((d, i) => (bodyRaw.get(d) ?? d.textContent) === segments[i].text)) return;
-        bodies.forEach((d, i) => { d.innerHTML = segments[i].html; markHandovers(d); d.classList.remove("ac-streaming"); });
+        bodies.forEach((d, i) => { d.innerHTML = segments[i].html; readyReplyLinks(d); d.classList.remove("ac-streaming"); });
         scroll();
       },
       stop
@@ -568,7 +592,7 @@ window.ChatPanel.mount = function (root) {
     fitComposer();
   }
 
-  log.querySelectorAll(".ac-msg.assistant .ac-body").forEach(markHandovers);
+  log.querySelectorAll(".ac-msg.assistant .ac-body").forEach(readyReplyLinks);
   restoreReadingPlace();
   // Reattach to a turn already running on the server. `from=0` replays it whole: the store
   // holds a turn's blocks only once it has finished, so mid-turn the buffer is the transcript.

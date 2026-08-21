@@ -294,9 +294,20 @@ log in the rail, the document on the page.
 
 `static/chat-panel.js` is the client, scoped to a root element rather than the
 document — every hook is a `js-` class, since an id would collide between two
-panels. It marks a same-origin link that is a whole paragraph as a handover
-(`.ac-goto`), which styles the gesture both agents already make; nothing is
-intercepted and no agent knows.
+panels. It makes two decisions about every link in a reply, both from one
+question — is this link back into this app?
+
+- **Where it opens.** `markdown_render` marks every link `target="_blank"`, which
+  was right while the chat was a page you lost by clicking anything on it. The
+  client drops it again for an in-app link: the rail carries the conversation
+  across an in-app navigation, and a new tab is now the only thing that still
+  loses it. Undone in the browser rather than at the renderer because origin is a
+  fact about the browser, which a server behind a proxy does not have. An
+  external link keeps its new tab.
+- **How it is drawn.** An in-app link that is a whole paragraph on its own is a
+  handover — the page the agent wants opened — and is drawn as a target
+  (`.ac-goto`). A link inside a sentence is a citation and stays inline. Nothing
+  is intercepted and no agent knows either decision happened.
 
 Neither host names an agent. What a surface calls one is
 `AgentConfig.display_name`, and `tests/arch/test_chat_rail_names_no_agent.py`
