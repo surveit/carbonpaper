@@ -12,7 +12,7 @@
     <script src="/static/diagram_nodes.js"></script>
     {% block head_extra %}{% endblock %}
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
     <header>
         {# The trail is the whole left side and the ONLY way back: no page adds a
            back link of its own. A page with no trail to pass (an error, a partial

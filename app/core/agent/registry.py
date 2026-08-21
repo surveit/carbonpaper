@@ -16,6 +16,14 @@ from app.core.agent.bound_tool import BoundToolSpec
 from app.core.ids import ID
 
 
+class OpeningTurn(BaseModel):
+    """An agent's written first turn: what it says, and what it offers as a reply."""
+
+    text: str
+    # Empty leaves the reader to type. Replies: an authored turn links to nothing.
+    offers: list[str] = []
+
+
 class AgentConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     system_prompt: str
@@ -28,11 +36,8 @@ class AgentConfig(BaseModel):
     # Labels for tools this agent does not own — e.g. the CLI's own ToolSearch
     # built-in, which has no BoundToolSpec here but still renders in the chat.
     extra_tool_labels: dict[str, str] = {}
-    # The message the agent opens with, written rather than generated: given this
-    # session's validated context, the text stored as its first assistant turn at
-    # creation — no model call, so no cost, no latency, no thinking block for prose
-    # the prompt already dictates. None = wait to be spoken to; "" = opens with nothing.
-    render_opening_message: Callable[[BaseModel], str] | None = None
+    # The first assistant turn, stored with no AI model call. None waits to be spoken to.
+    render_opening_turn: Callable[[BaseModel], OpeningTurn] | None = None
     # Prose only this session's context can supply, appended to system_prompt. What
     # it says is the agent's business; returning "" appends nothing, not a heading
     # over nothing.
@@ -53,12 +58,12 @@ def is_registered(agent_id: ID) -> bool:
     return agent_id in _registry
 
 
-def render_opening_message(agent_id: ID, context: dict[str, Any]) -> str | None:
-    """None when the agent waits to be spoken to. See AgentConfig.render_opening_message."""
+def render_opening_turn(agent_id: ID, context: dict[str, Any]) -> OpeningTurn | None:
+    """None when the agent waits to be spoken to. See AgentConfig.render_opening_turn."""
     config, _build_tools = _registry[agent_id]
-    if config.render_opening_message is None:
+    if config.render_opening_turn is None:
         return None
-    return config.render_opening_message(config.context_schema.model_validate(context))
+    return config.render_opening_turn(config.context_schema.model_validate(context))
 
 
 def build_engine(

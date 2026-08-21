@@ -94,4 +94,4 @@ def test_the_project_message_promises_no_publishing_because_nothing_publishes(
 
 def test_the_hook_the_editing_agent_registered_is_the_one_that_runs() -> None:
     # Without this, every test above would pass on an agent carrying no hook.
-    assert EDITING_CONFIG.render_opening_message is not None
+    assert EDITING_CONFIG.render_opening_turn is not None

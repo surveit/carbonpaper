@@ -10,8 +10,9 @@ import uuid
 from datetime import datetime
 from enum import Enum
 from typing import Any, ClassVar, Literal, TypedDict
+from urllib.parse import urlsplit, urlunsplit
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.agent.usage import LlmUsage, TurnSpend
 from app.core.persistence import PersistedModel, PersistenceScope
@@ -28,6 +29,7 @@ class PartType(str, Enum):
     thinking = "thinking"
     tool_call = "tool_call"
     tool_result = "tool_result"
+    offer = "offer"
 
 
 class TranscriptMessage(TypedDict):
@@ -53,9 +55,49 @@ class ToolBlock(BaseModel):
     calls: list[ToolCall]
 
 
+# Drawn as buttons, not a tool row: each option is a message the reader may send.
+OFFER_NEXT_STEPS = "offer_next_steps"
+
+
+class Offer(BaseModel):
+    """A reply the reader may click. Carrying a url it opens that page instead."""
+
+    text: str = Field(min_length=1, max_length=70)
+    url: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_a_bare_reply(cls, data: Any) -> Any:
+        # A written offer is a plain string: it replies, so it carries no url.
+        return {"text": data} if isinstance(data, str) else data
+
+    @field_validator("url")
+    @classmethod
+    def _keep_only_the_path(cls, url: str | None) -> str | None:
+        # Whatever host was written, the button goes to a page in this app.
+        if url is None:
+            return None
+        parts = urlsplit(url)
+        path = urlunsplit(("", "", parts.path, parts.query, parts.fragment))
+        if not path.startswith("/"):
+            raise ValueError(f"a link offer takes a path in this app, not {url!r}")
+        return path
+
+
+class NextSteps(BaseModel):
+    """What one turn offers as the reader's next message, in the reader's own voice."""
+
+    options: list[Offer] = Field(min_length=2, max_length=4)
+
+
+class OffersBlock(BaseModel):
+    kind: Literal["offers"] = "offers"
+    options: list[Offer]
+
+
 class Bubble(BaseModel):
     role: MessageRole
-    blocks: list[ProseBlock | ToolBlock]
+    blocks: list[ProseBlock | ToolBlock | OffersBlock]
 
 
 class AgentSession(PersistedModel):
@@ -182,12 +224,14 @@ def _render_history_bubbles(messages: list[dict]) -> list[Bubble]:
     ]
 
 
-def _blocks_in_turn_order(message: dict) -> list[ProseBlock | ToolBlock]:
+def _blocks_in_turn_order(message: dict) -> list[ProseBlock | ToolBlock | OffersBlock]:
     """Reading order is the order the turn produced, so text after a tool call renders after it."""
-    blocks: list[ProseBlock | ToolBlock] = []
+    blocks: list[ProseBlock | ToolBlock | OffersBlock] = []
     for part in message.get("parts") or []:
         part_type = part.get("type")
-        if part_type == PartType.tool_call:
+        if part_type == PartType.offer:
+            blocks.append(OffersBlock(options=part.get("options") or []))
+        elif part_type == PartType.tool_call:
             _append_tool_call(blocks, ToolCall(
                 name=part.get("name", ""), args=part.get("args", ""),
                 label=part.get("label") or part.get("name", "")))
@@ -195,10 +239,18 @@ def _blocks_in_turn_order(message: dict) -> list[ProseBlock | ToolBlock]:
             _append_prose(blocks, "text", part.get("text", ""))
         elif part_type == PartType.thinking:
             _append_prose(blocks, "thinking", part.get("text", ""))
-    return blocks
+    return _drop_superseded_offers(blocks)
 
 
-def _append_tool_call(blocks: list[ProseBlock | ToolBlock], call: ToolCall) -> None:
+def _drop_superseded_offers(
+    blocks: list[ProseBlock | ToolBlock | OffersBlock],
+) -> list[ProseBlock | ToolBlock | OffersBlock]:
+    """A turn offers one set of next steps; a second call replaces the first."""
+    newest = next((b for b in reversed(blocks) if isinstance(b, OffersBlock)), None)
+    return [b for b in blocks if not isinstance(b, OffersBlock) or b is newest]
+
+
+def _append_tool_call(blocks: list[ProseBlock | ToolBlock | OffersBlock], call: ToolCall) -> None:
     """One block per RUN of a kind, as for prose: calls with no prose between them share a block."""
     previous = blocks[-1] if blocks else None
     if isinstance(previous, ToolBlock):
@@ -207,7 +259,8 @@ def _append_tool_call(blocks: list[ProseBlock | ToolBlock], call: ToolCall) -> N
         blocks.append(ToolBlock(calls=[call]))
 
 
-def _append_prose(blocks: list[ProseBlock | ToolBlock], kind: Literal["text", "thinking"],
+def _append_prose(blocks: list[ProseBlock | ToolBlock | OffersBlock],
+                  kind: Literal["text", "thinking"],
                   text: str) -> None:
     """One block per RUN of a kind: the split the live stream renders, and the swap compares."""
     previous = blocks[-1] if blocks else None

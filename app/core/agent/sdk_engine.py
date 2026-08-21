@@ -23,10 +23,12 @@ from claude_agent_sdk import (
     ToolUseBlock,
     UserMessage,
 )
+from pydantic import ValidationError
 
 # `CLI_PATH` is the located Claude Code CLI (the SDK does not always find it on
 # PATH on Windows — app.core.llm_sdk probes the known install locations).
 from app.core.agent.errors import AccountLimitReached
+from app.core.agent.store import OFFER_NEXT_STEPS, NextSteps
 from app.core.agent.usage import LlmUsage
 from app.core.llm_sdk import CLI_PATH as _CLI_PATH
 from app.core.ids import ID
@@ -171,6 +173,15 @@ class ClaudeAgentSdkEngine:
                         # (e.g. "mcp__tools__read_stage"); the friendly label is
                         # keyed by the bare tool name.
                         bare = block.name.rsplit("__", 1)[-1]
+                        offered = _read_offered_steps(bare, block.input)
+                        if offered is not None:
+                            # Its own part type, so the page draws buttons and the
+                            # reader is never shown the plumbing behind them.
+                            hidden_tool_result_ids.add(block.id)
+                            emit({"kind": "offer", "options": offered.options})
+                            assistant_parts.append(
+                                {"type": "offer", "options": offered.options})
+                            continue
                         if bare == "submit_answer":
                             hidden_tool_result_ids.add(block.id)
                         label = self._tool_labels.get(bare, bare)
@@ -231,6 +242,16 @@ class ClaudeAgentSdkEngine:
             {"role": "assistant", "parts": assistant_parts},
         ]
         return transcript, session_id
+
+
+def _read_offered_steps(tool_name: str, payload: Any) -> NextSteps | None:
+    """None for any other tool, and for arguments that do not validate — both draw as a tool row."""
+    if tool_name != OFFER_NEXT_STEPS:
+        return None
+    try:
+        return NextSteps.model_validate(payload)
+    except ValidationError:
+        return None
 
 
 def _record_tool_results(

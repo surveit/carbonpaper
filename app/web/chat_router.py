@@ -20,7 +20,15 @@ from app.web.file_sizes import describe_attachment, describe_refusal
 
 from app.core.agent import registry
 from app.core.agent.session import build_session_engine, create_agent_session
-from app.core.agent.store import Bubble, MessageRole, ProseBlock, open_session_store
+from app.core.agent.store import (
+    Bubble,
+    MessageRole,
+    Offer,
+    OffersBlock,
+    ProseBlock,
+    ToolBlock,
+    open_session_store,
+)
 from app.core.agent.turns import default_turn_manager
 from app.web.breadcrumbs import build_chat_crumbs, build_home_crumbs
 from app.web.config import templates
@@ -59,6 +67,15 @@ async def chat_index(request: Request):
     })
 
 
+def _draft_opening_bubble(opening: registry.OpeningTurn) -> Bubble:
+    """Mirrors what create_agent_session stores, so a draft reads like the session it becomes."""
+    blocks: list[ProseBlock | ToolBlock | OffersBlock] = [
+        ProseBlock(kind="text", text=opening.text)]
+    if opening.offers:
+        blocks.append(OffersBlock(options=[Offer(text=t) for t in opening.offers]))
+    return Bubble(role=MessageRole.assistant, blocks=blocks)
+
+
 def _draft_title(agent_id: str, context: dict) -> str:
     if agent_id == "tutorial":
         return "Guided tour"
@@ -72,10 +89,8 @@ async def draft_agent_chat(agent_id: str, request: Request):
     if not registry.is_registered(agent_id):
         raise HTTPException(status_code=404, detail="Unknown agent")
     context = dict(request.query_params) | {"base_url": str(request.base_url)}
-    opening = registry.render_opening_message(agent_id, context)
-    history = [
-        Bubble(role=MessageRole.assistant, blocks=[ProseBlock(kind="text", text=opening)])
-    ] if opening else []
+    opening = registry.render_opening_turn(agent_id, context)
+    history = [_draft_opening_bubble(opening)] if opening and opening.text else []
     title = _draft_title(agent_id, context)
     return templates.TemplateResponse(request, "chat.html", {
         "session_id": None,

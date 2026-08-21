@@ -13,6 +13,7 @@ from urllib.parse import urlencode
 from pydantic import BaseModel
 
 from app.core import files as file_store
+from app.core.agent.store import NextSteps, Offer
 from app.models import EvalConfig
 from app.models.review_guide import ReviewGuideDraft
 from app.services import (
@@ -148,6 +149,47 @@ def _find_reusable_tour_project() -> str | None:
 def _is_on_disk(project_id: str) -> bool:
     """A project the workspace can run — not merely an id the store knows."""
     return (workspace.projects_dir() / project_id).is_dir() and methodology.exists(project_id)
+
+
+def offer_next_steps(options: list[Offer]) -> str:
+    """An echo reads as "carry on": the AI model wrote a second summary and offered again."""
+    shown = " | ".join(_describe_offer(o) for o in NextSteps(options=options).options)
+    return f"Drawn under this turn as buttons: {shown}. Nothing follows this."
+
+
+def _describe_offer(offer: Offer) -> str:
+    return f"{offer.text} -> {offer.url}" if offer.url else offer.text
+
+
+# Not in tool_specs: everything there is offered over MCP, where nothing draws a button.
+OFFER_NEXT_STEPS = ToolProse(
+    parameters={
+        "options": "Two to four of them. Each is `text` — at most 70 characters, in the "
+            "reader's own voice: \"Open the review queue\", not \"Open the queue for them\" "
+            "— and, for a step that is go-and-look-at-a-page, a `url`: the path of a URL a "
+            "tool gave you, which opens in a new tab instead of replying to you.",
+    },
+    description="""Offer the reader replies to click instead of typing.
+
+Call it ONCE, when everything you meant to say is said. A turn cannot end on
+a call, so close with one short sentence addressed to the reader — "Say the
+word and I'll run it." Never a stage direction: not "(End of turn)", not
+"(waiting for your choice)", not "pick one above". The reader can see the
+buttons; a line about them is a line about the furniture.
+
+Each option is drawn as a button under this turn, and clicking one sends that
+option's exact words as their next message — so these are not a menu you may
+narrow the conversation to. The reader can still type anything, and whatever
+comes back is an ordinary turn.
+
+Offer only steps you can carry out when one comes back, and never one that just
+ends the conversation.
+
+    offer_next_steps(options=[
+        {"text": "Open the review queue", "url": "/project/<id>/runs/<id>/queue/<stage>"},
+        {"text": "Trace a published figure back to its row"},
+    ])""",
+)
 
 
 CREATE_TUTORIAL_PROJECT = ToolProse(

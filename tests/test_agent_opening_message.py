@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 from app.core.agent import registry
-from app.core.agent.registry import AgentConfig, register
+from app.core.agent.registry import AgentConfig, OpeningTurn, register
 from app.core.agent.session import build_session_engine, create_agent_session
 from app.core.agent.store import open_session_store
 from app.main import app
@@ -32,9 +32,9 @@ def _no_tools(context: BaseModel) -> list:
     return []
 
 
-def _open_with(context: BaseModel) -> str:
+def _open_with(context: BaseModel) -> OpeningTurn:
     del context
-    return _OPENING
+    return OpeningTurn(text=_OPENING)
 
 
 @pytest.fixture(autouse=True)
@@ -43,7 +43,7 @@ def throwaway_agents() -> Iterator[None]:
     register("silent", AgentConfig(system_prompt="sp", context_schema=_Ctx), _no_tools)
     register(
         "greeter",
-        AgentConfig(system_prompt="sp", context_schema=_Ctx, render_opening_message=_open_with),
+        AgentConfig(system_prompt="sp", context_schema=_Ctx, render_opening_turn=_open_with),
         _no_tools,
     )
     yield

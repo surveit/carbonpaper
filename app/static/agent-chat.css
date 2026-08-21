@@ -10,12 +10,27 @@
    button on the h1's baseline hangs below the heading, where .dash-header's
    ＋ New project sits flush with the h1's top. */
 .ac-new { margin-left: auto; align-self: flex-start; }
+/* The head sits outside the scrolling log, so it takes the column and its padding
+   itself or the button drifts to the window's edge. */
+body.chat-page .ac-head { max-width: var(--chat-column); width: 100%; margin: 0 auto;
+    padding: 0 28px 4px; box-sizing: border-box; }
 
 .ac-sessions { list-style: none; padding: 0; max-width: 1280px; }
 .ac-session { border: 1px solid var(--border); border-radius: 8px; background: var(--raised);
     padding: 10px 12px; margin: 6px 0; }
 .ac-session a { text-decoration: none; font-weight: 500; }
 .ac-session-meta { color: var(--muted); font-size: 12px; }
+
+/* ═══ The page (chat.html) ═══ */
+/* The conversation owns the viewport: header, then the log scrolling in what is
+   left, then the composer as the column's last row. The composer used to be fixed
+   to the window, which put a bar the full width of the screen under a 1280px
+   column and a field of empty page between the last reply and the box you answer
+   it in. Nothing here escapes the flow, so there is no height to reserve and no
+   padding to keep in step with it. */
+body.chat-page { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+body.chat-page > main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+    padding: 12px 0 0; }
 
 /* ═══ The transcript (chat.html) ═══ */
 /* --chat-column is the conversation's width wherever it is drawn — the log, the
@@ -25,8 +40,9 @@
    margin left over keeps the column reading as a column inside the page.
    The composer is fixed to the viewport, so the log's own bottom padding is what
    keeps the last turn clear of it. */
-.ac-log { max-width: var(--chat-column); margin: 0 auto; padding: 8px 0 128px;
-    display: flex; flex-direction: column; gap: 28px; }
+.ac-log { max-width: var(--chat-column); width: 100%; margin: 0 auto; padding: 8px 28px 8px;
+    display: flex; flex-direction: column; gap: 28px; box-sizing: border-box;
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 
 /* Who spoke, for a screen reader only. On the page the grey bubble hard right and
    the unboxed prose under it already say it, so the label was a third row of
@@ -93,7 +109,10 @@
 .ac-files { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .ac-msg.user .ac-body { background: var(--hover); color: var(--fg);
     border-radius: 10px; padding: 8px 12px; }
-.ac-msg.assistant { align-self: stretch; }
+.ac-msg.assistant { align-self: stretch; display: flex; flex-direction: column; }
+/* The offers are the turn's last word wherever in it the AI model asked for them: a reply
+   that carries on talking under its own buttons reads as two turns. */
+.ac-msg.assistant .ac-offers { order: 1; }
 
 .ac-think { margin: 2px 0 8px; border-left: 3px solid var(--border-strong);
     background: var(--sunk-deep); border-radius: 4px; }
@@ -125,6 +144,9 @@
    .ac-tool's 1px left prose-to-tool at 1px while tool-to-prose stayed 12px. */
 .ac-tool + .ac-body,
 .ac-body + .ac-tool { margin-top: 12px; }
+/* Two text regions land side by side when what stood between them is an offers row,
+   which the rule above sends to the end of the turn. */
+.ac-body + .ac-body { margin-top: 14px; }
 .ac-tool-json { font-family: var(--mono); font-size: 11px; color: var(--muted);
     background: var(--sunk); border: 1px solid var(--border); border-radius: 6px;
     padding: 6px 9px; margin: 4px 0 6px; white-space: pre-wrap; overflow-x: auto; }
@@ -151,17 +173,19 @@
 @keyframes ac-spin { 0%, 80%, 100% { transform: scale(.6); opacity: .35 } 40% { transform: scale(1); opacity: 1 } }
 
 /* ═══ The composer ═══ */
-/* Fixed to the viewport bottom: main is a scrolling document with no height
-   contract, so a full-height flex shell would mean scoping 100vh onto this page
-   alone. The inner row holds the log's --chat-column so the two line up. */
-.ac-dock { position: fixed; bottom: 0; left: 0; right: 0; background: var(--raised);
-    border-top: 1px solid var(--border); }
-/* 28px, main's own side padding: below the width the column can hold, the row
-   then narrows exactly as the log above it does instead of drifting wider. */
+/* The dock carries the column and its 28px side padding — main's own — so the box
+   inside it lines its edges up with the messages above rather than drifting wider. */
+.ac-dock { flex: 0 0 auto; max-width: var(--chat-column); width: 100%; margin: 0 auto;
+    padding: 0 28px 16px; box-sizing: border-box; }
+/* The transcript scrolls UNDER the composer, so the fade is what says it continues
+   there. A rule across the window would say the opposite: that the page ends. */
+.ac-dock::before { content: ""; display: block; height: 20px; margin-top: -20px;
+    background: linear-gradient(to bottom, transparent, var(--bg)); }
 /* Bottom-aligned: the message box grows upward with what is typed, and the buttons
    beside it stay on the last line rather than stretching with it. */
-.ac-composer { max-width: var(--chat-column); margin: 0 auto; padding: 10px 28px; display: flex;
-    gap: 8px; align-items: flex-end; --ac-control: 44px; }
+.ac-composer { display: flex; gap: 8px; align-items: flex-end; --ac-control: 44px;
+    padding: 6px 8px; background: var(--raised); border: 1px solid var(--border-strong);
+    border-radius: 14px; }
 /* The three controls rest at one declared height — a floor clearing every one's own content
    box, so the row's top edge stays straight while the message box grows past it. */
 .ac-clip, .ac-input, .ac-send { min-height: var(--ac-control); }
@@ -170,9 +194,13 @@
 /* A textarea, so a message can hold paragraphs. `fitComposer` sets its height per keystroke
    and measures against border-box; the cap is what keeps a long draft off the screen. The
    drag handle is off — a hand-dragged height would fight every keystroke after it. */
-.ac-input { flex: 1; font: inherit; padding: 9px 11px; border: 1px solid var(--border);
-    border-radius: 8px; box-sizing: border-box; resize: none; overflow-y: auto;
+.ac-input { flex: 1; font: inherit; padding: 9px 11px; border: 0; background: none;
+    box-sizing: border-box; resize: none; overflow-y: auto;
     line-height: 1.45; max-height: 40vh; }
+/* The box around the whole row is the field now; a second outline inside it would
+   draw a box in a box. */
+.ac-input:focus { outline: none; }
+.ac-composer:focus-within { border-color: var(--accent); }
 .ac-send { font: inherit; padding: 9px 16px; border-radius: 8px; border: 1px solid var(--accent);
     background: var(--accent); color: var(--on-dark); cursor: pointer; }
 .ac-send:hover { background: var(--accent-deep); border-color: var(--accent-deep); }
@@ -186,11 +214,11 @@
     border: 1px solid var(--border); border-radius: 8px; background: var(--sunk-deep);
     cursor: pointer; }
 .ac-clip:hover { border-color: var(--border-strong); }
-.ac-attached { max-width: var(--chat-column); margin: 0 auto; padding: 8px 28px 0; font-size: 12.5px;
+.ac-attached { padding: 0 0 8px; font-size: 12.5px;
     color: var(--muted); font-family: var(--mono); }
 /* Above the composer rather than over the log: it belongs to what is being composed,
    and a question the reader can scroll away from is one they can miss. */
-.ac-pop { max-width: var(--chat-column); margin: 0 auto; padding: 10px 28px; }
+.ac-pop { padding: 10px 0; }
 .ac-pop-head { font-size: 12.5px; color: var(--muted); margin-bottom: 6px; }
 .ac-choice { display: block; width: 100%; text-align: left; font: inherit; font-size: 13px;
     padding: 8px 11px; margin-bottom: 5px; cursor: pointer; border: 1px solid var(--border);
@@ -237,3 +265,24 @@
     padding: 5px 8px 5px 12px; border: 1px solid var(--border); border-radius: 999px;
     background: var(--sunk-deep); }
 .ac-pending-chip .ac-file-name { font-size: 12px; }
+
+/* ═══ What the reader may click instead of typing ═══ */
+/* The agent's own words, offered as its turn ends; a click sends them as the reader's
+   next message. They sit under the turn that offered them and scroll away with it, so
+   the page never shows a step on offer that a later turn has moved past. */
+.ac-offers { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.ac-offer { font: inherit; font-size: 13.5px; text-align: left; cursor: pointer;
+    padding: 8px 14px; border-radius: 999px; border: 1px solid var(--border-strong);
+    background: var(--raised); color: var(--fg); }
+.ac-offer:hover { border-color: var(--accent); color: var(--accent); }
+/* An offer that opens a page rather than replying. The arrow is drawn here, never by
+   the AI model, so it cannot appear on a button that only sends a sentence. */
+.ac-offer-link { display: inline-flex; align-items: center; gap: 7px; text-decoration: none; }
+.ac-offer-arrow { font-size: 12px; color: var(--muted); }
+.ac-offer-link:hover .ac-offer-arrow { color: var(--accent); }
+
+/* Answered: the reader has said something since, so these are a record of what was
+   offered then. Left legible rather than removed — a turn must read on reload the way
+   it read live. A LINK does not expire with the turn: the page it opens is still there,
+   and there is no stale sentence to send. */
+.ac-log > .ac-msg:not(:last-child) button.ac-offer { opacity: .45; pointer-events: none; }

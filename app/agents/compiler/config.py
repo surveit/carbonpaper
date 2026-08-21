@@ -13,7 +13,7 @@ from app.services import project as project_service
 from app.services import terms as terms_service
 from app.tools.editing import EditingContext, build_editing_tools
 from app.tools.prompt_fragments import render_link_map
-from app.core.agent.registry import AgentConfig, register
+from app.core.agent.registry import AgentConfig, OpeningTurn, register
 from app.core.agent.bound_tool import BoundToolSpec
 
 
@@ -31,11 +31,12 @@ def _render_project_terms(context: EditingContext) -> str:
     return render_terms(terms_service.load_terms(context.project_id))
 
 
-def _render_opening_message(context: BaseModel) -> str:
+def _render_opening_turn(context: BaseModel) -> OpeningTurn:
     assert isinstance(context, EditingContext)
     if context.project_id is None:
-        return _BLANK_CHAT_OPENING
-    return _PROJECT_OPENING.format(name=project_service.read_project_name(context.project_id))
+        return OpeningTurn(text=_BLANK_CHAT_OPENING)
+    return OpeningTurn(text=_PROJECT_OPENING.format(
+        name=project_service.read_project_name(context.project_id)))
 
 
 # `POST /chat/new` — nothing is bound yet, so the message is the three ways in, numbered
@@ -77,7 +78,7 @@ CONFIG = AgentConfig(
     render_session_prompt=_render_session_note,
     # Written, not generated: the same words for every reader, and the model is told
     # them, so "the first one" resolves to a numbered line above.
-    render_opening_message=_render_opening_message,
+    render_opening_turn=_render_opening_turn,
 )
 
 

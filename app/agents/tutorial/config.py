@@ -7,29 +7,36 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from app.agents.tutorial.prompt import TUTORIAL_OPENING_MESSAGE, TUTORIAL_SYSTEM_PROMPT
+from app.agents.tutorial.prompt import (
+    TUTORIAL_OPENING_MESSAGE,
+    TUTORIAL_OPENING_OFFERS,
+    TUTORIAL_SYSTEM_PROMPT,
+)
 from app.core.agent.bound_tool import BoundToolSpec, bind_by_signature
-from app.core.agent.registry import AgentConfig, register
+from app.core.agent.registry import AgentConfig, OpeningTurn, register
 from app.tools import eval_runs, shared
 from app.tools.eval_runs import EvalRunResult
 from app.tools.shared import StageOutputRows
 from app.tools.tool_specs import bind, read_parameter_prose, read_tool_description
+from app.core.agent.store import OFFER_NEXT_STEPS as OFFER_NEXT_STEPS_NAME
 from app.tools.tutorial import (
     CREATE_TUTORIAL_PROJECT,
+    OFFER_NEXT_STEPS,
     TutorialAgentReference,
     TutorialContext,
+    offer_next_steps,
     seed_tutorial_project,
 )
 
-def _render_opening_message(context: BaseModel) -> str:
+def _render_opening_turn(context: BaseModel) -> OpeningTurn:
     assert isinstance(context, TutorialContext)
-    return TUTORIAL_OPENING_MESSAGE
+    return OpeningTurn(text=TUTORIAL_OPENING_MESSAGE, offers=TUTORIAL_OPENING_OFFERS)
 
 
 CONFIG = AgentConfig(
     system_prompt=TUTORIAL_SYSTEM_PROMPT,
     context_schema=TutorialContext,
-    render_opening_message=_render_opening_message,
+    render_opening_turn=_render_opening_turn,
     # The tour's turns are short and its tool sequence is dictated by the prompt —
     # there is nothing here for a reasoning block to earn.
     thinking={"type": "disabled"},
@@ -83,6 +90,13 @@ def build_tutorial_tools(context: BaseModel) -> list[BoundToolSpec]:
             fn=run_eval,
             label="Running the eval",
             parameters=eval_runs.RUN_EVAL.parameters,
+        ),
+        bind_by_signature(
+            name=OFFER_NEXT_STEPS_NAME,
+            description=OFFER_NEXT_STEPS.description,
+            fn=offer_next_steps,
+            label="Offering what to do next",
+            parameters=OFFER_NEXT_STEPS.parameters,
         ),
         *bind("run_workflow", "get_run_status", "sleep", "read_workflow_summary"),
     ]
