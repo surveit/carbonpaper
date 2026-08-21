@@ -55,8 +55,8 @@ def find_declaration_problems(says: str, table_schema: TableSchema) -> list[str]
     """Everything wrong with a shape, checkable with no run and no data."""
     if len(table_schema.columns) != 1:
         return [
-            f"a claim shape declares exactly one column while tabular claims are withheld, "
-            f"and this one declares {len(table_schema.columns)}"
+            f"a claim shape declares one column, because binding a claim to a table is not "
+            f"built yet; this one declares {len(table_schema.columns)}"
         ]
     return _find_unfillable_slots(says, {column.name for column in table_schema.columns})
 

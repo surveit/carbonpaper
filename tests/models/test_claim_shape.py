@@ -48,12 +48,12 @@ def test_a_format_spec_does_not_hide_the_column_it_names():
     ]
 
 
-def test_a_tabular_shape_is_withheld():
+def test_a_tabular_shape_is_refused_until_tables_can_be_bound():
     register = TableSchema(columns=[
         Column(name="mill_name", type="str", nullable=False),
         Column(name="capacity_tonnes_ffb_hour", type="float", nullable=True),
     ])
-    with pytest.raises(ValidationError, match="tabular claims are withheld"):
+    with pytest.raises(ValidationError, match="binding a claim to a table is not"):
         _shape("The mills in the register.", register)
 
 
