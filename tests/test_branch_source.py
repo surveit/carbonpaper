@@ -1,9 +1,9 @@
-"""Arm ids come from tree position, and the rewrite runs in both interpreters."""
+"""Branch ids come from tree position; the rewrite runs in both interpreters."""
 from __future__ import annotations
 
 from pathlib import Path
 
-from app.core.branch_source import RECORDER_NAME, find_branch_arms, instrument_branches
+from app.core.branch_source import RECORDER_NAME, find_branches, instrument_branches
 from app.runtime.branches import BRANCH_SCHEMA, BranchRecorder, RowBranches
 from app.runtime.code import load_function
 from app.runtime.starlark_code import compile_starlark_function
@@ -36,33 +36,33 @@ def stage_code(name: str) -> str:
     return (_STAGE_CODE / f"{name}.txt").read_text(encoding="utf-8")
 
 
-def test_an_elif_chain_names_every_arm_by_its_position() -> None:
-    assert [arm.id for arm in find_branch_arms(ELIF_CHAIN)] == [
+def test_an_elif_chain_names_every_branch_by_its_position() -> None:
+    assert [branch.id for branch in find_branches(ELIF_CHAIN)] == [
         "transform/0:if", "transform/0:elif0", "transform/0:elif1", "transform/0:else",
     ]
 
 
 def test_reformatting_moves_the_line_but_not_the_id() -> None:
     spaced = ELIF_CHAIN.replace("def transform(row):", "def transform(row):\n\n    # a comment")
-    before, after = find_branch_arms(ELIF_CHAIN), find_branch_arms(spaced)
+    before, after = find_branches(ELIF_CHAIN), find_branches(spaced)
     assert [a.id for a in before] == [a.id for a in after]
     assert [a.line for a in before] != [a.line for a in after]
 
 
-def test_a_handler_is_an_arm_so_a_guard_that_never_fired_is_still_named() -> None:
-    assert [arm.id for arm in find_branch_arms(stage_code("read_reported_money"))] == [
+def test_a_handler_is_a_branch_so_a_guard_that_never_fired_is_still_named() -> None:
+    assert [branch.id for branch in find_branches(stage_code("read_reported_money"))] == [
         "_read_money/0:if", "_read_money/2:if", "_read_money/3:try",
         "_read_money/3:except0", "_read_money/4:if",
     ]
 
 
-def test_an_arm_sharing_its_header_line_is_still_offered() -> None:
-    assert [arm.id for arm in find_branch_arms(ONE_LINER)] == [
+def test_a_branch_sharing_its_header_line_is_still_offered() -> None:
+    assert [branch.id for branch in find_branches(ONE_LINER)] == [
         "transform/0:if", "transform/0:else",
     ]
 
 
-def test_a_one_line_arm_records_like_any_other() -> None:
+def test_a_one_line_branch_records_like_any_other() -> None:
     recorder = BranchRecorder()
     transform = load_function(ONE_LINER, "transform", "transform", recorder)
     assert transform is not None
@@ -70,15 +70,15 @@ def test_a_one_line_arm_records_like_any_other() -> None:
     recorder.close_row(0)
     transform({"a": 0})
     recorder.close_row(1)
-    assert recorder.arms_for(0) == ("transform/0:if",)
-    assert recorder.arms_for(1) == ("transform/0:else",)
+    assert recorder.branches_for(0) == ("transform/0:if",)
+    assert recorder.branches_for(1) == ("transform/0:else",)
 
 
-def test_a_predicate_with_no_statement_branch_offers_no_arms() -> None:
-    assert find_branch_arms(stage_code("venezuela_rows")) == []
+def test_a_predicate_with_no_statement_branch_offers_none() -> None:
+    assert find_branches(stage_code("venezuela_rows")) == []
 
 
-def test_instrumenting_changes_which_arms_are_seen_and_nothing_else() -> None:
+def test_instrumenting_changes_which_branches_are_seen_and_nothing_else() -> None:
     """The claim the whole design rests on: the rewrite observes, it does not alter."""
     rows = [{"a": 1, "b": 0, "c": 0}, {"a": 0, "b": 1, "c": 0},
             {"a": 0, "b": 0, "c": 1}, {"a": 0, "b": 0, "c": 0}]
@@ -89,19 +89,19 @@ def test_instrumenting_changes_which_arms_are_seen_and_nothing_else() -> None:
     assert [plain(dict(row)) for row in rows] == [watched(dict(row)) for row in rows]
 
 
-def test_the_rewrite_opens_each_arm_exactly_once() -> None:
-    text, arms = instrument_branches(ELIF_CHAIN)
-    assert text.count(f'{RECORDER_NAME}("') == len(arms) == 4
+def test_the_rewrite_opens_each_branch_exactly_once() -> None:
+    text, branches = instrument_branches(ELIF_CHAIN)
+    assert text.count(f'{RECORDER_NAME}("') == len(branches) == 4
 
 
-def test_a_python_row_function_records_one_arm_per_call_it_makes() -> None:
+def test_a_python_row_function_records_one_branch_per_call_it_makes() -> None:
     recorder = BranchRecorder()
     transform = load_function(stage_code("read_reported_money"), "transform", "transform", recorder)
     assert transform is not None
     transform({"income": "45000", "expenses": None, "filing_uuid": "f1"})
     recorder.close_row(0)
-    # `_read_money` runs once per money column, so one row takes two arms.
-    assert recorder.arms_for(0) == ("_read_money/3:try", "_read_money/0:if")
+    # `_read_money` runs once per money column, so one row takes two branches.
+    assert recorder.branches_for(0) == ("_read_money/3:try", "_read_money/0:if")
 
 
 def test_a_starlark_row_function_records_through_the_real_interpreter() -> None:
@@ -112,9 +112,9 @@ def test_a_starlark_row_function_records_through_the_real_interpreter() -> None:
     for index, issues in enumerate(("Venezuela sanctions", "Steel tariffs")):
         handle({"issue_codes": "ENG", "specific_issues": issues, "exception_reason": None})
         recorder.close_row(index)
-    assert recorder.arms_for(0) == ("transform/3:if",)
-    assert recorder.arms_for(1) == ("transform/3:else",)
-    assert recorder.arms_for(2) is None
+    assert recorder.branches_for(0) == ("transform/3:if",)
+    assert recorder.branches_for(1) == ("transform/3:else",)
+    assert recorder.branches_for(2) is None
 
 
 def test_a_starlark_stage_computes_the_same_values_instrumented_or_not() -> None:
