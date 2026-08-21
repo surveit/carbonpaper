@@ -17,7 +17,7 @@ from app.models.stages.explode import ExplodeStage
 from app.models.stages.sort_rank import NullPlacement, SortKey, SortRankStage
 
 from ..context import RunContext
-from ..lineage import EdgeKind, RowLineage, RowParent, single_parent_lineage
+from ..lineage import EdgeKind, RowParent, explicit_lineage, single_parent_lineage
 from ..stage_output import StageOutput
 from .execution import narrow_stage
 
@@ -58,7 +58,7 @@ def handle_dedupe(
     survivors = [members[0] for members in groups]
     return StageOutput(
         table.take(survivors),
-        lineage=RowLineage([
+        lineage=explicit_lineage([
             [RowParent(input_id, int(members[0]))]
             + [RowParent(input_id, int(lost), EdgeKind.contribution.value)
                for lost in members[1:]]
