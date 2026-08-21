@@ -62,6 +62,8 @@ def test_a_file_missing_a_column_is_refused_rather_than_padded_with_nulls(tmp_pa
     ]
     with pytest.raises(FrameConcatMismatchError) as refusal:
         _read({"paths": paths, "format": "csv"})
+    # Named files, not "table 0" and "table 1" — the reader picked files, not tables.
+    assert "'jul.csv'" in str(refusal.value) and "'jun.csv'" in str(refusal.value)
     assert "reach" in str(refusal.value)
 
 

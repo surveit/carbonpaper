@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Hashable
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any
 
 import pandas as pd
 
+from app.core.errors import FrameConcatMismatchError
 from app.core.frames import concat_tables, frame_to_table
 from app.core.source_files import FileFormat, read_source_file
 from app.models import (
@@ -91,12 +92,28 @@ def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> StageOutp
             "workflow to author it or a reference override to inject it"
         )
     frames = [_read_one_file(Path(path), workflow_stage, params) for path in bound]
+    _refuse_files_that_disagree(bound, [list(frame.columns) for frame in frames])
     # pd.concat pads a missing column with nulls; concat_tables refuses and names it.
     return StageOutput(
         concat_tables([frame_to_table(frame) for frame in frames]),
         lineage=_which_file_each_row_came_from(
             input_stage.id, bound, [len(frame) for frame in frames]),
     )
+
+
+def _refuse_files_that_disagree(
+    bound: list[str], columns_per_file: list[list[str]]
+) -> None:
+    """concat_tables refuses this too, but by table ordinal — only here are they named files."""
+    first = set(columns_per_file[0])
+    for path, columns in zip(bound[1:], columns_per_file[1:]):
+        if set(columns) ^ first:
+            raise FrameConcatMismatchError(
+                f"'{PurePath(path).name}' does not carry the same columns as "
+                f"'{PurePath(bound[0]).name}': "
+                f"only in '{PurePath(bound[0]).name}' {sorted(first - set(columns))}, "
+                f"only in '{PurePath(path).name}' {sorted(set(columns) - first)}"
+            )
 
 
 def _which_file_each_row_came_from(
