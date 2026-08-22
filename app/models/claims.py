@@ -32,6 +32,10 @@ class ClaimShape(PersistedModel):
     importance: ClaimImportance
 
 
+# A scalar claim reads one cell, so the row it reads is the only row there is.
+CLAIMED_ROW = 0
+
+
 class Citation(BaseModel):
     """Where the evidence sits. The kind decides what else a citation carries."""
 
@@ -58,5 +62,6 @@ class Claim(PersistedModel):
     collection: ClassVar[str] = "claim"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
 
-    shape_id: ID
+    project_id: ID
+    label: str
     citation: StageOutputCellCitation

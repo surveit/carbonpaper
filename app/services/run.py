@@ -27,6 +27,7 @@ from app.runtime.manifest import (
     resolve_output_path,
 )
 from app.runtime.runner import prepare_run, resume_run, run_prepared
+from app.services.claims import save_run_claims
 from app.runtime.citations import build_row_trace_url as build_row_trace_url
 from app.services.errors import WorkflowLoadError
 from app.services.run_manifest_metadata import name_run
@@ -50,7 +51,7 @@ def start_run(
     # Named before execution, so the redirect lands on a named page.
     if name.strip():
         name_run(project_id, run_id, name)
-    _run_in_background(run_prepared, prep)
+    _run_in_background(_run_and_save_claims, prep, project_id)
     return run_id
 
 
@@ -63,9 +64,19 @@ def execute(
     offsets: dict[str, int] | None = None,
     bust_cache: bool = False,
 ) -> dict[str, Any]:
-    return run_prepared(
-        _prepare(project_id, version_id, bindings, limits, offsets, bust_cache)
+    prep = _prepare(project_id, version_id, bindings, limits, offsets, bust_cache)
+    return _run_and_save_claims(prep, project_id)
+
+
+def _run_and_save_claims(prep: dict[str, Any], project_id: str) -> dict[str, Any]:
+    """The runtime persists nothing outliving its run, so the claims are saved out here."""
+    manifest = run_prepared(prep)
+    run_id = str(prep["run_id"])
+    save_run_claims(
+        project_id, run_id, load_run_workflow(project_id, manifest),
+        read_run_manifest(project_id, run_id).stage_records,
     )
+    return manifest
 
 
 def _prepare(

@@ -54,12 +54,26 @@ class AggregationOp(_Base):
         return self
 
 
+class ProducedClaim(_Base):
+    # The label the run states, rather than a pointer to one a workflow expects.
+    label: str
+    column: str
+
+
 class AggregateConfig(StageConfig):
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"group_by", "aggregations"})
-    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({"claims"})
 
     group_by: list[str]
     aggregations: list[AggregationOp]
+    claims: list[ProducedClaim] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _claims_read_one_computed_cell(self) -> "AggregateConfig":
+        problems = find_claim_issues(self)
+        if problems:
+            raise ValueError("; ".join(problems))
+        return self
 
 
 class AggregateStage(AbstractStage):
@@ -123,6 +137,28 @@ def find_aggregate_column_issues(
                 field=f"aggregate.aggregations[{op.output_column}].where", cols=cols,
             ))
     return issues
+
+
+def read_declared_claims(stage: object) -> list[ProducedClaim]:
+    return stage.aggregate.claims if isinstance(stage, AggregateStage) else []
+
+
+def find_claim_issues(aggregate: "AggregateConfig") -> list[str]:
+    """A claim reads one cell, so only a whole-frame reduction can name one."""
+    if not aggregate.claims:
+        return []
+    if aggregate.group_by:
+        return [
+            f"a claim reads one cell, and this aggregate groups by {aggregate.group_by}, "
+            f"so it computes a row per group rather than one row"
+        ]
+    computed = {op.output_column for op in aggregate.aggregations}
+    return [
+        f"claim '{claim.label}' reads `{claim.column}`, which this aggregate does not "
+        f"compute — it computes {sorted(computed)}"
+        for claim in aggregate.claims
+        if claim.column not in computed
+    ]
 
 
 def find_aggregate_signature_issues(

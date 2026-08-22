@@ -31,6 +31,7 @@ from app.core.run_status import RunStatus, StageStatus
 
 from .cancellation import consume_cancel
 from .context import RunContext, RunIdentity
+from .claims import find_claim_row_issues
 from .stage_output import AwaitingReview, StageOutput
 from .errors import RunCancelled
 from .manifest import RunManifest, create_run_manifest, write_manifest
@@ -391,6 +392,7 @@ def _finalize_stage_output(
     out_rep = validate_table(
         table, workflow_stage.output_schema, stage_id=sid, phase="output")
     out_rep.issues.extend(find_key_coverage_issues(workflow_stage, inputs_for_stage))
+    out_rep.issues.extend(find_claim_row_issues(workflow_stage, table))
     if row_errors:
         out_rep.issues[0:0] = [
             Issue("error", None,
