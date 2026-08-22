@@ -10,7 +10,7 @@ import contextvars
 import queue
 import threading
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Iterator
 
 from app.core.persistence import JsonDict, PersistedModel, PersistenceScope
 
@@ -177,6 +177,15 @@ def count_events(project_id: str, run_id: str) -> int:
         if len(chunk.events) < CHUNK_SIZE:
             return index * CHUNK_SIZE + len(chunk.events)
         index += 1
+
+
+def read_events_backward(project_id: str, run_id: str) -> Iterator[list[JsonDict]]:
+    """Each stored chunk's events, NEWEST chunk first."""
+    for chunk_id in reversed(RunEventChunk.list_ids(f"{project_id}/{run_id}/")):
+        # Ids, not bodies; the padded index makes id order chunk order.
+        chunk = RunEventChunk.load_or_none(chunk_id)
+        if chunk is not None:
+            yield chunk.events
 
 
 def read_events_since(project_id: str, run_id: str, from_seq: int) -> list[dict[str, Any]]:
