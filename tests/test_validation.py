@@ -66,6 +66,18 @@ def test_enum_error_truncates_a_long_offender_list():
     )
 
 
+def test_exactly_the_sample_size_of_offenders_is_not_truncated():
+    schema = _schema(columns=[
+        {"name": "status", "type": "str", "enum": ["open"], "nullable": True},
+    ])
+    df = pd.DataFrame({"status": [f"v{n}" for n in range(10)]})
+    _, issues = _issues_for("status", df, schema)
+    assert issues[0].message == (
+        "10 value(s) outside enum ['open'] (e.g. 'v0', 'v1', 'v2', 'v3', 'v4', "
+        "'v5', 'v6', 'v7', 'v8', 'v9')"
+    )
+
+
 def test_enum_error_names_the_whole_vocabulary_however_long():
     vocabulary = [f"v{n}" for n in range(9)]
     schema = _schema(columns=[
@@ -143,6 +155,16 @@ def test_an_unbounded_upper_bound_admits_any_large_value():
 def test_an_unbounded_lower_bound_admits_any_small_value():
     report, issues = _range_issues([-1e18], bounds=["-inf", 0], type="float")
     assert issues == [] and report.ok
+
+
+def test_an_unbounded_upper_bound_leaves_the_lower_one_biting():
+    _, issues = _range_issues([-5.0, 1e18], bounds=[0, "+inf"], type="float")
+    assert issues[0].message == "1 value(s) outside range [0, +inf]"
+
+
+def test_an_unbounded_lower_bound_leaves_the_upper_one_biting():
+    _, issues = _range_issues([-1e18, 42.0], bounds=["-inf", 10], type="float")
+    assert issues[0].message == "1 value(s) outside range [-inf, 10]"
 
 
 def test_a_null_is_not_counted_as_out_of_range():
