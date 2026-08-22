@@ -6,7 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from app.web.stage_diff import CellDiffState
+from app.web.diff_state import CellDiffState
 
 
 @dataclass(frozen=True)
