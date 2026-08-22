@@ -25,8 +25,7 @@ class ClaimShape(PersistedModel):
     collection: ClassVar[str] = "claim_shape"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
 
-    project_id: ID
-    # Authored before any stage exists, so it declares no stage and no column.
+    # A project points at the shapes it aims to state; it does not own them.
     label: str
     requires: DataUniverseRequirement
     importance: ClaimImportance

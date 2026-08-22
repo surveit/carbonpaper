@@ -151,6 +151,12 @@ STAGE_DESCRIPTION_DESCRIPTION = (
 
 
 # ── The shared field list ────────────────────────────────────────────────────
+class StatedClaim(_Base):
+    # The one-row check is a fact about data, so the runtime makes it.
+    shape_id: ID
+    column: str
+
+
 class AuthoredStageFields(_Base):
     id: ID = Field(max_length=STAGE_ID_MAX_CHARS, description=STAGE_ID_DESCRIPTION)
     type: StageType
@@ -183,6 +189,8 @@ class AuthoredStageFields(_Base):
     # checked against the config (find_signature_config_issues) and against what
     # the inputs supply (find_signature_issues).
     signature: Optional[TransformSignature] = None
+    # Which output column states which claim shape. Authored, so the draft carries it.
+    claims: Optional[list[StatedClaim]] = None
 
     @field_validator("inputs", mode="before")
     @classmethod

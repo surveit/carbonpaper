@@ -17,7 +17,6 @@ _RUN = "20260807T142707"
 
 def _shape() -> ClaimShape:
     return ClaimShape(
-        project_id="venezuela_lobbying_q1_q2_2026",
         label="Total paid to outside lobbying firms to lobby on Venezuela",
         requires=DataUniverseRequirement.closed,
         importance=ClaimImportance.primary,
@@ -49,7 +48,7 @@ def test_a_claim_survives_the_store():
     assert Claim.load(claim.id).citation.value == _TOTAL
 
 
-def test_claims_of_one_shape_are_found_together_across_runs():
+def test_the_claims_of_one_shape_are_found_together_across_runs():
     shape = _shape()
     shape.save()
     for run_id in (_RUN, "20260812T133317"):
