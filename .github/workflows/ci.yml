@@ -160,10 +160,12 @@ jobs:
       # refs/pull/N/merge — this branch merged into master's tip. base.sha is the
       # fork point, so every commit master gained since would read as this PR's.
       # head.sha is also the sha the reports build their source links from.
+      # fetch-depth: 0 so the added-coverage report's `base...head` merge-base diff resolves.
       - name: Checkout PR head
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
       - name: Checkout PR base
         uses: actions/checkout@v4
         with:
@@ -274,3 +276,30 @@ jobs:
         with:
           marker: "<!-- vocabulary-report -->"
           body-file: vocabulary-body.md
+
+      # The one report that must RUN the suite, so it re-runs what `test` already ran
+      # rather than passing coverage between jobs. Actions bills public repositories
+      # nothing, and `reports` runs beside `test` rather than after it, so the duplicate
+      # costs neither money nor wall clock — and it keeps this job self-contained, with
+      # no artifact handoff and no `needs:` serialising the pipeline.
+      #
+      # A line executed only at IMPORT counts as run: module-level constants, class
+      # bodies and signature defaults never execute inside a test, and treating them as
+      # unrun made two thirds of a real diff read as uncovered.
+      #
+      # Report-only for now, like the two above — the same two weeks of firings decide
+      # whether an added line no test reaches should ever block.
+      - id: added-coverage
+        if: always() && steps.import-graph.conclusion != 'skipped'
+        run: |
+          uv run --frozen python -m pytest tests/ app/ -n auto -q --cov=app --cov-report=
+          uv run --frozen python -m scripts.added_coverage --markdown \
+            --base ${{ github.event.pull_request.base.sha }} --head HEAD \
+            --repo ${{ github.repository }} --sha ${{ github.event.pull_request.head.sha }} \
+            > added-coverage-body.md
+      - name: Upsert added-coverage comment
+        if: always() && steps.added-coverage.conclusion == 'success'
+        uses: ./.github/actions/upsert-pr-comment
+        with:
+          marker: "<!-- added-coverage-report -->"
+          body-file: added-coverage-body.md
