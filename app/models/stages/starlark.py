@@ -16,7 +16,12 @@ from app.core.starlark_source import (
     compile_starlark_module,
     find_bound_function,
 )
-from app.models.schema import StageConfig
+from app.models.schema import (
+    Column,
+    DATE_COLUMN_TYPES,
+    StageConfig,
+    find_list_element_type,
+)
 from app.models.stages.stage_base import AbstractStage, StageInput, StageType
 from app.models.stages.code import CORNER_CASES_DESCRIPTION, SUMMARY_DESCRIPTION, CornerCase
 from app.models.stages.stage_type_spec import StageTypeSpec
@@ -45,6 +50,13 @@ _VALUE_MARSHALLING_NOTE = (
     "timestamps as ISO-8601 strings and every missing value as None."
 )
 
+# Not on the filter: it keeps or drops a row, so it writes no column to declare.
+_DATE_COLUMN_NOTE = (
+    "For a date, that ISO-8601 string is also the most it can RETURN, so it may not write a "
+    "`date`/`datetime` column: declare that column `str` and give its format in the "
+    "column description."
+)
+
 _FUNCTION_DESCRIPTION = (
     "Name of the function to call within `code`, defaulting to `transform`. `code` "
     "says what is defined; this says which name in it to call — set it only when the "
@@ -56,6 +68,7 @@ _CODE_DESCRIPTION = (
     "...`, one row dict in, one row dict out, and the returned dict IS the output row "
     "(a key you do not return is absent — carry columns through with `return "
     "dict(row, key=value)`). " + STARLARK_LANGUAGE_NOTE + " " + _VALUE_MARSHALLING_NOTE +
+    " " + _DATE_COLUMN_NOTE +
     " Call `refuse(\"reason\")` to decline a row you cannot honestly process; call "
     "`fail(\"reason\")` only for a bug. Module-level variables are frozen after "
     "load — keep state in locals."
@@ -130,6 +143,40 @@ class StarlarkRowFunctionStage(AbstractStage):
     def find_handle_compiler_warnings(self) -> list[CompilerWarning]:
         return find_starlark_warnings(self)
 
+    def find_signature_config_issues(self) -> list[str]:
+        return find_starlark_signature_issues(self)
+
+
+def find_starlark_signature_issues(stage: "StarlarkRowFunctionStage") -> list[str]:
+    signature = stage.signature
+    dates = _find_date_columns([*signature.adds, *signature.rewrites])
+    if not dates:
+        return []
+    named = ", ".join(repr(name) for name in dates)
+    return [
+        f"stage '{stage.id}': starlark_row_function cannot write {named} — the declared "
+        f"type holds a date, and Starlark has none: the function returns the ISO-8601 "
+        f"string that spells one, and the row check refuses it. Declare the column `str`, "
+        f"with its format in the description."
+    ]
+
+
+def _find_date_columns(columns: list[Column]) -> list[str]:
+    return [column.name for column in columns if _is_date_column(column)]
+
+
+def _is_date_column(column: Column) -> bool:
+    return (
+        _is_date_type(column.type)
+        or _is_date_type(column.value_type or "")
+        or any(_is_date_column(field) for field in column.fields or ())
+    )
+
+
+def _is_date_type(type_name: str) -> bool:
+    element = find_list_element_type(type_name)
+    return _is_date_type(element) if element else type_name in DATE_COLUMN_TYPES
+
 
 def find_starlark_warnings(stage: "StarlarkRowFunctionStage") -> list[CompilerWarning]:
     if not (stage.starlark.summary or "").strip():
@@ -154,7 +201,7 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
             "`transform(row)` is handed a plain dict and must return a "
             "plain dict, and that dict IS the output row: a key you do not return is "
             "absent, so carry columns through explicitly (`return dict(row, key=value)`). "
-            + _VALUE_MARSHALLING_NOTE + " An integer "
+            + _VALUE_MARSHALLING_NOTE + " " + _DATE_COLUMN_NOTE + " An integer "
             "beyond 2**63-1 stops the step rather than losing precision. Call "
             "`refuse(\"reason\")` to decline a row you cannot honestly process. "
             "Module-level variables freeze after load — keep state in locals."

@@ -17,6 +17,7 @@ from app.core.errors import FrameConcatMismatchError
 from app.core.frames import concat_tables, frame_to_table
 from app.core.source_files import FileFormat, read_source_file
 from app.models import (
+    DATE_COLUMN_TYPES,
     JSON_COLUMN_TYPE,
     STR_COLUMN_TYPE,
     TableSchema,
@@ -37,8 +38,7 @@ from .execution import narrow_stage
 # `json`/`list[X]` (parsed by the `list_columns` path or by a later stage).
 # Letting pandas guess any of them is the silent-data-loss case: a zero-padded
 # `002` declared `str` comes back as the integer 2.
-_TEXT_ON_DISK_TYPES = frozenset({STR_COLUMN_TYPE, JSON_COLUMN_TYPE, "date", "datetime"})
-_DATE_TYPES = frozenset({"date", "datetime"})
+_TEXT_ON_DISK_TYPES = frozenset({STR_COLUMN_TYPE, JSON_COLUMN_TYPE}) | DATE_COLUMN_TYPES
 
 # The formats pandas type-INFERS, and so the only ones the declared schema has
 # anything to add to. xlsx is one of them: a workbook does type its cells, but
@@ -198,7 +198,7 @@ def _date_columns(
         return columns
     seen = set(columns)
     columns.extend(c.name for c in schema.columns
-                   if c.type in _DATE_TYPES and c.name not in seen)
+                   if c.type in DATE_COLUMN_TYPES and c.name not in seen)
     return columns
 
 

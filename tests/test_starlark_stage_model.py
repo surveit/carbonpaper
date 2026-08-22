@@ -140,6 +140,40 @@ def test_stage_requires_exactly_one_input():
         _stage(inputs=[])
 
 
+_DATE_WRITES = {
+    "date": Column(name="when", type="date", nullable=False),
+    "datetime": Column(name="when", type="datetime", nullable=False),
+    "list of dates": Column(name="when", type="list[date]", nullable=False),
+    "json field": Column(name="j", type="json", nullable=False,
+                         fields=[Column(name="when", type="date", nullable=False)]),
+    "json map of dates": Column(name="j", type="json", nullable=False, value_type="date"),
+}
+
+
+@pytest.mark.parametrize("column", _DATE_WRITES.values(), ids=list(_DATE_WRITES))
+def test_a_date_write_is_refused_at_save(column):
+    with pytest.raises(ValidationError, match="cannot write"):
+        _stage(signature=ExtendsSignature(adds=[column]))
+
+
+def test_a_date_rewrite_is_refused_at_save():
+    date = Column(name="n", type="date", nullable=False)
+    with pytest.raises(ValidationError, match="cannot write"):
+        _stage(signature=ExtendsSignature(
+            reads=[{"input": "load", "columns": [date]}], rewrites=[date]))
+
+
+def test_a_date_the_function_only_reads_is_accepted():
+    date = Column(name="seen_on", type="date", nullable=False)
+    # A read marshals in as an ISO-8601 string; only a WRITE is unsatisfiable.
+    assert _stage(signature=ExtendsSignature(reads=[{"input": "load", "columns": [date]}]))
+
+
+def test_a_string_write_is_accepted():
+    assert _stage(signature=ExtendsSignature(
+        adds=[Column(name="when", type="str", nullable=False)]))
+
+
 def test_stage_carries_runnable_tests():
     assert StarlarkRowFunctionStage.CARRIES_RUNNABLE_TESTS is True
 
