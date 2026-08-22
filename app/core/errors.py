@@ -21,8 +21,12 @@ class CitationMismatch(ValueError):
     """A publish stage cited a cell for a value that cell does not hold."""
 
 
-class ClaimNotEstablished(ValueError):
-    """The stage named for a claim cannot supply the one cell its shape declares."""
+class ColumnNotInFrame(ValueError):
+    pass
+
+
+class CellIsNotAScalar(ValueError):
+    """A frame cell holds a list, struct or other payload no scalar reader can carry."""
 
 
 class NoVersionToRunError(Exception):

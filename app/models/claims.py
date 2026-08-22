@@ -7,7 +7,6 @@ from typing import ClassVar, Literal
 from pydantic import BaseModel
 
 from app.core.persistence import JsonScalar, PersistedModel, PersistenceScope
-from app.models.schema import TableSchema
 from app.core.ids import ID
 
 
@@ -29,7 +28,6 @@ class ClaimShape(PersistedModel):
     project_id: ID
     # Authored before any stage exists, so it declares no stage and no column.
     label: str
-    table_schema: TableSchema
     requires: DataUniverseRequirement
     importance: ClaimImportance
 
@@ -42,9 +40,9 @@ class Citation(BaseModel):
 
 class StageOutputCellCitation(Citation):
     kind: Literal["stage_output_cell"] = "stage_output_cell"
+    run_id: ID
     stage_id: ID
     row_ordinal: int
-    # The column in the SOURCE, which need not share the name the shape declares.
     column: str
     value: JsonScalar
 
@@ -61,5 +59,4 @@ class Claim(PersistedModel):
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
 
     shape_id: ID
-    run_id: ID
     citation: StageOutputCellCitation
