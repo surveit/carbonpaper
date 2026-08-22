@@ -27,7 +27,8 @@ def _shape() -> ClaimShape:
 def _claim(shape: ClaimShape, run_id: str = _RUN) -> Claim:
     table = pa.table({"total_income_usd": [_TOTAL]})
     return Claim(
-        shape_id=shape.id,
+        project_id=shape.project_id,
+        label=shape.label,
         citation=StageOutputCellCitation(
             run_id=run_id, stage_id="paid_totals", row_ordinal=0,
             column="total_income_usd", value=read_cell(table, "total_income_usd", 0),
@@ -49,11 +50,11 @@ def test_a_claim_survives_the_store():
     assert Claim.load(claim.id).citation.value == _TOTAL
 
 
-def test_claims_of_one_shape_are_found_together_across_runs():
+def test_a_projects_claims_are_found_together_across_runs():
     shape = _shape()
     shape.save()
     for run_id in (_RUN, "20260812T133317"):
         _claim(shape, run_id).save()
-    assert sorted(c.citation.run_id for c in Claim.find(shape_id=shape.id)) == [
+    assert sorted(c.citation.run_id for c in Claim.find(project_id=shape.project_id)) == [
         "20260807T142707", "20260812T133317",
     ]
