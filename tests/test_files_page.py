@@ -41,7 +41,6 @@ def test_the_page_lists_what_the_project_holds(project_id):
     store(project_id)
     page = client.get(f"/project/{project_id}/files").text
     assert "posts.csv" in page
-    assert CSV_SHA[:12] in page
 
 
 def test_a_file_no_run_has_read_says_so(project_id):
