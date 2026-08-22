@@ -15,6 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from app.core.llm_sdk import CLI_PATH
 from app.services import project as project_service
 from app.services.project import ProjectListing
+from app.services.project_record import read_project_name
 from app.core.errors import FileOverCeiling, StoreOverQuota
 from app.core.files import max_upload_bytes, save_upload
 from app.web.file_sizes import describe_attachment, describe_refusal
@@ -200,7 +201,7 @@ async def upload_chat_file(sid: str, file: UploadFile = File(...),
     return JSONResponse({"ok": True, "file_id": record.id, "filename": record.filename,
                          "bytes": record.byte_count, "project_id": record.project_id,
                          "line": describe_attachment(
-                             record, project_service.read_project_name(record.project_id)
+                             record, read_project_name(record.project_id)
                              if record.project_id else "")})
 
 

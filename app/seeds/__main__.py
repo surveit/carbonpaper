@@ -9,7 +9,7 @@ import argparse
 from app.core.store_config import refuse_renamed_env_vars
 from app.seeds.bootstrap import configure_default_document_store, configure_projects_dir_from_env
 from app.seeds.seed import discover_workflow_files, seed_all
-from app.services.project import read_project_name
+from app.services.project_record import read_project_name
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:

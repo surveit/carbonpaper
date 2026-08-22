@@ -28,6 +28,9 @@ _GRANDFATHERED: frozenset[str] = frozenset({
     "loader.py::WorkingCopy",
     "methodology.py::Methodology",
     "project.py::Project",
+    # Same two construction sites as before, in two files since the record moved
+    # below the lifecycle service — the key is file-scoped, so the split needs both.
+    "project_record.py::Project",
     # Composes the scope prefix the store's prefix-selected list() needs, then a
     # uuid — the closest of these to the rule, and still not it.
     "run_manifest_metadata.py::RunManifestMetadata",
