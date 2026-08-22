@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -151,8 +152,8 @@ def test_no_runs_dir_lists_nothing(tmp_path: Path):
 
 
 def test_file_sha256_narrows_to_runs_that_read_it(runs_root: Path):
-    read_it = _current_manifest()
-    other_file = _current_manifest()
+    read_it: dict[str, Any] = _current_manifest()
+    other_file: dict[str, Any] = _current_manifest()
     other_file["input_bindings"]["load"]["sha256"] = "a" * 64
     other_file["input_bindings"]["load"]["path"] = "other.csv"
     _write_run(runs_root, "20260101T000000", read_it)
