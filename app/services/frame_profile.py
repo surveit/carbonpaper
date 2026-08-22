@@ -13,6 +13,7 @@ from app.core.source_files import (
 from app.core.column_profile import (
     ColumnProfile, NumericRange, StageOutputProfile, TableProfile, ValueCount,
 )
+from app.core.file_shape import FileShape, measure_column_shape
 from app.core.frames import frame_to_table, table_to_frame
 from app.services.run import read_stage_output
 from app.core.files import open_project_file
@@ -85,6 +86,18 @@ def read_stored_file_frame(
         header_row=header_row, first_column=first_column,
     )
     return StoredFileFrame(filename=record.filename, format=file_format, frame=frame)
+
+
+def measure_file_shape(project_id: str, file_id: str, *, max_values: int) -> FileShape:
+    """Every column of a stored file, as the fill and values a reader checks it against."""
+    frame = read_stored_file_frame(project_id, file_id).frame
+    columns = []
+    for name in frame.columns:
+        present = frame[name].dropna()
+        columns.append(measure_column_shape(
+            str(name), [str(value) for value in present],
+            null_count=len(frame) - len(present), max_values=max_values))
+    return FileShape(row_count=len(frame), columns=columns)
 
 
 def profile_table(

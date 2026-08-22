@@ -237,6 +237,30 @@ The page counts the decisions it has recorded on top of
 `page.reviewed_count` to move the progress bar, and reveals the **Resume run**
 button (rendered `hidden`) once that count reaches the total.
 
+## One file (`file_detail.html`, `_file_column.html`)
+
+`/project/<id>/files/<file_id>`, which the Files table's rows open. Four sections under
+a head naming the file: what its holder claims about it, its shape, its first rows, and
+the runs that read it — then the delete, which takes the filename typed back.
+
+**Data completeness** is a claim about the rows, not a state of the work. `closed` says
+these rows are all of them, `sampled` says they are a subset and the note beside it says
+how it was drawn (the save refuses a sampled file with an empty note), `open` says
+nobody has claimed either way. It is not a run state and takes no run colour.
+
+**Shape** is what the page exists for. Each column carries how much of it is filled,
+how many distinct values it holds, and a glance at those values: a histogram for
+numbers, a timeline for dates, the character range for prose, the commonest values for
+a set. Opening one lists its values, with the empty string and the null ranked among
+them — a column 96% blank says so in its first bar. Filled, blank and null are three
+separate counts because they answer different questions: a Meltwater export arrives 100%
+non-null with 17 of its 51 columns holding an empty string in every row, and a null
+count alone calls all 51 full. The shares are over every row; a column that is not
+wholly filled offers a switch to read them over the rows that carry a value instead.
+
+`app/core/file_shape.py` measures a column from its values (no pandas);
+`app/services/frame_profile.py` reads the file and hands it those values.
+
 ## The node panel + workflow versioning (`_node_panel.html`, `versions.html`)
 
 Reading and editing the *workflow itself*, stage by stage — distinct from
