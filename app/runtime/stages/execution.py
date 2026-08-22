@@ -14,7 +14,7 @@ import pyarrow as pa
 from pydantic import BaseModel
 
 from app.models import WorkflowStage
-from app.models.run_manifest import RowError, StageContribution
+from app.models.stage_contribution import RowError, StageContribution
 from app.models.stages.signature import transform_output_schema
 from app.models.stage import (
     AbstractStage,

@@ -10,7 +10,7 @@ import pandas as pd
 import pyarrow as pa
 
 from app.core.frames import frame_to_table
-from app.models.run_manifest import StageContribution
+from app.models.stage_contribution import StageContribution
 
 from .branches import RowBranches
 from .lineage import RowLineage

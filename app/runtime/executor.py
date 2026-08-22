@@ -21,12 +21,11 @@ from app.core.frames import (
 )
 from app.models import StageType, Workflow, WorkflowStage
 from app.models.run_manifest import (
-    RowError,
     SCHEMA_REFUSAL_ERROR_TYPE,
-    StageContribution,
     StageErrorInfo,
     StageRecord,
 )
+from app.models.stage_contribution import RowError, StageContribution
 from app.models.run_parameters import RunParameters
 from app.core.run_status import RunStatus, StageStatus
 
