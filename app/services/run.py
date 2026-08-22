@@ -20,12 +20,18 @@ from app.models.run_manifest import read_run_bindings
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.runtime.cancellation import discard_cancel
 from app.runtime.manifest import (
+    PRODUCTION_RUNS as PRODUCTION_RUNS,
     RunEntry as RunEntry,
+    RunManifest as RunManifest,
     list_run_entries as list_run_entries,
+    mark_abandoned,
     read_run_manifest,
     read_stage_output_frame,
     resolve_output_path,
 )
+from app.runtime import lease
+from app.runtime.lease import expire_tenures_on_shutdown as expire_tenures_on_shutdown
+from app.runtime.errors import RunLeaseLost as RunLeaseLost
 from app.runtime.runner import prepare_run, resume_run, run_prepared
 from app.runtime.citations import build_row_trace_url as build_row_trace_url
 from app.services.errors import WorkflowLoadError
@@ -94,16 +100,33 @@ def _prepare(
 
 
 def resume(project_id: str, run_id: str) -> None:
+    # At request time: a cancel aimed at the dead executor must not stop the restart.
+    discard_cancel(project_id, run_id)
+    _run_in_background(resume_now, project_id, run_id)
+
+
+def resume_now(project_id: str, run_id: str) -> None:
+    """Resume on the CALLING thread. The boot sweep uses this to restart runs one at a time."""
     workflow_version = read_pinned_version(project_id, run_id)
     discard_cancel(project_id, run_id)
-    _run_in_background(
-        resume_run,
+    resume_run(
         resolve_run_dir(project_id, run_id),
         project_id,
         run_id,
         Workflow(stages=load_version_stages(project_id, workflow_version)),
         workflow_version,
     )
+
+
+def abandon(project_id: str, run_id: str, detail: str) -> bool:
+    """Bury a run, under its lease so a run someone has just taken over is never buried."""
+    manifest = read_run_manifest(project_id, run_id)
+    try:
+        with lease.hold(manifest.id):
+            mark_abandoned(manifest, detail)
+    except RunLeaseLost:
+        return False
+    return True
 
 
 def read_pinned_version(project_id: str, run_id: str) -> str:

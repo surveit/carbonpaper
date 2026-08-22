@@ -9,16 +9,14 @@ from datetime import datetime, timedelta
 from enum import Enum
 from threading import RLock
 from uuid import uuid4
-from typing import Any, ClassVar, Iterator, Mapping, Protocol, Self
+from typing import ClassVar, Iterator, Mapping, Protocol, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.ids import ID
+from app.core.json_types import JsonDict, JsonScalar
+from app.core.run_lease import RunLeaseStore
 
-# The one honest dynamic boundary: an arbitrary pydantic model_dump / JSON body.
-JsonDict = dict[str, Any]
-# What a stored field can be compared against: a JSON scalar, never a list or object.
-JsonScalar = str | int | float | bool | None
 
 
 def validate_id(id: ID) -> ID:
@@ -45,15 +43,19 @@ class DocumentStore(Protocol):
     def read_all(self, collection: str, prefix: str = "") -> Iterator[tuple[str, JsonDict]]: ...
 
 
-_store: DocumentStore | None = None
+class Store(DocumentStore, RunLeaseStore, Protocol):
+    """One handle, because the fence reads a lease and writes a document in one transaction."""
 
 
-def configure_store(store: DocumentStore) -> None:
+_store: Store | None = None
+
+
+def configure_store(store: Store) -> None:
     global _store
     _store = store
 
 
-def get_store() -> DocumentStore:
+def get_store() -> Store:
     if _store is None:
         raise RuntimeError("document store not configured; call configure_store() first")
     return _store
