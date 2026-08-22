@@ -41,7 +41,7 @@ from ..stage_output import StageOutput
 from ..lineage import kept_rows_lineage
 from ..errors import RunCancelled
 from ..run_log import RunLog, bind_detail_sink, unbind_detail_sink
-from ..validation import build_row_model, find_row_issues
+from ..validation import find_row_issues
 from .row_events import (
     emit_cached_row,
     emit_row_outcome,
@@ -298,7 +298,7 @@ def _run_row_mapper(
     caching = _open_row_caching(workflow_stage, ctx)
     execution = _StageExecution(
         map_group,
-        build_row_model(transform_output_schema(stage), f"{stage.id}_written"),
+        transform_output_schema(stage).to_pydantic_model(f"{stage.id}_written"),
         caching,
         ctx.run_log,
         stage.id,
