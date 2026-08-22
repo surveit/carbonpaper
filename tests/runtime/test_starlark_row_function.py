@@ -6,10 +6,11 @@ import pandas as pd
 import pytest
 import starlark
 
-from app.models import parse_stage
+from app.models import Column, TableSchema, parse_stage
 from app.models.errors import StepRefused
 from app.models.stage import StageType
 from app.runtime.stages import HANDLERS, RowMapTransformHandler
+from app.runtime.validation import find_row_issues
 from conftest import as_inputs, make_run_context, place_stage, reads_of, rows_of
 
 DOUBLE = "def transform(row):\n    return {'n': row['n'], 'doubled': row['n'] * 2}\n"
@@ -86,6 +87,17 @@ def test_a_row_with_a_datetime_is_marshalled_before_starlark_sees_it():
         make_run_context(),
     )
     assert rows_of(out)["iso"].tolist() == ["2024-01-02T03:04:05"]
+
+
+# The per-row failure `find_starlark_signature_issues` forecloses at save.
+@pytest.mark.parametrize("type_name", ["date", "datetime"])
+def test_the_iso_string_starlark_returns_does_not_satisfy_a_date_column(type_name):
+    model = TableSchema(
+        columns=[Column(name="when", type=type_name, nullable=False)]
+    ).to_pydantic_model("written")
+    assert find_row_issues({"when": "2021-02-12T00:00:00"}, model) == [
+        f"when: Input should be a valid {type_name}"
+    ]
 
 
 def test_an_empty_function_name_falls_back_to_transform():
