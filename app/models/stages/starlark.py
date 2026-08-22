@@ -50,10 +50,11 @@ _VALUE_MARSHALLING_NOTE = (
     "timestamps as ISO-8601 strings and every missing value as None."
 )
 
-# Row-function only: the filter keeps a row or drops it, so it writes no column at all.
+# Not on the filter: it keeps or drops a row, so it writes no column to declare.
 _DATE_COLUMN_NOTE = (
-    "A string is also all it can return, so it may not write a `date`/`datetime` column: "
-    "declare that column `str` and give its format in the column description."
+    "For a date, that ISO-8601 string is also the most it can RETURN, so it may not write a "
+    "`date`/`datetime` column: declare that column `str` and give its format in the "
+    "column description."
 )
 
 _FUNCTION_DESCRIPTION = (
