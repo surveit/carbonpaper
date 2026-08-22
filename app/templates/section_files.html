@@ -42,7 +42,7 @@
 {% if files.rows %}
 <table class="stages files-table">
   <thead>
-    <tr><th>file</th><th>added</th><th>read by</th><th>SHA-256</th><th></th></tr>
+    <tr><th>file</th><th>added</th><th>read by</th><th></th></tr>
   </thead>
   <tbody>
     {% for row in files.rows %}
@@ -54,7 +54,6 @@
         <a href="/project/{{ state.id }}/runs?file={{ row.sha256 }}">{{ row.run_count }} run{{ "" if row.run_count == 1 else "s" }}</a>
         {% else %}<span class="muted">never read</span>{% endif %}
       </td>
-      <td><code class="files-hash">{{ row.sha256[:12] }}…</code></td>
       <td class="files-act">
         {# The row carries what the dialog needs to say; one dialog serves every row. #}
         <button type="button" class="files-trash" title="Delete {{ row.filename }}"

@@ -11,16 +11,13 @@
 .files-table td, .files-table th { vertical-align: top; }
 .files-table th { white-space: nowrap; }
 .files-table td:not(.files-name) { white-space: nowrap; }
-.files-table th:nth-child(1) { width: 36%; }
-.files-table th:nth-child(2) { width: 8%; }
-.files-table th:nth-child(3) { width: 14%; }
-.files-table th:nth-child(4) { width: 10%; }
-.files-table th:nth-child(5) { width: 16%; }
-.files-table th:nth-child(6) { width: 6%; }
+.files-table th:nth-child(1) { width: 52%; }
+.files-table th:nth-child(2) { width: 22%; }
+.files-table th:nth-child(3) { width: 19%; }
+.files-table th:nth-child(4) { width: 7%; }
 /* An export's name is long and unbroken; it wraps rather than pushing the row wide. */
 .files-name code { overflow-wrap: anywhere; }
 .files-num { text-align: right; }
-.files-hash { font-size: .78rem; }
 .files-act { text-align: right; }
 
 /* A trash icon, not a word: the row is a list of files, and the only verb it offers
