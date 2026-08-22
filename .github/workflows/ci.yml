@@ -274,3 +274,53 @@ jobs:
         with:
           marker: "<!-- vocabulary-report -->"
           body-file: vocabulary-body.md
+
+
+  # Its own job, not a step in `reports`, because it RUNS the suite and `reports`
+  # holds two checkouts: the base copy at base/ doubles the tree, and the arch
+  # tests walk the repo root rather than pytest's collection, so they scanned
+  # base/app and base/tests and failed on the second copy. One checkout only.
+  #
+  # Coverage must be measured on head.sha, not the merge ref `test` uses: the
+  # diff's line numbers come from head, and mapping coverage taken on a
+  # different tree onto them would silently misreport which lines ran.
+  #
+  # A line executed only at IMPORT counts as run — module-level constants, class
+  # bodies and signature defaults never execute inside a test, and counting them
+  # unrun made two thirds of a real diff read as uncovered.
+  #
+  # Report-only for now, like the three in `reports` — two weeks of real firings
+  # decide whether an added line no test reaches should ever block.
+  added-coverage:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # fetch-depth: 0 so the `base...head` merge-base diff resolves.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - id: added-coverage
+        run: |
+          uv run --frozen python -m pytest tests/ app/ -n auto -q --cov=app --cov-report=
+          uv run --frozen python -m scripts.added_coverage --markdown \
+            --base ${{ github.event.pull_request.base.sha }} --head HEAD \
+            --repo ${{ github.repository }} --sha ${{ github.event.pull_request.head.sha }} \
+            > added-coverage-body.md
+      - name: Upsert added-coverage comment
+        if: always() && steps.added-coverage.conclusion == 'success'
+        uses: ./.github/actions/upsert-pr-comment
+        with:
+          marker: "<!-- added-coverage-report -->"
+          body-file: added-coverage-body.md
