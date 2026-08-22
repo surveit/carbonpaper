@@ -1,9 +1,4 @@
-"""Architecture: a <select> given as the picker() macro's body carries `picker-native`.
-
-static/picker.js finds the select it enhances by that class. Not every <select>
-is a picker (run-form.css styles a plain one deliberately), so this governs only
-a select inside a `{% call picker(...) %}` block.
-"""
+"""A <select> inside a {% call picker(...) %} block must carry `picker-native`."""
 from __future__ import annotations
 
 import re
