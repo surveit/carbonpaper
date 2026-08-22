@@ -1,6 +1,4 @@
-"""What a diff says about one column and one cell. Its own module so a reader of
-the states does not import the differ that produces them.
-"""
+"""What a diff says about one column and one cell."""
 
 from __future__ import annotations
 

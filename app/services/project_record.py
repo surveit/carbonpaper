@@ -1,7 +1,4 @@
-"""The project RECORD and the name to show for an id. Below the rest of
-`app.services.project`, so page chrome that only needs a project's name does not
-import the run, versioning and editing services along with it.
-"""
+"""The project record, and the name to show for an id."""
 
 from __future__ import annotations
 
@@ -19,10 +16,7 @@ class Project(PersistedModel):
     collection: ClassVar[str] = "project"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
 
-    # Optional, and it must stay so: a project created before labels existed carries no
-    # `name` key, and PersistedModel.load is a strict extra="forbid" validate, so a
-    # required field would orphan every one of them. None is not a missing label — it
-    # means the id is still the only name the project has, which `label` reports.
+    # Must stay optional: a project older than labels has no `name`, and would orphan.
     name: str | None = None
     title: str | None = None
     model: str | None = None
@@ -65,8 +59,7 @@ def read_project_json(project_id: str) -> Project | None:
         return None
     if not isinstance(stored, dict):
         return None
-    # project.json's `created_at` is the date the PROJECT was authored, which the record
-    # calls `authored_at` — its own `created_at` stamps when the record was written.
+    # project.json's `created_at` is the authoring date; the record's own stamps the write.
     return Project(
         id=project_id,
         name=stored.get("name"),
