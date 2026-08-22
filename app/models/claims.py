@@ -25,15 +25,10 @@ class ClaimShape(PersistedModel):
     collection: ClassVar[str] = "claim_shape"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
 
-    project_id: ID
-    # Authored before any stage exists, so it declares no stage and no column.
+    # A project points at the shapes it aims to state; it does not own them.
     label: str
     requires: DataUniverseRequirement
     importance: ClaimImportance
-
-
-# A scalar claim reads one cell, so the row it reads is the only row there is.
-CLAIMED_ROW = 0
 
 
 class Citation(BaseModel):
@@ -62,6 +57,5 @@ class Claim(PersistedModel):
     collection: ClassVar[str] = "claim"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
 
-    project_id: ID
-    label: str
+    shape_id: ID
     citation: StageOutputCellCitation
