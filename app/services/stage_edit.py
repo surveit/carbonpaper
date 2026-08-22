@@ -150,6 +150,38 @@ def find_unapproved_code_issues(
     return [CODE_EXECUTION_REFUSAL.format(sid=candidate.get("id"), stage_type=stage_type)]
 
 
+AGGREGATION_WHERE_REFUSAL = (
+    "stage '{sid}': aggregation `{output_column}` carries `where`, which is retired. A "
+    "`where` cuts which rows feed that ONE column, so the output row it lands in has no "
+    "single population: the row's other columns are computed over a different set of rows, "
+    "and 'which rows produced this figure' can then only be answered per column. It is "
+    "also the only row-cut here that is not a stage — nothing in the workflow shows it "
+    "happened, no row count reports it, and no stage test can pin it.\n"
+    "Write the cut as a grouping instead. `{predicate}` tests one column, so group on that "
+    "column and let every category come out as its own row: the figure you wanted is the "
+    "row for that category, and every row has one population. Where the published grain "
+    "has to stay one row per subject, add a sibling aggregate grouped on that subject AND "
+    "the category, or carry the category column through with formula `list`."
+)
+
+
+def find_aggregation_where_issues(candidate: dict) -> list[str]:
+    """Enforced on write, not on the model — on load it would refuse every version stored before."""
+    aggregate = candidate.get("aggregate")
+    aggregations = aggregate.get("aggregations") if isinstance(aggregate, dict) else None
+    if not isinstance(aggregations, list):
+        return []
+    return [
+        AGGREGATION_WHERE_REFUSAL.format(
+            sid=candidate.get("id"),
+            output_column=op.get("output_column"),
+            predicate=op.get("where"),
+        )
+        for op in aggregations
+        if isinstance(op, dict) and op.get("where")
+    ]
+
+
 def find_unnamed_model_issues(candidate: dict) -> list[str]:
     """Enforced on write, not on the model — on load it would refuse every llm stage stored before."""
     llm = candidate.get("llm")
@@ -174,6 +206,7 @@ def _apply(project_id: str, specs: dict[str, dict], stage_id: str, candidate: di
     issues += find_description_issues(candidate)
     issues += find_unnamed_model_issues(candidate)
     issues += find_unapproved_code_issues(project_id, candidate, specs)
+    issues += find_aggregation_where_issues(candidate)
     if issues:
         return EditStageResult(ok=False, issues=issues)
 

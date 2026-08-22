@@ -9,6 +9,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, ClassVar, Literal, Optional, Sequence
 
 from pydantic import Field, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 from app.core.errors import PredicateError
 from app.core.predicate import parse_predicate
@@ -43,7 +44,8 @@ class AggregationOp(_Base):
     output_column: str
     formula: AggFormula
     value_column: Optional[str] = None
-    where: Optional[str] = None
+    # docs/retired-aggregation-where.md
+    where: SkipJsonSchema[Optional[str]] = None
 
     @model_validator(mode="after")
     def _value_column_for_formula(self) -> "AggregationOp":
@@ -217,7 +219,10 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
             "reduces the whole frame "
             "to ONE row of just the aggregation outputs — reach for it whenever a stage "
             "boils everything down to published figures. That row comes out even when no "
-            "row reaches it, every figure NULL. formula `count` counts ROWS and takes no "
+            "row reaches it, every figure NULL. A figure over only SOME of the rows is a "
+            "grouping, never a per-column cut: group_by the column that names them and "
+            "every category comes out as its own row, each resting on rows of its own. "
+            "formula `count` counts ROWS and takes no "
             "value_column; every other formula requires one — `count_distinct` counts "
             "distinct NON-NULL values. Declared output types must match what the formula "
             "computes: count/count_distinct->int, mean->float, "
