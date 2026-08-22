@@ -122,13 +122,6 @@ def validate_table(
     return report
 
 
-def build_row_model(schema: TableSchema, name: str) -> type[BaseModel]:
-    """Range is warning-severity on a frame, so it must not fail a row."""
-    return TableSchema(
-        columns=[column.model_copy(update={"range": None}) for column in schema.columns]
-    ).to_pydantic_model(name)
-
-
 def find_row_issues(row: Mapping[str, Any], model: type[BaseModel]) -> list[str]:
     """Strict, or pydantic coerces '2' into an int column and passes it."""
     try:
@@ -246,7 +239,7 @@ def _find_numeric_range_issues(values: pa.ChunkedArray, col: Column) -> list[Iss
     except TypeError:
         return []  # mixed types — _find_type_issues reports them
     if bad:
-        return [Issue("warning", col.name, f"{bad} value(s) outside range [{lo}, {hi}]")]
+        return [Issue("error", col.name, f"{bad} value(s) outside range [{lo}, {hi}]")]
     return []
 
 

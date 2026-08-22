@@ -99,12 +99,55 @@ def test_enum_nulls_are_not_reported_as_outside_the_vocabulary():
     assert report.ok
 
 
-def test_numeric_range_value_outside_bounds_warns():
-    schema = _schema(columns=[{"name": "score", "type": "int", "range": [0, 10], "nullable": True}])
-    df = pd.DataFrame({"score": [5, 42]})
-    report = validate_dataframe(df, schema, stage_id="s", phase="output")
-    msgs = [i.message for i in report.issues if i.column == "score"]
-    assert any("range" in msg for msg in msgs), msgs
+def _range_issues(values, *, bounds, type="int"):
+    schema = _schema(columns=[
+        {"name": "score", "type": type, "range": bounds, "nullable": True},
+    ])
+    return _issues_for("score", pd.DataFrame({"score": values}), schema)
+
+
+def test_a_value_over_the_upper_bound_fails_the_stage():
+    report, issues = _range_issues([5, 42], bounds=[0, 10])
+    assert len(issues) == 1
+    assert issues[0].severity == "error"
+    assert issues[0].message == "1 value(s) outside range [0, 10]"
+    assert not report.ok
+
+
+def test_a_value_under_the_lower_bound_is_counted_too():
+    _, issues = _range_issues([-3, 5], bounds=[0, 10])
+    assert issues[0].message == "1 value(s) outside range [0, 10]"
+
+
+def test_both_bounds_are_counted_together():
+    _, issues = _range_issues([-3, 5, 42], bounds=[0, 10])
+    assert issues[0].message == "2 value(s) outside range [0, 10]"
+
+
+def test_the_bounds_themselves_are_inside_the_range():
+    report, issues = _range_issues([0, 10], bounds=[0, 10])
+    assert issues == [] and report.ok
+
+
+def test_a_float_column_is_range_checked_like_an_int_one():
+    _, issues = _range_issues([0.5, 10.5], bounds=[0, 10], type="float")
+    assert issues[0].severity == "error"
+    assert issues[0].message == "1 value(s) outside range [0, 10]"
+
+
+def test_an_unbounded_upper_bound_admits_any_large_value():
+    report, issues = _range_issues([1e18], bounds=[0, "+inf"], type="float")
+    assert issues == [] and report.ok
+
+
+def test_an_unbounded_lower_bound_admits_any_small_value():
+    report, issues = _range_issues([-1e18], bounds=["-inf", 0], type="float")
+    assert issues == [] and report.ok
+
+
+def test_a_null_is_not_counted_as_out_of_range():
+    report, issues = _range_issues([5, None], bounds=[0, 10], type="float")
+    assert issues == [] and report.ok
 
 
 def test_no_schema_declared_produces_no_issues():
@@ -269,6 +312,28 @@ def test_json_column_accepts_anything():
     report, issues = _issues_for("v", pd.DataFrame({"v": [{"a": "b"}, {"a": "c"}]}), schema)
     assert issues == []
     assert report.ok
+
+
+def test_a_list_json_column_admits_any_element_object():
+    schema = _schema(columns=[
+        {"name": "v", "type": "list[json]", "value_type": "str", "nullable": True},
+    ])
+    report, issues = _issues_for("v", pd.DataFrame({"v": [[{"a": "b"}], [{"a": "c"}]]}), schema)
+    assert issues == []
+    assert report.ok
+
+
+def test_the_report_dict_names_every_key_the_manifest_reads():
+    schema = _schema(columns=[{"name": "n", "type": "int", "nullable": False}])
+    report = validate_dataframe(pd.DataFrame({"n": [1, None]}), schema, stage_id="s", phase="output")
+    as_dict = report.to_dict()
+    assert set(as_dict) == {"stage_id", "phase", "rows", "ok", "issues"}
+    assert as_dict["stage_id"] == "s"
+    assert as_dict["phase"] == "output"
+    assert as_dict["rows"] == 2
+    assert as_dict["ok"] is False
+    assert set(as_dict["issues"][0]) == {"severity", "column", "message"}
+    assert as_dict["issues"][0]["column"] == "n"
 
 
 def test_list_column_rejects_non_list_values():

@@ -124,12 +124,16 @@ the report says so rather than checking nothing silently. An error-severity issu
 value outside a declared enum, null in a non-nullable column) fails the
 stage: the record is `error` with an `OutputSchemaViolation` and downstream stages are blocked.
 `validation_warnings` means warning-severity issues only. Input-side issues alone still only warn.
-An out-of-`range` number is the deliberate exception, still a warning: a range bounds the
-expected, an enum the possible.
+An out-of-`range` number is one of those errors, enforced at every level a number passes: the
+reply an `llm_transform` may submit, the row its mapper returns, and the frame the stage lands.
+A declared bound is a constraint, not a hint — do not declare one the data may legitimately
+exceed. Inside an `llm_transform` the bound reaches the model as a `minimum`/`maximum` on the
+submit tool, so a true value outside it cannot be reported: that pressure is the price of the
+guarantee, and the reason a bound belongs only where it really holds.
 
 `find_row_issues` runs the schema's own `to_pydantic_model` over each mapped row as its
-mapper returns it, so a row off its signature fails AS that row. `range` is stripped first —
-warning-severity must not fail a row — and key uniqueness still needs `validate_table`.
+mapper returns it, so a row off its signature fails AS that row. `range` reaches that model as
+`ge`/`le`, nested `fields` included; key uniqueness still needs `validate_table`.
 
 `key_coverage.py` — the one COVERAGE check, on `enrich` and `expand`. Everything in
 `validation.py` asks whether the values present are allowed; this asks which key values
