@@ -1,5 +1,4 @@
-"""One file's page: what it is, what a reader may claim about it, what is in each
-column, and which runs read it."""
+"""One file's page: what it is, what is claimed of it, and what is in it."""
 from __future__ import annotations
 
 from pydantic import BaseModel
@@ -12,8 +11,7 @@ from app.web.file_sizes import describe_bytes
 from app.web.files_view import count_runs_by_file
 from app.runtime.manifest import list_run_entries
 
-# What one column's facet lists before it stops and says how many it left. Eight is what
-# fits beside the bars without the panel becoming the file.
+# What a facet lists before it says how many it left.
 _VALUES_SHOWN = 8
 
 
@@ -122,9 +120,7 @@ def _group_column(kind: ColumnKind) -> str:
 def _find_reading_runs(project_id: str, record: ProjectFile) -> list[ReadingRun]:
     """Newest first, off each run's own manifest — what ran, not what a version now names."""
     read_by = set(count_runs_by_file(project_id).get(record.sha256, []))
-    # The raw payload rather than the typed manifest, because that is what counted the
-    # reads: a run this model no longer parses still read these bytes, and dropping it
-    # here would leave a list shorter than the count beside it.
+    # raw, not the typed manifest: that is what counted the reads.
     return [ReadingRun(run_id=entry.run_id,
                        started_at=str((entry.raw or {}).get("started_at") or ""),
                        status=str((entry.raw or {}).get("status") or "unrecorded"))

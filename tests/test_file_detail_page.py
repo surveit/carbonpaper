@@ -16,8 +16,7 @@ from run_seed import store_manifest
 
 client = TestClient(app)
 
-# Two columns of a social export as it really arrives: one Meltwater geolocated for a
-# few rows, one it filled with an empty string for every row.
+# Two columns as a social export arrives: one geolocated, one empty in every row.
 CSV = (b"Country,Hashtags,Reactions\n"
        b"Netherlands,,4\n"
        b",,0\n"

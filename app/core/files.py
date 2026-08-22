@@ -39,9 +39,7 @@ _DEFAULT_MAX_UPLOAD_BYTES = 512 * _MEGABYTE
 _DEFAULT_FILES_QUOTA_BYTES = 4 * _GIGABYTE
 
 
-# A claim about the DATA, not about the work: `closed` says these rows are all of them,
-# `sampled` says they are a subset and the lineage note says how it was drawn, and `open`
-# says nobody has claimed either way yet.
+# A claim about the DATA, not the work; see docs/run-and-review-ui.md.
 class FileCompleteness(enum.StrEnum):
     OPEN = "open"
     CLOSED = "closed"

@@ -1,13 +1,11 @@
-"""What a column shape says about columns that really turned up in a Meltwater export:
-one 96% empty string, one constant, one numeric, one that is dates."""
+"""Columns that really turned up in a Meltwater export."""
 from __future__ import annotations
 
 import pytest
 
 from app.core.file_shape import ColumnKind, measure_column_shape
 
-# The Country column of a Meltwater social export: filled for the rows Meltwater
-# geolocated, an empty string for the rest.
+# A Meltwater export's Country: geolocated for some rows, blank for the rest.
 COUNTRY = ["", "Netherlands", "", "Poland", "Netherlands", "", "", "France", ""]
 
 

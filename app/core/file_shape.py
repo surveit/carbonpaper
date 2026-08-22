@@ -1,8 +1,4 @@
-"""What one column of a stored file holds: how much of it is filled, what values fill
-it, and the range or the timeline they cover.
-
-Measured over the values themselves, so nothing here needs pandas.
-"""
+"""What one column of a stored file holds; see docs/run-and-review-ui.md."""
 from __future__ import annotations
 
 import enum
@@ -17,8 +13,7 @@ from app.core.column_profile import NumericRange, ValueCount
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _TIME = re.compile(r"^\d{2}:\d{2}(:\d{2})?$")
 _HISTOGRAM_BINS = 12
-# Over this many distinct values a column is prose a reader scans, not a set they pick
-# from — and its top values stop being a summary of anything.
+# Above this many distinct values a column reads as prose, not a set.
 _CATEGORY_SHARE = 0.02
 _CATEGORY_FLOOR = 24
 
