@@ -83,13 +83,16 @@ class RunViewChoice(BaseModel):
 
 
 def build_run_index_rows(
-    project_id: str, *, view: str | None = None, input_key: str | None = None
+    project_id: str, *, view: str | None = None, input_key: str | None = None,
+    file_sha256: str | None = None,
 ) -> list[RunIndexRow]:
-    """`view=None` lists every non-archived run; `input_key` narrows to one input SET."""
+    """`view=None` lists every non-archived run; `input_key`/`file_sha256` each narrow it."""
     rows = _build_every_row(project_id, view)
-    if not input_key:
-        return rows
-    return [row for row in rows if row.input_key == input_key]
+    if input_key:
+        rows = [row for row in rows if row.input_key == input_key]
+    if file_sha256:
+        rows = [row for row in rows if any(i.sha256 == file_sha256 for i in row.inputs)]
+    return rows
 
 
 def count_archived_runs(project_id: str) -> int:

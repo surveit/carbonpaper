@@ -122,7 +122,7 @@ def _read_bust_cache(form: FormData) -> bool:
 
 @router.get("/project/{project_id}/runs", response_class=HTMLResponse)
 async def runs_index(request: Request, project_id: str,
-                     view: str = RUN_VIEW_PRODUCTION, inputs: str = ""):
+                     view: str = RUN_VIEW_PRODUCTION, inputs: str = "", file: str = ""):
     validate_project_or_404(project_id)
     if view not in RUN_VIEWS:
         raise HTTPException(status_code=400, detail=f"unknown runs view '{view}'")
@@ -135,10 +135,11 @@ async def runs_index(request: Request, project_id: str,
         {
             "state": shell_state(project_id, "runs"),
             "section": "runs",
-            "runs": build_run_index_rows(project_id, view=view, input_key=inputs),
+            "runs": build_run_index_rows(project_id, view=view, input_key=inputs, file_sha256=file),
             "view": view,
             "view_choices": build_run_view_choices(project_id),
             "input_filter": inputs,
+            "file_filter": file,
         },
     )
 

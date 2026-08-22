@@ -27,9 +27,11 @@
   two different runs read the same file.
 
   `?inputs=<key>` narrows the list to the runs that read the same set of files; each
-  inputs cell links to its own key when more than one run shares it. The Filter box
-  above the table is a separate, client-side narrowing over what is already on the
-  page (runs-filter.js), matching name, filename and version message.
+  inputs cell links to its own key when more than one run shares it. `?file=<sha256>`
+  narrows to the runs that read that one file, among possibly others — the Files
+  page's "read by" column links here. The Filter box above the table is a separate,
+  client-side narrowing over what is already on the page (runs-filter.js), matching
+  name, filename and version message.
 
   Fixed layout with declared column widths: under `auto`, the widest cell in a column
   sets that column's width and takes it from its neighbours, and a version message
@@ -52,7 +54,8 @@
     view_choices = app.web.run_index.build_run_view_choices(state.id) — one
             RunViewChoice per bucket, in RUN_VIEWS order, carrying its label
             and how many runs are in it
-    input_filter = the ?inputs= key the rows were narrowed to, or "" 
+    input_filter = the ?inputs= key the rows were narrowed to, or ""
+    file_filter = the ?file= sha256 the rows were narrowed to, or ""
 
   Only manifest-backed runs appear, and a run whose manifest cannot be read says so
   in place of the parts it could not read.
@@ -116,6 +119,10 @@
 {% if input_filter %}
 <p class="filter-note">Showing the {{ runs | length }} run{{ '' if runs | length == 1 else 's' }}
   that read the same files.
+  <a href="/project/{{ state.id }}/runs{% if view %}?view={{ view }}{% endif %}">Show all runs</a></p>
+{% elif file_filter %}
+<p class="filter-note">Showing the {{ runs | length }} run{{ '' if runs | length == 1 else 's' }}
+  that read this file.
   <a href="/project/{{ state.id }}/runs{% if view %}?view={{ view }}{% endif %}">Show all runs</a></p>
 {% endif %}
 
@@ -215,9 +222,9 @@
    static/row-link.js, delegated from the document for every page drawing this table.
    A click that lands on a link is that link's, so the inputs cell narrows the list
    rather than opening the run. #}
-{% elif input_filter %}
+{% elif input_filter or file_filter %}
 <div class="empty-state">
-  <h2>No runs read those files</h2>
+  <h2>No runs read {% if file_filter %}this file{% else %}those files{% endif %}</h2>
   <a href="/project/{{ state.id }}/runs" class="btn primary">Show all runs</a>
 </div>
 {% elif view == "archived" %}

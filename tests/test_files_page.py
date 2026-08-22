@@ -55,8 +55,8 @@ def test_the_count_comes_from_the_runs_own_manifests(project_id):
     record_a_run(project_id, CSV_SHA, "20260812T130000")
     page = client.get(f"/project/{project_id}/files").text
     assert "2 runs" in page
-    # Linked to the LAST run that read it, which is the one worth opening.
-    assert "/runs/20260812T130000" in page
+    # Linked to the runs list, filtered to the runs that read this file.
+    assert f"/runs?file={CSV_SHA}" in page
 
 
 def test_an_empty_project_says_where_files_come_from(project_id):

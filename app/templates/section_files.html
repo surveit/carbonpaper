@@ -52,7 +52,7 @@
       <td>{{ row.added | friendly_time }}</td>
       <td>
         {% if row.run_count %}
-        <a href="/project/{{ state.id }}/runs/{{ row.last_run_id }}">{{ row.run_count }} run{{ "" if row.run_count == 1 else "s" }}</a>
+        <a href="/project/{{ state.id }}/runs?file={{ row.sha256 }}">{{ row.run_count }} run{{ "" if row.run_count == 1 else "s" }}</a>
         {% else %}<span class="muted">never read</span>{% endif %}
       </td>
       <td><code class="files-hash">{{ row.sha256[:12] }}…</code></td>
