@@ -21,7 +21,7 @@ class FileRow(BaseModel):
     size: str
     added: str
     run_count: int
-    status: file_store.FileStatus
+    completeness: file_store.FileCompleteness
     lineage: str
 
 
@@ -82,6 +82,6 @@ def _build_row(record: file_store.ProjectFile, run_ids: list[str]) -> FileRow:
         size=describe_bytes(record.byte_count),
         added=record.created_at,
         run_count=len(run_ids),
-        status=record.status,
+        completeness=record.completeness,
         lineage=record.lineage,
     )

@@ -1,0 +1,151 @@
+/* ═══ ONE FILE — what it is, where it came from, what is in it ═══
+   Every colour comes from palette.css. Column KIND takes no hue, on the same
+   reasoning a stage type takes none: colour here answers what happened and whether a
+   check passed, and "this column is text" answers neither. */
+
+.file-head { margin-bottom: 18px; }
+.file-head .head-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.file-head h1 { margin: 0; font-size: 1.35rem; overflow-wrap: anywhere; }
+.file-head h1 code { font-size: 1.15rem; }
+.file-facts { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center;
+    margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+
+/* The provenance card: the only editable thing on the page, so it sits directly under
+   the name and takes a plain Save rather than a dialog. */
+.file-card { background: var(--raised); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px; margin-bottom: 26px; }
+.file-provenance { display: grid; grid-template-columns: 200px minmax(0, 1fr) auto;
+    gap: 16px; align-items: start; }
+.file-provenance label { display: block; font-size: 12px; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 5px; }
+.file-provenance textarea { width: 100%; box-sizing: border-box; font: inherit;
+    font-size: 13.5px; padding: 7px 9px; border: 1px solid var(--border);
+    border-radius: 6px; background: var(--bg); color: var(--fg); resize: vertical; }
+.file-provenance select { width: 100%; }
+.fp-hint { margin: 6px 0 0; font-size: 12px; color: var(--warn-ink); line-height: 1.45; }
+.fp-hint[hidden] { display: none; }
+.fp-save { display: flex; align-items: flex-end; padding-top: 21px; }
+
+.file-section { margin: 0 0 30px; }
+.file-section-head h2 { margin: 0 0 4px; font-size: 1.05rem; }
+.file-section-lede { margin: 0 0 12px; font-size: 13px; color: var(--muted);
+    max-width: 74ch; line-height: 1.5; }
+
+/* ── The shape list ──────────────────────────────────────────────────────
+   One row per column, ordered as the file orders them, because a reader
+   comparing this against their own export reads it in that order. */
+.shape-filters { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.shape-filter { font: inherit; font-size: 12.5px; padding: 3px 10px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--raised); color: var(--muted);
+    cursor: pointer; }
+.shape-filter:hover { border-color: var(--border-strong); color: var(--fg); }
+.shape-filter.on { background: var(--sunk-deep); border-color: var(--border-strong);
+    color: var(--fg); font-weight: 600; }
+
+.shape-list { border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+    background: var(--raised); }
+.shape-head, .shape-col > summary { display: grid;
+    grid-template-columns: 74px minmax(140px, 1.4fr) 128px 74px minmax(200px, 2fr);
+    gap: 12px; align-items: center; padding: 7px 12px; }
+.shape-head { background: var(--sunk-deep); border-bottom: 1px solid var(--border);
+    font-size: 11.5px; letter-spacing: .05em; text-transform: uppercase;
+    color: var(--muted); }
+.shape-col { border-bottom: 1px solid var(--border); }
+.shape-col:last-child { border-bottom: none; }
+.shape-col > summary { cursor: pointer; list-style: none; font-size: 13px; }
+.shape-col > summary::-webkit-details-marker { display: none; }
+.shape-col > summary:hover { background: var(--hover); }
+.shape-col[open] > summary { background: var(--sunk); }
+.shape-col.dim > summary { color: var(--muted); }
+
+.shape-kind { font-family: var(--mono); font-size: 10.5px; letter-spacing: .3px;
+    text-align: center; padding: 2px 0; border-radius: 3px; background: var(--sunk-deep);
+    border: 1px solid var(--border); color: var(--muted); }
+.shape-name { font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; }
+.shape-distinct { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+.shape-fill { display: flex; align-items: center; gap: 7px; }
+.shape-peek { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.peek-note { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; }
+
+/* One meter, three parts: what a value fills, what an empty string fills, what is
+   null. The file that made this page necessary is 100% present and 33% empty string,
+   which one "filled" number cannot say. */
+.fill-track { display: inline-flex; height: 8px; width: 72px; border-radius: 4px;
+    overflow: hidden; background: var(--sunk-deep); border: 1px solid var(--border); }
+.fill-track i { display: block; height: 100%; }
+.fill-filled { background: var(--accent); }
+.fill-blank { background: var(--border-strong); }
+.fill-null { background: var(--idle-bd); }
+.fill-num { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fill-num.none { color: var(--muted); font-style: italic; }
+
+.seg-track { display: inline-flex; height: 8px; width: 96px; border-radius: 4px;
+    overflow: hidden; background: var(--sunk-deep); border: 1px solid var(--border); }
+.seg-track i { display: block; height: 100%; border-right: 1px solid var(--raised); }
+.seg-track i:first-child { background: var(--accent); }
+.seg-track i:nth-child(2) { background: color-mix(in srgb, var(--accent) 62%, var(--bg)); }
+.seg-track i:nth-child(3) { background: color-mix(in srgb, var(--accent) 44%, var(--bg)); }
+.seg-track i:nth-child(4) { background: color-mix(in srgb, var(--accent) 30%, var(--bg)); }
+.seg-track i:nth-child(n+5) { background: color-mix(in srgb, var(--accent) 18%, var(--bg)); }
+/* After the shades above, and it must win the tie: what no row filled reads as the
+   meter's blank does, wherever it lands in the order. */
+.seg-track i.seg-absent { background: var(--border-strong); }
+.spark { display: inline-flex; align-items: flex-end; gap: 1px; height: 18px; width: 62px;
+    flex: none; }
+.spark i { flex: 1; min-height: 1px; background: var(--accent); border-radius: 1px 1px 0 0; }
+
+/* ── One column, opened ────────────────────────────────────────────────── */
+.shape-facet { padding: 12px 14px 16px 100px; background: var(--sunk);
+    border-top: 1px solid var(--border); }
+.facet-stats { display: flex; gap: 22px; margin: 0 0 12px; }
+.facet-stats dt { font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--muted); }
+.facet-stats dd { margin: 2px 0 0; font-family: var(--mono); font-size: 13px; }
+.facet-scale { display: flex; gap: 0; margin: 0 0 8px; }
+.facet-scale button { font: inherit; font-size: 11.5px; color: var(--muted); cursor: pointer;
+    padding: 2px 9px; border: 1px solid var(--border); background: var(--raised); }
+.facet-scale button:first-child { border-radius: 4px 0 0 4px; }
+.facet-scale button:last-child { border-radius: 0 4px 4px 0; border-left: none; }
+.facet-scale button.on { background: var(--sunk-deep); border-color: var(--border-strong);
+    color: var(--fg); font-weight: 600; }
+
+.facet-values { width: 100%; max-width: 640px; border-collapse: collapse; font-size: 13px; }
+.facet-values td { padding: 3px 8px 3px 0; vertical-align: middle; }
+.fv-value { font-family: var(--mono); font-size: 12.5px; max-width: 320px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fv-bar { width: 160px; }
+.fv-bar i { display: block; height: 9px; background: var(--accent); border-radius: 2px;
+    min-width: 1px; }
+.fv-count, .fv-pct { text-align: right; font-variant-numeric: tabular-nums;
+    color: var(--muted); width: 62px; }
+/* The empty string and the null rank with the values, because a column that is mostly
+   neither is a fact about the column — but they are not values, so they read as the
+   meter's blank rather than as ink. */
+.fv-absent .fv-value { font-family: var(--ui); font-style: italic; color: var(--muted); }
+.fv-absent .fv-bar i { background: var(--border-strong); }
+.facet-note { margin: 10px 0 0; font-size: 12.5px; color: var(--muted); max-width: 70ch; }
+
+/* ── The rows, second ───────────────────────────────────────────────────── */
+.file-rows > summary { cursor: pointer; display: flex; align-items: baseline; gap: 8px; }
+.file-rows > summary h2 { display: inline; margin: 0; font-size: 1.05rem; color: var(--fg); }
+.file-rows > summary::-webkit-details-marker { color: var(--muted); }
+.file-rows .table-scroll { margin-top: 10px; }
+
+/* ── Read by ────────────────────────────────────────────────────────────── */
+.read-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--raised); }
+.read-list li { display: flex; align-items: center; gap: 10px; padding: 7px 12px;
+    border-bottom: 1px solid var(--border); font-size: 13px; }
+.read-list li:last-child { border-bottom: none; }
+.read-when { margin-left: auto; font-variant-numeric: tabular-nums; }
+.read-more { margin: 8px 0 0; font-size: 13px; }
+.read-none { font-size: 13px; color: var(--muted); }
+
+/* ── Delete, in its own space ───────────────────────────────────────────── */
+.file-danger { border-top: 1px solid var(--border); padding-top: 18px; }
+.delete-inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.delete-inline label { font-size: 13px; color: var(--muted); }
+.delete-inline input { font: inherit; font-size: 13px; padding: 6px 9px;
+    border: 1px solid var(--border); border-radius: 6px; min-width: 280px;
+    background: var(--raised); color: var(--fg); }

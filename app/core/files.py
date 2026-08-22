@@ -39,7 +39,10 @@ _DEFAULT_MAX_UPLOAD_BYTES = 512 * _MEGABYTE
 _DEFAULT_FILES_QUOTA_BYTES = 4 * _GIGABYTE
 
 
-class FileStatus(enum.StrEnum):
+# A claim about the DATA, not about the work: `closed` says these rows are all of them,
+# `sampled` says they are a subset and the lineage note says how it was drawn, and `open`
+# says nobody has claimed either way yet.
+class FileCompleteness(enum.StrEnum):
     OPEN = "open"
     CLOSED = "closed"
     SAMPLED = "sampled"
@@ -61,7 +64,7 @@ class ProjectFile(PersistedModel):
     filename: str
     byte_count: int
     project_id: ID | None = None
-    status: FileStatus = FileStatus.OPEN
+    completeness: FileCompleteness = FileCompleteness.OPEN
     lineage: str = ""
 
 
@@ -112,14 +115,20 @@ def move_file_to_project(file_id: ID, project_id: ID) -> ProjectFile:
     return record
 
 
-def update_investigation(project_id: ID, file_id: ID, status: FileStatus, lineage: str) -> ProjectFile:
-    """Set this project's status/lineage note for one file."""
+def update_file_provenance(
+    project_id: ID, file_id: ID, completeness: FileCompleteness, lineage: str,
+) -> ProjectFile:
+    """`sampled` takes a lineage note saying how the sample was drawn; the others do not."""
+    if completeness == FileCompleteness.SAMPLED and not lineage.strip():
+        raise ValueError(
+            "a sampled file needs a note saying how the sample was drawn — say which rows "
+            "these are, or set completeness to open")
     record = ProjectFile.load_or_none(file_id)
     if record is None or record.project_id != project_id:
         raise FileNotStoredError(
             f"no file {file_id!r} in project '{project_id}' — list its files, upload this "
             "one, or move it in if it is not in a project yet")
-    record.status = status
+    record.completeness = completeness
     record.lineage = lineage
     record.save()
     return record

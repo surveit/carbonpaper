@@ -1,0 +1,141 @@
+{% extends "project_shell.html" %}
+{% from "_picker.html" import picker %}
+{#
+  ONE FILE — what it is, what its holder claims about it, what is in each column, and
+  which runs read it.
+
+  Framed like the run and eval pages: a head naming the thing, then the sections under
+  it. The SHAPE comes before the rows because a file's columns are what a reader checks
+  an export against — twelve rows of a 51-column export say nothing about the 17 columns
+  that are empty in all of them, and the shape says it in a line.
+
+  Completeness is a claim about the DATA: closed says these rows are all of them, sampled
+  says they are a subset and the note says how it was drawn, open says nobody has claimed
+  either way. It is not a run state and takes no run colour.
+
+  Context the route passes:
+    state = shell_state(...); section = "files"
+    file  = file_detail_view.build_file_detail_view(project, file_id)
+#}
+{% block title %}{{ file.filename }} · files{% endblock %}
+
+{# `running` is not a verdict, so it takes the tint a run yet to start takes. #}
+{% set run_badge = {"done": "ok", "review_complete": "ok", "awaiting_review": "awaiting",
+                    "errors": "err", "cancelled": "pending", "running": "pending",
+                    "unrecorded": "pending"} %}
+
+{% block section %}
+<div class="sec-head file-head">
+  <div class="head-line">
+    <h1><code>{{ file.filename }}</code></h1>
+    <span class="badge {{ 'ok' if file.completeness.value == 'closed' else 'pending' }}">{{ file.completeness.value }}</span>
+  </div>
+  <p class="file-facts">
+    <span class="type-tag">{{ file.format }}</span>
+    <span>{{ file.size }}</span>
+    <span>{{ "{:,}".format(file.row_count) }} rows × {{ file.column_count }} columns</span>
+    <span>added {{ file.added | friendly_time }}</span>
+    <span><code class="files-hash">{{ file.sha256[:12] }}…</code></span>
+  </p>
+</div>
+
+<section class="file-card">
+  <form class="file-provenance" method="post"
+        action="/project/{{ state.id }}/files/{{ file.file_id }}/provenance">
+    <div class="fp-completeness">
+      <label for="file-completeness">Data completeness</label>
+      {% call picker("What is claimed about these rows", size="sm") %}
+      <select name="completeness" id="file-completeness" class="picker-native">
+        <option value="open" data-name="open" data-meta="No claim made"
+                {% if file.completeness.value == 'open' %}selected{% endif %}>open</option>
+        <option value="closed" data-name="closed" data-meta="These rows are all of them"
+                {% if file.completeness.value == 'closed' %}selected{% endif %}>closed</option>
+        <option value="sampled" data-name="sampled" data-meta="A subset — say how below"
+                {% if file.completeness.value == 'sampled' %}selected{% endif %}>sampled</option>
+      </select>
+      {% endcall %}
+    </div>
+    <div class="fp-lineage">
+      <label for="file-lineage">Where it came from</label>
+      <textarea name="lineage" id="file-lineage" rows="3"
+                placeholder="Who sent it, which export, what was asked for.">{{ file.lineage }}</textarea>
+      <p class="fp-hint" id="file-lineage-hint" hidden>A sampled file needs this: say how the sample was drawn.</p>
+    </div>
+    <div class="fp-save"><button type="submit" class="btn primary">Save</button></div>
+  </form>
+</section>
+
+<section class="file-section">
+  <div class="file-section-head">
+    <h2>Shape</h2>
+    <p class="file-section-lede">{{ file.column_count }} columns — <strong>{{ file.varying_count }} vary</strong>
+      {%- if file.constant_count %}, {{ file.constant_count }} hold one value for every row{% endif %}
+      {%- if file.empty_count %}, {{ file.empty_count }} hold no value at all{% endif %}.
+      Every count is over all {{ "{:,}".format(file.row_count) }} rows, not the sample below.</p>
+  </div>
+  <div class="shape-filters">
+    <button type="button" class="shape-filter on" data-filter="all">All {{ file.column_count }}</button>
+    <button type="button" class="shape-filter" data-filter="varying">Varying {{ file.varying_count }}</button>
+    {% if file.constant_count %}<button type="button" class="shape-filter" data-filter="constant">One value {{ file.constant_count }}</button>{% endif %}
+    {% if file.empty_count %}<button type="button" class="shape-filter" data-filter="empty">Empty {{ file.empty_count }}</button>{% endif %}
+  </div>
+  <div class="shape-list">
+    <div class="shape-head"><span></span><span>column</span><span>filled</span><span>distinct</span><span>values</span></div>
+    {% for column in file.columns %}{% include "_file_column.html" %}{% endfor %}
+  </div>
+</section>
+
+<section class="file-section">
+  <details class="file-rows">
+    <summary><h2>First rows</h2><span class="muted">{{ file.preview.rows | length }} of {{ "{:,}".format(file.row_count) }}</span></summary>
+    {% with preview = file.preview %}{% include "_file_preview.html" %}{% endwith %}
+  </details>
+</section>
+
+<section class="file-section">
+  <div class="file-section-head">
+    <h2>Read by</h2>
+    {% if file.runs %}
+    <p class="file-section-lede">{{ file.runs | length }} run{{ "" if file.runs | length == 1 else "s" }}
+      read these bytes. Each read is off the run's own manifest, so it says what ran — not
+      what the current version names.</p>
+    {% endif %}
+  </div>
+  {% if file.runs %}
+  <ul class="read-list">
+    {% for run in file.runs[:8] %}
+    <li>
+      <a href="/project/{{ state.id }}/runs/{{ run.run_id }}"><code>{{ run.run_id }}</code></a>
+      <span class="badge {{ run_badge.get(run.status, 'pending') }}">{{ run.status | replace('_', ' ') }}</span>
+      <span class="muted read-when">{{ run.started_at | friendly_time }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% if file.runs | length > 8 %}
+  <p class="read-more"><a href="/project/{{ state.id }}/runs?file={{ file.sha256 }}">All {{ file.runs | length }} runs over this file →</a></p>
+  {% endif %}
+  {% else %}
+  <p class="read-none">No run has read this file. Deleting it costs nothing that exists yet.</p>
+  {% endif %}
+</section>
+
+<section class="file-section file-danger">
+  <div class="file-section-head">
+    <h2>Delete this file</h2>
+    <p class="file-section-lede">
+      {%- if file.runs %}{{ file.runs | length }} run{{ "" if file.runs | length == 1 else "s" }}
+      read these bytes. Their manifests keep the hash either way, but re-running any of them
+      stops working the moment the bytes go.
+      {%- else %}No run has read these bytes, so nothing loses its input.{% endif %}</p>
+  </div>
+  <form class="delete-inline" method="post"
+        action="/project/{{ state.id }}/files/{{ file.file_id }}/delete" id="file-delete">
+    <label for="file-confirm">Type <code>{{ file.filename }}</code> to confirm</label>
+    <input type="text" id="file-confirm" name="confirm" autocomplete="off"
+           data-filename="{{ file.filename }}" required>
+    <button type="submit" class="btn danger" id="file-delete-submit" disabled
+            title="Type the file's name to enable this">Delete this file</button>
+  </form>
+</section>
+<script src="/static/file-detail.js"></script>
+{% endblock %}
