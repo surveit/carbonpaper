@@ -8,9 +8,7 @@ from app.core.run_status import StageStatus
 from app.core.ids import ID
 from app.models import Workflow
 from app.models.claims import Claim, StageOutputCellCitation
-from app.models.claims import CLAIMED_ROW
 from app.models.run_manifest import StageRecord
-from app.models.stages.aggregate import read_declared_claims
 from app.services.workspace import resolve_run_dir
 
 
@@ -27,27 +25,18 @@ def save_run_claims(
     }
     saved: list[Claim] = []
     for stage in workflow.stages:
-        declared = read_declared_claims(stage)
-        if not declared or stage.id not in written:
+        if not stage.claims or stage.id not in written:
             continue
         table = read_frame_table(run_dir / written[stage.id])
-        saved += [
-            _save_one(project_id, run_id, stage.id, claim.label, claim.column, table)
-            for claim in declared
-        ]
+        assert table.num_rows == 1, f"{stage.id}: the runtime lets only one row through"
+        for stated in stage.claims:
+            claim = Claim(
+                shape_id=stated.shape_id,
+                citation=StageOutputCellCitation(
+                    run_id=run_id, stage_id=stage.id, row_ordinal=0,
+                    column=stated.column, value=read_cell(table, stated.column, 0),
+                ),
+            )
+            claim.save()
+            saved.append(claim)
     return saved
-
-
-def _save_one(
-    project_id: ID, run_id: ID, stage_id: ID, label: str, column: str, table: object
-) -> Claim:
-    claim = Claim(
-        project_id=project_id,
-        label=label,
-        citation=StageOutputCellCitation(
-            run_id=run_id, stage_id=stage_id, row_ordinal=CLAIMED_ROW,
-            column=column, value=read_cell(table, column, CLAIMED_ROW),
-        ),
-    )
-    claim.save()
-    return claim

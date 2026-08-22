@@ -16,6 +16,10 @@ _PROJECT = "venezuela_lda_lobbying"
 _RUN = "20260812T133317.816579"
 
 
+_SHAPE = "9f2c4e7a1b3d4e5f8a0c2d4e6f8a0b1c"
+_OTHER = "1a2b3c4d5e6f708192a3b4c5d6e7f809"
+
+
 def _figures_stage(claims):
     return parse_stage({
         "id": "count_client_figures",
@@ -39,8 +43,8 @@ def _figures_stage(claims):
                 {"output_column": "external_spend", "formula": "sum",
                  "value_column": "total_income_usd"},
             ],
-            "claims": claims,
         },
+        **({"claims": claims} if claims else {}),
     })
 
 
@@ -76,38 +80,31 @@ _FIGURES = pa.table({"clients_paying": [24], "external_spend": [4461000.0]})
 
 def test_a_run_saves_the_claim_its_stage_declared():
     _write_output(_FIGURES)
-    stage = _figures_stage([
-        {"label": "Paid to outside lobbying firms to lobby on Venezuela",
-         "column": "external_spend"},
-    ])
+    stage = _figures_stage([{"shape_id": _SHAPE, "column": "external_spend"}])
     saved = save_run_claims(_PROJECT, _RUN, Workflow(stages=[_source_stage(), stage]), [_record()])
-    assert [(c.label, c.citation.value) for c in saved] == [
-        ("Paid to outside lobbying firms to lobby on Venezuela", 4461000.0)
-    ]
+    assert [(c.shape_id, c.citation.value) for c in saved] == [(_SHAPE, 4461000.0)]
     assert saved[0].citation.stage_id == "count_client_figures"
     assert saved[0].citation.run_id == _RUN
 
 
 def test_one_stage_can_declare_several_claims():
     _write_output(_FIGURES)
-    stage = _figures_stage([
-        {"label": "Paying clients", "column": "clients_paying"},
-        {"label": "Paid to outside firms", "column": "external_spend"},
-    ])
+    stage = _figures_stage([{"shape_id": _SHAPE, "column": "clients_paying"},
+                            {"shape_id": _OTHER, "column": "external_spend"}])
     saved = save_run_claims(_PROJECT, _RUN, Workflow(stages=[_source_stage(), stage]), [_record()])
     assert [c.citation.value for c in saved] == [24, 4461000.0]
 
 
-def test_a_saved_claim_is_found_by_its_project():
+def test_a_saved_claim_is_found_by_its_shape():
     _write_output(_FIGURES)
-    stage = _figures_stage([{"label": "Paid to outside firms", "column": "external_spend"}])
+    stage = _figures_stage([{"shape_id": _SHAPE, "column": "external_spend"}])
     save_run_claims(_PROJECT, _RUN, Workflow(stages=[_source_stage(), stage]), [_record()])
-    assert [c.label for c in Claim.find(project_id=_PROJECT)] == ["Paid to outside firms"]
+    assert [c.citation.value for c in Claim.find(shape_id=_SHAPE)] == [4461000.0]
 
 
 def test_an_errored_stage_states_no_claim_even_though_it_wrote_a_frame():
     _write_output(_FIGURES)
-    stage = _figures_stage([{"label": "Paid to outside firms", "column": "external_spend"}])
+    stage = _figures_stage([{"shape_id": _SHAPE, "column": "external_spend"}])
     saved = save_run_claims(
         _PROJECT, _RUN, Workflow(stages=[_source_stage(), stage]), [_record(StageStatus.ERROR)]
     )
@@ -116,5 +113,5 @@ def test_an_errored_stage_states_no_claim_even_though_it_wrote_a_frame():
 
 def test_a_stage_declaring_nothing_states_nothing():
     _write_output(_FIGURES)
-    saved = save_run_claims(_PROJECT, _RUN, Workflow(stages=[_source_stage(), _figures_stage([])]), [_record()])
+    saved = save_run_claims(_PROJECT, _RUN, Workflow(stages=[_source_stage(), _figures_stage(None)]), [_record()])
     assert saved == []

@@ -17,7 +17,6 @@ _RUN = "20260807T142707"
 
 def _shape() -> ClaimShape:
     return ClaimShape(
-        project_id="venezuela_lobbying_q1_q2_2026",
         label="Total paid to outside lobbying firms to lobby on Venezuela",
         requires=DataUniverseRequirement.closed,
         importance=ClaimImportance.primary,
@@ -27,8 +26,7 @@ def _shape() -> ClaimShape:
 def _claim(shape: ClaimShape, run_id: str = _RUN) -> Claim:
     table = pa.table({"total_income_usd": [_TOTAL]})
     return Claim(
-        project_id=shape.project_id,
-        label=shape.label,
+        shape_id=shape.id,
         citation=StageOutputCellCitation(
             run_id=run_id, stage_id="paid_totals", row_ordinal=0,
             column="total_income_usd", value=read_cell(table, "total_income_usd", 0),
@@ -50,11 +48,11 @@ def test_a_claim_survives_the_store():
     assert Claim.load(claim.id).citation.value == _TOTAL
 
 
-def test_a_projects_claims_are_found_together_across_runs():
+def test_the_claims_of_one_shape_are_found_together_across_runs():
     shape = _shape()
     shape.save()
     for run_id in (_RUN, "20260812T133317"):
         _claim(shape, run_id).save()
-    assert sorted(c.citation.run_id for c in Claim.find(project_id=shape.project_id)) == [
+    assert sorted(c.citation.run_id for c in Claim.find(shape_id=shape.id)) == [
         "20260807T142707", "20260812T133317",
     ]
