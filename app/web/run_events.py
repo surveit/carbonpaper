@@ -11,7 +11,7 @@ from typing import Any, AsyncIterator
 from fastapi import Request
 
 from app.core.run_status import RunStatus
-from app.runtime.run_log import RUN_DONE, read_events_since
+from app.runtime.run_log import RUN_DONE, read_events_backward, read_events_since
 from app.web.loading import load_manifest
 
 # How often the SSE tail re-reads the chunks, and how many empty polls it tolerates after
@@ -39,13 +39,20 @@ def select_stage_events(
 
 
 def tail_start_seq(project_id: str, run_id: str, tail: int, stage: str | None = None) -> int:
-    """Counts parsed events rather than `highest - tail`: seq is not guaranteed gap-free."""
-    events = select_stage_events(read_events_since(project_id, run_id, 0), stage)
-    if not events:
+    """Counts parsed events rather than `highest - tail`: seq is not gap-free."""
+    seen: list[dict[str, Any]] = []
+    # Newest chunk back: opening a panel must not parse the whole log.
+    exhausted = True
+    for events in read_events_backward(project_id, run_id):
+        seen[0:0] = select_stage_events(events, stage)
+        if seen and (tail <= 0 or len(seen) >= tail):
+            exhausted = False
+            break
+    if not seen:
         return 0
     if tail <= 0:
-        return int(events[-1]["seq"]) + 1      # start past the end: nothing old
-    return 0 if len(events) <= tail else int(events[-tail]["seq"])
+        return int(seen[-1]["seq"]) + 1        # start past the end: nothing old
+    return 0 if exhausted and len(seen) <= tail else int(seen[-tail]["seq"])
 
 
 def page_events_before(

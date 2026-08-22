@@ -138,6 +138,11 @@ class PersistedModel(BaseModel):
                 in get_store().find(cls.collection, cls._resolve_stored_keys(fields))]
 
     @classmethod
+    def list_ids(cls, prefix: str = "") -> list[ID]:
+        """Ids alone, no document bodies — declared above list(), which shadows the builtin."""
+        return get_store().list_ids(cls.collection, prefix)
+
+    @classmethod
     def list(cls, prefix: str = "") -> list[Self]:
         return [cls.model_validate(data)
                 for _, data in get_store().read_all(cls.collection, prefix)]
