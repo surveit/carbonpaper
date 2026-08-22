@@ -15,11 +15,8 @@ from app.main import app
 from app.services import workspace
 from app.services.project import create_project, list_projects, project_meta
 from app.services.methodology import exists as methodology_exists, read_methodology
-from app.services.project import (
-    Project,
-    read_project_name,
-    find_projects_by_name,
-)
+from app.services.project import find_projects_by_name
+from app.services.project_record import Project, read_project_name
 
 
 @pytest.fixture(autouse=True)

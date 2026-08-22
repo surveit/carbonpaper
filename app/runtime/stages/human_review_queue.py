@@ -20,7 +20,7 @@ from app.core.frames import write_frame_file_with_csv_fallback
 from app.core.persistence import PersistedModel, PersistenceScope
 from app.core.predicate import parse_predicate
 from app.models import AbstractStage, WorkflowStage
-from app.models.run_manifest import QueueStats, StageContribution
+from app.models.stage_contribution import QueueStats, StageContribution
 from app.models.stages.human_review_queue import (
     HumanReviewQueueStage,
     QueueConfig,

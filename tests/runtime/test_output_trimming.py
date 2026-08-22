@@ -4,7 +4,7 @@ import pyarrow as pa
 import pytest
 
 from app.models import parse_stage, Stage
-from app.models.run_manifest import StageContribution
+from app.models.stage_contribution import StageContribution
 from app.runtime.stages.execution import _trim_to_declared_columns
 from conftest import place_stage
 

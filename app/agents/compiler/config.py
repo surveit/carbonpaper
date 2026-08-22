@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
 from app.models.terms import render_terms
-from app.services import project as project_service
+from app.services.project_record import read_project_name
 from app.services import terms as terms_service
 from app.tools.editing import EditingContext, build_editing_tools
 from app.tools.prompt_fragments import render_link_map
@@ -36,7 +36,7 @@ def _render_opening_turn(context: BaseModel) -> OpeningTurn:
     if context.project_id is None:
         return OpeningTurn(text=_BLANK_CHAT_OPENING)
     return OpeningTurn(text=_PROJECT_OPENING.format(
-        name=project_service.read_project_name(context.project_id)))
+        name=read_project_name(context.project_id)))
 
 
 # `POST /chat/new` — nothing is bound yet, so the message is the three ways in, numbered

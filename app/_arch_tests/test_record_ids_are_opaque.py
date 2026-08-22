@@ -28,6 +28,8 @@ _GRANDFATHERED: frozenset[str] = frozenset({
     "loader.py::WorkingCopy",
     "methodology.py::Methodology",
     "project.py::Project",
+    # Two files since the record moved below the service; the key names a file.
+    "project_record.py::Project",
     # Composes the scope prefix the store's prefix-selected list() needs, then a
     # uuid — the closest of these to the rule, and still not it.
     "run_manifest_metadata.py::RunManifestMetadata",

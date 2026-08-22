@@ -15,7 +15,7 @@ from app.core.errors import LLMError
 from app.core.stage_cache import ReadOnlyStageCache
 from app.models import Stage, TableSchema, Workflow, WorkflowStage, WorkflowStageInput
 from app.models.stages.signature import promised_output_schema, transform_input_schemas
-from app.models.run_manifest import StageContribution
+from app.models.stage_contribution import StageContribution
 from app.runtime.manifest import read_run_manifest
 from app.models.run_parameters import RunParameters
 from app.core.frames import frame_to_table, table_to_frame

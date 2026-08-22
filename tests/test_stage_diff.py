@@ -16,6 +16,7 @@ from app.runtime.lineage import (
     lineage_sidecar_path,
 )
 from app.web.loading import PREVIEW_ROWS_SHOWN, load_output_preview
+from app.web.diff_state import CellDiffState, ColumnDiffState
 from app.web.stage_diff import (
     _NO_ALIGNED_DIFF,
     BASE_INPUT_ROLE,
@@ -24,8 +25,6 @@ from app.web.stage_diff import (
     ROW_ALIGNED_KIND,
     ROW_ALIGNED_TYPES,
     SOLE_INPUT_ROLE,
-    CellDiffState,
-    ColumnDiffState,
     FilterRowsDiff,
     RowAlignedDiff,
     build_stage_diff,
