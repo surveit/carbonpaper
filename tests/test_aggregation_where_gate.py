@@ -1,7 +1,4 @@
-"""The gate on an aggregation's `where`: withheld from the schema the stage-writing
-tools hand a model, refused on write, and still parsing and running for the stored
-versions that already carry one. docs/retired-aggregation-where.md
-"""
+"""docs/retired-aggregation-where.md"""
 from __future__ import annotations
 
 import json
