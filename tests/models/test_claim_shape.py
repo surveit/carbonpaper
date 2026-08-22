@@ -1,18 +1,15 @@
 from __future__ import annotations
 
 from app.models.claims import ClaimImportance, ClaimShape, DataUniverseRequirement
-from app.models.schema import Column, TableSchema
 
 # The figure the Venezuela LDA project rests on, and the column it is read from.
-_MONEY = TableSchema(columns=[Column(name="total_income_usd", type="float", nullable=False)])
 _LABEL = "Total paid to outside lobbying firms to lobby on Venezuela"
 
 
-def _shape(project_id: str, label: str = _LABEL, table_schema: TableSchema = _MONEY) -> ClaimShape:
+def _shape(project_id: str, label: str = _LABEL) -> ClaimShape:
     return ClaimShape(
         project_id=project_id,
         label=label,
-        table_schema=table_schema,
         requires=DataUniverseRequirement.closed,
         importance=ClaimImportance.primary,
     )

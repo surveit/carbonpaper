@@ -13,7 +13,8 @@ import pyarrow as pa
 
 from app.core.errors import CitationMismatch, RowOutOfRange, StageNotInRun
 from app.core.persistence import PersistedModel, PersistenceScope
-from app.models.citations import Citation, CitedRow
+from app.models.citations import CitedValue
+from app.models.claims import StageOutputRowCitation
 
 
 def build_row_trace_url(project_id: str, run_id: str, stage_id: str, row_ordinal: int) -> str:
@@ -37,8 +38,8 @@ class CitationProvider:
     tables: Mapping[str, pa.Table]
     # `frozen` stops these being rebound, not written, which is what lets the
     # provider handed to authored code come back carrying what that code said.
-    citations: list[Citation] = field(default_factory=list)
-    cited_rows: list[CitedRow] = field(default_factory=list)
+    citations: list[CitedValue] = field(default_factory=list)
+    cited_rows: list[StageOutputRowCitation] = field(default_factory=list)
 
     def cite_value(
         self, stage_id: str, row_ordinal: int, column: str, value: Any, label: str
@@ -51,7 +52,7 @@ class CitationProvider:
                 f"but that cell holds {cell!r} — publish renders what a stage computed, "
                 f"so a value it does not hold was made up in publish"
             )
-        self.citations.append(Citation(
+        self.citations.append(CitedValue(
             stage_id=stage_id, row_ordinal=row_ordinal, column=column,
             label=label, value=render_cell(cell),
         ))
@@ -59,7 +60,7 @@ class CitationProvider:
 
     def cite_row(self, stage_id: str, row_ordinal: int) -> str:
         self._require_row(stage_id, row_ordinal)
-        self.cited_rows.append(CitedRow(stage_id=stage_id, row_ordinal=row_ordinal))
+        self.cited_rows.append(StageOutputRowCitation(stage_id=stage_id, row_ordinal=row_ordinal))
         return build_row_trace_url(self.project, self.run_id, stage_id, row_ordinal)
 
     def _read_cell(self, stage_id: str, row_ordinal: int, column: str) -> Any:
@@ -115,8 +116,8 @@ class StageCitations(PersistedModel):
     collection: ClassVar[str] = "run_citations"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.RUN
 
-    citations: list[Citation] = []
-    cited_rows: list[CitedRow] = []
+    citations: list[CitedValue] = []
+    cited_rows: list[StageOutputRowCitation] = []
 
     @staticmethod
     def compose_id(project_id: str, run_id: str, stage_id: str) -> str:
@@ -133,7 +134,7 @@ def save_citations(
     ).save()
 
 
-def read_citations(project_id: str, run_id: str) -> list[Citation]:
+def read_citations(project_id: str, run_id: str) -> list[CitedValue]:
     """Every value this run's publish stages cited. Empty where none declared a provider."""
     return [c for saved in _saved(project_id, run_id) for c in saved.citations]
 

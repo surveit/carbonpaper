@@ -21,6 +21,14 @@ class CitationMismatch(ValueError):
     """A publish stage cited a cell for a value that cell does not hold."""
 
 
+class ColumnNotInFrame(ValueError):
+    pass
+
+
+class CellIsNotAScalar(ValueError):
+    """A frame cell holds a list, struct or other payload no scalar reader can carry."""
+
+
 class NoVersionToRunError(Exception):
     """No stored version at all; a named version_id with no document raises FileNotFoundError."""
 

@@ -19,8 +19,14 @@ import pyarrow.lib as pa_lib
 import pyarrow.csv as csv
 import pyarrow.parquet as pq
 
-from app.core.errors import FrameConcatMismatchError, FrameNotSerializableError
-from app.core.persistence import validate_id
+from app.core.errors import (
+    CellIsNotAScalar,
+    ColumnNotInFrame,
+    FrameConcatMismatchError,
+    FrameNotSerializableError,
+    RowOutOfRange,
+)
+from app.core.persistence import JsonScalar, validate_id
 from app.core.utils import compute_short_hash
 from app.core.ids import ID
 
@@ -252,6 +258,42 @@ def _reject_mismatched_columns(tables: Sequence[pa.Table]) -> None:
 
 
 # Through the same `types_mapper` a store read uses, so a list cell is a `list`.
+def read_cell(table: pa.Table, column: str, row_ordinal: int) -> JsonScalar:
+    """A date reads as ISO, a NaN as absent; the arrow type decides, not the python object."""
+    values = _select_column(table, column)
+    if not 0 <= row_ordinal < table.num_rows:
+        raise RowOutOfRange(
+            f"row {row_ordinal:,} of a {table.num_rows:,}-row frame"
+        )
+    if pa.types.is_nested(values.type):
+        raise CellIsNotAScalar(
+            f"'{column}' holds {values.type}, which no scalar reader carries"
+        )
+    return _as_json_scalar(column, values.type, values[row_ordinal].as_py())
+
+
+def _select_column(table: pa.Table, column: str) -> pa.ChunkedArray:
+    if column not in table.column_names:
+        raise ColumnNotInFrame(
+            f"'{column}' is not in the frame — it has {sorted(table.column_names)}"
+        )
+    return table.column(column)
+
+
+def _as_json_scalar(column: str, arrow_type: pa.DataType, cell: Any) -> JsonScalar:
+    if cell is None:
+        return None
+    if pa.types.is_date(arrow_type) or pa.types.is_timestamp(arrow_type):
+        return cell.isoformat()
+    if pa.types.is_floating(arrow_type) and math.isnan(cell):
+        return None
+    if isinstance(cell, (str, int, float, bool)):
+        return cell
+    raise CellIsNotAScalar(
+        f"'{column}' holds {arrow_type}, which reads as {type(cell).__name__}"
+    )
+
+
 def table_to_frame(table: pa.Table) -> pd.DataFrame:
     """An arrow table as pandas."""
     return table.to_pandas(types_mapper=_map_list_type_to_arrow_dtype)
