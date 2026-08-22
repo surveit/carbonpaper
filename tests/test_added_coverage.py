@@ -9,9 +9,9 @@ from scripts.added_coverage import (
 )
 
 
-def _lookup(executable: set[int], missing: set[int]):
+def _lookup(executable: set[int], missing: set[int], measured: str = "app/x.py"):
     def look(path: str) -> tuple[set[int] | None, set[int]]:
-        return (executable, missing) if path == "app/x.py" else (None, set())
+        return (executable, missing) if path == measured else (None, set())
     return look
 
 
@@ -49,6 +49,25 @@ def test_a_file_outside_app_is_not_governed() -> None:
 
 def test_a_file_coverage_never_measured_is_skipped() -> None:
     assert find_unrun_added_lines({"app/other.py": {1}}, _lookup({1}, {1})).unrun == []
+
+
+def test_app_web_is_counted_but_never_listed() -> None:
+    result = find_unrun_added_lines(
+        {"app/web/routers/x.py": {4, 5}}, _lookup({4, 5}, {4, 5}, "app/web/routers/x.py")
+    )
+    assert result.unrun == []
+    assert result.added == 0
+    assert result.exempt_unrun == 2
+
+
+def test_an_exempt_count_is_stated_rather_than_dropped_silently() -> None:
+    body = render_markdown(AddedCoverage(added=3, unrun=[], exempt_unrun=2), "o/r", "abc")
+    assert "2 more under `app/web/` are out of scope" in body
+
+
+def test_nothing_is_said_about_exemptions_when_none_applied() -> None:
+    body = render_markdown(AddedCoverage(added=3, unrun=[]), "o/r", "abc")
+    assert "out of scope" not in body
 
 
 def test_the_markdown_leads_with_the_marker_so_the_comment_upserts() -> None:

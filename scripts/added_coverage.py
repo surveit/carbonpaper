@@ -16,6 +16,10 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _GOVERNED_PREFIX = "app/"
 _MARKER = "<!-- added-coverage-report -->"
 
+# Routers, views and template glue: reached through a request rather than called, so an
+# uncovered line here costs a reader less than one in the runtime. Counted, never listed.
+_EXEMPT_PREFIXES = ("app/web/",)
+
 
 class UnrunSpan(BaseModel):
     path: str
@@ -27,6 +31,7 @@ class UnrunSpan(BaseModel):
 class AddedCoverage:
     added: int
     unrun: list[UnrunSpan]
+    exempt_unrun: int = 0
 
     @property
     def unrun_lines(self) -> int:
@@ -37,6 +42,7 @@ def find_unrun_added_lines(
     added_by_file: dict[str, set[int]], missing_for: "MissingLookup"
 ) -> AddedCoverage:
     added = 0
+    exempt_unrun = 0
     unrun: list[UnrunSpan] = []
     for path in sorted(added_by_file):
         if not path.startswith(_GOVERNED_PREFIX) or not path.endswith(".py"):
@@ -45,9 +51,12 @@ def find_unrun_added_lines(
         if executable is None:
             continue
         touched = added_by_file[path] & executable
+        if path.startswith(_EXEMPT_PREFIXES):
+            exempt_unrun += len(touched & missing)
+            continue
         added += len(touched)
         unrun.extend(_group_runs(path, sorted(touched & missing)))
-    return AddedCoverage(added=added, unrun=unrun)
+    return AddedCoverage(added=added, unrun=unrun, exempt_unrun=exempt_unrun)
 
 
 def _group_runs(path: str, lines: list[int]) -> list[UnrunSpan]:
@@ -75,11 +84,18 @@ class MissingLookup:
         return set(statements), set(missing)
 
 
+def _describe_exempt(result: AddedCoverage) -> str:
+    if not result.exempt_unrun:
+        return ""
+    return f" {result.exempt_unrun} more under `app/web/` are out of scope."
+
+
 def render_markdown(result: AddedCoverage, repo: str, sha: str) -> str:
     if not result.unrun:
         return (
             f"{_MARKER}\n### 🟢 added-line coverage — every added line runs\n\n"
-            f"`{result.added}` added executable lines under `app/`, all reached by the suite.\n"
+            f"`{result.added}` added executable lines under `app/`, all reached by the suite."
+            f"{_describe_exempt(result)}\n"
         )
     lines = [
         f"{_MARKER}",
@@ -95,7 +111,10 @@ def render_markdown(result: AddedCoverage, repo: str, sha: str) -> str:
         link = f"https://github.com/{repo}/blob/{sha}/{span.path}#{where}"
         lines.append(f"| [{where.replace('L', '')}]({link}) | `{span.path}` |")
     lines.append("")
-    lines.append("<sub>Report-only. A line executed only at import counts as run.</sub>")
+    lines.append(
+        "<sub>Report-only. A line executed only at import counts as run."
+        f"{_describe_exempt(result)}</sub>"
+    )
     return "\n".join(lines) + "\n"
 
 
@@ -130,6 +149,8 @@ def main(argv: list[str] | None = None) -> int:
     for span in result.unrun:
         print(f"{span.path}:{span.start_line}-{span.end_line} added but never executed")
     print(f"{result.unrun_lines} of {result.added} added executable lines under app/ never run")
+    if result.exempt_unrun:
+        print(f"{result.exempt_unrun} more under app/web/ are out of scope")
     return 0
 
 
