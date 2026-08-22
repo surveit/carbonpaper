@@ -230,7 +230,7 @@ def profile_stage_output_data_range(
     return {"ok": True, **profile.model_dump()}
 
 
-def _build_stored_file_view(record: file_store.UploadedFile) -> StoredFileView:
+def _build_stored_file_view(record: file_store.ProjectFile) -> StoredFileView:
     return StoredFileView(file_id=record.id, filename=record.filename,
                           bytes=record.byte_count, added=record.created_at)
 

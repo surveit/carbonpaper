@@ -21,6 +21,8 @@ class FileRow(BaseModel):
     size: str
     added: str
     run_count: int
+    status: file_store.FileStatus
+    lineage: str
 
 
 class FilesView(BaseModel):
@@ -72,7 +74,7 @@ def _read_input_hashes(manifest: JsonDict | None) -> list[str]:
     return [b.sha256 for b in read_input_bindings(manifest) if b.sha256]
 
 
-def _build_row(record: file_store.UploadedFile, run_ids: list[str]) -> FileRow:
+def _build_row(record: file_store.ProjectFile, run_ids: list[str]) -> FileRow:
     return FileRow(
         file_id=record.id,
         sha256=record.sha256,
@@ -80,4 +82,6 @@ def _build_row(record: file_store.UploadedFile, run_ids: list[str]) -> FileRow:
         size=describe_bytes(record.byte_count),
         added=record.created_at,
         run_count=len(run_ids),
+        status=record.status,
+        lineage=record.lineage,
     )

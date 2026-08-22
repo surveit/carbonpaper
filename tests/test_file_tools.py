@@ -119,7 +119,7 @@ def test_the_same_bytes_in_two_projects_are_weighed_twice(project, tmp_path):
     (tmp_path / "other").mkdir(parents=True)
     first = save_upload("posts.csv", io.BytesIO(CSV), "demo")
     second = save_upload("posts.csv", io.BytesIO(CSV), "other")
-    assert len(file_store.UploadedFile.list()) == 2
+    assert len(file_store.ProjectFile.list()) == 2
     assert file_store.resolve_stored_path(first) != file_store.resolve_stored_path(second)
     assert file_store.measure_files_used_bytes() == 2 * len(CSV)
 

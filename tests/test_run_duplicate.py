@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.services.run as run_service
-from app.core.files import UploadedFile, save_upload
+from app.core.files import ProjectFile, save_upload
 from app.main import app
 from app.runtime.manifest import read_run_manifest
 from app.services import versioning, workspace
@@ -175,7 +175,7 @@ def test_a_binding_recorded_under_the_old_sha256_directory_still_matches(
                 follow_redirects=False)
     run_id = _run_id(project)
     record = read_run_manifest("demo", run_id).to_dict()
-    stored = UploadedFile.load(file_id)
+    stored = ProjectFile.load(file_id)
     record["parameters"]["run_bindings"]["load"]["path"] = str(
         tmp_path / "files" / stored.sha256 / stored.filename)
     store_manifest(project, run_id, record)

@@ -42,13 +42,12 @@
 {% if files.rows %}
 <table class="stages files-table">
   <thead>
-    <tr><th>file</th><th>size</th><th>added</th><th>read by</th><th>SHA-256</th><th></th></tr>
+    <tr><th>file</th><th>added</th><th>read by</th><th>SHA-256</th><th></th></tr>
   </thead>
   <tbody>
     {% for row in files.rows %}
     <tr>
-      <td class="files-name"><code>{{ row.filename }}</code></td>
-      <td class="files-num">{{ row.size }}</td>
+      <td class="files-name"><code>{{ row.filename }}</code> <span class="muted files-size">{{ row.size }}</span></td>
       <td>{{ row.added | friendly_time }}</td>
       <td>
         {% if row.run_count %}

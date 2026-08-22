@@ -99,12 +99,12 @@ def _match_one_path(id_by_key: dict[str, str], path: object) -> str | None:
     return id_by_key.get(path) or id_by_key.get(Path(path).parent.name)
 
 
-def _name_the_record(record: file_store.UploadedFile) -> tuple[str, str, str]:
+def _name_the_record(record: file_store.ProjectFile) -> tuple[str, str, str]:
     # A file's directory was keyed by sha256 before it was keyed by record id.
     return (str(file_store.resolve_stored_path(record)), record.id, record.sha256)
 
 
-def build_file_choice(record: file_store.UploadedFile) -> FileChoice:
+def build_file_choice(record: file_store.ProjectFile) -> FileChoice:
     uploaded_at = datetime.fromisoformat(record.created_at)
     uploaded_label = f"Uploaded {format_upload_time(uploaded_at)}"
     size_label = describe_bytes(record.byte_count)
@@ -119,7 +119,7 @@ def build_file_choice(record: file_store.UploadedFile) -> FileChoice:
     )
 
 
-def build_uploaded_file_choice(record: file_store.UploadedFile) -> UploadedFileChoice:
+def build_uploaded_file_choice(record: file_store.ProjectFile) -> UploadedFileChoice:
     choice = build_file_choice(record)
     return UploadedFileChoice(
         **choice.model_dump(),

@@ -15,7 +15,7 @@ from app.main import app
 from app.services import workspace
 from app.core.errors import FileNotStoredError
 from app.core.files import (
-    UploadedFile,
+    ProjectFile,
     move_file_to_project,
     files_root,
     list_project_files,
@@ -42,8 +42,8 @@ def project(tmp_path, monkeypatch):
     return proj
 
 
-def _only_record() -> UploadedFile:
-    records = UploadedFile.list()
+def _only_record() -> ProjectFile:
+    records = ProjectFile.list()
     assert len(records) == 1, f"expected one record, got {len(records)}"
     return records[0]
 
@@ -127,7 +127,7 @@ def test_re_picking_the_same_bytes_is_a_second_arrival_with_its_own_time(project
     upload("posts.csv", CSV)
     first = _only_record()
     upload("renamed.csv", CSV)
-    again = next(r for r in UploadedFile.list() if r.id != first.id)
+    again = next(r for r in ProjectFile.list() if r.id != first.id)
     # Two arrivals of one file are two events. Collapsing them lost which upload a run
     # read and where each came from, which is the whole reason the record is the address.
     assert again.created_at > first.created_at
@@ -215,7 +215,7 @@ def test_two_projects_sending_the_same_bytes_each_get_their_own_copy(project):
     demo = Path(upload("posts.csv", CSV, project_name="demo").json()["path"])
     other = Path(upload("posts.csv", CSV, project_name="other").json()["path"])
     assert demo != other  # a copy each: deleting one cannot empty the other
-    assert {r.project_id for r in UploadedFile.list()} == {"demo", "other"}
+    assert {r.project_id for r in ProjectFile.list()} == {"demo", "other"}
 
 
 def test_a_file_can_arrive_before_any_project_owns_it(project):

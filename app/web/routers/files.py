@@ -9,7 +9,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.errors import FileNotStoredError
 from app.services.project import project_exists
-from app.core.files import delete_file
+from app.core.files import FileStatus, delete_file, update_investigation
 from app.web.config import templates
 from app.web.file_preview import build_file_preview
 from app.web.files_view import build_files_view
@@ -62,6 +62,22 @@ async def delete_project_file(project_id: str, file_id: str, confirm: str = Form
                             detail="type the file's name to confirm the delete")
     try:
         delete_file(project_id, file_id)
+    except FileNotStoredError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return RedirectResponse(url=f"/project/{project_id}/files", status_code=303)
+
+
+@router.post("/project/{project_id}/files/{file_id}/investigation")
+async def update_file_investigation(project_id: str, file_id: str,
+                                     status: str = Form(...), lineage: str = Form("")):
+    if not project_exists(project_id):
+        raise HTTPException(status_code=404, detail=f"No project '{project_id}'")
+    try:
+        parsed_status = FileStatus(status)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"invalid status {status!r}") from exc
+    try:
+        update_investigation(project_id, file_id, parsed_status, lineage)
     except FileNotStoredError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return RedirectResponse(url=f"/project/{project_id}/files", status_code=303)
