@@ -24,6 +24,7 @@ from app.models.stages.publish import PublishStage
 from ..branches import BranchRecorder
 from ..code import load_function
 from ..context import RunContext
+from ..lineage import LINEAGE_KWARG, LineageRecorder
 from ..stage_output import StageOutput
 from .execution import RecordingRowMapper, Row, RowMapper, narrow_stage
 
@@ -57,8 +58,20 @@ def handle_python_frame_function(
     fn = _load_python_function(narrow_stage(workflow_stage, PythonFrameFunctionStage))
     # Pass dataframes positionally in declared input order.
     args = [table_to_frame(inputs[ref.id]) for ref in workflow_stage.inputs]
-    kwargs = {"progress": ctx.stage_progress} if _accepts_progress(fn) else {}
-    return StageOutput.from_frame(_require_frame(fn(*args, **kwargs), workflow_stage))
+    # A keyword bundle for authored code, so its value type is the caller's, not ours.
+    declared: dict[str, object] = {}
+    if _accepts_progress(fn):
+        declared["progress"] = ctx.stage_progress
+    # The stage may reshape, so nothing out here knows which input row became which
+    # output row. A function that declares `lineage` says so itself; one that does
+    # not reports none, and the trace stops at this stage as it always has.
+    recorder = LineageRecorder(inputs) if _accepts_lineage(fn) else None
+    if recorder is not None:
+        declared[LINEAGE_KWARG] = recorder
+    frame = _require_frame(fn(*args, **declared), workflow_stage)
+    return StageOutput.from_frame(
+        frame, lineage=None if recorder is None else recorder.resolve(len(frame))
+    )
 
 
 def build_python_row_mapper(
@@ -92,9 +105,17 @@ def _require_frame(result: Any, workflow_stage: WorkflowStage) -> pd.DataFrame:
     return result
 
 
+def _accepts_lineage(fn: Callable[..., Any]) -> bool:
+    return _declares_keyword_only(fn, LINEAGE_KWARG)
+
+
 def _accepts_progress(fn: Callable[..., Any]) -> bool:
+    return _declares_keyword_only(fn, "progress")
+
+
+def _declares_keyword_only(fn: Callable[..., Any], name: str) -> bool:
     try:
-        progress = inspect.signature(fn).parameters.get("progress")
+        declared = inspect.signature(fn).parameters.get(name)
     except (TypeError, ValueError):
         return False
-    return progress is not None and progress.kind is inspect.Parameter.KEYWORD_ONLY
+    return declared is not None and declared.kind is inspect.Parameter.KEYWORD_ONLY

@@ -17,6 +17,10 @@ class RowOutOfRange(ValueError):
     pass
 
 
+class LineageIncomplete(ValueError):
+    """A frame function accounted for some of its output rows and not the rest."""
+
+
 class CitationMismatch(ValueError):
     """A publish stage cited a cell for a value that cell does not hold."""
 

@@ -283,7 +283,19 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
             "The runtime calls `transform(*frames)`: one POSITIONAL parameter per declared "
             "input, in `inputs` order — never by name, never a dict of frames. It receives no "
             "output_dir and no citation_provider; writing files is publish's job. Return the output "
-            "DataFrame."
+            "DataFrame.\n"
+            "THIS IS THE ONE TYPE THAT BREAKS A TRACE. Every other type has a shape the "
+            "runtime reads provenance off; this one reshapes however the code says, so a "
+            "reader asking where a row came from stops here. Declare `lineage` KEYWORD-ONLY "
+            "— `def transform(mills, claims, *, lineage)` — and say so yourself, per output "
+            "row: `lineage.built_from(out_ordinal, \"<input stage id>\", in_ordinal)` for the "
+            "row it was built from, `lineage.contributed_by(..., columns=[...])` for a row "
+            "that fed particular columns without being that one, and "
+            "`lineage.originates(out_ordinal)` for a row no input produced. Ordinals are "
+            "0-based positions in the frames AS RECEIVED. Every output row needs one of the "
+            "three: an unspoken-for row FAILS the stage, because silence and \"came from "
+            "nowhere\" would otherwise look the same. Omit the keyword and the stage reports "
+            "no lineage, which is what it did before."
         ),
     ),
 }

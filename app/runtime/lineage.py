@@ -1,14 +1,20 @@
 """Per-row provenance for a stage whose output isn't row-preserving BY POSITION
-(filter_rows, union, join), worked out by the RUNTIME, never reported by the
-authored stage. It is a field on `StageOutput`, never a column on the frame, so
-no runtime machinery can reach a stage's real output. A row may have several
-parents, so the sidecar is list-valued — see `RowLineage`."""
+(filter_rows, union, join), worked out by the RUNTIME wherever the stage's shape
+settles it, and reported by the stage itself for python_frame_function, which
+reshapes arbitrarily — see `LineageRecorder`. A row may have several parents, so
+the sidecar is list-valued; it is a field on `StageOutput`, never a frame column."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable, Sequence
+from typing import TYPE_CHECKING, Any, Iterable, Mapping, Sequence
+
+from app.core.errors import (
+    LineageIncomplete,
+    RowOutOfRange,
+    StageNotInRun,
+)
 
 import numpy as np
 import pandas as pd
@@ -218,3 +224,69 @@ def grouped_contributions_lineage(
 
 def lineage_sidecar_path(run_dir: Path, stage_id: str) -> Path:
     return Path(run_dir) / "outputs" / f"{stage_id}.lineage.parquet"
+
+
+# The keyword a frame function declares to be handed the recorder. Keyword-ONLY:
+# the positional slots are the input frames, so a positional `lineage` could not be
+# told apart from a third input.
+LINEAGE_KWARG = "lineage"
+
+
+@dataclass(frozen=True)
+class LineageRecorder:
+    """A frame function's own account of which input rows became which output row."""
+
+    tables: Mapping[str, pa.Table]  # this stage's inputs: the only rows it may claim
+    # `frozen` stops these being rebound, not written, which is what lets the recorder
+    # handed to authored code come back carrying what that code said.
+    spoken_for: dict[int, list[RowParent]] = field(default_factory=dict)
+
+    def built_from(self, row_ordinal: int, stage_id: str, source_row: int,
+                   columns: Iterable[str] | None = None) -> None:
+        """Output row `row_ordinal` is this input row, reshaped."""
+        self._record(row_ordinal, stage_id, source_row, EdgeKind.direct.value, columns)
+
+    def contributed_by(self, row_ordinal: int, stage_id: str, source_row: int,
+                       columns: Iterable[str] | None = None) -> None:
+        """This input row fed the output row without being the row it was built from."""
+        self._record(row_ordinal, stage_id, source_row, EdgeKind.contribution.value, columns)
+
+    def originates(self, row_ordinal: int) -> None:
+        """No input row became this one; `resolve` refuses silence but accepts this."""
+        self.spoken_for.setdefault(int(row_ordinal), [])
+
+    def resolve(self, row_count: int) -> RowLineage:
+        """Refuses a partial account — an unspoken-for row would trace as parentless."""
+        beyond = sorted(r for r in self.spoken_for if not 0 <= r < row_count)
+        if beyond:
+            raise RowOutOfRange(
+                f"lineage was recorded for output row(s) {beyond}, but the stage "
+                f"returned {row_count} row(s)"
+            )
+        unspoken = [r for r in range(row_count) if r not in self.spoken_for]
+        if unspoken:
+            raise LineageIncomplete(
+                f"lineage was recorded for {len(self.spoken_for)} of {row_count} output "
+                f"row(s); {len(unspoken)} were not spoken for, first at {unspoken[0]}. "
+                f"Every row needs a parent or an explicit `originates(...)` — a row left "
+                f"out would trace as having come from nowhere."
+            )
+        return RowLineage([self.spoken_for[r] for r in range(row_count)])
+
+    def _record(self, row_ordinal: int, stage_id: str, source_row: int,
+                kind: str, columns: Iterable[str] | None) -> None:
+        table = self.tables.get(stage_id)
+        if table is None:
+            raise StageNotInRun(
+                f"this stage was not given '{stage_id}', so it cannot have read its "
+                f"rows — it holds {sorted(self.tables)}"
+            )
+        if not 0 <= source_row < table.num_rows:
+            raise RowOutOfRange(
+                f"row {source_row} out of range for input '{stage_id}' "
+                f"({table.num_rows} rows)"
+            )
+        named = tuple(str(c) for c in columns) if columns else None
+        self.spoken_for.setdefault(int(row_ordinal), []).append(
+            RowParent(stage_id, int(source_row), kind, named)
+        )
