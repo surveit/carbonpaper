@@ -18,9 +18,6 @@ from app.core import files as file_store
 from app.services.frame_profile import read_file_shape
 from app.web.file_sizes import describe_bytes
 
-# What the comparison runs over, per column.
-_VALUES_MEASURED = 8
-
 
 class Distinction(BaseModel):
     """What separates this file from the others of its shape, in their own values."""
@@ -133,8 +130,7 @@ def _read_shapes(
     shapes = {}
     for record in records:
         try:
-            shapes[record.id] = read_file_shape(project_id, record.id,
-                                                max_values=_VALUES_MEASURED)
+            shapes[record.id] = read_file_shape(project_id, record.id)
         except (ValueError, FileNotStoredError):
             continue
     return shapes

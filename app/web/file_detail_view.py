@@ -6,14 +6,11 @@ from pydantic import BaseModel
 from app.core.file_shape import ColumnKind, ColumnShape
 from app.core.files import FileCompleteness, ProjectFile, open_project_file
 from app.core.source_files import find_file_format
-from app.services.frame_profile import measure_file_shape
+from app.services.frame_profile import read_file_shape
 from app.web.file_preview import FilePreview, build_file_preview
 from app.web.file_sizes import describe_bytes
 from app.web.files_view import count_runs_by_file
 from app.runtime.manifest import list_run_entries
-
-# What a facet lists before it says how many it left.
-_VALUES_SHOWN = 8
 
 
 class FacetValue(BaseModel):
@@ -85,7 +82,7 @@ def build_file_detail_view(project_id: str, file_id: str) -> FileDetailView:
 
 
 def _read_contents(project_id: str, file_id: str) -> FileContents:
-    shape = measure_file_shape(project_id, file_id, max_values=_VALUES_SHOWN)
+    shape = read_file_shape(project_id, file_id)
     columns = [_build_column_row(column, shape.row_count) for column in shape.columns]
     return FileContents(
         row_count=shape.row_count, column_count=len(shape.columns),

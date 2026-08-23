@@ -8,7 +8,9 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.file_shape import StoredFileShape
 from app.core.files import FileCompleteness, ProjectFile, save_upload
+from app.web import file_detail_view
 from app.main import app
 from app.services import workspace
 from app.services.project import create_project
@@ -125,3 +127,22 @@ def test_a_section_that_opens_says_so(project_id, file_id):
     text = page(project_id, file_id)
     assert text.count('<details class="file-rows') == 2
     assert '<div class="file-fold">' in text
+
+
+def test_the_page_reads_the_stored_shape_rather_than_the_file(project_id, file_id):
+    page(project_id, file_id)
+    assert len(StoredFileShape.find(file_id=file_id)) == 1
+    measured = {"n": 0}
+    monkeypatched = file_detail_view.read_file_shape
+
+    def counting(*args, **kwargs):
+        measured["n"] += 1
+        return monkeypatched(*args, **kwargs)
+
+    file_detail_view.read_file_shape = counting
+    try:
+        page(project_id, file_id)
+    finally:
+        file_detail_view.read_file_shape = monkeypatched
+    assert measured["n"] == 1
+    assert len(StoredFileShape.find(file_id=file_id)) == 1   # still one, nothing re-measured

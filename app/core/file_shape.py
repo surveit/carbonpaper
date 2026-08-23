@@ -16,6 +16,9 @@ from app.core.record import PersistedModel, PersistenceScope
 
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _TIME = re.compile(r"^\d{2}:\d{2}(:\d{2})?$")
+# How many of a column's commonest values a stored shape keeps, for every reader of it.
+VALUES_KEPT = 8
+
 _HISTOGRAM_BINS = 12
 # Above this many distinct values a column reads as prose, not a set.
 _CATEGORY_SHARE = 0.02
