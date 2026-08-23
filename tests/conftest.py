@@ -15,11 +15,11 @@ from app.core.errors import LLMError
 from app.core.stage_cache import ReadOnlyStageCache
 from app.models import Stage, TableSchema, Workflow, WorkflowStage, WorkflowStageInput
 from app.models.stages.signature import promised_output_schema, transform_input_schemas
-from app.models.run_manifest import StageContribution
+from app.models.stage_contribution import StageContribution
 from app.runtime.manifest import read_run_manifest
 from app.models.run_parameters import RunParameters
 from app.core.frames import frame_to_table, table_to_frame
-from app.runtime.stage_output import StageOutput
+from app.runtime.stage_output import AwaitingReview, StageOutput
 from app.runtime.context import (
     RunContext,
     RunIdentity,
@@ -86,6 +86,12 @@ def rows_of(output: StageOutput) -> pd.DataFrame:
 def contribution_of(output: StageOutput) -> StageContribution:
     """Read off the returned StageOutput — the executor merges it, the context never holds it."""
     return output.contribution
+
+
+def require_awaiting_review(output: StageOutput | None) -> AwaitingReview:
+    assert output is not None and output.awaiting_review is not None, (
+        "the stage finished; nothing was queued for review")
+    return output.awaiting_review
 
 
 @pytest.fixture(autouse=True)

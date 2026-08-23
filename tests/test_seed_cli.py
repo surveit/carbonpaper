@@ -8,7 +8,7 @@ from pathlib import Path
 
 from app.seeds.seed import discover_workflow_files, seed_all
 from app.services import project
-from app.services.project import read_project_name
+from app.services.project_record import read_project_name
 from app.services.stage_edit import find_description_issues, find_unnamed_model_issues
 import sqlite3
 

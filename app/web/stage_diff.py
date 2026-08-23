@@ -7,7 +7,6 @@ unverifiable yields None and the caller shows the plain output view."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
 from pathlib import Path
 from typing import ClassVar, Optional, Union
 
@@ -19,6 +18,7 @@ from app.runtime.lineage import RowLineage, lineage_sidecar_path
 from app.runtime.manifest import resolve_output_path
 from app.core.frames import read_frame_file, read_frame_table
 from app.web.column_order import order_written_columns_first
+from app.web.diff_state import CellDiffState, ColumnDiffState
 from app.web.loading import PREVIEW_ROWS_SHOWN, render_frame_as_text
 
 # The one grain-and-order-preserving type with nothing for a positional diff to
@@ -72,19 +72,6 @@ MINUS = "−"
 SOLE_INPUT_ROLE = "input"
 BASE_INPUT_ROLE = "base input"
 REFERENCE_INPUT_ROLE = "reference input"
-
-
-class ColumnDiffState(str, Enum):
-    carried = "carried"
-    dropped = "dropped"
-    added = "added"
-
-
-class CellDiffState(str, Enum):
-    carried = "carried"
-    changed = "changed"
-    dropped = "dropped"
-    added = "added"
 
 
 @dataclass(frozen=True)

@@ -30,7 +30,8 @@ from app.core.persistence import (
 )
 from app.core.run_status import RunStatus, StageStatus
 from app.models import WorkflowStage
-from app.models.run_manifest import QueueStats, StageRecord
+from app.models.run_manifest import StageRecord
+from app.models.stage_contribution import QueueStats
 from app.models.run_parameters import RunParameters
 
 from .context import RunContext

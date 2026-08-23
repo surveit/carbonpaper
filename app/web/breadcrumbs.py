@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from app.services.project import read_project_name
+from app.services.project_record import read_project_name
 
 
 class Crumb(BaseModel):

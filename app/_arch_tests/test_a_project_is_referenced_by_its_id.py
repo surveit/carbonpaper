@@ -22,7 +22,7 @@ _RESOLVER = "resolve_project_dir"
 # project directory to anything else.
 _PATH_OWNERS: dict[str, str] = {
     "app/services/workspace.py": "the resolver itself, plus runs/ and schemas/",
-    "app/services/project.py": "project.json, and the working copy's own directory",
+    "app/services/project.py": "the working copy's own directory",
     "app/evals/store.py": "eval_data/ uploads, eval_run/ output and its result table",
     "app/evals/runner.py": "the eval run's result_ref, recorded project-relative",
     "app/services/review_packet/data.py": "relocating a run input whose recorded absolute path went stale",

@@ -18,7 +18,6 @@ from app.models.stages.signature import ExtendsSignature
 from app.models.review_guide import ReviewGuideDraft
 from app.models.stages.human_review_queue import HumanReviewQueueStage
 from app.runtime.context import RunContext, RunIdentity
-from app.runtime.errors import HaltForReview
 from app.runtime.stage_tests import run_stage_tests
 from app.runtime.stages import HANDLERS
 from app.services import project, versioning
@@ -29,7 +28,9 @@ from app.tools.tutorial import (
     read_seed_eval_config,
     seed_tutorial_project,
 )
-from conftest import as_inputs, make_run_context, pinned_stages, place_stage, rows_of
+from conftest import (
+    as_inputs, make_run_context, pinned_stages, place_stage, require_awaiting_review, rows_of,
+)
 
 _FIXTURE_PATH = (
     Path(__file__).resolve().parents[1]
@@ -737,12 +738,11 @@ def test_the_review_step_queues_the_contradictions_and_halts_the_run(tmp_path):
         stage_cache=StageCacheEntry.read_write(),
     )
 
-    with pytest.raises(HaltForReview) as halted:
-        HANDLERS[StageType.human_review_queue].execute(
-            place_stage(_review_stage()), as_inputs({_TARGET_STAGE: judged}), ctx)
+    output = HANDLERS[StageType.human_review_queue].execute(
+        place_stage(_review_stage()), as_inputs({_TARGET_STAGE: judged}), ctx)
 
     assert contradictions > 0
-    assert halted.value.pending_count == contradictions
+    assert require_awaiting_review(output).pending_count == contradictions
 
 
 # ── the published report ─────────────────────────────────────────────────────

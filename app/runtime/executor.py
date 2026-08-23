@@ -21,23 +21,22 @@ from app.core.frames import (
 )
 from app.models import StageType, Workflow, WorkflowStage
 from app.models.run_manifest import (
-    RowError,
     SCHEMA_REFUSAL_ERROR_TYPE,
-    StageContribution,
     StageErrorInfo,
     StageRecord,
 )
+from app.models.stage_contribution import RowError, StageContribution
 from app.models.run_parameters import RunParameters
 from app.core.run_status import RunStatus, StageStatus
 
 from .cancellation import consume_cancel
 from .context import RunContext, RunIdentity
-from .stage_output import StageOutput
+from .stage_output import AwaitingReview, StageOutput
 from .errors import RunCancelled
 from .manifest import RunManifest, create_run_manifest, write_manifest
 from .run_log import RUN_START, STAGE_DONE, STAGE_START, RunLog
 from .progress import StageProgressReporter
-from .stages import HANDLERS, HaltForReview, StageHandler
+from .stages import HANDLERS, StageHandler
 from .lineage import (
     RowLineage,
     concatenated_inputs_lineage,
@@ -268,7 +267,7 @@ def _resolve_handler(stage_type: StageType) -> StageHandler:
     return handler
 
 
-def _record_halt(record: StageRecord, halt: HaltForReview, run_dir: Path) -> None:
+def _record_halt(record: StageRecord, halt: AwaitingReview, run_dir: Path) -> None:
     record.status = StageStatus.AWAITING_REVIEW
     record.output_row_count = halt.pending_count
     # Manifest paths are POSIX-style so the persisted JSON is identical on
@@ -479,19 +478,16 @@ def _run_stage(
         handler = _resolve_handler(stage.type)
         try:
             output = handler.execute(workflow_stage, inputs_for_stage, stage_ctx)
-        except HaltForReview as halt:
-            # The halt fires before a frame is returned, so its contribution
-            # (the stage's human_review_queue_stats) rides the exception; merge it into the
-            # manifest exactly as a returned frame's would be.
-            _merge_stage_contribution(halt.contribution, sid, manifest, record)
-            _record_halt(record, halt, run_dir)
-            return _StageOutcome.HALTED, True
         except RunCancelled:
             # Mid-stage cancel: the row driver unwound out of
             # handler.execute (see execution.py::_run_row_mapper). This
             # stage made no output — it is marked cancelled, not ok.
             record.status = StageStatus.CANCELLED
             return _StageOutcome.CANCELLED, False
+        if output is not None and output.awaiting_review is not None:
+            _merge_stage_contribution(output.contribution, sid, manifest, record)
+            _record_halt(record, output.awaiting_review, run_dir)
+            return _StageOutcome.HALTED, True
         joins_blocked = _finalize_stage_output(
             workflow_stage, window, record, output, inputs_for_stage, outputs_so_far,
             run_dir, manifest)

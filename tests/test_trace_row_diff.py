@@ -2,7 +2,7 @@
 left alone, and what it declines to claim when there is no parent to compare."""
 from __future__ import annotations
 
-from app.web.stage_diff import CellDiffState
+from app.web.diff_state import CellDiffState
 from app.web.trace_row_diff import build_row_diff, row_diff_to_dict
 
 

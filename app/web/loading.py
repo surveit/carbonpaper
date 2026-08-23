@@ -32,7 +32,8 @@ from app.services.loader import (
     read_stage_specs,
 )
 from app.services.versioning import list_versions, load_version_stages
-from app.services.project import find_workspace_project_ids, has_document, read_project_name
+from app.services.project import find_workspace_project_ids, has_document
+from app.services.project_record import read_project_name
 from app.services.terms import count_nouns
 from app.services.workspace import resolve_run_dir
 from app.web.project_cards import ProjectCard, count_runs

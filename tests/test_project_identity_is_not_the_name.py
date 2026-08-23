@@ -3,7 +3,6 @@ label: it addresses nothing, it may change, and two projects may share one.
 """
 from __future__ import annotations
 
-import json
 import re
 import shutil
 from pathlib import Path
@@ -15,11 +14,8 @@ from app.main import app
 from app.services import workspace
 from app.services.project import create_project, list_projects, project_meta
 from app.services.methodology import exists as methodology_exists, read_methodology
-from app.services.project import (
-    Project,
-    read_project_name,
-    find_projects_by_name,
-)
+from app.services.project import find_projects_by_name
+from app.services.project_record import Project, read_project_name
 
 
 @pytest.fixture(autouse=True)
@@ -147,23 +143,3 @@ def test_every_project_link_carries_the_id(workspace_root: Path) -> None:
             addressed = href.split("/")[2]
             assert addressed, f"/project/<id>{section} → {href} addresses no project"
             assert addressed != name, f"/project/<id>{section} → {href} links by name"
-
-
-def test_a_project_json_with_no_record_is_still_read_by_name(workspace_root: Path) -> None:
-    """A project copied onto disk has a name in project.json and nothing in the store."""
-    pdir = workspace_root / "congress_roster_diff"
-    pdir.mkdir()
-    (pdir / "project.json").write_text(json.dumps({
-        "name": "congress_roster_diff",
-        "title": "Congress roster — diffing two CSV snapshots",
-        "created_at": "2026-08-06T11:30:00",
-        "model": None,
-        "source": "manual",
-    }), encoding="utf-8")
-
-    assert read_project_name("congress_roster_diff") == (
-        "Congress roster — diffing two CSV snapshots")
-    meta = project_meta(pdir.name)
-    assert meta.display_name == "Congress roster — diffing two CSV snapshots"
-    assert meta.created_at == "2026-08-06T11:30:00"
-    assert meta.source == "manual"

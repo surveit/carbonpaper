@@ -21,8 +21,9 @@ from app.services import (
     run as run_service,
     workspace,
 )
-from app.services.project import Project, WorkflowFile, import_project
+from app.services.project import WorkflowFile, import_project
 from app.services.project import find_projects_by_name
+from app.services.project_record import Project
 from app.services import methodology
 from app.tools.types import ToolProse
 
@@ -130,7 +131,7 @@ def read_seed_eval_config(project_id: str) -> EvalConfig:
 
 
 def _read_seeded_record(project_id: str) -> Project:
-    record = project_service.read_project_record(project_id)
+    record = Project.load_or_none(project_id)
     if record is None:
         raise FileNotFoundError(
             f"the tour just seeded '{project_id}', but no project record can be read for it")

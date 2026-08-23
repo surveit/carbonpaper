@@ -5,15 +5,25 @@ materialized only where authored code reads a frame.
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 
 import pandas as pd
 import pyarrow as pa
 
 from app.core.frames import frame_to_table
-from app.models.run_manifest import StageContribution
+from app.models.stage_contribution import StageContribution
 
 from .branches import RowBranches
 from .lineage import RowLineage
+
+
+@dataclass(frozen=True)
+class AwaitingReview:
+    """A stage that queued rows for a person and cannot finish until they decide."""
+
+    stage_id: str
+    pending_count: int
+    queue_path: Path
 
 
 @dataclass(frozen=True)
@@ -27,6 +37,8 @@ class StageOutput:
     lineage: RowLineage | None = None
     # Which branch of its code each row took; None where nothing ran.
     branches: RowBranches | None = None
+    # Set where the stage queued rows for review; `table` is then not its output.
+    awaiting_review: AwaitingReview | None = None
 
     @classmethod
     def from_frame(
