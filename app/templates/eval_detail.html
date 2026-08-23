@@ -37,7 +37,7 @@
 
 {% if has_eval_dataset and report.ok %}
 {% if versions %}
-<form action="/project/{{ project }}/evals/{{ config.id }}/run" method="post" class="eval-run-form">
+<form action="/project/{{ project }}/evals/{{ config.eval_id }}/run" method="post" class="eval-run-form">
   {% call picker("Choose version", size="sm") %}
   <select name="version_id" id="eval-run-version" class="picker-native">
     {% for v in versions %}
@@ -78,9 +78,9 @@
       </thead>
       <tbody>
         {% for r in runs %}
-        <tr class="js-run-row" data-href="/project/{{ project }}/evals/{{ config.id }}/runs/{{ r.run_id }}">
+        <tr class="js-run-row" data-href="/project/{{ project }}/evals/{{ config.eval_id }}/runs/{{ r.run_id }}">
           <td class="run-date">
-            <a href="/project/{{ project }}/evals/{{ config.id }}/runs/{{ r.run_id }}"
+            <a href="/project/{{ project }}/evals/{{ config.eval_id }}/runs/{{ r.run_id }}"
                title="run {{ r.run_id }}">
               {%- if r.started_at %}{{ r.started_at | friendly_time }}{% else %}<code>{{ r.run_id }}</code>{% endif -%}
             </a>

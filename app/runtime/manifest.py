@@ -22,7 +22,7 @@ from app.core.errors import (
     StageOutputMissing,
 )
 from app.core.frames import read_frame_file
-from app.core.persistence import JsonDict, get_store
+from app.core.json_types import JsonDict
 from app.core.record import PersistedModel, PersistenceScope
 from app.core.run_status import RunStatus, StageStatus
 from app.models import WorkflowStage
@@ -230,13 +230,13 @@ def list_run_entries(project_id: str, area: str = PRODUCTION_RUNS) -> list[RunEn
     # down the listing of every other run.
     entries = [
         _read_entry(doc_id, doc_id[len(prefix):], project_id, area)
-        for doc_id in get_store().list_ids(RunManifest.collection, prefix)
+        for doc_id in RunManifest.list_ids(prefix)
     ]
     return sorted(entries, key=lambda e: e.run_id)
 
 
 def _read_entry(doc_id: str, run_id: str, project_id: str, area: str) -> RunEntry:
-    raw = get_store().read_tolerant(RunManifest.collection, doc_id)
+    raw = RunManifest.load_raw_or_none(doc_id)
     if raw is None:
         return RunEntry(run_id=run_id, project=project_id, area=area)
     try:

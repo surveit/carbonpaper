@@ -10,7 +10,9 @@ from fastapi.testclient import TestClient
 
 from app.core.errors import EvalNotScorableError
 from app.main import app
-from app.models import parse_stage, EvalConfig, EvalRun, ExpectedOutput, TableRef
+from app.models import parse_stage, ExpectedOutput, TableRef
+from app.models.records.eval_config import EvalConfig
+from app.models.records.eval_run import EvalRun
 from app.models.schema import TableSchema
 from app.models.stages.input_data import FileFormat
 from app.core import paths
@@ -76,7 +78,7 @@ def project(tmp_path, monkeypatch):
     pd.DataFrame({"doc_id": ["a", "b", "c", "d"], "score": [1, -1, 2, -3],
                   "label": ["pos", "neg", "neg", "neg"]}).to_csv(data / "cases.csv", index=False)
     config = EvalConfig(
-        id="label_check", project="demo", name="Label check",
+        eval_id="label_check", project="demo", name="Label check",
         override_stage="load", target_stage="classify",
         table=TableRef(path="demo/eval_data/cases.csv", format=FileFormat.csv,
                        table_schema=TableSchema(columns=[
@@ -96,7 +98,7 @@ def test_run_eval_scores_the_pathway(project):
     assert run.metrics["rows_passed"] == 3
     assert run.metrics["accuracy"] == pytest.approx(0.75)
     # The run was written and round-trips through the store.
-    assert load_eval_run(demo.name, run.id).metrics["accuracy"] == pytest.approx(0.75)
+    assert load_eval_run(demo.name, run.run_id).metrics["accuracy"] == pytest.approx(0.75)
 
 
 def test_run_eval_writes_a_per_row_result_table(project):
@@ -142,7 +144,7 @@ def test_run_eval_through_a_queue_stage_records_an_error_never_a_score(project):
     pd.DataFrame({"doc_id": ["a", "b"], "score": [1, 2], "human_score": [1, 2]}).to_csv(
         demo / "eval_data" / "queue_cases.csv", index=False)
     config = EvalConfig(
-        id="queue_check", project="demo", name="Queue check",
+        eval_id="queue_check", project="demo", name="Queue check",
         override_stage="load", target_stage="review",
         table=TableRef(path="demo/eval_data/queue_cases.csv", format=FileFormat.csv,
                        table_schema=TableSchema(columns=[
@@ -208,7 +210,7 @@ def test_run_eval_raises_when_no_versions_exist_at_all(tmp_path):
     demo = tmp_path / "demo2"
     demo.mkdir()
     config = EvalConfig(
-        id="label_check", project="demo2", name="Label check",
+        eval_id="label_check", project="demo2", name="Label check",
         override_stage="load", target_stage="classify",
         table=None, expected_outputs=[ExpectedOutput(output_column="label", metric="exact")])
     with pytest.raises(EvalNotScorableError, match="no workflow version"):
@@ -248,10 +250,10 @@ def test_start_eval_run_returns_before_the_score_is_in(project, monkeypatch):
     assert run.result_ref is None
     assert run.finished_at is None
     assert scoring_started.wait(timeout=30), "the scorer never ran"
-    assert load_eval_run(demo.name, run.id).status == "running"
+    assert load_eval_run(demo.name, run.run_id).status == "running"
 
     release_scoring.set()
-    scored = _wait_for_eval_run_status(demo.name, run.id, "scored")
+    scored = _wait_for_eval_run_status(demo.name, run.run_id, "scored")
     assert scored.metrics["rows_scored"] == 4
     assert scored.metrics["accuracy"] == pytest.approx(0.75)
     assert scored.finished_at is not None
@@ -268,7 +270,7 @@ def test_an_unexpected_failure_lands_an_error_run_never_a_stuck_running(project,
     run = start_eval_run(demo.name, config)
     assert run.status == "running"
 
-    errored = _wait_for_eval_run_status(demo.name, run.id, "error")
+    errored = _wait_for_eval_run_status(demo.name, run.run_id, "error")
     notes = "\n".join(errored.notes)
     assert "RuntimeError: the executor fell over" in notes
     assert "Traceback (most recent call last)" in notes

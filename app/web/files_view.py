@@ -11,7 +11,7 @@ from app.core.file_comparison import (
     ShapeGroup, choose_the_telling_column, group_files_by_columns, read_leading_value,
 )
 from app.core.file_shape import FileShape
-from app.core.persistence import JsonDict
+from app.core.json_types import JsonDict
 from app.models.run_manifest import read_input_bindings
 from app.runtime.manifest import list_run_entries
 from app.core import files as file_store

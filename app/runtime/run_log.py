@@ -12,7 +12,7 @@ import threading
 from datetime import datetime
 from typing import Any, ClassVar, Iterator
 
-from app.core.persistence import JsonDict
+from app.core.json_types import JsonDict
 from app.core.record import PersistedModel, PersistenceScope
 
 # Sentinel pushed by close() to tell the writer thread to drain and stop.

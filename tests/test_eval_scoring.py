@@ -8,7 +8,8 @@ import pytest
 
 from app import models as m
 from app.core.errors import EvalGrainViolationError
-from app.models import EvalConfig, ExpectedOutput
+from app.models import ExpectedOutput
+from app.models.records.eval_config import EvalConfig
 from app.evals.scoring import score_expected_outputs
 
 
@@ -24,7 +25,7 @@ def _stage(id_, output_cols, tmp_path):
 
 def _config(checks):
     return EvalConfig(
-        id="e", project="p", name="e", override_stage="ov", target_stage="tg",
+        eval_id="e", project="p", name="e", override_stage="ov", target_stage="tg",
         expected_outputs=checks)
 
 

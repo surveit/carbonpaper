@@ -12,10 +12,7 @@ from pydantic import ValidationError
 
 from app.core.errors import DocumentNotFound
 from app.core.paths import repo_root
-from app.core.persistence import (
-    JsonDict,
-    get_store,
-)
+from app.core.json_types import JsonDict
 from app.models.stage import Stage, parse_stage, stage_to_spec_dict
 from app.models.stages.code import PythonFunction
 from app.models.stages.starlark import StarlarkFunction
@@ -88,7 +85,7 @@ def read_stage_specs(project_id: str) -> list[JsonDict]:
         # Strict `read`: an ABSENT working copy is a real empty answer, but an
         # unparseable one is corruption and must raise rather than read as empty
         # and let an edit build on a workflow it never saw.
-        document = get_store().read(WorkingCopy.collection, project_id)
+        document = WorkingCopy.load_raw(project_id)
     except DocumentNotFound:
         return []
     stages = document.get("stages")

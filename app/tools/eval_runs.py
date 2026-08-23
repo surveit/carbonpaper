@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from app.evals.runner import run_eval as run_project_eval
 from app.evals.store import load_eval_config
-from app.models import EvalRun
+from app.models.records.eval_run import EvalRun
 from app.tools.shared import validate_project_exists
 from app.tools.types import ToolProse
 
@@ -36,7 +36,7 @@ def run_eval(
     )
     return EvalRunResult(
         run=run,
-        run_url=f"{base_url}/project/{project_id}/evals/{eval_id}/runs/{run.id}",
+        run_url=f"{base_url}/project/{project_id}/evals/{eval_id}/runs/{run.run_id}",
     )
 
 

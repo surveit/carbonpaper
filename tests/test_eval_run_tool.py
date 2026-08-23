@@ -7,7 +7,13 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from app.models import EvalConfig, ExpectedOutput, ScoringMetric, TableRef, parse_stage
+from app.models import (
+    ExpectedOutput,
+    ScoringMetric,
+    TableRef,
+    parse_stage,
+)
+from app.models.records.eval_config import EvalConfig
 from app.models.schema import TableSchema
 from app.models.stages.input_data import FileFormat
 from app.services.project import write_eval_config
@@ -59,7 +65,7 @@ def demo(projects_root: Path, tmp_path: Path) -> str:
     pd.DataFrame({"doc_id": ["a", "b", "c", "d"], "score": [1, -1, 2, -3],
                   "label": ["pos", "neg", "neg", "neg"]}).to_csv(cases, index=False)
     write_eval_config("demo", EvalConfig(
-        id="label_check", project="demo", name="Label check",
+        eval_id="label_check", project="demo", name="Label check",
         override_stage="load", target_stage="classify",
         table=TableRef(path=str(cases), format=FileFormat.csv,
                        table_schema=TableSchema.model_validate({"columns": [
@@ -79,7 +85,7 @@ def test_the_tool_scores_the_eval_and_links_the_page_that_shows_the_rows(demo: s
     assert result.run.metrics["rows_scored"] == 4
     assert result.run.metrics["rows_passed"] == 3
     assert result.run_url == (
-        f"{_BASE_URL}/project/demo/evals/label_check/runs/{result.run.id}"
+        f"{_BASE_URL}/project/demo/evals/label_check/runs/{result.run.run_id}"
     )
 
 

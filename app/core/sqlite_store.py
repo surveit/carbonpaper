@@ -1,7 +1,4 @@
-"""The SQLite ``DocumentStore``, sealed as the only module that imports ``sqlite3``
-(``app/_arch_tests/test_storage_engine_sealed.py``). Nothing but a composition root
-names it: everything else speaks the protocol in ``app.core.persistence``.
-"""
+"""The SQLite store, sealed as the only module that imports ``sqlite3``."""
 from __future__ import annotations
 
 import json
@@ -10,7 +7,7 @@ from threading import RLock
 from typing import Any, Iterator, Mapping
 
 from app.core.errors import DocumentNotFound
-from app.core.persistence import JsonDict, JsonScalar
+from app.core.json_types import JsonDict, JsonScalar
 from app.core.ids import ID
 
 

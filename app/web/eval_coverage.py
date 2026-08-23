@@ -9,7 +9,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from app.models import EvalConfig, EvalRun
+from app.models.records.eval_config import EvalConfig
+from app.models.records.eval_run import EvalRun
 from app.evals.store import list_eval_configs, list_eval_runs, resolve_eval_result_path
 from app.web.eval_run_view import count_scored_rows
 
@@ -38,7 +39,7 @@ def find_eval_coverages(
     """`version_id` is the version the reader is looking at; None means none resolved."""
     coverages = []
     for config in _find_evals_targeting(project_id, stage_id):
-        run = _latest_scored_run(project_id, config.id)
+        run = _latest_scored_run(project_id, config.eval_id)
         if run is None:
             continue
         coverage = _build_coverage(project_id, config, run, version_id)
@@ -77,7 +78,7 @@ def _build_coverage(
     return EvalCoverage(
         status=_judge(run, version_id, score.passed, score.total),
         eval_name=config.name,
-        href=f"/project/{project_id}/evals/{config.id}/runs/{run.id}",
+        href=f"/project/{project_id}/evals/{config.eval_id}/runs/{run.run_id}",
         columns=score.columns,
         rows_total=score.total,
         rows_passed=score.passed,

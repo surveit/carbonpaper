@@ -26,7 +26,8 @@ from app.core.errors import (
     FrameNotSerializableError,
     RowOutOfRange,
 )
-from app.core.persistence import JsonScalar, validate_id
+from app.core.ids import validate_id
+from app.core.json_types import JsonScalar
 from app.core.utils import compute_short_hash
 from app.core.ids import ID
 

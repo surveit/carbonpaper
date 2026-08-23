@@ -190,6 +190,21 @@ layers = ["app.models", "app.core"]
 # (llm, agent, persistence, errors, frames, utils); the contracts sit above it.
 
 [[tool.importlinter.contracts]]
+name = "the store handle is reached only by the record base and the store wiring"
+type = "protected"
+protected_modules = ["app.core.persistence"]
+allowed_importers = ["app.core.record", "app.core.store_config", "app.core.sqlite_store"]
+# `get_store()` was callable from anywhere, and a caller holding the handle can write
+# any collection under any id with no record class in the way — which is how `eval` and
+# `eval_run` came to exist as stored collections nothing modelled, and how `run_note`
+# and `archived_run` were left behind by a rename with no class to notice. Reaching
+# storage now means going through a record. app.core.sqlite_store is the implementation
+# of the protocol declared here, not a caller of the handle; app.core.store_config is the
+# composition root that hands the engine in. The JSON aliases moved to
+# app.core.json_types, which anyone may import: naming the shape of a payload is not
+# reaching for storage.
+
+[[tool.importlinter.contracts]]
 name = "app.core.record imported only by core, the record modules and the runtime"
 type = "protected"
 protected_modules = ["app.core.record"]

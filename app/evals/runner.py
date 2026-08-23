@@ -18,7 +18,9 @@ from app.core.errors import EvalGrainViolationError, EvalNotScorableError, Subse
 from app.core.frames import write_frame_file
 from app.evals.dataset import read_table_ref
 from app.evals.scoring import score_expected_outputs
-from app.models import EvalConfig, EvalRun, Workflow, WorkflowStage
+from app.models import Workflow, WorkflowStage
+from app.models.records.eval_config import EvalConfig
+from app.models.records.eval_run import EvalRun
 from app.core.frames import table_to_frame
 from app.runtime.executor import execute_subset
 from app.evals.compatibility import CompatibilityReport, validate_eval_compatibility
@@ -72,7 +74,7 @@ def _mint_eval_run(
     settings = report.settings
     assert settings is not None  # report.ok (checked above) guarantees settings
     return workflow, EvalRun(
-        id=_mint_run_id(), config=config.id, project=config.project,
+        run_id=_mint_run_id(), config=config.eval_id, project=config.project,
         workflow_version=version, status="running", settings=settings,
         started_at=_now())
 
@@ -92,7 +94,7 @@ def _score_run(
     override, target = by_id[config.override_stage], by_id[config.target_stage]
     assert config.table is not None  # _require_runnable checked this
     dataset = read_table_ref(config.table)
-    run_dir = resolve_eval_run_dir(project_id, run.id)
+    run_dir = resolve_eval_run_dir(project_id, run.run_id)
     try:
         outputs = execute_subset(
             workflow, stage_ids=run.settings.frontier, run_dir=run_dir,

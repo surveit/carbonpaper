@@ -6,6 +6,8 @@ from conftest import queue_added_columns, queue_columns, reads_of
 from pydantic import ValidationError
 
 from app import models as m
+from app.models.records.eval_config import EvalConfig
+from app.models.records.eval_run import EvalRun
 from app.evals.run_settings import resolve_eval_run_settings
 
 
@@ -157,7 +159,7 @@ def test_tableref_schema_required():
 # ── EvalConfig (defined by its checks; eval-dataset table is optional data) ──
 def _config(**over):
     base = {
-        "id": "scoring", "project": "lobbymap", "name": "n",
+        "eval_id": "scoring", "project": "lobbymap", "name": "n",
         "override_stage": "evidence_with_benchmarks", "target_stage": "benchmark_scoring",
         "table": _ref(cols=["evidence_id", "benchmark_id", "quote", "expected_score"]),
         "expected_outputs": [{"output_column": "score", "metric": "abs_tol", "tolerance": 1}],
@@ -167,7 +169,7 @@ def _config(**over):
 
 
 def test_eval_config_valid():
-    c = m.EvalConfig.model_validate(_config(
+    c = EvalConfig.model_validate(_config(
         reference_overrides=[{"stage_id": "benchmark_library", "table": _ref()}],
         metrics=["mean_absolute_error"]))
     assert c.target_stage == "benchmark_scoring"
@@ -176,22 +178,22 @@ def test_eval_config_valid():
 
 def test_eval_config_bad_id():
     with pytest.raises(ValidationError):
-        m.EvalConfig.model_validate(_config(id="Bad Id"))
+        EvalConfig.model_validate(_config(eval_id="Bad Id"))
 
 
 def test_eval_config_override_equals_target():
     with pytest.raises(ValidationError):
-        m.EvalConfig.model_validate(_config(target_stage="evidence_with_benchmarks"))
+        EvalConfig.model_validate(_config(target_stage="evidence_with_benchmarks"))
 
 
 def test_eval_config_nonempty_expected_outputs():
     with pytest.raises(ValidationError):
-        m.EvalConfig.model_validate(_config(expected_outputs=[]))
+        EvalConfig.model_validate(_config(expected_outputs=[]))
 
 
 def test_eval_config_table_optional():
-    cfg = m.EvalConfig.model_validate({
-        "id": "e1", "project": "lobbymap", "name": "E1",
+    cfg = EvalConfig.model_validate({
+        "eval_id": "e1", "project": "lobbymap", "name": "E1",
         "override_stage": "a", "target_stage": "b",
         "expected_outputs": [{"output_column": "score", "metric": "exact"}],
     })
@@ -199,8 +201,8 @@ def test_eval_config_table_optional():
 
 
 def test_eval_config_no_key_or_input_columns_fields():
-    cfg = m.EvalConfig.model_validate({
-        "id": "e1", "project": "lobbymap", "name": "E1",
+    cfg = EvalConfig.model_validate({
+        "eval_id": "e1", "project": "lobbymap", "name": "E1",
         "override_stage": "a", "target_stage": "b",
         "expected_outputs": [{"output_column": "score", "metric": "exact"}],
     })
@@ -210,8 +212,8 @@ def test_eval_config_no_key_or_input_columns_fields():
 
 def test_eval_config_rejects_stray_key_field():
     with pytest.raises(ValidationError):
-        m.EvalConfig.model_validate({
-            "id": "e1", "project": "lobbymap", "name": "E1",
+        EvalConfig.model_validate({
+            "eval_id": "e1", "project": "lobbymap", "name": "E1",
             "override_stage": "a", "target_stage": "b",
             "key": ["doc_id"],
             "expected_outputs": [{"output_column": "score", "metric": "exact"}],
@@ -220,13 +222,13 @@ def test_eval_config_rejects_stray_key_field():
 
 def test_eval_config_duplicate_reference_override():
     with pytest.raises(ValidationError):
-        m.EvalConfig.model_validate(_config(
+        EvalConfig.model_validate(_config(
             reference_overrides=[{"stage_id": "a", "table": _ref()},
                                  {"stage_id": "a", "table": _ref()}]))
 
 
 def test_eval_config_code_scorer():
-    c = m.EvalConfig.model_validate(_config(code={"module": "evals.org", "function": "score"}))
+    c = EvalConfig.model_validate(_config(code={"module": "evals.org", "function": "score"}))
     assert c.code.function == "score"
 
 
@@ -253,8 +255,8 @@ def test_stage_output_override():
 
 # ── EvalRun embeds settings (no overall pass/fail) ────────────────────────────
 def test_eval_run_embeds_settings():
-    r = m.EvalRun.model_validate({
-        "id": "run-1", "config": "scoring", "project": "lobbymap",
+    r = EvalRun.model_validate({
+        "run_id": "run-1", "config": "scoring", "project": "lobbymap",
         "workflow_version": "abc123", "status": "scored",
         "settings": {"can_score_declaratively": True,
                      "frontier": ["benchmark_scoring"], "blocking_stages": []},
@@ -263,8 +265,8 @@ def test_eval_run_embeds_settings():
 
 
 def test_eval_run_has_no_passed_field():
-    run = m.EvalRun.model_validate({
-        "id": "r1", "config": "e1", "project": "lobbymap",
+    run = EvalRun.model_validate({
+        "run_id": "r1", "config": "e1", "project": "lobbymap",
         "workflow_version": "v1", "status": "scored",
         "settings": {"can_score_declaratively": True, "frontier": ["b"], "blocking_stages": []},
         "metrics": {"match_rate": 1.0},

@@ -33,6 +33,9 @@ _GRANDFATHERED: frozenset[str] = frozenset({
     "run_manifest_metadata.py::RunManifestMetadata",
     "terms.py::StoredTerms",
     "versioning.py::WorkflowVersion",
+    # A staging step, approved on the record: the fix is project_id as a field and find().
+    "store.py::EvalRun",
+    "project.py::EvalConfig",
 })
 
 

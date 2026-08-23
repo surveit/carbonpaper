@@ -17,7 +17,6 @@ from app.models import Stage
 from app.models.workflow import find_stages_reaching_publish, parse_workflow
 from app.models.records.review_guide import ReviewGuide
 from app.models.records.workflow_version import WorkflowVersion
-from app.core.persistence import get_store
 from app.core.utils import format_errors
 from app.services.errors import WorkflowLoadError
 from app.services.terms import load_terms
@@ -193,7 +192,7 @@ def _invalid_version_document(doc_id: str, exc: ValidationError) -> WorkflowLoad
 
 def list_versions(project_id: str) -> list[WorkflowVersion]:
     versions: list[WorkflowVersion] = []
-    for doc_id, data in get_store().read_all("workflow_version", f"{project_id}/"):
+    for doc_id, data in WorkflowVersion.list_raw(f"{project_id}/"):
         try:
             v = WorkflowVersion.model_validate(data)
         except ValidationError as exc:

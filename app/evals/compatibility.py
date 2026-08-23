@@ -7,8 +7,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from app.models import (EvalConfig, EvalRunSettings, ScoringMetric,
-                        TableSchema, Workflow, WorkflowStage)
+from app.models import EvalRunSettings, ScoringMetric, TableSchema, Workflow, WorkflowStage
+from app.models.records.eval_config import EvalConfig
 from app.evals.dataset_columns import get_injected_columns
 from app.evals.run_settings import resolve_eval_run_settings
 

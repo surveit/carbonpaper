@@ -13,7 +13,9 @@ from fastapi.testclient import TestClient
 
 from app.core.frames import write_frame_file
 from app.main import app
-from app.models import EvalConfig, EvalRun, EvalRunSettings, ExpectedOutput
+from app.models import EvalRunSettings, ExpectedOutput
+from app.models.records.eval_config import EvalConfig
+from app.models.records.eval_run import EvalRun
 from app.evals.store import save_eval_config, save_eval_run
 from app.services import workspace
 from app.web.eval_coverage import find_eval_coverages
@@ -62,7 +64,7 @@ def demo_project(tmp_path):
     add_stage(compiled, _CLASSIFY)
     workspace.set_projects_dir(tmp_path)
     save_eval_config(demo.name, EvalConfig(
-        id="label_check", project="demo", name="Label check",
+        eval_id="label_check", project="demo", name="Label check",
         override_stage="load", target_stage="classify",
         expected_outputs=[ExpectedOutput(output_column="label", metric="exact")]))
     return tmp_path
@@ -74,7 +76,7 @@ def _save_run(tmp_path, per_row: pd.DataFrame, *, version: str = "v1", run_id: s
     result.parent.mkdir(parents=True, exist_ok=True)
     write_frame_file(per_row, result)
     save_eval_run("demo", EvalRun(
-        id=run_id, config="label_check", project="demo", workflow_version=version,
+        run_id=run_id, config="label_check", project="demo", workflow_version=version,
         status=status,
         settings=EvalRunSettings(can_score_declaratively=True, frontier=["classify"],
                                  blocking_stages=[]),
@@ -189,14 +191,14 @@ def test_a_stale_row_states_no_score_and_names_the_version_it_scored(tmp_path):
 def test_two_evals_on_one_stage_get_a_row_each_worst_first(tmp_path):
     _stored_version("v1")
     save_eval_config("demo", EvalConfig(
-        id="second_check", project="demo", name="Second check",
+        eval_id="second_check", project="demo", name="Second check",
         override_stage="load", target_stage="classify",
         expected_outputs=[ExpectedOutput(output_column="label", metric="exact")]))
     _save_run(tmp_path, _BOTH_MATCHED, run_id="passing")
     _save_run(tmp_path, _ONE_OF_TWO_MATCHED, run_id="failing")
     # The second config's run, so both evals have one of their own.
     save_eval_run("demo", EvalRun(
-        id="failing", config="second_check", project="demo", workflow_version="v1",
+        run_id="failing", config="second_check", project="demo", workflow_version="v1",
         status="scored",
         settings=EvalRunSettings(can_score_declaratively=True, frontier=["classify"],
                                  blocking_stages=[]),
@@ -232,12 +234,12 @@ def test_the_llm_block_reads_in_the_order_one_call_happens(tmp_path):
     }
     add_stage(tmp_path / "demo", llm)
     save_eval_config("demo", EvalConfig(
-        id="arbiter_check", project="demo", name="Arbiter check",
+        eval_id="arbiter_check", project="demo", name="Arbiter check",
         override_stage="load", target_stage="arbiter",
         expected_outputs=[ExpectedOutput(output_column="label", metric="exact")]))
     _stored_version("v1")
     save_eval_run("demo", EvalRun(
-        id="ar1", config="arbiter_check", project="demo", workflow_version="v1",
+        run_id="ar1", config="arbiter_check", project="demo", workflow_version="v1",
         status="scored",
         settings=EvalRunSettings(can_score_declaratively=True, frontier=["arbiter"],
                                  blocking_stages=[]),

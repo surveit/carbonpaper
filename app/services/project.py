@@ -13,10 +13,8 @@ from typing import Any, Sequence
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.core.persistence import get_store
 from app.core.timestamp_ids import mint_timestamp_id
 from app.models import (
-    EvalConfig,
     SchemaLibrary,
     Stage,
     StageDraft,
@@ -27,6 +25,7 @@ from app.models import (
     stage_to_spec_dict,
     validate_one_meaning_per_word,
 )
+from app.models.records.eval_config import EvalConfig
 from app.models.review_guide import ReviewGuideDraft
 from app.models.run_manifest import (
     records_a_test_run,
@@ -357,10 +356,16 @@ def write_review_guide(
     return guide
 
 
+# What PersistedModel adds; a caller hands in the eval's own fields alone.
+_STORE_FIELDS = {"id", "created_at", "updated_at"}
+
+
 def write_eval_config(name: str, config: EvalConfig) -> None:
-    """Writes the document app.evals.store reads back; that package is a leaf app.tools cannot import."""
-    get_store().write(
-        "eval", f"{name}/{config.id}", config.model_dump(mode="json", exclude_none=True))
+    """Writes what app.evals.store reads back; that package is a leaf app.tools cannot import."""
+    EvalConfig(
+        id=EvalConfig.compose_id(name, config.eval_id),
+        **config.model_dump(exclude=_STORE_FIELDS),
+    ).save()
 
 
 def _project_to_write(name: str) -> str:

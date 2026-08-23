@@ -18,7 +18,7 @@ from app.core.frames import (
     get_frame_store,
     save_table_or_reject,
 )
-from app.core.persistence import JsonDict
+from app.core.json_types import JsonDict
 from app.core.record import PersistedModel, PersistenceScope
 from app.core.utils import compute_short_hash
 from app.core.ids import ID

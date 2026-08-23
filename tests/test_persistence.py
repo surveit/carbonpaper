@@ -6,7 +6,9 @@ import pytest
 from app.core.errors import DocumentNotFound
 from pydantic import Field
 
-from app.core.persistence import get_store, now_iso, configure_store, validate_id
+from app.core.persistence import get_store, configure_store
+from app.core.ids import validate_id
+from app.core.timestamp_ids import now_iso
 from app.core.record import PersistedModel
 from app.core.sqlite_store import SqliteKvStore
 
