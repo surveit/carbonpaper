@@ -425,12 +425,16 @@ td.row-num, th.row-num { text-align: right; color: var(--idle-bd); font-variant-
 .wf-outputs { background: var(--raised); border: 1px solid var(--border); border-radius: 8px;
   padding: 1rem 1.15rem 1.05rem; margin: 0 0 1.2rem; box-shadow: 0 1px 3px var(--shadow); }
 .wf-outputs h2 { margin: 0 0 .1rem; font-size: 1.02rem; letter-spacing: -.01em; font-weight: 600; }
-.wf-outputs .wf-note { margin: 0 0 .8rem; font-size: .78rem; color: var(--muted); }
+.wf-outputs .wf-note { margin: 0 0 .9rem; font-size: .78rem; color: var(--muted); }
+.wf-outputs .wf-group { margin: 0 0 .4rem; font-size: .7rem; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .07em; }
+.wf-outputs .wf-rest + .wf-group, .wf-outputs .wf-leads + .wf-group { margin-top: 1rem; }
 
 /* The ones the work rests on, in the order they were declared. They shrink a step
    past two, and keep shrinking nowhere — marking everything primary should look wrong. */
-.wf-leads { padding: 0 0 .8rem; border-bottom: 1px solid var(--border); margin: 0 0 .3rem; }
-.wf-lead { display: flex; align-items: baseline; gap: .55rem; flex-wrap: wrap; padding: .28rem 0; }
+.wf-leads { padding: 0 0 .3rem; margin: 0; }
+.wf-lead { display: flex; align-items: baseline; gap: .55rem; flex-wrap: wrap; padding: .5rem 0; }
+.wf-lead + .wf-lead { border-top: 1px solid var(--border); }
 .wf-lead .wf-big { font-size: 2.1rem; line-height: 1.05; letter-spacing: -.03em;
   font-variant-numeric: tabular-nums; }
 .wf-leads.crowded .wf-big { font-size: 1.7rem; }
@@ -445,4 +449,3 @@ td.row-num, th.row-num { text-align: right; color: var(--idle-bd); font-variant-
 .wf-rest .wf-value { font-variant-numeric: tabular-nums; font-size: .93rem; white-space: nowrap;
   color: var(--fg); text-decoration: none; border-bottom: 1px solid var(--border); }
 .wf-rest .wf-value:hover { border-bottom-color: var(--accent); color: var(--accent); }
-.wf-rest .wf-stage { color: var(--muted); font-size: .72rem; text-align: right; white-space: nowrap; }

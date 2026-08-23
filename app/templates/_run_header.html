@@ -70,38 +70,6 @@
   </div>
   {% endif %}
 
-  {% if header.workflow_outputs %}
-  {%- set leads = header.workflow_outputs | selectattr('primary') | list %}
-  {%- set rest = header.workflow_outputs | rejectattr('primary') | list %}
-  <section class="wf-outputs">
-    <h2>What this run published</h2>
-    <p class="wf-note">Every figure links to the row it was read from.</p>
-    {%- if leads %}
-    <div class="wf-leads{% if leads | length > 2 %} crowded{% endif %}">
-      {%- for output in leads %}
-      <div class="wf-lead">
-        <span class="wf-big"><a href="{{ output.href }}"
-          title="Open the row this value was read from">{{ output.value }}</a></span>
-        <span class="wf-of">{{ output.label | lower }}</span>
-      </div>
-      {%- endfor %}
-    </div>
-    {%- endif %}
-    {%- if rest %}
-    <table class="wf-rest">
-      {%- for output in rest %}
-      <tr>
-        <th scope="row">{{ output.label }}</th>
-        <td><a class="wf-value" href="{{ output.href }}"
-               title="Open the row this value was read from">{{ output.value }}</a></td>
-        <td class="wf-stage">{{ output.stage_id }}</td>
-      </tr>
-      {%- endfor %}
-    </table>
-    {%- endif %}
-  </section>
-  {% endif %}
-
   {% with strip = header.strip, show_counts = true, strip_id = 'stage-strip' %}
     {% include "_stage_strip.html" %}
   {% endwith %}
