@@ -118,3 +118,10 @@ def test_a_file_that_is_not_a_table_still_has_a_page(project_id):
     assert "This file is not a table" in text
     assert "Delete this file" in text
     assert "Data completeness" in text
+
+
+def test_a_section_that_opens_says_so(project_id, file_id):
+    # Beside Read by and Delete, which are headings and do not open.
+    text = page(project_id, file_id)
+    assert text.count('<details class="file-rows') == 2
+    assert '<div class="file-fold">' in text
