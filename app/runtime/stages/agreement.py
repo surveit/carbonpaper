@@ -6,7 +6,7 @@ from typing import Any, Sequence
 from app.models.errors import StepRefused
 
 DISAGREEMENT = (
-    "stage '{sid}': {subject} holds {n} different values of `{column}` — {values}. "
+    "stage '{sid}': {subject} — {n} different values of `{column}`: {values}. "
     "Collapsing them publishes one and drops the rest with nothing recording that the "
     "sources disagreed: settle it upstream, or carry the column with formula `list`."
 )

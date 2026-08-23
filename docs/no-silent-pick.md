@@ -45,10 +45,10 @@ read, and a run that must pick one of two genuinely different rows needs one.
 ## What a refusal looks like
 
 ```
-stage 'venezuela_filings': the group filing_uuid='620bb255' holds 2 different values of
-`registrant` — 'BALLARD PARTNERS, LLC', 'BALLARD PARTNERS'. Collapsing them publishes one
-and drops the rest with nothing recording that the sources disagreed: settle it upstream,
-or carry the column with formula `list`.
+stage 'one_row_per_filing': the 2 rows with filing_uuid='f7eac1b9-...' — 2 different
+values of `registrant`: 'BALLARD PARTNERS, LLC', 'BALLARD PARTNERS'. Collapsing them
+publishes one and drops the rest with nothing recording that the sources disagreed:
+settle it upstream, or carry the column with formula `list`.
 ```
 
 Both refusals are raised by `app/runtime/stages/agreement.py`, which the aggregate handler
