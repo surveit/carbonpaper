@@ -31,7 +31,7 @@ from app.models.stages.human_review_queue import (
 from app.core.stage_cache import compute_row_fingerprint
 
 from ..context import RunContext, RunIdentity
-from ..errors import HaltForReview
+from ..stage_output import AwaitingReview
 from .execution import ROW_DEFERRED_KEY, Row, RowMapper, narrow_stage
 
 
@@ -121,22 +121,21 @@ class _QueueRowMapper:
         rows: Sequence[Row],
         ctx: RunContext,
         contribution: StageContribution,
-    ) -> None:
+    ) -> AwaitingReview | None:
         # The stats and pending scan are pandas work; materialize at this edge.
         df = pd.DataFrame(list(rows))
         stage = workflow_stage.stage
         contribution.human_review_queue_stats = _compute_queue_stats(self._queue, df)
         pending = _order_pending_reviews(self._queue.sort, _find_pending_reviews(df), stage.id)
         if not pending:
-            return
+            return None
         queue_path = _write_queue_files(
             ctx.require_run_dir() / "queue", ctx.require_identity(),
             workflow_stage, pending)
-        raise HaltForReview(
+        return AwaitingReview(
             stage_id=stage.id,
             pending_count=len(pending),
             queue_path=queue_path,
-            contribution=contribution,
         )
 
 

@@ -11,7 +11,7 @@ from app.models.stages.human_review_queue import ReviewVerdict
 from app.runtime.stages.human_review_queue import QueueFingerprints
 from app.runtime.cancellation import request_cancel
 from app.runtime.context import RunIdentity
-from app.runtime.errors import HaltForReview, RunCancelled
+from app.runtime.errors import RunCancelled
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stage_output import StageOutput
 from app.runtime.stages import HANDLERS, human_review_queue
@@ -20,7 +20,8 @@ from app.core.stage_cache import StageCache, compute_row_fingerprint
 from app.services.project import save_working_copy_as_version
 from conftest import (
     QUEUE_COLUMNS, as_inputs, contribution_of, make_run_context, pinned_stages,
-    place_stage, queue_added_columns, reads_of, resumed_stages, rows_of,
+    place_stage, queue_added_columns, reads_of, require_awaiting_review, resumed_stages,
+    rows_of,
 )
 
 from stage_seed import add_stage
@@ -94,9 +95,7 @@ def _read_fingerprints(project: str, run_id: str, stage_id: str = "review") -> d
 def _halt_and_read_snapshot(
     stage: Stage, inputs: dict[str, pd.DataFrame], ctx
 ) -> tuple[pd.DataFrame, dict]:
-    with pytest.raises(HaltForReview) as exc_info:
-        _run_queue_stage(stage, inputs, ctx)
-    queue_path = exc_info.value.queue_path
+    queue_path = require_awaiting_review(_run_queue_stage(stage, inputs, ctx)).queue_path
     return pd.read_parquet(queue_path), _read_fingerprints(PROJECT, ctx.identity.run_id, queue_path.stem)
 
 
@@ -257,9 +256,9 @@ def test_bust_cache_leaves_passed_through_rows_alone(tmp_path):
         stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
     _approve_every_row(snapshot, fingerprints)
 
-    with pytest.raises(HaltForReview) as exc_info:
-        _run_queue_stage(stage, {"scored": src.copy()}, _bust_ctx(tmp_path, run_id="run2"))
-    assert exc_info.value.contribution.human_review_queue_stats == {
+    output = _run_queue_stage(stage, {"scored": src.copy()}, _bust_ctx(tmp_path, run_id="run2"))
+    assert require_awaiting_review(output) is not None
+    assert output.contribution.human_review_queue_stats == {
         "items_queued_total": 2, "items_passed_through": 2,
         "items_pending": 2, "items_decided": 0,
     }
@@ -280,8 +279,7 @@ def test_bust_cache_reads_no_cache_entries_at_all(tmp_path, monkeypatch):
         stage_cache=cache,
         bust_cache=True,
     )
-    with pytest.raises(HaltForReview):
-        _run_queue_stage(_stage(), {"scored": _src(2)}, ctx)
+    require_awaiting_review(_run_queue_stage(_stage(), {"scored": _src(2)}, ctx))
     assert calls == []
 
 
@@ -439,13 +437,12 @@ def test_queue_stats_count_every_row_the_reviewer_answered(tmp_path):
 
     # On the halting path the stage's contribution rides out on the halt itself
     # — the raise is that path's only return into the manifest.
-    with pytest.raises(HaltForReview) as exc_info:
-        _run_queue_stage(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
-    assert exc_info.value.contribution.human_review_queue_stats == {
+    output = _run_queue_stage(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
+    assert output.contribution.human_review_queue_stats == {
         "items_queued_total": 2, "items_passed_through": 2,
         "items_pending": 2, "items_decided": 0,
     }
-    queue_path = exc_info.value.queue_path
+    queue_path = require_awaiting_review(output).queue_path
     snapshot, fingerprints = pd.read_parquet(queue_path), _read_fingerprints(PROJECT, "run1", queue_path.stem)
 
     decided = [(ReviewVerdict.approve, None), (ReviewVerdict.modify, 8.0)]
@@ -478,8 +475,7 @@ def test_cache_is_read_once_per_stage_execution(tmp_path, monkeypatch):
         identity=RunIdentity(project=PROJECT, run_id="count"),
         stage_cache=cache,
     )
-    with pytest.raises(HaltForReview):
-        _run_queue_stage(_stage(), {"scored": _src(3)}, ctx)
+    require_awaiting_review(_run_queue_stage(_stage(), {"scored": _src(3)}, ctx))
     assert len(calls) == 1
 
 

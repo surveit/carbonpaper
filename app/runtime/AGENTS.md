@@ -35,8 +35,8 @@ the output, write `outputs/<stage>.parquet`, append to the run record.
   what it computes, so the cache ends re-pinned, not stale. Recorded in the manifest
   and replayed on resume. A `human_review_queue` under it replays no decision — every
   queueable row halts again.
-- **Halt + resume:** `human_review_queue` raises `HaltForReview`; the run marks
-  `awaiting_review` and persists the pending queue. `resume_run(...)` reloads completed
+- **Halt + resume:** `human_review_queue` returns an `AwaitingReview` on its `StageOutput`;
+  the run marks `awaiting_review` and persists the pending queue. `resume_run(...)` reloads completed
   outputs and continues once cached decisions exist for the pending rows.
 
 ## `stages/` — one module per stage type (`HANDLERS`)

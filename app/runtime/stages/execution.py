@@ -37,7 +37,7 @@ from .frame_caching import (
 )
 from ..cancellation import consume_cancel
 from ..context import RunContext
-from ..stage_output import StageOutput
+from ..stage_output import AwaitingReview, StageOutput
 from ..lineage import kept_rows_lineage
 from ..errors import RunCancelled
 from ..run_log import RunLog, bind_detail_sink, unbind_detail_sink
@@ -135,7 +135,7 @@ _INTERNAL_ROW_COLUMNS = (
 
 @runtime_checkable
 class PostMapRowMapper(Protocol):
-    """`finish_mapped_rows` runs before the driver strips the internal columns, and may abort."""
+    """`finish_mapped_rows` runs before the driver strips the internal columns."""
 
     def __call__(self, row: Row, index: int) -> Row: ...
 
@@ -145,7 +145,7 @@ class PostMapRowMapper(Protocol):
         rows: Sequence[Row],
         ctx: RunContext,
         contribution: StageContribution,
-    ) -> None: ...
+    ) -> AwaitingReview | None: ...
 
 
 class StageHandler(ABC):
@@ -344,6 +344,7 @@ def _run_row_mapper(
         mapped.contribution,
         lineage,
         recorder.rows_kept(kept_indices) if recorder else None,
+        mapped.awaiting_review,
     )
 
 
@@ -388,9 +389,10 @@ class _RowsInGroupsOfOne:
         rows: Sequence[Row],
         ctx: RunContext,
         contribution: StageContribution,
-    ) -> None:
-        if isinstance(self.map_row, PostMapRowMapper):
-            self.map_row.finish_mapped_rows(workflow_stage, rows, ctx, contribution)
+    ) -> AwaitingReview | None:
+        if not isinstance(self.map_row, PostMapRowMapper):
+            return None
+        return self.map_row.finish_mapped_rows(workflow_stage, rows, ctx, contribution)
 
 
 # ── the fan-out ──────────────────────────────────────────────────────────────
@@ -661,6 +663,7 @@ class _MappedRows(NamedTuple):
 
     table: pa.Table
     contribution: StageContribution
+    awaiting_review: AwaitingReview | None
 
 
 def _finish_empty_result(
@@ -691,10 +694,18 @@ def _finish_mapped_frame(
 ) -> _MappedRows:
     """`finish_mapped_rows` is the last step that sees an internal column: it runs before the strip."""
     contribution = _collect_internal_columns(rows)
-    if isinstance(map_group, PostMapRowMapper):
+    awaiting_review = (
         map_group.finish_mapped_rows(workflow_stage, rows, ctx, contribution)
+        if isinstance(map_group, PostMapRowMapper)
+        else None
+    )
+    if awaiting_review is not None:
+        # Awaiting review, the stage has not produced its declared columns — nothing trims.
+        return _MappedRows(
+            pa.Table.from_pylist(_strip_internal_columns(rows)), contribution, awaiting_review
+        )
     return _MappedRows(
-        _strip_and_trim(rows, contribution, handler, workflow_stage), contribution
+        _strip_and_trim(rows, contribution, handler, workflow_stage), contribution, None
     )
 
 
