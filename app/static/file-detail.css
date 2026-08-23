@@ -140,7 +140,7 @@
 .read-list li:last-child { border-bottom: none; }
 .read-when { margin-left: auto; font-variant-numeric: tabular-nums; }
 .read-more { margin: 8px 0 0; font-size: 13px; }
-.read-none { font-size: 13px; color: var(--muted); }
+.read-none, .file-not-a-table { font-size: 13px; color: var(--muted); max-width: 70ch; }
 
 /* ── Delete, in its own space ───────────────────────────────────────────── */
 .file-danger { border-top: 1px solid var(--border); padding-top: 18px; }
