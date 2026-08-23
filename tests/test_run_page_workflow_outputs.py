@@ -9,9 +9,10 @@ _PROJECT = "venezuela_lda_lobbying"
 _RUN = "20260812T133317.816579"
 
 
-def _publish(slug: str, label: str, value, run_id: str = _RUN, column: str = "external_spend"):
+def _publish(slug: str, label: str, value, run_id: str = _RUN,
+             column: str = "external_spend", primary: bool = False):
     WorkflowOutput(
-        slug=slug, label=label,
+        slug=slug, label=label, primary=primary,
         citation=StageOutputCellCitation(
             run_id=run_id, stage_id="count_client_figures", row_ordinal=0,
             column=column, value=value,
@@ -52,3 +53,15 @@ def test_a_number_reads_with_thousands_separators():
 
 def test_an_absent_value_reads_as_absent_rather_than_none():
     assert render_output_value(None) == "—"
+
+
+def test_a_primary_output_is_marked_so_the_page_can_lead_with_it():
+    _publish("external-spend", "Paid to outside firms", 4461000.0, primary=True)
+    _publish("clients-paying", "Paying clients", 24, column="clients_paying")
+    by_slug = {o.slug: o.primary for o in read_workflow_outputs(_PROJECT, _RUN)}
+    assert by_slug == {"external-spend": True, "clients-paying": False}
+
+
+def test_nothing_is_primary_unless_the_stage_says_so():
+    _publish("external-spend", "Paid to outside firms", 4461000.0)
+    assert [o.primary for o in read_workflow_outputs(_PROJECT, _RUN)] == [False]

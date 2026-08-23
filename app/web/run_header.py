@@ -73,6 +73,7 @@ class WorkflowOutputView(BaseModel):
     label: str
     value: str
     stage_id: str
+    primary: bool
     # The row this value was read from, so a reader can open its lineage.
     href: str
 
@@ -409,6 +410,7 @@ def read_workflow_outputs(project_id: str, run_id: str) -> list[WorkflowOutputVi
         WorkflowOutputView(
             slug=output.slug,
             label=output.label,
+            primary=output.primary,
             value=render_output_value(output.citation.value),
             stage_id=output.citation.stage_id,
             href=run_service.build_row_trace_url(

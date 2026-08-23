@@ -147,7 +147,9 @@ WORKFLOW_OUTPUTS_DESCRIPTION = (
     "declaring one must output exactly one row — aggregate first. That is a hard "
     "refusal rather than a convention because a scalar read out of a many-row frame "
     "drifts to a different row whenever the input data changes, and nothing about the "
-    "value it returns would look wrong."
+    "value it returns would look wrong. Mark `primary` on the one or two a reader should "
+    "see first — the run leads with those and lists the rest, so marking everything "
+    "primary is the same as marking nothing."
 )
 
 
@@ -166,6 +168,8 @@ class WorkflowOutputRule(_Base):
     slug: str
     label: str
     column: str
+    # Whether the run leads with this. Mark what the work rests on, not everything.
+    primary: bool = False
 
 
 class AuthoredStageFields(_Base):

@@ -420,17 +420,29 @@ td.row-num, th.row-num { text-align: right; color: var(--idle-bd); font-variant-
 .eval-checks td { vertical-align: middle; }
 .eval-checks td code { margin-right: 4px; }
 
-/* What the run published. First thing under the header, because it is the
-   answer the run exists to produce; the stages below are how it got there. */
-.wf-outputs { margin: 0 0 1.3rem; }
-.wf-outputs h2 { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em;
-  color: var(--muted); margin: 0 0 .4rem; font-weight: 600; }
-.wf-output-table { border-collapse: collapse; width: 100%; max-width: 46rem; }
-.wf-output-table tr + tr { border-top: 1px solid var(--border); }
-.wf-output-table th, .wf-output-table td { padding: .32rem .6rem .32rem 0; text-align: left;
-  vertical-align: baseline; }
-.wf-output-table th { font-weight: 400; color: var(--muted); font-size: .84rem; width: 55%; }
-.wf-output-table .wf-value { font-variant-numeric: tabular-nums; font-size: .95rem;
-  white-space: nowrap; }
-.wf-output-table .wf-stage { color: var(--muted); font-size: .72rem; text-align: right;
-  white-space: nowrap; }
+/* What the run published. Under the status line and above the stage strip: the
+   outputs are the answer the run exists to produce, the stages are how it got there. */
+.wf-outputs { background: var(--raised); border: 1px solid var(--border); border-radius: 8px;
+  padding: 1rem 1.15rem 1.05rem; margin: 0 0 1.2rem; box-shadow: 0 1px 3px var(--shadow); }
+.wf-outputs h2 { margin: 0 0 .1rem; font-size: 1.02rem; letter-spacing: -.01em; font-weight: 600; }
+.wf-outputs .wf-note { margin: 0 0 .8rem; font-size: .78rem; color: var(--muted); }
+
+/* The ones the work rests on, in the order they were declared. They shrink a step
+   past two, and keep shrinking nowhere — marking everything primary should look wrong. */
+.wf-leads { padding: 0 0 .8rem; border-bottom: 1px solid var(--border); margin: 0 0 .3rem; }
+.wf-lead { display: flex; align-items: baseline; gap: .55rem; flex-wrap: wrap; padding: .28rem 0; }
+.wf-lead .wf-big { font-size: 2.1rem; line-height: 1.05; letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums; }
+.wf-leads.crowded .wf-big { font-size: 1.7rem; }
+.wf-lead .wf-of { font-size: .92rem; color: var(--muted); }
+.wf-lead a { color: var(--fg); text-decoration: none; border-bottom: 2px solid var(--border); }
+.wf-lead a:hover { border-bottom-color: var(--accent); color: var(--accent); }
+
+.wf-rest { border-collapse: collapse; width: 100%; }
+.wf-rest tr + tr { border-top: 1px solid var(--border); }
+.wf-rest th, .wf-rest td { padding: .32rem .6rem .32rem 0; text-align: left; vertical-align: baseline; }
+.wf-rest th { font-weight: 400; color: var(--muted); font-size: .84rem; width: 52%; }
+.wf-rest .wf-value { font-variant-numeric: tabular-nums; font-size: .93rem; white-space: nowrap;
+  color: var(--fg); text-decoration: none; border-bottom: 1px solid var(--border); }
+.wf-rest .wf-value:hover { border-bottom-color: var(--accent); color: var(--accent); }
+.wf-rest .wf-stage { color: var(--muted); font-size: .72rem; text-align: right; white-space: nowrap; }
