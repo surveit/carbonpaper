@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from app.core.file_shape import ColumnKind, ColumnShape
 from app.core.files import FileCompleteness, ProjectFile, open_project_file
+from app.core.source_files import find_file_format
 from app.services.frame_profile import measure_file_shape
 from app.web.file_preview import FilePreview, build_file_preview
 from app.web.file_sizes import describe_bytes
@@ -46,6 +47,16 @@ class ReadingRun(BaseModel):
     status: str
 
 
+class FileContents(BaseModel):
+    row_count: int
+    column_count: int
+    varying_count: int
+    constant_count: int
+    empty_count: int
+    columns: list[ColumnRow]
+    preview: FilePreview
+
+
 class FileDetailView(BaseModel):
     file_id: str
     filename: str
@@ -55,32 +66,33 @@ class FileDetailView(BaseModel):
     format: str
     completeness: FileCompleteness
     lineage: str
-    row_count: int
-    column_count: int
-    varying_count: int
-    constant_count: int
-    empty_count: int
-    columns: list[ColumnRow]
-    preview: FilePreview
+    # None for a file no reader here opens — a png someone attached to a conversation.
+    contents: FileContents | None
     runs: list[ReadingRun]
 
 
 def build_file_detail_view(project_id: str, file_id: str) -> FileDetailView:
     record, _ = open_project_file(project_id, file_id)
-    shape = measure_file_shape(project_id, file_id, max_values=_VALUES_SHOWN)
-    columns = [_build_column_row(column, shape.row_count) for column in shape.columns]
     return FileDetailView(
         file_id=record.id, filename=record.filename, sha256=record.sha256,
         size=describe_bytes(record.byte_count), added=record.created_at,
         format=_name_format(record), completeness=record.completeness,
-        lineage=record.lineage, row_count=shape.row_count,
-        column_count=len(shape.columns),
+        lineage=record.lineage,
+        contents=_read_contents(project_id, file_id) if find_file_format(record.filename)
+        else None,
+        runs=_find_reading_runs(project_id, record),
+    )
+
+
+def _read_contents(project_id: str, file_id: str) -> FileContents:
+    shape = measure_file_shape(project_id, file_id, max_values=_VALUES_SHOWN)
+    columns = [_build_column_row(column, shape.row_count) for column in shape.columns]
+    return FileContents(
+        row_count=shape.row_count, column_count=len(shape.columns),
         varying_count=sum(1 for row in columns if row.group == "varying"),
         constant_count=sum(1 for row in columns if row.group == "constant"),
         empty_count=sum(1 for row in columns if row.group == "empty"),
-        columns=columns,
-        preview=build_file_preview(project_id, file_id),
-        runs=_find_reading_runs(project_id, record),
+        columns=columns, preview=build_file_preview(project_id, file_id),
     )
 
 

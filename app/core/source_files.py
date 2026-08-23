@@ -48,6 +48,11 @@ _FORMAT_BY_SUFFIX: dict[str, FileFormat] = {
 SourceDtype = Mapping[Hashable, Any] | type | bool | None
 
 
+def find_file_format(path: str) -> FileFormat | None:
+    """None means no reader here holds this extension — a png, a pdf, a zip."""
+    return _FORMAT_BY_SUFFIX.get(Path(path).suffix.lower())
+
+
 def resolve_file_format(path: str) -> FileFormat:
     suffix = Path(path).suffix.lower()
     fmt = _FORMAT_BY_SUFFIX.get(suffix)

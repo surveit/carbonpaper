@@ -33,7 +33,7 @@
   <p class="file-facts">
     <span class="type-tag">{{ file.format }}</span>
     <span>{{ file.size }}</span>
-    <span>{{ "{:,}".format(file.row_count) }} rows × {{ file.column_count }} columns</span>
+    {% if file.contents %}<span>{{ "{:,}".format(file.contents.row_count) }} rows × {{ file.contents.column_count }} columns</span>{% endif %}
     <span>added {{ file.added | friendly_time }}</span>
     <span><code class="files-hash">{{ file.sha256[:12] }}…</code></span>
   </p>
@@ -65,32 +65,40 @@
   </form>
 </section>
 
+{% if file.contents %}
 <section class="file-section">
   <div class="file-section-head">
     <h2>Shape</h2>
-    <p class="file-section-lede">{{ file.column_count }} columns — <strong>{{ file.varying_count }} vary</strong>
-      {%- if file.constant_count %}, {{ file.constant_count }} hold one value for every row{% endif %}
-      {%- if file.empty_count %}, {{ file.empty_count }} hold no value at all{% endif %}.
-      Every count is over all {{ "{:,}".format(file.row_count) }} rows, not the sample below.</p>
+    <p class="file-section-lede">{{ file.contents.column_count }} columns — <strong>{{ file.contents.varying_count }} vary</strong>
+      {%- if file.contents.constant_count %}, {{ file.contents.constant_count }} hold one value for every row{% endif %}
+      {%- if file.contents.empty_count %}, {{ file.contents.empty_count }} hold no value at all{% endif %}.
+      Every count is over all {{ "{:,}".format(file.contents.row_count) }} rows, not the sample below.</p>
   </div>
   <div class="shape-filters">
-    <button type="button" class="shape-filter on" data-filter="all">All {{ file.column_count }}</button>
-    <button type="button" class="shape-filter" data-filter="varying">Varying {{ file.varying_count }}</button>
-    {% if file.constant_count %}<button type="button" class="shape-filter" data-filter="constant">One value {{ file.constant_count }}</button>{% endif %}
-    {% if file.empty_count %}<button type="button" class="shape-filter" data-filter="empty">Empty {{ file.empty_count }}</button>{% endif %}
+    <button type="button" class="shape-filter on" data-filter="all">All {{ file.contents.column_count }}</button>
+    <button type="button" class="shape-filter" data-filter="varying">Varying {{ file.contents.varying_count }}</button>
+    {% if file.contents.constant_count %}<button type="button" class="shape-filter" data-filter="constant">One value {{ file.contents.constant_count }}</button>{% endif %}
+    {% if file.contents.empty_count %}<button type="button" class="shape-filter" data-filter="empty">Empty {{ file.contents.empty_count }}</button>{% endif %}
   </div>
   <div class="shape-list">
     <div class="shape-head"><span></span><span>column</span><span>filled</span><span>distinct</span><span>values</span></div>
-    {% for column in file.columns %}{% include "_file_column.html" %}{% endfor %}
+    {% for column in file.contents.columns %}{% include "_file_column.html" %}{% endfor %}
   </div>
 </section>
 
 <section class="file-section">
   <details class="file-rows">
-    <summary><h2>First rows</h2><span class="muted">{{ file.preview.rows | length }} of {{ "{:,}".format(file.row_count) }}</span></summary>
-    {% with preview = file.preview %}{% include "_file_preview.html" %}{% endwith %}
+    <summary><h2>First rows</h2><span class="muted">{{ file.contents.preview.rows | length }} of {{ "{:,}".format(file.contents.row_count) }}</span></summary>
+    {% with preview = file.contents.preview %}{% include "_file_preview.html" %}{% endwith %}
   </details>
 </section>
+
+{% else %}
+<section class="file-section">
+  <p class="file-not-a-table">This file is not a table anything here reads, so it has no
+    shape and no rows. It is stored, and a run may still take it as bytes.</p>
+</section>
+{% endif %}
 
 <section class="file-section">
   <div class="file-section-head">

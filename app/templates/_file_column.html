@@ -41,21 +41,21 @@
       <span class="peek-note">{{ "{:,}".format(column.shape.lengths.min) }}–{{ "{:,}".format(column.shape.lengths.max) }} characters, median {{ "{:,}".format(column.shape.lengths.median) }}</span>
       {%- else %}
       <span class="seg-track">
-        {%- for value in column.shape.top %}<i style="width: {{ value.count * 100 / file.row_count }}%" title="{{ value.value }} — {{ "{:,}".format(value.count) }}"></i>{% endfor %}
+        {%- for value in column.shape.top %}<i style="width: {{ value.count * 100 / file.contents.row_count }}%" title="{{ value.value }} — {{ "{:,}".format(value.count) }}"></i>{% endfor %}
         {%- set absent = column.blank_count + column.null_count %}
-        {%- if absent %}<i class="seg-absent" style="width: {{ absent * 100 / file.row_count }}%" title="no value — {{ "{:,}".format(absent) }} rows"></i>{% endif %}
+        {%- if absent %}<i class="seg-absent" style="width: {{ absent * 100 / file.contents.row_count }}%" title="no value — {{ "{:,}".format(absent) }} rows"></i>{% endif %}
       </span>
-      {%- set top_share = column.shape.top[0].count * 100 / file.row_count %}
+      {%- set top_share = column.shape.top[0].count * 100 / file.contents.row_count %}
       {# A share under a twentieth rounds to nothing and says nothing; the count says it. #}
       <span class="peek-note">{{ column.shape.top[0].value | truncate(24, true, "…") }} ·
-        {% if column.filled_count == file.row_count and top_share >= 5 %}{{ top_share | round | int }}%
+        {% if column.filled_count == file.contents.row_count and top_share >= 5 %}{{ top_share | round | int }}%
         {%- else %}{{ "{:,}".format(column.shape.top[0].count) }} rows{% endif %}</span>
       {%- endif %}
     </span>
   </summary>
   <div class="shape-facet">
     {% if column.kind.value == 'empty' %}
-    <p class="facet-note">Every one of the {{ "{:,}".format(file.row_count) }} rows carries
+    <p class="facet-note">Every one of the {{ "{:,}".format(file.contents.row_count) }} rows carries
       {{ "null" if column.null_count >= column.blank_count else "an empty string" }} here. A stage
       reading this column reads nothing, whatever the export's header promises.</p>
     {% else %}
@@ -67,13 +67,13 @@
       <div><dt>max</dt><dd>{{ column.shape.numbers.max }}</dd></div>
     </dl>
     {% endif %}
-    {% if column.filled_count < file.row_count and column.shape.top %}
+    {% if column.filled_count < file.contents.row_count and column.shape.top %}
     <div class="facet-scale" role="group" aria-label="What the shares are over">
-      <button type="button" class="on" data-scale="all">of all {{ "{:,}".format(file.row_count) }} rows</button>
+      <button type="button" class="on" data-scale="all">of all {{ "{:,}".format(file.contents.row_count) }} rows</button>
       <button type="button" data-scale="filled">of the {{ "{:,}".format(column.filled_count) }} that carry a value</button>
     </div>
     {% endif %}
-    <table class="facet-values" data-rows="{{ file.row_count }}" data-filled="{{ column.filled_count }}">
+    <table class="facet-values" data-rows="{{ file.contents.row_count }}" data-filled="{{ column.filled_count }}">
       <tbody>
         {% for value in column.facet %}
         <tr class="{{ 'fv-absent' if value.absent }}" data-count="{{ value.count }}">
@@ -88,7 +88,7 @@
     {% if column.hidden_value_count %}
     <p class="facet-note">{{ "{:,}".format(column.hidden_value_count) }} further values, each rarer than these.</p>
     {% endif %}
-    {% if column.filled_count and column.filled_count < file.row_count %}
+    {% if column.filled_count and column.filled_count < file.contents.row_count %}
     <p class="facet-note">Of the {{ "{:,}".format(column.filled_count) }} rows that carry a value,
       {{ (column.shape.top[0].count * 100 / column.filled_count) | round | int }}% are
       <code>{{ column.shape.top[0].value | truncate(40, true, "…") }}</code>.</p>

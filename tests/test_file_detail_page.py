@@ -109,3 +109,12 @@ def test_a_file_this_project_does_not_hold_is_not_found(project_id):
     other = create_project("other", "A methodology.", source="test").id
     elsewhere = save_upload("theirs.csv", io.BytesIO(CSV), other).id
     assert client.get(f"/project/{project_id}/files/{elsewhere}").status_code == 404
+
+
+def test_a_file_that_is_not_a_table_still_has_a_page(project_id):
+    # A png someone attached to a conversation: no shape, but still a record to act on.
+    file_id = save_upload("screenshot.png", io.BytesIO(b"\x89PNG\r\n\x1a\n"), project_id).id
+    text = page(project_id, file_id)
+    assert "This file is not a table" in text
+    assert "Delete this file" in text
+    assert "Data completeness" in text
