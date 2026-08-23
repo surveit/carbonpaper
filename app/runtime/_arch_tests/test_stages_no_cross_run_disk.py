@@ -6,16 +6,11 @@ the run's OWN state, which is what `run_dir` writes were before it moved here.
 """
 from __future__ import annotations
 
-import ast
+from collections.abc import Mapping
 from pathlib import Path
 
 from arch import check_no_dict_keys
-from arch._helpers import (
-    collect_called_methods,
-    find_class_body_assignment,
-    find_subclasses_of,
-    parse_module,
-)
+from arch._helpers import collect_called_methods, parse_module
 from arch.scope import find_source_files_under
 
 _RUNTIME_STAGES_DIR = Path(__file__).resolve().parents[1] / "stages"
@@ -23,63 +18,26 @@ _RUNTIME_DIR = Path(__file__).resolve().parents[1]
 
 _BANNED_PERSISTENCE_METHODS = frozenset({"save", "delete"})
 
-# Written as a property of the module rather than a list of filenames, so it stays
-# the rule it means — project-scope writes from the runtime are still the bug this
-# catches — and needs no allowlist edit for the next run-scoped record.
-_RUN_SCOPE = "PersistenceScope.RUN"
-_RECORDS_MODULE = "app.models.records"
-_RECORDS_DIR = Path(__file__).resolve().parents[2] / "models" / "records"
-
-
-def defines_a_run_scoped_record(tree: ast.Module) -> bool:
-    """Whether `tree` declares a class with `SCOPE: ... = PersistenceScope.RUN`."""
-    return any(
-        isinstance(node, ast.AnnAssign)
-        and isinstance(node.target, ast.Name)
-        and node.target.id == "SCOPE"
-        and node.value is not None
-        and ast.unparse(node.value) == _RUN_SCOPE
-        for node in ast.walk(tree)
-    )
-
-
-def read_record_scopes() -> dict[str, str]:
-    """Every record declared under app/models/records, by the scope it carries."""
-    scopes: dict[str, str] = {}
-    for path in find_source_files_under(_RECORDS_DIR):
-        tree = parse_module(path)
-        for node in find_subclasses_of(tree, "PersistedModel"):
-            scope = find_class_body_assignment(node, "SCOPE")
-            value = getattr(scope, "value", None)
-            scopes[node.name] = ast.unparse(value) if value is not None else ""
-    return scopes
-
-
-def find_imported_record_names(tree: ast.Module) -> set[str]:
-    return {
-        alias.name
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom)
-        and node.module is not None
-        and node.module.startswith(_RECORDS_MODULE)
-        for alias in node.names
-    }
-
-
-def saves_only_run_scoped_records(tree: ast.Module, scopes: dict[str, str]) -> bool:
-    """A record declared elsewhere is still the run's own state if its scope says so."""
-    imported = find_imported_record_names(tree) & set(scopes)
-    return bool(imported) and all(scopes[name] == _RUN_SCOPE for name in imported)
+# Denied until listed, per tests/arch/test_contracts_are_whitelists.py: a rule that
+# admits whatever satisfies a property admits the module nobody remembered to check.
+# This was a property — "declares a run-scoped record" — while records lived beside
+# their writes; once they are declared in app/models/records that property is either
+# unsatisfiable or, read off imports, granted by accident.
+_MAY_WRITE_A_RUN_RECORD: Mapping[str, str] = {
+    "citations.py": "StageCitations — what a publish stage cited, per run",
+    "manifest.py": "RunManifest — the run's own record",
+    "run_log.py": "RunLogChunk — the run's event log",
+    "human_review_queue.py": "the queue this run halted on",
+    "workflow_outputs.py": "WorkflowOutput — what this run published",
+}
 
 
 def find_persisted_write_call_offenders(paths: list[Path]) -> list[str]:
-    scopes = read_record_scopes()
     offenders: list[str] = []
     for path in paths:
-        tree = parse_module(path)
-        if defines_a_run_scoped_record(tree) or saves_only_run_scoped_records(tree, scopes):
+        if path.name in _MAY_WRITE_A_RUN_RECORD:
             continue
-        hits = collect_called_methods(tree) & _BANNED_PERSISTENCE_METHODS
+        hits = collect_called_methods(parse_module(path)) & _BANNED_PERSISTENCE_METHODS
         if hits:
             offenders.append(f"{path.name}: {sorted(hits)}")
     return offenders
@@ -128,20 +86,17 @@ def test_find_persisted_write_call_offenders_ignores_read_only_calls(tmp_path: P
     assert find_persisted_write_call_offenders([target]) == []
 
 
-def test_a_run_scoped_record_declared_in_models_may_be_saved(tmp_path: Path) -> None:
+def test_a_listed_module_may_write(tmp_path: Path) -> None:
+    target = tmp_path / "workflow_outputs.py"
+    target.write_text("WorkflowOutput(...).save()\n", encoding="utf-8")
+    assert find_persisted_write_call_offenders([target]) == []
+
+
+def test_an_unlisted_module_may_not_write_even_a_run_scoped_record(tmp_path: Path) -> None:
     target = tmp_path / "m.py"
     target.write_text(
         "from app.models.records.workflow_output import WorkflowOutput\n"
         "WorkflowOutput(...).save()\n",
-        encoding="utf-8",
-    )
-    assert find_persisted_write_call_offenders([target]) == []
-
-
-def test_a_project_scoped_record_may_still_not_be_saved(tmp_path: Path) -> None:
-    target = tmp_path / "m.py"
-    target.write_text(
-        "from app.models.records.project import Project\nProject(...).save()\n",
         encoding="utf-8",
     )
     assert find_persisted_write_call_offenders([target]) == ["m.py: ['save']"]
