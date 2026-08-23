@@ -1,8 +1,4 @@
-"""Which columns tell one file from the others of its shape.
-
-Nothing here decides what a column MEANS; a column earns its place by how much the
-files disagree about it, and only ever against files it shares a schema with.
-"""
+"""Which columns tell one file from the others of its shape; see docs/run-and-review-ui.md."""
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -14,9 +10,7 @@ from app.core.column_profile import ValueCount
 from app.core.file_shape import ColumnShape, FileShape
 from app.core.ids import ID
 
-# What share of a file's rows a column's listed values must cover for the column to be
-# compared at all. Under it the values are a sample of a long tail — an id, a headline,
-# a timestamp — and two files disagreeing about them says nothing.
+# Under this share the listed values are a long tail: an id, a headline, a timestamp.
 _COVERAGE_FLOOR = 0.5
 
 # Below this the files agree closely enough that naming the column would be noise.
@@ -113,8 +107,7 @@ def _read_distribution(shape: FileShape, column: str) -> dict[str, float] | None
     covered = sum(shares.values())
     if covered < _COVERAGE_FLOOR:
         return None
-    # What the listed values leave out is one bucket: two files whose tails are
-    # different sizes disagree by that much, whatever is in them.
+    # What the listed values leave out, as one bucket.
     shares[_REST] = max(0.0, 1 - covered)
     return shares
 

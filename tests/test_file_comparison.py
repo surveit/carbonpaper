@@ -1,5 +1,4 @@
-"""Which column tells one file from another of its shape — over values that really
-turned up in four Meltwater exports of one schema."""
+"""Which column tells one file from another of its shape."""
 from __future__ import annotations
 
 from app.core.column_profile import ValueCount

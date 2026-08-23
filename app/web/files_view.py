@@ -18,8 +18,7 @@ from app.core import files as file_store
 from app.services.frame_profile import read_file_shape
 from app.web.file_sizes import describe_bytes
 
-# What a row shows of the column that tells it apart. Its listed values are what the
-# comparison ran over, so the commonest is the one worth naming.
+# What the comparison runs over, per column.
 _VALUES_MEASURED = 8
 
 
@@ -41,8 +40,7 @@ class FileRow(BaseModel):
     run_count: int
     completeness: file_store.FileCompleteness
     lineage: str
-    # None when this file shares its columns with nothing here, or when the files that
-    # share them carry the same values — in both cases there is nothing to say.
+    # None when nothing here shares its columns, or the sharers carry the same values.
     distinction: Distinction | None = None
     # How many files carry these columns, this one included.
     shape_group_size: int = 1
