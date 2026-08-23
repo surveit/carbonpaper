@@ -1364,3 +1364,4 @@
 {"run_id":"32630930664","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32630930664","created":"2026-08-23T09:26:10Z","branch":"claims-emitted-by-a-run","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"32631226901","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32631226901","created":"2026-08-23T09:31:54Z","branch":"record-base-contract","event":"pull_request","contracts_kept":15,"findings":[]}
 {"run_id":"32631226901","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32631226901","created":"2026-08-23T09:32:20Z","branch":"record-base-contract","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"32638361655","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32638361655","created":"2026-08-23T12:05:28Z","branch":"claims-emitted-by-a-run","event":"pull_request","contracts_kept":14,"findings":[]}
