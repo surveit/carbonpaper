@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from app.core.column_profile import NumericRange, ValueCount
 from app.core.ids import ID
-from app.core.persistence import PersistedModel, PersistenceScope
+from app.core.record import PersistedModel, PersistenceScope
 
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _TIME = re.compile(r"^\d{2}:\d{2}(:\d{2})?$")
