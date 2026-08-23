@@ -190,10 +190,27 @@ layers = ["app.models", "app.core"]
 # (llm, agent, persistence, errors, frames, utils); the contracts sit above it.
 
 [[tool.importlinter.contracts]]
+name = "app.core.record imported only by core, the record modules and the runtime"
+type = "protected"
+protected_modules = ["app.core.record"]
+allowed_importers = ["app.core", "app.models.records", "app.runtime"]
+# Declaring a record IS importing this module, so a whitelist here is a whitelist of the
+# places a stored row's shape may be written down — sweeping in a way an AST scan of one
+# directory is not. A service, the web layer, the tools and the compiler are all denied by
+# default: they operate on records through the functions that own a record's lifecycle.
+# app.models.records is where a project's records live, one module each. app.runtime keeps
+# its own four (RunManifest, RunEventChunk, StageCitations, QueueFingerprints) because
+# app/runtime/_arch_tests/test_stages_no_cross_run_disk.py grants a runtime module the
+# right to call .save() only while it DECLARES a PersistenceScope.RUN record — moving the
+# declaration out revokes the write. app.core covers the three records below app.models.
+# The store seam (get_store, now_iso, JsonDict) stayed in app.core.persistence, which is
+# unprotected: reaching storage is not the same act as declaring a row.
+
+[[tool.importlinter.contracts]]
 name = "inside app.core, the store sits below the rest"
 type = "layers"
 containers = ["app.core"]
-layers = ["agent | llm", "sqlite_store", "persistence"]
+layers = ["agent | llm", "sqlite_store", "record", "persistence"]
 # The engine sits below the rest of core and above the record base whose protocol it
 # satisfies, which is what makes "records depend on the store, never the reverse" true by
 # construction rather than by a list someone has to keep current.

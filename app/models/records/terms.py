@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import ClassVar
 
-from app.core.persistence import PersistedModel, PersistenceScope
+from app.core.record import PersistedModel, PersistenceScope
 from app.models.named_schemas import SchemaLibrary
 from app.models.terms import Verb
 

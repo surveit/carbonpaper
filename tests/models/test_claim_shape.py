@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from app.models.claims import ClaimImportance, ClaimShape, DataUniverseRequirement
+from app.models.claims import ClaimImportance, DataUniverseRequirement
+from app.models.records.claims import ClaimShape
 
 # The figure the Venezuela LDA project rests on, and the column it is read from.
 _LABEL = "Total paid to outside lobbying firms to lobby on Venezuela"

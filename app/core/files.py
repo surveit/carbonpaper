@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import BinaryIO, ClassVar
 
 from app.core.errors import FileNotStoredError, FileOverCeiling, StoreOverQuota
-from app.core.persistence import PersistedModel, PersistenceScope
+from app.core.record import PersistedModel, PersistenceScope
 from app.core.store_config import resolve_db_path
 from app.core.ids import ID
 

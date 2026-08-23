@@ -12,7 +12,7 @@ import pandas as pd
 import pyarrow as pa
 
 from app.core.errors import CitationMismatch, RowOutOfRange, StageNotInRun
-from app.core.persistence import PersistedModel, PersistenceScope
+from app.core.record import PersistedModel, PersistenceScope
 from app.models.citations import CitedValue
 from app.models.claims import StageOutputRowCitation
 
