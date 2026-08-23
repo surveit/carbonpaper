@@ -3,20 +3,20 @@ from __future__ import annotations
 import pyarrow as pa
 
 from app.models import Workflow, parse_stage
-from app.models.stages.stage_base import WorkflowOutput
+from app.models.stages.stage_base import WorkflowOutputRule
 from app.runtime.context import RunIdentity
 from app.runtime.workflow_outputs import (
-    RunOutput,
+    WorkflowOutput,
     find_output_row_issues,
-    save_run_outputs,
+    save_workflow_outputs,
 )
 
 _RUN = RunIdentity(project="venezuela_lda_lobbying", run_id="20260812T133317.816579")
 # The Venezuela client-side figures, as that aggregate really computes them.
 _FIGURES = pa.table({"clients_paying": [24], "external_spend": [4461000.0]})
-_SPEND = WorkflowOutput(slug="external-spend", label="Paid to outside lobbying firms",
+_SPEND = WorkflowOutputRule(slug="external-spend", label="Paid to outside lobbying firms",
                         column="external_spend")
-_CLIENTS = WorkflowOutput(slug="clients-paying", label="Paying clients",
+_CLIENTS = WorkflowOutputRule(slug="clients-paying", label="Paying clients",
                           column="clients_paying")
 
 
@@ -50,7 +50,7 @@ def _workflow_stage(outputs):
 
 
 def test_a_run_publishes_the_value_its_stage_declared():
-    saved = save_run_outputs(_workflow_stage([_SPEND]), _FIGURES, _RUN)
+    saved = save_workflow_outputs(_workflow_stage([_SPEND]), _FIGURES, _RUN)
     assert [(o.slug, o.citation.value) for o in saved] == [("external-spend", 4461000.0)]
     assert saved[0].citation.run_id == "20260812T133317.816579"
     assert saved[0].citation.stage_id == "count_client_figures"
@@ -58,29 +58,29 @@ def test_a_run_publishes_the_value_its_stage_declared():
 
 
 def test_the_value_keeps_its_type():
-    saved = save_run_outputs(_workflow_stage([_CLIENTS]), _FIGURES, _RUN)
+    saved = save_workflow_outputs(_workflow_stage([_CLIENTS]), _FIGURES, _RUN)
     assert saved[0].citation.value == 24 and isinstance(saved[0].citation.value, int)
 
 
 def test_one_stage_can_publish_several_results():
-    saved = save_run_outputs(_workflow_stage([_CLIENTS, _SPEND]), _FIGURES, _RUN)
+    saved = save_workflow_outputs(_workflow_stage([_CLIENTS, _SPEND]), _FIGURES, _RUN)
     assert [o.citation.value for o in saved] == [24, 4461000.0]
 
 
 def test_a_published_result_survives_the_store():
-    saved = save_run_outputs(_workflow_stage([_SPEND]), _FIGURES, _RUN)
-    assert RunOutput.load(saved[0].id).citation.value == 4461000.0
+    saved = save_workflow_outputs(_workflow_stage([_SPEND]), _FIGURES, _RUN)
+    assert WorkflowOutput.load(saved[0].id).citation.value == 4461000.0
 
 
 def test_a_runs_results_are_found_together():
-    save_run_outputs(_workflow_stage([_CLIENTS, _SPEND]), _FIGURES, _RUN)
-    found = [o for o in RunOutput.list()
+    save_workflow_outputs(_workflow_stage([_CLIENTS, _SPEND]), _FIGURES, _RUN)
+    found = [o for o in WorkflowOutput.list()
              if o.citation.run_id == "20260812T133317.816579"]
     assert sorted(o.slug for o in found) == ["clients-paying", "external-spend"]
 
 
 def test_a_stage_declaring_nothing_publishes_nothing():
-    assert save_run_outputs(_workflow_stage(None), _FIGURES, _RUN) == []
+    assert save_workflow_outputs(_workflow_stage(None), _FIGURES, _RUN) == []
 
 
 def test_a_stage_that_did_not_reduce_to_one_row_is_refused():

@@ -141,6 +141,16 @@ STAGE_ID_DESCRIPTION = (
     "`inputs` of every downstream stage — so name the step well enough that a reader "
     f"needs no gloss. HARD LIMIT: {STAGE_ID_MAX_CHARS} characters, refused above that."
 )
+WORKFLOW_OUTPUTS_DESCRIPTION = (
+    "Columns this workflow publishes as results, each with a slug that identifies it "
+    "across runs and a label a reader sees. A scalar output is one cell, so a stage "
+    "declaring one must output exactly one row — aggregate first. That is a hard "
+    "refusal rather than a convention because a scalar read out of a many-row frame "
+    "drifts to a different row whenever the input data changes, and nothing about the "
+    "value it returns would look wrong."
+)
+
+
 STAGE_DESCRIPTION_DESCRIPTION = (
     "ONE line saying what this step does, shown UNDER the id and as the graph node's "
     "tooltip — never as a heading and never as a label, so it must not restate the id "
@@ -151,7 +161,7 @@ STAGE_DESCRIPTION_DESCRIPTION = (
 
 
 # ── The shared field list ────────────────────────────────────────────────────
-class WorkflowOutput(_Base):
+class WorkflowOutputRule(_Base):
     # A slug identifies the output across runs; the value it holds is per run.
     slug: str
     label: str
@@ -190,8 +200,10 @@ class AuthoredStageFields(_Base):
     # checked against the config (find_signature_config_issues) and against what
     # the inputs supply (find_signature_issues).
     signature: Optional[TransformSignature] = None
-    # The columns this workflow publishes as results. Authored, so the draft carries it.
-    workflow_outputs: Optional[list[WorkflowOutput]] = None
+    # Authored, so the draft carries it.
+    workflow_outputs: Optional[list[WorkflowOutputRule]] = Field(
+        default=None, description=WORKFLOW_OUTPUTS_DESCRIPTION
+    )
 
     @field_validator("inputs", mode="before")
     @classmethod

@@ -17,10 +17,10 @@ from .validation import Issue
 PUBLISHED_ROW = 0
 
 
-class RunOutput(PersistedModel):
+class WorkflowOutput(PersistedModel):
     """Defined here, not in app/models, so this module may save it — see the PR thread."""
 
-    collection: ClassVar[str] = "run_output"
+    collection: ClassVar[str] = "workflow_output"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.RUN
 
     slug: str
@@ -40,11 +40,11 @@ def find_output_row_issues(workflow_stage: WorkflowStage, table: pa.Table) -> li
     )]
 
 
-def save_run_outputs(
+def save_workflow_outputs(
     workflow_stage: WorkflowStage, table: pa.Table, identity: RunIdentity
-) -> list[RunOutput]:
+) -> list[WorkflowOutput]:
     published = [
-        RunOutput(
+        WorkflowOutput(
             slug=output.slug, label=output.label,
             citation=StageOutputCellCitation(
                 run_id=identity.run_id, stage_id=workflow_stage.id,

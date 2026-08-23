@@ -31,7 +31,7 @@ from app.core.run_status import RunStatus, StageStatus
 
 from .cancellation import consume_cancel
 from .context import RunContext, RunIdentity
-from .workflow_outputs import find_output_row_issues, save_run_outputs
+from .workflow_outputs import find_output_row_issues, save_workflow_outputs
 from .stage_output import AwaitingReview, StageOutput
 from .errors import RunCancelled
 from .manifest import RunManifest, create_run_manifest, write_manifest
@@ -425,7 +425,7 @@ def _finalize_stage_output(
         ) else StageStatus.VALIDATION_WARNINGS
     record.output_row_count = table.num_rows
     if record.status != StageStatus.ERROR and ctx.identity is not None:
-        save_run_outputs(workflow_stage, table, ctx.identity)
+        save_workflow_outputs(workflow_stage, table, ctx.identity)
     # Manifest paths are POSIX-style so the persisted JSON is identical on
     # every platform.
     record.output_path = output_path.relative_to(run_dir).as_posix()
