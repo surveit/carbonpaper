@@ -1,12 +1,7 @@
-"""Architecture: `app.core.stage_cache` is the only channel a stage handler may
-use to persist something outliving its own run. Two rules: no `"project_dir"`
-dict key under `app/runtime/stages`, and no `.save()`/`.delete()` under
-`app/runtime` except in a module that DEFINES a PersistenceScope.RUN record —
-the run's OWN state, which is what `run_dir` writes were before it moved here.
-"""
+"""Architecture: no `project_dir` key under stages, and only a named module writes."""
 from __future__ import annotations
 
-import ast
+from collections.abc import Mapping
 from pathlib import Path
 
 from arch import check_no_dict_keys
@@ -18,31 +13,22 @@ _RUNTIME_DIR = Path(__file__).resolve().parents[1]
 
 _BANNED_PERSISTENCE_METHODS = frozenset({"save", "delete"})
 
-# Written as a property of the module rather than a list of filenames, so it stays
-# the rule it means — project-scope writes from the runtime are still the bug this
-# catches — and needs no allowlist edit for the next run-scoped record.
-_RUN_SCOPE = "PersistenceScope.RUN"
-
-
-def defines_a_run_scoped_record(tree: ast.Module) -> bool:
-    """Whether `tree` declares a class with `SCOPE: ... = PersistenceScope.RUN`."""
-    return any(
-        isinstance(node, ast.AnnAssign)
-        and isinstance(node.target, ast.Name)
-        and node.target.id == "SCOPE"
-        and node.value is not None
-        and ast.unparse(node.value) == _RUN_SCOPE
-        for node in ast.walk(tree)
-    )
+# Denied until listed, per tests/arch/test_contracts_are_whitelists.py.
+_MAY_WRITE_A_RUN_RECORD: Mapping[str, str] = {
+    "citations.py": "StageCitations — what a publish stage cited, per run",
+    "manifest.py": "RunManifest — the run's own record",
+    "run_log.py": "RunLogChunk — the run's event log",
+    "human_review_queue.py": "the queue this run halted on",
+    "workflow_outputs.py": "WorkflowOutput — what this run published",
+}
 
 
 def find_persisted_write_call_offenders(paths: list[Path]) -> list[str]:
     offenders: list[str] = []
     for path in paths:
-        tree = parse_module(path)
-        if defines_a_run_scoped_record(tree):
+        if path.name in _MAY_WRITE_A_RUN_RECORD:
             continue
-        hits = collect_called_methods(tree) & _BANNED_PERSISTENCE_METHODS
+        hits = collect_called_methods(parse_module(path)) & _BANNED_PERSISTENCE_METHODS
         if hits:
             offenders.append(f"{path.name}: {sorted(hits)}")
     return offenders
@@ -89,3 +75,19 @@ def test_find_persisted_write_call_offenders_ignores_read_only_calls(tmp_path: P
         encoding="utf-8",
     )
     assert find_persisted_write_call_offenders([target]) == []
+
+
+def test_a_listed_module_may_write(tmp_path: Path) -> None:
+    target = tmp_path / "workflow_outputs.py"
+    target.write_text("WorkflowOutput(...).save()\n", encoding="utf-8")
+    assert find_persisted_write_call_offenders([target]) == []
+
+
+def test_an_unlisted_module_may_not_write_even_a_run_scoped_record(tmp_path: Path) -> None:
+    target = tmp_path / "m.py"
+    target.write_text(
+        "from app.models.records.workflow_output import WorkflowOutput\n"
+        "WorkflowOutput(...).save()\n",
+        encoding="utf-8",
+    )
+    assert find_persisted_write_call_offenders([target]) == ["m.py: ['save']"]

@@ -31,6 +31,7 @@ from app.core.run_status import RunStatus, StageStatus
 
 from .cancellation import consume_cancel
 from .context import RunContext, RunIdentity
+from .workflow_outputs import find_output_row_issues, save_workflow_outputs
 from .stage_output import AwaitingReview, StageOutput
 from .errors import RunCancelled
 from .manifest import RunManifest, create_run_manifest, write_manifest
@@ -371,6 +372,7 @@ def _finalize_stage_output(
     outputs_so_far: dict[str, pa.Table],
     run_dir: Path,
     manifest: RunManifest,
+    ctx: RunContext,
 ) -> bool:
     sid = workflow_stage.id
     if output is None:
@@ -391,6 +393,7 @@ def _finalize_stage_output(
     out_rep = validate_table(
         table, workflow_stage.output_schema, stage_id=sid, phase="output")
     out_rep.issues.extend(find_key_coverage_issues(workflow_stage, inputs_for_stage))
+    out_rep.issues.extend(find_output_row_issues(workflow_stage, table))
     if row_errors:
         out_rep.issues[0:0] = [
             Issue("error", None,
@@ -421,6 +424,8 @@ def _finalize_stage_output(
             v["ok"] for v in record.input_validation_report
         ) else StageStatus.VALIDATION_WARNINGS
     record.output_row_count = table.num_rows
+    if record.status != StageStatus.ERROR and ctx.identity is not None:
+        save_workflow_outputs(workflow_stage, table, ctx.identity)
     # Manifest paths are POSIX-style so the persisted JSON is identical on
     # every platform.
     record.output_path = output_path.relative_to(run_dir).as_posix()
@@ -490,7 +495,7 @@ def _run_stage(
             return _StageOutcome.HALTED, True
         joins_blocked = _finalize_stage_output(
             workflow_stage, window, record, output, inputs_for_stage, outputs_so_far,
-            run_dir, manifest)
+            run_dir, manifest, ctx)
     except Exception as exc:  # noqa: BLE001 — the runner's contract is to
         # record ANY stage failure in the manifest and keep running
         # independent forks rather than crash the whole run.
