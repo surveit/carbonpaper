@@ -424,14 +424,13 @@ td.row-num, th.row-num { text-align: right; color: var(--idle-bd); font-variant-
    answer the run exists to produce; the stages below are how it got there. */
 .wf-outputs { margin: 0 0 1.3rem; }
 .wf-outputs h2 { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em;
-  color: var(--muted); margin: 0 0 .5rem; font-weight: 600; }
-.wf-output-list { display: flex; flex-wrap: wrap; gap: .5rem; list-style: none; margin: 0; padding: 0; }
-.wf-output { border: 1px solid var(--border); border-radius: 6px; background: var(--raised);
-  padding: .5rem .75rem; min-width: 9rem; }
-.wf-output .wf-label { display: block; font-size: .72rem; color: var(--muted);
-  letter-spacing: .03em; margin-bottom: .15rem; }
-.wf-output .wf-value { display: block; font-size: 1.15rem; font-variant-numeric: tabular-nums;
-  line-height: 1.2; }
-.wf-output a.wf-value { text-decoration: none; border-bottom: 1px solid var(--border); }
-.wf-output a.wf-value:hover { border-bottom-color: var(--accent); }
-.wf-output .wf-stage { display: block; font-size: .68rem; color: var(--muted); margin-top: .2rem; }
+  color: var(--muted); margin: 0 0 .4rem; font-weight: 600; }
+.wf-output-table { border-collapse: collapse; width: 100%; max-width: 46rem; }
+.wf-output-table tr + tr { border-top: 1px solid var(--border); }
+.wf-output-table th, .wf-output-table td { padding: .32rem .6rem .32rem 0; text-align: left;
+  vertical-align: baseline; }
+.wf-output-table th { font-weight: 400; color: var(--muted); font-size: .84rem; width: 55%; }
+.wf-output-table .wf-value { font-variant-numeric: tabular-nums; font-size: .95rem;
+  white-space: nowrap; }
+.wf-output-table .wf-stage { color: var(--muted); font-size: .72rem; text-align: right;
+  white-space: nowrap; }
