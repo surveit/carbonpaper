@@ -11,20 +11,35 @@
 .files-table td, .files-table th { vertical-align: top; }
 .files-table th { white-space: nowrap; }
 .files-table td:not(.files-name) { white-space: nowrap; }
-.files-table th:nth-child(1) { width: 32%; }
-.files-table th:nth-child(2) { width: 30%; }
-.files-table th:nth-child(3) { width: 16%; }
-.files-table th:nth-child(4) { width: 15%; }
+/* Two shapes of table: a list of files, and the same list blocked into the schema
+   groups the distinguishing column is measured within. */
+.files-table th:nth-child(1) { width: 52%; }
+.files-table th:nth-child(3) { width: 22%; }
+.files-table th:nth-child(4) { width: 19%; }
 .files-table th:nth-child(5) { width: 7%; }
+.files-table.grouped th:nth-child(1) { width: 32%; }
+.files-table.grouped th:nth-child(2) { width: 30%; }
+.files-table.grouped th:nth-child(3) { width: 16%; }
+.files-table.grouped th:nth-child(4) { width: 15%; }
+/* Distinguishing data compares a file against the ones sharing its columns. Ungrouped
+   those files sit apart, so the column says nothing a reader can check. */
+.files-table:not(.grouped) .files-apart-head,
+.files-table:not(.grouped) td.files-apart { display: none; }
 /* The column that separates this file from its siblings, then its value here. The
    column name is the quiet half: the value is what a reader compares. */
 .files-group-toggle { display: inline-block; font-size: 13px; color: var(--muted);
     cursor: pointer; margin-bottom: 8px; }
 .files-group-toggle input { vertical-align: middle; margin-right: 5px; }
-/* The band a group of one shape sits under, when the table is grouped. */
-.files-table td.files-group-head { background: var(--sunk-deep); font-size: 11.5px;
-    color: var(--muted); font-family: var(--mono); padding: 5px 10px;
+/* The band a group sits under. Space above it is what blocks one group off from the
+   last; the first band takes none, having nothing above it. */
+.files-table tr.files-group-head td { background: var(--sunk-deep); font-size: 11.5px;
+    color: var(--muted); font-family: var(--mono); padding: 6px 10px;
+    border-top: 1px solid var(--border-strong);
     border-bottom: 1px solid var(--border); }
+.files-table tr.files-group-head:not(.first) td { padding-top: 22px;
+    border-top: 1px solid var(--bg); box-shadow: inset 0 12px 0 var(--bg); }
+/* A group's rows are inset under its band, so the block reads as one. */
+.files-table.grouped tbody tr:not(.files-group-head) td:first-child { padding-left: 20px; }
 
 /* Beats `.files-table td:not(.files-name)`, which is nowrap: an export's name is long
    and unbroken, and left nowrap it prints straight over the next column. */

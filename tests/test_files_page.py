@@ -161,9 +161,10 @@ def test_the_table_can_be_grouped_by_shape(project_id):
     assert "/static/files-group.js" in page
 
 
-def test_a_file_of_its_own_shape_says_so(project_id):
+def test_a_file_of_its_own_shape_is_grouped_alone(project_id):
     store(project_id, "only.csv", b"city,n\nlyon,1\n")
-    assert "only file of its shape" in client.get(f"/project/{project_id}/files").text
+    assert 'data-shape-label="2 columns · 1 file"' in client.get(
+        f"/project/{project_id}/files").text
 
 
 def test_two_files_carrying_the_same_values_separate_by_nothing(project_id):
