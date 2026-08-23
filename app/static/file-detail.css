@@ -128,6 +128,8 @@
 
 /* ── The rows, second ───────────────────────────────────────────────────── */
 .file-rows > summary { cursor: pointer; display: flex; align-items: baseline; gap: 8px; }
+.file-shape > summary { margin-bottom: 4px; }
+.file-shape .file-section-head { margin-top: 8px; }
 .file-rows > summary h2 { display: inline; margin: 0; font-size: 1.05rem; color: var(--fg); }
 .file-rows > summary::-webkit-details-marker { color: var(--muted); }
 .file-rows .table-scroll { margin-top: 10px; }
