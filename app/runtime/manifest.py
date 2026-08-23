@@ -22,12 +22,8 @@ from app.core.errors import (
     StageOutputMissing,
 )
 from app.core.frames import read_frame_file
-from app.core.persistence import (
-    JsonDict,
-    PersistedModel,
-    PersistenceScope,
-    get_store,
-)
+from app.core.persistence import JsonDict, get_store
+from app.core.record import PersistedModel, PersistenceScope
 from app.core.run_status import RunStatus, StageStatus
 from app.models import WorkflowStage
 from app.models.run_manifest import StageRecord

@@ -4,7 +4,7 @@ from typing import Any, ClassVar
 
 from pydantic import Field
 
-from app.core.persistence import PersistedModel, PersistenceScope
+from app.core.record import PersistedModel, PersistenceScope
 from app.models.stage import STAGE_SPEC_SCHEMA_VERSION, Stage
 
 

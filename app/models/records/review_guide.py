@@ -4,7 +4,7 @@ from typing import ClassVar
 
 from pydantic import Field
 
-from app.core.persistence import PersistedModel, PersistenceScope
+from app.core.record import PersistedModel, PersistenceScope
 from app.models.review_guide import ReviewGuideStep
 
 

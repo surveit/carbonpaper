@@ -4,12 +4,11 @@ import pyarrow as pa
 
 from app.core.frames import read_cell
 from app.models.claims import (
-    Claim,
     ClaimImportance,
-    ClaimShape,
     DataUniverseRequirement,
     StageOutputCellCitation,
 )
+from app.models.records.claims import Claim, ClaimShape
 
 _TOTAL = 4461000.0
 _RUN = "20260807T142707"

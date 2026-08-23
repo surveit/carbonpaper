@@ -62,19 +62,33 @@ A record a project owns is declared in `app/models/records/`, one module per rec
 and nothing but the declaration lives there: the functions that load, mutate and save
 it stay in the service that owns its lifecycle. `app/services/project.py` still holds
 project creation, deletion and metadata; the `Project` class it operates on is
-`app/models/records/project.py`. `tests/arch/test_records_are_declared_in_models.py`
-fails a `PersistedModel` subclass declared under `app/services`.
+`app/models/records/project.py`.
 
-The runtime's own records — `RunManifest`, `RunEventChunk`, `StageCitations`,
-`QueueFingerprints` — stay beside the code that writes them, because
+Two modules, not one, sit under that:
+
+- `app/core/record.py` — `PersistedModel` and `PersistenceScope`. Declaring a record
+  means importing this, so the import-linter contract protecting it (`pyproject.toml`)
+  is the list of places a stored row's shape may be written down.
+- `app/core/persistence.py` — the store seam: the `DocumentStore` protocol, the
+  process-wide handle, `now_iso`, and the JSON aliases. Unprotected, because reaching
+  storage is not the same act as declaring a row, and a service legitimately does the
+  first without doing the second.
+
+A record subclass sets `DUMP_OPTS` to any extra `model_dump` kwargs its stored shape
+needs — `{"by_alias": True, "exclude_none": True}` for the stage-bearing records above,
+`{"exclude_unset": True}` for `RunManifest`. It must never carry `"mode"`, which
+`PersistedModel.save` fixes to `"json"`.
+
+Three packages are on that whitelist. `app.models.records` is the home above.
+`app.runtime` keeps its own four — `RunManifest`, `RunEventChunk`, `StageCitations`,
+`QueueFingerprints` — because
 `app/runtime/_arch_tests/test_stages_no_cross_run_disk.py` grants a runtime module the
-right to call `.save()` only when that module declares a `PersistenceScope.RUN` record.
-Moving those declarations out would take the exemption with them.
-
-Three records also stay in `app/core`, which sits *below* `app/models` in the
-import-linter layers contract, so a declaration in `app/models` would be unreachable
-from the module that needs it: `ProjectFile` (`app/core/files.py`), `StageCacheEntry`
-(`app/core/stage_cache.py`) and `AgentSession` (`app/core/agent/store.py`).
+right to call `.save()` only while that module *declares* a `PersistenceScope.RUN`
+record; moving the declaration out would revoke the write. `app.core` keeps three
+records that `app/models` sits above in the layers contract, so a declaration in
+`app/models` would be unreachable from the module that needs it: `ProjectFile`
+(`app/core/files.py`), `StageCacheEntry` (`app/core/stage_cache.py`) and `AgentSession`
+(`app/core/agent/store.py`).
 
 ### The stage spec-dict shape
 

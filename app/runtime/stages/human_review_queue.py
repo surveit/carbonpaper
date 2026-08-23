@@ -17,7 +17,7 @@ import pyarrow as pa
 
 from app.core.frames import table_to_frame
 from app.core.frames import write_frame_file_with_csv_fallback
-from app.core.persistence import PersistedModel, PersistenceScope
+from app.core.record import PersistedModel, PersistenceScope
 from app.core.predicate import parse_predicate
 from app.models import AbstractStage, WorkflowStage
 from app.models.stage_contribution import QueueStats, StageContribution

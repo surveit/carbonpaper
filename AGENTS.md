@@ -77,12 +77,14 @@ Also `app/AGENTS.md` (web layer), `app/runtime/AGENTS.md` (the Runner), `README.
 - **A record is declared in `app/models/records/`, never in a service.** One module per
   `PersistedModel` subclass, holding the declaration and nothing else; the functions that
   load, mutate and save it stay in the service that owns its lifecycle and import the
-  class. Enforced by `tests/arch/test_records_are_declared_in_models.py`, with an empty
-  allowlist. Two sets of records are deliberately outside this: the runtime's own
-  (`RunManifest`, `RunEventChunk`, `StageCitations`, `QueueFingerprints`), because
+  class. Held by the import-linter contract protecting `app.core.record`: declaring a
+  record IS importing the base, so the whitelist of importers is the whitelist of places a
+  row's shape may be written down. `app.runtime` is on it because
   `app/runtime/_arch_tests/test_stages_no_cross_run_disk.py` lets a runtime module call
-  `.save()` only when it declares a `PersistenceScope.RUN` record, and three in `app/core`
-  (`ProjectFile`, `StageCacheEntry`, `AgentSession`), which `app/models` sits above.
+  `.save()` only while it DECLARES a `PersistenceScope.RUN` record; `app.core` is on it for
+  the three records `app/models` sits above (`ProjectFile`, `StageCacheEntry`,
+  `AgentSession`). Reaching storage is a different act: `app.core.persistence` holds the
+  store seam and is unprotected.
 - **A `PersistedModel`'s `id` is opaque. Never build one out of the record's own data.**
   A sha256, a filename, a name someone typed, a fingerprint — putting any of them in the id
   makes the id move when the value does. The record then has two identities that must agree,
