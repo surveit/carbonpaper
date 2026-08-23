@@ -24,7 +24,7 @@ from app.tools.tool_specs import (
     read_parameter_prose,
     read_tool_description,
 )
-from app.services.project import Project
+from app.models.records.project import Project
 
 
 class EditingContext(BaseModel):

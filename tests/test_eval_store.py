@@ -25,7 +25,7 @@ from app.evals.store import (
     save_eval_config,
     save_eval_run,
 )
-from app.services.versioning import WorkflowVersion
+from app.models.records.workflow_version import WorkflowVersion
 
 
 def _ref(path="x.csv", cols=("k",)):

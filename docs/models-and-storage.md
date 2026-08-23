@@ -56,6 +56,44 @@ A project's state lives in exactly two places:
 user uploaded. What is left on disk under a project is `code/`, `data/` and
 `runs/<id>/{outputs, artifacts, queue}` — frames and the files around them.
 
+### Where a record is declared
+
+A record a project owns is declared in `app/models/records/`, one module per record,
+and nothing but the declaration lives there: the functions that load, mutate and save
+it stay in the service that owns its lifecycle. `app/services/project.py` still holds
+project creation, deletion and metadata; the `Project` class it operates on is
+`app/models/records/project.py`. `tests/arch/test_records_are_declared_in_models.py`
+fails a `PersistedModel` subclass declared under `app/services`.
+
+The runtime's own records — `RunManifest`, `RunEventChunk`, `StageCitations`,
+`QueueFingerprints` — stay beside the code that writes them, because
+`app/runtime/_arch_tests/test_stages_no_cross_run_disk.py` grants a runtime module the
+right to call `.save()` only when that module declares a `PersistenceScope.RUN` record.
+Moving those declarations out would take the exemption with them.
+
+Three records also stay in `app/core`, which sits *below* `app/models` in the
+import-linter layers contract, so a declaration in `app/models` would be unreachable
+from the module that needs it: `ProjectFile` (`app/core/files.py`), `StageCacheEntry`
+(`app/core/stage_cache.py`) and `AgentSession` (`app/core/agent/store.py`).
+
+### The stage spec-dict shape
+
+`WorkflowVersion`, `WorkingCopy` and `Draft` each embed a list of `Stage` objects and
+each sets `DUMP_OPTS = {"by_alias": True, "exclude_none": True}`. That is the *spec-dict
+shape* — field aliases restored, unset optionals dropped — which is what
+`stage_to_spec_dict` produces. All three share it deliberately: a stage must read
+identically in the working copy, in a draft, and in a version cut from either, so an
+edit that changes nothing produces no diff in the stored document.
+
+### An optional field may be load-bearing
+
+`PersistedModel.load` validates with `extra="forbid"` and no tolerance for a missing
+required key, so widening a stored field is cheap and narrowing one is not. `Project.name`
+is the standing example: projects created before labels existed carry no `name` key at
+all, and making the field required would fail to load every one of them. `None` there is
+not a missing label — it means the project id is still the only name it has, which
+`Project.label()` reports.
+
 ## Migrations replay, so every revision must be a no-op at head
 
 `./start` runs `alembic upgrade head` on boot. A store created by

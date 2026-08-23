@@ -14,7 +14,7 @@ import pytest
 import app.services.run as run_service
 from app.models.review_guide import ReviewGuideStep
 from app.services import versioning, workspace
-from app.services.versioning import ReviewGuide
+from app.models.records.review_guide import ReviewGuide
 from app.web.review_packet import export_review_packet
 from app.web.review_packet.pages import PACKET_MAX_TABLE_ROWS
 from app.web.routers.review_packet import _write_zip

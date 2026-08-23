@@ -10,7 +10,7 @@ from app.core.run_status import RunStatus, StageStatus
 from app.main import app
 from app.models.run_manifest import StageRecord
 from app.models.stages.stage_base import StageType
-from app.services.project import Project
+from app.models.records.project import Project
 from app.runtime.manifest import RunManifest
 from app.web.admin.spend import (
     NO_PROJECT,

@@ -7,59 +7,20 @@ store id. A version is born unpublished, and a stored document carrying no
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import Any
 
-from pydantic import Field, ValidationError
+from pydantic import ValidationError
 
 from app.core.errors import DocumentNotFound, NoVersionToRunError, ReviewGuideValidationError
 from app.core.timestamp_ids import mint_timestamp_id
-from app.models import STAGE_SPEC_SCHEMA_VERSION, Stage
-from app.models.review_guide import ReviewGuideStep
+from app.models import Stage
 from app.models.workflow import find_stages_reaching_publish, parse_workflow
-from app.core.persistence import PersistedModel, PersistenceScope, get_store
+from app.models.records.review_guide import ReviewGuide
+from app.models.records.workflow_version import WorkflowVersion
+from app.core.persistence import get_store
 from app.core.utils import format_errors
 from app.services.errors import WorkflowLoadError
 from app.services.terms import load_terms
-
-
-class WorkflowVersion(PersistedModel):
-    """`id` is the composite `{project_id}/{version_id}`; `published` is a signal, not a gate on running."""
-
-    collection: ClassVar[str] = "workflow_version"
-    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
-    SCHEMA_VERSION: ClassVar[int] = STAGE_SPEC_SCHEMA_VERSION
-    # Dump the embedded stages in their spec-dict shape (field aliases
-    # restored, unset optionals dropped) — the same convention stage_to_spec_dict
-    # uses, so a version's on-disk stage shape matches the working copy's.
-    DUMP_OPTS: ClassVar[dict[str, Any]] = {"by_alias": True, "exclude_none": True}
-
-    version_id: str
-    parent_version: str | None = None
-    message: str
-    reviewer: str
-    stages: list[Stage] = Field(default_factory=list)
-    schemas: list[dict[str, Any]] = Field(default_factory=list)
-    published: bool = False
-    published_at: str | None = None
-    published_by: str | None = None
-
-
-class ReviewGuide(PersistedModel):
-    collection: ClassVar[str] = "review_guide"
-    # Authored prose ABOUT a version, written by save_version_guide alone: run
-    # activity may read it and never writes one — WorkflowVersion's profile.
-    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
-
-    # Found on these backpointers, never a composed id. Writing appends: the newest is live.
-    project: str
-    version_id: str
-    # Prose only: a stage's name, type, order and columns are read off the
-    # version's stages at render time rather than frozen a second time here.
-    steps: list[ReviewGuideStep]
-    unnarrated: list[str] = Field(default_factory=list)
-
-    def collect_step_stage_ids(self) -> list[str]:
-        return [stage_id for step in self.steps for stage_id in step.stage_ids]
 
 
 def create_version_from_stages(

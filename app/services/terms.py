@@ -3,25 +3,12 @@ project. This module is the sole reader and writer of both halves — generation
 validated result here, and readers that need models, not raw dicts, load through here."""
 from __future__ import annotations
 
-from typing import ClassVar
 
-from app.core.persistence import PersistedModel, PersistenceScope
 from app.models import parse_schema_library
 from app.models.named_schemas import SchemaLibrary
-from app.models.terms import Terms, Verb
+from app.models.terms import Terms
+from app.models.records.terms import StoredTerms
 from app.services import workspace
-
-
-class StoredTerms(PersistedModel):
-    """The halves are stored apart; composing them is where a word meaning two things raises."""
-
-    collection: ClassVar[str] = "terms"
-    # Read by the review-guide and stage-test generators, written only by the
-    # authoring surface — WorkflowVersion's and ReviewGuide's profile.
-    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
-
-    nouns: SchemaLibrary
-    verbs: list[Verb]
 
 
 def load_terms(project_id: str) -> Terms:

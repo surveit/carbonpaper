@@ -12,7 +12,7 @@ from app.main import app
 from app.services import versioning
 from app.services import project as project_service
 from app.models.review_guide import ReviewGuideStep
-from app.services.versioning import ReviewGuide
+from app.models.records.review_guide import ReviewGuide
 from app.services import workspace
 from stage_seed import add_stage
 

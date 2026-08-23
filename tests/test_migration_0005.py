@@ -5,7 +5,7 @@ import importlib.util
 from pathlib import Path
 from typing import Any
 
-from app.services.drafts import Draft
+from app.models.records.draft import Draft
 from conftest import drop_input_schemas
 from scripts.stage_signatures import add_signature
 

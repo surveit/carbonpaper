@@ -12,7 +12,8 @@ from app.core.run_status import RunStatus
 from app.models import StageType
 from app.models.stage_contribution import QueueStats
 from app.runtime.manifest import RunManifest
-from app.services.project import Project, WorkflowFile
+from app.services.project import WorkflowFile
+from app.models.records.project import Project
 from app.services.workspace import StageSummary
 from app.tools.shared import StageOutputRow, StageOutputRows
 from app.tools.tool_specs import find_tool_names

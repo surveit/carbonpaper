@@ -6,7 +6,7 @@ import pytest
 
 from app.services.project import create_project
 from app.services.methodology import read_methodology
-from app.services.project import Project
+from app.models.records.project import Project
 
 
 def test_create_project_stores_document_and_meta(projects_root):

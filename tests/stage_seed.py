@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.persistence import get_store
-from app.services.loader import WorkingCopy
+from app.models.records.working_copy import WorkingCopy
 
 _STAMP = "2026-01-01T00:00:00"
 

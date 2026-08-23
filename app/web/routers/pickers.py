@@ -12,7 +12,8 @@ from fastapi.responses import HTMLResponse
 
 from app.core.run_status import RunStatus
 from app.services.project import list_project_listings, project_exists
-from app.services.versioning import WorkflowVersion, list_versions
+from app.services.versioning import list_versions
+from app.models.records.workflow_version import WorkflowVersion
 from app.web.breadcrumbs import Picker, PickerRow
 from app.web.config import templates
 from app.web.run_index import RunIndexRow, build_run_index_rows

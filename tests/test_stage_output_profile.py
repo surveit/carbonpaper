@@ -10,7 +10,7 @@ from app.core.errors import StageNotInRun, StageOutputMissing
 from app.models import parse_stage
 from app.services import workspace
 from app.services.run import read_run_status, read_stage_output
-from app.services.versioning import WorkflowVersion
+from app.models.records.workflow_version import WorkflowVersion
 from app.services.workflow_test import run_workflow_test
 
 # One distinct doc_id per row, 3 statuses in equal parts, and a numeric column

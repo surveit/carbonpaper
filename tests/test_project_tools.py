@@ -9,9 +9,9 @@ from app.tools.editing import EditingContext, build_editing_tools
 from app.core.agent.bound_tool import BoundToolSpec
 from app.core.errors import ReviewGuideValidationError
 from app.models.review_guide import ReviewGuideDraft, ReviewGuideStep
-from app.services.versioning import ReviewGuide
+from app.models.records.review_guide import ReviewGuide
 from app.services import workspace
-from app.services.project import Project
+from app.models.records.project import Project
 from stage_seed import add_stage, read_stage
 
 # Minimal valid config block per stage type (app/models/stage.py:

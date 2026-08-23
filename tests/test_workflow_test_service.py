@@ -8,7 +8,7 @@ from app.core.errors import NoWorkflowTestSourceError, NoWorkflowTestVersionErro
 from app.models import parse_stage
 from app.services import workspace
 from app.services.workflow_test import run_workflow_test
-from app.services.versioning import WorkflowVersion
+from app.models.records.workflow_version import WorkflowVersion
 from conftest import QUEUE_COLUMNS
 from run_seed import manifest_exists, read_manifest
 

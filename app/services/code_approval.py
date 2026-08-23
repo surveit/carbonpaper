@@ -6,13 +6,9 @@ there would close an import cycle.
 """
 from __future__ import annotations
 
-from typing import ClassVar
 
-from app.core.persistence import (
-    PersistedModel,
-    PersistenceScope,
-    now_iso,
-)
+from app.core.persistence import now_iso
+from app.models.records.code_approval import CodeExecutionApproval
 
 # What the owner is told before they answer. Rendered by every surface that asks
 # — the tool that requests it and the page that grants it — so the warning a
@@ -24,18 +20,6 @@ CODE_EXECUTION_WARNING = (
     "reshapes the table opaquely, so a trace stops at it — a figure published downstream "
     "cannot be walked back to the rows behind it."
 )
-
-
-class CodeExecutionApproval(PersistedModel):
-    collection: ClassVar[str] = "code_execution_approval"
-    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
-
-    # One record per approved project, found on this FIELD — the id stays an opaque uuid.
-    project_id: str
-    approved_at: str
-    # Why the owner was asked, in the words of whoever asked. Kept so the person
-    # revoking later can see what they said yes to.
-    reason: str
 
 
 def has_code_execution_approval(project_id: str) -> bool:

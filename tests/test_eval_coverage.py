@@ -154,7 +154,7 @@ def test_a_missing_result_table_states_nothing_rather_than_guessing(tmp_path):
 # ── The section the Transform pane draws ────────────────────────────────────
 
 def _stored_version(version_id: str) -> None:
-    from app.services.versioning import WorkflowVersion
+    from app.models.records.workflow_version import WorkflowVersion
     WorkflowVersion(id=f"demo/{version_id}", version_id=version_id,
                     created_at="2026-08-12T00:00:00", message="m", reviewer="r").save()
 

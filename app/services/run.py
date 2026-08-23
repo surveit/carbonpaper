@@ -30,12 +30,8 @@ from app.runtime.runner import prepare_run, resume_run, run_prepared
 from app.runtime.citations import build_row_trace_url as build_row_trace_url
 from app.services.errors import WorkflowLoadError
 from app.services.run_manifest_metadata import name_run
-from app.services.versioning import (
-    WorkflowVersion,
-    load_version,
-    load_version_stages,
-    resolve_version_id,
-)
+from app.services.versioning import load_version, load_version_stages, resolve_version_id
+from app.models.records.workflow_version import WorkflowVersion
 from app.services.workspace import resolve_run_dir, resolve_runs_dir
 
 

@@ -12,7 +12,7 @@ import pytest
 
 from app.models import parse_stage
 from app.models.review_guide import ReviewGuideStep
-from app.services.versioning import ReviewGuide
+from app.models.records.review_guide import ReviewGuide
 from app.services import workspace
 from app.models.workflow import parse_workflow
 from app.models.workflow_stage import WorkflowStage

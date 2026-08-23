@@ -26,7 +26,7 @@ from app.core.frames import write_frame_file
 from app.core.persistence import get_store
 from app.evals.store import save_eval_config, save_eval_run
 from app.runtime.run_log import count_events
-from app.services.versioning import WorkflowVersion
+from app.models.records.workflow_version import WorkflowVersion
 from app.services import workspace
 from stage_seed import add_stage, read_stages, set_stages
 from run_seed import store_events

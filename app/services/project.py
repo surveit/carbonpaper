@@ -30,17 +30,15 @@ from app.models.review_guide import ReviewGuideDraft
 from app.models.run_manifest import (
     records_a_test_run,
 )
-from app.services.versioning import ReviewGuide
+from app.models.records.project import Project as Project
+from app.models.records.review_guide import ReviewGuide
 from app.core.run_status import RunStatus
 from app.services import stage_edit, terms, versioning, workspace
 from app.services import loader
 from app.services import methodology
 from app.services import run as run_service
 from app.services.errors import WorkflowLoadError
-from app.services.project_record import (
-    Project as Project,
-    read_project_name as read_project_name,
-)
+from app.services.project_record import read_project_name as read_project_name
 from app.services.stage_edit import AddStagesResult, EditStageResult
 
 

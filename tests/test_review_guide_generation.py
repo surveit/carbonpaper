@@ -26,7 +26,8 @@ from app.models.review_guide import ReviewGuideDraft, ReviewGuideStep
 from app.services import versioning, workspace
 from app.services import project as project_service
 from stage_seed import add_stage
-from app.services.methodology import Methodology, write_methodology
+from app.services.methodology import write_methodology
+from app.models.records.methodology import Methodology
 
 _ROWS = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _DOUBLED = {"columns": [
