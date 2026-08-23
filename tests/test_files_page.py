@@ -148,8 +148,17 @@ def test_two_files_of_one_shape_are_told_apart_by_where_they_differ(project_id):
     store(project_id, "lyon.csv", b"city,n\nlyon,1\nlyon,2\nlyon,3\n")
     store(project_id, "paris.csv", b"city,n\nparis,1\nparis,2\nparis,3\n")
     page = client.get(f"/project/{project_id}/files").text
-    assert "tells it apart" in page
+    assert "distinguishing data" in page
     assert "city" in page and "lyon" in page and "paris" in page
+
+
+def test_the_table_can_be_grouped_by_shape(project_id):
+    store(project_id, "lyon.csv", b"city,n\nlyon,1\n")
+    store(project_id, "terms.csv", b"term,lang\nmerde,fr\n")
+    page = client.get(f"/project/{project_id}/files").text
+    assert "Group files by data shape" in page
+    assert 'data-shape-label="2 columns · 1 file"' in page
+    assert "/static/files-group.js" in page
 
 
 def test_a_file_of_its_own_shape_says_so(project_id):

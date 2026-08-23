@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from app.core.errors import FileNotStoredError
 from app.core.file_comparison import (
-    choose_the_telling_column, group_files_by_columns, read_leading_value,
+    ShapeGroup, choose_the_telling_column, group_files_by_columns, read_leading_value,
 )
 from app.core.file_shape import FileShape
 from app.core.persistence import JsonDict
@@ -41,6 +41,9 @@ class FileRow(BaseModel):
     distinction: Distinction | None = None
     # How many files carry these columns, this one included.
     shape_group_size: int = 1
+    # Which files group together, and what to call the group.
+    shape_key: str = ""
+    shape_label: str = ""
 
 
 class FilesView(BaseModel):
@@ -62,9 +65,10 @@ def build_files_view(project_id: str) -> FilesView:
     used, quota = file_store.measure_files_used_bytes(), file_store.files_quota_bytes()
     shapes = _read_shapes(project_id, records)
     distinctions = find_what_tells_them_apart(shapes)
+    groups = group_files_by_columns(shapes)
     return FilesView(
         rows=[_build_row(record, reads.get(record.sha256, []),
-                         distinctions.get(record.id), _count_shape_group(shapes, record.id))
+                         distinctions.get(record.id), _find_group(groups, record.id))
               for record in records],
         # Summed off the records, not the disk: the disk is shared, and one project's
         # files are the ones it holds.
@@ -136,15 +140,20 @@ def _read_shapes(
     return shapes
 
 
-def _count_shape_group(shapes: dict[str, FileShape], file_id: str) -> int:
-    if file_id not in shapes:
-        return 1
-    group = next(g for g in group_files_by_columns(shapes) if file_id in g.file_ids)
-    return len(group.file_ids)
+def _find_group(groups: list[ShapeGroup], file_id: str) -> ShapeGroup | None:
+    return next((group for group in groups if file_id in group.file_ids), None)
+
+
+def _name_group(group: ShapeGroup | None) -> str:
+    if group is None:
+        return "not a table"
+    files = len(group.file_ids)
+    return (f"{len(group.columns)} columns · {files} file"
+            f"{'' if files == 1 else 's'}")
 
 
 def _build_row(record: file_store.ProjectFile, run_ids: list[str],
-               distinction: Distinction | None, shape_group_size: int) -> FileRow:
+               distinction: Distinction | None, group: ShapeGroup | None) -> FileRow:
     return FileRow(
         file_id=record.id,
         sha256=record.sha256,
@@ -155,5 +164,7 @@ def _build_row(record: file_store.ProjectFile, run_ids: list[str],
         completeness=record.completeness,
         lineage=record.lineage,
         distinction=distinction,
-        shape_group_size=shape_group_size,
+        shape_group_size=len(group.file_ids) if group else 1,
+        shape_key="|".join(group.columns) if group else "",
+        shape_label=_name_group(group),
     )

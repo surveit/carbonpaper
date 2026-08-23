@@ -18,6 +18,14 @@
 .files-table th:nth-child(5) { width: 7%; }
 /* The column that separates this file from its siblings, then its value here. The
    column name is the quiet half: the value is what a reader compares. */
+.files-group-toggle { display: inline-block; font-size: 13px; color: var(--muted);
+    cursor: pointer; margin-bottom: 8px; }
+.files-group-toggle input { vertical-align: middle; margin-right: 5px; }
+/* The band a group of one shape sits under, when the table is grouped. */
+.files-table td.files-group-head { background: var(--sunk-deep); font-size: 11.5px;
+    color: var(--muted); font-family: var(--mono); padding: 5px 10px;
+    border-bottom: 1px solid var(--border); }
+
 /* Beats `.files-table td:not(.files-name)`, which is nowrap: an export's name is long
    and unbroken, and left nowrap it prints straight over the next column. */
 .files-table td.files-apart { white-space: normal; }

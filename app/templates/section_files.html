@@ -40,14 +40,19 @@
 </div>
 
 {% if files.rows %}
-<table class="stages files-table">
+{# Off by default: the table is a list of files first. Grouped, the distinguishing
+   column reads down a set that shares a schema, which is the only set it compared. #}
+<label class="files-group-toggle"><input type="checkbox" id="group-by-shape">
+  Group files by data shape</label>
+<table class="stages files-table" id="files-table">
   <thead>
-    <tr><th>file</th><th>tells it apart</th><th>added</th><th>read by</th><th></th></tr>
+    <tr><th>file</th><th>distinguishing data</th><th>added</th><th>read by</th><th></th></tr>
   </thead>
   <tbody>
     {% for row in files.rows %}
     {# The row opens the file's own page, where its completeness, its note and its shape are. #}
-    <tr class="js-run-row" data-href="/project/{{ state.id }}/files/{{ row.file_id }}">
+    <tr class="js-run-row" data-href="/project/{{ state.id }}/files/{{ row.file_id }}"
+        data-shape-key="{{ row.shape_key }}" data-shape-label="{{ row.shape_label }}">
       <td class="files-name"><a href="/project/{{ state.id }}/files/{{ row.file_id }}"><code>{{ row.filename }}</code></a> <span class="muted files-size">{{ row.size }}</span></td>
       {# Only ever against the files sharing this one's columns, and only when they
          disagree about something. Silence is the honest answer the rest of the time. #}
@@ -102,6 +107,7 @@
   </form>
 </dialog>
 <script src="/static/files-delete.js"></script>
+<script src="/static/files-group.js"></script>
 {% else %}
 <div class="empty-state">
   <h2>No files yet</h2>
