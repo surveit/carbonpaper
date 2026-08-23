@@ -17,20 +17,20 @@ def _stage(outputs):
         "aggregate": {"group_by": [], "aggregations": [
             {"output_column": "external_spend", "formula": "sum",
              "value_column": "total_income_usd"}]},
-        **({"outputs": outputs} if outputs else {}),
+        **({"workflow_outputs": outputs} if outputs else {}),
     })
 
 
 def test_a_stage_names_the_column_it_publishes():
     stage = _stage([{"slug": "external-spend", "label": "Paid to outside firms",
                      "column": "external_spend"}])
-    assert [(o.slug, o.column) for o in stage.outputs] == [
+    assert [(o.slug, o.column) for o in stage.workflow_outputs] == [
         ("external-spend", "external_spend")
     ]
 
 
 def test_a_stage_publishes_nothing_by_default():
-    assert _stage(None).outputs is None
+    assert _stage(None).workflow_outputs is None
 
 
 def test_any_stage_type_may_publish_a_result():
@@ -42,12 +42,12 @@ def test_any_stage_type_may_publish_a_result():
         "signature": {"form": "extends", "reads": [{"input": "flag_in_house_filings",
             "columns": [{"name": "in_scope", "type": "bool", "nullable": False}]}]},
         "filter": {"code": "def should_include(row):\n    return row['in_scope']\n"},
-        "outputs": [{"slug": "in-scope", "label": "In scope", "column": "in_scope"}],
+        "workflow_outputs": [{"slug": "in-scope", "label": "In scope", "column": "in_scope"}],
     })
-    assert [o.slug for o in stage.outputs] == ["in-scope"]
+    assert [o.slug for o in stage.workflow_outputs] == ["in-scope"]
 
 
 def test_the_slug_does_not_depend_on_a_run():
     # Two parses of the same authored stage agree, because nothing here is per-run.
     declared = [{"slug": "external-spend", "label": "Paid", "column": "external_spend"}]
-    assert _stage(declared).outputs == _stage(declared).outputs
+    assert _stage(declared).workflow_outputs == _stage(declared).workflow_outputs

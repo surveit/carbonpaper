@@ -151,7 +151,7 @@ STAGE_DESCRIPTION_DESCRIPTION = (
 
 
 # ── The shared field list ────────────────────────────────────────────────────
-class DeclaredOutput(_Base):
+class WorkflowOutput(_Base):
     # A slug identifies the output across runs; the value it holds is per run.
     slug: str
     label: str
@@ -191,7 +191,7 @@ class AuthoredStageFields(_Base):
     # the inputs supply (find_signature_issues).
     signature: Optional[TransformSignature] = None
     # The columns this workflow publishes as results. Authored, so the draft carries it.
-    outputs: Optional[list[DeclaredOutput]] = None
+    workflow_outputs: Optional[list[WorkflowOutput]] = None
 
     @field_validator("inputs", mode="before")
     @classmethod
