@@ -191,22 +191,27 @@
     color: var(--muted);
     font-size: 11.5px;
 }
-.picker-row-action { position: relative; display: flex; }
+/* Stacked, not side by side: two actions in a row take the width the filename needs. */
+.picker-row-action { position: relative; display: flex; flex-direction: column;
+    border-left: 1px solid var(--border); }
 .picker-action {
-    align-self: stretch;
-    min-width: 74px;
+    flex: 1;
+    min-width: 62px;
+    padding: 3px 10px;
     border: 0;
-    border-left: 1px solid var(--border);
-    border-radius: 0 4px 4px 0;
     background: transparent;
     color: var(--muted);
     font: inherit;
     font-size: 12px;
+    line-height: 1.5;
     cursor: pointer;
 }
-/* The link out to the file's page sits beside Preview and reads as one of the pair. */
+.picker-action + .picker-action { border-top: 1px solid var(--border); }
+.picker-action:first-child { border-radius: 0 4px 0 0; }
+.picker-action:last-child { border-radius: 0 0 4px 0; }
+.picker-action:only-child { border-radius: 0 4px 4px 0; }
 a.picker-action { display: inline-flex; align-items: center; justify-content: center;
-    padding: 0 10px; text-decoration: none; }
+    text-decoration: none; }
 .picker-action:hover,
 .picker-action:focus-visible {
     outline: none;
