@@ -252,3 +252,46 @@ def test_an_entry_stored_before_the_field_existed_replays_a_null_not_a_wrong_bra
 
     assert cold.taken[1] == ("transform/0:elif0",)
     assert warm.taken == [("transform/0:if",), None, ("transform/0:else",)]
+
+
+def _cached_filter(sid: str, input_id: str, code: str) -> Stage:
+    spec = _filter(sid, input_id, code).model_dump(mode="json", exclude_none=True)
+    return parse_stage({**spec, "cache": True})
+
+
+def _lineage(run_dir, stage_id: str) -> list[list[tuple[str, int]]]:
+    lineage = read_lineage_sidecar(run_dir, stage_id).lineage
+    assert lineage is not None
+    return [[(p.stage_id, p.row_ordinal) for p in entry] for entry in lineage.parents]
+
+
+_KEEP_HIGH = """
+def should_include(row):
+    if row["b"] > 1:
+        return True
+    return False
+"""
+
+
+def test_a_warm_cache_preserves_the_lineage_sidecar_too(tmp_path) -> None:
+    src = pd.DataFrame({"a": ["x", "y", "z", "w"], "b": [5, 1, 0, 9]})
+    add_stage(tmp_path, _load_stage("src", src, tmp_path).model_dump(mode="json", exclude_none=True))
+    add_stage(tmp_path, _cached_filter("kept", "src", _KEEP_HIGH).model_dump(
+        mode="json", exclude_none=True))
+    version = save_working_copy_as_version(
+        tmp_path.name, message="filter cache", reviewer="test").version_id
+    versioning.publish_version(tmp_path.name, version, reviewer="human")
+
+    runs = []
+    for _ in range(2):
+        manifest = run_prepared(prepare_run(
+            tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)))
+        assert manifest["status"] == "ok", manifest["status"]
+        run_dir = tmp_path / "runs" / manifest["run_id"]
+        runs.append((_lineage(run_dir, "kept"), _sidecar(run_dir, "kept").taken))
+
+    cold, warm = runs
+    # Lineage comes from the surviving ordinals, which a cached row fills like any other.
+    assert cold[0] == [[("src", 0)], [("src", 3)]]
+    assert warm[0] == cold[0]
+    assert warm[1] == cold[1]
