@@ -13,7 +13,8 @@ from app.core.source_files import (
 from app.core.column_profile import (
     ColumnProfile, NumericRange, StageOutputProfile, TableProfile, ValueCount,
 )
-from app.core.file_shape import FileShape, measure_column_shape
+from app.core.file_shape import FileShape, StoredFileShape, measure_column_shape
+from app.core.ids import ID
 from app.core.frames import frame_to_table, table_to_frame
 from app.services.run import read_stage_output
 from app.core.files import open_project_file
@@ -86,6 +87,16 @@ def read_stored_file_frame(
         header_row=header_row, first_column=first_column,
     )
     return StoredFileFrame(filename=record.filename, format=file_format, frame=frame)
+
+
+def read_file_shape(project_id: ID, file_id: ID, *, max_values: int) -> FileShape:
+    """Measured on the first ask and kept: a stored file's bytes never change."""
+    stored = StoredFileShape.find(file_id=file_id)
+    if stored:
+        return stored[0].shape
+    shape = measure_file_shape(project_id, file_id, max_values=max_values)
+    StoredFileShape(file_id=file_id, shape=shape).save()
+    return shape
 
 
 def measure_file_shape(project_id: str, file_id: str, *, max_values: int) -> FileShape:

@@ -259,7 +259,31 @@ count alone calls all 51 full. The shares are over every row; a column that is n
 wholly filled offers a switch to read them over the rows that carry a value instead.
 
 `app/core/file_shape.py` measures a column from its values (no pandas);
-`app/services/frame_profile.py` reads the file and hands it those values.
+`app/services/frame_profile.py` reads the file and hands it those values, and
+`read_file_shape` keeps what it measured — a stored file's bytes never change, so the
+Files index and this page read no files after the first look at each.
+
+## Telling one file from another (`app/core/file_comparison.py`)
+
+The Files index carries a **tells it apart** column. Nothing there decides what a column
+MEANS. A column earns the cell by how much the files DISAGREE about it, and only ever
+against files that carry the same columns — comparing a lexicon to a social export says
+nothing, so the files are grouped by their exact column set first and a group of one is
+told it is alone.
+
+Disagreement is the mean pairwise total-variation distance between the files'
+distributions over a column's commonest values, with everything else as one bucket. It
+is a distance between distributions rather than an overlap between value sets, because
+the case that matters is four Meltwater exports drawing on the SAME four queries in
+different proportions: their value sets are identical and their mixtures are not.
+
+Two guards keep it honest. A column whose listed values cover less than half a file's
+rows is not compared at all — an id, a headline, a timestamp, where two files differing
+means nothing. And of the columns that pass, the one shown is the one whose LEADING
+values differ across the most files, not the one that disagrees most: `Author Name`
+disagrees most across those four exports and every one of them leads with
+`Comment on Valeurs actuelles`, which is a cell that reads the same on every row.
+When no column clears the floor, the page says nothing separates them.
 
 ## The node panel + workflow versioning (`_node_panel.html`, `versions.html`)
 
