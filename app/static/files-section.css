@@ -18,7 +18,9 @@
 .files-table th:nth-child(5) { width: 7%; }
 /* The column that separates this file from its siblings, then its value here. The
    column name is the quiet half: the value is what a reader compares. */
-.files-apart { white-space: normal; }
+/* Beats `.files-table td:not(.files-name)`, which is nowrap: an export's name is long
+   and unbroken, and left nowrap it prints straight over the next column. */
+.files-table td.files-apart { white-space: normal; }
 .files-apart-column { font-family: var(--mono); font-size: 11px; color: var(--muted);
     display: block; }
 .files-apart-value { overflow-wrap: anywhere; }
