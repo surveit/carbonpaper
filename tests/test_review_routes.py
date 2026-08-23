@@ -152,7 +152,7 @@ def _build_and_halt(tmp_path, monkeypatch):
     _write_stage(project_dir, "03_review.json", _review_stage())
     _seed_version(project_dir)
 
-    manifest = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))
+    manifest = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir))).manifest
     assert manifest["status"] == "awaiting_review"
     assert manifest["halted_at"] == ["review"]
 
@@ -378,7 +378,7 @@ def test_e2e_decide_every_verdict_then_resume_completes(tmp_path, monkeypatch):
     _write_stage(project_dir, "02_review.json", _e2e_review_stage())
     _seed_version(project_dir)
 
-    manifest = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))
+    manifest = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir))).manifest
     assert manifest["status"] == "awaiting_review"
     run_id = manifest["run_id"]
 
@@ -417,7 +417,7 @@ def test_e2e_decide_every_verdict_then_resume_completes(tmp_path, monkeypatch):
         assert set(entry.frozen_input) == {"id", "score"}
 
     resumed = runner.resume_run(project_dir / "runs" / run_id, project_dir.name, run_id,
-                                  *resumed_stages(project_dir, run_id))
+                                  *resumed_stages(project_dir, run_id)).manifest
     assert resumed["status"] == "ok"
 
     out = pd.read_parquet(run_dir / "outputs" / "review.parquet").set_index("id")
@@ -470,7 +470,7 @@ def test_decide_400_on_notes_when_the_stage_declares_no_notes_column(tmp_path, m
     _write_stage(project_dir, "02_review.json", _no_notes_review_stage())
     _seed_version(project_dir)
 
-    manifest = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))
+    manifest = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir))).manifest
     run_id = manifest["run_id"]
     fingerprints = _read_fingerprints(project, run_id)
 
@@ -591,7 +591,7 @@ def _build_and_halt_bool_queue(tmp_path, monkeypatch, project, *, ai_value, null
             {"name": "flag", "type": "bool", "nullable": nullable}]}})
     _write_stage(project_dir, "02_review.json", _bool_review_stage(nullable))
     _seed_version(project_dir)
-    run_id = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))["run_id"]
+    run_id = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir))).manifest["run_id"]
     run_dir = project_dir / "runs" / run_id
     return run_id, _read_fingerprints(project, run_dir.name), pd.read_parquet(run_dir / "queue" / "review.parquet")
 
@@ -701,7 +701,7 @@ def _halt_a_temporal_queue(tmp_path, project, column_type):
     _write_stage(project_dir, "02_review.json", _temporal_review_stage(column_type))
     _seed_version(project_dir)
     run_id = run_prepared(prepare_run(
-        project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))["run_id"]
+        project_dir / "runs", project_dir.name, *pinned_stages(project_dir))).manifest["run_id"]
     return run_id, _read_fingerprints(project, run_id)
 
 
@@ -820,7 +820,7 @@ def _build_and_halt_declared_range_queue(tmp_path, monkeypatch, project):
     _write_stage(project_dir, "01_load.json", load)
     _write_stage(project_dir, "02_review.json", _declared_range_review_stage())
     _seed_version(project_dir)
-    run_id = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))["run_id"]
+    run_id = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir))).manifest["run_id"]
     return run_id, _read_fingerprints(project, run_id)
 
 
@@ -863,7 +863,7 @@ def _build_and_halt_queue_over(tmp_path, monkeypatch, project, stages):
     for index, stage in enumerate(stages, start=1):
         _write_stage(project_dir, f"{index:02d}_{stage['id']}.json", stage)
     _seed_version(project_dir)
-    manifest = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))
+    manifest = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir))).manifest
     assert manifest["status"] == "awaiting_review", manifest
     run_id = manifest["run_id"]
     return run_id, _read_fingerprints(project, run_id)
@@ -1808,7 +1808,7 @@ def test_two_identical_rows_share_one_decision_and_both_carry_it(tmp_path, monke
     _seed_version(project_dir)
 
     manifest = run_prepared(
-        prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))
+        prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir))).manifest
     assert manifest["status"] == "awaiting_review"
     run_id = manifest["run_id"]
     run_dir = project_dir / "runs" / run_id
@@ -1832,7 +1832,7 @@ def test_two_identical_rows_share_one_decision_and_both_carry_it(tmp_path, monke
     assert '<strong id="reviewed-count">2</strong> of <strong>2</strong> reviewed' in html
 
     resumed = runner.resume_run(project_dir / "runs" / run_id, project_dir.name, run_id,
-                                *resumed_stages(project_dir, run_id))
+                                *resumed_stages(project_dir, run_id)).manifest
     assert resumed["status"] == "ok"
     out = pd.read_parquet(run_dir / "outputs" / "review.parquet")
     assert len(out) == 2

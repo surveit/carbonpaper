@@ -85,7 +85,7 @@ def project_run_before_the_field(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
 
 def _panel(project_dir: Path) -> str:
-    run_id = str(execute_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir))["run_id"])
+    run_id = str(execute_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)).manifest["run_id"])
     client = TestClient(app)
     response = client.get(f"/project/{PROJECT}/runs/{run_id}/stage/judge/partial")
     assert response.status_code == 200, response.text

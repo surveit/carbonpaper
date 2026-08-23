@@ -27,7 +27,7 @@ from app.runtime.manifest import (
     resolve_output_path,
 )
 from app.runtime.runner import prepare_run, resume_run, run_prepared
-from app.services.claims import save_run_claims
+from app.services.claims import save_claims
 from app.runtime.citations import build_row_trace_url as build_row_trace_url
 from app.services.errors import WorkflowLoadError
 from app.services.run_manifest_metadata import name_run
@@ -69,14 +69,10 @@ def execute(
 
 
 def _run_and_save_claims(prep: dict[str, Any], project_id: str) -> dict[str, Any]:
-    """The runtime persists nothing outliving its run, so the claims are saved out here."""
-    manifest = run_prepared(prep)
-    run_id = str(prep["run_id"])
-    save_run_claims(
-        project_id, run_id, load_run_workflow(project_id, manifest),
-        read_run_manifest(project_id, run_id).stage_records,
-    )
-    return manifest
+    """The runtime mints what a run stated and persists nothing; saving it is the job here."""
+    outcome = run_prepared(prep)
+    save_claims(outcome.claims)
+    return outcome.manifest
 
 
 def _prepare(

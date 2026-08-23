@@ -170,7 +170,7 @@ def test_run_binding_recorded_with_hash_and_source(tmp_path):
     pd.DataFrame({"name": ["z"], "val": [9]}).to_csv(other, index=False)
 
     manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path),
-                           bindings={"load": {"path": str(other)}})
+                           bindings={"load": {"path": str(other)}}).manifest
 
     assert manifest["status"] == "ok"
     rec = manifest["input_bindings"]["load"]
@@ -184,7 +184,7 @@ def test_run_binding_recorded_with_hash_and_source(tmp_path):
 
 def test_workflow_path_recorded_as_workflow_source(tmp_path):
     data = _make_bound_project(tmp_path)
-    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
+    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)).manifest
     rec = manifest["input_bindings"]["load"]
     assert rec["source"] == "workflow"
     assert rec["files"][0]["path"] == str(data)
@@ -202,7 +202,7 @@ def test_unbound_input_leaves_no_run_dir(tmp_path):
     versioning.publish_version(tmp_path.name, vid, reviewer="human")
 
     with pytest.raises(MissingInputBindingError, match="load"):
-        execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
+        execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)).manifest
     assert not (tmp_path / "runs").exists()
 
 
@@ -210,7 +210,7 @@ def test_bound_file_must_exist_before_run_dir(tmp_path):
     _make_bound_project(tmp_path)
     with pytest.raises(MissingInputBindingError, match="ghost"):
         execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path),
-                    bindings={"load": {"path": str(tmp_path / "ghost.csv")}})
+                    bindings={"load": {"path": str(tmp_path / "ghost.csv")}}).manifest
     assert not (tmp_path / "runs").exists()
 
 

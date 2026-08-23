@@ -54,7 +54,7 @@ def test_limit_on_a_source_stage_caps_the_rows_it_loads(tmp_path):
     _make_project(tmp_path)
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path),
-                           limits={"load": 2})
+                           limits={"load": 2}).manifest
 
     assert manifest["status"] == "ok"
     [rec] = manifest["stage_records"]
@@ -76,7 +76,7 @@ def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
     _make_project(tmp_path)
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path),
-                           limits={"load": 3}, offsets={"load": 1})
+                           limits={"load": 3}, offsets={"load": 1}).manifest
 
     [rec] = manifest["stage_records"]
     assert rec["output_row_count"] == 3
@@ -100,7 +100,7 @@ def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
 def test_bust_cache_is_recorded_on_the_manifest(tmp_path):
     _make_project(tmp_path)
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path), bust_cache=True)
+    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path), bust_cache=True).manifest
 
     assert manifest["parameters"]["bust_cache"] is True
     on_disk = read_manifest(tmp_path, manifest["run_id"])
@@ -110,7 +110,7 @@ def test_bust_cache_is_recorded_on_the_manifest(tmp_path):
 def test_an_ordinary_run_records_bust_cache_false(tmp_path):
     _make_project(tmp_path)
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
+    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)).manifest
     assert manifest["parameters"]["bust_cache"] is False
 
 
@@ -138,9 +138,9 @@ def test_per_run_override_for_unknown_stage_id_fails_loudly(tmp_path):
     _make_project(tmp_path)
     _seed_version(tmp_path)
     with pytest.raises(ValueError, match="unknown stage id"):
-        execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path), limits={"nope": 3})
+        execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path), limits={"nope": 3}).manifest
     with pytest.raises(ValueError, match="unknown stage id"):
-        execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path), offsets={"nope": 1})
+        execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path), offsets={"nope": 1}).manifest
 
 
 _IDENTITY_ROW_FUNCTION = "def transform(row):\n    return row\n"
@@ -176,7 +176,7 @@ def test_offset_makes_the_trace_land_on_the_true_upstream_row(tmp_path):
                         _IDENTITY_ROW_FUNCTION)
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path),
-                           offsets={"keep": 2})
+                           offsets={"keep": 2}).manifest
 
     run_dir = tmp_path / "runs" / manifest["run_id"]
     assert list(pd.read_parquet(run_dir / "outputs" / "keep.parquet")["val"]) == [2, 3, 4]
@@ -221,7 +221,7 @@ def test_duplicate_input_rows_reach_the_stage_and_are_all_emitted(tmp_path):
         {"name": "a", "val": 1},
     ])
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
+    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)).manifest
 
     records = {r["stage_id"]: r for r in manifest["stage_records"]}
     assert records["consume"]["status"] == "ok"
@@ -270,7 +270,7 @@ def test_output_missing_a_declared_column_errors_the_stage_and_blocks_downstream
     _output_schema_violation_project(
         tmp_path, "def transform(df):\n    return df[['name']]\n")
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
+    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)).manifest
 
     records = {r["stage_id"]: r for r in manifest["stage_records"]}
     assert records["load"]["status"] == "ok"
@@ -289,7 +289,7 @@ def test_warning_only_output_report_does_not_error_the_stage(tmp_path):
     _output_schema_violation_project(
         tmp_path, "def transform(df):\n    df['extra'] = 1\n    return df\n")
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
+    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)).manifest
 
     records = {r["stage_id"]: r for r in manifest["stage_records"]}
     assert records["shape"]["status"] != "error"
@@ -329,7 +329,7 @@ def test_output_validation_error_other_than_a_missing_column_also_errors_the_sta
     add_stage(tmp_path, load)
     add_stage(tmp_path, blank)
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
+    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)).manifest
 
     record = {r["stage_id"]: r for r in manifest["stage_records"]}["blank"]
     assert record["status"] == "error"
@@ -371,7 +371,7 @@ def test_value_outside_a_declared_enum_errors_the_stage_and_blocks_downstream(tm
                             ("03_tail.json", tail)):
         add_stage(tmp_path, stage)
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
+    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)).manifest
 
     records = {r["stage_id"]: r for r in manifest["stage_records"]}
     assert records["label"]["status"] == "error"
@@ -420,7 +420,7 @@ def test_llm_generation_failure_surfaces_as_error_status_not_raised(tmp_path, mo
     monkeypatch.setattr(lt, "call_llm", boom)
     _llm_transform_project(tmp_path)
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
+    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)).manifest
 
     records = {r["stage_id"]: r for r in manifest["stage_records"]}
     rec = records["score"]
@@ -541,7 +541,7 @@ def test_raise_if_run_failed_lists_halted_stages_as_readable_text():
 def test_run_without_a_version_fails_loudly(tmp_path):
     _make_project(tmp_path)  # valid working copy, but no version created
     with pytest.raises(NoVersionToRunError):
-        execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
+        execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)).manifest
     assert not (tmp_path / "runs").exists()
     assert list_versions(tmp_path.name) == []
 
@@ -553,7 +553,7 @@ def test_the_newest_version_runs_even_when_an_older_one_is_the_published_one(tmp
 
     newer = save_working_copy_as_version(tmp_path.name, message="unpublished newer", reviewer="test").version_id
 
-    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
+    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)).manifest
     assert manifest["workflow_version"] == newer
     assert manifest["status"] == "ok"
 
@@ -562,7 +562,7 @@ def test_run_with_no_published_version_succeeds(tmp_path):
     _make_project(tmp_path)
     vid = save_working_copy_as_version(tmp_path.name, message="unpublished", reviewer="test").version_id
 
-    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
+    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)).manifest
     assert manifest["workflow_version"] == vid
     assert manifest["status"] == "ok"
 
@@ -571,7 +571,7 @@ def test_run_with_explicit_unpublished_id_succeeds(tmp_path):
     _make_project(tmp_path)
     unpublished_id = save_working_copy_as_version(tmp_path.name, message="unpublished", reviewer="test").version_id
 
-    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path, unpublished_id))
+    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path, unpublished_id)).manifest
     assert manifest["workflow_version"] == unpublished_id
     assert manifest["status"] == "ok"
 
@@ -606,7 +606,7 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
 
     # A run refuses (no version) and does NOT auto-create one — nothing on disk.
     with pytest.raises(NoVersionToRunError):
-        execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
+        execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)).manifest
     assert list_versions(tmp_path.name) == []
     assert not (tmp_path / "runs").exists()
 
@@ -621,11 +621,11 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
             "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]}}
     add_stage(tmp_path, good)
     with pytest.raises(NoVersionToRunError):
-        execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
+        execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)).manifest
 
     # Explicit creation, then the run succeeds against that version.
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
+    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)).manifest
     assert manifest["status"] == "ok"
 
 
@@ -663,7 +663,7 @@ def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
     }
     store_manifest(run_dir.parent.parent, run_dir.name, manifest)
 
-    result = resume_run(tmp_path / "runs" / run_id, tmp_path.name, run_id, *resumed_stages(tmp_path, run_id))
+    result = resume_run(tmp_path / "runs" / run_id, tmp_path.name, run_id, *resumed_stages(tmp_path, run_id)).manifest
 
     [rec] = result["stage_records"]
     assert rec["status"] == "ok", rec.get("error")
@@ -689,7 +689,7 @@ def test_resume_of_a_test_run_keeps_the_read_only_cache_it_ran_under(tmp_path):
                            "output_validation_report": None, "output_row_count": 0}],
     })
 
-    result = resume_run(run_dir, tmp_path.name, run_id, *resumed_stages(tmp_path, run_id))
+    result = resume_run(run_dir, tmp_path.name, run_id, *resumed_stages(tmp_path, run_id)).manifest
 
     [record] = result["stage_records"]
     assert record["status"] == "ok", record.get("error")
@@ -754,7 +754,7 @@ def test_a_frame_stage_succeeds_with_no_frame_store_configured(tmp_path, monkeyp
     _seed_version(tmp_path)
     monkeypatch.setattr(frames_module, "_frame_store", None)
 
-    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
+    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)).manifest
 
     assert manifest["status"] == "ok"
     record = next(r for r in manifest["stage_records"] if r["stage_id"] == "totals")

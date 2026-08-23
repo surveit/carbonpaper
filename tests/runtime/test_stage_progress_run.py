@@ -56,10 +56,10 @@ def test_row_progress_is_persisted_when_every_row_comes_from_cache(tmp_path):
     _add_row_stage(tmp_path)
     save_working_copy_as_version(tmp_path.name, message="seed", reviewer="test")
 
-    execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
+    execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)).manifest
     replayed = execute_run(
         tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)
-    )
+    ).manifest
 
     record = _find_stage(replayed, "map")
     assert record["cached_rows"] == 3
@@ -101,7 +101,7 @@ def test_resume_starts_a_new_progress_sequence_for_the_rerun(tmp_path):
     })
     save_working_copy_as_version(tmp_path.name, message="seed", reviewer="test")
 
-    first = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
+    first = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)).manifest
     assert first["status"] == "errors"
     assert _find_stage(first, "shape")["progress"]["completed"] == 1
 
@@ -110,7 +110,7 @@ def test_resume_starts_a_new_progress_sequence_for_the_rerun(tmp_path):
         tmp_path.name,
         first["run_id"],
         *resumed_stages(tmp_path, first["run_id"]),
-    )
+    ).manifest
 
     assert resumed["status"] == "ok"
     assert _find_stage(resumed, "shape")["progress"]["completed"] == 2

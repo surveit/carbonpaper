@@ -15,6 +15,7 @@ from app.core.stage_cache import ReadOnlyStageCache, StageCache, StageCacheEntry
 
 from .run_log import RunLog
 from .progress import StageProgressReporter
+from app.models.claims import Claim
 from app.models.run_parameters import RunParameters
 
 
@@ -45,6 +46,8 @@ class RunContext(BaseModel):
     # bindings) — the same object the manifest records, so the settings executed
     # under and the settings written down cannot drift.
     params: RunParameters = RunParameters()
+    # Write-only, like run_log. The runner hands it back; nothing here saves it.
+    claims: list[Claim] = Field(default_factory=list)
     # This run's event log, attached by the executor for
     # the duration of the run — see `attach_run_log`. Write-only from here: a
     # handler emits onto it and never reads it back, so it carries no run state
