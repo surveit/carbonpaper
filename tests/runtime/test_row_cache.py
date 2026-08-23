@@ -123,7 +123,7 @@ def test_registered_python_row_function_replays_a_recorded_row_over_its_own_code
         project_id=PROJECT, stage_id=stage.id,
         stage_fingerprint=stage.compute_definition_fingerprint(),
         input_fingerprint=compute_row_fingerprint({"x": 1}),
-        input_row={"x": 1}, output_row={"x": 1, "y": 999},
+        input_row={"x": 1}, output_row={"x": 1, "y": 999}, branches=None,
     )
 
     out = _run(stage, _src([1]), _ctx(run_id="run1"))

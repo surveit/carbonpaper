@@ -1,6 +1,7 @@
 """Which branch of its code each output row took."""
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 import pyarrow as pa
@@ -62,6 +63,11 @@ class BranchRecorder:
         self._by_input[self._open_row] = tuple(self._taken)
         self._open_row = None
         self._taken.clear()
+
+    def replay_row(self, index: int, branches: Sequence[str] | None) -> None:
+        """A cache hit runs no code, so its branches come back from the entry that stored them."""
+        if branches is not None:
+            self._by_input[index] = tuple(branches)
 
     def branches_for(self, index: int) -> BranchesTaken:
         return self._by_input.get(index)

@@ -43,6 +43,8 @@ class StageCacheEntry(PersistedModel):
     input_fingerprint: str
     frozen_input: JsonDict
     output_row: JsonDict | None
+    # None where no code ran or the entry predates the field; [] where code ran and never branched.
+    branches: list[str] | None = None
 
     @classmethod
     def read_only(cls) -> "ReadOnlyStageCache":
@@ -123,13 +125,13 @@ class ReadOnlyStageCache:
             prefix=_build_cache_prefix(project_id, stage_id, stage_fingerprint)
         )
 
-    def find_recorded_rows(
+    def find_recorded_entries(
         self, project_id: ID, stage_id: ID, stage_fingerprint: str
-    ) -> dict[str, JsonDict]:
+    ) -> dict[str, StageCacheEntry]:
+        """Keyed by input fingerprint, which is what a replay looks a row up by."""
         return {
-            entry.input_fingerprint: entry.output_row
+            entry.input_fingerprint: entry
             for entry in self.find_entries(project_id, stage_id, stage_fingerprint)
-            if entry.output_row is not None
         }
 
     def find_project_entries(self, project_id: ID) -> list[StageCacheEntry]:
@@ -167,6 +169,7 @@ class StageCache(ReadOnlyStageCache):
         input_fingerprint: str,
         input_row: Mapping[str, object],
         output_row: Mapping[str, object] | None,
+        branches: Sequence[str] | None,
     ) -> None:
         StageCacheEntry(
             id=_build_cache_id(project_id, stage_id, stage_fingerprint, input_fingerprint),
@@ -176,6 +179,7 @@ class StageCache(ReadOnlyStageCache):
             input_fingerprint=input_fingerprint,
             frozen_input=_to_json_safe_row(input_row),
             output_row=None if output_row is None else _to_json_safe_row(output_row),
+            branches=None if branches is None else list(branches),
         ).save()
 
     def copy_entry_into(self, entry: StageCacheEntry, project_id: ID) -> bool:
@@ -193,6 +197,7 @@ class StageCache(ReadOnlyStageCache):
             input_fingerprint=entry.input_fingerprint,
             frozen_input=entry.frozen_input,
             output_row=entry.output_row,
+            branches=entry.branches,
         ).save()
         return True
 
