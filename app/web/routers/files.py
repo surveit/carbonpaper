@@ -9,8 +9,9 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.errors import FileNotStoredError
 from app.services.project import project_exists
-from app.core.files import FileStatus, delete_file, update_investigation
+from app.core.files import FileCompleteness, delete_file, update_file_provenance
 from app.web.config import templates
+from app.web.file_detail_view import build_file_detail_view
 from app.web.file_preview import build_file_preview
 from app.web.files_view import build_files_view
 from app.web.project_view import shell_state
@@ -30,6 +31,23 @@ async def files_page(request: Request, project_id: str):
             "section": "files",
             "files": build_files_view(project_id),
         },
+    )
+
+
+@router.get("/project/{project_id}/files/{file_id}", response_class=HTMLResponse)
+async def file_page(request: Request, project_id: str, file_id: str):
+    if not project_exists(project_id):
+        raise HTTPException(status_code=404, detail=f"No project '{project_id}'")
+    try:
+        view = await run_in_threadpool(build_file_detail_view, project_id, file_id)
+    except FileNotStoredError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return templates.TemplateResponse(
+        request,
+        "file_detail.html",
+        {"state": shell_state(project_id, "files"), "section": "files", "file": view},
     )
 
 
@@ -67,20 +85,23 @@ async def delete_project_file(project_id: str, file_id: str, confirm: str = Form
     return RedirectResponse(url=f"/project/{project_id}/files", status_code=303)
 
 
-@router.post("/project/{project_id}/files/{file_id}/investigation")
-async def update_file_investigation(project_id: str, file_id: str,
-                                     status: str = Form(...), lineage: str = Form("")):
+@router.post("/project/{project_id}/files/{file_id}/provenance")
+async def record_file_provenance(project_id: str, file_id: str,
+                                 completeness: str = Form(...), lineage: str = Form("")):
     if not project_exists(project_id):
         raise HTTPException(status_code=404, detail=f"No project '{project_id}'")
     try:
-        parsed_status = FileStatus(status)
+        claim = FileCompleteness(completeness)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=f"invalid status {status!r}") from exc
+        raise HTTPException(
+            status_code=422, detail=f"invalid completeness {completeness!r}") from exc
     try:
-        update_investigation(project_id, file_id, parsed_status, lineage)
+        update_file_provenance(project_id, file_id, claim, lineage)
     except FileNotStoredError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return RedirectResponse(url=f"/project/{project_id}/files", status_code=303)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return RedirectResponse(url=f"/project/{project_id}/files/{file_id}", status_code=303)
 
 
 def _filename_of(project_id: str, file_id: str) -> str:

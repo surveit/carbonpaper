@@ -46,8 +46,9 @@
   </thead>
   <tbody>
     {% for row in files.rows %}
-    <tr>
-      <td class="files-name"><code>{{ row.filename }}</code> <span class="muted files-size">{{ row.size }}</span></td>
+    {# The row opens the file's own page, where its completeness, its note and its shape are. #}
+    <tr class="js-run-row" data-href="/project/{{ state.id }}/files/{{ row.file_id }}">
+      <td class="files-name"><a href="/project/{{ state.id }}/files/{{ row.file_id }}"><code>{{ row.filename }}</code></a> <span class="muted files-size">{{ row.size }}</span></td>
       <td>{{ row.added | friendly_time }}</td>
       <td>
         {% if row.run_count %}
