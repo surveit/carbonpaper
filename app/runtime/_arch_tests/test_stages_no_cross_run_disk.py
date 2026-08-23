@@ -1,8 +1,8 @@
 """Architecture: `app.core.stage_cache` is the only channel a stage handler may
 use to persist something outliving its own run. Two rules: no `"project_dir"`
 dict key under `app/runtime/stages`, and no `.save()`/`.delete()` under
-`app/runtime` except in a module that DEFINES a PersistenceScope.RUN record —
-the run's OWN state, which is what `run_dir` writes were before it moved here.
+`app/runtime` outside the modules named below, each of which writes one record
+that is the run's OWN state.
 """
 from __future__ import annotations
 
@@ -18,11 +18,7 @@ _RUNTIME_DIR = Path(__file__).resolve().parents[1]
 
 _BANNED_PERSISTENCE_METHODS = frozenset({"save", "delete"})
 
-# Denied until listed, per tests/arch/test_contracts_are_whitelists.py: a rule that
-# admits whatever satisfies a property admits the module nobody remembered to check.
-# This was a property — "declares a run-scoped record" — while records lived beside
-# their writes; once they are declared in app/models/records that property is either
-# unsatisfiable or, read off imports, granted by accident.
+# Denied until listed, per tests/arch/test_contracts_are_whitelists.py.
 _MAY_WRITE_A_RUN_RECORD: Mapping[str, str] = {
     "citations.py": "StageCitations — what a publish stage cited, per run",
     "manifest.py": "RunManifest — the run's own record",
