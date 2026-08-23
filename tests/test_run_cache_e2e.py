@@ -131,7 +131,7 @@ def _publish_a_version(root: Path) -> str:
 def _run_and_read(
     project: Path, *, bust_cache: bool = False
 ) -> dict[str, pd.DataFrame]:
-    manifest = execute_run(project / "runs", project.name, *pinned_stages(project), bust_cache=bust_cache).manifest
+    manifest = execute_run(project / "runs", project.name, *pinned_stages(project), bust_cache=bust_cache)
     assert manifest["status"] == "ok", manifest
     run_dir = project / "runs" / manifest["run_id"]
     return {
@@ -141,7 +141,7 @@ def _run_and_read(
 
 
 def _run_and_count_replays(project: Path) -> dict[str, object]:
-    manifest = execute_run(project / "runs", project.name, *pinned_stages(project)).manifest
+    manifest = execute_run(project / "runs", project.name, *pinned_stages(project))
     assert manifest["status"] == "ok", manifest
     return {
         record["stage_id"]: record.get("cached_rows")

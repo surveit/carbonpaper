@@ -10,8 +10,7 @@ import pytest
 
 from app.core.errors import CitationMismatch, RowOutOfRange, StageNotInRun
 from app.models import parse_stage, Stage
-from app.models.citations import CitedValue
-from app.models.claims import StageOutputRowCitation
+from app.models.citations import CitedRow, CitedValue
 from app.runtime.citations import CitationProvider
 from app.runtime.context import RunContext
 from app.runtime.stages.publish import handle_publish
@@ -109,7 +108,7 @@ def test_cite_row_claims_the_row_and_no_value():
     url = provider.cite_row("count_in_house_figures", 0)
     assert url.endswith("/stage/count_in_house_figures/row/0/trace/view")
     assert provider.cited_rows == [
-        StageOutputRowCitation(stage_id="count_in_house_figures", row_ordinal=0)
+        CitedRow(stage_id="count_in_house_figures", row_ordinal=0)
     ]
     assert provider.citations == []
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Mapping, NamedTuple
+from typing import Any, Mapping
 
 import pandas as pd
 import pyarrow as pa
@@ -18,7 +18,6 @@ from app.core.errors import MissingInputBindingError
 from app.core.timestamp_ids import mint_timestamp_id
 from app.core.frames import read_frame_table
 from app.models import StageType, Workflow, WorkflowStage
-from app.models.claims import Claim
 from app.models.run_parameters import RunParameters
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.core.run_status import StageStatus
@@ -113,18 +112,10 @@ def prepare_run(
             "ordered": ordered, "manifest": manifest}
 
 
-class RunOutcome(NamedTuple):
-    """What a run produced: its record, and the claims its stages stated."""
-
-    manifest: dict[str, Any]
-    claims: list[Claim]
-
-
-def run_prepared(prep: dict[str, Any]) -> RunOutcome:
-    ctx = prep["ctx"]
-    manifest = _execute_stages(prep["ordered"], ctx, prep["manifest"],
+def run_prepared(prep: dict[str, Any]) -> dict[str, Any]:
+    manifest = _execute_stages(prep["ordered"], prep["ctx"], prep["manifest"],
                                prep["run_dir"], outputs_so_far={})
-    return RunOutcome(manifest.to_dict(), list(ctx.claims))
+    return manifest.to_dict()
 
 
 def execute_run(
@@ -136,7 +127,7 @@ def execute_run(
     offsets: dict[str, int] | None = None,
     bindings: Mapping[StageId, TypeUnsafeUserStageConfigOverride] | None = None,
     bust_cache: bool = False,
-) -> RunOutcome:
+) -> dict[str, Any]:
     return run_prepared(
         prepare_run(runs_dir, project_id, workflow, workflow_version,
                     limits=limits, offsets=offsets, bindings=bindings,
@@ -150,7 +141,7 @@ def resume_run(
     run_id: str,
     workflow: Workflow,
     workflow_version: str,
-) -> RunOutcome:
+) -> dict[str, Any]:
     manifest = read_run_manifest(project_id, run_id)
 
     if manifest.workflow_version != workflow_version:
@@ -203,5 +194,4 @@ def resume_run(
     # "halted for review" banner and queue links while the stage re-runs. The
     # loop re-adds `halted_at` if a stage halts again; otherwise it stays gone.
     manifest.clear_halt()
-    resumed = _execute_stages(ordered, ctx, manifest, run_dir, outputs_so_far)
-    return RunOutcome(resumed.to_dict(), list(ctx.claims))
+    return _execute_stages(ordered, ctx, manifest, run_dir, outputs_so_far).to_dict()

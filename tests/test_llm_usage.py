@@ -131,7 +131,7 @@ def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
     vid = save_working_copy_as_version(tmp_path.name, message="seed", reviewer="test").version_id
     versioning.publish_version(tmp_path.name, vid, reviewer="human")
 
-    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)).manifest
+    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
 
     assert manifest["status"] == "ok", manifest
     record = next(r for r in manifest["stage_records"] if r["stage_id"] == "classify")

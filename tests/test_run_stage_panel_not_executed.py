@@ -90,7 +90,7 @@ def test_a_stage_the_run_never_heard_of_is_still_a_404(project: Path):
 
 
 def test_a_production_runs_input_stage_still_shows_its_run_detail(project: Path):
-    run_id = str(execute_run(project / "runs", project.name, *pinned_stages(project)).manifest["run_id"])
+    run_id = str(execute_run(project / "runs", project.name, *pinned_stages(project))["run_id"])
 
     response = _panel(run_id, "load")
     assert response.status_code == 200

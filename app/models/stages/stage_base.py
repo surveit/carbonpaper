@@ -151,9 +151,10 @@ STAGE_DESCRIPTION_DESCRIPTION = (
 
 
 # ── The shared field list ────────────────────────────────────────────────────
-class StatedClaim(_Base):
-    # The one-row check is a fact about data, so the runtime makes it.
-    shape_id: ID
+class DeclaredOutput(_Base):
+    # A slug identifies the output across runs; the value it holds is per run.
+    slug: str
+    label: str
     column: str
 
 
@@ -189,8 +190,8 @@ class AuthoredStageFields(_Base):
     # checked against the config (find_signature_config_issues) and against what
     # the inputs supply (find_signature_issues).
     signature: Optional[TransformSignature] = None
-    # Which output column states which claim shape. Authored, so the draft carries it.
-    claims: Optional[list[StatedClaim]] = None
+    # The columns this workflow publishes as results. Authored, so the draft carries it.
+    outputs: Optional[list[DeclaredOutput]] = None
 
     @field_validator("inputs", mode="before")
     @classmethod

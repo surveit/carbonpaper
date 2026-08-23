@@ -31,7 +31,7 @@ from app.core.run_status import RunStatus, StageStatus
 
 from .cancellation import consume_cancel
 from .context import RunContext, RunIdentity
-from .claims import find_claim_row_issues, mint_stage_claims
+from .workflow_outputs import find_output_row_issues, save_stage_outputs
 from .stage_output import AwaitingReview, StageOutput
 from .errors import RunCancelled
 from .manifest import RunManifest, create_run_manifest, write_manifest
@@ -393,7 +393,7 @@ def _finalize_stage_output(
     out_rep = validate_table(
         table, workflow_stage.output_schema, stage_id=sid, phase="output")
     out_rep.issues.extend(find_key_coverage_issues(workflow_stage, inputs_for_stage))
-    out_rep.issues.extend(find_claim_row_issues(workflow_stage, table))
+    out_rep.issues.extend(find_output_row_issues(workflow_stage, table))
     if row_errors:
         out_rep.issues[0:0] = [
             Issue("error", None,
@@ -425,7 +425,7 @@ def _finalize_stage_output(
         ) else StageStatus.VALIDATION_WARNINGS
     record.output_row_count = table.num_rows
     if record.status != StageStatus.ERROR and ctx.identity is not None:
-        ctx.claims.extend(mint_stage_claims(workflow_stage, table, ctx.identity))
+        save_stage_outputs(workflow_stage, table, ctx.identity)
     # Manifest paths are POSIX-style so the persisted JSON is identical on
     # every platform.
     record.output_path = output_path.relative_to(run_dir).as_posix()

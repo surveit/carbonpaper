@@ -135,7 +135,7 @@ def run_ctx(tmp_path: Path) -> tuple[Path, str]:
     workspace.set_projects_dir(tmp_path)
     version_id = project_service.save_working_copy_as_version(pdir.name, message="v1", reviewer="test").version_id
     versioning.publish_version(pdir.name, version_id, reviewer="test")
-    run_id = str(execute_run(pdir / "runs", pdir.name, *pinned_stages(pdir)).manifest["run_id"])
+    run_id = str(execute_run(pdir / "runs", pdir.name, *pinned_stages(pdir))["run_id"])
     return pdir, run_id
 
 

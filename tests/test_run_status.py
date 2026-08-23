@@ -96,7 +96,7 @@ def test_a_real_run_produces_enum_statuses_that_round_trip_to_bare_strings(tmp_p
     _make_project(tmp_path)
     _seed_and_publish(tmp_path)
 
-    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)).manifest
+    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
 
     # The producer's in-memory manifest carries real enum members, not plain
     # str — and they still equal / stringify as the bare value.
@@ -122,7 +122,7 @@ def test_a_real_run_renders_bare_status_through_the_web_layer(tmp_path, monkeypa
     _make_project(project_dir)
     _seed_and_publish(project_dir)
 
-    manifest = execute_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)).manifest
+    manifest = execute_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir))
     run_id = manifest["run_id"]
 
     client = TestClient(app)
