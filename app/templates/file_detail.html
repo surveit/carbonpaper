@@ -67,8 +67,21 @@
 
 {% if file.contents %}
 <section class="file-section">
+  <details class="file-rows">
+    <summary><h2>First rows</h2><span class="muted">{{ file.contents.preview.rows | length }} of {{ "{:,}".format(file.contents.row_count) }}</span></summary>
+    {% with preview = file.contents.preview %}{% include "_file_preview.html" %}{% endwith %}
+  </details>
+</section>
+
+<section class="file-section">
+  {# Closed, like the rows below it. 51 columns open is a page a reader has to scroll
+     past to find anything else; closed, the two are a menu of what this file can show. #}
+  <details class="file-rows file-shape">
+  <summary><h2>Shape</h2>
+    <span class="muted">{{ file.contents.column_count }} columns, {{ file.contents.varying_count }} varying
+      {%- if file.contents.empty_count %} · {{ file.contents.empty_count }} hold no value at all{% endif %}</span>
+  </summary>
   <div class="file-section-head">
-    <h2>Shape</h2>
     <p class="file-section-lede">{{ file.contents.column_count }} columns — <strong>{{ file.contents.varying_count }} vary</strong>
       {%- if file.contents.constant_count %}, {{ file.contents.constant_count }} hold one value for every row{% endif %}
       {%- if file.contents.empty_count %}, {{ file.contents.empty_count }} hold no value at all{% endif %}.
@@ -84,12 +97,6 @@
     <div class="shape-head"><span></span><span>column</span><span>filled</span><span>distinct</span><span>values</span></div>
     {% for column in file.contents.columns %}{% include "_file_column.html" %}{% endfor %}
   </div>
-</section>
-
-<section class="file-section">
-  <details class="file-rows">
-    <summary><h2>First rows</h2><span class="muted">{{ file.contents.preview.rows | length }} of {{ "{:,}".format(file.contents.row_count) }}</span></summary>
-    {% with preview = file.contents.preview %}{% include "_file_preview.html" %}{% endwith %}
   </details>
 </section>
 
