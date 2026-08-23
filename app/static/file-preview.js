@@ -47,6 +47,7 @@
     if (!dialog) return;
     var body = dialog.querySelector(".file-preview-body");
     var title = dialog.querySelector(".file-preview-title");
+    var openPage = dialog.querySelector(".file-preview-page-link");
     var activeButton = null;
     var activePicker = null;
     var request = null;
@@ -57,6 +58,7 @@
 
     function resetDialog() {
       title.textContent = "File preview";
+      if (openPage) openPage.hidden = true;
       showMessage(body, "Loading preview…", "file-preview-loading", "status");
     }
 
@@ -82,6 +84,11 @@
         insertPreview(body, await response.text());
         var result = body.querySelector("[data-file-preview-filename]");
         if (result) title.textContent = result.dataset.filePreviewFilename;
+        if (openPage) {
+          openPage.href = "/project/" + encodeURIComponent(project) + "/files/" +
+            encodeURIComponent(fileId);
+          openPage.hidden = false;
+        }
       } catch (error) {
         if (error.name !== "AbortError") {
           showMessage(

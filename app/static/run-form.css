@@ -248,11 +248,22 @@
 .file-preview-head h2 {
     min-width: 0;
     margin: 0;
+    margin-right: auto;
     overflow: hidden;
     font-size: 1.05rem;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+/* The way out of the dialog: it holds rows, the page holds everything else. */
+.file-preview-page-link {
+    flex: 0 0 auto;
+    font-size: 12.5px;
+    color: var(--accent);
+    text-decoration: none;
+    white-space: nowrap;
+}
+.file-preview-page-link:hover { text-decoration: underline; }
+.file-preview-page-link[hidden] { display: none; }
 .file-preview-close {
     flex: 0 0 auto;
     border: 0;
