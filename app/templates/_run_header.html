@@ -70,6 +70,22 @@
   </div>
   {% endif %}
 
+  {% if header.workflow_outputs %}
+  <section class="wf-outputs">
+    <h2>What this run published</h2>
+    <ul class="wf-output-list">
+      {%- for output in header.workflow_outputs %}
+      <li class="wf-output">
+        <span class="wf-label">{{ output.label }}</span>
+        <a class="wf-value" href="{{ output.href }}"
+           title="Open the row this value was read from">{{ output.value }}</a>
+        <span class="wf-stage">{{ output.stage_id }}</span>
+      </li>
+      {%- endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
   {% with strip = header.strip, show_counts = true, strip_id = 'stage-strip' %}
     {% include "_stage_strip.html" %}
   {% endwith %}
