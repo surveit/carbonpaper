@@ -42,8 +42,11 @@
 {% if files.rows %}
 {# Off by default: the table is a list of files first. Distinguishing data only means
    anything against the files sharing a schema, so it shows only once they are together. #}
-<label class="files-group-toggle"><input type="checkbox" id="group-by-shape">
-  Group files by data shape</label>
+<div class="files-toolbar">
+  <label class="switch"><input type="checkbox" id="group-by-shape">
+    <span class="switch-track"><span class="switch-knob"></span></span>
+    <span class="switch-label">Group files by data shape</span></label>
+</div>
 <table class="stages files-table" id="files-table">
   <thead>
     <tr><th>file</th><th class="files-apart-head">distinguishing data</th>

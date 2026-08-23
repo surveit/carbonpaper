@@ -27,9 +27,9 @@
 .files-table:not(.grouped) td.files-apart { display: none; }
 /* The column that separates this file from its siblings, then its value here. The
    column name is the quiet half: the value is what a reader compares. */
-.files-group-toggle { display: inline-block; font-size: 13px; color: var(--muted);
-    cursor: pointer; margin-bottom: 8px; }
-.files-group-toggle input { vertical-align: middle; margin-right: 5px; }
+/* Above the table and against its right edge, where a control over the table belongs
+   and nothing has to make room for it. */
+.files-toolbar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
 /* The band a group sits under. Space above it is what blocks one group off from the
    last; the first band takes none, having nothing above it. */
 .files-table tr.files-group-head td { background: var(--sunk-deep); font-size: 11.5px;
