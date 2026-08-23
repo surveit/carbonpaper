@@ -44,28 +44,18 @@ HANDLERS: dict[StageType, StageHandler] = {
     StageType.input_data: SourceHandler(read_input_data),
     # parallelism stays 1: the mapped function is user-authored code, not assumed thread-safe.
     StageType.python_row_function: RowMapTransformHandler(build_python_row_mapper),
+    # No frame handler consults the cache; each model's CACHE_IGNORED_BECAUSE says why.
     StageType.python_frame_function: FrameTransformHandler(handle_python_frame_function),
-    # caches_frames=False REFUSES caching whatever the stage declares, which is a
-    # stronger statement than `Stage.cache`'s per-type default: the joins
-    # (enrich/expand) and aggregate are bounded vectorised primitives whose
-    # compute is lower-order than the hash of their own input, so fingerprinting
-    # the inputs costs more than the pandas operation a hit would skip — there is
-    # no workflow in which an author turning it on would be right.
-    StageType.enrich: FrameTransformHandler(handle_enrich, caches_frames=False),
-    StageType.expand: FrameTransformHandler(handle_expand, caches_frames=False),
-    StageType.aggregate: FrameTransformHandler(handle_aggregate, caches_frames=False),
+    StageType.enrich: FrameTransformHandler(handle_enrich),
+    StageType.expand: FrameTransformHandler(handle_expand),
+    StageType.aggregate: FrameTransformHandler(handle_aggregate),
     StageType.llm_transform: LLMTransformHandler(parallelism=DEFAULT_PARALLEL),
     StageType.human_review_queue: RowMapTransformHandler(
         build_human_review_mapper,
         trims_output_to_declared=True,
     ),
-    # caches_frames=False: publish is terminal and side-effecting — it writes
-    # artifacts the world reads, not an output a later run consumes. Replaying a
-    # cached frame would skip the write and leave this run's artifacts absent.
-    StageType.publish: FrameTransformHandler(handle_publish, caches_frames=False),
-    # caches_frames=False: concatenation is a bounded vectorised primitive,
-    # same reasoning as the joins/aggregate above.
-    StageType.union: FrameTransformHandler(handle_union, caches_frames=False),
+    StageType.publish: FrameTransformHandler(handle_publish),
+    StageType.union: FrameTransformHandler(handle_union),
     # Row-mapped with drops_rows: the runtime drives the predicate row by row
     # and does the selecting itself, so it holds the input ordinals that
     # survived — this stage's lineage — without the handler reporting them.
@@ -78,15 +68,9 @@ HANDLERS: dict[StageType, StageHandler] = {
     # so it holds the surviving input ordinals without the predicate reporting them.
     StageType.starlark_filter_rows: RowMapTransformHandler(
         make_starlark_filter_mapper, drops_rows=True),
-    # caches_frames=False for a stronger reason than the joins/aggregate above:
-    # the frame cache stores a stage's TABLE, not its lineage sidecar, so a hit
-    # replays the rows without the provenance the handler worked out. The trace
-    # then finds no sidecar and, these types not being grain-and-order
-    # preserving, stops rather than crossing — dark exactly where these types
-    # exist to keep it lit. Cheap enough that opting in would never pay anyway.
-    StageType.explode: FrameTransformHandler(handle_explode, caches_frames=False),
-    StageType.dedupe: FrameTransformHandler(handle_dedupe, caches_frames=False),
-    StageType.sort_rank: FrameTransformHandler(handle_sort_rank, caches_frames=False),
+    StageType.explode: FrameTransformHandler(handle_explode),
+    StageType.dedupe: FrameTransformHandler(handle_dedupe),
+    StageType.sort_rank: FrameTransformHandler(handle_sort_rank),
 }
 
 # A mis-shaped registration (e.g. a frame handler for a type the model declares

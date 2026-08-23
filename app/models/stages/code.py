@@ -229,6 +229,9 @@ class PythonRowFunctionStage(CarriesPythonFunctionStage):
 
 class PythonFrameFunctionStage(CarriesPythonFunctionStage):
     type: Literal[StageType.python_frame_function]
+    CACHE_IGNORED_BECAUSE: ClassVar[str] = (
+        "hashing the whole input frame costs more than re-running the transform on it"
+    )
     CARRIES_RUNNABLE_TESTS: ClassVar[bool] = True
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)
     tests: Optional[Sequence[PythonFrameFunctionStageTest]] = None

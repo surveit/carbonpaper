@@ -1,33 +1,15 @@
-"""The content-addressed stage-result cache, keyed by (stage-definition fingerprint,
-input identity). Two grains, asymmetric: at ROW grain the caller passes a fingerprint
-it computed; at FRAME grain it passes the frames and the accessor resolves identity
-itself, so this seam exposes no frames fingerprint. `output_row` may be None — handle
-it. What the output MEANS lives above this seam, never here."""
+"""One cache entry per input ROW, keyed by (stage-definition, input) fingerprints."""
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import ClassVar
 import json
 
-import pyarrow as pa
-
-from app.core.frames import (
-    collapse_null_forms,
-    compute_tables_fingerprint,
-    convert_cell_to_json_native,
-    get_frame_store,
-    save_table_or_reject,
-)
+from app.core.frames import collapse_null_forms, convert_cell_to_json_native
 from app.core.json_types import JsonDict
 from app.core.record import PersistedModel, PersistenceScope
 from app.core.utils import compute_short_hash
 from app.core.ids import ID
-
-# The frame-store collection a whole-frame cache payload is filed under, keyed
-# by the same `_build_cache_id` composite as the entry itself. A frame is far
-# too big to carry as a `StageCacheEntry` JSON field, so it travels this second
-# channel.
-CACHED_FRAME_COLLECTION = "stage_cache_frames"
 
 
 class StageCacheEntry(PersistedModel):
@@ -74,24 +56,6 @@ def _build_cache_id(project_id: ID, stage_id: ID, stage_fingerprint: str, input_
     return _build_cache_prefix(project_id, stage_id, stage_fingerprint) + input_fingerprint
 
 
-def rekey_cache_id_to_project(cache_id: ID, project_id: ID) -> str:
-    """The project segment is SCOPE: what an entry answers is fixed by the two fingerprints."""
-    parts = cache_id.split("/", 2)
-    if len(parts) != 3 or parts[0] != f"v{CACHE_KEY_VERSION}":
-        raise ValueError(
-            f"not a v{CACHE_KEY_VERSION} stage-cache id: {cache_id!r}"
-        )
-    return f"{parts[0]}/{project_id}/{parts[2]}"
-
-
-def _build_frame_cache_id(
-    project_id: ID, stage_id: ID, stage_fingerprint: str, input_tables: Sequence[pa.Table]
-) -> ID:
-    return _build_cache_id(
-        project_id, stage_id, stage_fingerprint, compute_tables_fingerprint(input_tables)
-    )
-
-
 def compute_row_fingerprint(row: Mapping[str, object]) -> str:
     """Null forms collapse and keys sort, so round-trip drift and column order cannot change a row's id."""
     normalized = {key: collapse_null_forms(value) for key, value in row.items()}
@@ -135,27 +99,6 @@ class ReadOnlyStageCache:
     def find_project_entries(self, project_id: ID) -> list[StageCacheEntry]:
         return StageCacheEntry.list(prefix=f"v{CACHE_KEY_VERSION}/{project_id}/")
 
-    def find_project_frame_ids(self, project_id: ID) -> list[ID]:
-        return get_frame_store().list_ids(
-            CACHED_FRAME_COLLECTION, f"v{CACHE_KEY_VERSION}/{project_id}/"
-        )
-
-    def read_frame_payload(self, cache_id: ID) -> bytes | None:
-        return get_frame_store().read_payload(CACHED_FRAME_COLLECTION, cache_id)
-
-    def find_cached_frame(
-        self,
-        project_id: ID,
-        stage_id: ID,
-        stage_fingerprint: str,
-        input_tables: Sequence[pa.Table],
-    ) -> pa.Table | None:
-        """`input_tables` ORDER is part of the key — swapping a join's two sides is a different input."""
-        return get_frame_store().load_table(
-            CACHED_FRAME_COLLECTION,
-            _build_frame_cache_id(project_id, stage_id, stage_fingerprint, input_tables),
-        )
-
 
 class StageCache(ReadOnlyStageCache):
     def record(
@@ -195,27 +138,3 @@ class StageCache(ReadOnlyStageCache):
             output_row=entry.output_row,
         ).save()
         return True
-
-    def copy_frame_into(self, cache_id: ID, payload: bytes, project_id: ID) -> bool:
-        store = get_frame_store()
-        moved = rekey_cache_id_to_project(cache_id, project_id)
-        if store.exists(CACHED_FRAME_COLLECTION, moved):
-            return False
-        store.write_payload(CACHED_FRAME_COLLECTION, moved, payload)
-        return True
-
-    def record_frame(
-        self,
-        *,
-        project_id: ID,
-        stage_id: ID,
-        stage_fingerprint: str,
-        input_tables: Sequence[pa.Table],
-        table: pa.Table,
-    ) -> None:
-        save_table_or_reject(
-            CACHED_FRAME_COLLECTION,
-            _build_frame_cache_id(project_id, stage_id, stage_fingerprint, input_tables),
-            table,
-            described_as=f"stage {stage_id}",
-        )

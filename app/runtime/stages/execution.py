@@ -29,12 +29,6 @@ from app.core.frames import collapse_null_forms, is_null_form, list_table_rows
 from app.core.stage_cache import StageCache, compute_row_fingerprint
 from ..branches import BranchRecorder
 
-from .frame_caching import (
-    find_cached_frame,
-    note_skipped_caching,
-    open_frame_caching,
-    record_frame_output,
-)
 from ..cancellation import consume_cancel
 from ..context import RunContext
 from ..stage_output import AwaitingReview, StageOutput
@@ -216,27 +210,14 @@ class FrameTransformHandler(StageHandler):
         apply: Callable[
             [WorkflowStage, dict[str, pa.Table], RunContext], StageOutput | None
         ],
-        caches_frames: bool = True,
     ) -> None:
         self.apply = apply
-        self.caches_frames = caches_frames
 
     def execute(
         self, workflow_stage: WorkflowStage, inputs: dict[str, pa.Table],
         ctx: RunContext,
     ) -> StageOutput | None:
-        caching = open_frame_caching(workflow_stage, ctx, self.caches_frames)
-        if caching.key is None:
-            output = self.apply(workflow_stage, inputs, ctx)
-            return note_skipped_caching(output, caching.skipped_note)
-        input_tables = [inputs[ref.id] for ref in workflow_stage.inputs]
-        cached = find_cached_frame(caching, input_tables)
-        if cached is not None:
-            # A replayed frame carries no contribution: nothing ran to report.
-            return StageOutput(cached)
-        return record_frame_output(
-            caching, input_tables, self.apply(workflow_stage, inputs, ctx)
-        )
+        return self.apply(workflow_stage, inputs, ctx)
 
     @property
     def preserves_grain_and_order(self) -> bool:
@@ -274,12 +255,8 @@ def validate_registry_matches_model(handlers: dict[StageType, StageHandler]) -> 
 
 
 def _reads_the_cache_flag(handler: StageHandler) -> bool:
-    """A source recomputes; a frame handler may refuse; a row mapper always consults."""
-    if isinstance(handler, SourceHandler):
-        return False
-    if isinstance(handler, FrameTransformHandler):
-        return handler.caches_frames
-    return True
+    """A source and a frame transform both recompute; a row mapper always consults."""
+    return not isinstance(handler, (SourceHandler, FrameTransformHandler))
 
 
 def _run_row_mapper(

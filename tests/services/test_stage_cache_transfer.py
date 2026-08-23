@@ -6,7 +6,6 @@ from __future__ import annotations
 import zipfile
 from io import BytesIO
 
-import pyarrow as pa
 import pytest
 
 from app.core.stage_cache import CACHE_KEY_VERSION, StageCacheEntry
@@ -110,21 +109,32 @@ def test_a_zip_that_is_not_a_cache_export_is_refused():
         import_stage_cache(buffer.getvalue(), "destination")
 
 
-def test_frame_grain_payloads_travel_too():
-    table = pa.table({"comment": ["a", "b"], "is_abusive": [True, False]})
-    StageCacheEntry.read_write().record_frame(
-        project_id=_SOURCE, stage_id=_STAGE, stage_fingerprint="fp_a", input_tables=[table],
-        table=table,
-    )
+def test_an_export_carries_no_frame_members():
+    _record(_SOURCE, stage_fingerprint="fp_a", input_fingerprint="row_1", verdict=True)
+    with zipfile.ZipFile(BytesIO(export_stage_cache(_SOURCE))) as bundle:
+        assert not [n for n in bundle.namelist() if n.startswith("frames/")]
 
-    report = import_stage_cache(export_stage_cache(_SOURCE), "destination")
 
-    assert report.frames_written == 1
-    moved = StageCacheEntry.read_only().find_cached_frame(
-        "destination", _STAGE, "fp_a", [table]
-    )
-    assert moved is not None
-    assert moved.equals(table)
+def test_frame_members_from_an_older_export_are_counted_and_left_behind():
+    """The row entries beside them are still worth importing, so the archive is not refused."""
+    _record(_SOURCE, stage_fingerprint="fp_a", input_fingerprint="row_1", verdict=True)
+    older = _add_frame_member(export_stage_cache(_SOURCE), "v4/proj/stage/fp_a/inputfp")
+
+    report = import_stage_cache(older, "destination")
+
+    assert report.frames_skipped == 1
+    assert report.written == 1
+    assert StageCacheEntry.read_only().get("destination", _STAGE, "fp_a", "row_1") is not None
+
+
+def _add_frame_member(archive: bytes, frame_id: str) -> bytes:
+    buffer = BytesIO()
+    with zipfile.ZipFile(BytesIO(archive)) as source:
+        with zipfile.ZipFile(buffer, "w") as target:
+            for name in source.namelist():
+                target.writestr(name, source.read(name))
+            target.writestr(f"frames/{frame_id}.parquet", b"not read, only counted")
+    return buffer.getvalue()
 
 
 # ── reachability ──────────────────────────────────────────────────────────────

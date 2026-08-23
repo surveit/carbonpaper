@@ -1,7 +1,4 @@
-"""Carrying one project's stage cache between workspaces, so a run started on one
-machine can be finished on another without re-spending it. Append-only in both
-channels: an entry already stored keeps the output it holds.
-"""
+"""Carrying one project's stage cache to another workspace, so a run can finish there."""
 from __future__ import annotations
 
 from collections import Counter
@@ -25,7 +22,6 @@ class CacheArchiveManifest(BaseModel):
     source_project: str
     cache_key_version: int
     entry_count: int
-    frame_count: int
 
 
 class StageImportCount(BaseModel):
@@ -40,16 +36,13 @@ class CacheImportReport(BaseModel):
     source_project: str
     written: int
     already_stored: int
-    frames_written: int
-    frames_already_stored: int
+    frames_skipped: int
     reachable: int
     stages: list[StageImportCount]
 
 
 def export_stage_cache(project_id: str) -> bytes:
-    cache = StageCacheEntry.read_only()
-    entries = cache.find_project_entries(project_id)
-    frame_ids = cache.find_project_frame_ids(project_id)
+    entries = StageCacheEntry.read_only().find_project_entries(project_id)
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.writestr(
@@ -58,14 +51,9 @@ def export_stage_cache(project_id: str) -> bytes:
                 source_project=project_id,
                 cache_key_version=CACHE_KEY_VERSION,
                 entry_count=len(entries),
-                frame_count=len(frame_ids),
             ).model_dump_json(indent=2),
         )
         archive.writestr(_ENTRIES_FILE, _pack_entries(entries))
-        for frame_id in frame_ids:
-            payload = cache.read_frame_payload(frame_id)
-            if payload is not None:
-                archive.writestr(f"{_FRAMES_DIR}/{frame_id}{_FRAME_SUFFIX}", payload)
     return buffer.getvalue()
 
 
@@ -73,19 +61,14 @@ def import_stage_cache(archive: bytes, destination_project_id: str) -> CacheImpo
     with zipfile.ZipFile(BytesIO(archive)) as bundle:
         manifest = _read_manifest(bundle)
         entries = _read_entries(bundle)
-        frames = _read_frames(bundle)
+        frames_skipped = _count_frame_members(bundle)
     cache = StageCacheEntry.read_write()
     written = sum(cache.copy_entry_into(entry, destination_project_id) for entry in entries)
-    frames_written = sum(
-        cache.copy_frame_into(cache_id, payload, destination_project_id)
-        for cache_id, payload in frames
-    )
     return CacheImportReport(
         source_project=manifest.source_project,
         written=written,
         already_stored=len(entries) - written,
-        frames_written=frames_written,
-        frames_already_stored=len(frames) - frames_written,
+        frames_skipped=frames_skipped,
         reachable=_count_reachable(entries, destination_project_id),
         stages=_count_stages(entries, destination_project_id),
     )
@@ -156,11 +139,10 @@ def _read_entries(bundle: zipfile.ZipFile) -> list[StageCacheEntry]:
     ]
 
 
-def _read_frames(bundle: zipfile.ZipFile) -> list[tuple[str, bytes]]:
-    """Ids come off the archive's own paths, and reach the store through its `validate_id`."""
+def _count_frame_members(bundle: zipfile.ZipFile) -> int:
+    """An export from before the frame cache was dropped carries these; nothing reads one now."""
     prefix = f"{_FRAMES_DIR}/"
-    return [
-        (name[len(prefix) : -len(_FRAME_SUFFIX)], bundle.read(name))
+    return sum(
+        name.startswith(prefix) and name.endswith(_FRAME_SUFFIX)
         for name in bundle.namelist()
-        if name.startswith(prefix) and name.endswith(_FRAME_SUFFIX)
-    ]
+    )

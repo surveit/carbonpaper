@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import csv as _csv
 import datetime as _dt
-import json
 import math
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -23,12 +22,10 @@ from app.core.errors import (
     CellIsNotAScalar,
     ColumnNotInFrame,
     FrameConcatMismatchError,
-    FrameNotSerializableError,
     RowOutOfRange,
 )
 from app.core.ids import validate_id
 from app.core.json_types import JsonScalar
-from app.core.utils import compute_short_hash
 from app.core.ids import ID
 
 # The on-disk extension for a frame file, named so every reader that
@@ -196,7 +193,6 @@ def read_source_excel(
 # inverse of `frame.to_parquet`. `pd.read_parquet` is not that inverse: it
 # materializes a written list cell as an `np.ndarray`, so a saved
 # `["a", "b"]` returns as `array(["a", "b"])` and hashes through the
-# `default=str` fallback in `compute_table_fingerprint` /
 # `compute_row_fingerprint` as `"['a' 'b']"` rather than as a JSON array —
 # the same data under a different cache key. `types_mapper` fires only on the
 # arrow LIST types, so every scalar column keeps the numpy-backed dtype and
@@ -480,24 +476,6 @@ def convert_cell_to_json_value(value: object) -> object:
     return convert_cell_to_json_native(cell)
 
 
-def compute_tables_fingerprint(tables: Sequence[pa.Table]) -> str:
-    return compute_short_hash(
-        json.dumps([compute_table_fingerprint(table) for table in tables])
-    )
-
-
-def compute_table_fingerprint(table: pa.Table) -> str:
-    """Row/column ORDER is identity here, unlike a row fingerprint: a frame transform may sort."""
-    payload = {
-        "columns": list(table.column_names),
-        "rows": [
-            [collapse_null_forms(row[name]) for name in table.column_names]
-            for row in table.to_pylist()
-        ],
-    }
-    return compute_short_hash(json.dumps(payload, separators=(",", ":"), default=str))
-
-
 class FrameStore:
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
@@ -561,16 +539,3 @@ def get_frame_store() -> FrameStore:
 
 def is_frame_store_configured() -> bool:
     return _frame_store is not None
-
-
-def save_table_or_reject(
-    collection: str, id: ID, table: pa.Table, *, described_as: str
-) -> None:
-    store = get_frame_store()
-    try:
-        store.save_table(collection, id, table)
-    except (pa_lib.ArrowException, ValueError, TypeError) as exc:
-        store.delete(collection, id)
-        raise FrameNotSerializableError(
-            f"{described_as}: output frame could not be written as parquet ({exc})"
-        ) from exc
