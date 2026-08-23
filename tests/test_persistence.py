@@ -6,13 +6,8 @@ import pytest
 from app.core.errors import DocumentNotFound
 from pydantic import Field
 
-from app.core.persistence import (
-    PersistedModel,
-    get_store,
-    now_iso,
-    configure_store,
-    validate_id,
-)
+from app.core.persistence import get_store, now_iso, configure_store, validate_id
+from app.core.record import PersistedModel
 from app.core.sqlite_store import SqliteKvStore
 
 
@@ -336,6 +331,6 @@ def test_load_of_a_record_without_timestamps_fills_defaults_via_factory(configur
 def test_persistedmodel_config_mirrors_base():
     # PersistedModel must not import _Base, so nothing but this test catches config drift.
     from app.models.schema import _Base
-    from app.core.persistence import PersistedModel
+    from app.core.record import PersistedModel
     for key in ("extra", "use_enum_values", "validate_default", "populate_by_name"):
         assert PersistedModel.model_config.get(key) == _Base.model_config.get(key)

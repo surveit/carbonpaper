@@ -18,7 +18,7 @@ _ENGINE = "app.core.sqlite_store"
 _PROBE = (
     "import sys\n"
     "import app.models\n"
-    "from app.core.persistence import PersistedModel\n"
+    "from app.core.record import PersistedModel\n"
     "print('sqlite3' in sys.modules)\n"
 )
 
@@ -27,7 +27,7 @@ def test_no_contract_imports_the_storage_engine() -> None:
     offenders = check_no_import(find_governed_files(__file__), _ENGINE, allow=set())
     assert not offenders, (
         f"app/models holds validation-only contracts, so none may name {_ENGINE}; "
-        "a record persists through app.core.persistence, which carries no engine:\n  "
+        "a record persists through app.core.record, which carries no engine:\n  "
         + "\n  ".join(offenders)
     )
 
@@ -38,11 +38,11 @@ def test_importing_the_record_base_beside_the_contracts_loads_no_engine() -> Non
         cwd=_REPO_ROOT, capture_output=True, text=True,
     )
     assert probe.returncode == 0, (
-        "app.models must be importable alongside app.core.persistence — the record base "
+        "app.models must be importable alongside app.core.record — the record base "
         f"is what a record embedding a contract would import:\n{probe.stderr}"
     )
     assert probe.stdout.strip() == "False", (
         "importing app.models beside PersistedModel pulled sqlite3 in, which puts the "
         f"engine behind the contracts: either a contract names {_ENGINE} (the test above "
-        "says which) or app/core/persistence.py now reaches it"
+        "says which) or app/core/record.py now reaches it"
     )

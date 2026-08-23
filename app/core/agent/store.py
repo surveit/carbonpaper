@@ -15,7 +15,7 @@ from urllib.parse import urlsplit, urlunsplit
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.agent.usage import LlmUsage, TurnSpend
-from app.core.persistence import PersistedModel, PersistenceScope
+from app.core.record import PersistedModel, PersistenceScope
 from app.core.ids import ID
 
 

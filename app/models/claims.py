@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import ClassVar, Literal
+from typing import Literal
 
 from pydantic import BaseModel
 
-from app.core.persistence import JsonScalar, PersistedModel, PersistenceScope
+from app.core.persistence import JsonScalar
 from app.core.ids import ID
 
 
@@ -20,16 +20,6 @@ class DataUniverseRequirement(str, Enum):
     equal_coverage = "equal_coverage"
     closed = "closed"
 
-
-class ClaimShape(PersistedModel):
-    collection: ClassVar[str] = "claim_shape"
-    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
-
-    project_id: ID
-    # Authored before any stage exists, so it declares no stage and no column.
-    label: str
-    requires: DataUniverseRequirement
-    importance: ClaimImportance
 
 
 class Citation(BaseModel):
@@ -53,10 +43,3 @@ class StageOutputRowCitation(Citation):
     stage_id: ID
     row_ordinal: int
 
-
-class Claim(PersistedModel):
-    collection: ClassVar[str] = "claim"
-    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
-
-    shape_id: ID
-    citation: StageOutputCellCitation
