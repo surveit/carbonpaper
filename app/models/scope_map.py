@@ -27,12 +27,12 @@ RowCells = dict[str, ScalarCell]
 
 
 class BranchOrigin(StrEnum):
-    """Why the rows on either side of a branch differ, which is what a claim rests on."""
+    """Why the rows on either side of a branch differ. Names avoid `str` methods."""
 
     code = "code"            # an if/elif/else/try/except the row ran
     predicate = "predicate"  # a filter kept it or dropped it
-    join = "join"            # a reference input matched it or missed it
-    partition = "partition"  # which input of a union it arrived on
+    lookup = "lookup"        # a reference input matched it or missed it
+    union = "union"          # which input of a union it arrived on
     load = "load"            # the stage that read it off disk
     aggregate = "aggregate"  # which group of an aggregate it fed
 
@@ -130,7 +130,7 @@ class BranchReach(BaseModel):
 class ScopeMap(BaseModel):
     """Which rows produced one cited figure, and what told them apart from the rest."""
 
-    project: str
+    project_id: str
     run: str
     citation: StageOutputCellCitation
     formula: str | None

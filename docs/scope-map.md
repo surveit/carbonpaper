@@ -20,8 +20,8 @@ mechanism:
 | origin | discriminates on | arity |
 |---|---|---|
 | `load` | a stage with no inputs read the row off disk | 1 |
-| `partition` | which input of a union the row arrived on | one per input |
-| `join` | the reference input matched, or missed | 2 |
+| `union` | which input of a union the row arrived on | one per input |
+| `lookup` | the reference input matched, or missed | 2 |
 | `predicate` | the filter kept the row, or dropped it | 2 |
 | `code` | the `if`/`elif`/`else`/`try` arm in the branch sidecar | 2 or more |
 | `aggregate` | which group of the aggregate the row fed | one per output row |
