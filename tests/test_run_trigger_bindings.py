@@ -174,10 +174,10 @@ def test_the_picker_row_says_what_the_record_knows(project, tmp_path):
     assert "minus the sealed ones" in body
 
 
-def test_the_picker_row_links_to_the_files_own_page(project, tmp_path):
+def test_the_preview_dialog_is_the_way_to_the_files_own_page(project, tmp_path):
     _store("stories.csv", pd.DataFrame({"name": ["a"], "val": [1]}), tmp_path)
     body = client.get("/project/demo/runs/new").text
-    # Built client-side off the option's value, so the page carries the id and the hook.
+    # The row offers Preview alone; the dialog carries the link, filled in when it loads.
     assert 'data-picker-row-action="file-preview"' in body
     assert 'class="file-preview-page-link"' in body
     assert f'value="{list_project_files("demo")[0].id}"' in body
