@@ -127,11 +127,26 @@
 .facet-note { margin: 10px 0 0; font-size: 12.5px; color: var(--muted); max-width: 70ch; }
 
 /* ── The rows, second ───────────────────────────────────────────────────── */
-.file-rows > summary { cursor: pointer; display: flex; align-items: baseline; gap: 8px; }
-.file-shape > summary { margin-bottom: 4px; }
-.file-shape .file-section-head { margin-top: 8px; }
+/* Closed, these two sit beside two headings that do not open — Read by and Delete — so
+   the ▸/▾ the run form's Advanced fold carries is not enough on its own. A bordered row
+   is what says press me before the cursor is anywhere near it. */
+.file-rows > summary { cursor: pointer; user-select: none; list-style: none;
+    display: flex; align-items: baseline; gap: 9px;
+    padding: 9px 12px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--raised); }
+.file-rows > summary:hover { background: var(--sunk); border-color: var(--border-strong); }
+.file-rows[open] > summary { border-radius: 6px 6px 0 0; border-bottom-color: var(--border); }
+.file-shape .file-section-head { margin-top: 10px; }
 .file-rows > summary h2 { display: inline; margin: 0; font-size: 1.05rem; color: var(--fg); }
-.file-rows > summary::-webkit-details-marker { color: var(--muted); }
+.file-rows > summary::-webkit-details-marker { display: none; }
+.file-rows > summary::before { content: "▾"; font-size: 13px; color: var(--muted);
+    line-height: 1.4; }
+.file-rows:not([open]) > summary::before { content: "▸"; }
+.file-rows > summary:hover h2, .file-rows > summary:hover::before { color: var(--accent); }
+/* What the fold holds, tied to the row that opened it. */
+.file-fold { border: 1px solid var(--border); border-top: none;
+    border-radius: 0 0 6px 6px; padding: 12px 12px 14px; }
+.file-fold .file-section-head { margin-top: 0; }
 .file-rows .table-scroll { margin-top: 10px; }
 
 /* ── Read by ────────────────────────────────────────────────────────────── */
