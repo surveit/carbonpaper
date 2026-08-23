@@ -19,6 +19,10 @@
       button.setAttribute("aria-haspopup", "dialog");
       button.setAttribute("aria-controls", "run-file-preview");
       wrap.appendChild(button);
+      // The dialog holds rows and nothing else; the page holds the shape, the note,
+      // and what has read it. A reader deciding between two exports needs that.
+      var open = filePageLink(select, option.value, filename);
+      if (open) wrap.appendChild(open);
       return wrap;
     }
     button.setAttribute("aria-disabled", "true");
@@ -26,6 +30,19 @@
     button.setAttribute("data-tip", "Only project files can be previewed.");
     wrap.appendChild(button);
     return wrap;
+  }
+
+  function filePageLink(select, fileId, filename) {
+    var form = select.closest("form.run-controls");
+    var project = form && form.getAttribute("data-project");
+    if (!project) return null;
+    var link = document.createElement("a");
+    link.className = "picker-action file-page-open";
+    link.href = "/project/" + encodeURIComponent(project) + "/files/" +
+      encodeURIComponent(fileId);
+    link.textContent = "Open";
+    link.setAttribute("aria-label", "Open the page for " + filename);
+    return link;
   }
 
   function showMessage(body, message, className, role) {
@@ -47,6 +64,7 @@
     if (!dialog) return;
     var body = dialog.querySelector(".file-preview-body");
     var title = dialog.querySelector(".file-preview-title");
+    var openPage = dialog.querySelector(".file-preview-page-link");
     var activeButton = null;
     var activePicker = null;
     var request = null;
@@ -57,6 +75,7 @@
 
     function resetDialog() {
       title.textContent = "File preview";
+      if (openPage) openPage.hidden = true;
       showMessage(body, "Loading preview…", "file-preview-loading", "status");
     }
 
@@ -82,6 +101,11 @@
         insertPreview(body, await response.text());
         var result = body.querySelector("[data-file-preview-filename]");
         if (result) title.textContent = result.dataset.filePreviewFilename;
+        if (openPage) {
+          openPage.href = "/project/" + encodeURIComponent(project) + "/files/" +
+            encodeURIComponent(fileId);
+          openPage.hidden = false;
+        }
       } catch (error) {
         if (error.name !== "AbortError") {
           showMessage(

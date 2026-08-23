@@ -31,9 +31,12 @@
   {% endif %}
   {% endif %}
   {% for f in files %}
+  {# The meta line is what the RECORD knows — when it arrived, how many runs have read
+     it, and the note whoever added it wrote. Nothing is read out of the file itself. #}
   <option value="{{ f.file_id }}"{% if f.file_id in selected_file_ids %} selected{% endif %}
           data-uploaded-at="{{ f.uploaded_at.isoformat() }}"
-          data-name="{{ f.filename }}" data-meta="{{ f.uploaded_label }}"
+          data-name="{{ f.filename }}"
+          data-meta="{{ f.uploaded_label }} · {% if f.run_count %}{{ f.run_count }} run{{ "" if f.run_count == 1 else "s" }}{% else %}never read{% endif %}{% if f.completeness.value != 'open' %} · {{ f.completeness.value }}{% endif %}{% if f.lineage %} · {{ f.lineage }}{% endif %}"
           data-side="{{ f.size_label }}">{{ f.label }}</option>
   {% endfor %}
 </select>

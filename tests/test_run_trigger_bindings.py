@@ -15,7 +15,10 @@ from app.main import app
 from app.services import versioning
 from app.services import workspace
 from app.services.project import save_working_copy_as_version
-from app.core.files import ProjectFile, list_project_files, save_upload
+from app.core.files import (
+    FileCompleteness, ProjectFile, list_project_files, save_upload,
+    update_file_provenance,
+)
 from app.core.frames import read_frame_table
 from app.web.run_inputs import FileChoice, build_file_choice
 from stage_seed import add_stage, read_stage
@@ -156,6 +159,28 @@ def test_file_picker_lists_newest_upload_first_with_absolute_times(project, tmp_
     files = client.get("/project/demo/run-inputs").json()["files"]
     assert [file["filename"] for file in files] == ["newer.csv", "older.csv"]
     assert [file["label"] for file in files] == [newer, older]
+
+
+def test_the_picker_row_says_what_the_record_knows(project, tmp_path):
+    _store("stories.csv", pd.DataFrame({"name": ["a"], "val": [1]}), tmp_path)
+    record = list_project_files("demo")[0]
+    update_file_provenance("demo", record.id, FileCompleteness.SAMPLED,
+                           "Every filing FOIA returned, minus the sealed ones.")
+
+    body = client.get("/project/demo/runs/new").text
+
+    assert "never read" in body
+    assert "sampled" in body
+    assert "minus the sealed ones" in body
+
+
+def test_the_picker_row_links_to_the_files_own_page(project, tmp_path):
+    _store("stories.csv", pd.DataFrame({"name": ["a"], "val": [1]}), tmp_path)
+    body = client.get("/project/demo/runs/new").text
+    # Built client-side off the option's value, so the page carries the id and the hook.
+    assert 'data-picker-row-action="file-preview"' in body
+    assert 'class="file-preview-page-link"' in body
+    assert f'value="{list_project_files("demo")[0].id}"' in body
 
 
 def test_file_picker_refuses_a_choice_without_an_upload_time():

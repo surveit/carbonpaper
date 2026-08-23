@@ -13,6 +13,7 @@ from app.models.run_parameters import RunParameters
 from app.models.schema import StageId
 from app.runtime.manifest import RunManifest
 from app.web.file_sizes import describe_bytes
+from app.web.files_view import count_runs_by_file
 from app.web.loading import list_file_inputs
 
 _MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -28,6 +29,10 @@ class FileChoice(BaseModel):
     label: str
     uploaded_label: str
     size_label: str
+    # What the record says. Nothing here is read out of the file.
+    run_count: int = 0
+    completeness: file_store.FileCompleteness = file_store.FileCompleteness.OPEN
+    lineage: str = ""
 
 
 class UploadedFileChoice(FileChoice):
@@ -60,6 +65,7 @@ def build_run_input_choices(
 ) -> RunInputChoices:
     params = copy_of.parameters if copy_of else RunParameters()
     picks = _match_recorded_files(project_id, params)
+    reads = count_runs_by_file(project_id)
     rows = [InputRow(stage_id=row["stage_id"], authored_path=row["path"],
                      selected_file_ids=picks.get(row["stage_id"], []),
                      limit=params.limits.get(row["stage_id"]))
@@ -67,7 +73,7 @@ def build_run_input_choices(
     shown = {row.stage_id for row in rows}
     return RunInputChoices(
         inputs=rows,
-        files=[build_file_choice(record)
+        files=[build_file_choice(record, len(reads.get(record.sha256, [])))
                for record in file_store.list_project_files(project_id)],
         carried_limits={stage_id: cap for stage_id, cap in params.limits.items()
                         if stage_id not in shown},
@@ -104,7 +110,7 @@ def _name_the_record(record: file_store.ProjectFile) -> tuple[str, str, str]:
     return (str(file_store.resolve_stored_path(record)), record.id, record.sha256)
 
 
-def build_file_choice(record: file_store.ProjectFile) -> FileChoice:
+def build_file_choice(record: file_store.ProjectFile, run_count: int = 0) -> FileChoice:
     uploaded_at = datetime.fromisoformat(record.created_at)
     uploaded_label = f"Uploaded {format_upload_time(uploaded_at)}"
     size_label = describe_bytes(record.byte_count)
@@ -116,6 +122,9 @@ def build_file_choice(record: file_store.ProjectFile) -> FileChoice:
         label=f"{uploaded_label} · {record.filename} · {size_label}",
         uploaded_label=uploaded_label,
         size_label=size_label,
+        run_count=run_count,
+        completeness=record.completeness,
+        lineage=record.lineage,
     )
 
 
