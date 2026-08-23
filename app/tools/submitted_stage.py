@@ -12,7 +12,8 @@ from typing import Any, Sequence
 from pydantic import Field, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
-from app.models.stage import SERVER_OWNED_STAGE_FIELDS, StageDraft
+from app.models.stage import SERVER_OWNED_STAGE_FIELDS, StageDraft, StageEdit
+from app.tools.shared import EditedStages
 from app.services import project as project_service
 
 
@@ -49,16 +50,22 @@ def add_stages_reporting_drops(
     return result
 
 
-def edit_stage_reporting_drops(
-    project_id: str, stage_id: str, changes_json: str
-) -> dict[str, Any]:
-    trimmed, dropped = _drop_server_owned_from_json(changes_json)
-    result = project_service.edit_stage(project_id, stage_id, trimmed)
-    reported: dict[str, Any] = {"ok": result.ok, "issues": result.issues}
-    warnings = _describe_dropped_fields(stage_id, dropped)
-    if warnings:
-        reported["warnings"] = warnings
-    return reported
+def edit_stages_reporting_drops(
+    project_id: str, edits: Sequence[StageEdit]
+) -> EditedStages:
+    trimmed: list[StageEdit] = []
+    warnings: list[str] = []
+    for edit in edits:
+        changes, dropped = _drop_server_owned_from_json(edit.changes_json)
+        trimmed.append(StageEdit(stage_id=edit.stage_id, changes_json=changes))
+        warnings += _describe_dropped_fields(edit.stage_id, dropped)
+    result = project_service.edit_stages(project_id, trimmed)
+    return EditedStages(
+        ok=result.ok,
+        edited=[edit.stage_id for edit in trimmed] if result.ok else [],
+        issues=result.issues,
+        warnings=warnings,
+    )
 
 
 def _drop_server_owned_from_json(stage_json: str) -> tuple[str, list[str]]:

@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import Callable
 
 import pytest
+
+from app.models.stage import StageEdit
 from pydantic import ValidationError
 
 from app.tools.editing import EditingContext, build_editing_tools
@@ -102,12 +104,12 @@ def test_read_stage_missing_fails_loud(examples_root: Path) -> None:
 def test_edit_stage_tool_writes_and_reports_ok(examples_root: Path) -> None:
     pdir = _seed(examples_root, "alpha")
     tools = _tools("alpha")
-    out = _tool(tools, "edit_stage")(
-        "alpha", "load", json.dumps(_stage("load", "Load rows v2", "input_data"))
+    out = _tool(tools, "edit_stages")(
+        "alpha", [StageEdit(stage_id="load",
+                            changes_json=json.dumps(_stage("load", "Load rows v2", "input_data")))]
     )
-    # The tool reports only ok + issues; the node's review colour is computed by the
-    # review layer, not returned by the writer.
-    assert out["ok"] is True and out == {"ok": True, "issues": []}
+    # The review colour is the review layer's, never the writer's.
+    assert out.ok is True and out.edited == ["load"] and out.issues == []
     assert read_stage(pdir, "load")["description"] == "Load rows v2"
 
 
@@ -115,10 +117,12 @@ def test_edit_stage_tool_invalid_writes_nothing_and_reports_issues(examples_root
     pdir = _seed(examples_root, "alpha")
     before = read_stage(pdir, "load")
     tools = _tools("alpha")
-    out = _tool(tools, "edit_stage")(
-        "alpha", "load", json.dumps({"id": "load", "description": "x", "type": "not_a_real_type"})
+    out = _tool(tools, "edit_stages")(
+        "alpha", [StageEdit(stage_id="load",
+                            changes_json=json.dumps({"id": "load", "description": "x",
+                                                     "type": "not_a_real_type"}))]
     )
-    assert out["ok"] is False and out["issues"]
+    assert out.ok is False and out.issues and out.edited == []
     assert read_stage(pdir, "load") == before
 
 

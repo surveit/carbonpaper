@@ -22,7 +22,7 @@ from app.core.row_search import InputRows
 from app.models.review_guide import ReviewGuideDraft
 from app.models.named_schemas import SchemaLibrary
 from app.models.schema import StageId
-from app.models.stage import stage_to_spec_dict
+from app.models.stage import StageEdit, stage_to_spec_dict
 from app.models.stages.signature import transform_input_schemas
 from app.models.stages.stage_base import find_stage_test_class
 from app.models.stages.stage_tests import StageTest
@@ -32,7 +32,7 @@ from app.services.methodology import read_methodology
 from app.services.stage_edit import (
     find_description_issues,
     find_unnamed_model_issues,
-    patch_stage_spec,
+    patch_stage_specs,
 )
 from app.services.stage_test_rows import load_stage_row_sources
 
@@ -156,7 +156,9 @@ def _finish_stage_tests(
             f"stage-test generation for '{stage_id}' in {project_id} "
             "submitted an empty test suite"
         )
-    result = patch_stage_spec(project_id, stage_id, json.dumps({"tests": tests}))
+    result = patch_stage_specs(
+        project_id, [StageEdit(stage_id=stage_id, changes_json=json.dumps({"tests": tests}))]
+    )
     if not result.ok:
         raise GenerationError(
             f"stage-test generation for '{stage_id}' in {project_id} "

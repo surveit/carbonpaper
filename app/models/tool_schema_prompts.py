@@ -70,6 +70,8 @@ STAGE_DRAFT_DESCRIPTION = (
     "a stage that breaks a rule is refused in the reply rather than rejected as a bad argument."
 )
 
+STAGE_EDIT_DESCRIPTION = "The stage to change, and the fields of it that change."
+
 STAGE_TEST_DESCRIPTION = (
     "A rows case states `expected` rows; a failure case states `expected: null`."
 )

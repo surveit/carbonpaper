@@ -20,6 +20,7 @@ from app.models import (
     SchemaLibrary,
     Stage,
     StageDraft,
+    StageEdit,
     Terms,
     Verb,
     stage_to_json,
@@ -283,8 +284,8 @@ def read_stage(name: str, stage_id: str) -> str:
     return stage_to_json(stage)
 
 
-def edit_stage(name: str, stage_id: str, changes_json: str) -> EditStageResult:
-    return stage_edit.patch_stage_spec(_project_to_write(name), stage_id, changes_json)
+def edit_stages(name: str, edits: Sequence[StageEdit]) -> EditStageResult:
+    return stage_edit.patch_stage_specs(_project_to_write(name), edits)
 
 
 def add_stage(name: str, stage_json: str) -> EditStageResult:

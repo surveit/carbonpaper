@@ -68,8 +68,7 @@ async def node_edit(
 ):
     validate_project_or_404(project_id)
 
-    # The parse/validate/write core is `stage_edit.edit_stage_spec`, shared with the
-    # editing agent's `edit_stage` tool; this route only maps its result onto HTTP.
+    # `stage_edit.edit_stage_spec` parses, validates and writes; this route maps it onto HTTP.
     try:
         result = stage_edit.edit_stage_spec(project_id, stage_id, spec_text)
     except FileNotFoundError as exc:

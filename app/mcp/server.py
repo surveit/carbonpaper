@@ -14,10 +14,11 @@ from starlette.types import Receive, Scope, Send
 
 from app.mcp.instructions import INSTRUCTIONS
 from app.tools import shared, working_copy
+from app.models.stage import StageEdit
 from app.tools.submitted_stage import (
     SubmittedStage,
     add_stages_reporting_drops,
-    edit_stage_reporting_drops,
+    edit_stages_reporting_drops,
 )
 from app.tools.tool_specs import read_tool_description
 
@@ -131,10 +132,10 @@ def read_stage(project_id: str, stage_id: str) -> str:
     return shared.read_stage(project_id, stage_id)
 
 
-@mcp.tool(description=read_tool_description("edit_stage"))
-def edit_stage(project_id: str, stage_id: str, changes_json: str) -> dict[str, Any]:
+@mcp.tool(description=read_tool_description("edit_stages"))
+def edit_stages(project_id: str, edits: list[StageEdit]) -> shared.EditedStages:
     return working_copy.catch_stage_edit_refusals(
-        lambda: edit_stage_reporting_drops(project_id, stage_id, changes_json)
+        lambda: edit_stages_reporting_drops(project_id, edits)
     )
 
 

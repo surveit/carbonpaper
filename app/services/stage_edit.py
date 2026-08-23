@@ -14,7 +14,7 @@ from typing import Sequence
 from app.core.llm import LLMModel
 from app.models.stages.stage_types import APPROVAL_REQUIRED_TYPES
 from app.services.code_approval import has_code_execution_approval
-from app.models import StageDraft
+from app.models import StageDraft, StageEdit
 from app.models.stages.code import SUMMARY_MAX_CHARS
 from app.models.workflow import (
     detect_cycle,
@@ -162,18 +162,21 @@ def find_unnamed_model_issues(candidate: dict) -> list[str]:
     ]
 
 
-def _apply(project_id: str, specs: dict[str, dict], stage_id: str, candidate: dict) -> EditStageResult:
-    if candidate.get("id") != stage_id:
-        return EditStageResult(
-            ok=False,
-            issues=[f"the stage id must equal '{stage_id}' (got '{candidate.get('id')}')"],
-        )
+def _apply(project_id: str, specs: dict[str, dict], candidates: dict[str, dict]) -> EditStageResult:
+    misnamed = [
+        f"the stage id must equal '{stage_id}' (got '{candidate.get('id')}')"
+        for stage_id, candidate in candidates.items()
+        if candidate.get("id") != stage_id
+    ]
+    if misnamed:
+        return EditStageResult(ok=False, issues=misnamed)
 
-    resulting = {**specs, stage_id: candidate}
+    resulting = {**specs, **candidates}
     issues = validate_workflow_draft(list(resulting.values()))
-    issues += find_description_issues(candidate)
-    issues += find_unnamed_model_issues(candidate)
-    issues += find_unapproved_code_issues(project_id, candidate, specs)
+    for candidate in candidates.values():
+        issues += find_description_issues(candidate)
+        issues += find_unnamed_model_issues(candidate)
+        issues += find_unapproved_code_issues(project_id, candidate, specs)
     if issues:
         return EditStageResult(ok=False, issues=issues)
 
@@ -193,22 +196,28 @@ def edit_stage_spec(project_id: str, stage_id: str, spec_text: str) -> EditStage
     specs = _current_specs(project_id)
     if stage_id not in specs:
         raise FileNotFoundError(f"no stage '{stage_id}' in project '{project_id}'")
-    return _apply(project_id, specs, stage_id, spec)
+    return _apply(project_id, specs, {stage_id: spec})
 
 
-def patch_stage_spec(project_id: str, stage_id: str, patch_text: str) -> EditStageResult:
-    try:
-        patch = json.loads(patch_text)
-    except json.JSONDecodeError as exc:
-        return EditStageResult(ok=False, issues=[f"JSON parse error: {exc}"])
-    if not isinstance(patch, dict):
-        return EditStageResult(ok=False, issues=["changes must be a JSON object of {field: new_value}"])
+def patch_stage_specs(project_id: str, edits: Sequence[StageEdit]) -> EditStageResult:
+    """Every edit lands or none does: the merged workflow is validated once, then written once."""
     specs = _current_specs(project_id)
-    if stage_id not in specs:
-        raise FileNotFoundError(f"no stage '{stage_id}' in project '{project_id}'")
-    merged = _merge_patch(specs[stage_id], patch)
-    assert isinstance(merged, dict)  # both inputs are dicts, so the merge is too
-    return _apply(project_id, specs, stage_id, merged)
+    merged: dict[str, dict] = {}
+    for edit in edits:
+        if edit.stage_id not in specs:
+            raise FileNotFoundError(f"no stage '{edit.stage_id}' in project '{project_id}'")
+        try:
+            patch = json.loads(edit.changes_json)
+        except json.JSONDecodeError as exc:
+            return EditStageResult(ok=False, issues=[f"`{edit.stage_id}`: JSON parse error: {exc}"])
+        if not isinstance(patch, dict):
+            return EditStageResult(ok=False, issues=[
+                f"`{edit.stage_id}`: changes must be a JSON object of {{field: new_value}}"])
+        # Merging onto what an earlier edit produced, so two patches to one stage compose.
+        patched = _merge_patch(merged.get(edit.stage_id, specs[edit.stage_id]), patch)
+        assert isinstance(patched, dict)  # both inputs are dicts, so the merge is too
+        merged[edit.stage_id] = patched
+    return _apply(project_id, specs, merged)
 
 
 def add_stage_specs(project_id: str, stages: Sequence[StageDraft]) -> AddStagesResult:
@@ -255,9 +264,9 @@ def _add_new_stage(project_id: str, specs: dict[str, dict], spec: dict) -> EditS
     if stage_id in specs:
         return EditStageResult(
             ok=False,
-            issues=[f"stage '{stage_id}' already exists — use edit_stage to change it"],
+            issues=[f"stage '{stage_id}' already exists — use edit_stages to change it"],
         )
-    return _apply(project_id, specs, stage_id, spec)
+    return _apply(project_id, specs, {stage_id: spec})
 
 
 def delete_stage_spec(project_id: str, stage_id: str) -> EditStageResult:

@@ -25,6 +25,7 @@ from app.models.stage import (
     Stage as Stage,
     AbstractStage as AbstractStage,
     StageDraft as StageDraft,
+    StageEdit as StageEdit,
     StageInput as StageInput,
     StageType as StageType,
     STAGE_SPEC_SCHEMA_VERSION as STAGE_SPEC_SCHEMA_VERSION,

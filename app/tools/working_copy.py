@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from app.services import project as project_service, versioning
-from app.tools.shared import STAGE_TOOL_ERRORS, validate_project_exists
+from app.tools.shared import EditedStages, STAGE_TOOL_ERRORS, validate_project_exists
 
 
 def save_working_copy_as_version(
@@ -27,8 +27,9 @@ def save_working_copy_as_version(
     return {"ok": True, "issues": [], "version_id": version.version_id}
 
 
-def catch_stage_edit_refusals(edit: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+def catch_stage_edit_refusals(edit: Callable[[], EditedStages]) -> EditedStages:
+    """A workflow too broken to load is an issue the caller can read, not a transport error."""
     try:
         return edit()
     except STAGE_TOOL_ERRORS as exc:
-        return {"ok": False, "issues": [str(exc)]}
+        return EditedStages(ok=False, edited=[], issues=[str(exc)])

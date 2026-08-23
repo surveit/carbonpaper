@@ -55,7 +55,7 @@ class _Done:
 
 def test_stream_turn_maps_blocks_to_normalized_events(monkeypatch: Any) -> None:
     async def fake_query(*, prompt: str, options: Any) -> Any:
-        yield _Asst([_Text("Editing."), _Tool("edit_stage", {"stage_id": "score"})])
+        yield _Asst([_Text("Editing."), _Tool("edit_stages", {"stage_id": "score"})])
         yield _User([_Result("ok")])
         yield _Asst([_Text("Done.")])
         yield _Done()
@@ -74,8 +74,8 @@ def test_stream_turn_maps_blocks_to_normalized_events(monkeypatch: Any) -> None:
     engine = se.ClaudeAgentSdkEngine(
         system_prompt="sp",
         mcp_server=object(),
-        allowed_tools=["mcp__tools__edit_stage"],
-        tool_labels={"edit_stage": "Editing a stage"},
+        allowed_tools=["mcp__tools__edit_stages"],
+        tool_labels={"edit_stages": "Editing a stage"},
     )
     transcript, session_id = asyncio.run(
         engine.stream_turn("edit score", message_history=[], emit=events.append)
@@ -85,7 +85,7 @@ def test_stream_turn_maps_blocks_to_normalized_events(monkeypatch: Any) -> None:
     kinds = [(e["kind"], e.get("name") or e.get("text") or e.get("content")) for e in events]
     assert kinds == [
         ("text", "Editing."),
-        ("tool_call", "edit_stage"),
+        ("tool_call", "edit_stages"),
         ("tool_result", "ok"),
         ("text", "Done."),
     ]
@@ -174,7 +174,7 @@ def test_stream_turn_surfaces_in_band_result_error(monkeypatch: Any) -> None:
 
     class _ErrResult:
         is_error = True
-        result = "permission denied for mcp__tools__edit_stage"
+        result = "permission denied for mcp__tools__edit_stages"
         subtype = "error"
 
     async def fake_query(*, prompt: str, options: Any) -> Any:
