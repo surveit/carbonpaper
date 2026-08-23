@@ -37,8 +37,9 @@ from app.services import (
     workspace,
 )
 from app.services.errors import WorkflowLoadError
-from app.services.project import Project, ProjectListing
-from app.services.versioning import ReviewGuide
+from app.services.project import ProjectListing
+from app.models.records.project import Project
+from app.models.records.review_guide import ReviewGuide
 
 # Domain failures a run tool turns into {ok: False, error: str(exc)} — a loud, honest
 # verdict rather than a traceback or a fabricated run id/status. Anything outside this

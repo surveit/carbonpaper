@@ -74,6 +74,15 @@ Also `app/AGENTS.md` (web layer), `app/runtime/AGENTS.md` (the Runner), `README.
   caller. That spends the readability the ceiling exists to protect and leaves the next change
   with even less room. If the split is bigger than the change you are on, say so in the PR and
   let a human decide whether to take it now.
+- **A record is declared in `app/models/records/`, never in a service.** One module per
+  `PersistedModel` subclass, holding the declaration and nothing else; the functions that
+  load, mutate and save it stay in the service that owns its lifecycle and import the
+  class. Enforced by `tests/arch/test_records_are_declared_in_models.py`, with an empty
+  allowlist. Two sets of records are deliberately outside this: the runtime's own
+  (`RunManifest`, `RunEventChunk`, `StageCitations`, `QueueFingerprints`), because
+  `app/runtime/_arch_tests/test_stages_no_cross_run_disk.py` lets a runtime module call
+  `.save()` only when it declares a `PersistenceScope.RUN` record, and three in `app/core`
+  (`ProjectFile`, `StageCacheEntry`, `AgentSession`), which `app/models` sits above.
 - **A `PersistedModel`'s `id` is opaque. Never build one out of the record's own data.**
   A sha256, a filename, a name someone typed, a fingerprint — putting any of them in the id
   makes the id move when the value does. The record then has two identities that must agree,

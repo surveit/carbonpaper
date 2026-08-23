@@ -12,7 +12,7 @@ import pytest
 
 from app.models import parse_stage
 from app.services import workspace
-from app.services.versioning import WorkflowVersion
+from app.models.records.workflow_version import WorkflowVersion
 from app.services.workflow_test import run_workflow_test
 from app.services.workspace import resolve_run_dir
 from run_seed import read_manifest

@@ -12,7 +12,7 @@ from pydantic import ValidationError
 from app.models import NamedSchema, SchemaLibrary, Terms, Verb
 from app.models.terms import render_terms
 from app.services import terms
-from app.services.terms import StoredTerms
+from app.models.records.terms import StoredTerms
 from app.web.config import templates
 from app.web.diagrams import SCHEMA_KIND_CLASS, SCHEMA_KIND_GLYPH
 from app.services.methodology import write_methodology

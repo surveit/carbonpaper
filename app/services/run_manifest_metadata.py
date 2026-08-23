@@ -2,22 +2,10 @@
 
 from __future__ import annotations
 
-from typing import ClassVar
 from uuid import uuid4
 
-from app.core.persistence import PersistedModel, PersistenceScope
+from app.models.records.run_manifest_metadata import RunManifestMetadata
 from app.services.workspace import validate_project_id
-
-
-class RunManifestMetadata(PersistedModel):
-    collection: ClassVar[str] = "run_manifest_metadata"
-    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
-
-    project_id: str
-    run_id: str
-    archived: bool = False
-    # Empty is unnamed; clearing returns it there.
-    name: str = ""
 
 
 def archive_run(project_id: str, run_id: str) -> None:

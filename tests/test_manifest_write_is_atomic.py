@@ -11,7 +11,8 @@ from app.core.run_status import RunStatus, StageStatus
 from app.models import StageType
 from app.models.run_manifest import StageRecord
 from app.models.run_parameters import RunParameters
-from app.runtime.manifest import RunManifest, read_run_manifest, write_manifest
+from app.runtime.manifest import read_run_manifest, write_manifest
+from app.runtime.manifest import RunManifest
 
 _FLUSHES = 300
 _PROJECT = "demo"

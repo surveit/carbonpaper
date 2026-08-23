@@ -23,7 +23,7 @@ from app.services import (
 )
 from app.services.project import WorkflowFile, import_project
 from app.services.project import find_projects_by_name
-from app.services.project_record import Project
+from app.models.records.project import Project
 from app.services import methodology
 from app.tools.types import ToolProse
 

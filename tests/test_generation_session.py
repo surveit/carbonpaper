@@ -9,7 +9,7 @@ import app.services.generation as generation
 from app.core.agent.store import SessionStore
 from app.core.agent.turns import TurnManager
 from app.models.named_schemas import SchemaLibrary
-from app.services.terms import StoredTerms
+from app.models.records.terms import StoredTerms
 
 
 # ── the completion hook (_finish_data_model): store the nouns, nothing more ──────

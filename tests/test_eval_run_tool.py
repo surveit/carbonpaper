@@ -11,7 +11,7 @@ from app.models import EvalConfig, ExpectedOutput, ScoringMetric, TableRef, pars
 from app.models.schema import TableSchema
 from app.models.stages.input_data import FileFormat
 from app.services.project import write_eval_config
-from app.services.versioning import WorkflowVersion
+from app.models.records.workflow_version import WorkflowVersion
 from app.tools.eval_runs import run_eval
 
 _BASE_URL = "http://127.0.0.1:8788"

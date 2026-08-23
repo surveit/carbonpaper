@@ -6,7 +6,7 @@ import pandas as pd
 import app.services.run as run_service
 from app.models import parse_stage
 from app.services.project import save_working_copy_as_version
-from app.services.versioning import WorkflowVersion
+from app.models.records.workflow_version import WorkflowVersion
 from app.services import workspace
 from stage_seed import add_stage
 from run_seed import manifest_exists

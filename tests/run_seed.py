@@ -58,7 +58,8 @@ def _name(project: str | Path) -> str:
 
 def store_events(project: str | Path, run_id: str, events: list[dict[str, Any]]) -> None:
     """Seed a run's event log straight into its chunks, past the writer thread."""
-    from app.runtime.run_log import CHUNK_SIZE, RunEventChunk
+    from app.runtime.run_log import RunEventChunk
+    from app.runtime.run_log import CHUNK_SIZE
 
     grouped: dict[int, list[dict[str, Any]]] = {}
     for event in events:

@@ -21,7 +21,8 @@ from app.models import (
 )
 from app.models.stages.llm_transform import LLMTransformStage
 from app.runtime.stages.human_review_queue import QueueFingerprints
-from app.runtime.manifest import RunManifest, read_run_manifest, resolve_output_path
+from app.runtime.manifest import read_run_manifest, resolve_output_path
+from app.runtime.manifest import RunManifest
 from app.services.run import resolve_version
 from app.services.loader import (
     StageEntry,

@@ -1,7 +1,8 @@
 """Opening a log panel reads the newest chunks, not the whole log."""
 from __future__ import annotations
 
-from app.runtime.run_log import CHUNK_SIZE, RunEventChunk, read_events_since
+from app.runtime.run_log import CHUNK_SIZE, read_events_since
+from app.runtime.run_log import RunEventChunk
 from app.web.run_events import select_stage_events, tail_start_seq
 from run_seed import store_events
 

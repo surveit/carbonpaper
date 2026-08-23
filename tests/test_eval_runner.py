@@ -17,7 +17,7 @@ from app.core import paths
 from app.evals import runner as eval_runner
 from app.evals.runner import run_eval, start_eval_run
 from app.evals.store import load_eval_run, resolve_eval_result_path, save_eval_config
-from app.services.versioning import WorkflowVersion
+from app.models.records.workflow_version import WorkflowVersion
 from app.services import workspace
 from conftest import QUEUE_COLUMNS
 

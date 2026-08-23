@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.core.persistence import get_store
 from app.main import app
-from app.services.versioning import WorkflowVersion
+from app.models.records.workflow_version import WorkflowVersion
 from app.web.loading import list_projects
 from app.services import workspace
 from stage_seed import set_stages

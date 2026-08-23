@@ -14,9 +14,9 @@ from app.core.persistence import configure_store
 from app.core.sqlite_store import SqliteKvStore
 from app.models.stage import StageDraft
 from app.services import project as project_service
-from app.services.loader import WorkingCopy
-from app.services.methodology import Methodology
-from app.services.versioning import WorkflowVersion
+from app.models.records.working_copy import WorkingCopy
+from app.models.records.methodology import Methodology
+from app.models.records.workflow_version import WorkflowVersion
 from conftest import queue_added_columns, queue_columns, reads_of
 
 _ALEMBIC_DIRECTORY = Path(__file__).resolve().parents[1] / "alembic"

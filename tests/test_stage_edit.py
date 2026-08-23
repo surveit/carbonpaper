@@ -6,7 +6,7 @@ import pytest
 from app.services import stage_edit
 from app.services.errors import WorkflowLoadError
 from app.core.persistence import get_store
-from app.services.loader import WorkingCopy
+from app.models.records.working_copy import WorkingCopy
 from stage_seed import read_stage, read_stages, set_stages
 
 # A strictly-1:1 llm_transform (app/models/stage.py): its input and output

@@ -7,38 +7,23 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar
 
-from pydantic import Field, ValidationError
+from pydantic import ValidationError
 
 from app.core.errors import DocumentNotFound
 from app.core.paths import repo_root
 from app.core.persistence import (
     JsonDict,
-    PersistedModel,
-    PersistenceScope,
     get_store,
 )
-from app.models.stage import STAGE_SPEC_SCHEMA_VERSION, Stage, parse_stage, stage_to_spec_dict
+from app.models.stage import Stage, parse_stage, stage_to_spec_dict
 from app.models.stages.code import PythonFunction
 from app.models.stages.starlark import StarlarkFunction
 from app.models.workflow import Workflow, validate_workflow
+from app.models.records.working_copy import WorkingCopy
 from app.core.utils import format_errors
 
 from .errors import WorkflowLoadError
-
-
-class WorkingCopy(PersistedModel):
-    """A project's mutable stage list, `id`'d by project name."""
-
-    collection: ClassVar[str] = "working_copy"
-    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
-    SCHEMA_VERSION: ClassVar[int] = STAGE_SPEC_SCHEMA_VERSION
-    # The same spec-dict shape WorkflowVersion freezes its stages in, so a stage
-    # reads identically in the working copy and in a version cut from it.
-    DUMP_OPTS: ClassVar[JsonDict] = {"by_alias": True, "exclude_none": True}
-
-    stages: list[Stage] = Field(default_factory=list)
 
 
 @dataclass

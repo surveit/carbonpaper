@@ -16,19 +16,9 @@ from app.models.review_guide import ReviewGuideStep
 from app.core.persistence import get_store
 from app.services.loader import WorkflowLoadError
 from app.services.project import save_working_copy_as_version
-from app.services.versioning import (
-    ReviewGuide,
-    WorkflowVersion,
-    create_version_from_stages,
-    list_versions,
-    load_version,
-    find_latest_review_guide,
-    find_latest_version_id,
-    load_version_stages,
-    publish_version,
-    resolve_version_id,
-    save_version_guide,
-)
+from app.services.versioning import create_version_from_stages, list_versions, load_version, find_latest_review_guide, find_latest_version_id, load_version_stages, publish_version, resolve_version_id, save_version_guide
+from app.models.records.review_guide import ReviewGuide
+from app.models.records.workflow_version import WorkflowVersion
 from stage_seed import add_stage
 
 # Every non-publish stage's signature must say what it outputs

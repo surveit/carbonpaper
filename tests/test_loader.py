@@ -5,12 +5,8 @@ from __future__ import annotations
 import pytest
 
 from app.core.persistence import get_store
-from app.services.loader import (
-    WorkflowLoadError,
-    WorkingCopy,
-    load_stage_entries,
-    load_workflow,
-)
+from app.services.loader import WorkflowLoadError, load_stage_entries, load_workflow
+from app.models.records.working_copy import WorkingCopy
 
 
 def _valid(tmp_path):
