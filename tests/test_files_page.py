@@ -11,7 +11,9 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.services import workspace
 from app.services.project import create_project
+from app.core.file_shape import StoredFileShape
 from app.core.files import files_root, list_project_files, save_upload
+from app.web import files_view
 from run_seed import store_manifest
 
 client = TestClient(app)
@@ -124,3 +126,50 @@ def test_deleting_leaves_the_same_bytes_another_project_holds_its_own_copy_of(pr
 def test_deleting_a_file_this_project_does_not_hold_404s(project_id):
     assert client.post(f"/project/{project_id}/files/{'0' * 32}/delete",
                        data={"confirm": "anything"}).status_code == 404
+
+
+def test_the_shape_is_measured_once_and_kept(project_id, monkeypatch):
+    store(project_id, "a.csv", b"where,n\nlyon,1\n")
+    measured = {"n": 0}
+    real = files_view.read_file_shape
+
+    def counting(*args, **kwargs):
+        measured["n"] += 1
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(files_view, "read_file_shape", counting)
+    client.get(f"/project/{project_id}/files")
+    client.get(f"/project/{project_id}/files")
+    assert measured["n"] == 2                      # asked twice
+    assert len(StoredFileShape.find(file_id=list_project_files(project_id)[0].id)) == 1
+
+
+def test_two_files_of_one_shape_are_told_apart_by_where_they_differ(project_id):
+    store(project_id, "lyon.csv", b"city,n\nlyon,1\nlyon,2\nlyon,3\n")
+    store(project_id, "paris.csv", b"city,n\nparis,1\nparis,2\nparis,3\n")
+    page = client.get(f"/project/{project_id}/files").text
+    assert "distinguishing data" in page
+    assert "city" in page and "lyon" in page and "paris" in page
+
+
+def test_the_table_can_be_grouped_by_shape(project_id):
+    store(project_id, "lyon.csv", b"city,n\nlyon,1\n")
+    store(project_id, "terms.csv", b"term,lang\nmerde,fr\n")
+    page = client.get(f"/project/{project_id}/files").text
+    assert "Group files by data shape" in page
+    assert 'data-shape-label="2 columns · 1 file"' in page
+    assert "/static/files-group.js" in page
+
+
+def test_a_file_of_its_own_shape_is_grouped_alone(project_id):
+    store(project_id, "only.csv", b"city,n\nlyon,1\n")
+    assert 'data-shape-label="2 columns · 1 file"' in client.get(
+        f"/project/{project_id}/files").text
+
+
+def test_two_files_carrying_the_same_values_separate_by_nothing(project_id):
+    same = b"city,n\nlyon,1\nlyon,2\n"
+    store(project_id, "one.csv", same)
+    store(project_id, "two.csv", same)
+    assert "nothing separates it from 1 of these" in client.get(
+        f"/project/{project_id}/files").text

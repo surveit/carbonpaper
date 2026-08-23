@@ -6,12 +6,19 @@ import re
 from collections import Counter
 from collections.abc import Sequence
 
+from typing import ClassVar
+
 from pydantic import BaseModel
 
 from app.core.column_profile import NumericRange, ValueCount
+from app.core.ids import ID
+from app.core.record import PersistedModel, PersistenceScope
 
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _TIME = re.compile(r"^\d{2}:\d{2}(:\d{2})?$")
+# How many of a column's commonest values a stored shape keeps, for every reader of it.
+VALUES_KEPT = 8
+
 _HISTOGRAM_BINS = 12
 # Above this many distinct values a column reads as prose, not a set.
 _CATEGORY_SHARE = 0.02
@@ -59,6 +66,16 @@ class ColumnShape(BaseModel):
 class FileShape(BaseModel):
     row_count: int
     columns: list[ColumnShape]
+
+
+class StoredFileShape(PersistedModel):
+    """A file's bytes never change, so this is measured once and never recomputed."""
+
+    collection: ClassVar[str] = "file_shape"
+    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
+
+    file_id: ID
+    shape: FileShape
 
 
 def measure_column_shape(
