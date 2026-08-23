@@ -1351,3 +1351,4 @@
 {"run_id":"32629177956","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32629177956","created":"2026-08-23T08:47:24Z","branch":"claims-emitted-by-a-run","event":"pull_request","contracts_kept":14,"findings":[]}
 {"run_id":"32629177956","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32629177956","created":"2026-08-23T08:47:55Z","branch":"claims-emitted-by-a-run","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"32629455498","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32629455498","created":"2026-08-23T08:53:31Z","branch":"gate-the-cancelled-fan-out-test","event":"pull_request","contracts_kept":14,"findings":[]}
+{"run_id":"32629455498","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32629455498","created":"2026-08-23T08:54:08Z","branch":"gate-the-cancelled-fan-out-test","event":"pull_request","contracts_kept":null,"findings":[]}
