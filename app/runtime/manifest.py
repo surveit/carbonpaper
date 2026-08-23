@@ -109,6 +109,11 @@ class RunManifest(PersistedModel):
     halted_at: list[str] | None = None
     cancelled_at: str | None = None
     resumed_at: str | None = None
+    # How many times this run has been picked back up after its executor died
+    # (app.services.run_recovery). Bounded, because a run that kills the process
+    # — an OOM on a large frame — would otherwise be resumed into the same crash
+    # on every boot, spending a model call per attempt forever.
+    recovery_attempts: int = 0
 
     @model_validator(mode="before")
     @classmethod
