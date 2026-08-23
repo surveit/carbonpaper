@@ -16,7 +16,7 @@ from app.tools import shared, working_copy
 from app.tools.submitted_stage import (
     SubmittedStage,
     add_stages_reporting_drops,
-    edit_stage_reporting_drops,
+    edit_stages_reporting_drops,
 )
 from app.tools.tool_specs import (
     PROJECT_ID,
@@ -25,6 +25,7 @@ from app.tools.tool_specs import (
     read_tool_description,
 )
 from app.models.records.project import Project
+from app.models.stage import StageEdit
 
 
 class EditingContext(BaseModel):
@@ -42,8 +43,8 @@ def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
     def create_project(name: str, document: str) -> Project:
         return shared.create_project(name, document, source="editing agent")
 
-    def edit_stage(project_id: str, stage_id: str, changes_json: str) -> dict[str, Any]:
-        return edit_stage_reporting_drops(project_id, stage_id, changes_json)
+    def edit_stages(project_id: str, edits: list[StageEdit]) -> shared.EditedStages:
+        return edit_stages_reporting_drops(project_id, edits)
 
     def add_stage(project_id: str, stages: list[SubmittedStage]) -> dict[str, Any]:
         return add_stages_reporting_drops(project_id, stages)
@@ -69,7 +70,7 @@ def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
     tools: list[Callable[..., Any]] = [
         get_current_project,
         create_project,
-        edit_stage,
+        edit_stages,
         add_stage,
         save_version,
         list_files,
@@ -106,14 +107,10 @@ TOOL_SCHEMAS: dict[str, ToolParameterProse] = {
             "which every later generation reads — so send what the user wrote, never a "
             "summary of it.",
     },
-    "edit_stage": {
+    "edit_stages": {
         "project_id": PROJECT_ID,
-        "stage_id": "The id of the stage to change.",
-        "changes_json": "A JSON object (encoded as a string) of ONLY the fields to change — a "
-            "JSON Merge Patch. Fields you omit are preserved verbatim; a null value "
-            "deletes a field. Nested objects merge (they are not replaced whole). "
-            'Examples: {"cache": true} turns caching on; {"llm": {"model": "claude-opus-5"}} '
-            "changes only llm.model. You cannot change a stage's id this way.",
+        "edits": "One entry per stage you are changing; entries sent together are validated "
+            "and written as one workflow.",
     },
     "add_stage": {
         "project_id": PROJECT_ID,
@@ -146,7 +143,7 @@ TOOL_SCHEMAS: dict[str, ToolParameterProse] = {
 TOOL_LABELS: dict[str, str] = {
     "get_current_project": "Checking the current project",
     "create_project": "Creating the project",
-    "edit_stage": "Editing a stage",
+    "edit_stages": "Editing the workflow's stages",
     "add_stage": "Adding a stage",
     "save_version": "Saving the workflow as a version",
     "list_files": "Listing the project's files",

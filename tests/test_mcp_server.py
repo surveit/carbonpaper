@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 from app.models import Terms
 from app.tools.submitted_stage import SubmittedStage
+from app.models.stage import StageEdit
 from app.services import workspace
 from app.services.project import ProjectListing
 from stage_seed import read_stages, set_stages
@@ -67,7 +68,7 @@ def test_mcp_lists_the_authoring_tools(client):
         "get_project_status",
         "read_workflow_summary",
         "read_stage",
-        "edit_stage",
+        "edit_stages",
         "add_stage",
         "delete_stage",
         "generate_stage_tests",
@@ -301,8 +302,11 @@ def test_mcp_stage_tools_report_an_unknown_stage_id_as_issues(tmp_path, monkeypa
     removed = server.delete_stage(project_id=project_id, stage_id="ghost")
     assert removed["ok"] is False and any("ghost" in i for i in removed["issues"])
 
-    edited = server.edit_stage(project_id=project_id, stage_id="ghost", changes_json='{"cache": false}')
-    assert edited["ok"] is False and any("ghost" in i for i in edited["issues"])
+    edited = server.edit_stages(
+        project_id=project_id,
+        edits=[StageEdit(stage_id="ghost", changes_json='{"cache": false}')],
+    )
+    assert edited.ok is False and any("ghost" in i for i in edited.issues)
 
 
 def test_mcp_add_stage_reports_an_unloadable_workflow_as_issues(tmp_path, monkeypatch):

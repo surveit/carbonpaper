@@ -11,7 +11,8 @@ import pytest
 
 from app.services.loader import load_workflow
 from app.services.project import WorkflowFile, import_project
-from app.tools.submitted_stage import edit_stage_reporting_drops
+from app.models.stage import StageEdit
+from app.tools.submitted_stage import edit_stages_reporting_drops
 
 _FIXTURE_PATH = (
     Path(__file__).resolve().parents[2]
@@ -45,31 +46,31 @@ def test_a_patch_carrying_tests_leaves_the_stored_ones_untouched(tour_project):
         "expected": None,
     }]
 
-    reply = edit_stage_reporting_drops(
-        tour_project, _TESTED_STAGE, json.dumps({"tests": forged})
-    )
+    reply = edit_stages_reporting_drops(tour_project, [
+        StageEdit(stage_id=_TESTED_STAGE, changes_json=json.dumps({"tests": forged}))])
 
-    assert reply["ok"] is True
+    assert reply.ok is True
     assert _stage(tour_project, _TESTED_STAGE).tests == seeded
-    assert reply["warnings"][0].startswith(f"`{_TESTED_STAGE}`: ignored server-owned fields: tests")
+    assert reply.warnings[0].startswith(f"`{_TESTED_STAGE}`: ignored server-owned fields: tests")
 
 
 def test_a_patch_that_does_not_mention_tests_keeps_them(tour_project):
     """The strip runs on the PATCH: over the merged spec it would delete them on any edit."""
     seeded = _stage(tour_project, _TESTED_STAGE).tests
 
-    reply = edit_stage_reporting_drops(
-        tour_project, _TESTED_STAGE, json.dumps({"description": "Check each filing"})
-    )
+    reply = edit_stages_reporting_drops(tour_project, [
+        StageEdit(stage_id=_TESTED_STAGE,
+                  changes_json=json.dumps({"description": "Check each filing"}))])
 
-    assert reply["ok"] is True
-    assert "warnings" not in reply
+    assert reply.ok is True
+    assert reply.warnings == []
     assert _stage(tour_project, _TESTED_STAGE).tests == seeded
     assert _stage(tour_project, _TESTED_STAGE).description == "Check each filing"
 
 
 def test_unparseable_changes_still_reach_the_service_for_its_own_error(tour_project):
-    reply = edit_stage_reporting_drops(tour_project, _TESTED_STAGE, "{not json")
+    reply = edit_stages_reporting_drops(
+        tour_project, [StageEdit(stage_id=_TESTED_STAGE, changes_json="{not json")])
 
-    assert reply["ok"] is False
-    assert any("JSON parse error" in issue for issue in reply["issues"])
+    assert reply.ok is False
+    assert any("JSON parse error" in issue for issue in reply.issues)

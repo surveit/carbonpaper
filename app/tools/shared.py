@@ -170,6 +170,14 @@ def write_terms(project_id: str, terms: Terms) -> Terms:
     return terms_service.load_terms(project_id)
 
 
+# `edited` is empty whenever `ok` is false: the batch is written whole or not at all.
+class EditedStages(BaseModel):
+    ok: bool
+    edited: list[str]
+    issues: list[str]
+    warnings: list[str] = []
+
+
 class StoredFileView(BaseModel):
     """One file a project holds; `file_id` is what names it to run_workflow."""
 

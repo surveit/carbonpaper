@@ -23,6 +23,7 @@ from app.models.stages.stage_base import (  # noqa: F401  (re-exported: the stag
     StageType,
     is_grain_and_order_preserving,
 )
+from app.models.schema import _Base
 from app.models.stages.aggregate import AggregateConfig, AggregateStage
 from app.models.stages.code import (
     PythonFrameFunctionStage,
@@ -48,7 +49,7 @@ from app.models.stages.starlark import StarlarkFunction, StarlarkRowFunctionStag
 from app.models.stages.starlark_filter import StarlarkFilter, StarlarkFilterRowsStage
 from app.models.stages.union import UnionConfig, UnionStage
 from app.core.utils import format_errors
-from app.models.tool_schema_prompts import STAGE_DRAFT_DESCRIPTION
+from app.models.tool_schema_prompts import STAGE_DRAFT_DESCRIPTION, STAGE_EDIT_DESCRIPTION
 
 
 # ── Stage ────────────────────────────────────────────────────────────────────
@@ -159,3 +160,12 @@ class StageDraft(AuthoredStageFields):
 
     def to_stage_spec(self) -> dict[str, Any]:
         return self.model_dump(exclude_unset=True, by_alias=True)
+
+
+class StageEdit(_Base):
+    model_config = ConfigDict(json_schema_extra={"description": STAGE_EDIT_DESCRIPTION})
+
+    stage_id: str = Field(description="The id of the stage to change.")
+    changes_json: str = Field(
+        description="A JSON Merge Patch (as a string) of ONLY this stage's changed fields.",
+    )

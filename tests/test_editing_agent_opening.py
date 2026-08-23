@@ -24,7 +24,7 @@ _WAYS_IN = (
 # Each clause of the project-bound message, and the tools that make it true. A clause
 # whose tools this agent no longer binds is an offer it cannot keep.
 _OFFERS = {
-    "Add, edit or remove stages.": ("add_stage", "edit_stage", "delete_stage"),
+    "Add, edit or remove stages.": ("add_stage", "edit_stages", "delete_stage"),
     "Run it — all of it, or a slice of rows as a test": (
         "run_workflow", "run_workflow_test"),
     "read the rows each stage produced": ("read_stage_output_rows",),

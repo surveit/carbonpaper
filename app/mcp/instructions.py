@@ -63,7 +63,7 @@ run_workflow.)
 {ENUM_FROM_DATA_GUIDANCE}
 (Here: save_version, then run_workflow_test(stage_ids=["<the input stage id>"],
 limit=null) — a named source stage EXECUTES, and a null limit is the whole bound
-file — then profile_stage_output_data_range on what it wrote. edit_stage tightens
+file — then profile_stage_output_data_range on what it wrote. edit_stages tightens
 the schema afterwards.)
 
 # Your tools, by phase
@@ -79,8 +79,8 @@ record, and it returns the project record, whose `id` every other tool takes.
   TERMS      read_terms to see what is agreed, then write_terms once the user has
              agreed the rest. Every later phase writes in those words.
   PLANNING   (no tools — this is where you ask the user)
-  BUILD      add_stage, edit_stage, delete_stage, then generate_stage_tests and
-             loop edit_stage -> run_stage_tests until they pass. Still BUILD.
+  BUILD      add_stage, edit_stages, delete_stage, then generate_stage_tests and
+             loop edit_stages -> run_stage_tests until they pass. Still BUILD.
              If a write is refused because the step needs unsandboxed Python,
              that refusal names what to try instead. Only if nothing fits, put
              it to the user in their words, wait for their answer, and call

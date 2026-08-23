@@ -98,7 +98,8 @@ All three submit through `submit_answer`, so a schema-invalid reply is **re-aske
 the agent's own loop**, not just parse-checked. `app/services/generation.py` drives them
 and persists what comes back. The guide author is given the version's stages and no tool
 that reads a project, so it cannot narrate the working copy the version was cut from.
-Workflow stages are authored one at a time through `app/services/stage_edit.py`.
+Workflow stages are authored through `app/services/stage_edit.py`, a batch at a time,
+validated together.
 
 ## `app/web/` — the web layer  → `app/AGENTS.md`
 Thin `app/main.py` (~40 lines); routes under `/project/{project}/…`. Routers: `project.py`

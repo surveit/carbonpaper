@@ -19,7 +19,7 @@ _EXPECTED_TOOL_NAMES = {
     "read_workflow_summary",
     "read_stage_output_rows",
     "read_stage",
-    "edit_stage",
+    "edit_stages",
     "add_stage",
     "delete_stage",
     "save_version",

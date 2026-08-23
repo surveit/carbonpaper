@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from app.models.stage import StageEdit
 from app.services import stage_edit
 from app.services.errors import WorkflowLoadError
 from app.core.persistence import get_store
@@ -82,9 +83,20 @@ def _score(project: str) -> dict:
     return read_stage(project, "score")
 
 
+def _patch(project: str, stage_id: str, changes: dict) -> stage_edit.EditStageResult:
+    return _patch_many(project, {stage_id: changes})
+
+
+def _patch_many(project: str, changes_by_stage: dict[str, dict]) -> stage_edit.EditStageResult:
+    return stage_edit.patch_stage_specs(project, [
+        StageEdit(stage_id=stage_id, changes_json=json.dumps(changes))
+        for stage_id, changes in changes_by_stage.items()
+    ])
+
+
 def test_patch_changes_only_named_field_and_preserves_the_rest(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
-    result = stage_edit.patch_stage_spec(pdir, "score", json.dumps({"cache": False}))
+    result = _patch(pdir, "score", {"cache": False})
     assert result.ok is True
     after = _score(pdir)
     assert after["cache"] is False
@@ -96,7 +108,7 @@ def test_patch_changes_only_named_field_and_preserves_the_rest(tmp_path: Path) -
 
 def test_patch_deep_merges_nested_object(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
-    result = stage_edit.patch_stage_spec(pdir, "score", json.dumps({"llm": {"model": "claude-opus-5"}}))
+    result = _patch(pdir, "score", {"llm": {"model": "claude-opus-5"}})
     assert result.ok is True
     after = _score(pdir)
     assert after["llm"]["model"] == "claude-opus-5"
@@ -106,8 +118,8 @@ def test_patch_deep_merges_nested_object(tmp_path: Path) -> None:
 
 def test_patch_null_deletes_a_field(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
-    stage_edit.patch_stage_spec(pdir, "score", json.dumps({"review": {"rationale": "spot-check"}}))
-    result = stage_edit.patch_stage_spec(pdir, "score", json.dumps({"review": None}))
+    _patch(pdir, "score", {"review": {"rationale": "spot-check"}})
+    result = _patch(pdir, "score", {"review": None})
     assert result.ok is True
     assert "review" not in _score(pdir)
 
@@ -115,35 +127,35 @@ def test_patch_null_deletes_a_field(tmp_path: Path) -> None:
 def test_patch_invalid_result_writes_nothing(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
     before = _score(pdir)
-    result = stage_edit.patch_stage_spec(pdir, "score", json.dumps({"type": "not_a_real_type"}))
+    result = _patch(pdir, "score", {"type": "not_a_real_type"})
     assert result.ok is False and result.issues
     assert _score(pdir) == before
 
 
 def test_patch_cannot_change_id(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
-    result = stage_edit.patch_stage_spec(pdir, "score", json.dumps({"id": "renamed"}))
+    result = _patch(pdir, "score", {"id": "renamed"})
     assert result.ok is False and any("must equal" in i for i in result.issues)
 
 
 def test_patch_missing_stage_raises(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
     with pytest.raises(FileNotFoundError):
-        stage_edit.patch_stage_spec(pdir, "ghost", json.dumps({"cache": False}))
+        _patch(pdir, "ghost", {"cache": False})
 
 
 def test_edit_that_breaks_the_workflow_graph_is_rejected(tmp_path: Path) -> None:
     # The stage is valid on its own; the resulting WORKFLOW is not.
     pdir = _seed(tmp_path)
     before = _score(pdir)
-    result = stage_edit.patch_stage_spec(pdir, "score", json.dumps({
+    result = _patch(pdir, "score", {
         "inputs": [{"id": "ghost"}],
         "signature": {
             "form": "extends",
             "reads": [{"input": "ghost", "columns": _IN_SCHEMA["columns"]}],
             "adds": [{"name": "score", "type": "float", "nullable": False}],
         },
-    }))
+    })
     assert result.ok is False
     assert any("ghost" in i for i in result.issues)
     assert _score(pdir) == before
@@ -289,4 +301,57 @@ def test_edit_stage_on_an_empty_workflow_raises(tmp_path: Path) -> None:
 def test_patch_stage_on_an_empty_workflow_raises(tmp_path: Path) -> None:
     pdir = _seed_empty(tmp_path)
     with pytest.raises(FileNotFoundError):
-        stage_edit.patch_stage_spec(pdir, "load", json.dumps({"cache": False}))
+        _patch(pdir, "load", {"cache": False})
+
+
+# ── a batch of edits ─────────────────────────────────────────────────────────
+_READS_AN_INT = {
+    "form": "extends",
+    "reads": [{"input": "load", "columns": [{"name": "doc_id", "type": "int", "nullable": False}]}],
+    "adds": [{"name": "score", "type": "float", "nullable": False}],
+}
+_PRODUCES_AN_INT = {
+    "form": "replaces", "produces": [{"name": "doc_id", "type": "int", "nullable": False}],
+}
+
+
+def test_retyping_a_column_needs_its_writer_and_reader_in_one_call(tmp_path: Path) -> None:
+    pdir = _seed(tmp_path)
+    # Either stage alone contradicts the other, and neither refusal writes anything.
+    writer_alone = _patch(pdir, "load", {"signature": _PRODUCES_AN_INT})
+    reader_alone = _patch(pdir, "score", {"signature": _READS_AN_INT})
+    assert writer_alone.ok is False and reader_alone.ok is False
+    assert read_stage(pdir, "load")["signature"]["produces"][0]["type"] == "str"
+
+    together = _patch_many(pdir, {"load": {"signature": _PRODUCES_AN_INT},
+                                  "score": {"signature": _READS_AN_INT}})
+    assert together.ok is True, together.issues
+    assert read_stage(pdir, "load")["signature"]["produces"][0]["type"] == "int"
+    assert _score(pdir)["signature"]["reads"][0]["columns"][0]["type"] == "int"
+
+
+def test_one_bad_edit_writes_none_of_the_batch(tmp_path: Path) -> None:
+    pdir = _seed(tmp_path)
+    before = read_stages(pdir)
+    result = _patch_many(pdir, {"load": {"description": "Load the documents"},
+                                "score": {"type": "not_a_real_type"}})
+    assert result.ok is False and result.issues
+    assert read_stages(pdir) == before
+
+
+def test_two_patches_to_one_stage_compose(tmp_path: Path) -> None:
+    pdir = _seed(tmp_path)
+    result = stage_edit.patch_stage_specs(pdir, [
+        StageEdit(stage_id="score", changes_json=json.dumps({"cache": True})),
+        StageEdit(stage_id="score", changes_json=json.dumps({"description": "Twice"})),
+    ])
+    assert result.ok is True, result.issues
+    assert _score(pdir)["cache"] is True and _score(pdir)["description"] == "Twice"
+
+
+def test_changes_that_are_not_a_json_object_are_refused_by_stage(tmp_path: Path) -> None:
+    pdir = _seed(tmp_path)
+    result = stage_edit.patch_stage_specs(pdir, [
+        StageEdit(stage_id="score", changes_json="[1, 2]"),
+    ])
+    assert result.ok is False and any("score" in issue for issue in result.issues)

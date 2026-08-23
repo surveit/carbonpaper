@@ -217,7 +217,7 @@ of save_version.""",
 Run a stage's authored tests against its CURRENT code and report the
 result. Omit `stage_id` to run every stage that has tests, or pass one to
 scope the run to that stage. Use this after regenerating code
-with edit_stage to see which tests the new code fails — the report carries a
+with edit_stages to see which tests the new code fails — the report carries a
 summary plus, per test, its status and any cell diffs, and lists
 `untested_stages` (testable stages with no tests, a coverage gap).
 This does NOT edit tests: a failing test means the code disagrees with the
@@ -535,7 +535,7 @@ Create NEW stages in the workflow. `stages` is a LIST — submit every stage
 you are ready to author in ONE call; a list of one is the single-stage case.
 Each is a FULL stage, as the anatomy describes one. Its `id` is new, unique,
 and the stage's ONLY name — every surface shows it, so name the step well;
-use edit_stage to change an existing one. `publish` is the one type needing
+use edit_stages to change an existing one. `publish` is the one type needing
 TWO blocks: its own and a `function`. There is no output_schema to send —
 the stage's output IS what its signature promises.
 
@@ -577,13 +577,16 @@ or read off a page, identifies nothing.
 An empty document is refused and no project is written. Next: agree the
 project's terms — the words its methodology already uses — with the user, and
 store them with write_terms.""",
-    "edit_stage": """\
-Change specific fields of one stage. `changes_json` is a JSON object of
+    "edit_stages": """\
+Change specific fields of a stage. `changes_json` is a JSON object of
 ONLY the fields to change (a JSON Merge Patch): {"cache": true} turns caching on;
 {"llm": {"model": "claude-opus-5"}} changes only llm.model and leaves the rest of the
 llm block intact; a null value deletes a field. Fields you do not mention
 are preserved exactly. Validated first; if invalid, nothing is written and
-the issues are returned. You cannot change a stage's id this way.""",
+the issues are returned. You cannot change a stage's id this way.
+
+Edit several stages at once by sending several entries — they are validated and
+written as one workflow, which is what edits that only make sense together need.""",
     "get_current_project": """\
 Return the id of the project this session is editing, or nothing if this
 session was opened without one. Call this FIRST. If it returns an id, pass
