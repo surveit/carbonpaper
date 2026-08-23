@@ -37,8 +37,7 @@ class StageOutput:
     lineage: RowLineage | None = None
     # Which branch of its code each row took; None where nothing ran.
     branches: RowBranches | None = None
-    # Set where the stage queued rows for review: the run stops here, and `table`
-    # is not the stage's output — nothing writes it.
+    # Set where the stage queued rows for review; `table` is then not its output.
     awaiting_review: AwaitingReview | None = None
 
     @classmethod

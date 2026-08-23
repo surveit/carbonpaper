@@ -39,10 +39,7 @@ from app.services import run as run_service
 from app.services.errors import WorkflowLoadError
 from app.services.project_record import (
     Project as Project,
-    read_project_json,
     read_project_name as read_project_name,
-    read_project_record as read_project_record,
-    resolve_project_json_path,
 )
 from app.services.stage_edit import AddStagesResult, EditStageResult
 
@@ -60,8 +57,7 @@ def find_projects_by_name(name: str) -> list[Project]:
 
 
 def has_document(project_id: str) -> bool:
-    """A project imported onto disk carries its authoring facts in project.json, not a record."""
-    return methodology.exists(project_id) or resolve_project_json_path(project_id).is_file()
+    return methodology.exists(project_id)
 
 
 def find_workspace_project_ids() -> list[str]:
@@ -166,7 +162,7 @@ def _runs_summary(project_id: str) -> RunsSummary:
 
 def project_meta(project_id: str) -> ProjectMeta:
     # A project created before ids were minted reads as a slug of its title.
-    record = Project.load_or_none(project_id) or read_project_json(project_id)
+    record = Project.load_or_none(project_id)
     if record is None:
         # No record: the id is the only name this project has, and it is not invented.
         return ProjectMeta(name=project_id, display_name=project_id, title=None,

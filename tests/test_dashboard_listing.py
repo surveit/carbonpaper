@@ -27,8 +27,6 @@ def _make_document_only_project(root, name="fresh"):
     proj = root / name
     proj.mkdir(parents=True, exist_ok=True)
     write_methodology((proj).name, "methodology prose")
-    (proj / "project.json").write_text(
-        json.dumps({"name": name, "model": "sonnet"}), encoding="utf-8")
     return proj
 
 

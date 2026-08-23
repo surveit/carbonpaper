@@ -6,7 +6,6 @@ materializing writes a session but still runs no turn.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -34,9 +33,6 @@ def _make_project(root: Path, name: str = "already-here") -> None:
     proj = root / name
     proj.mkdir()
     write_methodology((proj).name, "methodology prose")
-    (proj / "project.json").write_text(
-        json.dumps({"name": name, "model": "sonnet"}), encoding="utf-8"
-    )
 
 
 def _materialize_the_tour() -> str:
