@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Sequence
 
 from app.core.llm import LLMModel
+from app.models.stages.aggregate import RETIRED_FORMULAS
 from app.models.stages.stage_types import APPROVAL_REQUIRED_TYPES
 from app.services.code_approval import has_code_execution_approval
 from app.models import StageDraft, StageEdit
@@ -151,35 +152,37 @@ def find_unapproved_code_issues(
 
 
 AGGREGATION_WHERE_REFUSAL = (
-    "stage '{sid}': aggregation `{output_column}` carries `where`, which is retired. A "
-    "`where` cuts which rows feed that ONE column, so the output row it lands in has no "
-    "single population: the row's other columns are computed over a different set of rows, "
-    "and 'which rows produced this figure' can then only be answered per column. It is "
-    "also the only row-cut here that is not a stage — nothing in the workflow shows it "
-    "happened, no row count reports it, and no stage test can pin it.\n"
-    "Write the cut as a grouping instead. `{predicate}` tests one column, so group on that "
-    "column and let every category come out as its own row: the figure you wanted is the "
-    "row for that category, and every row has one population. Where the published grain "
-    "has to stay one row per subject, add a sibling aggregate grouped on that subject AND "
-    "the category, or carry the category column through with formula `list`."
+    "stage '{sid}': aggregation `{output_column}` carries `where`, which is retired — a "
+    "row-cut no stage shows, leaving that row's columns each resting on different rows. "
+    "Group on the column `{predicate}` tests, or put a filter_rows stage in front."
+)
+
+AGGREGATION_PICK_REFUSAL = (
+    "stage '{sid}': aggregation `{output_column}` uses `{formula}`, which is retired — it "
+    "picks between rows that may disagree and drops the rest unrecorded. Use `only` where "
+    "the group agrees, `list` where it does not, or put a dedupe stage in front."
 )
 
 
-def find_aggregation_where_issues(candidate: dict) -> list[str]:
+def find_aggregation_issues(candidate: dict) -> list[str]:
     """Enforced on write, not on the model — on load it would refuse every version stored before."""
     aggregate = candidate.get("aggregate")
     aggregations = aggregate.get("aggregations") if isinstance(aggregate, dict) else None
     if not isinstance(aggregations, list):
         return []
-    return [
-        AGGREGATION_WHERE_REFUSAL.format(
-            sid=candidate.get("id"),
-            output_column=op.get("output_column"),
-            predicate=op.get("where"),
-        )
-        for op in aggregations
-        if isinstance(op, dict) and op.get("where")
-    ]
+    issues: list[str] = []
+    for op in aggregations:
+        if not isinstance(op, dict):
+            continue
+        if op.get("where"):
+            issues.append(AGGREGATION_WHERE_REFUSAL.format(
+                sid=candidate.get("id"), output_column=op.get("output_column"),
+                predicate=op.get("where")))
+        if op.get("formula") in RETIRED_FORMULAS:
+            issues.append(AGGREGATION_PICK_REFUSAL.format(
+                sid=candidate.get("id"), output_column=op.get("output_column"),
+                formula=op.get("formula")))
+    return issues
 
 
 def find_unnamed_model_issues(candidate: dict) -> list[str]:
@@ -209,7 +212,7 @@ def _apply(project_id: str, specs: dict[str, dict], candidates: dict[str, dict])
         issues += find_description_issues(candidate)
         issues += find_unnamed_model_issues(candidate)
         issues += find_unapproved_code_issues(project_id, candidate, specs)
-        issues += find_aggregation_where_issues(candidate)
+        issues += find_aggregation_issues(candidate)
     if issues:
         return EditStageResult(ok=False, issues=issues)
 

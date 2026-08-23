@@ -61,7 +61,7 @@ def test_the_schema_the_tools_advertise_no_longer_offers_where():
 
 def test_the_catalog_never_names_it_either():
     """No door, so no doorbell: `where` has a replacement, unlike an approval-gated type."""
-    assert "where" not in STAGE_TYPES["aggregate"].notes
+    assert "`where`" not in STAGE_TYPES["aggregate"].notes
 
 
 def test_the_catalog_points_at_the_grouping_that_replaces_it():
@@ -70,32 +70,37 @@ def test_the_catalog_points_at_the_grouping_that_replaces_it():
 
 # ── refused on write ──────────────────────────────────────────────────────────
 def test_a_where_is_refused_on_write():
-    issues = stage_edit.find_aggregation_where_issues(_WHERE_STAGE)
+    issues = stage_edit.find_aggregation_issues(_WHERE_STAGE)
     assert len(issues) == 1
     assert "exception_filings" in issues[0]
 
 
 def test_the_refusal_names_the_predicate_and_the_replacement():
-    refusal = stage_edit.find_aggregation_where_issues(_WHERE_STAGE)[0]
+    refusal = stage_edit.find_aggregation_issues(_WHERE_STAGE)[0]
     assert "inclusion_basis == 'reporter exception'" in refusal
-    # The reader is told the two costs, not just that it is blocked.
-    assert "no single population" in refusal and "not a stage" in refusal
-    for escape in ("group on that", "sibling aggregate", "`list`"):
+    assert "no stage shows" in refusal
+    for escape in ("Group on the column", "filter_rows"):
         assert escape in refusal, escape
+
+
+def test_the_refusal_is_short_enough_that_a_reader_reads_it():
+    """A refusal is prompt on every call that hits it; the long version was 11 lines."""
+    assert len(stage_edit.find_aggregation_issues(_WHERE_STAGE)[0].splitlines()) == 1
+    assert len(stage_edit.find_aggregation_issues(_WHERE_STAGE)[0]) < 300
 
 
 def test_one_refusal_per_aggregation_carrying_one():
     two = json.loads(json.dumps(_WHERE_STAGE))
     two["aggregate"]["aggregations"][0]["where"] = "filing_uuid IS NOT NULL"
-    assert len(stage_edit.find_aggregation_where_issues(two)) == 2
+    assert len(stage_edit.find_aggregation_issues(two)) == 2
 
 
 def test_the_same_stage_without_a_where_is_accepted():
-    assert stage_edit.find_aggregation_where_issues(_GROUPED_STAGE) == []
+    assert stage_edit.find_aggregation_issues(_GROUPED_STAGE) == []
 
 
 def test_a_stage_of_another_type_is_never_looked_at():
-    assert stage_edit.find_aggregation_where_issues(
+    assert stage_edit.find_aggregation_issues(
         {"id": "x", "type": "union", "aggregate": "not a block"}) == []
 
 

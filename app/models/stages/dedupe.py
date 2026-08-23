@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 
 class DedupeKeep(str, Enum):
+    agree = "agree"  # docs/no-silent-pick.md
     first = "first"  # position-dependent: means something only if an upstream stage fixed the order
     highest = "highest"
     lowest = "lowest"
@@ -38,9 +39,11 @@ class DedupeConfig(StageConfig):
     keep: DedupeKeep = Field(
         default=DedupeKeep.first,
         description=(
-            "Which duplicate survives. `highest`/`lowest` pick it by `by`. `first` takes "
-            "the earliest row in the frame, which is only meaningful when an upstream "
-            "stage fixed the order — prefer stating the rule with `by`."
+            "Which duplicate survives. `agree` picks NOTHING: it requires the duplicates to "
+            "be identical outside `keys` and fails, naming the column and the values, where "
+            "they are not. `highest`/`lowest` pick it by `by`. `first` takes the earliest "
+            "row in the frame, which is only meaningful when an upstream stage fixed the "
+            "order — prefer `agree`, or state the rule with `by`."
         ),
     )
     by: Optional[str] = Field(
@@ -53,6 +56,10 @@ class DedupeConfig(StageConfig):
         if self.keep == DedupeKeep.first:
             if self.by is not None:
                 raise ValueError("dedupe: keep=first picks by position, so it takes no `by`")
+            return self
+        if self.keep == DedupeKeep.agree:
+            if self.by is not None:
+                raise ValueError("dedupe: keep=agree picks nothing, so it takes no `by`")
             return self
         if not self.by:
             raise ValueError(f"dedupe: keep={self.keep} needs `by` to compare rows on")
@@ -128,11 +135,12 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
             "Takes exactly ONE input and never alters a row: the output is a SUBSET of "
             "the input's rows, so the signature READS the columns the rule consults — "
             "`keys`, and `by` — and writes nothing.\n"
-            "Say WHY one duplicate wins. `keep: highest, by: filed_at` keeps the latest "
-            "filing and says so in the config, where a reviewer reads it. `keep: first` "
-            "depends on the order the rows happen to arrive in, so it states nothing a "
-            "reviewer can check — use it only when an upstream stage fixed that order "
-            "deliberately.\n"
+            "Say WHY one duplicate wins. `keep: agree` says none has to win — the rows must "
+            "be identical outside `keys`, and the stage FAILS naming the column and the "
+            "values where they are not, so nothing is dropped unrecorded. `keep: highest, "
+            "by: filed_at` keeps the latest filing and says so in the config, where a "
+            "reviewer reads it. `keep: first` depends on the order the rows happen to "
+            "arrive in, so it states nothing a reviewer can check.\n"
             "Ties on `by` are broken by position, so a `by` that repeats within a key "
             "group is a rule that has not finished deciding — add a second key or a "
             "sharper `by`.\n"
