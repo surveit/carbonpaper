@@ -10,7 +10,12 @@ import ast
 from pathlib import Path
 
 from arch import check_no_dict_keys
-from arch._helpers import collect_called_methods, parse_module
+from arch._helpers import (
+    collect_called_methods,
+    find_class_body_assignment,
+    find_subclasses_of,
+    parse_module,
+)
 from arch.scope import find_source_files_under
 
 _RUNTIME_STAGES_DIR = Path(__file__).resolve().parents[1] / "stages"
@@ -22,6 +27,8 @@ _BANNED_PERSISTENCE_METHODS = frozenset({"save", "delete"})
 # the rule it means — project-scope writes from the runtime are still the bug this
 # catches — and needs no allowlist edit for the next run-scoped record.
 _RUN_SCOPE = "PersistenceScope.RUN"
+_RECORDS_MODULE = "app.models.records"
+_RECORDS_DIR = Path(__file__).resolve().parents[2] / "models" / "records"
 
 
 def defines_a_run_scoped_record(tree: ast.Module) -> bool:
@@ -36,11 +43,41 @@ def defines_a_run_scoped_record(tree: ast.Module) -> bool:
     )
 
 
+def read_record_scopes() -> dict[str, str]:
+    """Every record declared under app/models/records, by the scope it carries."""
+    scopes: dict[str, str] = {}
+    for path in find_source_files_under(_RECORDS_DIR):
+        tree = parse_module(path)
+        for node in find_subclasses_of(tree, "PersistedModel"):
+            scope = find_class_body_assignment(node, "SCOPE")
+            value = getattr(scope, "value", None)
+            scopes[node.name] = ast.unparse(value) if value is not None else ""
+    return scopes
+
+
+def find_imported_record_names(tree: ast.Module) -> set[str]:
+    return {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        and node.module is not None
+        and node.module.startswith(_RECORDS_MODULE)
+        for alias in node.names
+    }
+
+
+def saves_only_run_scoped_records(tree: ast.Module, scopes: dict[str, str]) -> bool:
+    """A record declared elsewhere is still the run's own state if its scope says so."""
+    imported = find_imported_record_names(tree) & set(scopes)
+    return bool(imported) and all(scopes[name] == _RUN_SCOPE for name in imported)
+
+
 def find_persisted_write_call_offenders(paths: list[Path]) -> list[str]:
+    scopes = read_record_scopes()
     offenders: list[str] = []
     for path in paths:
         tree = parse_module(path)
-        if defines_a_run_scoped_record(tree):
+        if defines_a_run_scoped_record(tree) or saves_only_run_scoped_records(tree, scopes):
             continue
         hits = collect_called_methods(tree) & _BANNED_PERSISTENCE_METHODS
         if hits:
@@ -89,3 +126,22 @@ def test_find_persisted_write_call_offenders_ignores_read_only_calls(tmp_path: P
         encoding="utf-8",
     )
     assert find_persisted_write_call_offenders([target]) == []
+
+
+def test_a_run_scoped_record_declared_in_models_may_be_saved(tmp_path: Path) -> None:
+    target = tmp_path / "m.py"
+    target.write_text(
+        "from app.models.records.workflow_output import WorkflowOutput\n"
+        "WorkflowOutput(...).save()\n",
+        encoding="utf-8",
+    )
+    assert find_persisted_write_call_offenders([target]) == []
+
+
+def test_a_project_scoped_record_may_still_not_be_saved(tmp_path: Path) -> None:
+    target = tmp_path / "m.py"
+    target.write_text(
+        "from app.models.records.project import Project\nProject(...).save()\n",
+        encoding="utf-8",
+    )
+    assert find_persisted_write_call_offenders([target]) == ["m.py: ['save']"]

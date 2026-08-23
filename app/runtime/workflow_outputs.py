@@ -3,29 +3,16 @@ from __future__ import annotations
 
 import pyarrow as pa
 
-from typing import ClassVar
-
 from app.core.frames import read_cell
-from app.core.persistence import PersistedModel, PersistenceScope
 from app.models import WorkflowStage
 from app.models.claims import StageOutputCellCitation
+from app.models.records.workflow_output import WorkflowOutput
 
 from .context import RunIdentity
 from .validation import Issue
 
 # A workflow output is one cell, so the row it reads is the only row there is.
 PUBLISHED_ROW = 0
-
-
-class WorkflowOutput(PersistedModel):
-    """Defined here, not in app/models, so this module may save it — see the PR thread."""
-
-    collection: ClassVar[str] = "workflow_output"
-    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.RUN
-
-    slug: str
-    label: str
-    citation: StageOutputCellCitation
 
 
 def find_output_row_issues(workflow_stage: WorkflowStage, table: pa.Table) -> list[Issue]:
