@@ -1,9 +1,4 @@
-"""Architecture: `app.core.stage_cache` is the only channel a stage handler may
-use to persist something outliving its own run. Two rules: no `"project_dir"`
-dict key under `app/runtime/stages`, and no `.save()`/`.delete()` under
-`app/runtime` outside the modules named below, each of which writes one record
-that is the run's OWN state.
-"""
+"""Architecture: no `project_dir` key under stages, and only a named module writes."""
 from __future__ import annotations
 
 from collections.abc import Mapping
