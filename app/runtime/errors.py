@@ -26,10 +26,6 @@ class BranchRecordingError(RuntimeError):
     """The driver mispaired a row; a branch would be attributed to the wrong one."""
 
 
-class UnresolvableFigure(RuntimeError):
-    """A cited cell whose contributing rows sit at more than one grain."""
-
-
 class MissingLineage(RuntimeError):
     """A stage owed a lineage sidecar by its type's contract and wrote none."""
 

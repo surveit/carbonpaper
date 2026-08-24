@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.runtime.errors import UnresolvableFigure
 from app.models.branch_analysis import BranchId, BranchRole, FrameScale
 from app.models.claims import StageOutputCellCitation
 from app.models.schema import StageId
@@ -78,10 +77,6 @@ def say_why_rows_left(cut: CutRows, role: BranchRole) -> str:
                 f"here. What they did differently is upstream of this stage.")
     return (f"{cut.total:,} row{'' if cut.total == 1 else 's'} still in the frame, "
             f"merged into a row this figure did not come through.")
-
-
-def refuse_reason(error: UnresolvableFigure) -> str:
-    return str(error)
 
 
 def _read_run(project_id: str, run_id: str) -> WorkflowRunBranches:

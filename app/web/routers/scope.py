@@ -10,7 +10,6 @@ from app.core.errors import (
     RunVersionUnresolvableError,
     StageNotInRun,
 )
-from app.runtime.errors import UnresolvableFigure
 from app.core.json_types import JsonDict
 from app.models.branch_analysis import BranchId, BranchRole
 from app.models.claims import StageOutputCellCitation
@@ -32,14 +31,6 @@ async def scope_page(request: Request, project_id: str, run_id: str,
     try:
         scope, cuts, lookups = scope_view.load_scope_map(
             project_id, run_id, citation)
-    except UnresolvableFigure as unresolvable:
-        return templates.TemplateResponse(
-            request, "scope_refused.html",
-            {"project": project_id, "run_id": run_id, "citation": citation,
-             "reason": scope_view.refuse_reason(unresolvable),
-             **_shell(project_id, run_id)},
-            status_code=422,
-        )
     except (StageNotInRun, RowOutOfRange, RunVersionUnresolvableError) as missing:
         raise HTTPException(status_code=404, detail=str(missing)) from missing
     return templates.TemplateResponse(
@@ -60,8 +51,6 @@ async def scope_json(project_id: str, run_id: str, stage: str, row: int, column:
     citation = _cite(run_id, stage, row, column)
     try:
         scope, cuts, _ = scope_view.load_scope_map(project_id, run_id, citation)
-    except UnresolvableFigure as unresolvable:
-        raise HTTPException(status_code=422, detail=str(unresolvable)) from unresolvable
     except (StageNotInRun, RowOutOfRange, RunVersionUnresolvableError) as missing:
         raise HTTPException(status_code=404, detail=str(missing)) from missing
     return JSONResponse(_payload(scope, cuts))
