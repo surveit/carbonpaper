@@ -11,6 +11,10 @@
 (function () {
   "use strict";
 
+  // A run numbers its rows from 0, and the payload carries those ordinals. What a
+  // reader sees counts from 1, as the spreadsheet beside them does.
+  function rowNumber(ordinal) { return ordinal + 1; }
+
   var host = document.getElementById("scope-payload");
   if (!host) return;
 
@@ -546,7 +550,7 @@
           '">draw these rows instead</span>' : "");
     } else if (pickedFigure()) {
       bar.innerHTML = "<span><b>1</b> row of <code>" + esc(D.citation.stage_id) +
-        "</code> — row " + D.cited_row.ordinal + ", merged from " +
+        "</code> — row " + rowNumber(D.cited_row.ordinal) + ", merged from " +
         num(D.covers.ordinals.length) + " rows of <code>" +
         esc(D.covers.at_stage) + "</code>.</span>";
     } else {
@@ -691,7 +695,7 @@
 
   // Cells are positional against the map's `columns`, the way every table here is.
   function rowOf(r) {
-    return '<td class="scope-num">' + r.ordinal + "</td>" +
+    return '<td class="scope-num">' + rowNumber(r.ordinal) + "</td>" +
       r.cells.map(cell).join("") + "</tr>";
   }
 

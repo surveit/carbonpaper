@@ -63,7 +63,7 @@
     {# Where each row came from. One line per row, in the table's own order, so a case
        feeding two rows accounts for both. #}
     {% for selection in input.selections %}
-    <p class="test-provenance">row {{ selection.row }} of run {{ selection.run_id }},
+    <p class="test-provenance">row {{ selection.row | row_number }} of run {{ selection.run_id }},
       found by <code>{{ selection.filter }}</code> — which matches
       {{ selection.matched }} of the {{ selection.scanned }} rows that run produced.</p>
     {% endfor %}

@@ -60,6 +60,18 @@ def test_errors_only_surfaces_an_llm_error_while_llm_detail_is_off(tmp_path):
     assert "row_ok" not in out["html"]
 
 
+def test_a_row_reads_as_a_reader_counts_them_while_its_link_carries_the_ordinal(tmp_path):
+    out = _run_in_node(_EVENTS_JS + """
+      console.log(JSON.stringify({
+        html: client.renderEvents(events, {errorsOnly: false, detail: false,
+                                           traceUrl: (s, r) => `/stage/${s}/row/${r}`}),
+      }));
+    """, tmp_path)
+
+    assert "row 1" in out["html"] and "row 0" not in out["html"]  # the event names row 0
+    assert "/stage/s/row/0" in out["html"]
+
+
 def test_the_default_view_hides_detail_and_keeps_the_lifecycle_spine(tmp_path):
     out = _run_in_node(_EVENTS_JS + """
       console.log(JSON.stringify({

@@ -228,7 +228,7 @@ ul.infiles li:last-child{border-bottom:0}
 <div class="lin-head">
 {% if offline %}
   {# A folder has no server to trace a different row from, so the coordinate is stated. #}
-  <h1><code>{{ view.start_stage }}</code> row {{ view.start_row }}</h1>
+  <h1><code>{{ view.start_stage }}</code> row {{ view.start_row | row_number }}</h1>
 {% else %}
   <h1>
     <span class="lin-value" id="lin-value">{% if coordinate.cell %}{% if coordinate.cell.value %}{{ coordinate.cell.value }}{% else %}<span class="lin-null">(empty)</span>{% endif %}{% endif %}</span>
@@ -246,8 +246,8 @@ ul.infiles li:last-child{border-bottom:0}
     {% endcall %}
     <label class="lin-word" for="lin-row">row</label>
     <input id="lin-row" class="lin-rowbox" type="number" inputmode="numeric"
-           value="{{ coordinate.row }}" min="0"
-           {% if coordinate.rows %}max="{{ coordinate.rows - 1 }}"{% endif %}>
+           value="{{ coordinate.row | row_number }}" min="1"
+           {% if coordinate.rows %}max="{{ coordinate.rows }}"{% endif %}>
     {# Stated only where the run counted them: a stage with no frame has no last row. #}
     {% if coordinate.rows %}<span class="lin-word">of {{ "{:,}".format(coordinate.rows) }}</span>{% endif %}
     {% if coordinate.cells %}
@@ -354,6 +354,9 @@ const V = {{ view | tojson }}, PROJECT = {{ project | tojson }};
 // page it already wrote instead of fetching the panel.
 const OFFLINE = {{ (offline | default(false)) | tojson }};
 const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+// A run numbers its own rows from 0 and every URL here carries that number.
+// What a reader sees counts from 1, as the spreadsheet beside them does.
+const rowNumber = ordinal => ordinal + 1;
 const JOIN_KINDS = ['enrich', 'expand'];
 
 document.getElementById('pagetabs').addEventListener('click', e => {
@@ -384,14 +387,16 @@ if(stagePick) stagePick.addEventListener('change', () => {
 });
 
 const rowBox = document.getElementById('lin-row');
+// The box holds the number the reader counts by; the address holds the ordinal.
 if(rowBox) rowBox.addEventListener('change', () => {
   const asked = Number(rowBox.value);
-  if(!Number.isInteger(asked)){ rowBox.value = COORD.row; return; }
+  if(!Number.isInteger(asked)){ rowBox.value = rowNumber(COORD.row); return; }
+  const last = COORD.rows === null ? asked : COORD.rows;
+  const number = Math.min(Math.max(1, asked), last);
+  rowBox.value = number;
   // The columns are the stage's, so the one being read survives the move.
-  const row = COORD.rows === null ? Math.max(0, asked)
-            : Math.min(Math.max(0, asked), COORD.rows - 1);
-  rowBox.value = row;
-  if(row !== COORD.row) location.href = lineageHref(COORD.stage_id, row, COORD.column);
+  if(number - 1 !== COORD.row)
+    location.href = lineageHref(COORD.stage_id, number - 1, COORD.column);
 });
 </script>
 {% if view.nodes %}
@@ -457,14 +462,14 @@ function renderSteps(){
   html += V.nodes.map((n, i) => `<button class="step ${i===sel?'on':''}" data-i="${i}">
       <span class="stepno">step ${n.step}</span>
       <span>${sentenceOf(n)}</span>
-      <span class="right">${n.role==='claim' ? '<span class="claim-tag">published claim</span> ' : ''}<span class="row-chip">row ${n.row_ordinal}</span>${deltaOf(n)}</span>
+      <span class="right">${n.role==='claim' ? '<span class="claim-tag">published claim</span> ' : ''}<span class="row-chip">row ${rowNumber(n.row_ordinal)}</span>${deltaOf(n)}</span>
     </button>`).join('');
   document.getElementById('steps').innerHTML = html;
 }
 
 // ---- The other parents, named in the sentence that owns them --------------
 function branchName(b){
-  return `<span class="branch-name">${esc(b.stage_id)} row ${b.row_ordinal}</span>`;
+  return `<span class="branch-name">${esc(b.stage_id)} row ${rowNumber(b.row_ordinal)}</span>`;
 }
 // A fan-in row has one contributor per input row it summarizes — fifty of them
 // reads as noise, so they collapse to a count. `contributor_groups` arrives
@@ -480,7 +485,7 @@ function groupName(g, showColumns){
   const stage = esc(g.stage_id);
   const into = (showColumns && g.columns) ? ` into ${g.columns.map(esc).join(' and ')}` : '';
   if(g.named.length){
-    const rows = g.named.map(b => b.row_ordinal).join(' ');
+    const rows = g.named.map(b => rowNumber(b.row_ordinal)).join(' ');
     return `<span class="branch-name">${stage} ${g.named.length > 1 ? 'rows' : 'row'} `
          + `${rows}</span>${into}`;
   }
@@ -506,7 +511,8 @@ function fieldRow(f){
 function saidOf(n, touched){
   if(touched.length || !n.base) return '';
   return `<div class="lin-said lin-said-idle">No cell changed — the row kept every value and`
-       + ` moved from <b>row ${n.base.row_ordinal}</b> to <b>row ${n.row_ordinal}</b>.</div>`;
+       + ` moved from <b>row ${rowNumber(n.base.row_ordinal)}</b> to`
+       + ` <b>row ${rowNumber(n.row_ordinal)}</b>.</div>`;
 }
 function renderRowTab(n){
   const fields = n.row_diff.fields;
@@ -528,7 +534,8 @@ function renderRowTab(n){
 // already names the file it was read from.
 function baseLine(n){
   const text = n.base
-    ? `compared against its parent, <code>${esc(n.base.stage_id)}</code> row ${n.base.row_ordinal}.`
+    ? `compared against its parent, <code>${esc(n.base.stage_id)}</code>`
+      + ` row ${rowNumber(n.base.row_ordinal)}.`
     : (fanInOf(n)
         ? `unmarked: this row summarizes ${fanInOf(n)}, so no single row precedes it.`
         : (V.upstream.truncated
@@ -539,17 +546,18 @@ function baseLine(n){
 // The file and both row numbers, in that order: the file row is where the row really
 // sits, and the stage's own number is what it became on the way in.
 function sourceTitle(n){
-  if(!n.source_file) return `<span class="lin-sub">row ${n.row_ordinal}</span>`;
+  if(!n.source_file) return `<span class="lin-sub">row ${rowNumber(n.row_ordinal)}</span>`;
   const named = `<span class="lin-source"><code>${esc(n.source_file)}</code>`
-    + ` row ${n.source_row}</span>`;
+    + ` row ${rowNumber(n.source_row)}</span>`;
   if(n.source_row === n.row_ordinal) return named;
   return named + `<span class="lin-became has-tip" data-tip="${esc(becameWhy(n))}"`
-    + ` tabindex="0">, became row ${n.row_ordinal}</span>`;
+    + ` tabindex="0">, became row ${rowNumber(n.row_ordinal)}</span>`;
 }
 function becameWhy(n){
   return n.source_file_count > 1
     ? `This run read ${n.source_file_count} files into ${n.stage_id}, which numbers its rows `
-      + `across all of them. Row ${n.source_row} of ${n.source_file} is its row ${n.row_ordinal}.`
+      + `across all of them. Row ${rowNumber(n.source_row)} of ${n.source_file} is its`
+      + ` row ${rowNumber(n.row_ordinal)}.`
     : `${n.stage_id} numbers its rows from the start of what this run read, which is not `
       + `the start of the file.`;
 }

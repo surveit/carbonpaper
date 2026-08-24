@@ -7,6 +7,7 @@ Routes under test:
 from __future__ import annotations
 
 import io
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -96,6 +97,16 @@ def test_rows_page_links_each_row_to_its_trace(examples_dir, client):
     assert "View lineage" in r.text
     for i in range(3):
         assert f"/stage/{STAGE}/row/{i}/trace/view" in r.text
+
+
+def test_the_number_shown_counts_from_one_and_the_link_from_zero(examples_dir, client):
+    _write_run(examples_dir, _df(3))
+    body = client.get(f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows").text
+    numbers = re.findall(r'<td class="row-num muted">(\d+)</td>', body)
+    # The reader counts rows as a spreadsheet does; the address carries the ordinal.
+    assert numbers == ["1", "2", "3"]
+    assert f"/stage/{STAGE}/row/0/trace/view" in body
+    assert f"/stage/{STAGE}/row/3/trace/view" not in body
 
 
 def test_rows_page_filters_to_named_ordinals(examples_dir, client):

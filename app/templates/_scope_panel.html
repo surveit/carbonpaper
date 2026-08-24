@@ -15,7 +15,7 @@ body { padding: 14px 18px 28px; }
 {% if reason %}
 <section class="scope">
   <p class="banner banner-warn">
-    No scope map for <code>{{ citation.stage_id }}</code> row {{ citation.row_ordinal }},
+    No scope map for <code>{{ citation.stage_id }}</code> row {{ citation.row_ordinal | row_number }},
     column <code>{{ citation.column }}</code> — {{ reason }}.
   </p>
 </section>
