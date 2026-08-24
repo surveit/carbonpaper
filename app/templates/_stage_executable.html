@@ -14,7 +14,11 @@
 {% from "_stage_code.html" import stage_summary, stage_corner_cases, prose_with_column_chips %}
 {% from "_stage_eval_check.html" import stage_eval_check %}
 
-{% if stage.connector %}
+{# One Python switch names the section a stage type takes; app/web/transform_block.py
+   ends in assert_never, so a new type stops type-checking until someone picks one. #}
+{% set block = stage | transform_block %}
+
+{% if block == 'connector' %}
 <section class="exec-block">
     <h2>⬆️ Connector</h2>
     <dl class="kv">
@@ -33,7 +37,7 @@
 </section>
 {% endif %}
 
-{% if stage.llm %}
+{% if block == 'llm' %}
 <section class="exec-block">
     <h2>{{ sparkle() }} LLM call</h2>
     {# One model call, read in the order it happens: what it is asked, what it is shown,
@@ -109,7 +113,7 @@
 
 
 
-{% if stage.union %}
+{% if block == 'union' %}
 <section class="exec-block">
     <h2>🧬 Union</h2>
     <p class="muted">Concatenates its inputs in declared order — no configuration of its own; the schema-identical inputs fix what it computes.</p>
@@ -119,7 +123,7 @@
 </section>
 {% endif %}
 
-{% if stage.join %}
+{% if block == 'join' %}
 <section class="exec-block">
     <h2>{% if stage.type == 'expand' %}🌿 Expand{% else %}🔗 Enrich{% endif %}</h2>
     <p class="muted">{% if stage.type == 'expand' %}Left join, many-to-many: one subject row may come out as
@@ -141,7 +145,7 @@
 </section>
 {% endif %}
 
-{% if stage.aggregate %}
+{% if block == 'aggregate' %}
 <section class="exec-block">
     <h2>📊 Aggregate</h2>
     <h3>group by</h3>
@@ -163,7 +167,7 @@
 </section>
 {% endif %}
 
-{% if stage.dedupe %}
+{% if block == 'dedupe' %}
 <section class="exec-block">
     <h2>🧹 Dedupe</h2>
     <p class="muted">Rows agreeing on every key collapse to one. The survivor passes through
@@ -182,7 +186,47 @@
 </section>
 {% endif %}
 
-{% if stage.queue %}
+{% if block == 'explode' %}
+<section class="exec-block">
+    <h2>🌱 Explode</h2>
+    <p class="muted">One output row per element of a list column; every other column is copied
+        onto each of them, so the run's trace crosses this stage.</p>
+    <dl class="kv">
+        <dt>column</dt><dd><code>{{ stage.explode.column }}</code></dd>
+        <dt>an empty list</dt>
+        <dd>{% if stage.explode.keep_empty %}keeps one row, carrying null in
+            <code>{{ stage.explode.column }}</code>{% else %}produces no row{% endif %}</dd>
+    </dl>
+</section>
+{% endif %}
+
+{% if block == 'sort_rank' %}
+<section class="exec-block">
+    <h2>🔢 Sort and rank</h2>
+    <p class="muted">Reorders the rows &mdash; the first key decides and the rest break ties.
+        No row is added or dropped.</p>
+    <h3>sort keys</h3>
+    <table class="sort-keys">
+        <thead><tr><th>column</th><th>order</th><th>rows holding no value</th></tr></thead>
+        <tbody>
+            {% for key in stage.sort_rank.keys %}
+            <tr>
+                <td><code>{{ key.column }}</code></td>
+                <td>{% if key.order %}{% for value in key.order %}<code>{{ value }}</code>{% if not loop.last %} &rarr; {% endif %}{% endfor %}{% elif key.descending %}largest first{% else %}smallest first{% endif %}</td>
+                <td>{% if key.nulls %}{{ key.nulls }}{% else %}<span class="muted">&mdash; a null stops the run</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% if stage.sort_rank.rank_column %}
+    <h3>rank column</h3>
+    <p><code>{{ stage.sort_rank.rank_column }}</code> &mdash; the 1-based sorted position,
+        so two rows the keys cannot separate still get different numbers.</p>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if block == 'queue' %}
 <section class="exec-block">
     <h2>👤 Review queue</h2>
     <dl class="kv">
@@ -198,7 +242,7 @@
 </section>
 {% endif %}
 
-{% if stage.publish %}
+{% if block == 'publish' %}
 <section class="exec-block">
     <h2>📤 Publish</h2>
     <dl class="kv">

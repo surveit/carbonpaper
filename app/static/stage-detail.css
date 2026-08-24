@@ -356,8 +356,8 @@ pre.code > code.hljs {
     font-size: 12px;
 }
 
-/* Join keys */
-table.join-keys, table.aggs {
+/* Small config tables inside an exec-block */
+table.join-keys, table.aggs, table.sort-keys {
     border-collapse: collapse;
     background: var(--raised);
     border: 1px solid var(--border);
@@ -367,12 +367,13 @@ table.join-keys, table.aggs {
     width: 100%;
 }
 table.join-keys th, table.join-keys td,
-table.aggs th, table.aggs td {
+table.aggs th, table.aggs td,
+table.sort-keys th, table.sort-keys td {
     padding: 6px 10px;
     text-align: left;
     border-bottom: 1px solid var(--border);
 }
-table.join-keys th, table.aggs th {
+table.join-keys th, table.aggs th, table.sort-keys th {
     background: var(--sunk-deep);
     font-weight: 600;
     font-size: 11px;
