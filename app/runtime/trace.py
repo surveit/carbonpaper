@@ -41,6 +41,26 @@ class ContributorChoice:
     row_ordinal: int
 
 
+@dataclass(frozen=True)
+class ContributorCohort:
+    """The rows of one stage that fed this one, and the columns of it they fed."""
+
+    stage_id: str
+    columns: tuple[str, ...] | None
+    row_ordinals: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class SampledFrom:
+    """The row taken at a fan-in that held SEVERAL; `place` is 1-based within `of`."""
+
+    stage_id: str
+    row_ordinal: int
+    columns: tuple[str, ...] | None
+    place: int
+    of: int
+
+
 @dataclass
 class StageTransform:
     stage_id: str
@@ -59,8 +79,12 @@ class StageTransform:
     source_row: int | None = None
     # How many files the stage read; None where the manifest did not record any binding.
     source_file_count: int | None = None
-    # The contribution edge this row was left by; every step above it is that row's.
+    # The edge this row was left by, set at EVERY fan-in — a one-row one included.
     followed: RowParent | None = None
+    # None where the fan-in held one row: nothing was picked out of anything.
+    sampled: SampledFrom | None = None
+    # Every contributing row, grouped by the stage and columns it fed.
+    cohorts: list[ContributorCohort] = field(default_factory=list)
 
 
 @dataclass
@@ -230,6 +254,34 @@ def _validate_every_choice_was_met(pending: list[ContributorChoice]) -> None:
     )
 
 
+def _find_sampled_from(
+    fan_in: list[RowParent] | None, followed: RowParent | None
+) -> SampledFrom | None:
+    if followed is None or fan_in is None:
+        return None
+    merged = _contributions(fan_in)
+    if len(merged) < 2:
+        return None
+    place = next(i for i, p in enumerate(merged, start=1)
+                 if (p.stage_id, p.row_ordinal) == (followed.stage_id, followed.row_ordinal))
+    return SampledFrom(followed.stage_id, followed.row_ordinal, followed.columns,
+                       place, len(merged))
+
+
+def _group_cohorts(parents: list[RowParent]) -> list[ContributorCohort]:
+    """Grouped over the WHOLE set, so a cohort's size is exact however many are shown."""
+    by_key: dict[tuple[str, tuple[str, ...] | None], list[int]] = {}
+    for parent in _contributions(parents):
+        by_key.setdefault(
+            (parent.stage_id, parent.columns or None), []).append(parent.row_ordinal)
+    return [ContributorCohort(stage_id, columns, tuple(ordinals))
+            for (stage_id, columns), ordinals in by_key.items()]
+
+
+def _contributions(parents: list[RowParent]) -> list[RowParent]:
+    return [p for p in parents if p.kind == EdgeKind.contribution.value]
+
+
 def _advance(
     frames: RunFrames, by_id: dict[str, dict[str, Any]], sid: str, stage_type: str, r: int,
     table: pa.Table, parents: list[str], spine: RowParent | None,
@@ -348,6 +400,8 @@ def trace_row_from(
             source_row=spine.row_ordinal if spine and spine.source_file else None,
             source_file_count=files_read.get(sid),
             followed=followed,
+            sampled=_find_sampled_from(fan_in, followed),
+            cohorts=_group_cohorts(branches),
         ))
 
         next_hop = _advance(
@@ -368,12 +422,16 @@ def trace_row_from(
     )
 
 
+def _build_columns(columns: tuple[str, ...] | None) -> list[str] | None:
+    return None if columns is None else list(columns)
+
+
 def _build_parent(parent: RowParent) -> dict[str, Any]:
     return {
         "stage_id": parent.stage_id,
         "row_ordinal": parent.row_ordinal,
         "kind": str(parent.kind),
-        "columns": None if parent.columns is None else list(parent.columns),
+        "columns": _build_columns(parent.columns),
     }
 
 
@@ -396,6 +454,23 @@ def trace_to_dict(trace: Trace) -> dict[str, Any]:
                 "followed": (
                     None if step.followed is None else _build_parent(step.followed)
                 ),
+                "sampled": (
+                    None if step.sampled is None else {
+                        "stage_id": step.sampled.stage_id,
+                        "row_ordinal": step.sampled.row_ordinal,
+                        "columns": _build_columns(step.sampled.columns),
+                        "place": step.sampled.place,
+                        "of": step.sampled.of,
+                    }
+                ),
+                "cohorts": [
+                    {
+                        "stage_id": cohort.stage_id,
+                        "columns": _build_columns(cohort.columns),
+                        "row_ordinals": list(cohort.row_ordinals),
+                    }
+                    for cohort in step.cohorts
+                ],
                 "branches": [_build_parent(branch) for branch in step.branches],
             }
             for step in trace.steps

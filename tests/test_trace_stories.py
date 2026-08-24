@@ -60,8 +60,9 @@ def test_a_cohort_too_big_to_name_is_one_entry_standing_for_all_of_it():
     total = CONTRIBUTOR_ROWS_LINKED + 40
     stories = _wide_fan_in_stories(total)
 
-    assert [s["kind"] for s in stories] == ["shown", "cohort"]
-    cohort = stories[1]
+    # The walk samples one of them, so that row is reported before the cohort is.
+    assert [s["kind"] for s in stories] == ["shown", "sampled", "cohort"]
+    cohort = stories[2]
     # No single row speaks for the others, so the entry names none.
     assert cohort["row_ordinal"] is None
     assert cohort["rows"] == total, "the entry reports the cohort's true size"
@@ -71,7 +72,10 @@ def test_a_cohort_too_big_to_name_is_one_entry_standing_for_all_of_it():
 
 def test_a_cohort_at_the_naming_bound_is_still_named_row_by_row():
     stories = _wide_fan_in_stories(CONTRIBUTORS_NAMED)
-    assert [s["kind"] for s in stories] == ["shown", *["contributor"] * CONTRIBUTORS_NAMED]
+
+    # The sampled row is named as sampled; the rest are offered as overrides.
+    assert [s["kind"] for s in stories] == [
+        "shown", "sampled", *["contributor"] * (CONTRIBUTORS_NAMED - 1)]
 
 
 def test_an_entry_the_packet_wrote_no_page_for_keeps_its_place(tmp_path):
@@ -113,19 +117,11 @@ def _summed_run(tmp_path):
 
 
 def _wide_fan_in_stories(contributors: int) -> list[dict]:
-    """A cohort at project scale, built as a trace payload — a frame that wide is slow."""
-    trace = {
-        "run_id": "T1", "start_stage": "totals", "start_row": 0,
-        "steps": [{
-            "stage_id": "totals", "stage_type": "aggregate", "row_ordinal": 0,
-            "row": {"amount": 1700}, "columns_new": ["amount"], "origin": "other",
-            "branches": [
-                {"stage_id": "filings", "row_ordinal": i, "kind": "contribution",
-                 "columns": None}
-                for i in range(contributors)
-            ],
-        }],
-        "end": {"reached_origin": False, "at_stage": "totals",
-                "message": "this row summarizes its inputs"},
-    }
+    """A cohort at project scale — a frame that wide is too slow to build for real."""
+    from app.runtime.lineage import EdgeKind, RowParent
+    from test_trace_helpers import fan_in_trace
+
+    trace = fan_in_trace(
+        [RowParent("filings", i, EdgeKind.contribution.value) for i in range(contributors)],
+        stage="totals", row={"amount": 1700}, columns_new=["amount"])
     return build_trace_view(trace, {}, AppPanelLinks("proj", "T1"))["stories"]

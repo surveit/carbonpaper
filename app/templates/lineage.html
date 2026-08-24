@@ -410,7 +410,7 @@ function sampleOf(n){
   // Only a fan-in that held ALTERNATIVES gets one; the view withholds the rest.
   if(!s) return '';
   return `<div class="sampled"><span class="mark">↑ Sampled</span><span>Following input row
-    <b>${s.at} of ${s.of} rows</b> that were summarized in step ${n.step}. Steps above show
+    <b>${s.place} of ${s.of} rows</b> that were summarized in step ${n.step}. Steps above show
     how that sample row was generated. ${allRowsLink(s, n)}</span></div>`;
 }
 function allRowsLink(s, n){

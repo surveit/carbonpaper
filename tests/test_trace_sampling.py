@@ -227,7 +227,7 @@ def test_the_mark_says_which_row_of_how_many_was_sampled(tmp_path):
     # amt=10 and amt=30 were totalled into firm "a", and the mark says so.
     assert view["nodes"][-1]["sampled"]["of"] == 2
     # The PLACE among contributors, not the ordinal at `tagged`.
-    assert view["nodes"][-1]["sampled"]["at"] == 1
+    assert view["nodes"][-1]["sampled"]["place"] == 1
     assert view["nodes"][-1]["sampled"]["row_ordinal"] == 0
     assert [s["rows"] for s in view["stories"] if s["kind"] == "sampled"] == [2]
 
@@ -241,7 +241,7 @@ def test_an_override_moves_the_place_but_not_the_count(tmp_path):
         {}, AppPanelLinks("proj", "T1"))
 
     # Second of firm "a"'s two contributors, and separately row 2 at `tagged`.
-    assert view["nodes"][-1]["sampled"]["at"] == 2
+    assert view["nodes"][-1]["sampled"]["place"] == 2
     assert view["nodes"][-1]["sampled"]["of"] == 2
     assert view["nodes"][-1]["sampled"]["row_ordinal"] == 2
 

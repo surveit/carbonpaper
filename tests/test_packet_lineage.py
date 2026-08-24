@@ -241,20 +241,13 @@ def test_a_wide_fan_in_is_reached_through_its_table_on_both_surfaces():
 
 
 def _aggregate_trace(contributors: int):
-    return {
-        "run_id": "r", "start_stage": "totals", "start_row": 0,
-        "steps": [{
-            "stage_id": "totals", "stage_type": "aggregate", "row_ordinal": 0,
-            "row": {"total": 1}, "columns_new": ["total"], "origin": "other",
-            "branches": [
-                {"stage_id": "spend_by_client", "row_ordinal": i,
-                 "kind": "contribution", "columns": None}
-                for i in range(contributors)
-            ],
-        }],
-        "end": {"reached_origin": False, "at_stage": "totals",
-                "message": "this row summarizes its inputs"},
-    }
+    from app.runtime.lineage import EdgeKind, RowParent
+    from test_trace_helpers import fan_in_trace
+
+    return fan_in_trace(
+        [RowParent("spend_by_client", i, EdgeKind.contribution.value)
+         for i in range(contributors)],
+        stage="totals", run_id="r")
 
 
 def test_the_index_links_land_on_a_section_the_directory_defines(tmp_path):

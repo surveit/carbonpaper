@@ -190,9 +190,8 @@ def _build_node(
     links: PanelLinks, truncated: bool, path: TracePath,
 ) -> dict[str, Any]:
     step = chrono[i]
-    groups = _group_contributors(_contributions(step), links, path)
-    sampled = _mark_sampled_row(step)
-    # Off `step`: an unmarked one-row fan-in still summarized, so still no diff.
+    groups = _build_groups(step.get("cohorts") or [], links, path)
+    # Off `followed`: an unmarked one-row fan-in still summarized, so still no diff.
     parent = chrono[i - 1] if i and not step.get("followed") else None
     diff = build_row_diff(
         step["row"],
@@ -229,57 +228,15 @@ def _build_node(
             {**branch, "links": _links_of(links, branch["stage_id"], branch["row_ordinal"])}
             for branch in _spine_branches(step)
         ],
-        "sampled": None if sampled is None else asdict(sampled),
+        # Straight from the walk, which knew the fan-in it sampled at.
+        "sampled": step.get("sampled"),
         "contributor_groups": [asdict(group) for group in groups],
     }
-
-
-@dataclass(frozen=True)
-class SampledRow:
-    """The row taken out of a fan-in, its 1-based place among them, and how many there were."""
-
-    stage_id: str
-    row_ordinal: int
-    columns: list[str] | None
-    at: int
-    of: int
-
-
-def _mark_sampled_row(step: dict[str, Any]) -> SampledRow | None:
-    """None where the fan-in held ONE row: nothing was sampled, so there is nothing to mark."""
-    followed = step.get("followed")
-    merged = _contributions(step)
-    if not followed or len(merged) < 2:
-        return None
-    return SampledRow(
-        stage_id=followed["stage_id"],
-        row_ordinal=followed["row_ordinal"],
-        columns=followed["columns"],
-        at=_find_place_among(merged, followed),
-        of=len(merged),
-    )
-
-
-def _find_place_among(merged: list[dict[str, Any]], followed: dict[str, Any]) -> int:
-    """1-based, so the reader counts rows the way the sentence beside it reads."""
-    key = (followed["stage_id"], followed["row_ordinal"])
-    return next(i for i, c in enumerate(merged, start=1)
-                if (c["stage_id"], c["row_ordinal"]) == key)
-
-
-def _cohort_key(parent: dict[str, Any]) -> tuple[str, tuple[str, ...] | None]:
-    columns = parent.get("columns")
-    return (str(parent["stage_id"]), tuple(columns) if columns else None)
 
 
 def _source_filename(step: dict[str, Any]) -> str | None:
     read_from = step.get("source_file")
     return PurePath(read_from).name if read_from else None
-
-
-def _contributions(step: dict[str, Any]) -> list[dict[str, Any]]:
-    return [b for b in (step.get("branches") or [])
-            if b.get("kind") == EdgeKind.contribution.value]
 
 
 def _spine_branches(step: dict[str, Any]) -> list[dict[str, Any]]:
@@ -306,39 +263,28 @@ def _links_of(
     }
 
 
-def _group_contributors(
-    contributions: list[dict[str, Any]], links: PanelLinks, path: TracePath
+def _build_groups(
+    cohorts: list[dict[str, Any]], links: PanelLinks, path: TracePath
 ) -> list[ContributorGroup]:
-    by_key: dict[tuple[str, tuple[str, ...] | None], list[dict[str, Any]]] = {}
-    # Grouped over the WHOLE set before anything is dropped, so a cohort's
-    # `total` and the number of cohorts are both exact however many rows are
-    # then linked. Bounding first would let a big cohort's tail hide a cohort of
-    # its own.
-    for parent in contributions:
-        by_key.setdefault(_cohort_key(parent), []).append(parent)
-    return [
-        _one_group(stage_id, columns, parents, links, path)
-        for (stage_id, columns), parents in by_key.items()
-    ]
+    return [_one_group(cohort, links, path) for cohort in cohorts]
 
 
 def _one_group(
-    stage_id: str, columns: tuple[str, ...] | None,
-    parents: list[dict[str, Any]], links: PanelLinks, path: TracePath,
+    cohort: dict[str, Any], links: PanelLinks, path: TracePath
 ) -> ContributorGroup:
-    named = parents[:CONTRIBUTORS_NAMED] if len(parents) <= CONTRIBUTORS_NAMED else []
+    stage_id, ordinals = cohort["stage_id"], cohort["row_ordinals"]
+    named = ordinals if len(ordinals) <= CONTRIBUTORS_NAMED else []
     return ContributorGroup(
         stage_id=stage_id,
-        columns=list(columns) if columns else None,
-        total=len(parents),
-        linked=links.rows_link_covers(len(parents)),
-        named=[{**p, "links": _links_of(links, p["stage_id"], int(p["row_ordinal"]),
-                                        path=path)}
-               for p in named],
+        columns=cohort["columns"],
+        total=len(ordinals),
+        linked=links.rows_link_covers(len(ordinals)),
+        named=[{"stage_id": stage_id, "row_ordinal": ordinal,
+                "columns": cohort["columns"],
+                "links": _links_of(links, stage_id, ordinal, path=path)}
+               for ordinal in named],
         rows_link=links.contributor_rows(
-            stage_id,
-            ordinals=[int(p["row_ordinal"]) for p in parents[:CONTRIBUTOR_ROWS_LINKED]],
-            path=path),
+            stage_id, ordinals=list(ordinals[:CONTRIBUTOR_ROWS_LINKED]), path=path),
     )
 
 

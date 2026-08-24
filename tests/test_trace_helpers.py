@@ -7,15 +7,38 @@ from pathlib import Path
 import pandas as pd
 
 from app.core.frames import write_frame_table
-from app.runtime.lineage import lineage_sidecar_path
+from app.runtime.lineage import RowParent, lineage_sidecar_path
 from app.runtime.trace import (
+    StageTransform,
+    Trace,
+    TraceEnd,
+    _find_sampled_from,
+    _group_cohorts,
     _is_row_preserving,
     _load_manifest,
     _origin,
     _parents,
     _stages_by_id,
+    trace_to_dict,
 )
 from run_seed import store_manifest
+
+
+def fan_in_trace(parents: list[RowParent], *, stage: str, run_id: str = "T1",
+                 row: dict | None = None, columns_new: list[str] | None = None) -> dict:
+    """One aggregate step made from `parents`, serialized exactly as the walk would."""
+    step = StageTransform(
+        stage_id=stage, stage_type="aggregate", row_ordinal=0,
+        row=row or {"total": 1}, columns_new=columns_new or ["total"], origin="other",
+        branches=list(parents),
+        followed=parents[0] if parents else None,
+        sampled=_find_sampled_from(list(parents), parents[0] if parents else None),
+        cohorts=_group_cohorts(list(parents)),
+    )
+    return trace_to_dict(Trace(
+        run_id=run_id, start_stage=stage, start_row=0, steps=[step],
+        end=TraceEnd(False, stage, "this row summarizes its inputs"),
+    ))
 
 
 def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1",
