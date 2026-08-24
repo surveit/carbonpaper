@@ -322,8 +322,9 @@ table.issue-table { width: 100%; border-collapse: collapse; font-size: .79rem; }
    markup (the guide-vs-offer-to-write-one branch reads more simply that way), but the
    walkthrough sits in the right-hand column. nav-expand is a sibling of .run-nav that
    must land in the same column. */
-.run-main { grid-column: 1; min-width: 0; }
-.run-nav, #nav-expand { grid-column: 2; }
+/* Row 1 explicitly: auto-placement leaves column 1 behind once .run-nav takes 2. */
+.run-main { grid-column: 1; grid-row: 1; min-width: 0; }
+.run-nav, #nav-expand { grid-column: 2; grid-row: 1; }
 .run-nav { min-width: 0; padding-left: 16px; border-left: 1px solid var(--border); }
 /* An author `display` rule would beat [hidden]. */
 .run-nav[hidden] { display: none; }
@@ -334,7 +335,7 @@ table.issue-table { width: 100%; border-collapse: collapse; font-size: .79rem; }
 /* One column, guide first: at this width a 360px rail leaves the tables unreadable. */
 @media (max-width: 1000px) {
     .run-shell, .run-shell.no-nav { grid-template-columns: 1fr; }
-    .run-main, .run-nav, #nav-expand { grid-column: 1; }
+    .run-main, .run-nav, #nav-expand { grid-column: 1; grid-row: auto; }
     .run-nav { border-left: 0; padding-left: 0; }
 }
 
