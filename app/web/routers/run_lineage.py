@@ -5,15 +5,20 @@ share the trace machinery no other run route touches."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from app.core.errors import RowOutOfRange, RunVersionUnresolvableError, StageNotInRun
+from app.core.errors import (
+    RowOutOfRange,
+    RunVersionUnresolvableError,
+    StageNotInRun,
+    TraceViaNotRecorded,
+)
 from app.services.loader import resolve_function_code
 from app.services import run as run_service
-from app.runtime.trace import trace_row, trace_to_dict
+from app.runtime.trace import RunFrames, trace_row, trace_row_via, trace_to_dict
 from app.web.stage_test_views import build_certification, shape_test_views
-from app.web.panel_links import AppPanelLinks
+from app.web.panel_links import AppPanelLinks, TracePageQuery, parse_via
 from app.web.trace_view import build_trace_view, find_cited_cell
 from app.web.breadcrumbs import build_run_child_crumbs
 from app.web.config import templates
@@ -85,14 +90,19 @@ async def run_stage_row_trace(project_id: str, run_id: str, stage_id: str, row: 
 async def run_stage_row_trace_view(
     request: Request, project_id: str, run_id: str, stage_id: str, row: int,
     column: str | None = None,
+    via: list[str] | None = Query(default=None),
 ):
     run_dir = resolve_run_dir(project_id, run_id)
     manifest = load_manifest(project_id, run_id)
+    # `via` routes the walk through named parents; the page keeps its own row.
+    page = TracePageQuery(vias=tuple(via or ()), column=column)
     try:
-        trace = trace_row(run_dir, stage_id, row)
+        trace = trace_row_via(
+            RunFrames(run_dir), stage_id, row, [parse_via(token) for token in page.vias]
+        )
     except StageNotInRun as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except RowOutOfRange as exc:
+    except (RowOutOfRange, TraceViaNotRecorded) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # Node detail and the graph both describe THIS run, so both read the version
@@ -105,7 +115,9 @@ async def run_stage_row_trace_view(
     except RunVersionUnresolvableError:
         stages_by_id = {}
 
-    view = build_trace_view(trace_to_dict(trace), stages_by_id, AppPanelLinks(project_id, run_id))
+    view = build_trace_view(
+        trace_to_dict(trace), stages_by_id, AppPanelLinks(project_id, run_id), page
+    )
     ordered = [stages_by_id[n["stage_id"]].stage for n in view["nodes"]
                if n["stage_id"] in stages_by_id]
     mermaid = build_mermaid_graph(ordered, project_id) if len(ordered) == len(view["nodes"]) else ""

@@ -6,6 +6,7 @@ from app.web.panel_links import (
     CONTRIBUTORS_NAMED,
     AppPanelLinks,
     PacketPanelLinks,
+    TracePageQuery,
 )
 from app.web.trace_view import build_trace_view
 from test_trace_join_branches import CONTRACTS, FILINGS, _join_run
@@ -37,7 +38,10 @@ def test_the_parent_the_walk_did_not_follow_is_an_entry_of_its_own(tmp_path):
     assert [s["kind"] for s in stories] == ["shown", "branch"]
     other = stories[1]
     assert (other["stage_id"], other["row_ordinal"]) == ("contracts", 0)
-    assert other["href"] == "/project/proj/runs/T1/stage/contracts/row/0/trace/view"
+    # The link keeps the page on ITS row and re-tells that row through this parent.
+    assert other["href"] == (
+        "/project/proj/runs/T1/stage/j/row/0/trace/view?via=2%3A0%3Acontracts"
+    )
     # It parts from the shown path at the join, not at the source.
     assert other["step"] == 2 and other["rows"] == 1
 
@@ -49,9 +53,11 @@ def test_a_fan_in_small_enough_to_name_gets_one_entry_per_row(tmp_path):
     assert [(s["stage_id"], s["row_ordinal"]) for s in stories[1:]] == [
         ("filings", _ACME), ("filings", _BOREALIS),
     ]
-    # Each states the cohort it is one of, and opens that row alone.
+    # Each states the cohort it is one of, and re-tells the summary row through it.
     assert [s["rows"] for s in stories[1:]] == [2, 2]
-    assert stories[1]["href"] == "/project/proj/runs/T1/stage/filings/row/0/trace/view"
+    assert stories[1]["href"] == (
+        "/project/proj/runs/T1/stage/totals/row/0/trace/view?via=1%3A0%3Afilings"
+    )
 
 
 def test_a_cohort_too_big_to_name_is_one_entry_standing_for_all_of_it():
@@ -91,6 +97,29 @@ def test_the_entries_carry_plain_json_types(tmp_path):
     assert set(story) == {
         "kind", "stage_id", "row_ordinal", "step", "rows", "linked", "columns", "href",
     }
+
+
+def test_a_parent_now_on_the_path_is_not_offered_as_a_way_off_it(tmp_path):
+    """Routing through a parent puts it on the spine; listing it again would loop."""
+    from app.runtime.trace import RunFrames, TraceVia, trace_row_via, trace_to_dict
+
+    run_dir = _join_run(tmp_path)
+    trace = trace_row_via(RunFrames(run_dir), "j", _ACME,
+                          [TraceVia(step=2, stage_id="contracts", row_ordinal=0)])
+    stories = build_trace_view(
+        trace_to_dict(trace), {}, AppPanelLinks("proj", "T1"),
+        TracePageQuery(vias=("2:0:contracts",)),
+    )["stories"]
+
+    assert [s["kind"] for s in stories] == ["shown", "opened_on"]
+    # The way back is the same page with no via — the path the walk itself followed.
+    assert stories[1]["href"] == "/project/proj/runs/T1/stage/j/row/0/trace/view"
+
+
+def test_a_page_on_the_walks_own_path_offers_no_way_back_to_it(tmp_path):
+    stories = _stories(_join_run(tmp_path), "j", _ACME)
+
+    assert "opened_on" not in [s["kind"] for s in stories]
 
 
 def _summed_run(tmp_path):

@@ -17,12 +17,14 @@ from app.models.stages.join import EnrichStage, ExpandStage
 from app.models.stages.llm_transform import LLMTransformStage
 from app.models.stages.starlark import StarlarkRowFunctionStage
 from app.runtime.lineage import EdgeKind
+from app.runtime.trace import TraceVia
 from app.services.loader import resolve_function_code
 from app.web.config import label_stage_type
 from app.web.panel_links import (
     CONTRIBUTOR_ROWS_LINKED,
     CONTRIBUTORS_NAMED,
     PanelLinks,
+    TracePageQuery,
 )
 from app.web.trace_row_diff import build_row_diff, render_cell, row_diff_to_dict
 
@@ -42,7 +44,7 @@ class ContributorGroup:
     rows_link: str | None
 
 
-StoryKind = Literal["shown", "branch", "contributor", "cohort"]
+StoryKind = Literal["shown", "branch", "contributor", "cohort", "opened_on"]
 
 
 @dataclass(frozen=True)
@@ -99,7 +101,8 @@ def _transform_of(workflow_stage: WorkflowStage | None) -> dict[str, Any]:
 
 
 def build_trace_view(
-    trace: dict[str, Any], stages: dict[str, WorkflowStage], links: PanelLinks
+    trace: dict[str, Any], stages: dict[str, WorkflowStage], links: PanelLinks,
+    query: TracePageQuery = TracePageQuery(),
 ) -> dict[str, Any]:
     chrono = list(reversed(trace["steps"]))
     end = trace["end"]
@@ -119,7 +122,11 @@ def build_trace_view(
         "start_row": trace["start_row"],
         "nodes": nodes,
         "edges": edges,
-        "stories": [asdict(story) for story in _build_stories(nodes)],
+        "switches_path": links.switches_path,
+        "stories": [
+            asdict(story) for story in _build_stories(
+                nodes, links, trace["start_stage"], int(trace["start_row"]), query)
+        ],
         "upstream": {
             "truncated": truncated,
             "at_stage": end["at_stage"],
@@ -164,6 +171,9 @@ def _build_node(
 ) -> dict[str, Any]:
     step = chrono[i]
     parent = chrono[i - 1] if i else None
+    # A row it summarizes is one of many, never the row it was made from.
+    if parent is not None and _summarizes(step, parent):
+        parent = None
     diff = build_row_diff(
         step["row"],
         parent["row"] if parent else None,
@@ -208,6 +218,11 @@ def _build_node(
 def _source_filename(step: dict[str, Any]) -> str | None:
     read_from = step.get("source_file")
     return PurePath(read_from).name if read_from else None
+
+
+def _summarizes(step: dict[str, Any], parent: dict[str, Any]) -> bool:
+    return any(c["stage_id"] == parent["stage_id"] and c["row_ordinal"] == parent["row_ordinal"]
+               for c in _contributions(step))
 
 
 def _contributions(step: dict[str, Any]) -> list[dict[str, Any]]:
@@ -270,7 +285,26 @@ def _one_group(
     )
 
 
-def _build_stories(nodes: list[dict[str, Any]]) -> list[Story]:
+@dataclass(frozen=True)
+class PathDestination:
+    """The row every path on the page ends at, and the parents already routed through."""
+
+    links: PanelLinks
+    stage_id: str
+    row: int
+    query: TracePageQuery
+
+    def build_link_through(self, step: int, stage_id: str, row_ordinal: int) -> str | None:
+        return self.links.path_via(
+            self.stage_id, self.row, self.query,
+            TraceVia(step=step, stage_id=stage_id, row_ordinal=row_ordinal),
+        )
+
+
+def _build_stories(
+    nodes: list[dict[str, Any]], links: PanelLinks,
+    start_stage: str, start_row: int, query: TracePageQuery,
+) -> list[Story]:
     # A stage whose output frame the run never wrote traces no step at all.
     if not nodes:
         return []
@@ -280,28 +314,50 @@ def _build_stories(nodes: list[dict[str, Any]]) -> list[Story]:
         kind="shown", stage_id=first["stage_id"], row_ordinal=first["row_ordinal"],
         step=1, rows=1, linked=0, columns=None, href=None,
     )
-    return [shown, *(s for node in nodes for s in _find_alternatives(node))]
+    dest = PathDestination(links, start_stage, start_row, query)
+    on_path = {(node["stage_id"], node["row_ordinal"]) for node in nodes}
+    alternatives = [
+        story for node in nodes for story in _find_alternatives(node, dest)
+        if (story.stage_id, story.row_ordinal) not in on_path
+    ]
+    return [shown, *alternatives, *_build_opened_on_story(dest)]
 
 
-def _find_alternatives(node: dict[str, Any]) -> list[Story]:
+def _build_opened_on_story(dest: PathDestination) -> list[Story]:
+    """The path before any via — reachable only from a page that routed through one."""
+    if not dest.query.vias:
+        return []
+    return [Story(
+        kind="opened_on", stage_id=dest.stage_id, row_ordinal=dest.row,
+        step=1, rows=1, linked=1, columns=None,
+        href=dest.links.path_reset(dest.stage_id, dest.row, dest.query),
+    )]
+
+
+def _find_alternatives(node: dict[str, Any], dest: PathDestination) -> list[Story]:
     step = node["step"]
     return [
-        *(_build_branch_story(branch, step) for branch in node["branches"]),
-        *(s for group in node["contributor_groups"] for s in _build_fan_in_stories(group, step)),
+        *(_build_branch_story(branch, step, dest) for branch in node["branches"]),
+        *(s for group in node["contributor_groups"]
+          for s in _build_fan_in_stories(group, step, dest)),
     ]
 
 
-def _build_branch_story(branch: dict[str, Any], step: int) -> Story:
-    href = branch["links"]["trace"]
+def _build_branch_story(branch: dict[str, Any], step: int, dest: PathDestination) -> Story:
+    href = dest.build_link_through(step, branch["stage_id"], int(branch["row_ordinal"]))
     return Story(
         kind="branch", stage_id=branch["stage_id"], row_ordinal=branch["row_ordinal"],
         step=step, rows=1, linked=1 if href else 0, columns=None, href=href,
     )
 
 
-def _build_fan_in_stories(group: dict[str, Any], step: int) -> list[Story]:
+def _build_fan_in_stories(
+    group: dict[str, Any], step: int, dest: PathDestination
+) -> list[Story]:
     if group["named"]:
-        return [_build_contributor_story(parent, group, step) for parent in group["named"]]
+        return [
+            _build_contributor_story(parent, group, step, dest) for parent in group["named"]
+        ]
     return [Story(
         kind="cohort", stage_id=group["stage_id"], row_ordinal=None, step=step,
         rows=group["total"], linked=group["linked"] if group["rows_link"] else 0,
@@ -310,9 +366,9 @@ def _build_fan_in_stories(group: dict[str, Any], step: int) -> list[Story]:
 
 
 def _build_contributor_story(
-    parent: dict[str, Any], group: dict[str, Any], step: int
+    parent: dict[str, Any], group: dict[str, Any], step: int, dest: PathDestination
 ) -> Story:
-    href = parent["links"]["trace"]
+    href = dest.build_link_through(step, parent["stage_id"], int(parent["row_ordinal"]))
     return Story(
         kind="contributor", stage_id=parent["stage_id"],
         row_ordinal=int(parent["row_ordinal"]), step=step, rows=group["total"],

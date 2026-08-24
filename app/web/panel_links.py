@@ -2,7 +2,11 @@
 review packet writes it to a folder — so the same template asks for links here."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from urllib.parse import quote, urlencode
+
+from app.core.errors import TraceViaNotRecorded
+from app.runtime.trace import TraceVia
 
 
 # aggregate makes its single row out of every input row, so a cohort runs to
@@ -18,7 +22,31 @@ CONTRIBUTOR_ROWS_LINKED = 500
 CONTRIBUTORS_NAMED = 3
 
 
+@dataclass(frozen=True)
+class TracePageQuery:
+    """The trace page's own query string, carried onto every path it links to."""
+
+    vias: tuple[str, ...] = ()
+    # The cited column the page was opened on, which no change of path moves.
+    column: str | None = None
+
+
+def format_via(via: TraceVia) -> str:
+    return f"{via.step}:{via.row_ordinal}:{via.stage_id}"
+
+
+def parse_via(token: str) -> TraceVia:
+    step, _, rest = token.partition(":")
+    row, _, stage_id = rest.partition(":")
+    if not (step.isdigit() and row.isdigit() and stage_id):
+        raise TraceViaNotRecorded(f"malformed via {token!r} — expected step:row:stage_id")
+    return TraceVia(step=int(step), row_ordinal=int(row), stage_id=stage_id)
+
+
 class AppPanelLinks:
+    # Every other parent is reachable from the page it parts from, so a path is a URL.
+    switches_path = True
+
     def __init__(self, project_id: str, run_id: str) -> None:
         self._base = f"/project/{_segment(project_id)}/runs/{_segment(run_id)}"
 
@@ -43,6 +71,22 @@ class AppPanelLinks:
 
     def row_trace(self, stage_id: str, row: int) -> str:
         return f"{self._base}/stage/{_segment(stage_id)}/row/{row}/trace/view"
+
+    def path_via(
+        self, dest_stage: str, dest_row: int, query: TracePageQuery, via: TraceVia
+    ) -> str:
+        """The traced row's own page, re-told through `via` — so the claim on screen never moves."""
+        params = [("via", token) for token in [*query.vias, format_via(via)]]
+        if query.column is not None:
+            params.append(("column", query.column))
+        return f"{self.row_trace(dest_stage, dest_row)}?{urlencode(params)}"
+
+    def path_reset(self, dest_stage: str, dest_row: int, query: TracePageQuery) -> str:
+        """The same page with no via — the path the walk itself followed."""
+        page = self.row_trace(dest_stage, dest_row)
+        if query.column is None:
+            return page
+        return f"{page}?{urlencode([('column', query.column)])}"
 
     def review_queue(self, stage_id: str) -> str:
         return f"{self._base}/queue/{_segment(stage_id)}"
@@ -79,6 +123,8 @@ def packet_contributors_href(
 
 class PacketPanelLinks:
     """`None` from a method means the template omits that link, not that it is broken."""
+
+    switches_path = False  # one page per row, so the only path it opens is that row's own
 
 
     def __init__(
@@ -118,6 +164,14 @@ class PacketPanelLinks:
         if self._traced is not None and (stage_id, row) not in self._traced:
             return None
         return packet_lineage_href(self._root, stage_id, row)
+
+    def path_via(
+        self, dest_stage: str, dest_row: int, query: TracePageQuery, via: TraceVia
+    ) -> str | None:
+        return self.row_trace(via.stage_id, via.row_ordinal)
+
+    def path_reset(self, dest_stage: str, dest_row: int, query: TracePageQuery) -> str | None:
+        return self.row_trace(dest_stage, dest_row)
 
     def review_queue(self, stage_id: str) -> None:
         return None

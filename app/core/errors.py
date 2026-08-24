@@ -57,6 +57,10 @@ class TraceLinksUnavailableError(Exception):
     pass
 
 
+class TraceViaNotRecorded(ValueError):
+    """A path was asked for through a parent this run's lineage never recorded."""
+
+
 class NoWorkflowTestSourceError(Exception):
     pass
 

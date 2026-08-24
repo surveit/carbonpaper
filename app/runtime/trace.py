@@ -7,13 +7,14 @@ from __future__ import annotations
 
 import math
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import pyarrow as pa
 
-from app.core.errors import RowOutOfRange, StageNotInRun
+from app.core.errors import RowOutOfRange, StageNotInRun, TraceViaNotRecorded
 from app.core.frames import read_frame_table
 from app.models.stage import StageType, is_grain_and_order_preserving
 from app.runtime.lineage import (
@@ -51,6 +52,15 @@ class StageTransform:
     source_row: int | None = None
     # How many files the stage read; None where the manifest did not record any binding.
     source_file_count: int | None = None
+
+
+@dataclass(frozen=True)
+class TraceVia:
+    """A parent to route the walk through, named where the shown path meets it."""
+
+    step: int  # 1-based, chronological, over the path as it stands
+    stage_id: str
+    row_ordinal: int
 
 
 @dataclass
@@ -305,6 +315,52 @@ def trace_row_from(frames: RunFrames, stage_id: str, row_ordinal: int) -> Trace:
         steps=steps,
         end=end,
     )
+
+
+# One walk per via, and each reads its own frames and sidecars.
+_VIA_LIMIT = 8
+
+
+def trace_row_via(
+    frames: RunFrames, stage_id: str, row_ordinal: int, vias: Sequence[TraceVia]
+) -> Trace:
+    """The same row's path, told through the parents `vias` names instead of the followed ones."""
+    if len(vias) > _VIA_LIMIT:
+        raise TraceViaNotRecorded(
+            f"a path may be routed through at most {_VIA_LIMIT} parents, asked for {len(vias)}"
+        )
+    trace = trace_row_from(frames, stage_id, row_ordinal)
+    for via in vias:
+        trace = _trace_through(frames, trace, via)
+    return trace
+
+
+def _trace_through(frames: RunFrames, trace: Trace, via: TraceVia) -> Trace:
+    junction = _find_step(trace, via.step)
+    if not any(p.stage_id == via.stage_id and p.row_ordinal == via.row_ordinal
+               for p in junction.branches):
+        raise TraceViaNotRecorded(
+            f"{via.stage_id!r} row {via.row_ordinal} is not a recorded parent of "
+            f"{junction.stage_id!r} row {junction.row_ordinal}"
+        )
+    upstream = trace_row_from(frames, via.stage_id, via.row_ordinal)
+    # The junction and everything after it stand; what fed the junction is replaced.
+    kept = len(trace.steps) - via.step + 1
+    return Trace(
+        run_id=trace.run_id,
+        start_stage=trace.start_stage,
+        start_row=trace.start_row,
+        steps=[*trace.steps[:kept], *upstream.steps],
+        end=upstream.end,
+    )
+
+
+def _find_step(trace: Trace, step: int) -> StageTransform:
+    if not 1 <= step <= len(trace.steps):
+        raise TraceViaNotRecorded(
+            f"step {step} is not on a path of {len(trace.steps)} steps"
+        )
+    return trace.steps[len(trace.steps) - step]
 
 
 def trace_to_dict(trace: Trace) -> dict[str, Any]:

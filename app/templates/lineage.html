@@ -172,14 +172,12 @@ tr.carried td.lin-v{color:var(--muted)}
 {% if view.nodes %}
 <div class="lin-split">
   <div class="lin-snav">
-    <h2>Stories</h2>
+    <h2>Paths to this row</h2>
     <div id="stories"></div>
     <div class="lin-snavtot" id="storiestot"></div>
   </div>
   <div class="lin-story">
-    <div class="lin-note"><b>The steps are one example of that path.</b> They follow this one row,
-      as it stood after each stage. Other rows may have run the same path; this page does not
-      count them. Click a step to see the row.</div>
+    <div class="lin-note" id="stepsnote"></div>
     <div id="steps"></div>
     <details class="lin-graph"><summary>Lineage graph</summary>
       <pre class="mermaid" id="mmd">{{ mermaid }}</pre>
@@ -246,7 +244,7 @@ document.getElementById('pagetabs').addEventListener('click', e => {
 let sel = V.nodes.length - 1, tab = 'row', scope = 'changed';
 const transformCache = {};
 
-// ---- The stories: every path this row's ancestry could be told down --------
+// ---- The paths: every route this row's ancestry could be told down --------
 // The trace knows which parents it did not follow. It does NOT know how many
 // rows ran each path, so no entry claims a share of anything.
 function renderStories(){
@@ -258,9 +256,17 @@ function renderStories(){
     // No page for this row (the review packet wrote none): the entry still
     // states the path, because the path is a fact and the link is not.
     if(!s.href) return `<div class="snavbtn">${body}</div>`;
-    return `<a class="snavbtn" href="${s.href}" title="trace this row instead">${body}</a>`;
+    return `<a class="snavbtn" href="${s.href}" title="${openTitle(s)}">${body}</a>`;
   }).join('');
   document.getElementById('storiestot').innerHTML = storiesNote();
+}
+// The packet is a folder of one page per row, so only the app can re-tell a path.
+function openTitle(s){
+  if(s.kind === 'opened_on') return 'tell the path the walk itself followed';
+  if(s.kind === 'cohort') return `open these rows of ${esc(s.stage_id)}`;
+  return V.switches_path
+    ? `re-tell this row's path through ${esc(s.stage_id)} row ${s.row_ordinal}`
+    : 'trace that row instead';
 }
 // Where the columns a cohort fed are the output's own, naming them says nothing.
 function countCohorts(){
@@ -268,12 +274,13 @@ function countCohorts(){
     .map(s => `${s.stage_id}\n${(s.columns || []).join(',')}`)).size;
 }
 function storyLabel(s){
-  return s.kind === 'cohort'
-    ? `${s.rows} rows of <code>${esc(s.stage_id)}</code>`
-    : `<code>${esc(s.stage_id)}</code> row ${s.row_ordinal}`;
+  if(s.kind === 'cohort') return `${s.rows} rows of <code>${esc(s.stage_id)}</code>`;
+  if(s.kind === 'opened_on') return 'the path this page opened on';
+  return `<code>${esc(s.stage_id)}</code> row ${s.row_ordinal}`;
 }
 function storyWhy(s, showColumns){
   if(s.kind === 'shown') return shownWhy();
+  if(s.kind === 'opened_on') return 'through the parents the walk itself followed';
   const at = `step ${s.step}, <code>${esc(V.nodes[s.step - 1].stage_id)}</code>`;
   const into = (showColumns && s.columns) ? ` into ${s.columns.map(esc).join(' and ')}` : '';
   const nopage = s.href ? '' : ' · <span class="nopage">no page for this row</span>';
@@ -294,11 +301,44 @@ function shownWhy(){
     : `the path told here — ${steps}, back to the source`;
 }
 function storiesNote(){
-  if(V.stories.length > 1)
-    return 'Every other parent this walk recorded is listed here. Opening one traces from it instead.';
-  return V.upstream.truncated
-    ? 'No step named a second parent, and the walk stopped before the source.'
-    : 'No step named a second parent, so this row has one path from the source.';
+  if(V.stories.length === 1) return '';
+  return V.switches_path
+    ? 'Every other parent this walk recorded is listed here. Opening one re-tells this same row '
+      + 'through it — the row above never changes.'
+    : 'Every other parent this walk recorded is listed here. Opening one traces from it instead.';
+}
+// A parent named where the walk STOPPED carries the path on; one named anywhere
+// else is a second path it could have taken.
+function findAlternatives(){
+  return V.stories.filter(s => s.kind !== 'shown' && s.kind !== 'opened_on');
+}
+function isContinuation(s){
+  return V.upstream.truncated && s.step === 1;
+}
+function stepsNote(){
+  const click = ' Click a step to see the row.';
+  const others = findAlternatives();
+  if(others.some(s => !isContinuation(s)))
+    return `<b>This row has more than one path.</b> The steps below are the one being told; `
+         + `every other parent the walk recorded is on the left.` + click;
+  if(others.length)
+    return `<b>The steps below stop at <code>${esc(V.nodes[0].stage_id)}</code>.</b> `
+         + `${carriesOn(others)} Open ${others.length > 1 ? 'one' : 'it'} on the left to carry `
+         + `the path back through it.` + click;
+  if(V.upstream.truncated)
+    return `<b>The only path recorded.</b> The walk stopped at `
+         + `<code>${esc(V.nodes[0].stage_id)}</code> before the source, so what fed it is not `
+         + `recorded — the steps below are every one this run can show.` + click;
+  return `<b>This row has one path.</b> No step recorded a second parent, so the steps below `
+       + `are the whole of how it was made.` + click;
+}
+// The cohort's true size, off the same count the entries on the left report.
+function carriesOn(others){
+  const first = others[0];
+  if(first.kind === 'branch') return 'It records a parent the walk could not follow from here.';
+  return first.rows > 1
+    ? `It summarizes ${first.rows} rows, each its own way further back.`
+    : 'It summarizes one row, which is the only way further back.';
 }
 
 // ---- The steps ------------------------------------------------------------
@@ -525,7 +565,8 @@ document.querySelector('.lin-graph').addEventListener('toggle', async e => {
   try { await mermaid.run({ nodes:[mmd] }); } catch(err){ graphRendered = false; }
 });
 
-// The stories do not move when a step is picked, so they are painted once.
+// Neither the paths nor what they are moves when a step is picked, so both are painted once.
+document.getElementById('stepsnote').innerHTML = stepsNote();
 renderStories();
 render();
 </script>
