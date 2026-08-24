@@ -33,7 +33,7 @@ client, an eval form that does not exist yet), the heading and line stand alone;
 button is not invented to complete the shape.
 
 ## The run page's two columns (`run_detail.html`)
-`.run-nav` (360px, collapsible) then `.run-main`. The nav column is the **spine** and holds
+`.run-main` on the left, `.run-nav` (360px, collapsible) on the right. The nav column is the **spine** and holds
 the **Run walkthrough** alone (the `ReviewGuide` record — the name is internal, the screen says
 walkthrough) — so it is rendered **only** where the pinned version carries a guide, and the work
 column takes the whole width otherwise (`.run-shell.no-nav`). It LEADS on the files the run

@@ -49,14 +49,14 @@
      What is here is what only a fixed-viewport app has: each pane scrolling on its
      own, and the collapse the button below drives. */
   .run-shell { height: 100%; min-height: 0; }
-  .run-shell.nav-collapsed { grid-template-columns: auto minmax(0, 1fr); }
+  .run-shell.nav-collapsed { grid-template-columns: minmax(0, 1fr) auto; }
   .run-nav { height: 100%; overflow-y: auto; }
   .run-section[hidden] { display: none; }
   /* The rail is titled by this page rather than by the partials below, because the
      collapse control shares the line. */
   .run-nav-head .drawer-btn { margin-left: auto; }
   .nav-expand { position: sticky; top: 0; align-self: start; }
-  .run-main { height: 100%; overflow-y: auto; padding-right: 6px; }
+  .run-main { height: 100%; overflow-y: auto; padding-left: 6px; }
 
   /* ── The toolbar shares the first section's heading line, actions to the right:
         the run's title and what you can do to the run are one band, and neither
