@@ -104,7 +104,7 @@ def _build_step(
     unreadable = _say_why_no_sheet(record, preview)
     on_frame = set() if preview is None else {str(name) for name in preview["columns"]}
     new_sheet = _find_new_sheet(stage)
-    present = _pick_present_columns(order, on_frame, new_sheet, unreadable)
+    present = _resolve_present_columns(order, on_frame, new_sheet, unreadable)
     states = _SheetStates(
         on_frame=on_frame,
         rewritten=_list_rewritten_columns(stage),
@@ -128,7 +128,7 @@ def _build_step(
     )
 
 
-def _pick_present_columns(
+def _resolve_present_columns(
     order: list[str], on_frame: set[str], new_sheet: NewSheet | None, unreadable: str | None
 ) -> list[str]:
     if unreadable is not None:
@@ -159,13 +159,13 @@ def _build_sheet_column(
     node = walk.nodes.get(ColumnAt(stage_id, name))
     return SheetColumn(
         name=name,
-        state=_pick_column_state(name, states, wrote=node is not None and node.wrote),
+        state=_resolve_column_state(name, states, wrote=node is not None and node.wrote),
         cited=ColumnAt(stage_id, name) == cited,
         writer=find_nearest_writer_upstream(walk, graph, stage_id, name),
     )
 
 
-def _pick_column_state(name: str, states: _SheetStates, *, wrote: bool) -> ColumnDiffState:
+def _resolve_column_state(name: str, states: _SheetStates, *, wrote: bool) -> ColumnDiffState:
     if name not in states.on_frame:
         return ColumnDiffState.absent
     if name in states.rewritten:

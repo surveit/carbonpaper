@@ -9,7 +9,7 @@ from enum import Enum
 from app.models import AbstractStage, StageType, WorkflowStage
 from app.models.schema import StageId
 from app.models.stages.aggregate import AggregateStage
-from app.models.stages.signature import ExtendsSignature
+from app.models.stages.signature import transform_output_schema
 
 WorkflowStagesById = dict[StageId, WorkflowStage]
 
@@ -137,10 +137,8 @@ def order_sheet_columns(walk: ColumnWalk) -> list[str]:
 
 
 def list_written_columns(stage: AbstractStage) -> set[str]:
-    signature = stage.signature
-    if isinstance(signature, ExtendsSignature):
-        return {column.name for column in (*signature.adds, *signature.rewrites)}
-    return {column.name for column in signature.produces}
+    # Never a publish stage, whose empty table the schema call asserts against.
+    return {column.name for column in transform_output_schema(stage).columns}
 
 
 def _find_parents(
