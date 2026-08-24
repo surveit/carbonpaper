@@ -45,7 +45,28 @@ body{display:flex;flex-direction:column;overflow:hidden}
 .lin-source{color:var(--info-ink);font-size:12.5px;font-weight:600}
 .lin-source code{background:var(--info-bg);padding:1px 5px;border-radius:4px}
 .lin-became{color:var(--muted);font-size:12.5px}
-.lin-split{flex:1;min-height:0;display:grid;grid-template-columns:minmax(400px,1fr) minmax(480px,1.1fr)}
+/* Three panes: the paths, one of them told, and the row it is told about. The
+   minimums sum under the 900px fallback below, so they never collide with it. */
+.lin-split{flex:1;min-height:0;display:grid;
+  grid-template-columns:220px minmax(280px,1fr) minmax(380px,1.05fr)}
+.lin-snav{overflow:auto;padding:14px 12px 30px;background:var(--sunk);
+  border-right:1px solid var(--border)}
+.lin-snav h2{margin:0 0 8px;font-size:11px;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.05em}
+/* Every entry is a link EXCEPT the one being told and one the packet wrote no
+   page for; all three read as the same list, so the pane is never ragged. */
+.snavbtn{display:block;width:100%;text-align:left;padding:7px 8px;border-radius:8px;
+  margin-bottom:4px;border-left:3px solid transparent;color:var(--fg);text-decoration:none}
+a.snavbtn:hover{background:var(--hover)}
+.snavbtn.on{background:var(--state-review-bg);border-left-color:var(--accent)}
+.snavbtn .lab{display:block;font-size:12.5px;line-height:1.3}
+.snavbtn .lab code{background:var(--sunk-deep);padding:0 4px;border-radius:4px}
+.snavbtn.on .lab code{background:var(--raised)}
+.snavbtn .why{display:block;font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.35}
+.snavbtn.on .why{color:var(--info-ink)}
+.snavbtn .nopage{color:var(--state-warn-ink)}
+.lin-snavtot{font-size:11.5px;color:var(--muted);line-height:1.45;
+  border-top:1px solid var(--border);padding-top:8px;margin-top:10px}
 .lin-story{overflow:auto;padding:16px 20px 40px}
 .lin-side{min-height:0;border-left:1px solid var(--border);background:var(--raised);
   display:flex;flex-direction:column;overflow:hidden}
@@ -56,6 +77,7 @@ body{display:flex;flex-direction:column;overflow:hidden}
   body{display:block;overflow:visible}
   .lin-pane{display:block}
   .lin-split{display:block}
+  .lin-snav{overflow:visible;border-right:0;border-bottom:1px solid var(--border)}
   .lin-story{overflow:visible}
   .lin-side{border-left:0;border-top:1px solid var(--border);overflow:visible}
   .lin-pbody{overflow:visible}
@@ -83,12 +105,9 @@ body{display:flex;flex-direction:column;overflow:hidden}
 .claim-tag{font-size:10.5px;border-radius:5px;padding:0 5px;margin-left:3px;
   background:var(--state-done-bg);color:var(--state-done-ink)}
 .nomatch{background:var(--warn-bg);color:var(--state-warn-ink);border-radius:5px;padding:0 5px;font-size:11.5px}
-/* A branch is a parent this walk did NOT follow: opening one re-traces from it,
-   swapping the spine, rather than expanding a second story inline. */
-.branch{background:var(--raised);border:1px solid var(--state-idle);color:var(--state-idle-ink);border-radius:6px;padding:0 7px;
-  font-size:12.5px;white-space:nowrap;text-decoration:none;display:inline-block}
-.branch:hover{background:var(--hover)}
-.branch::before{content:"⟨"}.branch::after{content:"⟩ ⇄"}
+/* A step names the row's other parents; opening one is the left pane's job, so
+   here they are words rather than a second set of controls in the sentence. */
+.branch-name{color:var(--state-idle-ink)}
 .trunc{background:var(--warn-bg);color:var(--state-warn-ink);border-radius:8px;padding:8px 12px;
   font-size:13px;margin-bottom:12px}
 .lin-graph{margin-top:18px;border-top:1px solid var(--border);padding-top:10px}
@@ -151,9 +170,16 @@ tr.carried td.lin-v{color:var(--muted)}
 </div>
 <div class="lin-pane" data-pane="paths">
 <div class="lin-split">
+  <div class="lin-snav">
+    <h2>Stories</h2>
+    <div id="stories"></div>
+    <div class="lin-snavtot" id="storiestot"></div>
+  </div>
   <div class="lin-story">
-    <div class="lin-note">Every step below is this one row, as it stood after that stage. Click a step to see it.</div>
-    <div id="story"></div>
+    <div class="lin-note"><b>The steps are one example of that path.</b> They follow this one row,
+      as it stood after each stage. Other rows may have run the same path; this page does not
+      count them. Click a step to see the row.</div>
+    <div id="steps"></div>
     <details class="lin-graph"><summary>Lineage graph</summary>
       <pre class="mermaid" id="mmd">{{ mermaid }}</pre>
       <div id="nograph" class="nograph hidden">Graph needs the compiled workflow, which isn't available for this run.</div>
@@ -209,7 +235,62 @@ document.getElementById('pagetabs').addEventListener('click', e => {
     p => p.classList.toggle('hidden', p.dataset.pane !== picked.dataset.pane));
 });
 
-// ---- Story ----------------------------------------------------------------
+// ---- The stories: every path this row's ancestry could be told down --------
+// The trace knows which parents it did not follow. It does NOT know how many
+// rows ran each path, so no entry claims a share of anything.
+function renderStories(){
+  const showColumns = countCohorts() > 1;
+  document.getElementById('stories').innerHTML = V.stories.map((s, i) => {
+    const body = `<span class="lab">${storyLabel(s)}</span>`
+               + `<span class="why">${storyWhy(s, showColumns)}</span>`;
+    if(i === 0) return `<div class="snavbtn on">${body}</div>`;
+    // No page for this row (the review packet wrote none): the entry still
+    // states the path, because the path is a fact and the link is not.
+    if(!s.href) return `<div class="snavbtn">${body}</div>`;
+    return `<a class="snavbtn" href="${s.href}" title="trace this row instead">${body}</a>`;
+  }).join('');
+  document.getElementById('storiestot').innerHTML = storiesNote();
+}
+// Where the columns a cohort fed are the output's own, naming them says nothing.
+function countCohorts(){
+  return new Set(V.stories.filter(s => s.kind === 'cohort' || s.kind === 'contributor')
+    .map(s => `${s.stage_id}\n${(s.columns || []).join(',')}`)).size;
+}
+function storyLabel(s){
+  return s.kind === 'cohort'
+    ? `${s.rows} rows of <code>${esc(s.stage_id)}</code>`
+    : `<code>${esc(s.stage_id)}</code> row ${s.row_ordinal}`;
+}
+function storyWhy(s, showColumns){
+  if(s.kind === 'shown') return shownWhy();
+  const at = `step ${s.step}, <code>${esc(V.nodes[s.step - 1].stage_id)}</code>`;
+  const into = (showColumns && s.columns) ? ` into ${s.columns.map(esc).join(' and ')}` : '';
+  const nopage = s.href ? '' : ' · <span class="nopage">no page for this row</span>';
+  if(s.kind === 'branch') return `another parent at ${at}${into}${nopage}`;
+  if(s.kind === 'contributor') return s.rows > 1
+    ? `one of ${s.rows} rows summarized at ${at}${into}${nopage}`
+    : `the one row summarized at ${at}${into}${nopage}`;
+  return `summarized at ${at}${into} — ${cohortReach(s)}`;
+}
+function cohortReach(s){
+  if(!s.href) return 'no table of them here';
+  return s.linked < s.rows ? `opens the first ${s.linked}` : 'opens all of them';
+}
+function shownWhy(){
+  const steps = `${V.nodes.length} step${V.nodes.length > 1 ? 's' : ''}`;
+  return V.upstream.truncated
+    ? `the path told here — ${steps}, stopping at <code>${esc(V.nodes[0].stage_id)}</code>`
+    : `the path told here — ${steps}, back to the source`;
+}
+function storiesNote(){
+  if(V.stories.length > 1)
+    return 'Every other parent this walk recorded is listed here. Opening one traces from it instead.';
+  return V.upstream.truncated
+    ? 'No step named a second parent, and the walk stopped before the source.'
+    : 'No step named a second parent, so this row has one path from the source.';
+}
+
+// ---- The steps ------------------------------------------------------------
 function verb(n){
   const k = n.transform.kind, sid = `<span class="sid">${esc(n.stage_id)}</span>`;
   if(k==='python') return `run python <span class="sid">${esc(n.stage_id)}()</span>`;
@@ -242,7 +323,7 @@ function sentenceOf(n){
   // this and the join case never both apply.
   const groups = n.contributor_groups || [];
   const from = groups.length
-    ? ' from ' + groups.map(g => gchip(g, groups.length > 1)).join('; ') : '';
+    ? ' from ' + groups.map(g => groupName(g, groups.length > 1)).join('; ') : '';
   return `${verb(n)}${from}`;
 }
 // A join leads with the reference row it brought in, and names the stage after
@@ -253,10 +334,10 @@ function joinSentence(n){
   const kind = n.transform.kind, sid = `<span class="sid">${esc(n.stage_id)}</span>`;
   const branches = n.branches || [];
   return branches.length
-    ? `${kind} with ${branches.map(bchip).join(' and ')} in ${sid}`
+    ? `${kind} with ${branches.map(branchName).join(' and ')} in ${sid}`
     : `${kind} in ${sid} — <span class="nomatch">no reference row matched</span>`;
 }
-function renderStory(){
+function renderSteps(){
   let html = '';
   // The banner is for a stop the story cannot otherwise show. A fan-in row says
   // what it summarized in its own sentence, so it needs no second telling.
@@ -269,44 +350,32 @@ function renderStory(){
       <span>${sentenceOf(n)}</span>
       <span class="right">${n.role==='claim' ? '<span class="claim-tag">published claim</span> ' : ''}<span class="row-chip">row ${n.row_ordinal}</span>${deltaOf(n)}</span>
     </button>`).join('');
-  document.getElementById('story').innerHTML = html;
+  document.getElementById('steps').innerHTML = html;
 }
 
 // ---- The other parents, named in the sentence that owns them --------------
-function bchip(b){
-  return `<a class="branch" href="${b.links.trace}" title="trace this row instead">`
-       + `${esc(b.stage_id)} row ${b.row_ordinal}</a>`;
+function branchName(b){
+  return `<span class="branch-name">${esc(b.stage_id)} row ${b.row_ordinal}</span>`;
 }
 // A fan-in row has one contributor per input row it summarizes — fifty of them
 // reads as noise, so they collapse to a count. `contributor_groups` arrives
-// already grouped by the columns each cohort fed, and already bounded, from
-// build_trace_view: an aggregate whose columns all rest on the same rows shows
-// one chip, and only a per-column `where` splits it into several.
+// already grouped by the columns each cohort fed, from build_trace_view.
 //
 // `g.total` is the cohort's TRUE size, counted over the whole sidecar, so the
-// number the reader sees is never the bounded one — `g.linked` says how many
-// rows the link opens where it cannot open them all. `g.named` is non-empty
-// only for a cohort small enough to name row by row, and `g.rows_link` is built
-// server-side, so no route is spelled out again here.
+// number here is never a bounded one. `g.named` is non-empty only for a cohort
+// small enough to name row by row. Where each of those rows can be OPENED is
+// the left pane's business, so nothing here is a link.
 // `showColumns` only where there IS more than one cohort: with a single one the
 // columns are just the output's own, which is a list nobody needs to read.
-function gchip(g, showColumns){
+function groupName(g, showColumns){
   const stage = esc(g.stage_id);
   const into = (showColumns && g.columns) ? ` into ${g.columns.map(esc).join(' and ')}` : '';
-  // Named row by row: the stage once, then the ordinals, which is what the
-  // reader is after — repeating the stage per row buries them.
   if(g.named.length){
-    const rows = g.named.map(b =>
-      `<a class="branch" href="${b.links.trace}" title="trace this row instead">${b.row_ordinal}</a>`);
-    return `${stage} ${g.named.length > 1 ? 'rows' : 'row'} ${rows.join(' ')}${into}`;
+    const rows = g.named.map(b => b.row_ordinal).join(' ');
+    return `<span class="branch-name">${stage} ${g.named.length > 1 ? 'rows' : 'row'} `
+         + `${rows}</span>${into}`;
   }
-  const label = g.linked < g.total
-    ? `${g.total} rows of ${stage} — open the first ${g.linked}`
-    : `${g.total} rows of ${stage}`;
-  // No rows view to point at (the review packet's link set): still say the count.
-  if(!g.rows_link) return `${label}${into}`;
-  return `<a class="branch" href="${g.rows_link}"`
-       + ` title="open these rows of ${stage}">${label}</a>${into}`;
+  return `<span class="branch-name">${g.total} rows of ${stage}</span>${into}`;
 }
 
 // ---- The panel: the row first, its transform a tab away -------------------
@@ -397,7 +466,7 @@ async function renderTransformTab(n){
   if(V.nodes[sel] === n && tab === 'transform') body.innerHTML = transformCache[n.stage_id];
 }
 function render(){
-  renderStory();
+  renderSteps();
   const n = V.nodes[sel];
   document.getElementById('ptype').textContent = `${n.stage_type_label} · step ${n.step} of ${V.nodes.length}`;
   document.getElementById('ptitle').innerHTML =
@@ -411,7 +480,7 @@ function render(){
 }
 function select(i){ sel = i; tab = 'row'; render(); document.getElementById('pbody').scrollTop = 0; }
 
-document.getElementById('story').addEventListener('click', e => {
+document.getElementById('steps').addEventListener('click', e => {
   const step = e.target.closest('.step'); if(step) select(+step.dataset.i);
 });
 document.querySelector('.lin-tabs').addEventListener('click', e => {
@@ -445,6 +514,8 @@ document.querySelector('.lin-graph').addEventListener('toggle', async e => {
   try { await mermaid.run({ nodes:[mmd] }); } catch(err){ graphRendered = false; }
 });
 
+// The stories do not move when a step is picked, so they are painted once.
+renderStories();
 render();
 </script>
 {% if not offline %}{% include "_chat_rail.html" %}
