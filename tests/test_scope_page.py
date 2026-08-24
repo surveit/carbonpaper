@@ -175,3 +175,26 @@ def test_a_cited_figure_that_is_not_a_number_carries_its_own_text(run_id):
     payload = TestClient(app).get(
         scope_url(PROJECT, run_id, "by_portfolio", "portfolio", 0, suffix=".json")).json()
     assert isinstance(payload["citation"]["value"], str)
+
+
+def test_every_stage_the_map_draws_has_a_transform_to_show(run_id):
+    # An empty Transform tab reads as "nothing happens here".
+    client = TestClient(app)
+    payload = client.get(scope_url(
+        PROJECT, run_id, "grant_totals", "total_amount", 0, suffix=".json")).json()
+    blank = []
+    for stage in payload["stages"]:
+        panel = client.get(
+            f"/project/{PROJECT}/runs/{run_id}/stage/{stage['id']}/lineage_panel?row=0")
+        assert panel.status_code == 200
+        if "exec-block" not in panel.text:
+            blank.append(f"{stage['id']} ({stage['type']})")
+    assert not blank, f"the Transform tab has nothing to show for {blank}"
+
+
+def test_the_page_carries_the_two_panes_the_script_fills(run_id):
+    page = TestClient(app).get(
+        scope_url(PROJECT, run_id, "grant_totals", "total_amount", 0))
+    assert 'id="scope-tabs"' in page.text
+    assert 'id="scope-table"' in page.text
+    assert 'id="scope-transform"' in page.text
