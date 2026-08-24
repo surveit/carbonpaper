@@ -22,6 +22,7 @@ from starlette.types import Scope
 # avoid.
 from app.core.paths import repo_root
 from app.core.utils import abbreviate_count
+from app.web.authored_code import describe_code_block, find_authored_code
 from app.web.diagrams import TYPE_LABEL
 from app.web.file_sizes import describe_bytes, read_turn
 from app.services.workspace import (
@@ -144,3 +145,6 @@ templates.env.filters["filesize"] = describe_bytes
 # A chat turn naming an attached file draws as a card; every other turn is
 # its own text. The line itself is what the agent reads either way.
 templates.env.filters["turn"] = read_turn
+# Every authored-code type reaches the screen through these two.
+templates.env.filters["authored_code"] = find_authored_code
+templates.env.filters["code_block_copy"] = describe_code_block

@@ -9,8 +9,12 @@ from __future__ import annotations
 import ast
 import re
 from pathlib import Path
+from typing import get_args, get_type_hints
 
 from app.models import StageType
+from app.models.stage import Stage
+from app.models.stages.stage_base import AbstractStage
+from app.web.authored_code import BLOCK_COPY
 from app.web.config import label_stage_type
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, TYPE_LABEL, build_mermaid_graph
 from arch._helpers import parse_module, read_stylesheets
@@ -265,3 +269,22 @@ def _iter_name_bindings(tree: ast.Module) -> list[tuple[str, ast.expr]]:
         ):
             bindings.append((node.target.id, node.value))
     return bindings
+
+
+def collect_authored_code_blocks() -> set[type]:
+    """The block class each stage type hands back from find_authored_code_block."""
+    blocks = set()
+    for stage_cls in get_args(get_args(Stage)[0]):
+        hook = stage_cls.find_authored_code_block
+        if hook is AbstractStage.find_authored_code_block:
+            continue
+        blocks.add(get_type_hints(hook)["return"])
+    return blocks
+
+
+def test_every_authored_code_block_has_screen_copy() -> None:
+    missing = sorted(b.__name__ for b in collect_authored_code_blocks() - set(BLOCK_COPY))
+    assert not missing, (
+        f"{missing} have no BLOCK_COPY entry (app/web/authored_code.py), so a stage "
+        f"carrying one renders a headless code section with no summary and no code."
+    )

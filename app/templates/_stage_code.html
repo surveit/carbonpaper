@@ -55,31 +55,12 @@
 {% endmacro %}
 
 {% macro stage_code(stage, function_code) %}
-{% if stage.function %}
+{% set copy = (stage | authored_code) | code_block_copy %}
+{% if function_code and copy %}
 <section class="exec-block code-block">
     <details open>
-        <summary><h2>💻 Code</h2><span class="muted">the implementation of the summary above</span></summary>
-        {% if function_code %}
+        <summary><h2>💻 Code</h2><span class="muted">{{ copy.caption }}</span></summary>
         <pre class="code"><code class="language-python">{{ function_code }}</code></pre>
-        {% else %}
-        <p class="muted"><em>(function source not found on disk)</em></p>
-        {% endif %}
-    </details>
-</section>
-{% endif %}
-{% if stage.filter %}
-<section class="exec-block code-block">
-    <details open>
-        <summary><h2>💻 Code</h2><span class="muted">the predicate behind the summary above</span></summary>
-        <pre class="code"><code class="language-python">{{ stage.filter.code }}</code></pre>
-    </details>
-</section>
-{% endif %}
-{% if stage.starlark %}
-<section class="exec-block code-block">
-    <details open>
-        <summary><h2>💻 Code</h2><span class="muted">the implementation of the summary above</span></summary>
-        <pre class="code"><code class="language-python">{{ stage.starlark.code }}</code></pre>
     </details>
 </section>
 {% endif %}

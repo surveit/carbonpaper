@@ -111,6 +111,8 @@ class CornerCase(_Base):
 class AuthoredCode(Protocol):
     summary: Optional[str]
     corner_cases: list[CornerCase]
+    code: str
+    function: Optional[str]
 
 
 def _binds_name(tree: ast.Module, name: str) -> bool:
@@ -152,7 +154,7 @@ class PythonFunction(StageConfig):
     model_config = ConfigDict(json_schema_extra={"description": PYTHON_FUNCTION_DESCRIPTION})
 
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
-        "kind", "code", "module", "function", "requirements",
+        "kind", "code", "function", "requirements",
     })
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({"summary", "corner_cases"})
 
@@ -161,8 +163,7 @@ class PythonFunction(StageConfig):
     corner_cases: list[CornerCase] = Field(
         default_factory=list, description=CORNER_CASES_DESCRIPTION
     )
-    code: Optional[str] = Field(
-        default=None,
+    code: str = Field(
         description=(
             "Inline Python defining `function` (default `transform`). Signature by stage "
             "type: python_row_function `def transform(row: dict) -> dict` (1 row in, 1 out; "
@@ -181,22 +182,11 @@ class PythonFunction(StageConfig):
             "have a forex conversion table and it will break sums downstream."
         ),
     )
-    module: Optional[str] = None
     function: Optional[str] = None
     requirements: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def _kind_fields(self) -> "PythonFunction":
-        if self.kind == FunctionKind.module and not self.module:
-            raise ValueError("function.kind=module needs `module`")
-        if self.kind == FunctionKind.inline and not self.code:
-            raise ValueError("function.kind=inline needs `code`")
-        return self
-
-    @model_validator(mode="after")
     def _inline_code_is_runnable(self) -> "PythonFunction":
-        if self.kind != FunctionKind.inline or not self.code:
-            return self
         validate_inline_function_code(self.code, self.function)
         return self
 
@@ -207,10 +197,6 @@ def find_python_function_warnings(stage: "CarriesPythonFunctionStage"
     if not (function.summary or "").strip():
         return [warn(stage, "undescribed",
                      "no plain-language description — reviewable only by reading its code")]
-    if function.kind == FunctionKind.module:
-        return [warn(stage, "unreviewable_code",
-                     f"the code lives in module `{function.module}` rather than on the "
-                     f"stage, so the review panel cannot show it")]
     return []
 
 
@@ -256,8 +242,8 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
         blocks=["function"],
         requires_inputs=True,
         min_inputs=1,
-        required=["kind"],
-        optional=["module", "function", "code", "requirements", "summary"],
+        required=["kind", "code"],
+        optional=["function", "requirements", "summary"],
         notes=(
             "Prefer starlark_row_function, which runs sandboxed with no file, network, or "
             "library access — reach for this Python variant only when the transform genuinely "
@@ -277,8 +263,8 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
         blocks=["function"],
         requires_inputs=True,
         min_inputs=1,
-        required=["kind"],
-        optional=["module", "function", "code", "requirements", "summary"],
+        required=["kind", "code"],
+        optional=["function", "requirements", "summary"],
         notes=(
             "The runtime calls `transform(*frames)`: one POSITIONAL parameter per declared "
             "input, in `inputs` order — never by name, never a dict of frames. It receives no "
