@@ -133,6 +133,13 @@ The distinct COUNT is evidence, never the criterion. Two questions decide:
 Values read off a sliced run, off a frame below a filter or an aggregate, or off a
 cut value list are a SAMPLE, not the set. Say which one you have. Say which one you have."""
 
+FILTER_ON_MEANING_GUIDANCE = """\
+A filter that tests a column an earlier stage LANDED — a joined value being null, a
+lookup that found nothing — tests whether that stage SUCCEEDED, so it drops every row
+that failed to match along with the rows you meant to exclude: filter on a column that
+carries the meaning you are claiming, and let an unexpected non-match reach a stage
+that fails."""
+
 # ─── The anatomy every stage shares ──────────────────────────────
 
 _WHAT_EVERY_STAGE_DECLARES = """\

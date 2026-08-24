@@ -12,6 +12,7 @@ from app.tools.prompt_fragments import (
     CODE_SUMMARY_CONTRACT_NOTE,
     CONCEPTS_NOTE,
     ENUM_FROM_DATA_GUIDANCE,
+    FILTER_ON_MEANING_GUIDANCE,
     HANDOVER_BARS_NOTE,
     HOW_YOU_WORK_NOTE,
     REVIEW_GUIDE_NOTE,
@@ -31,7 +32,9 @@ def build_editing_system_prompt() -> str:
         HANDOVER_BARS_NOTE,
         f"# Project lifecycle\n{AUTHORING_LIFECYCLE_GUIDANCE}",
         f"# Rules for workflows\n\n## Constrain inputs as tightly as possible\n"
-        f"{ENUM_FROM_DATA_GUIDANCE}",
+        f"{ENUM_FROM_DATA_GUIDANCE}\n\n"
+        f"## Filter on the column that carries the meaning\n"
+        f"{FILTER_ON_MEANING_GUIDANCE}",
         render_stage_anatomy_section(),
         render_stage_type_catalog(),
     ])
