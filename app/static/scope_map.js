@@ -27,7 +27,7 @@
   var TABLE = '<table class="data-preview">';
   var COLUMN = 300, BAR = 11, TOP = 52, GAP = 16;
   var LABEL_PITCH = 30, STUB = 26;
-  var SHORTEST_BAND = 170, BAND_PER_NODE = 46;
+  var SHORTEST_BAND = 170, BAND_PER_NODE = 46, SWEEPS = 4;
 
   var num = function (n) { return Number(n).toLocaleString("en-US"); };
   // A cited cell is not always a number — a group key is a figure a reader may cite
@@ -168,6 +168,8 @@
     var scale = Math.min.apply(null, cols.map(function (c) {
       return (band - (c.nodes.length - 1) * GAP) / total;
     }).concat([band / total]));
+    var ribbons = gatherRibbons();
+    orderNodes(ribbons);
     var x = 0;
     cols.forEach(function (c) {
       var y = TOP;
@@ -177,12 +179,10 @@
         y += n.h + GAP;
       });
       c.x = x;
-      c.nodes.forEach(function (n) { n.fromY = n.y; n.intoY = n.y; });
       c.bottom = Math.max(y, placeLabels(c.nodes));
       x += COLUMN;
     });
-
-    var ribbons = gatherRibbons(scale);
+    stackRibbons(ribbons);
     var goneRows = Math.max.apply(null, cols.map(function (c) {
       return c.gone.length;
     }).concat([0]));
@@ -218,14 +218,14 @@
     return Math.min(COLUMN, Math.max(SHORTEST_BAND, most * BAND_PER_NODE));
   }
 
-  function gatherRibbons(scale) {
+  function gatherRibbons() {
     var seen = new Map();
     for (var ci = 0; ci < cols.length - 1; ci++) {
       for (var i = 0; i < D.covers.ordinals.length; i++) {
         var a = nodeAt(ci, i), b = nodeAt(ci + 1, i);
         if (!a || !b) continue;
         var key = ci + a.key + ">" + b.key;
-        var ribbon = seen.get(key) || { ci: ci, a: a, b: b, rows: 0, scale: scale };
+        var ribbon = seen.get(key) || { ci: ci, a: a, b: b, rows: 0 };
         ribbon.rows += 1;
         seen.set(key, ribbon);
       }
@@ -233,22 +233,85 @@
     return Array.from(seen.values());
   }
 
+  // ── keeping the ribbons apart ────────────────────────────────────────────
+  //
+  // Two ribbons cross when the nodes they run between sit in the opposite order in
+  // the two columns, or when they leave one node in a different order from the one
+  // they arrive in. Both are ordering, not geometry, so both are fixable here.
+
+  // Each column takes the average position of the columns either side, weighted by
+  // rows, until the sweeps settle. The barycentre heuristic, and cheap at this size.
+  function orderNodes(ribbons) {
+    for (var pass = 0; pass < SWEEPS; pass++) {
+      for (var down = 1; down < cols.length; down++) sortColumn(down, down - 1, ribbons);
+      for (var up = cols.length - 2; up >= 0; up--) sortColumn(up, up + 1, ribbons);
+    }
+  }
+
+  function sortColumn(ci, neighbour, ribbons) {
+    var place = new Map();
+    cols[neighbour].nodes.forEach(function (n, i) { place.set(n.key, i); });
+    var held = new Map();
+    cols[ci].nodes.forEach(function (n, i) { held.set(n.key, i); });
+    var pull = new Map();
+    ribbons.forEach(function (r) {
+      if (r.ci !== Math.min(ci, neighbour)) return;
+      var here = ci < neighbour ? r.a : r.b;
+      var there = ci < neighbour ? r.b : r.a;
+      if (!place.has(there.key)) return;
+      var got = pull.get(here.key) || { sum: 0, rows: 0 };
+      got.sum += place.get(there.key) * r.rows;
+      got.rows += r.rows;
+      pull.set(here.key, got);
+    });
+    cols[ci].nodes.sort(function (p, q) {
+      return meanPlace(pull, held, p) - meanPlace(pull, held, q);
+    });
+  }
+
+  // A node with nothing running to that neighbour has no opinion, so it stays put.
+  function meanPlace(pull, held, node) {
+    var got = pull.get(node.key);
+    return got ? got.sum / got.rows : held.get(node.key);
+  }
+
+  // Each end is stacked in the order of the node at the OTHER end, so ribbons sharing
+  // a node fan out instead of swapping over.
+  function stackRibbons(ribbons) {
+    ribbons.forEach(function (r) {
+      r.h0 = r.a.h * (r.rows / Math.max(1, r.a.rows));
+      r.h1 = r.b.h * (r.rows / Math.max(1, r.b.rows));
+    });
+    stackEnd(ribbons, "a", "b", "y0", "h0");
+    stackEnd(ribbons, "b", "a", "y1", "h1");
+  }
+
+  function stackEnd(ribbons, end, other, edge, depth) {
+    var groups = new Map();
+    ribbons.forEach(function (r) {
+      var group = groups.get(r[end].key) || [];
+      group.push(r);
+      groups.set(r[end].key, group);
+    });
+    groups.forEach(function (group) {
+      group.sort(function (p, q) { return p[other].y - q[other].y; });
+      var y = group[0][end].y;
+      group.forEach(function (r) { r[edge] = y; y += r[depth]; });
+    });
+  }
+
   function nodeAt(ci, i) {
     var want = nodeKey(cols[ci], i);
     return cols[ci].nodes.find(function (n) { return n.key === want; });
   }
 
+  // Each end is a share of ITS OWN node's height, so a ribbon into a node drawn
+  // shorter than its inputs tapers — which is what an aggregate collapsing rows
+  // looks like.
   function drawRibbon(r) {
     var x0 = cols[r.ci].x + BAR, x1 = cols[r.ci + 1].x;
     var lit = isLit(r.a) && isLit(r.b);
-    // Each end is a share of ITS OWN node's height, so a ribbon into a node drawn
-    // shorter than its inputs tapers — which is what an aggregate collapsing rows
-    // looks like.
-    var h0 = r.a.h * (r.rows / Math.max(1, r.a.rows));
-    var h1 = r.b.h * (r.rows / Math.max(1, r.b.rows));
-    var y0 = r.a.fromY, y1 = r.b.intoY;
-    r.a.fromY += h0;
-    r.b.intoY += h1;
+    var h0 = r.h0, h1 = r.h1, y0 = r.y0, y1 = r.y1;
     var m = (x0 + x1) / 2;
     return '<path class="scope-ribbon' + (lit ? " is-lit" : "") + '" d="' +
       "M" + x0 + "," + y0 + "C" + m + "," + y0 + " " + m + "," + y1 + " " + x1 +
