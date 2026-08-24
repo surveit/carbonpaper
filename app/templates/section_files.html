@@ -8,7 +8,9 @@
   "read by" is the column the page exists for. It is the only thing here that says
   whether a file can go — size sorts the big ones to the top and tells you nothing about
   whether anything still needs them. It counts each run's OWN manifest, so it says what
-  ran, not what the current version happens to name.
+  ran, not what the current version happens to name. The link names unarchived runs only,
+  matching what /runs?file= actually lists; an archived count sits beside it rather than
+  folding in, since deleting still breaks re-running an archived run.
 
   Deleting takes the filename typed back. A run that read the file keeps its manifest
   either way, but re-running it stops working the moment the bytes go, and this is the
@@ -77,13 +79,17 @@
       <td>
         {% if row.run_count %}
         <a href="/project/{{ state.id }}/runs?file={{ row.sha256 }}">{{ row.run_count }} run{{ "" if row.run_count == 1 else "s" }}</a>
-        {% else %}<span class="muted">never read</span>{% endif %}
+        {% elif not row.archived_run_count %}<span class="muted">never read</span>{% endif %}
+        {% if row.archived_run_count %}
+        {% if row.run_count %}<span class="muted"> · </span>{% endif %}
+        <a class="muted" href="/project/{{ state.id }}/runs?file={{ row.sha256 }}&view=archived">{{ row.archived_run_count }} archived</a>
+        {% endif %}
       </td>
       <td class="files-act">
         {# The row carries what the dialog needs to say; one dialog serves every row. #}
         <button type="button" class="files-trash" title="Delete {{ row.filename }}"
                 data-file-id="{{ row.file_id }}" data-filename="{{ row.filename }}"
-                data-runs="{{ row.run_count }}" aria-label="Delete {{ row.filename }}">
+                data-runs="{{ row.run_count + row.archived_run_count }}" aria-label="Delete {{ row.filename }}">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/>

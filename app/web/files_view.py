@@ -16,6 +16,7 @@ from app.models.run_manifest import read_input_bindings
 from app.runtime.manifest import list_run_entries
 from app.core import files as file_store
 from app.services.frame_profile import read_file_shape
+from app.services.run_manifest_metadata import read_archived_run_ids
 from app.web.file_sizes import describe_bytes
 
 
@@ -34,7 +35,11 @@ class FileRow(BaseModel):
     filename: str
     size: str
     added: str
+    # Split because the "N runs" link only ever lists unarchived ones — a count that
+    # folded archived runs in would send the reader to a page with fewer rows than
+    # the number promised.
     run_count: int
+    archived_run_count: int
     completeness: file_store.FileCompleteness
     lineage: str
     # None when nothing here shares its columns, or the sharers carry the same values.
@@ -61,13 +66,14 @@ class FilesView(BaseModel):
 
 def build_files_view(project_id: str) -> FilesView:
     reads = count_runs_by_file(project_id)
+    archived = read_archived_run_ids(project_id)
     records = file_store.list_project_files(project_id)
     used, quota = file_store.measure_files_used_bytes(), file_store.files_quota_bytes()
     shapes = _read_shapes(project_id, records)
     distinctions = find_what_tells_them_apart(shapes)
     groups = group_files_by_columns(shapes)
     return FilesView(
-        rows=[_build_row(record, reads.get(record.sha256, []),
+        rows=[_build_row(record, reads.get(record.sha256, []), archived,
                          distinctions.get(record.id), _find_group(groups, record.id))
               for record in records],
         # Summed off the records, not the disk: the disk is shared, and one project's
@@ -152,7 +158,7 @@ def _name_group(group: ShapeGroup | None) -> str:
             f"{'' if files == 1 else 's'}")
 
 
-def _build_row(record: file_store.ProjectFile, run_ids: list[str],
+def _build_row(record: file_store.ProjectFile, run_ids: list[str], archived: set[str],
                distinction: Distinction | None, group: ShapeGroup | None) -> FileRow:
     return FileRow(
         file_id=record.id,
@@ -160,7 +166,8 @@ def _build_row(record: file_store.ProjectFile, run_ids: list[str],
         filename=record.filename,
         size=describe_bytes(record.byte_count),
         added=record.created_at,
-        run_count=len(run_ids),
+        run_count=sum(1 for run_id in run_ids if run_id not in archived),
+        archived_run_count=sum(1 for run_id in run_ids if run_id in archived),
         completeness=record.completeness,
         lineage=record.lineage,
         distinction=distinction,

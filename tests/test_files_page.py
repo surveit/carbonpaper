@@ -13,6 +13,7 @@ from app.services import workspace
 from app.services.project import create_project
 from app.core.file_shape import StoredFileShape
 from app.core.files import files_root, list_project_files, save_upload
+from app.services.run_manifest_metadata import archive_run
 from app.web import files_view
 from run_seed import store_manifest
 
@@ -58,6 +59,26 @@ def test_the_count_comes_from_the_runs_own_manifests(project_id):
     assert "2 runs" in page
     # Linked to the runs list, filtered to the runs that read this file.
     assert f"/runs?file={CSV_SHA}" in page
+
+
+def test_an_archived_run_counts_apart_from_the_link(project_id):
+    store(project_id)
+    record_a_run(project_id, CSV_SHA, "20260812T120000")
+    record_a_run(project_id, CSV_SHA, "20260812T130000")
+    archive_run(project_id, "20260812T130000")
+    page = client.get(f"/project/{project_id}/files").text
+    # The link's count matches what /runs?file= actually lists — archived excluded.
+    assert "1 run<" in page
+    assert "1 archived" in page
+
+
+def test_a_file_read_only_by_archived_runs_still_says_never_read(project_id):
+    store(project_id)
+    record_a_run(project_id, CSV_SHA, "20260812T120000")
+    archive_run(project_id, "20260812T120000")
+    page = client.get(f"/project/{project_id}/files").text
+    assert "never read" not in page
+    assert "1 archived" in page
 
 
 def test_an_empty_project_says_where_files_come_from(project_id):
