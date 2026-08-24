@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from app.models import WorkflowStage
 from app.models.records.run_manifest import RunManifest
-from app.web.config import label_stage_type
+from app.web.config import label_stage_type, render_row_number
 from app.web.trace_row_diff import render_cell
 
 
@@ -28,7 +28,9 @@ class CitedCell(BaseModel):
 class LineageCoordinate(BaseModel):
     stages: list[StagePick]
     stage_id: str
+    # The ordinal the address carries, and the number the box shows.
     row: int
+    row_number: str
     # None where this run recorded no frame for the stage: nothing counted its rows.
     rows: int | None
     # Empty where the walk read no row, which is a page with no columns to offer.
@@ -52,6 +54,7 @@ def build_lineage_coordinate(
         stages=stages,
         stage_id=stage_id,
         row=view["start_row"],
+        row_number=render_row_number(view["start_row"]),
         rows=next((s.rows for s in stages if s.stage_id == stage_id), None),
         cells=_describe_row_cells(view, workflow_stage),
         column=column,

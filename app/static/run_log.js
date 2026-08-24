@@ -24,10 +24,6 @@
 (function (global) {
   var LEVEL_DETAIL = 1;
 
-  // The log files each event under the ordinal every link here carries; a reader
-  // counts rows from 1.
-  function rowNumber(ordinal) { return ordinal + 1; }
-
   function escapeHtml(value) {
     return String(value).replace(/[&<>]/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c];
@@ -56,7 +52,7 @@
   function formatEvent(ev, traceUrl) {
     if ((ev.level || 0) >= LEVEL_DETAIL) return formatDetailEvent(ev);
     var ts = (ev.ts || "").slice(11, 23);        // HH:MM:SS.mmm
-    var loc = [ev.stage, ev.row != null ? "row " + rowNumber(ev.row) : null]
+    var loc = [ev.stage, ev.row != null ? ev.row_label : null]
       .filter(Boolean).join(" · ");
     var tail = ev.text ? " — " + ev.text : (ev.status ? " — " + ev.status : "");
     var src = ev.source ? "  [" + ev.source + "]" : "";
@@ -81,9 +77,7 @@
   // them, not to the single row it is filed under.
   function formatDetailEvent(ev) {
     var label = (ev.kind || "").replace(/^llm_/, "");
-    var span = (ev.rows && ev.rows.length > 1)
-      ? "rows " + rowNumber(ev.rows[0]) + "–" + rowNumber(ev.rows[ev.rows.length - 1])
-      : "row " + rowNumber(ev.row);
+    var span = ev.row_label || "";
     var head = escapeHtml(
       "    " + label + (ev.stage != null ? "  " + ev.stage + " · " + span : "")
     );

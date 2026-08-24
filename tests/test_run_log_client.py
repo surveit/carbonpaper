@@ -38,10 +38,10 @@ def _run_in_node(script: str, tmp_path: Path) -> dict[str, Any]:
 
 _EVENTS_JS = """
 const events = [
-  {seq: 0, kind: 'row_ok', stage: 's', row: 0, level: 0, source: 'computed'},
-  {seq: 1, kind: 'llm_error', stage: 's', row: 1, level: 1, text: 'model refused'},
-  {seq: 2, kind: 'row_error', stage: 's', row: 1, level: 0, text: 'row blew up'},
-  {seq: 3, kind: 'llm_prompt', stage: 's', row: 2, level: 1, text: 'score it'},
+  {seq: 0, kind: 'row_ok', stage: 's', row: 0, row_label: 'row 1', level: 0, source: 'computed'},
+  {seq: 1, kind: 'llm_error', stage: 's', row: 1, row_label: 'row 2', level: 1, text: 'model refused'},
+  {seq: 2, kind: 'row_error', stage: 's', row: 1, row_label: 'row 2', level: 0, text: 'row blew up'},
+  {seq: 3, kind: 'llm_prompt', stage: 's', row: 2, row_label: 'row 3', level: 1, text: 'score it'},
 ];
 """
 
@@ -60,7 +60,8 @@ def test_errors_only_surfaces_an_llm_error_while_llm_detail_is_off(tmp_path):
     assert "row_ok" not in out["html"]
 
 
-def test_a_row_reads_as_a_reader_counts_them_while_its_link_carries_the_ordinal(tmp_path):
+def test_a_line_prints_the_row_label_it_was_served_and_links_by_ordinal(tmp_path):
+    """The server counts rows (app/web/run_events.py); the panel never does arithmetic."""
     out = _run_in_node(_EVENTS_JS + """
       console.log(JSON.stringify({
         html: client.renderEvents(events, {errorsOnly: false, detail: false,
@@ -68,7 +69,7 @@ def test_a_row_reads_as_a_reader_counts_them_while_its_link_carries_the_ordinal(
       }));
     """, tmp_path)
 
-    assert "row 1" in out["html"] and "row 0" not in out["html"]  # the event names row 0
+    assert "row 1" in out["html"] and "row 0" not in out["html"]
     assert "/stage/s/row/0" in out["html"]
 
 

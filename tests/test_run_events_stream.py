@@ -36,12 +36,16 @@ def _seed_run(tmp_path: Path, monkeypatch, events: list[dict]) -> str:
     return f"/project/{PROJECT}/runs/r1/events"
 
 
-def _streamed_kinds(body: str) -> list[str]:
+def _streamed_events(body: str) -> list[dict]:
     return [
-        json.loads(line[len("data: "):])["kind"]
+        json.loads(line[len("data: "):])
         for line in body.splitlines()
         if line.startswith("data: ") and line != "data: {}"
     ]
+
+
+def _streamed_kinds(body: str) -> list[str]:
+    return [event["kind"] for event in _streamed_events(body)]
 
 
 def test_a_finished_run_drains_and_ends_on_the_run_done_marker(tmp_path, monkeypatch):
@@ -55,6 +59,23 @@ def test_a_finished_run_drains_and_ends_on_the_run_done_marker(tmp_path, monkeyp
 
     assert response.status_code == 200
     assert _streamed_kinds(response.text) == ["run_start", "row_ok", RUN_DONE]
+
+
+def test_the_stream_names_each_row_as_a_reader_counts_them(tmp_path, monkeypatch):
+    url = _seed_run(tmp_path, monkeypatch, [
+        {"seq": 0, "kind": "row_ok", "stage": "s", "row": 0, "level": 0},
+        {"seq": 1, "kind": "llm_prompt", "stage": "s", "row": 3, "rows": [3, 4, 5],
+         "level": 1, "text": "score them"},
+        {"seq": 2, "kind": "run_start", "level": 0},
+        {"seq": 3, "kind": RUN_DONE, "level": 0},
+    ])
+
+    served = _streamed_events(TestClient(app).get(url).text)
+
+    # The panel prints these; the ordinals it links by are untouched beside them.
+    assert served[0]["row_label"] == "row 1" and served[0]["row"] == 0
+    assert served[1]["row_label"] == "rows 4–6" and served[1]["rows"] == [3, 4, 5]
+    assert "row_label" not in served[2]  # an event about no row names none
 
 
 def test_from_seq_resumes_after_a_reconnect(tmp_path, monkeypatch):
