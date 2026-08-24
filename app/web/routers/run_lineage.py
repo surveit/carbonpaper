@@ -14,12 +14,13 @@ from app.services import run as run_service
 from app.runtime.trace import trace_row, trace_to_dict
 from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.panel_links import AppPanelLinks
-from app.web.trace_view import build_trace_view, find_cited_cell
+from app.web.lineage_coordinate import build_lineage_coordinate
+from app.web.trace_view import build_trace_view
 from app.web.breadcrumbs import build_run_child_crumbs
 from app.web.config import templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.services.workspace import resolve_run_dir
-from app.web.loading import load_manifest
+from app.web.loading import load_manifest, load_run_record
 
 router = APIRouter()
 
@@ -87,7 +88,8 @@ async def run_stage_row_trace_view(
     column: str | None = None,
 ):
     run_dir = resolve_run_dir(project_id, run_id)
-    manifest = load_manifest(project_id, run_id)
+    run_record = load_run_record(project_id, run_id)
+    manifest = run_record.to_dict()
     try:
         trace = trace_row(run_dir, stage_id, row)
     except StageNotInRun as exc:
@@ -109,22 +111,21 @@ async def run_stage_row_trace_view(
     ordered = [stages_by_id[n["stage_id"]].stage for n in view["nodes"]
                if n["stage_id"] in stages_by_id]
     mermaid = build_mermaid_graph(ordered, project_id) if len(ordered) == len(view["nodes"]) else ""
-    # With no step walked there is no row to read a cited cell from.
-    cell = None
-    if column is not None and view["nodes"]:
-        cell = find_cited_cell(view, stages_by_id.get(stage_id), column)
-        if cell is None:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Stage '{stage_id}' in run '{run_id}' has no column '{column}'",
-            )
+    coordinate = build_lineage_coordinate(
+        run_record, view, stages_by_id.get(stage_id), column)
+    # With no step walked there is no row to read a column off, so none is refused.
+    if column is not None and coordinate.cells and coordinate.cell is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Stage '{stage_id}' in run '{run_id}' has no column '{column}'",
+        )
     return templates.TemplateResponse(
         request,
         "lineage.html",
         {
             "title": f"{view['start_stage']} · row {view['start_row']}",
             "view": view,
-            "cell": cell,
+            "coordinate": coordinate,
             "project": project_id,
             "crumbs": build_run_child_crumbs(project_id, run_id, label="Row lineage"),
             "mermaid": mermaid,

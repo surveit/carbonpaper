@@ -1,3 +1,4 @@
+{% from "_picker.html" import picker %}
 <!doctype html><html><head><meta charset="utf-8">
 {# standalone page, so it repeats what base.html would have given it #}
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,6 +10,8 @@
 {# standalone page (does not extend base.html), so it loads the node dispatcher itself #}
 <script src="{{ static_root | default("/static/", true) }}diagram_nodes.js"></script>
 <script src="{{ static_root | default("/static/", true) }}tooltip.js"></script>
+{# The header's three pickers; served only, because a folder has no other row to move to. #}
+{% if not offline %}<script src="/static/picker.js" defer></script>{% endif %}
 {% if not offline %}<script src="{{ static_root | default("/static/", true) }}breadcrumbs.js" defer></script>
 {# Served live this page is part of the app, so the conversation follows the reader here as
    it does everywhere else. Written into a review packet it is a file in a zip: no server to
@@ -20,15 +23,21 @@
    the screen, which is a second scrollbar for nothing. */
 html,body{height:100%}
 body{display:flex;flex-direction:column;overflow:hidden}
-/* The headline is the coordinate: which value, in which column, where it sits. */
+/* The headline is the figure; the line under it is the coordinate that names it,
+   and every part of that coordinate is the control that moves to another one. */
 .lin-head{flex:none;padding:14px 22px 12px;background:var(--raised)}
 .lin-head h1{font-size:17px;margin:0;font-weight:600;
   display:flex;align-items:baseline;gap:11px;flex-wrap:wrap}
 .lin-value{font-size:34px;font-weight:650;letter-spacing:-.015em;line-height:1}
-.lin-colname{font-size:17px;font-weight:400;color:var(--info-ink);
-  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-.lin-at{color:var(--muted);font-size:13.5px;margin-top:7px}
-.lin-at code,.lin-head h1 code{background:var(--sunk-deep);padding:1px 5px;border-radius:4px}
+.lin-value.lin-long{font-size:19px;font-weight:600;line-height:1.3;letter-spacing:0}
+.lin-nocol{font-size:15px;font-weight:400;color:var(--muted)}
+.lin-head h1 code{background:var(--sunk-deep);padding:1px 5px;border-radius:4px}
+.lin-coord{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:9px}
+.lin-word{color:var(--muted);font-size:13px}
+.lin-rowbox{width:5.5em;font:inherit;font-size:13px;padding:6px 9px;color:var(--fg);
+  border:1px solid var(--border);border-radius:8px;background:var(--raised)}
+.lin-coltip{color:var(--muted);font-size:12.5px;margin:9px 0 0;max-width:78ch}
+.lin-coltip:empty{display:none}
 .lin-sub{color:var(--muted);font-size:12.5px}
 /* One question per tab: hold the row, hold the column, or hold both. */
 .lin-pagetabs{flex:none;display:flex;gap:2px;padding:0 18px;background:var(--raised);
@@ -39,12 +48,6 @@ body{display:flex;flex-direction:column;overflow:hidden}
 .lin-pagetab:hover{background:var(--hover)}
 .lin-pane{flex:1;min-height:0;display:flex;flex-direction:column}
 .lin-pane.hidden{display:none}
-.lin-cols{display:flex;flex-wrap:wrap;gap:6px;padding:10px 18px 0}
-.lin-cols button{border:1px solid var(--border);background:var(--raised);border-radius:7px;
-  padding:3px 10px;font:inherit;font-size:12px;color:var(--muted);cursor:pointer}
-.lin-cols button:hover{background:var(--hover)}
-.lin-cols button.on{background:var(--info-ink);color:var(--on-dark);border-color:var(--info-ink)}
-.lin-colsnote{color:var(--muted);font-size:12px;align-self:center;margin-right:2px}
 /* The frame scrolls the map; the pane itself does not, so the chips stay put. */
 .lin-scopeframe{flex:1;width:100%;border:0;min-height:0}
 @media (max-width:900px){.lin-scopeframe{height:80vh}}
@@ -163,10 +166,46 @@ tr.carried td.lin-v{color:var(--muted)}
 <header>{% include "_breadcrumbs.html" %}
   {% if not offline %}<a href="/admin" class="back-link header-right">Admin</a>{% endif %}</header>
 <div class="lin-head">
-  <h1>{% if cell %}<span class="lin-value">{% if cell.value %}{{ cell.value }}{% else %}<span class="lin-null">(empty)</span>{% endif %}</span>
-    <span class="lin-colname has-tip" data-tip="{{ cell.tip }}" tabindex="0">{{ cell.column }}</span>
-    {% else %}<code>{{ view.start_stage }}</code> row {{ view.start_row }}{% endif %}</h1>
-  {% if cell %}<div class="lin-at">at <code>{{ view.start_stage }}</code> row {{ view.start_row }}</div>{% endif %}
+{% if offline %}
+  {# A folder has no server to trace a different row from, so the coordinate is stated. #}
+  <h1><code>{{ view.start_stage }}</code> row {{ view.start_row }}</h1>
+{% else %}
+  <h1>
+    <span class="lin-value" id="lin-value">{% if coordinate.cell %}{% if coordinate.cell.value %}{{ coordinate.cell.value }}{% else %}<span class="lin-null">(empty)</span>{% endif %}{% endif %}</span>
+    <span class="lin-nocol" id="lin-nocol"{% if coordinate.cell %} hidden{% endif %}>Pick a column to read the figure it holds.</span>
+  </h1>
+  <div class="lin-coord">
+    <label class="lin-word" for="lin-stage">at</label>
+    {% call picker("Stages of this run", hint="the ones this run wrote rows for",
+                  search_label="a stage", size="sm") %}
+    <select id="lin-stage" class="picker-native">
+      {% for pick in coordinate.stages %}
+      <option value="{{ pick.stage_id }}" data-side="{{ "{:,}".format(pick.rows) }} rows" data-meta="{{ pick.type_label }}"{% if pick.stage_id == coordinate.stage_id %} selected{% endif %}>{{ pick.stage_id }}</option>
+      {% endfor %}
+    </select>
+    {% endcall %}
+    <label class="lin-word" for="lin-row">row</label>
+    <input id="lin-row" class="lin-rowbox" type="number" inputmode="numeric"
+           value="{{ coordinate.row }}" min="0"
+           {% if coordinate.rows %}max="{{ coordinate.rows - 1 }}"{% endif %}>
+    {# Stated only where the run counted them: a stage with no frame has no last row. #}
+    {% if coordinate.rows %}<span class="lin-word">of {{ "{:,}".format(coordinate.rows) }}</span>{% endif %}
+    {% if coordinate.cells %}
+    <label class="lin-word" for="lin-column">showing</label>
+    {% call picker("Columns of this row", hint="one cell is one figure", size="sm") %}
+    {# Names only: what each column MEANS is a sentence, and it reads under the
+       coordinate rather than inside the trigger that names one word. #}
+    <select id="lin-column" class="picker-native">
+      <option value=""{% if not coordinate.cell %} selected{% endif %}>the whole row</option>
+      {% for cell in coordinate.cells %}
+      <option value="{{ cell.column }}"{% if cell.column == coordinate.column %} selected{% endif %}>{{ cell.column }}</option>
+      {% endfor %}
+    </select>
+    {% endcall %}
+    {% endif %}
+  </div>
+  <p class="lin-coltip" id="lin-coltip">{% if coordinate.cell %}{{ coordinate.cell.tip }}{% endif %}</p>
+{% endif %}
 </div>
 <div class="lin-pagetabs" id="pagetabs">
   <button class="lin-pagetab on" data-pane="paths">Paths</button>
@@ -222,9 +261,7 @@ tr.carried td.lin-v{color:var(--muted)}
     {% endif %}
   </div>
 {% else %}
-  {# One figure is one cell, so the map is per column and the reader picks which.
-     The chips are written by the script below, off the traced row's own fields. #}
-  <div class="lin-cols" id="scope-cols"></div>
+  {# One figure is one cell, so the map is drawn for the column the header names. #}
   <iframe class="lin-scopeframe" id="scope-frame" title="The scope of this figure"></iframe>
 {% endif %}
 </div>
@@ -256,6 +293,36 @@ document.getElementById('pagetabs').addEventListener('click', e => {
     b => b.classList.toggle('on', b === picked));
   document.querySelectorAll('.lin-pane').forEach(
     p => p.classList.toggle('hidden', p.dataset.pane !== picked.dataset.pane));
+});
+
+// ---- The coordinate in the header: stage, row, column ---------------------
+// Null in a review packet, where the header states the coordinate rather than
+// offering another one — a folder has no server to trace a different row from.
+const COORD = {{ (coordinate.model_dump(mode="json") if coordinate else None) | tojson }};
+const RUN_BASE = `/project/${encodeURIComponent(PROJECT)}`
+               + `/runs/${encodeURIComponent(V.run_id)}`;
+
+function lineageHref(stageId, row, column){
+  const query = column ? `?column=${encodeURIComponent(column)}` : '';
+  return `${RUN_BASE}/stage/${encodeURIComponent(stageId)}/row/${row}/trace/view${query}`;
+}
+
+const stagePick = document.getElementById('lin-stage');
+// Row 12 of another stage is a different row, and its columns are its own, so the
+// move lands on that stage's first row with no column claimed for it.
+if(stagePick) stagePick.addEventListener('change', () => {
+  location.href = lineageHref(stagePick.value, 0, null);
+});
+
+const rowBox = document.getElementById('lin-row');
+if(rowBox) rowBox.addEventListener('change', () => {
+  const asked = Number(rowBox.value);
+  if(!Number.isInteger(asked)){ rowBox.value = COORD.row; return; }
+  // The columns are the stage's, so the one being read survives the move.
+  const row = COORD.rows === null ? Math.max(0, asked)
+            : Math.min(Math.max(0, asked), COORD.rows - 1);
+  rowBox.value = row;
+  if(row !== COORD.row) location.href = lineageHref(COORD.stage_id, row, COORD.column);
 });
 </script>
 {% if view.nodes %}
@@ -542,45 +609,61 @@ document.querySelector('.lin-graph').addEventListener('toggle', async e => {
   try { await mermaid.run({ nodes:[mmd] }); } catch(err){ graphRendered = false; }
 });
 
-// ---- Relevant rows: the scope of one figure, drawn by the scope map --------
-// A figure is a cell, so the map is per column: the chips pick which cell of this
-// row the frame is drawn for. `?column=` is what a published figure links with, so
-// the column the reader arrived on is the one already chosen.
-const CITED_COLUMN = {{ (cell.column if cell else None) | tojson }};
-const scopeCols = document.getElementById('scope-cols');
+// ---- The column being read: the figure above, and the scope map's subject --
+// A figure is a cell. Which cell is the header's to say, so switching one repaints
+// the headline off the row this page already holds — no second trip to the server.
+const columnPick = document.getElementById('lin-column');
 const scopeFrame = document.getElementById('scope-frame');
 let scopeColumn = null;
 
+function showColumn(column){
+  COORD.column = column || null;
+  const cell = COORD.cells.find(c => c.column === COORD.column);
+  paintValue(cell);
+  document.getElementById('lin-nocol').hidden = Boolean(cell);
+  document.getElementById('lin-coltip').textContent = cell ? cell.tip : '';
+  // Replaced, not pushed: the reader is reading one row, and the back button is
+  // still the way out of it. The address stays the one a figure links with.
+  history.replaceState(null, '', lineageHref(COORD.stage_id, COORD.row, COORD.column));
+  if(scopeColumn !== null && COORD.column) drawScopeFor(COORD.column);
+}
+// A sentence-long cell set at headline size is a paragraph in 34px, so a long one
+// is stepped down to a size a whole value fits at.
+function paintValue(cell){
+  const el = document.getElementById('lin-value');
+  el.innerHTML = !cell ? ''
+    : (cell.value === '' ? '<span class="lin-null">(empty)</span>' : esc(cell.value));
+  el.classList.toggle('lin-long', Boolean(cell) && cell.value.length > 48);
+}
+function chooseColumn(column){
+  columnPick.value = column;
+  columnPick.dispatchEvent(new Event('change', {bubbles: true}));
+}
+if(columnPick){
+  columnPick.addEventListener('change', () => showColumn(columnPick.value));
+  paintValue(COORD.cells.find(c => c.column === COORD.column));
+}
+
 function scopeUrlFor(column){
   const q = new URLSearchParams({stage: V.start_stage, row: V.start_row, column});
-  return `/project/${encodeURIComponent(PROJECT)}/runs/${encodeURIComponent(V.run_id)}`
-       + `/scope/panel?${q}`;
+  return `${RUN_BASE}/scope/panel?${q}`;
 }
 function drawScopeFor(column){
   scopeColumn = column;
   scopeFrame.src = scopeUrlFor(column);
-  scopeCols.querySelectorAll('button').forEach(
-    b => b.classList.toggle('on', b.dataset.column === column));
 }
-function renderScopeColumns(){
-  // The Row tab's own order, so the two panes name this row's columns the same way.
-  const columns = V.nodes[V.nodes.length - 1].row_diff.fields
-    .filter(f => f.state !== 'dropped').map(f => f.name);
-  scopeCols.innerHTML = '<span class="lin-colsnote">the figure in</span>'
-    + columns.map(c => `<button data-column="${esc(c)}">${esc(c)}</button>`).join('');
-  scopeCols.addEventListener('click', e => {
-    const picked = e.target.closest('button');
-    if(picked && picked.dataset.column !== scopeColumn) drawScopeFor(picked.dataset.column);
-  });
-  // The frame is a page load, so it waits until the reader opens the tab.
-  document.getElementById('pagetabs').addEventListener('click', e => {
-    const picked = e.target.closest('.lin-pagetab');
-    if(picked && picked.dataset.pane === 'rows' && scopeColumn === null){
-      drawScopeFor(columns.includes(CITED_COLUMN) ? CITED_COLUMN : columns[0]);
-    }
-  });
-}
-if(scopeCols && scopeFrame) renderScopeColumns();
+// The frame is a page load, so it waits until the reader opens the tab. The map is
+// drawn for one column: with none picked the tab picks the first, in the header,
+// where the reader can see which figure they are being shown the scope of.
+document.getElementById('pagetabs').addEventListener('click', e => {
+  const picked = e.target.closest('.lin-pagetab');
+  if(!picked || picked.dataset.pane !== 'rows' || !scopeFrame) return;
+  if(!COORD || !COORD.cells.length) return;
+  const column = COORD.column || COORD.cells[0].column;
+  if(scopeColumn === column) return;
+  if(columnPick.value !== column) chooseColumn(column);
+  drawScopeFor(column);
+});
 
 // The stories do not move when a step is picked, so they are painted once.
 renderStories();
