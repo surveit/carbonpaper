@@ -33,14 +33,14 @@ def build_row_diff(
     if parent_row is None:
         state = CellDiffState.added if is_origin else CellDiffState.carried
         return _count_fields([
-            RowField(name=str(name), state=state, text=_render(value), was=None)
+            RowField(name=str(name), state=state, text=render_cell(value), was=None)
             for name, value in row.items()
         ])
     return _count_fields(
         [_compare_field(str(name), value, parent_row) for name, value in row.items()]
         + [
             RowField(name=str(name), state=CellDiffState.dropped,
-                     text=_render(value), was=None)
+                     text=render_cell(value), was=None)
             for name, value in parent_row.items()
             if str(name) not in row
         ]
@@ -60,12 +60,16 @@ def row_diff_to_dict(diff: RowDiff) -> dict[str, Any]:
     }
 
 
+def render_cell(value: Any) -> str:
+    return "" if value is None else str(value)
+
+
 def _compare_field(name: str, value: Any, parent_row: dict[str, Any]) -> RowField:
     """Compared as RENDERED text: a difference nobody can see is not marked."""
-    text = _render(value)
+    text = render_cell(value)
     if name not in parent_row:
         return RowField(name=name, state=CellDiffState.added, text=text, was=None)
-    was = _render(parent_row[name])
+    was = render_cell(parent_row[name])
     if was == text:
         return RowField(name=name, state=CellDiffState.carried, text=text, was=None)
     return RowField(name=name, state=CellDiffState.changed, text=text, was=was)
@@ -81,7 +85,3 @@ def _count_fields(fields: list[RowField]) -> RowDiff:
         changed=count(CellDiffState.changed),
         dropped=count(CellDiffState.dropped),
     )
-
-
-def _render(value: Any) -> str:
-    return "" if value is None else str(value)

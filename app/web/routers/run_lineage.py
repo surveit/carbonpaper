@@ -14,7 +14,7 @@ from app.services import run as run_service
 from app.runtime.trace import trace_row, trace_to_dict
 from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.panel_links import AppPanelLinks
-from app.web.trace_view import build_trace_view
+from app.web.trace_view import build_trace_view, find_cited_cell
 from app.web.breadcrumbs import build_run_child_crumbs
 from app.web.config import templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
@@ -83,7 +83,8 @@ async def run_stage_row_trace(project_id: str, run_id: str, stage_id: str, row: 
     response_class=HTMLResponse,
 )
 async def run_stage_row_trace_view(
-    request: Request, project_id: str, run_id: str, stage_id: str, row: int
+    request: Request, project_id: str, run_id: str, stage_id: str, row: int,
+    column: str | None = None,
 ):
     run_dir = resolve_run_dir(project_id, run_id)
     manifest = load_manifest(project_id, run_id)
@@ -108,12 +109,20 @@ async def run_stage_row_trace_view(
     ordered = [stages_by_id[n["stage_id"]].stage for n in view["nodes"]
                if n["stage_id"] in stages_by_id]
     mermaid = build_mermaid_graph(ordered, project_id) if len(ordered) == len(view["nodes"]) else ""
+    cell = None if column is None else find_cited_cell(
+        view, stages_by_id.get(stage_id), column)
+    if column is not None and cell is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Stage '{stage_id}' in run '{run_id}' has no column '{column}'",
+        )
     return templates.TemplateResponse(
         request,
         "lineage.html",
         {
             "title": f"{view['start_stage']} · row {view['start_row']}",
             "view": view,
+            "cell": cell,
             "project": project_id,
             "crumbs": build_run_child_crumbs(project_id, run_id, label="Row lineage"),
             "mermaid": mermaid,

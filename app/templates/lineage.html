@@ -20,9 +20,28 @@
    the screen, which is a second scrollbar for nothing. */
 html,body{height:100%}
 body{display:flex;flex-direction:column;overflow:hidden}
-.lin-head{flex:none;padding:12px 22px;border-bottom:1px solid var(--border);background:var(--raised)}
-.lin-head h1{font-size:17px;margin:0 0 2px}
+/* The headline is the coordinate: which value, in which column, where it sits. */
+.lin-head{flex:none;padding:14px 22px 12px;background:var(--raised)}
+.lin-head h1{font-size:17px;margin:0;font-weight:600;
+  display:flex;align-items:baseline;gap:11px;flex-wrap:wrap}
+.lin-value{font-size:34px;font-weight:650;letter-spacing:-.015em;line-height:1}
+.lin-colname{font-size:17px;font-weight:400;color:var(--info-ink);
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.lin-at{color:var(--muted);font-size:13.5px;margin-top:7px}
+.lin-at code,.lin-head h1 code{background:var(--sunk-deep);padding:1px 5px;border-radius:4px}
 .lin-sub{color:var(--muted);font-size:12.5px}
+/* One question per tab: hold the row, hold the column, or hold both. */
+.lin-pagetabs{flex:none;display:flex;gap:2px;padding:0 18px;background:var(--raised);
+  border-bottom:1px solid var(--border)}
+.lin-pagetab{border:0;background:none;font:inherit;font-size:13px;color:var(--muted);
+  padding:9px 16px 8px;cursor:pointer;border-bottom:2px solid transparent;
+  display:flex;flex-direction:column;align-items:flex-start;gap:1px}
+.lin-pagetab .k{font-size:10.5px;color:var(--muted);
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.lin-pagetab.on{color:var(--fg);border-bottom-color:var(--accent);font-weight:600}
+.lin-pagetab:hover{background:var(--hover)}
+.lin-pane{flex:1;min-height:0;display:flex;flex-direction:column}
+.lin-pane.hidden{display:none}
 .lin-source{color:var(--info-ink);font-size:12.5px;font-weight:600}
 .lin-source code{background:var(--info-bg);padding:1px 5px;border-radius:4px}
 .lin-became{color:var(--muted);font-size:12.5px}
@@ -35,6 +54,7 @@ body{display:flex;flex-direction:column;overflow:hidden}
 @media (max-width:900px){
   html,body{height:auto}
   body{display:block;overflow:visible}
+  .lin-pane{display:block}
   .lin-split{display:block}
   .lin-story{overflow:visible}
   .lin-side{border-left:0;border-top:1px solid var(--border);overflow:visible}
@@ -117,7 +137,19 @@ tr.carried td.lin-v{color:var(--muted)}
    inherited — a page with no trail is a page with no way back. #}
 <header>{% include "_breadcrumbs.html" %}
   {% if not offline %}<a href="/admin" class="back-link header-right">Admin</a>{% endif %}</header>
-<div class="lin-head"><h1>Lineage</h1><div class="lin-sub" id="sub"></div></div>
+<div class="lin-head">
+  <h1>{% if cell %}<span class="lin-value">{% if cell.value %}{{ cell.value }}{% else %}<span class="lin-null">(empty)</span>{% endif %}</span>
+    <span class="lin-colname has-tip" data-tip="{{ cell.tip }}" tabindex="0">{{ cell.column }}</span>
+    {% else %}<code>{{ view.start_stage }}</code> row {{ view.start_row }}{% endif %}</h1>
+  {% if cell %}<div class="lin-at">at <code>{{ view.start_stage }}</code> row {{ view.start_row }}</div>{% endif %}
+</div>
+<div class="lin-pagetabs" id="pagetabs">
+  <button class="lin-pagetab on" data-pane="paths">Paths<span class="k">how each row got here</span></button>
+  <button class="lin-pagetab" data-pane="rows">Relevant rows<span class="k">what is in, and what left</span></button>
+  <button class="lin-pagetab" data-pane="values">Values used<span class="k">the column and the arithmetic</span></button>
+  <button class="lin-pagetab" data-pane="inputs">Inputs<span class="k">the files it was read from</span></button>
+</div>
+<div class="lin-pane" data-pane="paths">
 <div class="lin-split">
   <div class="lin-story">
     <div class="lin-note">Every step below is this one row, as it stood after that stage. Click a step to see it.</div>
@@ -137,6 +169,28 @@ tr.carried td.lin-v{color:var(--muted)}
     <div class="lin-pbody" id="pbody"></div>
   </div>
 </div>
+</div>
+<div class="lin-pane hidden" data-pane="rows">
+  <div class="empty-state">
+    <h2>The other rows are not counted on this page</h2>
+    <p>This page follows the one row named above. It does not list or count the other rows
+      that reached it.</p>
+  </div>
+</div>
+<div class="lin-pane hidden" data-pane="inputs">
+  <div class="empty-state">
+    <h2>The files behind this row are not listed here</h2>
+    <p>The Paths tab names the source stage each step read from. It does not say which file
+      that stage read, how many rows came out of it, or when it was read.</p>
+  </div>
+</div>
+<div class="lin-pane hidden" data-pane="values">
+  <div class="empty-state">
+    <h2>The column's other values are not on this page</h2>
+    <p>This page reads the cells of one row. It does not compare a column across the rest
+      of the frame.</p>
+  </div>
+</div>
 <script>
 const V = {{ view | tojson }}, PROJECT = {{ project | tojson }};
 // A folder has no server to ask, so the packet sends the reader to the stage
@@ -147,8 +201,13 @@ const JOIN_KINDS = ['enrich', 'expand'];
 let sel = V.nodes.length - 1, tab = 'row', scope = 'changed';
 const transformCache = {};
 
-document.getElementById('sub').textContent =
-  `run ${V.run_id} · ${V.start_stage} row ${V.start_row}`;
+document.getElementById('pagetabs').addEventListener('click', e => {
+  const picked = e.target.closest('.lin-pagetab'); if(!picked) return;
+  document.querySelectorAll('.lin-pagetab').forEach(
+    b => b.classList.toggle('on', b === picked));
+  document.querySelectorAll('.lin-pane').forEach(
+    p => p.classList.toggle('hidden', p.dataset.pane !== picked.dataset.pane));
+});
 
 // ---- Story ----------------------------------------------------------------
 function verb(n){

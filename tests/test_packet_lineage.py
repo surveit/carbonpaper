@@ -143,6 +143,17 @@ def test_a_lineage_page_reaches_the_rest_of_the_packet_by_relative_path(tmp_path
     }
 
 
+def test_the_packet_page_carries_the_three_tabs_with_no_column_bound(tmp_path):
+    """The packet writes a page per ROW, so its headline names the row and no cell."""
+    page = (_export_demo_packet(tmp_path) / "lineage/totals/0.html").read_text(encoding="utf-8")
+    assert "<code>totals</code> row 0" in page
+    assert '<span class="lin-value">' not in page
+    for pane, label in [("rows", "Relevant rows"), ("values", "Values used"),
+                        ("inputs", "Inputs")]:
+        assert f'data-pane="{pane}">{label}' in page
+    assert "The other rows are not counted on this page" in page
+
+
 def _demo_run(tmp_path):
     from app.runtime.lineage import RowLineage, RowParent
     from test_trace_helpers import write_run
