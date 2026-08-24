@@ -81,8 +81,8 @@
         <a href="/project/{{ state.id }}/runs?file={{ row.sha256 }}">{{ row.run_count }} run{{ "" if row.run_count == 1 else "s" }}</a>
         {% elif not row.archived_run_count %}<span class="muted">never read</span>{% endif %}
         {% if row.archived_run_count %}
-        {% if row.run_count %}<span class="muted"> · </span>{% endif %}
-        <a class="muted" href="/project/{{ state.id }}/runs?file={{ row.sha256 }}&view=archived">{{ row.archived_run_count }} archived</a>
+        <br>
+        <a class="muted" href="/project/{{ state.id }}/runs?file={{ row.sha256 }}&view=archived">{{ "and " if row.run_count else "" }}{{ row.archived_run_count }} archived</a>
         {% endif %}
       </td>
       <td class="files-act">
