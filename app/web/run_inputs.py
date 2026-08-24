@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from app.core import files as file_store
 from app.models.run_parameters import RunParameters
 from app.models.schema import StageId
-from app.runtime.manifest import RunManifest
+from app.models.records.run_manifest import RunManifest
 from app.web.file_sizes import describe_bytes
 from app.web.files_view import count_runs_by_file
 from app.web.loading import list_file_inputs

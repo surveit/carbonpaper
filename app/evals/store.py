@@ -17,7 +17,7 @@ from app.models.records.eval_config import EvalConfig
 from app.models.records.eval_run import EvalRun
 from app.core.utils import format_errors
 from app.evals.compatibility import CompatibilityReport
-from app.runtime.manifest import EVAL_RUNS
+from app.models.records.run_manifest import EVAL_RUNS
 from app.services.project import write_eval_config
 from app.services.workspace import resolve_project_dir
 from app.services.versioning import find_latest_version_id

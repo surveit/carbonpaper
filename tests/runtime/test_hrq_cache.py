@@ -8,7 +8,7 @@ import app.runtime.runner as runner
 from app.models import parse_stage, Stage
 from app.models.stage import StageType
 from app.models.stages.human_review_queue import ReviewVerdict
-from app.runtime.stages.human_review_queue import QueueFingerprints
+from app.models.records.queue_fingerprints import QueueFingerprints
 from app.runtime.cancellation import request_cancel
 from app.runtime.context import RunIdentity
 from app.runtime.errors import RunCancelled

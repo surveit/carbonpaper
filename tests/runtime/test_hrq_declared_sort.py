@@ -8,7 +8,7 @@ import pytest
 from app.core.stage_cache import StageCache
 from app.models import Stage, parse_stage
 from app.models.stage import StageType
-from app.runtime.stages.human_review_queue import QueueFingerprints
+from app.models.records.queue_fingerprints import QueueFingerprints
 from app.runtime.context import RunIdentity
 from app.runtime.stages import HANDLERS
 from conftest import (

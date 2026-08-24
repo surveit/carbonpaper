@@ -10,14 +10,12 @@ from dataclasses import dataclass
 from collections.abc import Sequence
 from functools import partial
 from pathlib import Path
-from typing import ClassVar
 
 import pandas as pd
 import pyarrow as pa
 
 from app.core.frames import table_to_frame
 from app.core.frames import write_frame_file_with_csv_fallback
-from app.core.record import PersistedModel, PersistenceScope
 from app.core.predicate import parse_predicate
 from app.models import AbstractStage, WorkflowStage
 from app.models.stage_contribution import QueueStats, StageContribution
@@ -29,31 +27,12 @@ from app.models.stages.human_review_queue import (
     SortDirection,
 )
 from app.core.stage_cache import compute_row_fingerprint
+from app.models.records.queue_fingerprints import QueueFingerprints
 
 from ..context import RunContext, RunIdentity
 from ..stage_output import AwaitingReview
 from .execution import ROW_DEFERRED_KEY, Row, RowMapper, narrow_stage
 
-
-class QueueFingerprints(PersistedModel):
-    """A halted queue stage's bookkeeping, stored as
-    `queue_fingerprints/<project>/<run_id>/<stage_id>`."""
-
-    collection: ClassVar[str] = "queue_fingerprints"
-    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.RUN
-
-    # Never snapshot COLUMNS: `stage_fingerprint` is shared by every pending row
-    # of that halt; `input_fingerprints` and `row_ordinals` hold one entry per
-    # row each, POSITIONALLY aligned to the snapshot's row order. `row_ordinals`
-    # is None on a record stored before the runtime recorded them — an
-    # unknowable position, never a guessed one.
-    stage_fingerprint: str
-    input_fingerprints: list[str]
-    row_ordinals: list[int] | None = None
-
-    @staticmethod
-    def compose_id(project_id: str, run_id: str, stage_id: str) -> str:
-        return f"{project_id}/{run_id}/{stage_id}"
 
 
 @dataclass(frozen=True)

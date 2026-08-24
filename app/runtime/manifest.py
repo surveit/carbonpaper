@@ -7,13 +7,13 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any
 
 import pandas as pd
 
 from dataclasses import dataclass
 
-from pydantic import ConfigDict, ValidationError, field_validator, model_validator
+from pydantic import ValidationError
 
 from app.core.errors import (
     DocumentNotFound,
@@ -23,143 +23,21 @@ from app.core.errors import (
 )
 from app.core.frames import read_frame_file
 from app.core.json_types import JsonDict
-from app.core.record import PersistedModel, PersistenceScope
 from app.core.run_status import RunStatus, StageStatus
 from app.models import WorkflowStage
 from app.models.run_manifest import StageRecord
-from app.models.stage_contribution import QueueStats
-from app.models.run_parameters import RunParameters
+from app.models.records.run_manifest import (
+    PRODUCTION_RUNS,
+    RunManifest,
+)
 
 from .context import RunContext
 
 
 # ─── The stored run manifest ─────────────────────────────────────────────────
 
-# RunParameters field -> the top-level key a manifest written before the nesting
-# carried it under. Read by `_lift_legacy_parameters`; may only grow.
-_LEGACY_PARAMETER_KEYS = {
-    "limits": "limit_overrides",
-    "offsets": "offset_overrides",
-    "bust_cache": "bust_cache",
-    "queue_auto_approve": "queue_auto_approve",
-    "is_test_run": "is_test_run",
-    "run_bindings": "run_bindings",
-}
 
 
-
-# The run directory a production run lives under, and the `area` segment of its
-# store key. `runs/` vs `eval_run/` was the discriminator before the manifest
-# moved here, so keeping it means a project's production runs stay one prefix
-# scan and an eval run can never appear in the runs index.
-PRODUCTION_RUNS = "runs"
-
-# The other area: an eval's subset run. `app.evals.store.resolve_eval_run_dir` builds
-# the directory from this, so the name a run is written under and the name a reader
-# filters by are one string.
-EVAL_RUNS = "eval_run"
-
-# Both areas, for a reader totalling a project's whole spend rather than its production
-# runs alone. Ordered as a project accumulates them.
-RUN_AREAS = (PRODUCTION_RUNS, EVAL_RUNS)
-
-# PersistedModel's own fields. A run recorded none of them, so `to_dict` leaves
-# them out of what every reader above this module consumes.
-_STORE_BOOKKEEPING = {"id", "created_at", "updated_at"}
-
-
-class RunManifest(PersistedModel):
-    """The run's living record, stored as `run/<project>/<run_id>`."""
-
-    collection: ClassVar[str] = "run"
-    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.RUN
-    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid",
-                              validate_default=True, populate_by_name=True)
-    # The stored payload is the `exclude_unset` shape `to_dict` produces, so a
-    # field the run never set is absent from the record too — `clear_halt`
-    # depends on it: a stored `halted_at: null` would come back marked set and
-    # re-appear in `to_dict` on the next read.
-    DUMP_OPTS: ClassVar[JsonDict] = {"exclude_unset": True}
-
-    run_id: str
-    started_at: str
-    # Required, unlike the `project` a subset run used to default to None: a run
-    # that cannot name its project has no id to be stored under, and every caller
-    # names one.
-    project: str
-    workflow_version: str | None
-    # What the caller asked of this run, verbatim — the settings a resume replays.
-    # `_lift_legacy_parameters` reads the flat pre-nesting keys off an older
-    # manifest into it, so every run on disk still parses.
-    parameters: RunParameters = RunParameters()
-    # The preflight provenance of each bound input (its absolute path, a sha256 and
-    # a byte count streamed at prepare time). A RESULT, not a parameter: it records
-    # what the run found, not what it was asked for.
-    input_bindings: dict[str, dict[str, Any]] = {}
-    # Required, no default: it would let a pre-rename manifest parse silently, hiding queued items.
-    human_review_queue_stats: dict[str, QueueStats]
-    dropped_columns: dict[str, list[str]] = {}
-    status: RunStatus
-    stage_records: list[StageRecord]
-    finished_at: str | None = None
-    halted_at: list[str] | None = None
-    cancelled_at: str | None = None
-    resumed_at: str | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def _lift_legacy_parameters(cls, data: Any) -> Any:
-        if not isinstance(data, dict):
-            return data
-        # The flat keys MOVE — never copied, never left behind. This model forbids
-        # extras, so a payload carrying both spellings would not load at all.
-        lifted = {k: v for k, v in data.items() if k not in _LEGACY_PARAMETER_KEYS.values()}
-        if "parameters" in data:
-            return lifted
-        legacy = {new: data[old] for new, old in _LEGACY_PARAMETER_KEYS.items() if old in data}
-        return {**lifted, "parameters": legacy} if legacy else lifted
-
-    @model_validator(mode="after")
-    def _always_write_the_store_bookkeeping(self) -> RunManifest:
-        """`exclude_unset` must never drop the store's own fields."""
-        self.__pydantic_fields_set__.update(_STORE_BOOKKEEPING)
-        return self
-
-    @field_validator("halted_at", mode="before")
-    @classmethod
-    def _halted_at_to_list(cls, value: object) -> object:
-        if isinstance(value, str):
-            return [value]
-        return value
-
-    def settle_stage_records(self, records: list[StageRecord]) -> None:
-        self.stage_records = records
-
-    def record_dropped_columns(self, stage_id: str, columns: list[str]) -> None:
-        self.dropped_columns[stage_id] = columns
-        # Marked set so `exclude_unset` still emits it on a legacy manifest that lacked the key.
-        self.__pydantic_fields_set__.add("dropped_columns")
-
-    def record_human_review_queue_stats(self, stage_id: str, stats: QueueStats) -> None:
-        self.human_review_queue_stats[stage_id] = stats
-
-    def clear_halt(self) -> None:
-        self.halted_at = None
-        # Unmarked so `exclude_unset` writes no key: a resumed or cancelled run must not
-        # show a review banner for a halt that no longer holds.
-        self.__pydantic_fields_set__.discard("halted_at")
-
-    def find_stage_record(self, stage_id: str) -> StageRecord | None:
-        return next((r for r in self.stage_records if r.stage_id == stage_id), None)
-
-    @staticmethod
-    def compose_id(project_id: str, run_id: str, area: str = PRODUCTION_RUNS) -> str:
-        """The store key; `area` is the directory that held the run."""
-        return f"{project_id}/{area}/{run_id}"
-
-    def to_dict(self) -> dict[str, Any]:
-        """What this run RECORDED — the boundary shape every reader consumes."""
-        return self.model_dump(exclude_unset=True, exclude=_STORE_BOOKKEEPING)
 
 
 
