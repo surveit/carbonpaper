@@ -1572,3 +1572,4 @@
 {"run_id":"32728640070","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32728640070","created":"2026-08-24T12:44:24Z","branch":"lexicon-annotate-new-verbs","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"32728640070","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32728640070","created":"2026-08-24T12:44:53Z","branch":"lexicon-annotate-new-verbs","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"32728644462","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32728644462","created":"2026-08-24T12:44:55Z","branch":"lineage-panes-to-master","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"32728737210","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32728737210","created":"2026-08-24T12:45:24Z","branch":"master","event":"push","contracts_kept":16,"findings":[]}
