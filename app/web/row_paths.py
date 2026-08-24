@@ -31,6 +31,7 @@ class CitedFigure:
 
 @dataclass(frozen=True)
 class PathBehindFigure:
+    # The group's size. Not shown: see the note in _row_paths.html.
     rows: int
     # The branches this path holds and at least one other path does not.
     tells_it_apart: list[BranchOption]
