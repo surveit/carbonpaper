@@ -115,7 +115,7 @@ def test_dedupe_panel_names_its_keys_and_which_row_survives(client: TestClient) 
     html = response.text
     assert "Dedupe" in html
     assert "<code>client</code>" in html
-    assert "highest <code>relevance</code>" in html
+    assert "The row with the highest <code>relevance</code>" in html
 
 
 def test_explode_panel_names_the_column_and_what_an_empty_list_does(
@@ -125,7 +125,7 @@ def test_explode_panel_names_the_column_and_what_an_empty_list_does(
     html = response.text
     assert "Explode" in html
     assert "<code>mentions</code>" in html
-    assert "keeps one row" in html
+    assert "set to null" in html
 
 
 def test_sort_rank_panel_lists_its_keys_in_priority_order(client: TestClient) -> None:

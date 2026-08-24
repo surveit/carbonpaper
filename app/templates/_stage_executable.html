@@ -170,18 +170,15 @@
 {% if block == 'dedupe' %}
 <section class="exec-block">
     <h2>🧹 Dedupe</h2>
-    <p class="muted">Rows agreeing on every key collapse to one. The survivor passes through
-        unchanged, so nothing is written here &mdash; the rest of the group is dropped.</p>
-    <h3>keys <span class="muted">(rows agreeing on all of these are one thing)</span></h3>
+    <p class="muted">Rows with the same value for every key are collapsed to one row. The
+        others are dropped. No column is written.</p>
+    <h3>keys</h3>
     <p>{% for key in stage.dedupe.keys %}<code>{{ key }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
-    <h3>which row survives</h3>
-    <p>{% if stage.dedupe.keep == 'agree' %}<code>agree</code> &mdash; none is picked. The
-        duplicates must be identical outside the keys, and the run fails, naming the column and
-        the values, where they are not.
-    {% elif stage.dedupe.keep == 'first' %}<code>first</code> &mdash; the earliest of them
-        in the frame, which means something only where an upstream stage fixed the order.
-    {% else %}<code>{{ stage.dedupe.keep }}</code> &mdash; the one with the
-        {{ stage.dedupe.keep }} <code>{{ stage.dedupe.by }}</code>.
+    <h3>which row is kept</h3>
+    <p>{% if stage.dedupe.keep == 'agree' %}None. The rows must match in every other column
+        too; where they do not, the run fails and names the column and the values.
+    {% elif stage.dedupe.keep == 'first' %}The first row by row number.
+    {% else %}The row with the {{ stage.dedupe.keep }} <code>{{ stage.dedupe.by }}</code>.
     {% endif %}</p>
 </section>
 {% endif %}
@@ -189,13 +186,13 @@
 {% if block == 'explode' %}
 <section class="exec-block">
     <h2>🌱 Explode</h2>
-    <p class="muted">One output row per element of a list column; every other column is copied
-        onto each of them, so the run's trace crosses this stage.</p>
+    <p class="muted">One row per element of the list. Every other column is copied onto each
+        of the new rows.</p>
     <dl class="kv">
-        <dt>column</dt><dd><code>{{ stage.explode.column }}</code></dd>
-        <dt>an empty list</dt>
-        <dd>{% if stage.explode.keep_empty %}keeps one row, carrying null in
-            <code>{{ stage.explode.column }}</code>{% else %}produces no row{% endif %}</dd>
+        <dt>list column</dt><dd><code>{{ stage.explode.column }}</code></dd>
+        <dt>a row whose list is empty</dt>
+        <dd>{% if stage.explode.keep_empty %}kept as one row, with
+            <code>{{ stage.explode.column }}</code> set to null{% else %}dropped{% endif %}</dd>
     </dl>
 </section>
 {% endif %}
@@ -203,8 +200,8 @@
 {% if block == 'sort_rank' %}
 <section class="exec-block">
     <h2>🔢 Sort and rank</h2>
-    <p class="muted">Reorders the rows &mdash; the first key decides and the rest break ties.
-        No row is added or dropped.</p>
+    <p class="muted">Reorders the rows. The first key decides; the rest break ties. No row is
+        added or dropped.</p>
     <h3>sort keys</h3>
     <table class="sort-keys">
         <thead><tr><th>column</th><th>order</th><th>rows holding no value</th></tr></thead>
@@ -213,15 +210,15 @@
             <tr>
                 <td><code>{{ key.column }}</code></td>
                 <td>{% if key.order %}{% for value in key.order %}<code>{{ value }}</code>{% if not loop.last %} &rarr; {% endif %}{% endfor %}{% elif key.descending %}largest first{% else %}smallest first{% endif %}</td>
-                <td>{% if key.nulls %}{{ key.nulls }}{% else %}<span class="muted">&mdash; a null stops the run</span>{% endif %}</td>
+                <td>{% if key.nulls %}sorted {{ key.nulls }}{% else %}<span class="muted">a null stops the run</span>{% endif %}</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
     {% if stage.sort_rank.rank_column %}
     <h3>rank column</h3>
-    <p><code>{{ stage.sort_rank.rank_column }}</code> &mdash; the 1-based sorted position,
-        so two rows the keys cannot separate still get different numbers.</p>
+    <p><code>{{ stage.sort_rank.rank_column }}</code> &mdash; 1 for the first row, 2 for the
+        second, and so on. Two rows the keys cannot separate still get different numbers.</p>
     {% endif %}
 </section>
 {% endif %}
