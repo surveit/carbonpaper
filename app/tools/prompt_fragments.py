@@ -133,6 +133,12 @@ The distinct COUNT is evidence, never the criterion. Two questions decide:
 Values read off a sliced run, off a frame below a filter or an aggregate, or off a
 cut value list are a SAMPLE, not the set. Say which one you have. Say which one you have."""
 
+FILTER_ON_MEANING_GUIDANCE = """\
+Filters should be applied if possible on the semantic meaning of columns, as early as they 
+are available. For example, filter on country is not null before joining with country data 
+instead of filtering on the enriched column being non-null. This ensures you filter exactly as 
+intended without also filtering join mismatches for example."""
+
 # ─── The anatomy every stage shares ──────────────────────────────
 
 _WHAT_EVERY_STAGE_DECLARES = """\

@@ -13,6 +13,7 @@ from app.tools.prompt_fragments import (
     CODE_SUMMARY_CONTRACT_NOTE,
     CONCEPTS_NOTE,
     ENUM_FROM_DATA_GUIDANCE,
+    FILTER_ON_MEANING_GUIDANCE,
     HANDOVER_BARS_NOTE,
     HOW_YOU_WORK_NOTE,
     REVIEW_GUIDE_NOTE,
@@ -65,6 +66,8 @@ run_workflow.)
 limit=null) — a named source stage EXECUTES, and a null limit is the whole bound
 file — then profile_stage_output_data_range on what it wrote. edit_stages tightens
 the schema afterwards.)
+
+{FILTER_ON_MEANING_GUIDANCE}
 
 # Your tools, by phase
 Each tool's own description says how it behaves; this says WHEN. Start by calling
