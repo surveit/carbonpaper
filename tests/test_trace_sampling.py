@@ -292,6 +292,23 @@ def test_the_sampled_row_is_named_once_in_the_stories(tmp_path):
         f"/project/proj/runs/T1/stage/agg/row/{firm_a}/trace/view?via=tagged%3A2")
 
 
+def test_offline_the_mark_points_at_a_file_the_packet_wrote(tmp_path):
+    """A folder has no Relevant rows tab, so the phrase goes to the cohort table."""
+    from app.web.panel_links import PacketPanelLinks
+
+    run_dir, totals = _three_stage_run(tmp_path)
+    firm_a = _firm_a(totals)
+
+    view = build_trace_view(
+        trace_to_dict(trace_row(run_dir, "agg", firm_a)), {},
+        PacketPanelLinks(to_root="../../", owner=("agg", firm_a)))
+
+    sampled = view["nodes"][-1]["sampled"]
+    cohort = next(g for g in view["nodes"][-1]["contributor_groups"]
+                  if g["stage_id"] == sampled["stage_id"])
+    assert cohort["rows_link"] == f"../../lineage/agg/{firm_a}.from-tagged.html"
+
+
 def _serve(tmp_path, project: str):
     workspace.set_projects_dir(tmp_path)
     run_dir, totals = _three_stage_run(tmp_path / project / "runs")

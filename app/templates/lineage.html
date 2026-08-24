@@ -399,7 +399,9 @@ function renderSteps(){
       <span class="right">${n.role==='claim' ? '<span class="claim-tag">published claim</span> ' : ''}<span class="row-chip">row ${n.row_ordinal}</span>${deltaOf(n)}</span>
     </button>`).join('');
   document.getElementById('steps').innerHTML = html;
-  document.getElementById('stepsnote').innerHTML = stepsNote();
+  const note = document.getElementById('stepsnote');
+  note.innerHTML = stepsNote();
+  note.classList.toggle('hidden', !note.innerHTML);
 }
 // Drawn above the step it belongs to, which is the step the rows fed: everything
 // above the mark is the sampled row, and this step's row is the summary.
@@ -409,30 +411,26 @@ function sampleOf(n){
   if(!s) return '';
   return `<div class="sampled"><span class="mark">↑ Sampled</span><span>Following input row
     <b>${s.at} of ${s.of} rows</b> that were summarized in step ${n.step}. Steps above show
-    how that sample row was generated. Explore all ${s.of} rows in
-    ${allRowsLink(s)}.</span></div>`;
+    how that sample row was generated. ${allRowsLink(s, n)}</span></div>`;
 }
-// The scope map that Relevant rows draws IS the rows behind this figure, so the
-// app sends the reader there. A packet has no server to draw it, and says so, so
-// there the rows are the cohort table the Stories list links.
-function allRowsLink(s){
-  return OFFLINE
-    ? `the <b>Stories</b> list beside these steps`
-    : `<a href="#" data-goto="rows">Relevant rows</a>`;
+function allRowsLink(s, n){
+  const label = `Explore all ${s.of} relevant rows`;
+  // Served: the tab whose scope map draws them, opened by clicking the tab
+  // itself so its own load fires. A folder has no server to draw that, so there
+  // the phrase goes to the cohort table the packet wrote.
+  if(!OFFLINE) return `<a href="#" data-goto="rows">${label}</a>`;
+  const cohort = (n.contributor_groups || []).find(g => g.stage_id === s.stage_id);
+  return cohort && cohort.rows_link
+    ? `<a href="${cohort.rows_link}">${label}</a>` : label;
 }
-// The one claim the page makes about itself: a break is the only place a choice
-// stood in for a fact, so a run of steps with none is row-level lineage.
+// Only the ABSENCE is stated here. A row that was sampled is marked inline at the
+// step it happened; with nothing marked there is nothing inline to read, and a
+// blank top would not tell "nothing to flag" from "the feature never ran".
 function stepsNote(){
-  const sampled = V.nodes.filter(n => n.sampled).length;
-  if(!sampled) return `<b>No step on this path sampled a row.</b> Every step names the row it `
-    + `actually came from, back to <code>${esc(V.nodes[0].stage_id)}</code> — nothing here `
-    + `stands in for anything else.`;
-  const marks = `${sampled} ↑ Sampled mark${sampled > 1 ? 's' : ''}`;
-  const is = sampled > 1 ? 'are' : 'is';
-  return `<b>The ${marks} below ${is} the only place${sampled > 1 ? 's' : ''} a row was `
-    + `picked for you.</b> A step that summarized several rows into one has no single row `
-    + `above it, so the first the run recorded is sampled. Every other step names the row it `
-    + `actually came from.`;
+  if(V.nodes.some(n => n.sampled)) return '';
+  return `<b>No step on this path sampled a row.</b> Every step names the row it actually `
+    + `came from, back to <code>${esc(V.nodes[0].stage_id)}</code> — nothing here stands in `
+    + `for anything else.`;
 }
 
 // ---- The other parents, named in the sentence that owns them --------------
