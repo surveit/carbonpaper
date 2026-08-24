@@ -163,6 +163,25 @@
 </section>
 {% endif %}
 
+{% if stage.dedupe %}
+<section class="exec-block">
+    <h2>🧹 Dedupe</h2>
+    <p class="muted">Rows agreeing on every key collapse to one. The survivor passes through
+        unchanged, so nothing is written here &mdash; the rest of the group is dropped.</p>
+    <h3>keys <span class="muted">(rows agreeing on all of these are one thing)</span></h3>
+    <p>{% for key in stage.dedupe.keys %}<code>{{ key }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+    <h3>which row survives</h3>
+    <p>{% if stage.dedupe.keep == 'agree' %}<code>agree</code> &mdash; none is picked. The
+        duplicates must be identical outside the keys, and the run fails, naming the column and
+        the values, where they are not.
+    {% elif stage.dedupe.keep == 'first' %}<code>first</code> &mdash; the earliest of them
+        in the frame, which means something only where an upstream stage fixed the order.
+    {% else %}<code>{{ stage.dedupe.keep }}</code> &mdash; the one with the
+        {{ stage.dedupe.keep }} <code>{{ stage.dedupe.by }}</code>.
+    {% endif %}</p>
+</section>
+{% endif %}
+
 {% if stage.queue %}
 <section class="exec-block">
     <h2>👤 Review queue</h2>

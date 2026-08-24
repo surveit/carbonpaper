@@ -49,6 +49,15 @@ def _seed_project(root: Path) -> None:
                       "reads": [{"input": "all_filings", "columns": _SCHEMA["columns"]}]},
         "filter": {"code": _PREDICATE},
     })
+    add_stage(compiled, {
+        "id": "one_filing_per_client", "description": "One filing per client",
+        "type": "dedupe",
+        "inputs": [{"id": "select_incidental_filings"}],
+        "signature": {"form": "extends",
+                      "reads": [{"input": "select_incidental_filings",
+                                 "columns": _SCHEMA["columns"]}]},
+        "dedupe": {"keys": ["client"], "keep": "highest", "by": "relevance"},
+    })
 
 
 @pytest.fixture
@@ -73,3 +82,12 @@ def test_union_panel_names_the_inputs_it_concatenates(client: TestClient) -> Non
     html = response.text
     assert "Union" in html
     assert "load_more" in html
+
+
+def test_dedupe_panel_names_its_keys_and_which_row_survives(client: TestClient) -> None:
+    response = client.get("/project/alpha/node/one_filing_per_client/panel")
+    assert response.status_code == 200
+    html = response.text
+    assert "Dedupe" in html
+    assert "<code>client</code>" in html
+    assert "highest <code>relevance</code>" in html
