@@ -24,8 +24,6 @@ router = APIRouter()
 
 
 # ─── Path guards ───────────────────────────────────────────────────────────
-# Every {bundle}/{project_name} below is checked against a list the seam itself
-# just enumerated — never a filesystem path built directly from the request.
 
 def _bundle_path(bundle: str) -> Path:
     for candidate in discover_workflow_files():

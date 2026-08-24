@@ -1,9 +1,4 @@
-"""Architecture: a project the reader may not see is dropped in one place, not at each list.
-
-Two things hide one: `private` on its record, and a working copy `delete_project` removed
-while keeping the record. Both are applied by `app.services.project`, so no listing surface
-can forget them and only the admin screens name the one function that shows a private project.
-"""
+"""Architecture: a project the reader may not see is dropped once, not at each listing."""
 from __future__ import annotations
 
 import ast
@@ -24,8 +19,6 @@ _DIRECTORY_SCAN_CALLERS = frozenset({_SERVICE, "app/web/loading.py"})
 _ESCAPE_HATCH = "list_project_listings_including_private"
 _ESCAPE_HATCH_CALLERS = frozenset({
     _SERVICE,
-    # The operator's own screens. They say `private` on the row, so the flag is
-    # readable exactly where the project it hides is still listed.
     "app/web/admin/workspace_router.py",
     "app/web/admin/cache_router.py",
 })
