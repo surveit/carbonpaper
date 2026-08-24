@@ -1718,3 +1718,4 @@
 {"run_id":"32774723940","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32774723940","created":"2026-08-24T20:36:26Z","branch":"fix/scope-map-ribbon-shape","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"32774813223","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32774813223","created":"2026-08-24T20:36:40Z","branch":"feat/values-used-tab","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"32774813223","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32774813223","created":"2026-08-24T20:37:19Z","branch":"feat/values-used-tab","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"32775262631","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32775262631","created":"2026-08-24T20:41:32Z","branch":"stage-blocks-guard","event":"pull_request","contracts_kept":16,"findings":[]}
