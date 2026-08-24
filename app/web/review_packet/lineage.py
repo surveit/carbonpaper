@@ -19,7 +19,7 @@ from app.services.review_packet.views import (
     StageTraces,
 )
 from app.web.breadcrumbs import Crumb
-from app.web.config import number_row, templates
+from app.web.config import render_row_number, templates
 from app.web.panel_links import (
     PacketPanelLinks,
     packet_contributors_href,
@@ -148,7 +148,7 @@ def _write_page(
     links = PacketPanelLinks(to_root="../../", traced=traced, owner=(stage_id, row))
     trace_view = build_trace_view(trace, stages_by_id, links)
     html = templates.env.get_template("lineage.html").render(
-        title=f"{stage_id} · row {number_row(row)}",
+        title=f"{stage_id} · row {render_row_number(row)}",
         pane=_read_paths_pane(branches, stage_id, row),
         figure=CitedFigure(stage_id=stage_id, row_ordinal=row),
         links=links,
@@ -156,7 +156,7 @@ def _write_page(
         project=view.project,
         crumbs=[
             Crumb(label=view.project or "run", href="../../index.html"),
-            Crumb(label=f"{stage_id} row {number_row(row)}", is_code=True),
+            Crumb(label=f"{stage_id} row {render_row_number(row)}", is_code=True),
         ],
         mermaid="",
         offline=True,
