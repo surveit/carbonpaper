@@ -660,3 +660,28 @@ def test_the_sandboxed_filter_gets_the_same_dropped_rows_view(tmp_path: Path) ->
     assert diff.dropped_total == 2 and diff.kept_total == 2
     assert [row.dropped for row in diff.rows] == [False, True, False, True]
     assert [row.output_ordinal for row in diff.rows] == [0, None, 1, None]
+
+
+def _dedupe_stage() -> Stage:
+    return parse_stage({
+        "id": "keep", "description": "Keep", "type": "dedupe",
+        "inputs": [{"id": LOAD_ID}],
+        "dedupe": {"keys": ["name"], "keep": "highest", "by": "val"},
+        "signature": {"form": "extends", "reads": reads_of(LOAD_ID, _IN_COLUMNS)},
+    })
+
+
+def test_a_dedupe_gets_the_same_dropped_rows_view(tmp_path: Path) -> None:
+    """It drew no diff at all until the type was wired into FILTER_TYPES."""
+    _write_output(tmp_path, LOAD_ID, pd.DataFrame(
+        {"name": ["a", "b", "b", "c"], "val": [1, 2, 3, 4]}))
+    out_rel = _write_output(tmp_path, "keep", pd.DataFrame(
+        {"name": ["a", "b", "c"], "val": [1, 3, 4]}))
+    _write_lineage(tmp_path, "keep", kept=[0, 2, 3])
+
+    diff = _diff(tmp_path, _dedupe_stage(), out_rel)
+
+    assert diff is not None and diff.kind == FILTER_ROWS_KIND
+    assert [row.dropped for row in diff.rows] == [False, True, False, False]
+    assert diff.rows[1].cells == ["b", "2"]
+    assert diff.dropped_total == 1 and diff.kept_total == 3

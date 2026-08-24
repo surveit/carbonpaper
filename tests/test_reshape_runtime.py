@@ -9,7 +9,6 @@ from app.core.errors import SubsetRunError
 from app.core.frames import table_to_frame
 from app.models import parse_stage, Stage, Workflow
 from app.runtime.executor import execute_subset
-from app.runtime.lineage import EdgeKind
 from app.runtime.trace import trace_row
 
 # A filing register: one row per lobbying filing, each carrying the issue codes
@@ -128,7 +127,7 @@ def test_dedupe_keeps_the_highest_row_per_key(tmp_path):
     assert out.loc[out["client"] == "Northwind Resources", "amount_usd"].tolist() == [260000]
 
 
-def test_dedupe_records_the_row_it_collapsed_as_well_as_the_survivor(tmp_path):
+def test_a_deduped_row_names_only_the_row_that_carried_forward(tmp_path):
     run_dir = tmp_path / "runs" / "r"
     workflow = Workflow(stages=[
         _source_stage("filings", _FILINGS, _FLAT_COLUMNS, tmp_path),
@@ -139,11 +138,21 @@ def test_dedupe_records_the_row_it_collapsed_as_well_as_the_survivor(tmp_path):
     northwind = out.index[out["client"] == "Northwind Resources"][0]
     trace = trace_row(run_dir, "latest", int(northwind))
 
-    # The spine reaches F-1003 (input row 2), the row that survived...
+    # F-1003 (input row 2) survived; F-1001 lost to it and supplies no cell.
     assert _traced_source_ordinals(run_dir, "latest", int(northwind)) == [2]
-    # ...and F-1001 (input row 0), which lost to it, is still named as collapsed into it.
-    assert [b.row_ordinal for b in trace.steps[0].branches] == [0]
-    assert all(b.kind == EdgeKind.contribution.value for b in trace.steps[0].branches)
+    assert trace.steps[0].branches == []
+
+
+def test_dedupe_emits_its_survivors_in_input_order(tmp_path):
+    run_dir = tmp_path / "runs" / "r"
+    workflow = Workflow(stages=[
+        _source_stage("filings", _FILINGS, _FLAT_COLUMNS, tmp_path),
+        _dedupe_stage("latest", "filings", keep="highest", by="amount_usd"),
+    ])
+    _run(workflow, ["filings", "latest"], run_dir)
+
+    kept = [_traced_source_ordinals(run_dir, "latest", i)[0] for i in range(2)]
+    assert kept == sorted(kept)
 
 
 def test_dedupe_keep_first_refuses_a_by_column(tmp_path):
