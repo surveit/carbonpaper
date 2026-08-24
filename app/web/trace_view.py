@@ -271,6 +271,9 @@ def _one_group(
 
 
 def _build_stories(nodes: list[dict[str, Any]]) -> list[Story]:
+    # A stage whose output frame the run never wrote traces no step at all.
+    if not nodes:
+        return []
     # Always first, so a row nothing else fed still reads as one story.
     first = nodes[0]
     shown = Story(

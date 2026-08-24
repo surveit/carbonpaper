@@ -109,13 +109,15 @@ async def run_stage_row_trace_view(
     ordered = [stages_by_id[n["stage_id"]].stage for n in view["nodes"]
                if n["stage_id"] in stages_by_id]
     mermaid = build_mermaid_graph(ordered, project_id) if len(ordered) == len(view["nodes"]) else ""
-    cell = None if column is None else find_cited_cell(
-        view, stages_by_id.get(stage_id), column)
-    if column is not None and cell is None:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Stage '{stage_id}' in run '{run_id}' has no column '{column}'",
-        )
+    # With no step walked there is no row to read a cited cell from.
+    cell = None
+    if column is not None and view["nodes"]:
+        cell = find_cited_cell(view, stages_by_id.get(stage_id), column)
+        if cell is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Stage '{stage_id}' in run '{run_id}' has no column '{column}'",
+            )
     return templates.TemplateResponse(
         request,
         "lineage.html",

@@ -205,3 +205,45 @@ def test_trace_view_says_reshaping_not_traceable(tmp_path, monkeypatch):
     assert resp.status_code == 200
     assert "reshapes rows" in resp.text
     assert "#58" in resp.text
+
+
+def _run_missing_its_output_frame(tmp_path) -> TestClient:
+    project_runs = tmp_path / "proj" / "runs"
+    project_runs.mkdir(parents=True)
+    run_dir = write_run(project_runs, [
+        {"id": "seeds", "type": "input_data", "parents": [],
+         "df": pd.DataFrame({"facility_id": ["a", "b"]})},
+    ], run_id="R4")
+    # What an interrupted run leaves: a record naming a file nothing wrote.
+    (run_dir / "outputs" / "seeds.parquet").unlink()
+    workspace.set_projects_dir(tmp_path)
+    return TestClient(app)
+
+
+def test_trace_view_states_the_missing_output_file_instead_of_raising(tmp_path):
+    client = _run_missing_its_output_frame(tmp_path)
+    resp = client.get("/project/proj/runs/R4/stage/seeds/row/0/trace/view")
+    assert resp.status_code == 200
+    assert "this stage&#39;s output file is missing from the run" in resp.text
+    assert "This run recorded no path for this row" in resp.text
+    # The step machinery reads V.nodes[0]; with none, it must not ship at all.
+    assert "renderStories();" not in resp.text
+
+
+def test_trace_view_of_a_missing_output_file_still_renders_with_a_column(tmp_path):
+    client = _run_missing_its_output_frame(tmp_path)
+    resp = client.get(
+        "/project/proj/runs/R4/stage/seeds/row/0/trace/view?column=facility_id")
+    assert resp.status_code == 200
+    assert "this stage&#39;s output file is missing from the run" in resp.text
+
+
+def test_trace_of_a_missing_output_file_walks_no_step(tmp_path):
+    client = _run_missing_its_output_frame(tmp_path)
+    body = client.get("/project/proj/runs/R4/stage/seeds/row/0/trace").json()
+    assert body["steps"] == []
+    assert body["end"] == {
+        "reached_origin": False,
+        "at_stage": "seeds",
+        "message": "this stage's output file is missing from the run",
+    }

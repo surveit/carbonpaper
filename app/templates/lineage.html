@@ -169,6 +169,7 @@ tr.carried td.lin-v{color:var(--muted)}
   <button class="lin-pagetab" data-pane="inputs">Inputs<span class="k">the files it was read from</span></button>
 </div>
 <div class="lin-pane" data-pane="paths">
+{% if view.nodes %}
 <div class="lin-split">
   <div class="lin-snav">
     <h2>Stories</h2>
@@ -195,6 +196,13 @@ tr.carried td.lin-v{color:var(--muted)}
     <div class="lin-pbody" id="pbody"></div>
   </div>
 </div>
+{% else %}
+  <div class="empty-state">
+    <h2>This run recorded no path for this row</h2>
+    <p>The walk stopped at <code>{{ view.upstream.at_stage }}</code> before it read a single
+      step &mdash; {{ view.upstream.message }}. The run wrote no row here to follow.</p>
+  </div>
+{% endif %}
 </div>
 <div class="lin-pane hidden" data-pane="rows">
   <div class="empty-state">
@@ -224,8 +232,6 @@ const V = {{ view | tojson }}, PROJECT = {{ project | tojson }};
 const OFFLINE = {{ (offline | default(false)) | tojson }};
 const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const JOIN_KINDS = ['enrich', 'expand'];
-let sel = V.nodes.length - 1, tab = 'row', scope = 'changed';
-const transformCache = {};
 
 document.getElementById('pagetabs').addEventListener('click', e => {
   const picked = e.target.closest('.lin-pagetab'); if(!picked) return;
@@ -234,6 +240,11 @@ document.getElementById('pagetabs').addEventListener('click', e => {
   document.querySelectorAll('.lin-pane').forEach(
     p => p.classList.toggle('hidden', p.dataset.pane !== picked.dataset.pane));
 });
+</script>
+{% if view.nodes %}
+<script>
+let sel = V.nodes.length - 1, tab = 'row', scope = 'changed';
+const transformCache = {};
 
 // ---- The stories: every path this row's ancestry could be told down --------
 // The trace knows which parents it did not follow. It does NOT know how many
@@ -518,6 +529,7 @@ document.querySelector('.lin-graph').addEventListener('toggle', async e => {
 renderStories();
 render();
 </script>
+{% endif %}
 {% if not offline %}{% include "_chat_rail.html" %}
 <script src="/static/chat-panel.js"></script>
 <script src="/static/chat-rail.js"></script>{% endif %}
