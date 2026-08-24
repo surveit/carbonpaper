@@ -61,6 +61,8 @@ class RowSet(BaseModel):
     ordinals: list[RowOrdinal]
     # Every stage that re-grained on the way down, nearest the cited cell first.
     regrained_at: list[StageId] = []
+    # The ordinals above that no input row fed.
+    fed_by_no_rows: list[RowOrdinal] = []
 
 
 class FrameScale(BaseModel):

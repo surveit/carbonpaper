@@ -195,6 +195,43 @@ def stage_specs(data: Path) -> list[dict]:
                              column("mean_amount", "float")]},
         },
         {
+            "id": "over_a_million", "type": "filter_rows", "cache": True,
+            "description": "Keeps the grants above a million. None of these are.",
+            "inputs": [{"id": "grants_only"}],
+            "filter": {
+                "summary": "Keeps a grant only where the recorded amount is above a million.",
+                "corner_cases": [{"case": "amount is 400",
+                                  "expected": "the row is dropped"}],
+                "code": 'def should_include(row):\n    return row["amount"] > 1000000\n',
+            },
+            "signature": {"form": "extends", "reads": [
+                {"input": "grants_only", "columns": [column("amount", "int", False)]}],
+                "adds": [], "rewrites": []},
+        },
+        {
+            "id": "million_total", "type": "aggregate", "cache": True,
+            "description": "One row: what those come to. No row fed it.",
+            "inputs": [{"id": "over_a_million"}],
+            "aggregate": {"group_by": [], "aggregations": [
+                {"output_column": "total_amount", "formula": "sum",
+                 "value_column": "amount"}]},
+            "signature": {"form": "replaces", "reads": [
+                {"input": "over_a_million", "columns": [column("amount", "int", False)]}],
+                "produces": [column("total_amount", "int")]},
+        },
+        {
+            "id": "million_total_summed", "type": "aggregate", "cache": True,
+            "description": "Sums a total that no row fed.",
+            "inputs": [{"id": "million_total"}],
+            "aggregate": {"group_by": [], "aggregations": [
+                {"output_column": "summed_total", "formula": "sum",
+                 "value_column": "total_amount"}]},
+            "signature": {"form": "replaces", "reads": [
+                {"input": "million_total",
+                 "columns": [column("total_amount", "int")]}],
+                "produces": [column("summed_total", "int")]},
+        },
+        {
             "id": "total_of_means", "type": "aggregate", "cache": True,
             "description": "The three portfolio averages added together.",
             "inputs": [{"id": "mean_by_portfolio"}],

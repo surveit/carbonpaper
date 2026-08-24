@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.runtime.errors import UnresolvableFigure
 from app.models.branch_analysis import BranchId, BranchRole, FrameScale
 from app.models.claims import StageOutputCellCitation
 from app.models.schema import StageId
@@ -35,14 +34,26 @@ def load_scope_map(project_id: str, run_id: str, citation: StageOutputCellCitati
 def say_what_the_rows_answer(scope: ScopeMap) -> str:
     """One sentence under the figure: which rows the drawing is about."""
     covered = len(scope.covers.ordinals)
-    if not covered:
-        return "Nothing fed this cell, which is why it is null."
     where = f"{covered:,} row{'' if covered == 1 else 's'} of {scope.covers.at_stage}"
     merged_at = scope.covers.regrained_at[1:]
     if not merged_at:
         return f"Computed from {where}."
     return (f"Computed from {where}, merged at {' and '.join(merged_at)} before this "
             f"figure was taken.")
+
+
+def say_what_no_row_fed(scope: ScopeMap) -> str | None:
+    """A row the run recorded nothing behind still counts as a row, so it is said here."""
+    unfed = len(scope.covers.fed_by_no_rows)
+    if not unfed:
+        return None
+    named = len(scope.covers.ordinals)
+    if unfed == named:
+        return (f"No row fed this figure: the run recorded nothing behind the "
+                f"{unfed:,} row{'' if unfed == 1 else 's'} it names at "
+                f"{scope.covers.at_stage}.")
+    return (f"The run recorded nothing behind {unfed:,} of the {named:,} rows this "
+            f"figure names at {scope.covers.at_stage}.")
 
 
 def say_how_much_is_off_screen(scale: list[FrameScale],
@@ -78,10 +89,6 @@ def say_why_rows_left(cut: CutRows, role: BranchRole) -> str:
                 f"here. What they did differently is upstream of this stage.")
     return (f"{cut.total:,} row{'' if cut.total == 1 else 's'} still in the frame, "
             f"merged into a row this figure did not come through.")
-
-
-def refuse_reason(error: UnresolvableFigure) -> str:
-    return str(error)
 
 
 def _read_run(project_id: str, run_id: str) -> WorkflowRunBranches:

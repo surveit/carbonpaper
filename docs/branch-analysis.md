@@ -123,10 +123,10 @@ lineage, because output row *i* IS input row *i* by contract — `is_grain_and_o
 says which types those are. Twelve of the twenty-three stages in a real workflow are in that set.
 Any other type that writes none raises `MissingLineage` rather than being guessed at.
 
-**It refuses a figure whose rows do not sit at one grain.** If expanding a cell bottoms out in
-two different stages, there is no single frame the rows live in, and it raises
-`UnresolvableFigure` rather than presenting a mixture. A merge upstream that gathered no rows at
-all is not that case: it contributes no rows and so names no grain, and the walk passes over it.
+**Every expansion bottoms out in one frame.** Only an `aggregate` stage writes merge edges, and
+it names one input stage on every row it emits, so the rows a cell expands to always sit at one
+grain. The one aggregate row that no input row fed — a whole-frame aggregate over an empty frame,
+which is one row by construction — is its own row set, and the walk stops there.
 
 **A frame can be read by more than one merge, and only one is on your route.** Group the same
 grants by portfolio and by region, and every row holds a branch from both. Asked about a portfolio

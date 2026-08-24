@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.runtime.errors import UnresolvableFigure
 from app.models.branch_analysis import (
     BranchId,
     FrameScale,
@@ -24,8 +23,10 @@ def find_contributing_rows(run_branches: WorkflowRunBranches,
     """Replace a merged row by the rows merged into it, until none was merged."""
     reached, at_stage, through = _expand(run_branches, citation.stage_id,
                                          citation.row_ordinal)
-    return RowSet(at_stage=at_stage, ordinals=sorted(set(reached)),
-                  regrained_at=through)
+    ordinals = sorted(set(reached))
+    return RowSet(at_stage=at_stage, ordinals=ordinals, regrained_at=through,
+                  fed_by_no_rows=[ordinal for ordinal in ordinals
+                                  if _fed_by_no_rows(run_branches, at_stage, ordinal)])
 
 
 def find_merges_that_excluded(run_branches: WorkflowRunBranches,
@@ -58,24 +59,20 @@ def _expand(run_branches: WorkflowRunBranches, stage_id: StageId, ordinal: RowOr
     merged_from = _merged_from(run_branches, stage_id, ordinal)
     if merged_from is None:
         return [ordinal], stage_id, []
-    gathered: list[RowOrdinal] = []
-    landed: set[StageId] = set()
-    below: list[StageId] = []
-    for parent in merged_from:
-        rows, at_stage, deeper = _expand(run_branches, parent.stage_id,
-                                         parent.row_ordinal)
-        if not rows:
-            continue  # an empty merge upstream contributes nothing, and no grain
-        gathered.extend(rows)
-        landed.add(at_stage)
-        below = deeper
-    if not landed:
-        return [], stage_id, []
-    if len(landed) > 1:
-        raise UnresolvableFigure(
-            f"{stage_id} row {ordinal} bottoms out in {sorted(landed)}; "
-            f"a set of contributing rows must sit at one grain")
-    return gathered, landed.pop(), [stage_id] + below
+    # A merge names one input stage, whose rows were all merged or none were.
+    from_each_parent = [_expand(run_branches, parent.stage_id, parent.row_ordinal)
+                        for parent in merged_from]
+    _, at_stage, below = from_each_parent[0]
+    gathered = [row for rows, _, _ in from_each_parent for row in rows]
+    return gathered, at_stage, [stage_id] + below
+
+
+def _fed_by_no_rows(run_branches: WorkflowRunBranches, stage_id: StageId,
+                    ordinal: RowOrdinal) -> bool:
+    """The row is in the frame and the lineage names nothing that produced it."""
+    lineage = run_branches.lineages.get(stage_id)
+    return (lineage is not None and ordinal < len(lineage.parents)
+            and not lineage.parents[ordinal])
 
 
 def _merged_from(run_branches: WorkflowRunBranches, stage_id: StageId,

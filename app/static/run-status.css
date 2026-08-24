@@ -73,6 +73,7 @@
 .banner-done   { background: var(--state-done-bg);   border-left-color: var(--state-done); }
 .banner-warn   { background: var(--state-warn-bg);   border-left-color: var(--state-warn); }
 .banner-review { background: var(--state-review-bg); border-left-color: var(--state-review); }
+.banner-failed { background: var(--state-failed-bg); border-left-color: var(--state-failed); }
 .banner-review .btn { margin-left: 12px; }
 
 /* Per-stage run blocks */
