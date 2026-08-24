@@ -11,7 +11,7 @@ from typing import Any, Literal, Mapping
 from pydantic import BaseModel
 
 from app.core.errors import RunVersionUnresolvableError
-from app.core.persistence import JsonScalar
+from app.core.json_types import JsonScalar
 from app.models.records.workflow_output import WorkflowOutput
 from app.core.run_status import RunStatus, StageStatus
 from app.services import run as run_service

@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from app.core.persistence import JsonScalar
+from app.core.json_types import JsonScalar
 from app.core.ids import ID
 
 

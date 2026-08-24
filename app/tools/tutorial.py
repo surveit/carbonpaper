@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from app.core import files as file_store
 from app.core.agent.store import NextSteps, Offer
-from app.models import EvalConfig
+from app.models.records.eval_config import EvalConfig
 from app.models.review_guide import ReviewGuideDraft
 from app.services import (
     project as project_service,
@@ -104,8 +104,8 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialAgentReference:
         workflow_url=f"{ctx.base_url}project/{name}/workflow",
         guide_url=f"{ctx.base_url}project/{name}/workflow/version/{version_id}",
         runs_url_prefix=f"{ctx.base_url}project/{name}/runs/",
-        eval_id=eval_config.id,
-        eval_url=f"{ctx.base_url}project/{name}/evals/{eval_config.id}",
+        eval_id=eval_config.eval_id,
+        eval_url=f"{ctx.base_url}project/{name}/evals/{eval_config.eval_id}",
         edit_chat_url=(
             f"{ctx.base_url.rstrip('/')}/chat/agent/editing/new?"
             f"{urlencode({'project_id': name})}"

@@ -3,12 +3,14 @@ from __future__ import annotations
 
 from enum import Enum
 from uuid import uuid4
-from typing import ClassVar, Mapping, Self
+from typing import ClassVar, Iterator, Mapping, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.ids import ID
-from app.core.persistence import JsonDict, JsonScalar, get_store, now_iso
+from app.core.persistence import get_store
+from app.core.json_types import JsonDict, JsonScalar
+from app.core.timestamp_ids import now_iso
 
 
 class PersistenceScope(str, Enum):
@@ -67,6 +69,20 @@ class PersistedModel(BaseModel):
         """Matches on the STORED json, so an enum field takes its value and not the member."""
         return [cls.model_validate(data) for _, data
                 in get_store().find(cls.collection, cls._resolve_stored_keys(fields))]
+
+    @classmethod
+    def load_raw(cls, id: ID) -> JsonDict:
+        """The stored payload, unvalidated. Raises DocumentNotFound; a torn payload is not empty."""
+        return get_store().read(cls.collection, id)
+
+    @classmethod
+    def load_raw_or_none(cls, id: ID) -> JsonDict | None:
+        return get_store().read_tolerant(cls.collection, id)
+
+    @classmethod
+    def list_raw(cls, prefix: str = "") -> Iterator[tuple[str, JsonDict]]:
+        """Payloads with their ids, unvalidated — for a reader that reports a bad record."""
+        return get_store().read_all(cls.collection, prefix)
 
     @classmethod
     def list_ids(cls, prefix: str = "") -> list[ID]:

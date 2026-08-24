@@ -13,7 +13,8 @@ from pydantic import BaseModel
 from app.core.errors import EvalNotScorableError
 from app.core.frames import read_frame_file
 from app.evals.dataset import read_table_ref
-from app.models import EvalRun, TableRef
+from app.models import TableRef
+from app.models.records.eval_run import EvalRun
 from app.web.loading import render_frame_as_text
 from app.web.run_header import (
     VersionNote,
@@ -61,7 +62,7 @@ def _build_run_row(
         seen[run.workflow_version] = read_version_note(project_id, run.workflow_version)
     accuracy = run.metrics.get("accuracy")
     return EvalRunRow(
-        run_id=run.id,
+        run_id=run.run_id,
         status=run.status,
         outcome=_OUTCOME_WORDS.get(run.status, run.status),
         started_at=run.started_at,

@@ -12,13 +12,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.models import (
-    EvalConfig,
-    EvalRun,
-    EvalRunSettings,
-    ExpectedOutput,
-    TableRef,
-)
+from app.models import EvalRunSettings, ExpectedOutput, TableRef
+from app.models.records.eval_config import EvalConfig
+from app.models.records.eval_run import EvalRun
 from app.models.schema import TableSchema
 from app.models.stages.input_data import FileFormat
 from app.core import paths
@@ -89,7 +85,7 @@ def demo_project(tmp_path, monkeypatch):
             {"name": "label", "type": "str", "nullable": True}]),
     )
     save_eval_config(demo.name, EvalConfig(
-        id="label_check", project="demo", name="Label check",
+        eval_id="label_check", project="demo", name="Label check",
         description="Does classify still label rows the same way?",
         override_stage="load", target_stage="classify", table=dataset,
         expected_outputs=[ExpectedOutput(output_column="label", metric="exact")],
@@ -155,7 +151,7 @@ def test_eval_detail_404_for_unknown_config():
 
 def test_eval_run_page_renders_a_seeded_run():
     run = EvalRun(
-        id="run1", config="label_check", project="demo",
+        run_id="run1", config="label_check", project="demo",
         workflow_version="v1", status="scored",
         settings=EvalRunSettings(can_score_declaratively=True,
                                  frontier=["classify"], blocking_stages=[]),
@@ -203,7 +199,7 @@ def _save_scored_run(tmp_path, per_row: pd.DataFrame, *, run_id: str = "scored1"
     result.parent.mkdir(parents=True, exist_ok=True)
     write_frame_file(per_row, result)
     save_eval_run(demo.name, EvalRun(
-        id=run_id, config="label_check", project="demo",
+        run_id=run_id, config="label_check", project="demo",
         workflow_version="v1", status="scored",
         settings=EvalRunSettings(can_score_declaratively=True,
                                  frontier=["classify"], blocking_stages=[]),
@@ -257,7 +253,7 @@ def test_run_page_refuses_to_line_up_a_dataset_that_changed_since_the_run(tmp_pa
 
 def test_run_page_states_why_a_vetoed_run_has_no_rows(tmp_path):
     save_eval_run("demo", EvalRun(
-        id="vetoed1", config="label_check", project="demo",
+        run_id="vetoed1", config="label_check", project="demo",
         workflow_version="v1", status="vetoed",
         settings=EvalRunSettings(can_score_declaratively=False, frontier=["classify"],
                                  blocking_stages=["aggregate_it"]),
@@ -318,7 +314,7 @@ def test_eval_lists_its_runs_in_the_runs_index_table(tmp_path):
 
 def _save_running_run(run_id: str = "running1", *, seconds_ago: int = 5) -> None:
     save_eval_run("demo", EvalRun(
-        id=run_id, config="label_check", project="demo",
+        run_id=run_id, config="label_check", project="demo",
         workflow_version="v1", status="running",
         settings=EvalRunSettings(can_score_declaratively=True,
                                  frontier=["classify"], blocking_stages=[]),
@@ -341,7 +337,7 @@ def test_run_page_offers_the_log_panel_before_the_run_has_logged_anything():
 
 def test_a_vetoed_run_still_offers_no_log_panel():
     save_eval_run("demo", EvalRun(
-        id="vetoed3", config="label_check", project="demo",
+        run_id="vetoed3", config="label_check", project="demo",
         workflow_version="v1", status="vetoed",
         settings=EvalRunSettings(can_score_declaratively=False, frontier=["classify"],
                                  blocking_stages=["aggregate_it"]),
@@ -398,7 +394,7 @@ def test_the_runs_table_words_a_run_in_flight_instead_of_printing_its_token():
 
 def test_a_run_that_stored_no_accuracy_is_not_given_one(tmp_path):
     save_eval_run("demo", EvalRun(
-        id="vetoed2", config="label_check", project="demo",
+        run_id="vetoed2", config="label_check", project="demo",
         workflow_version="v1", status="vetoed",
         settings=EvalRunSettings(can_score_declaratively=False, frontier=["classify"],
                                  blocking_stages=["aggregate_it"]),

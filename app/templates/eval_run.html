@@ -9,7 +9,7 @@
   Context the route passes: config, run (EvalRun), rows (EvalRowsView | None — None
   where the run recorded no result table), log_href (None where it wrote no log).
 #}
-{% block title %}Run {{ run.id }} · {{ config.name }}{% endblock %}
+{% block title %}Run {{ run.run_id }} · {{ config.name }}{% endblock %}
 
 {% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
 
@@ -23,10 +23,10 @@
 
 <div class="stage-panel-head">
   <div class="head-line">
-    <h2><code>{{ run.id }}</code></h2>
+    <h2><code>{{ run.run_id }}</code></h2>
     <span class="badge {{ badge_class.get(run.status, 'pending') }}">{{ run.status }}</span>
   </div>
-  <p class="stage-blurb"><a href="/project/{{ project }}/evals/{{ config.id }}">{{ config.name }}</a>{% if config.description %} — {{ config.description }}{% endif %}</p>
+  <p class="stage-blurb"><a href="/project/{{ project }}/evals/{{ config.eval_id }}">{{ config.name }}</a>{% if config.description %} — {{ config.description }}{% endif %}</p>
   <p class="stage-facts">
     <span>{% if elapsed %}{% if run.is_running() %}running for <span id="eval-run-elapsed">{{ elapsed }}</span>{% else %}ran {{ elapsed }}{% endif %} · {% endif %}
       {%- if rows and not rows.error %}{{ "{:,}".format(rows.rows_total) }} row{% if rows.rows_total != 1 %}s{% endif %} scored · {% endif %}

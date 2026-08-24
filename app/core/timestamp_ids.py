@@ -1,7 +1,8 @@
 """The timestamp id run ids, version ids and workflow-test run ids are all minted from."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
+from threading import RLock
 
 from app.core.ids import ID
 
@@ -21,3 +22,18 @@ _ID_FORMAT = "%Y%m%dT%H%M%S.%f"
 
 def mint_timestamp_id() -> ID:
     return datetime.now().strftime(_ID_FORMAT)
+
+
+_stamp_lock = RLock()
+_last_stamp: datetime | None = None
+
+
+def now_iso() -> str:
+    # Strictly increasing WITHIN a process only — two processes can still tie in one OS tick.
+    global _last_stamp
+    with _stamp_lock:
+        now = datetime.now()
+        if _last_stamp is not None and now <= _last_stamp:
+            now = _last_stamp + timedelta(microseconds=1)
+        _last_stamp = now
+    return now.isoformat(timespec="microseconds")

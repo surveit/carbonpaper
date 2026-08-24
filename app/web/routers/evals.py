@@ -10,7 +10,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Stre
 
 from app.core.errors import EvalNotScorableError
 from app.core.frames import list_rows
-from app.models import EvalConfig, EvalRun, WorkflowNotFormed
+from app.models import WorkflowNotFormed
+from app.models.records.eval_config import EvalConfig
+from app.models.records.eval_run import EvalRun
 from app.evals.compatibility import CompatibilityReport, validate_eval_compatibility
 from app.evals.dataset import read_table_ref
 from app.evals.runner import start_eval_run
@@ -78,7 +80,7 @@ def _build_eval_index_rows(
             continue
         status, run_issue = _resolve_eval_status(entry.config, listing, project_id,
                                                   latest_version)
-        rows.append({"id": entry.config.id, "name": entry.config.name,
+        rows.append({"id": entry.config.eval_id, "name": entry.config.name,
                      "status": status, "issues": [run_issue] if run_issue else []})
     return rows
 
@@ -97,7 +99,7 @@ def _render_eval_detail(
 ) -> HTMLResponse:
     listing = load_stages_or_empty(project_id)
     report = _report_compatibility(config, listing)
-    runs, runs_error = _list_eval_runs_safely(project_id, config.id)
+    runs, runs_error = _list_eval_runs_safely(project_id, config.eval_id)
     latest_version = latest_version_id(project_id)
     status = ("broken" if runs_error else
               eval_status(report, runs, latest_version,
@@ -163,7 +165,7 @@ async def eval_run_detail(request: Request, project_id: str, eval_id: str, run_i
             "section": "evals",
             "project": project_id,
             "crumbs": build_eval_run_crumbs(
-                project_id, config_name=config.name, config_id=config.id, run_id=run_id
+                project_id, config_name=config.name, config_id=config.eval_id, run_id=run_id
             ),
             "config": config,
             "run": run,
@@ -181,10 +183,10 @@ async def eval_run_detail(request: Request, project_id: str, eval_id: str, run_i
             # anything; a terminal run that wrote no log — a vetoed run executed
             # nothing — has none to offer.
             "log_href": (
-                _eval_run_href(project_id, config.id, run_id)
+                _eval_run_href(project_id, config.eval_id, run_id)
                 if run.is_running() or count_events(project_id, run_id) else None
             ),
-            "status_href": _eval_run_status_href(project_id, config.id, run_id),
+            "status_href": _eval_run_status_href(project_id, config.eval_id, run_id),
         },
     )
 
@@ -280,7 +282,7 @@ async def trigger_eval_run(request: Request, project_id: str, eval_id: str):
     except FileNotFoundError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=404)
     return RedirectResponse(
-        url=f"/project/{project_id}/evals/{eval_id}/runs/{run.id}", status_code=303)
+        url=f"/project/{project_id}/evals/{eval_id}/runs/{run.run_id}", status_code=303)
 
 
 # ─── Shared helpers ──────────────────────────────────────────────────────────
@@ -306,7 +308,7 @@ def _resolve_eval_status(
     latest_version: str | None,
 ) -> tuple[str, str | None]:
     report = _report_compatibility(config, listing)
-    runs, run_issue = _list_eval_runs_safely(project_id, config.id)
+    runs, run_issue = _list_eval_runs_safely(project_id, config.eval_id)
     status = ("broken" if run_issue else
               eval_status(report, runs, latest_version,
                           has_eval_dataset=config.table is not None))

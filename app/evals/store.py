@@ -13,8 +13,8 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from app.core.errors import DocumentNotFound
-from app.models import EvalConfig, EvalRun
-from app.core.persistence import get_store
+from app.models.records.eval_config import EvalConfig
+from app.models.records.eval_run import EvalRun
 from app.core.utils import format_errors
 from app.evals.compatibility import CompatibilityReport
 from app.runtime.manifest import EVAL_RUNS
@@ -34,7 +34,7 @@ class EvalConfigEntry:
 
 def list_eval_configs(project_id: str) -> list[EvalConfigEntry]:
     entries: list[EvalConfigEntry] = []
-    for doc_id, data in get_store().read_all("eval", f"{project_id}/"):
+    for doc_id, data in EvalConfig.list_raw(f"{project_id}/"):
         local_id = doc_id.split("/", 1)[1]
         try:
             entries.append(EvalConfigEntry(config=EvalConfig.model_validate(data), id=local_id))
@@ -45,7 +45,7 @@ def list_eval_configs(project_id: str) -> list[EvalConfigEntry]:
 
 def load_eval_config(project_id: str, eval_id: str) -> EvalConfig:
     try:
-        data = get_store().read("eval", f"{project_id}/{eval_id}")
+        data = EvalConfig.load_raw(EvalConfig.compose_id(project_id, eval_id))
     except DocumentNotFound as exc:
         raise FileNotFoundError(
             f"no eval config '{eval_id}' in project '{project_id}'") from exc
@@ -63,14 +63,17 @@ def save_eval_config(project_id: str, config: EvalConfig) -> None:
 
 
 def save_eval_run(project_id: str, run: EvalRun) -> None:
-    get_store().write("eval_run", f"{project_id}/{run.id}", run.model_dump(mode="json"))
+    EvalRun(
+        id=EvalRun.compose_id(project_id, run.run_id),
+        **run.model_dump(exclude={"id", "created_at", "updated_at"}),
+    ).save()
 
 
 def load_eval_run(project_id: str, run_id: str) -> EvalRun:
     if not _SLUG_RE.match(run_id):
         raise ValueError(f"not a valid run id: {run_id!r}")
     try:
-        data = get_store().read("eval_run", f"{project_id}/{run_id}")
+        data = EvalRun.load_raw(EvalRun.compose_id(project_id, run_id))
     except DocumentNotFound as exc:
         raise FileNotFoundError(
             f"no eval run '{run_id}' in project '{project_id}'") from exc
@@ -84,10 +87,9 @@ def load_eval_run(project_id: str, run_id: str) -> EvalRun:
 
 
 def list_eval_runs(project_id: str, config_id: str) -> list[EvalRun]:
-    runs = [EvalRun.model_validate(data)
-            for _, data in get_store().read_all("eval_run", f"{project_id}/")]
+    runs = EvalRun.list(f"{project_id}/")
     runs = [r for r in runs if r.config == config_id]
-    runs.sort(key=lambda r: (r.started_at or "", r.id), reverse=True)
+    runs.sort(key=lambda r: (r.started_at or "", r.run_id), reverse=True)
     return runs
 
 

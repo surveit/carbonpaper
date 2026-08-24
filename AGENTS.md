@@ -83,8 +83,14 @@ Also `app/AGENTS.md` (web layer), `app/runtime/AGENTS.md` (the Runner), `README.
   `app/runtime/_arch_tests/test_stages_no_cross_run_disk.py` lets a runtime module call
   `.save()` only while it DECLARES a `PersistenceScope.RUN` record; `app.core` is on it for
   the three records `app/models` sits above (`ProjectFile`, `StageCacheEntry`,
-  `AgentSession`). Reaching storage is a different act: `app.core.persistence` holds the
-  store seam and is unprotected.
+  `AgentSession`).
+- **Under `app/`, a record class is the only way to reach storage.** A second contract
+  protects `app.core.persistence`, so only `app.core.record` (plus the store wiring) may
+  hold the handle: no module calls `get_store()` to write a collection nothing models.
+  A raw payload a reader must tolerate comes off the record too — `load_raw`,
+  `load_raw_or_none`, `list_raw`. Tests are outside the contract and may still reach the
+  handle to arrange a fixture. `JsonDict`/`JsonScalar` live in `app.core.json_types` and
+  are open to all: naming a payload's shape is not reaching for storage.
 - **A `PersistedModel`'s `id` is opaque. Never build one out of the record's own data.**
   A sha256, a filename, a name someone typed, a fingerprint — putting any of them in the id
   makes the id move when the value does. The record then has two identities that must agree,

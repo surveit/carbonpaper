@@ -12,7 +12,8 @@ from typing import Any
 import pandas as pd
 
 from app.core.errors import EvalGrainViolationError
-from app.models import EvalConfig, ScoringMetric, WorkflowStage
+from app.models import ScoringMetric, WorkflowStage
+from app.models.records.eval_config import EvalConfig
 from app.evals.dataset_columns import (
     deconflict_column_names,
     get_output_columns_from_stage,

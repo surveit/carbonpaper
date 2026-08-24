@@ -7,7 +7,7 @@ there would close an import cycle.
 from __future__ import annotations
 
 
-from app.core.persistence import now_iso
+from app.core.timestamp_ids import now_iso
 from app.models.records.code_approval import CodeExecutionApproval
 
 # What the owner is told before they answer. Rendered by every surface that asks

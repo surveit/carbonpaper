@@ -64,15 +64,38 @@ it stay in the service that owns its lifecycle. `app/services/project.py` still 
 project creation, deletion and metadata; the `Project` class it operates on is
 `app/models/records/project.py`.
 
-Two modules, not one, sit under that:
+Three modules, not one, sit under that, and two of them are protected:
 
-- `app/core/record.py` — `PersistedModel` and `PersistenceScope`. Declaring a record
-  means importing this, so the import-linter contract protecting it (`pyproject.toml`)
-  is the list of places a stored row's shape may be written down.
-- `app/core/persistence.py` — the store seam: the `DocumentStore` protocol, the
-  process-wide handle, `now_iso`, and the JSON aliases. Unprotected, because reaching
-  storage is not the same act as declaring a row, and a service legitimately does the
-  first without doing the second.
+| Module | Holds | Who may import it |
+|---|---|---|
+| `app/core/record.py` | `PersistedModel`, `PersistenceScope` | `app.core`, `app.models.records`, `app.runtime` |
+| `app/core/persistence.py` | `PersistenceLibraryProtocol`, `get_store`, `configure_store` | `app.core.record`, `app.core.store_config`, `app.core.sqlite_store` |
+| `app/core/json_types.py` | `JsonDict`, `JsonScalar` | anyone |
+
+Declaring a record means importing the base, so the first whitelist is the list of
+places a stored row's shape may be written down. Holding the handle means being able to
+write any collection under any id with no record class in the way, so the second
+whitelist closes that off: **under `app/`, a record class is the only way to reach
+storage.** Naming the shape of a payload is neither of those acts, which is why the
+JSON aliases sit apart and stay open.
+
+Tests are outside both contracts — import-linter's root package is `app` — so a test may
+still reach `get_store()` directly to arrange a fixture or assert on the stored bytes.
+
+That door being open is not hypothetical history. `eval` and `eval_run` were stored
+collections that no record class described, because `app/evals/store.py` wrote them
+through the handle; `run_note` and `archived_run` are rows a rename left behind in the
+live store with no class to notice they were orphaned.
+
+### An eval run records no verdict
+
+`EvalRun` carries rollup `metrics` and a `result_ref` pointing at a per-row result
+table, and deliberately no overall pass/fail field. An eval-dataset row passes when all
+its checks match; whether the eval as a whole *looks good* is a human review judgment,
+so storing a bool would be recording a decision nobody made. `status` says only whether
+the run finished and how — `running` is the sole non-final value, and a run in flight
+exists as a record so it is visible while carrying no metrics, no `result_ref` and no
+`finished_at` until the scorer replaces it under the same id.
 
 A record subclass sets `DUMP_OPTS` to any extra `model_dump` kwargs its stored shape
 needs — `{"by_alias": True, "exclude_none": True}` for the stage-bearing records above,

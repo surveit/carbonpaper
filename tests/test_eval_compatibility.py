@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app import models as m
+from app.models.records.eval_config import EvalConfig
 from app.evals.dataset_columns import get_injected_columns, get_output_columns_from_stage
 from app.evals import compatibility
 from app.evals.compatibility import CompatibilityReport
@@ -89,13 +90,13 @@ def _ref(path="x.csv", cols=("k",)):
 
 def _config(**over):
     base = {
-        "id": "scoring", "project": "lobbymap", "name": "n",
+        "eval_id": "scoring", "project": "lobbymap", "name": "n",
         "override_stage": "src", "target_stage": "tgt",
         "table": _ref(cols=["k", "v", "quote", "score"]),
         "expected_outputs": [{"output_column": "score", "metric": "abs_tol", "tolerance": 1}],
     }
     base.update(over)
-    return m.EvalConfig.model_validate(base)
+    return EvalConfig.model_validate(base)
 
 
 # The default fixture: src(input) --v--> tgt(row), both grain-preserving, both

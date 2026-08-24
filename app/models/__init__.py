@@ -73,8 +73,6 @@ from app.models.workflow_stage import (
 from app.models.table import TableRef as TableRef
 from app.models.eval import (
     CodeScorer as CodeScorer,
-    EvalConfig as EvalConfig,
-    EvalRun as EvalRun,
     EvalRunSettings as EvalRunSettings,
     ExpectedOutput as ExpectedOutput,
     ScoringMetric as ScoringMetric,

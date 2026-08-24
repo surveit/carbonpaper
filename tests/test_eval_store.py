@@ -9,7 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from app.models import EvalConfig, EvalRun
+from app.models.records.eval_config import EvalConfig
+from app.models.records.eval_run import EvalRun
 from app.core.persistence import get_store
 from app.evals.compatibility import CompatibilityReport
 from app.services.workspace import resolve_project_dir
@@ -33,9 +34,12 @@ def _ref(path="x.csv", cols=("k",)):
             "table_schema": {"columns": [{"name": c, "type": "str", "nullable": True} for c in cols]}}
 
 
+_STORE_FIELDS = {"id", "created_at", "updated_at"}
+
+
 def _config(**over):
     base = {
-        "id": "scoring", "project": "lobbymap", "name": "n",
+        "eval_id": "scoring", "project": "lobbymap", "name": "n",
         "override_stage": "evidence_with_benchmarks", "target_stage": "benchmark_scoring",
         "table": _ref(cols=["evidence_id", "benchmark_id", "quote", "expected_score"]),
         "expected_outputs": [{"output_column": "score", "metric": "abs_tol", "tolerance": 1}],
@@ -46,7 +50,7 @@ def _config(**over):
 
 def _run(**over):
     base = {
-        "id": "run-1", "config": "scoring", "project": "lobbymap",
+        "run_id": "run-1", "config": "scoring", "project": "lobbymap",
         "workflow_version": "v1", "status": "scored",
         "settings": {"can_score_declaratively": True,
                      "frontier": ["benchmark_scoring"], "blocking_stages": []},
@@ -64,18 +68,19 @@ def test_save_list_load_roundtrip(tmp_path: Path):
     entries = list_eval_configs(tmp_path.name)
     assert len(entries) == 1
     assert entries[0].config is not None
-    assert entries[0].config.id == "scoring"
+    assert entries[0].config.eval_id == "scoring"
     assert entries[0].issues == []
     assert entries[0].id == "scoring"
 
     loaded = load_eval_config(tmp_path.name, "scoring")
-    assert loaded == config
+    assert loaded.model_dump(exclude=_STORE_FIELDS) == config.model_dump(exclude=_STORE_FIELDS)
+    assert loaded.id == f"{tmp_path.name}/scoring"
 
 
 def test_a_running_eval_run_round_trips_carrying_nothing_it_has_not_learned_yet(
     tmp_path: Path,
 ):
-    run = _run(id="run_in_flight", status="running", finished_at=None)
+    run = _run(run_id="run_in_flight", status="running", finished_at=None)
     save_eval_run(tmp_path.name, run)
 
     loaded = load_eval_run(tmp_path.name, "run_in_flight")
@@ -99,7 +104,8 @@ def test_save_eval_config_overwrite_allowed(tmp_path: Path):
 def test_save_eval_config_excludes_none_fields_from_the_stored_doc(tmp_path: Path):
     save_eval_config(tmp_path.name, _config())
     data = get_store().read("eval", f"{tmp_path.name}/scoring")
-    assert data["id"] == "scoring"
+    assert data["eval_id"] == "scoring"
+    assert data["id"] == f"{tmp_path.name}/scoring"
     assert data["override_stage"] == "evidence_with_benchmarks"
     # exclude_none=True: reference_overrides default is [] (kept, not None-valued);
     # description is None and should be excluded entirely.
@@ -172,7 +178,7 @@ def test_save_load_eval_run_roundtrip(tmp_path: Path):
     save_eval_run(tmp_path.name, run)
 
     loaded = load_eval_run(tmp_path.name, "run-1")
-    assert loaded == run
+    assert loaded.model_dump(exclude=_STORE_FIELDS) == run.model_dump(exclude=_STORE_FIELDS)
 
 
 def test_load_eval_run_missing_raises_file_not_found(tmp_path: Path):
@@ -190,12 +196,12 @@ def test_load_eval_run_invalid_schema_raises_value_error(tmp_path: Path):
 
 
 def test_load_eval_run_ignores_sibling_invalid_run(tmp_path: Path):
-    wanted = _run(id="run-good")
+    wanted = _run(run_id="run-good")
     save_eval_run(tmp_path.name, wanted)
     get_store().write("eval_run", f"{tmp_path.name}/run-bad", {"id": "run-bad"})
 
     loaded = load_eval_run(tmp_path.name, "run-good")
-    assert loaded == wanted
+    assert loaded.model_dump(exclude=_STORE_FIELDS) == wanted.model_dump(exclude=_STORE_FIELDS)
 
 
 @pytest.mark.parametrize("bad_id", [
@@ -208,14 +214,14 @@ def test_load_eval_run_rejects_non_slugish_run_id(tmp_path: Path, bad_id):
 
 # ── list_eval_runs ────────────────────────────────────────────────────────────
 def test_list_eval_runs_filters_by_config_and_sorts_newest_first(tmp_path: Path):
-    r_old = _run(id="run-old", started_at="2026-01-01T00:00:00")
-    r_new = _run(id="run-new", started_at="2026-02-01T00:00:00")
-    r_other_config = _run(id="run-other", config="other-config")
+    r_old = _run(run_id="run-old", started_at="2026-01-01T00:00:00")
+    r_new = _run(run_id="run-new", started_at="2026-02-01T00:00:00")
+    r_other_config = _run(run_id="run-other", config="other-config")
     for r in (r_old, r_new, r_other_config):
         save_eval_run(tmp_path.name, r)
 
     runs = list_eval_runs(tmp_path.name, "scoring")
-    assert [r.id for r in runs] == ["run-new", "run-old"]
+    assert [r.run_id for r in runs] == ["run-new", "run-old"]
 
 
 def test_list_eval_runs_none_stored_returns_empty(tmp_path: Path):
@@ -223,15 +229,15 @@ def test_list_eval_runs_none_stored_returns_empty(tmp_path: Path):
 
 
 def test_list_eval_runs_sorts_by_started_at_then_id_when_missing(tmp_path: Path):
-    r_no_start_a = _run(id="run-a", started_at=None)
-    r_no_start_b = _run(id="run-b", started_at=None)
+    r_no_start_a = _run(run_id="run-a", started_at=None)
+    r_no_start_b = _run(run_id="run-b", started_at=None)
     for r in (r_no_start_a, r_no_start_b):
         save_eval_run(tmp_path.name, r)
 
     runs = list_eval_runs(tmp_path.name, "scoring")
     # both have started_at=None -> "" -> tiebreak by id, newest-first means
     # sorted descending on (started_at or "", id)
-    assert [r.id for r in runs] == ["run-b", "run-a"]
+    assert [r.run_id for r in runs] == ["run-b", "run-a"]
 
 
 # ── latest_version_id ─────────────────────────────────────────────────────────
