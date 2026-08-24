@@ -20,7 +20,8 @@ CONTRIBUTORS_NAMED = 3
 
 class AppPanelLinks:
     def __init__(self, project_id: str, run_id: str) -> None:
-        self._base = f"/project/{_segment(project_id)}/runs/{_segment(run_id)}"
+        self._project = f"/project/{_segment(project_id)}"
+        self._base = f"{self._project}/runs/{_segment(run_id)}"
 
     def stage_anchor(self, stage_id: str) -> str:
         return f"{self._base}#{stage_id}"
@@ -61,6 +62,9 @@ class AppPanelLinks:
 
     def rows_link_covers(self, total: int) -> int:
         return min(total, CONTRIBUTOR_ROWS_LINKED)
+
+    def file_page(self, file_id: str) -> str:
+        return f"{self._project}/files/{_segment(file_id)}"
 
 
 def packet_lineage_href(to_root: str, stage_id: str, row: int) -> str:
@@ -106,6 +110,10 @@ class PacketPanelLinks:
 
     def rows_link_covers(self, total: int) -> int:
         return total  # the CSV the packet writes is uncapped
+
+    def file_page(self, file_id: str) -> None:
+        """A packet is a folder; the file's page is a route only the app serves."""
+        return None
 
     def stage_rows_raw(self, stage_id: str) -> None:
         """The uncapped rows are stage_csv's data/<id>.csv, linked beside this."""

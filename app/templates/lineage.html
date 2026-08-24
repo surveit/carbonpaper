@@ -87,6 +87,7 @@ a.snavbtn:hover{background:var(--hover)}
   .lin-story{overflow:visible}
   .lin-side{border-left:0;border-top:1px solid var(--border);overflow:visible}
   .lin-pbody{overflow:visible}
+  .lin-inbody{overflow:visible}
   /* The row chip and the delta take their own line rather than pushing the
      sentence off the screen. */
   .step{grid-template-columns:52px 1fr;row-gap:2px}
@@ -156,6 +157,40 @@ tr.carried td.lin-v{color:var(--muted)}
 .lin-was em{text-decoration:none;font-style:normal}
 .lin-null{color:var(--muted);font-style:italic}
 .lin-clip{max-height:5.2em;overflow:hidden;cursor:zoom-in}
+
+/* Inputs: one card per input stage, in the order the ancestry found them. */
+.lin-inbody{overflow:auto;padding:16px 22px 40px;flex:1}
+.lin-inbody>*{max-width:1080px}
+.incard{border:1px solid var(--border);border-radius:10px;background:var(--raised);
+  padding:12px 14px 10px;margin-bottom:14px}
+.inhead{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.inhead h2{margin:0;font-size:15px}
+.inhead h2 code{background:var(--sunk-deep);padding:1px 6px;border-radius:5px;font-size:14px}
+/* Every badge names its own state in words — the tint only repeats it. */
+.inrole{font-size:10.5px;border-radius:5px;padding:1px 6px;text-transform:uppercase;
+  letter-spacing:.04em}
+.inrole-fed{background:var(--state-review-bg);color:var(--state-review-ink)}
+.inrole-ref{background:var(--info-bg);color:var(--info-ink)}
+.inrole-off{background:var(--state-idle-bg);color:var(--state-idle-ink)}
+.inroutes{margin:7px 0 10px;padding-left:18px;color:var(--muted);font-size:12.5px;
+  line-height:1.5}
+.inroutes code{background:var(--sunk-deep);padding:0 4px;border-radius:4px;color:var(--fg)}
+ul.infiles{list-style:none;margin:0;padding:0;font-size:12.5px}
+ul.infiles li{border-bottom:1px solid var(--border);padding:7px 0}
+ul.infiles li:last-child{border-bottom:0}
+.infile{font-weight:600}
+.inpath{display:block;color:var(--muted);font-size:11px;margin-top:2px;word-break:break-all}
+/* Where the row really sits: the one fact the reader came to this tab for. */
+.inrow{display:inline-block;background:var(--info-bg);color:var(--info-ink);
+  border:1px solid var(--info-bd);border-radius:6px;padding:0 6px;font-size:11px;
+  margin-left:5px}
+.inmiss{color:var(--state-warn-ink);font-size:11px;margin-left:5px}
+.inline-note{color:var(--muted);font-size:12px;margin:8px 0 0}
+.inline-note code{background:var(--sunk-deep);padding:0 4px;border-radius:4px}
+/* What the run TOOK, as opposed to what the file holds — facts about this run. */
+.instrip{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;padding-top:8px;
+  border-top:1px solid var(--border);color:var(--muted);font-size:11.5px}
+.instrip b{color:var(--fg)}
 .hidden{display:none}
 </style></head><body>
 {# Standalone (see the head above), so the trail is rendered here rather than
@@ -229,11 +264,7 @@ tr.carried td.lin-v{color:var(--muted)}
 {% endif %}
 </div>
 <div class="lin-pane hidden" data-pane="inputs">
-  <div class="empty-state">
-    <h2>The files behind this row are not listed here</h2>
-    <p>The Paths tab names the source stage each step read from. It does not say which file
-      that stage read, how many rows came out of it, or when it was read.</p>
-  </div>
+{% include "_lineage_inputs.html" %}
 </div>
 <div class="lin-pane hidden" data-pane="values">
   <div class="empty-state">
@@ -585,6 +616,15 @@ if(scopeCols && scopeFrame) renderScopeColumns();
 // The stories do not move when a step is picked, so they are painted once.
 renderStories();
 render();
+
+// A pane is a deep link, so a link can hand someone the tool, not the page.
+document.getElementById('pagetabs').addEventListener('click', e => {
+  const picked = e.target.closest('.lin-pagetab');
+  if(picked) history.replaceState(null, '', '#' + picked.dataset.pane);
+});
+const asked = document.querySelector(
+  `.lin-pagetab[data-pane="${CSS.escape(location.hash.slice(1))}"]`);
+if(asked) asked.click();
 </script>
 {% endif %}
 {% if not offline %}{% include "_chat_rail.html" %}

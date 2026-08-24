@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from app.core.json_types import JsonDict
 from app.models import WorkflowStage
 from app.core.frames import write_frame_file, table_to_frame
 from app.runtime.trace import RunFrames, trace_row_from, trace_to_dict
@@ -25,6 +26,7 @@ from app.web.panel_links import (
     packet_lineage_href,
 )
 from app.web.review_packet.pages import ASSETS_DIR, FAVICON, STYLESHEETS
+from app.web.trace_inputs import InputCatalog, build_input_catalog, select_row_inputs
 from app.web.trace_view import build_trace_view
 
 _log = logging.getLogger(__name__)
@@ -37,10 +39,13 @@ PACKET_MAX_LINEAGE_PAGES = 20_000
 
 
 def write_packet_lineage(
-    root: Path, run_dir: Path, view: RunView, stages_by_id: dict[str, WorkflowStage]
+    root: Path, run_dir: Path, view: RunView, stages_by_id: dict[str, WorkflowStage],
+    manifest: JsonDict,
 ) -> LineageReport:
     """Traces every row the run PUBLISHED a link to, and the rows feeding those."""
     frames = RunFrames(run_dir)
+    # Read once for the whole packet: every page below scopes this same catalog.
+    catalog = build_input_catalog(view.project, manifest)
     published = set(_published_rows(view))
     closure = _find_closure(frames, view)
     if len(closure) > PACKET_MAX_LINEAGE_PAGES:
@@ -53,7 +58,8 @@ def write_packet_lineage(
     written = [
         path
         for stage_id, row in sorted(closure)
-        for path in _write_page(root, frames, view, stages_by_id, stage_id, row, traced)
+        for path in _write_page(
+            root, frames, view, stages_by_id, catalog, stage_id, row, traced)
     ]
     stages = _group_by_stage(sorted(closure), published)
     figures = _named_figures(view, closure)
@@ -126,17 +132,17 @@ def _branches_of(frames: RunFrames, stage_id: str, row: int) -> list[tuple[str, 
 
 def _write_page(
     root: Path, frames: RunFrames, view: RunView, stages_by_id: dict[str, WorkflowStage],
-    stage_id: str, row: int, traced: frozenset[tuple[str, int]],
+    catalog: InputCatalog, stage_id: str, row: int, traced: frozenset[tuple[str, int]],
 ) -> list[str]:
     trace = trace_to_dict(trace_row_from(frames, stage_id, row))
     relative = packet_lineage_href("", stage_id, row)
     written = _write_contributor_tables(root, frames, view, trace, stage_id, row)
+    links = PacketPanelLinks(to_root="../../", traced=traced, owner=(stage_id, row))
+    trace_view = build_trace_view(trace, stages_by_id, links)
     html = templates.env.get_template("lineage.html").render(
         title=f"{stage_id} · row {row}",
-        view=build_trace_view(
-            trace, stages_by_id,
-            PacketPanelLinks(to_root="../../", traced=traced, owner=(stage_id, row)),
-        ),
+        view=trace_view,
+        inputs=select_row_inputs(catalog, trace_view, links),
         project=view.project,
         crumbs=[
             Crumb(label=view.project or "run", href="../../index.html"),
