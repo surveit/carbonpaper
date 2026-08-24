@@ -29,6 +29,9 @@ mechanism:
 Only `code` comes from the branch sidecar the instrumenter writes. The other five are read back off
 the lineage sidecar, so they cost no extra recording and no re-run.
 
+The two names that read oddly are forced: a `StrEnum` member may not shadow a `str` method, so the
+join origin is `lookup` and the partition origin is `union`.
+
 An `aggregate` branch is recorded on the **contributor** rows and keyed by the aggregate's stage —
 the same shape a filter's `dropped` arm already uses, where the arm labels rows of the input frame.
 Without it, selecting rows by their branches over-collects badly: a `group_by` partitions on a data

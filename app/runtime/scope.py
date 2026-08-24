@@ -1,8 +1,4 @@
-"""Read one run's branches back off its sidecars: what told each row apart.
-
-Self-contained on the run directory, like `app.runtime.trace`.
-See docs/scope-map.md.
-"""
+"""Read one run's branches off its sidecars. Self-contained, like app.runtime.trace."""
 
 from __future__ import annotations
 

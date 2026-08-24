@@ -1,4 +1,4 @@
-"""Build one `ScopeMap`: which rows produced a cited figure, and what cut the rest.
+"""Build one `ScopeMap`: which rows produced a figure, and what cut the rest.
 
 See docs/scope-map.md.
 """
@@ -176,8 +176,6 @@ def _expand(run: RunBranches, stage_id: StageId, ordinal: RowOrdinal
 
 
 def _contributors(run: RunBranches, stage_id: StageId, ordinal: RowOrdinal):
-    # Only the STAGE TYPE separates a dedupe's losers from an aggregate's
-    # contributors; both are contribution edges. See docs/scope-map.md.
     """None when the row is its own row set; a list when it is a group."""
     lineage = run.lineages.get(stage_id)
     if lineage is None or ordinal >= len(lineage.parents):

@@ -1,15 +1,11 @@
-"""A twelve-row workflow that exercises every branch origin and the corners a real
-project rarely reaches. Every number in the tests below is checkable by hand."""
+"""A twelve-row workflow hitting every branch origin. Every number checks by hand."""
 from __future__ import annotations
 
 from pathlib import Path
 
 import pandas as pd
 
-# G-004 is in BOTH sources: the dedupe, so an aggregate downstream merges two rows
-# that disagree about which source they came from.
-# G-009's agency is absent from the reference: the lookup miss.
-# G-007 is recorded at 0: the filter drops it.
+# G-004 is in both sources; G-009's agency is not in the reference; G-007 is a 0.
 EAST = [
     ("G-001", "east", "AGENCY-A", 100, "grant"),
     ("G-002", "east", "AGENCY-A", 200, "grant"),

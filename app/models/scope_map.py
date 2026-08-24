@@ -1,7 +1,4 @@
-"""What a reader is handed to check that a figure covered the right rows.
-
-One `ScopeMap` answers one citation. See docs/scope-map.md.
-"""
+"""One `ScopeMap` answers one citation. See docs/scope-map.md."""
 
 from __future__ import annotations
 
@@ -13,8 +10,7 @@ from app.models.claims import StageOutputCellCitation
 
 # A stage's id within one workflow version.
 StageId = str
-# f"{stage_id}|{branch_id}", unique across a run. NOT a join key or a group-by
-# column, both of which this codebase already calls a key.
+# f"{stage_id}|{branch_id}", unique in a run. Not a join or group-by key.
 BranchId = str
 # A row's position in its stage's output frame.
 RowOrdinal = int
@@ -27,22 +23,22 @@ RowCells = dict[str, ScalarCell]
 
 
 class BranchOrigin(StrEnum):
-    """Why the rows on either side of a branch differ. Names avoid `str` methods."""
+    """Why the rows on either side of a branch differ. See docs/scope-map.md."""
 
-    code = "code"            # an if/elif/else/try/except the row ran
-    predicate = "predicate"  # a filter kept it or dropped it
-    lookup = "lookup"        # a reference input matched it or missed it
-    union = "union"          # which input of a union it arrived on
-    load = "load"            # the stage that read it off disk
-    aggregate = "aggregate"  # which group of an aggregate it fed
+    code = "code"
+    predicate = "predicate"
+    lookup = "lookup"
+    union = "union"
+    load = "load"
+    aggregate = "aggregate"
 
 
 class BranchRole(StrEnum):
     """What became of the rows not in this figure. See docs/scope-map.md."""
 
-    removes = "removes"    # taken out of the frame: a filter's drop, a dedupe's loser
-    excludes = "excludes"  # left in the frame, but in another group of an aggregate
-    arm = "arm"            # neither — the rows are still downstream
+    removes = "removes"    # taken out of the frame
+    excludes = "excludes"  # in another group
+    arm = "arm"            # still downstream
 
 
 class BranchFact(BaseModel):
@@ -53,11 +49,9 @@ class BranchFact(BaseModel):
     origin: BranchOrigin
     role: BranchRole
     label: str
-    # The code the branch decided in: the arm's own line, a filter's source, a join's
-    # key pairs. Empty where the stage declares the decision rather than writing it.
+    # The code the branch decided in. Empty where the stage declares it instead.
     source: str = ""
-    # The line the arm's test is on, and the line its body starts. None where there
-    # is no code to point at, which is every origin but `code`.
+    # The arm's test line and its body's first line. None for every origin but code.
     tested_at: int | None = None
     decided_at: int | None = None
 
@@ -86,8 +80,7 @@ class ContributingRow(BaseModel):
     # Index into `ScopeMap.paths`.
     path: int
     cells: RowCells
-    # What this row put into the figure — the aggregation's `value_column` cell. Set
-    # only where the figure's formula read this very frame; see `ContributingRowSet`.
+    # This row's value_column cell, set only where the formula read this frame.
     contribution: ScalarCell = None
 
 
@@ -98,8 +91,7 @@ class ContributingRowSet(BaseModel):
     ordinals: list[RowOrdinal]
     # The aggregates walked down through, nearest the cited cell first.
     stages_traced_through: list[StageId] = []
-    # These rows always answer WHICH rows reached the figure; their values total to
-    # it only when this frame is the one the formula read and the formula adds.
+    # True only where this frame is what the formula read and the formula adds.
     adds_up: bool = False
     # Set when `rows` was sampled, so a reader never mistakes a sample for the whole.
     sampled_from: int | None = None

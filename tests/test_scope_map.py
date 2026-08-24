@@ -94,8 +94,7 @@ def test_a_sum_over_one_hop_adds_up_and_a_sum_of_means_does_not(scoped):
 
 def test_an_untaken_arm_is_not_drawn_as_a_loss(scoped):
     run, _ = scoped
-    # size_band removes nothing: all ten rows go on, and the one taking `if amount == 0`
-    # is dropped later, at `funded`.
+    # size_band removes nothing; the row taking amount == 0 is dropped at funded.
     arms = [f for f in run.catalog.values() if f.stage == "size_band"]
     assert arms and all(f.role is BranchRole.arm for f in arms)
     assert run.catalog["funded|dropped"].role is BranchRole.removes
