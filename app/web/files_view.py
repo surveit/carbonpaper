@@ -35,9 +35,7 @@ class FileRow(BaseModel):
     filename: str
     size: str
     added: str
-    # Split because the "N runs" link only ever lists unarchived ones — a count that
-    # folded archived runs in would send the reader to a page with fewer rows than
-    # the number promised.
+    # The "N runs" link only ever lists unarchived ones, so the two are split apart.
     run_count: int
     archived_run_count: int
     completeness: file_store.FileCompleteness
