@@ -125,7 +125,7 @@ def _build_node(
         # The name alone; where it sat on disk is the manifest's business.
         "source_file": _source_filename(step),
         "source_row": step.get("source_row"),
-        "source_row_number": _number_or_none(step.get("source_row")),
+        "source_row_number": _render_row_number_or_none(step.get("source_row")),
         "source_file_count": step.get("source_file_count"),
         "role": _role_of(i, len(chrono), truncated),
         "columns_new": step["columns_new"],
@@ -155,7 +155,7 @@ def _name_the_row(entry: dict[str, Any], links: PanelLinks) -> dict[str, Any]:
             "row_number": render_row_number(ordinal)}
 
 
-def _number_or_none(ordinal: int | None) -> str | None:
+def _render_row_number_or_none(ordinal: int | None) -> str | None:
     return None if ordinal is None else render_row_number(ordinal)
 
 
