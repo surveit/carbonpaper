@@ -24,7 +24,7 @@ from app.web.panel_links import (
     CONTRIBUTORS_NAMED,
     PanelLinks,
 )
-from app.web.trace_row_diff import build_row_diff, render_cell, row_diff_to_dict
+from app.web.trace_row_diff import build_row_diff, row_diff_to_dict
 
 # How many contributing rows ONE cohort's link addresses. A `group_by: []`
 @dataclass(frozen=True)
@@ -61,14 +61,6 @@ class Story:
     linked: int
     columns: list[str] | None
     href: str | None
-
-
-@dataclass(frozen=True)
-class CitedCell:
-    column: str
-    value: str
-    # The authored description, or a plain statement of why there is none.
-    tip: str
 
 
 def _transform_of(workflow_stage: WorkflowStage | None) -> dict[str, Any]:
@@ -126,36 +118,6 @@ def build_trace_view(
             "message": end["message"],
         },
     }
-
-
-def find_cited_cell(
-    view: dict[str, Any], workflow_stage: WorkflowStage | None, column: str
-) -> CitedCell | None:
-    """None where the traced row carries no such column."""
-    row = view["nodes"][-1]["row"]
-    if column not in row:
-        return None
-    return CitedCell(
-        column=column,
-        value=render_cell(row[column]),
-        tip=_describe_column(view["start_stage"], workflow_stage, column),
-    )
-
-
-def _describe_column(
-    stage_id: str, workflow_stage: WorkflowStage | None, column: str
-) -> str:
-    if workflow_stage is None:
-        return f"The version this run pinned is unreadable, so nothing declares {column} here."
-    schema = workflow_stage.output_schema
-    declared = schema.column_for_name(column) if schema else None
-    if declared is None:
-        return f"The version this run pinned declares no {column} on {stage_id}."
-    if declared.description:
-        return declared.description
-    nullability = "null allowed" if declared.nullable else "not null"
-    return (f"Declared {declared.type}, {nullability}. "
-            f"No description was authored for this column.")
 
 
 def _build_node(

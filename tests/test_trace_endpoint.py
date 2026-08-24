@@ -118,11 +118,39 @@ def test_trace_view_headline_names_the_cited_cell(tmp_path, monkeypatch):
     client = _project_run(tmp_path, monkeypatch)  # enrich row 1: b/B, score 2
     body = client.get(
         "/project/proj/runs/R1/stage/enrich/row/1/trace/view?column=score").text
-    assert '<span class="lin-value">2</span>' in body
-    assert 'class="lin-colname has-tip"' in body and ">score</span>" in body
-    assert 'at <code>enrich</code> row 1' in body
-    # This run pins a version nothing can load, so the tooltip says so.
+    assert '<span class="lin-value" id="lin-value">2</span>' in body
+    assert '<option value="score" selected>score</option>' in body
+    # This run pins a version nothing can load, so the header says so under the coordinate.
     assert "is unreadable, so nothing declares score here" in body
+
+
+def test_the_header_offers_every_stage_this_run_wrote_rows_for(tmp_path, monkeypatch):
+    client = _project_run(tmp_path, monkeypatch)  # seeds and enrich, 2 rows each
+    body = client.get("/project/proj/runs/R1/stage/enrich/row/1/trace/view").text
+    assert '<option value="seeds" data-side="2 rows"' in body
+    assert '<option value="enrich" data-side="2 rows" data-meta="row function" selected>' in body
+
+
+def test_the_header_bounds_the_row_box_by_the_stage_it_reads(tmp_path, monkeypatch):
+    client = _project_run(tmp_path, monkeypatch)  # enrich holds rows 0 and 1
+    body = client.get("/project/proj/runs/R1/stage/enrich/row/1/trace/view").text
+    assert 'value="1" min="0"' in body and 'max="1"' in body
+    assert "of 2" in body
+
+
+def test_the_header_offers_the_columns_of_the_row_it_read(tmp_path, monkeypatch):
+    client = _project_run(tmp_path, monkeypatch)
+    body = client.get("/project/proj/runs/R1/stage/enrich/row/1/trace/view").text
+    for column in ("facility_id", "name", "score"):
+        assert f'<option value="{column}">{column}</option>' in body
+
+
+def test_a_row_the_walk_could_not_read_names_no_column(tmp_path):
+    client = _run_missing_its_output_frame(tmp_path)
+    body = client.get("/project/proj/runs/R4/stage/seeds/row/0/trace/view").text
+    # The manifest recorded rows for the stage, so it is still somewhere to go.
+    assert '<option value="seeds" data-side="2 rows" data-meta="input" selected>' in body
+    assert 'id="lin-column"' not in body  # but no row was read, so no column to name
 
 
 def test_trace_view_400_for_a_column_the_stage_does_not_have(tmp_path, monkeypatch):
@@ -133,12 +161,12 @@ def test_trace_view_400_for_a_column_the_stage_does_not_have(tmp_path, monkeypat
     assert "nope" in resp.json()["detail"] and "enrich" in resp.json()["detail"]
 
 
-def test_trace_view_without_a_column_names_the_row_alone(tmp_path, monkeypatch):
+def test_trace_view_without_a_column_asks_for_one(tmp_path, monkeypatch):
     client = _project_run(tmp_path, monkeypatch)
     body = client.get("/project/proj/runs/R1/stage/enrich/row/0/trace/view").text
-    assert "<code>enrich</code> row 0" in body
-    assert '<span class="lin-value">' not in body
-    assert 'class="lin-colname has-tip"' not in body
+    assert '<span class="lin-value" id="lin-value"></span>' in body
+    assert '<option value="" selected>the whole row</option>' in body
+    assert 'id="lin-nocol">Pick a column' in body
 
 
 def test_trace_view_carries_the_three_tabs_with_the_story_open(tmp_path, monkeypatch):
@@ -177,12 +205,12 @@ def _run_a_pinned_version(tmp_path) -> tuple[TestClient, str]:
     return TestClient(app), str(run["run_id"])
 
 
-def test_the_column_tooltip_carries_the_declared_description(tmp_path):
+def test_the_header_carries_the_declared_description_of_the_column_it_shows(tmp_path):
     client, run_id = _run_a_pinned_version(tmp_path)
     body = client.get(
         f"/project/described/runs/{run_id}/stage/readings/row/0/trace/view?column=val").text
-    assert f'data-tip="{VAL_DESCRIPTION}"' in body
-    assert '<span class="lin-value">1</span>' in body
+    assert f'<p class="lin-coltip" id="lin-coltip">{VAL_DESCRIPTION}</p>' in body
+    assert '<span class="lin-value" id="lin-value">1</span>' in body
 
 
 def test_an_undescribed_column_says_so_rather_than_showing_nothing(tmp_path):
