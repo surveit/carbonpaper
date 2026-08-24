@@ -10,10 +10,10 @@ RowRef = tuple[str, int]
 
 @dataclass(frozen=True)
 class TracePath:
-    """The trace page a link is built from: where its walk starts, and the fan-ins crossed."""
+    """The trace page a link is built from: where its walk starts, and the rows sampled."""
 
     start: RowRef
-    crossed: tuple[RowRef, ...] = ()
+    sampled: tuple[RowRef, ...] = ()
 
 
 # aggregate makes its single row out of every input row, so a cohort runs to
@@ -76,12 +76,12 @@ class AppPanelLinks:
             return rows
         # Carries the page that sent the reader, so each row offers the crossing.
         joined = "&".join([
-            urlencode({"owner": _render_row_ref(path.start)}), *_via_params(path.crossed)])
+            urlencode({"owner": _render_row_ref(path.start)}), *_via_params(path.sampled)])
         return f"{rows}{'&' if '?' in rows else '?'}{joined}"
 
     def follow_contributor(self, path: TracePath, pick: RowRef) -> str:
         return self.row_trace(*path.start) + "?" + "&".join(
-            _via_params([*path.crossed, pick]))
+            _via_params([*path.sampled, pick]))
 
     def rows_link_covers(self, total: int) -> int:
         return min(total, CONTRIBUTOR_ROWS_LINKED)

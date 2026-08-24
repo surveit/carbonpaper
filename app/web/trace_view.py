@@ -43,7 +43,7 @@ class ContributorGroup:
     rows_link: str | None
 
 
-StoryKind = Literal["shown", "crossed", "branch", "contributor", "cohort"]
+StoryKind = Literal["shown", "sampled", "branch", "contributor", "cohort"]
 
 
 @dataclass(frozen=True)
@@ -136,7 +136,7 @@ def _read_path(trace: dict[str, Any]) -> TracePath:
     """`steps` runs newest first, which is the order the walk consumed the choices in."""
     return TracePath(
         start=(trace["start_stage"], trace["start_row"]),
-        crossed=tuple(
+        sampled=tuple(
             (step["followed"]["stage_id"], step["followed"]["row_ordinal"])
             for step in trace["steps"] if step.get("followed")
         ),
@@ -146,10 +146,10 @@ def _read_path(trace: dict[str, Any]) -> TracePath:
 def _build_path_per_node(
     chrono: list[dict[str, Any]], path: TracePath
 ) -> list[TracePath]:
-    """A pick at a fan-in REPLACES the choice made there; the crossings past it are dropped."""
+    """A pick at a fan-in REPLACES the row sampled there; the samples past it are dropped."""
     made, cut = 0, []
     for step in reversed(chrono):  # the walk's own order
-        cut.append(TracePath(path.start, path.crossed[:made]))
+        cut.append(TracePath(path.start, path.sampled[:made]))
         if step.get("followed"):
             made += 1
     return list(reversed(cut))
@@ -191,7 +191,7 @@ def _build_node(
 ) -> dict[str, Any]:
     step = chrono[i]
     groups = _group_contributors(_contributions(step), links, path)
-    followed = _mark_crossing(step)
+    sampled = _mark_sampled_row(step)
     # Off `step`: an unmarked one-row fan-in still summarized, so still no diff.
     parent = chrono[i - 1] if i and not step.get("followed") else None
     diff = build_row_diff(
@@ -229,33 +229,42 @@ def _build_node(
             {**branch, "links": _links_of(links, branch["stage_id"], branch["row_ordinal"])}
             for branch in _spine_branches(step)
         ],
-        "followed": None if followed is None else asdict(followed),
+        "sampled": None if sampled is None else asdict(sampled),
         "contributor_groups": [asdict(group) for group in groups],
     }
 
 
 @dataclass(frozen=True)
-class Crossing:
-    """The contributor followed out of a fan-in, and how many rows that fan-in merged."""
+class SampledRow:
+    """The row taken out of a fan-in, its 1-based place among them, and how many there were."""
 
     stage_id: str
     row_ordinal: int
     columns: list[str] | None
+    at: int
     of: int
 
 
-def _mark_crossing(step: dict[str, Any]) -> Crossing | None:
-    """None where the fan-in held ONE row: nothing was chosen, so there is nothing to mark."""
+def _mark_sampled_row(step: dict[str, Any]) -> SampledRow | None:
+    """None where the fan-in held ONE row: nothing was sampled, so there is nothing to mark."""
     followed = step.get("followed")
-    merged = len(_contributions(step))
-    if not followed or merged < 2:
+    merged = _contributions(step)
+    if not followed or len(merged) < 2:
         return None
-    return Crossing(
+    return SampledRow(
         stage_id=followed["stage_id"],
         row_ordinal=followed["row_ordinal"],
         columns=followed["columns"],
-        of=merged,
+        at=_find_place_among(merged, followed),
+        of=len(merged),
     )
+
+
+def _find_place_among(merged: list[dict[str, Any]], followed: dict[str, Any]) -> int:
+    """1-based, so the reader counts rows the way the sentence beside it reads."""
+    key = (followed["stage_id"], followed["row_ordinal"])
+    return next(i for i, c in enumerate(merged, start=1)
+                if (c["stage_id"], c["row_ordinal"]) == key)
 
 
 def _cohort_key(parent: dict[str, Any]) -> tuple[str, tuple[str, ...] | None]:
@@ -291,7 +300,7 @@ def _links_of(
         "stage": links.stage_anchor(stage_id),
         "rows": links.stage_rows(stage_id),
         "trace": links.row_trace(stage_id, row_ordinal),
-        # This page's path crossed at the fan-in that row fed.
+        # This page, re-told with that row sampled at the fan-in it fed.
         "follow": (None if path is None
                    else links.follow_contributor(path, (stage_id, row_ordinal))),
     }
@@ -348,24 +357,24 @@ def _build_stories(nodes: list[dict[str, Any]], links: PanelLinks) -> list[Story
 
 def _find_alternatives(node: dict[str, Any], links: PanelLinks) -> list[Story]:
     step = node["step"]
-    crossed = node["followed"]
+    sampled = node["sampled"]
     # A fan-in that merged ONE row offered nothing to pick, so it offers no entry.
     merged = sum(group["total"] for group in node["contributor_groups"])
     return [
-        *([_build_crossed_story(crossed, step)] if crossed else []),
+        *([_build_sampled_story(sampled, step)] if sampled else []),
         *(_build_branch_story(branch, step) for branch in node["branches"]),
         *([] if merged < 2 else
           [s for group in node["contributor_groups"]
-           for s in _build_fan_in_stories(group, step, crossed)]),
+           for s in _build_fan_in_stories(group, step, sampled)]),
     ]
 
 
-def _build_crossed_story(crossed: dict[str, Any], step: int) -> Story:
+def _build_sampled_story(sampled: dict[str, Any], step: int) -> Story:
     """The reader is already on this one, so it carries no href — like the shown entry."""
     return Story(
-        kind="crossed", stage_id=crossed["stage_id"],
-        row_ordinal=crossed["row_ordinal"], step=step, rows=crossed["of"],
-        linked=0, columns=crossed["columns"], href=None,
+        kind="sampled", stage_id=sampled["stage_id"],
+        row_ordinal=sampled["row_ordinal"], step=step, rows=sampled["of"],
+        linked=0, columns=sampled["columns"], href=None,
     )
 
 
@@ -378,12 +387,12 @@ def _build_branch_story(branch: dict[str, Any], step: int) -> Story:
 
 
 def _build_fan_in_stories(
-    group: dict[str, Any], step: int, crossed: dict[str, Any] | None,
+    group: dict[str, Any], step: int, sampled: dict[str, Any] | None,
 ) -> list[Story]:
     if group["named"]:
         return [_build_contributor_story(parent, group, step)
                 for parent in group["named"]
-                if not _is_crossed(parent, crossed)]
+                if not _is_sampled(parent, sampled)]
     return [Story(
         kind="cohort", stage_id=group["stage_id"], row_ordinal=None, step=step,
         rows=group["total"], linked=group["linked"] if group["rows_link"] else 0,
@@ -391,11 +400,11 @@ def _build_fan_in_stories(
     )]
 
 
-def _is_crossed(parent: dict[str, Any], crossed: dict[str, Any] | None) -> bool:
-    """The followed contributor has its own entry already; a second one would read as a fork."""
-    return crossed is not None and (
+def _is_sampled(parent: dict[str, Any], sampled: dict[str, Any] | None) -> bool:
+    """The sampled row has its own entry already; a second one would read as a fork."""
+    return sampled is not None and (
         (parent["stage_id"], int(parent["row_ordinal"]))
-        == (crossed["stage_id"], crossed["row_ordinal"])
+        == (sampled["stage_id"], sampled["row_ordinal"])
     )
 
 

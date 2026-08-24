@@ -46,7 +46,7 @@ def test_a_fan_in_small_enough_to_name_gets_one_entry_per_row(tmp_path):
     stories = _stories(_summed_run(tmp_path), "totals", 0)
 
     # The first is the one the walk took; the second is the override that swaps it.
-    assert [s["kind"] for s in stories] == ["shown", "crossed", "contributor"]
+    assert [s["kind"] for s in stories] == ["shown", "sampled", "contributor"]
     assert [(s["stage_id"], s["row_ordinal"]) for s in stories[1:]] == [
         ("filings", _ACME), ("filings", _BOREALIS),
     ]

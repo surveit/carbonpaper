@@ -119,10 +119,11 @@ a.snavbtn:hover{background:var(--hover)}
 /* A break in the list, not another step: below it the walk is following the
    summary row, above it one of the rows summarized. The ordinals differ either
    side, so the two halves must not read as one row moving along. */
-.cross{display:grid;grid-template-columns:52px 1fr;gap:6px;padding:7px 8px;margin:3px 0;
+.sampled{display:grid;grid-template-columns:52px 1fr;gap:6px;padding:7px 8px;margin:3px 0;
   border-left:3px solid var(--accent);border-radius:7px;font-size:12px;line-height:1.45;
   background:var(--state-idle-bg);color:var(--state-idle-ink)}
-.cross .mark{font-size:11.5px;color:var(--muted)}
+.sampled .mark{font-size:11.5px;color:var(--muted)}
+.sampled a{color:inherit;font-weight:600}
 .lin-graph{margin-top:18px;border-top:1px solid var(--border);padding-top:10px}
 .lin-graph summary{cursor:pointer;font-size:13px;color:var(--muted)}
 .mermaid{background:var(--raised)}.nograph{color:var(--muted);font-size:13px}
@@ -262,6 +263,14 @@ document.getElementById('pagetabs').addEventListener('click', e => {
   document.querySelectorAll('.lin-pane').forEach(
     p => p.classList.toggle('hidden', p.dataset.pane !== picked.dataset.pane));
 });
+// Clicks the tab rather than showing the pane: a pane may load its content on
+// that click, and a second way in would arrive before it.
+document.addEventListener('click', e => {
+  const goto = e.target.closest('[data-goto]');
+  if(!goto) return;
+  e.preventDefault();
+  document.querySelector(`.lin-pagetab[data-pane="${goto.dataset.goto}"]`)?.click();
+});
 </script>
 {% if view.nodes %}
 <script>
@@ -276,7 +285,7 @@ function renderStories(){
   document.getElementById('stories').innerHTML = V.stories.map((s, i) => {
     const body = `<span class="lab">${storyLabel(s)}</span>`
                + `<span class="why">${storyWhy(s, showColumns)}</span>`;
-    if(i === 0 || s.kind === 'crossed') return `<div class="snavbtn on">${body}</div>`;
+    if(i === 0 || s.kind === 'sampled') return `<div class="snavbtn on">${body}</div>`;
     // No page for this row (the review packet wrote none): the entry still
     // states the path, because the path is a fact and the link is not.
     if(!s.href) return `<div class="snavbtn">${body}</div>`;
@@ -299,8 +308,8 @@ function storyWhy(s, showColumns){
   const at = `step ${s.step}, <code>${esc(V.nodes[s.step - 1].stage_id)}</code>`;
   const into = (showColumns && s.columns) ? ` into ${s.columns.map(esc).join(' and ')}` : '';
   const nopage = s.href ? '' : ' · <span class="nopage">no page for this row</span>';
-  // A crossed entry only exists where the fan-in held alternatives.
-  if(s.kind === 'crossed') return `followed here — one of ${s.rows} rows summarized at ${at}${into}`;
+  // A sampled entry only exists where the fan-in held alternatives.
+  if(s.kind === 'sampled') return `sampled here — one of ${s.rows} rows summarized at ${at}${into}`;
   if(s.kind === 'branch') return `another parent at ${at}${into}${nopage}`;
   if(s.kind === 'contributor') return s.rows > 1
     ? `one of ${s.rows} rows summarized at ${at}${into}${nopage}`
@@ -313,8 +322,8 @@ function cohortReach(s){
 }
 function shownWhy(){
   const steps = `${V.nodes.length} step${V.nodes.length > 1 ? 's' : ''}`;
-  const crossed = V.stories.filter(s => s.kind === 'crossed').length;
-  const across = crossed ? `, across ${crossed} summarizing step${crossed > 1 ? 's' : ''}` : '';
+  const sampled = V.stories.filter(s => s.kind === 'sampled').length;
+  const across = sampled ? `, across ${sampled} summarizing step${sampled > 1 ? 's' : ''}` : '';
   return V.upstream.truncated
     ? `the path told here — ${steps}${across}, stopping at <code>${esc(V.nodes[0].stage_id)}</code>`
     : `the path told here — ${steps}${across}, back to the source`;
@@ -384,7 +393,7 @@ function renderSteps(){
   if(V.upstream.truncated && !fanIn){
     html += `<div class="trunc">⋯ upstream not traced — ${esc(V.upstream.message)}</div>`;
   }
-  html += V.nodes.map((n, i) => crossingOf(n) + `<button class="step ${i===sel?'on':''}" data-i="${i}">
+  html += V.nodes.map((n, i) => sampleOf(n) + `<button class="step ${i===sel?'on':''}" data-i="${i}">
       <span class="stepno">step ${n.step}</span>
       <span>${sentenceOf(n)}</span>
       <span class="right">${n.role==='claim' ? '<span class="claim-tag">published claim</span> ' : ''}<span class="row-chip">row ${n.row_ordinal}</span>${deltaOf(n)}</span>
@@ -392,31 +401,37 @@ function renderSteps(){
   document.getElementById('steps').innerHTML = html;
   document.getElementById('stepsnote').innerHTML = stepsNote();
 }
-// Drawn above the step it belongs to, which is the step BELOW the crossing: the
-// steps above it are the contributor's, and this one's row is the summary's.
-function crossingOf(n){
-  const f = n.followed;
+// Drawn above the step it belongs to, which is the step the rows fed: everything
+// above the mark is the sampled row, and this step's row is the summary.
+function sampleOf(n){
+  const s = n.sampled;
   // Only a fan-in that held ALTERNATIVES gets one; the view withholds the rest.
-  if(!f) return '';
-  return `<div class="cross"><span class="mark">↑ crossed</span><span>Following
-    <span class="sid">${esc(f.stage_id)}</span> row ${f.row_ordinal} — one of the
-    <b>${f.of} rows</b> summarized into step ${n.step}. Every step above is that row, and
-    nothing above was compared against step ${n.step}'s row. The other ${f.of - 1} are in
-    <b>Stories</b>.</span></div>`;
+  if(!s) return '';
+  return `<div class="sampled"><span class="mark">↑ Sampled</span><span>Following input row
+    <b>${s.at} of ${s.of} rows</b> that were summarized in step ${n.step}. Steps above show
+    how that sample row was generated. Explore all ${s.of} rows in
+    ${allRowsLink(s)}.</span></div>`;
+}
+// The scope map that Relevant rows draws IS the rows behind this figure, so the
+// app sends the reader there. A packet has no server to draw it, and says so, so
+// there the rows are the cohort table the Stories list links.
+function allRowsLink(s){
+  return OFFLINE
+    ? `the <b>Stories</b> list beside these steps`
+    : `<a href="#" data-goto="rows">Relevant rows</a>`;
 }
 // The one claim the page makes about itself: a break is the only place a choice
 // stood in for a fact, so a run of steps with none is row-level lineage.
 function stepsNote(){
-  const crossed = V.nodes.filter(n => n.followed).length;
-  if(!crossed) return `<b>No step on this path had more than one row to choose from.</b> `
-    + `Every step names the row it actually came from, back to `
-    + `<code>${esc(V.nodes[0].stage_id)}</code> — nothing here stands in for anything else.`;
-  const breaks = `${crossed} ↑ crossed break${crossed > 1 ? 's' : ''}`;
-  const is = crossed > 1 ? 'are' : 'is';
-  return `<b>The ${breaks} below ${is} the only choice${crossed > 1 ? 's' : ''} on this page.</b>`
-    + ` Where a step summarized `
-    + `several rows into one, no single row precedes it, so the FIRST the run recorded is `
-    + `followed and the break says how many it stood among. Every other step names the row it `
+  const sampled = V.nodes.filter(n => n.sampled).length;
+  if(!sampled) return `<b>No step on this path sampled a row.</b> Every step names the row it `
+    + `actually came from, back to <code>${esc(V.nodes[0].stage_id)}</code> — nothing here `
+    + `stands in for anything else.`;
+  const marks = `${sampled} ↑ Sampled mark${sampled > 1 ? 's' : ''}`;
+  const is = sampled > 1 ? 'are' : 'is';
+  return `<b>The ${marks} below ${is} the only place${sampled > 1 ? 's' : ''} a row was `
+    + `picked for you.</b> A step that summarized several rows into one has no single row `
+    + `above it, so the first the run recorded is sampled. Every other step names the row it `
     + `actually came from.`;
 }
 

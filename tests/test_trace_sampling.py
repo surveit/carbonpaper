@@ -1,4 +1,4 @@
-"""Crossing a fan-in: the first recorded edge, marked wherever a choice existed."""
+"""Sampling at a fan-in: the first recorded row, marked wherever a choice existed."""
 from __future__ import annotations
 
 import json
@@ -79,8 +79,8 @@ def _firm_b(totals) -> int:
     return list(totals["firm"]).index("b")
 
 
-def test_with_nothing_supplied_the_walk_crosses_to_the_input_data(tmp_path):
-    """The default reaches the source; the break is what says a choice was made."""
+def test_with_nothing_supplied_the_walk_samples_its_way_to_the_input_data(tmp_path):
+    """The default reaches the source; the mark is what says a row was sampled."""
     run_dir, totals = _three_stage_run(tmp_path)
 
     trace = trace_row(run_dir, "agg", _firm_a(totals))
@@ -94,8 +94,8 @@ def test_with_nothing_supplied_the_walk_crosses_to_the_input_data(tmp_path):
     assert [s.followed for s in trace.steps[1:]] == [None, None]
 
 
-def test_a_row_no_step_summarized_carries_no_crossing_at_all(tmp_path):
-    """The invariant: no crossing marked means row-level lineage the whole way."""
+def test_a_row_no_step_summarized_samples_nothing_at_all(tmp_path):
+    """The invariant: nothing marked means row-level lineage the whole way."""
     run_dir, _ = _three_stage_run(tmp_path)
 
     trace = trace_row(run_dir, "tagged", 3)
@@ -107,7 +107,7 @@ def test_a_row_no_step_summarized_carries_no_crossing_at_all(tmp_path):
     assert trace.end.reached_origin is True
 
 
-def test_a_named_contributor_overrides_which_one_is_taken(tmp_path):
+def test_a_named_contributor_overrides_which_row_is_sampled(tmp_path):
     run_dir, totals = _three_stage_run(tmp_path)
 
     trace = trace_row(run_dir, "agg", _firm_a(totals), [ContributorChoice("tagged", 2)])
@@ -142,7 +142,7 @@ def test_each_fan_in_met_takes_the_next_choice(tmp_path):
     assert trace.end.reached_origin is True
 
 
-def test_one_choice_overrides_its_fan_in_and_the_rest_are_taken_by_default(tmp_path):
+def test_one_choice_overrides_its_fan_in_and_the_rest_are_sampled_by_default(tmp_path):
     stages = _banded_stages()
     totals = stages[-1]["df"]
     stacked = handle_aggregate(
@@ -187,8 +187,8 @@ def test_a_choice_the_walk_never_met_fails_loudly(tmp_path):
     assert "met no fan-in" in str(caught.value)
 
 
-def test_a_fan_in_of_one_row_draws_no_break_at_all(tmp_path):
-    """Nothing was chosen there, so a caution would teach the reader to ignore cautions."""
+def test_a_fan_in_of_one_row_marks_nothing_at_all(tmp_path):
+    """Nothing was sampled there, so a caution would teach the reader to ignore cautions."""
     run_dir, totals = _three_stage_run(tmp_path)
     trace = trace_row(run_dir, "agg", _firm_b(totals))
 
@@ -197,13 +197,13 @@ def test_a_fan_in_of_one_row_draws_no_break_at_all(tmp_path):
     assert [(s.stage_id, s.row_ordinal) for s in trace.steps] == [
         ("agg", _firm_b(totals)), ("tagged", 4), ("filings", 4),
     ]
-    assert trace.steps[0].followed.row_ordinal == 4, "the walk still crossed"
-    assert [n["followed"] for n in view["nodes"]] == [None, None, None]
+    assert trace.steps[0].followed.row_ordinal == 4, "the walk still took it"
+    assert [n["sampled"] for n in view["nodes"]] == [None, None, None]
     # Nor is it offered in the pane: there was no alternative to offer.
     assert [s["kind"] for s in view["stories"]] == ["shown"]
 
 
-def test_a_one_row_fan_in_is_still_not_compared_across(tmp_path):
+def test_an_unmarked_one_row_fan_in_is_still_not_compared_across(tmp_path):
     """An aggregate row is a summary, not its one contributor carried forward."""
     run_dir, totals = _three_stage_run(tmp_path)
 
@@ -217,36 +217,53 @@ def test_a_one_row_fan_in_is_still_not_compared_across(tmp_path):
     assert summary["row_diff"]["changed"] == 0 and summary["row_diff"]["added"] == 0
 
 
-def test_a_break_says_how_many_rows_the_fan_in_merged(tmp_path):
+def test_the_mark_says_which_row_of_how_many_was_sampled(tmp_path):
     run_dir, totals = _three_stage_run(tmp_path)
 
     view = build_trace_view(
         trace_to_dict(trace_row(run_dir, "agg", _firm_a(totals))),
         {}, AppPanelLinks("proj", "T1"))
 
-    # amt=10 and amt=30 were totalled into firm "a", and the break says so.
-    assert view["nodes"][-1]["followed"]["of"] == 2
-    assert [s["rows"] for s in view["stories"] if s["kind"] == "crossed"] == [2]
+    # amt=10 and amt=30 were totalled into firm "a", and the mark says so.
+    assert view["nodes"][-1]["sampled"]["of"] == 2
+    # The PLACE among contributors, not the ordinal at `tagged`.
+    assert view["nodes"][-1]["sampled"]["at"] == 1
+    assert view["nodes"][-1]["sampled"]["row_ordinal"] == 0
+    assert [s["rows"] for s in view["stories"] if s["kind"] == "sampled"] == [2]
 
 
-def test_the_crossed_step_is_compared_against_nothing(tmp_path):
-    """The row below a crossing is a contributor's, so a diff would invent a transform."""
+def test_an_override_moves_the_place_but_not_the_count(tmp_path):
+    run_dir, totals = _three_stage_run(tmp_path)
+
+    view = build_trace_view(
+        trace_to_dict(trace_row(run_dir, "agg", _firm_a(totals),
+                                [ContributorChoice("tagged", 2)])),
+        {}, AppPanelLinks("proj", "T1"))
+
+    # Second of firm "a"'s two contributors, and separately row 2 at `tagged`.
+    assert view["nodes"][-1]["sampled"]["at"] == 2
+    assert view["nodes"][-1]["sampled"]["of"] == 2
+    assert view["nodes"][-1]["sampled"]["row_ordinal"] == 2
+
+
+def test_the_sampling_step_is_compared_against_nothing(tmp_path):
+    """The row below a sample is a contributor's, so a diff would invent a transform."""
     run_dir, totals = _three_stage_run(tmp_path)
     trace = trace_to_dict(
         trace_row(run_dir, "agg", _firm_a(totals), [ContributorChoice("tagged", 0)]))
 
     view = build_trace_view(trace, {}, AppPanelLinks("proj", "T1"))
 
-    crossed = view["nodes"][-1]
-    assert crossed["stage_id"] == "agg"
-    assert crossed["base"] is None
-    assert crossed["row_diff"]["changed"] == 0 and crossed["row_diff"]["added"] == 0
-    assert crossed["followed"]["stage_id"] == "tagged"
-    assert crossed["followed"]["row_ordinal"] == 0
-    assert crossed["followed"]["of"] == 2, "firm 'a' was totalled from two filings"
+    summary = view["nodes"][-1]
+    assert summary["stage_id"] == "agg"
+    assert summary["base"] is None
+    assert summary["row_diff"]["changed"] == 0 and summary["row_diff"]["added"] == 0
+    assert summary["sampled"]["stage_id"] == "tagged"
+    assert summary["sampled"]["row_ordinal"] == 0
+    assert summary["sampled"]["of"] == 2, "firm 'a' was totalled from two filings"
 
 
-def test_the_step_below_a_crossing_still_compares_against_its_own_parent(tmp_path):
+def test_the_step_below_a_sampled_row_still_compares_against_its_own_parent(tmp_path):
     run_dir, totals = _three_stage_run(tmp_path)
     trace = trace_to_dict(
         trace_row(run_dir, "agg", _firm_a(totals), [ContributorChoice("tagged", 0)]))
@@ -256,10 +273,10 @@ def test_the_step_below_a_crossing_still_compares_against_its_own_parent(tmp_pat
     tagged = view["nodes"][1]
     assert tagged["base"] == {"stage_id": "filings", "row_ordinal": 0}
     assert tagged["row_diff"]["added"] == 1, "the band column"
-    assert tagged["followed"] is None
+    assert tagged["sampled"] is None
 
 
-def test_the_followed_row_is_named_once_in_the_stories(tmp_path):
+def test_the_sampled_row_is_named_once_in_the_stories(tmp_path):
     run_dir, totals = _three_stage_run(tmp_path)
     firm_a = _firm_a(totals)
     trace = trace_to_dict(
@@ -268,7 +285,7 @@ def test_the_followed_row_is_named_once_in_the_stories(tmp_path):
     stories = build_trace_view(trace, {}, AppPanelLinks("proj", "T1"))["stories"]
 
     # The picked row reads as followed; the cohort's other row is still offered.
-    assert [s["kind"] for s in stories] == ["shown", "crossed", "contributor"]
+    assert [s["kind"] for s in stories] == ["shown", "sampled", "contributor"]
     assert (stories[1]["stage_id"], stories[1]["row_ordinal"]) == ("tagged", 0)
     assert stories[1]["href"] is None
     assert stories[2]["href"] == (
@@ -287,19 +304,19 @@ def _embedded_view(page: str) -> dict:
     return json.loads(blob.group(1))
 
 
-def test_the_route_crosses_with_no_via_at_all(tmp_path):
-    project, run_id, totals = _serve(tmp_path, "crossing_route_default")
+def test_the_route_samples_with_no_via_at_all(tmp_path):
+    project, run_id, totals = _serve(tmp_path, "sampling_route_default")
     base = f"/project/{project}/runs/{run_id}/stage/agg/row/{_firm_a(totals)}/trace/view"
 
     view = _embedded_view(TestClient(app).get(base).text)
 
     assert [n["stage_id"] for n in view["nodes"]] == ["filings", "tagged", "agg"]
     assert view["upstream"]["truncated"] is False
-    assert view["nodes"][-1]["followed"]["row_ordinal"] == 0
+    assert view["nodes"][-1]["sampled"]["row_ordinal"] == 0
 
 
-def test_the_route_lets_via_swap_which_contributor_is_taken(tmp_path):
-    project, run_id, totals = _serve(tmp_path, "crossing_route")
+def test_the_route_lets_via_swap_which_row_is_sampled(tmp_path):
+    project, run_id, totals = _serve(tmp_path, "sampling_route")
     base = f"/project/{project}/runs/{run_id}/stage/agg/row/{_firm_a(totals)}/trace/view"
 
     view = _embedded_view(TestClient(app).get(base, params={"via": "tagged:2"}).text)
@@ -307,11 +324,11 @@ def test_the_route_lets_via_swap_which_contributor_is_taken(tmp_path):
     assert [(n["stage_id"], n["row_ordinal"]) for n in view["nodes"]] == [
         ("filings", 2), ("tagged", 2), ("agg", _firm_a(totals)),
     ]
-    assert view["nodes"][-1]["followed"]["row_ordinal"] == 2
+    assert view["nodes"][-1]["sampled"]["row_ordinal"] == 2
 
 
-def test_a_break_is_marked_at_every_fan_in_the_walk_took(tmp_path):
-    """The page invariant: a break marks a place where a choice existed among rows."""
+def test_a_mark_is_drawn_at_every_fan_in_that_held_a_choice(tmp_path):
+    """The page invariant: a mark is a place where a row was picked out of several."""
     stages = _banded_stages()
     totals = stages[-1]["df"]
     stacked = handle_aggregate(
@@ -320,33 +337,33 @@ def test_a_break_is_marked_at_every_fan_in_the_walk_took(tmp_path):
         "id": "top", "type": "aggregate", "parents": ["agg"],
         "df": rows_of(stacked), "lineage": stacked.lineage}])
 
-    crossed = build_trace_view(
+    marked = build_trace_view(
         trace_to_dict(trace_row(run_dir, "top", 0)), {}, AppPanelLinks("proj", "T1"))
     unbroken = build_trace_view(
         trace_to_dict(trace_row(run_dir, "tagged", 3)), {}, AppPanelLinks("proj", "T1"))
 
     # Two aggregates on the path, each merging more than one row, so two marks.
-    assert sum(1 for n in crossed["nodes"] if n["followed"]) == 2
-    assert [n["stage_id"] for n in crossed["nodes"]] == [
+    assert sum(1 for n in marked["nodes"] if n["sampled"]) == 2
+    assert [n["stage_id"] for n in marked["nodes"]] == [
         "filings", "tagged", "agg", "top"]
     # No aggregate on this one, so nothing was picked and nothing is marked.
-    assert [n["followed"] for n in unbroken["nodes"]] == [None, None]
+    assert [n["sampled"] for n in unbroken["nodes"]] == [None, None]
     assert unbroken["upstream"]["truncated"] is False
 
 
 def test_the_route_refuses_a_via_that_names_no_contributor(tmp_path):
-    project, run_id, totals = _serve(tmp_path, "crossing_route_refusal")
+    project, run_id, totals = _serve(tmp_path, "sampling_route_refusal")
     base = f"/project/{project}/runs/{run_id}/stage/agg/row/{_firm_a(totals)}/trace/view"
     client = TestClient(app)
 
     assert client.get(base, params={"via": "filings:0"}).status_code == 400
     assert client.get(base, params={"via": "tagged"}).status_code == 400
-    # Without one the page renders the default crossing rather than refusing.
+    # Without one the page renders the default sample rather than refusing.
     assert client.get(base).status_code == 200
 
 
 def test_the_cohort_table_carries_the_page_that_sent_the_reader(tmp_path):
-    project, run_id, totals = _serve(tmp_path, "crossing_route_cohort")
+    project, run_id, totals = _serve(tmp_path, "sampling_route_cohort")
     firm_a = _firm_a(totals)
     trace = trace_to_dict(trace_row(
         workspace.projects_dir() / project / "runs" / run_id, "agg", firm_a))
@@ -363,7 +380,7 @@ def test_the_cohort_table_carries_the_page_that_sent_the_reader(tmp_path):
 
 
 def test_a_rows_table_reached_without_an_owner_keeps_its_own_trace_links(tmp_path):
-    project, run_id, _ = _serve(tmp_path, "crossing_route_plain")
+    project, run_id, _ = _serve(tmp_path, "sampling_route_plain")
 
     page = TestClient(app).get(f"/project/{project}/runs/{run_id}/stage/tagged/rows")
 
@@ -372,12 +389,13 @@ def test_a_rows_table_reached_without_an_owner_keeps_its_own_trace_links(tmp_pat
     assert "Follow this row" not in page.text
 
 
-def test_the_json_route_carries_the_crossing(tmp_path):
-    project, run_id, totals = _serve(tmp_path, "crossing_route_json")
+def test_the_json_route_carries_the_sampled_edge(tmp_path):
+    project, run_id, totals = _serve(tmp_path, "sampling_route_json")
     url = f"/project/{project}/runs/{run_id}/stage/agg/row/{_firm_a(totals)}/trace"
 
     payload = TestClient(app).get(url, params={"via": "tagged:0"}).json()
 
+    # `followed` is the runtime's edge at EVERY fan-in, not the view's mark.
     assert [s["stage_id"] for s in payload["steps"]] == ["agg", "tagged", "filings"]
     assert payload["steps"][0]["followed"]["row_ordinal"] == 0
     assert payload["steps"][1]["followed"] is None
