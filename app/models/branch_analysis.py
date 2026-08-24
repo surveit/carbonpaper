@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from app.models.schema import StageId
 
-# f"{stage_id}|{branch_id}", unique in a run. Not a join or group-by key.
+# Opaque, and unique in a run. Nothing reads anything back out of it.
 BranchId = str
 # A row's position in its stage's output frame.
 RowOrdinal = int
@@ -24,30 +24,34 @@ class BranchReason(StrEnum):
     join = "join"  # type: ignore[assignment]  # shadows str.join; never called
     union = "union"
     load = "load"
-    aggregate = "aggregate"
+    merge = "merge"
 
 
 class BranchRole(StrEnum):
-    """What the branch did to the rows that took it."""
+    """What the branch did to the rows that took it. Both hold whatever is asked."""
 
-    removes = "removes"    # taken out of the frame
-    excludes = "excludes"  # in another group
-    keeps = "keeps"        # still in the frame, and still downstream
+    removes = "removes"  # taken out of the frame
+    keeps = "keeps"      # still in the frame, and still downstream
 
 
-class BranchFact(BaseModel):
-    """One distinction the run recorded, and where to look at the code behind it."""
+class BranchOption(BaseModel):
+    """One way the run could tell rows apart, and where to look at the code behind it."""
 
     id: BranchId
-    stage: StageId
+    # The stage that made the decision.
+    stage_id: StageId
+    # The frame this branch's rows are rows of. See docs/branch-analysis.md.
+    rows_live_in_stage_id: StageId
     reason: BranchReason
     role: BranchRole
     label: str
-    # The code the branch decided in. Empty where the stage declares it instead.
-    source: str = ""
-    # The branch's test line and its body's first line. None for every reason but code.
-    tested_at: int | None = None
-    decided_at: int | None = None
+    source_code: str = ""
+    # None for every reason but `code`, which is the only one written in a stage's source.
+    test_line_number: int | None = None
+    first_body_line_number: int | None = None
+    last_body_line_number: int | None = None
+    # Which output row a merge built, so no caller works it out from the id.
+    merged_into_row_ordinal: RowOrdinal | None = None
 
 
 class RowSet(BaseModel):
@@ -55,8 +59,8 @@ class RowSet(BaseModel):
 
     at_stage: StageId
     ordinals: list[RowOrdinal]
-    # The aggregates walked down through, nearest the cited cell first.
-    aggregates_walked_down: list[StageId] = []
+    # The merges walked down through, nearest the cited cell first.
+    merges_walked_down: list[StageId] = []
 
 
 class FrameScale(BaseModel):
@@ -65,5 +69,3 @@ class FrameScale(BaseModel):
     stage: StageId
     rows_count: int
     included_rows_count: int
-    # A join's second input is a lookup table: its size is not the flow narrowing.
-    is_a_lookup_table: bool = False

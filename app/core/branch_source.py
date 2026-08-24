@@ -15,6 +15,8 @@ class Branch:
     # Where the branch's body starts. Where to point a reader, never the identity.
     line: int
     column: int
+    # The body's last line, so a reader lights the block rather than its first statement.
+    end_line: int = 0
 
 
 def find_branches(source: str) -> list[Branch]:
@@ -111,5 +113,6 @@ def _walk_try(node: ast.Try, base: str, found: list[Branch]) -> None:
 
 def _open(body: list[ast.stmt], branch_id: str, found: list[Branch]) -> None:
     first = body[0]
-    found.append(Branch(branch_id, first.lineno, first.col_offset))
+    found.append(Branch(branch_id, first.lineno, first.col_offset,
+                        body[-1].end_lineno or first.lineno))
     _walk_body(body, branch_id, found)

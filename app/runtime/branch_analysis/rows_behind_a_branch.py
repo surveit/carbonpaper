@@ -2,47 +2,49 @@
 
 from __future__ import annotations
 
-from app.models.branch_analysis import BranchId, BranchReason, RowOrdinal
+from app.models.branch_analysis import (
+    BranchId,
+    BranchOption,
+    BranchReason,
+    BranchRole,
+    RowOrdinal,
+)
 from app.models.schema import StageId
 from app.runtime.branch_analysis.run_branches import (
-    SOURCE_STAGE,
+    MERGE_EDGE,
     WorkflowRunBranches,
 )
 
-# The arm whose rows are in the stage's INPUT frame, never its output.
-DROPPED_ARM = "dropped"
 
-
-def find_rows_that_took(run: WorkflowRunBranches, branch: BranchId
+def find_rows_that_took(run_branches: WorkflowRunBranches, branch_id: BranchId
                         ) -> tuple[StageId, list[RowOrdinal]]:
-    """Where a branch's rows live: a lost row is in the stage's INPUT frame."""
-    fact = run.catalog[branch]
-    if fact.reason is BranchReason.aggregate:
-        return _find_group_members(run, branch)
-    if fact.stage == SOURCE_STAGE:
-        loader = branch.split("|", 1)[1]
-        return loader, list(range(run.rows[loader]))
-    arm = branch.split("|", 1)[1]
-    if arm == DROPPED_ARM:
-        return _find_lost_rows(run, fact.stage, arm)
-    return fact.stage, [i for i, held in enumerate(run.paths[fact.stage])
-                        if branch in held]
+    """A branch's rows are rows of `rows_live_in_stage_id`, never always its own stage."""
+    branch = run_branches.branch_options[branch_id]
+    if branch.reason is BranchReason.merge:
+        return branch.rows_live_in_stage_id, _find_merged_rows(run_branches, branch)
+    if branch.reason is BranchReason.load:
+        return branch.stage_id, list(range(run_branches.row_counts[branch.stage_id]))
+    if branch.role is BranchRole.removes:
+        return branch.rows_live_in_stage_id, _find_removed_rows(run_branches, branch)
+    return branch.stage_id, [
+        row for row, path in enumerate(run_branches.branch_paths[branch.stage_id])
+        if branch_id in path]
 
-def _find_group_members(run: WorkflowRunBranches, branch: BranchId
-                        ) -> tuple[StageId, list[RowOrdinal]]:
-    for sid, rows in run.groups.items():
-        members = sorted(row for row, held in rows.items() if branch in held)
-        if members:
-            return sid, members
-    return run.catalog[branch].stage, []
 
-def _find_lost_rows(run: WorkflowRunBranches, stage_id: StageId, arm: str
-                    ) -> tuple[StageId, list[RowOrdinal]]:
-    stage = run.stages[stage_id]
-    parent = stage.inputs[0].id
-    lineage = run.lineages[stage_id]
+def _find_merged_rows(run_branches: WorkflowRunBranches,
+                      branch: BranchOption) -> list[RowOrdinal]:
+    merged = run_branches.merges_per_row.get(branch.rows_live_in_stage_id, {})
+    return sorted(row for row, held in merged.items() if branch.id in held)
+
+
+def _find_removed_rows(run_branches: WorkflowRunBranches,
+                       branch: BranchOption) -> list[RowOrdinal]:
+    """Removed rows are the input's rows no output row reaches."""
+    lineage = run_branches.lineages[branch.stage_id]
     if lineage is None:
-        return parent, []
-    kept = {p.row_ordinal for group in lineage.parents for p in group
-            if p.stage_id == parent}
-    return parent, [i for i in range(run.rows[parent]) if i not in kept]
+        return []
+    input_stage_id = branch.rows_live_in_stage_id
+    reached = {p.row_ordinal for entry in lineage.parents for p in entry
+               if p.stage_id == input_stage_id and p.kind != MERGE_EDGE}
+    return [row for row in range(run_branches.row_counts[input_stage_id])
+            if row not in reached]

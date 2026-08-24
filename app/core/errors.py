@@ -148,3 +148,11 @@ class StoreOverQuota(Exception):
 
 class UnresolvableFigure(RuntimeError):
     """A cited cell whose contributing rows sit at more than one grain."""
+
+
+class MissingLineage(RuntimeError):
+    """A stage owed a lineage sidecar by its type's contract and wrote none."""
+
+
+class NotALoadStage(RuntimeError):
+    """A stage with no inputs that is not an input_data stage."""
