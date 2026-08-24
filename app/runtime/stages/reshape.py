@@ -19,6 +19,7 @@ from app.models.stages.sort_rank import NullPlacement, SortKey, SortRankStage
 from ..context import RunContext
 from ..lineage import single_parent_lineage
 from ..stage_output import StageOutput
+from .agreement import refuse_a_disagreeing_group
 from .execution import narrow_stage
 
 
@@ -55,6 +56,8 @@ def handle_dedupe(
 
     ranked = _ranking_for_keep(table, config.keep, config.by)
     groups_as_ordinals = _group_ordinals(table, config.keys, ranked)
+    if config.keep == DedupeKeep.agree:
+        _refuse_a_disagreeing_group(table, config.keys, groups_as_ordinals, stage.id)
     # Each group is ranked, so its [0] is always the row `keep` chose to survive.
     kept_ordinals = [ordinals[0] for ordinals in groups_as_ordinals]
     # `ranked` left these in keep order, not the input's.
@@ -99,7 +102,7 @@ def _ranking_for_keep(
     table: pa.Table, keep: DedupeKeep, by: str | None
 ) -> pa.Array | None:
     """Each row's position in the keep order, so the survivor is the group's minimum."""
-    if keep == DedupeKeep.first:
+    if keep in (DedupeKeep.first, DedupeKeep.agree):
         return None
     direction = "ascending" if keep == DedupeKeep.lowest else "descending"
     return pc.sort_indices(table, sort_keys=[(by, direction)])
@@ -115,6 +118,30 @@ def _group_ordinals(
     for ordinal in order:
         groups.setdefault(tuple(column[ordinal] for column in key_columns), []).append(int(ordinal))
     return list(groups.values())
+
+
+def _refuse_a_disagreeing_group(
+    table: pa.Table, keys: Sequence[str], groups: list[list[int]], stage_id: str
+) -> None:
+    """Checked before a survivor is taken: a group that disagrees has no survivor to take."""
+    carried = [name for name in table.column_names if name not in set(keys)]
+    if not carried:
+        return
+    columns = [table.column(name).to_pylist() for name in carried]
+    for members in groups:
+        if len(members) == 1:
+            continue
+        refuse_a_disagreeing_group(
+            [[column[ordinal] for column in columns] for ordinal in members], carried,
+            stage_id=stage_id,
+            subject=_name_the_duplicates(table, keys, members[0], len(members)))
+
+
+def _name_the_duplicates(
+    table: pa.Table, keys: Sequence[str], ordinal: int, members: int
+) -> str:
+    named = ", ".join(f"{key}={table.column(key)[ordinal].as_py()!r}" for key in keys)
+    return f"the {members} rows with {named}"
 
 
 # ── sort_rank ────────────────────────────────────────────────────────────────

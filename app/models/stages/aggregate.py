@@ -6,9 +6,10 @@ group_by + the aggregations compute."""
 from __future__ import annotations
 
 from enum import Enum
-from typing import TYPE_CHECKING, ClassVar, Literal, Optional, Sequence
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Optional, Sequence
 
 from pydantic import Field, model_validator
+from pydantic.json_schema import SkipJsonSchema, WithJsonSchema
 
 from app.core.errors import PredicateError
 from app.core.predicate import parse_predicate
@@ -36,14 +37,26 @@ class AggFormula(str, Enum):
     max = "max"
     first = "first"
     first_including_null = "first_including_null"
+    only = "only"
     list = "list"
+
+
+# docs/no-silent-pick.md
+RETIRED_FORMULAS = (AggFormula.first.value, AggFormula.first_including_null.value)
+
+OFFERED_FORMULAS = [
+    member.value for member in AggFormula if member.value not in RETIRED_FORMULAS
+]
 
 
 class AggregationOp(_Base):
     output_column: str
-    formula: AggFormula
+    # docs/no-silent-pick.md
+    formula: Annotated[AggFormula, WithJsonSchema(
+        {"type": "string", "enum": OFFERED_FORMULAS, "title": "Formula"})]
     value_column: Optional[str] = None
-    where: Optional[str] = None
+    # docs/retired-aggregation-where.md
+    where: SkipJsonSchema[Optional[str]] = None
 
     @model_validator(mode="after")
     def _value_column_for_formula(self) -> "AggregationOp":
@@ -93,6 +106,7 @@ AGG_FORMULA_COUNT = "count"
 AGG_FORMULA_COUNT_DISTINCT = "count_distinct"
 AGG_FORMULA_FIRST = "first"
 AGG_FORMULA_FIRST_INCLUDING_NULL = "first_including_null"
+AGG_FORMULA_ONLY = "only"
 AGG_FORMULA_LIST = "list"
 
 
@@ -194,7 +208,7 @@ def compute_aggregate_output_types(
             )
         elif op.formula == AGG_FORMULA_LIST:
             computed[op.output_column] = f"list[{value_type}]" if value_type else None
-        else:  # min / max / first / first_including_null: the value column's own type
+        else:  # min / max / only / first / first_including_null: the value column's own type
             computed[op.output_column] = value_type
     return computed
 
@@ -211,17 +225,20 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
         notes=(
             "Output columns are exactly group_by plus each aggregation's output_column — every "
             "other input column is DROPPED, so carry anything needed downstream via "
-            "group_by or an aggregation. `first` takes the first NON-NULL value; "
-            "`first_including_null` takes the first row's value, including NULL. "
-            "An EMPTY group_by "
+            "group_by or an aggregation. `only` carries a column whose value is the SAME on "
+            "every row of the group; it fails, naming the values, where they differ, so "
+            "reach for it to carry an identity through a collapse. An EMPTY group_by "
             "reduces the whole frame "
             "to ONE row of just the aggregation outputs — reach for it whenever a stage "
             "boils everything down to published figures. That row comes out even when no "
-            "row reaches it, every figure NULL. formula `count` counts ROWS and takes no "
+            "row reaches it, every figure NULL. A figure over only SOME of the rows is a "
+            "grouping, never a per-column cut: group_by the column that names them and "
+            "every category comes out as its own row, each resting on rows of its own. "
+            "formula `count` counts ROWS and takes no "
             "value_column; every other formula requires one — `count_distinct` counts "
             "distinct NON-NULL values. Declared output types must match what the formula "
             "computes: count/count_distinct->int, mean->float, "
-            "min/max/first/first_including_null->the value column's type, "
+            "min/max/only->the value column's type, "
             "list->list[<that type>]."
         ),
     ),

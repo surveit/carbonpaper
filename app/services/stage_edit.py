@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Sequence
 
 from app.core.llm import LLMModel
+from app.models.stages.aggregate import RETIRED_FORMULAS
 from app.models.stages.stage_types import APPROVAL_REQUIRED_TYPES
 from app.services.code_approval import has_code_execution_approval
 from app.models import StageDraft, StageEdit
@@ -150,6 +151,40 @@ def find_unapproved_code_issues(
     return [CODE_EXECUTION_REFUSAL.format(sid=candidate.get("id"), stage_type=stage_type)]
 
 
+AGGREGATION_WHERE_REFUSAL = (
+    "stage '{sid}': aggregation `{output_column}` carries `where`, which is retired — a "
+    "row-cut no stage shows, leaving that row's columns each resting on different rows. "
+    "Group on the column `{predicate}` tests, or put a filter_rows stage in front."
+)
+
+AGGREGATION_PICK_REFUSAL = (
+    "stage '{sid}': aggregation `{output_column}` uses `{formula}`, which is retired — it "
+    "picks between rows that may disagree and drops the rest unrecorded. Use `only` where "
+    "the group agrees, `list` where it does not, or put a dedupe stage in front."
+)
+
+
+def find_aggregation_issues(candidate: dict) -> list[str]:
+    """Enforced on write, not on the model — on load it would refuse every version stored before."""
+    aggregate = candidate.get("aggregate")
+    aggregations = aggregate.get("aggregations") if isinstance(aggregate, dict) else None
+    if not isinstance(aggregations, list):
+        return []
+    issues: list[str] = []
+    for op in aggregations:
+        if not isinstance(op, dict):
+            continue
+        if op.get("where"):
+            issues.append(AGGREGATION_WHERE_REFUSAL.format(
+                sid=candidate.get("id"), output_column=op.get("output_column"),
+                predicate=op.get("where")))
+        if op.get("formula") in RETIRED_FORMULAS:
+            issues.append(AGGREGATION_PICK_REFUSAL.format(
+                sid=candidate.get("id"), output_column=op.get("output_column"),
+                formula=op.get("formula")))
+    return issues
+
+
 def find_unnamed_model_issues(candidate: dict) -> list[str]:
     """Enforced on write, not on the model — on load it would refuse every llm stage stored before."""
     llm = candidate.get("llm")
@@ -177,6 +212,7 @@ def _apply(project_id: str, specs: dict[str, dict], candidates: dict[str, dict])
         issues += find_description_issues(candidate)
         issues += find_unnamed_model_issues(candidate)
         issues += find_unapproved_code_issues(project_id, candidate, specs)
+        issues += find_aggregation_issues(candidate)
     if issues:
         return EditStageResult(ok=False, issues=issues)
 
