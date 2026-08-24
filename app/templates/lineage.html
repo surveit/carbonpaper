@@ -12,6 +12,10 @@
 {% if not offline %}<script src="{{ static_root | default("/static/", true) }}breadcrumbs.js" defer></script>
 {# The packet's Values used pane is an empty state, so the script driving it is dead there. #}
 <script src="{{ static_root | default("/static/", true) }}values-used.js"></script>
+{# Standalone, so it does not inherit base.html's painter. Its observer colours a
+   panel swapped in by innerHTML, which is how every transform pane here arrives. #}
+<script src="{{ static_root | default("/static/", true) }}highlight.min.js"></script>
+<script src="{{ static_root | default("/static/", true) }}code-highlight.js"></script>
 {# Served live this page is part of the app, so the conversation follows the reader here as
    it does everywhere else. Written into a review packet it is a file in a zip: no server to
    fetch a panel from and no session to carry, which is what `offline` says. #}
