@@ -14,6 +14,7 @@ from app.services import run as run_service
 from app.runtime.trace import trace_row, trace_to_dict
 from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.panel_links import AppPanelLinks
+from app.web.trace_inputs import build_input_catalog, select_row_inputs
 from app.web.trace_view import build_trace_view, find_cited_cell
 from app.web.breadcrumbs import build_run_child_crumbs
 from app.web.config import templates
@@ -105,7 +106,8 @@ async def run_stage_row_trace_view(
     except RunVersionUnresolvableError:
         stages_by_id = {}
 
-    view = build_trace_view(trace_to_dict(trace), stages_by_id, AppPanelLinks(project_id, run_id))
+    links = AppPanelLinks(project_id, run_id)
+    view = build_trace_view(trace_to_dict(trace), stages_by_id, links)
     ordered = [stages_by_id[n["stage_id"]].stage for n in view["nodes"]
                if n["stage_id"] in stages_by_id]
     mermaid = build_mermaid_graph(ordered, project_id) if len(ordered) == len(view["nodes"]) else ""
@@ -124,6 +126,8 @@ async def run_stage_row_trace_view(
         {
             "title": f"{view['start_stage']} · row {view['start_row']}",
             "view": view,
+            "inputs": select_row_inputs(
+                build_input_catalog(project_id, manifest), view, links),
             "cell": cell,
             "project": project_id,
             "crumbs": build_run_child_crumbs(project_id, run_id, label="Row lineage"),

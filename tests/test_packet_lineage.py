@@ -140,6 +140,8 @@ def test_a_lineage_page_reaches_the_rest_of_the_packet_by_relative_path(tmp_path
         "../../assets/palette.css",
         "../../assets/style.css", "../../assets/packet.css", "../../assets/favicon.svg",
         "../../index.html",
+        # The Inputs pane names the input stage, and the packet writes that page.
+        "../../stages/source.html",
     }
 
 
@@ -201,8 +203,30 @@ def _export_demo_packet(tmp_path):
 
     root = tmp_path / "packet"
     root.mkdir()
-    write_packet_lineage(root, run_dir, _run_view(2), {})
+    write_packet_lineage(root, run_dir, _run_view(2), {}, _DEMO_MANIFEST)
     return root
+
+
+# What the run recorded of the one file it read — the Inputs pane's whole source.
+_DEMO_MANIFEST = {
+    "input_bindings": {"source": {"files": [
+        {"path": "/data/east.csv", "sha256": "e" * 64, "bytes": 791}], "source": "run"}},
+    "parameters": {"limits": {"source": 50}},
+    "stage_records": [{"stage_id": "source", "type": "input_data", "status": "ok",
+                       "output_row_count": 2, "started_at": "2026-08-13T18:16:47"}],
+}
+
+
+def test_the_packet_page_names_the_file_the_run_read(tmp_path):
+    """No server to ask, so the pane is rendered into the page rather than fetched."""
+    page = (_export_demo_packet(tmp_path) / "lineage/totals/0.html").read_text(encoding="utf-8")
+
+    assert "east.csv" in page
+    assert "row cap <b>50</b>" in page
+    # The packet has no /project/.../files route, so the name stands without a link.
+    assert '<span class="infile">east.csv</span>' in page
+    # The pane says whose inputs these are, so the reader never reads them as the row's.
+    assert "These are the run's inputs" in page
 
 
 def _view_links(html: str) -> list[str]:
