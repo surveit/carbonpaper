@@ -1,0 +1,114 @@
+/* scope-map.css — the scope of one figure: the sankey, its cut stubs and its rows.
+ * Colour comes from palette.css only (tests/arch/test_palette_owns_colour.py).
+ */
+
+.scope { max-width: 100%; }
+
+.scope-figure {
+  border-left: 3px solid var(--accent);
+  background: var(--sunk);
+  padding: 0.7rem 1rem;
+  margin-bottom: 1rem;
+}
+.scope-cell { margin: 0 0 0.35rem; }
+.scope-beta { margin-right: 0.5rem; vertical-align: 1px; }
+.scope-cell code { font-size: 0.95em; }
+.scope-formula { margin-left: 0.5rem; font-size: 0.85em; }
+.scope-answers { margin: 0; }
+.scope-drilled { margin: 0; }
+.scope[data-drilled] .scope-answers,
+.scope[data-drilled] .scope-scale,
+.scope[data-drilled] .scope-cell { display: none; }
+.scope:not([data-drilled]) .scope-drilled { display: none; }
+.scope[data-drilled] .scope-figure { border-left-color: var(--state-failed); }
+.scope-scale { margin: 0.5rem 0 0; color: var(--muted); font-size: 0.85rem; }
+
+.scope-funnel {
+  display: inline-flex;
+  gap: 0.3rem;
+  align-items: baseline;
+  margin-left: 0.4rem;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--mono, ui-monospace, Menlo, monospace);
+  font-size: 0.78rem;
+}
+.scope-funnel .scope-of { opacity: 0.55; }
+.scope-funnel i { opacity: 0.4; font-style: normal; }
+
+.scope-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+}
+
+/* The one place a reader leaves the figure for a set of rows that is not its own. */
+.scope-here {
+  display: inline-block;
+  padding: 1px 9px 2px;
+  border: 1px solid currentColor;
+  border-radius: 11px;
+  color: var(--accent);
+  background: var(--bg);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.scope-here:hover { background: var(--accent); color: var(--on-dark); }
+/* `display` on the rule above would otherwise beat the hidden attribute. */
+.scope-here[hidden] { display: none; }
+.scope-here::before { content: "\2039\00a0"; }
+
+/* Wide content scrolls inside its own box; the page body never scrolls sideways. */
+.scope-drawing { overflow-x: auto; border: 1px solid var(--border); border-radius: 6px; }
+.scope-drawing svg { display: block; }
+
+#scope-svg text { font-size: 11px; fill: var(--fg); }
+#scope-svg text.scope-head { font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.05em; fill: var(--muted); }
+#scope-svg text.scope-head-note { text-transform: none; letter-spacing: 0; }
+#scope-svg text.scope-out { font-size: 9.5px; fill: var(--muted);
+  font-variant-numeric: tabular-nums; }
+#scope-svg text.scope-node { font-family: var(--mono, ui-monospace, Menlo, monospace);
+  font-size: 10.5px; }
+#scope-svg text.scope-count { fill: var(--muted); font-size: 9.5px;
+  font-variant-numeric: tabular-nums; }
+#scope-svg .scope-ribbon { fill: var(--accent); opacity: 0.22; }
+#scope-svg .scope-ribbon.is-lit { opacity: 0.42; }
+#scope-svg .scope-bar-mark { fill: var(--accent-deep); cursor: pointer; }
+#scope-svg text.scope-node, #scope-svg text.scope-head, #scope-svg text.scope-out,
+#scope-svg .scope-bar-mark { cursor: help; }
+#scope-svg text.scope-stub-label { cursor: pointer; }
+#scope-svg .scope-bar-mark.is-implied { fill: var(--muted); }
+#scope-svg .scope-bar-mark.is-dim { opacity: 0.3; }
+#scope-svg .scope-leader { stroke: var(--border-strong); stroke-width: 1; fill: none; }
+
+/* A stub is not drawn to scale: its count is true and its width is not. */
+#scope-svg .scope-stub { stroke: var(--state-failed); stroke-width: 1;
+  stroke-dasharray: 2 2; }
+#scope-svg text.scope-stub-label { fill: var(--state-failed-ink); font-size: 9.5px;
+  cursor: pointer; }
+
+.scope-legend { font-size: 0.8rem; margin: 0.4rem 0 0.8rem; }
+
+.scope-bar {
+  display: flex; align-items: baseline; gap: 0.7rem; flex-wrap: wrap;
+  padding: 0.5rem 0.2rem; font-size: 0.9rem;
+}
+.scope-bar .scope-clear { color: var(--accent); cursor: pointer;
+  text-decoration: underline; font-size: 0.8rem; }
+
+/* The rows are the app's data-preview table; only the click is scope's own. */
+.scope-table { overflow-x: auto; }
+.scope-table td.scope-num { text-align: right; font-variant-numeric: tabular-nums; }
+.scope-table tbody tr { cursor: pointer; }
+.scope-table tbody tr:hover { background: var(--hover); }
+.scope-table tbody tr.is-on { background: var(--info-bg); }
+
+.scope-source {
+  background: var(--sunk); border: 1px solid var(--border); border-radius: 6px;
+  padding: 0.6rem 0.8rem; margin: 0.6rem 0; overflow-x: auto;
+  font-family: var(--mono, ui-monospace, Menlo, monospace); font-size: 0.75rem;
+  line-height: 1.6; white-space: pre;
+}
+.scope-source .is-lit { background: var(--state-warn-bg); }

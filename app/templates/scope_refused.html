@@ -1,0 +1,15 @@
+{% extends "project_shell.html" %}
+{# A cell whose contributing rows sit at more than one grain. Refusing is the honest
+   answer: a map drawn over two grains at once compares widths that do not compare. #}
+{% block title %}Scope of {{ citation.stage_id }}.{{ citation.column }} · {{ project }}{% endblock %}
+{% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
+{% block section %}
+<section class="scope">
+  <p class="banner banner-warn">
+    No scope map for <code>{{ citation.stage_id }}</code> row {{ citation.row_ordinal }},
+    column <code>{{ citation.column }}</code> — {{ reason }}.
+  </p>
+  <p class="muted">Every width in a scope map is a row count at one grain. Drawn over
+  two, the ribbons would compare things that do not compare, so no map is drawn.</p>
+</section>
+{% endblock %}
