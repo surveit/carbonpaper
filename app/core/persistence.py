@@ -8,7 +8,7 @@ from app.core.json_types import JsonDict, JsonScalar
 
 
 
-class PersistenceLibraryProtocol(Protocol):
+class StoreProtocol(Protocol):
     def write(self, collection: str, id: ID, data: JsonDict, schema_version: int = 1) -> None: ...
     def read(self, collection: str, id: ID) -> JsonDict: ...
     def read_tolerant(self, collection: str, id: ID) -> JsonDict | None: ...
@@ -21,17 +21,17 @@ class PersistenceLibraryProtocol(Protocol):
     def read_all(self, collection: str, prefix: str = "") -> Iterator[tuple[str, JsonDict]]: ...
 
 
-_store: PersistenceLibraryProtocol | None = None
+_store: StoreProtocol | None = None
 
 
-def configure_store(store: PersistenceLibraryProtocol) -> None:
+def configure_store(store: StoreProtocol) -> None:
     global _store
     _store = store
 
 
-def get_store() -> PersistenceLibraryProtocol:
+def get_store() -> StoreProtocol:
     if _store is None:
-        raise RuntimeError("document store not configured; call configure_store() first")
+        raise RuntimeError("store not configured; call configure_store() first")
     return _store
 
 

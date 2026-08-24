@@ -69,7 +69,7 @@ Three modules, not one, sit under that, and two of them are protected:
 | Module | Holds | Who may import it |
 |---|---|---|
 | `app/core/record.py` | `PersistedModel`, `PersistenceScope` | `app.core`, `app.models.records`, `app.runtime` |
-| `app/core/persistence.py` | `PersistenceLibraryProtocol`, `get_store`, `configure_store` | `app.core.record`, `app.core.store_config`, `app.core.sqlite_store` |
+| `app/core/persistence.py` | `StoreProtocol`, `get_store`, `configure_store` | `app.core.record`, `app.core.store_config`, `app.core.sqlite_store` |
 | `app/core/json_types.py` | `JsonDict`, `JsonScalar` | anyone |
 
 Declaring a record means importing the base, so the first whitelist is the list of
