@@ -39,7 +39,7 @@
    result — the reason it could not be scored — so it is stated before anything
    else, not folded into a tab. #}
 {% if run.notes %}
-<p class="banner {{ 'banner-error' if run.status == 'error' else 'banner-warn' }}">
+<p class="banner {{ 'banner-failed' if run.status == 'error' else 'banner-warn' }}">
   {% for note in run.notes %}{{ note }}{% if not loop.last %}<br>{% endif %}{% endfor %}
 </p>
 {% endif %}

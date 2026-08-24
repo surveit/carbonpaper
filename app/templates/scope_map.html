@@ -1,4 +1,5 @@
 {% extends "project_shell.html" %}
+{% from "_severity_icon.html" import severity_icon %}
 {#
   THE SCOPE OF ONE FIGURE — which rows produced a cited number, and what told them
   apart from the rows that did not.
@@ -21,9 +22,6 @@
 
 {% block section %}
 <section class="scope">
-  {% if unfed %}
-  <p class="banner banner-warn">{{ unfed }}</p>
-  {% endif %}
   <header class="scope-figure">
     <p class="scope-cell">
       <span class="badge pending scope-beta">beta</span>
@@ -40,6 +38,10 @@
     </p>
     {% endif %}
   </header>
+
+  {% if unfed %}
+  <p class="banner banner-failed">{{ severity_icon("error") }}{{ unfed }}</p>
+  {% endif %}
 
   <div class="scope-controls">
     <label><input type="checkbox" id="scope-every-stage"> show every stage</label>
