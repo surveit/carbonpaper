@@ -9,8 +9,13 @@ import pandas as pd
 from fastapi.testclient import TestClient
 
 from app.main import app
-from test_trace_helpers import write_run
+from app.runtime.runner import execute_run
+from app.services import project as project_service
+from app.services import versioning
 from app.services import workspace
+from conftest import pinned_stages
+from stage_seed import add_stage
+from test_trace_helpers import write_run
 
 
 def _project_run(tmp_path, monkeypatch):
@@ -107,6 +112,82 @@ def test_lineage_panel_is_the_transform_not_the_row(tmp_path, monkeypatch):
     assert "lineage-stage" in body     # the panel rendered
     assert "data-preview" not in body  # and carries no row table
     assert "b</td>" not in body        # not row 1's cells either
+
+
+def test_trace_view_headline_names_the_cited_cell(tmp_path, monkeypatch):
+    client = _project_run(tmp_path, monkeypatch)  # enrich row 1: b/B, score 2
+    body = client.get(
+        "/project/proj/runs/R1/stage/enrich/row/1/trace/view?column=score").text
+    assert '<span class="lin-value">2</span>' in body
+    assert 'class="lin-colname has-tip"' in body and ">score</span>" in body
+    assert 'at <code>enrich</code> row 1' in body
+    # This run pins a version nothing can load, so the tooltip says so.
+    assert "is unreadable, so nothing declares score here" in body
+
+
+def test_trace_view_400_for_a_column_the_stage_does_not_have(tmp_path, monkeypatch):
+    client = _project_run(tmp_path, monkeypatch)
+    resp = client.get(
+        "/project/proj/runs/R1/stage/enrich/row/1/trace/view?column=nope")
+    assert resp.status_code == 400
+    assert "nope" in resp.json()["detail"] and "enrich" in resp.json()["detail"]
+
+
+def test_trace_view_without_a_column_names_the_row_alone(tmp_path, monkeypatch):
+    client = _project_run(tmp_path, monkeypatch)
+    body = client.get("/project/proj/runs/R1/stage/enrich/row/0/trace/view").text
+    assert "<code>enrich</code> row 0" in body
+    assert '<span class="lin-value">' not in body
+    assert 'class="lin-colname has-tip"' not in body
+
+
+def test_trace_view_carries_the_three_tabs_with_the_story_open(tmp_path, monkeypatch):
+    client = _project_run(tmp_path, monkeypatch)
+    body = client.get("/project/proj/runs/R1/stage/enrich/row/0/trace/view").text
+    assert '<button class="lin-pagetab on" data-pane="story">Story' in body
+    assert 'data-pane="rows">Rows' in body and 'data-pane="value">Value' in body
+    assert "The other rows are not counted on this page" in body
+    assert "The column's other values are not on this page" in body
+
+
+VAL_DESCRIPTION = "Tonnes of CO2e the operator reported for the year."
+
+
+def _run_a_pinned_version(tmp_path) -> tuple[TestClient, str]:
+    project_dir = tmp_path / "described"
+    project_dir.mkdir(parents=True)
+    data = project_dir / "rows.csv"
+    pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(data, index=False)
+    add_stage(project_dir, {
+        "id": "readings", "description": "Readings", "type": "input_data",
+        "connector": {"kind": "file", "params": {"path": str(data), "format": "csv"}},
+        "signature": {"form": "replaces", "produces": [
+            {"name": "name", "type": "str", "nullable": False},
+            {"name": "val", "type": "int", "nullable": False,
+             "description": VAL_DESCRIPTION},
+        ]},
+    })
+    workspace.set_projects_dir(tmp_path)
+    version_id = project_service.save_working_copy_as_version(
+        "described", message="v1", reviewer="test").version_id
+    versioning.publish_version("described", version_id, reviewer="test")
+    run = execute_run(project_dir / "runs", "described", *pinned_stages(project_dir))
+    return TestClient(app), str(run["run_id"])
+
+
+def test_the_column_tooltip_carries_the_declared_description(tmp_path):
+    client, run_id = _run_a_pinned_version(tmp_path)
+    body = client.get(
+        f"/project/described/runs/{run_id}/stage/readings/row/0/trace/view?column=val").text
+    assert f'data-tip="{VAL_DESCRIPTION}"' in body
+    assert '<span class="lin-value">1</span>' in body
+
+
+def test_an_undescribed_column_says_so_rather_than_showing_nothing(tmp_path):
+    client, run_id = _run_a_pinned_version(tmp_path)
+    body = client.get(
+        f"/project/described/runs/{run_id}/stage/readings/row/0/trace/view?column=name").text
+    assert "Declared str, not null. No description was authored for this column." in body
 
 
 def test_trace_view_says_reshaping_not_traceable(tmp_path, monkeypatch):
