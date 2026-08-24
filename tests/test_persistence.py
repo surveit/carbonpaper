@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from app.core.errors import DocumentNotFound
-from pydantic import Field
+from pydantic import Field, ValidationError
 
 from app.core.persistence import get_store, configure_store
 from app.core.ids import validate_id
@@ -336,3 +336,17 @@ def test_persistedmodel_config_mirrors_base():
     from app.core.record import PersistedModel
     for key in ("extra", "use_enum_values", "validate_default", "populate_by_name"):
         assert PersistedModel.model_config.get(key) == _Base.model_config.get(key)
+
+
+def test_id_cannot_be_reassigned():
+    w = _Widget(id="a", name="x")
+    with pytest.raises(ValidationError):
+        w.id = "b"
+    assert w.id == "a"
+
+
+def test_every_other_field_stays_mutable():
+    w = _Widget(id="a", name="x")
+    w.name = "y"
+    w.updated_at = now_iso()
+    assert w.name == "y"

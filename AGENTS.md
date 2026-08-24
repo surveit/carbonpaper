@@ -91,7 +91,7 @@ Also `app/AGENTS.md` (web layer), `app/runtime/AGENTS.md` (the Runner), `README.
   `load_raw_or_none`, `list_raw`. Tests are outside the contract and may still reach the
   handle to arrange a fixture. `JsonDict`/`JsonScalar` live in `app.core.json_types` and
   are open to all: naming a payload's shape is not reaching for storage.
-- **A `PersistedModel`'s `id` is opaque. Never build one out of the record's own data.**
+- **A `PersistedModel`'s `id` is opaque and frozen. Never build one out of the record's own data.**
   A sha256, a filename, a name someone typed, a fingerprint — putting any of them in the id
   makes the id move when the value does. The record then has two identities that must agree,
   nothing checks that they do, and re-keying it means deleting and re-writing the row rather
@@ -99,7 +99,9 @@ Also `app/AGENTS.md` (web layer), `app/runtime/AGENTS.md` (the Runner), `README.
   goes in FIELDS, which is what a lookup filters on — `find()` selects on stored fields, so
   a scope has no reason to be smuggled into the id. `StageCacheEntry` is the deliberate
   exception and the only one: a cache entry IS its content hash, so its id is built from the
-  fingerprints it looks up by.
+  fingerprints it looks up by. `id` carries `frozen=True`, so reassigning it on a loaded
+  record raises rather than silently re-keying the row — a record's identity is settled
+  when it is constructed.
 - **When master is red, do not fix it unless that fix is your whole task.** A trunk breakage
   is shared state: parallel sessions each patching it on their own branches fork the same fix
   N ways, and every branch conflicts when the first copy merges. If you hit a red master
