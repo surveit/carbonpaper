@@ -24,6 +24,20 @@ caller needs as a field, including `rows_live_in_stage_id`, the frame its rows a
 A branch carries a `BranchReason` (why the rows differ) and a `BranchRole` (what the branch did
 to the rows that took it). Both are in `app/models/branch_analysis.py`.
 
+## How many options a stage has
+
+Most stages offer a fixed number, readable off the workflow before anything runs: an `if`/`elif`
+chain has one per arm, a filter has kept and dropped, a join has matched and missed per input, a
+union has one per input, a load has one.
+
+A `group_by` does not. It offers **one option per group**, and how many groups there are is decided
+by the data: group ten grants by the portfolio their agency belongs to and you get however many
+distinct portfolios those ten rows carry. So the catalogue is per-run, and
+`BranchOption.merged_into_row_ordinal` is the part that varies.
+
+That is not a wart. "Which group did you go into" is the same shape of question as "which arm did
+you take"; it just has more answers, and they are not known until the rows arrive.
+
 ## Where branches come from
 
 Only **one** kind of branch is recorded while the run executes.
@@ -113,6 +127,11 @@ Any other type that writes none raises `MissingLineage` rather than being guesse
 two different stages, there is no single frame the rows live in, and it raises
 `UnresolvableFigure` rather than presenting a mixture. A merge upstream that gathered no rows at
 all is not that case: it contributes no rows and so names no grain, and the walk passes over it.
+
+**A frame can be read by more than one merge, and only one is on your route.** Group the same
+grants by portfolio and by region, and every row holds a branch from both. Asked about a portfolio
+total, the region branch splits rows that the question does not distinguish, so `RowSet.regrained_at`
+records the merges the walk actually came down through and the rest are dropped from the path.
 
 `measure_frame_scale` is the same walk with a different question: for each stage, how many of
 *its* rows this figure came through. That is a count per stage, never a shape drawn to scale —

@@ -28,14 +28,14 @@ class BranchReason(StrEnum):
 
 
 class BranchRole(StrEnum):
-    """What the branch did to the rows that took it. Both hold whatever is asked."""
+    """What the branch did to the rows that took it."""
 
     removes = "removes"  # taken out of the frame
     keeps = "keeps"      # still in the frame, and still downstream
 
 
 class BranchOption(BaseModel):
-    """One way the run could tell rows apart, and where to look at the code behind it."""
+    """One option a stage offered its rows. How many it had can be data-decided."""
 
     id: BranchId
     # The stage that made the decision.
@@ -50,7 +50,7 @@ class BranchOption(BaseModel):
     test_line_number: int | None = None
     first_body_line_number: int | None = None
     last_body_line_number: int | None = None
-    # Which output row a merge built, so no caller works it out from the id.
+    # The data-decided part. See docs/branch-analysis.md.
     merged_into_row_ordinal: RowOrdinal | None = None
 
 
