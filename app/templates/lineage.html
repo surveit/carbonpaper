@@ -39,6 +39,15 @@ body{display:flex;flex-direction:column;overflow:hidden}
 .lin-pagetab:hover{background:var(--hover)}
 .lin-pane{flex:1;min-height:0;display:flex;flex-direction:column}
 .lin-pane.hidden{display:none}
+.lin-cols{display:flex;flex-wrap:wrap;gap:6px;padding:10px 18px 0}
+.lin-cols button{border:1px solid var(--border);background:var(--raised);border-radius:7px;
+  padding:3px 10px;font:inherit;font-size:12px;color:var(--muted);cursor:pointer}
+.lin-cols button:hover{background:var(--hover)}
+.lin-cols button.on{background:var(--info-ink);color:var(--on-dark);border-color:var(--info-ink)}
+.lin-colsnote{color:var(--muted);font-size:12px;align-self:center;margin-right:2px}
+/* The frame scrolls the map; the pane itself does not, so the chips stay put. */
+.lin-scopeframe{flex:1;width:100%;border:0;min-height:0}
+@media (max-width:900px){.lin-scopeframe{height:80vh}}
 .lin-source{color:var(--info-ink);font-size:12.5px;font-weight:600}
 .lin-source code{background:var(--info-bg);padding:1px 5px;border-radius:4px}
 .lin-became{color:var(--muted);font-size:12.5px}
@@ -202,11 +211,22 @@ tr.carried td.lin-v{color:var(--muted)}
 {% endif %}
 </div>
 <div class="lin-pane hidden" data-pane="rows">
+{% if offline or not view.nodes %}
   <div class="empty-state">
-    <h2>The other rows are not counted on this page</h2>
-    <p>This page follows the one row named above. It does not list or count the other rows
-      that reached it.</p>
+    <h2>The other rows are not counted here</h2>
+    {% if offline %}
+    <p>The scope of a figure &mdash; which rows produced it, and what cut the rest &mdash;
+      is drawn by the running app. A folder has no server to ask.</p>
+    {% else %}
+    <p>The run wrote no row here, so there is nothing whose scope could be drawn.</p>
+    {% endif %}
   </div>
+{% else %}
+  {# One figure is one cell, so the map is per column and the reader picks which.
+     The chips are written by the script below, off the traced row's own fields. #}
+  <div class="lin-cols" id="scope-cols"></div>
+  <iframe class="lin-scopeframe" id="scope-frame" title="The scope of this figure"></iframe>
+{% endif %}
 </div>
 <div class="lin-pane hidden" data-pane="inputs">
   <div class="empty-state">
@@ -521,6 +541,46 @@ document.querySelector('.lin-graph').addEventListener('toggle', async e => {
   graphRendered = true;
   try { await mermaid.run({ nodes:[mmd] }); } catch(err){ graphRendered = false; }
 });
+
+// ---- Relevant rows: the scope of one figure, drawn by the scope map --------
+// A figure is a cell, so the map is per column: the chips pick which cell of this
+// row the frame is drawn for. `?column=` is what a published figure links with, so
+// the column the reader arrived on is the one already chosen.
+const CITED_COLUMN = {{ (cell.column if cell else None) | tojson }};
+const scopeCols = document.getElementById('scope-cols');
+const scopeFrame = document.getElementById('scope-frame');
+let scopeColumn = null;
+
+function scopeUrlFor(column){
+  const q = new URLSearchParams({stage: V.start_stage, row: V.start_row, column});
+  return `/project/${encodeURIComponent(PROJECT)}/runs/${encodeURIComponent(V.run_id)}`
+       + `/scope/panel?${q}`;
+}
+function drawScopeFor(column){
+  scopeColumn = column;
+  scopeFrame.src = scopeUrlFor(column);
+  scopeCols.querySelectorAll('button').forEach(
+    b => b.classList.toggle('on', b.dataset.column === column));
+}
+function renderScopeColumns(){
+  // The Row tab's own order, so the two panes name this row's columns the same way.
+  const columns = V.nodes[V.nodes.length - 1].row_diff.fields
+    .filter(f => f.state !== 'dropped').map(f => f.name);
+  scopeCols.innerHTML = '<span class="lin-colsnote">the figure in</span>'
+    + columns.map(c => `<button data-column="${esc(c)}">${esc(c)}</button>`).join('');
+  scopeCols.addEventListener('click', e => {
+    const picked = e.target.closest('button');
+    if(picked && picked.dataset.column !== scopeColumn) drawScopeFor(picked.dataset.column);
+  });
+  // The frame is a page load, so it waits until the reader opens the tab.
+  document.getElementById('pagetabs').addEventListener('click', e => {
+    const picked = e.target.closest('.lin-pagetab');
+    if(picked && picked.dataset.pane === 'rows' && scopeColumn === null){
+      drawScopeFor(columns.includes(CITED_COLUMN) ? CITED_COLUMN : columns[0]);
+    }
+  });
+}
+if(scopeCols && scopeFrame) renderScopeColumns();
 
 // The stories do not move when a step is picked, so they are painted once.
 renderStories();

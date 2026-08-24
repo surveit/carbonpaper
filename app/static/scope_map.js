@@ -27,8 +27,13 @@
   var LABEL_PITCH = 30, STUB = 26;
 
   var num = function (n) { return Number(n).toLocaleString("en-US"); };
-  var money = function (n) {
-    return Number(n).toLocaleString("en-US", { maximumFractionDigits: 2 });
+  // A cited cell is not always a number — a group key is a figure a reader may cite
+  // too, and Number("Facebook") prints NaN where the frame holds a name.
+  var figure = function (value) {
+    if (value === null || value === undefined) return "(empty)";
+    return typeof value === "number"
+      ? value.toLocaleString("en-US", { maximumFractionDigits: 2 })
+      : String(value);
   };
   var esc = function (s) {
     return String(s == null ? "" : s).replace(/[&<>]/g, function (c) {
@@ -147,7 +152,7 @@
 
   function labelOf(node) {
     if (node.isFigure) {
-      return D.citation.column + " = " + money(D.citation.value) +
+      return D.citation.column + " = " + figure(D.citation.value) +
         ", merged from " + num(node.rows);
     }
     var labels = node.branches.map(function (b) { return D.branches[b].label; });
