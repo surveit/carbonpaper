@@ -1,0 +1,25 @@
+{# The scope map as its own bare document, for the frame the row lineage page's
+   Relevant rows tab holds. No project shell: the tab is already inside one, and a
+   second sidebar and trail inside a pane is chrome the reader has to look past.
+   `reason` instead of `scope` where no map can be drawn. #}
+<!doctype html><html><head><meta charset="utf-8">
+<title>Scope of {{ citation.stage_id }}.{{ citation.column }}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+{% include "_stylesheets.html" %}
+<script src="/static/tooltip.js"></script>
+<style>
+body { padding: 14px 18px 28px; }
+/* The frame is the scroller, so the drawing sizes to the tab and not to a page. */
+.scope-figure { margin-top: 0; }
+</style></head><body>
+{% if reason %}
+<section class="scope">
+  <p class="banner banner-warn">
+    No scope map for <code>{{ citation.stage_id }}</code> row {{ citation.row_ordinal }},
+    column <code>{{ citation.column }}</code> — {{ reason }}.
+  </p>
+</section>
+{% else %}
+{% include "_scope_map.html" %}
+{% endif %}
+</body></html>

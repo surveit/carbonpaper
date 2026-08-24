@@ -147,7 +147,8 @@ def test_trace_view_carries_the_three_tabs_with_the_story_open(tmp_path, monkeyp
     assert '<button class="lin-pagetab on" data-pane="paths">Paths' in body
     for pane, label in [("rows", "Relevant rows"), ("values", "Values used"), ("inputs", "Inputs")]:
         assert f'data-pane="{pane}">{label}' in body
-    assert "The other rows are not counted on this page" in body
+    # Relevant rows holds the scope map, in a frame the tab loads when it is opened.
+    assert 'id="scope-frame"' in body
     assert "The column's other values are not on this page" in body
 
 

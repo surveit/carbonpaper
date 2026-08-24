@@ -151,7 +151,8 @@ def test_the_packet_page_carries_the_three_tabs_with_no_column_bound(tmp_path):
     for pane, label in [("rows", "Relevant rows"), ("values", "Values used"),
                         ("inputs", "Inputs")]:
         assert f'data-pane="{pane}">{label}' in page
-    assert "The other rows are not counted on this page" in page
+    # A folder has no server, so the scope map is the one pane the packet cannot draw.
+    assert "A folder has no server to ask" in page
 
 
 def test_the_packet_page_carries_the_story_pane_with_no_server_to_ask(tmp_path):

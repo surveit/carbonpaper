@@ -244,3 +244,35 @@ def stage_specs(data: Path) -> list[dict]:
                 "produces": [column("summed_means", "float")]},
         },
     ]
+
+
+def review_tail() -> list[dict]:
+    """A halting review stage and one aggregate after it, so a run leaves work pending."""
+    return [
+        {
+            "id": "review_totals", "type": "human_review_queue",
+            "description": "A human checks the total before anything downstream reads it.",
+            "inputs": [{"id": "grant_totals"}],
+            "signature": {"form": "extends", "reads": [
+                {"input": "grant_totals", "columns": [
+                    column("grants", "int"), column("total_amount", "int")]}],
+                "adds": [column("checked_amount", "int"), column("decision", "str"),
+                         column("reviewer_id", "str"), column("reviewed_at", "str"),
+                         column("review_notes", "str")]},
+            "queue": {"reviewed_columns": {"total_amount": "checked_amount"},
+                      "verdict_column": "decision", "reviewer_column": "reviewer_id",
+                      "reviewed_at_column": "reviewed_at",
+                      "review_notes_column": "review_notes"},
+        },
+        {
+            "id": "count_reviewed", "type": "aggregate",
+            "description": "What the reviewer's signed-off totals come to.",
+            "inputs": [{"id": "review_totals"}],
+            "aggregate": {"group_by": [], "aggregations": [
+                {"output_column": "reviewed_total", "formula": "sum",
+                 "value_column": "checked_amount"}]},
+            "signature": {"form": "replaces", "reads": [
+                {"input": "review_totals", "columns": [column("checked_amount", "int")]}],
+                "produces": [column("reviewed_total", "int")]},
+        },
+    ]

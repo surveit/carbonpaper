@@ -93,12 +93,16 @@ def say_why_rows_left(cut: CutRows, role: BranchRole) -> str:
 
 def _read_run(project_id: str, run_id: str) -> WorkflowRunBranches:
     manifest = run_service.read_run_status(project_id, run_id)
-    order = [record["stage_id"] for record in manifest["stage_records"]]
+    # An interrupted run leaves records for stages it never reached: no frame, none owed.
+    records_with_a_frame = [record for record in manifest["stage_records"]
+                            if record.get("output_path")]
+    order = [record["stage_id"] for record in records_with_a_frame]
     rows = {record["stage_id"]: record["output_row_count"]
-            for record in manifest["stage_records"]}
+            for record in records_with_a_frame}
     stages = load_version_stages(project_id,
                                  run_service.read_pinned_version(project_id, run_id))
     workflow = Workflow(stages=stages)
-    placed = {stage.id: workflow.find_workflow_stage(stage.id) for stage in stages}
+    placed = {stage.id: workflow.find_workflow_stage(stage.id)
+              for stage in stages if stage.id in rows}
     return reconstruct_run_branches(resolve_run_dir(project_id, run_id), placed,
                                     order, rows)
