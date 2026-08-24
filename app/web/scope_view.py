@@ -24,7 +24,7 @@ from app.web.scope_payload import (
 
 def load_scope_map(project_id: str, run_id: str, citation: StageOutputCellCitation
                    ) -> tuple[ScopeMap, dict[BranchId, CutRows], set[StageId]]:
-    run_branches = _read_run(project_id, run_id)
+    run_branches = read_run_branches(project_id, run_id)
     outputs = resolve_run_dir(project_id, run_id) / "outputs"
     scope = build_scope_map(run_branches, project_id, run_id, outputs, citation)
     cuts = find_cuts_to_offer(run_branches, outputs, scope)
@@ -91,7 +91,7 @@ def say_why_rows_left(cut: CutRows, role: BranchRole) -> str:
             f"merged into a row this figure did not come through.")
 
 
-def _read_run(project_id: str, run_id: str) -> WorkflowRunBranches:
+def read_run_branches(project_id: str, run_id: str) -> WorkflowRunBranches:
     manifest = run_service.read_run_status(project_id, run_id)
     # An interrupted run leaves records for stages it never reached: no frame, none owed.
     records_with_a_frame = [record for record in manifest["stage_records"]

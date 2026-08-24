@@ -1,0 +1,42 @@
+{# The Paths pane: every path the rows behind this figure took, none collapsed.
+   Context: pane (app.web.row_paths.PathsPane). #}
+<h2>How these rows got here</h2>
+{% if pane.reason is defined %}
+<p class="paths-none">This run cannot say: {{ pane.reason }}</p>
+{% else %}
+<p class="paths-count">
+  {% if pane.paths | length == 1 %}
+    All <b>{{ pane.rows }}</b> row{{ '' if pane.rows == 1 else 's' }} behind
+    <code>{{ pane.figure.stage_id }}</code> row {{ pane.figure.row_ordinal }} took the
+    <b>same path</b>.
+  {% else %}
+    <b>{{ pane.rows }}</b> rows behind <code>{{ pane.figure.stage_id }}</code> row
+    {{ pane.figure.row_ordinal }}, on <b>{{ pane.paths | length }}</b> paths.
+  {% endif %}
+</p>
+{% for path in pane.paths %}
+  {% set body %}
+    <span class="path-rows"><b>{{ path.rows }}</b> row{{ '' if path.rows == 1 else 's' }}</span>
+    {% for branch in path.tells_it_apart %}
+      <span class="path-branch {{ 'is-code' if branch.reason.value == 'code' }}"
+            title="{{ branch.reason.value }} at {{ branch.stage_id }}">{{ branch.label }}</span>
+    {% endfor %}
+  {% endset %}
+  {% if path.carries_the_shown_row %}
+    <div class="path-entry on">{{ body }}</div>
+  {% elif path.href %}
+    <a class="path-entry" href="{{ path.href }}"
+       title="follow one of these rows instead">{{ body }}</a>
+  {% else %}
+    <div class="path-entry">{{ body }}</div>
+  {% endif %}
+{% endfor %}
+{% if pane.arms_not_recorded_at %}
+<p class="paths-gap">{% for sid in pane.arms_not_recorded_at %}<code>{{ sid }}</code>{{ ", " if not loop.last }}{% endfor %}
+  {{ 'has' if pane.arms_not_recorded_at | length == 1 else 'have' }} branches in
+  {{ 'its' if pane.arms_not_recorded_at | length == 1 else 'their' }} code that this run did not
+  record, because the rows came from cache. No path below names them.</p>
+{% endif %}
+<p class="paths-foot">Every path is one the run recorded. Branches every path shares are left
+  out — they tell none of them apart. Opening one follows a row that took it.</p>
+{% endif %}
