@@ -11,7 +11,11 @@ import app.services.run as run_service
 from app.services import workspace
 from app.main import app
 from app.services.project import save_working_copy_as_version
-from app.services.versioning import list_versions, publish_version
+from app.services.versioning import (
+    create_version_from_stages,
+    list_versions,
+    publish_version,
+)
 from stage_seed import add_stage, set_stages
 from run_seed import read_manifest
 
@@ -212,3 +216,41 @@ def test_run_inputs_endpoint_returns_the_selected_versions_inputs(
     assert older["inputs"][0]["authored_path"] == str(proj / "a.csv")
     # The files are project-wide, so both answers carry the same list.
     assert latest["files"] == older["files"]
+
+
+def _store_version_without_working_copy(tmp_path) -> str:
+    """A version written straight to the store, the way a rebuild from outside does."""
+    proj = tmp_path / "demo"
+    proj.mkdir(parents=True, exist_ok=True)
+    data = proj / "a.csv"
+    pd.DataFrame({"name": ["x"], "val": [1]}).to_csv(data, index=False)
+    workspace.set_projects_dir(tmp_path)
+    return create_version_from_stages(
+        proj.name,
+        [{"id": "load", "description": "Load", "type": "input_data",
+          "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
+          "connector": {"kind": "file",
+                        "params": {"path": str(data), "format": "csv"}}}],
+        message="rebuilt elsewhere", reviewer="test",
+    ).version_id
+
+
+def test_run_form_shown_for_a_version_stored_without_a_working_copy(tmp_path):
+    vid = _store_version_without_working_copy(tmp_path)
+
+    resp = client.get(f"/project/demo/runs/new?version_id={vid}")
+
+    assert resp.status_code == 200
+    assert 'name="version_id"' in resp.text
+    assert f'value="{vid}" selected' in resp.text
+    assert 'name="binding__load"' in resp.text
+    assert "No workflow to run" not in resp.text
+
+
+def test_runs_page_offers_a_new_run_without_a_working_copy(tmp_path):
+    _store_version_without_working_copy(tmp_path)
+
+    resp = client.get("/project/demo/runs")
+
+    assert resp.status_code == 200
+    assert 'href="/project/demo/runs/new"' in resp.text

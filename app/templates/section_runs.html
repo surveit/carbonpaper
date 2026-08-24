@@ -83,7 +83,7 @@
     {% endif %}
   </div>
   <div class="actions wf-actions">
-    {% if state.workflow.present %}
+    {% if state.versions or state.workflow.present %}
     <a href="/project/{{ state.id }}/runs/new" class="btn primary">▶ New run</a>
     {% endif %}
   </div>
@@ -242,7 +242,7 @@
 {% else %}
 <div class="empty-state">
   <h2>No runs yet</h2>
-  {% if state.workflow.present %}
+  {% if state.versions or state.workflow.present %}
   <p>Pick a version, bind a file to each input, and execute the pipeline end-to-end.</p>
   <a href="/project/{{ state.id }}/runs/new" class="btn primary">Start new run</a>
   {% else %}
