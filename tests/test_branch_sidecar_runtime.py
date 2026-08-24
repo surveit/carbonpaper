@@ -34,14 +34,20 @@ def _load_stage(sid: str, frame: pd.DataFrame, tmp_path) -> Stage:
     })
 
 
-def _row_function(sid: str, input_id: str) -> Stage:
+def _row_function(sid: str, input_id: str, code: str = _TIER) -> Stage:
     return parse_stage({
         "id": sid, "description": sid, "type": "python_row_function",
         "inputs": [{"id": input_id}],
         "signature": {"form": "extends",
                       "reads": [{"input": input_id, "columns": _COLS}]},
-        "function": {"kind": "inline", "code": _TIER},
+        "function": {"kind": "inline", "code": code},
     })
+
+
+_MARKER = """
+def transform(row):
+    return dict(row, marked=1 if row["b"] > 1 else 0)
+"""
 
 
 def _filter(sid: str, input_id: str, code: str) -> Stage:
@@ -98,6 +104,18 @@ def test_a_stage_whose_code_never_branches_writes_no_sidecar(tmp_path) -> None:
          ["src", "kept"], run_dir)
 
     assert not branch_sidecar_path(run_dir, "kept").exists()
+
+
+def test_a_stage_that_only_chooses_between_values_writes_one_too(tmp_path) -> None:
+    src = pd.DataFrame({"a": ["x", "y"], "b": [5, 1]})
+    run_dir = tmp_path / "runs" / "r3b"
+    _run(Workflow(stages=[_load_stage("src", src, tmp_path),
+                          _row_function("marked", "src", _MARKER)]),
+         ["src", "marked"], run_dir)
+
+    assert _sidecar(run_dir, "marked").taken == [
+        ("transform/0:choice0:if",), ("transform/0:choice0:else",),
+    ]
 
 
 def test_the_sidecar_carries_one_schema(tmp_path) -> None:

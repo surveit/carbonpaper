@@ -16,6 +16,7 @@ A branch has an id, the stage it happened at, and a label a person can read:
 funded|removed                    at `funded`, "dropped by the predicate"
 read_money|transform/3:elif0      at `read_money`, "elif text.startswith('$')"
 load_grants|loaded                at `load_grants`, "loaded by load_grants"
+mark_groups|transform/5:choice1:else   at `mark_groups`, "else"
 ```
 
 The id is opaque. Nothing reads anything back out of it — a `BranchOption` carries every fact a
@@ -27,8 +28,8 @@ to the rows that took it). Both are in `app/models/branch_analysis.py`.
 ## How many options a stage has
 
 Most stages offer a fixed number, readable off the workflow before anything runs: an `if`/`elif`
-chain has one per arm, a filter has kept and dropped, a join has matched and missed per input, a
-union has one per input, a load has one.
+chain has one per arm, so does a conditional expression, a filter has kept and dropped, a join
+has matched and missed per input, a union has one per input, a load has one.
 
 A `group_by` does not. It offers **one option per group**, and how many groups there are is decided
 by the data: group ten grants by the portfolio their agency belongs to and you get however many
@@ -46,6 +47,16 @@ Only **one** kind of branch is recorded while the run executes.
 `if` / `elif` / `else` / `try` / `except` with a call that reports itself. Each output row's list
 of arms lands in `<stage>.branch.parquet` beside its frame. That is the `code` reason, and it is
 the only one that costs anything to collect.
+
+A conditional expression — `1 if in_window else 0` — is recorded too, and it is the case a
+statement rewrite cannot reach: an arm is a value, with no suite to put a call above. So each arm
+is wrapped instead, `(record_branch("…") or (1))`, which yields the arm itself because the
+recorder returns `None`. A `ChoiceBranch` carries the arm's end position for that wrap, and its
+own label (`if in_window`, `else`), since no line opens it for `read_branch_test` to read.
+
+Two places a conditional expression is deliberately **not** recorded. Inside a comprehension or
+a lambda it runs per element and per call, so "which arm did this row take" has no one answer.
+And a `def`'s own decorators and defaults run where the `def` is written, not once per row.
 
 The other five are **worked out afterwards**, from the shape of the lineage sidecar. Lineage is
 already written for every stage: `<stage>.lineage.parquet` says, for each output row, which input
@@ -109,7 +120,7 @@ and the row that took `if amount == 0` is still dropped two stages later at `fun
 ## Asking which rows produced a figure
 
 `app/services/scope.py` answers a citation — a stage, a row and a column, e.g.
-`people_figures` row 0, column `deaths_gb_review_period`.
+`grant_totals` row 0, column `total_amount`.
 
 It starts at that cell and asks whether the row was merged from several. It was, when the lineage
 records several rows feeding it by merge edges. If so, the row is replaced by the rows that fed
