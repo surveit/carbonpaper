@@ -13,6 +13,7 @@ import pytest
 
 from scripts.lexicon import (
     LexiconSnapshot,
+    NewVerbUse,
     Sighting,
     SourceLinks,
     Role,
@@ -26,6 +27,8 @@ from scripts.lexicon import (
     main,
     read_registry,
     render_markdown,
+    render_new_verb_annotations,
+    render_new_verb_lines,
     split_words,
 )
 
@@ -156,7 +159,9 @@ def test_noun_led_words_are_marked_by_hand_only() -> None:
 def test_first_verb_use_of_a_noun_only_word_is_flagged() -> None:
     base = LexiconSnapshot(words={"figure": WordRoles(noun=12)}, functions=1, accessors=0, types=1)
     head = LexiconSnapshot(words={"figure": WordRoles(noun=12, verb=1)}, functions=1, accessors=0, types=1)
-    assert find_new_verb_uses(head, base) == ["figure (verb 0 → 1)"]
+    found = find_new_verb_uses(head, base)
+    assert found == [NewVerbUse(word="figure", verb=1, held_before=[Role.NOUN])]
+    assert render_new_verb_lines(found) == ["figure (verb 0 → 1)"]
 
 
 def test_word_already_holding_verb_is_not_reflagged() -> None:
@@ -201,7 +206,9 @@ def test_check_new_verbs_exits_nonzero_on_a_finding(
     )
     exit_code = main(["--check-new-verbs", str(head_path), str(base_path)])
     assert exit_code == 1
-    assert "figure" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "figure" in out
+    assert "::error" not in out, "a local run gets plain lines; annotations are opt-in"
 
 
 def test_check_new_verbs_is_silent_and_zero_on_no_finding(
@@ -215,6 +222,87 @@ def test_check_new_verbs_is_silent_and_zero_on_no_finding(
     exit_code = main(["--check-new-verbs", str(same_path), str(same_path)])
     assert exit_code == 0
     assert capsys.readouterr().out == ""
+
+
+# --- a finding reaches the reader, not just the log ------------------------------
+
+
+def test_an_annotation_points_at_the_line_that_first_used_the_word_as_a_verb() -> None:
+    """The exit code alone names no file; GitHub renders this one on the diff itself."""
+    base = LexiconSnapshot(words={"scope": WordRoles(noun=4, field=2)}, functions=1, accessors=0, types=1)
+    head = LexiconSnapshot(
+        words={"scope": WordRoles(noun=4, field=2, verb=2)},
+        functions=3,
+        accessors=0,
+        types=1,
+        sightings={
+            "scope:verb": Sighting(path="app/web/routers/scope.py", line=29, source="async def scope_page(")
+        },
+    )
+    line = render_new_verb_annotations(find_new_verb_uses(head, base), head)[0]
+    assert line.startswith("::error file=app/web/routers/scope.py,line=29,title=")
+    assert "field, noun" in line, "the reader needs to know what the word already meant"
+    assert len(line.splitlines()) == 1, "the runner drops a workflow command that spans lines"
+
+
+def test_an_annotation_survives_a_snapshot_that_carries_no_sightings() -> None:
+    """`--registry` output has none, and losing the line number must not lose the finding."""
+    base = LexiconSnapshot(words={"figure": WordRoles(noun=1)}, functions=1, accessors=0, types=1)
+    head = LexiconSnapshot(words={"figure": WordRoles(noun=1, verb=1)}, functions=2, accessors=0, types=1)
+    line = render_new_verb_annotations(find_new_verb_uses(head, base), head)[0]
+    assert line.startswith("::error title=")
+    assert "figure" in line
+
+
+def test_annotate_switches_the_check_to_workflow_commands(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    base_path, head_path = tmp_path / "base.json", tmp_path / "head.json"
+    base_path.write_text(
+        LexiconSnapshot(words={"figure": WordRoles(noun=1)}, functions=1, accessors=0, types=1).model_dump_json(),
+        encoding="utf-8",
+    )
+    head_path.write_text(
+        LexiconSnapshot(
+            words={"figure": WordRoles(noun=1, verb=1)},
+            functions=2,
+            accessors=0,
+            types=1,
+            sightings={"figure:verb": Sighting(path="app/x.py", line=7, source="def figure_out():")},
+        ).model_dump_json(),
+        encoding="utf-8",
+    )
+    exit_code = main(["--check-new-verbs", str(head_path), str(base_path), "--annotate"])
+    assert exit_code == 1
+    assert capsys.readouterr().out.startswith("::error file=app/x.py,line=7,")
+
+
+def test_the_comment_marks_the_row_the_check_failed_on() -> None:
+    """Twelve equal-weight rows leave the red X unexplained; only one of them is the cause."""
+    base = LexiconSnapshot(words={"scope": WordRoles(noun=4)}, functions=1, accessors=0, types=1)
+    head = LexiconSnapshot(
+        words={"scope": WordRoles(noun=4, verb=2), "sidecar": WordRoles(noun=1)},
+        functions=3,
+        accessors=0,
+        types=2,
+        sightings={
+            "scope:verb": Sighting(path="app/web/routers/scope.py", line=29, source="async def scope_page(")
+        },
+    )
+    body = render_markdown(head, base)
+    assert "### 🔴 lexicon" in body
+    flagged_row = next(line for line in body.splitlines() if "`scope`" in line and "`verb`" in line)
+    assert flagged_row.startswith("| 🔴 ")
+    assert "🔴" not in next(line for line in body.splitlines() if "`sidecar`" in line)
+
+
+def test_a_report_only_comment_stays_yellow_and_unmarked() -> None:
+    """A brand-new word fails no check, so nothing in the comment may claim it did."""
+    base = LexiconSnapshot(words={}, functions=0, accessors=0, types=0)
+    head = LexiconSnapshot(words={"sidecar": WordRoles(verb=1)}, functions=1, accessors=0, types=0)
+    body = render_markdown(head, base)
+    assert "### 🟡 lexicon" in body
+    assert "🔴" not in body
 
 
 def test_build_snapshot_merges_a_plural_noun_and_field_into_the_singular(tmp_path: Path) -> None:

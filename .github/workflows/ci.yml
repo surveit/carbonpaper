@@ -247,7 +247,7 @@ jobs:
       # required-status-check, so a red step here surfaces the finding without blocking.
       - name: New verb usage of an established word (non-blocking)
         if: always() && steps.lexicon.conclusion == 'success'
-        run: uv run --frozen python -m scripts.lexicon --check-new-verbs head-lexicon.json base-lexicon.json
+        run: uv run --frozen python -m scripts.lexicon --check-new-verbs head-lexicon.json base-lexicon.json --annotate
 
       # Wider and noisier than the lexicon report by design: comment prose is ~2,900 of
       # the ~3,400 words here, and a new word in a sentence is usually just a sentence.

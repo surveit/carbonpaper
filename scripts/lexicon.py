@@ -70,6 +70,14 @@ class RoleGain(BaseModel):
     is_new_word: bool
 
 
+class NewVerbUse(BaseModel):
+    """`held_before` is what BASE held the word as — never empty, and never `verb`."""
+
+    word: str
+    verb: int
+    held_before: list[Role]
+
+
 def build_snapshot(root: Path) -> LexiconSnapshot:
     seen: dict[str, Counter[Role]] = defaultdict(Counter)
     sightings: dict[str, Sighting] = {}
@@ -157,7 +165,7 @@ def find_ratchet_breaks(head: LexiconSnapshot, registry: LexiconSnapshot) -> lis
 _NON_VERB_ROLES = {Role.NOUN, Role.FIELD, Role.ACCESSOR}
 
 
-def find_new_verb_uses(head: LexiconSnapshot, base: LexiconSnapshot) -> list[str]:
+def find_new_verb_uses(head: LexiconSnapshot, base: LexiconSnapshot) -> list[NewVerbUse]:
     """A word BASE never used as a verb just led a function name for the first time on HEAD.
 
     Wider than `find_ratchet_breaks`: fires on every established non-verb word, not only the
@@ -169,13 +177,32 @@ def find_new_verb_uses(head: LexiconSnapshot, base: LexiconSnapshot) -> list[str
     only what that PR introduces.
     """
     return [
-        f"{word} (verb 0 → {roles.verb})"
+        NewVerbUse(word=word, verb=roles.verb, held_before=sorted(known.held()))
         for word, roles in head.words.items()
         if roles.verb > 0
         and (known := base.words.get(word)) is not None
         and Role.VERB not in known.held()
         and known.held() & _NON_VERB_ROLES
     ]
+
+
+def render_new_verb_lines(uses: list[NewVerbUse]) -> list[str]:
+    return [f"{use.word} (verb 0 → {use.verb})" for use in uses]
+
+
+def render_new_verb_annotations(uses: list[NewVerbUse], head: LexiconSnapshot) -> list[str]:
+    """Workflow commands, so a finding lands on the diff line rather than only in the log."""
+    return [_render_annotation(use, head.sighting(use.word, Role.VERB)) for use in uses]
+
+
+def _render_annotation(use: NewVerbUse, seen: Sighting | None) -> str:
+    held = ", ".join(role.value for role in use.held_before)
+    where = "" if seen is None else f"file={seen.path},line={seen.line},"
+    return (
+        f"::error {where}title=New verb usage of an established word::"
+        f"`{use.word}` has never led a function name on base, which holds it as {held}. "
+        f"It now leads {use.verb}. A new capability, or a word you already have, respelled?"
+    )
 
 
 def read_registry(root: Path = _REPO_ROOT) -> LexiconSnapshot:
@@ -200,14 +227,19 @@ def render_markdown(head: LexiconSnapshot, base: LexiconSnapshot, links: SourceL
             f"{_MARKER}\n### 🟢 lexicon — no new vocabulary\n\n"
             f"`{len(head.words)}` words · `{head.types}` types · `{head.functions}` functions · unchanged."
         )
-    lines = [_MARKER, f"### 🟡 lexicon — {len(gains) + len(breaks)} to look at", ""]
+    # The comment is upserted whatever the check step does, so it is the only place a reader
+    # can learn WHICH of these rows is the one that turned the run red.
+    flagged = {use.word for use in find_new_verb_uses(head, base)}
+    heading = "🔴" if flagged else "🟡"
+    lines = [_MARKER, f"### {heading} lexicon — {len(gains) + len(breaks)} to look at", ""]
     if gains:
         lines += [
             "Each row is one question: **a new concept, or one you already have, respelled?**",
             "",
+            *_render_flag_key(flagged),
             "| word | gains role | held before | where |",
             "|---|---|---|---|",
-            *[_render_gain(gain, base, head, links) for gain in gains],
+            *[_render_gain(gain, base, head, links, flagged) for gain in gains],
             "",
         ]
     if breaks:
@@ -303,12 +335,27 @@ def _is_docstring(statement: ast.stmt) -> bool:
     return isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant)
 
 
+def _render_flag_key(flagged: set[str]) -> list[str]:
+    if not flagged:
+        return []
+    return [
+        "🔴 marks what failed the non-blocking **New verb usage** check: an established "
+        "non-verb word now leads a function name. Every other row is report-only.",
+        "",
+    ]
+
+
 def _render_gain(
-    gain: RoleGain, base: LexiconSnapshot, head: LexiconSnapshot, links: SourceLinks | None
+    gain: RoleGain,
+    base: LexiconSnapshot,
+    head: LexiconSnapshot,
+    links: SourceLinks | None,
+    flagged: set[str],
 ) -> str:
     held = base.words.get(gain.word, WordRoles()).held()
     before = "**new word**" if gain.is_new_word else ", ".join(sorted(r.value for r in held))
-    return f"| `{gain.word}` | `{gain.role.value}` | {before} | {_render_sighting(gain, head, links)} |"
+    mark = "🔴 " if gain.role is Role.VERB and gain.word in flagged else ""
+    return f"| {mark}`{gain.word}` | `{gain.role.value}` | {before} | {_render_sighting(gain, head, links)} |"
 
 
 def _render_sighting(gain: RoleGain, head: LexiconSnapshot, links: SourceLinks | None) -> str:
@@ -364,6 +411,11 @@ def main(argv: list[str] | None = None) -> int:
         metavar=("HEAD_JSON", "BASE_JSON"),
         help="exit 1 if HEAD_JSON leads a function with a word BASE_JSON never held as a verb",
     )
+    parser.add_argument(
+        "--annotate",
+        action="store_true",
+        help="report --check-new-verbs findings as GitHub workflow commands, not plain lines",
+    )
     args = parser.parse_args(argv)
     if args.markdown:
         links = _read_links(args.repo, args.sha)  # bad arguments fail before any file is read
@@ -373,7 +425,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.check_new_verbs:
         head, base = (LexiconSnapshot.model_validate_json(Path(p).read_text(encoding="utf-8")) for p in args.check_new_verbs)
         new_verbs = find_new_verb_uses(head, base)
-        for line in new_verbs:
+        rendered = render_new_verb_annotations(new_verbs, head) if args.annotate else render_new_verb_lines(new_verbs)
+        for line in rendered:
             print(line)
         return 1 if new_verbs else 0
     snapshot = build_snapshot(args.root)
