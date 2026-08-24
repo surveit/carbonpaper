@@ -154,6 +154,21 @@ def test_the_packet_page_carries_the_three_tabs_with_no_column_bound(tmp_path):
     assert "The other rows are not counted on this page" in page
 
 
+def test_the_packet_page_carries_the_story_pane_with_no_server_to_ask(tmp_path):
+    """The paths are in the page's own view model, so the pane draws in a folder."""
+    page = (_export_demo_packet(tmp_path) / "lineage/totals/0.html").read_text(encoding="utf-8")
+    assert '<div class="lin-snav">' in page and '<div id="stories">' in page
+
+    blob = _VIEW.search(page)
+    assert blob, "the pane is built from the embedded view model"
+    stories = json.loads(blob.group(1))["stories"]
+
+    # Row 0 of totals was fed by source row 0 alone: the path told, and that row.
+    assert [s["kind"] for s in stories] == ["shown", "contributor"]
+    assert stories[0]["stage_id"] == "totals" and stories[0]["href"] is None
+    assert stories[1]["href"] == "../../lineage/source/0.html"
+
+
 def _demo_run(tmp_path):
     from app.runtime.lineage import RowLineage, RowParent
     from test_trace_helpers import write_run
