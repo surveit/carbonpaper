@@ -144,11 +144,12 @@ tr.carried td.lin-v{color:var(--muted)}
   {% if cell %}<div class="lin-at">at <code>{{ view.start_stage }}</code> row {{ view.start_row }}</div>{% endif %}
 </div>
 <div class="lin-pagetabs" id="pagetabs">
-  <button class="lin-pagetab on" data-pane="story">Story<span class="k">one row, told end to end</span></button>
-  <button class="lin-pagetab" data-pane="rows">Rows<span class="k">which rows reached this one</span></button>
-  <button class="lin-pagetab" data-pane="value">Value<span class="k">{% if cell %}the column this figure is made of{% else %}one column, across the frame{% endif %}</span></button>
+  <button class="lin-pagetab on" data-pane="paths">Paths<span class="k">how each row got here</span></button>
+  <button class="lin-pagetab" data-pane="rows">Relevant rows<span class="k">what is in, and what left</span></button>
+  <button class="lin-pagetab" data-pane="values">Values used<span class="k">the column and the arithmetic</span></button>
+  <button class="lin-pagetab" data-pane="inputs">Inputs<span class="k">the files it was read from</span></button>
 </div>
-<div class="lin-pane" data-pane="story">
+<div class="lin-pane" data-pane="paths">
 <div class="lin-split">
   <div class="lin-story">
     <div class="lin-note">Every step below is this one row, as it stood after that stage. Click a step to see it.</div>
@@ -176,7 +177,14 @@ tr.carried td.lin-v{color:var(--muted)}
       that reached it.</p>
   </div>
 </div>
-<div class="lin-pane hidden" data-pane="value">
+<div class="lin-pane hidden" data-pane="inputs">
+  <div class="empty-state">
+    <h2>The files behind this row are not listed here</h2>
+    <p>The Paths tab names the source stage each step read from. It does not say which file
+      that stage read, how many rows came out of it, or when it was read.</p>
+  </div>
+</div>
+<div class="lin-pane hidden" data-pane="values">
   <div class="empty-state">
     <h2>The column's other values are not on this page</h2>
     <p>This page reads the cells of one row. It does not compare a column across the rest

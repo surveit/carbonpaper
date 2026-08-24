@@ -148,7 +148,9 @@ def test_the_packet_page_carries_the_three_tabs_with_no_column_bound(tmp_path):
     page = (_export_demo_packet(tmp_path) / "lineage/totals/0.html").read_text(encoding="utf-8")
     assert "<code>totals</code> row 0" in page
     assert '<span class="lin-value">' not in page
-    assert 'data-pane="rows">Rows' in page and 'data-pane="value">Value' in page
+    for pane, label in [("rows", "Relevant rows"), ("values", "Values used"),
+                        ("inputs", "Inputs")]:
+        assert f'data-pane="{pane}">{label}' in page
     assert "The other rows are not counted on this page" in page
 
 
