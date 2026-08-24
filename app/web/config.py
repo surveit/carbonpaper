@@ -23,6 +23,7 @@ from starlette.types import Scope
 from app.core.paths import repo_root
 from app.core.utils import abbreviate_count
 from app.web.authored_code import describe_code_block, find_authored_code
+from app.web.transform_block import name_transform_block
 from app.web.diagrams import TYPE_LABEL
 from app.web.file_sizes import describe_bytes, read_turn
 from app.services.workspace import (
@@ -148,3 +149,4 @@ templates.env.filters["turn"] = read_turn
 # Every authored-code type reaches the screen through these two.
 templates.env.filters["authored_code"] = find_authored_code
 templates.env.filters["code_block_copy"] = describe_code_block
+templates.env.filters["transform_block"] = name_transform_block
