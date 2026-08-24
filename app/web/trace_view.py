@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from pathlib import PurePath
-from typing import Any, Literal
+from typing import Any
 
 from app.models import WorkflowStage
 from app.models.stages.code import PythonFrameFunctionStage, PythonRowFunctionStage
@@ -40,27 +40,6 @@ class ContributorGroup:
     # the same way. Empty unless the cohort is small enough to name row by row.
     named: list[dict[str, Any]]
     rows_link: str | None
-
-
-StoryKind = Literal["shown", "branch", "contributor", "cohort"]
-
-
-@dataclass(frozen=True)
-class Story:
-    """One path this row's ancestry can be told down."""
-
-    kind: StoryKind
-    stage_id: str
-    # None for a cohort — no single row of it speaks for the others.
-    row_ordinal: int | None
-    # Step of the shown path this one parts from.
-    step: int
-    # How many rows this entry stands for; 1 for a lone parent.
-    rows: int
-    # How many of them `href` opens — 0 where there is no href.
-    linked: int
-    columns: list[str] | None
-    href: str | None
 
 
 @dataclass(frozen=True)
@@ -119,7 +98,6 @@ def build_trace_view(
         "start_row": trace["start_row"],
         "nodes": nodes,
         "edges": edges,
-        "stories": [asdict(story) for story in _build_stories(nodes)],
         "upstream": {
             "truncated": truncated,
             "at_stage": end["at_stage"],
@@ -267,54 +245,4 @@ def _one_group(
         rows_link=links.contributor_rows(
             stage_id,
             ordinals=[int(p["row_ordinal"]) for p in parents[:CONTRIBUTOR_ROWS_LINKED]]),
-    )
-
-
-def _build_stories(nodes: list[dict[str, Any]]) -> list[Story]:
-    # A stage whose output frame the run never wrote traces no step at all.
-    if not nodes:
-        return []
-    # Always first, so a row nothing else fed still reads as one story.
-    first = nodes[0]
-    shown = Story(
-        kind="shown", stage_id=first["stage_id"], row_ordinal=first["row_ordinal"],
-        step=1, rows=1, linked=0, columns=None, href=None,
-    )
-    return [shown, *(s for node in nodes for s in _find_alternatives(node))]
-
-
-def _find_alternatives(node: dict[str, Any]) -> list[Story]:
-    step = node["step"]
-    return [
-        *(_build_branch_story(branch, step) for branch in node["branches"]),
-        *(s for group in node["contributor_groups"] for s in _build_fan_in_stories(group, step)),
-    ]
-
-
-def _build_branch_story(branch: dict[str, Any], step: int) -> Story:
-    href = branch["links"]["trace"]
-    return Story(
-        kind="branch", stage_id=branch["stage_id"], row_ordinal=branch["row_ordinal"],
-        step=step, rows=1, linked=1 if href else 0, columns=None, href=href,
-    )
-
-
-def _build_fan_in_stories(group: dict[str, Any], step: int) -> list[Story]:
-    if group["named"]:
-        return [_build_contributor_story(parent, group, step) for parent in group["named"]]
-    return [Story(
-        kind="cohort", stage_id=group["stage_id"], row_ordinal=None, step=step,
-        rows=group["total"], linked=group["linked"] if group["rows_link"] else 0,
-        columns=group["columns"], href=group["rows_link"],
-    )]
-
-
-def _build_contributor_story(
-    parent: dict[str, Any], group: dict[str, Any], step: int
-) -> Story:
-    href = parent["links"]["trace"]
-    return Story(
-        kind="contributor", stage_id=parent["stage_id"],
-        row_ordinal=int(parent["row_ordinal"]), step=step, rows=group["total"],
-        linked=1 if href else 0, columns=group["columns"], href=href,
     )

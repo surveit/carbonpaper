@@ -44,6 +44,12 @@ class AppPanelLinks:
     def row_trace(self, stage_id: str, row: int) -> str:
         return f"{self._base}/stage/{_segment(stage_id)}/row/{row}/trace/view"
 
+    def build_row_trace_for_figure(self, stage_id: str, row: int,
+                             figure_stage: str, figure_row: int) -> str:
+        """That row's own story, with the pane still listing the paths to `figure_stage`."""
+        figure = urlencode({"figure": f"{figure_stage}:{figure_row}"})
+        return f"{self.row_trace(stage_id, row)}?{figure}"
+
     def review_queue(self, stage_id: str) -> str:
         return f"{self._base}/queue/{_segment(stage_id)}"
 
@@ -118,6 +124,10 @@ class PacketPanelLinks:
         if self._traced is not None and (stage_id, row) not in self._traced:
             return None
         return packet_lineage_href(self._root, stage_id, row)
+
+    def build_row_trace_for_figure(self, stage_id: str, row: int,
+                             figure_stage: str, figure_row: int) -> str | None:
+        return self.row_trace(stage_id, row)
 
     def review_queue(self, stage_id: str) -> None:
         return None

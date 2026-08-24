@@ -113,7 +113,7 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
     if citation.stage_id not in run_branches.stages:
         raise StageNotInRun(f"no stage '{citation.stage_id}' in this run")
     cited_frame, cited = _read_the_cited_cell(outputs, citation)
-    covers = find_contributing_rows(run_branches, cited)
+    covers = find_contributing_rows(run_branches, cited.stage_id, cited.row_ordinal)
     frame = read_frame_table(outputs / f"{covers.at_stage}.parquet")
     on_route = set(covers.regrained_at) | {cited.stage_id}
     paths, index = index_paths(run_branches, covers.at_stage, covers.ordinals, on_route)
