@@ -3,15 +3,15 @@
    union / aggregate / queue / publish. Used on both the static stage page and
    the run-detail right panel.
 
-   For the two authored-code blocks (function / filter) this renders the
-   plain-language summary and the metadata only — the code itself is a separate
-   macro (_stage_code.html) the host renders LAST, after the test cases.
+   For the authored-code block this renders the plain-language summary and the
+   metadata only — the code itself is a separate macro (_stage_code.html) the host
+   renders LAST, after the test cases.
 
    Required context: stage, function_code (may be None).
    Optional context: llm_example {prompt, columns} — a rendered prompt
    from this run's actual input first row, for LLM stages. #}
 {% from "_schema_table.html" import columns_table %}
-{% from "_stage_code.html" import stage_summary, stage_corner_cases %}
+{% from "_stage_code.html" import stage_summary, stage_corner_cases, prose_with_column_chips %}
 {% from "_stage_eval_check.html" import stage_eval_check %}
 
 {% if stage.connector %}
@@ -82,52 +82,32 @@
 </section>
 {% endif %}
 
-{% if stage.function %}
+{# The one authored-code block, whichever type carries it: the stage is asked for
+   its block (AbstractStage.find_authored_code_block) rather than probed field by
+   field, so a new code-carrying type renders here the day it is added. What differs
+   between them is copy, and that lives in app/web/authored_code.py. #}
+{% set code_block = stage | authored_code %}
+{% if code_block %}
+{% set copy = code_block | code_block_copy %}
 <section class="exec-block">
-    <h2>🐍 Code transformation</h2>
-    {{ stage_summary(stage.function.summary) }}
-    {{ stage_corner_cases(stage.function.corner_cases) }}
+    <h2>{{ copy.glyph }} {{ copy.heading }}</h2>
+    {{ stage_summary(code_block.summary) }}
+    {{ stage_corner_cases(code_block.corner_cases) }}
     {{ stage_eval_check(eval_coverages) }}
-    {# No `kind` row: its two values are `inline` (the code is in the Code block
-       below, so saying so tells a reviewer nothing) and `module` (the code lives in
-       a file on disk) — and the `module` row already states that case. The whole
-       list is dropped when none of its rows apply, which is every inline stage. #}
-    {% if stage.function.module or stage.function.function or stage.function.requirements %}
+    {% if copy.note %}<p class="muted">{{ prose_with_column_chips(copy.note) }}</p>{% endif %}
+    {# `function` only when the author named one — unnamed, the code below binds the
+       default, and the reader sees that name on its `def` line. `requirements` is
+       carried by Python blocks alone; the others leave it undefined, so falsy. #}
+    {% if code_block.function or code_block.requirements %}
     <dl class="kv">
-        {% if stage.function.module %}<dt>module</dt><dd><code>{{ stage.function.module }}</code></dd>{% endif %}
-        {% if stage.function.function %}<dt>function</dt><dd><code>{{ stage.function.function }}</code></dd>{% endif %}
-        {% if stage.function.requirements %}<dt>requirements</dt><dd>{{ stage.function.requirements | join(', ') }}</dd>{% endif %}
+        {% if code_block.function %}<dt>function</dt><dd><code>{{ code_block.function }}</code></dd>{% endif %}
+        {% if code_block.requirements %}<dt>requirements</dt><dd>{{ code_block.requirements | join(', ') }}</dd>{% endif %}
     </dl>
     {% endif %}
 </section>
 {% endif %}
 
-{% if stage.starlark %}
-<section class="exec-block">
-    <h2>🛡️ Sandboxed code transformation</h2>
-    {{ stage_summary(stage.starlark.summary) }}
-    {{ stage_corner_cases(stage.starlark.corner_cases) }}
-    {{ stage_eval_check(eval_coverages) }}
-    {% if stage.starlark.function %}
-    <dl class="kv">
-        <dt>function</dt><dd><code>{{ stage.starlark.function }}</code></dd>
-    </dl>
-    {% endif %}
-</section>
-{% endif %}
 
-{% if stage.filter %}
-<section class="exec-block">
-    <h2>🔎 Row filter</h2>
-    {{ stage_summary(stage.filter.summary) }}
-    {{ stage_corner_cases(stage.filter.corner_cases) }}
-    {{ stage_eval_check(eval_coverages) }}
-    <p class="muted">Keeps the rows this predicate returns <code>True</code> for; every kept row passes through unchanged, in order.</p>
-    <dl class="kv">
-        <dt>function</dt><dd><code>{{ stage.filter.function or 'should_include' }}</code></dd>
-    </dl>
-</section>
-{% endif %}
 
 {% if stage.union %}
 <section class="exec-block">

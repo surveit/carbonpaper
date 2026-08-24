@@ -129,13 +129,6 @@ def test_missing_description_outranks_missing_examples():
     assert _kinds(_stage(summary=None)) == ["undescribed"]
 
 
-def test_module_code_warns_because_the_panel_cannot_show_it():
-    warnings = find_stage_compiler_warnings(
-        _stage(kind="module", module="pkg.mod", tests=[_PASSING_EXAMPLE]))
-    assert [w.kind for w in warnings] == ["unreviewable_code"]
-    assert warnings[0].severity == "warning"
-
-
 def _publish_stage(stage_id="pub"):
     return m.parse_stage({
         "id": stage_id, "description": "Pub", "type": "publish",

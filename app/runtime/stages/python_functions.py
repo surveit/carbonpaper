@@ -5,7 +5,6 @@ what the function is shown (a row dict or the whole frame).
 
 from __future__ import annotations
 
-import importlib
 import inspect
 from typing import Any, Callable
 
@@ -14,7 +13,7 @@ import pyarrow as pa
 
 from app.core.frames import table_to_frame
 from ..errors import AuthoredFrameExpected
-from app.models import FunctionKind, WorkflowStage
+from app.models import WorkflowStage
 from app.models.stages.code import (
     PythonFrameFunctionStage,
     PythonRowFunctionStage,
@@ -37,17 +36,10 @@ def _load_python_function(
 ) -> Callable[..., Any]:
     fn_spec = stage.function
     fn_name = fn_spec.function or "transform"
-    if fn_spec.kind == FunctionKind.module:
-        if not fn_spec.module:
-            raise ValueError(f"stage {stage.id}: function.kind=module without module")
-        module = importlib.import_module(fn_spec.module)
-        return getattr(module, fn_name)
-    if fn_spec.kind == FunctionKind.inline:
-        fn = load_function(fn_spec.code or "", fn_name, "transform", recorder)
-        if fn is None:
-            raise ValueError(f"Inline function 'transform' not defined for stage {stage.id}")
-        return fn
-    raise ValueError(f"Unknown function kind for stage {stage.id}: {fn_spec.kind}")
+    fn = load_function(fn_spec.code, fn_name, "transform", recorder)
+    if fn is None:
+        raise ValueError(f"Inline function 'transform' not defined for stage {stage.id}")
+    return fn
 
 
 def handle_python_frame_function(
