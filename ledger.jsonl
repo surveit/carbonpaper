@@ -1625,3 +1625,4 @@
 {"run_id":"32734448256","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32734448256","created":"2026-08-24T13:45:25Z","branch":"master","event":"push","contracts_kept":null,"findings":[]}
 {"run_id":"32734467723","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32734467723","created":"2026-08-24T13:45:28Z","branch":"lineage-path-switching","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"32735199234","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32735199234","created":"2026-08-24T13:52:36Z","branch":"lineage-cohort-to-scope-map","event":"pull_request","contracts_kept":16,"findings":[]}
+{"run_id":"32735199234","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32735199234","created":"2026-08-24T13:53:05Z","branch":"lineage-cohort-to-scope-map","event":"pull_request","contracts_kept":null,"findings":[]}
