@@ -31,7 +31,7 @@ class PersistedModel(BaseModel):
         populate_by_name=True,
     )
 
-    id: ID = Field(default_factory=lambda: uuid4().hex)
+    id: ID = Field(default_factory=lambda: uuid4().hex, frozen=True)
     created_at: str = Field(default_factory=now_iso)
     updated_at: str = Field(default_factory=now_iso)
 
