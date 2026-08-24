@@ -1640,3 +1640,4 @@
 {"run_id":"32737939494","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32737939494","created":"2026-08-24T14:20:12Z","branch":"trace-crosses-a-fan-in","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"32739197142","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32739197142","created":"2026-08-24T14:31:50Z","branch":"trace-crosses-a-fan-in","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"32739197142","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32739197142","created":"2026-08-24T14:32:22Z","branch":"trace-crosses-a-fan-in","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"32739463190","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32739463190","created":"2026-08-24T14:34:20Z","branch":"lineage-inputs-tab","event":"pull_request","contracts_kept":16,"findings":[]}
