@@ -1,0 +1,115 @@
+"""Which rows produced a cited cell, over a run's branches. docs/branch-analysis.md."""
+
+from __future__ import annotations
+
+from app.runtime.errors import UnresolvableFigure
+from app.models.branch_analysis import (
+    BranchId,
+    FrameScale,
+    RowOrdinal,
+    RowSet,
+)
+from app.models.claims import StageOutputCellCitation
+from app.models.schema import StageId
+from app.runtime.branch_analysis.run_branches import (
+    MERGE_EDGE,
+    WorkflowRunBranches,
+    find_reference_inputs,
+)
+from app.runtime.lineage import RowParent
+
+
+def find_contributing_rows(run_branches: WorkflowRunBranches,
+                           citation: StageOutputCellCitation) -> RowSet:
+    """Replace a merged row by the rows merged into it, until none was merged."""
+    reached, at_stage, through = _expand(run_branches, citation.stage_id,
+                                         citation.row_ordinal)
+    return RowSet(at_stage=at_stage, ordinals=sorted(set(reached)),
+                  regrained_at=through)
+
+
+def find_merges_that_excluded(run_branches: WorkflowRunBranches,
+                              citation: StageOutputCellCitation) -> set[BranchId]:
+    """A merge branch excludes rows only relative to a citation, so it is asked here."""
+    return {branch_id
+            for branch_id, option in run_branches.branch_options.items()
+            if option.merged_into_row_ordinal is not None
+            and option.stage_id == citation.stage_id
+            and option.merged_into_row_ordinal != citation.row_ordinal}
+
+
+def measure_frame_scale(run_branches: WorkflowRunBranches,
+                        citation: StageOutputCellCitation) -> list[FrameScale]:
+    """Per stage: rows in the frame, and how many of them reached the figure."""
+    reached = _reach_upstream(run_branches, citation.stage_id, citation.row_ordinal)
+    return [FrameScale(stage=sid, rows_count=run_branches.row_counts[sid],
+                       included_rows_count=len(reached[sid]))
+            for sid in run_branches.ordered_stage_ids
+            if sid in reached and run_branches.row_counts[sid]]
+
+
+def find_lookup_table_stages(run_branches: WorkflowRunBranches) -> set[StageId]:
+    """A lookup table's size is not the flow narrowing, so a funnel leaves it out."""
+    return find_reference_inputs(run_branches.stages)
+
+
+def _expand(run_branches: WorkflowRunBranches, stage_id: StageId, ordinal: RowOrdinal
+            ) -> tuple[list[RowOrdinal], StageId, list[StageId]]:
+    merged_from = _merged_from(run_branches, stage_id, ordinal)
+    if merged_from is None:
+        return [ordinal], stage_id, []
+    gathered: list[RowOrdinal] = []
+    landed: set[StageId] = set()
+    below: list[StageId] = []
+    for parent in merged_from:
+        rows, at_stage, deeper = _expand(run_branches, parent.stage_id,
+                                         parent.row_ordinal)
+        if not rows:
+            continue  # an empty merge upstream contributes nothing, and no grain
+        gathered.extend(rows)
+        landed.add(at_stage)
+        below = deeper
+    if not landed:
+        return [], stage_id, []
+    if len(landed) > 1:
+        raise UnresolvableFigure(
+            f"{stage_id} row {ordinal} bottoms out in {sorted(landed)}; "
+            f"a set of contributing rows must sit at one grain")
+    return gathered, landed.pop(), [stage_id] + below
+
+
+def _merged_from(run_branches: WorkflowRunBranches, stage_id: StageId,
+                 ordinal: RowOrdinal) -> list[RowParent] | None:
+    """None when the row is its own row set; a list when several rows made it."""
+    lineage = run_branches.lineages.get(stage_id)
+    if lineage is None or ordinal >= len(lineage.parents):
+        return None
+    merged = [p for p in lineage.parents[ordinal] if p.kind == MERGE_EDGE]
+    return merged or None
+
+
+def _reach_upstream(run_branches: WorkflowRunBranches, stage_id: StageId,
+                    ordinal: RowOrdinal) -> dict[StageId, set[RowOrdinal]]:
+    """Every (stage, row) the cited row came from, ignoring what each hop meant."""
+    found: dict[StageId, set[RowOrdinal]] = {}
+    front = [(stage_id, ordinal)]
+    seen = {(stage_id, ordinal)}
+    while front:
+        sid, row = front.pop()
+        found.setdefault(sid, set()).add(row)
+        for step in _one_hop_up(run_branches, sid, row):
+            if step not in seen:
+                seen.add(step)
+                front.append(step)
+    return found
+
+
+def _one_hop_up(run_branches: WorkflowRunBranches, sid: StageId, row: RowOrdinal
+                ) -> list[tuple[StageId, RowOrdinal]]:
+    lineage = run_branches.lineages.get(sid)
+    if lineage is not None and row < len(lineage.parents):
+        return [(p.stage_id, p.row_ordinal) for p in lineage.parents[row]]
+    # No lineage: the stage type's contract says output row i IS input row i.
+    stage = run_branches.stages.get(sid)
+    inputs = [ref.id for ref in stage.inputs] if stage else []
+    return [(inputs[0], row)] if len(inputs) == 1 else []

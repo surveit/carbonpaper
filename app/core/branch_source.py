@@ -15,10 +15,36 @@ class Branch:
     # Where the branch's body starts. Where to point a reader, never the identity.
     line: int
     column: int
+    # The body's last line, so a reader lights the block rather than its first statement.
+    end_line: int = 0
 
 
 def find_branches(source: str) -> list[Branch]:
     return _branches(ast.parse(source))
+
+
+def read_branch_test(lines: list[str], branch: Branch) -> tuple[int, str]:
+    """`Branch.line` is the body's first statement; the test the row passed is above it."""
+    prefix = lines[branch.line - 1][:branch.column]
+    if prefix.strip():
+        return branch.line, prefix.strip()  # `if x: y = 1`
+    last = branch.line - 2
+    while last > 0 and not lines[last].strip():
+        last -= 1
+    first = last
+    while first > 0 and not _opens_a_branch(lines[first]):
+        first -= 1
+    if not _opens_a_branch(lines[first]):
+        return last + 1, lines[last].strip()
+    return first + 1, " ".join(line.strip() for line in lines[first:last + 1])
+
+
+_OPENERS = ("if", "elif", "else", "try", "except")
+
+
+def _opens_a_branch(line: str) -> bool:
+    head = line.strip().split("(")[0].split(":")[0].split()
+    return bool(head) and head[0] in _OPENERS
 
 
 def instrument_branches(source: str) -> tuple[str, list[Branch]]:
@@ -87,5 +113,6 @@ def _walk_try(node: ast.Try, base: str, found: list[Branch]) -> None:
 
 def _open(body: list[ast.stmt], branch_id: str, found: list[Branch]) -> None:
     first = body[0]
-    found.append(Branch(branch_id, first.lineno, first.col_offset))
+    found.append(Branch(branch_id, first.lineno, first.col_offset,
+                        body[-1].end_lineno or first.lineno))
     _walk_body(body, branch_id, found)

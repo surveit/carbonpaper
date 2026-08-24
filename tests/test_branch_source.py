@@ -3,7 +3,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.core.branch_source import RECORDER_NAME, find_branches, instrument_branches
+from app.core.branch_source import (
+    RECORDER_NAME,
+    find_branches,
+    instrument_branches,
+    read_branch_test,
+)
 from app.runtime.branches import BRANCH_SCHEMA, BranchRecorder, RowBranches
 from app.runtime.code import load_function
 from app.runtime.starlark_code import compile_starlark_function
@@ -147,3 +152,64 @@ def test_a_branch_sidecar_carries_one_schema_however_empty() -> None:
     populated = RowBranches([("transform/0:if",), (), None]).to_table()
     assert populated.schema.equals(BRANCH_SCHEMA)
     assert RowBranches.from_table(populated).taken == [("transform/0:if",), (), None]
+
+
+# ─── read_branch_test: which line a reader is pointed at ─────────────────────
+
+_ONE_LINE_BODY = """def transform(row):
+    if row["a"] == 0:
+        return None
+    return row
+"""
+
+_INLINE_BODY = """def transform(row):
+    if row["a"] == 0: return None
+    return row
+"""
+
+_MULTI_LINE_TEST = """def transform(row):
+    if (row["a"] == 0
+            and row["b"] > 1):
+        return None
+    return row
+"""
+
+_FOUR_LINE_BODY = """def transform(row):
+    if row["a"] == 0:
+        first = 1
+        second = 2
+        third = 3
+        return first + second + third
+    return row
+"""
+
+
+def _only(source: str):
+    branches = find_branches(source)
+    header = [b for b in branches if b.id.endswith(":if")]
+    assert len(header) == 1, [b.id for b in branches]
+    return header[0], source.split("\n")
+
+
+def test_the_test_line_is_above_the_body() -> None:
+    branch, lines = _only(_ONE_LINE_BODY)
+    assert read_branch_test(lines, branch) == (2, 'if row["a"] == 0:')
+    assert branch.line == 3
+
+
+def test_a_one_line_if_points_at_its_own_line() -> None:
+    branch, lines = _only(_INLINE_BODY)
+    assert read_branch_test(lines, branch) == (2, 'if row["a"] == 0:')
+
+
+def test_a_test_spanning_two_lines_is_read_whole() -> None:
+    branch, lines = _only(_MULTI_LINE_TEST)
+    line, text = read_branch_test(lines, branch)
+    assert line == 2
+    assert text == 'if (row["a"] == 0 and row["b"] > 1):'
+
+
+def test_a_four_line_body_carries_its_last_line() -> None:
+    # Lighting only the body's first statement says the other three never ran.
+    branch, _ = _only(_FOUR_LINE_BODY)
+    assert (branch.line, branch.end_line) == (3, 6)
