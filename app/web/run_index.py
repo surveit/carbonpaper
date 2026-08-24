@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from app.core.run_status import RunStatus
 from app.models.run_manifest import UNREADABLE_RUN_STATUS, InputBinding, read_input_bindings
 from app.runtime.manifest import RunEntry, list_run_entries
-from app.runtime.manifest import RunManifest
+from app.models.records.run_manifest import RunManifest
 from app.services.run_manifest_metadata import read_archived_run_ids, read_run_names
 from app.web.file_sizes import describe_bytes
 from app.web.run_header import VersionNote, describe_run_duration, read_version_note

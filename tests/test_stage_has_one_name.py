@@ -14,7 +14,7 @@ from app.models.stages.stage_base import (
     STAGE_DESCRIPTION_MAX_CHARS,
     STAGE_ID_MAX_CHARS,
 )
-from app.runtime.manifest import RunManifest
+from app.models.records.run_manifest import RunManifest
 from app.web.diagrams import build_mermaid_graph
 
 _COLUMNS = [{"name": "id", "type": "str", "nullable": True}]

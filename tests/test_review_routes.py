@@ -15,7 +15,7 @@ import app.web.loading as loading
 from app.services import workspace
 from app.web import queue_view
 from app.main import app
-from app.runtime.stages.human_review_queue import QueueFingerprints
+from app.models.records.queue_fingerprints import QueueFingerprints
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
 from app.services import review, versioning

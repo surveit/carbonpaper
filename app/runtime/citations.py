@@ -5,16 +5,16 @@ that the stage PRINTED what it cited is the stage's word."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, ClassVar, Mapping
+from typing import Any, Mapping
 from urllib.parse import quote
 
 import pandas as pd
 import pyarrow as pa
 
 from app.core.errors import CitationMismatch, RowOutOfRange, StageNotInRun
-from app.core.record import PersistedModel, PersistenceScope
 from app.models.citations import CitedValue
 from app.models.claims import StageOutputRowCitation
+from app.models.records.citations import StageCitations
 
 
 def build_row_trace_url(project_id: str, run_id: str, stage_id: str, row_ordinal: int) -> str:
@@ -109,19 +109,6 @@ def _is_null(value: Any) -> bool:
 def _path_segment(value: str) -> str:
     return quote(value, safe="")
 
-
-class StageCitations(PersistedModel):
-    """What one publish stage cited, in the order it said so."""
-
-    collection: ClassVar[str] = "run_citations"
-    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.RUN
-
-    citations: list[CitedValue] = []
-    cited_rows: list[StageOutputRowCitation] = []
-
-    @staticmethod
-    def compose_id(project_id: str, run_id: str, stage_id: str) -> str:
-        return f"{project_id}/{run_id}/{stage_id}"
 
 
 def save_citations(

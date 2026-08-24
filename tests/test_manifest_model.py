@@ -14,7 +14,7 @@ from pydantic import ValidationError
 from app.core.run_status import RunStatus, StageStatus
 from app.models import parse_stage
 from app.models.stage_contribution import StageContribution
-from app.runtime.manifest import RunManifest
+from app.models.records.run_manifest import RunManifest
 from app.runtime.context import RunContext
 from app.runtime.manifest import create_run_manifest
 from conftest import place_stage

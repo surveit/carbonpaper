@@ -11,7 +11,7 @@ from app.agents.tutorial.prompt import TUTORIAL_OPENING_MESSAGE, TUTORIAL_SYSTEM
 from app.core.run_status import RunStatus
 from app.models import StageType
 from app.models.stage_contribution import QueueStats
-from app.runtime.manifest import RunManifest
+from app.models.records.run_manifest import RunManifest
 from app.services.project import WorkflowFile
 from app.models.records.project import Project
 from app.services.workspace import StageSummary

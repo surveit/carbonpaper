@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Form, HTTPException
 from fastapi.responses import RedirectResponse
 
-from app.runtime.manifest import RunManifest
+from app.models.records.run_manifest import RunManifest
 from app.services.run_manifest_metadata import archive_run, name_run, unarchive_run
 from app.web.project_view import validate_project_or_404
 

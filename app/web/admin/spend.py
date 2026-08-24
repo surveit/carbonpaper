@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from app.core.agent.store import AgentSession
 from app.core.agent.usage import LlmUsage
 from app.runtime.manifest import RunEntry, list_run_entries
-from app.runtime.manifest import PRODUCTION_RUNS, RUN_AREAS
+from app.models.records.run_manifest import PRODUCTION_RUNS, RUN_AREAS
 from app.services.project import list_project_listings, list_projects
 
 # What a model's name is shown as where the record does not carry one. Every run

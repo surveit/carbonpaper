@@ -102,16 +102,17 @@ needs — `{"by_alias": True, "exclude_none": True}` for the stage-bearing recor
 `{"exclude_unset": True}` for `RunManifest`. It must never carry `"mode"`, which
 `PersistedModel.save` fixes to `"json"`.
 
-Three packages are on that whitelist. `app.models.records` is the home above.
-`app.runtime` keeps its own four — `RunManifest`, `RunEventChunk`, `StageCitations`,
-`QueueFingerprints` — because
-`app/runtime/_arch_tests/test_stages_no_cross_run_disk.py` grants a runtime module the
-right to call `.save()` only while that module *declares* a `PersistenceScope.RUN`
-record; moving the declaration out would revoke the write. `app.core` keeps three
-records that `app/models` sits above in the layers contract, so a declaration in
-`app/models` would be unreachable from the module that needs it: `ProjectFile`
-(`app/core/files.py`), `StageCacheEntry` (`app/core/stage_cache.py`) and `AgentSession`
-(`app/core/agent/store.py`).
+Two packages are on that whitelist. `app.models.records` is the home above — every
+project record, the runtime's own included. A record the runtime writes is declared
+there like any other; its *writer* stays in `app/runtime` and is named in
+`app/runtime/_arch_tests/test_stages_no_cross_run_disk.py`, which grants the right to
+call `.save()` per writing module rather than per declaration site.
+
+`app.core` is the other, for records that `app/models` sits above in the layers
+contract, where a declaration in `app/models` would be unreachable from the module that
+needs it: `ProjectFile` (`app/core/files.py`), `StageCacheEntry`
+(`app/core/stage_cache.py`), `AgentSession` (`app/core/agent/store.py`) and
+`StoredFileShape` (`app/core/file_shape.py`).
 
 ### The stage spec-dict shape
 

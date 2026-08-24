@@ -10,10 +10,10 @@ import contextvars
 import queue
 import threading
 from datetime import datetime
-from typing import Any, ClassVar, Iterator
+from typing import Any, Iterator
 
 from app.core.json_types import JsonDict
-from app.core.record import PersistedModel, PersistenceScope
+from app.models.records.run_events import RunEventChunk
 
 # Sentinel pushed by close() to tell the writer thread to drain and stop.
 _STOP = object()
@@ -33,18 +33,6 @@ CHUNK_SIZE = 500
 # polls at 0.5s, so the wider window costs at most a second of lag in the panel.
 _FLUSH_INTERVAL_S = 1.0
 
-
-class RunEventChunk(PersistedModel):
-    """One run's events `first_seq .. first_seq + len(events) - 1`."""
-
-    collection: ClassVar[str] = "run_events"
-    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.RUN
-
-    events: list[JsonDict] = []
-
-    @staticmethod
-    def compose_id(project_id: str, run_id: str, index: int) -> str:
-        return f"{project_id}/{run_id}/{index:06d}"
 
 # The run log's whole vocabulary, declared once. The lifecycle spine:
 RUN_START = "run_start"
