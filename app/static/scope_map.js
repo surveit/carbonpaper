@@ -25,8 +25,9 @@
 
   var SEP = " ";
   var TABLE = '<table class="data-preview">';
-  var COLUMN = 300, BAR = 11, HEIGHT = 520, TOP = 52, GAP = 16;
+  var COLUMN = 300, BAR = 11, TOP = 52, GAP = 16;
   var LABEL_PITCH = 30, STUB = 26;
+  var SHORTEST_BAND = 170, BAND_PER_NODE = 46;
 
   var num = function (n) { return Number(n).toLocaleString("en-US"); };
   // A cited cell is not always a number — a group key is a figure a reader may cite
@@ -163,9 +164,10 @@
 
   function draw() {
     var total = D.covers.ordinals.length || 1;
+    var band = measureBand();
     var scale = Math.min.apply(null, cols.map(function (c) {
-      return (HEIGHT - (c.nodes.length - 1) * GAP) / total;
-    }).concat([HEIGHT / total]));
+      return (band - (c.nodes.length - 1) * GAP) / total;
+    }).concat([band / total]));
     var x = 0;
     cols.forEach(function (c) {
       var y = TOP;
@@ -175,9 +177,8 @@
         y += n.h + GAP;
       });
       c.x = x;
-      c.bottom = y;
       c.nodes.forEach(function (n) { n.fromY = n.y; n.intoY = n.y; });
-      placeLabels(c.nodes);
+      c.bottom = Math.max(y, placeLabels(c.nodes));
       x += COLUMN;
     });
 
@@ -206,6 +207,15 @@
       el.onclick = function (event) { event.stopPropagation(); pick(el.dataset.cut); };
     });
     svg.onclick = clearPick;
+  }
+
+  // A ribbon travelling further up or down than it runs across bulges rather than
+  // flows, so the busiest column sets the height and COLUMN caps it.
+  function measureBand() {
+    var most = Math.max.apply(null, cols.map(function (c) {
+      return c.nodes.length;
+    }).concat([1]));
+    return Math.min(COLUMN, Math.max(SHORTEST_BAND, most * BAND_PER_NODE));
   }
 
   function gatherRibbons(scale) {
@@ -250,12 +260,14 @@
     return !pickedNode || node.key === pickedNode;
   }
 
+  // Returns where the label stack ends, which outruns the bars once they are thin.
   function placeLabels(nodes) {
     var y = TOP;
     nodes.forEach(function (n) {
       n.labelY = Math.max(y, n.y + n.h / 2);
       y = n.labelY + LABEL_PITCH;
     });
+    return y;
   }
 
   function drawNode(c, n) {
@@ -277,7 +289,8 @@
     var full = labelOf(n);
     var short = clip(full, Math.floor(room / 6.1));
     return mark + leader +
-      '<text class="scope-node" data-tip="' + esc(full) + '" x="' + tx +
+      '<text class="scope-node" data-node="' + esc(n.key) +
+      '" data-tip="' + esc(full) + '" x="' + tx +
       '" y="' + (n.labelY + 3) + '">' +
       esc(short) + "</text>" +
       '<text class="scope-count" x="' + tx + '" y="' + (n.labelY + 14) + '">' +

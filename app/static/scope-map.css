@@ -73,11 +73,14 @@
   font-size: 10.5px; }
 #scope-svg text.scope-count { fill: var(--muted); font-size: 9.5px;
   font-variant-numeric: tabular-nums; }
+/* A label sits over the ribbon it names, so it carries the page behind it. */
+#scope-svg text.scope-node, #scope-svg text.scope-count {
+  paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round; }
 #scope-svg .scope-ribbon { fill: var(--accent); opacity: 0.22; }
 #scope-svg .scope-ribbon.is-lit { opacity: 0.42; }
 #scope-svg .scope-bar-mark { fill: var(--accent-deep); cursor: pointer; }
-#scope-svg text.scope-node, #scope-svg text.scope-head, #scope-svg text.scope-out,
-#scope-svg .scope-bar-mark { cursor: help; }
+#scope-svg text.scope-head, #scope-svg text.scope-out { cursor: help; }
+#scope-svg text.scope-node { cursor: pointer; }
 #scope-svg text.scope-stub-label { cursor: pointer; }
 #scope-svg .scope-bar-mark.is-implied { fill: var(--muted); }
 #scope-svg .scope-bar-mark.is-dim { opacity: 0.3; }
