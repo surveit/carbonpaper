@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from app.models.branch_analysis import (
     BranchId,
+    BranchPath,
+    BranchReason,
     FrameScale,
+    PathBehindFigure,
+    PathsBehindFigure,
     RowOrdinal,
     RowSet,
 )
@@ -15,14 +19,14 @@ from app.runtime.branch_analysis.run_branches import (
     WorkflowRunBranches,
     find_reference_inputs,
 )
+from app.runtime.errors import MissingLineage
 from app.runtime.lineage import RowParent
 
 
 def find_contributing_rows(run_branches: WorkflowRunBranches,
-                           citation: StageOutputCellCitation) -> RowSet:
+                           stage_id: StageId, row_ordinal: RowOrdinal) -> RowSet:
     """Replace a merged row by the rows merged into it, until none was merged."""
-    reached, at_stage, through = _expand(run_branches, citation.stage_id,
-                                         citation.row_ordinal)
+    reached, at_stage, through = _expand(run_branches, stage_id, row_ordinal)
     ordinals = sorted(set(reached))
     return RowSet(at_stage=at_stage, ordinals=ordinals, regrained_at=through,
                   fed_by_no_rows=[ordinal for ordinal in ordinals
@@ -110,3 +114,82 @@ def _one_hop_up(run_branches: WorkflowRunBranches, sid: StageId, row: RowOrdinal
     stage = run_branches.stages.get(sid)
     inputs = [ref.id for ref in stage.inputs] if stage else []
     return [(inputs[0], row)] if len(inputs) == 1 else []
+
+
+def find_paths_behind(run_branches: WorkflowRunBranches, at_stage: StageId,
+                      ordinals: list[RowOrdinal], on_route: set[StageId]
+                      ) -> PathsBehindFigure:
+    """Every distinct route the rows took, each with one row that took it."""
+    _refuse_a_frame_with_no_paths(run_branches, at_stage, ordinals)
+    paths, index = index_paths(run_branches, at_stage, ordinals, on_route)
+    took = _gather_ordinals_per_path(ordinals, index, len(paths))
+    shared = _find_branches_on_every_path(paths)
+    return PathsBehindFigure(
+        at_stage=at_stage,
+        paths=[_read_one_path(run_branches, path, on_it, shared)
+               for path, on_it in zip(paths, took)],
+    )
+
+
+def index_paths(run_branches: WorkflowRunBranches, at_stage: StageId,
+                ordinals: list[RowOrdinal], on_route: set[StageId]
+                ) -> tuple[list[BranchPath], list[int]]:
+    """Distinct paths, and one small int per row."""
+    paths: list[BranchPath] = []
+    seen: dict[BranchPath, int] = {}
+    index = []
+    for ordinal in ordinals:
+        path = _keep_branches_on_route(
+            run_branches, run_branches.branch_paths[at_stage][ordinal], on_route)
+        if path not in seen:
+            seen[path] = len(paths)
+            paths.append(path)
+        index.append(seen[path])
+    return paths, index
+
+
+def _read_one_path(run_branches: WorkflowRunBranches, path: BranchPath,
+                   ordinals: list[RowOrdinal], shared: frozenset[BranchId]
+                   ) -> PathBehindFigure:
+    options = [run_branches.branch_options[branch_id] for branch_id in path]
+    return PathBehindFigure(
+        ordinals=ordinals,
+        tells_it_apart=[o for o in options if o.id not in shared],
+        whole_path=options,
+        example_ordinal=ordinals[0],
+    )
+
+
+def _refuse_a_frame_with_no_paths(run_branches: WorkflowRunBranches, at_stage: StageId,
+                                  ordinals: list[RowOrdinal]) -> None:
+    """A stage the reconstruction never sized holds no path for any of its rows."""
+    held = len(run_branches.branch_paths.get(at_stage) or [])
+    if ordinals and held <= max(ordinals):
+        raise MissingLineage(
+            f"this run recorded paths for {held} rows of {at_stage}, "
+            f"not the {max(ordinals) + 1} the figure reaches"
+        )
+
+
+def _keep_branches_on_route(run_branches: WorkflowRunBranches, path: BranchPath,
+                            on_route: set[StageId]) -> BranchPath:
+    """A merge into a row this figure is not tells these rows nothing, so it is dropped."""
+    options = run_branches.branch_options
+    return tuple(branch_id for branch_id in path
+                 if options[branch_id].reason is not BranchReason.merge
+                 or options[branch_id].stage_id in on_route)
+
+
+def _gather_ordinals_per_path(ordinals: list[RowOrdinal], index: list[int], paths: int
+                              ) -> list[list[RowOrdinal]]:
+    took: list[list[RowOrdinal]] = [[] for _ in range(paths)]
+    for at, which in enumerate(index):
+        took[which].append(ordinals[at])
+    return took
+
+
+def _find_branches_on_every_path(paths: list[BranchPath]) -> frozenset[BranchId]:
+    """One path tells itself apart from nothing, so nothing of it reads as shared."""
+    if len(paths) < 2:
+        return frozenset()
+    return frozenset.intersection(*(frozenset(path) for path in paths))

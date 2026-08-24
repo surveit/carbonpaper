@@ -71,3 +71,21 @@ class FrameScale(BaseModel):
     stage: StageId
     rows_count: int
     included_rows_count: int
+
+class PathBehindFigure(BaseModel):
+    """One distinct route the rows behind a figure took, and a row that took it."""
+
+    ordinals: list[RowOrdinal]  # every row on it; the pane shows one and counts the rest
+    # The branches this path holds that at least one other path does not.
+    tells_it_apart: list[BranchOption]
+    whole_path: list[BranchOption]
+    example_ordinal: RowOrdinal
+
+
+class PathsBehindFigure(BaseModel):
+    at_stage: StageId
+    paths: list[PathBehindFigure]
+
+    @property
+    def rows(self) -> int:
+        return sum(len(path.ordinals) for path in self.paths)

@@ -68,6 +68,25 @@ body{display:flex;flex-direction:column;overflow:hidden}
   border-right:1px solid var(--border)}
 .lin-snav h2{margin:0 0 8px;font-size:11px;color:var(--muted);
   text-transform:uppercase;letter-spacing:.05em}
+/* One entry per path the run recorded, none folded into another. */
+.paths-count{font-size:12.5px;margin:0 0 10px;color:var(--muted);line-height:1.45}
+.paths-count code{background:var(--sunk-deep);padding:0 4px;border-radius:4px}
+.path-entry{display:block;padding:7px 8px;border-radius:8px;margin-bottom:5px;
+  border-left:3px solid transparent;color:var(--fg);text-decoration:none;
+  background:var(--raised);border:1px solid var(--border)}
+a.path-entry:hover{background:var(--hover)}
+.path-entry.on{background:var(--state-review-bg);border-left-color:var(--accent)}
+.path-rows{display:block;font-size:12.5px;margin-bottom:3px}
+.path-branch{display:inline-block;font-size:10.5px;line-height:1.5;padding:1px 5px;
+  border-radius:4px;margin:2px 3px 0 0;background:var(--sunk-deep);color:var(--muted);
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere;max-width:100%}
+.path-branch.is-code{background:var(--info-bg);color:var(--info-ink);border:1px solid var(--info-bd)}
+.paths-gap{font-size:11.5px;color:var(--state-warn-ink);background:var(--warn-bg);
+  border-radius:7px;padding:7px 9px;margin:10px 0 0;line-height:1.45}
+.paths-gap code{background:none;padding:0;font-weight:600}
+.paths-none{font-size:12.5px;color:var(--muted);line-height:1.45}
+.paths-foot{font-size:11.5px;color:var(--muted);line-height:1.45;
+  border-top:1px solid var(--border);padding-top:8px;margin-top:10px}
 /* Every entry is a link EXCEPT the one being told and one the packet wrote no
    page for; all three read as the same list, so the pane is never ragged. */
 .snavbtn{display:block;width:100%;text-align:left;padding:7px 8px;border-radius:8px;
@@ -96,6 +115,7 @@ a.snavbtn:hover{background:var(--hover)}
   .lin-story{overflow:visible}
   .lin-side{border-left:0;border-top:1px solid var(--border);overflow:visible}
   .lin-pbody{overflow:visible}
+  .lin-inbody{overflow:visible}
   /* The row chip and the delta take their own line rather than pushing the
      sentence off the screen. */
   .step{grid-template-columns:52px 1fr;row-gap:2px}
@@ -165,6 +185,40 @@ tr.carried td.lin-v{color:var(--muted)}
 .lin-was em{text-decoration:none;font-style:normal}
 .lin-null{color:var(--muted);font-style:italic}
 .lin-clip{max-height:5.2em;overflow:hidden;cursor:zoom-in}
+
+/* Inputs: one card per input stage, in the order the ancestry found them. */
+.lin-inbody{overflow:auto;padding:16px 22px 40px;flex:1}
+.lin-inbody>*{max-width:1080px}
+.incard{border:1px solid var(--border);border-radius:10px;background:var(--raised);
+  padding:12px 14px 10px;margin-bottom:14px}
+.inhead{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.inhead h2{margin:0;font-size:15px}
+.inhead h2 code{background:var(--sunk-deep);padding:1px 6px;border-radius:5px;font-size:14px}
+/* Every badge names its own state in words — the tint only repeats it. */
+.inrole{font-size:10.5px;border-radius:5px;padding:1px 6px;text-transform:uppercase;
+  letter-spacing:.04em}
+.inrole-fed{background:var(--state-review-bg);color:var(--state-review-ink)}
+.inrole-ref{background:var(--info-bg);color:var(--info-ink)}
+.inrole-off{background:var(--state-idle-bg);color:var(--state-idle-ink)}
+.inroutes{margin:7px 0 10px;padding-left:18px;color:var(--muted);font-size:12.5px;
+  line-height:1.5}
+.inroutes code{background:var(--sunk-deep);padding:0 4px;border-radius:4px;color:var(--fg)}
+ul.infiles{list-style:none;margin:0;padding:0;font-size:12.5px}
+ul.infiles li{border-bottom:1px solid var(--border);padding:7px 0}
+ul.infiles li:last-child{border-bottom:0}
+.infile{font-weight:600}
+.inpath{display:block;color:var(--muted);font-size:11px;margin-top:2px;word-break:break-all}
+/* Where the row really sits: the one fact the reader came to this tab for. */
+.inrow{display:inline-block;background:var(--info-bg);color:var(--info-ink);
+  border:1px solid var(--info-bd);border-radius:6px;padding:0 6px;font-size:11px;
+  margin-left:5px}
+.inmiss{color:var(--state-warn-ink);font-size:11px;margin-left:5px}
+.inline-note{color:var(--muted);font-size:12px;margin:8px 0 0}
+.inline-note code{background:var(--sunk-deep);padding:0 4px;border-radius:4px}
+/* What the run TOOK, as opposed to what the file holds — facts about this run. */
+.instrip{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;padding-top:8px;
+  border-top:1px solid var(--border);color:var(--muted);font-size:11.5px}
+.instrip b{color:var(--fg)}
 .hidden{display:none}
 </style></head><body>
 {# Standalone (see the head above), so the trail is rendered here rather than
@@ -223,14 +277,12 @@ tr.carried td.lin-v{color:var(--muted)}
 {% if view.nodes %}
 <div class="lin-split">
   <div class="lin-snav">
-    <h2>Stories</h2>
-    <div id="stories"></div>
-    <div class="lin-snavtot" id="storiestot"></div>
+    {% include "_row_paths.html" %}
   </div>
   <div class="lin-story">
-    <div class="lin-note"><b>The steps are one example of that path.</b> They follow this one row,
-      as it stood after each stage. Other rows may have run the same path; this page does not
-      count them. Click a step to see the row.</div>
+    <div class="lin-note">The steps below follow this one row, as it stood after each stage.
+      Which path it took, and what else the rows behind the figure did, is on the left.
+      Click a step to see the row.</div>
     <div id="steps"></div>
     <details class="lin-graph"><summary>Lineage graph</summary>
       <pre class="mermaid" id="mmd">{{ mermaid }}</pre>
@@ -272,11 +324,7 @@ tr.carried td.lin-v{color:var(--muted)}
 {% endif %}
 </div>
 <div class="lin-pane hidden" data-pane="inputs">
-  <div class="empty-state">
-    <h2>The files behind this row are not listed here</h2>
-    <p>The Paths tab names the source stage each step read from. It does not say which file
-      that stage read, how many rows came out of it, or when it was read.</p>
-  </div>
+{% include "_lineage_inputs.html" %}
 </div>
 <div class="lin-pane hidden" data-pane="values">
 {% if offline or not view.nodes %}
@@ -346,61 +394,6 @@ if(rowBox) rowBox.addEventListener('change', () => {
 <script>
 let sel = V.nodes.length - 1, tab = 'row', scope = 'changed';
 const transformCache = {};
-
-// ---- The stories: every path this row's ancestry could be told down --------
-// The trace knows which parents it did not follow. It does NOT know how many
-// rows ran each path, so no entry claims a share of anything.
-function renderStories(){
-  const showColumns = countCohorts() > 1;
-  document.getElementById('stories').innerHTML = V.stories.map((s, i) => {
-    const body = `<span class="lab">${storyLabel(s)}</span>`
-               + `<span class="why">${storyWhy(s, showColumns)}</span>`;
-    if(i === 0) return `<div class="snavbtn on">${body}</div>`;
-    // No page for this row (the review packet wrote none): the entry still
-    // states the path, because the path is a fact and the link is not.
-    if(!s.href) return `<div class="snavbtn">${body}</div>`;
-    return `<a class="snavbtn" href="${s.href}" title="trace this row instead">${body}</a>`;
-  }).join('');
-  document.getElementById('storiestot').innerHTML = storiesNote();
-}
-// Where the columns a cohort fed are the output's own, naming them says nothing.
-function countCohorts(){
-  return new Set(V.stories.filter(s => s.kind === 'cohort' || s.kind === 'contributor')
-    .map(s => `${s.stage_id}\n${(s.columns || []).join(',')}`)).size;
-}
-function storyLabel(s){
-  return s.kind === 'cohort'
-    ? `${s.rows} rows of <code>${esc(s.stage_id)}</code>`
-    : `<code>${esc(s.stage_id)}</code> row ${s.row_ordinal}`;
-}
-function storyWhy(s, showColumns){
-  if(s.kind === 'shown') return shownWhy();
-  const at = `step ${s.step}, <code>${esc(V.nodes[s.step - 1].stage_id)}</code>`;
-  const into = (showColumns && s.columns) ? ` into ${s.columns.map(esc).join(' and ')}` : '';
-  const nopage = s.href ? '' : ' · <span class="nopage">no page for this row</span>';
-  if(s.kind === 'branch') return `another parent at ${at}${into}${nopage}`;
-  if(s.kind === 'contributor') return s.rows > 1
-    ? `one of ${s.rows} rows summarized at ${at}${into}${nopage}`
-    : `the one row summarized at ${at}${into}${nopage}`;
-  return `summarized at ${at}${into} — ${cohortReach(s)}`;
-}
-function cohortReach(s){
-  if(!s.href) return 'no table of them here';
-  return s.linked < s.rows ? `opens the first ${s.linked}` : 'opens all of them';
-}
-function shownWhy(){
-  const steps = `${V.nodes.length} step${V.nodes.length > 1 ? 's' : ''}`;
-  return V.upstream.truncated
-    ? `the path told here — ${steps}, stopping at <code>${esc(V.nodes[0].stage_id)}</code>`
-    : `the path told here — ${steps}, back to the source`;
-}
-function storiesNote(){
-  if(V.stories.length > 1)
-    return 'Every other parent this walk recorded is listed here. Opening one traces from it instead.';
-  return V.upstream.truncated
-    ? 'No step named a second parent, and the walk stopped before the source.'
-    : 'No step named a second parent, so this row has one path from the source.';
-}
 
 // ---- The steps ------------------------------------------------------------
 function verb(n){
@@ -736,9 +729,16 @@ function renderValuesColumns(){
 }
 if(valuesCols && valuesRoot) renderValuesColumns();
 
-// The stories do not move when a step is picked, so they are painted once.
-renderStories();
 render();
+
+// A pane is a deep link, so a link can hand someone the tool, not the page.
+document.getElementById('pagetabs').addEventListener('click', e => {
+  const picked = e.target.closest('.lin-pagetab');
+  if(picked) history.replaceState(null, '', '#' + picked.dataset.pane);
+});
+const asked = document.querySelector(
+  `.lin-pagetab[data-pane="${CSS.escape(location.hash.slice(1))}"]`);
+if(asked) asked.click();
 </script>
 {% endif %}
 {% if not offline %}{% include "_chat_rail.html" %}

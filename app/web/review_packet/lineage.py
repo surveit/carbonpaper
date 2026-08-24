@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from app.core.json_types import JsonDict
 from app.models import WorkflowStage
 from app.core.frames import write_frame_file, table_to_frame
 from app.runtime.trace import RunFrames, trace_row_from, trace_to_dict
@@ -25,6 +26,16 @@ from app.web.panel_links import (
     packet_lineage_href,
 )
 from app.web.review_packet.pages import ASSETS_DIR, FAVICON, STYLESHEETS
+from app.core.errors import RowOutOfRange, StageNotInRun
+from app.runtime.branch_analysis import WorkflowRunBranches, reconstruct_run_branches
+from app.runtime.errors import MissingLineage
+from app.web.row_paths import (
+    CitedFigure,
+    NoPathsToShow,
+    PathsPane,
+    find_paths_behind_figure,
+)
+from app.web.trace_inputs import InputCatalog, build_input_catalog, select_row_inputs
 from app.web.trace_view import build_trace_view
 
 _log = logging.getLogger(__name__)
@@ -37,10 +48,14 @@ PACKET_MAX_LINEAGE_PAGES = 20_000
 
 
 def write_packet_lineage(
-    root: Path, run_dir: Path, view: RunView, stages_by_id: dict[str, WorkflowStage]
+    root: Path, run_dir: Path, view: RunView, stages_by_id: dict[str, WorkflowStage],
+    manifest: JsonDict,
 ) -> LineageReport:
     """Traces every row the run PUBLISHED a link to, and the rows feeding those."""
     frames = RunFrames(run_dir)
+    branches = _read_run_branches(run_dir, view, stages_by_id)
+    # Read once for the whole packet: every page below scopes this same catalog.
+    catalog = build_input_catalog(view.project, manifest)
     published = set(_published_rows(view))
     closure = _find_closure(frames, view)
     if len(closure) > PACKET_MAX_LINEAGE_PAGES:
@@ -53,7 +68,8 @@ def write_packet_lineage(
     written = [
         path
         for stage_id, row in sorted(closure)
-        for path in _write_page(root, frames, view, stages_by_id, stage_id, row, traced)
+        for path in _write_page(root, frames, branches, view, stages_by_id,
+                                catalog, stage_id, row, traced)
     ]
     stages = _group_by_stage(sorted(closure), published)
     figures = _named_figures(view, closure)
@@ -125,18 +141,24 @@ def _branches_of(frames: RunFrames, stage_id: str, row: int) -> list[tuple[str, 
 
 
 def _write_page(
-    root: Path, frames: RunFrames, view: RunView, stages_by_id: dict[str, WorkflowStage],
-    stage_id: str, row: int, traced: frozenset[tuple[str, int]],
+    root: Path, frames: RunFrames, branches: WorkflowRunBranches | None, view: RunView,
+    stages_by_id: dict[str, WorkflowStage], catalog: InputCatalog, stage_id: str,
+    row: int, traced: frozenset[tuple[str, int]],
 ) -> list[str]:
     trace = trace_to_dict(trace_row_from(frames, stage_id, row))
     relative = packet_lineage_href("", stage_id, row)
     written = _write_contributor_tables(root, frames, view, trace, stage_id, row)
+    links = PacketPanelLinks(to_root="../../", traced=traced, owner=(stage_id, row))
+    trace_view = build_trace_view(trace, stages_by_id, links)
     html = templates.env.get_template("lineage.html").render(
         title=f"{stage_id} · row {row}",
-        view=build_trace_view(
-            trace, stages_by_id,
-            PacketPanelLinks(to_root="../../", traced=traced, owner=(stage_id, row)),
-        ),
+        pane=_read_paths_pane(branches, stage_id, row),
+        figure=CitedFigure(stage_id=stage_id, row_ordinal=row),
+        links=links,
+        shown_row=row,
+        feeds=None,
+        view=trace_view,
+        inputs=select_row_inputs(catalog, trace_view, links),
         project=view.project,
         crumbs=[
             Crumb(label=view.project or "run", href="../../index.html"),
@@ -228,3 +250,30 @@ def _write_one_cohort(
 
 def _cell(value: Any) -> str:
     return "" if value is None else str(value)
+
+
+def _read_run_branches(
+    run_dir: Path, view: RunView, stages_by_id: dict[str, WorkflowStage]
+) -> WorkflowRunBranches | None:
+    """None where this run's lineage cannot be read; the pages then say so."""
+    if not stages_by_id:
+        return None
+    order = [stage.stage_id for stage in view.stages]
+    rows = {stage.stage_id: stage.row_count for stage in view.stages}
+    try:
+        return reconstruct_run_branches(run_dir, stages_by_id, order, rows)
+    except MissingLineage:
+        return None
+
+
+def _read_paths_pane(
+    branches: WorkflowRunBranches | None, stage_id: str, row: int,
+) -> PathsPane:
+    if branches is None:
+        return NoPathsToShow(
+            reason="the version this run pinned is unreadable, so no stage's branches are known")
+    figure = CitedFigure(stage_id=stage_id, row_ordinal=row)
+    try:
+        return find_paths_behind_figure(branches, figure)
+    except (MissingLineage, StageNotInRun, RowOutOfRange) as no_paths:
+        return NoPathsToShow(reason=str(no_paths))
