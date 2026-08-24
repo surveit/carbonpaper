@@ -1,0 +1,96 @@
+{# The Values used tab: where the cited column came from, replayed one sheet at a
+   time. Injected into the row lineage page, which drives it with values-used.js.
+   `reason` instead of `values` where no walk can be made.
+
+   Context: project, run_id, stage_id, column, and either values (app.web.values_view)
+   with nav (what the script steers by) or reason. #}
+{% from "_data_cell.html" import data_cell %}
+{% if reason %}
+<p class="banner banner-warn">No column lineage for <code>{{ column }}</code> at
+  <code>{{ stage_id }}</code> — {{ reason }}.</p>
+{% elif values.counts_rows %}
+<p class="vu-say"><code>{{ column }}</code> counts rows at <code>{{ stage_id }}</code>.
+  It reads no column, so no earlier column feeds it — which rows were counted is the
+  <button class="vu-to-rows" type="button">Relevant rows</button> tab.</p>
+{% else %}
+<div class="vu" data-project="{{ project }}" data-run="{{ run_id }}" data-row="{{ values.row }}">
+<script type="application/json" class="vu-nav">{{ nav | tojson }}</script>
+<p class="vu-say">This view shows only the stages that can affect
+  <code>{{ column }}</code> and how they transformed the data.</p>
+<div class="vu-maprow">
+  <button class="vu-arrow" data-go="back" title="back one stage (left arrow)">◀</button>
+  <div class="vu-map"><svg class="vu-wires"></svg>
+    {%- for map_column in values.minimap %}
+    <div class="vu-mapcol">
+      {%- for node in map_column %}
+      <button class="vu-node" data-node="{{ node.stage_id }}">{{ node.glyph }} {{ node.stage_id }}</button>
+      {%- endfor %}
+    </div>
+    {%- endfor %}
+  </div>
+  <button class="vu-arrow" data-go="fwd" title="forward one stage (right arrow)">▶</button>
+</div>
+<div class="vu-scroll">
+{% for step in values.steps %}
+  <section class="vu-step" data-step="{{ step.stage_id }}">
+    <div class="vu-stephead"><code class="vu-sid">{{ step.stage_id }}</code>
+      <span class="vu-kind">{{ step.glyph }} {{ step.label }}</span>
+      <span class="vu-rows">{{ "{:,}".format(step.rows_total) }} row{% if step.rows_total != 1 %}s{% endif %}</span>
+    </div>
+    {%- if step.new_sheet %}
+    <p class="vu-newsheet">New sheet:
+      {%- if step.new_sheet == 'per_group' %} one row per group.
+      {%- elif step.new_sheet == 'one_row' %} every row collapses into one.
+      {%- else %} this stage rebuilt the frame.{% endif %}</p>
+    {%- endif %}
+    {% if step.unreadable %}
+    <p class="vu-nosheet">No sheet for this stage — {{ step.unreadable }}.</p>
+    {% else %}
+    <div class="vu-legend">
+      <span><i class="vu-sw vu-col-added"></i>written here</span>
+      <span><i class="vu-sw vu-col-rewritten"></i>rewritten here</span>
+      <span><i class="vu-sw vu-col-read"></i>read here</span>
+      <span><i class="vu-sw vu-col-carried"></i>carried, not used here</span>
+      <span><i class="vu-sw vu-col-absent"></i>not on this sheet yet</span>
+    </div>
+    <div class="table-scroll"><table class="vu-sheet">
+      <thead><tr>
+        {%- for column_state in step.columns %}
+        {%- set klass = 'vu-col-cited' if column_state.cited else 'vu-col-' ~ column_state.state %}
+        {%- if column_state.writer %}
+        <th class="{{ klass }} vu-linked" data-jump="{{ column_state.writer }}"
+            title="written by {{ column_state.writer }} — go there">{{ column_state.name }}
+        {%- else %}<th class="{{ klass }}">{{ column_state.name }}{% endif %}
+        {%- if column_state.state == 'added' %}<i>new here</i>
+        {%- elif column_state.state == 'rewritten' %}<i>rewritten</i>{% endif %}</th>
+        {%- endfor %}
+      </tr></thead>
+      <tbody>
+      {%- for row in step.rows %}
+        <tr>
+        {%- for cell in row %}
+        {%- set state = step.columns[loop.index0] %}
+        {{- data_cell(cell, 'vu-col-cited' if state.cited else 'vu-col-' ~ state.state, '', false) }}
+        {%- endfor %}
+        </tr>
+      {%- endfor %}
+      </tbody>
+    </table></div>
+    <p class="vu-sheetfoot">{{ step.rows | length }} of {{ "{:,}".format(step.rows_total) }} rows
+      · {{ step.columns | rejectattr('state', 'equalto', 'absent') | list | length }} of
+      {{ step.columns_total }} columns, the ones this value came through</p>
+    {% endif %}
+    <div class="vu-what"><h3>what ran here</h3>
+      <div class="vu-transform" data-transform="{{ step.stage_id }}"></div></div>
+  </section>
+{% endfor %}
+</div>
+<div class="vu-modal" hidden><div class="vu-modal-card">
+  <button class="vu-modal-close" type="button">close</button>
+  <h3 class="vu-modal-title"></h3>
+  <p class="vu-modal-say">These are separate datasets. Each one is its own path, with its
+    own transformations to agree with &mdash; walking one says nothing about the others.</p>
+  <div class="vu-forklist"></div>
+</div></div>
+</div>
+{% endif %}

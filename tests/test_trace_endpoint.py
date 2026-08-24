@@ -177,7 +177,8 @@ def test_trace_view_carries_the_three_tabs_with_the_story_open(tmp_path, monkeyp
         assert f'data-pane="{pane}">{label}' in body
     # Relevant rows holds the scope map, in a frame the tab loads when it is opened.
     assert 'id="scope-frame"' in body
-    assert "The column's other values are not on this page" in body
+    # Values used holds the column walk, fetched into this element on the same signal.
+    assert 'id="values-root"' in body
 
 
 VAL_DESCRIPTION = "Tonnes of CO2e the operator reported for the year."
