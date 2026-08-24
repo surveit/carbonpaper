@@ -34,7 +34,8 @@
   </div>
 </div>
 
-{% if state.workflow.present %}
+{% if versions or state.workflow.present %}
+{# Versions make it runnable; the workflow check only picks which zero state shows. #}
 {% include "_run_controls.html" %}
 {% else %}
 <div class="empty-state">
