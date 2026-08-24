@@ -26,6 +26,7 @@ from app.web.panel_links import AppPanelLinks, read_row_ref
 from app.web import scope_view
 from app.web.lineage_coordinate import build_lineage_coordinate
 from app.web.row_paths import CitedFigure, NoPathsToShow, PathsPane, find_paths_behind_figure
+from app.web.trace_inputs import build_input_catalog, select_row_inputs
 from app.web.trace_view import build_trace_view, read_walked_rows
 from app.web.breadcrumbs import build_run_child_crumbs
 from app.web.config import render_row_number, templates
@@ -152,6 +153,8 @@ async def run_stage_row_trace_view(
             "title": f"{view['start_stage']} · row {render_row_number(view['start_row'])}",
             "view": view,
             "coordinate": coordinate,
+            "inputs": select_row_inputs(
+                build_input_catalog(project_id, manifest), view, links),
             "pane": _read_paths_pane(project_id, run_id, stage_id, row, view),
             "figure": CitedFigure(stage_id=stage_id, row_ordinal=row),
             "links": links,

@@ -35,6 +35,7 @@ from app.web.row_paths import (
     PathsPane,
     find_paths_behind_figure,
 )
+from app.web.trace_inputs import InputCatalog, build_input_catalog, select_row_inputs
 from app.web.trace_view import build_trace_view, read_walked_rows
 
 _log = logging.getLogger(__name__)
@@ -53,6 +54,8 @@ def write_packet_lineage(
     """Traces every row the run PUBLISHED a link to, and the rows feeding those."""
     frames = RunFrames(run_dir)
     branches = _read_run_branches(run_dir, view, stages_by_id)
+    # Read once for the whole packet: every page below scopes this same catalog.
+    catalog = build_input_catalog(view.project, manifest)
     published = set(_published_rows(view))
     closure = _find_closure(frames, view)
     if len(closure) > PACKET_MAX_LINEAGE_PAGES:
@@ -66,7 +69,7 @@ def write_packet_lineage(
         path
         for stage_id, row in sorted(closure)
         for path in _write_page(root, frames, branches, view, stages_by_id,
-                                stage_id, row, traced)
+                                catalog, stage_id, row, traced)
     ]
     stages = _group_by_stage(sorted(closure), published)
     figures = _named_figures(view, closure)
@@ -139,7 +142,7 @@ def _branches_of(frames: RunFrames, stage_id: str, row: int) -> list[tuple[str, 
 
 def _write_page(
     root: Path, frames: RunFrames, branches: WorkflowRunBranches | None, view: RunView,
-    stages_by_id: dict[str, WorkflowStage], stage_id: str,
+    stages_by_id: dict[str, WorkflowStage], catalog: InputCatalog, stage_id: str,
     row: int, traced: frozenset[tuple[str, int]],
 ) -> list[str]:
     trace = trace_to_dict(trace_row_from(frames, stage_id, row))
@@ -153,6 +156,7 @@ def _write_page(
         figure=CitedFigure(stage_id=stage_id, row_ordinal=row),
         links=links,
         view=trace_view,
+        inputs=select_row_inputs(catalog, trace_view, links),
         project=view.project,
         crumbs=[
             Crumb(label=view.project or "run", href="../../index.html"),

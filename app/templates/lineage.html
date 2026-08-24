@@ -326,11 +326,7 @@ ul.infiles li:last-child{border-bottom:0}
 {% endif %}
 </div>
 <div class="lin-pane hidden" data-pane="inputs">
-  <div class="empty-state">
-    <h2>The files behind this row are not listed here</h2>
-    <p>The Paths tab names the source stage each step read from. It does not say which
-      file that stage read, how many rows came out of it, or when it was read.</p>
-  </div>
+{% include "_lineage_inputs.html" %}
 </div>
 <div class="lin-pane hidden" data-pane="values">
 {% if offline or not view.nodes %}
