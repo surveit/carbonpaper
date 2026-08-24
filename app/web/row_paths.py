@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Mapping
 
 from pydantic import BaseModel
 
@@ -11,11 +12,16 @@ from app.models.branch_analysis import (
     BranchOption,
     BranchPath,
     RowOrdinal,
+    RowRef,
 )
 from app.models.schema import StageId
 from app.runtime.branch_analysis import WorkflowRunBranches, group_rows_by_path
 from app.runtime.errors import MissingLineage
-from app.services.scope import find_contributing_rows
+from app.services.scope import (
+    find_contributing_rows,
+    find_crossings_behind,
+    find_stages_on_route,
+)
 
 
 @dataclass(frozen=True)
@@ -31,6 +37,8 @@ class PathBehindFigure(BaseModel):
     tells_it_apart: list[BranchOption]  # held here, not on the paths beside it
     whole_path: list[BranchOption]
     example_ordinal: RowOrdinal
+    # The contributor to follow at each fan-in, walking the figure to `example_ordinal`.
+    crossings: list[RowRef] = []
     holds_the_marked_row: bool = False
 
 
@@ -55,22 +63,27 @@ PathsPane = PathsBehindFigure | NoPathsToShow
 
 def find_paths_behind_figure(
     run_branches: WorkflowRunBranches, figure: CitedFigure,
-    marked_row: RowOrdinal | None = None,
+    walked: Mapping[StageId, RowOrdinal],
 ) -> PathsBehindFigure:
-    covers = find_contributing_rows(run_branches, figure.stage_id, figure.row_ordinal)
+    """`walked` is the row the page's own trace stood on at each stage it stepped through."""
+    cited = (figure.stage_id, figure.row_ordinal)
+    covers = find_contributing_rows(run_branches, *cited)
     _refuse_a_frame_with_no_paths(run_branches, covers.at_stage, covers.ordinals)
     taken = group_rows_by_path(run_branches, covers.at_stage, covers.ordinals,
-                               set(covers.regrained_at) | {figure.stage_id})
+                               find_stages_on_route(run_branches, [cited]))
+    crossings = find_crossings_behind(run_branches, *cited)
     shared = _find_branches_on_every_path(taken.paths)
+    marked_row = walked.get(covers.at_stage)
     return PathsBehindFigure(
         at_stage=covers.at_stage,
-        paths=[_read_one_path(run_branches, path, on_it, shared, marked_row)
+        paths=[_read_one_path(run_branches, path, on_it, shared, crossings, marked_row)
                for path, on_it in zip(taken.paths, taken.ordinals)],
     )
 
 
 def _read_one_path(run_branches: WorkflowRunBranches, path: BranchPath,
                    ordinals: list[RowOrdinal], shared: frozenset[BranchId],
+                   crossings: Mapping[RowOrdinal, tuple[RowRef, ...]],
                    marked_row: RowOrdinal | None) -> PathBehindFigure:
     options = [run_branches.branch_options[branch_id] for branch_id in path]
     return PathBehindFigure(
@@ -78,6 +91,7 @@ def _read_one_path(run_branches: WorkflowRunBranches, path: BranchPath,
         tells_it_apart=[o for o in options if o.id not in shared],
         whole_path=options,
         example_ordinal=ordinals[0],
+        crossings=list(crossings.get(ordinals[0], ())),
         holds_the_marked_row=marked_row in ordinals,
     )
 
@@ -91,7 +105,6 @@ def _refuse_a_frame_with_no_paths(run_branches: WorkflowRunBranches, at_stage: S
             f"this run recorded paths for {held} rows of {at_stage}, "
             f"not the {max(ordinals) + 1} the figure reaches"
         )
-
 
 
 def _find_branches_on_every_path(paths: list[BranchPath]) -> frozenset[BranchId]:

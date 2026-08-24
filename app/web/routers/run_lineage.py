@@ -5,11 +5,13 @@ share the trace machinery no other run route touches."""
 
 from __future__ import annotations
 
+from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.core.errors import (
+    ContributorNotInFanIn,
     DocumentNotFound,
     RowOutOfRange,
     RunVersionUnresolvableError,
@@ -18,13 +20,13 @@ from app.core.errors import (
 from app.runtime.errors import MissingLineage
 from app.services.loader import resolve_function_code
 from app.services import run as run_service
-from app.runtime.trace import trace_row, trace_to_dict
+from app.runtime.trace import ContributorChoice, Trace, trace_row, trace_to_dict
 from app.web.stage_test_views import build_certification, shape_test_views
-from app.web.panel_links import AppPanelLinks
+from app.web.panel_links import AppPanelLinks, read_row_ref
 from app.web import scope_view
 from app.web.lineage_coordinate import build_lineage_coordinate
 from app.web.row_paths import CitedFigure, NoPathsToShow, PathsPane, find_paths_behind_figure
-from app.web.trace_view import build_trace_view
+from app.web.trace_view import build_trace_view, read_walked_rows
 from app.web.breadcrumbs import build_run_child_crumbs
 from app.web.config import render_row_number, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
@@ -75,17 +77,37 @@ async def run_stage_lineage_panel(
     )
 
 
-@router.get("/project/{project_id}/runs/{run_id}/stage/{stage_id}/row/{row}/trace")
-async def run_stage_row_trace(project_id: str, run_id: str, stage_id: str, row: int):
+_VIA = Query(
+    None,
+    description="Which contributor to follow at a fan-in, as <stage_id>:<row_ordinal>.",
+)
+
+
+def _walk_row(project_id: str, run_id: str, stage_id: str, row: int,
+              via: list[str] | None) -> Trace:
+    """Crosses every fan-in it meets; `via` only says which contributor to take there."""
     run_dir = resolve_run_dir(project_id, run_id)
-    load_manifest(project_id, run_id)  # 404s if the run doesn't exist
     try:
-        trace = trace_row(run_dir, stage_id, row)
+        return trace_row(run_dir, stage_id, row, _read_choices(via))
     except StageNotInRun as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except RowOutOfRange as exc:
+    except (RowOutOfRange, ContributorNotInFanIn) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return JSONResponse(trace_to_dict(trace))
+
+
+def _read_choices(via: list[str] | None) -> list[ContributorChoice]:
+    try:
+        return [ContributorChoice(*read_row_ref(value)) for value in via or []]
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/project/{project_id}/runs/{run_id}/stage/{stage_id}/row/{row}/trace")
+async def run_stage_row_trace(project_id: str, run_id: str, stage_id: str, row: int,
+                              via: list[str] | None = _VIA):
+    load_manifest(project_id, run_id)  # 404s if the run doesn't exist
+    return JSONResponse(
+        trace_to_dict(_walk_row(project_id, run_id, stage_id, row, via)))
 
 
 @router.get(
@@ -94,17 +116,11 @@ async def run_stage_row_trace(project_id: str, run_id: str, stage_id: str, row: 
 )
 async def run_stage_row_trace_view(
     request: Request, project_id: str, run_id: str, stage_id: str, row: int,
-    column: str | None = None, figure: str | None = None,
+    column: str | None = None, via: list[str] | None = _VIA,
 ):
-    run_dir = resolve_run_dir(project_id, run_id)
     run_record = load_run_record(project_id, run_id)
     manifest = run_record.to_dict()
-    try:
-        trace = trace_row(run_dir, stage_id, row)
-    except StageNotInRun as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except RowOutOfRange as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    trace = _walk_row(project_id, run_id, stage_id, row, via)
 
     # Node detail and the graph both describe THIS run, so both read the version
     # it pinned. With no resolvable version neither falls back to the working
@@ -136,9 +152,8 @@ async def run_stage_row_trace_view(
             "title": f"{view['start_stage']} · row {render_row_number(view['start_row'])}",
             "view": view,
             "coordinate": coordinate,
-            "pane": _read_paths_pane(project_id, run_id, stage_id, row, figure),
-            "figure": _read_figure(figure) or CitedFigure(stage_id=stage_id,
-                                                          row_ordinal=row),
+            "pane": _read_paths_pane(project_id, run_id, stage_id, row, view),
+            "figure": CitedFigure(stage_id=stage_id, row_ordinal=row),
             "links": links,
             "project": project_id,
             "crumbs": build_run_child_crumbs(project_id, run_id, label="Row lineage"),
@@ -148,27 +163,16 @@ async def run_stage_row_trace_view(
 
 
 def _read_paths_pane(project_id: str, run_id: str, stage_id: str, row: int,
-                     figure: str | None) -> PathsPane:
-    """`figure` holds the pane on the row the reader came from as they change path."""
-    cited = _read_figure(figure) or CitedFigure(stage_id=stage_id, row_ordinal=row)
+                     view: dict[str, Any]) -> PathsPane:
+    """The page is the figure; its own walk says which of the paths below it took."""
     try:
         return find_paths_behind_figure(
-            scope_view.read_run_branches(project_id, run_id), cited, marked_row=row)
+            scope_view.read_run_branches(project_id, run_id),
+            CitedFigure(stage_id=stage_id, row_ordinal=row), read_walked_rows(view),
+        )
     # A run whose version no longer resolves has no branch options to read paths from.
     except (MissingLineage, StageNotInRun, RowOutOfRange, DocumentNotFound,
             FileNotFoundError, RunVersionUnresolvableError) as no_paths:
         return NoPathsToShow(reason=str(no_paths))
-
-
-def _read_figure(figure: str | None) -> CitedFigure | None:
-    if figure is None:
-        return None
-    stage_id, _, ordinal = figure.rpartition(":")
-    if not stage_id or not ordinal.isdigit():
-        raise HTTPException(
-            status_code=400,
-            detail=f"malformed figure {figure!r} — expected stage_id:row",
-        )
-    return CitedFigure(stage_id=stage_id, row_ordinal=int(ordinal))
 
 

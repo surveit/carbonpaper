@@ -84,7 +84,7 @@ def test_trace_view_renders_the_story_and_the_row_panel(tmp_path, monkeypatch):
     body = resp.text
     assert "mermaid" in body                            # reuses the central graph
     assert "/lineage_panel?row=" in body                # the Transform tab's fetch
-    assert "this one row" in body                       # single-row subheader
+    assert '"crossed": null' in body
     assert "enrich" in body and "seeds" in body        # both stages, in the payload
     assert '"step": 1' in body and '"step": 2' in body  # numbered steps in payload
     assert '"row_diff"' in body                         # the row, marked, in the payload

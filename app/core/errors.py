@@ -17,6 +17,10 @@ class RowOutOfRange(ValueError):
     pass
 
 
+class ContributorNotInFanIn(ValueError):
+    """A trace was told to follow a contributor the run's lineage does not record."""
+
+
 class CitationMismatch(ValueError):
     """A publish stage cited a cell for a value that cell does not hold."""
 

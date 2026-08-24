@@ -1,5 +1,5 @@
 {# The Paths pane: every path the rows behind this figure took, none collapsed.
-   Context: pane (app.models.branch_analysis.PathsBehindFigure, or a refusal carrying
+   Context: pane (app.web.row_paths.PathsBehindFigure, or a refusal carrying
    `reason`), figure, links. #}
 <h2>How these rows got here</h2>
 {% if pane.reason is defined %}
@@ -26,12 +26,12 @@
     {% endfor %}
   {% endset %}
   {% set href = links.build_row_trace_for_figure(
-       pane.at_stage, path.example_ordinal, figure.stage_id, figure.row_ordinal) %}
+       figure.stage_id, figure.row_ordinal, path.crossings) %}
   {% if path.holds_the_marked_row %}
     <div class="path-entry on">{{ body }}</div>
   {% elif href %}
     <a class="path-entry" href="{{ href }}"
-       title="follow one of these rows instead">{{ body }}</a>
+       title="re-tell this figure's walk through that row">{{ body }}</a>
   {% else %}
     <div class="path-entry">{{ body }}</div>
   {% endif %}

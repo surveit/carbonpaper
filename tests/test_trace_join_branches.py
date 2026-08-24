@@ -12,7 +12,7 @@ from app.runtime.lineage import (
     RowParent,
 )
 from app.runtime.stages.join import handle_enrich, handle_expand
-from app.runtime.trace import trace_row
+from app.runtime.trace import Crossing, trace_row
 from test_trace_helpers import write_run
 
 FILINGS = pd.DataFrame({"client": ["Acme", "Borealis"], "amount": [500, 1200]})
@@ -86,7 +86,7 @@ def test_spine_follows_the_right_side_when_only_it_matched(tmp_path):
     assert trace.end.reached_origin is True
 
 
-def test_contribution_parents_are_never_walked_into(tmp_path):
+def test_one_contribution_parent_is_crossed_and_the_rest_stay_listed(tmp_path):
     lineage = RowLineage([[
         RowParent("filings", 0, EdgeKind.contribution.value),
         RowParent("filings", 1, EdgeKind.contribution.value),
@@ -97,10 +97,10 @@ def test_contribution_parents_are_never_walked_into(tmp_path):
          "df": pd.DataFrame({"total": [1700]}), "lineage": lineage},
     ])
     trace = trace_row(run_dir, "agg", 0)
-    assert [s.stage_id for s in trace.steps] == ["agg"]
+    assert [s.stage_id for s in trace.steps] == ["agg", "filings"]
     assert len(trace.steps[0].branches) == 2
-    assert trace.end.reached_origin is False
-    assert "summarizes" in trace.end.message
+    assert trace.steps[0].crossed == Crossing("filings", 0, None, 1, 2)
+    assert trace.end.reached_origin is True
     # Each contributor is still a promotable starting point.
     promoted = trace_row(run_dir, "filings", trace.steps[0].branches[1].row_ordinal)
     assert promoted.steps[0].row["client"] == "Borealis"

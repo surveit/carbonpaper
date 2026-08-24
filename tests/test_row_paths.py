@@ -12,7 +12,7 @@ from app.services.project import save_working_copy_as_version
 from app.services.run import read_pinned_version
 from app.services.versioning import load_version_stages
 from app.services.workspace import resolve_run_dir
-from app.web.panel_links import PacketPanelLinks
+from app.web.panel_links import AppPanelLinks, PacketPanelLinks
 from app.web.row_paths import CitedFigure, find_paths_behind_figure
 from scope_fixture import stage_specs, write_inputs
 from stage_seed import set_stages
@@ -39,8 +39,10 @@ def scoped(projects_root):
         resolve_run_dir(PROJECT, run_id), placed, order, rows)
 
 
-def _behind(run, stage: str, row: int):
-    return find_paths_behind_figure(run, CitedFigure(stage_id=stage, row_ordinal=row))
+def _behind(run, stage: str, row: int, walked: dict[str, int] | None = None):
+    """`walked` stands in for the page's own trace: the row it stood on at each stage."""
+    return find_paths_behind_figure(
+        run, CitedFigure(stage_id=stage, row_ordinal=row), {stage: row, **(walked or {})})
 
 
 def test_the_rows_behind_a_group_are_counted_where_they_live(scoped):
@@ -90,29 +92,33 @@ def test_one_path_keeps_its_whole_chain(scoped):
     assert len(only.whole_path) == 7
 
 
-def test_each_path_opens_a_row_that_took_it_without_moving_the_figure(scoped):
+def test_each_path_retells_the_figures_own_walk_through_a_row_that_took_it(scoped):
     behind = _behind(scoped, "by_portfolio", _HEALTH)
+    links = AppPanelLinks(PROJECT, "R1")
 
     assert [path.example_ordinal for path in behind.paths] == [0, 5]
+    assert [links.build_row_trace_for_figure("by_portfolio", _HEALTH, path.crossings)
+            for path in behind.paths] == [
+        f"/project/{PROJECT}/runs/R1/stage/by_portfolio/row/{_HEALTH}/trace/view"
+        f"?via=one_row_per_grant%3A{ordinal}" for ordinal in (0, 5)
+    ]
 
 
-@pytest.mark.parametrize("marked_row, holds_it", [(0, 0), (5, 1)])
-def test_the_marked_row_is_on_exactly_one_path(scoped, marked_row, holds_it):
-    told = find_paths_behind_figure(
-        scoped, CitedFigure(stage_id="by_portfolio", row_ordinal=_HEALTH),
-        marked_row=marked_row)
+@pytest.mark.parametrize("walked_row, holds_it", [(0, 0), (5, 1)])
+def test_the_path_the_walk_took_is_the_one_marked(scoped, walked_row, holds_it):
+    told = _behind(scoped, "by_portfolio", _HEALTH,
+                   walked={"one_row_per_grant": walked_row})
 
     assert [path.holds_the_marked_row for path in told.paths] == [
         position == holds_it for position, _ in enumerate(told.paths)
     ]
 
 
-def test_a_row_that_feeds_no_figure_of_its_own_marks_nothing(scoped):
-    """The pane opened on a plain row: it is the figure, so no contributor is current."""
+def test_a_walk_that_never_reached_the_frame_marks_no_path(scoped):
+    """A walk stopped short of `at_stage` stood on no row there, so none is current."""
     behind = _behind(scoped, "by_portfolio", _HEALTH)
 
-    assert [p.example_ordinal for p in behind.paths] == sorted(
-        p.example_ordinal for p in behind.paths)
+    assert not any(path.holds_the_marked_row for path in behind.paths)
 
 
 def test_a_path_names_the_code_arm_its_rows_took(scoped):
@@ -122,9 +128,12 @@ def test_a_path_names_the_code_arm_its_rows_took(scoped):
                for path in behind.paths for branch in path.whole_path)
 
 
-def test_the_packet_sends_a_path_to_that_rows_own_page():
-    """A folder has no query string to hold the figure, so the link is the row's page."""
-    href = PacketPanelLinks(to_root="../").build_row_trace_for_figure(
-        "one_row_per_grant", 0, "by_portfolio", 0)
+def test_the_packet_sends_a_path_to_that_rows_own_page(scoped):
+    """A folder has no query string to re-tell the walk, so the link is the row's page."""
+    behind = _behind(scoped, "by_portfolio", _HEALTH)
+    links = PacketPanelLinks(to_root="../")
 
-    assert href is not None and "figure=" not in href
+    assert [links.build_row_trace_for_figure("by_portfolio", _HEALTH, path.crossings)
+            for path in behind.paths] == [
+        f"../lineage/one_row_per_grant/{ordinal}.html" for ordinal in (0, 5)
+    ]

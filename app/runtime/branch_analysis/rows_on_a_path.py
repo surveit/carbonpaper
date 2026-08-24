@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
-from app.models.branch_analysis import BranchPath, BranchReason, RowOrdinal
+from app.models.branch_analysis import BranchPath, RowOrdinal
 from app.models.schema import StageId
 from app.runtime.branch_analysis.run_branches import WorkflowRunBranches
 
@@ -37,8 +37,7 @@ def group_rows_by_path(run_branches: WorkflowRunBranches, at_stage: StageId,
 
 def _keep_branches_on_route(run_branches: WorkflowRunBranches, path: BranchPath,
                             on_route: set[StageId]) -> BranchPath:
-    """A merge into a row this figure is not tells these rows nothing, so it is dropped."""
+    """A decision taken at a stage these rows never came through tells them nothing."""
     options = run_branches.branch_options
     return tuple(branch_id for branch_id in path
-                 if options[branch_id].reason is not BranchReason.merge
-                 or options[branch_id].stage_id in on_route)
+                 if options[branch_id].stage_id in on_route)

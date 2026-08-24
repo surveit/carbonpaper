@@ -31,6 +31,7 @@ from app.runtime.branch_analysis.stage_code import read_decision_source, read_st
 from app.services.scope import (
     find_contributing_rows,
     find_merges_that_excluded,
+    find_stages_on_route,
     measure_frame_scale,
 )
 from app.web.config import render_row_number
@@ -122,7 +123,7 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
     cited_frame, cited = _read_the_cited_cell(outputs, citation)
     covers = find_contributing_rows(run_branches, cited.stage_id, cited.row_ordinal)
     frame = read_frame_table(outputs / f"{covers.at_stage}.parquet")
-    on_route = set(covers.regrained_at) | {cited.stage_id}
+    on_route = find_stages_on_route(run_branches, [(cited.stage_id, cited.row_ordinal)])
     paths, _, index = group_rows_by_path(
         run_branches, covers.at_stage, covers.ordinals, on_route)
     shown = covers.ordinals[:CELL_ROWS]
@@ -169,7 +170,9 @@ def read_cut(run_branches: WorkflowRunBranches, outputs: Path,
     at_stage, ordinals = find_rows_that_took(run_branches, branch_id)
     if not ordinals or at_stage not in run_branches.branch_paths:
         return None
-    paths, _, index = group_rows_by_path(run_branches, at_stage, ordinals, set())
+    paths, _, index = group_rows_by_path(
+        run_branches, at_stage, ordinals,
+        find_stages_on_route(run_branches, [(at_stage, o) for o in ordinals]))
     spread = Counter(index)
     shown = ordinals[:CUT_SAMPLE]
     frame = read_frame_table(outputs / f"{at_stage}.parquet")

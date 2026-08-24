@@ -121,7 +121,6 @@ a.snavbtn:hover{background:var(--hover)}
   .step{grid-template-columns:52px 1fr;row-gap:2px}
   .step .right{grid-column:2;white-space:normal}
 }
-.lin-note{color:var(--muted);font-size:12.5px;margin:0 0 12px}
 /* A step is one line of the story AND the control that puts that row in the panel. */
 .step{display:grid;grid-template-columns:52px 1fr auto;gap:6px;align-items:baseline;width:100%;
   text-align:left;border:0;background:none;font:inherit;padding:5px 8px;border-radius:7px;
@@ -145,6 +144,13 @@ a.snavbtn:hover{background:var(--hover)}
 .branch-name{color:var(--state-idle-ink)}
 .trunc{background:var(--warn-bg);color:var(--state-warn-ink);border-radius:8px;padding:8px 12px;
   font-size:13px;margin-bottom:12px}
+/* A break in the list, not another step: below it the walk stands on the row that
+   summarizes, above it on one of the rows summarized. The two ordinals belong to
+   different frames, so the halves must not read as one row moving along. */
+.crossed{display:grid;grid-template-columns:52px 1fr;gap:6px;padding:7px 8px;margin:3px 0;
+  border-left:3px solid var(--accent);border-radius:7px;font-size:12px;line-height:1.45;
+  background:var(--state-idle-bg);color:var(--state-idle-ink)}
+.crossed .mark{font-size:11.5px;color:var(--muted)}
 .lin-graph{margin-top:18px;border-top:1px solid var(--border);padding-top:10px}
 .lin-graph summary{cursor:pointer;font-size:13px;color:var(--muted)}
 .mermaid{background:var(--raised)}.nograph{color:var(--muted);font-size:13px}
@@ -280,9 +286,6 @@ ul.infiles li:last-child{border-bottom:0}
     {% include "_row_paths.html" %}
   </div>
   <div class="lin-story">
-    <div class="lin-note">The steps below follow this one row, as it stood after each stage.
-      Which path it took, and what else the rows behind the figure did, is on the left.
-      Click a step to see the row.</div>
     <div id="steps"></div>
     <details class="lin-graph"><summary>Lineage graph</summary>
       <pre class="mermaid" id="mmd">{{ mermaid }}</pre>
@@ -450,18 +453,31 @@ function joinSentence(n){
 }
 function renderSteps(){
   let html = '';
-  // The banner is for a stop the story cannot otherwise show. A fan-in row says
-  // what it summarized in its own sentence, so it needs no second telling.
-  const fanIn = (V.nodes[0].contributor_groups || []).length > 0;
-  if(V.upstream.truncated && !fanIn){
+  if(V.upstream.truncated){
     html += `<div class="trunc">⋯ upstream not traced — ${esc(V.upstream.message)}</div>`;
   }
-  html += V.nodes.map((n, i) => `<button class="step ${i===sel?'on':''}" data-i="${i}">
+  html += V.nodes.map((n, i) => crossingOf(n, i) + `<button class="step ${i===sel?'on':''}" data-i="${i}">
       <span class="stepno">step ${n.step}</span>
       <span>${sentenceOf(n)}</span>
       <span class="right">${n.role==='claim' ? '<span class="claim-tag">published claim</span> ' : ''}<span class="row-chip">row ${n.row_number}</span>${deltaOf(n)}</span>
     </button>`).join('');
   document.getElementById('steps').innerHTML = html;
+}
+// Drawn above the step whose row the crossing fed, which is where it happened:
+// everything above the mark is that one contributor, this step is the summary.
+// The absence of these marks is the page's statement that the whole list is
+// row-level lineage, so every crossing draws one — a one-row fan-in included.
+function crossingOf(n, i){
+  const c = n.crossed;
+  // Nothing above it to follow: the walk crossed and then stopped, which the
+  // truncation banner at the top of the list is already the statement of.
+  if(!c || !i) return '';
+  const which = c.of > 1
+    ? `<b>${c.place} of ${c.of}</b> rows summarized into step ${n.step}, taken in row order.
+       The other ${c.of - 1} are listed on the left.`
+    : `the only row summarized into step ${n.step}.`;
+  return `<div class="crossed"><span class="mark">↑ crossed</span><span>Steps above follow
+    <code>${esc(c.stage_id)}</code> row <b>${c.row_ordinal}</b> — ${which}</span></div>`;
 }
 
 // ---- The other parents, named in the sentence that owns them --------------
