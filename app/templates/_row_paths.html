@@ -4,15 +4,15 @@
 {% if pane.reason is defined %}
 <p class="paths-none">This run cannot say: {{ pane.reason }}</p>
 {% else %}
+{# The count names its frame: which frame a figure bottoms out in differs per figure,
+   so a bare number says nothing a reader can check. #}
 <p class="paths-count">
-  {% if pane.paths | length == 1 %}
-    All <b>{{ pane.rows }}</b> row{{ '' if pane.rows == 1 else 's' }} behind
-    <code>{{ pane.figure.stage_id }}</code> row {{ pane.figure.row_ordinal }} took the
-    <b>same path</b>.
-  {% else %}
-    <b>{{ pane.rows }}</b> rows behind <code>{{ pane.figure.stage_id }}</code> row
-    {{ pane.figure.row_ordinal }}, on <b>{{ pane.paths | length }}</b> paths.
-  {% endif %}
+  <code>{{ pane.figure.stage_id }}</code> row {{ pane.figure.row_ordinal }} rests on
+  <b>{{ pane.rows }}</b> row{{ '' if pane.rows == 1 else 's' }} of
+  <code>{{ pane.at_stage }}</code>{% if pane.paths | length == 1 %}, and
+  <b>every one took the same path</b>.{% else %}, on
+  <b>{{ pane.paths | length }}</b> paths.{% endif %}
+  Counts below are rows of that frame.
 </p>
 {% for path in pane.paths %}
   {% set body %}

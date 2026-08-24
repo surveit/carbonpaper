@@ -47,11 +47,20 @@ def _behind(run, stage: str, row: int, shown_stage: str = "", shown_row: int = -
 
 
 def test_the_rows_behind_a_group_are_counted_where_they_live(scoped):
+    """Which frame a figure bottoms out in differs per figure, so the pane names it."""
     behind = _behind(scoped, "by_portfolio", _TRANSPORT)
 
     assert behind.at_stage == "one_row_per_grant"
     assert behind.rows == 2  # G-003 at 300 and G-004 at 400
     assert behind.figure == CitedFigure(stage_id="by_portfolio", row_ordinal=_TRANSPORT)
+
+
+def test_a_figure_over_a_different_frame_counts_in_that_frame(scoped):
+    over_grants = _behind(scoped, "by_portfolio", _HEALTH)
+    over_the_source = _behind(scoped, "load_east", 0)
+
+    assert (over_grants.at_stage, over_grants.rows) == ("one_row_per_grant", 5)
+    assert (over_the_source.at_stage, over_the_source.rows) == ("load_east", 1)
 
 
 def test_every_path_is_listed_and_none_is_folded_into_another(scoped):
