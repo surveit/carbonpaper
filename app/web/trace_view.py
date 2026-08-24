@@ -23,6 +23,7 @@ from app.web.panel_links import (
     CONTRIBUTOR_ROWS_LINKED,
     CONTRIBUTORS_NAMED,
     PanelLinks,
+    TracePath,
 )
 from app.web.trace_row_diff import build_row_diff, render_cell, row_diff_to_dict
 
@@ -42,7 +43,7 @@ class ContributorGroup:
     rows_link: str | None
 
 
-StoryKind = Literal["shown", "branch", "contributor", "cohort"]
+StoryKind = Literal["shown", "crossed", "branch", "contributor", "cohort"]
 
 
 @dataclass(frozen=True)
@@ -104,8 +105,11 @@ def build_trace_view(
     chrono = list(reversed(trace["steps"]))
     end = trace["end"]
     truncated = not end["reached_origin"]
+    path = _read_path(trace)
+    paths = _cut_paths_at_each_node(chrono, path)
 
-    nodes = [_build_node(i, chrono, stages, links, truncated) for i in range(len(chrono))]
+    nodes = [_build_node(i, chrono, stages, links, truncated, paths[i])
+             for i in range(len(chrono))]
 
     edges = [
         {"from": chrono[i]["stage_id"], "to": chrono[i + 1]["stage_id"],
@@ -119,13 +123,36 @@ def build_trace_view(
         "start_row": trace["start_row"],
         "nodes": nodes,
         "edges": edges,
-        "stories": [asdict(story) for story in _build_stories(nodes)],
+        "stories": [asdict(story) for story in _build_stories(nodes, links)],
         "upstream": {
             "truncated": truncated,
             "at_stage": end["at_stage"],
             "message": end["message"],
         },
     }
+
+
+def _read_path(trace: dict[str, Any]) -> TracePath:
+    """`steps` runs newest first, which is the order the walk consumed the choices in."""
+    return TracePath(
+        start=(trace["start_stage"], trace["start_row"]),
+        crossed=tuple(
+            (step["followed"]["stage_id"], step["followed"]["row_ordinal"])
+            for step in trace["steps"] if step.get("followed")
+        ),
+    )
+
+
+def _cut_paths_at_each_node(
+    chrono: list[dict[str, Any]], path: TracePath
+) -> list[TracePath]:
+    """A pick at a fan-in REPLACES the choice made there; the crossings past it are dropped."""
+    made, cut = 0, []
+    for step in reversed(chrono):  # the walk's own order
+        cut.append(TracePath(path.start, path.crossed[:made]))
+        if step.get("followed"):
+            made += 1
+    return list(reversed(cut))
 
 
 def find_cited_cell(
@@ -160,10 +187,13 @@ def _describe_column(
 
 def _build_node(
     i: int, chrono: list[dict[str, Any]], stages: dict[str, WorkflowStage],
-    links: PanelLinks, truncated: bool,
+    links: PanelLinks, truncated: bool, path: TracePath,
 ) -> dict[str, Any]:
     step = chrono[i]
-    parent = chrono[i - 1] if i else None
+    groups = _group_contributors(_contributions(step), links, path)
+    followed = _mark_crossing(step)
+    # A diff across a crossing would report a transform that never ran.
+    parent = chrono[i - 1] if i and followed is None else None
     diff = build_row_diff(
         step["row"],
         parent["row"] if parent else None,
@@ -199,10 +229,37 @@ def _build_node(
             {**branch, "links": _links_of(links, branch["stage_id"], branch["row_ordinal"])}
             for branch in _spine_branches(step)
         ],
-        "contributor_groups": [
-            asdict(group) for group in _group_contributors(_contributions(step), links)
-        ],
+        "followed": None if followed is None else asdict(followed),
+        "contributor_groups": [asdict(group) for group in groups],
     }
+
+
+@dataclass(frozen=True)
+class Crossing:
+    """The contributor this page was told to follow out of a fan-in, and its cohort's size."""
+
+    stage_id: str
+    row_ordinal: int
+    columns: list[str] | None
+    of: int
+
+
+def _mark_crossing(step: dict[str, Any]) -> Crossing | None:
+    followed = step.get("followed")
+    if not followed:
+        return None
+    key = _cohort_key(followed)
+    return Crossing(
+        stage_id=followed["stage_id"],
+        row_ordinal=followed["row_ordinal"],
+        columns=followed["columns"],
+        of=sum(1 for c in _contributions(step) if _cohort_key(c) == key),
+    )
+
+
+def _cohort_key(parent: dict[str, Any]) -> tuple[str, tuple[str, ...] | None]:
+    columns = parent.get("columns")
+    return (str(parent["stage_id"]), tuple(columns) if columns else None)
 
 
 def _source_filename(step: dict[str, Any]) -> str | None:
@@ -226,16 +283,21 @@ def _role_of(i: int, total: int, truncated: bool) -> str:
     return "source" if i == 0 and not truncated else "step"
 
 
-def _links_of(links: PanelLinks, stage_id: str, row_ordinal: int) -> dict[str, str | None]:
+def _links_of(
+    links: PanelLinks, stage_id: str, row_ordinal: int, path: TracePath | None = None
+) -> dict[str, str | None]:
     return {
         "stage": links.stage_anchor(stage_id),
         "rows": links.stage_rows(stage_id),
         "trace": links.row_trace(stage_id, row_ordinal),
+        # This page's path crossed at the fan-in that row fed.
+        "follow": (None if path is None
+                   else links.follow_contributor(path, (stage_id, row_ordinal))),
     }
 
 
 def _group_contributors(
-    contributions: list[dict[str, Any]], links: PanelLinks
+    contributions: list[dict[str, Any]], links: PanelLinks, path: TracePath
 ) -> list[ContributorGroup]:
     by_key: dict[tuple[str, tuple[str, ...] | None], list[dict[str, Any]]] = {}
     # Grouped over the WHOLE set before anything is dropped, so a cohort's
@@ -243,18 +305,16 @@ def _group_contributors(
     # then linked. Bounding first would let a big cohort's tail hide a cohort of
     # its own.
     for parent in contributions:
-        columns = parent.get("columns")
-        key = (str(parent["stage_id"]), tuple(columns) if columns else None)
-        by_key.setdefault(key, []).append(parent)
+        by_key.setdefault(_cohort_key(parent), []).append(parent)
     return [
-        _one_group(stage_id, columns, parents, links)
+        _one_group(stage_id, columns, parents, links, path)
         for (stage_id, columns), parents in by_key.items()
     ]
 
 
 def _one_group(
     stage_id: str, columns: tuple[str, ...] | None,
-    parents: list[dict[str, Any]], links: PanelLinks,
+    parents: list[dict[str, Any]], links: PanelLinks, path: TracePath,
 ) -> ContributorGroup:
     named = parents[:CONTRIBUTORS_NAMED] if len(parents) <= CONTRIBUTORS_NAMED else []
     return ContributorGroup(
@@ -262,15 +322,17 @@ def _one_group(
         columns=list(columns) if columns else None,
         total=len(parents),
         linked=links.rows_link_covers(len(parents)),
-        named=[{**p, "links": _links_of(links, p["stage_id"], int(p["row_ordinal"]))}
+        named=[{**p, "links": _links_of(links, p["stage_id"], int(p["row_ordinal"]),
+                                        path=path)}
                for p in named],
         rows_link=links.contributor_rows(
             stage_id,
-            ordinals=[int(p["row_ordinal"]) for p in parents[:CONTRIBUTOR_ROWS_LINKED]]),
+            ordinals=[int(p["row_ordinal"]) for p in parents[:CONTRIBUTOR_ROWS_LINKED]],
+            path=path),
     )
 
 
-def _build_stories(nodes: list[dict[str, Any]]) -> list[Story]:
+def _build_stories(nodes: list[dict[str, Any]], links: PanelLinks) -> list[Story]:
     # A stage whose output frame the run never wrote traces no step at all.
     if not nodes:
         return []
@@ -280,15 +342,27 @@ def _build_stories(nodes: list[dict[str, Any]]) -> list[Story]:
         kind="shown", stage_id=first["stage_id"], row_ordinal=first["row_ordinal"],
         step=1, rows=1, linked=0, columns=None, href=None,
     )
-    return [shown, *(s for node in nodes for s in _find_alternatives(node))]
+    return [shown, *(s for node in nodes for s in _find_alternatives(node, links))]
 
 
-def _find_alternatives(node: dict[str, Any]) -> list[Story]:
+def _find_alternatives(node: dict[str, Any], links: PanelLinks) -> list[Story]:
     step = node["step"]
+    crossed = node["followed"]
     return [
+        *([_build_crossed_story(crossed, step)] if crossed else []),
         *(_build_branch_story(branch, step) for branch in node["branches"]),
-        *(s for group in node["contributor_groups"] for s in _build_fan_in_stories(group, step)),
+        *(s for group in node["contributor_groups"]
+          for s in _build_fan_in_stories(group, step, crossed)),
     ]
+
+
+def _build_crossed_story(crossed: dict[str, Any], step: int) -> Story:
+    """The reader is already on this one, so it carries no href — like the shown entry."""
+    return Story(
+        kind="crossed", stage_id=crossed["stage_id"],
+        row_ordinal=crossed["row_ordinal"], step=step, rows=crossed["of"],
+        linked=0, columns=crossed["columns"], href=None,
+    )
 
 
 def _build_branch_story(branch: dict[str, Any], step: int) -> Story:
@@ -299,9 +373,13 @@ def _build_branch_story(branch: dict[str, Any], step: int) -> Story:
     )
 
 
-def _build_fan_in_stories(group: dict[str, Any], step: int) -> list[Story]:
+def _build_fan_in_stories(
+    group: dict[str, Any], step: int, crossed: dict[str, Any] | None,
+) -> list[Story]:
     if group["named"]:
-        return [_build_contributor_story(parent, group, step) for parent in group["named"]]
+        return [_build_contributor_story(parent, group, step)
+                for parent in group["named"]
+                if not _is_crossed(parent, crossed)]
     return [Story(
         kind="cohort", stage_id=group["stage_id"], row_ordinal=None, step=step,
         rows=group["total"], linked=group["linked"] if group["rows_link"] else 0,
@@ -309,10 +387,19 @@ def _build_fan_in_stories(group: dict[str, Any], step: int) -> list[Story]:
     )]
 
 
+def _is_crossed(parent: dict[str, Any], crossed: dict[str, Any] | None) -> bool:
+    """The followed contributor has its own entry already; a second one would read as a fork."""
+    return crossed is not None and (
+        (parent["stage_id"], int(parent["row_ordinal"]))
+        == (crossed["stage_id"], crossed["row_ordinal"])
+    )
+
+
 def _build_contributor_story(
     parent: dict[str, Any], group: dict[str, Any], step: int
 ) -> Story:
-    href = parent["links"]["trace"]
+    # Crosses THIS page's path, rather than starting a fresh walk here.
+    href = parent["links"]["follow"]
     return Story(
         kind="contributor", stage_id=parent["stage_id"],
         row_ordinal=int(parent["row_ordinal"]), step=step, rows=group["total"],

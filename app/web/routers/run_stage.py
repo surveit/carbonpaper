@@ -9,7 +9,7 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.services.loader import resolve_function_code
@@ -34,6 +34,7 @@ from app.web.loading import (
     read_output_df,
     render_cells_as_text,
 )
+from app.web.panel_links import TracePath, read_row_ref
 from app.web.run_stage_panel import not_executed_panel, resolve_panel_links
 from app.web.stage_diff import StageDiff, build_stage_diff
 
@@ -126,7 +127,8 @@ async def run_stage_partial(
 )
 async def run_stage_rows(
     request: Request, project_id: str, run_id: str, stage_id: str, raw: bool = False,
-    ordinals: str | None = None,
+    ordinals: str | None = None, owner: str | None = None,
+    via: list[str] | None = Query(None),
 ):
     run_dir = resolve_run_dir(project_id, run_id)
     manifest = load_manifest(project_id, run_id)
@@ -159,12 +161,23 @@ async def run_stage_rows(
             ),
             "raw": raw,
             "links": resolve_panel_links(project_id, run_id),
+            # The row these fed, where the reader came from a fan-in.
+            "fed_row": _read_fed_row(owner, via),
             # The page's own treatments (row numbers, click-to-expand cells,
             # sticky-header scroll box) the shared diff partial renders on request.
             "full_rows": True,
             **table,
         },
     )
+
+
+def _read_fed_row(owner: str | None, via: list[str] | None) -> TracePath | None:
+    if owner is None:
+        return None
+    try:
+        return TracePath(read_row_ref(owner), tuple(read_row_ref(v) for v in via or []))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _parse_ordinals(ordinals: str | None) -> list[int] | None:

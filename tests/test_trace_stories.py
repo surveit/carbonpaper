@@ -49,9 +49,10 @@ def test_a_fan_in_small_enough_to_name_gets_one_entry_per_row(tmp_path):
     assert [(s["stage_id"], s["row_ordinal"]) for s in stories[1:]] == [
         ("filings", _ACME), ("filings", _BOREALIS),
     ]
-    # Each states the cohort it is one of, and opens that row alone.
+    # Each opens THIS page crossed into that row, not a walk starting over at it.
     assert [s["rows"] for s in stories[1:]] == [2, 2]
-    assert stories[1]["href"] == "/project/proj/runs/T1/stage/filings/row/0/trace/view"
+    assert stories[1]["href"] == (
+        "/project/proj/runs/T1/stage/totals/row/0/trace/view?via=filings%3A0")
 
 
 def test_a_cohort_too_big_to_name_is_one_entry_standing_for_all_of_it():

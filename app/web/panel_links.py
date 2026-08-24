@@ -2,7 +2,18 @@
 review packet writes it to a folder — so the same template asks for links here."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from urllib.parse import quote, urlencode
+
+RowRef = tuple[str, int]
+
+
+@dataclass(frozen=True)
+class TracePath:
+    """The trace page a link is built from: where its walk starts, and the fan-ins crossed."""
+
+    start: RowRef
+    crossed: tuple[RowRef, ...] = ()
 
 
 # aggregate makes its single row out of every input row, so a cohort runs to
@@ -56,8 +67,21 @@ class AppPanelLinks:
     def guide_stage(self, stage_id: str) -> str:
         return f"#{stage_id}"
 
-    def contributor_rows(self, stage_id: str, ordinals: list[int] | None = None) -> str:
-        return self.stage_rows(stage_id, ordinals)
+    def contributor_rows(
+        self, stage_id: str, ordinals: list[int] | None = None,
+        path: TracePath | None = None,
+    ) -> str:
+        rows = self.stage_rows(stage_id, ordinals)
+        if path is None:
+            return rows
+        # Carries the page that sent the reader, so each row offers the crossing.
+        joined = "&".join([
+            urlencode({"owner": _render_row_ref(path.start)}), *_via_params(path.crossed)])
+        return f"{rows}{'&' if '?' in rows else '?'}{joined}"
+
+    def follow_contributor(self, path: TracePath, pick: RowRef) -> str:
+        return self.row_trace(*path.start) + "?" + "&".join(
+            _via_params([*path.crossed, pick]))
 
     def rows_link_covers(self, total: int) -> int:
         return min(total, CONTRIBUTOR_ROWS_LINKED)
@@ -98,11 +122,18 @@ class PacketPanelLinks:
     def stage_rows(self, stage_id: str, ordinals: list[int] | None = None) -> None:
         return None
 
-    def contributor_rows(self, stage_id: str, ordinals: list[int] | None = None) -> str:
+    def contributor_rows(
+        self, stage_id: str, ordinals: list[int] | None = None,
+        path: TracePath | None = None,
+    ) -> str:
         """The cohort's own table where the packet wrote one; else the whole CSV."""
         if self._owner is None:
             return self.stage_csv(stage_id)
         return f"{self._root}{packet_contributors_href('', *self._owner, stage_id)}"
+
+    def follow_contributor(self, path: TracePath, pick: RowRef) -> str | None:
+        """A file cannot vary on a query string, so the packet opens the contributor's own page."""
+        return self.row_trace(*pick)
 
     def rows_link_covers(self, total: int) -> int:
         return total  # the CSV the packet writes is uncapped
@@ -135,6 +166,22 @@ class PacketPanelLinks:
 def _segment(value: str) -> str:
     """safe='' so an id carrying a `/` cannot widen the path."""
     return quote(value, safe="")
+
+
+def read_row_ref(value: str) -> RowRef:
+    """The `owner=`/`via=` wire form, `<stage_id>:<row_ordinal>`. Raises on anything else."""
+    stage_id, _, row = value.rpartition(":")
+    if not stage_id or not row.lstrip("-").isdigit():
+        raise ValueError(f"{value!r} is not a <stage_id>:<row_ordinal> pair")
+    return stage_id, int(row)
+
+
+def _render_row_ref(ref: RowRef) -> str:
+    return f"{ref[0]}:{ref[1]}"
+
+
+def _via_params(refs: "list[RowRef] | tuple[RowRef, ...]") -> list[str]:
+    return [urlencode({"via": _render_row_ref(ref)}) for ref in refs]
 
 # Either link set a trace view may be rendered against: the app's routes, or the
 # packet's relative files. `stage_rows` is the one that differs in TYPE — the

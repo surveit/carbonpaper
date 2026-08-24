@@ -9,11 +9,11 @@ import math
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import pyarrow as pa
 
-from app.core.errors import RowOutOfRange, StageNotInRun
+from app.core.errors import ContributorNotInFanIn, RowOutOfRange, StageNotInRun
 from app.core.frames import read_frame_table
 from app.models.stage import StageType, is_grain_and_order_preserving
 from app.runtime.lineage import (
@@ -31,6 +31,14 @@ def _is_row_preserving(stage_type: str) -> bool:
         return is_grain_and_order_preserving(StageType(stage_type))
     except ValueError:
         return False
+
+
+@dataclass(frozen=True)
+class ContributorChoice:
+    """Which contributor to follow at a fan-in. Supplied by the reader, never by the walk."""
+
+    stage_id: str
+    row_ordinal: int
 
 
 @dataclass
@@ -51,6 +59,8 @@ class StageTransform:
     source_row: int | None = None
     # How many files the stage read; None where the manifest did not record any binding.
     source_file_count: int | None = None
+    # The contribution edge the caller named; every step above it is that row's.
+    followed: RowParent | None = None
 
 
 @dataclass
@@ -184,17 +194,49 @@ def _summarizes_message(contributors: int) -> str:
             "of them — open the contributors to go further")
 
 
+def _find_fan_in(
+    stage_type: str, spine: RowParent | None, hops: list[RowParent] | None
+) -> list[RowParent] | None:
+    """The contributors the walk cannot choose between; None where it needs no choice."""
+    if stage_type == StageType.input_data or spine is not None or hops is None:
+        return None
+    return hops
+
+
+def _match_chosen_contributor(
+    sid: str, fan_in: list[RowParent], choice: ContributorChoice
+) -> RowParent:
+    for parent in fan_in:
+        if (parent.stage_id, parent.row_ordinal) == (choice.stage_id, choice.row_ordinal):
+            return parent
+    raise ContributorNotInFanIn(
+        f"{choice.stage_id!r} row {choice.row_ordinal} is not one of the "
+        f"{len(fan_in)} rows recorded as feeding {sid!r}"
+    )
+
+
+def _validate_every_choice_was_met(pending: list[ContributorChoice]) -> None:
+    if not pending:
+        return
+    left = pending[0]
+    raise ContributorNotInFanIn(
+        f"the walk met no fan-in to follow {left.stage_id!r} row {left.row_ordinal} at"
+    )
+
+
 def _advance(
     frames: RunFrames, by_id: dict[str, dict[str, Any]], sid: str, stage_type: str, r: int,
     table: pa.Table, parents: list[str], spine: RowParent | None,
-    hops: list[RowParent] | None = None,
+    fan_in: list[RowParent] | None = None, followed: RowParent | None = None,
 ) -> tuple[str, int] | TraceEnd:
     if stage_type == StageType.input_data:
         return TraceEnd(True, sid, "input_data stage — the rows originate here")
     if spine is not None:
         return _advance_via_lineage(frames, by_id, sid, spine)
-    if hops is not None:
-        return TraceEnd(False, sid, _summarizes_message(len(hops)))
+    if followed is not None:
+        return _advance_via_lineage(frames, by_id, sid, followed)
+    if fan_in is not None:
+        return TraceEnd(False, sid, _summarizes_message(len(fan_in)))
     if not parents:
         return TraceEnd(False, sid, "the manifest records no input edge for this stage")
     # Nothing recorded: the only remaining route is the ordinal, and only where
@@ -238,12 +280,18 @@ class RunFrames:
         return self._sidecars[stage_id]
 
 
-def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
-    """Raises only for caller errors (bad stage id/ordinal); a describable state is a TraceEnd."""
-    return trace_row_from(RunFrames(run_dir), stage_id, row_ordinal)
+def trace_row(
+    run_dir: Path, stage_id: str, row_ordinal: int,
+    follow: Sequence[ContributorChoice] = (),
+) -> Trace:
+    """Raises only for caller errors (bad stage id, ordinal or choice); else a TraceEnd."""
+    return trace_row_from(RunFrames(run_dir), stage_id, row_ordinal, follow)
 
 
-def trace_row_from(frames: RunFrames, stage_id: str, row_ordinal: int) -> Trace:
+def trace_row_from(
+    frames: RunFrames, stage_id: str, row_ordinal: int,
+    follow: Sequence[ContributorChoice] = (),
+) -> Trace:
     """As `trace_row`, over a reader many rows of one run share."""
     run_dir = frames.run_dir
     manifest = _load_manifest(run_dir)
@@ -255,6 +303,7 @@ def trace_row_from(frames: RunFrames, stage_id: str, row_ordinal: int) -> Trace:
     steps: list[StageTransform] = []
     sid, r = stage_id, row_ordinal
     end: TraceEnd | None = None
+    pending = list(follow)
 
     while end is None:
         record = by_id[sid]
@@ -271,6 +320,11 @@ def trace_row_from(frames: RunFrames, stage_id: str, row_ordinal: int) -> Trace:
         parents = _parents(record)
         hops = frames.lineage_hops(sid, r)
         spine, branches = _split_spine(hops or [])
+        fan_in = _find_fan_in(stage_type, spine, hops)
+        followed = (
+            _match_chosen_contributor(sid, fan_in, pending.pop(0))
+            if fan_in is not None and pending else None
+        )
         columns_parent_id = _columns_parent_id(parents, spine)
         parent_table = (
             frames.output(by_id[columns_parent_id])
@@ -288,16 +342,18 @@ def trace_row_from(frames: RunFrames, stage_id: str, row_ordinal: int) -> Trace:
             source_file=spine.source_file if spine else None,
             source_row=spine.row_ordinal if spine and spine.source_file else None,
             source_file_count=files_read.get(sid),
+            followed=followed,
         ))
 
         next_hop = _advance(
-            frames, by_id, sid, stage_type, r, table, parents, spine, hops
+            frames, by_id, sid, stage_type, r, table, parents, spine, fan_in, followed
         )
         if isinstance(next_hop, TraceEnd):
             end = next_hop
         else:
             sid, r = next_hop
 
+    _validate_every_choice_was_met(pending)
     return Trace(
         run_id=manifest.get("run_id", run_dir.name),
         start_stage=stage_id,
@@ -305,6 +361,15 @@ def trace_row_from(frames: RunFrames, stage_id: str, row_ordinal: int) -> Trace:
         steps=steps,
         end=end,
     )
+
+
+def _build_parent(parent: RowParent) -> dict[str, Any]:
+    return {
+        "stage_id": parent.stage_id,
+        "row_ordinal": parent.row_ordinal,
+        "kind": str(parent.kind),
+        "columns": None if parent.columns is None else list(parent.columns),
+    }
 
 
 def trace_to_dict(trace: Trace) -> dict[str, Any]:
@@ -323,15 +388,10 @@ def trace_to_dict(trace: Trace) -> dict[str, Any]:
                 "source_file": step.source_file,
                 "source_row": step.source_row,
                 "source_file_count": step.source_file_count,
-                "branches": [
-                    {
-                        "stage_id": branch.stage_id,
-                        "row_ordinal": branch.row_ordinal,
-                        "kind": str(branch.kind),
-                        "columns": None if branch.columns is None else list(branch.columns),
-                    }
-                    for branch in step.branches
-                ],
+                "followed": (
+                    None if step.followed is None else _build_parent(step.followed)
+                ),
+                "branches": [_build_parent(branch) for branch in step.branches],
             }
             for step in trace.steps
         ],

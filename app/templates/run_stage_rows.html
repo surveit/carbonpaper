@@ -40,7 +40,7 @@
     <span class="alert warn">⚠ Showing first {{ "{:,}".format(rows | length) }} of {{ "{:,}".format(rows_total) }} rows — download the CSV for the complete data.</span>
     {% endif %}
     {% if selected_total %}
-    <span class="alert">Showing {{ "{:,}".format(rows | length) }} of {{ "{:,}".format(rows_total) }} rows — the ones that fed the row you came from.</span>
+    <span class="alert">Showing {{ "{:,}".format(rows | length) }} of {{ "{:,}".format(rows_total) }} rows — the ones that fed the row you came from.{% if fed_row %} Pick one to carry <code>{{ fed_row.start[0] }}</code> row {{ fed_row.start[1] }}'s lineage across this fan-in.{% endif %}</span>
     {% endif %}
     <a class="btn primary" href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage_id }}/rows.csv">⬇ Download full CSV</a>
     {% endif %}
@@ -51,7 +51,7 @@
 {% elif rows %}
 <div class="table-scroll rows-full">
 <table class="data-preview">
-    <thead><tr><th class="row-num">#</th><th class="syw-col">trace</th>{% for c in columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+    <thead><tr><th class="row-num">#</th><th class="syw-col">{% if fed_row %}follow{% else %}trace{% endif %}</th>{% for c in columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
     <tbody>
     {% for row in rows %}
     {# A filtered view (?ordinals=) carries each row's OWN ordinal, so the number
@@ -59,7 +59,11 @@
        in the filtered list. #}
     {% set ordinal = row['_row_ordinal'] if '_row_ordinal' in row else loop.index0 %}
     <tr><td class="row-num muted">{{ ordinal + 1 }}</td>
+        {% if fed_row %}
+        <td class="syw-cell"><a href="{{ links.follow_contributor(fed_row, (stage_id, ordinal)) }}" title="carry the row you came from across this fan-in, following this row">Follow this row</a></td>
+        {% else %}
         <td class="syw-cell"><a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage_id }}/row/{{ ordinal }}/trace/view" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a></td>
+        {% endif %}
         {% for c in columns %}{% set v = row[c] | string | truncate(4000, True, '… (truncated — download the CSV for the full value)') %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td class="cell-clip" title="{{ v }}">{{ v }}</td>{% endif %}{% endfor %}
     </tr>
     {% endfor %}

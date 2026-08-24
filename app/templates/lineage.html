@@ -116,6 +116,13 @@ a.snavbtn:hover{background:var(--hover)}
 .branch-name{color:var(--state-idle-ink)}
 .trunc{background:var(--warn-bg);color:var(--state-warn-ink);border-radius:8px;padding:8px 12px;
   font-size:13px;margin-bottom:12px}
+/* A break in the list, not another step: below it the walk is following the
+   summary row, above it one of the rows summarized. The ordinals differ either
+   side, so the two halves must not read as one row moving along. */
+.cross{display:grid;grid-template-columns:52px 1fr;gap:6px;padding:7px 8px;margin:3px 0;
+  border-left:3px solid var(--accent);border-radius:7px;font-size:12px;line-height:1.45;
+  background:var(--state-idle-bg);color:var(--state-idle-ink)}
+.cross .mark{font-size:11.5px;color:var(--muted)}
 .lin-graph{margin-top:18px;border-top:1px solid var(--border);padding-top:10px}
 .lin-graph summary{cursor:pointer;font-size:13px;color:var(--muted)}
 .mermaid{background:var(--raised)}.nograph{color:var(--muted);font-size:13px}
@@ -271,7 +278,7 @@ function renderStories(){
   document.getElementById('stories').innerHTML = V.stories.map((s, i) => {
     const body = `<span class="lab">${storyLabel(s)}</span>`
                + `<span class="why">${storyWhy(s, showColumns)}</span>`;
-    if(i === 0) return `<div class="snavbtn on">${body}</div>`;
+    if(i === 0 || s.kind === 'crossed') return `<div class="snavbtn on">${body}</div>`;
     // No page for this row (the review packet wrote none): the entry still
     // states the path, because the path is a fact and the link is not.
     if(!s.href) return `<div class="snavbtn">${body}</div>`;
@@ -294,6 +301,9 @@ function storyWhy(s, showColumns){
   const at = `step ${s.step}, <code>${esc(V.nodes[s.step - 1].stage_id)}</code>`;
   const into = (showColumns && s.columns) ? ` into ${s.columns.map(esc).join(' and ')}` : '';
   const nopage = s.href ? '' : ' · <span class="nopage">no page for this row</span>';
+  if(s.kind === 'crossed') return s.rows > 1
+    ? `followed here — one of ${s.rows} rows summarized at ${at}${into}`
+    : `followed here — the one row summarized at ${at}${into}`;
   if(s.kind === 'branch') return `another parent at ${at}${into}${nopage}`;
   if(s.kind === 'contributor') return s.rows > 1
     ? `one of ${s.rows} rows summarized at ${at}${into}${nopage}`
@@ -306,13 +316,16 @@ function cohortReach(s){
 }
 function shownWhy(){
   const steps = `${V.nodes.length} step${V.nodes.length > 1 ? 's' : ''}`;
+  const crossed = V.stories.filter(s => s.kind === 'crossed').length;
+  const across = crossed ? `, across ${crossed} fan-in${crossed > 1 ? 's' : ''} you chose` : '';
   return V.upstream.truncated
-    ? `the path told here — ${steps}, stopping at <code>${esc(V.nodes[0].stage_id)}</code>`
-    : `the path told here — ${steps}, back to the source`;
+    ? `the path told here — ${steps}${across}, stopping at <code>${esc(V.nodes[0].stage_id)}</code>`
+    : `the path told here — ${steps}${across}, back to the source`;
 }
 function storiesNote(){
   if(V.stories.length > 1)
-    return 'Every other parent this walk recorded is listed here. Opening one traces from it instead.';
+    return 'Every other parent this walk recorded is listed here. Picking one of the rows a '
+         + 'step summarized carries this path across that step; any other parent is traced from itself.';
   return V.upstream.truncated
     ? 'No step named a second parent, and the walk stopped before the source.'
     : 'No step named a second parent, so this row has one path from the source.';
@@ -373,12 +386,23 @@ function renderSteps(){
   if(V.upstream.truncated && !fanIn){
     html += `<div class="trunc">⋯ upstream not traced — ${esc(V.upstream.message)}</div>`;
   }
-  html += V.nodes.map((n, i) => `<button class="step ${i===sel?'on':''}" data-i="${i}">
+  html += V.nodes.map((n, i) => crossingOf(n) + `<button class="step ${i===sel?'on':''}" data-i="${i}">
       <span class="stepno">step ${n.step}</span>
       <span>${sentenceOf(n)}</span>
       <span class="right">${n.role==='claim' ? '<span class="claim-tag">published claim</span> ' : ''}<span class="row-chip">row ${n.row_ordinal}</span>${deltaOf(n)}</span>
     </button>`).join('');
   document.getElementById('steps').innerHTML = html;
+}
+// Drawn above the step it belongs to, which is the step BELOW the crossing: the
+// steps above it are the contributor's, and this one's row is the summary's.
+function crossingOf(n){
+  const f = n.followed;
+  if(!f) return '';
+  const one = f.of > 1 ? `one of the ${f.of} rows` : 'the one row';
+  return `<div class="cross"><span class="mark">↑ crossed</span><span>You chose to follow
+    <span class="sid">${esc(f.stage_id)}</span> row ${f.row_ordinal}, ${one} summarized at
+    step ${n.step}. Every step above is that row — step ${n.step}'s own row starts here, so
+    nothing above it was compared against it.</span></div>`;
 }
 
 // ---- The other parents, named in the sentence that owns them --------------
