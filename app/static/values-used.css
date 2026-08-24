@@ -1,0 +1,79 @@
+/* The row lineage page's Values used tab: the minimap, the sheet replayed one
+   stage at a time, and the fork modal. Class names are its own, so where this
+   sheet sits in the cascade is free. */
+
+/* The tab owns a scroll region of its own (.vu-scroll), so changing stage never
+   moves the document — which is what kept the prototype jumping on every click. */
+#values-root { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 12px 18px 0; }
+.vu { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.vu-say { font-size: 13px; color: var(--muted); margin: 0 0 11px; line-height: 1.5; max-width: 78ch; }
+.vu-say code { background: var(--sunk-deep); border-radius: 4px; padding: 1px 5px; color: var(--fg); }
+.vu-to-rows { border: 0; background: none; font: inherit; color: var(--accent); cursor: pointer; padding: 0; text-decoration: underline; }
+
+/* ── the minimap: the writer stages, left to right like the workflow ───────── */
+.vu-maprow { flex: none; display: flex; align-items: stretch; gap: 8px; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+.vu-arrow { border: 1px solid var(--border-strong); background: var(--raised); border-radius: 9px; font: inherit; font-size: 13px; color: var(--muted); padding: 0 12px; cursor: pointer; align-self: center; }
+.vu-arrow:hover { background: var(--hover); }
+.vu-map { position: relative; display: flex; gap: 38px; overflow-x: auto; padding: 8px 2px 12px; flex: 1; }
+.vu-wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.vu-wires path { fill: none; stroke: var(--border-strong); stroke-width: 1.5; }
+.vu-wires path.vu-hot { stroke: var(--accent); stroke-width: 2.5; }
+.vu-mapcol { display: flex; flex-direction: column; gap: 6px; position: relative; z-index: 1; }
+.vu-node { border: 1px solid var(--border-strong); background: var(--raised); border-radius: 7px; font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px; color: var(--muted); padding: 3px 8px; cursor: pointer; white-space: nowrap; text-align: left; }
+.vu-node:hover { background: var(--hover); }
+.vu-node.vu-seen { color: var(--fg); }
+.vu-node.vu-next { border-style: dashed; border-color: var(--accent); color: var(--fg); }
+.vu-node.vu-on { border-color: var(--accent); border-width: 2px; padding: 2px 7px; color: var(--fg); font-weight: 600; }
+
+/* ── one step ─────────────────────────────────────────────────────────────── */
+.vu-scroll { flex: 1; min-height: 0; overflow: auto; padding-bottom: 60px; }
+.vu-step { display: none; }
+.vu-step.vu-on { display: block; }
+.vu-stephead { display: flex; align-items: baseline; gap: 11px; flex-wrap: wrap; margin-bottom: 9px; }
+.vu-sid { font-size: 14px; font-weight: 600; }
+.vu-kind { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.vu-rows { margin-left: auto; font-size: 11.5px; color: var(--muted); }
+.vu-newsheet { font-size: 12px; color: var(--warn-ink); background: var(--warn-bg); border: 1px solid var(--warn-bd); border-radius: 7px; padding: 5px 10px; margin: 0 0 8px; display: inline-block; }
+.vu-nosheet { color: var(--muted); font-size: 12.5px; padding: 12px; border: 1px dashed var(--border-strong); border-radius: 9px; }
+.vu-sheetfoot { font-size: 11px; color: var(--muted); margin: 5px 2px 0; }
+
+/* The legend sits ABOVE the table: a reader meets the states before the tints. */
+.vu-legend { display: flex; gap: 15px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin: 0 2px 6px; }
+.vu-legend span { display: flex; align-items: center; gap: 5px; }
+.vu-sw { width: 13px; height: 13px; border-radius: 3px; border: 1px solid var(--border-strong); display: inline-block; }
+
+table.vu-sheet { border-collapse: collapse; width: 100%; font-size: 12px; background: var(--raised); }
+table.vu-sheet th { text-align: left; padding: 6px 9px; white-space: nowrap; border-bottom: 1px solid var(--border-strong); font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; vertical-align: bottom; }
+table.vu-sheet th i { display: block; font-style: normal; font-size: 9px; letter-spacing: .05em; text-transform: uppercase; font-family: inherit; }
+table.vu-sheet td { padding: 5px 9px; border-bottom: 1px solid var(--border); vertical-align: top; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; max-width: 280px; }
+table.vu-sheet tr:last-child td { border-bottom: 0; }
+table.vu-sheet th.vu-linked { cursor: pointer; }
+table.vu-sheet th.vu-linked:hover { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* The five column states, and the cited column's own fill. The blue is the one
+   the stage-tests table already spends on a written column (node-review.css). */
+.vu-col-added { background: var(--state-review-bg); color: var(--info-ink); }
+.vu-col-rewritten { background: var(--warn-bg); color: var(--warn-ink); }
+.vu-col-read { background: var(--raised); color: var(--fg); }
+.vu-col-carried { background: var(--sunk); color: var(--muted); }
+.vu-col-absent { background: repeating-linear-gradient(135deg, var(--sunk), var(--sunk) 4px, var(--sunk-deep) 4px, var(--sunk-deep) 8px); color: var(--border-strong); }
+table.vu-sheet th.vu-col-absent { font-weight: 400; }
+.vu-col-cited { background: var(--info-ink); color: var(--on-dark); }
+table.vu-sheet th.vu-col-cited i { color: var(--on-dark); }
+
+.vu-what { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 11px; }
+/* base.css already makes an h3 the small caps label; only the spacing is ours. */
+.vu-what h3 { margin: 0 0 5px; }
+
+/* ── the fork: a review decision, so it takes the screen ───────────────────── */
+.vu-modal { position: fixed; inset: 0; background: var(--scrim); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 34px; }
+.vu-modal[hidden] { display: none; }
+.vu-modal-card { background: var(--raised); border-radius: 12px; max-width: 720px; width: 100%; max-height: 100%; overflow: auto; padding: 16px 20px 22px; }
+.vu-modal-card h3 { margin: 0 0 3px; font-size: 15px; text-transform: none; letter-spacing: 0; color: var(--fg); }
+.vu-modal-say { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+.vu-modal-close { float: right; border: 1px solid var(--border-strong); background: var(--raised); border-radius: 7px; font: inherit; font-size: 12px; padding: 3px 10px; cursor: pointer; }
+.vu-forklist { display: flex; flex-direction: column; gap: 7px; margin-top: 11px; }
+.vu-forkopt { border: 1px solid var(--border-strong); background: var(--raised); border-radius: 9px; padding: 9px 12px; font: inherit; text-align: left; cursor: pointer; }
+.vu-forkopt:hover { background: var(--hover); }
+.vu-forkopt b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; display: block; }
+.vu-forkopt span { font-size: 11.5px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }

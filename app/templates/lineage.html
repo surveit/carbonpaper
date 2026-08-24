@@ -10,6 +10,8 @@
 <script src="{{ static_root | default("/static/", true) }}diagram_nodes.js"></script>
 <script src="{{ static_root | default("/static/", true) }}tooltip.js"></script>
 {% if not offline %}<script src="{{ static_root | default("/static/", true) }}breadcrumbs.js" defer></script>
+{# The packet's Values used pane is an empty state, so the script driving it is dead there. #}
+<script src="{{ static_root | default("/static/", true) }}values-used.js"></script>
 {# Served live this page is part of the app, so the conversation follows the reader here as
    it does everywhere else. Written into a review packet it is a file in a zip: no server to
    fetch a panel from and no session to carry, which is what `offline` says. #}
@@ -236,11 +238,22 @@ tr.carried td.lin-v{color:var(--muted)}
   </div>
 </div>
 <div class="lin-pane hidden" data-pane="values">
+{% if offline or not view.nodes %}
   <div class="empty-state">
-    <h2>The column's other values are not on this page</h2>
-    <p>This page reads the cells of one row. It does not compare a column across the rest
-      of the frame.</p>
+    <h2>Where this column came from is not drawn here</h2>
+    {% if offline %}
+    <p>The walk back over what each stage read is made by the running app. A folder has
+      no server to ask.</p>
+    {% else %}
+    <p>The run wrote no row here, so there is no cell whose column could be walked.</p>
+    {% endif %}
   </div>
+{% else %}
+  {# One column is one walk, so the reader picks which cell of the row to follow.
+     The chips are written by the script below, off the traced row's own fields. #}
+  <div class="lin-cols" id="values-cols"></div>
+  <div id="values-root"></div>
+{% endif %}
 </div>
 <script>
 const V = {{ view | tojson }}, PROJECT = {{ project | tojson }};
@@ -581,6 +594,60 @@ function renderScopeColumns(){
   });
 }
 if(scopeCols && scopeFrame) renderScopeColumns();
+
+// ---- Values used: where one column came from, walked back over what each ----
+// stage read. Same chips as Relevant rows, because the question is also per
+// column: this one holds the column and lets go of the row.
+const valuesCols = document.getElementById('values-cols');
+const valuesRoot = document.getElementById('values-root');
+let valuesColumn = null;
+
+function valuesUrlFor(column){
+  const q = new URLSearchParams({stage: V.start_stage, row: V.start_row, column});
+  return `/project/${encodeURIComponent(PROJECT)}/runs/${encodeURIComponent(V.run_id)}`
+       + `/values/panel?${q}`;
+}
+async function walkValuesFor(column){
+  valuesColumn = column;
+  valuesCols.querySelectorAll('button').forEach(
+    b => b.classList.toggle('on', b.dataset.column === column));
+  valuesRoot.innerHTML = '<p class="muted">loading…</p>';
+  try {
+    const answer = await fetch(valuesUrlFor(column));
+    // The reader may have picked another column while this was in flight.
+    if(valuesColumn !== column) return;
+    valuesRoot.innerHTML = answer.ok
+      ? await answer.text()
+      : `<p class="muted">could not walk ${esc(column)} (${answer.status})</p>`;
+    ValuesUsed.mount(valuesRoot);
+  } catch(failure){
+    valuesRoot.innerHTML = `<p class="muted">error: ${esc(failure)}</p>`;
+  }
+}
+function renderValuesColumns(){
+  const columns = V.nodes[V.nodes.length - 1].row_diff.fields
+    .filter(f => f.state !== 'dropped').map(f => f.name);
+  valuesCols.innerHTML = '<span class="lin-colsnote">the column</span>'
+    + columns.map(c => `<button data-column="${esc(c)}">${esc(c)}</button>`).join('');
+  valuesCols.addEventListener('click', e => {
+    const picked = e.target.closest('button');
+    if(picked && picked.dataset.column !== valuesColumn) walkValuesFor(picked.dataset.column);
+  });
+  // A walk is a page load, so it waits until the reader opens the tab.
+  document.getElementById('pagetabs').addEventListener('click', e => {
+    const picked = e.target.closest('.lin-pagetab');
+    if(picked && picked.dataset.pane === 'values' && valuesColumn === null){
+      walkValuesFor(columns.includes(CITED_COLUMN) ? CITED_COLUMN : columns[0]);
+    }
+  });
+  // A count reads no column, so its panel sends the reader to the rows instead.
+  valuesRoot.addEventListener('click', e => {
+    if(e.target.closest('.vu-to-rows')){
+      document.querySelector('.lin-pagetab[data-pane="rows"]').click();
+    }
+  });
+}
+if(valuesCols && valuesRoot) renderValuesColumns();
 
 // The stories do not move when a step is picked, so they are painted once.
 renderStories();

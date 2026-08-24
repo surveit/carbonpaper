@@ -278,7 +278,9 @@ def load_output_row(run_dir: Path, rel_path: str | None, row: int) -> dict[str, 
     }
 
 
-def load_output_preview(run_dir: Path, rel_path: str | None) -> dict[str, Any] | None:
+def load_output_preview(
+    run_dir: Path, rel_path: str | None, rows_shown: int = PREVIEW_ROWS_SHOWN
+) -> dict[str, Any] | None:
     if not rel_path:
         return None
     try:
@@ -294,7 +296,7 @@ def load_output_preview(run_dir: Path, rel_path: str | None) -> dict[str, Any] |
     return {
         "columns": list(df.columns),
         "rows_total": len(df),
-        "preview": render_cells_as_text(df.head(PREVIEW_ROWS_SHOWN)),
+        "preview": render_cells_as_text(df.head(rows_shown)),
     }
 
 
