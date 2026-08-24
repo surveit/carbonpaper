@@ -152,7 +152,6 @@ def _write_page(
         pane=_read_paths_pane(branches, stage_id, row),
         figure=CitedFigure(stage_id=stage_id, row_ordinal=row),
         links=links,
-        feeds=None,
         view=trace_view,
         project=view.project,
         crumbs=[
