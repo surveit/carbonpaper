@@ -60,7 +60,7 @@ def read_run_branches(
     recorded = {sid: taken for sid in order
                 if (taken := _read_taken(run_dir, sid)) is not None}
     implied = {sid: _find_implied(stages.get(sid), lineages[sid], rows) for sid in order}
-    groups, group_facts = _find_groups(order, lineages, stages)
+    groups, group_facts = _find_groups(order, lineages)
 
     catalog = _catalog_code(stages, recorded)
     for found in implied.values():
@@ -85,10 +85,6 @@ def read_branching_stage(stage: WorkflowStage, position: int) -> BranchingStage:
     )
 
 
-def is_a_dedupe(stage: WorkflowStage | None) -> bool:
-    return stage is not None and stage.stage.type == StageType.dedupe
-
-
 def find_reference_inputs(stages: dict[StageId, WorkflowStage]) -> set[StageId]:
     """A join's inputs[1:] are lookup tables; a union's inputs are all subjects."""
     return {ref.id for stage in stages.values() if stage.stage.type in _LOOKS_UP
@@ -109,8 +105,6 @@ def _find_implied(stage: WorkflowStage | None, lineage: RowLineage | None,
                   rows: dict[StageId, int]) -> _Implied:
     if stage is None:
         return _Implied()
-    if is_a_dedupe(stage) and lineage is not None:
-        return _mark_duplicates(stage, lineage)
     inputs = [ref.id for ref in stage.inputs]
     if not inputs:
         return _mark_loaded_here(stage, rows[stage.id])
@@ -133,20 +127,6 @@ def _mark_loaded_here(stage: WorkflowStage, rows: int) -> _Implied:
                       role=BranchRole.arm, label=f"loaded by {stage.id}",
                       source=stage.stage.description or "")
     return _Implied([(branch,)] * rows, catalog={branch: fact})
-
-
-def _mark_duplicates(stage: WorkflowStage, lineage: RowLineage) -> _Implied:
-    kept, gone = f"{stage.id}|kept", f"{stage.id}|duplicate"
-    found = _Implied([(kept,) for _ in lineage.parents])
-    found.catalog[kept] = _implied_fact(stage, kept, BranchOrigin.predicate,
-                                        "kept, one row per group")
-    found.catalog[gone] = _implied_fact(stage, gone, BranchOrigin.predicate,
-                                        "discarded as a duplicate")
-    discarded = sum(1 for entry in lineage.parents for p in entry
-                    if p.kind == CONTRIBUTION)
-    if discarded:
-        found.unreached[gone] = discarded
-    return found
 
 
 def _is_a_partition(present: dict[StageId, list[bool]], inputs: list[StageId]) -> bool:
@@ -191,12 +171,20 @@ def _mark_drops(found: _Implied, stage: WorkflowStage, lineage: RowLineage, pres
         if dropped <= 0:
             continue
         kept, gone = f"{stage.id}|kept", f"{stage.id}|dropped"
+        keep_label, drop_label = _name_the_removal(stage)
         found.catalog[kept] = _implied_fact(stage, kept, BranchOrigin.predicate,
-                                            "kept by the predicate")
+                                            keep_label)
         found.catalog[gone] = _implied_fact(stage, gone, BranchOrigin.predicate,
-                                            "dropped by the predicate")
+                                            drop_label)
         _mark(found, flags, kept)
         found.unreached[gone] = dropped
+
+
+def _name_the_removal(stage: WorkflowStage) -> tuple[str, str]:
+    # A dedupe removes rows the way a filter does, but it has keys, not a predicate.
+    if stage.stage.type is StageType.dedupe:
+        return "kept, one row per key", "dropped as a repeat of a kept row"
+    return "kept by the predicate", "dropped by the predicate"
 
 
 def _mark(found: _Implied, flags: list[bool], branch: BranchId) -> None:
@@ -204,7 +192,7 @@ def _mark(found: _Implied, flags: list[bool], branch: BranchId) -> None:
                      for held, flag in zip(found.per_row, flags)]
 
 
-_REMOVES = ("dropped", "duplicate")
+_REMOVES = ("dropped",)
 
 
 def _implied_fact(stage: WorkflowStage, branch: BranchId, origin: BranchOrigin,
@@ -220,14 +208,13 @@ def _implied_fact(stage: WorkflowStage, branch: BranchId, origin: BranchOrigin,
 # ─── which group of an aggregate a row fed ───────────────────────────────────
 
 def _find_groups(order: list[StageId], lineages: dict[StageId, RowLineage | None],
-                 stages: dict[StageId, WorkflowStage],
                  ) -> tuple[dict[StageId, dict[RowOrdinal, tuple[BranchId, ...]]],
                             dict[BranchId, BranchFact]]:
     held: dict[StageId, dict[RowOrdinal, list[BranchId]]] = {}
     catalog: dict[BranchId, BranchFact] = {}
     for sid in order:
         lineage = lineages.get(sid)
-        if lineage is None or is_a_dedupe(stages.get(sid)):
+        if lineage is None:
             continue
         for ordinal, parents in enumerate(lineage.parents):
             for parent in parents:

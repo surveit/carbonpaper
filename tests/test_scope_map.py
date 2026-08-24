@@ -58,11 +58,11 @@ def test_every_branch_origin_is_recorded(scoped):
                      BranchOrigin.predicate, BranchOrigin.code, BranchOrigin.aggregate}
 
 
-def test_a_dedupe_writes_no_group_branch(scoped):
-    # Its losers are contribution edges too, and they are drops. docs/scope-map.md.
+def test_a_dedupe_drops_rows_the_way_a_filter_does(scoped):
     run, _ = scoped
     assert not [b for b in run.catalog if b.startswith("one_row_per_grant|group:")]
-    assert run.catalog["one_row_per_grant|duplicate"].role is BranchRole.removes
+    assert run.catalog["one_row_per_grant|dropped"].role is BranchRole.removes
+    assert run.catalog["one_row_per_grant|kept"].role is BranchRole.arm
 
 
 def test_a_deduped_grant_resolves_to_the_survivor(scoped):

@@ -34,13 +34,11 @@ from app.runtime.scope import (
     SOURCE_STAGE,
     RunBranches,
     find_reference_inputs,
-    is_a_dedupe,
 )
 
 CONTRIBUTION = EdgeKind.contribution.value
-DUPLICATE_ARM = "duplicate"
-# The two arms whose rows are in the stage's INPUT frame, never its output.
-LOST_ARMS = ("dropped", DUPLICATE_ARM)
+# The arm whose rows are in the stage's INPUT frame, never its output.
+DROPPED_ARM = "dropped"
 # Cells for a wider set than this are sampled; the counts never are.
 CELL_ROWS = 400
 
@@ -119,7 +117,7 @@ def find_rows_that_took(run: RunBranches, branch: BranchId
         loader = branch.split("|", 1)[1]
         return loader, list(range(run.rows[loader]))
     arm = branch.split("|", 1)[1]
-    if arm in LOST_ARMS:
+    if arm == DROPPED_ARM:
         return _find_lost_rows(run, fact.stage, arm)
     return fact.stage, [i for i, held in enumerate(run.paths[fact.stage])
                         if branch in held]
@@ -180,8 +178,6 @@ def _contributors(run: RunBranches, stage_id: StageId, ordinal: RowOrdinal):
     lineage = run.lineages.get(stage_id)
     if lineage is None or ordinal >= len(lineage.parents):
         return None
-    if is_a_dedupe(run.stages.get(stage_id)):
-        return None
     fed_by = [p for p in lineage.parents[ordinal] if p.kind == CONTRIBUTION]
     return fed_by or None
 
@@ -206,10 +202,7 @@ def _one_hop_up(run: RunBranches, sid: StageId, row: RowOrdinal
                 ) -> list[tuple[StageId, RowOrdinal]]:
     lineage = run.lineages.get(sid)
     if lineage is not None and row < len(lineage.parents):
-        # A discarded duplicate is not an ancestor: the survivor carried every value.
-        kept = [p for p in lineage.parents[row]
-                if not (is_a_dedupe(run.stages.get(sid)) and p.kind == CONTRIBUTION)]
-        return [(p.stage_id, p.row_ordinal) for p in kept]
+        return [(p.stage_id, p.row_ordinal) for p in lineage.parents[row]]
     stage = run.stages.get(sid)
     inputs = [ref.id for ref in stage.inputs] if stage else []
     if len(inputs) == 1 and run.rows[inputs[0]] == run.rows[sid]:
@@ -292,10 +285,6 @@ def _find_lost_rows(run: RunBranches, stage_id: StageId, arm: str
     lineage = run.lineages[stage_id]
     if lineage is None:
         return parent, []
-    if arm == DUPLICATE_ARM:
-        return parent, sorted(
-            p.row_ordinal for group in lineage.parents for p in group
-            if p.stage_id == parent and p.kind == CONTRIBUTION)
     kept = {p.row_ordinal for group in lineage.parents for p in group
             if p.stage_id == parent}
     return parent, [i for i in range(run.rows[parent]) if i not in kept]

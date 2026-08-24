@@ -37,21 +37,6 @@ the same shape a filter's `dropped` arm already uses, where the arm labels rows 
 Without it, selecting rows by their branches over-collects badly: a `group_by` partitions on a data
 value and no `if` ever tests it, so rows in different groups routinely sit on identical paths.
 
-## `dedupe` and `aggregate` write the same edges and mean opposite things
-
-`EdgeKind` has two members, `direct` and `contribution`. `handle_dedupe` writes the surviving row as
-a `direct` edge and every discarded duplicate as a `contribution` edge — the same kind an aggregate
-uses for a genuine contributor. Nothing in the edge separates them.
-
-The **stage type** is the declaration:
-
-- `dedupe` — duplicates are errors carrying no information. Read it as a filter: the survivor is the
-  row, the losers are drops, and they belong in a cut rather than in the population.
-- `aggregate` — an entity resolution. Every contributor fed the output row and is in the population.
-
-A builder that filters for `kind == contribution` without asking the stage type descends a dedupe
-into the *discarded* row and never reaches the survivor.
-
 ## What a row's path means at an aggregate
 
 At a row-preserving stage a path is what that row did. An aggregate's output row is reached by many
