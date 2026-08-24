@@ -6,7 +6,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from app.core.errors import MissingLineage, NotALoadStage
+from app.runtime.errors import MissingLineage, NotALoadStage
 from app.core.frames import read_frame_table
 from app.models.branch_analysis import (
     BranchId,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.core.errors import UnresolvableFigure
+from app.runtime.errors import UnresolvableFigure
 from app.models.branch_analysis import (
     BranchId,
     FrameScale,
@@ -25,7 +25,7 @@ def find_contributing_rows(run_branches: WorkflowRunBranches,
     reached, at_stage, through = _expand(run_branches, citation.stage_id,
                                          citation.row_ordinal)
     return RowSet(at_stage=at_stage, ordinals=sorted(set(reached)),
-                  merges_walked_down=through)
+                  regrained_at=through)
 
 
 def find_merges_that_excluded(run_branches: WorkflowRunBranches,

@@ -144,15 +144,3 @@ class StoreOverQuota(Exception):
     def __init__(self, *, used: int, quota: int, sent: int, root: Path) -> None:
         self.used, self.quota, self.sent, self.root = used, quota, sent, root
         super().__init__(f"store would reach {used} bytes, over the {quota}-byte limit")
-
-
-class UnresolvableFigure(RuntimeError):
-    """A cited cell whose contributing rows sit at more than one grain."""
-
-
-class MissingLineage(RuntimeError):
-    """A stage owed a lineage sidecar by its type's contract and wrote none."""
-
-
-class NotALoadStage(RuntimeError):
-    """A stage with no inputs that is not an input_data stage."""

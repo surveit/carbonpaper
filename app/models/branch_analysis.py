@@ -59,8 +59,8 @@ class RowSet(BaseModel):
 
     at_stage: StageId
     ordinals: list[RowOrdinal]
-    # The merges walked down through, nearest the cited cell first.
-    merges_walked_down: list[StageId] = []
+    # Every stage that re-grained on the way down, nearest the cited cell first.
+    regrained_at: list[StageId] = []
 
 
 class FrameScale(BaseModel):
