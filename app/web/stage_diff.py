@@ -53,11 +53,9 @@ ROW_ALIGNED_TYPES: frozenset[StageType] = frozenset(
 # frame; only the rows drawn are capped — aligned windows the OUTPUT frame,
 # filter windows the INPUT frame, so dropped rows appear in place among the kept.
 
-# Both filters drop rows the same way and the runtime records the same lineage for
-# each, so the review surface owes them the same view: which rows went, in place
-# among the ones that stayed.
+# All three emit a subsequence of their input, so one view serves them all.
 FILTER_TYPES: frozenset[StageType] = frozenset(
-    {StageType.filter_rows, StageType.starlark_filter_rows}
+    {StageType.filter_rows, StageType.starlark_filter_rows, StageType.dedupe}
 )
 
 ROW_ALIGNED_KIND = "row_aligned"

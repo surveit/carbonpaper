@@ -17,7 +17,7 @@ from app.models.stages.explode import ExplodeStage
 from app.models.stages.sort_rank import NullPlacement, SortKey, SortRankStage
 
 from ..context import RunContext
-from ..lineage import EdgeKind, RowLineage, RowParent, single_parent_lineage
+from ..lineage import single_parent_lineage
 from ..stage_output import StageOutput
 from .execution import narrow_stage
 
@@ -54,16 +54,14 @@ def handle_dedupe(
     table = inputs[input_id]
 
     ranked = _ranking_for_keep(table, config.keep, config.by)
-    groups = _group_members(table, config.keys, ranked)
-    survivors = [members[0] for members in groups]
+    groups_as_ordinals = _group_ordinals(table, config.keys, ranked)
+    # Each group is ranked, so its [0] is always the row `keep` chose to survive.
+    kept_ordinals = [ordinals[0] for ordinals in groups_as_ordinals]
+    # `ranked` left these in keep order, not the input's.
+    kept_in_input_order = sorted(kept_ordinals)
     return StageOutput(
-        table.take(survivors),
-        lineage=RowLineage([
-            [RowParent(input_id, int(members[0]))]
-            + [RowParent(input_id, int(lost), EdgeKind.contribution.value)
-               for lost in members[1:]]
-            for members in groups
-        ]),
+        table.take(kept_in_input_order),
+        lineage=single_parent_lineage(input_id, kept_in_input_order),
     )
 
 
@@ -107,7 +105,7 @@ def _ranking_for_keep(
     return pc.sort_indices(table, sort_keys=[(by, direction)])
 
 
-def _group_members(
+def _group_ordinals(
     table: pa.Table, keys: Sequence[str], ranked: pa.Array | None
 ) -> list[list[int]]:
     """Input ordinals per key group, winner first — [0] survives, the rest were collapsed."""
