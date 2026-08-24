@@ -50,8 +50,16 @@
   <p class="muted scope-legend" id="scope-legend"></p>
 
   <div class="scope-bar" id="scope-bar"></div>
-  <div id="scope-detail"></div>
-  <div class="scope-table" id="scope-table"></div>
+  {# Shown once a bar is picked: the rows it holds, and what the stage did to them.
+     The app's tab strip, so it reads as the run page's stage panel does. #}
+  <div class="stage-tabs" id="scope-tabs" hidden>
+    <div class="tabs">
+      <button data-tab="rows" class="active">Rows</button>
+      <button data-tab="transform">Transform</button>
+    </div>
+  </div>
+  <div class="pane scope-table" data-pane="rows" id="scope-table"></div>
+  <div class="pane" data-pane="transform" id="scope-transform" hidden></div>
 </section>
 
 <script id="scope-payload" type="application/json">{{ payload | tojson }}</script>

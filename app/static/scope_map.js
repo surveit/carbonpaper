@@ -20,6 +20,8 @@
   var pickedNode = null;
   var pickedRow = null;
   var showAll = false;
+  var openTab = "rows";
+  var panels = {};
 
   var SEP = " ";
   var TABLE = '<table class="data-preview">';
@@ -421,8 +423,8 @@
     draw();
     renderHere();
     renderBar();
-    renderDetail();
     renderTable();
+    renderTabs();
     var stubs = cols.reduce(function (all, c) {
       return all.concat(c.gone.map(function (g) { return g.rows; }));
     }, [0]);
@@ -489,26 +491,84 @@
     });
   }
 
-  function renderDetail() {
-    var host = byId("scope-detail");
-    if (!pickedNode || pickedCut()) { host.innerHTML = ""; return; }
-    var stageId = pickedNode.split(SEP)[0];
-    var held = pickedNode.slice(stageId.length + 1);
-    var facts = (held ? held.split(",") : []).map(function (b) {
-      return D.branches[b];
-    }).filter(Boolean);
-    var stage = D.stages.find(function (s) { return s.id === stageId; });
-    var source = facts.length && facts[0].reason !== "code"
-      ? facts[0].source : (stage || {}).code;
-    if (!source) { host.innerHTML = ""; return; }
-    var lit = new Set(facts.reduce(function (all, f) {
-      return all.concat(lineRange(f));
+  // ── the transform behind the picked rows ─────────────────────────────────
+  //
+  // The rows and the step that made them are the same question asked twice, so they
+  // are two tabs over one pick. The transform is the run page's own panel, fetched
+  // per stage, with the arm these rows took lit inside its code block.
+
+  function renderTabs() {
+    var stage = pickedStage();
+    if (!stage) openTab = "rows";
+    byId("scope-tabs").hidden = !stage;
+    byId("scope-table").hidden = openTab !== "rows";
+    byId("scope-transform").hidden = openTab !== "transform";
+    document.querySelectorAll("#scope-tabs [data-tab]").forEach(function (button) {
+      button.classList.toggle("active", button.dataset.tab === openTab);
+    });
+    if (stage && openTab === "transform") showTransform(stage);
+  }
+
+  function pickedStage() {
+    return pickedNode ? pickedNode.split(SEP)[0] : null;
+  }
+
+  function showTransform(stageId) {
+    var host = byId("scope-transform");
+    if (host.dataset.node === pickedNode) return;
+    host.dataset.node = pickedNode;
+    var wanted = pickedNode;
+    host.textContent = "reading " + stageId + "…";
+    loadPanel(stageId).then(function (html) {
+      if (host.dataset.node !== wanted) return;
+      host.innerHTML = html;
+      lightTheArm(host, stageId);
+    }, function () {
+      if (host.dataset.node !== wanted) return;
+      host.textContent = "This run kept no transform for " + stageId + ".";
+    });
+  }
+
+  function loadPanel(stageId) {
+    if (!panels[stageId]) {
+      panels[stageId] = fetch(panelAddress(stageId)).then(function (reply) {
+        if (!reply.ok) throw new Error(String(reply.status));
+        return reply.text();
+      });
+    }
+    return panels[stageId];
+  }
+
+  function panelAddress(stageId) {
+    // lineage_panel takes a row; nothing in the transform it renders varies by one.
+    var row = D.rows.length ? D.rows[0].ordinal : 0;
+    return "/project/" + encodeURIComponent(D.project_id) + "/runs/" +
+      encodeURIComponent(D.run_id) + "/stage/" + encodeURIComponent(stageId) +
+      "/lineage_panel?row=" + row;
+  }
+
+  // Which arm ran is what this page knows and the panel does not, so the panel's own
+  // code block gives way to the same source with those lines lit.
+  function lightTheArm(host, stageId) {
+    var lit = new Set(armsTaken().reduce(function (all, fact) {
+      return all.concat(lineRange(fact));
     }, []).filter(Boolean));
-    host.innerHTML = '<pre class="scope-source">' + source.split("\n")
+    var block = host.querySelector(".code-block pre.code");
+    var stage = D.stages.find(function (s) { return s.id === stageId; });
+    if (!block || !lit.size || !stage || !stage.code) return;
+    block.outerHTML = '<pre class="scope-source">' + stage.code.split("\n")
       .map(function (line, i) {
         var text = esc(line) || " ";
         return lit.has(i + 1) ? '<span class="is-lit">' + text + "</span>" : text;
       }).join("\n") + "</pre>";
+  }
+
+  function armsTaken() {
+    if (!pickedNode) return [];
+    var held = pickedNode.slice(pickedStage().length + 1);
+    return (held ? held.split(",") : []).map(function (b) {
+      return D.branches[b];
+    }).filter(function (fact) { return fact && fact.reason === "code"; });
   }
 
   function renderTable() {
@@ -577,6 +637,13 @@
     host.innerHTML = TABLE + "<thead>" + head + "</thead><tbody>" + body +
       "</tbody></table>";
   }
+
+  byId("scope-tabs").onclick = function (event) {
+    var button = event.target.closest("[data-tab]");
+    if (!button) return;
+    openTab = button.dataset.tab;
+    renderTabs();
+  };
 
   var every = byId("scope-every-stage");
   if (every) {
