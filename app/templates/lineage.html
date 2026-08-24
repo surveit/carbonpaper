@@ -34,10 +34,7 @@ body{display:flex;flex-direction:column;overflow:hidden}
 .lin-pagetabs{flex:none;display:flex;gap:2px;padding:0 18px;background:var(--raised);
   border-bottom:1px solid var(--border)}
 .lin-pagetab{border:0;background:none;font:inherit;font-size:13px;color:var(--muted);
-  padding:9px 16px 8px;cursor:pointer;border-bottom:2px solid transparent;
-  display:flex;flex-direction:column;align-items:flex-start;gap:1px}
-.lin-pagetab .k{font-size:10.5px;color:var(--muted);
-  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  padding:9px 16px 8px;cursor:pointer;border-bottom:2px solid transparent}
 .lin-pagetab.on{color:var(--fg);border-bottom-color:var(--accent);font-weight:600}
 .lin-pagetab:hover{background:var(--hover)}
 .lin-pane{flex:1;min-height:0;display:flex;flex-direction:column}
@@ -163,10 +160,10 @@ tr.carried td.lin-v{color:var(--muted)}
   {% if cell %}<div class="lin-at">at <code>{{ view.start_stage }}</code> row {{ view.start_row }}</div>{% endif %}
 </div>
 <div class="lin-pagetabs" id="pagetabs">
-  <button class="lin-pagetab on" data-pane="paths">Paths<span class="k">how each row got here</span></button>
-  <button class="lin-pagetab" data-pane="rows">Relevant rows<span class="k">what is in, and what left</span></button>
-  <button class="lin-pagetab" data-pane="values">Values used<span class="k">the column and the arithmetic</span></button>
-  <button class="lin-pagetab" data-pane="inputs">Inputs<span class="k">the files it was read from</span></button>
+  <button class="lin-pagetab on" data-pane="paths">Paths</button>
+  <button class="lin-pagetab" data-pane="rows">Relevant rows</button>
+  <button class="lin-pagetab" data-pane="values">Values used</button>
+  <button class="lin-pagetab" data-pane="inputs">Inputs</button>
 </div>
 <div class="lin-pane" data-pane="paths">
 {% if view.nodes %}
