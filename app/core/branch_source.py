@@ -21,6 +21,30 @@ def find_branches(source: str) -> list[Branch]:
     return _branches(ast.parse(source))
 
 
+def read_branch_test(lines: list[str], branch: Branch) -> tuple[int, str]:
+    """`Branch.line` is the body's first statement; the test the row passed is above it."""
+    prefix = lines[branch.line - 1][:branch.column]
+    if prefix.strip():
+        return branch.line, prefix.strip()  # `if x: y = 1`
+    last = branch.line - 2
+    while last > 0 and not lines[last].strip():
+        last -= 1
+    first = last
+    while first > 0 and not _opens_a_branch(lines[first]):
+        first -= 1
+    if not _opens_a_branch(lines[first]):
+        return last + 1, lines[last].strip()
+    return first + 1, " ".join(line.strip() for line in lines[first:last + 1])
+
+
+_OPENERS = ("if", "elif", "else", "try", "except")
+
+
+def _opens_a_branch(line: str) -> bool:
+    head = line.strip().split("(")[0].split(":")[0].split()
+    return bool(head) and head[0] in _OPENERS
+
+
 def instrument_branches(source: str) -> tuple[str, list[Branch]]:
     """The same source with a recorder call opening each branch; valid python AND starlark."""
     lines = source.split("\n")

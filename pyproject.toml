@@ -131,10 +131,10 @@ allowed_importers = ["app.services"]
 # The reusable agent spine (app.core.agent) must not import it.
 
 [[tool.importlinter.contracts]]
-name = "app.runtime imported only by evals, web, and three named service seams"
+name = "app.runtime imported only by evals, web, and four named service seams"
 type = "protected"
 protected_modules = ["app.runtime"]
-allowed_importers = ["app.evals", "app.web", "app.services.run", "app.services.workflow_test", "app.services.stage_tests"]
+allowed_importers = ["app.evals", "app.web", "app.services.run", "app.services.workflow_test", "app.services.stage_tests", "app.services.scope"]
 # The runner is driven by the top-level interfaces: web and evals. app.core.agent sits below
 # the runtime (llm.py imports app.core.agent.agent.Agent as the reply backend) rather than the
 # other way round, so it is not an importer here. app.services stays out of the runtime EXCEPT
@@ -142,8 +142,10 @@ allowed_importers = ["app.evals", "app.web", "app.services.run", "app.services.w
 # app.runtime.runner, see the contract below), app.services.workflow_test (the workflow-test
 # seam, which reaches only app.runtime.executor), and app.services.stage_tests (running a
 # stage's authored tests outside a run, which both authoring surfaces and the compile page
-# reach through app.tools). Every other service module stays runtime-free — status/review
-# helpers must not reach in.
+# reach through app.tools) and app.services.scope (reading a finished run's branches back,
+# which is not the runner's job — the module belongs in a package that may read the runtime,
+# see https://github.com/surveit/carbonpaper/issues/834). Every other service module stays
+# runtime-free — status/review helpers must not reach in.
 
 [[tool.importlinter.contracts]]
 name = "app.runtime.preview imported only by web"
