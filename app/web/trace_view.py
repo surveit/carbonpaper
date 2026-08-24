@@ -192,8 +192,8 @@ def _build_node(
     step = chrono[i]
     groups = _group_contributors(_contributions(step), links, path)
     followed = _mark_crossing(step)
-    # A diff across a crossing would report a transform that never ran.
-    parent = chrono[i - 1] if i and followed is None else None
+    # Off `step`: an unmarked one-row fan-in still summarized, so still no diff.
+    parent = chrono[i - 1] if i and not step.get("followed") else None
     diff = build_row_diff(
         step["row"],
         parent["row"] if parent else None,
@@ -236,7 +236,7 @@ def _build_node(
 
 @dataclass(frozen=True)
 class Crossing:
-    """The contributor this page was told to follow out of a fan-in, and its cohort's size."""
+    """The contributor followed out of a fan-in, and how many rows that fan-in merged."""
 
     stage_id: str
     row_ordinal: int
@@ -245,15 +245,16 @@ class Crossing:
 
 
 def _mark_crossing(step: dict[str, Any]) -> Crossing | None:
+    """None where the fan-in held ONE row: nothing was chosen, so there is nothing to mark."""
     followed = step.get("followed")
-    if not followed:
+    merged = len(_contributions(step))
+    if not followed or merged < 2:
         return None
-    key = _cohort_key(followed)
     return Crossing(
         stage_id=followed["stage_id"],
         row_ordinal=followed["row_ordinal"],
         columns=followed["columns"],
-        of=sum(1 for c in _contributions(step) if _cohort_key(c) == key),
+        of=merged,
     )
 
 
@@ -348,11 +349,14 @@ def _build_stories(nodes: list[dict[str, Any]], links: PanelLinks) -> list[Story
 def _find_alternatives(node: dict[str, Any], links: PanelLinks) -> list[Story]:
     step = node["step"]
     crossed = node["followed"]
+    # A fan-in that merged ONE row offered nothing to pick, so it offers no entry.
+    merged = sum(group["total"] for group in node["contributor_groups"])
     return [
         *([_build_crossed_story(crossed, step)] if crossed else []),
         *(_build_branch_story(branch, step) for branch in node["branches"]),
-        *(s for group in node["contributor_groups"]
-          for s in _build_fan_in_stories(group, step, crossed)),
+        *([] if merged < 2 else
+          [s for group in node["contributor_groups"]
+           for s in _build_fan_in_stories(group, step, crossed)]),
     ]
 
 

@@ -1,4 +1,4 @@
-"""Crossing a fan-in: taken by default at the first recorded edge, marked wherever taken."""
+"""Crossing a fan-in: the first recorded edge, marked wherever a choice existed."""
 from __future__ import annotations
 
 import json
@@ -70,7 +70,13 @@ def _three_stage_run(tmp_path):
 
 
 def _firm_a(totals) -> int:
+    """Two of FILINGS' rows carry firm "a", so its group is a fan-in with a choice."""
     return list(totals["firm"]).index("a")
+
+
+def _firm_b(totals) -> int:
+    """Only FILINGS row 4 carries firm "b", so its group is a fan-in of exactly one."""
+    return list(totals["firm"]).index("b")
 
 
 def test_with_nothing_supplied_the_walk_crosses_to_the_input_data(tmp_path):
@@ -181,6 +187,48 @@ def test_a_choice_the_walk_never_met_fails_loudly(tmp_path):
     assert "met no fan-in" in str(caught.value)
 
 
+def test_a_fan_in_of_one_row_draws_no_break_at_all(tmp_path):
+    """Nothing was chosen there, so a caution would teach the reader to ignore cautions."""
+    run_dir, totals = _three_stage_run(tmp_path)
+    trace = trace_row(run_dir, "agg", _firm_b(totals))
+
+    view = build_trace_view(trace_to_dict(trace), {}, AppPanelLinks("proj", "T1"))
+
+    assert [(s.stage_id, s.row_ordinal) for s in trace.steps] == [
+        ("agg", _firm_b(totals)), ("tagged", 4), ("filings", 4),
+    ]
+    assert trace.steps[0].followed.row_ordinal == 4, "the walk still crossed"
+    assert [n["followed"] for n in view["nodes"]] == [None, None, None]
+    # Nor is it offered in the pane: there was no alternative to offer.
+    assert [s["kind"] for s in view["stories"]] == ["shown"]
+
+
+def test_a_one_row_fan_in_is_still_not_compared_across(tmp_path):
+    """An aggregate row is a summary, not its one contributor carried forward."""
+    run_dir, totals = _three_stage_run(tmp_path)
+
+    view = build_trace_view(
+        trace_to_dict(trace_row(run_dir, "agg", _firm_b(totals))),
+        {}, AppPanelLinks("proj", "T1"))
+
+    summary = view["nodes"][-1]
+    assert summary["stage_id"] == "agg"
+    assert summary["base"] is None
+    assert summary["row_diff"]["changed"] == 0 and summary["row_diff"]["added"] == 0
+
+
+def test_a_break_says_how_many_rows_the_fan_in_merged(tmp_path):
+    run_dir, totals = _three_stage_run(tmp_path)
+
+    view = build_trace_view(
+        trace_to_dict(trace_row(run_dir, "agg", _firm_a(totals))),
+        {}, AppPanelLinks("proj", "T1"))
+
+    # amt=10 and amt=30 were totalled into firm "a", and the break says so.
+    assert view["nodes"][-1]["followed"]["of"] == 2
+    assert [s["rows"] for s in view["stories"] if s["kind"] == "crossed"] == [2]
+
+
 def test_the_crossed_step_is_compared_against_nothing(tmp_path):
     """The row below a crossing is a contributor's, so a diff would invent a transform."""
     run_dir, totals = _three_stage_run(tmp_path)
@@ -263,7 +311,7 @@ def test_the_route_lets_via_swap_which_contributor_is_taken(tmp_path):
 
 
 def test_a_break_is_marked_at_every_fan_in_the_walk_took(tmp_path):
-    """The page invariant: no marked break means row-level lineage all the way down."""
+    """The page invariant: a break marks a place where a choice existed among rows."""
     stages = _banded_stages()
     totals = stages[-1]["df"]
     stacked = handle_aggregate(
@@ -277,7 +325,7 @@ def test_a_break_is_marked_at_every_fan_in_the_walk_took(tmp_path):
     unbroken = build_trace_view(
         trace_to_dict(trace_row(run_dir, "tagged", 3)), {}, AppPanelLinks("proj", "T1"))
 
-    # Two aggregates on the path, so two marks — one per place a row was picked.
+    # Two aggregates on the path, each merging more than one row, so two marks.
     assert sum(1 for n in crossed["nodes"] if n["followed"]) == 2
     assert [n["stage_id"] for n in crossed["nodes"]] == [
         "filings", "tagged", "agg", "top"]

@@ -164,10 +164,9 @@ def test_the_packet_page_carries_the_story_pane_with_no_server_to_ask(tmp_path):
     assert blob, "the pane is built from the embedded view model"
     stories = json.loads(blob.group(1))["stories"]
 
-    # source row 0 fed it alone and was crossed into, so the pane reports it.
-    assert [s["kind"] for s in stories] == ["shown", "crossed"]
+    # source row 0 fed it alone, so nothing was chosen and nothing is offered.
+    assert [s["kind"] for s in stories] == ["shown"]
     assert stories[0]["stage_id"] == "source" and stories[0]["href"] is None
-    assert (stories[1]["stage_id"], stories[1]["href"]) == ("source", None)
 
 
 def _demo_run(tmp_path):

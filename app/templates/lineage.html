@@ -299,9 +299,8 @@ function storyWhy(s, showColumns){
   const at = `step ${s.step}, <code>${esc(V.nodes[s.step - 1].stage_id)}</code>`;
   const into = (showColumns && s.columns) ? ` into ${s.columns.map(esc).join(' and ')}` : '';
   const nopage = s.href ? '' : ' · <span class="nopage">no page for this row</span>';
-  if(s.kind === 'crossed') return s.rows > 1
-    ? `followed here — one of ${s.rows} rows summarized at ${at}${into}`
-    : `followed here — the one row summarized at ${at}${into}`;
+  // A crossed entry only exists where the fan-in held alternatives.
+  if(s.kind === 'crossed') return `followed here — one of ${s.rows} rows summarized at ${at}${into}`;
   if(s.kind === 'branch') return `another parent at ${at}${into}${nopage}`;
   if(s.kind === 'contributor') return s.rows > 1
     ? `one of ${s.rows} rows summarized at ${at}${into}${nopage}`
@@ -397,25 +396,28 @@ function renderSteps(){
 // steps above it are the contributor's, and this one's row is the summary's.
 function crossingOf(n){
   const f = n.followed;
+  // Only a fan-in that held ALTERNATIVES gets one; the view withholds the rest.
   if(!f) return '';
-  const one = f.of > 1 ? `one of the ${f.of} rows` : 'the one row';
-  const rest = f.of > 1
-    ? ` The other ${f.of - 1} are in <b>Stories</b>.` : '';
   return `<div class="cross"><span class="mark">↑ crossed</span><span>Following
-    <span class="sid">${esc(f.stage_id)}</span> row ${f.row_ordinal} — ${one} summarized into
-    step ${n.step}. Every step above is that row, and nothing above was compared against
-    step ${n.step}'s row.${rest}</span></div>`;
+    <span class="sid">${esc(f.stage_id)}</span> row ${f.row_ordinal} — one of the
+    <b>${f.of} rows</b> summarized into step ${n.step}. Every step above is that row, and
+    nothing above was compared against step ${n.step}'s row. The other ${f.of - 1} are in
+    <b>Stories</b>.</span></div>`;
 }
 // The one claim the page makes about itself: a break is the only place a choice
 // stood in for a fact, so a run of steps with none is row-level lineage.
 function stepsNote(){
   const crossed = V.nodes.filter(n => n.followed).length;
-  if(!crossed) return `<b>No step here summarized many rows into one.</b> This is one row, `
-    + `cell by cell, from ${esc(V.nodes[0].stage_id)} to the claim — nothing was chosen for you.`;
+  if(!crossed) return `<b>No step on this path had more than one row to choose from.</b> `
+    + `Every step names the row it actually came from, back to `
+    + `<code>${esc(V.nodes[0].stage_id)}</code> — nothing here stands in for anything else.`;
   const breaks = `${crossed} ↑ crossed break${crossed > 1 ? 's' : ''}`;
-  return `<b>Read the ${breaks} below as the only guesses on this page.</b> A step that `
-    + `summarized many rows into one has no single row above it, so the FIRST row the run `
-    + `recorded is followed. Everywhere else this is one row, cell by cell.`;
+  const is = crossed > 1 ? 'are' : 'is';
+  return `<b>The ${breaks} below ${is} the only choice${crossed > 1 ? 's' : ''} on this page.</b>`
+    + ` Where a step summarized `
+    + `several rows into one, no single row precedes it, so the FIRST the run recorded is `
+    + `followed and the break says how many it stood among. Every other step names the row it `
+    + `actually came from.`;
 }
 
 // ---- The other parents, named in the sentence that owns them --------------
