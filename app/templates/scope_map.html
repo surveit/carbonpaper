@@ -1,0 +1,56 @@
+{% extends "project_shell.html" %}
+{#
+  THE SCOPE OF ONE FIGURE — which rows produced a cited number, and what told them
+  apart from the rows that did not.
+
+  The order is the reader's question order: the figure, then what its rows do and do
+  not establish, then how small a slice of the run they are, then the drawing, then
+  the rows themselves. Every distinction drawn was recorded while the run executed;
+  docs/scope-map.md says what each one means.
+
+  Context the route passes:
+    scope      = app.models.scope_map.ScopeMap
+    answers    = the sentence under the figure (scope_view.say_what_the_rows_answer)
+    off_screen = the widest frame's share, or None when the figure covers all of it
+    payload    = the same map as JSON, plus `cuts`, for the drawing
+#}
+{% block title %}Scope of {{ scope.citation.stage_id }}.{{ scope.citation.column }} · {{ project }}{% endblock %}
+
+{% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
+
+{% block section %}
+<section class="scope">
+  <header class="scope-figure">
+    <p class="scope-cell">
+      <span class="badge pending scope-beta">beta</span>
+      <code>{{ scope.citation.stage_id }}</code> row {{ scope.citation.row_ordinal }},
+      column <code>{{ scope.citation.column }}</code>
+    </p>
+    <p class="scope-answers">{{ answers }}</p>
+    {# Written by scope_map.js while a cut is drawn: the sentences above describe the
+       figure, and the drawing then does not. #}
+    <p class="scope-drilled" id="scope-drilled"></p>
+    {% if off_screen %}
+    <p class="scope-scale">
+      {{ off_screen }}
+    </p>
+    {% endif %}
+  </header>
+
+  <div class="scope-controls">
+    <label><input type="checkbox" id="scope-every-stage"> show every stage</label>
+    <span class="scope-here" id="scope-here" hidden></span>
+  </div>
+
+  <div class="scope-drawing"><svg id="scope-svg" role="img"
+    aria-label="Which rows reached this figure, and where the rest left"></svg></div>
+  <p class="muted scope-legend" id="scope-legend"></p>
+
+  <div class="scope-bar" id="scope-bar"></div>
+  <div id="scope-detail"></div>
+  <div class="scope-table" id="scope-table"></div>
+</section>
+
+<script id="scope-payload" type="application/json">{{ payload | tojson }}</script>
+<script src="/static/scope_map.js"></script>
+{% endblock %}

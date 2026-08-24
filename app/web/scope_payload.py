@@ -1,0 +1,276 @@
+"""What the scope page is handed: a figure's rows, their branches, and the cuts."""
+
+from __future__ import annotations
+
+from collections import Counter
+from pathlib import Path
+
+import pyarrow as pa
+from pydantic import BaseModel
+
+from app.core.errors import RowOutOfRange, StageNotInRun
+from app.core.frames import read_frame_table
+from app.core.json_types import JsonScalar
+from app.models.branch_analysis import (
+    BranchId,
+    BranchOption,
+    BranchPath,
+    BranchReason,
+    BranchRole,
+    FrameScale,
+    RowOrdinal,
+    RowSet,
+)
+from app.models.claims import StageOutputCellCitation
+from app.models.schema import StageId
+from app.runtime.branch_analysis import WorkflowRunBranches, find_rows_that_took
+from app.runtime.branch_analysis.stage_code import read_decision_source, read_stage_code
+from app.services.scope import (
+    find_contributing_rows,
+    find_merges_that_excluded,
+    measure_frame_scale,
+)
+
+# Cells for a wider set than this are sampled; the counts never are.
+CELL_ROWS = 400
+# A cut can be most of the corpus. Its counts are exact; these are the cells shown.
+CUT_SAMPLE = 25
+# Where every load branch is drawn, since no one stage read the whole run off disk.
+SOURCE_COLUMN = "(source)"
+
+
+class DrawnRow(BaseModel):
+    """One row of a frame, positional against the map's `columns`, as tables are here."""
+
+    ordinal: RowOrdinal
+    branch_path_index: int
+    cells: list[JsonScalar]
+
+
+class DrawnStage(BaseModel):
+    """A column of the drawing: a stage that told these rows apart."""
+
+    id: StageId
+    type: str
+    description: str
+    # Index in the run's execution order: the drawing's left-to-right.
+    position: int
+    code: str = ""
+
+
+class CitedRow(BaseModel):
+    """The figure's own output row, shown when a reader clicks the figure itself."""
+
+    ordinal: RowOrdinal
+    columns: list[str]
+    cells: list[JsonScalar]
+
+
+class BranchReach(BaseModel):
+    """`taken` counts every row of the run; `here` only this figure's."""
+
+    branch: BranchId
+    taken: int
+    here: int
+
+
+class CutRows(BaseModel):
+    """The rows behind one branch this figure's rows did not take."""
+
+    branch: BranchId
+    at_stage: StageId
+    total: int
+    columns: list[str]
+    branch_paths: list[BranchPath]
+    # Parallel to `branch_paths`: how many rows took each one.
+    rows_per_branch_path: list[int]
+    rows: list[DrawnRow]
+    stages: list[DrawnStage]
+
+
+class ScopeMap(BaseModel):
+    """Which rows produced one cited figure, and what told them apart from the rest."""
+
+    project_id: str
+    run_id: str
+    citation: StageOutputCellCitation
+    covers: RowSet
+    cited_row: CitedRow
+    # Set when `rows` was sampled, so a reader never mistakes a sample for the whole.
+    sampled_from: int | None = None
+    rows: list[DrawnRow]
+    columns: list[str]
+    branch_paths: list[BranchPath]
+    branch_path_index: list[int]
+    branches: dict[BranchId, BranchOption]
+    stages: list[DrawnStage]
+    reach: list[BranchReach]
+    scale: list[FrameScale]
+
+
+def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: str,
+                    outputs: Path, citation: StageOutputCellCitation) -> ScopeMap:
+    if citation.stage_id not in run_branches.stages:
+        raise StageNotInRun(f"no stage '{citation.stage_id}' in this run")
+    cited_frame, cited = _read_the_cited_cell(outputs, citation)
+    covers = find_contributing_rows(run_branches, cited)
+    frame = read_frame_table(outputs / f"{covers.at_stage}.parquet")
+    on_route = set(covers.regrained_at) | {cited.stage_id}
+    paths, index = index_paths(run_branches, covers.at_stage, covers.ordinals, on_route)
+    shown = covers.ordinals[:CELL_ROWS]
+    return ScopeMap(
+        project_id=project_id, run_id=run_id, citation=cited, covers=covers,
+        cited_row=_read_cited_row(cited_frame, cited.row_ordinal),
+        sampled_from=len(covers.ordinals) if len(shown) < len(covers.ordinals) else None,
+        rows=read_rows(frame, shown, index),
+        columns=list(frame.column_names),
+        branch_paths=paths, branch_path_index=index,
+        branches=_branches_on(run_branches, paths),
+        stages=_draw_stages(run_branches, _stages_touched(run_branches, paths)),
+        reach=_count_reach(run_branches, paths, index),
+        scale=measure_frame_scale(run_branches, cited),
+    )
+
+
+def _read_the_cited_cell(outputs: Path, citation: StageOutputCellCitation
+                         ) -> tuple[pa.Table, StageOutputCellCitation]:
+    """The citation with the cell's real value on it, read out of the run's frame."""
+    path = outputs / f"{citation.stage_id}.parquet"
+    if not path.exists():
+        raise StageNotInRun(f"no stage '{citation.stage_id}' in this run")
+    frame = read_frame_table(path)
+    if citation.column not in frame.column_names:
+        raise StageNotInRun(
+            f"stage '{citation.stage_id}' has no column '{citation.column}'")
+    if citation.row_ordinal >= frame.num_rows:
+        raise RowOutOfRange(f"stage '{citation.stage_id}' has {frame.num_rows} rows")
+    return frame, citation.model_copy(update={
+        "value": _plain(frame.column(citation.column)[citation.row_ordinal])})
+
+
+def _read_cited_row(frame: pa.Table, ordinal: RowOrdinal) -> CitedRow:
+    return CitedRow(
+        ordinal=ordinal, columns=list(frame.column_names),
+        cells=[_plain(frame.column(name)[ordinal]) for name in frame.column_names])
+
+
+def read_cut(run_branches: WorkflowRunBranches, outputs: Path,
+             branch_id: BranchId) -> CutRows | None:
+    """The rows behind one branch: counts over all of them, cells over a sample."""
+    at_stage, ordinals = find_rows_that_took(run_branches, branch_id)
+    if not ordinals or at_stage not in run_branches.branch_paths:
+        return None
+    paths, index = index_paths(run_branches, at_stage, ordinals, set())
+    spread = Counter(index)
+    shown = ordinals[:CUT_SAMPLE]
+    frame = read_frame_table(outputs / f"{at_stage}.parquet")
+    return CutRows(
+        branch=branch_id, at_stage=at_stage, total=len(ordinals),
+        columns=list(frame.column_names),
+        branch_paths=paths,
+        rows_per_branch_path=[spread[i] for i in range(len(paths))],
+        rows=read_rows(frame, shown, index[:len(shown)]),
+        stages=_draw_stages(run_branches, _stages_touched(run_branches, paths)),
+    )
+
+
+def find_cuts_to_offer(run_branches: WorkflowRunBranches, outputs: Path,
+                       scope: ScopeMap) -> dict[BranchId, CutRows]:
+    """A branch that took rows out here, or merged them into a row this figure is not."""
+    drawn = {branch_id for path in scope.branch_paths for branch_id in path}
+    excluded = find_merges_that_excluded(run_branches, scope.citation)
+    found: dict[BranchId, CutRows] = {}
+    for branch_id, option in scope.branches.items():
+        if branch_id in drawn:
+            continue
+        if option.role is not BranchRole.removes and branch_id not in excluded:
+            continue
+        cut = read_cut(run_branches, outputs, branch_id)
+        if cut is not None:
+            found[branch_id] = cut
+    return found
+
+
+def index_paths(run_branches: WorkflowRunBranches, at_stage: StageId,
+                ordinals: list[RowOrdinal], on_route: set[StageId]
+                ) -> tuple[list[BranchPath], list[int]]:
+    """Distinct paths, and one small int per row."""
+    paths: list[BranchPath] = []
+    seen: dict[BranchPath, int] = {}
+    index = []
+    for ordinal in ordinals:
+        path = _on_route(run_branches, run_branches.branch_paths[at_stage][ordinal],
+                         on_route)
+        if path not in seen:
+            seen[path] = len(paths)
+            paths.append(path)
+        index.append(seen[path])
+    return paths, index
+
+
+def read_rows(frame: pa.Table, ordinals: list[RowOrdinal],
+              branch_path_index: list[int]) -> list[DrawnRow]:
+    cells = [frame.column(name).to_pylist() for name in frame.column_names]
+    return [DrawnRow(ordinal=ordinal, branch_path_index=branch_path_index[position],
+                     cells=[_plain(column[ordinal]) for column in cells])
+            for position, ordinal in enumerate(ordinals)]
+
+
+def _on_route(run_branches: WorkflowRunBranches, path: BranchPath,
+              on_route: set[StageId]) -> BranchPath:
+    """A merge into a row this figure is not tells these rows nothing, so it is dropped."""
+    options = run_branches.branch_options
+    return tuple(branch_id for branch_id in path
+                 if options[branch_id].reason is not BranchReason.merge
+                 or options[branch_id].stage_id in on_route)
+
+
+def _branches_on(run_branches: WorkflowRunBranches, paths: list[BranchPath]
+                 ) -> dict[BranchId, BranchOption]:
+    touched = _stages_touched(run_branches, paths)
+    return {branch_id: option
+            for branch_id, option in run_branches.branch_options.items()
+            if any(branch_id in path for path in paths) or option.stage_id in touched}
+
+
+def _stages_touched(run_branches: WorkflowRunBranches,
+                    paths: list[BranchPath]) -> set[StageId]:
+    return {run_branches.branch_options[branch_id].stage_id
+            for path in paths for branch_id in path}
+
+
+def _count_reach(run_branches: WorkflowRunBranches, paths: list[BranchPath],
+                 branch_path_index: list[int]) -> list[BranchReach]:
+    here: Counter[BranchId] = Counter()
+    for index in branch_path_index:
+        here.update(paths[index])
+    touched = _stages_touched(run_branches, paths)
+    return [BranchReach(branch=branch_id, taken=taken, here=here[branch_id])
+            for branch_id, taken in run_branches.row_count_per_branch_id.items()
+            if run_branches.branch_options[branch_id].stage_id in touched]
+
+
+def _draw_stages(run_branches: WorkflowRunBranches,
+                 touched: set[StageId]) -> list[DrawnStage]:
+    return [_draw_stage(run_branches, sid, position)
+            for position, sid in enumerate(run_branches.ordered_stage_ids)
+            if sid in touched and sid in run_branches.stages]
+
+
+def _draw_stage(run_branches: WorkflowRunBranches, sid: StageId,
+                position: int) -> DrawnStage:
+    stage = run_branches.stages[sid]
+    authored = stage.stage
+    return DrawnStage(
+        id=sid, type=str(getattr(authored.type, "value", authored.type)),
+        position=position, description=authored.description or "",
+        code=read_stage_code(stage) or read_decision_source(stage))
+
+
+def _plain(value: object) -> JsonScalar:
+    plain = value.as_py() if hasattr(value, "as_py") else value
+    if isinstance(plain, float) and plain != plain:
+        return None
+    if isinstance(plain, (str, int, float, bool)) or plain is None:
+        return plain
+    return str(plain)  # a list cell, so the table can show it
