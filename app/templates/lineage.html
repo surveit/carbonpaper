@@ -116,6 +116,14 @@ a.snavbtn:hover{background:var(--hover)}
 .branch-name{color:var(--state-idle-ink)}
 .trunc{background:var(--warn-bg);color:var(--state-warn-ink);border-radius:8px;padding:8px 12px;
   font-size:13px;margin-bottom:12px}
+/* A break in the list, not another step: below it the walk is following the
+   summary row, above it one of the rows summarized. The ordinals differ either
+   side, so the two halves must not read as one row moving along. */
+.sampled{display:grid;grid-template-columns:52px 1fr;gap:6px;padding:7px 8px;margin:3px 0;
+  border-left:3px solid var(--accent);border-radius:7px;font-size:12px;line-height:1.45;
+  background:var(--state-idle-bg);color:var(--state-idle-ink)}
+.sampled .mark{font-size:11.5px;color:var(--muted)}
+.sampled a{color:inherit;font-weight:600}
 .lin-graph{margin-top:18px;border-top:1px solid var(--border);padding-top:10px}
 .lin-graph summary{cursor:pointer;font-size:13px;color:var(--muted)}
 .mermaid{background:var(--raised)}.nograph{color:var(--muted);font-size:13px}
@@ -183,9 +191,7 @@ tr.carried td.lin-v{color:var(--muted)}
     <div class="lin-snavtot" id="storiestot"></div>
   </div>
   <div class="lin-story">
-    <div class="lin-note"><b>The steps are one example of that path.</b> They follow this one row,
-      as it stood after each stage. Other rows may have run the same path; this page does not
-      count them. Click a step to see the row.</div>
+    <div class="lin-note" id="stepsnote"></div>
     <div id="steps"></div>
     <details class="lin-graph"><summary>Lineage graph</summary>
       <pre class="mermaid" id="mmd">{{ mermaid }}</pre>
@@ -257,6 +263,14 @@ document.getElementById('pagetabs').addEventListener('click', e => {
   document.querySelectorAll('.lin-pane').forEach(
     p => p.classList.toggle('hidden', p.dataset.pane !== picked.dataset.pane));
 });
+// Clicks the tab rather than showing the pane: a pane may load its content on
+// that click, and a second way in would arrive before it.
+document.addEventListener('click', e => {
+  const goto = e.target.closest('[data-goto]');
+  if(!goto) return;
+  e.preventDefault();
+  document.querySelector(`.lin-pagetab[data-pane="${goto.dataset.goto}"]`)?.click();
+});
 </script>
 {% if view.nodes %}
 <script>
@@ -271,7 +285,7 @@ function renderStories(){
   document.getElementById('stories').innerHTML = V.stories.map((s, i) => {
     const body = `<span class="lab">${storyLabel(s)}</span>`
                + `<span class="why">${storyWhy(s, showColumns)}</span>`;
-    if(i === 0) return `<div class="snavbtn on">${body}</div>`;
+    if(i === 0 || s.kind === 'sampled') return `<div class="snavbtn on">${body}</div>`;
     // No page for this row (the review packet wrote none): the entry still
     // states the path, because the path is a fact and the link is not.
     if(!s.href) return `<div class="snavbtn">${body}</div>`;
@@ -294,6 +308,8 @@ function storyWhy(s, showColumns){
   const at = `step ${s.step}, <code>${esc(V.nodes[s.step - 1].stage_id)}</code>`;
   const into = (showColumns && s.columns) ? ` into ${s.columns.map(esc).join(' and ')}` : '';
   const nopage = s.href ? '' : ' · <span class="nopage">no page for this row</span>';
+  // A sampled entry only exists where the fan-in held alternatives.
+  if(s.kind === 'sampled') return `sampled here — one of ${s.rows} rows summarized at ${at}${into}`;
   if(s.kind === 'branch') return `another parent at ${at}${into}${nopage}`;
   if(s.kind === 'contributor') return s.rows > 1
     ? `one of ${s.rows} rows summarized at ${at}${into}${nopage}`
@@ -306,13 +322,17 @@ function cohortReach(s){
 }
 function shownWhy(){
   const steps = `${V.nodes.length} step${V.nodes.length > 1 ? 's' : ''}`;
+  const sampled = V.stories.filter(s => s.kind === 'sampled').length;
+  const across = sampled ? `, across ${sampled} summarizing step${sampled > 1 ? 's' : ''}` : '';
   return V.upstream.truncated
-    ? `the path told here — ${steps}, stopping at <code>${esc(V.nodes[0].stage_id)}</code>`
-    : `the path told here — ${steps}, back to the source`;
+    ? `the path told here — ${steps}${across}, stopping at <code>${esc(V.nodes[0].stage_id)}</code>`
+    : `the path told here — ${steps}${across}, back to the source`;
 }
 function storiesNote(){
   if(V.stories.length > 1)
-    return 'Every other parent this walk recorded is listed here. Opening one traces from it instead.';
+    return 'Every other parent this walk recorded is listed here. Where a step summarized many '
+         + 'rows, the first is followed and picking another re-tells this path across that step; '
+         + 'any other parent is traced from itself.';
   return V.upstream.truncated
     ? 'No step named a second parent, and the walk stopped before the source.'
     : 'No step named a second parent, so this row has one path from the source.';
@@ -373,12 +393,44 @@ function renderSteps(){
   if(V.upstream.truncated && !fanIn){
     html += `<div class="trunc">⋯ upstream not traced — ${esc(V.upstream.message)}</div>`;
   }
-  html += V.nodes.map((n, i) => `<button class="step ${i===sel?'on':''}" data-i="${i}">
+  html += V.nodes.map((n, i) => sampleOf(n) + `<button class="step ${i===sel?'on':''}" data-i="${i}">
       <span class="stepno">step ${n.step}</span>
       <span>${sentenceOf(n)}</span>
       <span class="right">${n.role==='claim' ? '<span class="claim-tag">published claim</span> ' : ''}<span class="row-chip">row ${n.row_ordinal}</span>${deltaOf(n)}</span>
     </button>`).join('');
   document.getElementById('steps').innerHTML = html;
+  const note = document.getElementById('stepsnote');
+  note.innerHTML = stepsNote();
+  note.classList.toggle('hidden', !note.innerHTML);
+}
+// Drawn above the step it belongs to, which is the step the rows fed: everything
+// above the mark is the sampled row, and this step's row is the summary.
+function sampleOf(n){
+  const s = n.sampled;
+  // Only a fan-in that held ALTERNATIVES gets one; the view withholds the rest.
+  if(!s) return '';
+  return `<div class="sampled"><span class="mark">↑ Sampled</span><span>Following input row
+    <b>${s.place} of ${s.of} rows</b> that were summarized in step ${n.step}. Steps above show
+    how that sample row was generated. ${allRowsLink(s, n)}</span></div>`;
+}
+function allRowsLink(s, n){
+  const label = `Explore all ${s.of} relevant rows`;
+  // Served: the tab whose scope map draws them, opened by clicking the tab
+  // itself so its own load fires. A folder has no server to draw that, so there
+  // the phrase goes to the cohort table the packet wrote.
+  if(!OFFLINE) return `<a href="#" data-goto="rows">${label}</a>`;
+  const cohort = (n.contributor_groups || []).find(g => g.stage_id === s.stage_id);
+  return cohort && cohort.rows_link
+    ? `<a href="${cohort.rows_link}">${label}</a>` : label;
+}
+// Only the ABSENCE is stated here. A row that was sampled is marked inline at the
+// step it happened; with nothing marked there is nothing inline to read, and a
+// blank top would not tell "nothing to flag" from "the feature never ran".
+function stepsNote(){
+  if(V.nodes.some(n => n.sampled)) return '';
+  return `<b>No step on this path sampled a row.</b> Every step names the row it actually `
+    + `came from, back to <code>${esc(V.nodes[0].stage_id)}</code> — nothing here stands in `
+    + `for anything else.`;
 }
 
 // ---- The other parents, named in the sentence that owns them --------------

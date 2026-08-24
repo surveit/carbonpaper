@@ -10,28 +10,23 @@ from app.web.panel_links import (
     CONTRIBUTORS_NAMED,
     AppPanelLinks,
 )
+from app.runtime.lineage import EdgeKind, RowParent
 from app.web.trace_view import build_trace_view
 
-_STOP = {"reached_origin": False, "at_stage": "agg", "message": "summarizes its inputs"}
+from test_trace_helpers import fan_in_trace
 
 
 def _contributor(ordinal: int, columns: list[str] | None, stage: str = "filings"):
-    return {"stage_id": stage, "row_ordinal": ordinal, "kind": "contribution",
-            "columns": columns}
+    return RowParent(stage, ordinal, EdgeKind.contribution.value,
+                     tuple(columns) if columns else None)
 
 
-def _view(branches: list[dict]) -> dict:
-    trace = {
-        "run_id": "T1", "start_stage": "agg", "start_row": 0,
-        "steps": [{"stage_id": "agg", "stage_type": "aggregate", "row_ordinal": 0,
-                   "row": {"total": 1}, "columns_new": ["total"], "origin": "other",
-                   "branches": branches}],
-        "end": _STOP,
-    }
-    return build_trace_view(trace, {}, AppPanelLinks("proj", "T1"))
+def _view(branches: list[RowParent]) -> dict:
+    return build_trace_view(
+        fan_in_trace(branches, stage="agg"), {}, AppPanelLinks("proj", "T1"))
 
 
-def _groups(branches: list[dict]) -> list[dict]:
+def _groups(branches: list[RowParent]) -> list[dict]:
     return _view(branches)["nodes"][0]["contributor_groups"]
 
 
@@ -120,7 +115,7 @@ def test_contributors_are_kept_out_of_branches():
 
 
 def test_a_direct_parent_still_reaches_branches_beside_a_contribution():
-    direct = {"stage_id": "contracts", "row_ordinal": 7, "kind": "direct", "columns": None}
+    direct = RowParent("contracts", 7, EdgeKind.direct.value)
     node = _view([*_fan_in(3), direct])["nodes"][0]
     assert [b["row_ordinal"] for b in node["branches"]] == [7]
     assert node["contributor_groups"][0]["total"] == 3

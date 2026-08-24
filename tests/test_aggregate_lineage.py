@@ -110,7 +110,7 @@ def test_the_sidecar_round_trips_through_parquet(tmp_path):
     assert RowLineage.from_table(read_frame_table(path)) == lineage
 
 
-def test_the_walk_reports_contributors_and_stops(tmp_path):
+def test_the_walk_reports_contributors_and_takes_the_first(tmp_path):
     out, lineage = _persistable(
         handle_aggregate(place_stage(_stage([_TOTAL], [_TOTAL_COL])), as_inputs({"filings": FILINGS}), None))
     run_dir = write_run(tmp_path, [
@@ -122,9 +122,10 @@ def test_the_walk_reports_contributors_and_stops(tmp_path):
 
     trace = trace_row(run_dir, "agg", firm_a)
 
-    assert [s.stage_id for s in trace.steps] == ["agg"]
-    assert trace.end.reached_origin is False
-    assert "summarizes" in trace.end.message
+    assert [s.stage_id for s in trace.steps] == ["agg", "filings"]
+    assert trace.end.reached_origin is True
+    # Every contributor is still reported; the walk left by the first of them.
+    assert trace.steps[0].followed.row_ordinal == 0
     assert [b.row_ordinal for b in trace.steps[0].branches] == [0, 2]
     assert all(b.kind == EdgeKind.contribution.value for b in trace.steps[0].branches)
 
