@@ -29,8 +29,9 @@ PathsPane = PathsBehindFigure | NoPathsToShow
 
 
 def find_paths_behind_figure(
-    run_branches: WorkflowRunBranches, figure: CitedFigure
+    run_branches: WorkflowRunBranches, figure: CitedFigure,
+    marked_row: RowOrdinal | None = None,
 ) -> PathsBehindFigure:
     covers = find_contributing_rows(run_branches, figure.stage_id, figure.row_ordinal)
     return find_paths_behind(run_branches, covers.at_stage, covers.ordinals,
-                             set(covers.regrained_at) | {figure.stage_id})
+                             set(covers.regrained_at) | {figure.stage_id}, marked_row)

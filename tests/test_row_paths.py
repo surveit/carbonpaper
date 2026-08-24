@@ -63,8 +63,8 @@ def test_every_path_is_listed_and_none_is_folded_into_another(scoped):
     behind = _behind(scoped, "by_portfolio", _HEALTH)
 
     assert (behind.rows, len(behind.paths)) == (5, 2)
-    assert sorted(len(path.ordinals) for path in behind.paths) == [2, 3]
-    assert sum(len(path.ordinals) for path in behind.paths) == behind.rows
+    assert sorted(path.rows for path in behind.paths) == [2, 3]
+    assert sum(path.rows for path in behind.paths) == behind.rows
     # One entry per DISTINCT path, so two rows that decided alike share an entry.
     assert len(behind.paths) == len({tuple(b.id for b in p.whole_path)
                                      for p in behind.paths})
@@ -96,12 +96,13 @@ def test_each_path_opens_a_row_that_took_it_without_moving_the_figure(scoped):
     assert [path.example_ordinal for path in behind.paths] == [0, 5]
 
 
-@pytest.mark.parametrize("shown_row, holds_it", [(0, 0), (5, 1)])
-def test_each_row_sits_on_exactly_one_path(scoped, shown_row, holds_it):
-    """The pane marks the shown row's path by this membership, in the template."""
-    told = _behind(scoped, "by_portfolio", _HEALTH)
+@pytest.mark.parametrize("marked_row, holds_it", [(0, 0), (5, 1)])
+def test_the_marked_row_is_on_exactly_one_path(scoped, marked_row, holds_it):
+    told = find_paths_behind_figure(
+        scoped, CitedFigure(stage_id="by_portfolio", row_ordinal=_HEALTH),
+        marked_row=marked_row)
 
-    assert [shown_row in path.ordinals for path in told.paths] == [
+    assert [path.holds_the_marked_row for path in told.paths] == [
         position == holds_it for position, _ in enumerate(told.paths)
     ]
 

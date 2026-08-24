@@ -75,11 +75,13 @@ class FrameScale(BaseModel):
 class PathBehindFigure(BaseModel):
     """One distinct route the rows behind a figure took, and a row that took it."""
 
-    ordinals: list[RowOrdinal]  # every row on it; the pane shows one and counts the rest
+    rows: int
     # The branches this path holds that at least one other path does not.
     tells_it_apart: list[BranchOption]
     whole_path: list[BranchOption]
     example_ordinal: RowOrdinal
+    # True where the row the caller asked to mark is one of this path's own.
+    holds_the_marked_row: bool = False
 
 
 class PathsBehindFigure(BaseModel):
@@ -88,4 +90,4 @@ class PathsBehindFigure(BaseModel):
 
     @property
     def rows(self) -> int:
-        return sum(len(path.ordinals) for path in self.paths)
+        return sum(path.rows for path in self.paths)

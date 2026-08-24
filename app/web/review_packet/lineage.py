@@ -155,7 +155,6 @@ def _write_page(
         pane=_read_paths_pane(branches, stage_id, row),
         figure=CitedFigure(stage_id=stage_id, row_ordinal=row),
         links=links,
-        shown_row=row,
         feeds=None,
         view=trace_view,
         inputs=select_row_inputs(catalog, trace_view, links),
@@ -274,6 +273,6 @@ def _read_paths_pane(
             reason="the version this run pinned is unreadable, so no stage's branches are known")
     figure = CitedFigure(stage_id=stage_id, row_ordinal=row)
     try:
-        return find_paths_behind_figure(branches, figure)
+        return find_paths_behind_figure(branches, figure, marked_row=row)
     except (MissingLineage, StageNotInRun, RowOutOfRange) as no_paths:
         return NoPathsToShow(reason=str(no_paths))

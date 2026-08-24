@@ -117,8 +117,8 @@ def _one_hop_up(run_branches: WorkflowRunBranches, sid: StageId, row: RowOrdinal
 
 
 def find_paths_behind(run_branches: WorkflowRunBranches, at_stage: StageId,
-                      ordinals: list[RowOrdinal], on_route: set[StageId]
-                      ) -> PathsBehindFigure:
+                      ordinals: list[RowOrdinal], on_route: set[StageId],
+                      marked_row: RowOrdinal | None = None) -> PathsBehindFigure:
     """Every distinct route the rows took, each with one row that took it."""
     _refuse_a_frame_with_no_paths(run_branches, at_stage, ordinals)
     paths, index = index_paths(run_branches, at_stage, ordinals, on_route)
@@ -126,7 +126,7 @@ def find_paths_behind(run_branches: WorkflowRunBranches, at_stage: StageId,
     shared = _find_branches_on_every_path(paths)
     return PathsBehindFigure(
         at_stage=at_stage,
-        paths=[_read_one_path(run_branches, path, on_it, shared)
+        paths=[_read_one_path(run_branches, path, on_it, shared, marked_row)
                for path, on_it in zip(paths, took)],
     )
 
@@ -149,14 +149,15 @@ def index_paths(run_branches: WorkflowRunBranches, at_stage: StageId,
 
 
 def _read_one_path(run_branches: WorkflowRunBranches, path: BranchPath,
-                   ordinals: list[RowOrdinal], shared: frozenset[BranchId]
-                   ) -> PathBehindFigure:
+                   ordinals: list[RowOrdinal], shared: frozenset[BranchId],
+                   marked_row: RowOrdinal | None) -> PathBehindFigure:
     options = [run_branches.branch_options[branch_id] for branch_id in path]
     return PathBehindFigure(
-        ordinals=ordinals,
+        rows=len(ordinals),
         tells_it_apart=[o for o in options if o.id not in shared],
         whole_path=options,
         example_ordinal=ordinals[0],
+        holds_the_marked_row=marked_row in ordinals,
     )
 
 

@@ -143,7 +143,6 @@ async def run_stage_row_trace_view(
             "figure": _read_figure(figure) or CitedFigure(stage_id=stage_id,
                                                           row_ordinal=row),
             "links": links,
-            "shown_row": row,
             "project": project_id,
             "crumbs": build_run_child_crumbs(project_id, run_id, label="Row lineage"),
             "mermaid": mermaid,
@@ -157,7 +156,7 @@ def _read_paths_pane(project_id: str, run_id: str, stage_id: str, row: int,
     cited = _read_figure(figure) or CitedFigure(stage_id=stage_id, row_ordinal=row)
     try:
         return find_paths_behind_figure(
-            scope_view.read_run_branches(project_id, run_id), cited)
+            scope_view.read_run_branches(project_id, run_id), cited, marked_row=row)
     # A run whose version no longer resolves has no branch options to read paths from.
     except (MissingLineage, StageNotInRun, RowOutOfRange, DocumentNotFound,
             FileNotFoundError, RunVersionUnresolvableError) as no_paths:

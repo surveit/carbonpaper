@@ -10,7 +10,6 @@ from app.models.branch_analysis import (
     BranchRole,
 )
 from app.models.schema import StageId
-from app.models.stage import StageType
 from app.models.workflow_stage import WorkflowStage
 from app.runtime.branches import RowBranches
 
@@ -33,20 +32,6 @@ def find_code_branches(stages: dict[StageId, WorkflowStage],
                 first_body_line_number=branch.line,
                 last_body_line_number=branch.end_line or branch.line)
     return options
-
-
-# The four handlers that pass a BranchRecorder, in app.runtime.stages.
-_RECORDS_ARMS = frozenset({
-    StageType.python_row_function,
-    StageType.starlark_row_function,
-    StageType.filter_rows,
-    StageType.starlark_filter_rows,
-})
-
-
-def records_branch_arms(stage: WorkflowStage | None) -> bool:
-    """Whether executing this stage writes an arm sidecar; every other type writes none."""
-    return stage is not None and StageType(stage.stage.type) in _RECORDS_ARMS
 
 
 def read_stage_code(stage: WorkflowStage | None) -> str:
