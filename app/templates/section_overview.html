@@ -13,14 +13,28 @@
 <div class="ov-head">
   <div class="ov-title">
     <h1>{{ s.meta.display_name }}</h1>
-    <p class="ov-meta">
+    {# A div, not a p: the privacy form below is flow content a <p> cannot hold. #}
+    <div class="ov-meta">
       <span><b>model</b> {{ s.meta.model or 'unknown' }}</span>
       <span class="ov-dot">·</span>
       <span><b>created</b> {% if s.meta.created_at %}{{ s.meta.created_at | friendly_time }}{% else %}unknown{% endif %}</span>
       {% if s.meta.source %}<span class="ov-dot">·</span><span><b>source</b> {{ s.meta.source }}</span>{% endif %}
       <span class="ov-dot">·</span>
       <span><b>dir</b> <code>examples/{{ s.id }}/</code></span>
-    </p>
+      <span class="ov-dot">·</span>
+      {# The one screen that says which a project is, because it is the one every
+         listing drops a private project from — including the way back to here. #}
+      <form class="ov-privacy" method="post" action="/project/{{ s.id }}/private">
+        {% if s.meta.private %}
+        <span><b>private</b> listed nowhere</span>
+        <button type="submit" class="btn sm">List it</button>
+        {% else %}
+        <input type="hidden" name="private" value="on">
+        <span><b>listed</b> on the projects page</span>
+        <button type="submit" class="btn sm">Make private</button>
+        {% endif %}
+      </form>
+    </div>
   </div>
 </div>
 

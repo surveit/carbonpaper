@@ -16,7 +16,7 @@ from pydantic import ValidationError
 from app.seeds.seed import discover_workflow_files
 from app.services import project
 from app.services.project import (
-    WorkflowFile, read_project_name, export_project, import_project,
+    AdminProjectListing, WorkflowFile, read_project_name, export_project, import_project,
 )
 from app.web.config import templates
 
@@ -24,9 +24,8 @@ router = APIRouter()
 
 
 # ─── Path guards ───────────────────────────────────────────────────────────
-# Every {bundle}/{project_name} below is checked against a list the seam
-# itself just enumerated (discover_workflow_files() / list_projects()) —
-# never a filesystem path built directly from the request.
+# Every {bundle}/{project_name} below is checked against a list the seam itself
+# just enumerated — never a filesystem path built directly from the request.
 
 def _bundle_path(bundle: str) -> Path:
     for candidate in discover_workflow_files():
@@ -36,9 +35,14 @@ def _bundle_path(bundle: str) -> Path:
 
 
 def _known_project(project_name: str) -> str:
-    if project_name not in project.list_projects():
+    if project_name not in [row.id for row in _list_projects()]:
         raise HTTPException(status_code=404, detail=f"No project '{project_name}'")
     return project_name
+
+
+def _list_projects() -> list[AdminProjectListing]:
+    """Admin lists a private project, so it is where the operator finds one again."""
+    return project.list_project_listings_including_private()
 
 
 def _redirect_to_admin(msg: str) -> RedirectResponse:
@@ -54,7 +58,7 @@ async def admin_index(request: Request, msg: str | None = None):
         "admin.html",
         {
             "bundles": [wf_path.stem for wf_path in discover_workflow_files()],
-            "projects": project.list_projects(),
+            "projects": _list_projects(),
             "msg": msg,
         },
     )

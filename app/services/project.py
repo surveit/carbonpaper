@@ -66,6 +66,11 @@ def find_workspace_project_ids() -> list[str]:
     return sorted(child.name for child in root.iterdir() if child.is_dir())
 
 
+def find_private_project_ids() -> set[str]:
+    """What a directory scan must SUBTRACT: the flag is on the record, not on the folder."""
+    return {record.id for record in Project.list() if record.private}
+
+
 # ─── Status models ────────────────────────────────────────────────────────────
 # The typed shapes project_meta / project_state return. Every field is read off
 # disk truthfully (see project_state); an unknown fact is None / 0, never a
@@ -95,6 +100,12 @@ class ProjectListing(BaseModel):
     name: str
 
 
+class AdminProjectListing(ProjectListing):
+    """The admin screens' row. They are the one place a private project is listed AND said to be."""
+
+    private: bool
+
+
 class ProjectMeta(BaseModel):
     """`name` is the slug a bundle exports under; `display_name` is what a screen shows."""
 
@@ -104,6 +115,7 @@ class ProjectMeta(BaseModel):
     created_at: str | None
     model: str | None
     source: str | None
+    private: bool
 
 
 class ProjectState(BaseModel):
@@ -164,7 +176,7 @@ def project_meta(project_id: str) -> ProjectMeta:
     if record is None:
         # No record: the id is the only name this project has, and it is not invented.
         return ProjectMeta(name=project_id, display_name=project_id, title=None,
-                           created_at=None, model=None, source=None)
+                           created_at=None, model=None, source=None, private=False)
     return ProjectMeta(
         name=record.label(),
         display_name=record.display_name(),
@@ -172,6 +184,7 @@ def project_meta(project_id: str) -> ProjectMeta:
         created_at=record.authored_at,
         model=record.model,
         source=record.source,
+        private=record.private,
     )
 
 
@@ -260,15 +273,36 @@ def project_exists(project_id: str) -> bool:
 
 def list_projects() -> list[str]:
     """Ids, not names — a name identifies nothing, and two projects may share one."""
-    return sorted(record.id for record in Project.list())
+    return [listing.id for listing in list_project_listings()]
 
 
 def list_project_listings() -> list[ProjectListing]:
     """Both halves: the id to pass back, and the label to say it by."""
     return [
-        ProjectListing(id=record.id, name=record.display_name())
-        for record in sorted(Project.list(), key=lambda r: r.id)
+        ProjectListing(id=row.id, name=row.name)
+        for row in list_project_listings_including_private()
+        if not row.private
     ]
+
+
+def list_project_listings_including_private() -> list[AdminProjectListing]:
+    # delete_project keeps the record and removes the working copy, so the copy is the truth.
+    return [
+        AdminProjectListing(id=record.id, name=record.display_name(), private=record.private)
+        for record in sorted(Project.list(), key=lambda r: r.id)
+        if project_exists(record.id)
+    ]
+
+
+def read_project_names() -> dict[str, str]:
+    """A NAME lookup, not a listing: spend on a deleted project still has to say whose."""
+    return {record.id: record.display_name() for record in Project.list()}
+
+
+def set_project_private(project_id: str, private: bool) -> None:
+    record = Project.load(project_id)
+    record.private = private
+    record.save()
 
 
 def read_workflow_summary(name: str) -> workspace.WorkflowSummary:

@@ -113,6 +113,15 @@ def list_run_entries(project_id: str, area: str = PRODUCTION_RUNS) -> list[RunEn
     return sorted(entries, key=lambda e: e.run_id)
 
 
+def list_every_run_entry() -> list[RunEntry]:
+    """Every recorded run. One outlives its project's working copy, and so does its cost."""
+    entries = []
+    for doc_id in RunManifest.list_ids():
+        project_id, area, run_id = doc_id.split("/", 2)
+        entries.append(_read_entry(doc_id, run_id, project_id, area))
+    return sorted(entries, key=lambda e: (e.project, e.area, e.run_id))
+
+
 def _read_entry(doc_id: str, run_id: str, project_id: str, area: str) -> RunEntry:
     raw = RunManifest.load_raw_or_none(doc_id)
     if raw is None:

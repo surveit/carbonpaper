@@ -207,6 +207,8 @@
 
 .ov-dot { color: var(--border); }
 
+.ov-privacy { display: flex; align-items: center; gap: 8px; }
+
 /* The prominent "do this next" CTA. */
 .ov-cta {
     display: flex;

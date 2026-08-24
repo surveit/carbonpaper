@@ -111,13 +111,27 @@ def test_a_chat_that_names_no_project_is_labelled_rather_than_dropped():
     assert [e.link for e in entries] == [f"/chat/{sid}"]
 
 
-def test_a_run_under_a_project_the_workspace_does_not_list_is_not_read():
-    """The cost of reading per project: runs outliving their project record fall out of the total."""
+def test_a_run_outliving_its_project_record_is_still_counted():
+    """Deleting a project unspends nothing, so its runs stay in the total under their bare id."""
     _store_run("congresswatch", "20260816T090000",
                [_stage_record("score", LlmUsage(cost_usd=1.0, calls=1), "2026-08-16T09:00:00")])
     Project.delete("congresswatch")
 
-    assert read_workspace_spend().total.cost_usd == 0.0
+    spend = read_workspace_spend()
+
+    assert spend.total.cost_usd == 1.0
+    assert [count.label for count in spend.by_project] == ["congresswatch"]
+
+
+def test_a_private_project_is_counted_like_any_other():
+    """Spend is the operator's own figure; hiding a project must not hide its money."""
+    _store_run("congresswatch", "20260816T090000",
+               [_stage_record("score", LlmUsage(cost_usd=1.0, calls=1), "2026-08-16T09:00:00")])
+    record = Project.load("congresswatch")
+    record.private = True
+    record.save()
+
+    assert read_workspace_spend().total.cost_usd == 1.0
 
 
 def test_the_admin_page_serves_the_figure():

@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import BaseModel
 
 from app.services import project
+from app.services.project import AdminProjectListing
 from app.services.stage_cache_transfer import (
     CacheArchiveRejected, count_cached_entries, export_stage_cache, import_stage_cache,
 )
@@ -24,6 +25,7 @@ PAGE_TITLE = "Stage cache"
 
 class ProjectCacheSize(BaseModel):
     id: str
+    private: bool
     entry_count: int
 
 
@@ -34,8 +36,9 @@ async def cache_page(request: Request, msg: str | None = None) -> HTMLResponse:
         "admin_cache.html",
         {
             "projects": [
-                ProjectCacheSize(id=p, entry_count=count_cached_entries(p))
-                for p in project.list_projects()
+                ProjectCacheSize(id=row.id, private=row.private,
+                                 entry_count=count_cached_entries(row.id))
+                for row in _list_projects()
             ],
             "msg": msg,
             "crumbs": build_home_crumbs(PAGE_TITLE),
@@ -78,9 +81,14 @@ async def upload_cache(
 
 
 def _known_project(project_name: str) -> str:
-    if project_name not in project.list_projects():
+    if project_name not in [row.id for row in _list_projects()]:
         raise HTTPException(status_code=404, detail=f"No project '{project_name}'")
     return project_name
+
+
+def _list_projects() -> list[AdminProjectListing]:
+    """Admin lists a private project, so its cache is still exportable and importable."""
+    return project.list_project_listings_including_private()
 
 
 def _redirect_to_cache_page(msg: str) -> RedirectResponse:
