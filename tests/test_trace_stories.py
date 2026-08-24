@@ -127,3 +127,17 @@ def _wide_fan_in_stories(contributors: int) -> list[dict]:
                 "message": "this row summarizes its inputs"},
     }
     return build_trace_view(trace, {}, AppPanelLinks("proj", "T1"))["stories"]
+
+
+def test_a_walk_that_reached_no_row_offers_no_story(tmp_path):
+    """#833 read nodes[0] unguarded, so a stage with no output 500ed the page."""
+    run_dir = _join_run(tmp_path)
+    for parquet in (run_dir / "outputs").glob("j.*"):
+        parquet.unlink()
+
+    from app.runtime.trace import trace_row, trace_to_dict
+    view = build_trace_view(
+        trace_to_dict(trace_row(run_dir, "j", 0)), {}, AppPanelLinks("proj", "T1"))
+
+    assert view["nodes"] == [] and view["stories"] == []
+    assert "missing from the run" in view["upstream"]["message"]
