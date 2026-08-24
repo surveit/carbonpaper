@@ -61,6 +61,20 @@ def test_a_figure_over_a_merge_that_no_row_fed_still_names_one_grain(run_id):
                   suffix=".json")).json()
     assert payload["covers"]["at_stage"] == "million_total"
     assert payload["covers"]["ordinals"] == [0]
+    assert payload["covers"]["fed_by_no_rows"] == [0]
+
+
+def test_the_page_says_when_no_row_fed_the_figure(run_id):
+    # 1 row of million_total is still 1 row, so counting it is not enough.
+    page = TestClient(app).get(
+        scope_url(run_id, "million_total_summed", "summed_total", 0))
+    assert ("No row fed this figure: the run recorded nothing behind the 1 row it "
+            "names at million_total." in page.text)
+
+
+def test_the_page_says_nothing_of_the_kind_where_rows_did_feed_the_figure(run_id):
+    page = TestClient(app).get(scope_url(run_id, "grant_totals", "total_amount", 0))
+    assert "No row fed this figure" not in page.text
 
 
 def test_the_page_says_how_much_of_the_widest_frame_is_off_screen(run_id):

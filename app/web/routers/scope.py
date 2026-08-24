@@ -38,6 +38,7 @@ async def scope_page(request: Request, project_id: str, run_id: str,
         {
             "project": project_id, "run_id": run_id, "scope": scope,
             "answers": scope_view.say_what_the_rows_answer(scope),
+            "unfed": scope_view.say_what_no_row_fed(scope),
             "off_screen": scope_view.say_how_much_is_off_screen(scope.scale, lookups),
             "funnel": scope_view.narrow_the_funnel(scope.scale, lookups),
             "payload": _payload(scope, cuts),

@@ -11,6 +11,7 @@
   Context the route passes:
     scope      = app.models.scope_map.ScopeMap
     answers    = the sentence under the figure (scope_view.say_what_the_rows_answer)
+    unfed      = what no row fed, or None when every row it names has rows behind it
     off_screen = the widest frame's share, or None when the figure covers all of it
     payload    = the same map as JSON, plus `cuts`, for the drawing
 #}
@@ -20,6 +21,9 @@
 
 {% block section %}
 <section class="scope">
+  {% if unfed %}
+  <p class="banner banner-warn">{{ unfed }}</p>
+  {% endif %}
   <header class="scope-figure">
     <p class="scope-cell">
       <span class="badge pending scope-beta">beta</span>
