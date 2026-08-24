@@ -254,7 +254,7 @@ def _carry_forward(order, stages, lineages, rows, recorded, implied, groups, ran
         here = own.taken if own is not None else [()] * len(inherited)
         fed = groups.get(sid, {})
         paths[sid] = [
-            tuple(sorted(set(carried) | set(_code_branches(sid, cell)) | set(extra)
+            tuple(sorted(set(carried) | set(_read_code_branches(sid, cell)) | set(extra)
                          | set(fed.get(i, ())), key=lambda b: rank.get(b, (len(order), 0, b))))
             for i, (carried, cell, extra)
             in enumerate(zip(inherited, here, implied[sid].per_row))
@@ -278,20 +278,20 @@ def _merge(paths, parents) -> BranchPath:
     return tuple(dict.fromkeys(b for held in carried for b in held))
 
 
-def _code_branches(sid: StageId, cell) -> list[BranchId]:
+def _read_code_branches(sid: StageId, cell) -> list[BranchId]:
     return [f"{sid}|{arm}" for arm in dict.fromkeys(cell or ())]
 
 
 def _rank_branches(order: list[StageId], catalog) -> dict[BranchId, tuple]:
     """One order for a row's branches, so two rows holding the same set compare equal."""
-    return {branch: (_position(order, fact.stage), fact.decided_at or 0, branch)
+    return {branch: (_find_position(order, fact.stage), fact.decided_at or 0, branch)
             for branch, fact in catalog.items()}
 
 
 def _count_taken(recorded, implied, groups) -> Counter[BranchId]:
     taken: Counter[BranchId] = Counter(
         branch for sid in recorded for cell in recorded[sid].taken
-        for branch in _code_branches(sid, cell))
+        for branch in _read_code_branches(sid, cell))
     for found in implied.values():
         taken.update(b for held in found.per_row for b in held)
         taken.update(found.unreached)
@@ -375,7 +375,7 @@ def _read_lineage(run_dir: Path, stage_id: StageId) -> RowLineage | None:
     return RowLineage.from_table(read_frame_table(path)) if path.exists() else None
 
 
-def _position(order: list[StageId], stage_id: StageId) -> int:
+def _find_position(order: list[StageId], stage_id: StageId) -> int:
     return order.index(stage_id) if stage_id in order else -1
 
 
