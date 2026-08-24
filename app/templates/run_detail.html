@@ -222,7 +222,13 @@
 {% include "_run_issues.html" %}
 </section>
 
-{# ── 2. RUN OUTPUTS — the files this run published, listed as links. Never a button:
+{# ── 2. WHAT THIS RUN PUBLISHED — its result, read AFTER the state of the run that
+      produced it: a figure means nothing to a reader who does not yet know whether the
+      run finished. Every value links to the row it was read from. Absent until a stage
+      declares a workflow output. ── #}
+{% include "_run_published.html" %}
+
+{# ── 3. RUN OUTPUTS — the files this run published, listed as links. Never a button:
       a CTA is an imperative and a finished run has none, and sizing a primary button
       to a filename is how `venezuela_lobbying_q1q2_2026.xlsx` came to dominate the
       page. Absent until a publish stage has actually written something. ── #}
@@ -237,7 +243,7 @@
 </section>
 {% endif %}
 
-{# ── 3. RUN VISUAL SUMMARY — the workflow as a MINIMAP: a short band held at a readable zoom rather than
+{# ── 4. RUN VISUAL SUMMARY — the workflow as a MINIMAP: a short band held at a readable zoom rather than
       the whole graph fitted to width. The reader's continuous act is picking a
       stage — the guide rail and this band both do that — and surveying the whole
       shape is a once-per-run act, which is what ⛶ is for. Built from the version
@@ -291,7 +297,7 @@
 {% endif %}
 </section>
 
-{# ── 4. STAGE DETAILS — one stage, picked from the band above or the guide rail.
+{# ── 5. STAGE DETAILS — one stage, picked from the band above or the guide rail.
       Not on the page until one is: a placeholder box claims space on a page whose
       whole point is having less on it. loadStage() unhides it.
 

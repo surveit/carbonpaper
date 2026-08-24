@@ -13,4 +13,5 @@ class WorkflowOutput(PersistedModel):
 
     slug: str
     label: str
+    primary: bool = False
     citation: StageOutputCellCitation

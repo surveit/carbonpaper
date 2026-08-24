@@ -51,3 +51,14 @@ def test_the_slug_does_not_depend_on_a_run():
     # Two parses of the same authored stage agree, because nothing here is per-run.
     declared = [{"slug": "external-spend", "label": "Paid", "column": "external_spend"}]
     assert _stage(declared).workflow_outputs == _stage(declared).workflow_outputs
+
+
+def test_an_output_is_not_primary_unless_declared():
+    stage = _stage([{"slug": "external-spend", "label": "Paid", "column": "external_spend"}])
+    assert [o.primary for o in stage.workflow_outputs] == [False]
+
+
+def test_an_output_can_be_marked_primary():
+    stage = _stage([{"slug": "external-spend", "label": "Paid",
+                     "column": "external_spend", "primary": True}])
+    assert [o.primary for o in stage.workflow_outputs] == [True]

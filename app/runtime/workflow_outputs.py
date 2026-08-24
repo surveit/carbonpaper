@@ -32,7 +32,7 @@ def save_workflow_outputs(
 ) -> list[WorkflowOutput]:
     published = [
         WorkflowOutput(
-            slug=output.slug, label=output.label,
+            slug=output.slug, label=output.label, primary=output.primary,
             citation=StageOutputCellCitation(
                 run_id=identity.run_id, stage_id=workflow_stage.id,
                 row_ordinal=PUBLISHED_ROW, column=output.column,
