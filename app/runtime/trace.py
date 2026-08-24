@@ -35,7 +35,7 @@ def _is_row_preserving(stage_type: str) -> bool:
 
 @dataclass(frozen=True)
 class ContributorChoice:
-    """Which contributor to follow at a fan-in. Supplied by the reader, never by the walk."""
+    """An override: take this contributor at a fan-in, not the first recorded one."""
 
     stage_id: str
     row_ordinal: int
@@ -59,7 +59,7 @@ class StageTransform:
     source_row: int | None = None
     # How many files the stage read; None where the manifest did not record any binding.
     source_file_count: int | None = None
-    # The contribution edge the caller named; every step above it is that row's.
+    # The contribution edge this row was left by; every step above it is that row's.
     followed: RowParent | None = None
 
 
@@ -186,21 +186,27 @@ def _advance_positionally(
     return parent_id, r
 
 
-def _summarizes_message(contributors: int) -> str:
-    if not contributors:
-        return ("this row summarizes its inputs, and the run recorded that no input "
-                "row fed it — an aggregation over an empty group")
-    return ("this row summarizes its inputs rather than being made from one "
-            "of them — open the contributors to go further")
+def _summarizes_message() -> str:
+    return ("this row summarizes its inputs, and the run recorded that no input "
+            "row fed it — an aggregation over an empty group")
 
 
 def _find_fan_in(
     stage_type: str, spine: RowParent | None, hops: list[RowParent] | None
 ) -> list[RowParent] | None:
-    """The contributors the walk cannot choose between; None where it needs no choice."""
+    """The rows this one was summarized from; None where the walk faces no fan-in."""
     if stage_type == StageType.input_data or spine is not None or hops is None:
         return None
     return hops
+
+
+def _choose_contributor(
+    sid: str, fan_in: list[RowParent], pending: list[ContributorChoice]
+) -> RowParent | None:
+    """The first recorded contribution edge, unless the caller named a different one."""
+    if pending:
+        return _match_chosen_contributor(sid, fan_in, pending.pop(0))
+    return fan_in[0] if fan_in else None
 
 
 def _match_chosen_contributor(
@@ -236,7 +242,7 @@ def _advance(
     if followed is not None:
         return _advance_via_lineage(frames, by_id, sid, followed)
     if fan_in is not None:
-        return TraceEnd(False, sid, _summarizes_message(len(fan_in)))
+        return TraceEnd(False, sid, _summarizes_message())
     if not parents:
         return TraceEnd(False, sid, "the manifest records no input edge for this stage")
     # Nothing recorded: the only remaining route is the ordinal, and only where
@@ -322,8 +328,7 @@ def trace_row_from(
         spine, branches = _split_spine(hops or [])
         fan_in = _find_fan_in(stage_type, spine, hops)
         followed = (
-            _match_chosen_contributor(sid, fan_in, pending.pop(0))
-            if fan_in is not None and pending else None
+            None if fan_in is None else _choose_contributor(sid, fan_in, pending)
         )
         columns_parent_id = _columns_parent_id(parents, spine)
         parent_table = (

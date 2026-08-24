@@ -45,14 +45,15 @@ def test_the_parent_the_walk_did_not_follow_is_an_entry_of_its_own(tmp_path):
 def test_a_fan_in_small_enough_to_name_gets_one_entry_per_row(tmp_path):
     stories = _stories(_summed_run(tmp_path), "totals", 0)
 
-    assert [s["kind"] for s in stories] == ["shown", "contributor", "contributor"]
+    # The first is the one the walk took; the second is the override that swaps it.
+    assert [s["kind"] for s in stories] == ["shown", "crossed", "contributor"]
     assert [(s["stage_id"], s["row_ordinal"]) for s in stories[1:]] == [
         ("filings", _ACME), ("filings", _BOREALIS),
     ]
-    # Each opens THIS page crossed into that row, not a walk starting over at it.
     assert [s["rows"] for s in stories[1:]] == [2, 2]
-    assert stories[1]["href"] == (
-        "/project/proj/runs/T1/stage/totals/row/0/trace/view?via=filings%3A0")
+    assert stories[1]["href"] is None
+    assert stories[2]["href"] == (
+        "/project/proj/runs/T1/stage/totals/row/0/trace/view?via=filings%3A1")
 
 
 def test_a_cohort_too_big_to_name_is_one_entry_standing_for_all_of_it():

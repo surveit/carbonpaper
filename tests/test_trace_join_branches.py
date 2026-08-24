@@ -86,7 +86,7 @@ def test_spine_follows_the_right_side_when_only_it_matched(tmp_path):
     assert trace.end.reached_origin is True
 
 
-def test_contribution_parents_are_never_walked_into(tmp_path):
+def test_a_contribution_parent_is_walked_into_and_marked(tmp_path):
     lineage = RowLineage([[
         RowParent("filings", 0, EdgeKind.contribution.value),
         RowParent("filings", 1, EdgeKind.contribution.value),
@@ -97,11 +97,12 @@ def test_contribution_parents_are_never_walked_into(tmp_path):
          "df": pd.DataFrame({"total": [1700]}), "lineage": lineage},
     ])
     trace = trace_row(run_dir, "agg", 0)
-    assert [s.stage_id for s in trace.steps] == ["agg"]
+    assert [s.stage_id for s in trace.steps] == ["agg", "filings"]
     assert len(trace.steps[0].branches) == 2
-    assert trace.end.reached_origin is False
-    assert "summarizes" in trace.end.message
-    # Each contributor is still a promotable starting point.
+    # The first recorded edge, and the step says it left by one.
+    assert trace.steps[0].followed.row_ordinal == 0
+    assert trace.end.reached_origin is True
+    # The other contributor is still a promotable starting point.
     promoted = trace_row(run_dir, "filings", trace.steps[0].branches[1].row_ordinal)
     assert promoted.steps[0].row["client"] == "Borealis"
 

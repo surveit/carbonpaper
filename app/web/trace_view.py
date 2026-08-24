@@ -106,7 +106,7 @@ def build_trace_view(
     end = trace["end"]
     truncated = not end["reached_origin"]
     path = _read_path(trace)
-    paths = _cut_paths_at_each_node(chrono, path)
+    paths = _build_path_per_node(chrono, path)
 
     nodes = [_build_node(i, chrono, stages, links, truncated, paths[i])
              for i in range(len(chrono))]
@@ -143,7 +143,7 @@ def _read_path(trace: dict[str, Any]) -> TracePath:
     )
 
 
-def _cut_paths_at_each_node(
+def _build_path_per_node(
     chrono: list[dict[str, Any]], path: TracePath
 ) -> list[TracePath]:
     """A pick at a fan-in REPLACES the choice made there; the crossings past it are dropped."""

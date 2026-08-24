@@ -190,9 +190,7 @@ tr.carried td.lin-v{color:var(--muted)}
     <div class="lin-snavtot" id="storiestot"></div>
   </div>
   <div class="lin-story">
-    <div class="lin-note"><b>The steps are one example of that path.</b> They follow this one row,
-      as it stood after each stage. Other rows may have run the same path; this page does not
-      count them. Click a step to see the row.</div>
+    <div class="lin-note" id="stepsnote"></div>
     <div id="steps"></div>
     <details class="lin-graph"><summary>Lineage graph</summary>
       <pre class="mermaid" id="mmd">{{ mermaid }}</pre>
@@ -317,15 +315,16 @@ function cohortReach(s){
 function shownWhy(){
   const steps = `${V.nodes.length} step${V.nodes.length > 1 ? 's' : ''}`;
   const crossed = V.stories.filter(s => s.kind === 'crossed').length;
-  const across = crossed ? `, across ${crossed} fan-in${crossed > 1 ? 's' : ''} you chose` : '';
+  const across = crossed ? `, across ${crossed} summarizing step${crossed > 1 ? 's' : ''}` : '';
   return V.upstream.truncated
     ? `the path told here — ${steps}${across}, stopping at <code>${esc(V.nodes[0].stage_id)}</code>`
     : `the path told here — ${steps}${across}, back to the source`;
 }
 function storiesNote(){
   if(V.stories.length > 1)
-    return 'Every other parent this walk recorded is listed here. Picking one of the rows a '
-         + 'step summarized carries this path across that step; any other parent is traced from itself.';
+    return 'Every other parent this walk recorded is listed here. Where a step summarized many '
+         + 'rows, the first is followed and picking another re-tells this path across that step; '
+         + 'any other parent is traced from itself.';
   return V.upstream.truncated
     ? 'No step named a second parent, and the walk stopped before the source.'
     : 'No step named a second parent, so this row has one path from the source.';
@@ -392,6 +391,7 @@ function renderSteps(){
       <span class="right">${n.role==='claim' ? '<span class="claim-tag">published claim</span> ' : ''}<span class="row-chip">row ${n.row_ordinal}</span>${deltaOf(n)}</span>
     </button>`).join('');
   document.getElementById('steps').innerHTML = html;
+  document.getElementById('stepsnote').innerHTML = stepsNote();
 }
 // Drawn above the step it belongs to, which is the step BELOW the crossing: the
 // steps above it are the contributor's, and this one's row is the summary's.
@@ -399,10 +399,23 @@ function crossingOf(n){
   const f = n.followed;
   if(!f) return '';
   const one = f.of > 1 ? `one of the ${f.of} rows` : 'the one row';
-  return `<div class="cross"><span class="mark">↑ crossed</span><span>You chose to follow
-    <span class="sid">${esc(f.stage_id)}</span> row ${f.row_ordinal}, ${one} summarized at
-    step ${n.step}. Every step above is that row — step ${n.step}'s own row starts here, so
-    nothing above it was compared against it.</span></div>`;
+  const rest = f.of > 1
+    ? ` The other ${f.of - 1} are in <b>Stories</b>.` : '';
+  return `<div class="cross"><span class="mark">↑ crossed</span><span>Following
+    <span class="sid">${esc(f.stage_id)}</span> row ${f.row_ordinal} — ${one} summarized into
+    step ${n.step}. Every step above is that row, and nothing above was compared against
+    step ${n.step}'s row.${rest}</span></div>`;
+}
+// The one claim the page makes about itself: a break is the only place a choice
+// stood in for a fact, so a run of steps with none is row-level lineage.
+function stepsNote(){
+  const crossed = V.nodes.filter(n => n.followed).length;
+  if(!crossed) return `<b>No step here summarized many rows into one.</b> This is one row, `
+    + `cell by cell, from ${esc(V.nodes[0].stage_id)} to the claim — nothing was chosen for you.`;
+  const breaks = `${crossed} ↑ crossed break${crossed > 1 ? 's' : ''}`;
+  return `<b>Read the ${breaks} below as the only guesses on this page.</b> A step that `
+    + `summarized many rows into one has no single row above it, so the FIRST row the run `
+    + `recorded is followed. Everywhere else this is one row, cell by cell.`;
 }
 
 // ---- The other parents, named in the sentence that owns them --------------
