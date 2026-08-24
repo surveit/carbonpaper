@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from app.core.branch_source import (
     RECORDER_NAME,
@@ -9,7 +10,7 @@ from app.core.branch_source import (
     instrument_branches,
     read_branch_test,
 )
-from app.runtime.branches import BRANCH_SCHEMA, BranchRecorder, RowBranches
+from app.runtime.branches import BRANCH_SCHEMA, BranchesTaken, BranchRecorder, RowBranches
 from app.runtime.code import load_function
 from app.runtime.starlark_code import compile_starlark_function
 
@@ -213,3 +214,147 @@ def test_a_four_line_body_carries_its_last_line() -> None:
     # Lighting only the body's first statement says the other three never ran.
     branch, _ = _only(_FOUR_LINE_BODY)
     assert (branch.line, branch.end_line) == (3, 6)
+
+
+# ─── a conditional expression: an arm with no suite to open ──────────────────
+
+CHOICE_CHAIN = """
+def transform(row):
+    k = "a" if row["a"] else "b" if row["b"] else "c"
+    return dict(row, k=k)
+"""
+
+FALSY_ARMS = """
+def transform(row):
+    return dict(row,
+        a = 0 if row["p"] else 1,
+        b = "" if row["p"] else "x",
+        c = None if row["p"] else 1,
+        d = [] if row["p"] else [1],
+        e = False if row["p"] else True)
+"""
+
+COMPREHENSION = """
+def transform(row):
+    kept = [x for x in row["xs"] if x > 0]
+    marks = [1 if x else 0 for x in row["xs"]]
+    return dict(row, kept=kept, marks=marks)
+"""
+
+NESTED_CHOICE = """
+def transform(row):
+    k = (1 if row["c"] else 2) if row["d"] else 3
+    return dict(row, k=k)
+"""
+
+# A stage in the grants workflow's shape: several groups marked, none by an `if` statement.
+GROUP_MARKERS = """
+WINDOW_FROM = 3
+WINDOW_TO = 8
+
+def transform(row):
+    east = row["region"] == "east"
+    year = row["year"]
+    quarter = row["quarter"]
+    in_window = east and quarter != None and quarter >= WINDOW_FROM and quarter <= WINDOW_TO
+    in_years = east and year >= 2 and year <= 4
+    return dict(row,
+        counts_all = 1,
+        counts_east = 1 if east else 0,
+        counts_window = 1 if in_window else 0,
+        counts_years = 1 if in_years else 0,
+        counts_no_quarter = 1 if quarter == None else 0)
+"""
+
+GRANTS_BY_REASON: dict[str, dict[str, Any]] = {
+    "inside the window": {"region": "east", "year": 3, "quarter": 5},
+    "before the window": {"region": "east", "year": 1, "quarter": 1},
+    "after the window": {"region": "east", "year": 4, "quarter": 9},
+    "no quarter recorded": {"region": "east", "year": 3, "quarter": None},
+    "west, so in no group": {"region": "west", "year": 3, "quarter": 5},
+}
+
+
+def test_a_conditional_expression_names_both_its_arms() -> None:
+    assert [branch.id for branch in find_branches(CHOICE_CHAIN)] == [
+        "transform/0:choice0:if", "transform/0:choice0:elif0", "transform/0:choice0:else",
+    ]
+
+
+def test_an_arm_reads_as_the_choice_it_was_an_arm_of() -> None:
+    lines = CHOICE_CHAIN.split("\n")
+    assert [read_branch_test(lines, b) for b in find_branches(CHOICE_CHAIN)] == [
+        (3, "if row['a']"), (3, "elif row['b']"), (3, "else"),
+    ]
+
+
+def test_a_conditional_expression_records_the_arm_the_row_took() -> None:
+    recorder = BranchRecorder()
+    transform = load_function(CHOICE_CHAIN, "transform", "transform", recorder)
+    assert transform is not None
+    for index, row in enumerate(({"a": 1, "b": 0}, {"a": 0, "b": 1}, {"a": 0, "b": 0})):
+        recorder.open_row(index)
+        transform(row)
+        recorder.close_row()
+    assert recorder.branches_for(0) == ("transform/0:choice0:if",)
+    assert recorder.branches_for(1) == ("transform/0:choice0:elif0",)
+    assert recorder.branches_for(2) == ("transform/0:choice0:else",)
+
+
+def test_an_arm_keeps_its_own_value_however_falsy_that_value_is() -> None:
+    # The recorder folds in with `or`, which yields the arm only because it returns None.
+    for interpreter in (load_function, compile_starlark_function):
+        recorder = BranchRecorder()
+        plain = interpreter(FALSY_ARMS, "transform", "transform")
+        watched = interpreter(FALSY_ARMS, "transform", "transform", recorder)
+        assert plain is not None and watched is not None
+        for index, chose_the_first_arm in enumerate((True, False)):
+            recorder.open_row(index)
+            assert (watched({"p": chose_the_first_arm})
+                    == plain({"p": chose_the_first_arm}))
+            recorder.close_row()
+
+
+def test_a_comprehension_runs_per_element_so_it_offers_no_branch() -> None:
+    assert find_branches(COMPREHENSION) == []
+
+
+def test_a_conditional_expression_inside_another_records_both() -> None:
+    recorder = BranchRecorder()
+    transform = load_function(NESTED_CHOICE, "transform", "transform", recorder)
+    assert transform is not None
+    for index, row in enumerate(({"c": 1, "d": 1}, {"c": 0, "d": 1}, {"c": 1, "d": 0})):
+        recorder.open_row(index)
+        assert transform(row)["k"] == (1, 2, 3)[index]
+        recorder.close_row()
+    assert recorder.branches_for(0) == ("transform/0:choice0:if", "transform/0:choice1:if")
+    assert recorder.branches_for(1) == ("transform/0:choice0:if", "transform/0:choice1:else")
+    assert recorder.branches_for(2) == ("transform/0:choice0:else",)
+
+
+def _group_marker_arms() -> dict[str, BranchesTaken]:
+    recorder = BranchRecorder()
+    plain = compile_starlark_function(GROUP_MARKERS, "transform", "transform")
+    watched = compile_starlark_function(GROUP_MARKERS, "transform", "transform", recorder)
+    assert plain is not None and watched is not None
+    taken: dict[str, BranchesTaken] = {}
+    for index, (reason, row) in enumerate(GRANTS_BY_REASON.items()):
+        recorder.open_row(index)
+        assert watched(dict(row)) == plain(dict(row))
+        recorder.close_row()
+        taken[reason] = recorder.branches_for(index)
+    return taken
+
+
+def test_a_stage_that_decides_a_figure_without_an_if_is_no_longer_silent() -> None:
+    taken = _group_marker_arms()
+    window = "transform/5:choice1"
+    assert (taken["inside the window"] or ())[1] == f"{window}:if"
+    assert all((arms or ())[1] == f"{window}:else"
+               for reason, arms in taken.items() if reason != "inside the window")
+
+
+def test_each_reason_a_row_fell_outside_the_figure_took_its_own_arms() -> None:
+    # Four `else` arms all reading `else`; the whole set is what tells the reasons apart.
+    taken = _group_marker_arms()
+    assert len(set(taken.values())) == len(GRANTS_BY_REASON)
