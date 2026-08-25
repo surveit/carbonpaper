@@ -93,8 +93,7 @@ def test_rows_page_links_each_row_to_its_trace(examples_dir, client):
     _write_run(examples_dir, _df(3))
     r = client.get(f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows")
     assert r.status_code == 200
-    # The row carries its own trace href, 0-indexed; static/cell-lineage.js opens it
-    # and appends the column of the cell clicked.
+    # The row holds the href, the header the column static/cell-lineage.js appends.
     for i in range(3):
         assert f'data-href="/project/{PROJ}/runs/{RUN}/stage/{STAGE}/row/{i}/trace/view"' in r.text
     assert 'data-column="name"' in r.text
