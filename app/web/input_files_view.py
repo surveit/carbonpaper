@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from enum import Enum
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -32,6 +33,13 @@ from app.web.scope_view import read_run_branches
 OTHER_ROWS_SHOWN = 40
 
 
+class Basis(str, Enum):
+    """Which rows, or which columns, every panel of the tab is about."""
+
+    relevant = "relevant"
+    all = "all"
+
+
 class PreviewRow(BaseModel):
     """`label` is the line this row holds in the file, where the loader stamped one."""
 
@@ -57,6 +65,27 @@ class InputFileSlice(BaseModel):
     rows: list[PreviewRow]
     ordinals: list[RowOrdinal]
 
+    @property
+    def read_percent(self) -> float:
+        return _share(self.rows_read, self.rows_in_file or self.rows_read)
+
+    @property
+    def relevant_percent(self) -> float:
+        return _share(self.rows_relevant, self.rows_in_file or self.rows_read)
+
+    @property
+    def columns_percent(self) -> float:
+        return _share(len(self.columns_relevant), len(self.columns_read))
+
+
+# A slice of a big file draws as nothing at all, and a bar drawn as nothing reads
+# as a bar that failed to draw.
+NARROWEST_BAR = 0.5
+
+
+def _share(part: int, whole: int) -> float:
+    return max(part * 100 / whole, NARROWEST_BAR) if whole else 0.0
+
 
 class InputFilesView(BaseModel):
     citation: StageOutputCellCitation
@@ -75,13 +104,21 @@ def load_input_files(project_id: str, run_id: str,
                                  citation.stage_id, citation.column)
     outputs = resolve_run_dir(project_id, run_id) / "outputs"
     manifest = read_run_manifest(project_id, run_id)
-    files = [_build_one_file(outputs, manifest, placed.id,
-                             sorted(reached[placed.id]),
-                             sorted(behind.get(placed.id, ())))
-             for placed in workflow.list_workflow_stages()
-             if isinstance(placed.stage, InputDataStage) and placed.id in reached]
+    reading = [placed.id for placed in workflow.list_workflow_stages()
+               if isinstance(placed.stage, InputDataStage) and placed.id in reached]
+    files = [_build_one_file(outputs, manifest, stage_id, sorted(reached[stage_id]),
+                             sorted(behind.get(stage_id, ())))
+             # The run's order, not the workflow's: the reader met these files in it.
+             for stage_id in _in_the_order_the_run_read_them(manifest, reading)]
     return InputFilesView(citation=citation, files=files,
                           value=_read_the_cited_cell(outputs, citation))
+
+
+def _in_the_order_the_run_read_them(manifest: RunManifest,
+                                   stage_ids: Sequence[StageId]) -> list[StageId]:
+    ran = [record.stage_id for record in manifest.stage_records]
+    return sorted(stage_ids, key=lambda stage_id: (ran.index(stage_id)
+                                                   if stage_id in ran else len(ran)))
 
 
 def _build_one_file(outputs: Path, manifest: RunManifest, stage_id: StageId,

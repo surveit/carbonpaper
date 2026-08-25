@@ -1,0 +1,125 @@
+{# The Input files tab: each file this figure read, sliced to the rows and columns it
+   needed. Injected into the row lineage page, which drives it with input-files.js.
+   `reason` instead of `view` where no slice can be worked out.
+
+   Context: project, run_id, stage_id, column, and either view
+   (app.web.input_files_view.InputFilesView) or reason. #}
+{% if reason %}
+<p class="banner banner-warn">No input files for <code>{{ column }}</code> at
+  <code>{{ stage_id }}</code> — {{ reason }}.</p>
+{% elif not view.files %}
+<p class="banner banner-warn">This run recorded no file behind
+  <code>{{ column }}</code>.</p>
+{% else %}
+{% from "_picker.html" import picker %}
+<div class="if-tab" data-project="{{ project }}" data-run="{{ run_id }}"
+     data-stage="{{ stage_id }}" data-column="{{ column }}"
+     data-row="{{ view.citation.row_ordinal }}"
+     data-rows="relevant" data-columns="relevant">
+
+  <div class="if-toolbar">
+    {% call picker("Choose file", hint="The files this run read", size="sm") %}
+    <select id="if-file" class="picker-native if-file">
+      {%- for file in view.files %}
+      <option value="{{ file.stage_id }}" data-name="{{ file.filename }}"
+              data-side="{{ file.size_label }}"
+              data-meta="read by {{ file.stage_id }} · {{ "{:,}".format(file.rows_relevant) }} of {{ "{:,}".format(file.rows_read) }} rows behind this figure"
+              >{{ file.filename }}</option>
+      {%- endfor %}
+    </select>
+    {% endcall %}
+    <span class="if-by">read by <code class="if-stage">{{ view.files[0].stage_id }}</code></span>
+    <span class="if-toggles">
+      <span class="if-tg" data-axis="rows">
+        <button type="button" class="on" data-pick="relevant">Relevant rows</button
+        ><button type="button" data-pick="all">All rows</button></span>
+      <span class="if-tg" data-axis="columns">
+        <button type="button" class="on" data-pick="relevant">Relevant columns</button
+        ><button type="button" data-pick="all">All columns</button></span>
+    </span>
+  </div>
+
+  {% for file in view.files %}
+  <section class="if-file-pane{% if not loop.first %} hidden{% endif %}"
+           data-file="{{ file.stage_id }}">
+    <div class="if-bars">
+      <div class="if-bar"><span class="if-bar-lab">rows</span>
+        <span class="if-track">
+          <i class="if-read" style="width: {{ file.read_percent }}%"></i>
+          <i class="if-need" style="width: {{ file.relevant_percent }}%"></i></span>
+        <span class="if-num"><b>{{ "{:,}".format(file.rows_relevant) }}</b> behind this
+          figure · {{ "{:,}".format(file.rows_read) }} the run read
+          {%- if file.rows_in_file %} · {{ "{:,}".format(file.rows_in_file) }} in the file
+          {%- else %} — the whole file{% endif %}
+          {%- if file.cap %} <span class="if-cap">capped at {{ "{:,}".format(file.cap) }}</span>{% endif %}
+        </span></div>
+      <div class="if-bar"><span class="if-bar-lab">columns</span>
+        <span class="if-track"><i class="if-read" style="width: 100%"></i>
+          <i class="if-need" style="width: {{ file.columns_percent }}%"></i></span>
+        <span class="if-num"><b>{{ file.columns_relevant | length }}</b> behind this
+          figure · {{ file.columns_read | length }} the run read</span></div>
+    </div>
+
+    <div class="if-sec">
+      <div class="if-sechead"><h3>Shape</h3>
+        <span class="if-basis">
+          <span data-when="relevant">over the {{ "{:,}".format(file.rows_relevant) }}
+            rows behind this figure</span>
+          <span data-when="all" hidden>over all {{ "{:,}".format(file.rows_read) }}
+            rows the run read</span></span></div>
+      <div class="shape-list">
+        <div class="shape-head"><span></span><span>column</span><span>filled</span>
+          <span>distinct</span><span>values</span></div>
+        {%- for basis, measured, over in (
+              ("relevant", file.shape_over_relevant_rows, file.rows_relevant),
+              ("all", file.shape_over_every_row, file.rows_read)) %}
+        {%- for column in measured %}
+        <div class="if-shape" data-basis="{{ basis }}"
+             data-relevant="{{ 'yes' if column.column in file.columns_relevant else 'no' }}">
+          <span class="shape-kind">{{ column.kind.value }}</span>
+          <span class="shape-name">{{ column.column }}</span>
+          <span class="shape-fill"><span class="fill-track">
+            <i class="fill-filled" style="width: {{ column.filled_percent }}%"></i>
+            <i class="fill-blank" style="width: {{ column.blank_percent }}%"></i>
+            <i class="fill-null" style="width: {{ column.null_percent }}%"></i></span>
+            <span class="fill-num">{{ column.filled_percent | round | int }}%</span></span>
+          <span class="shape-distinct">{{ "{:,}".format(column.distinct_count) }}</span>
+          <span class="shape-peek">{% with rows = over %}{% include "_file_column_peek.html" %}{% endwith %}</span>
+        </div>
+        {%- endfor %}{%- endfor %}
+      </div>
+    </div>
+
+    <div class="if-sec">
+      <div class="if-sechead"><h3>Preview</h3>
+        <span class="if-basis if-count"></span></div>
+      <div class="table-scroll if-table"><table class="data-preview">
+        <thead><tr><th class="if-rownum">{{ file.row_label }}</th>
+          {%- for name in file.columns_read %}
+          <th data-relevant="{{ 'yes' if name in file.columns_relevant else 'no' }}">{{ name }}</th>
+          {%- endfor %}</tr></thead>
+        <tbody>
+          {%- for row in file.rows %}
+          <tr data-relevant="{{ 'yes' if row.relevant else 'no' }}">
+            <td class="if-rownum">{{ row.label }}</td>
+            {%- for cell in row.cells %}
+            <td class="cell-clip" title="{{ cell }}"
+                data-relevant="{{ 'yes' if file.columns_read[loop.index0] in file.columns_relevant else 'no' }}"
+              >{% if cell is none %}<span class="if-null">null</span>{% else %}{{ cell }}{% endif %}</td>
+            {%- endfor %}
+          </tr>
+          {%- endfor %}
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="if-take">
+      <a class="btn if-download" href="#" download>Download</a>
+      <span class="if-by">Every row of this file behind the figure, at the row number
+        it holds in the file.</span>
+      <p class="if-checked" hidden></p>
+    </div>
+  </section>
+  {% endfor %}
+</div>
+{% endif %}
