@@ -129,15 +129,10 @@ a.snavbtn:hover{background:var(--hover)}
 .step.on{background:var(--state-review-bg);border-left-color:var(--accent)}
 .stepno{color:var(--muted);font-size:11.5px}
 .step .right{white-space:nowrap}
-.sid{font-weight:600;color:var(--info-ink)}
-.row-chip{background:var(--info-bg);color:var(--info-ink);border:1px solid var(--info-bd);border-radius:6px;padding:0 6px;
-  font-size:12px;white-space:nowrap}
-.step.on .row-chip{background:var(--info-ink);color:var(--on-dark);border-color:var(--info-ink)}
+.sid{font-weight:600}
 .delta{font-size:11.5px;color:var(--muted);margin-left:4px}
 .delta .add{color:var(--state-review-ink)}
 .delta .chg{color:var(--state-warn-ink)}
-.claim-tag{font-size:10.5px;border-radius:5px;padding:0 5px;margin-left:3px;
-  background:var(--state-done-bg);color:var(--state-done-ink)}
 .nomatch{background:var(--warn-bg);color:var(--state-warn-ink);border-radius:5px;padding:0 5px;font-size:11.5px}
 /* A step names the row's other parents; opening one is the left pane's job, so
    here they are words rather than a second set of controls in the sentence. */
@@ -408,11 +403,10 @@ const transformCache = {};
 // ---- The steps ------------------------------------------------------------
 function verb(n){
   const k = n.transform.kind, sid = `<span class="sid">${esc(n.stage_id)}</span>`;
-  if(k==='python') return `run python <span class="sid">${esc(n.stage_id)}()</span>`;
-  if(k==='starlark') return `run Starlark <span class="sid">${esc(n.stage_id)}()</span>`;
+  if(k==='python' || k==='starlark') return `run code ${sid} on row`;
   if(k==='llm') return `ask the LLM in ${sid}`;
   if(k==='union') return `carry through ${sid}`;
-  if(k==='filter_rows') return `keep the row through ${sid}`;
+  if(k==='filter_rows') return `filter to ${sid}`;
   if(k==='aggregate') return `run aggregation ${sid}`;
   if(k==='source') return n.source_file
     ? `read ${sid} from <span class="sid">${esc(n.source_file)}</span>`
@@ -437,9 +431,9 @@ function sentenceOf(n){
   // A fan-in names what it summarized. Only an aggregate has contributors, so
   // this and the join case never both apply.
   const groups = n.contributor_groups || [];
-  const from = groups.length
-    ? ' from ' + groups.map(g => groupName(g, groups.length > 1)).join('; ') : '';
-  return `${verb(n)}${from}`;
+  const on = groups.length
+    ? ' on ' + groups.map(g => groupName(g, groups.length > 1)).join('; ') : '';
+  return `${verb(n)}${on}`;
 }
 // A join leads with the reference row it brought in, and names the stage after
 // it: the row is what the reader traces next, and the added cells came from it,
@@ -460,7 +454,7 @@ function renderSteps(){
   html += V.nodes.map((n, i) => crossingOf(n, i) + `<button class="step ${i===sel?'on':''}" data-i="${i}">
       <span class="stepno">step ${n.step}</span>
       <span>${sentenceOf(n)}</span>
-      <span class="right">${n.role==='claim' ? '<span class="claim-tag">published claim</span> ' : ''}<span class="row-chip">row ${n.row_number}</span>${deltaOf(n)}</span>
+      <span class="right">${deltaOf(n)}</span>
     </button>`).join('');
   document.getElementById('steps').innerHTML = html;
 }
@@ -494,25 +488,15 @@ function allRowsLink(c, n){
 function branchName(b){
   return `<span class="branch-name">${esc(b.stage_id)} row ${b.row_number}</span>`;
 }
-// A fan-in row has one contributor per input row it summarizes — fifty of them
-// reads as noise, so they collapse to a count. `contributor_groups` arrives
-// already grouped by the columns each cohort fed, from build_trace_view.
-//
 // `g.total` is the cohort's TRUE size, counted over the whole sidecar, so the
-// number here is never a bounded one. `g.named` is non-empty only for a cohort
-// small enough to name row by row. Where each of those rows can be OPENED is
+// number here is never a bounded one. Where each of those rows can be OPENED is
 // the left pane's business, so nothing here is a link.
 // `showColumns` only where there IS more than one cohort: with a single one the
 // columns are just the output's own, which is a list nobody needs to read.
 function groupName(g, showColumns){
-  const stage = esc(g.stage_id);
   const into = (showColumns && g.columns) ? ` into ${g.columns.map(esc).join(' and ')}` : '';
-  if(g.named.length){
-    const rows = g.named.map(b => b.row_number).join(' ');
-    return `<span class="branch-name">${stage} ${g.named.length > 1 ? 'rows' : 'row'} `
-         + `${rows}</span>${into}`;
-  }
-  return `<span class="branch-name">${g.total} rows of ${stage}</span>${into}`;
+  const rows = `${g.total} row${g.total > 1 ? 's' : ''}`;
+  return `<span class="branch-name">${rows} from ${esc(g.stage_id)}</span>${into}`;
 }
 
 // ---- The panel: the row first, its transform a tab away -------------------
