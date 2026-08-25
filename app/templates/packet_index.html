@@ -167,12 +167,9 @@
   // time; diagram_nodes.js re-broadcasts it, and subscribing is what makes the node
   // clickable. In the packet a click navigates, there being no panel to load into.
   //
-  // startOnLoad false because diagram_viewport.js, loaded next, renders the diagram
-  // itself and then measures the svg to fit it — mermaid rendering on its own would
-  // race that, and the viewport would size against a diagram that is not there yet.
-  if (window.mermaid) {
-    mermaid.initialize({ startOnLoad: false, theme: "default", securityLevel: "loose" });
-  }
+  // diagram_viewport.js, loaded next, configures mermaid from the palette and renders
+  // the diagram itself, then measures the svg to fit it — mermaid rendering on its own
+  // would race that, and the viewport would size against a diagram that is not there yet.
   if (window.onDiagramNode) {
     onDiagramNode(function (stageId) {
       location.href = "{{ stages_dir }}/" + encodeURIComponent(stageId) + ".html";

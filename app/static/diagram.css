@@ -18,12 +18,12 @@
 /* The box hugs the diagram: no min-height, so a one-row graph does not sit in a
    tall empty well. resize:vertical still lets a reader open it up by hand. */
 .diagram-viewport { overflow: auto; max-height: 72vh; border: 1px solid var(--border);
-    border-radius: 8px; background: var(--raised); resize: vertical; cursor: grab; }
+    border-radius: 8px; background: var(--sunk-deep); resize: vertical; cursor: grab; }
 .diagram-viewport.grabbing { cursor: grabbing; }
 /* The FULLSCREENED element is the .diagram-block (see diagram_viewport.js), so the
    viewport is sized by the `.diagram-block:fullscreen` rules further down. This one
    remains for a viewport fullscreened on its own. */
-.diagram-viewport:fullscreen { max-height: none; height: 100vh; width: 100vw; background: var(--raised); }
+.diagram-viewport:fullscreen { max-height: none; height: 100vh; width: 100vw; background: var(--sunk-deep); }
 /* THE VIEWPORT OWNS THE SCROLL. `pre` carries overflow-x:auto from the base rule,
    which made this block its own scroll container: the svg's overflow ended here
    instead of at .diagram-viewport, whose scrollLeft then had no range to move in
@@ -33,6 +33,11 @@
 .diagram-viewport .mermaid { margin: 0; padding: .5rem; overflow: visible;
     width: max-content; min-width: 100%; box-sizing: border-box; }
 .diagram-viewport .mermaid svg { max-width: none !important; height: auto; }
+/* A node's fill sits one L* step above the board it is drawn on, which is the palette's
+   figure/ground but too fine a step to read on its own — the shadow is what lifts it,
+   and the radius is what stops a row of sharp rectangles reading as a table. */
+.diagram-viewport svg g.node > rect { rx: 7px; ry: 7px; }
+.diagram-viewport svg g.node { filter: drop-shadow(0 1px 1.5px var(--shadow)); }
 /* The node currently open in the panel — outline it in the graph so the two agree
    on the selection (distinct from the run-status stroke). */
 .diagram-viewport svg g.node.wf-node-active > rect,
@@ -66,9 +71,9 @@
 .run-outputs a { font-family: var(--mono); font-size: 13px; }
 
 .diagram-minimap { position: relative; }
-/* ~2 rows of stage nodes at the floor zoom: enough to read the node you are on and
+/* ~3 rows of stage nodes at the floor zoom: enough to read the node you are on and
    see what it feeds, without the band becoming a second panel. */
-.diagram-minimap .diagram-viewport { height: 200px; }
+.diagram-minimap .diagram-viewport { height: 260px; }
 .diagram-minimap .diagram-tools { position: absolute; top: 7px; right: 7px; z-index: 2;
     margin: 0; gap: .2rem; }
 /* Square, so the four read as one control cluster rather than four words; and they
@@ -108,7 +113,10 @@ html[data-diagram-clickable] .mermaid g.node.clickable:hover > circle,
 html[data-diagram-clickable] .mermaid g.node.clickable:hover > path { stroke-width: 2.5px; }
 
 /* ── Workflow: graph on top, stage detail full-width below (master-detail layout). ── */
-.wf-top .diagram-viewport { max-height: 56vh; }        /* cap so the detail below stays reachable */
+/* A floor under the graph and a floor under the box: fit-to-width alone shrank a
+   seven-stage graph to a strip of unreadable labels, and the box hugged the strip.
+   safe center parks a graph shorter than the box in the middle of it. */
+.wf-top .diagram-viewport { min-height: 300px; max-height: 64vh; align-content: safe center; }
 .wf-detail { margin-top: 20px; border-top: 2px solid var(--border); padding-top: 18px; min-height: 120px; }
 .wf-detail.loading { opacity: .5; }
 .wf-detail-empty { text-align: center; padding: 24px 0; }
