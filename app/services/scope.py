@@ -92,7 +92,7 @@ def find_stages_beside_the_flow(run_branches: WorkflowRunBranches,
 def find_stages_each_row_came_through(
         run_branches: WorkflowRunBranches, at_stage: StageId,
         ordinals: list[RowOrdinal]) -> list[list[StageId]]:
-    """Per row: the stages its lineage reaches, so a frame it was never a row of is not drawn."""
+    """Per row: every frame it was a row of, which its branch path holds only part of."""
     memo: dict[tuple[StageId, RowOrdinal], frozenset[StageId]] = {}
     return [sorted(_came_through(run_branches, at_stage, ordinal, memo))
             for ordinal in ordinals]

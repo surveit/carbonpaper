@@ -127,7 +127,7 @@ class ScopeMap(BaseModel):
     columns: list[str]
     branch_paths: list[BranchPath]
     branch_path_index: list[int]
-    # Distinct sets of stages a row came through, and one per row of `covers`.
+    # NOT the stages in its path: one it passed without branching is here, not there.
     came_through: list[list[StageId]]
     came_through_index: list[int]
     # Lookup tables this figure came through. Named, never drawn: see the legend.
