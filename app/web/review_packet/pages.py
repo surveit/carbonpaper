@@ -62,6 +62,8 @@ VIEWPORT_SCRIPT = "diagram_viewport.js"
 # The shared tooltip, vendored so a packet page's `data-tip` opens offline like the app's.
 TOOLTIP_SCRIPT = "tooltip.js"
 DIAGRAM_SCRIPTS = (NODE_SCRIPT, VIEWPORT_SCRIPT, TOOLTIP_SCRIPT)
+# Vendored, or a packet's tables would open nothing: the link column is gone.
+CELL_LINEAGE_SCRIPT = "cell-lineage.js"
 
 # The tokenizer and its caller, vendored so a stage page colours its code offline.
 # The theme rides in the concatenated stylesheet, which already follows the app's
@@ -158,7 +160,8 @@ def _write_diagram_source(root: Path, diagram: str) -> str:
 
 
 def _write_diagram_scripts(root: Path) -> list[str]:
-    return [_write_asset(root, name) for name in DIAGRAM_SCRIPTS]
+    return [_write_asset(root, name)
+            for name in (*DIAGRAM_SCRIPTS, CELL_LINEAGE_SCRIPT)]
 
 
 def _write_asset(root: Path, name: str) -> str:
@@ -179,6 +182,7 @@ def _write_stage_page(
         run=view,
         assets=[f"../{ASSETS_DIR}/{name}" for name in STYLESHEETS],
         icon=f"../{ASSETS_DIR}/{FAVICON}",
+        cell_script=f"../{ASSETS_DIR}/{CELL_LINEAGE_SCRIPT}",
         index_href="../index.html",
         **_build_panel_context(run_dir, view, stage, workflow_stage, traced),
     )

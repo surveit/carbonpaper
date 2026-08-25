@@ -48,6 +48,10 @@ class AppPanelLinks:
     def row_trace(self, stage_id: str, row: int) -> str:
         return f"{self._base}/stage/{_segment(stage_id)}/row/{row}/trace/view"
 
+    def opens_a_cell(self) -> bool:
+        """The trace route takes `column`, so a link here can name one cell."""
+        return True
+
     def build_row_trace_for_figure(self, figure_stage: str, figure_row: int,
                                    sample_choices: Sequence[RowRef]) -> str:
         """The figure's own walk, told through the contributor named at each fan-in down."""
@@ -136,6 +140,10 @@ class PacketPanelLinks:
         if self._traced is not None and (stage_id, row) not in self._traced:
             return None
         return packet_lineage_href(self._root, stage_id, row)
+
+    def opens_a_cell(self) -> bool:
+        """A file takes no query string, so the packet's pages are per ROW."""
+        return False
 
     def build_row_trace_for_figure(self, figure_stage: str, figure_row: int,
                                    sample_choices: Sequence[RowRef]) -> str | None:

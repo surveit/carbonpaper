@@ -71,11 +71,11 @@
         <span class="preview-actions"><a href="{{ links.stage_rows(step.stage_id) }}">view all rows</a>
         · <a href="{{ links.stage_csv(step.stage_id) }}">⬇ CSV</a></span></div>
       <div class="table-scroll"><table class="data-preview">
-        <thead><tr><th class="syw-col">lineage</th>
+        <thead><tr>
           {%- for column_state in step.columns %}
           {%- set klasses = [('diff-col-cited' if column_state.cited else ''),
                              ('diff-col-jump' if column_state.writer else '')] | select | join(' ') %}
-          <th{% if klasses %} class="{{ klasses }}"{% endif %}
+          <th{% if klasses %} class="{{ klasses }}"{% endif %} data-column="{{ column_state.name }}"
             {%- if column_state.writer %} data-jump="{{ column_state.writer }}"
             title="written by {{ column_state.writer }} — go there"{% endif %}>
             {%- if column_state.cited %}<i class="diff-col-mine">the value</i>{% endif -%}
@@ -84,8 +84,7 @@
         </tr></thead>
         <tbody>
         {%- for row in step.rows %}
-          <tr><td class="syw-cell"><a href="{{ links.row_trace(step.stage_id, loop.index0) }}"
-            target="_blank" rel="noopener">View lineage</a></td>
+          <tr data-href="{{ links.row_trace(step.stage_id, loop.index0) }}">
           {%- for cell in row %}
           <td{% if step.columns[loop.index0].cited %} class="diff-col-cited"{% endif %}>{{ cell | truncate(240) }}</td>
           {%- endfor %}

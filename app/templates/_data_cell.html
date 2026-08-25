@@ -3,7 +3,10 @@
    template it sits in, and _stage_diff.html's body needs a `diff` to render. #}
 {% macro data_cell(text, klass, was, full) -%}
 {%- set klasses = (('cell-clip ' if full else '') ~ klass) | trim -%}
-<td{% if klasses %} class="{{ klasses }}"{% endif %}{% if full %} title="{{ text }}"{% endif %}>
+{#- The title is the hover: it is what a reader gets instead of expanding a cell,
+    so it is written wherever the cell below had to cut the value. -#}
+{%- set cut = full or text | length > 240 -%}
+<td{% if klasses %} class="{{ klasses }}"{% endif %}{% if cut %} title="{{ text }}"{% endif %}>
 {%- if was %}<span class="diff-was" title="the input value this stage replaced">{{ was | truncate(120) }}</span>{% endif %}
 {%- if full %}{{ text | truncate(4000, True, '… (truncated — download the CSV for the full value)') }}
 {%- else %}{{ text | truncate(240) }}{% endif %}</td>
