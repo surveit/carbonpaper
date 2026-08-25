@@ -65,6 +65,8 @@
        for a column a diff has already said did not change: legible when the eye
        goes looking, quiet enough that it never competes with what did. */
     --muted-dim: #83878d;
+    /* A graph's edges: structure, so quieter than ink and firmer than a rule. */
+    --diagram-edge: var(--muted-dim);
 
     /* ── Code, printed light-on-dark ──────────────────────────────────────
        --code-fg is a dimmed white, not --on-dark: a button label is one line

@@ -18,10 +18,10 @@
  * short band can hold a wide graph at a readable size and pan instead of shrinking it.
  * Fullscreen ignores the floor and fits the whole graph on both axes, centred.
  *
- * The page must call mermaid.initialize({ startOnLoad: false, ... }) BEFORE loading this
- * file; boot() renders the diagrams then wires each viewport. A caller that re-renders a
- * diagram in place (e.g. the workflow graph after a spec edit) should call viewport._refit() after
- * mermaid.run() so the new svg is re-measured + re-fit.
+ * boot() configures mermaid from the palette, renders the diagrams, then wires each
+ * viewport — the page supplies neither theme nor mermaid.initialize call. A caller that
+ * re-renders a diagram in place (e.g. the workflow graph after a spec edit) should call
+ * viewport._refit() after mermaid.run() so the new svg is re-measured + re-fit.
  */
 (function () {
   "use strict";
@@ -47,12 +47,23 @@
       return true;
     }
     function apply() { if (svg) svg.style.width = (baseW * scale) + "px"; }
+    // The stylesheet's slack around the diagram — read rather than assumed, so raising
+    // it gives a panned graph more room without shrinking a fitted one out of the box.
+    function readSlack() {
+      var pre = vp.querySelector(".mermaid");
+      if (!pre) return { x: PAD, y: PAD };
+      var box = getComputedStyle(pre);
+      return {
+        x: parseFloat(box.paddingLeft) + parseFloat(box.paddingRight),
+        y: parseFloat(box.paddingTop) + parseFloat(box.paddingBottom),
+      };
+    }
     function fit() {
       if (!svg) return;
       // Collapse the svg FIRST so the diagram's own width can't inflate the viewport
       // (its container is content-sized in some layouts); then measure the real width.
       svg.style.width = "0px";
-      scale = Math.max(zoomFloor, Math.min(1, (vp.clientWidth - PAD) / baseW));
+      scale = Math.max(zoomFloor, Math.min(1, (vp.clientWidth - readSlack().x) / baseW));
       apply();
     }
     // Fullscreen is the survey: fit the whole graph on BOTH axes and park it in the
@@ -62,8 +73,9 @@
     function fitWholeGraph() {
       if (!svg) return;
       svg.style.width = "0px";
+      var slack = readSlack();
       scale = Math.max(MIN_SCALE, Math.min(
-        1, (vp.clientWidth - PAD) / baseW, (vp.clientHeight - PAD) / baseH));
+        1, (vp.clientWidth - slack.x) / baseW, (vp.clientHeight - slack.y) / baseH));
       apply();
       centreInViewport();
     }
@@ -163,11 +175,10 @@
 
     // ⌘/Ctrl + wheel = zoom; plain wheel = native scroll.
     //
-    // The step follows the gesture's SIZE, not only its sign. A trackpad pinch fires a
-    // stream of small-delta events, and a flat per-event step spent a full 10% on each
-    // one, so the graph shot past the scale being reached for. A firm scroll still lands
-    // near that 10%; a light one now moves about 1%.
-    var ZOOM_PER_WHEEL_PIXEL = 0.0025, WHEEL_PIXEL_CAP = 40;
+    // The step follows the gesture's SIZE, not only its sign: a trackpad pinch fires a
+    // stream of small-delta events, and a flat per-event step shot past the scale being
+    // reached for. A firm scroll moves about 20%, a light one a fraction of that.
+    var ZOOM_PER_WHEEL_PIXEL = 0.006, WHEEL_PIXEL_CAP = 40;
     vp.addEventListener("wheel", function (e) {
       if (!(e.ctrlKey || e.metaKey)) return;
       e.preventDefault();
@@ -215,10 +226,57 @@
     }, true);
   }
 
+  // Every palette value the graph spends, read off :root so mermaid follows the
+  // stylesheet instead of carrying a second copy of it.
+  var THEME_TOKENS = ["ui", "fg", "bg", "border", "sunk-deep", "diagram-edge"];
+
+  function readPaletteTokens() {
+    var css = getComputedStyle(document.documentElement);
+    var tokens = {};
+    THEME_TOKENS.forEach(function (t) { tokens[t] = css.getPropertyValue("--" + t).trim(); });
+    return tokens;
+  }
+
+  // A page served without the palette resolves every token to "", which mermaid would
+  // take literally and draw invisible text in.
+  function dropUnset(vars) {
+    Object.keys(vars).forEach(function (k) { if (!vars[k]) delete vars[k]; });
+    return vars;
+  }
+
+  // themeVariables reach the "base" theme only — under "default" mermaid ignores them
+  // and draws its own typeface and edge colour over the app's.
+  function initMermaidTheme() {
+    var p = readPaletteTokens();
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "loose",
+      theme: "base",
+      themeVariables: dropUnset({
+        fontFamily: p.ui,
+        fontSize: "15px",
+        primaryColor: p.bg,
+        primaryBorderColor: p.border,
+        primaryTextColor: p.fg,
+        textColor: p.fg,
+        lineColor: p["diagram-edge"],
+        edgeLabelBackground: p["sunk-deep"],
+      }),
+      // useMaxWidth:false — this file sizes the svg itself, so zoom is real.
+      // wrappingWidth above mermaid's 200 so a long stage id stays on one line —
+      // a wrapped title is the other way a node ends up taller than its neighbours.
+      flowchart: {
+        curve: "basis", padding: 18, nodeSpacing: 28, rankSpacing: 58,
+        wrappingWidth: 340, useMaxWidth: false,
+      },
+    });
+  }
+
   async function boot() {
     var vps = Array.prototype.slice.call(document.querySelectorAll(".diagram-viewport"));
     if (!vps.length) return;
     if (window.mermaid) {
+      initMermaidTheme();
       try { await mermaid.run({ querySelector: ".diagram-viewport .mermaid" }); }
       catch (e) { console.error("mermaid render failed", e); }
     }

@@ -234,7 +234,6 @@ def _node_view(s: AbstractStage | dict[str, Any]) -> dict[str, Any]:
             "id": s.id,
             "description": s.description,
             "type": s.type,
-            "has_notes": bool(s.compiler_notes),
             "has_eval": s.eval is not None,
             "has_review": s.review is not None,
             "input_ids": s.input_ids,
@@ -250,7 +249,6 @@ def _node_view(s: AbstractStage | dict[str, Any]) -> dict[str, Any]:
         "id": sid,
         "description": s.get("description") or "",
         "type": s.get("type") or "?",
-        "has_notes": bool(s.get("compiler_notes")),
         "has_eval": bool(s.get("eval")),
         "has_review": bool(s.get("review")),
         "input_ids": input_ids,
@@ -292,7 +290,7 @@ def _render_node_classdefs() -> list[str]:
 # plain strings read back off the JSON manifest, and a StrEnum member hashes/
 # equals its bare string, so lookups by that plain string still hit.
 _STATUS_GLYPH: dict[str, str] = {
-    StageStatus.OK: "✓",
+    # OK has none: its green stroke already says the stage finished.
     StageStatus.RUNNING: "⟳",
     StageStatus.VALIDATION_WARNINGS: "⚠",
     StageStatus.ERROR: "✗",
@@ -336,21 +334,20 @@ def _render_workflow_node_lines(
     return lines
 
 
+# Always two lines: a third for the flags made a flagged node taller than the rest.
 def _build_workflow_node_label(n: dict[str, Any], status: str | None) -> str:
-    sid = n["id"]
     stype = n["type"]
-    glyph = TYPE_GLYPH.get(stype, "")
-    notes_indicator = "⚠ " if n["has_notes"] else ""
-    eval_indicator = "📊" if n["has_eval"] else ""
-    review_indicator = "👤" if n["has_review"] else ""
-    small_line = TYPE_LABEL.get(stype, stype)
-    flags = " ".join(filter(None, [eval_indicator, review_indicator]))
-    status_prefix = f"{_STATUS_GLYPH.get(status, '')} " if status else ""
+    title = " ".join(filter(None, [
+        _STATUS_GLYPH.get(status or "", ""), TYPE_GLYPH.get(stype, ""), n["id"],
+    ]))
+    subtitle = " ".join(filter(None, [
+        TYPE_LABEL.get(stype, stype),
+        "📊" if n["has_eval"] else "",
+        "👤" if n["has_review"] else "",
+    ]))
     return (
-        f'"<b>{status_prefix}{notes_indicator}{glyph} {sid}</b>'
-        f'<br/><span style=\'font-size:10px;color:#5c6169\'>{small_line}</span>'
-        + (f"<br/><span style='font-size:11px'>{flags}</span>" if flags else "")
-        + '"'
+        f'"<b>{title}</b>'
+        f'<br/><span style=\'font-size:10px;color:#5c6169\'>{subtitle}</span>"'
     )
 
 

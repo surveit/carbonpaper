@@ -18,11 +18,6 @@
 <script>
   // Graph node clicks → the read-only frozen-stage panel below the graph.
   onDiagramNode(function (stageId) { if (window._loadStage) window._loadStage(stageId); });
-  document.addEventListener("DOMContentLoaded", function () {
-    mermaid.initialize({ startOnLoad: false, theme: "default",
-      flowchart: { curve: "basis", padding: 20, useMaxWidth: false },
-      securityLevel: "loose" });
-  });
 </script>
 <script src="/static/diagram_viewport.js"></script>
 {% endblock %}
@@ -79,7 +74,7 @@
       <button type="button" class="diagram-fs" title="Fullscreen">⛶ fullscreen</button>
       <span class="muted diagram-hint">drag to pan · ⌘/Ctrl-scroll to zoom</span>
     </div>
-    <div class="diagram-viewport">
+    <div class="diagram-viewport" data-zoom-floor="0.75">
       <pre class="mermaid">
 {{ mermaid }}
       </pre>

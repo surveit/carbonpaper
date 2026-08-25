@@ -9,15 +9,6 @@
   onDiagramNode(function (stageId) {
     if (window._loadStage) window._loadStage(stageId, { pulse: false, reveal: true });
   });
-  document.addEventListener("DOMContentLoaded", function () {
-    // startOnLoad:false + useMaxWidth:false — diagram_viewport.js renders the graph and
-    // sizes the svg itself, so zoom is real and a focused node can be centred.
-    mermaid.initialize({
-      startOnLoad: false, theme: "default",
-      flowchart: { curve: "basis", padding: 20, useMaxWidth: false },
-      securityLevel: "loose"
-    });
-  });
 </script>
 <script src="/static/diagram_viewport.js"></script>
 {% endblock %}
