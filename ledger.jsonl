@@ -2022,3 +2022,4 @@
 {"run_id":"32875575992","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32875575992","created":"2026-08-25T17:03:44Z","branch":"fix/lineage-row-window","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"32875604072","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32875604072","created":"2026-08-25T17:03:51Z","branch":"feedback/lineage-journalist","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"32875575992","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32875575992","created":"2026-08-25T17:04:16Z","branch":"fix/lineage-row-window","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"32875581211","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32875581211","created":"2026-08-25T17:04:22Z","branch":"feedback/lineage-journalist","event":"pull_request","contracts_kept":null,"findings":[]}
