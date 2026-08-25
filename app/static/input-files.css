@@ -3,6 +3,9 @@
  * (tests/arch/test_palette_owns_colour.py).
  */
 
+#input-files-root { padding: 16px 22px 0; }
+#input-files-root > * { max-width: 1080px; }
+
 .if-toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
     margin-bottom: 14px; }
 .if-by { font-size: 12.5px; color: var(--muted); }
@@ -37,12 +40,9 @@
     letter-spacing: .08em; color: var(--muted); }
 .if-basis { font-size: 12.5px; color: var(--muted); }
 
-/* One row per column per basis; the toggles decide which of the two is shown. */
-.if-shape { display: grid;
-    grid-template-columns: 74px minmax(140px, 1.4fr) 128px 74px minmax(220px, 2fr);
-    gap: 12px; align-items: center; padding: 7px 12px; font-size: 13px;
-    border-bottom: 1px solid var(--border); }
-.if-shape:last-child { border-bottom: none; }
+/* Each row is the file detail page's own column row, wrapped so the toggles can
+ * reach it: one per basis, and only one basis is shown. */
+.if-shape:last-child .shape-col { border-bottom: none; }
 
 .if-tab[data-rows="relevant"] .if-shape[data-basis="all"],
 .if-tab[data-rows="all"] .if-shape[data-basis="relevant"] { display: none; }
@@ -65,8 +65,3 @@ tr[data-relevant="no"] td { color: var(--muted); background: var(--sunk); }
     border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px;
     display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .if-download { text-decoration: none; }
-.if-checked { width: 100%; margin: 0; font-size: 12.5px; color: var(--muted);
-    border-left: 2px solid var(--state-done); padding-left: 9px; line-height: 1.5; }
-.if-checked b { color: var(--state-done-ink); }
-.if-checked.if-differs { border-left-color: var(--state-failed); }
-.if-checked.if-differs b { color: var(--state-failed-ink); }

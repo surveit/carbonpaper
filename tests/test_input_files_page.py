@@ -43,32 +43,24 @@ def test_the_panel_carries_a_shape_row_for_each_basis(run_id):
     assert 'data-basis="relevant"' in page and 'data-basis="all"' in page
 
 
-def test_the_check_reports_the_slice_matches_the_file(run_id):
-    report = TestClient(app).get(
-        _url(run_id, "check.json", input="load_east")).json()
-    assert report["mismatches"] == 0
-    assert report["filename"] == "east.csv"
-    assert report["cells"] == report["rows"] * report["columns"]
-
-
-def test_the_check_over_every_column_covers_more_cells(run_id):
-    client = TestClient(app)
-    few = client.get(_url(run_id, "check.json", input="load_east")).json()
-    every = client.get(
-        _url(run_id, "check.json", input="load_east", columns="all")).json()
-    assert every["columns"] > few["columns"]
-    assert every["mismatches"] == 0
-
-
 def test_the_download_carries_the_relevant_rows_and_columns(run_id):
     answer = TestClient(app).get(_url(run_id, "slice.csv", input="load_east"))
     assert answer.status_code == 200
     rows = list(csv.reader(io.StringIO(answer.text)))
-    report = TestClient(app).get(_url(run_id, "check.json", input="load_east")).json()
-    assert len(rows) == report["rows"] + 1
-    assert len(rows[0]) == report["columns"]
+    assert rows[0] == ["agency_code", "amount", "grant_id", "kind"]
+    assert 1 < len(rows) < 7
+
+
+def test_the_download_widens_to_every_row_and_column(run_id):
+    answer = TestClient(app).get(
+        _url(run_id, "slice.csv", input="load_east", rows="all", columns="all"))
+    rows = list(csv.reader(io.StringIO(answer.text)))
+    assert len(rows) == 7
+    assert "region" in rows[0]
 
 
 def test_a_file_this_figure_never_read_is_refused(run_id):
-    answer = TestClient(app).get(_url(run_id, "check.json", input="load_nothing"))
+    answer = TestClient(app).get(_url(run_id, "slice.csv", input="load_nothing"))
     assert answer.status_code == 404
+
+

@@ -49,27 +49,28 @@ window.InputFiles = window.InputFiles || (function () {
   function paint(tab) {
     var pane = shownPane(tab);
     if (!pane) return;
-    var rows = pane.querySelectorAll("tbody tr:not([hidden])");
+    var rows = pane.querySelectorAll(".if-table tbody tr");
     var shown = 0;
     rows.forEach(function (row) { if (row.offsetParent !== null) shown += 1; });
     var columns = 0;
-    pane.querySelectorAll("thead th[data-relevant]").forEach(function (head) {
+    pane.querySelectorAll(".if-table thead th[data-relevant]").forEach(function (head) {
       if (head.offsetParent !== null) columns += 1;
     });
     var count = pane.querySelector(".if-count");
     if (count) count.textContent = countOf(shown, "row") + " × " + countOf(columns, "column");
-    paintTake(tab, pane, shown, columns);
+    paintTake(tab, pane);
   }
 
-  function paintTake(tab, pane, rows, columns) {
+  // The preview shows a page of the rows; the download carries every one of them,
+  // so its label counts off the file rather than off what is on screen.
+  function paintTake(tab, pane) {
     var link = pane.querySelector(".if-download");
     if (!link) return;
+    var rows = Number(pane.dataset["rows" + capitalised(tab.dataset.rows)]);
+    var columns = Number(pane.dataset["columns" + capitalised(tab.dataset.columns)]);
     link.textContent = "Download " + countOf(rows, "row") + " × " +
       countOf(columns, "column") + " (CSV)";
     link.href = urlFor(tab, pane, "slice.csv");
-    var checked = pane.querySelector(".if-checked");
-    if (checked) { checked.hidden = true; checked.textContent = ""; }
-    check(tab, pane);
   }
 
   function urlFor(tab, pane, leaf) {
@@ -82,29 +83,8 @@ window.InputFiles = window.InputFiles || (function () {
       encodeURIComponent(tab.dataset.run) + "/input-files/" + leaf + "?" + query;
   }
 
-  // The comparison re-reads the file, so it is asked for after the panel is drawn
-  // rather than made part of the page load.
-  function check(tab, pane) {
-    var asked = urlFor(tab, pane, "check.json");
-    pane.dataset.asked = asked;
-    fetch(asked).then(function (answer) {
-      return answer.ok ? answer.json() : null;
-    }).then(function (report) {
-      if (pane.dataset.asked !== asked) return;
-      say(pane.querySelector(".if-checked"), report);
-    }).catch(function () { /* the line stays hidden; nothing is claimed */ });
-  }
-
-  function say(line, report) {
-    if (!line || !report) return;
-    line.hidden = false;
-    line.classList.toggle("if-differs", report.mismatches > 0);
-    var mark = report.mismatches ? "✗ " + report.mismatches.toLocaleString() +
-      " cells differ." : "✓ checked.";
-    line.innerHTML = "<b>" + mark + "</b> " + countOf(report.cells, "cell") + " — " +
-      countOf(report.rows, "row") + " × " + countOf(report.columns, "column") +
-      " — read back from " + escapeText(report.filename) +
-      " as the run read it, rows located by " + escapeText(report.located_by) + ".";
+  function capitalised(word) {
+    return word.charAt(0).toUpperCase() + word.slice(1);
   }
 
   function countOf(many, thing) {

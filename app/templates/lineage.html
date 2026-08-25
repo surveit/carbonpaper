@@ -210,6 +210,9 @@ tr.lin-opens:hover td{background:var(--hover)}
 
 /* Inputs: one card per input stage, in the order the ancestry found them. */
 .lin-inbody{overflow:auto;padding:16px 22px 40px;flex:1}
+/* This pane holds two sections, so it scrolls rather than each of them. */
+.lin-pane[data-pane="inputs"]{overflow:auto}
+.lin-pane[data-pane="inputs"] .lin-inbody{overflow:visible;flex:none}
 .lin-inbody>*{max-width:1080px}
 .incard{border:1px solid var(--border);border-radius:10px;background:var(--raised);
   padding:12px 14px 10px;margin-bottom:14px}

@@ -6,7 +6,7 @@ import csv
 import io
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 
 from app.core.errors import (
     ColumnNotInFrame,
@@ -18,7 +18,6 @@ from app.core.frames import read_frame_table
 from app.models.claims import StageOutputCellCitation
 from app.models.schema import StageId
 from app.runtime.errors import MissingLineage
-from app.services.input_check import compare_slice_to_the_file
 from app.services.workspace import resolve_run_dir
 from app.web import input_files_view
 from app.web.config import templates
@@ -47,18 +46,6 @@ async def input_files_panel(request: Request, project_id: str, run_id: str,
         request, "_input_files_panel.html",
         {"project": project_id, "run_id": run_id, "stage_id": stage,
          "column": column, "view": view})
-
-
-@router.get(f"{_BASE}/check.json", response_class=JSONResponse)
-async def input_file_check(project_id: str, run_id: str, stage: str, row: int,
-                           column: str, input: str, rows: Basis = Basis.relevant,
-                           columns: Basis = Basis.relevant):
-    """Re-reads the file and compares the slice — a click, never a page load."""
-    slice_ = _find_file(_load(project_id, run_id, stage, row, column), input)
-    compared = compare_slice_to_the_file(
-        project_id, run_id, slice_.stage_id, _choose_rows(slice_, rows),
-        _choose_columns(slice_, columns))
-    return JSONResponse(compared.model_dump(mode="json"))
 
 
 @router.get(f"{_BASE}/slice.csv")

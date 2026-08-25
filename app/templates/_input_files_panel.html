@@ -41,7 +41,10 @@
 
   {% for file in view.files %}
   <section class="if-file-pane{% if not loop.first %} hidden{% endif %}"
-           data-file="{{ file.stage_id }}">
+           data-file="{{ file.stage_id }}"
+           data-rows-relevant="{{ file.rows_relevant }}" data-rows-all="{{ file.rows_read }}"
+           data-columns-relevant="{{ file.columns_relevant | length }}"
+           data-columns-all="{{ file.columns_read | length }}">
     <div class="if-bars">
       <div class="if-bar"><span class="if-bar-lab">rows</span>
         <span class="if-track">
@@ -76,15 +79,7 @@
         {%- for column in measured %}
         <div class="if-shape" data-basis="{{ basis }}"
              data-relevant="{{ 'yes' if column.column in file.columns_relevant else 'no' }}">
-          <span class="shape-kind">{{ column.kind.value }}</span>
-          <span class="shape-name">{{ column.column }}</span>
-          <span class="shape-fill"><span class="fill-track">
-            <i class="fill-filled" style="width: {{ column.filled_percent }}%"></i>
-            <i class="fill-blank" style="width: {{ column.blank_percent }}%"></i>
-            <i class="fill-null" style="width: {{ column.null_percent }}%"></i></span>
-            <span class="fill-num">{{ column.filled_percent | round | int }}%</span></span>
-          <span class="shape-distinct">{{ "{:,}".format(column.distinct_count) }}</span>
-          <span class="shape-peek">{% with rows = over %}{% include "_file_column_peek.html" %}{% endwith %}</span>
+          {% with rows = over %}{% include "_file_column.html" %}{% endwith %}
         </div>
         {%- endfor %}{%- endfor %}
       </div>
@@ -117,7 +112,6 @@
       <a class="btn if-download" href="#" download>Download</a>
       <span class="if-by">Every row of this file behind the figure, at the row number
         it holds in the file.</span>
-      <p class="if-checked" hidden></p>
     </div>
   </section>
   {% endfor %}
