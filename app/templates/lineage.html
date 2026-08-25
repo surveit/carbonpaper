@@ -187,6 +187,10 @@ tr.changed td{background:var(--state-warn-bg)}
 tr.changed td.lin-f{color:var(--state-warn-ink);font-weight:600}
 tr.dropped td{background:var(--state-failed-bg);color:var(--state-failed-ink);text-decoration:line-through}
 tr.carried td.lin-v{color:var(--muted)}
+/* Same rule as the stage diff's quiet column: nothing happened to this field here
+   and nothing here read it, so it recesses instead of competing. */
+tr.inert td{background:var(--sunk-deep)}
+tr.inert td.lin-f,tr.inert td.lin-v{color:var(--muted-dim)}
 .lin-mark{font-weight:700;margin-right:4px}
 .lin-was{display:block;color:var(--muted);text-decoration:line-through;font-size:12px;margin-top:2px}
 .lin-was em{text-decoration:none;font-style:normal}
@@ -532,7 +536,7 @@ function fieldRow(f){
   const was = f.state === 'changed'
     ? `<span class="lin-was">${f.was === '' ? '<em>(empty)</em>' : esc(f.was)}</span>` : '';
   const opens = (OFFLINE || f.state === 'dropped') ? '' : ' lin-opens';
-  return `<tr class="${f.state}${opens}" data-column="${esc(f.name)}">
+  return `<tr class="${f.state}${f.inert ? ' inert' : ''}${opens}" data-column="${esc(f.name)}">
     <td class="lin-f" title="${esc(f.name)}"><span class="lin-mark">${mark}</span>${esc(f.name)}</td>
     <td class="lin-v"><div class="lin-clip">${text}${was}</div></td></tr>`;
 }

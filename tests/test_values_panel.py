@@ -67,6 +67,12 @@ def test_the_column_the_stage_read_is_drawn_beside_what_it_wrote(run_id):
     assert agency_code.state is ColumnDiffState.carried
 
 
+def test_a_column_the_stage_read_is_not_dimmed_with_the_rest(run_id):
+    # tag_portfolio joins on agency_code; dimming it would hide what the join used.
+    step = _step(_walk(run_id, "by_portfolio", "portfolio"), "tag_portfolio")
+    assert _diff_column(step, "agency_code").inert is False
+
+
 def test_a_transform_step_carries_the_input_to_output_split(run_id):
     values = _walk(run_id, "by_portfolio", "portfolio")
     step = _step(values, "tag_portfolio")

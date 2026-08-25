@@ -94,12 +94,10 @@
        this page is tracing, and where each other one was written. Absent
        everywhere else, so the header is the plain one. #}
     {%- set writers = column_writers | default({}, true) %}
-    {# Untouched columns go dim so the eye lands on what the stage did. A caller
-       that CUT the columns has already dropped the ones that did not matter, so
-       there is nothing left here to call inert. #}
-    {%- set quiet = [] if columns_are_cut | default(false, true) else diff.columns
-        | selectattr('state', 'equalto', 'carried') | rejectattr('changed_cells')
-        | map(attribute='name') | list %}
+    {# A column the stage neither touched NOR read goes dim, so the eye lands on
+       what the stage did and on what it did it from. `inert` is the diff's own
+       word for that; the read set is the signature's. #}
+    {%- set quiet = diff.columns | selectattr('inert') | map(attribute='name') | list %}
     <thead><tr>{% if full_rows %}<th class="row-num">#</th>{% endif %}<th class="syw-col">lineage</th>
       {%- for column in diff.columns %}
       {%- set jump = writers.get(column.name) %}
