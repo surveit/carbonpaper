@@ -17,14 +17,17 @@ from app.runtime.branch_analysis.run_branches import (
     MERGE_EDGE,
     WorkflowRunBranches,
     find_reference_inputs,
+    find_stage_position,
 )
 from app.runtime.lineage import RowParent
 
 
 def find_contributing_rows(run_branches: WorkflowRunBranches,
                            stage_id: StageId, row_ordinal: RowOrdinal) -> RowSet:
-    """Replace a merged row by the rows merged into it, until none was merged."""
-    reached, at_stage, through = _expand(run_branches, stage_id, row_ordinal)
+    """Replace a merged row by the rows merged into it, past every merge on the route."""
+    reached, at_stage, through = _expand(
+        run_branches, stage_id, row_ordinal,
+        _find_the_stage_the_earliest_merge_read(run_branches, (stage_id, row_ordinal)))
     ordinals = sorted(reached)
     return RowSet(at_stage=at_stage, ordinals=ordinals, regrained_at=through,
                   fed_by_no_rows=[ordinal for ordinal in ordinals
@@ -35,7 +38,9 @@ def find_sample_choices_behind(run_branches: WorkflowRunBranches, stage_id: Stag
                                row_ordinal: RowOrdinal
                                ) -> dict[RowOrdinal, tuple[RowRef, ...]]:
     """Per row behind the cited one, the row to sample at each fan-in between."""
-    reached, _, _ = _expand(run_branches, stage_id, row_ordinal)
+    reached, _, _ = _expand(
+        run_branches, stage_id, row_ordinal,
+        _find_the_stage_the_earliest_merge_read(run_branches, (stage_id, row_ordinal)))
     return reached
 
 
@@ -83,14 +88,22 @@ def find_lookup_table_stages(run_branches: WorkflowRunBranches) -> set[StageId]:
     return find_reference_inputs(run_branches.stages)
 
 
-def _expand(run_branches: WorkflowRunBranches, stage_id: StageId, ordinal: RowOrdinal
+def _expand(run_branches: WorkflowRunBranches, stage_id: StageId, ordinal: RowOrdinal,
+            stop_at_stage: StageId | None
             ) -> tuple[dict[RowOrdinal, tuple[RowRef, ...]], StageId, list[StageId]]:
     """Each reached row against the rows a walk down to it has to sample."""
+    if stage_id == stop_at_stage:
+        return {ordinal: ()}, stage_id, []
     merged_from = _merged_from(run_branches, stage_id, ordinal)
     if merged_from is None:
-        return {ordinal: ()}, stage_id, []
+        above = (None if stop_at_stage is None else _read_the_only_upstream_row(
+            run_branches, (stage_id, ordinal), stop_at_stage))
+        if above is None:
+            return {ordinal: ()}, stage_id, []
+        return _expand(run_branches, above[0], above[1], stop_at_stage)
     # A merge names one input stage, whose rows were all merged or none were.
-    from_each_parent = [(parent, _expand(run_branches, parent.stage_id, parent.row_ordinal))
+    from_each_parent = [(parent, _expand(run_branches, parent.stage_id,
+                                         parent.row_ordinal, stop_at_stage))
                         for parent in merged_from]
     _, (_, at_stage, below) = from_each_parent[0]
     gathered: dict[RowOrdinal, tuple[RowRef, ...]] = {}
@@ -99,6 +112,37 @@ def _expand(run_branches: WorkflowRunBranches, stage_id: StageId, ordinal: RowOr
         for row, choices in reached.items():
             gathered.setdefault(row, (step, *choices))
     return gathered, at_stage, [stage_id] + below
+
+
+def _find_the_stage_the_earliest_merge_read(run_branches: WorkflowRunBranches,
+                                            cited: RowRef) -> StageId | None:
+    """Where a walk back from `cited` stops. docs/branch-analysis.md"""
+    on_route = set(_reach_upstream(run_branches, [cited]))
+    merged = find_merge_stage_ids(run_branches) & on_route
+    earliest = next((sid for sid in run_branches.ordered_stage_ids if sid in merged), None)
+    if earliest is None:
+        return None
+    lineage = run_branches.lineages.get(earliest)
+    return next((parent.stage_id for parents in (lineage.parents if lineage else [])
+                 for parent in parents if parent.kind == MERGE_EDGE), None)
+
+
+def _read_the_only_upstream_row(run_branches: WorkflowRunBranches, row: RowRef,
+                                stop_at_stage: StageId) -> RowRef | None:
+    """The one row `row` was made from, on the input it is a version of — never a lookup."""
+    stage_id, ordinal = row
+    order = run_branches.ordered_stage_ids
+    if find_stage_position(order, stage_id) <= find_stage_position(order, stop_at_stage):
+        return None
+    stage = run_branches.stages.get(stage_id)
+    subject = stage.inputs[0].id if stage and stage.inputs else None
+    if subject is None:
+        return None
+    lineage = run_branches.lineages.get(stage_id)
+    if lineage is None or ordinal >= len(lineage.parents):
+        return (subject, ordinal)
+    on_subject = [p for p in lineage.parents[ordinal] if p.stage_id == subject]
+    return (subject, on_subject[0].row_ordinal) if len(on_subject) == 1 else None
 
 
 def _fed_by_no_rows(run_branches: WorkflowRunBranches, stage_id: StageId,
