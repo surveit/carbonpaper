@@ -184,6 +184,11 @@ one page at a time (`app/web/merge_alias.py`), not one dashed stub each with a d
 computed up front. `AliasedMerge` carries what the node says: the group_by columns, how many
 groups and rows the stage has, and how many of each this figure came through.
 
+`group_rows_by_path` takes `resolved_merge` as a required argument, never a defaulted one.
+`None` there is a real answer — a figure no merge fed has no re-graining to resolve — and it
+aliases every merge, so a caller that simply forgot to pass one would get a silently thinner
+drawing rather than an error.
+
 A filter is untouched by any of this. Its `predicate` branch has its own id and its own stub,
 so aliasing a merge never hides what a stage removed.
 

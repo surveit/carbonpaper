@@ -56,7 +56,3 @@ def _is_resolved(option: BranchOption, resolved_merge: StageId | None) -> bool:
     return (option.reason is not BranchReason.merge
             or option.stage_id == resolved_merge)
 
-
-# `resolved_merge` is required, never defaulted: None means EVERY merge is aliased,
-# which is a real answer for a figure no merge fed and a silent one for a caller
-# that just forgot. docs/branch-analysis.md
