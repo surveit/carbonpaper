@@ -191,7 +191,7 @@ def test_the_paths_pane_is_not_told_apart_by_an_aliased_merge(run_id):
         "?column=summed_means")
     assert pane.status_code == 200
     said = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", pane.text))
-    assert "4 paths reach total_of_means" in said
+    assert "4 paths reach this row" in said
     assert "merged:" not in pane.text
 
 

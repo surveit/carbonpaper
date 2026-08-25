@@ -37,6 +37,8 @@ class CitedFigure:
 
 
 class PathBehindFigure(BaseModel):
+    # What the pane calls this path, so the story beside it can name the one it walks.
+    number: int
     rows: int
     tells_it_apart: list[BranchOption]  # held here, not on the paths beside it
     whole_path: list[BranchOption]
@@ -53,6 +55,10 @@ class PathsBehindFigure(BaseModel):
     @property
     def rows(self) -> int:
         return sum(path.rows for path in self.paths)
+
+    def find_the_walked_path(self) -> PathBehindFigure | None:
+        """None where the page's walk stopped short of the frame the paths live in."""
+        return next((path for path in self.paths if path.holds_the_marked_row), None)
 
 
 @dataclass(frozen=True)
@@ -85,8 +91,10 @@ def find_paths_behind_figure(
     marked_row = walked.get(covers.at_stage)
     return PathsBehindFigure(
         at_stage=covers.at_stage,
-        paths=[_read_one_path(run_branches, path, on_it, left_out, choices, marked_row)
-               for path, on_it in zip(taken.paths, taken.ordinals)],
+        paths=[_read_one_path(run_branches, number, path, on_it, left_out, choices,
+                              marked_row)
+               for number, (path, on_it)
+               in enumerate(zip(taken.paths, taken.ordinals), start=1)],
     )
 
 
@@ -96,12 +104,13 @@ def _resolve_the_nearest(run_branches: WorkflowRunBranches,
     return {nearest} if nearest else set()
 
 
-def _read_one_path(run_branches: WorkflowRunBranches, path: BranchPath,
+def _read_one_path(run_branches: WorkflowRunBranches, number: int, path: BranchPath,
                    ordinals: list[RowOrdinal], left_out: frozenset[BranchId],
                    choices: Mapping[RowOrdinal, tuple[RowRef, ...]],
                    marked_row: RowOrdinal | None) -> PathBehindFigure:
     options = [run_branches.branch_options[branch_id] for branch_id in path]
     return PathBehindFigure(
+        number=number,
         rows=len(ordinals),
         tells_it_apart=[o for o in options if o.id not in left_out],
         whole_path=options,

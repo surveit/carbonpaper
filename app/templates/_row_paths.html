@@ -9,16 +9,15 @@
    further up, which are not part of a path's identity. Relevant rows counts. #}
 <p class="paths-count">
   {% if pane.paths | length == 1 %}
-    Every row behind <code>{{ figure.stage_id }}</code> row
-    {{ figure.row_ordinal | row_number }} took the <b>same path</b>.
+    Every row behind this one took the <b>same path</b>.
   {% else %}
-    <b>{{ pane.paths | length }}</b> paths reach <code>{{ figure.stage_id }}</code>
-    row {{ figure.row_ordinal | row_number }}, through <code>{{ pane.at_stage }}</code>.
+    <b>{{ pane.paths | length }}</b> paths reach this row.
   {% endif %}
 </p>
 {% for path in pane.paths %}
   {% set body %}
-    <span class="path-rows">follow row {{ path.example_ordinal | row_number }}</span>
+    <span class="path-rows">Path {{ path.number }} <span class="path-row-ref">· row
+      {{ path.example_ordinal | row_number }}</span></span>
     <span class="path-text">
       {%- for branch in path.tells_it_apart -%}
         <span class="{{ 'is-code' if branch.reason.value == 'code' }}"

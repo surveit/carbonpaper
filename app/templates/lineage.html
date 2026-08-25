@@ -76,7 +76,8 @@ body{display:flex;flex-direction:column;overflow:hidden}
   background:var(--raised);border:1px solid var(--border)}
 a.path-entry:hover{background:var(--hover)}
 .path-entry.on{background:var(--state-review-bg);border-left-color:var(--accent)}
-.path-rows{display:block;font-size:12.5px;margin-bottom:3px}
+.path-rows{display:block;font-size:12.5px;margin-bottom:3px;font-weight:600}
+.path-row-ref{color:var(--muted);font-weight:400;font-size:11.5px}
 .path-text{display:block;font-size:11.5px;line-height:1.45;color:var(--muted);
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}
 .path-text .is-code{color:var(--info-ink)}
@@ -101,6 +102,11 @@ a.snavbtn:hover{background:var(--hover)}
 .lin-snavtot{font-size:11.5px;color:var(--muted);line-height:1.45;
   border-top:1px solid var(--border);padding-top:8px;margin-top:10px}
 .lin-story{overflow:auto;padding:16px 20px 40px}
+.story-head{margin:0 0 10px;padding-bottom:9px;border-bottom:1px solid var(--border)}
+.story-head h2{margin:0;font-size:14px}
+.story-of{color:var(--muted);font-weight:400;font-size:12px}
+.story-sub{margin:4px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5}
+.story-branch{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--fg)}
 .lin-side{min-height:0;border-left:1px solid var(--border);background:var(--raised);
   display:flex;flex-direction:column;overflow:hidden}
 /* Too narrow to stand them side by side: one column, and the document scrolls as
@@ -280,6 +286,22 @@ tr.lin-opens:hover td{background:var(--hover)}
     {% include "_row_paths.html" %}
   </div>
   <div class="lin-story">
+    {% set walked = pane.find_the_walked_path() if pane.reason is not defined else none %}
+    {% if walked %}
+    <div class="story-head">
+      <h2>Path {{ walked.number }}<span class="story-of"> of {{ pane.paths | length }}</span></h2>
+      {% if walked.tells_it_apart %}
+      <p class="story-sub">Told apart by
+        {%- for branch in walked.tells_it_apart %}
+        <span class="story-branch" title="{{ branch.reason.value }} at {{ branch.stage_id }}"
+          >{{ branch.label }}</span>{{ "," if not loop.last }}
+        {%- endfor %}
+      </p>
+      {% else %}
+      <p class="story-sub">Nothing told this path apart from the others.</p>
+      {% endif %}
+    </div>
+    {% endif %}
     <div id="steps"></div>
     <details class="lin-graph"><summary>Lineage graph</summary>
       <pre class="mermaid" id="mmd">{{ mermaid }}</pre>
