@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 import app.services.run as run_service
+from app.models.branch_analysis import BranchRole
 from app.models.claims import StageOutputCellCitation
 from app.models.workflow import Workflow
 from app.runtime.branch_analysis import group_rows_by_path, reconstruct_run_branches
@@ -100,6 +101,27 @@ def stage_specs(data: Path) -> list[dict]:
                        "reads": [{"input": "reporting_regions",
                                   "columns": [column("region_total", "int")]}],
                        "produces": [column("total", "int")]}},
+        {"id": "big_regions", "type": "filter_rows", "cache": True,
+         "description": "Keeps the regions that sold at least a thousand.",
+         "inputs": [{"id": "by_region"}],
+         "filter": {"summary": "Keeps a region only where its total reaches a thousand.",
+                    "corner_cases": [],
+                    "code": 'def should_include(row):\n'
+                            '    return row["region_total"] >= 1000\n'},
+         "signature": {"form": "extends",
+                       "reads": [{"input": "by_region",
+                                  "columns": [column("region_total", "int")]}],
+                       "adds": [], "rewrites": []}},
+        {"id": "big_total", "type": "aggregate", "cache": True,
+         "description": "What the big regions come to.",
+         "inputs": [{"id": "big_regions"}],
+         "aggregate": {"group_by": [], "aggregations": [
+             {"output_column": "total", "formula": "sum",
+              "value_column": "region_total"}]},
+         "signature": {"form": "replaces",
+                       "reads": [{"input": "big_regions",
+                                  "columns": [column("region_total", "int")]}],
+                       "produces": [column("total", "int")]}},
     ]
 
 
@@ -182,3 +204,39 @@ def test_the_column_counts_what_its_header_counts(scoped):
                                 column="total", value=None))
     banded = next(scale for scale in drawn.scale if scale.stage == "banded")
     assert banded.included_rows_count == len(drawn.branch_path_index) == 9
+
+
+def test_a_cut_below_the_drawn_grain_still_reaches_the_map(scoped):
+    """north's row left at big_regions, a stage no drawn row has a branch at."""
+    from app.web.scope_payload import build_scope_map
+
+    run, run_id = scoped
+    outputs = Path(resolve_run_dir(PROJECT, run_id)) / "outputs"
+    drawn = build_scope_map(
+        run, PROJECT, run_id, outputs,
+        StageOutputCellCitation(run_id=run_id, stage_id="big_total", row_ordinal=0,
+                                column="total", value=None))
+    assert drawn.covers.at_stage == "banded"
+    assert not any(branch.startswith("big_regions|")
+                   for path in drawn.branch_paths for branch in path)
+    assert drawn.branches["big_regions|removed"].role is BranchRole.removes
+    cut = next(r for r in drawn.reach if r.branch == "big_regions|removed")
+    assert (cut.taken, cut.here) == (1, 0)
+
+
+def test_a_cut_draws_its_own_groups_and_not_the_figures(scoped):
+    """The 1 row big_regions cut lives at by_region, so by_region is ITS nearest merge."""
+    from app.web.scope_payload import build_scope_map, find_cuts_to_offer
+
+    run, run_id = scoped
+    outputs = Path(resolve_run_dir(PROJECT, run_id)) / "outputs"
+    drawn = build_scope_map(
+        run, PROJECT, run_id, outputs,
+        StageOutputCellCitation(run_id=run_id, stage_id="big_total", row_ordinal=0,
+                                column="total", value=None))
+    assert drawn.nearest_merge == "big_total"
+    assert set(drawn.aliased_merges) == {"by_region"}
+    cut = find_cuts_to_offer(run, outputs, drawn)["big_regions|removed"]
+    assert (cut.at_stage, cut.total) == ("by_region", 1)
+    assert cut.nearest_merge == "by_region"
+    assert cut.aliased_merges == {}

@@ -43,6 +43,7 @@ from app.web.merge_alias import (
     name_the_groups,
 )
 from app.web.config import render_row_number
+from app.web.diagrams import TYPE_GLYPH
 
 # Cells for a wider set than this are sampled; the counts never are.
 CELL_ROWS = 400
@@ -67,6 +68,8 @@ class DrawnStage(BaseModel):
 
     id: StageId
     type: str
+    # The type's mark from the run page's tags, so a column says what kind of stage it is.
+    glyph: str
     description: str
     # Index in the run's execution order: the drawing's left-to-right.
     position: int
@@ -102,6 +105,10 @@ class CutRows(BaseModel):
     rows_per_branch_path: list[int]
     rows: list[DrawnRow]
     stages: list[DrawnStage]
+    # These rows' own merges, never the figure's: they went into other groups.
+    aliased_merges: dict[StageId, AliasedMerge]
+    resolved_merges: list[StageId]
+    nearest_merge: StageId | None
 
 
 class ScopeMap(BaseModel):
@@ -141,12 +148,13 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
     # The nearest re-graining, plus any a reader expanded. docs/branch-analysis.md
     nearest = find_nearest_merge(run_branches, cited_row)
     resolved = ({nearest} if nearest else set()) | set(expand)
+    route = find_stages_on_route(run_branches, cited_row)
     paths, _, index = group_rows_by_path(
         run_branches, covers.at_stage, covers.ordinals,
-        find_branches_that_tell_rows_apart(
-            run_branches, find_stages_on_route(run_branches, cited_row), resolved))
+        find_branches_that_tell_rows_apart(run_branches, route, resolved))
     branches = _name_merge_groups(
-        run_branches, outputs, _branches_on(run_branches, paths))
+        run_branches, outputs,
+        _branches_on(run_branches, paths) | _removals_on(run_branches, route))
     aliased = alias_the_merges(
         run_branches, find_rows_reached_per_stage(run_branches, cited_row), resolved)
     shown = covers.ordinals[:CELL_ROWS]
@@ -162,7 +170,7 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
         resolved_merges=sorted(resolved),
         nearest_merge=nearest,
         # "show every stage" says every. docs/scope-map.md
-        stages=_draw_stages(run_branches, find_stages_on_route(run_branches, cited_row)),
+        stages=_draw_stages(run_branches, route),
         reach=_count_reach(run_branches, branches, index, paths),
         scale=measure_frame_scale(run_branches, cited),
     )
@@ -191,19 +199,19 @@ def _read_cited_row(frame: pa.Table, ordinal: RowOrdinal) -> CitedRow:
         cells=[_plain(frame.column(name)[ordinal]) for name in frame.column_names])
 
 
-def read_cut(run_branches: WorkflowRunBranches, outputs: Path,
-             branch_id: BranchId) -> CutRows | None:
+def read_cut(run_branches: WorkflowRunBranches, outputs: Path, branch_id: BranchId,
+             expand: frozenset[StageId] = frozenset()) -> CutRows | None:
     """The rows behind one branch: counts over all of them, cells over a sample."""
     at_stage, ordinals = find_rows_that_took(run_branches, branch_id)
     if not ordinals or at_stage not in run_branches.branch_paths:
         return None
     behind = [(at_stage, ordinal) for ordinal in ordinals]
     nearest = find_nearest_merge(run_branches, behind)
+    resolved = ({nearest} if nearest else set()) | set(expand)
     paths, _, index = group_rows_by_path(
         run_branches, at_stage, ordinals,
         find_branches_that_tell_rows_apart(
-            run_branches, find_stages_on_route(run_branches, behind),
-            {nearest} if nearest else set()))
+            run_branches, find_stages_on_route(run_branches, behind), resolved))
     spread = Counter(index)
     shown = ordinals[:CUT_SAMPLE]
     frame = read_frame_table(outputs / f"{at_stage}.parquet")
@@ -214,18 +222,23 @@ def read_cut(run_branches: WorkflowRunBranches, outputs: Path,
         rows_per_branch_path=[spread[i] for i in range(len(paths))],
         rows=read_rows(frame, shown, index[:len(shown)]),
         stages=_draw_stages(run_branches, _stages_touched(run_branches, paths)),
+        aliased_merges=alias_the_merges(
+            run_branches, find_rows_reached_per_stage(run_branches, behind), resolved),
+        resolved_merges=sorted(resolved),
+        nearest_merge=nearest,
     )
 
 
 def find_cuts_to_offer(run_branches: WorkflowRunBranches, outputs: Path,
-                       scope: ScopeMap) -> dict[BranchId, CutRows]:
+                       scope: ScopeMap, expand: frozenset[StageId] = frozenset()
+                       ) -> dict[BranchId, CutRows]:
     """A branch that took rows out here. A merge's groups are asked for one at a time."""
     drawn = {branch_id for path in scope.branch_paths for branch_id in path}
     found: dict[BranchId, CutRows] = {}
     for branch_id, option in scope.branches.items():
         if branch_id in drawn or option.role is not BranchRole.removes:
             continue
-        cut = read_cut(run_branches, outputs, branch_id)
+        cut = read_cut(run_branches, outputs, branch_id, expand)
         if cut is not None:
             found[branch_id] = cut
     return found
@@ -248,6 +261,14 @@ def _branches_on(run_branches: WorkflowRunBranches, paths: list[BranchPath]
             for branch_id, option in run_branches.branch_options.items()
             if branch_id in held or (option.stage_id in touched
                                      and not _is_aliased(option, held))}
+
+
+def _removals_on(run_branches: WorkflowRunBranches, route: set[StageId]
+                 ) -> dict[BranchId, BranchOption]:
+    """A cut below the drawn grain is on no drawn path, so `_branches_on` misses it."""
+    return {branch_id: option
+            for branch_id, option in run_branches.branch_options.items()
+            if option.role is BranchRole.removes and option.stage_id in route}
 
 
 def _name_merge_groups(run_branches: WorkflowRunBranches, outputs: Path,
@@ -307,6 +328,7 @@ def _draw_stage(run_branches: WorkflowRunBranches, sid: StageId,
     authored = stage.stage
     return DrawnStage(
         id=sid, type=str(getattr(authored.type, "value", authored.type)),
+        glyph=TYPE_GLYPH[authored.type],
         position=position, description=authored.description or "",
         code=read_stage_code(stage) or read_decision_source(stage))
 

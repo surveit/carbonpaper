@@ -5,8 +5,8 @@
  * branches, not one branch, so a row holding two arms of a split lands in its own
  * node and every row is in exactly one. docs/scope-map.md.
  *
- * Clicking a cut stub redraws for the rows behind it: the reason a set of rows is
- * missing is usually upstream of the stage that removed them.
+ * Clicking a removal count redraws for the rows behind it: the reason a set of rows
+ * is missing is usually upstream of the stage that removed them.
  */
 (function () {
   "use strict";
@@ -15,7 +15,6 @@
   if (!host) return;
 
   var D = JSON.parse(host.textContent);
-  var BACK = [];
   var cols = [];
   var pickedNode = null;
   var pickedRow = null;
@@ -24,14 +23,18 @@
   var panels = {};
 
   var SEP = " ";
+  // Says the link leaves this page, the way it does anywhere else.
+  var OUTWARD = "\u00a0\u2197";
   // Gutter mark against a branch the drawn rows are here by. A glyph, not a tint:
   // highlight.js owns the code element's markup and rewrites it wholesale.
   var MARK = "\u25B8";
   var tableOf = function (stageId) {
     return '<table class="data-preview" data-stage="' + esc(stageId) + '">';
   };
-  var COLUMN = 300, BAR = 11, TOP = 52, GAP = 16;
-  var LABEL_PITCH = 30, STUB = 26;
+  var COLUMN = 300, BAR = 11, HEAD = 52, GAP = 16, CUT_LINE = 11;
+  // HEAD plus a line per removal the widest column names above its bar.
+  var TOP = HEAD;
+  var LABEL_PITCH = 30;
   var SHORTEST_BAND = 260, TALLEST_BAND = 620, BAND_PER_NODE = 72, SWEEPS = 4;
 
   var num = function (n) { return Number(n).toLocaleString("en-US"); };
@@ -102,7 +105,7 @@
     return Array.from(seen.values()).sort(function (a, b) { return b.rows - a.rows; });
   }
 
-  // A stub is for rows that LEFT here. An arm none of these rows took is not a
+  // A removal is rows that LEFT here. An arm none of these rows took is not a
   // loss — those rows carried on.
   function leftHere(branch) {
     return (D.branches[branch] || {}).role === "removes";
@@ -202,6 +205,7 @@
     var scale = Math.min.apply(null, cols.map(function (c) {
       return (band - (c.nodes.length - 1) * GAP) / total;
     }).concat([band / total]));
+    TOP = HEAD + countCutLines() * CUT_LINE;
     var ribbons = gatherRibbons();
     orderNodes(ribbons);
     var x = 0;
@@ -217,12 +221,10 @@
       x += COLUMN;
     });
     stackRibbons(ribbons);
-    var goneRows = Math.max.apply(null, cols.map(function (c) {
-      return stubCount(c) + ((c.alias || c.expanded) ? 1 : 0);
-    }).concat([0]));
+    var foot = cols.some(function (c) { return c.alias || c.expanded; }) ? 1 : 0;
     var height = Math.max.apply(null, cols.map(function (c) {
       return c.bottom;
-    }).concat([TOP])) + 14 + goneRows * 17;
+    }).concat([TOP])) + 14 + foot * 17;
 
     var svg = byId("scope-svg");
     svg.setAttribute("width", String(x));
@@ -238,7 +240,10 @@
       el.onclick = function (event) { event.stopPropagation(); pick(el.dataset.node); };
     });
     svg.querySelectorAll("[data-cut]").forEach(function (el) {
-      el.onclick = function (event) { event.stopPropagation(); pick(el.dataset.cut); };
+      el.onclick = function (event) {
+        event.stopPropagation();
+        window.open(scopePageFor(el.dataset.cut), "_blank");
+      };
     });
     svg.querySelectorAll("[data-expand]").forEach(function (el) {
       el.onclick = function (event) {
@@ -409,80 +414,83 @@
       '" x="' + c.x + '" y="27">' +
       esc(clip(c.description || c.type, Math.floor(room / 5.6))) + "</text>" +
       drawScale(c, room) +
-      c.gone.map(function (g, i) { return drawStub(c, g, i); }).join("") +
-      drawOffPathStub(c) +
       drawMergeControl(c);
   }
 
+  function countCutLines() {
+    return Math.max.apply(null, cols.map(function (c) {
+      return c.gone.length;
+    }).concat([0]));
+  }
+
   // How much of the frame here the figure descends from, on every column that has
-  // one: a blank reads as missing, not as all of them. A count, never a ribbon —
-  // 45,061 drawn beside 40 to scale is the scale-mixing that makes a lie.
+  // one: a blank reads as missing, not as all of them.
   function drawScale(c, room) {
-    var step = (D.scale || []).find(function (s) { return s.stage === c.id; });
-    if (!step || !step.rows_count) return "";
-    var label = num(step.included_rows_count) + " of " + num(step.rows_count) +
-      (step.rows_count === 1 ? " row here" : " rows here");
-    return '<text class="scope-out" data-tip="' + esc(c.id + " holds " +
-      num(step.rows_count) + " rows; this figure descends from " + num(step.included_rows_count)) +
-      '" x="' + c.x + '" y="39">' + esc(clip(label, Math.floor(room / 5.6))) +
-      "</text>";
+    var step = (D.scale || []).find(function (s) {
+      return s.stage === c.id && s.rows_count;
+    });
+    var budget = Math.floor(room / 5.6);
+    var frame = step
+      ? '<text class="scope-out" data-tip="' + esc(c.id + " holds " +
+          num(step.rows_count) + " rows; this figure descends from " +
+          num(step.included_rows_count)) + '" x="' + c.x + '" y="39">' +
+        esc(clip(num(step.included_rows_count) + " of " + num(step.rows_count) +
+                 (step.rows_count === 1 ? " row at " : " rows at ") +
+                 c.glyph + " " + c.id, budget)) +
+        "</text>"
+      : "";
+    return frame + c.gone.map(function (gone, i) {
+      return drawRemoval(c, gone, i, budget);
+    }).join("");
+  }
+
+  // A count, never a ribbon: 44,963 drawn beside 40 to scale is the scale-mixing
+  // that makes a lie. It counts rows of the frame this stage READ, one column left.
+  function drawRemoval(c, gone, i, room) {
+    var label = num(gone.rows) + (gone.rows === 1 ? " row" : " rows") + " filtered here";
+    return '<text class="scope-out-gone" data-cut="' + esc(gone.branch) +
+      '" data-tip="' + esc(num(gone.rows) + (gone.rows === 1 ? " row was" : " rows were") +
+      " dropped from the workflow at this stage. Click to draw them in a new tab: " +
+      "they are a different set of rows, so the page around this one stops fitting.") +
+      '" x="' + c.x + '" y="' + (39 + (i + 1) * CUT_LINE) + '">' +
+      esc(clip(label, room - 2) + OUTWARD) + "</text>";
+  }
+
+  // The standalone scope page, never `location`: drawn inside the lineage page's
+  // frame this link leaves that page's figure behind, so it may not address it.
+  function scopePageFor(branch) {
+    var query = new URLSearchParams({
+      stage: D.citation.stage_id, row: String(D.citation.row_ordinal),
+      column: D.citation.column, cut: branch,
+    });
+    return "/project/" + encodeURIComponent(D.project_id) + "/runs/" +
+      encodeURIComponent(D.run_id) + "/scope?" + query.toString();
+  }
+
+  // A merge splits on values, not on anything a person wrote, hence the last sentence.
+  function sayWhatExpandingWouldDraw(alias) {
+    var rows = alias.on_route_rows_count, groups = alias.on_route_groups_count;
+    return alias.stage_id + " groups " + num(rows) + " relevant row" +
+      (rows === 1 ? "" : "s") + " into " + num(groups) + " group" +
+      (groups === 1 ? "" : "s") + " based on your data. Click to draw a node for " +
+      "each group. This is a rare operation because groups based on data are " +
+      "usually not qualitatively different.";
   }
 
   // Aliased or expanded, a merge stage offers the other reading of itself here.
   function drawMergeControl(c) {
     if (!c.alias && !c.expanded) return "";
-    var y = c.bottom + 4 + stubCount(c) * 17;
+    var y = c.bottom + 4;
     var want = c.alias ? "1" : "0";
     var text = c.alias
       ? "split into " + num(c.alias.on_route_groups_count) + " groups"
-      : "fold " + num(c.nodes.length) + " groups back";
-    var tip = c.alias
-      ? c.id + " grouped " + num(c.alias.rows_count) + " rows into " +
-        num(c.alias.groups_count) + ". Draw a node per group these rows went into."
-      : "Draw " + c.id + " as one node again.";
+      : "fold " + num(c.nodes.length) +
+        (c.nodes.length === 1 ? " group back" : " groups back");
+    var tip = c.alias ? sayWhatExpandingWouldDraw(c.alias)
+                      : "Draw " + c.id + " as one node again.";
     return '<text class="scope-expand" data-expand="' + esc(c.id) + '" data-want="' +
       want + '" data-tip="' + esc(tip) + '" x="' + (c.x + BAR + 12) + '" y="' +
       (y + 3) + '">' + esc(text) + "</text>";
-  }
-
-  // Rows the frame here still holds that this figure has no ancestor among. Not a
-  // removal: they are alive, and they went into a row the figure did not come through.
-  function countOffPath(c) {
-    var step = (D.scale || []).find(function (s) { return s.stage === c.id; });
-    return step ? step.rows_count - step.included_rows_count : 0;
-  }
-
-  function stubCount(c) {
-    return c.gone.length + (countOffPath(c) ? 1 : 0);
-  }
-
-  function drawOffPathStub(c) {
-    var rows = countOffPath(c);
-    if (!rows) return "";
-    var y = c.bottom + 4 + c.gone.length * 17;
-    var budget = Math.floor((COLUMN - BAR - STUB - 10) / 6.3);
-    return '<line class="scope-stub-off" x1="' + c.x + '" y1="' + y + '" x2="' +
-      (c.x + STUB) + '" y2="' + y + '"/>' +
-      '<text class="scope-stub-off-label" data-tip="' + esc(num(rows) +
-      (rows === 1 ? " row at this stage is present, but does not"
-                  : " rows at this stage are present, but do not") +
-      " contribute any information to the row under investigation") +
-      '" x="' + (c.x + STUB + 5) + '" y="' + (y + 3) + '">' +
-      esc(clip(num(rows) + (rows === 1 ? " row" : " rows") + " not on path", budget)) +
-      "</text>";
-  }
-
-  function drawStub(c, gone, i) {
-    var y = c.bottom + 4 + i * 17;
-    var budget = Math.floor((COLUMN - BAR - STUB - 10) / 6.3);
-    return '<line class="scope-stub" x1="' + c.x + '" y1="' + y + '" x2="' +
-      (c.x + STUB) + '" y2="' + y + '"/>' +
-      '<text class="scope-stub-label" data-cut="' + esc(c.id + SEP + gone.branch) +
-      '" data-tip="' + esc(num(gone.rows) + (gone.rows === 1 ? " row was" : " rows were") +
-      " dropped from the workflow at this stage") +
-      '" x="' + (c.x + STUB + 5) + '" y="' + (y + 3) + '">' +
-      esc(clip(num(gone.rows) + (gone.rows === 1 ? " row" : " rows") +
-               " filtered here", budget)) + "</text>";
   }
 
   // ── what is picked ───────────────────────────────────────────────────────
@@ -500,15 +508,6 @@
   }
   window.scopeClearPick = clearPick;
 
-  function pickedCut() {
-    if (!pickedNode) return null;
-    var branch = pickedNode.slice(pickedNode.indexOf(SEP) + 1);
-    var known = cols.some(function (c) {
-      return c.nodes.some(function (n) { return n.key === pickedNode; });
-    });
-    return !known && D.branches[branch] ? branch : null;
-  }
-
   function selected() {
     if (pickedRow != null) return [pickedRow];
     if (!pickedNode) return D.covers.ordinals;
@@ -519,39 +518,13 @@
 
   // ── drilling into a cut ──────────────────────────────────────────────────
   //
-  // A drilled view is one branch id, so `?cut=` addresses it. The rows behind a cut
-  // arrive as counts per path; the synthetic index below sizes the ribbons and is
-  // never a name for a row.
-
-  function enterCut(branch) {
-    if (!openCut(branch)) return;
-    history.pushState({ cut: branch }, "", addressOf(branch));
-  }
-  window.scopeEnterCut = enterCut;
-
-  function leaveCut() {
-    if (!closeCut()) return;
-    history.pushState({ cut: null }, "", addressOf(null));
-  }
-  window.scopeLeaveCut = leaveCut;
-
-  function addressOf(branch) {
-    var query = new URLSearchParams(location.search);
-    if (branch) query.set("cut", branch); else query.delete("cut");
-    return location.pathname + "?" + query.toString();
-  }
-
-  window.addEventListener("popstate", function () {
-    var wanted = new URLSearchParams(location.search).get("cut");
-    if (wanted === (D.drilled || {}).branch) return;
-    if (wanted) openCut(wanted); else closeCut();
-  });
+  // A cut is a page of its own, addressed by `?cut=`, and this reads it once on
+  // load. The rows behind it arrive as counts per path; the synthetic index below
+  // sizes the ribbons and is never a name for a row.
 
   function openCut(branch) {
     var cut = (D.cuts || {})[branch];
     if (!cut) return false;
-    if (D.drilled) closeCut();
-    BACK.push({ map: D, node: pickedNode });
     var index = [];
     cut.rows_per_branch_path.forEach(function (rows, path) {
       for (var n = 0; n < rows; n++) index.push(path);
@@ -562,20 +535,12 @@
                 merges_walked_down: [] },
       branch_paths: cut.branch_paths, branch_path_index: index, rows: cut.rows, columns: cut.columns,
       stages: cut.stages, reach: [], scale: [], sampled_from: cut.total,
+      aliased_merges: cut.aliased_merges, resolved_merges: cut.resolved_merges,
+      nearest_merge: cut.nearest_merge,
       drilled: { branch: branch, label: D.branches[branch].label,
                  stage: D.branches[branch].stage_id, total: cut.total },
     });
     pickedNode = null;
-    pickedRow = null;
-    shape();
-    return true;
-  }
-
-  function closeCut() {
-    var previous = BACK.pop();
-    if (!previous) return false;
-    D = previous.map;
-    pickedNode = previous.node;
     pickedRow = null;
     shape();
     return true;
@@ -603,33 +568,21 @@
     renderBar();
     renderTable();
     renderTabs();
-    var stubs = cols.reduce(function (all, c) {
-      return all.concat(c.gone.map(function (g) { return g.rows; }));
-    }, [0]);
-    var widest = Math.max.apply(null, stubs);
-    var offPath = cols.some(countOffPath);
-    byId("scope-legend").textContent = widest || offPath
-      ? (widest ? "A red stub is rows the stage took out of the workflow — click one to " +
-          "draw them. Its count is true and its width is not: the biggest is " +
-          num(widest) + " against " + num(D.covers.ordinals.length) + " rows. " : "") +
-        (offPath ? "An amber stub is rows the frame here still holds that this figure " +
-          "did not come through." : "")
+    var cut = cols.some(function (c) { return c.gone.length; });
+    byId("scope-legend").textContent = cut
+      ? "An underlined count is rows that stage took out of the workflow — click " +
+        "one to draw them in a new tab. Nothing in the drawing is scaled to it."
       : "";
   }
 
   function renderHere() {
-    var here = byId("scope-here");
     var note = byId("scope-drilled");
     var section = document.querySelector(".scope");
     if (!D.drilled) {
-      here.hidden = true;
       section.removeAttribute("data-drilled");
       note.textContent = "";
       return;
     }
-    here.hidden = false;
-    here.textContent = "back to " + D.citation.stage_id + "." + D.citation.column;
-    here.onclick = leaveCut;
     section.setAttribute("data-drilled", "");
     note.innerHTML = "<b>" + num(D.drilled.total) + "</b> row" +
       (D.drilled.total === 1 ? "" : "s") + " that <code>" + esc(D.drilled.stage) +
@@ -640,16 +593,7 @@
 
   function renderBar() {
     var bar = byId("scope-bar");
-    var cut = pickedCut();
-    if (cut) {
-      var known = (D.cuts || {})[cut];
-      var left = (D.reach.find(function (r) { return r.branch === cut; }) || {}).taken || 0;
-      bar.innerHTML = "<span><b>" + num(left) + "</b> row" + (left === 1 ? "" : "s") +
-        " took <code>" + esc(D.branches[cut].label) +
-        "</code>. None of them are in this figure.</span>" +
-        (known ? ' <span class="scope-clear" data-enter="' + esc(cut) +
-          '">draw these rows instead</span>' : "");
-    } else if (pickedFigure()) {
+    if (pickedFigure()) {
       bar.innerHTML = "<span><b>1</b> row of <code>" + esc(D.citation.stage_id) +
         "</code> — row " + D.cited_row.number + ", merged from " +
         num(D.covers.ordinals.length) + " rows of <code>" +
@@ -666,9 +610,6 @@
     }
     bar.querySelectorAll("[data-clear]").forEach(function (el) {
       el.onclick = clearPick;
-    });
-    bar.querySelectorAll("[data-enter]").forEach(function (el) {
-      el.onclick = function () { enterCut(el.dataset.enter); };
     });
   }
 
@@ -756,8 +697,6 @@
   }
 
   function renderTable() {
-    var cut = pickedCut();
-    if (cut) { renderCutTable(cut); return; }
     if (pickedFigure()) { renderCitedRow(); return; }
     var wanted = new Set(selected());
     var head = headOf(D.columns);
@@ -811,21 +750,6 @@
     byId("scope-table").innerHTML = tableOf(D.citation.stage_id) + "<thead>" +
       headOf(row.columns) + '</thead><tbody><tr data-row="' + row.ordinal + '">' +
       rowOf(row, row.columns) + "</tbody></table>";
-  }
-
-  function renderCutTable(branch) {
-    var cut = (D.cuts || {})[branch];
-    var host = byId("scope-table");
-    if (!cut) {
-      host.innerHTML = "";
-      return;
-    }
-    var head = headOf(cut.columns);
-    var body = cut.rows.map(function (r) {
-      return '<tr data-row="' + r.ordinal + '">' + rowOf(r, cut.columns);
-    }).join("");
-    host.innerHTML = tableOf(cut.at_stage) + "<thead>" + head + "</thead><tbody>" +
-      body + "</tbody></table>";
   }
 
   // A cell is one figure's coordinate — stage, row, column — so it opens that

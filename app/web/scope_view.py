@@ -28,7 +28,7 @@ def load_scope_map(project_id: str, run_id: str, citation: StageOutputCellCitati
     outputs = resolve_run_dir(project_id, run_id) / "outputs"
     scope = build_scope_map(run_branches, project_id, run_id, outputs, citation,
                             expand)
-    return scope, find_cuts_to_offer(run_branches, outputs, scope)
+    return scope, find_cuts_to_offer(run_branches, outputs, scope, expand)
 
 
 def say_what_no_row_fed(scope: ScopeMap) -> str | None:
