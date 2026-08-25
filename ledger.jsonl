@@ -1788,3 +1788,4 @@
 {"run_id":"32828839908","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32828839908","created":"2026-08-25T08:53:03Z","branch":"trace-crosses-and-paths","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"32829052617","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32829052617","created":"2026-08-25T08:54:58Z","branch":"trace-crosses-and-paths","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"32829052617","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32829052617","created":"2026-08-25T08:55:27Z","branch":"trace-crosses-and-paths","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"32829820445","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32829820445","created":"2026-08-25T09:03:26Z","branch":"fix/lineage-tab-survives-the-row","event":"pull_request","contracts_kept":16,"findings":[]}
