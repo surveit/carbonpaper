@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from app.models.branch_analysis import (
     BranchId,
-    BranchPath,
-    BranchReason,
     FrameScale,
     RowOrdinal,
     RowSet,
@@ -111,31 +109,5 @@ def _one_hop_up(run_branches: WorkflowRunBranches, sid: StageId, row: RowOrdinal
     stage = run_branches.stages.get(sid)
     inputs = [ref.id for ref in stage.inputs] if stage else []
     return [(inputs[0], row)] if len(inputs) == 1 else []
-
-
-def index_paths(run_branches: WorkflowRunBranches, at_stage: StageId,
-                ordinals: list[RowOrdinal], on_route: set[StageId]
-                ) -> tuple[list[BranchPath], list[int]]:
-    """Distinct paths, and one small int per row."""
-    paths: list[BranchPath] = []
-    seen: dict[BranchPath, int] = {}
-    index = []
-    for ordinal in ordinals:
-        path = _keep_branches_on_route(
-            run_branches, run_branches.branch_paths[at_stage][ordinal], on_route)
-        if path not in seen:
-            seen[path] = len(paths)
-            paths.append(path)
-        index.append(seen[path])
-    return paths, index
-
-
-def _keep_branches_on_route(run_branches: WorkflowRunBranches, path: BranchPath,
-                            on_route: set[StageId]) -> BranchPath:
-    """A merge into a row this figure is not tells these rows nothing, so it is dropped."""
-    options = run_branches.branch_options
-    return tuple(branch_id for branch_id in path
-                 if options[branch_id].reason is not BranchReason.merge
-                 or options[branch_id].stage_id in on_route)
 
 

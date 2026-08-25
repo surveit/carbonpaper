@@ -17,9 +17,9 @@ from app.models.branch_analysis import (
     RowOrdinal,
 )
 from app.models.schema import StageId
-from app.runtime.branch_analysis import WorkflowRunBranches
+from app.runtime.branch_analysis import WorkflowRunBranches, group_rows_by_path
 from app.runtime.errors import MissingLineage
-from app.services.scope import find_contributing_rows, index_paths
+from app.services.scope import find_contributing_rows
 
 
 @dataclass(frozen=True)
@@ -32,9 +32,7 @@ class CitedFigure:
 
 class PathBehindFigure(BaseModel):
     rows: int
-    # What this path holds and at least one other does not — a comparison across
-    # the paths drawn together, which is why it is read here and not recorded.
-    tells_it_apart: list[BranchOption]
+    tells_it_apart: list[BranchOption]  # held here, not on the paths beside it
     whole_path: list[BranchOption]
     example_ordinal: RowOrdinal
     holds_the_marked_row: bool = False
@@ -65,14 +63,13 @@ def find_paths_behind_figure(
 ) -> PathsBehindFigure:
     covers = find_contributing_rows(run_branches, figure.stage_id, figure.row_ordinal)
     _refuse_a_frame_with_no_paths(run_branches, covers.at_stage, covers.ordinals)
-    paths, index = index_paths(run_branches, covers.at_stage, covers.ordinals,
+    taken = group_rows_by_path(run_branches, covers.at_stage, covers.ordinals,
                                set(covers.regrained_at) | {figure.stage_id})
-    took = _gather_ordinals_per_path(covers.ordinals, index, len(paths))
-    shared = _find_branches_on_every_path(paths)
+    shared = _find_branches_on_every_path(taken.paths)
     return PathsBehindFigure(
         at_stage=covers.at_stage,
         paths=[_read_one_path(run_branches, path, on_it, shared, marked_row)
-               for path, on_it in zip(paths, took)],
+               for path, on_it in zip(taken.paths, taken.ordinals)],
     )
 
 
@@ -99,13 +96,6 @@ def _refuse_a_frame_with_no_paths(run_branches: WorkflowRunBranches, at_stage: S
             f"not the {max(ordinals) + 1} the figure reaches"
         )
 
-
-def _gather_ordinals_per_path(ordinals: list[RowOrdinal], index: list[int], paths: int
-                              ) -> list[list[RowOrdinal]]:
-    took: list[list[RowOrdinal]] = [[] for _ in range(paths)]
-    for at, which in enumerate(index):
-        took[which].append(ordinals[at])
-    return took
 
 
 def _find_branches_on_every_path(paths: list[BranchPath]) -> frozenset[BranchId]:

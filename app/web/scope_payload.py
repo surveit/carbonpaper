@@ -22,12 +22,15 @@ from app.models.branch_analysis import (
 )
 from app.models.claims import StageOutputCellCitation
 from app.models.schema import StageId
-from app.runtime.branch_analysis import WorkflowRunBranches, find_rows_that_took
+from app.runtime.branch_analysis import (
+    WorkflowRunBranches,
+    find_rows_that_took,
+    group_rows_by_path,
+)
 from app.runtime.branch_analysis.stage_code import read_decision_source, read_stage_code
 from app.services.scope import (
     find_contributing_rows,
     find_merges_that_excluded,
-    index_paths,
     measure_frame_scale,
 )
 
@@ -116,7 +119,8 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
     covers = find_contributing_rows(run_branches, cited.stage_id, cited.row_ordinal)
     frame = read_frame_table(outputs / f"{covers.at_stage}.parquet")
     on_route = set(covers.regrained_at) | {cited.stage_id}
-    paths, index = index_paths(run_branches, covers.at_stage, covers.ordinals, on_route)
+    paths, _, index = group_rows_by_path(
+        run_branches, covers.at_stage, covers.ordinals, on_route)
     shown = covers.ordinals[:CELL_ROWS]
     return ScopeMap(
         project_id=project_id, run_id=run_id, citation=cited, covers=covers,
@@ -160,7 +164,7 @@ def read_cut(run_branches: WorkflowRunBranches, outputs: Path,
     at_stage, ordinals = find_rows_that_took(run_branches, branch_id)
     if not ordinals or at_stage not in run_branches.branch_paths:
         return None
-    paths, index = index_paths(run_branches, at_stage, ordinals, set())
+    paths, _, index = group_rows_by_path(run_branches, at_stage, ordinals, set())
     spread = Counter(index)
     shown = ordinals[:CUT_SAMPLE]
     frame = read_frame_table(outputs / f"{at_stage}.parquet")

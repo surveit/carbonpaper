@@ -3,6 +3,12 @@
 from app.runtime.branch_analysis.rows_behind_a_branch import (
     find_rows_that_took as find_rows_that_took,
 )
+from app.runtime.branch_analysis.rows_on_a_path import (
+    PathsTaken as PathsTaken,
+)
+from app.runtime.branch_analysis.rows_on_a_path import (
+    group_rows_by_path as group_rows_by_path,
+)
 from app.runtime.branch_analysis.run_branches import (
     MERGE_EDGE as MERGE_EDGE,
 )
