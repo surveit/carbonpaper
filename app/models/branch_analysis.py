@@ -44,7 +44,8 @@ class BranchOption(BaseModel):
     rows_live_in_stage_id: StageId
     reason: BranchReason
     role: BranchRole
-    label: str
+    # Empty for a merge: its words name a row, which the reader's layer writes.
+    label: str = ""
     source_code: str = ""
     # None for every reason but `code`, which is the only one written in a stage's source.
     test_line_number: int | None = None

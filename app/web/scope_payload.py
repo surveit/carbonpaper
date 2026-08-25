@@ -33,6 +33,7 @@ from app.services.scope import (
     find_merges_that_excluded,
     measure_frame_scale,
 )
+from app.web.config import render_row_number
 
 # Cells for a wider set than this are sampled; the counts never are.
 CELL_ROWS = 400
@@ -46,6 +47,8 @@ class DrawnRow(BaseModel):
     """One row of a frame, positional against the map's `columns`, as tables are here."""
 
     ordinal: RowOrdinal
+    # The same row as the table heads it. See `render_row_number`.
+    number: str
     branch_path_index: int
     cells: list[JsonScalar]
 
@@ -65,6 +68,7 @@ class CitedRow(BaseModel):
     """The figure's own output row, shown when a reader clicks the figure itself."""
 
     ordinal: RowOrdinal
+    number: str
     columns: list[str]
     cells: list[JsonScalar]
 
@@ -154,7 +158,8 @@ def _read_the_cited_cell(outputs: Path, citation: StageOutputCellCitation
 
 def _read_cited_row(frame: pa.Table, ordinal: RowOrdinal) -> CitedRow:
     return CitedRow(
-        ordinal=ordinal, columns=list(frame.column_names),
+        ordinal=ordinal, number=render_row_number(ordinal),
+        columns=list(frame.column_names),
         cells=[_plain(frame.column(name)[ordinal]) for name in frame.column_names])
 
 
@@ -198,7 +203,8 @@ def find_cuts_to_offer(run_branches: WorkflowRunBranches, outputs: Path,
 def read_rows(frame: pa.Table, ordinals: list[RowOrdinal],
               branch_path_index: list[int]) -> list[DrawnRow]:
     cells = [frame.column(name).to_pylist() for name in frame.column_names]
-    return [DrawnRow(ordinal=ordinal, branch_path_index=branch_path_index[position],
+    return [DrawnRow(ordinal=ordinal, number=render_row_number(ordinal),
+                     branch_path_index=branch_path_index[position],
                      cells=[_plain(column[ordinal]) for column in cells])
             for position, ordinal in enumerate(ordinals)]
 
@@ -206,9 +212,17 @@ def read_rows(frame: pa.Table, ordinals: list[RowOrdinal],
 def _branches_on(run_branches: WorkflowRunBranches, paths: list[BranchPath]
                  ) -> dict[BranchId, BranchOption]:
     touched = _stages_touched(run_branches, paths)
-    return {branch_id: option
+    return {branch_id: _label_a_merge(option)
             for branch_id, option in run_branches.branch_options.items()
             if any(branch_id in path for path in paths) or option.stage_id in touched}
+
+
+def _label_a_merge(option: BranchOption) -> BranchOption:
+    """What a merge says IS the row it merged into, and naming a row is a reader's layer's."""
+    if option.merged_into_row_ordinal is None:
+        return option
+    return option.model_copy(update={
+        "label": f"merged into row {render_row_number(option.merged_into_row_ordinal)}"})
 
 
 def _stages_touched(run_branches: WorkflowRunBranches,

@@ -260,7 +260,7 @@ def _merge_option(sid: StageId, branch_id: BranchId, ordinal: RowOrdinal,
     return BranchOption(
         id=branch_id, stage_id=sid, rows_live_in_stage_id=parent.stage_id,
         reason=BranchReason.merge, role=BranchRole.keeps,
-        label=f"merged into row {ordinal}", merged_into_row_ordinal=ordinal)
+        merged_into_row_ordinal=ordinal)
 
 
 # ─── one path per row, out of the per-stage branches ─────────────────────────

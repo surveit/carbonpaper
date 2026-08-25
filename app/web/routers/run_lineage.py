@@ -26,7 +26,7 @@ from app.web.lineage_coordinate import build_lineage_coordinate
 from app.web.row_paths import CitedFigure, NoPathsToShow, PathsPane, find_paths_behind_figure
 from app.web.trace_view import build_trace_view
 from app.web.breadcrumbs import build_run_child_crumbs
-from app.web.config import templates
+from app.web.config import render_row_number, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.services.workspace import resolve_run_dir
 from app.web.loading import load_manifest, load_run_record
@@ -133,7 +133,7 @@ async def run_stage_row_trace_view(
         request,
         "lineage.html",
         {
-            "title": f"{view['start_stage']} · row {view['start_row']}",
+            "title": f"{view['start_stage']} · row {render_row_number(view['start_row'])}",
             "view": view,
             "coordinate": coordinate,
             "pane": _read_paths_pane(project_id, run_id, stage_id, row, figure),

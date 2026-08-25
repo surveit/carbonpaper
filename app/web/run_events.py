@@ -12,6 +12,7 @@ from fastapi import Request
 
 from app.core.run_status import RunStatus
 from app.runtime.run_log import RUN_DONE, read_events_backward, read_events_since
+from app.web.config import render_row_number
 from app.web.loading import load_manifest
 
 # How often the SSE tail re-reads the chunks, and how many empty polls it tolerates after
@@ -36,6 +37,21 @@ def select_stage_events(
         for event in events
         if event.get("stage") == stage or event.get("kind") == RUN_DONE
     ]
+
+
+def label_rows(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The panel prints `row_label`; the log files an event under the row's ordinal."""
+    return [_label_row(event) for event in events]
+
+
+def _label_row(event: dict[str, Any]) -> dict[str, Any]:
+    span = event.get("rows") or []
+    if len(span) > 1:
+        return {**event, "row_label":
+                f"rows {render_row_number(span[0])}–{render_row_number(span[-1])}"}
+    if event.get("row") is None:
+        return event
+    return {**event, "row_label": f"row {render_row_number(event['row'])}"}
 
 
 def tail_start_seq(project_id: str, run_id: str, tail: int, stage: str | None = None) -> int:
@@ -66,7 +82,7 @@ def page_events_before(
     # The window is cut AFTER filtering, not from `before_seq - limit`: a stage
     # holding a handful of events inside a 5000-seq span would otherwise hand
     # back a nearly empty page and report the rest as already loaded.
-    page = older[-limit:]
+    page = label_rows(older[-limit:])
     first_seq = int(page[0]["seq"]) if page else 0
     return {
         "events": page,
@@ -91,7 +107,7 @@ async def stream_events(
         # the next poll.
         if new:
             cursor = int(new[-1]["seq"]) + 1
-        for event in select_stage_events(new, stage):
+        for event in label_rows(select_stage_events(new, stage)):
             yield f"data: {json.dumps(event)}\n\n"
             if event.get("kind") == RUN_DONE:
                 return

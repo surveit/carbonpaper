@@ -162,7 +162,8 @@ def test_a_node_carries_its_row_marked_against_its_parents():
 def test_a_node_names_the_row_its_diff_was_taken_against():
     view = _view(_trace(), _stages())
     assert view["nodes"][0]["base"] is None  # the origin has no parent to compare to
-    assert view["nodes"][-1]["base"] == {"stage_id": "seeds", "row_ordinal": 0}
+    assert view["nodes"][-1]["base"] == {
+        "stage_id": "seeds", "row_ordinal": 0, "row_number": "1"}
 
 
 def test_a_node_links_where_the_reader_goes_next():

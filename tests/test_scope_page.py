@@ -57,6 +57,12 @@ def test_the_citation_carries_the_cell_read_back_off_the_frame(run_id):
     assert payload["citation"]["value"] == 2200
 
 
+def test_the_figure_names_its_row_as_a_reader_counts_them(run_id):
+    page = TestClient(app).get(scope_url(PROJECT, run_id, "grant_totals", "total_amount", 0))
+    # Ordinal 0 in the address; row 1 on the page, as everywhere else it is named.
+    assert "row 1," in page.text and "row 0," not in page.text
+
+
 def test_a_row_past_the_end_of_the_frame_is_a_404(run_id):
     page = TestClient(app).get(scope_url(PROJECT, run_id, "grant_totals", "total_amount", 99))
     assert page.status_code == 404

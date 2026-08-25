@@ -10,16 +10,16 @@
 <p class="paths-count">
   {% if pane.paths | length == 1 %}
     Every row behind <code>{{ figure.stage_id }}</code> row
-    {{ figure.row_ordinal }} took the <b>same path</b>.
+    {{ figure.row_ordinal | row_number }} took the <b>same path</b>.
   {% else %}
     <b>{{ pane.paths | length }}</b> paths reach <code>{{ figure.stage_id }}</code>
-    row {{ figure.row_ordinal }}, through <code>{{ pane.at_stage }}</code>.
+    row {{ figure.row_ordinal | row_number }}, through <code>{{ pane.at_stage }}</code>.
   {% endif %}
 </p>
 {% for path in pane.paths %}
   {% set body %}
     <span class="path-rows">follow <code>{{ pane.at_stage }}</code> row
-      {{ path.example_ordinal }}</span>
+      {{ path.example_ordinal | row_number }}</span>
     {% for branch in path.tells_it_apart %}
       <span class="path-branch {{ 'is-code' if branch.reason.value == 'code' }}"
             title="{{ branch.reason.value }} at {{ branch.stage_id }}">{{ branch.label }}</span>

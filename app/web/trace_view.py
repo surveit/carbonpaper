@@ -18,7 +18,7 @@ from app.models.stages.llm_transform import LLMTransformStage
 from app.models.stages.starlark import StarlarkRowFunctionStage
 from app.runtime.lineage import EdgeKind
 from app.services.loader import resolve_function_code
-from app.web.config import label_stage_type
+from app.web.config import label_stage_type, render_row_number
 from app.web.panel_links import (
     CONTRIBUTOR_ROWS_LINKED,
     CONTRIBUTORS_NAMED,
@@ -115,6 +115,8 @@ def _build_node(
         "step": i + 1,  # 1-based, chronological — so the story can say "step 4"
         "stage_id": step["stage_id"],
         "row_ordinal": step["row_ordinal"],
+        # Ordinals address rows; a page names them. Nothing here counts on its own.
+        "row_number": render_row_number(step["row_ordinal"]),
         "stage_type": step["stage_type"],
         # The slug stays — it is what the trace recorded — and the label beside it is
         # what the panel prints, so both surfaces name a type the same way.
@@ -123,6 +125,7 @@ def _build_node(
         # The name alone; where it sat on disk is the manifest's business.
         "source_file": _source_filename(step),
         "source_row": step.get("source_row"),
+        "source_row_number": _render_row_number_or_none(step.get("source_row")),
         "source_file_count": step.get("source_file_count"),
         "role": _role_of(i, len(chrono), truncated),
         "columns_new": step["columns_new"],
@@ -132,19 +135,28 @@ def _build_node(
         # rather than leaving the reader to assume which frame the diff used.
         "base": None if parent is None else {
             "stage_id": parent["stage_id"], "row_ordinal": parent["row_ordinal"],
+            "row_number": render_row_number(parent["row_ordinal"]),
         },
         "transform": _transform_of(stages.get(step["stage_id"])),
         "links": _links_of(links, step["stage_id"], step["row_ordinal"]),
         # Fan-in parents are NOT in `branches` — a row can have tens of
         # thousands, and `branches` is what the reader promotes one at a time.
-        "branches": [
-            {**branch, "links": _links_of(links, branch["stage_id"], branch["row_ordinal"])}
-            for branch in _spine_branches(step)
-        ],
+        "branches": [_name_the_row(branch, links) for branch in _spine_branches(step)],
         "contributor_groups": [
             asdict(group) for group in _group_contributors(_contributions(step), links)
         ],
     }
+
+
+def _name_the_row(entry: dict[str, Any], links: PanelLinks) -> dict[str, Any]:
+    """A parent row as the page shows it: where it opens, and what it is called there."""
+    ordinal = int(entry["row_ordinal"])
+    return {**entry, "links": _links_of(links, entry["stage_id"], ordinal),
+            "row_number": render_row_number(ordinal)}
+
+
+def _render_row_number_or_none(ordinal: int | None) -> str | None:
+    return None if ordinal is None else render_row_number(ordinal)
 
 
 def _source_filename(step: dict[str, Any]) -> str | None:
@@ -204,8 +216,7 @@ def _one_group(
         columns=list(columns) if columns else None,
         total=len(parents),
         linked=links.rows_link_covers(len(parents)),
-        named=[{**p, "links": _links_of(links, p["stage_id"], int(p["row_ordinal"]))}
-               for p in named],
+        named=[_name_the_row(p, links) for p in named],
         rows_link=links.contributor_rows(
             stage_id,
             ordinals=[int(p["row_ordinal"]) for p in parents[:CONTRIBUTOR_ROWS_LINKED]]),

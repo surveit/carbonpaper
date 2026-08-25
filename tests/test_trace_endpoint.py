@@ -132,9 +132,10 @@ def test_the_header_offers_every_stage_this_run_wrote_rows_for(tmp_path, monkeyp
 
 
 def test_the_header_bounds_the_row_box_by_the_stage_it_reads(tmp_path, monkeypatch):
-    client = _project_run(tmp_path, monkeypatch)  # enrich holds rows 0 and 1
+    client = _project_run(tmp_path, monkeypatch)  # enrich holds two rows
     body = client.get("/project/proj/runs/R1/stage/enrich/row/1/trace/view").text
-    assert 'value="1" min="0"' in body and 'max="1"' in body
+    # Ordinal 1 in the address is row 2 in the box, and 2 is the last one to ask for.
+    assert 'value="2" min="1"' in body and 'max="2"' in body
     assert "of 2" in body
 
 

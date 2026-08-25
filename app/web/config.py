@@ -118,6 +118,11 @@ def label_stage_type(v: object) -> str:
     return TYPE_LABEL.get(slug, slug)
 
 
+def render_row_number(ordinal: int) -> str:
+    """A row's place as a reader counts it; a run numbers its own rows from 0."""
+    return str(ordinal + 1)
+
+
 def serves_an_open_demo() -> bool:
     """True on Fly, which is the only place this app is a shared public deploy."""
     return bool(os.environ.get("FLY_APP_NAME"))
@@ -137,6 +142,8 @@ templates.env.filters["plain_value"] = plain_value
 # Every type tag goes through this, so a new stage type cannot reach the screen as
 # a raw slug on one surface and a label on another.
 templates.env.filters["label_stage_type"] = label_stage_type
+# Ordinals stay 0-based in every URL and record; a number on screen counts from 1.
+templates.env.filters["row_number"] = render_row_number
 # The review packet renders the same templates through this env, so the rail's
 # sizes abbreviate identically in a written packet and on a live run page.
 templates.env.filters["abbreviate_count"] = abbreviate_count

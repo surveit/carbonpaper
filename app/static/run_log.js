@@ -52,7 +52,7 @@
   function formatEvent(ev, traceUrl) {
     if ((ev.level || 0) >= LEVEL_DETAIL) return formatDetailEvent(ev);
     var ts = (ev.ts || "").slice(11, 23);        // HH:MM:SS.mmm
-    var loc = [ev.stage, ev.row != null ? "row " + ev.row : null]
+    var loc = [ev.stage, ev.row != null ? ev.row_label : null]
       .filter(Boolean).join(" · ");
     var tail = ev.text ? " — " + ev.text : (ev.status ? " — " + ev.status : "");
     var src = ev.source ? "  [" + ev.source + "]" : "";
@@ -77,9 +77,7 @@
   // them, not to the single row it is filed under.
   function formatDetailEvent(ev) {
     var label = (ev.kind || "").replace(/^llm_/, "");
-    var span = (ev.rows && ev.rows.length > 1)
-      ? "rows " + ev.rows[0] + "–" + ev.rows[ev.rows.length - 1]
-      : "row " + ev.row;
+    var span = ev.row_label || "";
     var head = escapeHtml(
       "    " + label + (ev.stage != null ? "  " + ev.stage + " · " + span : "")
     );

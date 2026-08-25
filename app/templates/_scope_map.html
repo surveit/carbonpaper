@@ -22,7 +22,7 @@
   <header class="scope-figure">
     <p class="scope-cell">
       <span class="badge pending scope-beta">beta</span>
-      <code>{{ scope.citation.stage_id }}</code> row {{ scope.citation.row_ordinal }},
+      <code>{{ scope.citation.stage_id }}</code> row {{ scope.citation.row_ordinal | row_number }},
       column <code>{{ scope.citation.column }}</code>
     </p>
     <p class="scope-answers">{{ answers }}</p>

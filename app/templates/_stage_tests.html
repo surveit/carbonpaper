@@ -63,7 +63,7 @@
     {# Where each row came from. One line per row, in the table's own order, so a case
        feeding two rows accounts for both. #}
     {% for selection in input.selections %}
-    <p class="test-provenance">row {{ selection.row }} of run {{ selection.run_id }},
+    <p class="test-provenance">row {{ selection.row | row_number }} of run {{ selection.run_id }},
       found by <code>{{ selection.filter }}</code> — which matches
       {{ selection.matched }} of the {{ selection.scanned }} rows that run produced.</p>
     {% endfor %}
@@ -110,7 +110,7 @@
       <thead><tr><th>row</th><th>column</th><th>expected</th><th>actual</th></tr></thead>
       <tbody>
         {% for diff in view.diffs %}
-        <tr><td>{{ diff.row }}</td><td><code>{{ diff.column }}</code></td>
+        <tr><td>{{ diff.row | row_number }}</td><td><code>{{ diff.column }}</code></td>
             <td>{{ diff.expected }}</td><td>{{ diff.actual }}</td></tr>
         {% endfor %}
       </tbody>
