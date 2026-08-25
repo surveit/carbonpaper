@@ -43,8 +43,8 @@ def compare_slice_to_the_file(project_id: str, run_id: str, stage_id: StageId,
     source = frame_to_table(_reread_the_source(project_id, run_id, stage_id, path))
     ran_rows = ran.take(pa.array(list(ordinals)))
     source_rows, located_by = _align_rows(
-        ran_rows, source, _skipped_rows(project_id, run_id, stage_id), ordinals)
-    mismatches = sum(_count_differing_cells(ran_rows, source_rows, column)
+        ran_rows, source, _read_the_offset(project_id, run_id, stage_id), ordinals)
+    mismatches = sum(_measure_differing_cells(ran_rows, source_rows, column)
                      for column in columns)
     return SliceComparison(rows=len(ordinals), columns=len(columns),
                            cells=len(ordinals) * len(columns), mismatches=mismatches,
@@ -74,14 +74,14 @@ def _align_rows(ran_rows: pa.Table, source: pa.Table, skipped: int,
             "row position")
 
 
-def _count_differing_cells(ran_rows: pa.Table, source_rows: pa.Table,
+def _measure_differing_cells(ran_rows: pa.Table, source_rows: pa.Table,
                            column: str) -> int:
-    ran = _as_text(ran_rows.column(column).to_pylist())
-    reread = _as_text(source_rows.column(column).to_pylist())
+    ran = _render_as_text(ran_rows.column(column).to_pylist())
+    reread = _render_as_text(source_rows.column(column).to_pylist())
     return sum(1 for here, there in zip(ran, reread) if here != there)
 
 
-def _as_text(cells: list) -> list[str | None]:
+def _render_as_text(cells: list) -> list[str | None]:
     return [None if cell is None else str(cell) for cell in cells]
 
 
@@ -103,6 +103,6 @@ def _read_the_connector_params(project_id: str, run_id: str,
     raise StageNotInRun(f"the pinned version has no file stage '{stage_id}'")
 
 
-def _skipped_rows(project_id: str, run_id: str, stage_id: StageId) -> int:
+def _read_the_offset(project_id: str, run_id: str, stage_id: StageId) -> int:
     offsets = run_service.read_run_status(project_id, run_id)["parameters"]["offsets"]
     return int(offsets.get(stage_id) or 0)
