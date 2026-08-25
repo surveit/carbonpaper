@@ -29,21 +29,21 @@
    the screen, which is a second scrollbar for nothing. */
 html,body{height:100%}
 body{display:flex;flex-direction:column;overflow:hidden}
-/* The headline is the figure; the line under it is the coordinate that names it,
-   and every part of that coordinate is the control that moves to another one. */
-.lin-head{flex:none;padding:14px 22px 12px;background:var(--raised)}
+/* The figure is the picker (see .picker.figure in static/picker.css); the line under
+   it is the coordinate, and every part of that is the control that moves to another. */
+.lin-head{flex:none;padding:10px 22px 9px;background:var(--raised)}
 .lin-head h1{font-size:17px;margin:0;font-weight:600;
   display:flex;align-items:baseline;gap:11px;flex-wrap:wrap}
-.lin-value{font-size:34px;font-weight:650;letter-spacing:-.015em;line-height:1}
-.lin-value.lin-long{font-size:19px;font-weight:600;line-height:1.3;letter-spacing:0}
-.lin-nocol{font-size:15px;font-weight:400;color:var(--muted)}
 .lin-head h1 code{background:var(--sunk-deep);padding:1px 5px;border-radius:4px}
-.lin-coord{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:9px}
-.lin-word{color:var(--muted);font-size:13px}
-.lin-rowbox{width:5.5em;font:inherit;font-size:13px;padding:6px 9px;color:var(--fg);
+/* Bottom-aligned, so the mark sits on the value rather than the column above it. */
+.lin-figure{display:flex;align-items:flex-end;gap:7px}
+.lin-why{border:1px solid var(--border);border-radius:50%;color:var(--muted);cursor:help;
+  font-size:11px;line-height:15px;width:16px;height:16px;text-align:center;margin-bottom:7px}
+.lin-why[hidden]{display:none}
+.lin-coord{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:7px}
+.lin-word{color:var(--muted);font-size:12.5px}
+.lin-rowbox{width:5em;font:inherit;font-size:12.5px;padding:5px 8px;color:var(--fg);
   border:1px solid var(--border);border-radius:8px;background:var(--raised)}
-.lin-coltip{color:var(--muted);font-size:12.5px;margin:9px 0 0;max-width:78ch}
-.lin-coltip:empty{display:none}
 .lin-sub{color:var(--muted);font-size:12.5px}
 /* One question per tab: hold the row, hold the column, or hold both. */
 .lin-pagetabs{flex:none;display:flex;gap:2px;padding:0 18px;background:var(--raised);
@@ -230,10 +230,28 @@ ul.infiles li:last-child{border-bottom:0}
   {# A folder has no server to trace a different row from, so the coordinate is stated. #}
   <h1><code>{{ view.start_stage }}</code> row {{ view.start_row }}</h1>
 {% else %}
-  <h1>
-    <span class="lin-value" id="lin-value">{% if coordinate.cell %}{% if coordinate.cell.value %}{{ coordinate.cell.value }}{% else %}<span class="lin-null">(empty)</span>{% endif %}{% endif %}</span>
-    <span class="lin-nocol" id="lin-nocol"{% if coordinate.cell %} hidden{% endif %}>Pick a column to read the figure it holds.</span>
-  </h1>
+{% if not coordinate.cells %}
+  {# The walk read no row here, so there is no cell to read and none to offer. #}
+  <h1><code>{{ view.start_stage }}</code> row {{ view.start_row }}</h1>
+{% else %}
+  {# The figure and the column it sits in are one control: the picker wears them, and
+     its list is this row, so every other cell is one click from the one being read. #}
+  <div class="lin-figure">
+    {% call picker("Select from " ~ coordinate.cells | length ~ " columns",
+                  search_label=("a column" if coordinate.cells | length > 8 else ""),
+                  size="figure") %}
+    <select id="lin-column" class="picker-native">
+      <option value="" data-name="the whole row" data-meta="{{ coordinate.cells | length }} columns"{% if not coordinate.cell %} selected{% endif %}>the whole row</option>
+      {% for cell in coordinate.cells %}
+      <option value="{{ cell.column }}" data-name="{{ cell.value | truncate(160, true) or "(empty)" }}" data-meta="{{ cell.column }}"{% if cell.column == coordinate.column %} selected{% endif %}>{{ cell.column }}</option>
+      {% endfor %}
+    </select>
+    {% endcall %}
+    {# What the version declares about this column, where the column is named. #}
+    <span class="lin-why has-tip" id="lin-why" tabindex="0"
+          data-tip="{{ coordinate.cell.tip if coordinate.cell }}"{% if not coordinate.cell %} hidden{% endif %}>?</span>
+  </div>
+{% endif %}
   <div class="lin-coord">
     <label class="lin-word" for="lin-stage">at</label>
     {% call picker("Stages of this run", hint="the ones this run wrote rows for",
@@ -250,21 +268,7 @@ ul.infiles li:last-child{border-bottom:0}
            {% if coordinate.rows %}max="{{ coordinate.rows - 1 }}"{% endif %}>
     {# Stated only where the run counted them: a stage with no frame has no last row. #}
     {% if coordinate.rows %}<span class="lin-word">of {{ "{:,}".format(coordinate.rows) }}</span>{% endif %}
-    {% if coordinate.cells %}
-    <label class="lin-word" for="lin-column">showing</label>
-    {% call picker("Columns of this row", hint="one cell is one figure", size="sm") %}
-    {# Names only: what each column MEANS is a sentence, and it reads under the
-       coordinate rather than inside the trigger that names one word. #}
-    <select id="lin-column" class="picker-native">
-      <option value=""{% if not coordinate.cell %} selected{% endif %}>the whole row</option>
-      {% for cell in coordinate.cells %}
-      <option value="{{ cell.column }}"{% if cell.column == coordinate.column %} selected{% endif %}>{{ cell.column }}</option>
-      {% endfor %}
-    </select>
-    {% endcall %}
-    {% endif %}
   </div>
-  <p class="lin-coltip" id="lin-coltip">{% if coordinate.cell %}{{ coordinate.cell.tip }}{% endif %}</p>
 {% endif %}
 </div>
 <div class="lin-pagetabs" id="pagetabs">
@@ -625,31 +629,30 @@ document.querySelector('.lin-graph').addEventListener('toggle', async e => {
   try { await mermaid.run({ nodes:[mmd] }); } catch(err){ graphRendered = false; }
 });
 
-// ---- The column being read: the figure above, and the scope map's subject --
-// A figure is a cell. Which cell is the header's to say, so switching one repaints
-// the headline off the row this page already holds — no second trip to the server.
+// ---- The column being read: the figure itself, and the scope map's subject --
+// A figure is a cell, and the picker wears it: the trigger is painted from the option
+// the reader chose, so switching one costs no trip to the server.
 const columnPick = document.getElementById('lin-column');
+const columnWhy = document.getElementById('lin-why');
 const scopeFrame = document.getElementById('scope-frame');
 let scopeColumn = null;
 
 function showColumn(column){
   COORD.column = column || null;
   const cell = COORD.cells.find(c => c.column === COORD.column);
-  paintValue(cell);
-  document.getElementById('lin-nocol').hidden = Boolean(cell);
-  document.getElementById('lin-coltip').textContent = cell ? cell.tip : '';
+  columnWhy.hidden = !cell;
+  if(cell) columnWhy.dataset.tip = cell.tip;
+  markLongValue(cell);
   // Replaced, not pushed: the reader is reading one row, and the back button is
   // still the way out of it. The address stays the one a figure links with.
   history.replaceState(null, '', lineageHref(COORD.stage_id, COORD.row, COORD.column));
   if(scopeColumn !== null && COORD.column) drawScopeFor(COORD.column);
 }
-// A sentence-long cell set at headline size is a paragraph in 34px, so a long one
-// is stepped down to a size a whole value fits at.
-function paintValue(cell){
-  const el = document.getElementById('lin-value');
-  el.innerHTML = !cell ? ''
-    : (cell.value === '' ? '<span class="lin-null">(empty)</span>' : esc(cell.value));
-  el.classList.toggle('lin-long', Boolean(cell) && cell.value.length > 48);
+// A sentence-long cell at heading size is four words and an ellipsis, so a long one
+// is stepped down to a size that shows more of it.
+function markLongValue(cell){
+  columnPick.closest('.picker').classList.toggle(
+    'is-long', Boolean(cell) && cell.value.length > 48);
 }
 function chooseColumn(column){
   columnPick.value = column;
@@ -657,7 +660,7 @@ function chooseColumn(column){
 }
 if(columnPick){
   columnPick.addEventListener('change', () => showColumn(columnPick.value));
-  paintValue(COORD.cells.find(c => c.column === COORD.column));
+  markLongValue(COORD.cells.find(c => c.column === COORD.column));
 }
 
 function scopeUrlFor(column){
