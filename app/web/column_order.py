@@ -27,7 +27,7 @@ def describe_frame_columns(
     plain = [str(name) for name in names]
     if workflow_stage is None:
         return [DrawnColumn(name=name) for name in plain]
-    states = _tell_what_the_stage_did(workflow_stage, plain)
+    states = _find_column_states(workflow_stage, plain)
     return [DrawnColumn(name=name, state=states[name])
             for name in sorted(plain, key=lambda name: _DRAWN_FIRST.index(states[name]))]
 
@@ -69,7 +69,7 @@ _DRAWN_FIRST = [
 ]
 
 
-def _tell_what_the_stage_did(
+def _find_column_states(
     workflow_stage: WorkflowStage, names: Sequence[str]
 ) -> dict[str, ColumnDiffState]:
     signature = workflow_stage.stage.signature
@@ -79,10 +79,10 @@ def _tell_what_the_stage_did(
     rewritten = {column.name for column in signature.rewrites}
     added = {column.name for column in signature.adds}
     read = {column.name for entry in signature.reads for column in entry.columns}
-    return {name: _state_of(name, rewritten, added, read) for name in names}
+    return {name: _resolve_column_state(name, rewritten, added, read) for name in names}
 
 
-def _state_of(
+def _resolve_column_state(
     name: str, rewritten: set[str], added: set[str], read: set[str]
 ) -> ColumnDiffState:
     if name in rewritten:
