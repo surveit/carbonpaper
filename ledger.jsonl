@@ -1807,3 +1807,4 @@
 {"run_id":"32834428974","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32834428974","created":"2026-08-25T09:54:59Z","branch":"feat/lineage-figure-picker","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"32834428974","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32834428974","created":"2026-08-25T09:55:35Z","branch":"feat/lineage-figure-picker","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"32834572266","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32834572266","created":"2026-08-25T09:56:32Z","branch":"inputs-tab-split","event":"pull_request","contracts_kept":16,"findings":[]}
+{"run_id":"32834620882","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32834620882","created":"2026-08-25T09:57:05Z","branch":"feat/lineage-figure-picker","event":"pull_request","contracts_kept":16,"findings":[]}
