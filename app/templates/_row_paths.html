@@ -1,0 +1,42 @@
+{# The Paths pane: every path the rows behind this figure took, none collapsed.
+   Context: pane (app.models.branch_analysis.PathsBehindFigure, or a refusal carrying
+   `reason`), figure, links. #}
+<h2>How these rows got here</h2>
+{% if pane.reason is defined %}
+<p class="paths-none">This run cannot say: {{ pane.reason }}</p>
+{% else %}
+{# No row count: the frame a figure rests on is itself the product of regrains
+   further up, which are not part of a path's identity. Relevant rows counts. #}
+<p class="paths-count">
+  {% if pane.paths | length == 1 %}
+    Every row behind <code>{{ figure.stage_id }}</code> row
+    {{ figure.row_ordinal }} took the <b>same path</b>.
+  {% else %}
+    <b>{{ pane.paths | length }}</b> paths reach <code>{{ figure.stage_id }}</code>
+    row {{ figure.row_ordinal }}, through <code>{{ pane.at_stage }}</code>.
+  {% endif %}
+</p>
+{% for path in pane.paths %}
+  {% set body %}
+    <span class="path-rows">follow <code>{{ pane.at_stage }}</code> row
+      {{ path.example_ordinal }}</span>
+    {% for branch in path.tells_it_apart %}
+      <span class="path-branch {{ 'is-code' if branch.reason.value == 'code' }}"
+            title="{{ branch.reason.value }} at {{ branch.stage_id }}">{{ branch.label }}</span>
+    {% endfor %}
+  {% endset %}
+  {% set href = links.build_row_trace_for_figure(
+       pane.at_stage, path.example_ordinal, figure.stage_id, figure.row_ordinal) %}
+  {% if path.holds_the_marked_row %}
+    <div class="path-entry on">{{ body }}</div>
+  {% elif href %}
+    <a class="path-entry" href="{{ href }}"
+       title="follow one of these rows instead">{{ body }}</a>
+  {% else %}
+    <div class="path-entry">{{ body }}</div>
+  {% endif %}
+{% endfor %}
+<p class="paths-foot">Every path the run recorded, none folded into another. Branches every
+  path shares are left out — they tell none of them apart. How many rows took each, and what
+  each row stands for, is <b>Relevant rows</b>.</p>
+{% endif %}

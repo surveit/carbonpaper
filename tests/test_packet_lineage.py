@@ -140,6 +140,7 @@ def test_a_lineage_page_reaches_the_rest_of_the_packet_by_relative_path(tmp_path
         "../../assets/palette.css",
         "../../assets/style.css", "../../assets/packet.css", "../../assets/favicon.svg",
         "../../index.html",
+        # The Inputs pane names the input stage, and the packet writes that page.
     }
 
 
@@ -155,19 +156,14 @@ def test_the_packet_page_carries_the_three_tabs_with_no_column_bound(tmp_path):
     assert "A folder has no server to ask" in page
 
 
-def test_the_packet_page_carries_the_story_pane_with_no_server_to_ask(tmp_path):
-    """The paths are in the page's own view model, so the pane draws in a folder."""
+def test_a_packet_whose_version_is_unreadable_says_so_where_the_paths_would_be(tmp_path):
+    """The packet is exported with no stages here, so no stage's branches are known."""
     page = (_export_demo_packet(tmp_path) / "lineage/totals/0.html").read_text(encoding="utf-8")
-    assert '<div class="lin-snav">' in page and '<div id="stories">' in page
 
-    blob = _VIEW.search(page)
-    assert blob, "the pane is built from the embedded view model"
-    stories = json.loads(blob.group(1))["stories"]
-
-    # Row 0 of totals was fed by source row 0 alone: the path told, and that row.
-    assert [s["kind"] for s in stories] == ["shown", "contributor"]
-    assert stories[0]["stage_id"] == "totals" and stories[0]["href"] is None
-    assert stories[1]["href"] == "../../lineage/source/0.html"
+    assert '<div class="lin-snav">' in page
+    assert "the version this run pinned is unreadable" in page
+    # Matched on markup: the page carries the pane's stylesheet either way.
+    assert 'class="path-entry' not in page
 
 
 def _demo_run(tmp_path):
@@ -201,8 +197,20 @@ def _export_demo_packet(tmp_path):
 
     root = tmp_path / "packet"
     root.mkdir()
-    write_packet_lineage(root, run_dir, _run_view(2), {})
+    write_packet_lineage(root, run_dir, _run_view(2), {}, _DEMO_MANIFEST)
     return root
+
+
+# What the run recorded of the one file it read — the Inputs pane's whole source.
+_DEMO_MANIFEST = {
+    "input_bindings": {"source": {"files": [
+        {"path": "/data/east.csv", "sha256": "e" * 64, "bytes": 791}], "source": "run"}},
+    "parameters": {"limits": {"source": 50}},
+    "stage_records": [{"stage_id": "source", "type": "input_data", "status": "ok",
+                       "output_row_count": 2, "started_at": "2026-08-13T18:16:47"}],
+}
+
+
 
 
 def _view_links(html: str) -> list[str]:

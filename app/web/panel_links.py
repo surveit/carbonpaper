@@ -20,7 +20,8 @@ CONTRIBUTORS_NAMED = 3
 
 class AppPanelLinks:
     def __init__(self, project_id: str, run_id: str) -> None:
-        self._base = f"/project/{_segment(project_id)}/runs/{_segment(run_id)}"
+        self._project = f"/project/{_segment(project_id)}"
+        self._base = f"{self._project}/runs/{_segment(run_id)}"
 
     def stage_anchor(self, stage_id: str) -> str:
         return f"{self._base}#{stage_id}"
@@ -44,6 +45,12 @@ class AppPanelLinks:
     def row_trace(self, stage_id: str, row: int) -> str:
         return f"{self._base}/stage/{_segment(stage_id)}/row/{row}/trace/view"
 
+    def build_row_trace_for_figure(self, stage_id: str, row: int,
+                             figure_stage: str, figure_row: int) -> str:
+        """That row's own story, with the pane still listing the paths to `figure_stage`."""
+        figure = urlencode({"figure": f"{figure_stage}:{figure_row}"})
+        return f"{self.row_trace(stage_id, row)}?{figure}"
+
     def review_queue(self, stage_id: str) -> str:
         return f"{self._base}/queue/{_segment(stage_id)}"
 
@@ -61,6 +68,9 @@ class AppPanelLinks:
 
     def rows_link_covers(self, total: int) -> int:
         return min(total, CONTRIBUTOR_ROWS_LINKED)
+
+    def file_page(self, file_id: str) -> str:
+        return f"{self._project}/files/{_segment(file_id)}"
 
 
 def packet_lineage_href(to_root: str, stage_id: str, row: int) -> str:
@@ -107,6 +117,10 @@ class PacketPanelLinks:
     def rows_link_covers(self, total: int) -> int:
         return total  # the CSV the packet writes is uncapped
 
+    def file_page(self, file_id: str) -> None:
+        """A packet is a folder; the file's page is a route only the app serves."""
+        return None
+
     def stage_rows_raw(self, stage_id: str) -> None:
         """The uncapped rows are stage_csv's data/<id>.csv, linked beside this."""
         return None
@@ -118,6 +132,10 @@ class PacketPanelLinks:
         if self._traced is not None and (stage_id, row) not in self._traced:
             return None
         return packet_lineage_href(self._root, stage_id, row)
+
+    def build_row_trace_for_figure(self, stage_id: str, row: int,
+                             figure_stage: str, figure_row: int) -> str | None:
+        return self.row_trace(stage_id, row)
 
     def review_queue(self, stage_id: str) -> None:
         return None

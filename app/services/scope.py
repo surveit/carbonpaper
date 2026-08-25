@@ -19,10 +19,9 @@ from app.runtime.lineage import RowParent
 
 
 def find_contributing_rows(run_branches: WorkflowRunBranches,
-                           citation: StageOutputCellCitation) -> RowSet:
+                           stage_id: StageId, row_ordinal: RowOrdinal) -> RowSet:
     """Replace a merged row by the rows merged into it, until none was merged."""
-    reached, at_stage, through = _expand(run_branches, citation.stage_id,
-                                         citation.row_ordinal)
+    reached, at_stage, through = _expand(run_branches, stage_id, row_ordinal)
     ordinals = sorted(set(reached))
     return RowSet(at_stage=at_stage, ordinals=ordinals, regrained_at=through,
                   fed_by_no_rows=[ordinal for ordinal in ordinals
@@ -110,3 +109,5 @@ def _one_hop_up(run_branches: WorkflowRunBranches, sid: StageId, row: RowOrdinal
     stage = run_branches.stages.get(sid)
     inputs = [ref.id for ref in stage.inputs] if stage else []
     return [(inputs[0], row)] if len(inputs) == 1 else []
+
+

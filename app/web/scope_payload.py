@@ -15,7 +15,6 @@ from app.models.branch_analysis import (
     BranchId,
     BranchOption,
     BranchPath,
-    BranchReason,
     BranchRole,
     FrameScale,
     RowOrdinal,
@@ -23,7 +22,11 @@ from app.models.branch_analysis import (
 )
 from app.models.claims import StageOutputCellCitation
 from app.models.schema import StageId
-from app.runtime.branch_analysis import WorkflowRunBranches, find_rows_that_took
+from app.runtime.branch_analysis import (
+    WorkflowRunBranches,
+    find_rows_that_took,
+    group_rows_by_path,
+)
 from app.runtime.branch_analysis.stage_code import read_decision_source, read_stage_code
 from app.services.scope import (
     find_contributing_rows,
@@ -113,10 +116,11 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
     if citation.stage_id not in run_branches.stages:
         raise StageNotInRun(f"no stage '{citation.stage_id}' in this run")
     cited_frame, cited = _read_the_cited_cell(outputs, citation)
-    covers = find_contributing_rows(run_branches, cited)
+    covers = find_contributing_rows(run_branches, cited.stage_id, cited.row_ordinal)
     frame = read_frame_table(outputs / f"{covers.at_stage}.parquet")
     on_route = set(covers.regrained_at) | {cited.stage_id}
-    paths, index = index_paths(run_branches, covers.at_stage, covers.ordinals, on_route)
+    paths, _, index = group_rows_by_path(
+        run_branches, covers.at_stage, covers.ordinals, on_route)
     shown = covers.ordinals[:CELL_ROWS]
     return ScopeMap(
         project_id=project_id, run_id=run_id, citation=cited, covers=covers,
@@ -160,7 +164,7 @@ def read_cut(run_branches: WorkflowRunBranches, outputs: Path,
     at_stage, ordinals = find_rows_that_took(run_branches, branch_id)
     if not ordinals or at_stage not in run_branches.branch_paths:
         return None
-    paths, index = index_paths(run_branches, at_stage, ordinals, set())
+    paths, _, index = group_rows_by_path(run_branches, at_stage, ordinals, set())
     spread = Counter(index)
     shown = ordinals[:CUT_SAMPLE]
     frame = read_frame_table(outputs / f"{at_stage}.parquet")
@@ -191,38 +195,12 @@ def find_cuts_to_offer(run_branches: WorkflowRunBranches, outputs: Path,
     return found
 
 
-def index_paths(run_branches: WorkflowRunBranches, at_stage: StageId,
-                ordinals: list[RowOrdinal], on_route: set[StageId]
-                ) -> tuple[list[BranchPath], list[int]]:
-    """Distinct paths, and one small int per row."""
-    paths: list[BranchPath] = []
-    seen: dict[BranchPath, int] = {}
-    index = []
-    for ordinal in ordinals:
-        path = _on_route(run_branches, run_branches.branch_paths[at_stage][ordinal],
-                         on_route)
-        if path not in seen:
-            seen[path] = len(paths)
-            paths.append(path)
-        index.append(seen[path])
-    return paths, index
-
-
 def read_rows(frame: pa.Table, ordinals: list[RowOrdinal],
               branch_path_index: list[int]) -> list[DrawnRow]:
     cells = [frame.column(name).to_pylist() for name in frame.column_names]
     return [DrawnRow(ordinal=ordinal, branch_path_index=branch_path_index[position],
                      cells=[_plain(column[ordinal]) for column in cells])
             for position, ordinal in enumerate(ordinals)]
-
-
-def _on_route(run_branches: WorkflowRunBranches, path: BranchPath,
-              on_route: set[StageId]) -> BranchPath:
-    """A merge into a row this figure is not tells these rows nothing, so it is dropped."""
-    options = run_branches.branch_options
-    return tuple(branch_id for branch_id in path
-                 if options[branch_id].reason is not BranchReason.merge
-                 or options[branch_id].stage_id in on_route)
 
 
 def _branches_on(run_branches: WorkflowRunBranches, paths: list[BranchPath]

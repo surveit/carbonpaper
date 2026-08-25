@@ -69,7 +69,7 @@ def test_a_dedupe_drops_rows_the_way_a_filter_does(scoped):
 
 def test_a_deduped_grant_resolves_to_the_survivor(scoped):
     run, _ = scoped
-    covers = find_contributing_rows(run, cite("by_portfolio", "total_amount", 1, 700))
+    covers = find_contributing_rows(run, "by_portfolio", 1)
     assert covers.at_stage == "one_row_per_grant"
     assert len(covers.ordinals) == 2  # G-003 at 300 and G-004 at 400
 
@@ -77,8 +77,7 @@ def test_a_deduped_grant_resolves_to_the_survivor(scoped):
 def test_the_group_branch_names_exactly_the_rows_lineage_says(scoped):
     run, _ = scoped
     for ordinal, total in ((0, 2200), (1, 700), (2, 900)):
-        covers = find_contributing_rows(
-            run, cite("by_portfolio", "total_amount", ordinal, total))
+        covers = find_contributing_rows(run, "by_portfolio", ordinal)
         at_stage, members = find_rows_that_took(
             run, f"by_portfolio|merged:{ordinal}")
         assert (at_stage, members) == (covers.at_stage, covers.ordinals)
