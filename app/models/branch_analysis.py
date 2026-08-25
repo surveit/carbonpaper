@@ -71,23 +71,3 @@ class FrameScale(BaseModel):
     stage: StageId
     rows_count: int
     included_rows_count: int
-
-class PathBehindFigure(BaseModel):
-    """One distinct route the rows behind a figure took, and a row that took it."""
-
-    rows: int
-    # The branches this path holds that at least one other path does not.
-    tells_it_apart: list[BranchOption]
-    whole_path: list[BranchOption]
-    example_ordinal: RowOrdinal
-    # True where the row the caller asked to mark is one of this path's own.
-    holds_the_marked_row: bool = False
-
-
-class PathsBehindFigure(BaseModel):
-    at_stage: StageId
-    paths: list[PathBehindFigure]
-
-    @property
-    def rows(self) -> int:
-        return sum(path.rows for path in self.paths)
