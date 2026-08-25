@@ -15,7 +15,8 @@ from app.core.json_types import JsonDict
 from app.models.branch_analysis import BranchId
 from app.models.claims import StageOutputCellCitation
 from app.web import scope_view
-from app.web.scope_payload import CutRows, ScopeMap
+from app.web.scope_drawing import draw_the_scope
+from app.web.scope_payload import CutRows, ScopeMap, build_scope_map_for_cut
 from app.web.breadcrumbs import build_run_child_crumbs
 from app.web.config import templates
 from app.web.project_view import shell_state
@@ -96,8 +97,20 @@ def _cite(run_id: str, stage: str, row: int, column: str) -> StageOutputCellCita
 
 def _payload(scope: ScopeMap, cuts: dict[BranchId, CutRows]) -> JsonDict:
     drawn = scope.model_dump(mode="json")
-    drawn["cuts"] = {branch: cut.model_dump(mode="json")
-                     for branch, cut in cuts.items()}
+    drawn["cuts"] = {branch: _drawn_cut(scope, cut) for branch, cut in cuts.items()}
+    # Both, because the switch between them changes the layout, not just the styling.
+    drawn["drawn"] = draw_the_scope(scope, every_stage=False).model_dump(mode="json")
+    drawn["drawn_every_stage"] = draw_the_scope(
+        scope, every_stage=True).model_dump(mode="json")
+    return drawn
+
+
+def _drawn_cut(scope: ScopeMap, cut: CutRows) -> JsonDict:
+    """A cut is a page of its own, so it arrives drawn rather than shaped in the browser."""
+    at = build_scope_map_for_cut(scope, cut)
+    drawn = cut.model_dump(mode="json")
+    # Inside a cut every column is drawn: what these rows DID is the question.
+    drawn["drawn"] = draw_the_scope(at, every_stage=True).model_dump(mode="json")
     return drawn
 
 

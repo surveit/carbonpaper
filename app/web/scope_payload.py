@@ -141,6 +141,8 @@ class ScopeMap(BaseModel):
     stages: list[DrawnStage]
     reach: list[BranchReach]
     scale: list[FrameScale]
+    # Set on the map of a cut, whose rows are not the figure's and hold no figure bar.
+    is_a_cut: bool = False
 
 
 def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: str,
@@ -252,6 +254,21 @@ def read_cut(run_branches: WorkflowRunBranches, outputs: Path, branch_id: Branch
         resolved_merges=sorted(resolved),
         nearest_merge=nearest,
     )
+
+
+def build_scope_map_for_cut(scope: ScopeMap, cut: CutRows) -> ScopeMap:
+    """The rows behind one cut as a map of their own: counts per path, no row named."""
+    index = [path for path, rows in enumerate(cut.rows_per_branch_path)
+             for _ in range(rows)]
+    return scope.model_copy(update={
+        "covers": RowSet(at_stage=cut.at_stage, ordinals=list(range(len(index)))),
+        "branch_paths": cut.branch_paths, "branch_path_index": index,
+        "rows": cut.rows, "columns": cut.columns, "stages": cut.stages,
+        "reach": [], "scale": [], "sampled_from": cut.total,
+        "aliased_merges": cut.aliased_merges, "resolved_merges": cut.resolved_merges,
+        "nearest_merge": cut.nearest_merge,
+        # A cut's rows arrive as counts per path, which name no frame each was in.
+        "came_through": [], "came_through_index": [], "is_a_cut": True})
 
 
 def find_cuts_to_offer(run_branches: WorkflowRunBranches, outputs: Path,
