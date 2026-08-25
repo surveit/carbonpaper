@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from app.runtime.row_sidecar import write_row_sidecar
+from app.runtime.lineage_sidecar import write_lineage_sidecar
 from app.runtime.trace import (
     _is_row_preserving,
     _load_manifest,
@@ -25,7 +25,7 @@ def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1",
     for spec in stages:
         rel = f"outputs/{spec['id']}.parquet"
         spec["df"].to_parquet(run_dir / rel, index=False)
-        write_row_sidecar(run_dir, spec["id"], spec.get("lineage"), spec.get("branches"))
+        write_lineage_sidecar(run_dir, spec["id"], spec.get("lineage"), spec.get("branches"))
         records.append({
             "stage_id": spec["id"],
             "type": spec["type"],

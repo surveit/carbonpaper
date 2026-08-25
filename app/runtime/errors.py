@@ -34,5 +34,5 @@ class NotALoadStage(RuntimeError):
     """A stage with no inputs that is not an input_data stage."""
 
 
-class RowSidecarLengthMismatch(RuntimeError):
+class LineageSidecarLengthMismatch(RuntimeError):
     """The two halves of a stage's row sidecar disagree on how many rows it has."""

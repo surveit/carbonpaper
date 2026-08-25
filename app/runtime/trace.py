@@ -13,7 +13,7 @@ from app.core.errors import ContributorNotInFanIn, RowOutOfRange, StageNotInRun
 from app.core.frames import read_frame_table
 from app.models.stage import StageType, is_grain_and_order_preserving
 from app.runtime.lineage import EdgeKind, RowLineage, RowParent
-from app.runtime.row_sidecar import read_row_sidecar
+from app.runtime.lineage_sidecar import read_lineage_sidecar
 from app.models.run_manifest import read_input_bindings
 from app.runtime.manifest import read_run_manifest, resolve_output_path
 
@@ -287,7 +287,7 @@ class RunFrames:
         if stage_id not in self._sidecars:
             # Parsing a 45k-row sidecar to read one row is the whole cost of a
             # trace, so a run traced row by row must not pay it per row.
-            self._sidecars[stage_id] = read_row_sidecar(self.run_dir, stage_id).lineage
+            self._sidecars[stage_id] = read_lineage_sidecar(self.run_dir, stage_id).lineage
         return self._sidecars[stage_id]
 
 

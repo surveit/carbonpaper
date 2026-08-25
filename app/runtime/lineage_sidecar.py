@@ -9,41 +9,42 @@ import pyarrow as pa
 from app.core.frames import read_frame_table, write_frame_table
 
 from .branches import BRANCHES_KEY, RowBranches
-from .errors import RowSidecarLengthMismatch
+from .errors import LineageSidecarLengthMismatch
 from .lineage import TRACE_SOURCE_STAGE_KEY, RowLineage
 
 
 @dataclass(frozen=True)
-class RowSidecar:
+class LineageSidecar:
     """Both halves are optional and independent; None is "the run recorded none"."""
 
     lineage: RowLineage | None = None
     branches: RowBranches | None = None
 
 
-def resolve_row_sidecar_path(run_dir: Path, stage_id: str) -> Path:
+def resolve_lineage_sidecar_path(run_dir: Path, stage_id: str) -> Path:
     return Path(run_dir) / "outputs" / f"{stage_id}.lineage.parquet"
 
 
-def write_row_sidecar(
+def write_lineage_sidecar(
     run_dir: Path, stage_id: str, lineage: RowLineage | None, branches: RowBranches | None
 ) -> None:
     if lineage is None and branches is None:
         return
     if lineage is not None and branches is not None and len(lineage) != len(branches):
-        raise RowSidecarLengthMismatch(
+        raise LineageSidecarLengthMismatch(
             f"{stage_id!r}: {len(lineage)} row(s) of lineage against "
             f"{len(branches)} of branches — both are keyed by output row"
         )
-    write_frame_table(_joined_table(lineage, branches), resolve_row_sidecar_path(run_dir, stage_id))
+    write_frame_table(
+        _joined_table(lineage, branches), resolve_lineage_sidecar_path(run_dir, stage_id))
 
 
-def read_row_sidecar(run_dir: Path, stage_id: str) -> RowSidecar:
-    table = _read_table(resolve_row_sidecar_path(run_dir, stage_id))
+def read_lineage_sidecar(run_dir: Path, stage_id: str) -> LineageSidecar:
+    table = _read_table(resolve_lineage_sidecar_path(run_dir, stage_id))
     branches = _read_branches(table)
     if branches is None:
         branches = _read_branches(_read_table(_pre_merge_branch_path(run_dir, stage_id)))
-    return RowSidecar(lineage=_read_lineage(table), branches=branches)
+    return LineageSidecar(lineage=_read_lineage(table), branches=branches)
 
 
 def _joined_table(lineage: RowLineage | None, branches: RowBranches | None) -> pa.Table:

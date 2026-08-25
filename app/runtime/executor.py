@@ -34,7 +34,7 @@ from .run_log import RUN_START, STAGE_DONE, STAGE_START, RunLog
 from .progress import StageProgressReporter
 from .stages import HANDLERS, StageHandler
 from .lineage import RowLineage, concatenated_inputs_lineage, kept_rows_lineage
-from .row_sidecar import write_row_sidecar
+from .lineage_sidecar import write_lineage_sidecar
 from app.models.severity import UserFacingErrorSeverity
 from .key_coverage import find_key_coverage_issues
 from .validation import Issue, ValidationReport, validate_table
@@ -368,7 +368,7 @@ def _finalize_stage_output(
         # frame it just loaded is the runtime's only handle on them: its window
         # is taken here rather than on an input frame that does not exist.
         table = _take_row_window(table, window, "loaded from the source", record)
-    write_row_sidecar(run_dir, sid, lineage, output.branches)
+    write_lineage_sidecar(run_dir, sid, lineage, output.branches)
 
     out_rep = validate_table(
         table, workflow_stage.output_schema, stage_id=sid, phase="output")

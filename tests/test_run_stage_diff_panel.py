@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 import app.services.workspace as workspace
 import app.web.loading as loading
 from app.main import app
-from app.runtime.row_sidecar import resolve_row_sidecar_path
+from app.runtime.lineage_sidecar import resolve_lineage_sidecar_path
 from app.runtime.runner import execute_run
 from app.services import versioning
 from app.services import project as project_service
@@ -375,7 +375,7 @@ def test_an_input_stage_keeps_the_plain_output_view_in_data(run_ctx) -> None:
 
 def test_a_filter_missing_its_sidecar_falls_back_to_the_plain_pane(run_ctx) -> None:
     pdir, run_id = run_ctx
-    resolve_row_sidecar_path(pdir / "runs" / run_id, KEEP_ID).unlink()
+    resolve_lineage_sidecar_path(pdir / "runs" / run_id, KEEP_ID).unlink()
     html = _panel(run_id, KEEP_ID)
     assert "stage-diff" not in html
     assert "output data" in html

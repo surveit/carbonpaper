@@ -7,7 +7,7 @@ import pytest
 from app.core.frames import read_frame_table
 from app.models import Stage, Workflow, parse_stage
 from app.runtime.branches import BRANCH_SCHEMA, RowBranches
-from app.runtime.row_sidecar import read_row_sidecar, resolve_row_sidecar_path
+from app.runtime.lineage_sidecar import read_lineage_sidecar, resolve_lineage_sidecar_path
 from app.runtime.executor import execute_subset
 
 _COLS = [{"name": "a", "type": "str", "nullable": True},
@@ -67,7 +67,7 @@ def _run(workflow: Workflow, stage_ids: list[str], run_dir):
 
 
 def _sidecar(run_dir, stage_id: str) -> RowBranches:
-    branches = read_row_sidecar(run_dir, stage_id).branches
+    branches = read_lineage_sidecar(run_dir, stage_id).branches
     assert branches is not None
     return branches
 
@@ -107,7 +107,7 @@ def test_a_stage_whose_code_never_branches_records_no_branches(tmp_path) -> None
          ["src", "kept"], run_dir)
 
     # The stage still writes its lineage, so the file is there without the half.
-    assert read_row_sidecar(run_dir, "kept").branches is None
+    assert read_lineage_sidecar(run_dir, "kept").branches is None
 
 
 def test_a_stage_that_only_chooses_between_values_writes_one_too(tmp_path) -> None:
@@ -128,7 +128,7 @@ def test_a_stage_that_records_only_branches_writes_only_that_column(tmp_path) ->
     _run(Workflow(stages=[_load_stage("src", src, tmp_path), _row_function("tier", "src")]),
          ["src", "tier"], run_dir)
 
-    table = read_frame_table(resolve_row_sidecar_path(run_dir, "tier"))
+    table = read_frame_table(resolve_lineage_sidecar_path(run_dir, "tier"))
     assert table.schema.equals(BRANCH_SCHEMA)
 
 

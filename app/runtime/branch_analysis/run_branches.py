@@ -24,7 +24,7 @@ from app.runtime.branch_analysis.stage_code import (
 )
 from app.runtime.branches import RowBranches
 from app.runtime.lineage import EdgeKind, RowLineage, RowParent
-from app.runtime.row_sidecar import read_row_sidecar
+from app.runtime.lineage_sidecar import read_lineage_sidecar
 
 MERGE_EDGE = EdgeKind.contribution.value
 _LOOKS_UP = (StageType.enrich, StageType.expand)
@@ -57,7 +57,7 @@ def reconstruct_run_branches(
     run_dir: Path, stages: dict[StageId, WorkflowStage],
     ordered_stage_ids: list[StageId], row_counts: dict[StageId, int],
 ) -> WorkflowRunBranches:
-    sidecars = {sid: read_row_sidecar(run_dir, sid) for sid in ordered_stage_ids}
+    sidecars = {sid: read_lineage_sidecar(run_dir, sid) for sid in ordered_stage_ids}
     lineages = {sid: sidecars[sid].lineage for sid in ordered_stage_ids}
     arms_taken = {sid: sidecar.branches for sid, sidecar in sidecars.items()
                   if sidecar.branches is not None}

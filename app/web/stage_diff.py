@@ -14,7 +14,7 @@ import pandas as pd
 
 from app.models import StageType, WorkflowStage
 from app.models.stage import is_grain_and_order_preserving
-from app.runtime.row_sidecar import read_row_sidecar
+from app.runtime.lineage_sidecar import read_lineage_sidecar
 from app.runtime.manifest import resolve_output_path
 from app.core.frames import read_frame_file
 from app.web.column_order import order_written_columns_first
@@ -383,7 +383,7 @@ def _read_kept_ordinals(
     run_dir: Path, stage_id: str, input_id: str, *, rows_out: int, rows_in: int
 ) -> Optional[list[int]]:
     try:
-        lineage = read_row_sidecar(run_dir, stage_id).lineage
+        lineage = read_lineage_sidecar(run_dir, stage_id).lineage
     except (OSError, ValueError):
         return None
     if lineage is None:
