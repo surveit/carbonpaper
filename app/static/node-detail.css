@@ -213,12 +213,13 @@ table.data-preview.scratch th { background: var(--hover); }
 .stage-diff td.diff-cell-changed,
 .legend i.diff-cell-changed { background: var(--state-warn-bg); }
 .stage-diff td.diff-cell-same { color: var(--muted); }
-/* A column the stage neither wrote nor changed a cell of. Header and cells both,
-   so a full-strength name never stands over a column the reader may skip. After
+/* A column the stage neither wrote nor changed a cell of, recessed as one band
+   from its header to its last row: the header already sits on --sunk-deep, so
+   tinting only the text under it changed almost nothing on the screen. After
    .diff-cell-same, which it has to beat on the same specificity. */
 .stage-diff th.diff-col-quiet { font-weight: 400; }
 .stage-diff th.diff-col-quiet,
-.stage-diff td.diff-col-quiet { color: var(--muted-dim); }
+.stage-diff td.diff-col-quiet { background: var(--sunk-deep); color: var(--muted-dim); }
 .stage-diff .diff-was { display: block; color: var(--muted); text-decoration: line-through; }
 .stage-diff tr.diff-row-dropped td { background: var(--state-failed-bg); color: var(--state-failed-ink); }
 
@@ -238,6 +239,7 @@ table.data-preview.scratch th { background: var(--hover); }
 }
 .stage-diff th.diff-col-jump { cursor: pointer; }
 .stage-diff th.diff-col-jump:hover { outline: 2px solid var(--accent); outline-offset: -2px; }
+.stage-diff th.diff-col-jump:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
 /* The Data pane's input-rows disclosure: the upstream previews, folded below the
    (diff-aware) output so the pane leads with what the stage produced. */

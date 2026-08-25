@@ -52,6 +52,10 @@ body{display:flex;flex-direction:column;overflow:hidden}
   padding:9px 16px 8px;cursor:pointer;border-bottom:2px solid transparent}
 .lin-pagetab.on{color:var(--fg);border-bottom-color:var(--accent);font-weight:600}
 .lin-pagetab:hover{background:var(--hover)}
+/* The house focus ring. Without one these fall back to the browser's own blue,
+   which is a colour this palette spends on something else. */
+.lin-pagetab:focus-visible,.lin-tabs button:focus-visible{outline:none;
+  box-shadow:0 0 0 2px var(--focus-halo)}
 .lin-pane{flex:1;min-height:0;display:flex;flex-direction:column}
 .lin-pane.hidden{display:none}
 /* The frame scrolls the map; the pane itself does not, so the chips stay put. */
