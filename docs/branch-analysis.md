@@ -126,8 +126,18 @@ and the row that took `if amount == 0` is still dropped two stages later at `fun
 
 It starts at that cell and asks whether the row was merged from several. It was, when the lineage
 records several rows feeding it by merge edges. If so, the row is replaced by the rows that fed
-it and the question is asked again, until nothing was merged (`_expand`). What comes back is a
-`RowSet`: a stage, and ordinals into that stage's frame.
+it and the question is asked again. Where the row was NOT merged, the walk steps to the row it was
+made from on its subject input and asks again (`_expand`). What comes back is a `RowSet`: a stage,
+and ordinals into that stage's frame.
+
+**The walk stops at the frame the earliest merge on the route read, not at the first row that was
+not merged.** A path unions its parents' branches at a merge, so a row after one holds arms of an
+earlier `if` that no single row took together — `if amount < 100:` and `else:` on one path. Rows
+the earliest merge read still hold their own branches and no ancestor's, which is the frame a
+drawing can label. Stopping at the first unmerged row lands after any merge that an ordinary stage
+separates from the cell, and the columns drawn for the earlier stages then name a conjunction
+nothing executed. Walking further, to the load frame, loses instead: a loaded row holds no arm of
+an `if` that ran later, so every column collapses to one node.
 
 Two things it deliberately does not do.
 
@@ -139,7 +149,9 @@ Any other type that writes none raises `MissingLineage` rather than being guesse
 **Every expansion bottoms out in one frame.** Only an `aggregate` stage writes merge edges, and
 it names one input stage on every row it emits, so the rows a cell expands to always sit at one
 grain. The one aggregate row that no input row fed — a whole-frame aggregate over an empty frame,
-which is one row by construction — is its own row set, and the walk stops there.
+which is one row by construction — is its own row set, and the walk stops there. A step to a
+subject input stops too where the lineage names anything but one row on it, so a shape the walk
+cannot read leaves the frame higher rather than guessing at it.
 
 **A frame can be read by more than one merge, and only one is on your route.** Group the same
 grants by portfolio and by region, and every row holds a branch from both. Asked about a portfolio
