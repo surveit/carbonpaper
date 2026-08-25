@@ -18,7 +18,12 @@ from app.services.scope import (
 )
 from app.services.versioning import load_version_stages
 from app.services.workspace import resolve_run_dir
-from app.web.merge_alias import count_merge_groups, resolve_merge_groups
+from app.web.merge_alias import (
+    count_merge_groups,
+    read_group_by,
+    read_one_merge_group,
+    resolve_merge_groups,
+)
 from app.web.scope_payload import (
     CutRows,
     read_cut,
@@ -52,14 +57,17 @@ def load_merge_groups(project_id: str, run_id: str,
             count_merge_groups(run_branches, merge))
 
 
-def load_one_merge_group(project_id: str, run_id: str, merge: StageId,
-                         ordinal: int) -> CutRows | None:
-    """The rows behind one group, once a reader has picked it out of the alias."""
+def load_one_merge_group(project_id: str, run_id: str, merge: StageId, ordinal: int
+                         ) -> tuple[CutRows | None, MergeGroup, list[str]]:
+    """The rows behind one group, what it stands for, and the keys that name it."""
     run_branches = read_run_branches(project_id, run_id)
     if merge not in run_branches.stages:
         raise StageNotInRun(f"no stage '{merge}' in this run")
     outputs = resolve_run_dir(project_id, run_id) / "outputs"
-    return read_cut(run_branches, outputs, f"{merge}|merged:{ordinal}")
+    # Named before its rows are read: an ordinal the stage never grouped raises here.
+    named = read_one_merge_group(run_branches, outputs, merge, ordinal)
+    return (read_cut(run_branches, outputs, named.branch), named,
+            read_group_by(run_branches, merge))
 
 
 def say_what_the_rows_answer(scope: ScopeMap) -> str:

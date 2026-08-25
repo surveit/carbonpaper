@@ -76,12 +76,15 @@ async def merge_groups(project_id: str, run_id: str, stage: str, row: int,
 async def merge_group_rows(project_id: str, run_id: str, merge: str, group: int):
     """The rows behind one de-aliased group, in the shape the drilled view draws."""
     try:
-        cut = scope_view.load_one_merge_group(project_id, run_id, merge, group)
-    except (StageNotInRun, RunVersionUnresolvableError) as missing:
+        cut, named, group_by = scope_view.load_one_merge_group(
+            project_id, run_id, merge, group)
+    except (StageNotInRun, RowOutOfRange, RunVersionUnresolvableError) as missing:
         raise HTTPException(status_code=404, detail=str(missing)) from missing
     if cut is None:
         raise HTTPException(status_code=404, detail="no rows behind that group")
-    return JSONResponse({"cut": cut.model_dump(mode="json")})
+    return JSONResponse({"cut": cut.model_dump(mode="json"),
+                         "group": named.model_dump(mode="json"),
+                         "group_by": group_by})
 
 
 @router.get(f"{_SCOPE_PATH}/panel", response_class=HTMLResponse)

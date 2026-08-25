@@ -263,3 +263,32 @@ def test_a_merge_stage_this_run_never_had_is_a_404(run_id):
         suffix="/merge/groups") + "&merge=no_such_stage")
     assert missing.status_code == 404
 
+
+
+def test_a_group_the_stage_never_made_is_a_404(run_id):
+    # A count of 0 rows behind it would be a number the run never recorded.
+    missing = TestClient(app).get(scope_url(
+        PROJECT, run_id, "total_of_means", "summed_means", 0, suffix="/merge/rows")
+        + "&merge=mean_by_portfolio&group=9999")
+    assert missing.status_code == 404
+
+
+def test_one_group_names_itself_however_a_reader_reached_it(run_id):
+    # The address survives a reload, so the name cannot live only in the group list.
+    body = TestClient(app).get(scope_url(
+        PROJECT, run_id, "total_of_means", "summed_means", 0, suffix="/merge/rows")
+        + "&merge=mean_by_portfolio&group=0").json()
+    assert body["group_by"] == ["portfolio"]
+    assert body["group"]["keys"] == ["Health"]
+    assert body["group"]["rows_count"] == body["cut"]["total"]
+
+
+def test_the_paths_pane_is_not_told_apart_by_an_aliased_merge(run_id):
+    # Told apart by group, the 8 rows behind this figure are 5 paths, not 4.
+    pane = TestClient(app).get(
+        f"/project/{PROJECT}/runs/{run_id}/stage/total_of_means/row/0/trace/view"
+        "?column=summed_means")
+    assert pane.status_code == 200
+    said = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", pane.text))
+    assert "4 paths reach total_of_means" in said
+    assert "merged:" not in pane.text

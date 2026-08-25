@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.core.errors import RowOutOfRange
 from app.core.frames import read_frame_table
 from app.core.json_types import JsonScalar
 from app.models.branch_analysis import (
@@ -45,6 +46,22 @@ def resolve_merge_groups(run_branches: WorkflowRunBranches, outputs: Path,
 
 def count_merge_groups(run_branches: WorkflowRunBranches, stage_id: StageId) -> int:
     return len(_count_rows_per_group(run_branches, stage_id))
+
+
+def read_one_merge_group(run_branches: WorkflowRunBranches, outputs: Path,
+                         stage_id: StageId, ordinal: RowOrdinal) -> MergeGroup:
+    """What one group stands for, so a link to it can name it however it was reached."""
+    counts = _count_rows_per_group(run_branches, stage_id)
+    if ordinal not in counts:
+        raise RowOutOfRange(
+            f"stage '{stage_id}' merged no rows into row {ordinal}")
+    keys = _read_group_keys(run_branches, outputs, stage_id)
+    return MergeGroup(branch=f"{stage_id}|merged:{ordinal}", ordinal=ordinal,
+                      keys=keys.get(ordinal, []), rows_count=counts[ordinal])
+
+
+def read_group_by(run_branches: WorkflowRunBranches, stage_id: StageId) -> list[str]:
+    return _read_group_by(run_branches, stage_id)
 
 
 def _describe(run_branches: WorkflowRunBranches, stage_id: StageId,

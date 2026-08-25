@@ -498,8 +498,21 @@
   window.addEventListener("popstate", function () {
     var wanted = new URLSearchParams(location.search).get("cut");
     if (wanted === (D.drilled || {}).branch) return;
-    if (wanted) openCut(wanted); else closeCut();
+    if (wanted) showCut(wanted); else closeCut();
   });
+
+  // A group's rows are never shipped with the map, so an addressed one is fetched.
+  function showCut(branch) {
+    if (openCut(branch)) return;
+    var named = branch.split("|merged:");
+    if (named.length !== 2) return;
+    fetch(oneGroupUrl(named[0], named[1]))
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (body) {
+        takeOneGroup(body.cut, named[0], groupName(body.group, body.group_by));
+      })
+      .catch(function () { closeCut(); });
+  }
 
   function openCut(branch) {
     var cut = (D.cuts || {})[branch];
@@ -517,7 +530,10 @@
       branch_paths: cut.branch_paths, branch_path_index: index, rows: cut.rows, columns: cut.columns,
       stages: cut.stages, reach: [], scale: [], sampled_from: cut.total,
       drilled: { branch: branch, label: D.branches[branch].label,
-                 stage: D.branches[branch].stage_id, total: cut.total },
+                 stage: D.branches[branch].stage_id, total: cut.total,
+                 at_stage: cut.at_stage,
+                 group: D.branches[branch].reason === "merge"
+                   ? D.branches[branch].label : null },
     });
     pickedNode = null;
     pickedRow = null;
@@ -539,14 +555,22 @@
   //
   // The groups are fetched a page at a time, never shipped with the map.
 
-  function mergeUrl(path, extra) {
-    var query = new URLSearchParams({
+  // The citation rides along: which groups this figure came through is its question.
+  function groupsUrl(offset) {
+    return scopeUrl("groups", {
       stage: D.citation.stage_id, row: String(D.citation.row_ordinal),
-      column: D.citation.column, merge: deAliased.stage
+      column: D.citation.column, merge: deAliased.stage, offset: String(offset)
     });
-    Object.keys(extra || {}).forEach(function (k) { query.set(k, extra[k]); });
+  }
+
+  function oneGroupUrl(stageId, ordinal) {
+    return scopeUrl("rows", { merge: stageId, group: String(ordinal) });
+  }
+
+  function scopeUrl(path, query) {
     return "/project/" + encodeURIComponent(D.project_id) + "/runs/" +
-      encodeURIComponent(D.run_id) + "/scope/merge/" + path + "?" + query.toString();
+      encodeURIComponent(D.run_id) + "/scope/merge/" + path + "?" +
+      new URLSearchParams(query).toString();
   }
 
   function deAlias(stageId) {
@@ -563,7 +587,7 @@
 
   function fetchGroups(offset) {
     var wanted = deAliased.stage;
-    fetch(mergeUrl("groups", { offset: String(offset) }))
+    fetch(groupsUrl(offset))
       .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
       .then(function (body) {
         if (!deAliased || deAliased.stage !== wanted) return;
@@ -580,17 +604,10 @@
 
   function drawOneGroup(ordinal) {
     var wanted = deAliased.stage;
-    fetch(mergeUrl("rows", { group: String(ordinal) }))
+    fetch(oneGroupUrl(wanted, ordinal))
       .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
       .then(function (body) {
-        D.cuts = D.cuts || {};
-        D.cuts[body.cut.branch] = body.cut;
-        D.branches[body.cut.branch] = D.branches[body.cut.branch] || {
-          id: body.cut.branch, stage_id: wanted, reason: "merge", role: "keeps",
-          label: "one group of " + wanted
-        };
-        deAliased = null;
-        enterCut(body.cut.branch);
+        takeOneGroup(body.cut, wanted, groupName(body.group, body.group_by));
       })
       .catch(function () {
         if (deAliased) deAliased.failed = true;
@@ -598,14 +615,32 @@
       });
   }
 
-  function groupName(group) {
+  function groupKeyNames() {
     var alias = (D.aliased_merges || {})[deAliased.stage];
-    var names = (alias && alias.group_by) || [];
+    return (alias && alias.group_by) || [];
+  }
+
+  function takeOneGroup(cut, stageId, named) {
+    D.cuts = D.cuts || {};
+    D.cuts[cut.branch] = cut;
+    D.branches[cut.branch] = {
+      id: cut.branch, stage_id: stageId, reason: "merge", role: "keeps", label: named
+    };
+    deAliased = null;
+    enterCut(cut.branch);
+  }
+
+  function groupName(group, names) {
     return group.keys.length
       ? group.keys.map(function (value, i) {
-          return (names[i] ? names[i] + " = " : "") + figure(value);
+          return (names[i] ? names[i] + " = " : "") + keyText(value);
         }).join(" · ")
       : "row " + group.ordinal;
+  }
+
+  // A group key names a group, so 2024 is a year and never 2,024.
+  function keyText(value) {
+    return value === null || value === undefined ? "(empty)" : String(value);
   }
 
   function renderGroupTable() {
@@ -620,11 +655,12 @@
         esc(deAliased.stage) + "</code>…</p>";
       return;
     }
-    host.innerHTML = TABLE + "<thead><tr><th>group</th><th>rows</th>" +
+    host.innerHTML = tableOf(deAliased.stage) + "<thead><tr><th>group</th><th>rows</th>" +
       "<th>in this figure</th><th></th></tr></thead><tbody>" +
       deAliased.groups.map(function (g) {
         return '<tr class="' + (g.on_route ? "is-on" : "") + '"><td>' +
-          esc(groupName(g)) + "</td><td>" + num(g.rows_count) + "</td><td>" +
+          esc(groupName(g, groupKeyNames())) + "</td><td>" + num(g.rows_count) +
+          "</td><td>" +
           (g.on_route ? "yes" : "no") + '</td><td><span class="scope-clear" ' +
           'data-group="' + g.ordinal + '">draw its rows</span></td></tr>';
       }).join("") + "</tbody></table>" + groupPager();
@@ -683,11 +719,16 @@
     here.textContent = "back to " + D.citation.stage_id + "." + D.citation.column;
     here.onclick = leaveCut;
     section.setAttribute("data-drilled", "");
-    note.innerHTML = "<b>" + num(D.drilled.total) + "</b> row" +
-      (D.drilled.total === 1 ? "" : "s") + " that <code>" + esc(D.drilled.stage) +
-      "</code> " + esc(D.drilled.label) + ", drawn over <code>" +
-      esc(D.covers.at_stage) + "</code> where they were still present. Their path is " +
-      "why they left: whatever they did differently is upstream of that stage.";
+    note.innerHTML = D.drilled.group
+      ? "<b>" + num(D.drilled.total) + "</b> row" +
+        (D.drilled.total === 1 ? "" : "s") + " that <code>" + esc(D.drilled.stage) +
+        "</code> grouped into <b>" + esc(D.drilled.group) + "</b>, drawn over <code>" +
+        esc(D.drilled.at_stage) + "</code>."
+      : "<b>" + num(D.drilled.total) + "</b> row" +
+        (D.drilled.total === 1 ? "" : "s") + " that <code>" + esc(D.drilled.stage) +
+        "</code> " + esc(D.drilled.label) + ", drawn over <code>" +
+        esc(D.covers.at_stage) + "</code> where they were still present. Their path is " +
+        "why they left: whatever they did differently is upstream of that stage.";
   }
 
   function renderBar() {
@@ -922,5 +963,5 @@
   }
   shape();
   var asked = new URLSearchParams(location.search).get("cut");
-  if (asked) openCut(asked);
+  if (asked) showCut(asked);
 })();

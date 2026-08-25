@@ -23,7 +23,7 @@ class PathsTaken(NamedTuple):
 
 def group_rows_by_path(run_branches: WorkflowRunBranches, at_stage: StageId,
                        ordinals: list[RowOrdinal], on_route: set[StageId],
-                       resolved_merge: StageId | None = None) -> PathsTaken:
+                       resolved_merge: StageId | None) -> PathsTaken:
     paths: list[BranchPath] = []
     seen: dict[BranchPath, int] = {}
     path_of_row = []
@@ -55,3 +55,8 @@ def _is_resolved(option: BranchOption, resolved_merge: StageId | None) -> bool:
     """An aliased merge's groups are one node, so no path is told apart by them."""
     return (option.reason is not BranchReason.merge
             or option.stage_id == resolved_merge)
+
+
+# `resolved_merge` is required, never defaulted: None means EVERY merge is aliased,
+# which is a real answer for a figure no merge fed and a silent one for a caller
+# that just forgot. docs/branch-analysis.md
