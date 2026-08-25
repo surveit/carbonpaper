@@ -47,22 +47,19 @@ def say_what_a_stage_did(stage: AbstractStage) -> str:
 
 
 class AggregationOutput(BaseModel):
+    """One output column, said as a sentence the source column sits inside."""
+
     column: str
-    # The column it was worked out from; None where the formula reads no column.
-    from_column: str | None
-
-
-class AggregationGroup(BaseModel):
-    """One formula's outputs, and what that formula does to them."""
-
     does: str
-    outputs: list[AggregationOutput]
+    from_column: str | None
+    # The clause after the source column, where the formula owes one.
+    then: str | None
 
 
 class AggregatePlan(BaseModel):
     lead: str
     grouped_by: list[str]
-    groups: list[AggregationGroup]
+    outputs: list[AggregationOutput]
 
 
 def plan_an_aggregate(stage: AggregateStage) -> AggregatePlan:
@@ -71,42 +68,36 @@ def plan_an_aggregate(stage: AggregateStage) -> AggregatePlan:
         lead=(f"One row per {_and_list(keys)}."
               if keys else "Every row collapses into one row."),
         grouped_by=keys,
-        groups=_group_by_formula(stage.aggregate.aggregations),
+        outputs=[_say_the_output(op) for op in stage.aggregate.aggregations],
     )
 
 
-def _group_by_formula(ops: list[AggregationOp]) -> list[AggregationGroup]:
-    ordered: dict[str, list[AggregationOutput]] = {}
-    for op in ops:
-        ordered.setdefault(_say_the_formula(op.formula), []).append(
-            AggregationOutput(
-                column=op.output_column,
-                from_column=(None if op.value_column == op.output_column
-                             else op.value_column)))
-    return [AggregationGroup(does=does, outputs=outputs) for does, outputs in ordered.items()]
+def _say_the_output(op: AggregationOp) -> AggregationOutput:
+    does, then = _say_the_formula(op.formula)
+    return AggregationOutput(
+        column=op.output_column, does=does, from_column=op.value_column, then=then)
 
 
-def _say_the_formula(formula: AggFormula) -> str:
+def _say_the_formula(formula: AggFormula) -> tuple[str, str | None]:
     match formula:
         case AggFormula.sum:
-            return "Added up"
+            return "added up from", None
         case AggFormula.mean:
-            return "Averaged"
+            return "the average of", None
         case AggFormula.count_:
-            return "Counted — how many rows there were"
+            return "how many rows there were", None
         case AggFormula.count_distinct:
-            return "Counted, once per different value"
+            return "how many different values of", None
         case AggFormula.min:
-            return "The smallest of them"
+            return "the smallest", None
         case AggFormula.max:
-            return "The largest of them"
+            return "the largest", None
         case AggFormula.list:
-            return "Every value, kept as a list"
+            return "every", ", kept as a list"
         case AggFormula.only:
-            return ("Carried across, and must be the same on every row of the group — "
-                    "the run stops where two differ")
+            return "carried from", " — the run stops if two rows of the group differ"
         case AggFormula.first | AggFormula.first_including_null:
-            return "Whichever row came first"
+            return "whichever row came first", None
     assert_never(formula)
 
 

@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import pytest
 
+from app.models.stages.aggregate import AggregateStage
 from app.models.workflow import Workflow
 from app.web.stage_prose import plan_an_aggregate, say_what_a_stage_did
-from scope_fixture import stage_specs
+from scope_fixture import column, stage_specs
 
 
 @pytest.fixture
@@ -40,21 +41,35 @@ def test_a_whole_frame_aggregate_says_one_row_comes_out(stages):
     assert plan_an_aggregate(stages["grant_totals"]).lead == "Every row collapses into one row."
 
 
-def test_an_aggregate_groups_its_outputs_by_what_the_formula_does(stages):
+def test_each_output_column_gets_a_sentence_the_source_column_sits_inside(stages):
     plan = plan_an_aggregate(stages["by_portfolio"])
     assert plan.lead == "One row per portfolio."
-    assert [(group.does, [out.column for out in group.outputs]) for group in plan.groups] == [
-        ("Counted — how many rows there were", ["grants"]),
-        ("Added up", ["total_amount"]),
+    assert [(out.column, out.does, out.from_column) for out in plan.outputs] == [
+        # `count` counts rows and reads no column, so there is nothing to name.
+        ("grants", "how many rows there were", None),
+        ("total_amount", "added up from", "amount"),
     ]
 
 
-def test_an_output_names_the_column_it_was_worked_out_from(stages):
-    plan = plan_an_aggregate(stages["by_portfolio"])
-    summed = next(out for group in plan.groups for out in group.outputs
-                  if out.column == "total_amount")
-    assert summed.from_column == "amount"
-    counted = next(out for group in plan.groups for out in group.outputs
-                   if out.column == "grants")
-    # `count` counts rows and reads no column, so there is nothing to name.
-    assert counted.from_column is None
+def test_a_list_and_a_carried_column_put_their_clause_after_the_source_column(stages):
+    # No stage in the fixture reaches for either formula, so the spec is written here.
+    plan = plan_an_aggregate(_aggregate_over(stages["one_row_per_grant"], [
+        {"output_column": "grant_ids", "formula": "list", "value_column": "grant_id"},
+        {"output_column": "region", "formula": "only", "value_column": "region"},
+    ]))
+    said = {out.column: f"{out.does} {out.from_column}{out.then}" for out in plan.outputs}
+    assert said["grant_ids"] == "every grant_id, kept as a list"
+    assert said["region"] == (
+        "carried from region — the run stops if two rows of the group differ")
+
+
+def _aggregate_over(source, aggregations):
+    return AggregateStage.model_validate({
+        "id": "by_portfolio_wide", "type": "aggregate",
+        "description": "Every grant of a portfolio, listed.",
+        "inputs": [{"id": source.id}],
+        "aggregate": {"group_by": ["portfolio"], "aggregations": aggregations},
+        "signature": {"form": "replaces", "reads": [], "produces": [
+            column("portfolio", "str"), column("grant_ids", "list[str]"),
+            column("region", "str")]},
+    })
