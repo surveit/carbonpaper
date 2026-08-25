@@ -62,8 +62,7 @@ VIEWPORT_SCRIPT = "diagram_viewport.js"
 # The shared tooltip, vendored so a packet page's `data-tip` opens offline like the app's.
 TOOLTIP_SCRIPT = "tooltip.js"
 DIAGRAM_SCRIPTS = (NODE_SCRIPT, VIEWPORT_SCRIPT, TOOLTIP_SCRIPT)
-# A data table has no column of lineage links any more; the row carries the href
-# and this opens it. Vendored, or a packet's tables would open nothing.
+# Vendored, or a packet's tables would open nothing: the link column is gone.
 CELL_LINEAGE_SCRIPT = "cell-lineage.js"
 
 # The tokenizer and its caller, vendored so a stage page colours its code offline.
