@@ -8,7 +8,9 @@ from fastapi.testclient import TestClient
 from app.core.persistence import get_store
 from app.main import app
 from app.models.records.workflow_version import WorkflowVersion
+from app.services.errors import WorkflowLoadError
 from app.web.loading import list_projects
+from app.web.project_cards import ProjectStatus
 from app.services import workspace
 from stage_seed import set_stages
 from app.services.methodology import write_methodology
@@ -77,13 +79,34 @@ def test_unpublished_only_project_is_ready(examples_root):
     assert 'href="/project/drafted"' in r.text
 
 
-def test_half_written_version_snapshot_fails_the_listing_loudly(examples_root):
-    from app.services.loader import WorkflowLoadError
-
-    proj = _make_document_only_project(examples_root, name="halfway")
+def _break_a_version_snapshot(root, name):
+    proj = _make_document_only_project(root, name=name)
     get_store().write("workflow_version", f"{proj.name}/20260101T000000", {"bogus": "data"})
+    return proj
+
+
+def test_half_written_version_snapshot_does_not_take_down_the_index(examples_root):
+    _break_a_version_snapshot(examples_root, "halfway")
+    _make_document_only_project(examples_root, name="unaffected")
+    labels = {card.label: card for card in list_projects()}
+    assert set(labels) == {"halfway", "unaffected"}
+    assert labels["halfway"].is_ready is False
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "unaffected" in r.text
+
+
+def test_half_written_version_snapshot_shows_the_project_as_errored(examples_root):
+    _break_a_version_snapshot(examples_root, "halfway")
+    [card] = list_projects()
+    assert card.status is ProjectStatus.ERRORED
+    assert "Errored" in client.get("/").text
+
+
+def test_half_written_version_snapshot_still_fails_its_own_project_loudly(examples_root):
+    proj = _break_a_version_snapshot(examples_root, "halfway")
     with pytest.raises(WorkflowLoadError, match="20260101T000000"):
-        list_projects()
+        client.get(f"/project/{proj.name}")
 
 
 def test_random_directory_is_not_a_project(examples_root):
