@@ -281,8 +281,9 @@ def _stack_end(ribbons: list[Ribbon], leaving: bool) -> None:
 # ─── where the bars land ─────────────────────────────────────────────────────
 
 
-def place_bars(facts: Facts, columns: list[Column], top: float) -> None:
-    scale = _measure_scale(facts, columns)
+def place_bars(facts: Facts, columns: list[Column], top: float,
+               has_ribbons: bool) -> None:
+    scale = _measure_scale(facts, columns, has_ribbons)
     entered = _where_each_group_enters(facts, columns)
     for ci, column in enumerate(columns):
         # The rows running past hold the top of the band, so a source stacks below.
@@ -296,9 +297,12 @@ def place_bars(facts: Facts, columns: list[Column], top: float) -> None:
 
 
 # A ribbon travelling further than it runs across bulges, so the busiest sets this.
-def _measure_scale(facts: Facts, columns: list[Column]) -> float:
+def _measure_scale(facts: Facts, columns: list[Column],
+                   has_ribbons: bool) -> float:
     most = max([len(column.nodes) for column in columns] + [1])
-    band = min(TALLEST_BAND, max(SHORTEST_BAND, most * BAND_PER_NODE))
+    # Nothing runs between one column's bars, so the labels are all the room needed.
+    floor = SHORTEST_BAND if has_ribbons else most * LABEL_PITCH
+    band = min(TALLEST_BAND, max(floor, most * BAND_PER_NODE if has_ribbons else 0))
     fits = [(band - (len(c.nodes) - 1) * GAP) / facts.total for c in columns]
     return min(fits + [band / facts.total])
 

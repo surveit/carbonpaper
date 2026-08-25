@@ -111,7 +111,7 @@ def draw_the_scope(scope: ScopeMap, every_stage: bool) -> ScopeDrawing:
     top = HEAD + BAND_GAP + count_removal_lines(columns) * CUT_LINE
     ribbons = gather_ribbons(facts, columns)
     order_nodes(columns, ribbons)
-    place_bars(facts, columns, top)
+    place_bars(facts, columns, top, bool(ribbons))
     stack_ribbons(ribbons)
     return ScopeDrawing(
         width=len(columns) * COLUMN, top=top,
@@ -173,8 +173,11 @@ def _label_of(facts: Facts, node: Node) -> str:
                 f"{node.alias_of.groups_count:,} groups, by {by}")
     if node.is_figure:
         cited = facts.scope.citation
-        return (f"{cited.column} = {_say_the_figure(cited.value)}, "
-                f"merged from {node.rows:,}")
+        named = f"{cited.column} = {_say_the_figure(cited.value)}"
+        # A cell of the frame it was read into was merged from nothing.
+        if facts.scope.covers.at_stage == cited.stage_id and node.rows == 1:
+            return named
+        return f"{named}, merged from {node.rows:,}"
     labels = [facts.scope.branches[b].label for b in node.branches]
     return " + ".join(labels) if labels else "—"
 
