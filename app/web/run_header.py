@@ -412,7 +412,8 @@ def read_workflow_outputs(project_id: str, run_id: str) -> list[WorkflowOutputVi
             primary=output.primary,
             value=render_output_value(output.citation.value),
             href=run_service.build_row_trace_url(
-                project_id, run_id, output.citation.stage_id, output.citation.row_ordinal
+                project_id, run_id, output.citation.stage_id, output.citation.row_ordinal,
+                column=output.citation.column,
             ),
         )
         for output in sorted(published, key=lambda o: o.slug)

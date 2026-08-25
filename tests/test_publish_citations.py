@@ -36,14 +36,14 @@ def _provider(frames=None) -> CitationProvider:
 
 # ── citing a value ────────────────────────────────────────────────────────────
 
-def test_a_value_the_cell_holds_is_cited_and_gets_that_row_s_trace_url():
+def test_a_value_the_cell_holds_is_cited_and_gets_that_cell_s_trace_url():
     url = _provider().cite_value(
         "count_client_figures", 0, "external_spend", 4461000.0,
         label="Total external spend",
     )
     assert url == (
         "/project/venezuela_lda_lobbying/runs/R1"
-        "/stage/count_client_figures/row/0/trace/view"
+        "/stage/count_client_figures/row/0/trace/view?column=external_spend"
     )
 
 

@@ -37,6 +37,16 @@ def test_build_row_trace_url_rejects_a_negative_ordinal():
         build_row_trace_url("palm", "R1", "score_rows", -1)
 
 
+def test_build_row_trace_url_names_the_cited_column():
+    url = build_row_trace_url("palm", "R1", "score_rows", 4, column="mill_score")
+    assert url == "/project/palm/runs/R1/stage/score_rows/row/4/trace/view?column=mill_score"
+
+
+def test_build_row_trace_url_percent_encodes_the_column():
+    url = build_row_trace_url("palm", "R1", "score_rows", 0, column="score & rank")
+    assert url.endswith("?column=score%20%26%20rank")
+
+
 # ── what the publish handler passes ───────────────────────────────────────────
 
 _CITING_PUBLISH_CODE = """
