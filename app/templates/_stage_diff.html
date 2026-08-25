@@ -98,6 +98,7 @@
       {%- for column in diff.columns %}
       {%- set jump = writers.get(column.name) %}
       {%- set klasses = [cell_class[column.state] if column.state != 'carried' else '',
+                         'diff-col-quiet' if column.state == 'carried' and not column.changed_cells else '',
                          'diff-col-cited' if column.name == cited_column else '',
                          'diff-col-jump' if jump else ''] | select | join(' ') %}
       <th{% if klasses %} class="{{ klasses }}"{% endif %}

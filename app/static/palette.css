@@ -61,6 +61,10 @@
     --fg: #24272b;
     --muted: #5c6169;
     --on-dark: #ffffff;
+    /* A third copy down, at 3.3:1 — under the 4.5:1 body floor on purpose. It is
+       for a column a diff has already said did not change: legible when the eye
+       goes looking, quiet enough that it never competes with what did. */
+    --muted-dim: #83878d;
 
     /* ── Code, printed light-on-dark ──────────────────────────────────────
        --code-fg is a dimmed white, not --on-dark: a button label is one line

@@ -212,7 +212,11 @@ table.data-preview.scratch th { background: var(--hover); }
 .stage-diff .diff-mark { font-weight: 700; margin-right: 3px; }
 .stage-diff td.diff-cell-changed,
 .legend i.diff-cell-changed { background: var(--state-warn-bg); }
-.stage-diff td.diff-cell-same { color: var(--muted); }
+/* A column the stage neither wrote nor changed a cell of. Both its header and
+   its cells go dim: greying only the cells left a full-strength name over a
+   column the reader has been told to skip. */
+.stage-diff th.diff-col-quiet { color: var(--muted-dim); font-weight: 400; }
+.stage-diff td.diff-cell-same { color: var(--muted-dim); }
 .stage-diff .diff-was { display: block; color: var(--muted); text-decoration: line-through; }
 .stage-diff tr.diff-row-dropped td { background: var(--state-failed-bg); color: var(--state-failed-ink); }
 
