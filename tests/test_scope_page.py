@@ -240,12 +240,13 @@ def test_a_row_that_matched_nothing_in_a_lookup_never_came_through_it(run_id):
     assert any("load_agencies" not in stages for stages in came)
 
 
-def test_a_lookup_table_is_drawn_beside_the_flow_rather_than_in_it(run_id):
+def test_a_lookup_table_is_named_under_the_drawing_rather_than_drawn_in_it(run_id):
     payload = TestClient(app).get(
         scope_url(PROJECT, run_id, "grant_totals", "total_amount", 0, suffix=".json")).json()
-    beside = {stage["id"]: stage["lookup_table"] for stage in payload["stages"]}
-    assert beside["load_agencies"] is True
-    assert beside["load_east"] is False
+    drawn = [stage["id"] for stage in payload["stages"]]
+    assert payload["lookup_tables"] == ["load_agencies"]
+    assert "load_agencies" not in drawn
+    assert "load_east" in drawn
 
 
 
@@ -260,7 +261,7 @@ def test_the_walk_crosses_the_join_and_keeps_going_up_the_lookup(tiered_run_id):
     assert any("load_agencies" not in stages for stages in came)
 
 
-def test_a_branch_the_lookup_took_is_drawn(tiered_run_id):
+def test_a_branch_the_lookup_took_is_on_the_path_though_no_column_draws_it(tiered_run_id):
     payload = TestClient(app).get(scope_url(
         TIERED_PROJECT, tiered_run_id, "grant_totals", "total_amount", 0,
         suffix=".json")).json()
@@ -269,13 +270,14 @@ def test_a_branch_the_lookup_took_is_drawn(tiered_run_id):
     assert arms, "the lookup's own branch is in no path this figure took"
     took = {branch for path in payload["branch_paths"] for branch in path}
     assert took & set(arms)
+    assert "tier_agencies" not in [stage["id"] for stage in payload["stages"]]
 
 
-def test_every_stage_behind_a_lookup_stands_beside_the_flow(tiered_run_id):
+def test_every_stage_behind_a_lookup_is_left_out_of_the_drawing(tiered_run_id):
     payload = TestClient(app).get(scope_url(
         TIERED_PROJECT, tiered_run_id, "grant_totals", "total_amount", 0,
         suffix=".json")).json()
-    beside = {stage["id"]: stage["lookup_table"] for stage in payload["stages"]}
-    assert beside["tier_agencies"] is True
-    assert beside["load_agencies"] is True
-    assert beside["both_regions"] is False
+    drawn = [stage["id"] for stage in payload["stages"]]
+    assert payload["lookup_tables"] == ["load_agencies", "tier_agencies"]
+    assert not set(payload["lookup_tables"]) & set(drawn)
+    assert "both_regions" in drawn

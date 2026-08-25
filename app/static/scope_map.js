@@ -166,7 +166,7 @@
         return running[i] + "|" + branchesAt(i, column.id).join(",");
       });
       // Drop the column a row first appears at and the row runs in from off the left.
-      var brings = !column.lookup_table && D.covers.ordinals.some(function (_, i) {
+      var brings = D.covers.ordinals.some(function (_, i) {
         return !arrived[i] && cameThrough(i, column.id);
       });
       if (brings || column.id === D.citation.stage_id || column.gone.length ||
@@ -175,7 +175,7 @@
         kept.push(column);
         running = next;
         D.covers.ordinals.forEach(function (_, i) {
-          if (!column.lookup_table && cameThrough(i, column.id)) arrived[i] = true;
+          if (cameThrough(i, column.id)) arrived[i] = true;
         });
       }
     });
@@ -367,12 +367,10 @@
     });
   }
 
-  // A lookup table stands beside the flow, so a row is at its bar without ever
-  // having run through it: its column joins no ribbon and starts no row's route.
   function onTheFlow(i) {
     var at = [];
     for (var ci = 0; ci < cols.length; ci++) {
-      var node = onFlowAt(ci, i);
+      var node = nodeAt(ci, i);
       if (node) at.push({ ci: ci, node: node });
     }
     return at;
@@ -385,17 +383,12 @@
     });
   }
 
-  // A lookup table is at none of them, so its bar lands under the whole flow.
   function countRunningPast(ci, entered) {
     var running = 0;
     for (var i = 0; i < entered.length; i++) {
-      if (entered[i] < ci && !onFlowAt(ci, i)) running += 1;
+      if (entered[i] < ci && !nodeAt(ci, i)) running += 1;
     }
     return running;
-  }
-
-  function onFlowAt(ci, i) {
-    return cols[ci].lookup_table ? null : nodeAt(ci, i);
   }
 
   function nodeAt(ci, i) {
@@ -624,10 +617,20 @@
     renderTable();
     renderTabs();
     var cut = cols.some(function (c) { return c.gone.length; });
-    byId("scope-legend").textContent = cut
-      ? "An underlined count is rows that stage took out of the workflow — click " +
-        "one to draw them in a new tab. Nothing in the drawing is scaled to it."
-      : "";
+    byId("scope-legend").textContent =
+      (cut ? "An underlined count is rows that stage took out of the workflow — click " +
+        "one to draw them in a new tab. Nothing in the drawing is scaled to it. " : "") +
+      sayWhatIsNotDrawn();
+  }
+
+  // The whole lookup side is left out of the drawing, so it is named here instead.
+  function sayWhatIsNotDrawn() {
+    var lookups = D.lookup_tables || [];
+    if (!lookups.length || D.drilled) return "";
+    return "This figure also read " + (lookups.length === 1 ? "a lookup table, " :
+      lookups.length + " lookup tables, ") + lookups.join(", ") +
+      ". Neither they nor the stages behind them are drawn yet: a row that matched " +
+      "one leaves as one row, which no ribbon here carries.";
   }
 
   function renderHere() {

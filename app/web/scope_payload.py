@@ -76,8 +76,6 @@ class DrawnStage(BaseModel):
     # Index in the run's execution order: the drawing's left-to-right.
     position: int
     code: str = ""
-    # A lookup table stands beside the flow: no ribbon of these rows runs into it.
-    lookup_table: bool = False
 
 
 class CitedRow(BaseModel):
@@ -132,6 +130,8 @@ class ScopeMap(BaseModel):
     # Distinct sets of stages a row came through, and one per row of `covers`.
     came_through: list[list[StageId]]
     came_through_index: list[int]
+    # Lookup tables this figure came through. Named, never drawn: see the legend.
+    lookup_tables: list[StageId]
     branches: dict[BranchId, BranchOption]
     # Merge stages standing in for their groups. See docs/branch-analysis.md.
     aliased_merges: dict[StageId, AliasedMerge]
@@ -174,6 +174,8 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
         columns=list(frame.column_names),
         branch_paths=paths, branch_path_index=index,
         came_through=came_through, came_through_index=came_through_index,
+        lookup_tables=_name_the_lookups(
+            run_branches, cited.stage_id, find_stages_on_route(run_branches, cited_row)),
         branches=branches,
         aliased_merges=aliased,
         resolved_merges=sorted(resolved),
@@ -181,7 +183,7 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
         # "show every stage" says every. docs/scope-map.md
         stages=_draw_stages(run_branches, route, cited.stage_id),
         reach=_count_reach(run_branches, branches, index, paths),
-        scale=measure_frame_scale(run_branches, cited),
+        scale=_measure_the_flow(run_branches, cited),
     )
 
 
@@ -338,24 +340,39 @@ def _count_reach(run_branches: WorkflowRunBranches,
             if branch_id in branches]
 
 
+def _measure_the_flow(run_branches: WorkflowRunBranches,
+                      cited: StageOutputCellCitation) -> list[FrameScale]:
+    """A lookup table's size is not the flow narrowing, and it is drawn no column here."""
+    beside = find_stages_beside_the_flow(run_branches, cited.stage_id)
+    return [step for step in measure_frame_scale(run_branches, cited)
+            if step.stage not in beside]
+
+
+def _name_the_lookups(run_branches: WorkflowRunBranches, from_stage: StageId,
+                      on_route: set[StageId]) -> list[StageId]:
+    """The lookup tables this figure read: named under the drawing, never drawn in it."""
+    beside = find_stages_beside_the_flow(run_branches, from_stage)
+    return [sid for sid in run_branches.ordered_stage_ids
+            if sid in beside and sid in on_route]
+
+
 def _draw_stages(run_branches: WorkflowRunBranches, touched: set[StageId],
                  from_stage: StageId) -> list[DrawnStage]:
     beside = find_stages_beside_the_flow(run_branches, from_stage)
-    return [_draw_stage(run_branches, sid, position, sid in beside)
+    return [_draw_stage(run_branches, sid, position)
             for position, sid in enumerate(run_branches.ordered_stage_ids)
-            if sid in touched and sid in run_branches.stages]
+            if sid in touched and sid not in beside and sid in run_branches.stages]
 
 
 def _draw_stage(run_branches: WorkflowRunBranches, sid: StageId,
-                position: int, lookup_table: bool) -> DrawnStage:
+                position: int) -> DrawnStage:
     stage = run_branches.stages[sid]
     authored = stage.stage
     return DrawnStage(
         id=sid, type=str(getattr(authored.type, "value", authored.type)),
         glyph=TYPE_GLYPH[authored.type],
         position=position, description=authored.description or "",
-        code=read_stage_code(stage) or read_decision_source(stage),
-        lookup_table=lookup_table)
+        code=read_stage_code(stage) or read_decision_source(stage))
 
 
 def _plain(value: object) -> JsonScalar:
