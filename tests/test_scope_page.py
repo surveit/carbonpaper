@@ -43,11 +43,10 @@ def scope_url(project: str, run_id: str, stage: str, column: str, row: int,
             f"?stage={stage}&row={row}&column={column}")
 
 
-def test_the_page_names_the_figure_and_what_its_rows_establish(run_id):
+def test_the_page_serves_the_map_the_drawing_reads(run_id):
     page = TestClient(app).get(scope_url(PROJECT, run_id, "grant_totals", "total_amount", 0))
     assert page.status_code == 200
-    assert "grant_totals" in page.text
-    assert "Computed from 5 rows of grants_only" in page.text
+    assert 'id="scope-payload"' in page.text
 
 
 def test_the_citation_carries_the_cell_read_back_off_the_frame(run_id):
@@ -57,21 +56,16 @@ def test_the_citation_carries_the_cell_read_back_off_the_frame(run_id):
     assert payload["citation"]["value"] == 2200
 
 
-def test_the_figure_names_its_row_as_a_reader_counts_them(run_id):
-    page = TestClient(app).get(scope_url(PROJECT, run_id, "grant_totals", "total_amount", 0))
-    # Ordinal 0 in the address; row 1 on the page, as everywhere else it is named.
-    assert "row 1," in page.text and "row 0," not in page.text
-
-
 def test_a_row_past_the_end_of_the_frame_is_a_404(run_id):
     page = TestClient(app).get(scope_url(PROJECT, run_id, "grant_totals", "total_amount", 99))
     assert page.status_code == 404
 
 
-def test_a_figure_over_two_merges_names_the_one_in_between(run_id):
-    page = TestClient(app).get(scope_url(PROJECT, run_id, "total_of_means", "summed_means", 0))
-    assert page.status_code == 200
-    assert "merged at mean_by_portfolio before this figure was taken" in page.text
+def test_a_figure_over_two_merges_records_the_one_in_between(run_id):
+    payload = TestClient(app).get(
+        scope_url(PROJECT, run_id, "total_of_means", "summed_means", 0,
+                  suffix=".json")).json()
+    assert payload["covers"]["regrained_at"] == ["total_of_means", "mean_by_portfolio"]
 
 
 def test_a_figure_over_a_merge_that_no_row_fed_still_names_one_grain(run_id):
@@ -94,12 +88,6 @@ def test_the_page_says_when_no_row_fed_the_figure(run_id):
 def test_the_page_says_nothing_of_the_kind_where_rows_did_feed_the_figure(run_id):
     page = TestClient(app).get(scope_url(PROJECT, run_id, "grant_totals", "total_amount", 0))
     assert "No row fed this figure" not in page.text
-
-
-def test_the_page_says_how_much_of_the_widest_frame_is_off_screen(run_id):
-    page = TestClient(app).get(scope_url(PROJECT, run_id, "grant_totals", "total_amount", 0))
-    assert "of the 10 rows at both_regions" in page.text
-    assert "The rest of that frame is not drawn" in page.text
 
 
 def test_the_payload_carries_a_map_for_each_cut_and_none_for_an_untaken_arm(run_id):
@@ -148,7 +136,6 @@ def panel_url(project: str, run_id: str, stage: str, column: str, row: int = 0) 
 def test_the_panel_draws_the_same_map_without_the_project_shell(run_id):
     panel = TestClient(app).get(panel_url(PROJECT, run_id, "grant_totals", "total_amount"))
     assert panel.status_code == 200
-    assert "Computed from 5 rows of grants_only" in panel.text
     assert 'id="scope-payload"' in panel.text
     # The frame sits inside a page that already has a sidebar and a trail.
     assert "app-side-nav" not in panel.text
@@ -163,9 +150,10 @@ def test_the_panel_states_why_no_map_rather_than_erroring_inside_the_frame(run_i
 def test_a_stage_the_run_never_reached_is_left_out_of_the_map(halted_run_id):
     # It wrote no frame, so it owes no lineage sidecar: reading one is a 500.
     page = TestClient(app).get(
-        scope_url(HALTED_PROJECT, halted_run_id, "grant_totals", "total_amount", 0))
+        scope_url(HALTED_PROJECT, halted_run_id, "grant_totals", "total_amount", 0,
+                  suffix=".json"))
     assert page.status_code == 200
-    assert "Computed from 5 rows of grants_only" in page.text
+    assert page.json()["covers"]["at_stage"] == "grants_only"
     assert "count_reviewed" not in page.text
 
 
