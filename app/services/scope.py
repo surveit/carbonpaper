@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Sequence
 
 from app.models.branch_analysis import (
-    BranchId,
+    BranchReason,
     FrameScale,
     RowOrdinal,
     RowRef,
@@ -42,17 +42,30 @@ def find_sample_choices_behind(run_branches: WorkflowRunBranches, stage_id: Stag
 def find_stages_on_route(run_branches: WorkflowRunBranches,
                          rows: Sequence[RowRef]) -> set[StageId]:
     """Every stage these rows came through. A branch anywhere else tells them nothing."""
-    return set(_reach_upstream(run_branches, rows))
+    return set(find_rows_reached_per_stage(run_branches, rows))
 
 
-def find_merges_that_excluded(run_branches: WorkflowRunBranches,
-                              citation: StageOutputCellCitation) -> set[BranchId]:
-    """A merge branch excludes rows only relative to a citation, so it is asked here."""
-    return {branch_id
-            for branch_id, option in run_branches.branch_options.items()
-            if option.merged_into_row_ordinal is not None
-            and option.stage_id == citation.stage_id
-            and option.merged_into_row_ordinal != citation.row_ordinal}
+def find_rows_reached_per_stage(run_branches: WorkflowRunBranches,
+                                rows: Sequence[RowRef]
+                                ) -> dict[StageId, set[RowOrdinal]]:
+    """Which rows of each stage on the route these rows came through."""
+    return _reach_upstream(run_branches, rows)
+
+
+def find_nearest_merge(run_branches: WorkflowRunBranches,
+                       rows: Sequence[RowRef]) -> StageId | None:
+    """The re-graining closest to the cited cell — the only one a drawing resolves."""
+    on_route = find_stages_on_route(run_branches, rows)
+    merged = find_merge_stage_ids(run_branches)
+    crossed = [sid for sid in run_branches.ordered_stage_ids
+               if sid in on_route and sid in merged]
+    return crossed[-1] if crossed else None
+
+
+def find_merge_stage_ids(run_branches: WorkflowRunBranches) -> set[StageId]:
+    """A stage whose lineage says several input rows became one output row."""
+    return {option.stage_id for option in run_branches.branch_options.values()
+            if option.reason is BranchReason.merge}
 
 
 def measure_frame_scale(run_branches: WorkflowRunBranches,

@@ -12,9 +12,11 @@ from app.core.errors import RowOutOfRange, StageNotInRun
 from app.core.frames import read_frame_table
 from app.core.json_types import JsonScalar
 from app.models.branch_analysis import (
+    AliasedMerge,
     BranchId,
     BranchOption,
     BranchPath,
+    BranchReason,
     BranchRole,
     FrameScale,
     RowOrdinal,
@@ -30,10 +32,12 @@ from app.runtime.branch_analysis import (
 from app.runtime.branch_analysis.stage_code import read_decision_source, read_stage_code
 from app.services.scope import (
     find_contributing_rows,
-    find_merges_that_excluded,
+    find_nearest_merge,
+    find_rows_reached_per_stage,
     find_stages_on_route,
     measure_frame_scale,
 )
+from app.web.merge_alias import alias_the_merges
 from app.web.config import render_row_number
 
 # Cells for a wider set than this are sampled; the counts never are.
@@ -111,6 +115,9 @@ class ScopeMap(BaseModel):
     branch_paths: list[BranchPath]
     branch_path_index: list[int]
     branches: dict[BranchId, BranchOption]
+    # Merge stages standing in for their groups. See docs/branch-analysis.md.
+    aliased_merges: dict[StageId, AliasedMerge]
+    resolved_merge: StageId | None
     stages: list[DrawnStage]
     reach: list[BranchReach]
     scale: list[FrameScale]
@@ -123,9 +130,13 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
     cited_frame, cited = _read_the_cited_cell(outputs, citation)
     covers = find_contributing_rows(run_branches, cited.stage_id, cited.row_ordinal)
     frame = read_frame_table(outputs / f"{covers.at_stage}.parquet")
-    on_route = find_stages_on_route(run_branches, [(cited.stage_id, cited.row_ordinal)])
+    cited_row = [(cited.stage_id, cited.row_ordinal)]
+    # Only the nearest re-graining is resolved. docs/branch-analysis.md
+    nearest = find_nearest_merge(run_branches, cited_row)
     paths, _, index = group_rows_by_path(
-        run_branches, covers.at_stage, covers.ordinals, on_route)
+        run_branches, covers.at_stage, covers.ordinals,
+        find_stages_on_route(run_branches, cited_row), nearest)
+    branches = _branches_on(run_branches, paths)
     shown = covers.ordinals[:CELL_ROWS]
     return ScopeMap(
         project_id=project_id, run_id=run_id, citation=cited, covers=covers,
@@ -134,9 +145,12 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
         rows=read_rows(frame, shown, index),
         columns=list(frame.column_names),
         branch_paths=paths, branch_path_index=index,
-        branches=_branches_on(run_branches, paths),
+        branches=branches,
+        aliased_merges=alias_the_merges(
+            run_branches, find_rows_reached_per_stage(run_branches, cited_row), nearest),
+        resolved_merge=nearest,
         stages=_draw_stages(run_branches, _stages_touched(run_branches, paths)),
-        reach=_count_reach(run_branches, paths, index),
+        reach=_count_reach(run_branches, branches, index, paths),
         scale=measure_frame_scale(run_branches, cited),
     )
 
@@ -170,9 +184,11 @@ def read_cut(run_branches: WorkflowRunBranches, outputs: Path,
     at_stage, ordinals = find_rows_that_took(run_branches, branch_id)
     if not ordinals or at_stage not in run_branches.branch_paths:
         return None
+    behind = [(at_stage, ordinal) for ordinal in ordinals]
     paths, _, index = group_rows_by_path(
         run_branches, at_stage, ordinals,
-        find_stages_on_route(run_branches, [(at_stage, o) for o in ordinals]))
+        find_stages_on_route(run_branches, behind),
+        find_nearest_merge(run_branches, behind))
     spread = Counter(index)
     shown = ordinals[:CUT_SAMPLE]
     frame = read_frame_table(outputs / f"{at_stage}.parquet")
@@ -188,14 +204,11 @@ def read_cut(run_branches: WorkflowRunBranches, outputs: Path,
 
 def find_cuts_to_offer(run_branches: WorkflowRunBranches, outputs: Path,
                        scope: ScopeMap) -> dict[BranchId, CutRows]:
-    """A branch that took rows out here, or merged them into a row this figure is not."""
+    """A branch that took rows out here. A merge's groups are asked for one at a time."""
     drawn = {branch_id for path in scope.branch_paths for branch_id in path}
-    excluded = find_merges_that_excluded(run_branches, scope.citation)
     found: dict[BranchId, CutRows] = {}
     for branch_id, option in scope.branches.items():
-        if branch_id in drawn:
-            continue
-        if option.role is not BranchRole.removes and branch_id not in excluded:
+        if branch_id in drawn or option.role is not BranchRole.removes:
             continue
         cut = read_cut(run_branches, outputs, branch_id)
         if cut is not None:
@@ -215,9 +228,16 @@ def read_rows(frame: pa.Table, ordinals: list[RowOrdinal],
 def _branches_on(run_branches: WorkflowRunBranches, paths: list[BranchPath]
                  ) -> dict[BranchId, BranchOption]:
     touched = _stages_touched(run_branches, paths)
+    held = {branch_id for path in paths for branch_id in path}
     return {branch_id: _label_a_merge(option)
             for branch_id, option in run_branches.branch_options.items()
-            if any(branch_id in path for path in paths) or option.stage_id in touched}
+            if branch_id in held or (option.stage_id in touched
+                                     and not _is_aliased(option, held))}
+
+
+def _is_aliased(option: BranchOption, held: set[BranchId]) -> bool:
+    """A group no drawn row went into sits behind its stage's node, not on the page."""
+    return option.reason is BranchReason.merge and option.id not in held
 
 
 def _label_a_merge(option: BranchOption) -> BranchOption:
@@ -234,15 +254,16 @@ def _stages_touched(run_branches: WorkflowRunBranches,
             for path in paths for branch_id in path}
 
 
-def _count_reach(run_branches: WorkflowRunBranches, paths: list[BranchPath],
-                 branch_path_index: list[int]) -> list[BranchReach]:
+def _count_reach(run_branches: WorkflowRunBranches,
+                 branches: dict[BranchId, BranchOption],
+                 branch_path_index: list[int],
+                 paths: list[BranchPath]) -> list[BranchReach]:
     here: Counter[BranchId] = Counter()
     for index in branch_path_index:
         here.update(paths[index])
-    touched = _stages_touched(run_branches, paths)
     return [BranchReach(branch=branch_id, taken=taken, here=here[branch_id])
             for branch_id, taken in run_branches.row_count_per_branch_id.items()
-            if run_branches.branch_options[branch_id].stage_id in touched]
+            if branch_id in branches]
 
 
 def _draw_stages(run_branches: WorkflowRunBranches,

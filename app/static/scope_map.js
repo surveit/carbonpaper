@@ -20,6 +20,7 @@
   var pickedNode = null;
   var pickedRow = null;
   var showAll = false;
+  var deAliased = null;
   var openTab = "rows";
   var panels = {};
 
@@ -99,11 +100,17 @@
     return Array.from(seen.values()).sort(function (a, b) { return b.rows - a.rows; });
   }
 
-  // A stub is for rows that LEFT here: removed from the frame, or grouped elsewhere.
-  // An arm none of these rows took is not a loss — those rows carried on.
+  // A stub is for rows that LEFT here. An arm none of these rows took is not a
+  // loss — those rows carried on.
   function leftHere(branch) {
-    var role = (D.branches[branch] || {}).role;
-    return role === "removes" || (D.excluded_merges || []).indexOf(branch) >= 0;
+    return (D.branches[branch] || {}).role === "removes";
+  }
+
+  // A merge stage hangs under the frame it grouped, which is a column that is drawn.
+  function aliasesUnder(stageId) {
+    return Object.keys(D.aliased_merges || {})
+      .map(function (id) { return D.aliased_merges[id]; })
+      .filter(function (a) { return a.rows_live_in_stage_id === stageId; });
   }
 
   function columns() {
@@ -125,7 +132,10 @@
                !held.has(r.branch) && leftHere(r.branch);
       }).map(function (r) { return { branch: r.branch, rows: r.taken }; })
         .sort(function (a, b) { return b.rows - a.rows; });
-      return Object.assign({}, stage, { nodes: nodes, gone: gone });
+      var aliased = aliasesUnder(stage.id).map(function (a) {
+        return { alias: a, rows: a.rows_count };
+      });
+      return Object.assign({}, stage, { nodes: nodes, gone: gone.concat(aliased) });
     }).filter(function (c) { return c.nodes.length || c.gone.length; });
   }
 
@@ -210,6 +220,12 @@
     });
     svg.querySelectorAll("[data-cut]").forEach(function (el) {
       el.onclick = function (event) { event.stopPropagation(); pick(el.dataset.cut); };
+    });
+    svg.querySelectorAll("[data-merge]").forEach(function (el) {
+      el.onclick = function (event) {
+        event.stopPropagation();
+        deAlias(el.dataset.merge);
+      };
     });
     svg.onclick = clearPick;
   }
@@ -391,15 +407,36 @@
 
   function drawStub(c, gone, i) {
     var y = c.bottom + 4 + i * 17;
-    var fact = D.branches[gone.branch];
     var budget = Math.floor((COLUMN - BAR - STUB - 10) / 6.3);
-    return '<line class="scope-stub" x1="' + c.x + '" y1="' + y + '" x2="' +
-      (c.x + STUB) + '" y2="' + y + '"/>' +
-      '<text class="scope-stub-label" data-cut="' + esc(c.id + SEP + gone.branch) +
-      '" data-tip="' + esc(fact.label + " — " + num(gone.rows) + " row" +
-      (gone.rows === 1 ? "" : "s") + ", none of them in this figure") +
-      '" x="' + (c.x + STUB + 5) + '" y="' + (y + 3) + '">' +
-      esc(clip(num(gone.rows) + " " + fact.label, budget)) + "</text>";
+    var drawn = gone.alias ? aliasLabel(gone.alias) : cutLabel(c, gone);
+    return '<line class="scope-stub' + (gone.alias ? " is-alias" : "") +
+      '" x1="' + c.x + '" y1="' + y + '" x2="' + (c.x + STUB) + '" y2="' + y + '"/>' +
+      '<text class="scope-stub-label" ' + drawn.handle +
+      ' data-tip="' + esc(drawn.tip) + '" x="' + (c.x + STUB + 5) + '" y="' +
+      (y + 3) + '">' + esc(clip(drawn.text, budget)) + "</text>";
+  }
+
+  function cutLabel(c, gone) {
+    var fact = D.branches[gone.branch];
+    return {
+      handle: 'data-cut="' + esc(c.id + SEP + gone.branch) + '"',
+      text: num(gone.rows) + " " + fact.label,
+      tip: fact.label + " — " + num(gone.rows) + " row" +
+        (gone.rows === 1 ? "" : "s") + ", none of them in this figure"
+    };
+  }
+
+  // How many groups there are is decided by the data, so none are drawn.
+  function aliasLabel(alias) {
+    var key = alias.group_by.length ? alias.group_by.join(", ") : "the whole frame";
+    return {
+      handle: 'data-merge="' + esc(alias.stage_id) + '"',
+      text: num(alias.groups_count) + " groups at " + alias.stage_id,
+      tip: alias.stage_id + " grouped " + num(alias.rows_count) + " rows into " +
+        num(alias.groups_count) + " by " + key + ". This figure came through " +
+        num(alias.on_route_groups_count) + " of them, holding " +
+        num(alias.on_route_rows_count) + " rows. Click to list the groups."
+    };
   }
 
   // ── what is picked ───────────────────────────────────────────────────────
@@ -498,6 +535,121 @@
     return true;
   }
 
+  // ── de-aliasing a merge ──────────────────────────────────────────────────
+  //
+  // The groups are fetched a page at a time, never shipped with the map.
+
+  function mergeUrl(path, extra) {
+    var query = new URLSearchParams({
+      stage: D.citation.stage_id, row: String(D.citation.row_ordinal),
+      column: D.citation.column, merge: deAliased.stage
+    });
+    Object.keys(extra || {}).forEach(function (k) { query.set(k, extra[k]); });
+    return "/project/" + encodeURIComponent(D.project_id) + "/runs/" +
+      encodeURIComponent(D.run_id) + "/scope/merge/" + path + "?" + query.toString();
+  }
+
+  function deAlias(stageId) {
+    deAliased = { stage: stageId, offset: 0, groups: null, total: 0, failed: false };
+    render();
+    fetchGroups(0);
+  }
+
+  function reAlias() {
+    deAliased = null;
+    render();
+  }
+  window.scopeReAlias = reAlias;
+
+  function fetchGroups(offset) {
+    var wanted = deAliased.stage;
+    fetch(mergeUrl("groups", { offset: String(offset) }))
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (body) {
+        if (!deAliased || deAliased.stage !== wanted) return;
+        deAliased.groups = body.groups;
+        deAliased.total = body.total;
+        deAliased.offset = body.offset;
+        render();
+      })
+      .catch(function () {
+        if (deAliased) deAliased.failed = true;
+        render();
+      });
+  }
+
+  function drawOneGroup(ordinal) {
+    var wanted = deAliased.stage;
+    fetch(mergeUrl("rows", { group: String(ordinal) }))
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (body) {
+        D.cuts = D.cuts || {};
+        D.cuts[body.cut.branch] = body.cut;
+        D.branches[body.cut.branch] = D.branches[body.cut.branch] || {
+          id: body.cut.branch, stage_id: wanted, reason: "merge", role: "keeps",
+          label: "one group of " + wanted
+        };
+        deAliased = null;
+        enterCut(body.cut.branch);
+      })
+      .catch(function () {
+        if (deAliased) deAliased.failed = true;
+        render();
+      });
+  }
+
+  function groupName(group) {
+    var alias = (D.aliased_merges || {})[deAliased.stage];
+    var names = (alias && alias.group_by) || [];
+    return group.keys.length
+      ? group.keys.map(function (value, i) {
+          return (names[i] ? names[i] + " = " : "") + figure(value);
+        }).join(" · ")
+      : "row " + group.ordinal;
+  }
+
+  function renderGroupTable() {
+    var host = byId("scope-table");
+    if (deAliased.failed) {
+      host.innerHTML = '<p class="muted">Could not read the groups at <code>' +
+        esc(deAliased.stage) + "</code>.</p>";
+      return;
+    }
+    if (!deAliased.groups) {
+      host.innerHTML = '<p class="muted">Reading the groups at <code>' +
+        esc(deAliased.stage) + "</code>…</p>";
+      return;
+    }
+    host.innerHTML = TABLE + "<thead><tr><th>group</th><th>rows</th>" +
+      "<th>in this figure</th><th></th></tr></thead><tbody>" +
+      deAliased.groups.map(function (g) {
+        return '<tr class="' + (g.on_route ? "is-on" : "") + '"><td>' +
+          esc(groupName(g)) + "</td><td>" + num(g.rows_count) + "</td><td>" +
+          (g.on_route ? "yes" : "no") + '</td><td><span class="scope-clear" ' +
+          'data-group="' + g.ordinal + '">draw its rows</span></td></tr>';
+      }).join("") + "</tbody></table>" + groupPager();
+    host.querySelectorAll("[data-group]").forEach(function (el) {
+      el.onclick = function () { drawOneGroup(Number(el.dataset.group)); };
+    });
+    host.querySelectorAll("[data-page]").forEach(function (el) {
+      el.onclick = function () { fetchGroups(Number(el.dataset.page)); };
+    });
+  }
+
+  function groupPager() {
+    var shown = deAliased.offset + deAliased.groups.length;
+    var more = shown < deAliased.total
+      ? ' <span class="scope-clear" data-page="' + shown + '">next ' +
+        num(Math.min(deAliased.total - shown, deAliased.groups.length)) + "</span>"
+      : "";
+    var back = deAliased.offset
+      ? ' <span class="scope-clear" data-page="' +
+        Math.max(0, deAliased.offset - deAliased.groups.length) + '">previous</span>'
+      : "";
+    return '<p class="muted">' + num(deAliased.offset + 1) + "–" + num(shown) +
+      " of " + num(deAliased.total) + " groups." + back + more + "</p>";
+  }
+
   // ── the words under the drawing ──────────────────────────────────────────
 
   function render() {
@@ -539,6 +691,7 @@
   }
 
   function renderBar() {
+    if (deAliased) { renderAliasBar(); return; }
     var bar = byId("scope-bar");
     var cut = pickedCut();
     if (cut) {
@@ -569,6 +722,20 @@
     });
     bar.querySelectorAll("[data-enter]").forEach(function (el) {
       el.onclick = function () { enterCut(el.dataset.enter); };
+    });
+  }
+
+  function renderAliasBar() {
+    var alias = (D.aliased_merges || {})[deAliased.stage] || {};
+    var by = (alias.group_by || []).join(", ");
+    byId("scope-bar").innerHTML = "<span><code>" + esc(deAliased.stage) +
+      "</code> grouped <b>" + num(alias.rows_count || 0) + "</b> rows into <b>" +
+      num(alias.groups_count || 0) + "</b>" + (by ? " by <code>" + esc(by) + "</code>" : "") +
+      ". This figure came through <b>" + num(alias.on_route_groups_count || 0) +
+      "</b> of them.</span> <span class=\"scope-clear\" data-realias>back to this figure" +
+      "'s rows</span>";
+    byId("scope-bar").querySelectorAll("[data-realias]").forEach(function (el) {
+      el.onclick = reAlias;
     });
   }
 
@@ -653,6 +820,7 @@
   }
 
   function renderTable() {
+    if (deAliased) { renderGroupTable(); return; }
     var cut = pickedCut();
     if (cut) { renderCutTable(cut); return; }
     if (pickedFigure()) { renderCitedRow(); return; }

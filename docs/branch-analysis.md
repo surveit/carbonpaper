@@ -39,6 +39,8 @@ distinct portfolios those ten rows carry. So the catalogue is per-run, and
 That is not a wart. "Which group did you go into" is the same shape of question as "which arm did
 you take"; it just has more answers, and they are not known until the rows arrive.
 
+It does mean a drawing cannot offer one option per group. See "Aliasing a merge" below.
+
 ## Where branches come from
 
 Only **one** kind of branch is recorded while the run executes.
@@ -144,6 +146,9 @@ grants by portfolio and by region, and every row holds a branch from both. Asked
 total, the region branch splits rows that the question does not distinguish, so `RowSet.regrained_at`
 records the merges the walk actually came down through and the rest are dropped from the path.
 
+`regrained_at` records every re-graining the walk came down through. A drawing resolves only the
+nearest of them; see "Aliasing a merge".
+
 `measure_frame_scale` is the same walk with a different question: for each stage, how many of
 *its* rows this figure came through. That is a count per stage, never a shape drawn to scale —
 40 rows beside 45,061 cannot be drawn as two ribbons without lying about one of them.
@@ -159,6 +164,29 @@ the output at all, by definition, so it names the *input* frame and they are the
 output row reaches (`_find_removed_rows`). A `merge` branch names the merged stage's input frame
 too, and its rows are the ones merged into one output row (`_find_merged_rows`).
 
+## Aliasing a merge
+
+A code branch has as many options as the code has arms. A merge has as many as the data has
+groups — 6,132 at one `group_by` in a run of 37,403 rows. So a reader is shown **one node per
+merge stage**, standing in for every group it made, and the groups themselves are fetched only
+when asked for. That standing-in is called **aliasing**, and asking for the groups is
+**de-aliasing**. Nothing about the run changes: the groups are in the lineage either way.
+
+One merge is left resolved — the re-graining nearest the cited cell, which is what the figure
+is composed of (`find_nearest_merge`). Every merge below it is aliased. Two consequences.
+
+**A drawing's node count is the workflow's, not the data's.** Rows that differ only in which
+group they joined further down hold the same path, so they are one node. Without this, a figure
+over 35 rows drew 35 nodes.
+
+**A sibling group is not a stub.** A merge stage's other groups are behind its aliased node,
+one page at a time (`app/web/merge_alias.py`), not one dashed stub each with a drill-in
+computed up front. `AliasedMerge` carries what the node says: the group_by columns, how many
+groups and rows the stage has, and how many of each this figure came through.
+
+A filter is untouched by any of this. Its `predicate` branch has its own id and its own stub,
+so aliasing a merge never hides what a stage removed.
+
 ## Where the code lives
 
 | module | holds |
@@ -168,7 +196,8 @@ too, and its rows are the ones merged into one output row (`_find_merged_rows`).
 | `app/runtime/branch_analysis/run_branches.py` | reading the sidecars, working out the other five reasons, building a path per row |
 | `app/runtime/branch_analysis/stage_code.py` | the stage source a branch decided in |
 | `app/runtime/branch_analysis/rows_behind_a_branch.py` | which rows took one branch, and in which frame |
-| `app/services/scope.py` | answering a citation, and measuring frame scale |
+| `app/services/scope.py` | answering a citation, measuring frame scale, finding the nearest merge |
+| `app/web/merge_alias.py` | a merge stage's groups: what its aliased node says, and de-aliasing it |
 | `tests/scope_fixture.py` | twelve grants and fourteen stages, hitting every reason on purpose |
 
 `app/runtime/branch_analysis` reads a finished run rather than executing one, which is not the

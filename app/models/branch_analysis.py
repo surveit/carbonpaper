@@ -6,6 +6,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel
 
+from app.core.json_types import JsonScalar
 from app.models.schema import StageId
 
 # Opaque, and unique in a run. Nothing reads anything back out of it.
@@ -55,6 +56,30 @@ class BranchOption(BaseModel):
     last_body_line_number: int | None = None
     # The data-decided part. See docs/branch-analysis.md.
     merged_into_row_ordinal: RowOrdinal | None = None
+
+
+class MergeGroup(BaseModel):
+    """One group a merge stage made: the key values it stands for, and its rows."""
+
+    branch: BranchId
+    ordinal: RowOrdinal
+    # One value per column in the merge stage's `group_by`, in that order.
+    keys: list[JsonScalar]
+    rows_count: int
+    # Whether the figure being asked about came down through this group.
+    on_route: bool = False
+
+
+class AliasedMerge(BaseModel):
+    """A merge stage drawn as one node, its groups left unresolved."""
+
+    stage_id: StageId
+    rows_live_in_stage_id: StageId
+    group_by: list[str]
+    groups_count: int
+    rows_count: int
+    on_route_groups_count: int
+    on_route_rows_count: int
 
 
 class RowSet(BaseModel):
