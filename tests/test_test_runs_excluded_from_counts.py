@@ -8,6 +8,7 @@ from pathlib import Path
 
 from app.services import project as project_service
 from app.services import workspace
+from project_seed import seed_project
 from app.web import loading
 from app.services.methodology import write_methodology
 from run_seed import store_manifest
@@ -46,9 +47,8 @@ def test_runs_summary_with_only_test_runs_reports_no_runs(tmp_path):
 
 def test_dashboard_card_n_runs_excludes_test_runs(tmp_path, monkeypatch):
     workspace.set_projects_dir(tmp_path)
-    root = tmp_path / "demo"
-    root.mkdir()
-    write_methodology((root).name, "methodology")
+    root = seed_project("demo")
+    write_methodology("demo", "methodology")
     _write_manifest(root / "runs" / "20260101T000000", status="ok", is_test_run=None)
     _write_manifest(root / "runs" / "20260102T000000", status="ok", is_test_run=True)
 
@@ -58,9 +58,8 @@ def test_dashboard_card_n_runs_excludes_test_runs(tmp_path, monkeypatch):
 
 def test_a_legacy_manifests_flat_flag_still_excludes_it(tmp_path):
     workspace.set_projects_dir(tmp_path)
-    root = tmp_path / "demo"
-    root.mkdir()
-    write_methodology((root).name, "methodology")
+    root = seed_project("demo")
+    write_methodology("demo", "methodology")
     _write_manifest(root / "runs" / "20260101T000000", status="ok",
                     is_test_run=None, legacy=True)
     _write_manifest(root / "runs" / "20260102T000000", status="ok",

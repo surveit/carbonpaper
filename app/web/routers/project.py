@@ -68,6 +68,14 @@ async def withdraw_code_execution(project_name: str):
     return RedirectResponse(f"/project/{project_name}", status_code=303)
 
 
+@router.post("/project/{project_name}/private")
+async def set_project_private(project_name: str, private: str = Form("")):
+    """Stays on the project: a private one is gone from the home grid it would return to."""
+    project_id = validate_project_or_404(project_name)
+    project.set_project_private(project_id, private == "on")
+    return RedirectResponse(f"/project/{project_id}", status_code=303)
+
+
 @router.post("/project/{project_name}/delete")
 async def delete_project(project_name: str):
     project.delete_project(validate_project_or_404(project_name))

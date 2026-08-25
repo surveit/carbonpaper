@@ -58,14 +58,6 @@ def has_document(project_id: str) -> bool:
     return methodology.exists(project_id)
 
 
-def find_workspace_project_ids() -> list[str]:
-    """Every project DIRECTORY, so one imported without a record is still listed."""
-    root = workspace.projects_dir()
-    if not root.exists():
-        return []
-    return sorted(child.name for child in root.iterdir() if child.is_dir())
-
-
 # ─── Status models ────────────────────────────────────────────────────────────
 # The typed shapes project_meta / project_state return. Every field is read off
 # disk truthfully (see project_state); an unknown fact is None / 0, never a
@@ -104,6 +96,7 @@ class ProjectMeta(BaseModel):
     created_at: str | None
     model: str | None
     source: str | None
+    private: bool
 
 
 class ProjectState(BaseModel):
@@ -164,7 +157,7 @@ def project_meta(project_id: str) -> ProjectMeta:
     if record is None:
         # No record: the id is the only name this project has, and it is not invented.
         return ProjectMeta(name=project_id, display_name=project_id, title=None,
-                           created_at=None, model=None, source=None)
+                           created_at=None, model=None, source=None, private=False)
     return ProjectMeta(
         name=record.label(),
         display_name=record.display_name(),
@@ -172,6 +165,7 @@ def project_meta(project_id: str) -> ProjectMeta:
         created_at=record.authored_at,
         model=record.model,
         source=record.source,
+        private=record.private,
     )
 
 
@@ -260,15 +254,23 @@ def project_exists(project_id: str) -> bool:
 
 def list_projects() -> list[str]:
     """Ids, not names — a name identifies nothing, and two projects may share one."""
-    return sorted(record.id for record in Project.list())
+    return [listing.id for listing in list_project_listings()]
 
 
 def list_project_listings() -> list[ProjectListing]:
-    """Both halves: the id to pass back, and the label to say it by."""
+    """Every project a reader may see, and the only listing of them there is."""
     return [
         ProjectListing(id=record.id, name=record.display_name())
+        # delete_project keeps the record and drops the working copy; project_exists sees that.
         for record in sorted(Project.list(), key=lambda r: r.id)
+        if not record.private and project_exists(record.id)
     ]
+
+
+def set_project_private(project_id: str, private: bool) -> None:
+    record = Project.load(project_id)
+    record.private = private
+    record.save()
 
 
 def read_workflow_summary(name: str) -> workspace.WorkflowSummary:
