@@ -86,12 +86,7 @@
       </tbody>
     </table>
     {% if column.hidden_value_count %}
-    <p class="facet-note">{{ "{:,}".format(column.hidden_value_count) }} further values, each rarer than these.</p>
-    {% endif %}
-    {% if column.filled_count and column.filled_count < file.contents.row_count %}
-    <p class="facet-note">Of the {{ "{:,}".format(column.filled_count) }} rows that carry a value,
-      {{ (column.shape.top[0].count * 100 / column.filled_count) | round | int }}% are
-      <code>{{ column.shape.top[0].value | truncate(40, true, "…") }}</code>.</p>
+    <p class="facet-note">and {{ "{:,}".format(column.hidden_value_count) }} more…</p>
     {% endif %}
     {% endif %}
   </div>
