@@ -54,8 +54,7 @@ def test_a_stage_the_run_read_no_file_for_is_refused(run_id):
         compare_slice_to_the_file(PROJECT, run_id, "grant_totals", [0], ["total_amount"])
 
 
-# The xlsx path is the one that stamps `source_row`, and a sheet line counts the
-# header, so an off-by-one here would compare a row against its neighbour.
+# A sheet line counts the header, so these rows have differing neighbours.
 SHEET = [("G-101", "AGENCY-A", 100), ("G-102", "AGENCY-B", 200),
          ("G-103", "AGENCY-A", 300), ("G-104", "AGENCY-C", 400)]
 

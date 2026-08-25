@@ -30,11 +30,9 @@ def test_the_reference_side_of_a_join_carries_its_key_and_what_it_landed():
     assert behind["load_agencies"] == {"agency_code", "portfolio"}
 
 
-def test_a_column_no_stage_on_the_route_read_is_left_out():
+def test_a_predicate_column_off_the_route_and_an_unread_one_are_both_left_out():
     behind = find_columns_behind(_workflow(), PORTFOLIO_ROUTE,
                                  "by_portfolio", "total_amount")
-    # `kind` is read by grants_only, which a by_portfolio row never passed through,
-    # and `region` is read by nothing at all.
     assert "kind" not in behind["load_east"]
     assert "region" not in behind["load_east"]
 
