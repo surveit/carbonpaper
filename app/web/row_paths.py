@@ -138,9 +138,7 @@ def _find_branches_on_every_path(paths: list[BranchPath]) -> frozenset[BranchId]
     return frozenset.intersection(*(frozenset(path) for path in paths))
 
 
-# A join or union under an input is WHY a row reached it, so it already says what
-# that input's load branch says. Correlation is not enough: two branches can split
-# the rows alike and still be different facts. docs/branch-analysis.md
+# docs/branch-analysis.md
 _SAYS_WHY_A_ROW_REACHED_AN_INPUT = {BranchReason.join, BranchReason.union}
 
 
