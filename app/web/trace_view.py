@@ -52,7 +52,9 @@ def _transform_of(workflow_stage: WorkflowStage | None) -> dict[str, Any]:
         named = ", ".join(stage.connector.params.paths)
         src = named or (stage.source.doc if stage.source else None)
         return {"kind": "source", "detail": src or "originates the rows"}
-    if isinstance(stage, (PythonRowFunctionStage, PythonFrameFunctionStage)):
+    if isinstance(stage, PythonFrameFunctionStage):
+        return {"kind": "python_frame", "detail": resolve_function_code(stage)}
+    if isinstance(stage, PythonRowFunctionStage):
         # Full source: the whole module file for a module ref, the inline code
         # for an inline ref — never a partial snippet or a bare reference.
         return {"kind": "python", "detail": resolve_function_code(stage)}

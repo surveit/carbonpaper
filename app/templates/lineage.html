@@ -404,6 +404,8 @@ const transformCache = {};
 function verb(n){
   const k = n.transform.kind, sid = `<span class="sid">${esc(n.stage_id)}</span>`;
   if(k==='python' || k==='starlark') return `run code ${sid} on row`;
+  // Whole-table code: it saw every row at once, so it did nothing "on row".
+  if(k==='python_frame') return `run code ${sid} on the table`;
   if(k==='llm') return `ask the LLM in ${sid}`;
   if(k==='union') return `carry through ${sid}`;
   if(k==='filter_rows') return `filter to ${sid}`;
