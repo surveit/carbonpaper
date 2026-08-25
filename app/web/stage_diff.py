@@ -129,8 +129,7 @@ class RowAlignedDiff:
 
     @property
     def opens_on_the_first(self) -> bool:
-        """False once `at_rows` picked them, where "the first N" would misname them."""
-        return self.row_ordinals == list(range(len(self.row_ordinals)))
+        return opens_on_the_first(self.row_ordinals)
 
     @property
     def count_labels(self) -> list[str]:
@@ -216,6 +215,11 @@ def _choose_rows(
     if at_rows is None:
         return list(range(min(rows_total, rows_shown)))
     return [row for row in at_rows if 0 <= row < rows_total][:rows_shown]
+
+
+def opens_on_the_first(row_ordinals: Sequence[int]) -> bool:
+    """False once rows were picked, where "the first N" would misname them."""
+    return list(row_ordinals) == list(range(len(row_ordinals)))
 
 
 def keep_diff_columns(diff: RowAlignedDiff, names: Collection[str]) -> RowAlignedDiff:

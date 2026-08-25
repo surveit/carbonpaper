@@ -98,6 +98,8 @@
        what the stage did and on what it did it from. `inert` is the diff's own
        word for that; the read set is the signature's. #}
     {%- set quiet = diff.columns | selectattr('inert') | map(attribute='name') | list %}
+    {# The rows the figure came through, where a caller drew neighbours around them. #}
+    {%- set behind = cited_rows | default([], true) %}
     <thead><tr>{% if full_rows %}<th class="row-num">#</th>{% endif %}<th class="syw-col">lineage</th>
       {%- for column in diff.columns %}
       {%- set jump = writers.get(column.name) %}
@@ -116,7 +118,7 @@
     <tbody>
     {% for row in diff.rows %}
     {%- set ordinal = diff.row_ordinals[loop.index0] %}
-    <tr>{% if full_rows %}<td class="row-num muted">{{ ordinal | row_number }}</td>{% endif %}<td class="syw-cell">{% set trace_href = links.row_trace(stage.stage_id, ordinal) %}{% if trace_href %}<a href="{{ trace_href }}" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a>{% endif %}</td>
+    <tr>{% if full_rows %}<td class="row-num muted">{{ ordinal | row_number }}</td>{% endif %}<td class="syw-cell">{% if ordinal in behind %}<b>the row behind this figure</b>{% else %}{% set trace_href = links.row_trace(stage.stage_id, ordinal) %}{% if trace_href %}<a href="{{ trace_href }}" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a>{% endif %}{% endif %}</td>
       {%- for cell in row %}
       {%- set column = diff.columns[loop.index0] %}
       {%- set klass = [cell_class[cell.state],
