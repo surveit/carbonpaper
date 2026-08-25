@@ -146,24 +146,39 @@
 {% endif %}
 
 {% if block == 'aggregate' %}
+{% set plan = stage | aggregate_plan %}
 <section class="exec-block">
     <h2>📊 Aggregate</h2>
-    <h3>group by</h3>
-    <p>{% for g in stage.aggregate.group_by %}<code>{{ g }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
-    <h3>aggregations</h3>
-    <table class="aggs">
-        <thead><tr><th>output</th><th>formula</th><th>value</th><th>where</th></tr></thead>
-        <tbody>
-            {% for a in stage.aggregate.aggregations %}
-            <tr>
-                <td><code>{{ a.output_column }}</code></td>
-                <td><code>{{ a.formula }}</code></td>
-                <td>{% if a.value_column %}<code>{{ a.value_column }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
-                <td>{% if a.where %}<code>{{ a.where }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <p class="agg-lead">{{ plan.lead }}</p>
+    {% if plan.grouped_by %}
+    <p class="muted">Every other column of the input is dropped unless it is worked out below.</p>
+    {% endif %}
+    <dl class="agg-plan">
+        {% for group in plan.groups %}
+        <dt>{{ group.does }}</dt>
+        <dd>{% for out in group.outputs %}<code>{{ out.column }}</code>{% if out.from_column %}
+            <span class="muted">from <code>{{ out.from_column }}</code></span>{% endif %}{% if not loop.last %},
+            {% endif %}{% endfor %}</dd>
+        {% endfor %}
+    </dl>
+    <details class="agg-spec">
+        <summary>the aggregation as it is written down</summary>
+        <h3>group by</h3>
+        <p>{% for g in stage.aggregate.group_by %}<code>{{ g }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+        <table class="aggs">
+            <thead><tr><th>output</th><th>formula</th><th>value</th><th>where</th></tr></thead>
+            <tbody>
+                {% for a in stage.aggregate.aggregations %}
+                <tr>
+                    <td><code>{{ a.output_column }}</code></td>
+                    <td><code>{{ a.formula }}</code></td>
+                    <td>{% if a.value_column %}<code>{{ a.value_column }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+                    <td>{% if a.where %}<code>{{ a.where }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </details>
 </section>
 {% endif %}
 

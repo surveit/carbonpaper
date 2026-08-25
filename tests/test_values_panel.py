@@ -129,3 +129,18 @@ def test_every_sheet_names_where_its_rows_sit_in_the_frame(run_id):
         f"/project/{PROJECT}/runs/{run_id}/values/panel"
         "?stage=by_portfolio&row=2&column=total_amount")
     assert '<th class="vu-rowno" scope="row">6</th>' in page.text
+
+
+def test_the_tab_says_what_to_do_with_it(run_id):
+    page = TestClient(app).get(
+        f"/project/{PROJECT}/runs/{run_id}/values/panel"
+        "?stage=by_portfolio&row=1&column=total_amount")
+    assert "Walk this value back to your input data" in page.text
+    assert "use the arrow keys" in page.text
+
+
+def test_a_step_leads_with_the_stage_description_and_says_the_mechanism(run_id):
+    page = TestClient(app).get(
+        f"/project/{PROJECT}/runs/{run_id}/stage/by_portfolio/row/1/trace/view")
+    assert "Lands each grant&#39;s portfolio. AGENCY-Z matches nothing." in page.text
+    assert "Combine both_regions data with load_agencies data on agency_code" in page.text

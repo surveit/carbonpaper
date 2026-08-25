@@ -403,3 +403,12 @@ details pre { margin-top: 6px; max-height: 480px; overflow: auto; }
     line-height: 1.55;
 }
 
+
+/* An aggregate said in English: the shape first, then each formula's outputs.
+   The written-down spec keeps its table, folded, for a reviewer checking it. */
+.agg-lead { font-size: 1.05rem; font-weight: 600; margin: 0 0 0.3rem; }
+.agg-plan { margin: 0.9rem 0 0; }
+.agg-plan dt { font-weight: 600; margin-top: 0.7rem; }
+.agg-plan dd { margin: 0.2rem 0 0 1.1rem; }
+.agg-spec { margin-top: 1rem; }
+.agg-spec summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
