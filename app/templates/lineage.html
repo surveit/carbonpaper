@@ -229,7 +229,7 @@ tr.lin-opens:hover td{background:var(--hover)}
 {% else %}
 {% if not coordinate.cells %}
   {# The walk read no row here, so there is no cell to read and none to offer. #}
-  <h1><code>{{ view.start_stage }}</code> row {{ view.start_row }}</h1>
+  <h1><code>{{ view.start_stage }}</code> row {{ view.start_row | row_number }}</h1>
 {% else %}
   {# The figure and the column it sits in are one control: the picker wears them, and
      its list is this row, so every other cell is one click from the one being read. #}
