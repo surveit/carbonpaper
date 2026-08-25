@@ -64,7 +64,7 @@
     {% if step.diff %}
     {% with diff = step.diff, stage = step, full_rows = false,
             cited_column = values.column if step.stage_id == values.cited_stage else none,
-            cited_rows = step.reached_rows, column_writers = step.column_writers %}
+            reached_rows = step.reached_rows, column_writers = step.column_writers %}
     {% include "_stage_diff.html" %}
     {% endwith %}
     {% else %}
@@ -77,7 +77,7 @@
         <span class="preview-actions"><a href="{{ links.stage_rows(step.stage_id) }}">view all rows</a>
         · <a href="{{ links.stage_csv(step.stage_id) }}">⬇ CSV</a></span></div>
       <div class="table-scroll"><table class="data-preview">
-        <thead><tr><th class="syw-col">lineage</th>
+        <thead><tr><th class="row-num">#</th><th class="syw-col">lineage</th>
           {%- for column_state in step.columns %}
           {%- set klasses = [('diff-col-cited' if column_state.cited else ''),
                              ('diff-col-jump' if column_state.writer else '')] | select | join(' ') %}
@@ -91,11 +91,13 @@
         <tbody>
         {%- for row in step.rows %}
           {%- set ordinal = step.row_ordinals[loop.index0] %}
-          <tr><td class="syw-cell">{% if ordinal in step.reached_rows %}<b>the row behind this figure</b>
-            {%- else %}<a href="{{ links.row_trace(step.stage_id, ordinal) }}"
-            target="_blank" rel="noopener">View lineage</a>{% endif %}</td>
+          {%- set traced = ordinal in step.reached_rows %}
+          <tr{% if traced %} class="diff-row-mine"{% endif %}>
+            <td class="row-num {{ 'diff-row-num-mine' if traced else 'muted' }}">{{ ordinal | row_number }}</td>
+            <td class="syw-cell"><a href="{{ links.row_trace(step.stage_id, ordinal) }}"
+              target="_blank" rel="noopener">View lineage</a></td>
           {%- for cell in row %}
-          <td{% if step.columns[loop.index0].cited %} class="diff-col-cited"{% endif %}>{{ cell | truncate(240) }}</td>
+          <td{% if step.columns[loop.index0].cited and traced %} class="diff-col-cited"{% endif %}>{{ cell | truncate(240) }}</td>
           {%- endfor %}
           </tr>
         {%- endfor %}

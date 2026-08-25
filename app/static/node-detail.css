@@ -189,6 +189,13 @@ table.data-preview.scratch th { background: var(--hover); }
     font-size: 15px;
 }
 
+/* The row a Values used sheet was opened on, among the neighbours drawn around
+   it: banded its whole width, ruled down its left edge, and its number taken
+   out of muted. Before the column tints below, which have to win on it. */
+.stage-diff tr.diff-row-mine td { background: var(--hover); }
+.stage-diff tr.diff-row-mine td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.stage-diff td.diff-row-num-mine { color: var(--fg); font-weight: 700; }
+
 /* Outputs-pane stage diff (app/templates/_stage_diff.html). A column the stage
    ADDS takes the same palette tint the stage-tests table uses for its added
    columns (--state-review-bg); a column the stage DROPPED carries the failed

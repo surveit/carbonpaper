@@ -28,7 +28,12 @@
    `full_rows` (absent, so false, in the stage panel) switches on the full-rows
    page's own treatments: a # row-number column, cells clipped to one line with
    click-to-expand and a title hover, truncated at 4000 characters rather than
-   240, and the tall sticky-header scroll box. #}
+   240, and the tall sticky-header scroll box.
+
+   `reached_rows` (the Values used tab's) names the rows the figure came
+   through, which the tab draws neighbours around: those rows are marked, the
+   cited column is painted on them alone, and the # column comes on so the rest
+   can be read against them. #}
 {% macro frame_unit(role, frame_id, rows_total, klass) -%}
 <span class="diff-frame {{ klass }}"><span class="diff-frame-head"><span class="diff-frame-role">{{ role }}</span>
     <code class="diff-frame-id">{{ frame_id }}</code></span>
@@ -98,9 +103,11 @@
        what the stage did and on what it did it from. `inert` is the diff's own
        word for that; the read set is the signature's. #}
     {%- set quiet = diff.columns | selectattr('inert') | map(attribute='name') | list %}
-    {# The rows the figure came through, where a caller drew neighbours around them. #}
-    {%- set behind = cited_rows | default([], true) %}
-    <thead><tr>{% if full_rows %}<th class="row-num">#</th>{% endif %}<th class="syw-col">lineage</th>
+    {# The rows the figure came through, numbered so they read apart from the
+       neighbours a caller drew around them. #}
+    {%- set mine = reached_rows | default([], true) %}
+    {%- set numbered = full_rows or mine %}
+    <thead><tr>{% if numbered %}<th class="row-num">#</th>{% endif %}<th class="syw-col">lineage</th>
       {%- for column in diff.columns %}
       {%- set jump = writers.get(column.name) %}
       {%- set klasses = [cell_class[column.state] if column.state != 'carried' else '',
@@ -118,12 +125,13 @@
     <tbody>
     {% for row in diff.rows %}
     {%- set ordinal = diff.row_ordinals[loop.index0] %}
-    <tr>{% if full_rows %}<td class="row-num muted">{{ ordinal | row_number }}</td>{% endif %}<td class="syw-cell">{% if ordinal in behind %}<b>the row behind this figure</b>{% else %}{% set trace_href = links.row_trace(stage.stage_id, ordinal) %}{% if trace_href %}<a href="{{ trace_href }}" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a>{% endif %}{% endif %}</td>
+    {%- set traced = ordinal in mine %}
+    <tr{% if traced %} class="diff-row-mine"{% endif %}>{% if numbered %}<td class="row-num {{ 'diff-row-num-mine' if traced else 'muted' }}">{{ ordinal | row_number }}</td>{% endif %}<td class="syw-cell">{% set trace_href = links.row_trace(stage.stage_id, ordinal) %}{% if trace_href %}<a href="{{ trace_href }}" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a>{% endif %}</td>
       {%- for cell in row %}
       {%- set column = diff.columns[loop.index0] %}
       {%- set klass = [cell_class[cell.state],
                        'diff-col-quiet' if column.name in quiet else '',
-                       'diff-col-cited' if column.name == cited_column else ''] | select | join(' ') %}
+                       'diff-col-cited' if column.name == cited_column and traced else ''] | select | join(' ') %}
       {%- if cell.text[:4] == 'http' and cell.state != 'changed' %}<td class="cell-url {{ klass }}"><a href="{{ cell.text }}" target="_blank" rel="noopener">{{ cell.text }}</a></td>
       {%- else %}{{ data_cell(cell.text, klass, cell.was, full_rows) }}
       {%- endif %}

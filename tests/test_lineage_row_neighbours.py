@@ -1,6 +1,8 @@
 """A lone reached row is drawn among its neighbours, so it can be read against them."""
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
@@ -55,12 +57,24 @@ def test_a_sheet_of_one_reached_row_draws_the_rows_around_it(run_id):
         assert step.row_ordinals == list(range(43, 60))
 
 
-def test_the_panel_links_every_drawn_row_to_itself_and_names_the_one_traced(run_id):
-    page = TestClient(app).get(
-        f"/project/{PROJECT}/runs/{run_id}/values/panel"
-        f"?stage=double&row={CITED_ROW}&column=doubled")
-    assert "showing 17 of 60 rows" in page.text
+def test_the_panel_links_every_drawn_row_to_itself_and_marks_the_one_traced(run_id):
+    page = _panel(run_id)
+    assert "showing 17 of 60 rows" in page
     # Row 43 is drawn first; a link built off the loop would send the reader to row 0.
-    assert "/stage/double/row/43/trace/view" in page.text
-    assert "/stage/double/row/0/trace/view" not in page.text
-    assert page.text.count("the row behind this figure") == 2
+    assert "/stage/double/row/43/trace/view" in page
+    assert "/stage/double/row/0/trace/view" not in page
+    assert f"/stage/double/row/{CITED_ROW}/trace/view" in page
+    # One mark per sheet: the input stage's, and the stage the figure was taken from.
+    assert page.count("diff-row-mine") == 2
+    assert page.count(f'<td class="row-num diff-row-num-mine">{CITED_ROW + 1}</td>') == 2
+
+
+def test_the_cited_column_is_painted_on_the_traced_row_alone(run_id):
+    cells = re.findall(r'<td[^>]*class="[^"]*diff-col-cited', _panel(run_id))
+    assert len(cells) == 1
+
+
+def _panel(run_id):
+    return TestClient(app).get(
+        f"/project/{PROJECT}/runs/{run_id}/values/panel"
+        f"?stage=double&row={CITED_ROW}&column=doubled").text
