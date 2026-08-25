@@ -102,6 +102,10 @@ class CutRows(BaseModel):
     rows_per_branch_path: list[int]
     rows: list[DrawnRow]
     stages: list[DrawnStage]
+    # These rows' own merges, never the figure's: they went into other groups.
+    aliased_merges: dict[StageId, AliasedMerge]
+    resolved_merges: list[StageId]
+    nearest_merge: StageId | None
 
 
 class ScopeMap(BaseModel):
@@ -192,19 +196,19 @@ def _read_cited_row(frame: pa.Table, ordinal: RowOrdinal) -> CitedRow:
         cells=[_plain(frame.column(name)[ordinal]) for name in frame.column_names])
 
 
-def read_cut(run_branches: WorkflowRunBranches, outputs: Path,
-             branch_id: BranchId) -> CutRows | None:
+def read_cut(run_branches: WorkflowRunBranches, outputs: Path, branch_id: BranchId,
+             expand: frozenset[StageId] = frozenset()) -> CutRows | None:
     """The rows behind one branch: counts over all of them, cells over a sample."""
     at_stage, ordinals = find_rows_that_took(run_branches, branch_id)
     if not ordinals or at_stage not in run_branches.branch_paths:
         return None
     behind = [(at_stage, ordinal) for ordinal in ordinals]
     nearest = find_nearest_merge(run_branches, behind)
+    resolved = ({nearest} if nearest else set()) | set(expand)
     paths, _, index = group_rows_by_path(
         run_branches, at_stage, ordinals,
         find_branches_that_tell_rows_apart(
-            run_branches, find_stages_on_route(run_branches, behind),
-            {nearest} if nearest else set()))
+            run_branches, find_stages_on_route(run_branches, behind), resolved))
     spread = Counter(index)
     shown = ordinals[:CUT_SAMPLE]
     frame = read_frame_table(outputs / f"{at_stage}.parquet")
@@ -215,18 +219,23 @@ def read_cut(run_branches: WorkflowRunBranches, outputs: Path,
         rows_per_branch_path=[spread[i] for i in range(len(paths))],
         rows=read_rows(frame, shown, index[:len(shown)]),
         stages=_draw_stages(run_branches, _stages_touched(run_branches, paths)),
+        aliased_merges=alias_the_merges(
+            run_branches, find_rows_reached_per_stage(run_branches, behind), resolved),
+        resolved_merges=sorted(resolved),
+        nearest_merge=nearest,
     )
 
 
 def find_cuts_to_offer(run_branches: WorkflowRunBranches, outputs: Path,
-                       scope: ScopeMap) -> dict[BranchId, CutRows]:
+                       scope: ScopeMap, expand: frozenset[StageId] = frozenset()
+                       ) -> dict[BranchId, CutRows]:
     """A branch that took rows out here. A merge's groups are asked for one at a time."""
     drawn = {branch_id for path in scope.branch_paths for branch_id in path}
     found: dict[BranchId, CutRows] = {}
     for branch_id, option in scope.branches.items():
         if branch_id in drawn or option.role is not BranchRole.removes:
             continue
-        cut = read_cut(run_branches, outputs, branch_id)
+        cut = read_cut(run_branches, outputs, branch_id, expand)
         if cut is not None:
             found[branch_id] = cut
     return found

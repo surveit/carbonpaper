@@ -222,3 +222,21 @@ def test_a_cut_below_the_drawn_grain_still_reaches_the_map(scoped):
     assert drawn.branches["big_regions|removed"].role is BranchRole.removes
     cut = next(r for r in drawn.reach if r.branch == "big_regions|removed")
     assert (cut.taken, cut.here) == (1, 0)
+
+
+def test_a_cut_draws_its_own_groups_and_not_the_figures(scoped):
+    """The 1 row big_regions cut lives at by_region, so by_region is ITS nearest merge."""
+    from app.web.scope_payload import build_scope_map, find_cuts_to_offer
+
+    run, run_id = scoped
+    outputs = Path(resolve_run_dir(PROJECT, run_id)) / "outputs"
+    drawn = build_scope_map(
+        run, PROJECT, run_id, outputs,
+        StageOutputCellCitation(run_id=run_id, stage_id="big_total", row_ordinal=0,
+                                column="total", value=None))
+    assert drawn.nearest_merge == "big_total"
+    assert set(drawn.aliased_merges) == {"by_region"}
+    cut = find_cuts_to_offer(run, outputs, drawn)["big_regions|removed"]
+    assert (cut.at_stage, cut.total) == ("by_region", 1)
+    assert cut.nearest_merge == "by_region"
+    assert cut.aliased_merges == {}
