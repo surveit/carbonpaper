@@ -82,6 +82,15 @@ def measure_frame_scale(run_branches: WorkflowRunBranches,
             if sid in reached and run_branches.row_counts[sid]]
 
 
+def find_stages_each_row_came_through(
+        run_branches: WorkflowRunBranches, at_stage: StageId,
+        ordinals: list[RowOrdinal]) -> list[list[StageId]]:
+    """Per row: the stages its lineage reaches, so a frame it was never a row of is not drawn."""
+    memo: dict[tuple[StageId, RowOrdinal], frozenset[StageId]] = {}
+    return [sorted(_came_through(run_branches, at_stage, ordinal, memo))
+            for ordinal in ordinals]
+
+
 def find_stages_each_stage_feeds(run_branches: WorkflowRunBranches
                                  ) -> dict[StageId, set[StageId]]:
     """Transitive, so an input can be matched to a stage well below the one reading it."""
@@ -193,6 +202,20 @@ def _reach_upstream(run_branches: WorkflowRunBranches, rows: Sequence[RowRef]
                 seen.add(step)
                 front.append(step)
     return found
+
+
+def _came_through(run_branches: WorkflowRunBranches, sid: StageId, row: RowOrdinal,
+                  memo: dict[tuple[StageId, RowOrdinal], frozenset[StageId]]
+                  ) -> frozenset[StageId]:
+    key = (sid, row)
+    if key not in memo:
+        found = {sid}
+        # A load names its own rows as their parents, to hold the file they came out of.
+        for parent in _one_hop_up(run_branches, sid, row):
+            if parent != key:
+                found |= _came_through(run_branches, parent[0], parent[1], memo)
+        memo[key] = frozenset(found)
+    return memo[key]
 
 
 def _one_hop_up(run_branches: WorkflowRunBranches, sid: StageId, row: RowOrdinal

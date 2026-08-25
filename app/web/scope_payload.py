@@ -25,6 +25,7 @@ from app.models.claims import StageOutputCellCitation
 from app.models.schema import StageId
 from app.runtime.branch_analysis import (
     WorkflowRunBranches,
+    find_reference_inputs,
     find_rows_that_took,
     group_rows_by_path,
 )
@@ -33,6 +34,7 @@ from app.services.scope import (
     find_contributing_rows,
     find_nearest_merge,
     find_rows_reached_per_stage,
+    find_stages_each_row_came_through,
     find_stages_on_route,
     measure_frame_scale,
 )
@@ -74,6 +76,8 @@ class DrawnStage(BaseModel):
     # Index in the run's execution order: the drawing's left-to-right.
     position: int
     code: str = ""
+    # A lookup table stands beside the flow: no ribbon of these rows runs into it.
+    lookup_table: bool = False
 
 
 class CitedRow(BaseModel):
@@ -125,6 +129,9 @@ class ScopeMap(BaseModel):
     columns: list[str]
     branch_paths: list[BranchPath]
     branch_path_index: list[int]
+    # Distinct sets of stages a row came through, and one per row of `covers`.
+    came_through: list[list[StageId]]
+    came_through_index: list[int]
     branches: dict[BranchId, BranchOption]
     # Merge stages standing in for their groups. See docs/branch-analysis.md.
     aliased_merges: dict[StageId, AliasedMerge]
@@ -157,6 +164,7 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
         _branches_on(run_branches, paths) | _removals_on(run_branches, route))
     aliased = alias_the_merges(
         run_branches, find_rows_reached_per_stage(run_branches, cited_row), resolved)
+    came_through, came_through_index = _index_stages_come_through(run_branches, covers)
     shown = covers.ordinals[:CELL_ROWS]
     return ScopeMap(
         project_id=project_id, run_id=run_id, citation=cited, covers=covers,
@@ -165,6 +173,7 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
         rows=read_rows(frame, shown, index),
         columns=list(frame.column_names),
         branch_paths=paths, branch_path_index=index,
+        came_through=came_through, came_through_index=came_through_index,
         branches=branches,
         aliased_merges=aliased,
         resolved_merges=sorted(resolved),
@@ -174,6 +183,19 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
         reach=_count_reach(run_branches, branches, index, paths),
         scale=measure_frame_scale(run_branches, cited),
     )
+
+
+def _index_stages_come_through(run_branches: WorkflowRunBranches, covers: RowSet
+                             ) -> tuple[list[list[StageId]], list[int]]:
+    per_row = find_stages_each_row_came_through(
+        run_branches, covers.at_stage, covers.ordinals)
+    distinct: dict[tuple[StageId, ...], int] = {}
+    index = []
+    for stages in per_row:
+        seen = tuple(stages)
+        distinct.setdefault(seen, len(distinct))
+        index.append(distinct[seen])
+    return [list(seen) for seen in distinct], index
 
 
 def _read_the_cited_cell(outputs: Path, citation: StageOutputCellCitation
@@ -317,20 +339,22 @@ def _count_reach(run_branches: WorkflowRunBranches,
 
 def _draw_stages(run_branches: WorkflowRunBranches,
                  touched: set[StageId]) -> list[DrawnStage]:
-    return [_draw_stage(run_branches, sid, position)
+    lookups = find_reference_inputs(run_branches.stages)
+    return [_draw_stage(run_branches, sid, position, sid in lookups)
             for position, sid in enumerate(run_branches.ordered_stage_ids)
             if sid in touched and sid in run_branches.stages]
 
 
 def _draw_stage(run_branches: WorkflowRunBranches, sid: StageId,
-                position: int) -> DrawnStage:
+                position: int, lookup_table: bool) -> DrawnStage:
     stage = run_branches.stages[sid]
     authored = stage.stage
     return DrawnStage(
         id=sid, type=str(getattr(authored.type, "value", authored.type)),
         glyph=TYPE_GLYPH[authored.type],
         position=position, description=authored.description or "",
-        code=read_stage_code(stage) or read_decision_source(stage))
+        code=read_stage_code(stage) or read_decision_source(stage),
+        lookup_table=lookup_table)
 
 
 def _plain(value: object) -> JsonScalar:

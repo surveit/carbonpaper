@@ -209,3 +209,27 @@ def test_show_every_stage_can_reach_every_stage_on_the_route(run_id):
         PROJECT, run_id, "total_of_means", "summed_means", 0, suffix=".json")).json()
     assert ([stage["id"] for stage in payload["stages"]]
             == [step["stage"] for step in payload["scale"]])
+
+def test_the_page_carries_the_two_panes_the_script_fills(run_id):
+    page = TestClient(app).get(
+        scope_url(PROJECT, run_id, "grant_totals", "total_amount", 0))
+    assert 'id="scope-tabs"' in page.text
+    assert 'id="scope-table"' in page.text
+    assert 'id="scope-transform"' in page.text
+
+
+def test_a_row_that_matched_nothing_in_a_lookup_never_came_through_it(run_id):
+    payload = TestClient(app).get(
+        scope_url(PROJECT, run_id, "grant_totals", "total_amount", 0, suffix=".json")).json()
+    came = [payload["came_through"][index] for index in payload["came_through_index"]]
+    assert all("both_regions" in stages for stages in came)
+    assert any("load_agencies" not in stages for stages in came)
+
+
+def test_a_lookup_table_is_drawn_beside_the_flow_rather_than_in_it(run_id):
+    payload = TestClient(app).get(
+        scope_url(PROJECT, run_id, "grant_totals", "total_amount", 0, suffix=".json")).json()
+    beside = {stage["id"]: stage["lookup_table"] for stage in payload["stages"]}
+    assert beside["load_agencies"] is True
+    assert beside["load_east"] is False
+

@@ -32,8 +32,10 @@
     return '<table class="data-preview" data-stage="' + esc(stageId) + '">';
   };
   var COLUMN = 300, BAR = 11, HEAD = 52, GAP = 16, CUT_LINE = 11;
+  // Clear of the head: flush against it, the ribbons read as hanging off the text.
+  var BAND_GAP = 14;
   // HEAD plus a line per removal the widest column names above its bar.
-  var TOP = HEAD;
+  var TOP = HEAD + BAND_GAP;
   var LABEL_PITCH = 30;
   var SHORTEST_BAND = 260, TALLEST_BAND = 620, BAND_PER_NODE = 72, SWEEPS = 4;
 
@@ -92,9 +94,16 @@
     return stageId + SEP + branchesOn(path, stageId).join(",");
   }
 
+  // A lookup table a row never matched held no row of it.
+  function cameThrough(i, stageId) {
+    var stages = (D.came_through || [])[(D.came_through_index || [])[i]];
+    return !stages || stages.indexOf(stageId) >= 0;
+  }
+
   function tally(column) {
     var seen = new Map();
     D.covers.ordinals.forEach(function (ordinal, i) {
+      if (!cameThrough(i, column.id)) return;
       var key = nodeKey(column, i);
       var node = seen.get(key) || { key: key, branches: branchesAt(i, column.id),
                                     rows: 0, on: [] };
@@ -150,16 +159,24 @@
   // dropping it leaves the last frame drawn looking like the answer.
   function keepInformative(all) {
     var running = D.covers.ordinals.map(function () { return ""; });
+    var arrived = D.covers.ordinals.map(function () { return false; });
     var kept = [];
     all.forEach(function (column) {
       var next = D.covers.ordinals.map(function (_, i) {
         return running[i] + "|" + branchesAt(i, column.id).join(",");
       });
-      if (column.id === D.citation.stage_id || column.gone.length || column.alias ||
-          column.expanded ||
+      // Drop the column a row first appears at and the row runs in from off the left.
+      var brings = !column.lookup_table && D.covers.ordinals.some(function (_, i) {
+        return !arrived[i] && cameThrough(i, column.id);
+      });
+      if (brings || column.id === D.citation.stage_id || column.gone.length ||
+          column.alias || column.expanded ||
           new Set(next).size > new Set(running).size) {
         kept.push(column);
         running = next;
+        D.covers.ordinals.forEach(function (_, i) {
+          if (!column.lookup_table && cameThrough(i, column.id)) arrived[i] = true;
+        });
       }
     });
     return kept;
@@ -205,12 +222,15 @@
     var scale = Math.min.apply(null, cols.map(function (c) {
       return (band - (c.nodes.length - 1) * GAP) / total;
     }).concat([band / total]));
-    TOP = HEAD + countCutLines() * CUT_LINE;
+    TOP = HEAD + BAND_GAP + countCutLines() * CUT_LINE;
     var ribbons = gatherRibbons();
     orderNodes(ribbons);
+    var entered = whereEachRowEnters();
     var x = 0;
-    cols.forEach(function (c) {
-      var y = TOP;
+    cols.forEach(function (c, ci) {
+      // The rows already running past this column hold the top of the band, so a
+      // source joining here stacks below them instead of under their ribbons.
+      var y = TOP + countRunningPast(ci, entered) * scale;
       c.nodes.forEach(function (n) {
         n.h = Math.max(2, (n.drawnRows == null ? n.rows : n.drawnRows) * scale);
         n.y = y;
@@ -263,14 +283,16 @@
     return Math.min(TALLEST_BAND, Math.max(SHORTEST_BAND, most * BAND_PER_NODE));
   }
 
+  // Each row runs to the next column it is AT, which is not always the one beside it.
   function gatherRibbons() {
     var seen = new Map();
-    for (var ci = 0; ci < cols.length - 1; ci++) {
-      for (var i = 0; i < D.covers.ordinals.length; i++) {
-        var a = nodeAt(ci, i), b = nodeAt(ci + 1, i);
-        if (!a || !b) continue;
-        var key = ci + a.key + ">" + b.key;
-        var ribbon = seen.get(key) || { ci: ci, a: a, b: b, rows: 0 };
+    for (var i = 0; i < D.covers.ordinals.length; i++) {
+      var at = onTheFlow(i);
+      for (var step = 0; step + 1 < at.length; step++) {
+        var from = at[step], into = at[step + 1];
+        var key = from.ci + from.node.key + ">" + into.ci + into.node.key;
+        var ribbon = seen.get(key) ||
+          { ci: from.ci, cj: into.ci, a: from.node, b: into.node, rows: 0 };
         ribbon.rows += 1;
         seen.set(key, ribbon);
       }
@@ -300,7 +322,7 @@
     cols[ci].nodes.forEach(function (n, i) { held.set(n.key, i); });
     var pull = new Map();
     ribbons.forEach(function (r) {
-      if (r.ci !== Math.min(ci, neighbour)) return;
+      if (r.ci !== Math.min(ci, neighbour) || r.cj !== Math.max(ci, neighbour)) return;
       var here = ci < neighbour ? r.a : r.b;
       var there = ci < neighbour ? r.b : r.a;
       if (!place.has(there.key)) return;
@@ -345,6 +367,37 @@
     });
   }
 
+  // A lookup table stands beside the flow, so a row is at its bar without ever
+  // having run through it: its column joins no ribbon and starts no row's route.
+  function onTheFlow(i) {
+    var at = [];
+    for (var ci = 0; ci < cols.length; ci++) {
+      var node = onFlowAt(ci, i);
+      if (node) at.push({ ci: ci, node: node });
+    }
+    return at;
+  }
+
+  function whereEachRowEnters() {
+    return D.covers.ordinals.map(function (_, i) {
+      var at = onTheFlow(i);
+      return at.length ? at[0].ci : cols.length;
+    });
+  }
+
+  // A lookup table is at none of them, so its bar lands under the whole flow.
+  function countRunningPast(ci, entered) {
+    var running = 0;
+    for (var i = 0; i < entered.length; i++) {
+      if (entered[i] < ci && !onFlowAt(ci, i)) running += 1;
+    }
+    return running;
+  }
+
+  function onFlowAt(ci, i) {
+    return cols[ci].lookup_table ? null : nodeAt(ci, i);
+  }
+
   function nodeAt(ci, i) {
     var want = nodeKey(cols[ci], i);
     return cols[ci].nodes.find(function (n) { return n.key === want; });
@@ -354,7 +407,7 @@
   // shorter than its inputs tapers — which is what an aggregate collapsing rows
   // looks like.
   function drawRibbon(r) {
-    var x0 = cols[r.ci].x + BAR, x1 = cols[r.ci + 1].x;
+    var x0 = cols[r.ci].x + BAR, x1 = cols[r.cj].x;
     var lit = isLit(r.a) && isLit(r.b);
     var h0 = r.h0, h1 = r.h1, y0 = r.y0, y1 = r.y1;
     var m = (x0 + x1) / 2;
@@ -537,6 +590,8 @@
       stages: cut.stages, reach: [], scale: [], sampled_from: cut.total,
       aliased_merges: cut.aliased_merges, resolved_merges: cut.resolved_merges,
       nearest_merge: cut.nearest_merge,
+      // A cut's rows arrive as counts per path, which say no frame each was a row of.
+      came_through: [], came_through_index: [],
       drilled: { branch: branch, label: D.branches[branch].label,
                  stage: D.branches[branch].stage_id, total: cut.total },
     });
