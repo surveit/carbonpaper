@@ -259,24 +259,12 @@ def list_projects() -> list[str]:
 
 def list_project_listings() -> list[ProjectListing]:
     """Every project a reader may see, and the only listing of them there is."""
-    records = {record.id: record for record in Project.list()}
-    listings = []
-    # delete_project removes the working copy and keeps the record, so a deleted one drops out.
-    for project_id in _find_workspace_project_ids():
-        record = records.get(project_id)
-        if record is not None and record.private:
-            continue
-        name = project_id if record is None else record.display_name()
-        listings.append(ProjectListing(id=project_id, name=name))
-    return listings
-
-
-def _find_workspace_project_ids() -> list[str]:
-    """Module-private: a caller reading the directories directly would see past `private`."""
-    root = workspace.projects_dir()
-    if not root.exists():
-        return []
-    return sorted(child.name for child in root.iterdir() if child.is_dir())
+    return [
+        ProjectListing(id=record.id, name=record.display_name())
+        # delete_project keeps the record and drops the working copy; project_exists sees that.
+        for record in sorted(Project.list(), key=lambda r: r.id)
+        if not record.private and project_exists(record.id)
+    ]
 
 
 def set_project_private(project_id: str, private: bool) -> None:

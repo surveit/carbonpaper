@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from app.core.run_status import RunStatus
 from app.main import app
 from app.services import workspace
+from project_seed import seed_project
 from app.web.loading import list_projects
 from app.web.project_cards import ProjectStatus, count_runs
 from app.services.methodology import write_methodology
@@ -35,8 +36,7 @@ def _write_run(runs_dir, run_id, *, status=None, is_test=False):
 
 
 def _make_project(root, name, runs=()):
-    proj = root / name
-    proj.mkdir()
+    proj = seed_project(name)
     write_methodology((proj).name, "methodology prose")
     for run_id, kwargs in runs:
         _write_run(proj / "runs", run_id, **kwargs)

@@ -12,6 +12,7 @@ import pytest
 
 from app.services import project as project_service
 from app.services import workspace
+from project_seed import seed_project
 from app.web import loading
 from app.web.run_index import build_run_index_rows
 from app.services.methodology import write_methodology
@@ -23,7 +24,7 @@ GOLDENS = Path(__file__).parent / "goldens"
 @pytest.fixture
 def project_dir(tmp_path: Path) -> Path:
     workspace.set_projects_dir(tmp_path)
-    pdir = tmp_path / "demo"
+    pdir = seed_project("demo")
     (pdir / "runs").mkdir(parents=True)
     write_methodology((pdir).name, "methodology")
     return pdir

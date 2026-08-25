@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import workspace
+from project_seed import seed_project
 from app.tools.tutorial import TutorialContext
 from app.web.chat_router import _store
 from app.services.methodology import write_methodology
@@ -30,9 +31,8 @@ def examples_root(tmp_path: Path) -> Path:
 
 
 def _make_project(root: Path, name: str = "already-here") -> None:
-    proj = root / name
-    proj.mkdir()
-    write_methodology((proj).name, "methodology prose")
+    seed_project(name)
+    write_methodology(name, "methodology prose")
 
 
 def _materialize_the_tour() -> str:

@@ -13,6 +13,7 @@ from app.services import workspace
 from stage_seed import set_stages
 from app.services.methodology import write_methodology
 from run_seed import store_manifest
+from project_seed import seed_project
 
 client = TestClient(app)
 
@@ -24,9 +25,8 @@ def examples_root(tmp_path, monkeypatch):
 
 
 def _make_document_only_project(root, name="fresh"):
-    proj = root / name
-    proj.mkdir(parents=True, exist_ok=True)
-    write_methodology((proj).name, "methodology prose")
+    proj = seed_project(name)
+    write_methodology(name, "methodology prose")
     return proj
 
 
