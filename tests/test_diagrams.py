@@ -48,16 +48,28 @@ def test_every_node_class_gets_the_same_neutral_surface() -> None:
     assert len(surfaces) == 1, f"stage types are still fill-coded: {sorted(surfaces)}"
 
 
-def test_notes_eval_and_review_indicators_all_appear() -> None:
+def test_eval_and_review_flags_share_the_type_line() -> None:
     stages = [{
         "id": "s1", "description": "Stage One", "type": "aggregate",
-        "compiler_notes": "watch this", "eval": {"metrics": ["recall"]},
-        "review": {"belief": "approved"},
+        "eval": {"metrics": ["recall"]}, "review": {"belief": "approved"},
     }]
     graph = build_mermaid_graph(stages, "demo")
-    assert "⚠ " in graph          # has_notes
-    assert "📊" in graph           # has_eval flag glyph (also the aggregate type glyph)
-    assert "👤" in graph           # has_review flag glyph
+    assert ">aggregate 📊 👤</span>" in graph
+    assert graph.count("<br/>") == 1, "a flag must not open a third line — see the label"
+
+
+def test_compiler_notes_put_no_mark_on_the_node() -> None:
+    """No surface renders compiler_notes, so a mark for them pointed at nothing."""
+    stages = [{"id": "s1", "description": "Stage One", "type": "aggregate",
+               "compiler_notes": "watch this"}]
+    assert "⚠" not in build_mermaid_graph(stages, "demo")
+
+
+def test_a_finished_stage_carries_its_stroke_and_no_glyph() -> None:
+    stages = [{"id": "s1", "description": "Stage One", "type": "input_data"}]
+    graph = build_mermaid_graph(stages, "demo", status_by_id={"s1": "ok"})
+    assert "✓" not in graph
+    assert "stroke:#2f6d30" in graph
 
 
 def test_an_unrecognized_status_draws_no_stroke_override() -> None:
@@ -70,7 +82,7 @@ def test_unknown_stage_type_gets_the_custom_class_and_no_glyph() -> None:
     stages = [{"id": "s1", "description": "Stage One", "type": "mystery"}]
     graph = build_mermaid_graph(stages, "demo")
     assert "]:::custom" in graph
-    assert '"<b> s1</b>' in graph   # no glyph prefix (glyph slot left as a bare space)
+    assert '"<b>s1</b>' in graph   # no glyph prefix, and no space held open for one
 
 
 def test_edges_are_drawn_from_input_ids() -> None:

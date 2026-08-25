@@ -47,12 +47,23 @@
       return true;
     }
     function apply() { if (svg) svg.style.width = (baseW * scale) + "px"; }
+    // The stylesheet's slack around the diagram — read rather than assumed, so raising
+    // it gives a panned graph more room without shrinking a fitted one out of the box.
+    function readSlack() {
+      var pre = vp.querySelector(".mermaid");
+      if (!pre) return { x: PAD, y: PAD };
+      var box = getComputedStyle(pre);
+      return {
+        x: parseFloat(box.paddingLeft) + parseFloat(box.paddingRight),
+        y: parseFloat(box.paddingTop) + parseFloat(box.paddingBottom),
+      };
+    }
     function fit() {
       if (!svg) return;
       // Collapse the svg FIRST so the diagram's own width can't inflate the viewport
       // (its container is content-sized in some layouts); then measure the real width.
       svg.style.width = "0px";
-      scale = Math.max(zoomFloor, Math.min(1, (vp.clientWidth - PAD) / baseW));
+      scale = Math.max(zoomFloor, Math.min(1, (vp.clientWidth - readSlack().x) / baseW));
       apply();
     }
     // Fullscreen is the survey: fit the whole graph on BOTH axes and park it in the
@@ -62,8 +73,9 @@
     function fitWholeGraph() {
       if (!svg) return;
       svg.style.width = "0px";
+      var slack = readSlack();
       scale = Math.max(MIN_SCALE, Math.min(
-        1, (vp.clientWidth - PAD) / baseW, (vp.clientHeight - PAD) / baseH));
+        1, (vp.clientWidth - slack.x) / baseW, (vp.clientHeight - slack.y) / baseH));
       apply();
       centreInViewport();
     }
@@ -251,8 +263,11 @@
         edgeLabelBackground: p["sunk-deep"],
       }),
       // useMaxWidth:false — this file sizes the svg itself, so zoom is real.
+      // wrappingWidth above mermaid's 200 so a long stage id stays on one line —
+      // a wrapped title is the other way a node ends up taller than its neighbours.
       flowchart: {
-        curve: "basis", padding: 18, nodeSpacing: 28, rankSpacing: 58, useMaxWidth: false,
+        curve: "basis", padding: 18, nodeSpacing: 28, rankSpacing: 58,
+        wrappingWidth: 340, useMaxWidth: false,
       },
     });
   }
