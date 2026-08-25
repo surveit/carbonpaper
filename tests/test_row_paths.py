@@ -137,3 +137,27 @@ def test_the_packet_sends_a_path_to_that_rows_own_page(scoped):
             for path in behind.paths] == [
         f"../lineage/one_row_per_grant/{ordinal}.html" for ordinal in (0, 5)
     ]
+
+
+def test_a_load_a_join_or_union_below_it_explains_is_left_out(scoped):
+    """Reaching that input is why the row carries the load, so the load says nothing more."""
+    behind = _behind(scoped, "by_portfolio", _HEALTH)
+
+    told_apart = {b.id for path in behind.paths for b in path.tells_it_apart}
+    loads = {b.id for path in behind.paths for b in path.whole_path
+             if b.reason is BranchReason.load}
+    assert loads
+    assert not loads & told_apart
+
+
+def test_a_branch_that_only_splits_the_rows_alike_is_still_told(scoped):
+    """Two branches can split the paths identically and be different facts. Keep both."""
+    behind = _behind(scoped, "by_portfolio", _HEALTH)
+
+    told_apart = [b for path in behind.paths for b in path.tells_it_apart]
+    by_footprint: dict[frozenset[int], set[str]] = {}
+    for branch in told_apart:
+        carrying = frozenset(position for position, path in enumerate(behind.paths)
+                             if branch.id in {b.id for b in path.tells_it_apart})
+        by_footprint.setdefault(carrying, set()).add(branch.stage_id)
+    assert any(len(stage_ids) > 1 for stage_ids in by_footprint.values())

@@ -82,6 +82,28 @@ def measure_frame_scale(run_branches: WorkflowRunBranches,
             if sid in reached and run_branches.row_counts[sid]]
 
 
+def find_stages_each_stage_feeds(run_branches: WorkflowRunBranches
+                                 ) -> dict[StageId, set[StageId]]:
+    """Transitive, so an input can be matched to a stage well below the one reading it."""
+    children: dict[StageId, set[StageId]] = {}
+    for stage_id, stage in run_branches.stages.items():
+        for read in stage.inputs:
+            children.setdefault(read.id, set()).add(stage_id)
+    return {stage_id: _walk_down(children, stage_id)
+            for stage_id in run_branches.stages}
+
+
+def _walk_down(children: dict[StageId, set[StageId]],
+               stage_id: StageId) -> set[StageId]:
+    below: set[StageId] = set()
+    frontier = list(children.get(stage_id, ()))
+    while frontier:
+        below.add(next_id := frontier.pop())
+        frontier.extend(child for child in children.get(next_id, ())
+                        if child not in below)
+    return below
+
+
 def _expand(run_branches: WorkflowRunBranches, stage_id: StageId, ordinal: RowOrdinal,
             stop_at_stage: StageId | None
             ) -> tuple[dict[RowOrdinal, tuple[RowRef, ...]], StageId, list[StageId]]:

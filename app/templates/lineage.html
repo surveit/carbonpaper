@@ -76,17 +76,14 @@ body{display:flex;flex-direction:column;overflow:hidden}
   background:var(--raised);border:1px solid var(--border)}
 a.path-entry:hover{background:var(--hover)}
 .path-entry.on{background:var(--state-review-bg);border-left-color:var(--accent)}
-.path-rows{display:block;font-size:12.5px;margin-bottom:3px}
-.path-branch{display:inline-block;font-size:10.5px;line-height:1.5;padding:1px 5px;
-  border-radius:4px;margin:2px 3px 0 0;background:var(--sunk-deep);color:var(--muted);
-  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere;max-width:100%}
-.path-branch.is-code{background:var(--info-bg);color:var(--info-ink);border:1px solid var(--info-bd)}
+.path-name{display:block;font-size:12.5px;margin-bottom:3px;font-weight:600}
+.path-text{display:block;font-size:11.5px;line-height:1.45;color:var(--muted);
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}
+.path-text .is-code{color:var(--info-ink)}
 .paths-gap{font-size:11.5px;color:var(--state-warn-ink);background:var(--warn-bg);
   border-radius:7px;padding:7px 9px;margin:10px 0 0;line-height:1.45}
 .paths-gap code{background:none;padding:0;font-weight:600}
 .paths-none{font-size:12.5px;color:var(--muted);line-height:1.45}
-.paths-foot{font-size:11.5px;color:var(--muted);line-height:1.45;
-  border-top:1px solid var(--border);padding-top:8px;margin-top:10px}
 /* Every entry is a link EXCEPT the one being told and one the packet wrote no
    page for; all three read as the same list, so the pane is never ragged. */
 .snavbtn{display:block;width:100%;text-align:left;padding:7px 8px;border-radius:8px;
@@ -102,6 +99,11 @@ a.snavbtn:hover{background:var(--hover)}
 .lin-snavtot{font-size:11.5px;color:var(--muted);line-height:1.45;
   border-top:1px solid var(--border);padding-top:8px;margin-top:10px}
 .lin-story{overflow:auto;padding:16px 20px 40px}
+.story-head{margin:0 0 10px;padding-bottom:9px;border-bottom:1px solid var(--border)}
+.story-head h2{margin:0;font-size:14px}
+.story-of{color:var(--muted);font-weight:400;font-size:12px}
+.story-sub{margin:4px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5}
+.story-branch{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--fg)}
 .lin-side{min-height:0;border-left:1px solid var(--border);background:var(--raised);
   display:flex;flex-direction:column;overflow:hidden}
 /* Too narrow to stand them side by side: one column, and the document scrolls as
@@ -281,6 +283,22 @@ tr.lin-opens:hover td{background:var(--hover)}
     {% include "_row_paths.html" %}
   </div>
   <div class="lin-story">
+    {% set walked = pane.find_the_walked_path() if pane.reason is not defined else none %}
+    {% if walked %}
+    <div class="story-head">
+      <h2>Path {{ walked.number }}<span class="story-of"> of {{ pane.paths | length }}</span></h2>
+      {% if walked.tells_it_apart %}
+      <p class="story-sub">Told apart by
+        {%- for branch in walked.tells_it_apart %}
+        <span class="story-branch" title="{{ branch.reason.value }} at {{ branch.stage_id }}"
+          >{{ branch.label }}</span>{{ "," if not loop.last }}
+        {%- endfor %}
+      </p>
+      {% else %}
+      <p class="story-sub">Nothing told this path apart from the others.</p>
+      {% endif %}
+    </div>
+    {% endif %}
     <div id="steps"></div>
     <details class="lin-graph"><summary>Lineage graph</summary>
       <pre class="mermaid" id="mmd">{{ mermaid }}</pre>

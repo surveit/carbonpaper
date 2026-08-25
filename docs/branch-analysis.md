@@ -101,6 +101,24 @@ tuple**. That equality is what the drawing is made of: rows on identical paths a
 Sorting is `_rank_branches`. Without it, two rows that took the same decisions in the same order
 could still hold their branches in different orders and never compare equal.
 
+## Which branches the Paths pane leaves out
+
+The pane lists one entry per distinct path, so it shows only what tells one path from another.
+Two kinds of branch are left out.
+
+The first is any branch every path holds — it separates none of them.
+
+The second is a `load`. A row carries an input's `load` branch exactly when its ancestry reaches
+that input, and a `join` or `union` below that input is *why* it reached it. So the load restates
+the branch beside it and is dropped whenever join or union branches, at stages the input feeds,
+cover the paths the load sits on. The walk has to be transitive: a union names its immediate
+input, never the load above it, so `stamp_q1_source` and `q1_2026_export` never match by name.
+
+Sharing a footprint is NOT enough on its own. Two branches can split the paths identically and
+still be different facts — a join that matched a reference table, and the code arm that reads
+the result of that join, split the rows the same way and are separate decisions a reader needs
+to see. Only a `load`, and only under a stage that explains it, is dropped.
+
 ## What a branch did to its rows
 
 `BranchRole` has two values, and they answer one question: what happened to the rows that took

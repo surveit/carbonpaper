@@ -1,7 +1,6 @@
 {# The Paths pane: every path the rows behind this figure took, none collapsed.
    Context: pane (app.web.row_paths.PathsBehindFigure, or a refusal carrying
    `reason`), figure, links. #}
-<h2>How these rows got here</h2>
 {% if pane.reason is defined %}
 <p class="paths-none">This run cannot say: {{ pane.reason }}</p>
 {% else %}
@@ -9,21 +8,21 @@
    further up, which are not part of a path's identity. Relevant rows counts. #}
 <p class="paths-count">
   {% if pane.paths | length == 1 %}
-    Every row behind <code>{{ figure.stage_id }}</code> row
-    {{ figure.row_ordinal | row_number }} took the <b>same path</b>.
+    Every row behind this one took the <b>same pathway</b>.
   {% else %}
-    <b>{{ pane.paths | length }}</b> paths reach <code>{{ figure.stage_id }}</code>
-    row {{ figure.row_ordinal | row_number }}, through <code>{{ pane.at_stage }}</code>.
+    <b>{{ pane.paths | length }}</b> distinct pathways reach this row.
   {% endif %}
 </p>
 {% for path in pane.paths %}
   {% set body %}
-    <span class="path-rows">follow <code>{{ pane.at_stage }}</code> row
-      {{ path.example_ordinal | row_number }}</span>
-    {% for branch in path.tells_it_apart %}
-      <span class="path-branch {{ 'is-code' if branch.reason.value == 'code' }}"
-            title="{{ branch.reason.value }} at {{ branch.stage_id }}">{{ branch.label }}</span>
-    {% endfor %}
+    <span class="path-name">Path {{ path.number }}</span>
+    <span class="path-text">
+      {%- for branch in path.tells_it_apart -%}
+        <span class="{{ 'is-code' if branch.reason.value == 'code' }}"
+              title="{{ branch.reason.value }} at {{ branch.stage_id }}"
+              >{{ branch.label }}</span>{{ ", " if not loop.last }}
+      {%- endfor -%}
+    </span>
   {% endset %}
   {% set href = links.build_row_trace_for_figure(
        figure.stage_id, figure.row_ordinal, path.sample_choices) %}
@@ -36,7 +35,4 @@
     <div class="path-entry">{{ body }}</div>
   {% endif %}
 {% endfor %}
-<p class="paths-foot">Every path the run recorded, none folded into another. Branches every
-  path shares are left out — they tell none of them apart. How many rows took each, and what
-  each row stands for, is <b>Relevant rows</b>.</p>
 {% endif %}
