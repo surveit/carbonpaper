@@ -69,9 +69,12 @@ def test_the_panel_links_every_drawn_row_to_itself_and_marks_the_one_traced(run_
     assert page.count(f'<td class="row-num diff-row-num-mine">{CITED_ROW + 1}</td>') == 2
 
 
-def test_the_cited_column_is_painted_on_the_traced_row_alone(run_id):
-    cells = re.findall(r'<td[^>]*class="[^"]*diff-col-cited', _panel(run_id))
-    assert len(cells) == 1
+def test_the_cited_tint_falls_on_the_traced_cell_alone(run_id):
+    page = _panel(run_id)
+    assert len(re.findall(r'<td[^>]*class="[^"]*diff-col-cited', page)) == 1
+    # The header carries the word, never the tint: a column is not the value.
+    assert not re.findall(r'<th[^>]*class="[^"]*diff-col-cited', page)
+    assert len(re.findall(r'class="diff-col-mine">the value<', page)) == 1
 
 
 def _panel(run_id):

@@ -79,8 +79,7 @@
       <div class="table-scroll"><table class="data-preview">
         <thead><tr><th class="row-num">#</th><th class="syw-col">lineage</th>
           {%- for column_state in step.columns %}
-          {%- set klasses = [('diff-col-cited' if column_state.cited else ''),
-                             ('diff-col-jump' if column_state.writer else '')] | select | join(' ') %}
+          {%- set klasses = 'diff-col-jump' if column_state.writer else '' %}
           <th{% if klasses %} class="{{ klasses }}"{% endif %}
             {%- if column_state.writer %} data-jump="{{ column_state.writer }}"
             title="written by {{ column_state.writer }} — go there"{% endif %}>

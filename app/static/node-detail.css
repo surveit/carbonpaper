@@ -189,11 +189,11 @@ table.data-preview.scratch th { background: var(--hover); }
     font-size: 15px;
 }
 
-/* The row a Values used sheet was opened on, among the neighbours drawn around
-   it: banded its whole width, ruled down its left edge, and its number taken
-   out of muted. Before the column tints below, which have to win on it. */
-.stage-diff tr.diff-row-mine td { background: var(--hover); }
-.stage-diff tr.diff-row-mine td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+/* The row a Values used sheet was opened on: banded, ruled down its left edge,
+   its number out of muted. One class and one element, so it loses the tie to
+   every column tint below and their cells survive the band. */
+.stage-diff .diff-row-mine td { background: var(--hover); }
+.stage-diff .diff-row-mine td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .stage-diff td.diff-row-num-mine { color: var(--fg); font-weight: 700; }
 
 /* Outputs-pane stage diff (app/templates/_stage_diff.html). A column the stage
@@ -230,12 +230,12 @@ table.data-preview.scratch th { background: var(--hover); }
 .stage-diff .diff-was { display: block; color: var(--muted); text-decoration: line-through; }
 .stage-diff tr.diff-row-dropped td { background: var(--state-failed-bg); color: var(--state-failed-ink); }
 
-/* The Values used tab's two additions to the same table: the column the page is
-   tracing, and a header that opens the stage that wrote its column. Both are
-   inert on the outputs pane, which passes neither. */
-.stage-diff th.diff-col-cited,
+/* The Values used tab's two additions to the same table: the ONE cell the page
+   is tracing, and a header that opens the stage that wrote its column. Both are
+   inert on the outputs pane, which passes neither. The column keeps whatever
+   tint its own state earned; the cell takes the loudest ink on the page. */
 .stage-diff td.diff-col-cited,
-.legend i.diff-col-cited { background: var(--info-ink); color: var(--on-dark); }
+.legend i.diff-col-cited { background: var(--accent); color: var(--on-dark); }
 .stage-diff td.diff-col-cited .diff-was { color: var(--on-dark); }
 .stage-diff .diff-col-mine {
     display: block;

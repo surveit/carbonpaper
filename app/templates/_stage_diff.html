@@ -112,7 +112,6 @@
       {%- set jump = writers.get(column.name) %}
       {%- set klasses = [cell_class[column.state] if column.state != 'carried' else '',
                          'diff-col-quiet' if column.name in quiet else '',
-                         'diff-col-cited' if column.name == cited_column else '',
                          'diff-col-jump' if jump else ''] | select | join(' ') %}
       <th{% if klasses %} class="{{ klasses }}"{% endif %}
         {%- if jump %} data-jump="{{ jump }}" title="written by {{ jump }} — go there"
