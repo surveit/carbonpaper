@@ -12,6 +12,7 @@ from app.core.errors import (
 )
 from app.web import values_view
 from app.web.config import templates
+from app.web.panel_links import AppPanelLinks
 
 router = APIRouter()
 
@@ -35,6 +36,7 @@ async def values_panel(request: Request, project_id: str, run_id: str,
         request, "_values_panel.html",
         {"project": project_id, "run_id": run_id, "stage_id": stage,
          "column": column, "values": payload,
+         "links": AppPanelLinks(project_id, run_id),
          # What values-used.js steers by; the sheets themselves are already drawn.
          "nav": payload.model_dump(
              mode="json", include={"cited_stage", "edges", "sources"})},

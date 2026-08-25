@@ -198,7 +198,8 @@ table.data-preview.scratch th { background: var(--hover); }
    touched. Every tint has a colour-free twin: the + and − marks on the column
    headers, and the strike through a dropped column's cells. */
 .stage-diff th.diff-col-new,
-.stage-diff td.diff-col-new { background: var(--state-review-bg); }
+.stage-diff td.diff-col-new,
+.legend i.diff-col-new { background: var(--state-review-bg); }
 .stage-diff th.diff-col-dropped,
 .stage-diff td.diff-col-dropped {
     background: var(--state-failed-bg);
@@ -209,10 +210,36 @@ table.data-preview.scratch th { background: var(--hover); }
 .stage-diff td.diff-col-dropped { text-decoration: line-through; }
 .stage-diff th.diff-col-dropped .diff-col-name { text-decoration: line-through; }
 .stage-diff .diff-mark { font-weight: 700; margin-right: 3px; }
-.stage-diff td.diff-cell-changed { background: var(--state-warn-bg); }
+.stage-diff td.diff-cell-changed,
+.legend i.diff-cell-changed { background: var(--state-warn-bg); }
 .stage-diff td.diff-cell-same { color: var(--muted); }
+/* A column the stage neither wrote nor changed a cell of, recessed as one band
+   from its header to its last row: the header already sits on --sunk-deep, so
+   tinting only the text under it changed almost nothing on the screen. After
+   .diff-cell-same, which it has to beat on the same specificity. */
+.stage-diff th.diff-col-quiet { font-weight: 400; }
+.stage-diff th.diff-col-quiet,
+.stage-diff td.diff-col-quiet { background: var(--sunk-deep); color: var(--muted-dim); }
 .stage-diff .diff-was { display: block; color: var(--muted); text-decoration: line-through; }
 .stage-diff tr.diff-row-dropped td { background: var(--state-failed-bg); color: var(--state-failed-ink); }
+
+/* The Values used tab's two additions to the same table: the column the page is
+   tracing, and a header that opens the stage that wrote its column. Both are
+   inert on the outputs pane, which passes neither. */
+.stage-diff th.diff-col-cited,
+.stage-diff td.diff-col-cited,
+.legend i.diff-col-cited { background: var(--info-ink); color: var(--on-dark); }
+.stage-diff td.diff-col-cited .diff-was { color: var(--on-dark); }
+.stage-diff .diff-col-mine {
+    display: block;
+    font-style: normal;
+    font-size: 9px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+.stage-diff th.diff-col-jump { cursor: pointer; }
+.stage-diff th.diff-col-jump:hover { outline: 2px solid var(--accent); outline-offset: -2px; }
+.stage-diff th.diff-col-jump:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
 /* The Data pane's input-rows disclosure: the upstream previews, folded below the
    (diff-aware) output so the pane leads with what the stage produced. */

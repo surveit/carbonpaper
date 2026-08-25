@@ -32,8 +32,8 @@ def _step(values, stage_id):
     return next(step for step in values.steps if step.stage_id == stage_id)
 
 
-def _state_of(step, name):
-    return next(column.state for column in step.columns if column.name == name)
+def _diff_column(step, name):
+    return next(column for column in step.diff.columns if column.name == name)
 
 
 def test_only_the_stages_that_wrote_get_a_step(run_id):
@@ -54,15 +54,46 @@ def test_the_enrich_that_added_the_group_key_is_on_the_walk(run_id):
     assert "tag_portfolio" in [step.stage_id for step in values.steps]
 
 
-def test_a_column_holds_its_slot_before_the_stage_that_writes_it(run_id):
+def test_a_column_is_on_no_sheet_before_the_stage_that_writes_it(run_id):
     values = _walk(run_id, "by_portfolio", "portfolio")
-    assert _state_of(_step(values, "load_east"), "portfolio") is ColumnDiffState.absent
-    assert _state_of(_step(values, "tag_portfolio"), "portfolio") is ColumnDiffState.added
+    assert "portfolio" not in [c.name for c in _step(values, "load_east").columns]
+    portfolio = _diff_column(_step(values, "tag_portfolio"), "portfolio")
+    assert portfolio.state is ColumnDiffState.added
 
 
-def test_a_column_the_stage_consumed_reads_as_read_not_carried(run_id):
+def test_the_column_the_stage_read_is_drawn_beside_what_it_wrote(run_id):
     values = _walk(run_id, "by_portfolio", "portfolio")
-    assert _state_of(_step(values, "tag_portfolio"), "agency_code") is ColumnDiffState.read
+    agency_code = _diff_column(_step(values, "tag_portfolio"), "agency_code")
+    assert agency_code.state is ColumnDiffState.carried
+
+
+def test_a_column_the_stage_read_is_not_dimmed_with_the_rest(run_id):
+    # tag_portfolio joins on agency_code; dimming it would hide what the join used.
+    step = _step(_walk(run_id, "by_portfolio", "portfolio"), "tag_portfolio")
+    assert _diff_column(step, "agency_code").inert is False
+
+
+def test_a_transform_step_carries_the_input_to_output_split(run_id):
+    values = _walk(run_id, "by_portfolio", "portfolio")
+    step = _step(values, "tag_portfolio")
+    assert [frame.role for frame in step.diff.inputs] == ["base input", "reference input"]
+    assert "+1 col" in step.diff.count_labels
+
+
+def test_an_input_stage_has_no_frame_to_paint_over(run_id):
+    values = _walk(run_id, "by_portfolio", "portfolio")
+    assert _step(values, "load_east").diff is None
+
+
+def _minimap_columns(values):
+    return [[node.stage_id for node in column] for column in values.minimap]
+
+
+def test_two_sources_of_one_stage_stack_rather_than_read_as_a_chain(run_id):
+    # Drawn one after another they read as the first flowing into the second.
+    columns = _minimap_columns(_walk(run_id, "by_portfolio", "portfolio"))
+    assert set(columns[0]) == {"load_agencies", "load_east", "load_west"}
+    assert columns[1:] == [["tag_portfolio"], ["by_portfolio"]]
 
 
 def test_an_aggregate_hands_back_a_new_sheet_and_says_which(run_id):
@@ -82,6 +113,8 @@ def test_the_panel_renders_the_sheet_of_every_step(run_id):
     assert page.status_code == 200
     assert page.text.count('class="vu-step"') == 3
     assert 'data-transform="load_east"' in page.text
+    # The shared diff table, not a second one of this tab's own.
+    assert 'class="data-preview"' in page.text
 
 
 def test_a_column_the_stage_does_not_write_is_refused_in_the_pane(run_id):

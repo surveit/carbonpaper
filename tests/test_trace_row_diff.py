@@ -62,7 +62,14 @@ def test_a_difference_the_reader_can_see_is_marked():
     assert diff.fields[0].state is CellDiffState.changed
 
 
+def test_a_carried_field_the_stage_read_is_not_inert():
+    read = build_row_diff({"a": "x"}, {"a": "x"}, is_origin=False, read=frozenset({"a"}))
+    unread = build_row_diff({"a": "x"}, {"a": "x"}, is_origin=False)
+    assert (read.fields[0].inert, unread.fields[0].inert) == (False, True)
+
+
 def test_the_payload_names_each_state_as_a_plain_string():
     payload = row_diff_to_dict(build_row_diff({"a": "x"}, {"a": "y"}, is_origin=False))
-    assert payload["fields"] == [{"name": "a", "state": "changed", "text": "x", "was": "y"}]
+    assert payload["fields"] == [
+        {"name": "a", "state": "changed", "text": "x", "was": "y", "inert": False}]
     assert (payload["added"], payload["changed"], payload["dropped"]) == (0, 1, 0)

@@ -7,7 +7,7 @@ from enum import Enum
 from pydantic import BaseModel
 
 from app.models.schema import StageId
-from app.web.diff_state import ColumnDiffState
+from app.web.stage_diff import RowAlignedDiff
 
 
 class NewSheet(str, Enum):
@@ -20,7 +20,6 @@ class NewSheet(str, Enum):
 
 class SheetColumn(BaseModel):
     name: str
-    state: ColumnDiffState
     cited: bool
     # The nearest stage upstream that wrote it; the header links there.
     writer: StageId | None
@@ -35,11 +34,21 @@ class ValuesStep(BaseModel):
     rows_total: int
     new_sheet: NewSheet | None
     columns: list[SheetColumn]
-    # Positional against `columns`, already rendered as text; "" where the column
-    # is not on this frame.
+    # None where the diff refuses the type; `rows` below is then what is drawn.
+    diff: RowAlignedDiff | None
+    # Positional against `columns`, as text. Read only where `diff` is None.
     rows: list[list[str]]
     columns_total: int
     unreadable: str | None
+
+    @property
+    def column_writers(self) -> dict[str, StageId]:
+        """What the diff header links: column name -> the stage that wrote it."""
+        return {
+            column.name: column.writer
+            for column in self.columns
+            if column.writer is not None
+        }
 
 
 class MinimapNode(BaseModel):

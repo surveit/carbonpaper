@@ -9,7 +9,7 @@ window.ValuesUsed = window.ValuesUsed || (function(){
     if(!pane) return;
     const nav = JSON.parse(root.querySelector('.vu-nav').textContent);
     const view = {
-      pane, nav, trail: [nav.cited_stage],
+      pane, nav, trail: [nav.cited_stage], tab: 'data',
       map: pane.querySelector('.vu-map'),
       scroll: pane.querySelector('.vu-scroll'),
       modal: pane.querySelector('.vu-modal'),
@@ -38,7 +38,15 @@ window.ValuesUsed = window.ValuesUsed || (function(){
     // the reader still wants the new sheet from the top.
     view.scroll.scrollTop = 0;
     drawWires(view);
-    loadTransform(view, here);
+    applyTabs(view);
+  }
+
+  function applyTabs(view){
+    view.pane.querySelectorAll('.vu-steptabs button').forEach(
+      button => button.classList.toggle('on', button.dataset.tab === view.tab));
+    view.pane.querySelectorAll('.vu-pane').forEach(
+      pane => pane.classList.toggle('vu-off', pane.dataset.tab !== view.tab));
+    if(view.tab === 'transform') loadTransform(view, at(view));
   }
 
   function goTo(view, stageId){ view.trail.push(stageId); show(view); }
@@ -109,7 +117,7 @@ window.ValuesUsed = window.ValuesUsed || (function(){
     }).join('');
   }
 
-  const CONTROLS = '.vu-node, .vu-arrow, .vu-forkopt, .vu-modal-close, th.vu-linked';
+  const CONTROLS = '.vu-node, .vu-arrow, .vu-forkopt, .vu-modal-close, th.diff-col-jump, .vu-steptabs button';
 
   function wire(view){
     // Focusing a control inside a horizontally scrolling strip makes the browser
@@ -120,8 +128,10 @@ window.ValuesUsed = window.ValuesUsed || (function(){
     view.pane.addEventListener('click', event => {
       const control = event.target.closest(CONTROLS);
       if(control) control.focus({preventScroll: true});
-      const header = event.target.closest('th.vu-linked');
+      const header = event.target.closest('th.diff-col-jump');
       if(header) return goTo(view, header.dataset.jump);
+      const tab = event.target.closest('.vu-steptabs button');
+      if(tab){ view.tab = tab.dataset.tab; return applyTabs(view); }
       const node = event.target.closest('.vu-node');
       if(node) return goTo(view, node.dataset.node);
       const fork = event.target.closest('.vu-forkopt');

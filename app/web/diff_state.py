@@ -9,10 +9,6 @@ class ColumnDiffState(str, Enum):
     carried = "carried"
     dropped = "dropped"
     added = "added"
-    # The three the values-used sheet adds (app.web.values_view).
-    rewritten = "rewritten"
-    read = "read"
-    absent = "absent"
 
 
 class CellDiffState(str, Enum):

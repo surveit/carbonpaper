@@ -6,13 +6,15 @@ unverifiable yields None and the caller shows the plain output view."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Collection
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import ClassVar, Optional, Union
 
 import pandas as pd
 
 from app.models import StageType, WorkflowStage
+from app.models.stages.signature import list_read_column_names
 from app.models.stage import is_grain_and_order_preserving
 from app.runtime.lineage_sidecar import read_lineage_sidecar
 from app.runtime.manifest import resolve_output_path
@@ -94,6 +96,17 @@ class DiffColumn:
     name: str
     state: ColumnDiffState
     changed_cells: int
+    # The stage's signature says the transform consumes it.
+    read: bool = False
+
+    @property
+    def inert(self) -> bool:
+        """Nothing happened to it here, and nothing here read it."""
+        return (
+            self.state is ColumnDiffState.carried
+            and not self.changed_cells
+            and not self.read
+        )
 
 
 @dataclass(frozen=True)
@@ -187,6 +200,16 @@ def build_stage_diff(
     return _build_row_aligned_diff(workflow_stage, inputs, input_df, output_df, rows_shown)
 
 
+def keep_diff_columns(diff: RowAlignedDiff, names: Collection[str]) -> RowAlignedDiff:
+    """Cuts what the table DRAWS; the counts stay the whole frame's."""
+    kept = [i for i, column in enumerate(diff.columns) if column.name in names]
+    return replace(
+        diff,
+        columns=[diff.columns[i] for i in kept],
+        rows=[[row[i] for i in kept] for row in diff.rows],
+    )
+
+
 def _shape_input_frames(
     run_dir: Path, input_ids: list[str], output_by_id: dict[str, Optional[str]], base_rows: int
 ) -> list[DiffFrame]:
@@ -231,7 +254,9 @@ def _build_row_aligned_diff(
     in_text = _text_frame(input_df)
     out_text = _text_frame(output_df)
     columns = _order_diff_columns(
-        workflow_stage, _shape_aligned_columns(in_text, out_text))
+        workflow_stage,
+        _shape_aligned_columns(
+            in_text, out_text, list_read_column_names(workflow_stage.stage)))
     return RowAlignedDiff(
         inputs=inputs,
         columns=columns,
@@ -263,10 +288,12 @@ def _order_diff_columns(
     ]]
 
 
-def _shape_aligned_columns(in_text: pd.DataFrame, out_text: pd.DataFrame) -> list[DiffColumn]:
+def _shape_aligned_columns(
+    in_text: pd.DataFrame, out_text: pd.DataFrame, read: set[str]
+) -> list[DiffColumn]:
     input_names = set(in_text.columns)
     return [
-        _shape_input_column(in_text, out_text, str(name)) for name in in_text.columns
+        _shape_input_column(in_text, out_text, str(name), read) for name in in_text.columns
     ] + [
         DiffColumn(name=str(name), state=ColumnDiffState.added, changed_cells=0)
         for name in out_text.columns
@@ -274,13 +301,16 @@ def _shape_aligned_columns(in_text: pd.DataFrame, out_text: pd.DataFrame) -> lis
     ]
 
 
-def _shape_input_column(in_text: pd.DataFrame, out_text: pd.DataFrame, name: str) -> DiffColumn:
+def _shape_input_column(
+    in_text: pd.DataFrame, out_text: pd.DataFrame, name: str, read: set[str]
+) -> DiffColumn:
     if name not in out_text.columns:
         return DiffColumn(name=name, state=ColumnDiffState.dropped, changed_cells=0)
     return DiffColumn(
         name=name,
         state=ColumnDiffState.carried,
         changed_cells=int((in_text[name] != out_text[name]).sum()),
+        read=name in read,
     )
 
 

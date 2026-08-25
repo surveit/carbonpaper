@@ -49,9 +49,6 @@ class ColumnWalk:
         node = self.nodes.get(at)
         return None if node is None else node.stop
 
-    def measure_depth_of_stage(self, stage_id: StageId) -> int:
-        return min(depth for at, depth in self.depth.items() if at.stage_id == stage_id)
-
 
 @dataclass(frozen=True)
 class WriterEdge:

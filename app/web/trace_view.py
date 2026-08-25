@@ -15,6 +15,7 @@ from app.models.stages.code import PythonFrameFunctionStage, PythonRowFunctionSt
 from app.models.stages.input_data import InputDataStage
 from app.models.stages.join import EnrichStage, ExpandStage
 from app.models.stages.llm_transform import LLMTransformStage
+from app.models.stages.signature import list_read_column_names
 from app.models.stages.starlark import StarlarkRowFunctionStage
 from app.runtime.lineage import EdgeKind
 from app.services.loader import resolve_function_code
@@ -107,6 +108,14 @@ def read_walked_rows(view: dict[str, Any]) -> dict[str, int]:
     return {node["stage_id"]: node["row_ordinal"] for node in view["nodes"]}
 
 
+def _list_reads_at(stages: dict[str, WorkflowStage], stage_id: str) -> frozenset[str]:
+    """Empty where the run pinned a version this page cannot resolve."""
+    workflow_stage = stages.get(stage_id)
+    if workflow_stage is None:
+        return frozenset()
+    return frozenset(list_read_column_names(workflow_stage.stage))
+
+
 def _build_node(
     i: int, chrono: list[dict[str, Any]], stages: dict[str, WorkflowStage],
     links: PanelLinks, truncated: bool,
@@ -118,6 +127,7 @@ def _build_node(
         step["row"],
         parent["row"] if parent else None,
         is_origin=(i == 0 and not truncated),
+        read=_list_reads_at(stages, step["stage_id"]),
     )
     return {
         "step": i + 1,  # 1-based, chronological — so the story can say "step 4"

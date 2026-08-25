@@ -205,6 +205,13 @@ def list_written_column_names(stage: "AbstractStage") -> list[str]:
     return [column.name for column in [*signature.rewrites, *signature.adds]]
 
 
+def list_read_column_names(stage: "AbstractStage") -> set[str]:
+    """Consumed by the transform; a column that merely flows through is not one."""
+    signature = stage.signature
+    assert signature is not None, f"stage `{stage.id}`: no signature"
+    return {column.name for entry in signature.reads for column in entry.columns}
+
+
 def anchor_read_columns(stage: "AbstractStage") -> list[Column]:
     """What the transform consumes from its anchor input; [] unless the form flows the rest."""
     signature = stage.signature

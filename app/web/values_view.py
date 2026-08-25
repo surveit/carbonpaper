@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -16,8 +15,8 @@ from app.models.stages.signature import ExtendsSignature
 from app.services import run as run_service
 from app.services.workspace import resolve_run_dir
 from app.web.diagrams import TYPE_GLYPH, TYPE_LABEL
-from app.web.diff_state import ColumnDiffState
 from app.web.loading import load_output_preview, load_run_record
+from app.web.stage_diff import RowAlignedDiff, build_stage_diff, keep_diff_columns
 from app.web.values_payload import (
     MinimapEdge,
     MinimapNode,
@@ -52,8 +51,10 @@ def load_values_used(
     _refuse_unknown_cell(stages, run_id, stage_id, column)
     walk = walk_column_back(stages, ColumnAt(stage_id, column))
     graph = build_writer_graph(walk, stages)
-    replayed = _order_stages_that_wrote(walk)
+    level = _rank_stages_by_graph_level(graph, _list_stages_that_wrote(walk))
+    replayed = sorted(level, key=lambda sid: (level[sid], sid))
     records = {entry.stage_id: entry for entry in record.stage_records}
+    output_by_id = {entry.stage_id: entry.output_path for entry in record.stage_records}
     run_dir = resolve_run_dir(project_id, run_id)
     order = order_sheet_columns(walk)
     return ValuesUsed(
@@ -61,11 +62,11 @@ def load_values_used(
         column=column,
         row=row,
         steps=[
-            _build_step(stages[sid], records.get(sid), run_dir, walk, graph, order,
-                        cited=ColumnAt(stage_id, column))
+            _build_step(stages[sid], records.get(sid), run_dir, output_by_id, walk, graph,
+                        order, cited=ColumnAt(stage_id, column))
             for sid in replayed
         ],
-        minimap=_build_minimap(walk, replayed, stages),
+        minimap=_build_minimap(level, replayed, stages),
         edges=_list_edges(graph),
         sources=_index_sources(graph),
         counts_rows=walk.find_stop_at(ColumnAt(stage_id, column)) is WalkStop.counts_rows,
@@ -83,16 +84,32 @@ def _refuse_unknown_cell(
         raise ColumnNotInFrame(f"stage '{stage_id}' writes no column '{column}'")
 
 
-def _order_stages_that_wrote(walk: ColumnWalk) -> list[StageId]:
-    """Root first, so the replay reads left to right like the workflow graph."""
-    wrote = {at.stage_id for at, node in walk.nodes.items() if node.wrote}
-    return sorted(wrote, key=lambda sid: (-walk.measure_depth_of_stage(sid), sid))
+def _list_stages_that_wrote(walk: ColumnWalk) -> set[StageId]:
+    return {at.stage_id for at, node in walk.nodes.items() if node.wrote}
+
+
+def _rank_stages_by_graph_level(
+    graph: WriterGraph, wrote: set[StageId]
+) -> dict[StageId, int]:
+    """One column right of its furthest parent, so two sources of one stage stack."""
+    level: dict[StageId, int] = {}
+
+    def measure(stage_id: StageId) -> int:
+        if stage_id not in level:
+            parents = [edge.from_stage for edge in graph.list_parents(stage_id)]
+            level[stage_id] = 0 if not parents else 1 + max(map(measure, parents))
+        return level[stage_id]
+
+    for stage_id in sorted(wrote):
+        measure(stage_id)
+    return level
 
 
 def _build_step(
     workflow_stage: WorkflowStage,
     record: StageRecord | None,
     run_dir: Path,
+    output_by_id: dict[str, str | None],
     walk: ColumnWalk,
     graph: WriterGraph,
     order: list[str],
@@ -103,23 +120,19 @@ def _build_step(
         run_dir, record.output_path, SHEET_ROWS_SHOWN)
     unreadable = _say_why_no_sheet(record, preview)
     on_frame = set() if preview is None else {str(name) for name in preview["columns"]}
-    new_sheet = _find_new_sheet(stage)
-    present = _resolve_present_columns(order, on_frame, new_sheet, unreadable)
-    states = _SheetStates(
-        on_frame=on_frame,
-        rewritten=_list_rewritten_columns(stage),
-        read_here=_list_columns_read_here(walk, stage.id),
-    )
+    diff = _build_step_diff(workflow_stage, record, run_dir, output_by_id, order)
+    present = _resolve_present_columns(order, on_frame, unreadable)
     return ValuesStep(
         stage_id=stage.id,
         glyph=TYPE_GLYPH[stage.type],
         label=TYPE_LABEL[stage.type],
         rows_total=0 if record is None else record.output_row_count,
-        new_sheet=new_sheet,
+        new_sheet=_find_new_sheet(stage),
         columns=[
-            _build_sheet_column(name, stage.id, walk, graph, states, cited)
-            for name in present
+            _build_sheet_column(name, stage.id, walk, graph, cited)
+            for name in (present if diff is None else [c.name for c in diff.columns])
         ],
+        diff=diff,
         rows=[] if preview is None else [
             [str(row.get(name, "")) for name in present] for row in preview["preview"]
         ],
@@ -128,24 +141,29 @@ def _build_step(
     )
 
 
+def _build_step_diff(
+    workflow_stage: WorkflowStage,
+    record: StageRecord | None,
+    run_dir: Path,
+    output_by_id: dict[str, str | None],
+    order: list[str],
+) -> RowAlignedDiff | None:
+    if record is None:
+        return None
+    diff = build_stage_diff(
+        workflow_stage, run_dir, record.output_path, output_by_id, SHEET_ROWS_SHOWN)
+    # A filter writes no column, so no step here is ever a filter's merged table.
+    if not isinstance(diff, RowAlignedDiff):
+        return None
+    return keep_diff_columns(diff, set(order))
+
+
 def _resolve_present_columns(
-    order: list[str], on_frame: set[str], new_sheet: NewSheet | None, unreadable: str | None
+    order: list[str], on_frame: set[str], unreadable: str | None
 ) -> list[str]:
     if unreadable is not None:
         return []
-    # A rebuilt frame keeps none of the old columns, so no slot is held.
-    if new_sheet is not None:
-        return [name for name in order if name in on_frame]
-    return list(order)
-
-
-@dataclass(frozen=True)
-class _SheetStates:
-    """What one stage did to each column, taken off the stage and the walk once."""
-
-    on_frame: set[str]
-    rewritten: set[str]
-    read_here: set[str]
+    return [name for name in order if name in on_frame]
 
 
 def _build_sheet_column(
@@ -153,45 +171,13 @@ def _build_sheet_column(
     stage_id: StageId,
     walk: ColumnWalk,
     graph: WriterGraph,
-    states: _SheetStates,
     cited: ColumnAt,
 ) -> SheetColumn:
-    node = walk.nodes.get(ColumnAt(stage_id, name))
     return SheetColumn(
         name=name,
-        state=_resolve_column_state(name, states, wrote=node is not None and node.wrote),
         cited=ColumnAt(stage_id, name) == cited,
         writer=find_nearest_writer_upstream(walk, graph, stage_id, name),
     )
-
-
-def _resolve_column_state(name: str, states: _SheetStates, *, wrote: bool) -> ColumnDiffState:
-    if name not in states.on_frame:
-        return ColumnDiffState.absent
-    if name in states.rewritten:
-        return ColumnDiffState.rewritten
-    if wrote:
-        return ColumnDiffState.added
-    if name in states.read_here:
-        return ColumnDiffState.read
-    return ColumnDiffState.carried
-
-
-def _list_rewritten_columns(stage: AbstractStage) -> set[str]:
-    signature = stage.signature
-    if not isinstance(signature, ExtendsSignature):
-        return set()
-    return {column.name for column in signature.rewrites}
-
-
-def _list_columns_read_here(walk: ColumnWalk, stage_id: StageId) -> set[str]:
-    """Named by the parents of what this stage wrote, so it is the walk's own read set."""
-    return {
-        parent.column
-        for at, node in walk.nodes.items()
-        if at.stage_id == stage_id and node.wrote
-        for parent in node.parents
-    }
 
 
 def _find_new_sheet(stage: AbstractStage) -> NewSheet | None:
@@ -214,17 +200,17 @@ def _say_why_no_sheet(
 
 
 def _build_minimap(
-    walk: ColumnWalk, replayed: list[StageId], stages: WorkflowStagesById
+    level: dict[StageId, int], replayed: list[StageId], stages: WorkflowStagesById
 ) -> list[list[MinimapNode]]:
-    by_depth: dict[int, list[StageId]] = defaultdict(list)
+    by_level: dict[int, list[StageId]] = defaultdict(list)
     for stage_id in replayed:
-        by_depth[walk.measure_depth_of_stage(stage_id)].append(stage_id)
+        by_level[level[stage_id]].append(stage_id)
     return [
         [
             MinimapNode(stage_id=sid, glyph=TYPE_GLYPH[stages[sid].stage.type])
-            for sid in by_depth[depth]
+            for sid in by_level[column]
         ]
-        for depth in sorted(by_depth, reverse=True)
+        for column in sorted(by_level)
     ]
 
 

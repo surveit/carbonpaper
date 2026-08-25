@@ -52,6 +52,10 @@ body{display:flex;flex-direction:column;overflow:hidden}
   padding:9px 16px 8px;cursor:pointer;border-bottom:2px solid transparent}
 .lin-pagetab.on{color:var(--fg);border-bottom-color:var(--accent);font-weight:600}
 .lin-pagetab:hover{background:var(--hover)}
+/* The house focus ring. Without one these fall back to the browser's own blue,
+   which is a colour this palette spends on something else. */
+.lin-pagetab:focus-visible,.lin-tabs button:focus-visible{outline:none;
+  box-shadow:0 0 0 2px var(--focus-halo)}
 .lin-pane{flex:1;min-height:0;display:flex;flex-direction:column}
 .lin-pane.hidden{display:none}
 /* The frame scrolls the map; the pane itself does not, so the chips stay put. */
@@ -183,6 +187,10 @@ tr.changed td{background:var(--state-warn-bg)}
 tr.changed td.lin-f{color:var(--state-warn-ink);font-weight:600}
 tr.dropped td{background:var(--state-failed-bg);color:var(--state-failed-ink);text-decoration:line-through}
 tr.carried td.lin-v{color:var(--muted)}
+/* Same rule as the stage diff's quiet column: nothing happened to this field here
+   and nothing here read it, so it recesses instead of competing. */
+tr.inert td{background:var(--sunk-deep)}
+tr.inert td.lin-f,tr.inert td.lin-v{color:var(--muted-dim)}
 .lin-mark{font-weight:700;margin-right:4px}
 .lin-was{display:block;color:var(--muted);text-decoration:line-through;font-size:12px;margin-top:2px}
 .lin-was em{text-decoration:none;font-style:normal}
@@ -528,7 +536,7 @@ function fieldRow(f){
   const was = f.state === 'changed'
     ? `<span class="lin-was">${f.was === '' ? '<em>(empty)</em>' : esc(f.was)}</span>` : '';
   const opens = (OFFLINE || f.state === 'dropped') ? '' : ' lin-opens';
-  return `<tr class="${f.state}${opens}" data-column="${esc(f.name)}">
+  return `<tr class="${f.state}${f.inert ? ' inert' : ''}${opens}" data-column="${esc(f.name)}">
     <td class="lin-f" title="${esc(f.name)}"><span class="lin-mark">${mark}</span>${esc(f.name)}</td>
     <td class="lin-v"><div class="lin-clip">${text}${was}</div></td></tr>`;
 }
