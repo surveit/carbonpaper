@@ -109,7 +109,10 @@ def choose_columns(facts: Facts, every_stage: bool) -> list[Column]:
     return kept if every_stage else _keep_informative(facts, kept)
 
 
+# Dropping the cited cell's own stage leaves the last frame drawn looking like it.
 def _is_worth_a_column(facts: Facts, stage: DrawnStage) -> bool:
+    if stage.id == facts.scope.citation.stage_id and not facts.scope.is_a_cut:
+        return True
     return bool(facts.scope.aliased_merges.get(stage.id)) or any(
         facts.branches_at(group, stage.id) for group in facts.groups)
 

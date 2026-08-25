@@ -140,3 +140,13 @@ def _edges_at(ribbon, at_x: float) -> tuple[float, float]:
 def _cubic(a: float, b: float, c: float, d: float, t: float) -> float:
     return ((1 - t) ** 3 * a + 3 * (1 - t) ** 2 * t * b
             + 3 * (1 - t) * t ** 2 * c + t ** 3 * d)
+
+
+def test_the_stages_below_the_rows_own_stage_are_still_drawn(run_id):  # noqa: F811
+    # This figure walks down two merges, so stages sit between its rows and it.
+    scope = read_map(PROJECT, run_id, "total_of_means", "summed_means")
+    assert scope.covers.at_stage != scope.citation.stage_id
+    for drawing in both_drawings(scope):
+        drawn = {column.stage.id: len(column.bars) for column in drawing.columns}
+        assert drawn.get(scope.citation.stage_id), "the drawing stops above the figure"
+        assert not [at for at, bars in drawn.items() if not bars]
