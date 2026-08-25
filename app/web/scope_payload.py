@@ -33,6 +33,8 @@ from app.services.scope import (
     find_contributing_rows,
     find_nearest_merge,
     find_rows_reached_per_stage,
+    find_stages_beside_the_flow,
+    find_stages_each_row_came_through,
     find_stages_on_route,
     measure_frame_scale,
 )
@@ -125,6 +127,11 @@ class ScopeMap(BaseModel):
     columns: list[str]
     branch_paths: list[BranchPath]
     branch_path_index: list[int]
+    # NOT the stages in its path: one it passed without branching is here, not there.
+    came_through: list[list[StageId]]
+    came_through_index: list[int]
+    # Lookup tables this figure came through. Named, never drawn: see the legend.
+    lookup_tables: list[StageId]
     branches: dict[BranchId, BranchOption]
     # Merge stages standing in for their groups. See docs/branch-analysis.md.
     aliased_merges: dict[StageId, AliasedMerge]
@@ -134,6 +141,8 @@ class ScopeMap(BaseModel):
     stages: list[DrawnStage]
     reach: list[BranchReach]
     scale: list[FrameScale]
+    # Set on the map of a cut, whose rows are not the figure's and hold no figure bar.
+    is_a_cut: bool = False
 
 
 def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: str,
@@ -157,6 +166,7 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
         _branches_on(run_branches, paths) | _removals_on(run_branches, route))
     aliased = alias_the_merges(
         run_branches, find_rows_reached_per_stage(run_branches, cited_row), resolved)
+    came_through, came_through_index = _index_stages_come_through(run_branches, covers)
     shown = covers.ordinals[:CELL_ROWS]
     return ScopeMap(
         project_id=project_id, run_id=run_id, citation=cited, covers=covers,
@@ -165,15 +175,31 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
         rows=read_rows(frame, shown, index),
         columns=list(frame.column_names),
         branch_paths=paths, branch_path_index=index,
+        came_through=came_through, came_through_index=came_through_index,
+        lookup_tables=_name_the_lookups(
+            run_branches, cited.stage_id, find_stages_on_route(run_branches, cited_row)),
         branches=branches,
         aliased_merges=aliased,
         resolved_merges=sorted(resolved),
         nearest_merge=nearest,
         # "show every stage" says every. docs/scope-map.md
-        stages=_draw_stages(run_branches, route),
+        stages=_draw_stages(run_branches, route, cited.stage_id),
         reach=_count_reach(run_branches, branches, index, paths),
-        scale=measure_frame_scale(run_branches, cited),
+        scale=_measure_the_flow(run_branches, cited),
     )
+
+
+def _index_stages_come_through(run_branches: WorkflowRunBranches, covers: RowSet
+                             ) -> tuple[list[list[StageId]], list[int]]:
+    per_row = find_stages_each_row_came_through(
+        run_branches, covers.at_stage, covers.ordinals)
+    distinct: dict[tuple[StageId, ...], int] = {}
+    index = []
+    for stages in per_row:
+        seen = tuple(stages)
+        distinct.setdefault(seen, len(distinct))
+        index.append(distinct[seen])
+    return [list(seen) for seen in distinct], index
 
 
 def _read_the_cited_cell(outputs: Path, citation: StageOutputCellCitation
@@ -221,12 +247,28 @@ def read_cut(run_branches: WorkflowRunBranches, outputs: Path, branch_id: Branch
         branch_paths=paths,
         rows_per_branch_path=[spread[i] for i in range(len(paths))],
         rows=read_rows(frame, shown, index[:len(shown)]),
-        stages=_draw_stages(run_branches, _stages_touched(run_branches, paths)),
+        stages=_draw_stages(run_branches, _stages_touched(run_branches, paths),
+                            at_stage),
         aliased_merges=alias_the_merges(
             run_branches, find_rows_reached_per_stage(run_branches, behind), resolved),
         resolved_merges=sorted(resolved),
         nearest_merge=nearest,
     )
+
+
+def build_scope_map_for_cut(scope: ScopeMap, cut: CutRows) -> ScopeMap:
+    """The rows behind one cut as a map of their own: counts per path, no row named."""
+    index = [path for path, rows in enumerate(cut.rows_per_branch_path)
+             for _ in range(rows)]
+    return scope.model_copy(update={
+        "covers": RowSet(at_stage=cut.at_stage, ordinals=list(range(len(index)))),
+        "branch_paths": cut.branch_paths, "branch_path_index": index,
+        "rows": cut.rows, "columns": cut.columns, "stages": cut.stages,
+        "reach": [], "scale": [], "sampled_from": cut.total,
+        "aliased_merges": cut.aliased_merges, "resolved_merges": cut.resolved_merges,
+        "nearest_merge": cut.nearest_merge,
+        # A cut's rows arrive as counts per path, which name no frame each was in.
+        "came_through": [], "came_through_index": [], "is_a_cut": True})
 
 
 def find_cuts_to_offer(run_branches: WorkflowRunBranches, outputs: Path,
@@ -315,11 +357,28 @@ def _count_reach(run_branches: WorkflowRunBranches,
             if branch_id in branches]
 
 
-def _draw_stages(run_branches: WorkflowRunBranches,
-                 touched: set[StageId]) -> list[DrawnStage]:
+def _measure_the_flow(run_branches: WorkflowRunBranches,
+                      cited: StageOutputCellCitation) -> list[FrameScale]:
+    """A lookup table's size is not the flow narrowing, and it is drawn no column here."""
+    beside = find_stages_beside_the_flow(run_branches, cited.stage_id)
+    return [step for step in measure_frame_scale(run_branches, cited)
+            if step.stage not in beside]
+
+
+def _name_the_lookups(run_branches: WorkflowRunBranches, from_stage: StageId,
+                      on_route: set[StageId]) -> list[StageId]:
+    """The lookup tables this figure read: named under the drawing, never drawn in it."""
+    beside = find_stages_beside_the_flow(run_branches, from_stage)
+    return [sid for sid in run_branches.ordered_stage_ids
+            if sid in beside and sid in on_route]
+
+
+def _draw_stages(run_branches: WorkflowRunBranches, touched: set[StageId],
+                 from_stage: StageId) -> list[DrawnStage]:
+    beside = find_stages_beside_the_flow(run_branches, from_stage)
     return [_draw_stage(run_branches, sid, position)
             for position, sid in enumerate(run_branches.ordered_stage_ids)
-            if sid in touched and sid in run_branches.stages]
+            if sid in touched and sid not in beside and sid in run_branches.stages]
 
 
 def _draw_stage(run_branches: WorkflowRunBranches, sid: StageId,

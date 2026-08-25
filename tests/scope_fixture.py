@@ -276,3 +276,48 @@ def review_tail() -> list[dict]:
                 "produces": [column("reviewed_total", "int")]},
         },
     ]
+
+
+TIER_CODE = '''
+def transform(row):
+    if row["portfolio"] == "Health":
+        tier = "clinical"
+    else:
+        tier = "built"
+    return {"tier": tier}
+'''
+
+
+def give_the_lookup_a_stage_of_its_own(specs: list[dict]) -> list[dict]:
+    """The same workflow with a stage between the lookup table and the join that reads it."""
+    tiered = []
+    for spec in specs:
+        if spec["id"] == "tag_portfolio":
+            tiered.append(_tier_agencies())
+            spec = {**spec, "inputs": [{"id": "both_regions"}, {"id": "tier_agencies"}],
+                    "signature": {**spec["signature"], "reads": [
+                        {"input": "both_regions",
+                         "columns": [column("agency_code", "str", False)]},
+                        {"input": "tier_agencies",
+                         "columns": [column("agency_code", "str", False),
+                                     column("portfolio", "str", False)]}]}}
+        tiered.append(spec)
+    return tiered
+
+
+def _tier_agencies() -> dict:
+    return {
+        "id": "tier_agencies", "type": "starlark_row_function", "cache": True,
+        "description": "Tiers a portfolio. AGENCY-B's Transport takes the else arm.",
+        "inputs": [{"id": "load_agencies"}],
+        "starlark": {
+            "summary": "Tiers a portfolio clinical where it is Health, else built.",
+            "corner_cases": [{"case": "portfolio is Transport",
+                              "expected": "tier is `built`"}],
+            "code": TIER_CODE,
+        },
+        "signature": {"form": "extends", "reads": [
+            {"input": "load_agencies",
+             "columns": [column("portfolio", "str", False)]}],
+            "adds": [column("tier", "str", False)], "rewrites": []},
+    }

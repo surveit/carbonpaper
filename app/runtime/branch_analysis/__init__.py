@@ -17,6 +17,7 @@ from app.runtime.branch_analysis.run_branches import (
 )
 from app.runtime.branch_analysis.run_branches import (
     find_reference_inputs as find_reference_inputs,
+    find_subject_inputs as find_subject_inputs,
 )
 from app.runtime.branch_analysis.run_branches import (
     reconstruct_run_branches as reconstruct_run_branches,

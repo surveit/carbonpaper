@@ -15,7 +15,6 @@
   if (!host) return;
 
   var D = JSON.parse(host.textContent);
-  var cols = [];
   var pickedNode = null;
   var pickedRow = null;
   var showAll = false;
@@ -32,8 +31,10 @@
     return '<table class="data-preview" data-stage="' + esc(stageId) + '">';
   };
   var COLUMN = 300, BAR = 11, HEAD = 52, GAP = 16, CUT_LINE = 11;
+  // Clear of the head: flush against it, the ribbons read as hanging off the text.
+  var BAND_GAP = 14;
   // HEAD plus a line per removal the widest column names above its bar.
-  var TOP = HEAD;
+  var TOP = HEAD + BAND_GAP;
   var LABEL_PITCH = 30;
   var SHORTEST_BAND = 260, TALLEST_BAND = 620, BAND_PER_NODE = 72, SWEEPS = 4;
 
@@ -72,7 +73,11 @@
   };
   var byId = function (id) { return document.getElementById(id); };
 
-  // ── which columns to draw ────────────────────────────────────────────────
+  // ── the drawing ──────────────────────────────────────────────────────────
+  //
+  // Every position here was decided in app/web/scope_drawing.py and arrives on the
+  // payload. Nothing below measures anything: it turns numbers into SVG and binds
+  // the clicks. See docs/scope-map.md.
 
   function branchesOn(path, stageId) {
     return (D.branch_paths[path] || []).filter(function (b) {
@@ -80,162 +85,41 @@
     });
   }
 
-  function branchesAt(i, stageId) {
-    return branchesOn(D.branch_path_index[i], stageId);
-  }
-
-  function nodeKey(column, i) {
-    return column.id + SEP + branchesAt(i, column.id).join(",");
-  }
-
   function nodeKeyForPath(stageId, path) {
     return stageId + SEP + branchesOn(path, stageId).join(",");
   }
 
-  function tally(column) {
-    var seen = new Map();
-    D.covers.ordinals.forEach(function (ordinal, i) {
-      var key = nodeKey(column, i);
-      var node = seen.get(key) || { key: key, branches: branchesAt(i, column.id),
-                                    rows: 0, on: [] };
-      node.rows += 1;
-      node.on.push(ordinal);
-      seen.set(key, node);
-    });
-    return Array.from(seen.values()).sort(function (a, b) { return b.rows - a.rows; });
+  function drawing() {
+    if (D.drilled) return (D.cuts[D.drilled.branch] || {}).drawn;
+    return showAll ? D.drawn_every_stage : D.drawn;
   }
 
-  // A removal is rows that LEFT here. An arm none of these rows took is not a
-  // loss — those rows carried on.
-  function leftHere(branch) {
-    return (D.branches[branch] || {}).role === "removes";
-  }
-
-  function aliasAt(stageId) {
-    return (D.aliased_merges || {})[stageId] || null;
-  }
-
-  function columns() {
-    var drawn = D.stages.filter(function (stage) {
-      return showAll || aliasAt(stage.id) ||
-        D.covers.ordinals.some(function (_, i) {
-          return branchesAt(i, stage.id).length;
-        });
-    });
-    return drawn.map(function (stage) {
-      var nodes = tally(stage);
-      var alias = aliasAt(stage.id);
-      // One node: the groups are aliased, so nothing here tells these rows apart.
-      if (alias) nodes.forEach(function (n) { n.aliasOf = alias; });
-      if (stage.id === D.citation.stage_id && !D.drilled) {
-        nodes.forEach(function (n) { n.isFigure = true; n.drawnRows = 1; });
-      }
-      var held = new Set(nodes.reduce(function (all, n) {
-        return all.concat(n.branches);
-      }, []));
-      var gone = (D.reach || []).filter(function (r) {
-        return D.branches[r.branch] && D.branches[r.branch].stage_id === stage.id &&
-               !held.has(r.branch) && leftHere(r.branch);
-      }).map(function (r) { return { branch: r.branch, rows: r.taken }; })
-        .sort(function (a, b) { return b.rows - a.rows; });
-      var expanded = !alias && stage.id !== D.nearest_merge &&
-        (D.resolved_merges || []).indexOf(stage.id) >= 0;
-      return Object.assign({}, stage,
-        { nodes: nodes, gone: gone, alias: alias, expanded: expanded });
-    }).filter(function (c) { return c.nodes.length || c.gone.length; });
-  }
-
-  // A column adds nothing when every row it separates was already separated. The
-  // cited cell's own stage is exempt: it is the figure, not a distinction, and
-  // dropping it leaves the last frame drawn looking like the answer.
-  function keepInformative(all) {
-    var running = D.covers.ordinals.map(function () { return ""; });
-    var kept = [];
-    all.forEach(function (column) {
-      var next = D.covers.ordinals.map(function (_, i) {
-        return running[i] + "|" + branchesAt(i, column.id).join(",");
-      });
-      if (column.id === D.citation.stage_id || column.gone.length || column.alias ||
-          column.expanded ||
-          new Set(next).size > new Set(running).size) {
-        kept.push(column);
-        running = next;
-      }
-    });
-    return kept;
+  function bars() {
+    return drawing().columns.reduce(function (all, c) {
+      return all.concat(c.bars);
+    }, []);
   }
 
   function shape() {
-    cols = columns();
-    // Inside a cut the question is what these rows DID, not how they differ from one
-    // another — dropping a column here would hide the arm that got them removed.
-    if (!showAll && !D.drilled) cols = keepInformative(cols);
     render();
   }
 
-  // ── the drawing ──────────────────────────────────────────────────────────
-
-  function labelOf(node) {
-    if (node.aliasOf) {
-      return num(node.aliasOf.on_route_groups_count) + " of " +
-        num(node.aliasOf.groups_count) + " groups, by " +
-        (node.aliasOf.group_by.join(", ") || "the whole frame");
-    }
-    if (node.isFigure) {
-      return D.citation.column + " = " + figure(D.citation.value) +
-        ", merged from " + num(node.rows);
-    }
-    var labels = node.branches.map(function (b) { return D.branches[b].label; });
-    return labels.length ? labels.join(" + ") : "—";
-  }
-
-  function nodeTip(n) {
-    if (!n.aliasOf) {
-      return labelOf(n) + " — " + num(n.rows) + " row" + (n.rows === 1 ? "" : "s");
-    }
-    return n.aliasOf.stage_id + " grouped " + num(n.aliasOf.rows_count) +
-      " rows into " + num(n.aliasOf.groups_count) + ". These " + num(n.rows) +
-      " came through " + num(n.aliasOf.on_route_groups_count) +
-      " of them. Click to list the groups.";
-  }
-
   function draw() {
-    var total = D.covers.ordinals.length || 1;
-    var band = measureBand();
-    var scale = Math.min.apply(null, cols.map(function (c) {
-      return (band - (c.nodes.length - 1) * GAP) / total;
-    }).concat([band / total]));
-    TOP = HEAD + countCutLines() * CUT_LINE;
-    var ribbons = gatherRibbons();
-    orderNodes(ribbons);
-    var x = 0;
-    cols.forEach(function (c) {
-      var y = TOP;
-      c.nodes.forEach(function (n) {
-        n.h = Math.max(2, (n.drawnRows == null ? n.rows : n.drawnRows) * scale);
-        n.y = y;
-        y += n.h + GAP;
-      });
-      c.x = x;
-      c.bottom = Math.max(y, placeLabels(c.nodes));
-      x += COLUMN;
-    });
-    stackRibbons(ribbons);
-    var foot = cols.some(function (c) { return c.alias || c.expanded; }) ? 1 : 0;
-    var height = Math.max.apply(null, cols.map(function (c) {
-      return c.bottom;
-    }).concat([TOP])) + 14 + foot * 17;
-
+    var g = drawing();
     var svg = byId("scope-svg");
-    svg.setAttribute("width", String(x));
-    svg.setAttribute("height", String(height));
-    svg.setAttribute("viewBox", "0 0 " + x + " " + height);
+    svg.setAttribute("width", String(g.width));
+    svg.setAttribute("height", String(g.height));
+    svg.setAttribute("viewBox", "0 0 " + g.width + " " + g.height);
     svg.innerHTML =
-      ribbons.map(drawRibbon).join("") +
-      cols.map(function (c) {
-        return c.nodes.map(function (n) { return drawNode(c, n); }).join("") +
-               drawHead(c);
+      g.ribbons.map(function (r) { return drawRibbon(g, r); }).join("") +
+      g.columns.map(function (c) {
+        return c.bars.map(function (b) { return drawBar(g, b); }).join("") +
+               drawHead(g, c);
       }).join("");
+    bindTheDrawing(svg);
+  }
+
+  function bindTheDrawing(svg) {
     svg.querySelectorAll("[data-node]").forEach(function (el) {
       el.onclick = function (event) { event.stopPropagation(); pick(el.dataset.node); };
     });
@@ -254,206 +138,63 @@
     svg.onclick = clearPick;
   }
 
-  // A ribbon travelling further up or down than it runs across bulges rather than
-  // flows, so the busiest column sets the height and COLUMN caps it.
-  function measureBand() {
-    var most = Math.max.apply(null, cols.map(function (c) {
-      return c.nodes.length;
-    }).concat([1]));
-    return Math.min(TALLEST_BAND, Math.max(SHORTEST_BAND, most * BAND_PER_NODE));
-  }
-
-  function gatherRibbons() {
-    var seen = new Map();
-    for (var ci = 0; ci < cols.length - 1; ci++) {
-      for (var i = 0; i < D.covers.ordinals.length; i++) {
-        var a = nodeAt(ci, i), b = nodeAt(ci + 1, i);
-        if (!a || !b) continue;
-        var key = ci + a.key + ">" + b.key;
-        var ribbon = seen.get(key) || { ci: ci, a: a, b: b, rows: 0 };
-        ribbon.rows += 1;
-        seen.set(key, ribbon);
-      }
-    }
-    return Array.from(seen.values());
-  }
-
-  // ── keeping the ribbons apart ────────────────────────────────────────────
-  //
-  // Two ribbons cross when the nodes they run between sit in the opposite order in
-  // the two columns, or when they leave one node in a different order from the one
-  // they arrive in. Both are ordering, not geometry, so both are fixable here.
-
-  // Each column takes the average position of the columns either side, weighted by
-  // rows, until the sweeps settle. The barycentre heuristic, and cheap at this size.
-  function orderNodes(ribbons) {
-    for (var pass = 0; pass < SWEEPS; pass++) {
-      for (var down = 1; down < cols.length; down++) sortColumn(down, down - 1, ribbons);
-      for (var up = cols.length - 2; up >= 0; up--) sortColumn(up, up + 1, ribbons);
-    }
-  }
-
-  function sortColumn(ci, neighbour, ribbons) {
-    var place = new Map();
-    cols[neighbour].nodes.forEach(function (n, i) { place.set(n.key, i); });
-    var held = new Map();
-    cols[ci].nodes.forEach(function (n, i) { held.set(n.key, i); });
-    var pull = new Map();
-    ribbons.forEach(function (r) {
-      if (r.ci !== Math.min(ci, neighbour)) return;
-      var here = ci < neighbour ? r.a : r.b;
-      var there = ci < neighbour ? r.b : r.a;
-      if (!place.has(there.key)) return;
-      var got = pull.get(here.key) || { sum: 0, rows: 0 };
-      got.sum += place.get(there.key) * r.rows;
-      got.rows += r.rows;
-      pull.set(here.key, got);
-    });
-    cols[ci].nodes.sort(function (p, q) {
-      return meanPlace(pull, held, p) - meanPlace(pull, held, q);
-    });
-  }
-
-  // A node with nothing running to that neighbour has no opinion, so it stays put.
-  function meanPlace(pull, held, node) {
-    var got = pull.get(node.key);
-    return got ? got.sum / got.rows : held.get(node.key);
-  }
-
-  // Each end is stacked in the order of the node at the OTHER end, so ribbons sharing
-  // a node fan out instead of swapping over.
-  function stackRibbons(ribbons) {
-    ribbons.forEach(function (r) {
-      r.h0 = r.a.h * (r.rows / Math.max(1, r.a.rows));
-      r.h1 = r.b.h * (r.rows / Math.max(1, r.b.rows));
-    });
-    stackEnd(ribbons, "a", "b", "y0", "h0");
-    stackEnd(ribbons, "b", "a", "y1", "h1");
-  }
-
-  function stackEnd(ribbons, end, other, edge, depth) {
-    var groups = new Map();
-    ribbons.forEach(function (r) {
-      var group = groups.get(r[end].key) || [];
-      group.push(r);
-      groups.set(r[end].key, group);
-    });
-    groups.forEach(function (group) {
-      group.sort(function (p, q) { return p[other].y - q[other].y; });
-      var y = group[0][end].y;
-      group.forEach(function (r) { r[edge] = y; y += r[depth]; });
-    });
-  }
-
-  function nodeAt(ci, i) {
-    var want = nodeKey(cols[ci], i);
-    return cols[ci].nodes.find(function (n) { return n.key === want; });
-  }
-
-  // Each end is a share of ITS OWN node's height, so a ribbon into a node drawn
+  // Each end is a share of ITS OWN bar's height, so a ribbon into a bar drawn
   // shorter than its inputs tapers — which is what an aggregate collapsing rows
   // looks like.
-  function drawRibbon(r) {
-    var x0 = cols[r.ci].x + BAR, x1 = cols[r.ci + 1].x;
-    var lit = isLit(r.a) && isLit(r.b);
-    var h0 = r.h0, h1 = r.h1, y0 = r.y0, y1 = r.y1;
-    var m = (x0 + x1) / 2;
+  function drawRibbon(g, r) {
+    var lit = isLit(r.from_key) && isLit(r.into_key);
+    var m = (r.x0 + r.x1) / 2;
     return '<path class="scope-ribbon' + (lit ? " is-lit" : "") + '" d="' +
-      "M" + x0 + "," + y0 + "C" + m + "," + y0 + " " + m + "," + y1 + " " + x1 +
-      "," + y1 + "v" + h1 + "C" + m + "," + (y1 + h1) + " " + m + "," + (y0 + h0) +
-      " " + x0 + "," + (y0 + h0) + 'Z"/>';
+      "M" + r.x0 + "," + r.y0 + "C" + m + "," + r.y0 + " " + m + "," + r.y1 + " " +
+      r.x1 + "," + r.y1 + "v" + r.h1 + "C" + m + "," + (r.y1 + r.h1) + " " + m +
+      "," + (r.y0 + r.h0) + " " + r.x0 + "," + (r.y0 + r.h0) + 'Z"/>';
   }
 
-  function isLit(node) {
-    return !pickedNode || node.key === pickedNode;
+  function isLit(key) {
+    return !pickedNode || key === pickedNode;
   }
 
-  // Returns where the label stack ends, which outruns the bars once they are thin.
-  function placeLabels(nodes) {
-    var y = TOP;
-    nodes.forEach(function (n) {
-      n.labelY = Math.max(y, n.y + n.h / 2);
-      y = n.labelY + LABEL_PITCH;
-    });
-    return y;
+  function drawBar(g, b) {
+    var dim = pickedNode && b.key !== pickedNode;
+    var edge = b.x + g.bar_width;
+    var leader = b.leader_at == null ? ""
+      : '<path class="scope-leader" d="M' + edge + "," + b.leader_at + "H" +
+        (edge + 6) + "V" + b.label_y + "H" + (edge + 10) + '"/>';
+    return '<rect class="scope-bar-mark' + (b.implied ? " is-implied" : "") +
+      (dim ? " is-dim" : "") + '" data-node="' + esc(b.key) + '" data-tip="' +
+      esc(b.tip) + '" x="' + b.x + '" y="' + b.y + '" width="' + g.bar_width +
+      '" height="' + b.height + '"/>' + leader +
+      '<text class="scope-node" data-node="' + esc(b.key) + '" data-tip="' +
+      esc(b.tip) + '" x="' + b.text_x + '" y="' + (b.label_y + 3) + '">' +
+      esc(b.label) + "</text>" +
+      '<text class="scope-count" x="' + b.text_x + '" y="' + (b.label_y + 14) +
+      '">' + num(b.rows) + "</text>";
   }
 
-  function drawNode(c, n) {
-    var room = COLUMN - BAR - 14;
-    var implied = n.branches.every(function (b) {
-      return D.branches[b].reason !== "code";
-    });
-    var dim = pickedNode && n.key !== pickedNode;
-    var mark = '<rect class="scope-bar-mark' + (implied ? " is-implied" : "") +
-      (dim ? " is-dim" : "") + '" data-node="' + esc(n.key) + '" data-tip="' +
-      esc(nodeTip(n)) + '" x="' + c.x + '" y="' + n.y + '" width="' + BAR +
-      '" height="' + n.h + '"/>';
-    var mid = n.y + n.h / 2;
-    var leader = Math.abs(n.labelY - mid) > 2
-      ? '<path class="scope-leader" d="M' + (c.x + BAR) + "," + mid + "H" +
-        (c.x + BAR + 6) + "V" + n.labelY + "H" + (c.x + BAR + 10) + '"/>'
-      : "";
-    var tx = c.x + BAR + 12;
-    var full = labelOf(n);
-    var short = clip(full, Math.floor(room / 6.1));
-    return mark + leader +
-      '<text class="scope-node" data-node="' + esc(n.key) +
-      '" data-tip="' + esc(nodeTip(n)) + '" x="' + tx +
-      '" y="' + (n.labelY + 3) + '">' +
-      esc(short) + "</text>" +
-      '<text class="scope-count" x="' + tx + '" y="' + (n.labelY + 14) + '">' +
-      num(n.rows) + "</text>";
+  function drawHead(g, c) {
+    return '<text class="scope-head" data-tip="' + esc(c.head_tip) + '" x="' + c.x +
+      '" y="15">' + esc(c.head_label) + "</text>" +
+      '<text class="scope-head scope-head-note" data-tip="' + esc(c.head_tip) +
+      '" x="' + c.x + '" y="27">' + esc(c.head_note) + "</text>" +
+      (c.scale_label ? '<text class="scope-out" data-tip="' + esc(c.scale_tip) +
+        '" x="' + c.x + '" y="39">' + esc(c.scale_label) + "</text>" : "") +
+      c.removals.map(function (r) { return drawRemoval(g, c, r); }).join("") +
+      drawMergeControl(g, c);
   }
 
-  function drawHead(c) {
-    var room = COLUMN - 14;
-    var about = c.id + " — " + (c.description || c.type);
-    return '<text class="scope-head" data-tip="' + esc(about) + '" x="' + c.x +
-      '" y="15">' + esc(clip(c.id, Math.floor(room / 7))) + "</text>" +
-      '<text class="scope-head scope-head-note" data-tip="' + esc(about) +
-      '" x="' + c.x + '" y="27">' +
-      esc(clip(c.description || c.type, Math.floor(room / 5.6))) + "</text>" +
-      drawScale(c, room) +
-      drawMergeControl(c);
+  function drawRemoval(g, c, r) {
+    return '<text class="scope-out-gone" data-cut="' + esc(r.branch) +
+      '" data-tip="' + esc(r.tip) + '" x="' + c.x + '" y="' +
+      (39 + (r.line + 1) * 11) + '">' + esc(r.label) + OUTWARD + "</text>";
   }
 
-  function countCutLines() {
-    return Math.max.apply(null, cols.map(function (c) {
-      return c.gone.length;
-    }).concat([0]));
-  }
-
-  // How much of the frame here the figure descends from, on every column that has
-  // one: a blank reads as missing, not as all of them.
-  function drawScale(c, room) {
-    var step = (D.scale || []).find(function (s) {
-      return s.stage === c.id && s.rows_count;
-    });
-    var budget = Math.floor(room / 5.6);
-    var frame = step
-      ? '<text class="scope-out" data-tip="' + esc(c.id + " holds " +
-          num(step.rows_count) + " rows; this figure descends from " +
-          num(step.included_rows_count)) + '" x="' + c.x + '" y="39">' +
-        esc(clip(num(step.included_rows_count) + " of " + num(step.rows_count) +
-                 (step.rows_count === 1 ? " row at " : " rows at ") +
-                 c.glyph + " " + c.id, budget)) +
-        "</text>"
-      : "";
-    return frame + c.gone.map(function (gone, i) {
-      return drawRemoval(c, gone, i, budget);
-    }).join("");
-  }
-
-  // A count, never a ribbon: 44,963 drawn beside 40 to scale is the scale-mixing
-  // that makes a lie. It counts rows of the frame this stage READ, one column left.
-  function drawRemoval(c, gone, i, room) {
-    var label = num(gone.rows) + (gone.rows === 1 ? " row" : " rows") + " filtered here";
-    return '<text class="scope-out-gone" data-cut="' + esc(gone.branch) +
-      '" data-tip="' + esc(num(gone.rows) + (gone.rows === 1 ? " row was" : " rows were") +
-      " dropped from the workflow at this stage. Click to draw them in a new tab: " +
-      "they are a different set of rows, so the page around this one stops fitting.") +
-      '" x="' + c.x + '" y="' + (39 + (i + 1) * CUT_LINE) + '">' +
-      esc(clip(label, room - 2) + OUTWARD) + "</text>";
+  // Aliased or expanded, a merge stage offers the other reading of itself here.
+  function drawMergeControl(g, c) {
+    if (!c.merge_label) return "";
+    return '<text class="scope-expand" data-expand="' + esc(c.stage.id) +
+      '" data-want="' + (c.merge_wants ? "1" : "0") + '" x="' +
+      (c.x + g.bar_width + 12) + '" y="' + (c.bottom + 7) + '">' +
+      esc(c.merge_label) + "</text>";
   }
 
   // The standalone scope page, never `location`: drawn inside the lineage page's
@@ -465,32 +206,6 @@
     });
     return "/project/" + encodeURIComponent(D.project_id) + "/runs/" +
       encodeURIComponent(D.run_id) + "/scope?" + query.toString();
-  }
-
-  // A merge splits on values, not on anything a person wrote, hence the last sentence.
-  function sayWhatExpandingWouldDraw(alias) {
-    var rows = alias.on_route_rows_count, groups = alias.on_route_groups_count;
-    return alias.stage_id + " groups " + num(rows) + " relevant row" +
-      (rows === 1 ? "" : "s") + " into " + num(groups) + " group" +
-      (groups === 1 ? "" : "s") + " based on your data. Click to draw a node for " +
-      "each group. This is a rare operation because groups based on data are " +
-      "usually not qualitatively different.";
-  }
-
-  // Aliased or expanded, a merge stage offers the other reading of itself here.
-  function drawMergeControl(c) {
-    if (!c.alias && !c.expanded) return "";
-    var y = c.bottom + 4;
-    var want = c.alias ? "1" : "0";
-    var text = c.alias
-      ? "split into " + num(c.alias.on_route_groups_count) + " groups"
-      : "fold " + num(c.nodes.length) +
-        (c.nodes.length === 1 ? " group back" : " groups back");
-    var tip = c.alias ? sayWhatExpandingWouldDraw(c.alias)
-                      : "Draw " + c.id + " as one node again.";
-    return '<text class="scope-expand" data-expand="' + esc(c.id) + '" data-want="' +
-      want + '" data-tip="' + esc(tip) + '" x="' + (c.x + BAR + 12) + '" y="' +
-      (y + 3) + '">' + esc(text) + "</text>";
   }
 
   // ── what is picked ───────────────────────────────────────────────────────
@@ -511,9 +226,8 @@
   function selected() {
     if (pickedRow != null) return [pickedRow];
     if (!pickedNode) return D.covers.ordinals;
-    var node = cols.reduce(function (all, c) { return all.concat(c.nodes); }, [])
-      .find(function (n) { return n.key === pickedNode; });
-    return node ? node.on : [];
+    var bar = bars().find(function (b) { return b.key === pickedNode; });
+    return bar ? bar.on : [];
   }
 
   // ── drilling into a cut ──────────────────────────────────────────────────
@@ -537,6 +251,8 @@
       stages: cut.stages, reach: [], scale: [], sampled_from: cut.total,
       aliased_merges: cut.aliased_merges, resolved_merges: cut.resolved_merges,
       nearest_merge: cut.nearest_merge,
+      // A cut's rows arrive as counts per path, which say no frame each was a row of.
+      came_through: [], came_through_index: [],
       drilled: { branch: branch, label: D.branches[branch].label,
                  stage: D.branches[branch].stage_id, total: cut.total },
     });
@@ -568,11 +284,21 @@
     renderBar();
     renderTable();
     renderTabs();
-    var cut = cols.some(function (c) { return c.gone.length; });
-    byId("scope-legend").textContent = cut
-      ? "An underlined count is rows that stage took out of the workflow — click " +
-        "one to draw them in a new tab. Nothing in the drawing is scaled to it."
-      : "";
+    var cut = drawing().columns.some(function (c) { return c.removals.length; });
+    byId("scope-legend").textContent =
+      (cut ? "An underlined count is rows that stage took out of the workflow — click " +
+        "one to draw them in a new tab. Nothing in the drawing is scaled to it. " : "") +
+      sayWhatIsNotDrawn();
+  }
+
+  // The whole lookup side is left out of the drawing, so it is named here instead.
+  function sayWhatIsNotDrawn() {
+    var lookups = D.lookup_tables || [];
+    if (!lookups.length || D.drilled) return "";
+    return "This figure also read " + (lookups.length === 1 ? "a lookup table, " :
+      lookups.length + " lookup tables, ") + lookups.join(", ") +
+      ". Neither they nor the stages behind them are drawn yet: a row that matched " +
+      "one leaves as one row, which no ribbon here carries.";
   }
 
   function renderHere() {
@@ -727,9 +453,8 @@
   // The figure's node is ONE output row, not a slice of what fed it.
   function pickedFigure() {
     if (!pickedNode || D.drilled) return false;
-    return cols.some(function (c) {
-      return c.id === D.citation.stage_id &&
-        c.nodes.some(function (n) { return n.key === pickedNode; });
+    return bars().some(function (b) {
+      return b.is_figure && b.key === pickedNode;
     });
   }
 

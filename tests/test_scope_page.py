@@ -10,12 +10,19 @@ from fastapi.testclient import TestClient
 import app.services.run as run_service
 from app.main import app
 from app.services.project import save_working_copy_as_version
-from scope_fixture import review_tail, stage_specs, write_inputs
+from scope_fixture import (
+    give_the_lookup_a_stage_of_its_own,
+    review_tail,
+    stage_specs,
+    write_inputs,
+)
 from stage_seed import set_stages
 
 PROJECT = "scope_fixture"
 # Its own project: the run halts at the review stage, which the tests above must not.
 HALTED_PROJECT = "scope_fixture_halted"
+# Its own project: the lookup table it joins has a branching stage between the two.
+TIERED_PROJECT = "scope_fixture_tiered"
 
 
 def _execute(project: str, stages: list[dict], projects_root) -> str:
@@ -29,6 +36,13 @@ def _execute(project: str, stages: list[dict], projects_root) -> str:
 @pytest.fixture
 def run_id(projects_root):
     return _execute(PROJECT, stage_specs(projects_root / PROJECT / "data"), projects_root)
+
+
+@pytest.fixture
+def tiered_run_id(projects_root):
+    data = projects_root / TIERED_PROJECT / "data"
+    return _execute(TIERED_PROJECT,
+                    give_the_lookup_a_stage_of_its_own(stage_specs(data)), projects_root)
 
 
 @pytest.fixture
@@ -209,3 +223,61 @@ def test_show_every_stage_can_reach_every_stage_on_the_route(run_id):
         PROJECT, run_id, "total_of_means", "summed_means", 0, suffix=".json")).json()
     assert ([stage["id"] for stage in payload["stages"]]
             == [step["stage"] for step in payload["scale"]])
+
+def test_the_page_carries_the_two_panes_the_script_fills(run_id):
+    page = TestClient(app).get(
+        scope_url(PROJECT, run_id, "grant_totals", "total_amount", 0))
+    assert 'id="scope-tabs"' in page.text
+    assert 'id="scope-table"' in page.text
+    assert 'id="scope-transform"' in page.text
+
+
+def test_a_row_that_matched_nothing_in_a_lookup_never_came_through_it(run_id):
+    payload = TestClient(app).get(
+        scope_url(PROJECT, run_id, "grant_totals", "total_amount", 0, suffix=".json")).json()
+    came = [payload["came_through"][index] for index in payload["came_through_index"]]
+    assert all("both_regions" in stages for stages in came)
+    assert any("load_agencies" not in stages for stages in came)
+
+
+def test_a_lookup_table_is_named_under_the_drawing_rather_than_drawn_in_it(run_id):
+    payload = TestClient(app).get(
+        scope_url(PROJECT, run_id, "grant_totals", "total_amount", 0, suffix=".json")).json()
+    drawn = [stage["id"] for stage in payload["stages"]]
+    assert payload["lookup_tables"] == ["load_agencies"]
+    assert "load_agencies" not in drawn
+    assert "load_east" in drawn
+
+
+
+def test_the_walk_crosses_the_join_and_keeps_going_up_the_lookup(tiered_run_id):
+    payload = TestClient(app).get(scope_url(
+        TIERED_PROJECT, tiered_run_id, "grant_totals", "total_amount", 0,
+        suffix=".json")).json()
+    came = [payload["came_through"][index] for index in payload["came_through_index"]]
+    matched = [stages for stages in came if "load_agencies" in stages]
+    assert matched, "no row of this figure matched the lookup table"
+    assert all("tier_agencies" in stages for stages in matched)
+    assert any("load_agencies" not in stages for stages in came)
+
+
+def test_a_branch_the_lookup_took_is_on_the_path_though_no_column_draws_it(tiered_run_id):
+    payload = TestClient(app).get(scope_url(
+        TIERED_PROJECT, tiered_run_id, "grant_totals", "total_amount", 0,
+        suffix=".json")).json()
+    arms = {branch: fact["label"] for branch, fact in payload["branches"].items()
+            if fact["stage_id"] == "tier_agencies"}
+    assert arms, "the lookup's own branch is in no path this figure took"
+    took = {branch for path in payload["branch_paths"] for branch in path}
+    assert took & set(arms)
+    assert "tier_agencies" not in [stage["id"] for stage in payload["stages"]]
+
+
+def test_every_stage_behind_a_lookup_is_left_out_of_the_drawing(tiered_run_id):
+    payload = TestClient(app).get(scope_url(
+        TIERED_PROJECT, tiered_run_id, "grant_totals", "total_amount", 0,
+        suffix=".json")).json()
+    drawn = [stage["id"] for stage in payload["stages"]]
+    assert payload["lookup_tables"] == ["load_agencies", "tier_agencies"]
+    assert not set(payload["lookup_tables"]) & set(drawn)
+    assert "both_regions" in drawn

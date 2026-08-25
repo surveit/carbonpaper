@@ -17,6 +17,7 @@ from app.runtime.branch_analysis.run_branches import (
     MERGE_EDGE,
     WorkflowRunBranches,
     find_stage_position,
+    find_subject_inputs,
 )
 from app.runtime.lineage import RowParent
 
@@ -80,6 +81,21 @@ def measure_frame_scale(run_branches: WorkflowRunBranches,
                        included_rows_count=len(reached[sid]))
             for sid in run_branches.ordered_stage_ids
             if sid in reached and run_branches.row_counts[sid]]
+
+
+def find_stages_beside_the_flow(run_branches: WorkflowRunBranches,
+                                from_stage: StageId) -> set[StageId]:
+    """Stages no path reaches from `from_stage` without crossing into a lookup table."""
+    return set(run_branches.stages) - _walk_back_along_the_flow(run_branches, from_stage)
+
+
+def find_stages_each_row_came_through(
+        run_branches: WorkflowRunBranches, at_stage: StageId,
+        ordinals: list[RowOrdinal]) -> list[list[StageId]]:
+    """Per row: every frame it was a row of, which its branch path holds only part of."""
+    memo: dict[tuple[StageId, RowOrdinal], frozenset[StageId]] = {}
+    return [sorted(_came_through(run_branches, at_stage, ordinal, memo))
+            for ordinal in ordinals]
 
 
 def find_stages_each_stage_feeds(run_branches: WorkflowRunBranches
@@ -193,6 +209,33 @@ def _reach_upstream(run_branches: WorkflowRunBranches, rows: Sequence[RowRef]
                 seen.add(step)
                 front.append(step)
     return found
+
+
+def _walk_back_along_the_flow(run_branches: WorkflowRunBranches,
+                              from_stage: StageId) -> set[StageId]:
+    on_flow: set[StageId] = set()
+    front = [from_stage]
+    while front:
+        sid = front.pop()
+        if sid in on_flow or sid not in run_branches.stages:
+            continue
+        on_flow.add(sid)
+        front.extend(find_subject_inputs(run_branches.stages[sid]))
+    return on_flow
+
+
+def _came_through(run_branches: WorkflowRunBranches, sid: StageId, row: RowOrdinal,
+                  memo: dict[tuple[StageId, RowOrdinal], frozenset[StageId]]
+                  ) -> frozenset[StageId]:
+    key = (sid, row)
+    if key not in memo:
+        found = {sid}
+        # A load names its own rows as their parents, to hold the file they came out of.
+        for parent in _one_hop_up(run_branches, sid, row):
+            if parent != key:
+                found |= _came_through(run_branches, parent[0], parent[1], memo)
+        memo[key] = frozenset(found)
+    return memo[key]
 
 
 def _one_hop_up(run_branches: WorkflowRunBranches, sid: StageId, row: RowOrdinal
