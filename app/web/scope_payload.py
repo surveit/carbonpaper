@@ -43,6 +43,7 @@ from app.web.merge_alias import (
     name_the_groups,
 )
 from app.web.config import render_row_number
+from app.web.diagrams import TYPE_GLYPH
 
 # Cells for a wider set than this are sampled; the counts never are.
 CELL_ROWS = 400
@@ -67,6 +68,8 @@ class DrawnStage(BaseModel):
 
     id: StageId
     type: str
+    # The type's mark from the run page's tags, so a column says what kind of stage it is.
+    glyph: str
     description: str
     # Index in the run's execution order: the drawing's left-to-right.
     position: int
@@ -325,6 +328,7 @@ def _draw_stage(run_branches: WorkflowRunBranches, sid: StageId,
     authored = stage.stage
     return DrawnStage(
         id=sid, type=str(getattr(authored.type, "value", authored.type)),
+        glyph=TYPE_GLYPH[authored.type],
         position=position, description=authored.description or "",
         code=read_stage_code(stage) or read_decision_source(stage))
 

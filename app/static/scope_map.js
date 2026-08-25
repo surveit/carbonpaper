@@ -15,7 +15,6 @@
   if (!host) return;
 
   var D = JSON.parse(host.textContent);
-  var BACK = [];
   var cols = [];
   var pickedNode = null;
   var pickedRow = null;
@@ -436,7 +435,8 @@
           num(step.rows_count) + " rows; this figure descends from " +
           num(step.included_rows_count)) + '" x="' + c.x + '" y="39">' +
         esc(clip(num(step.included_rows_count) + " of " + num(step.rows_count) +
-                 (step.rows_count === 1 ? " row here" : " rows here"), budget)) +
+                 (step.rows_count === 1 ? " row at " : " rows at ") +
+                 c.glyph + " " + c.id, budget)) +
         "</text>"
       : "";
     return frame + c.gone.map(function (gone, i) {
@@ -518,33 +518,13 @@
 
   // ── drilling into a cut ──────────────────────────────────────────────────
   //
-  // A drilled view is one branch id, so `?cut=` addresses it. The rows behind a cut
-  // arrive as counts per path; the synthetic index below sizes the ribbons and is
-  // never a name for a row.
-
-  function leaveCut() {
-    if (!closeCut()) return;
-    history.pushState({ cut: null }, "", addressOf(null));
-  }
-  window.scopeLeaveCut = leaveCut;
-
-  function addressOf(branch) {
-    var query = new URLSearchParams(location.search);
-    if (branch) query.set("cut", branch); else query.delete("cut");
-    return location.pathname + "?" + query.toString();
-  }
-
-  window.addEventListener("popstate", function () {
-    var wanted = new URLSearchParams(location.search).get("cut");
-    if (wanted === (D.drilled || {}).branch) return;
-    if (wanted) openCut(wanted); else closeCut();
-  });
+  // A cut is a page of its own, addressed by `?cut=`, and this reads it once on
+  // load. The rows behind it arrive as counts per path; the synthetic index below
+  // sizes the ribbons and is never a name for a row.
 
   function openCut(branch) {
     var cut = (D.cuts || {})[branch];
     if (!cut) return false;
-    if (D.drilled) closeCut();
-    BACK.push({ map: D, node: pickedNode });
     var index = [];
     cut.rows_per_branch_path.forEach(function (rows, path) {
       for (var n = 0; n < rows; n++) index.push(path);
@@ -561,16 +541,6 @@
                  stage: D.branches[branch].stage_id, total: cut.total },
     });
     pickedNode = null;
-    pickedRow = null;
-    shape();
-    return true;
-  }
-
-  function closeCut() {
-    var previous = BACK.pop();
-    if (!previous) return false;
-    D = previous.map;
-    pickedNode = previous.node;
     pickedRow = null;
     shape();
     return true;
@@ -600,24 +570,19 @@
     renderTabs();
     var cut = cols.some(function (c) { return c.gone.length; });
     byId("scope-legend").textContent = cut
-      ? "The underlined count under a column is rows that stage took out of the " +
-        "workflow — click one to draw them in a new tab. Nothing is scaled to it."
+      ? "An underlined count is rows that stage took out of the workflow — click " +
+        "one to draw them in a new tab. Nothing in the drawing is scaled to it."
       : "";
   }
 
   function renderHere() {
-    var here = byId("scope-here");
     var note = byId("scope-drilled");
     var section = document.querySelector(".scope");
     if (!D.drilled) {
-      here.hidden = true;
       section.removeAttribute("data-drilled");
       note.textContent = "";
       return;
     }
-    here.hidden = false;
-    here.textContent = "back to " + D.citation.stage_id + "." + D.citation.column;
-    here.onclick = leaveCut;
     section.setAttribute("data-drilled", "");
     note.innerHTML = "<b>" + num(D.drilled.total) + "</b> row" +
       (D.drilled.total === 1 ? "" : "s") + " that <code>" + esc(D.drilled.stage) +

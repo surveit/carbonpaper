@@ -22,22 +22,6 @@
 }
 .scope-every { margin-left: auto; }
 
-/* The one place a reader leaves the figure for a set of rows that is not its own. */
-.scope-here {
-  display: inline-block;
-  padding: 1px 9px 2px;
-  border: 1px solid currentColor;
-  border-radius: 11px;
-  color: var(--accent);
-  background: var(--bg);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.scope-here:hover { background: var(--accent); color: var(--on-dark); }
-/* `display` on the rule above would otherwise beat the hidden attribute. */
-.scope-here[hidden] { display: none; }
-.scope-here::before { content: "\2039\00a0"; }
-
 /* Wide content scrolls inside its own box; the page body never scrolls sideways. */
 .scope-drawing { overflow-x: auto; border: 1px solid var(--border); border-radius: 6px; }
 .scope-drawing svg { display: block; }
