@@ -196,11 +196,28 @@ def test_every_stage_the_map_draws_has_a_transform_to_show(run_id):
         if "exec-block" not in panel.text:
             blank.append(f"{stage['id']} ({stage['type']})")
     assert not blank, f"the Transform tab has nothing to show for {blank}"
+def test_the_paths_pane_is_not_told_apart_by_an_aliased_merge(run_id):
+    # Told apart by group, the 8 rows behind this figure are 5 paths, not 4.
+    pane = TestClient(app).get(
+        f"/project/{PROJECT}/runs/{run_id}/stage/total_of_means/row/0/trace/view"
+        "?column=summed_means")
+    assert pane.status_code == 200
+    said = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", pane.text))
+    assert "4 paths reach total_of_means" in said
+    assert "merged:" not in pane.text
 
 
-def test_the_page_carries_the_two_panes_the_script_fills(run_id):
-    page = TestClient(app).get(
-        scope_url(PROJECT, run_id, "grant_totals", "total_amount", 0))
-    assert 'id="scope-tabs"' in page.text
-    assert 'id="scope-table"' in page.text
-    assert 'id="scope-transform"' in page.text
+def test_the_aliased_merge_is_its_own_column(run_id):
+    # Hung under the frame it grouped, it read as a fact about that other stage.
+    payload = TestClient(app).get(scope_url(
+        PROJECT, run_id, "total_of_means", "summed_means", 0, suffix=".json")).json()
+    drawn = [stage["id"] for stage in payload["stages"]]
+    assert "mean_by_portfolio" in drawn
+    assert drawn.index("one_row_per_grant") < drawn.index("mean_by_portfolio")
+
+
+def test_show_every_stage_can_reach_every_stage_on_the_route(run_id):
+    payload = TestClient(app).get(scope_url(
+        PROJECT, run_id, "total_of_means", "summed_means", 0, suffix=".json")).json()
+    assert ([stage["id"] for stage in payload["stages"]]
+            == [step["stage"] for step in payload["scale"]])

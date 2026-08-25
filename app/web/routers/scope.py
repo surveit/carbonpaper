@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.core.errors import (
@@ -12,7 +12,7 @@ from app.core.errors import (
 )
 from app.runtime.errors import MissingLineage
 from app.core.json_types import JsonDict
-from app.models.branch_analysis import BranchId, BranchRole
+from app.models.branch_analysis import BranchId
 from app.models.claims import StageOutputCellCitation
 from app.web import scope_view
 from app.web.scope_payload import CutRows, ScopeMap
@@ -23,15 +23,18 @@ from app.web.project_view import shell_state
 router = APIRouter()
 
 _SCOPE_PATH = "/project/{project_id}/runs/{run_id}/scope"
+# Repeatable: `?expand=a&expand=b` resolves both merges. docs/branch-analysis.md
+_EXPAND = Query(default=None)
 
 
 @router.get(_SCOPE_PATH, response_class=HTMLResponse)
 async def scope_page(request: Request, project_id: str, run_id: str,
-                     stage: str, row: int, column: str):
+                     stage: str, row: int, column: str,
+                     expand: list[str] | None = _EXPAND):
     citation = _cite(run_id, stage, row, column)
     try:
         scope, cuts, lookups = scope_view.load_scope_map(
-            project_id, run_id, citation)
+            project_id, run_id, citation, frozenset(expand or ()))
     except (StageNotInRun, RowOutOfRange, RunVersionUnresolvableError) as missing:
         raise HTTPException(status_code=404, detail=str(missing)) from missing
     return templates.TemplateResponse(
@@ -49,10 +52,12 @@ async def scope_page(request: Request, project_id: str, run_id: str,
 
 
 @router.get(f"{_SCOPE_PATH}.json", response_class=JSONResponse)
-async def scope_json(project_id: str, run_id: str, stage: str, row: int, column: str):
+async def scope_json(project_id: str, run_id: str, stage: str, row: int, column: str,
+                     expand: list[str] | None = _EXPAND):
     citation = _cite(run_id, stage, row, column)
     try:
-        scope, cuts, _ = scope_view.load_scope_map(project_id, run_id, citation)
+        scope, cuts, _ = scope_view.load_scope_map(project_id, run_id, citation,
+                                                   frozenset(expand or ()))
     except (StageNotInRun, RowOutOfRange, RunVersionUnresolvableError) as missing:
         raise HTTPException(status_code=404, detail=str(missing)) from missing
     return JSONResponse(_payload(scope, cuts))
@@ -60,11 +65,13 @@ async def scope_json(project_id: str, run_id: str, stage: str, row: int, column:
 
 @router.get(f"{_SCOPE_PATH}/panel", response_class=HTMLResponse)
 async def scope_panel(request: Request, project_id: str, run_id: str,
-                      stage: str, row: int, column: str):
+                      stage: str, row: int, column: str,
+                      expand: list[str] | None = _EXPAND):
     """The same map, shell-less, for the frame the row lineage page holds it in."""
     citation = _cite(run_id, stage, row, column)
     try:
-        scope, cuts, lookups = scope_view.load_scope_map(project_id, run_id, citation)
+        scope, cuts, lookups = scope_view.load_scope_map(project_id, run_id, citation,
+                                                         frozenset(expand or ()))
     except (MissingLineage, StageNotInRun, RowOutOfRange,
             RunVersionUnresolvableError) as no_map:
         # A pane that 404s shows the reader a browser error page inside a tab.
@@ -96,10 +103,6 @@ def _payload(scope: ScopeMap, cuts: dict[BranchId, CutRows]) -> JsonDict:
     drawn = scope.model_dump(mode="json")
     drawn["cuts"] = {branch: cut.model_dump(mode="json")
                      for branch, cut in cuts.items()}
-    # A merge excludes rows only relative to this citation, so the page is told which.
-    drawn["excluded_merges"] = sorted(
-        branch for branch, cut in cuts.items()
-        if scope.branches[branch].role is not BranchRole.removes)
     return drawn
 
 

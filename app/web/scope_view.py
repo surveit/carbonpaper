@@ -22,11 +22,13 @@ from app.web.scope_payload import (
 )
 
 
-def load_scope_map(project_id: str, run_id: str, citation: StageOutputCellCitation
+def load_scope_map(project_id: str, run_id: str, citation: StageOutputCellCitation,
+                   expand: frozenset[StageId] = frozenset()
                    ) -> tuple[ScopeMap, dict[BranchId, CutRows], set[StageId]]:
     run_branches = read_run_branches(project_id, run_id)
     outputs = resolve_run_dir(project_id, run_id) / "outputs"
-    scope = build_scope_map(run_branches, project_id, run_id, outputs, citation)
+    scope = build_scope_map(run_branches, project_id, run_id, outputs, citation,
+                            expand)
     cuts = find_cuts_to_offer(run_branches, outputs, scope)
     return scope, cuts, find_lookup_table_stages(run_branches)
 

@@ -29,7 +29,7 @@
   };
   var COLUMN = 300, BAR = 11, TOP = 52, GAP = 16;
   var LABEL_PITCH = 30, STUB = 26;
-  var SHORTEST_BAND = 170, BAND_PER_NODE = 46, SWEEPS = 4;
+  var SHORTEST_BAND = 260, TALLEST_BAND = 620, BAND_PER_NODE = 72, SWEEPS = 4;
 
   var num = function (n) { return Number(n).toLocaleString("en-US"); };
   // A cited cell is not always a number — a group key is a figure a reader may cite
@@ -99,21 +99,28 @@
     return Array.from(seen.values()).sort(function (a, b) { return b.rows - a.rows; });
   }
 
-  // A stub is for rows that LEFT here: removed from the frame, or grouped elsewhere.
-  // An arm none of these rows took is not a loss — those rows carried on.
+  // A stub is for rows that LEFT here. An arm none of these rows took is not a
+  // loss — those rows carried on.
   function leftHere(branch) {
-    var role = (D.branches[branch] || {}).role;
-    return role === "removes" || (D.excluded_merges || []).indexOf(branch) >= 0;
+    return (D.branches[branch] || {}).role === "removes";
+  }
+
+  function aliasAt(stageId) {
+    return (D.aliased_merges || {})[stageId] || null;
   }
 
   function columns() {
     var drawn = D.stages.filter(function (stage) {
-      return D.covers.ordinals.some(function (_, i) {
-        return branchesAt(i, stage.id).length;
-      });
+      return showAll || aliasAt(stage.id) ||
+        D.covers.ordinals.some(function (_, i) {
+          return branchesAt(i, stage.id).length;
+        });
     });
     return drawn.map(function (stage) {
       var nodes = tally(stage);
+      var alias = aliasAt(stage.id);
+      // One node: the groups are aliased, so nothing here tells these rows apart.
+      if (alias) nodes.forEach(function (n) { n.aliasOf = alias; });
       if (stage.id === D.citation.stage_id && !D.drilled) {
         nodes.forEach(function (n) { n.isFigure = true; n.drawnRows = 1; });
       }
@@ -125,7 +132,10 @@
                !held.has(r.branch) && leftHere(r.branch);
       }).map(function (r) { return { branch: r.branch, rows: r.taken }; })
         .sort(function (a, b) { return b.rows - a.rows; });
-      return Object.assign({}, stage, { nodes: nodes, gone: gone });
+      var expanded = !alias && stage.id !== D.nearest_merge &&
+        (D.resolved_merges || []).indexOf(stage.id) >= 0;
+      return Object.assign({}, stage,
+        { nodes: nodes, gone: gone, alias: alias, expanded: expanded });
     }).filter(function (c) { return c.nodes.length || c.gone.length; });
   }
 
@@ -139,7 +149,8 @@
       var next = D.covers.ordinals.map(function (_, i) {
         return running[i] + "|" + branchesAt(i, column.id).join(",");
       });
-      if (column.id === D.citation.stage_id || column.gone.length ||
+      if (column.id === D.citation.stage_id || column.gone.length || column.alias ||
+          column.expanded ||
           new Set(next).size > new Set(running).size) {
         kept.push(column);
         running = next;
@@ -159,12 +170,27 @@
   // ── the drawing ──────────────────────────────────────────────────────────
 
   function labelOf(node) {
+    if (node.aliasOf) {
+      return num(node.aliasOf.on_route_groups_count) + " of " +
+        num(node.aliasOf.groups_count) + " groups, by " +
+        (node.aliasOf.group_by.join(", ") || "the whole frame");
+    }
     if (node.isFigure) {
       return D.citation.column + " = " + figure(D.citation.value) +
         ", merged from " + num(node.rows);
     }
     var labels = node.branches.map(function (b) { return D.branches[b].label; });
     return labels.length ? labels.join(" + ") : "—";
+  }
+
+  function nodeTip(n) {
+    if (!n.aliasOf) {
+      return labelOf(n) + " — " + num(n.rows) + " row" + (n.rows === 1 ? "" : "s");
+    }
+    return n.aliasOf.stage_id + " grouped " + num(n.aliasOf.rows_count) +
+      " rows into " + num(n.aliasOf.groups_count) + ". These " + num(n.rows) +
+      " came through " + num(n.aliasOf.on_route_groups_count) +
+      " of them. Click to list the groups.";
   }
 
   function draw() {
@@ -189,7 +215,7 @@
     });
     stackRibbons(ribbons);
     var goneRows = Math.max.apply(null, cols.map(function (c) {
-      return c.gone.length;
+      return c.gone.length + ((c.alias || c.expanded) ? 1 : 0);
     }).concat([0]));
     var height = Math.max.apply(null, cols.map(function (c) {
       return c.bottom;
@@ -211,6 +237,12 @@
     svg.querySelectorAll("[data-cut]").forEach(function (el) {
       el.onclick = function (event) { event.stopPropagation(); pick(el.dataset.cut); };
     });
+    svg.querySelectorAll("[data-expand]").forEach(function (el) {
+      el.onclick = function (event) {
+        event.stopPropagation();
+        location.href = expandUrl(el.dataset.expand, el.dataset.want === "1");
+      };
+    });
     svg.onclick = clearPick;
   }
 
@@ -220,7 +252,7 @@
     var most = Math.max.apply(null, cols.map(function (c) {
       return c.nodes.length;
     }).concat([1]));
-    return Math.min(COLUMN, Math.max(SHORTEST_BAND, most * BAND_PER_NODE));
+    return Math.min(TALLEST_BAND, Math.max(SHORTEST_BAND, most * BAND_PER_NODE));
   }
 
   function gatherRibbons() {
@@ -346,8 +378,8 @@
     var dim = pickedNode && n.key !== pickedNode;
     var mark = '<rect class="scope-bar-mark' + (implied ? " is-implied" : "") +
       (dim ? " is-dim" : "") + '" data-node="' + esc(n.key) + '" data-tip="' +
-      esc(labelOf(n) + " — " + num(n.rows) + " row" + (n.rows === 1 ? "" : "s")) +
-      '" x="' + c.x + '" y="' + n.y + '" width="' + BAR + '" height="' + n.h + '"/>';
+      esc(nodeTip(n)) + '" x="' + c.x + '" y="' + n.y + '" width="' + BAR +
+      '" height="' + n.h + '"/>';
     var mid = n.y + n.h / 2;
     var leader = Math.abs(n.labelY - mid) > 2
       ? '<path class="scope-leader" d="M' + (c.x + BAR) + "," + mid + "H" +
@@ -358,7 +390,7 @@
     var short = clip(full, Math.floor(room / 6.1));
     return mark + leader +
       '<text class="scope-node" data-node="' + esc(n.key) +
-      '" data-tip="' + esc(full) + '" x="' + tx +
+      '" data-tip="' + esc(nodeTip(n)) + '" x="' + tx +
       '" y="' + (n.labelY + 3) + '">' +
       esc(short) + "</text>" +
       '<text class="scope-count" x="' + tx + '" y="' + (n.labelY + 14) + '">' +
@@ -374,7 +406,8 @@
       '" x="' + c.x + '" y="27">' +
       esc(clip(c.description || c.type, Math.floor(room / 5.6))) + "</text>" +
       drawScale(c, room) +
-      c.gone.map(function (g, i) { return drawStub(c, g, i); }).join("");
+      c.gone.map(function (g, i) { return drawStub(c, g, i); }).join("") +
+      drawMergeControl(c);
   }
 
   // The frame here held rows this figure has no ancestor among. A count, never a
@@ -389,6 +422,23 @@
       "</text>";
   }
 
+  // Aliased or expanded, a merge stage offers the other reading of itself here.
+  function drawMergeControl(c) {
+    if (!c.alias && !c.expanded) return "";
+    var y = c.bottom + 4 + c.gone.length * 17;
+    var want = c.alias ? "1" : "0";
+    var text = c.alias
+      ? "split into " + num(c.alias.on_route_groups_count) + " groups"
+      : "fold " + num(c.nodes.length) + " groups back";
+    var tip = c.alias
+      ? c.id + " grouped " + num(c.alias.rows_count) + " rows into " +
+        num(c.alias.groups_count) + ". Draw a node per group these rows went into."
+      : "Draw " + c.id + " as one node again.";
+    return '<text class="scope-expand" data-expand="' + esc(c.id) + '" data-want="' +
+      want + '" data-tip="' + esc(tip) + '" x="' + (c.x + BAR + 12) + '" y="' +
+      (y + 3) + '">' + esc(text) + "</text>";
+  }
+
   function drawStub(c, gone, i) {
     var y = c.bottom + 4 + i * 17;
     var fact = D.branches[gone.branch];
@@ -396,7 +446,7 @@
     return '<line class="scope-stub" x1="' + c.x + '" y1="' + y + '" x2="' +
       (c.x + STUB) + '" y2="' + y + '"/>' +
       '<text class="scope-stub-label" data-cut="' + esc(c.id + SEP + gone.branch) +
-      '" data-tip="' + esc(fact.label + " — " + num(gone.rows) + " row" +
+      '" data-tip="' + esc(fact.label + " \u2014 " + num(gone.rows) + " row" +
       (gone.rows === 1 ? "" : "s") + ", none of them in this figure") +
       '" x="' + (c.x + STUB + 5) + '" y="' + (y + 3) + '">' +
       esc(clip(num(gone.rows) + " " + fact.label, budget)) + "</text>";
@@ -496,6 +546,20 @@
     pickedRow = null;
     shape();
     return true;
+  }
+
+  // ── expanding a merge ────────────────────────────────────────────────────
+  //
+  // A merge's groups are aliased into one node by default. Expanding one asks the
+  // route to resolve it, so the drawing splits into a node per group.
+
+  function expandUrl(stageId, want) {
+    var query = new URLSearchParams(location.search);
+    query.delete("expand");
+    (D.resolved_merges || []).concat(want ? [stageId] : []).forEach(function (id) {
+      if (id !== D.nearest_merge && (want || id !== stageId)) query.append("expand", id);
+    });
+    return location.pathname + "?" + query.toString();
   }
 
   // ── the words under the drawing ──────────────────────────────────────────
