@@ -4,36 +4,14 @@
 
 .scope { max-width: 100%; }
 
-.scope-figure {
-  border-left: 3px solid var(--accent);
+/* Boxed because it only appears while the drawing is a cut and not the figure. */
+.scope-drilled {
+  border-left: 3px solid var(--state-failed);
   background: var(--sunk);
   padding: 0.7rem 1rem;
-  margin-bottom: 1rem;
+  margin: 0 0 1rem;
 }
-.scope-cell { margin: 0 0 0.35rem; }
-.scope-beta { margin-right: 0.5rem; vertical-align: 1px; }
-.scope-cell code { font-size: 0.95em; }
-.scope-formula { margin-left: 0.5rem; font-size: 0.85em; }
-.scope-answers { margin: 0; }
-.scope-drilled { margin: 0; }
-.scope[data-drilled] .scope-answers,
-.scope[data-drilled] .scope-scale,
-.scope[data-drilled] .scope-cell { display: none; }
 .scope:not([data-drilled]) .scope-drilled { display: none; }
-.scope[data-drilled] .scope-figure { border-left-color: var(--state-failed); }
-.scope-scale { margin: 0.5rem 0 0; color: var(--muted); font-size: 0.85rem; }
-
-.scope-funnel {
-  display: inline-flex;
-  gap: 0.3rem;
-  align-items: baseline;
-  margin-left: 0.4rem;
-  font-variant-numeric: tabular-nums;
-  font-family: var(--mono, ui-monospace, Menlo, monospace);
-  font-size: 0.78rem;
-}
-.scope-funnel .scope-of { opacity: 0.55; }
-.scope-funnel i { opacity: 0.4; font-style: normal; }
 
 .scope-controls {
   display: flex;
@@ -42,6 +20,7 @@
   margin-bottom: 0.5rem;
   font-size: 0.85rem;
 }
+.scope-every { margin-left: auto; }
 
 /* The one place a reader leaves the figure for a set of rows that is not its own. */
 .scope-here {
@@ -95,6 +74,11 @@
   stroke-dasharray: 2 2; }
 #scope-svg text.scope-stub-label { fill: var(--state-failed-ink); font-size: 9.5px;
   cursor: pointer; }
+/* Amber and finer: these rows are still in the frame, so they are not a loss. */
+#scope-svg .scope-stub-off { stroke: var(--state-warn); stroke-width: 1;
+  stroke-dasharray: 1 3; }
+#scope-svg text.scope-stub-off-label { fill: var(--state-warn-ink); font-size: 9.5px;
+  cursor: help; }
 
 .scope-legend { font-size: 0.8rem; margin: 0.4rem 0 0.8rem; }
 

@@ -3,46 +3,37 @@
   THE SCOPE OF ONE FIGURE — which rows produced a cited number, and what told them
   apart from the rows that did not.
 
-  The order is the reader's question order: the figure, then what its rows do and do
-  not establish, then how small a slice of the run they are, then the drawing, then
+  The order is the reader's question order: what no row fed, then the drawing, then
   the rows themselves. Every distinction drawn was recorded while the run executed;
   docs/scope-map.md says what each one means.
+
+  The surface around this names the figure — the row lineage page in its header, the
+  scope page in its title — so nothing here repeats the cell.
 
   Rendered into the scope page and, by _scope_panel.html, into the frame the row
   lineage page's Relevant rows tab holds.
 
   Context the route passes:
-    scope      = app.web.scope_payload.ScopeMap
-    answers    = the sentence under the figure (scope_view.say_what_the_rows_answer)
-    unfed      = what no row fed, or None when every row it names has rows behind it
-    off_screen = the widest frame's share, or None when the figure covers all of it
-    payload    = the same map as JSON, plus `cuts`, for the drawing
+    scope   = app.web.scope_payload.ScopeMap
+    unfed   = what no row fed, or None when every row it names has rows behind it
+    payload = the same map as JSON, plus `cuts`, for the drawing
 #}
 <section class="scope">
-  <header class="scope-figure">
-    <p class="scope-cell">
-      <span class="badge pending scope-beta">beta</span>
-      <code>{{ scope.citation.stage_id }}</code> row {{ scope.citation.row_ordinal | row_number }},
-      column <code>{{ scope.citation.column }}</code>
-    </p>
-    <p class="scope-answers">{{ answers }}</p>
-    {# Written by scope_map.js while a cut is drawn: the sentences above describe the
-       figure, and the drawing then does not. #}
-    <p class="scope-drilled" id="scope-drilled"></p>
-    {% if off_screen %}
-    <p class="scope-scale">
-      {{ off_screen }}
-    </p>
-    {% endif %}
-  </header>
+  {# Written by scope_map.js while a cut is drawn, when the drawing is no longer
+     the figure and only this sentence says so. #}
+  <p class="scope-drilled" id="scope-drilled"></p>
 
   {% if unfed %}
   <p class="banner banner-failed">{{ severity_icon("error") }}{{ unfed }}</p>
   {% endif %}
 
   <div class="scope-controls">
-    <label><input type="checkbox" id="scope-every-stage"> show every stage</label>
     <span class="scope-here" id="scope-here" hidden></span>
+    {# On by default: every column carries its own frame count and off-path count,
+       which a column dropped for separating nothing would take with it. #}
+    <label class="switch scope-every"><input type="checkbox" id="scope-every-stage" checked>
+      <span class="switch-track"><span class="switch-knob"></span></span>
+      <span class="switch-label">show every stage</span></label>
   </div>
 
   <div class="scope-drawing"><svg id="scope-svg" role="img"

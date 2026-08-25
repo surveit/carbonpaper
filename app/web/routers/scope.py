@@ -33,7 +33,7 @@ async def scope_page(request: Request, project_id: str, run_id: str,
                      expand: list[str] | None = _EXPAND):
     citation = _cite(run_id, stage, row, column)
     try:
-        scope, cuts, lookups = scope_view.load_scope_map(
+        scope, cuts = scope_view.load_scope_map(
             project_id, run_id, citation, frozenset(expand or ()))
     except (StageNotInRun, RowOutOfRange, RunVersionUnresolvableError) as missing:
         raise HTTPException(status_code=404, detail=str(missing)) from missing
@@ -41,10 +41,7 @@ async def scope_page(request: Request, project_id: str, run_id: str,
         request, "scope_map.html",
         {
             "project": project_id, "run_id": run_id, "scope": scope,
-            "answers": scope_view.say_what_the_rows_answer(scope),
             "unfed": scope_view.say_what_no_row_fed(scope),
-            "off_screen": scope_view.say_how_much_is_off_screen(scope.scale, lookups),
-            "funnel": scope_view.narrow_the_funnel(scope.scale, lookups),
             "payload": _payload(scope, cuts),
             **_shell(project_id, run_id),
         },
@@ -56,8 +53,8 @@ async def scope_json(project_id: str, run_id: str, stage: str, row: int, column:
                      expand: list[str] | None = _EXPAND):
     citation = _cite(run_id, stage, row, column)
     try:
-        scope, cuts, _ = scope_view.load_scope_map(project_id, run_id, citation,
-                                                   frozenset(expand or ()))
+        scope, cuts = scope_view.load_scope_map(project_id, run_id, citation,
+                                                frozenset(expand or ()))
     except (StageNotInRun, RowOutOfRange, RunVersionUnresolvableError) as missing:
         raise HTTPException(status_code=404, detail=str(missing)) from missing
     return JSONResponse(_payload(scope, cuts))
@@ -70,8 +67,8 @@ async def scope_panel(request: Request, project_id: str, run_id: str,
     """The same map, shell-less, for the frame the row lineage page holds it in."""
     citation = _cite(run_id, stage, row, column)
     try:
-        scope, cuts, lookups = scope_view.load_scope_map(project_id, run_id, citation,
-                                                         frozenset(expand or ()))
+        scope, cuts = scope_view.load_scope_map(project_id, run_id, citation,
+                                                frozenset(expand or ()))
     except (MissingLineage, StageNotInRun, RowOutOfRange,
             RunVersionUnresolvableError) as no_map:
         # A pane that 404s shows the reader a browser error page inside a tab.
@@ -85,9 +82,7 @@ async def scope_panel(request: Request, project_id: str, run_id: str,
         {
             "project": project_id, "run_id": run_id, "scope": scope,
             "citation": citation,
-            "answers": scope_view.say_what_the_rows_answer(scope),
             "unfed": scope_view.say_what_no_row_fed(scope),
-            "off_screen": scope_view.say_how_much_is_off_screen(scope.scale, lookups),
             "payload": _payload(scope, cuts),
         },
     )

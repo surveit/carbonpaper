@@ -9,12 +9,12 @@ from app.models.claims import StageOutputCellCitation
 from app.models.branch_analysis import BranchReason, BranchRole
 from app.runtime.manifest import read_run_manifest
 from app.runtime.branch_analysis import (
+    find_reference_inputs,
     find_rows_that_took,
     reconstruct_run_branches,
 )
 from app.services.scope import (
     find_contributing_rows,
-    find_lookup_table_stages,
     measure_frame_scale,
 )
 from app.services.project import save_working_copy_as_version
@@ -94,7 +94,7 @@ def test_a_branch_that_removes_nothing_is_not_a_loss(scoped):
 def test_the_scale_names_the_frame_the_figure_barely_covers(scoped):
     run, _ = scoped
     scale = measure_frame_scale(run, cite("grant_totals", "total_amount", 0, 2200))
-    lookups = find_lookup_table_stages(run)
+    lookups = find_reference_inputs(run.stages)
     widest = max((s for s in scale if s.stage not in lookups), key=lambda s: s.rows_count)
     assert (widest.stage, widest.rows_count, widest.included_rows_count) == (
         "both_regions", 10, 5)

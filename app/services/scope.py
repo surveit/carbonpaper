@@ -16,7 +16,6 @@ from app.models.schema import StageId
 from app.runtime.branch_analysis.run_branches import (
     MERGE_EDGE,
     WorkflowRunBranches,
-    find_reference_inputs,
     find_stage_position,
 )
 from app.runtime.lineage import RowParent
@@ -81,11 +80,6 @@ def measure_frame_scale(run_branches: WorkflowRunBranches,
                        included_rows_count=len(reached[sid]))
             for sid in run_branches.ordered_stage_ids
             if sid in reached and run_branches.row_counts[sid]]
-
-
-def find_lookup_table_stages(run_branches: WorkflowRunBranches) -> set[StageId]:
-    """A lookup table's size is not the flow narrowing, so a funnel leaves it out."""
-    return find_reference_inputs(run_branches.stages)
 
 
 def _expand(run_branches: WorkflowRunBranches, stage_id: StageId, ordinal: RowOrdinal,

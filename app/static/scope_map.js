@@ -218,7 +218,7 @@
     });
     stackRibbons(ribbons);
     var goneRows = Math.max.apply(null, cols.map(function (c) {
-      return c.gone.length + ((c.alias || c.expanded) ? 1 : 0);
+      return stubCount(c) + ((c.alias || c.expanded) ? 1 : 0);
     }).concat([0]));
     var height = Math.max.apply(null, cols.map(function (c) {
       return c.bottom;
@@ -410,15 +410,18 @@
       esc(clip(c.description || c.type, Math.floor(room / 5.6))) + "</text>" +
       drawScale(c, room) +
       c.gone.map(function (g, i) { return drawStub(c, g, i); }).join("") +
+      drawOffPathStub(c) +
       drawMergeControl(c);
   }
 
-  // The frame here held rows this figure has no ancestor among. A count, never a
-  // ribbon: 45,061 drawn beside 40 to scale is the scale-mixing that makes a lie.
+  // How much of the frame here the figure descends from, on every column that has
+  // one: a blank reads as missing, not as all of them. A count, never a ribbon —
+  // 45,061 drawn beside 40 to scale is the scale-mixing that makes a lie.
   function drawScale(c, room) {
     var step = (D.scale || []).find(function (s) { return s.stage === c.id; });
-    if (!step || !step.rows_count || step.included_rows_count >= step.rows_count) return "";
-    var label = num(step.included_rows_count) + " of " + num(step.rows_count) + " rows here";
+    if (!step || !step.rows_count) return "";
+    var label = num(step.included_rows_count) + " of " + num(step.rows_count) +
+      (step.rows_count === 1 ? " row here" : " rows here");
     return '<text class="scope-out" data-tip="' + esc(c.id + " holds " +
       num(step.rows_count) + " rows; this figure descends from " + num(step.included_rows_count)) +
       '" x="' + c.x + '" y="39">' + esc(clip(label, Math.floor(room / 5.6))) +
@@ -428,7 +431,7 @@
   // Aliased or expanded, a merge stage offers the other reading of itself here.
   function drawMergeControl(c) {
     if (!c.alias && !c.expanded) return "";
-    var y = c.bottom + 4 + c.gone.length * 17;
+    var y = c.bottom + 4 + stubCount(c) * 17;
     var want = c.alias ? "1" : "0";
     var text = c.alias
       ? "split into " + num(c.alias.on_route_groups_count) + " groups"
@@ -442,17 +445,44 @@
       (y + 3) + '">' + esc(text) + "</text>";
   }
 
+  // Rows the frame here still holds that this figure has no ancestor among. Not a
+  // removal: they are alive, and they went into a row the figure did not come through.
+  function countOffPath(c) {
+    var step = (D.scale || []).find(function (s) { return s.stage === c.id; });
+    return step ? step.rows_count - step.included_rows_count : 0;
+  }
+
+  function stubCount(c) {
+    return c.gone.length + (countOffPath(c) ? 1 : 0);
+  }
+
+  function drawOffPathStub(c) {
+    var rows = countOffPath(c);
+    if (!rows) return "";
+    var y = c.bottom + 4 + c.gone.length * 17;
+    var budget = Math.floor((COLUMN - BAR - STUB - 10) / 6.3);
+    return '<line class="scope-stub-off" x1="' + c.x + '" y1="' + y + '" x2="' +
+      (c.x + STUB) + '" y2="' + y + '"/>' +
+      '<text class="scope-stub-off-label" data-tip="' + esc(num(rows) +
+      (rows === 1 ? " row at this stage is present, but does not"
+                  : " rows at this stage are present, but do not") +
+      " contribute any information to the row under investigation") +
+      '" x="' + (c.x + STUB + 5) + '" y="' + (y + 3) + '">' +
+      esc(clip(num(rows) + (rows === 1 ? " row" : " rows") + " not on path", budget)) +
+      "</text>";
+  }
+
   function drawStub(c, gone, i) {
     var y = c.bottom + 4 + i * 17;
-    var fact = D.branches[gone.branch];
     var budget = Math.floor((COLUMN - BAR - STUB - 10) / 6.3);
     return '<line class="scope-stub" x1="' + c.x + '" y1="' + y + '" x2="' +
       (c.x + STUB) + '" y2="' + y + '"/>' +
       '<text class="scope-stub-label" data-cut="' + esc(c.id + SEP + gone.branch) +
-      '" data-tip="' + esc(fact.label + " \u2014 " + num(gone.rows) + " row" +
-      (gone.rows === 1 ? "" : "s") + ", none of them in this figure") +
+      '" data-tip="' + esc(num(gone.rows) + (gone.rows === 1 ? " row was" : " rows were") +
+      " dropped from the workflow at this stage") +
       '" x="' + (c.x + STUB + 5) + '" y="' + (y + 3) + '">' +
-      esc(clip(num(gone.rows) + " " + fact.label, budget)) + "</text>";
+      esc(clip(num(gone.rows) + (gone.rows === 1 ? " row" : " rows") +
+               " filtered here", budget)) + "</text>";
   }
 
   // ── what is picked ───────────────────────────────────────────────────────
@@ -577,10 +607,13 @@
       return all.concat(c.gone.map(function (g) { return g.rows; }));
     }, [0]);
     var widest = Math.max.apply(null, stubs);
-    byId("scope-legend").textContent = widest
-      ? "A dashed stub is a branch none of these rows took. Its count is true and its " +
-        "width is not — the biggest is " + num(widest) + " against " +
-        num(D.covers.ordinals.length) + " rows. Click one to draw those rows instead."
+    var offPath = cols.some(countOffPath);
+    byId("scope-legend").textContent = widest || offPath
+      ? (widest ? "A red stub is rows the stage took out of the workflow — click one to " +
+          "draw them. Its count is true and its width is not: the biggest is " +
+          num(widest) + " against " + num(D.covers.ordinals.length) + " rows. " : "") +
+        (offPath ? "An amber stub is rows the frame here still holds that this figure " +
+          "did not come through." : "")
       : "";
   }
 
@@ -820,6 +853,8 @@
 
   var every = byId("scope-every-stage");
   if (every) {
+    // The markup owns the default, and a reload restoring the box agrees with it.
+    showAll = every.checked;
     every.onchange = function () { showAll = every.checked; shape(); };
   }
   shape();

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.models.branch_analysis import BranchId, BranchRole, FrameScale
+from app.models.branch_analysis import BranchId, BranchRole
 from app.models.claims import StageOutputCellCitation
 from app.models.schema import StageId
 from app.models.workflow import Workflow
@@ -11,7 +11,6 @@ from app.runtime.branch_analysis import (
     reconstruct_run_branches,
 )
 from app.services import run as run_service
-from app.services.scope import find_lookup_table_stages
 from app.services.versioning import load_version_stages
 from app.services.workspace import resolve_run_dir
 from app.web.scope_payload import (
@@ -24,24 +23,12 @@ from app.web.scope_payload import (
 
 def load_scope_map(project_id: str, run_id: str, citation: StageOutputCellCitation,
                    expand: frozenset[StageId] = frozenset()
-                   ) -> tuple[ScopeMap, dict[BranchId, CutRows], set[StageId]]:
+                   ) -> tuple[ScopeMap, dict[BranchId, CutRows]]:
     run_branches = read_run_branches(project_id, run_id)
     outputs = resolve_run_dir(project_id, run_id) / "outputs"
     scope = build_scope_map(run_branches, project_id, run_id, outputs, citation,
                             expand)
-    cuts = find_cuts_to_offer(run_branches, outputs, scope)
-    return scope, cuts, find_lookup_table_stages(run_branches)
-
-
-def say_what_the_rows_answer(scope: ScopeMap) -> str:
-    """One sentence under the figure: which rows the drawing is about."""
-    covered = len(scope.covers.ordinals)
-    where = f"{covered:,} row{'' if covered == 1 else 's'} of {scope.covers.at_stage}"
-    merged_at = scope.covers.regrained_at[1:]
-    if not merged_at:
-        return f"Computed from {where}."
-    return (f"Computed from {where}, merged at {' and '.join(merged_at)} before this "
-            f"figure was taken.")
+    return scope, find_cuts_to_offer(run_branches, outputs, scope)
 
 
 def say_what_no_row_fed(scope: ScopeMap) -> str | None:
@@ -56,33 +43,6 @@ def say_what_no_row_fed(scope: ScopeMap) -> str | None:
                 f"{scope.covers.at_stage}.")
     return (f"The run recorded nothing behind {unfed:,} of the {named:,} rows this "
             f"figure names at {scope.covers.at_stage}.")
-
-
-def say_how_much_is_off_screen(scale: list[FrameScale],
-                               lookups: set[StageId]) -> str | None:
-    """The widest frame the figure passed through, so a slice is not read as the whole."""
-    flow = [step for step in scale if step.stage not in lookups]
-    if not flow:
-        return None
-    widest = max(flow, key=lambda step: step.rows_count)
-    if widest.included_rows_count >= widest.rows_count:
-        return None
-    share = widest.included_rows_count / widest.rows_count * 100
-    printed = f"{share:.2f}%" if share < 0.5 else f"{share:.1f}%"
-    return (f"{widest.included_rows_count:,} of the {widest.rows_count:,} rows at "
-            f"{widest.stage} — {printed} of the widest frame this figure passed "
-            f"through. The rest of that frame is not drawn.")
-
-
-def narrow_the_funnel(scale: list[FrameScale],
-                      lookups: set[StageId]) -> list[FrameScale]:
-    """The narrowing, with a lookup table and a repeat of the step before it dropped."""
-    steps: list[FrameScale] = []
-    for step in (s for s in scale if s.stage not in lookups):
-        here = (step.rows_count, step.included_rows_count)
-        if not steps or (steps[-1].rows_count, steps[-1].included_rows_count) != here:
-            steps.append(step)
-    return steps
 
 
 def say_why_rows_left(cut: CutRows, role: BranchRole) -> str:
