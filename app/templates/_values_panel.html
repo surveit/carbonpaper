@@ -49,6 +49,10 @@
     {%- endif %}
     {% if step.unreadable %}
     <p class="vu-nosheet">No sheet for this stage — {{ step.unreadable }}.</p>
+    {% elif not step.rows_reached %}
+    <p class="vu-nosheet">No row of <code>{{ step.stage_id }}</code> fed this figure. It writes
+      a column the value came through, but this run recorded none of its
+      {{ "{:,}".format(step.rows_total) }} rows behind this one.</p>
     {% else %}
     <p class="legend"><span><i class="diff-col-new"></i>a column this stage wrote</span>
       <span><i class="diff-cell-changed"></i>a cell this stage rewrote</span>

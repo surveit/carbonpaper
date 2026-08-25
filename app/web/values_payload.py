@@ -38,6 +38,10 @@ class ValuesStep(BaseModel):
     diff: RowAlignedDiff | None
     # Positional against `columns`, as text. Read only where `diff` is None.
     rows: list[list[str]]
+    # Positional against `rows`: where each one sits in the stage's own frame.
+    row_ordinals: list[int]
+    # How many rows of this stage the figure came through, before the sheet's cap.
+    rows_reached: int
     columns_total: int
     unreadable: str | None
 
