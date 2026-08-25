@@ -24,7 +24,7 @@
         {% if f.href %}<a class="infile" href="{{ f.href }}">{{ f.filename }} ↗</a>
         {% else %}<span class="infile">{{ f.filename }}</span>{% endif %}
         {% if f.source_row is not none %}
-        <span class="inrow">this row is row {{ f.source_row }} of it</span>{% endif %}
+        <span class="inrow">this row is row {{ f.source_row | row_number }} of it</span>{% endif %}
         {% if not f.href %}
         <span class="inmiss">no file this project holds now hashes to the bytes this run
           read, so there is no page for it</span>{% endif %}
