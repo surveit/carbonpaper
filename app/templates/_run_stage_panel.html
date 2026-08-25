@@ -152,8 +152,8 @@
         <span class="preview-actions">{% set rows_href = links.stage_rows(stage.stage_id) %}{% if rows_href %}· <a href="{{ rows_href }}">view all rows</a>{% endif %}
         · <a href="{{ links.stage_csv(stage.stage_id) }}">⬇ CSV</a></span></div>
       <div class="table-scroll"><table class="data-preview">
-        <thead><tr><th class="syw-col">lineage</th>{% for c in preview.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
-        <tbody>{% for row in preview.preview %}<tr><td class="syw-cell">{% set trace_href = links.row_trace(stage.stage_id, loop.index0) %}{% if trace_href %}<a href="{{ trace_href }}" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a>{% endif %}</td>{% for c in preview.columns %}{% set v = row[c] | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}</tr>{% endfor %}</tbody>
+        <thead><tr>{% for c in preview.columns %}<th{% if links.opens_a_cell() %} data-column="{{ c }}"{% endif %}>{{ c }}</th>{% endfor %}</tr></thead>
+        <tbody>{% for row in preview.preview %}<tr{% set trace_href = links.row_trace(stage.stage_id, loop.index0) %}{% if trace_href %} data-href="{{ trace_href }}"{% endif %}>{% for c in preview.columns %}{% set v = row[c] | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}</tr>{% endfor %}</tbody>
       </table></div>
     </div>
     {% elif preview and preview.error %}<p class="muted"><em>output preview unavailable: {{ preview.error }}</em></p>
