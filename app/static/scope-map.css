@@ -112,10 +112,12 @@
 /* .stage-tabs sets display, which would otherwise beat the hidden attribute. */
 #scope-tabs[hidden] { display: none; }
 
-.scope-source {
-  background: var(--sunk); border: 1px solid var(--border); border-radius: 6px;
-  padding: 0.6rem 0.8rem; margin: 0.6rem 0; overflow-x: auto;
-  font-family: var(--mono, ui-monospace, Menlo, monospace); font-size: 0.75rem;
-  line-height: 1.6; white-space: pre;
+/* The stage panel's own code block (stage-detail.css), with a gutter beside it. Both
+   columns are pre-formatted text at one line-height, which is what aligns them: a
+   wrapped line in either would put every mark below it against the wrong line. */
+pre.code.scope-lit { display: flex; }
+pre.code.scope-lit > .scope-gutter {
+  flex: none; padding-right: 0.75rem; white-space: pre; user-select: none;
 }
-.scope-source .is-lit { background: var(--state-warn-bg); }
+pre.code.scope-lit > code { flex: auto; white-space: pre; overflow-x: auto; }
+.scope-lit-legend { font-size: 0.8rem; margin: 0.4rem 0 0; }
