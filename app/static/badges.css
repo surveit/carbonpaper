@@ -9,6 +9,16 @@
     font-size: 13px;
     color: var(--muted);
 }
+.legend span { display: flex; align-items: center; gap: 5px; }
+/* The swatch carries the tint of the state it names; which tint is the naming
+   stylesheet's business, so nothing here is a colour. */
+.legend i {
+    display: inline-block;
+    width: 13px;
+    height: 13px;
+    border: 1px solid var(--border-strong);
+    border-radius: 3px;
+}
 
 /* Type badges */
 .badge, .type-tag {

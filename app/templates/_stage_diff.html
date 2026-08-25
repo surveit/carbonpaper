@@ -90,18 +90,29 @@
     {%- set column_mark = {'added': '+', 'dropped': '−'} %}
     {%- set column_title = {'added': 'added by this stage',
                             'dropped': 'dropped by this stage, carrying the input value'} %}
+    {# `column_writers` and `cited_column` are the Values used tab's: the column
+       this page is tracing, and where each other one was written. Absent
+       everywhere else, so the header is the plain one. #}
+    {%- set writers = column_writers | default({}, true) %}
     <thead><tr>{% if full_rows %}<th class="row-num">#</th>{% endif %}<th class="syw-col">lineage</th>
       {%- for column in diff.columns %}
-      {%- if column.state == 'carried' %}<th>
-      {%- else %}<th class="{{ cell_class[column.state] }}" title="{{ column_title[column.state] }}"><span class="diff-mark">{{ column_mark[column.state] }}</span>
-      {%- endif %}<span class="diff-col-name">{{ column.name }}</span></th>
+      {%- set jump = writers.get(column.name) %}
+      {%- set klasses = [cell_class[column.state] if column.state != 'carried' else '',
+                         'diff-col-cited' if column.name == cited_column else '',
+                         'diff-col-jump' if jump else ''] | select | join(' ') %}
+      <th{% if klasses %} class="{{ klasses }}"{% endif %}
+        {%- if jump %} data-jump="{{ jump }}" title="written by {{ jump }} — go there"
+        {%- elif column.state != 'carried' %} title="{{ column_title[column.state] }}"{% endif %}>
+        {%- if column.name == cited_column %}<span class="diff-col-mine">the value</span>{% endif -%}
+        {%- if column.state != 'carried' %}<span class="diff-mark">{{ column_mark[column.state] }}</span>{% endif -%}
+        <span class="diff-col-name">{{ column.name }}</span></th>
       {%- endfor %}
     </tr></thead>
     <tbody>
     {% for row in diff.rows %}
     <tr>{% if full_rows %}<td class="row-num muted">{{ loop.index0 | row_number }}</td>{% endif %}<td class="syw-cell">{% set trace_href = links.row_trace(stage.stage_id, loop.index0) %}{% if trace_href %}<a href="{{ trace_href }}" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a>{% endif %}</td>
       {%- for cell in row %}
-      {%- set klass = cell_class[cell.state] %}
+      {%- set klass = (cell_class[cell.state] ~ (' diff-col-cited' if diff.columns[loop.index0].name == cited_column else '')) %}
       {%- if cell.text[:4] == 'http' and cell.state != 'changed' %}<td class="cell-url {{ klass }}"><a href="{{ cell.text }}" target="_blank" rel="noopener">{{ cell.text }}</a></td>
       {%- else %}{{ data_cell(cell.text, klass, cell.was, full_rows) }}
       {%- endif %}

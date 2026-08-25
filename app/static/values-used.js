@@ -109,7 +109,7 @@ window.ValuesUsed = window.ValuesUsed || (function(){
     }).join('');
   }
 
-  const CONTROLS = '.vu-node, .vu-arrow, .vu-forkopt, .vu-modal-close, th.vu-linked';
+  const CONTROLS = '.vu-node, .vu-arrow, .vu-forkopt, .vu-modal-close, th.diff-col-jump';
 
   function wire(view){
     // Focusing a control inside a horizontally scrolling strip makes the browser
@@ -120,7 +120,7 @@ window.ValuesUsed = window.ValuesUsed || (function(){
     view.pane.addEventListener('click', event => {
       const control = event.target.closest(CONTROLS);
       if(control) control.focus({preventScroll: true});
-      const header = event.target.closest('th.vu-linked');
+      const header = event.target.closest('th.diff-col-jump');
       if(header) return goTo(view, header.dataset.jump);
       const node = event.target.closest('.vu-node');
       if(node) return goTo(view, node.dataset.node);

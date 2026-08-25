@@ -6,8 +6,9 @@ unverifiable yields None and the caller shows the plain output view."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
+from collections.abc import Collection
 from typing import ClassVar, Optional, Union
 
 import pandas as pd
@@ -185,6 +186,16 @@ def build_stage_diff(
             stage_def.id, inputs, run_dir, input_df, output_df, rows_shown
         )
     return _build_row_aligned_diff(workflow_stage, inputs, input_df, output_df, rows_shown)
+
+
+def keep_diff_columns(diff: RowAlignedDiff, names: Collection[str]) -> RowAlignedDiff:
+    """Cuts what the table DRAWS; the counts stay the whole frame's."""
+    kept = [i for i, column in enumerate(diff.columns) if column.name in names]
+    return replace(
+        diff,
+        columns=[diff.columns[i] for i in kept],
+        rows=[[row[i] for i in kept] for row in diff.rows],
+    )
 
 
 def _shape_input_frames(
