@@ -35,10 +35,10 @@ body{display:flex;flex-direction:column;overflow:hidden}
 .lin-head h1{font-size:17px;margin:0;font-weight:600;
   display:flex;align-items:baseline;gap:11px;flex-wrap:wrap}
 .lin-head h1 code{background:var(--sunk-deep);padding:1px 5px;border-radius:4px}
-/* Bottom-aligned, so the mark sits on the value rather than the column above it. */
-.lin-figure{display:flex;align-items:flex-end;gap:7px}
+/* Top-aligned: what the mark explains is the column, which is the line above. */
+.lin-figure{display:flex;align-items:flex-start;gap:6px}
 .lin-why{border:1px solid var(--border);border-radius:50%;color:var(--muted);cursor:help;
-  font-size:11px;line-height:15px;width:16px;height:16px;text-align:center;margin-bottom:7px}
+  font-size:10px;line-height:14px;width:15px;height:15px;text-align:center;margin-top:5px}
 .lin-why[hidden]{display:none}
 .lin-coord{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:7px}
 .lin-word{color:var(--muted);font-size:12.5px}
