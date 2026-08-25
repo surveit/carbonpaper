@@ -16,9 +16,9 @@ from pydantic import BaseModel
 
 from app.core.agent.store import AgentSession
 from app.core.agent.usage import LlmUsage
-from app.runtime.manifest import RunEntry, list_every_run_entry
-from app.models.records.run_manifest import PRODUCTION_RUNS
-from app.services.project import read_project_names
+from app.runtime.manifest import RunEntry, list_run_entries
+from app.models.records.run_manifest import PRODUCTION_RUNS, RUN_AREAS
+from app.services.project import list_project_listings, list_projects
 
 # What a model's name is shown as where the record does not carry one. Every run
 # before the `model` field existed is in this bucket, so it holds real money.
@@ -28,7 +28,7 @@ UNRECORDED_MODEL = "not recorded"
 # home page belongs to no project.
 NO_PROJECT = "no project"
 
-# Project id -> the name to show it by.
+# Project id -> the name to show it by, as `list_project_listings` reports them.
 ProjectNames = dict[str, str]
 
 
@@ -88,7 +88,7 @@ class SpendReading(BaseModel):
 def read_workspace_spend(*, biggest: int = 25) -> SpendReading:
     runs = list_every_run_entry()
     sessions = AgentSession.list()
-    names = read_project_names()
+    names = {listing.id: listing.name for listing in list_project_listings()}
     entries = [*read_run_spend(runs, names), *read_session_spend(sessions, names)]
     return SpendReading(
         total=count_spend("everything", entries),
@@ -100,6 +100,16 @@ def read_workspace_spend(*, biggest: int = 25) -> SpendReading:
         unreadable_runs=sum(1 for run in runs if run.manifest is None),
         silent_sessions=sum(1 for session in sessions if not session.turn_spend),
     )
+
+
+def list_every_run_entry() -> list[RunEntry]:
+    """Both areas of every project the workspace lists — a run under an unlisted project is not read."""
+    return [
+        entry
+        for project_id in list_projects()
+        for area in RUN_AREAS
+        for entry in list_run_entries(project_id, area=area)
+    ]
 
 
 def read_run_spend(runs: list[RunEntry], names: ProjectNames) -> list[SpendEntry]:

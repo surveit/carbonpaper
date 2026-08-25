@@ -58,19 +58,6 @@ def has_document(project_id: str) -> bool:
     return methodology.exists(project_id)
 
 
-def find_workspace_project_ids() -> list[str]:
-    """Every project DIRECTORY, so one imported without a record is still listed."""
-    root = workspace.projects_dir()
-    if not root.exists():
-        return []
-    return sorted(child.name for child in root.iterdir() if child.is_dir())
-
-
-def find_private_project_ids() -> set[str]:
-    """What a directory scan must SUBTRACT: the flag is on the record, not on the folder."""
-    return {record.id for record in Project.list() if record.private}
-
-
 # ─── Status models ────────────────────────────────────────────────────────────
 # The typed shapes project_meta / project_state return. Every field is read off
 # disk truthfully (see project_state); an unknown fact is None / 0, never a
@@ -98,12 +85,6 @@ class ProjectListing(BaseModel):
 
     id: str
     name: str
-
-
-class AdminProjectListing(ProjectListing):
-    """The admin screens' row. They are the one place a private project is listed AND said to be."""
-
-    private: bool
 
 
 class ProjectMeta(BaseModel):
@@ -277,26 +258,26 @@ def list_projects() -> list[str]:
 
 
 def list_project_listings() -> list[ProjectListing]:
-    """Both halves: the id to pass back, and the label to say it by."""
-    return [
-        ProjectListing(id=row.id, name=row.name)
-        for row in list_project_listings_including_private()
-        if not row.private
-    ]
+    """Every project a reader may see, and the only listing of them there is."""
+    records = {record.id: record for record in Project.list()}
+    listings = []
+    # The working copy is the universe. delete_project removes it and KEEPS the record,
+    # so a deleted project drops out by itself and one older than records is still shown.
+    for project_id in _find_workspace_project_ids():
+        record = records.get(project_id)
+        if record is not None and record.private:
+            continue
+        name = project_id if record is None else record.display_name()
+        listings.append(ProjectListing(id=project_id, name=name))
+    return listings
 
 
-def list_project_listings_including_private() -> list[AdminProjectListing]:
-    # delete_project keeps the record and removes the working copy, so the copy is the truth.
-    return [
-        AdminProjectListing(id=record.id, name=record.display_name(), private=record.private)
-        for record in sorted(Project.list(), key=lambda r: r.id)
-        if project_exists(record.id)
-    ]
-
-
-def read_project_names() -> dict[str, str]:
-    """A NAME lookup, not a listing: spend on a deleted project still has to say whose."""
-    return {record.id: record.display_name() for record in Project.list()}
+def _find_workspace_project_ids() -> list[str]:
+    """Module-private: a caller reading the directories directly would see past `private`."""
+    root = workspace.projects_dir()
+    if not root.exists():
+        return []
+    return sorted(child.name for child in root.iterdir() if child.is_dir())
 
 
 def set_project_private(project_id: str, private: bool) -> None:

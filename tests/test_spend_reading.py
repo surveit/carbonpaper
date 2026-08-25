@@ -12,6 +12,8 @@ from app.models.run_manifest import StageRecord
 from app.models.stages.stage_base import StageType
 from app.models.records.project import Project
 from app.models.records.run_manifest import RunManifest
+from app.services import project as project_service
+from app.services.workspace import resolve_project_dir
 from app.web.admin.spend import (
     NO_PROJECT,
     UNRECORDED_MODEL,
@@ -32,6 +34,8 @@ def _stage_record(stage_id: str, usage: LlmUsage | None, started_at: str) -> Sta
 
 
 def _store_run(project: str, run_id: str, records: list[StageRecord], area: str = "runs") -> None:
+    # The working copy too: spend reads runs per project, and a project is its directory.
+    resolve_project_dir(project).mkdir(parents=True, exist_ok=True)
     Project(id=project, name=project).save()
     RunManifest(
         id=RunManifest.compose_id(project, run_id, area),
@@ -111,27 +115,13 @@ def test_a_chat_that_names_no_project_is_labelled_rather_than_dropped():
     assert [e.link for e in entries] == [f"/chat/{sid}"]
 
 
-def test_a_run_outliving_its_project_record_is_still_counted():
-    """Deleting a project unspends nothing, so its runs stay in the total under their bare id."""
+def test_a_run_under_a_project_the_workspace_does_not_list_is_not_read():
+    """https://github.com/surveit/carbonpaper/issues/868"""
     _store_run("congresswatch", "20260816T090000",
                [_stage_record("score", LlmUsage(cost_usd=1.0, calls=1), "2026-08-16T09:00:00")])
-    Project.delete("congresswatch")
+    project_service.delete_project("congresswatch")
 
-    spend = read_workspace_spend()
-
-    assert spend.total.cost_usd == 1.0
-    assert [count.label for count in spend.by_project] == ["congresswatch"]
-
-
-def test_a_private_project_is_counted_like_any_other():
-    """Spend is the operator's own figure; hiding a project must not hide its money."""
-    _store_run("congresswatch", "20260816T090000",
-               [_stage_record("score", LlmUsage(cost_usd=1.0, calls=1), "2026-08-16T09:00:00")])
-    record = Project.load("congresswatch")
-    record.private = True
-    record.save()
-
-    assert read_workspace_spend().total.cost_usd == 1.0
+    assert read_workspace_spend().total.cost_usd == 0.0
 
 
 def test_the_admin_page_serves_the_figure():

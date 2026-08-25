@@ -23,7 +23,7 @@
     <tbody>
         {% for b in bundles %}
         <tr>
-            <td><code>{{ b }}</code></td>
+            <td><code>{{ b }}</code>{% if b in projects %} <span class="badge ok">loaded</span>{% endif %}</td>
             <td>
                 <form method="post" action="/admin/load/{{ b }}" style="display:inline;">
                     <button type="submit" class="btn">Load</button>
@@ -49,10 +49,9 @@
     <tbody>
         {% for p in projects %}
         <tr>
-            <td><a href="/project/{{ p.id }}">{{ p.name }}</a>
-                {% if p.private %}<span class="badge">private</span>{% endif %}</td>
+            <td><a href="/project/{{ p }}">{{ p }}</a></td>
             <td>
-                <a href="/admin/export/{{ p.id }}" class="btn" download>Download bundle</a>
+                <a href="/admin/export/{{ p }}" class="btn" download>Download bundle</a>
             </td>
         </tr>
         {% endfor %}

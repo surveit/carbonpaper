@@ -43,7 +43,6 @@ def test_a_private_project_is_dropped_from_every_record_backed_listing(workspace
 
 
 def test_a_private_project_is_dropped_from_the_home_grid(workspace_dir: Path) -> None:
-    """The grid scans DIRECTORIES, where the record's flag is invisible until subtracted."""
     _make_project(workspace_dir, "shown")
     _make_project(workspace_dir, "hidden", private=True)
     methodology.write_methodology("shown", "how it works")
@@ -72,16 +71,18 @@ def test_a_private_project_is_dropped_from_the_breadcrumb_picker(workspace_dir: 
     assert "/project/hidden" not in body
 
 
-def test_the_admin_page_is_where_a_private_project_is_listed_and_said_to_be(
-    workspace_dir: Path,
+@pytest.mark.parametrize("path", ["/admin", "/admin/cache"])
+def test_a_private_project_is_dropped_from_the_admin_screens(
+    workspace_dir: Path, path: str
 ) -> None:
-    """Admin is the way back to a project every other screen has dropped."""
+    """No auth guards /admin, so listing a private project there would list it publicly."""
+    _make_project(workspace_dir, "shown")
     _make_project(workspace_dir, "hidden", private=True)
 
-    body = client.get("/admin").text
+    body = client.get(path).text
 
-    assert "/project/hidden" in body
-    assert "private" in body
+    assert "/project/shown" in body
+    assert "/project/hidden" not in body
 
 
 def test_the_flag_is_set_and_cleared_from_the_project_itself(workspace_dir: Path) -> None:
@@ -104,5 +105,13 @@ def test_a_project_whose_working_copy_is_gone_is_dropped_everywhere(workspace_di
     project_service.delete_project("gone")
 
     assert project_service.list_projects() == ["shown"]
-    assert [row.id for row in project_service.list_project_listings_including_private()] == ["shown"]
+    assert [card.id for card in loading.list_projects()] == []
     assert Project.load_or_none("gone") is not None
+
+
+def test_a_private_project_is_still_reachable_at_its_own_url(workspace_dir: Path) -> None:
+    """The flag hides it from lists; it is not permissions, and nothing guards the URL."""
+    _make_project(workspace_dir, "hidden", private=True)
+    methodology.write_methodology("hidden", "how it works")
+
+    assert client.get("/project/hidden").status_code == 200
