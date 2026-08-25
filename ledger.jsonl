@@ -1757,3 +1757,4 @@
 {"run_id":"32783261514","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32783261514","created":"2026-08-24T22:10:43Z","branch":"feat/private-and-deleted-project-filtering","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"32783297219","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32783297219","created":"2026-08-24T22:11:08Z","branch":"lineage-paths-and-inputs","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"32820756982","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32820756982","created":"2026-08-25T07:16:43Z","branch":"lineage-paths-and-inputs","event":"pull_request","contracts_kept":16,"findings":[]}
+{"run_id":"32820756982","run_url":"https://github.com/surveit/carbonpaper/actions/runs/32820756982","created":"2026-08-25T07:17:09Z","branch":"lineage-paths-and-inputs","event":"pull_request","contracts_kept":null,"findings":[]}
