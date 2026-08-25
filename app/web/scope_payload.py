@@ -25,7 +25,6 @@ from app.models.claims import StageOutputCellCitation
 from app.models.schema import StageId
 from app.runtime.branch_analysis import (
     WorkflowRunBranches,
-    find_reference_inputs,
     find_rows_that_took,
     group_rows_by_path,
 )
@@ -34,6 +33,7 @@ from app.services.scope import (
     find_contributing_rows,
     find_nearest_merge,
     find_rows_reached_per_stage,
+    find_stages_beside_the_flow,
     find_stages_each_row_came_through,
     find_stages_on_route,
     measure_frame_scale,
@@ -179,7 +179,7 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
         resolved_merges=sorted(resolved),
         nearest_merge=nearest,
         # "show every stage" says every. docs/scope-map.md
-        stages=_draw_stages(run_branches, route),
+        stages=_draw_stages(run_branches, route, cited.stage_id),
         reach=_count_reach(run_branches, branches, index, paths),
         scale=measure_frame_scale(run_branches, cited),
     )
@@ -243,7 +243,8 @@ def read_cut(run_branches: WorkflowRunBranches, outputs: Path, branch_id: Branch
         branch_paths=paths,
         rows_per_branch_path=[spread[i] for i in range(len(paths))],
         rows=read_rows(frame, shown, index[:len(shown)]),
-        stages=_draw_stages(run_branches, _stages_touched(run_branches, paths)),
+        stages=_draw_stages(run_branches, _stages_touched(run_branches, paths),
+                            at_stage),
         aliased_merges=alias_the_merges(
             run_branches, find_rows_reached_per_stage(run_branches, behind), resolved),
         resolved_merges=sorted(resolved),
@@ -337,10 +338,10 @@ def _count_reach(run_branches: WorkflowRunBranches,
             if branch_id in branches]
 
 
-def _draw_stages(run_branches: WorkflowRunBranches,
-                 touched: set[StageId]) -> list[DrawnStage]:
-    lookups = find_reference_inputs(run_branches.stages)
-    return [_draw_stage(run_branches, sid, position, sid in lookups)
+def _draw_stages(run_branches: WorkflowRunBranches, touched: set[StageId],
+                 from_stage: StageId) -> list[DrawnStage]:
+    beside = find_stages_beside_the_flow(run_branches, from_stage)
+    return [_draw_stage(run_branches, sid, position, sid in beside)
             for position, sid in enumerate(run_branches.ordered_stage_ids)
             if sid in touched and sid in run_branches.stages]
 

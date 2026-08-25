@@ -82,6 +82,12 @@ def reconstruct_run_branches(
     )
 
 
+def find_subject_inputs(stage: WorkflowStage) -> list[StageId]:
+    """The inputs a stage's rows come FROM: a join's inputs[0], every input otherwise."""
+    refs = [ref.id for ref in stage.inputs]
+    return refs[:1] if stage.stage.type in _LOOKS_UP else refs
+
+
 def find_reference_inputs(stages: dict[StageId, WorkflowStage]) -> set[StageId]:
     """A join's inputs[1:] are lookup tables; a union's inputs are all subjects."""
     return {ref.id for stage in stages.values() if stage.stage.type in _LOOKS_UP
