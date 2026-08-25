@@ -261,8 +261,7 @@ def list_project_listings() -> list[ProjectListing]:
     """Every project a reader may see, and the only listing of them there is."""
     records = {record.id: record for record in Project.list()}
     listings = []
-    # The working copy is the universe. delete_project removes it and KEEPS the record,
-    # so a deleted project drops out by itself and one older than records is still shown.
+    # delete_project removes the working copy and keeps the record, so a deleted one drops out.
     for project_id in _find_workspace_project_ids():
         record = records.get(project_id)
         if record is not None and record.private:

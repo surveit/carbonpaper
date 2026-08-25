@@ -1,8 +1,4 @@
-"""Architecture: `private` is applied once, by the one function that lists projects.
-`list_project_listings` walks the working copies and drops any whose record is private.
-There is no listing that shows a private one — /admin is served without auth, so an
-operator-only view would be a public view. Nothing else may enumerate the record.
-"""
+"""Architecture: one function lists projects, and it is the only place `private` is applied."""
 from __future__ import annotations
 
 import ast
@@ -23,9 +19,12 @@ def test_only_the_project_service_enumerates_project_records() -> None:
         for lineno in find_record_enumerations(parse_module(path))
     ]
     assert not offenders, (
-        "Project.list() hands back every stored project, including one that is private and "
-        f"one whose working copy delete_project removed. Call {_SERVICE}'s "
-        "list_project_listings / list_projects, which drop both:\n  " + "\n  ".join(offenders)
+        "Project.list() hands back every stored project, private ones included. There is no "
+        "listing that shows a private project — /admin is served without auth, so an "
+        "operator-only view would be a public one — and this is how that stays true: "
+        f"{_SERVICE}'s list_project_listings walks the working copies and drops any whose "
+        "record is private, and list_projects wraps it. Call one of those, and a project "
+        "deleted out of the workspace drops out for free:\n  " + "\n  ".join(offenders)
     )
 
 
