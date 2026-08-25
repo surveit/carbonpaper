@@ -96,11 +96,13 @@ def test_half_written_version_snapshot_does_not_take_down_the_index(examples_roo
     assert "unaffected" in r.text
 
 
-def test_half_written_version_snapshot_shows_the_project_as_errored(examples_root):
+def test_half_written_version_snapshot_shows_the_project_as_unreadable(examples_root):
     _break_a_version_snapshot(examples_root, "halfway")
     [card] = list_projects()
-    assert card.status is ProjectStatus.ERRORED
-    assert "Errored" in client.get("/").text
+    assert card.status is ProjectStatus.UNREADABLE
+    body = client.get("/").text
+    assert "Unreadable" in body
+    assert "Errored" not in body
 
 
 def test_half_written_version_snapshot_still_fails_its_own_project_loudly(examples_root):

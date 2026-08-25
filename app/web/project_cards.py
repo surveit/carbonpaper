@@ -17,6 +17,8 @@ class ProjectStatus(enum.StrEnum):
     AWAITING_REVIEW = "awaiting_review"
     COMPLETED = "completed"
     ERRORED = "errored"
+    # A stored version document this code cannot read. ERRORED is a run that failed.
+    UNREADABLE = "unreadable"
 
 
 PROJECT_STATUS_LABELS = {
@@ -24,6 +26,7 @@ PROJECT_STATUS_LABELS = {
     ProjectStatus.AWAITING_REVIEW: "Awaiting review",
     ProjectStatus.COMPLETED: "Completed",
     ProjectStatus.ERRORED: "Errored",
+    ProjectStatus.UNREADABLE: "Unreadable",
 }
 
 # Every RunStatus, mapped onto the four words the card speaks in.

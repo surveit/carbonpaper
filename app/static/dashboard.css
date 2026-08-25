@@ -91,14 +91,15 @@
 
 /* The headline state, as a word rather than a chip: twelve filled badges read as
    a grid of colour blocks before they read as twelve states. Colour is spent only
-   on the two states that ask something of the reader — a stopped run to fix, a
-   queue waiting on their decision — and carries no fill, so it marks those two
-   without the other ten competing for the same attention. */
+   on the states that ask something of the reader — a stopped run to fix, a queue
+   waiting on their decision, a version record to repair — and carries no fill, so
+   it marks those without the rest competing for the same attention. */
 .project-state { font-weight: 500; color: var(--fg); }
 
 .project-state.state-in_progress    { color: var(--muted); }
 .project-state.state-awaiting_review { color: var(--state-review-ink); }
 .project-state.state-errored        { color: var(--state-failed-ink); }
+.project-state.state-unreadable     { color: var(--state-warn-ink); }
 
 .project-links {
     display: flex;
