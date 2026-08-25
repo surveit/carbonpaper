@@ -71,7 +71,7 @@ def test_an_empty_string_is_empty_too_and_ranks_among_the_values(project_id, tmp
     file_id = save_upload("export.parquet", io.BytesIO(path.read_bytes()), project_id).id
     text = page(project_id, file_id)
     assert "(empty string)" in text
-    assert "2 rows that carry a value" in text
+    assert "of the 2 that carry a value" in text
 
 
 def test_a_file_no_run_has_read_says_so(project_id, file_id):
