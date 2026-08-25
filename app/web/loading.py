@@ -32,12 +32,13 @@ from app.services.loader import (
     load_stage_entries,
     read_stage_specs,
 )
+from app.services.errors import WorkflowLoadError
 from app.services.versioning import list_versions, load_version_stages
 from app.services.project import has_document, list_project_listings
 from app.services.project_record import read_project_name
 from app.services.terms import count_nouns
 from app.services.workspace import resolve_run_dir
-from app.web.project_cards import ProjectCard, count_runs
+from app.web.project_cards import ProjectCard, ProjectStatus, count_runs
 
 
 # ─── Projects & stages ──────────────────────────────────────────────────
@@ -56,19 +57,28 @@ def _build_project_card(project_id: str) -> ProjectCard | None:
     carries_document = has_document(project_id)
     if not (has_workflow or has_schemas or carries_document):
         return None
+    n_versions = _count_stored_versions(project_id)
     return ProjectCard(
         id=project_id,
         label=read_project_name(project_id),
         has_document=carries_document,
         has_workflow=has_workflow,
         has_schemas=has_schemas,
-        is_ready=bool(list_versions(project_id)),
+        is_ready=bool(n_versions),
         n_stages=n_stages,
         n_schemas=n_schemas,
         n_runs=runs.real,
         n_test_runs=runs.tests,
-        status=runs.headline,
+        status=runs.headline if n_versions is not None else ProjectStatus.ERRORED,
     )
+
+
+def _count_stored_versions(project_id: str) -> int | None:
+    # None: a frozen snapshot no longer validates, so no count is knowable here.
+    try:
+        return len(list_versions(project_id))
+    except WorkflowLoadError:
+        return None
 
 
 @dataclass
