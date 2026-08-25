@@ -409,15 +409,17 @@ def test_the_full_rows_page_reads_as_a_diff_by_default(run_ctx) -> None:
     assert "diff-cell-changed" in html and "BETA" in html
 
 
-def test_the_full_rows_diff_keeps_the_row_numbers_and_expandable_cells(run_ctx) -> None:
-    # The shared partial takes the row numbers and the click-to-expand cells as flags.
+def test_the_full_rows_diff_keeps_the_row_numbers_and_the_hovered_value(run_ctx) -> None:
+    # The shared partial takes the row numbers and the clipped cells as flags.
     _pdir, run_id = run_ctx
     html = _rows_page(run_id, CLASSIFY_ID)
     assert "diff-cell-changed" in html  # it IS the diff table these belong to
     assert '<th class="row-num">#</th>' in html
     assert '<td class="row-num muted">1</td>' in html
     assert "cell-clip" in html
-    assert "Click any clipped cell to expand it" in html
+    assert "Hover a cell for its whole value" in html
+    # The click belongs to the lineage now, so the whole value rides the hover.
+    assert 'title="' in html
 
 
 def test_the_diff_page_leaves_the_view_toggle_and_the_csv_to_the_header(run_ctx) -> None:
@@ -430,7 +432,7 @@ def test_the_diff_page_leaves_the_view_toggle_and_the_csv_to_the_header(run_ctx)
     assert f'/stage/{CLASSIFY_ID}/rows?raw=1"' in unit
     assert f'/stage/{CLASSIFY_ID}/rows.csv"' in unit
     # What is left still has content, so the strip is no empty gap.
-    assert "Click any clipped cell to expand it" in toolbar
+    assert "Hover a cell for its whole value" in toolbar
 
 
 def test_the_capped_diff_warning_sends_the_reader_to_a_link_that_exists(run_ctx, monkeypatch) -> None:
