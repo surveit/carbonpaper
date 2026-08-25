@@ -37,6 +37,14 @@ class StageOutputCellCitation(Citation):
     value: JsonScalar
 
 
+class StageOutputTableCitation(Citation):
+    # A whole output frame, so no row and no column — row_count is what it published.
+    kind: Literal["stage_output_table"] = "stage_output_table"
+    run_id: ID
+    stage_id: ID
+    row_count: int
+
+
 class StageOutputRowCitation(Citation):
     # A row pointed at with no value of its own — the show-the-work link.
     kind: Literal["stage_output_row"] = "stage_output_row"

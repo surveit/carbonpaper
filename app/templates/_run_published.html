@@ -1,10 +1,12 @@
 {# What the run published, above the account of how it ran. #}
-{% if header.workflow_outputs %}
-  {%- set leads = header.workflow_outputs | selectattr('primary') | list %}
-  {%- set rest = header.workflow_outputs | rejectattr('primary') | list %}
+{% if header.published %}
+  {%- set leads = header.published.figures | selectattr('primary') | list %}
+  {%- set rest = header.published.figures | rejectattr('primary') | list %}
+  {%- set tables = header.published.tables %}
   <section class="wf-outputs">
     <h2>What this run published</h2>
-    <p class="wf-note">Every figure links to the row it was read from.</p>
+    <p class="wf-note">Every figure links to the row it was read from, and every
+      published row to its own lineage.</p>
     {%- if leads %}
     <h3 class="wf-group">Headline claims</h3>
     <div class="wf-leads{% if leads | length > 2 %} crowded{% endif %}">
@@ -16,6 +18,39 @@
       </div>
       {%- endfor %}
     </div>
+    {%- endif %}
+    {%- if tables %}
+    <h3 class="wf-group">Result tables</h3>
+    {%- for table in tables %}
+    <div class="wf-table">
+      <p class="wf-table-head">
+        <span class="wf-table-label">{{ table.label }}</span>
+        <span class="wf-table-count">{{ "{:,}".format(table.row_count) }} row{% if table.row_count != 1 %}s{% endif %}</span>
+        <a href="{{ table.rows_url }}">View all rows →</a>
+        <a href="{{ table.csv_url }}">⬇ CSV</a>
+      </p>
+      {%- if table.preview %}
+      <div class="table-scroll">
+      <table class="data-preview">
+        <thead><tr><th class="syw-col">trace</th>{% for c in table.preview.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+        <tbody>
+        {%- for row in table.preview.rows %}
+        <tr>
+          <td class="syw-cell"><a href="{{ row.href }}" target="_blank" rel="noopener"
+              title="trace this row's provenance back through the pipeline">View lineage</a></td>
+          {%- for cell in row.cells %}<td class="cell-clip" title="{{ cell }}">{{ cell }}</td>{% endfor %}
+        </tr>
+        {%- endfor %}
+        </tbody>
+      </table>
+      </div>
+      {%- if table.row_count > table.preview.rows | length %}
+      <p class="wf-table-more">Showing the first {{ table.preview.rows | length }} of
+        {{ "{:,}".format(table.row_count) }} rows.</p>
+      {%- endif %}
+      {%- endif %}
+    </div>
+    {%- endfor %}
     {%- endif %}
     {%- if rest %}
     <h3 class="wf-group">Secondary claims</h3>
@@ -31,4 +66,3 @@
     {%- endif %}
   </section>
 {% endif %}
-

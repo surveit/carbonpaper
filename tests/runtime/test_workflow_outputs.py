@@ -3,7 +3,7 @@ from __future__ import annotations
 import pyarrow as pa
 
 from app.models import Workflow, parse_stage
-from app.models.stages.stage_base import WorkflowOutputRule
+from app.models.stages.stage_base import WorkflowFigureRule, WorkflowTableRule
 from app.runtime.context import RunIdentity
 from app.runtime.workflow_outputs import (
     WorkflowOutput,
@@ -14,10 +14,12 @@ from app.runtime.workflow_outputs import (
 _RUN = RunIdentity(project="venezuela_lda_lobbying", run_id="20260812T133317.816579")
 # The Venezuela client-side figures, as that aggregate really computes them.
 _FIGURES = pa.table({"clients_paying": [24], "external_spend": [4461000.0]})
-_SPEND = WorkflowOutputRule(slug="external-spend", label="Paid to outside lobbying firms",
-                        column="external_spend")
-_CLIENTS = WorkflowOutputRule(slug="clients-paying", label="Paying clients",
-                          column="clients_paying")
+_SPEND = WorkflowFigureRule(kind="figure", slug="external-spend",
+                            label="Paid to outside lobbying firms", column="external_spend")
+_CLIENTS = WorkflowFigureRule(kind="figure", slug="clients-paying",
+                              label="Paying clients", column="clients_paying")
+_TABLE = WorkflowTableRule(kind="table", slug="client-spend",
+                           label="What each client paid")
 
 
 def _workflow_stage(outputs):
@@ -98,3 +100,35 @@ def test_a_one_row_output_raises_no_issue():
 def test_a_stage_declaring_nothing_is_never_refused_for_its_row_count():
     many = pa.table({"clients_paying": [1, 2, 3], "external_spend": [1.0, 2.0, 3.0]})
     assert find_output_row_issues(_workflow_stage(None), many) == []
+
+
+# ─── A table output: the whole frame, not one cell ───────────────────────────
+
+_SPEND_ROWS = pa.table({"client": ["Ballard", "Amsterdam & Partners"],
+                        "external_spend": [4180000.0, 281000.0]})
+
+
+def test_a_run_publishes_the_row_count_of_the_table_its_stage_declared():
+    [saved] = save_workflow_outputs(_workflow_stage([_TABLE]), _SPEND_ROWS, _RUN)
+    assert (saved.slug, saved.citation.row_count) == ("client-spend", 2)
+    assert saved.citation.stage_id == "count_client_figures"
+    assert saved.citation.run_id == "20260812T133317.816579"
+
+
+def test_a_published_table_survives_the_store_as_a_table():
+    [saved] = save_workflow_outputs(_workflow_stage([_TABLE]), _SPEND_ROWS, _RUN)
+    assert WorkflowOutput.load(saved.id).citation.kind == "stage_output_table"
+
+
+def test_a_table_does_not_hold_the_stage_to_one_row():
+    assert find_output_row_issues(_workflow_stage([_TABLE]), _SPEND_ROWS) == []
+
+
+def test_a_figure_beside_a_table_still_holds_the_stage_to_one_row():
+    issues = find_output_row_issues(_workflow_stage([_SPEND, _TABLE]), _SPEND_ROWS)
+    assert len(issues) == 1 and "`external_spend`" in issues[0].message
+
+
+def test_a_stage_publishes_its_figures_and_its_table_together():
+    saved = save_workflow_outputs(_workflow_stage([_SPEND, _TABLE]), _FIGURES, _RUN)
+    assert [o.slug for o in saved] == ["external-spend", "client-spend"]

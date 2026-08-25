@@ -1,0 +1,163 @@
+"""What a run published: a figure and the row it holds, a table and the frame it is."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, Mapping
+
+from pydantic import BaseModel
+
+from app.core.json_types import JsonScalar
+from app.models.claims import StageOutputCellCitation, StageOutputTableCitation
+from app.models.records.workflow_output import WorkflowOutput
+from app.services import run as run_service
+from app.web import loading
+
+# Enough to show what the table holds; the full-rows page is where the data lives.
+PUBLISHED_PREVIEW_ROWS = 5
+
+
+class PublishedFigure(BaseModel):
+    slug: str
+    label: str
+    primary: bool
+    value: str
+    # The row this value was read from, so a reader can open its lineage.
+    href: str
+
+
+class PublishedRow(BaseModel):
+    cells: list[str]
+    href: str
+
+
+class TablePreview(BaseModel):
+    columns: list[str]
+    rows: list[PublishedRow]
+
+
+class PublishedTable(BaseModel):
+    slug: str
+    label: str
+    primary: bool
+    row_count: int
+    rows_url: str
+    csv_url: str
+    # Absent for a secondary table, and where the frame is no longer on disk.
+    preview: TablePreview | None = None
+
+
+class RunPublished(BaseModel):
+    figures: list[PublishedFigure]
+    tables: list[PublishedTable]
+
+    def __bool__(self) -> bool:
+        return bool(self.figures or self.tables)
+
+
+def read_published_outputs(
+    project_id: str, run_id: str, run_dir: Path, manifest: Mapping[str, Any]
+) -> RunPublished:
+    """Filtered in python: a run id sits inside the citation, which find() cannot select on."""
+    published = sorted(
+        (o for o in WorkflowOutput.list() if o.citation.run_id == run_id),
+        key=lambda o: o.slug,
+    )
+    return RunPublished(
+        figures=[
+            _build_figure(output, output.citation, project_id, run_id)
+            for output in published
+            if isinstance(output.citation, StageOutputCellCitation)
+        ],
+        tables=sorted(
+            (
+                _build_table(output, output.citation, project_id, run_id, run_dir, manifest)
+                for output in published
+                if isinstance(output.citation, StageOutputTableCitation)
+            ),
+            key=lambda t: not t.primary,
+        ),
+    )
+
+
+def render_output_value(value: JsonScalar) -> str:
+    """A null reads as absent rather than as the word None."""
+    return "—" if value is None else f"{value:,}" if isinstance(value, (int, float)) else str(value)
+
+
+def _build_figure(
+    output: WorkflowOutput,
+    citation: StageOutputCellCitation,
+    project_id: str,
+    run_id: str,
+) -> PublishedFigure:
+    return PublishedFigure(
+        slug=output.slug,
+        label=output.label,
+        primary=output.primary,
+        value=render_output_value(citation.value),
+        href=run_service.build_row_trace_url(
+            project_id, run_id, citation.stage_id, citation.row_ordinal,
+            column=citation.column,
+        ),
+    )
+
+
+def _build_table(
+    output: WorkflowOutput,
+    citation: StageOutputTableCitation,
+    project_id: str,
+    run_id: str,
+    run_dir: Path,
+    manifest: Mapping[str, Any],
+) -> PublishedTable:
+    base = f"/project/{project_id}/runs/{run_id}/stage/{citation.stage_id}/rows"
+    return PublishedTable(
+        slug=output.slug,
+        label=output.label,
+        primary=output.primary,
+        row_count=citation.row_count,
+        rows_url=base,
+        csv_url=f"{base}.csv",
+        preview=(
+            _read_preview(project_id, run_id, citation, run_dir, manifest)
+            if output.primary
+            else None
+        ),
+    )
+
+
+def _read_preview(
+    project_id: str,
+    run_id: str,
+    citation: StageOutputTableCitation,
+    run_dir: Path,
+    manifest: Mapping[str, Any],
+) -> TablePreview | None:
+    output_path = _find_output_path(manifest, citation.stage_id)
+    if output_path is None:
+        return None
+    preview = loading.load_output_preview(run_dir, output_path, PUBLISHED_PREVIEW_ROWS)
+    if preview is None or "error" in preview:
+        return None
+    columns = [str(name) for name in preview["columns"]]
+    return TablePreview(
+        columns=columns,
+        rows=[
+            PublishedRow(
+                cells=[str(row.get(name, "")) for name in columns],
+                href=run_service.build_row_trace_url(
+                    project_id, run_id, citation.stage_id, ordinal
+                ),
+            )
+            for ordinal, row in enumerate(preview["preview"])
+        ],
+    )
+
+
+def _find_output_path(manifest: Mapping[str, Any], stage_id: str) -> str | None:
+    for record in manifest.get("stage_records", []):
+        if record.get("stage_id") == stage_id:
+            path = record.get("output_path")
+            return str(path) if path else None
+    return None

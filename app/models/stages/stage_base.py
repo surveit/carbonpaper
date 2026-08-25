@@ -9,7 +9,16 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from enum import Enum
-from typing import TYPE_CHECKING, Any, ClassVar, Optional, get_args
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Any,
+    ClassVar,
+    Literal,
+    Optional,
+    Union,
+    get_args,
+)
 
 from pydantic import (
     Field,
@@ -142,14 +151,21 @@ STAGE_ID_DESCRIPTION = (
     f"needs no gloss. HARD LIMIT: {STAGE_ID_MAX_CHARS} characters, refused above that."
 )
 WORKFLOW_OUTPUTS_DESCRIPTION = (
-    "Columns this workflow publishes as results, each with a slug that identifies it "
-    "across runs and a label a reader sees. A scalar output is one cell, so a stage "
-    "declaring one must output exactly one row — aggregate first. That is a hard "
+    "What this workflow publishes as results, each with a slug that identifies it across "
+    "runs and a label a reader sees. Two kinds, and `kind` says which:\n"
+    "`figure` names one COLUMN and publishes its one cell. A figure is one cell, so a "
+    "stage declaring one must output exactly one row — aggregate first. That is a hard "
     "refusal rather than a convention because a scalar read out of a many-row frame "
     "drifts to a different row whenever the input data changes, and nothing about the "
-    "value it returns would look wrong. Mark `primary` on the one or two a reader should "
-    "see first — the run leads with those and lists the rest, so marking everything "
-    "primary is the same as marking nothing."
+    "value it returns would look wrong.\n"
+    "`table` names no column and publishes this stage's WHOLE output frame — every row, "
+    "every column, each row linking to its own lineage. Declare one where the result the "
+    "work is for is a list rather than a number: the filings in scope, the contracts that "
+    "matched. A stage has one output frame, so it may declare at most one.\n"
+    "Mark `primary` on the one or two a reader should see first — the run leads with "
+    "those and lists the rest, so marking everything primary is the same as marking "
+    "nothing. A primary table is drawn on the run page; a secondary one is a line and a "
+    "link."
 )
 
 
@@ -163,13 +179,27 @@ STAGE_DESCRIPTION_DESCRIPTION = (
 
 
 # ── The shared field list ────────────────────────────────────────────────────
-class WorkflowOutputRule(_Base):
-    # A slug identifies the output across runs; the value it holds is per run.
+class _WorkflowOutputFields(_Base):
+    # A slug identifies the output across runs; what it holds is per run.
     slug: str
     label: str
-    column: str
     # Whether the run leads with this. Mark what the work rests on, not everything.
     primary: bool = False
+
+
+class WorkflowFigureRule(_WorkflowOutputFields):
+    kind: Literal["figure"]
+    column: str
+
+
+class WorkflowTableRule(_WorkflowOutputFields):
+    # No column: the published thing is the stage's whole output frame.
+    kind: Literal["table"]
+
+
+WorkflowOutputRule = Annotated[
+    Union[WorkflowFigureRule, WorkflowTableRule], Field(discriminator="kind")
+]
 
 
 class AuthoredStageFields(_Base):
@@ -216,9 +246,31 @@ class AuthoredStageFields(_Base):
             return v
         return [{"id": item} if isinstance(item, str) else item for item in v]
 
+    @field_validator("workflow_outputs")
+    @classmethod
+    def _one_frame_is_one_table(
+        cls, v: Optional[list[WorkflowOutputRule]]
+    ) -> Optional[list[WorkflowOutputRule]]:
+        tables = [rule.slug for rule in v or [] if rule.kind == "table"]
+        if len(tables) > 1:
+            raise ValueError(
+                f"a stage has one output frame and published it as {len(tables)} tables "
+                f"({', '.join(tables)}) — keep one, or split the stage"
+            )
+        return v
+
     @property
     def input_ids(self) -> list[ID]:
         return [ref.id for ref in self.inputs]
+
+    def list_published_figures(self) -> list[WorkflowFigureRule]:
+        return [r for r in self.workflow_outputs or [] if isinstance(r, WorkflowFigureRule)]
+
+    def find_published_table(self) -> Optional[WorkflowTableRule]:
+        return next(
+            (r for r in self.workflow_outputs or [] if isinstance(r, WorkflowTableRule)),
+            None,
+        )
 
 
 # ── The per-type stage base ──────────────────────────────────────────────────
