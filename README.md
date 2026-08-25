@@ -85,8 +85,3 @@ taken it once.
 - Hosting it for other people: [docs/self-hosting.md](docs/self-hosting.md) — the
   upload endpoint and its quotas, and the Fly.io deploy.
 - Contributor guide / conventions: [AGENTS.md](AGENTS.md)
-
-## Licence
-
-MIT — see [LICENSE](LICENSE).
-
