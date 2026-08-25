@@ -728,10 +728,10 @@ def test_the_documented_cli_runs_a_project_with_nothing_configured(
 _FRAME_STAGE_CODE = "def transform(df):\n    return df.assign(double=df['val'] * 2)\n"
 
 
-def _add_frame_stage(root, *, cache: bool = False):
+def _add_frame_stage(root):
     add_stage(root, {
         "id": "totals", "description": "Totals", "type": "python_frame_function",
-        "inputs": [{"id": "load"}], "cache": cache,
+        "inputs": [{"id": "load"}],
         "signature": {
             "form": "replaces",
             "reads": [{"input": "load", "columns": _NAME_VAL_SCHEMA["columns"]}],
@@ -749,8 +749,7 @@ def test_a_frame_stage_succeeds_with_no_frame_store_configured(tmp_path, monkeyp
     from app.core import frames as frames_module
 
     _make_project(tmp_path)
-    # Only a stage that asked to cache can be told the store is missing.
-    _add_frame_stage(tmp_path, cache=True)
+    _add_frame_stage(tmp_path)
     _seed_version(tmp_path)
     monkeypatch.setattr(frames_module, "_frame_store", None)
 
@@ -760,4 +759,3 @@ def test_a_frame_stage_succeeds_with_no_frame_store_configured(tmp_path, monkeyp
     record = next(r for r in manifest["stage_records"] if r["stage_id"] == "totals")
     assert record["status"] == "ok"
     assert record["output_row_count"] == 5
-    assert any("no frame store" in note for note in record["notes"])

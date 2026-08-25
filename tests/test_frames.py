@@ -6,7 +6,6 @@ import pytest
 from app.core.frames import (
     FrameStore,
     collapse_null_forms,
-    compute_table_fingerprint,
     frame_to_table,
     is_bool_cell,
     is_exact_float_cell,
@@ -84,9 +83,9 @@ def test_a_null_bearing_column_comes_back_with_its_null_in_place(round_tripped):
     assert loaded.schema.field("maybe_score").type == saved.schema.field("maybe_score").type
 
 
-def test_a_round_tripped_frame_keeps_its_frame_fingerprint(round_tripped):
+def test_a_round_tripped_frame_comes_back_cell_for_cell(round_tripped):
     saved, loaded = round_tripped
-    assert compute_table_fingerprint(loaded) == compute_table_fingerprint(saved)
+    assert loaded.equals(saved)
 
 
 def test_a_round_tripped_frames_rows_keep_their_row_fingerprints(round_tripped):
@@ -226,8 +225,7 @@ def test_write_frame_file_round_trips_a_list_column_through_read_frame_file(tmp_
     write_frame_file(frame, path)
     back = read_frame_file(path)
     assert [list(cell) for cell in back["tags"]] == [["a", "b"], []]
-    assert compute_table_fingerprint(frame_to_table(back)) == compute_table_fingerprint(
-        frame_to_table(frame))
+    assert frame_to_table(back).equals(frame_to_table(frame))
 
 
 def test_write_frame_file_writes_csv_for_a_csv_suffix(tmp_path):

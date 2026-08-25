@@ -83,10 +83,6 @@ class DocumentNotFound(Exception):
     """Raised by the strict read path; the tolerant read (`read_tolerant`/`load_or_none`) returns None."""
 
 
-class FrameNotSerializableError(Exception):
-    """A dtype/shape parquet cannot represent. A disk/OS error is NOT reported this way — it propagates."""
-
-
 # Named rather than null-filled: a union's inputs are declared schema-identical,
 # so a column present on one side and not the other is a bug upstream, not a
 # shape for the concatenation to paper over with a value nothing supplied.

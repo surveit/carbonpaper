@@ -1,8 +1,4 @@
-"""Whole workflows run twice through the production entry points, spanning both cache
-grains - row-mapped and frame-shaped are intercepted by different code. Evidence is the
-stages' own authored code: each appends a line to a probe file when its body runs, so a
-replayed run leaves the probe untouched. Every code stage here declares
-`cache: true`, which only llm_transform and human_review_queue get by default."""
+"""Whole workflows run twice for real; each stage body appends to a probe file when it runs."""
 from __future__ import annotations
 
 import json
@@ -30,6 +26,8 @@ _TOTALLED = [*_FLAGGED, {"name": "total", "type": "int", "nullable": True}]
 
 # probe count: row-mapped runs once per row; frame-shaped runs once for the frame.
 _EVERYTHING_COMPUTED = Counter({"clean": 3, "flag": 3, "totals": 1})
+# What every later run adds no matter what: a frame stage consults no cache.
+_A_FURTHER_RUN = Counter({"totals": 1})
 _NOTHING_COMPUTED: Counter[str] = Counter()
 
 
@@ -58,17 +56,16 @@ def _flag_code(probe: Path) -> str:
     )
 
 
-def _totals_code(probe: Path, *, edit: str = "") -> str:
+def _totals_code(probe: Path) -> str:
     return (
         "def transform(df):\n"
         + _probe_call(probe, "totals")
         + "    return df.assign(total=df['doubled'].sum())\n"
-        + edit
     )
 
 
 def _write_project(
-    root: Path, *, clean_edit: str = "", totals_edit: str = "", flag_cache: bool = True
+    root: Path, *, clean_edit: str = "", flag_cache: bool = True
 ) -> Path:
     probe = root / "probe.log"
     root.mkdir(parents=True, exist_ok=True)
@@ -102,13 +99,13 @@ def _write_project(
     })
     _write_stage(root, "04_totals", {
         "id": "totals", "description": "Totals", "type": "python_frame_function",
-        "inputs": [{"id": "flag"}], "cache": True,
+        "inputs": [{"id": "flag"}],
         "signature": {
             "form": "replaces",
             "reads": [{"input": "flag", "columns": _FLAGGED}],
             "produces": _TOTALLED,
         },
-        "function": {"kind": "inline", "code": _totals_code(probe, edit=totals_edit)},
+        "function": {"kind": "inline", "code": _totals_code(probe)},
     })
     return probe
 
@@ -163,7 +160,7 @@ def _assert_same_outputs(
         assert_frame_equal(second[stage_id], frame, obj=stage_id)
 
 
-def test_a_second_run_recomputes_nothing_and_reproduces_the_first_exactly(tmp_path):
+def test_a_second_run_replays_every_row_and_reproduces_the_first_exactly(tmp_path):
     probe = _write_project(tmp_path)
     _publish_a_version(tmp_path)
 
@@ -171,12 +168,13 @@ def test_a_second_run_recomputes_nothing_and_reproduces_the_first_exactly(tmp_pa
     assert _invocations(probe) == _EVERYTHING_COMPUTED
 
     second = _run_and_read(tmp_path)
-    assert _invocations(probe) == _EVERYTHING_COMPUTED  # no body ran a second time
+    # No row-mapped body ran again; the frame stage recomputed, as it always does.
+    assert _invocations(probe) == _EVERYTHING_COMPUTED + _A_FURTHER_RUN
     _assert_same_outputs(first, second)
 
 
 def test_the_manifest_counts_the_rows_the_second_run_replayed(tmp_path):
-    """Only the row-mapped stages carry a count; the frame cache is another grain."""
+    """Only the row-mapped stages carry a count; a frame-shaped stage replays no rows."""
     _write_project(tmp_path)
     _publish_a_version(tmp_path)
 
@@ -198,16 +196,14 @@ def test_bust_cache_recomputes_everything_and_leaves_the_cache_re_pinned(tmp_pat
 
     _append_input_row(tmp_path, {"name": "d", "val": 4})
     busted = _run_and_read(tmp_path, bust_cache=True)
-    # Everything recomputed, including what was already pinned: reads skipped at
-    # both grains.
+    # Every row recomputed, the three already pinned included: the read was skipped.
     assert _invocations(probe) == _EVERYTHING_COMPUTED + Counter(
-        {"clean": 4, "flag": 4, "totals": 1})
+        {"clean": 4, "flag": 4}) + _A_FURTHER_RUN
 
     after = _run_and_read(tmp_path)
-    # Unchanged — so row "d" and the four-row frame, which only the busted run
-    # ever computed, were pinned by it.
+    # No row body ran, so row "d" — computed by the busted run alone — was pinned by it.
     assert _invocations(probe) == _EVERYTHING_COMPUTED + Counter(
-        {"clean": 4, "flag": 4, "totals": 1})
+        {"clean": 4, "flag": 4}) + _A_FURTHER_RUN + _A_FURTHER_RUN
     _assert_same_outputs(busted, after)
 
 
@@ -221,38 +217,22 @@ def test_editing_one_stages_function_body_invalidates_that_stage_alone(tmp_path)
     _publish_a_version(tmp_path)
 
     edited = _run_and_read(tmp_path)
-    assert _invocations(probe) == _EVERYTHING_COMPUTED + Counter({"clean": 3})
+    assert _invocations(probe) == _EVERYTHING_COMPUTED + Counter({"clean": 3}) + _A_FURTHER_RUN
     _assert_same_outputs(first, edited)
 
 
-def test_editing_the_frame_stages_body_invalidates_only_the_frame_stage(tmp_path):
-    probe = _write_project(tmp_path)
-    _publish_a_version(tmp_path)
-    first = _run_and_read(tmp_path)
-    _run_and_read(tmp_path)
-    # An unedited `totals` replays, else this count can't tell invalidation from always-recompute.
-    assert _invocations(probe) == _EVERYTHING_COMPUTED
-
-    _write_project(tmp_path, totals_edit="\n# a comment the cache must notice\n")
-    _publish_a_version(tmp_path)
-
-    edited = _run_and_read(tmp_path)
-    assert _invocations(probe) == _EVERYTHING_COMPUTED + Counter({"totals": 1})
-    _assert_same_outputs(first, edited)
-
-
-def test_one_new_input_row_recomputes_only_that_row_but_the_whole_frame(tmp_path):
+def test_one_new_input_row_recomputes_only_that_row(tmp_path):
     probe = _write_project(tmp_path)
     _publish_a_version(tmp_path)
     _run_and_read(tmp_path)
     _run_and_read(tmp_path)
-    assert _invocations(probe) == _EVERYTHING_COMPUTED  # nothing recomputes yet
+    assert _invocations(probe) == _EVERYTHING_COMPUTED + _A_FURTHER_RUN
 
     _append_input_row(tmp_path, {"name": "d", "val": 4})
     _run_and_read(tmp_path)
 
     assert _invocations(probe) == _EVERYTHING_COMPUTED + Counter(
-        {"clean": 1, "flag": 1, "totals": 1})
+        {"clean": 1, "flag": 1}) + _A_FURTHER_RUN + _A_FURTHER_RUN
 
 
 def test_a_stage_declaring_cache_false_recomputes_on_every_run(tmp_path):
@@ -262,9 +242,8 @@ def test_a_stage_declaring_cache_false_recomputes_on_every_run(tmp_path):
     _run_and_read(tmp_path)
     _run_and_read(tmp_path)
 
-    # `flag` re-rolled; `clean` above it and `totals` below it both replayed —
-    # the opt-out is that stage's alone.
-    assert _invocations(probe) == _EVERYTHING_COMPUTED + Counter({"flag": 3})
+    # `flag` re-rolled while `clean` above it replayed: the opt-out is that stage's alone.
+    assert _invocations(probe) == _EVERYTHING_COMPUTED + Counter({"flag": 3}) + _A_FURTHER_RUN
 
 
 def test_the_cache_survives_a_process_restart_and_a_change_of_directory(tmp_path):
@@ -286,7 +265,7 @@ def test_the_cache_survives_a_process_restart_and_a_change_of_directory(tmp_path
 
     _run_in_a_fresh_process(tmp_path, db=db, cwd=second_cwd)
 
-    assert _invocations(probe) == _EVERYTHING_COMPUTED  # every stage replayed
+    assert _invocations(probe) == _EVERYTHING_COMPUTED + _A_FURTHER_RUN  # every ROW replayed
 
 
 def _run_in_a_fresh_process(project: Path, *, db: Path, cwd: Path) -> None:

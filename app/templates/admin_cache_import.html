@@ -35,14 +35,17 @@
             <td class="spend-num">{{ "{:,}".format(report.written) }}</td>
             <td class="spend-num">{{ "{:,}".format(report.already_stored) }}</td>
         </tr>
-        <tr>
-            <td>frames</td>
-            <td class="spend-num">{{ "{:,}".format(report.frames_written) }}</td>
-            <td class="spend-num">{{ "{:,}".format(report.frames_already_stored) }}</td>
-        </tr>
     </tbody>
 </table>
 <p class="muted">Nothing was replaced: an id already stored keeps the output it holds.</p>
+{% if report.frames_skipped %}
+<div class="banner banner-warn">
+    <p>⚠ <strong>{{ "{:,}".format(report.frames_skipped) }} whole-frame entries in this export were not
+       imported.</strong> They came from a workspace that still cached a stage's whole output frame.
+       Nothing reads one now — a frame-shaped stage recomputes every run — so they were left in the
+       archive. The row entries above imported normally.</p>
+</div>
+{% endif %}
 
 <h2>By stage</h2>
 <p class="muted">An entry is looked up by its stage's definition fingerprint. A stage edited on

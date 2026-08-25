@@ -7,12 +7,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from app.core.frames import (
-    compute_table_fingerprint,
-    compute_tables_fingerprint,
-    frame_to_table,
-    list_rows,
-)
+from app.core.frames import list_rows
 from app.core.stage_cache import compute_row_fingerprint
 
 # One frame exercising every representation that has moved under us before: an
@@ -31,17 +26,12 @@ _FROZEN_FRAME = pd.DataFrame(
 )
 
 _FROZEN_ROW_FINGERPRINTS = ["f7b3dbcee3434b6f", "8cf1a35ba171fc08"]
-_FROZEN_FRAME_FINGERPRINT = "c3fcf60bf0750e1b"
 
 
 def test_row_fingerprints_have_not_moved():
     assert [compute_row_fingerprint(r) for r in list_rows(_FROZEN_FRAME)] == (
         _FROZEN_ROW_FINGERPRINTS
     )
-
-
-def test_frame_fingerprint_has_not_moved():
-    assert compute_table_fingerprint(frame_to_table(_FROZEN_FRAME)) == _FROZEN_FRAME_FINGERPRINT
 
 
 @pytest.mark.parametrize(
@@ -64,7 +54,3 @@ def test_a_round_trip_through_the_frame_seam_keeps_a_rows_identity(column, value
     write_frame_file(frame, tmp_path / "f.parquet")
     after = [compute_row_fingerprint(row) for row in list_rows(read_frame_file(tmp_path / "f.parquet"))]
     assert before == after
-
-
-def test_frames_fingerprint_has_not_moved():
-    assert compute_tables_fingerprint([frame_to_table(_FROZEN_FRAME)]) == "4689154503d07474"
