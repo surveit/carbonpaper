@@ -436,7 +436,7 @@ function mechanismOf(n){
 // What the step did to the row, off the same compare the panel shows.
 function deltaOf(n){
   const d = n.row_diff, parts = [];
-  if(d.added) parts.push(`<span class="add">+${d.added} field${d.added>1?'s':''}</span>`);
+  if(d.added) parts.push(`<span class="add">+${d.added} column${d.added>1?'s':''}</span>`);
   if(d.changed) parts.push(`<span class="chg">~${d.changed} changed</span>`);
   if(d.dropped) parts.push(`−${d.dropped} dropped`);
   // "no cell changed" is a comparison's result; with no parent row there was no
@@ -525,9 +525,9 @@ function fanInOf(n){
   const total = groups.reduce((sum, g) => sum + g.total, 0);
   return `${total} row${total > 1 ? 's' : ''} of ${esc(groups[0].stage_id)}`;
 }
-// A dropped field is not in this row, so there is no cell of it to read and the
+// A dropped column is not in this row, so there is no cell of it to read and the
 // line stays inert — every other line opens the lineage of the cell it prints.
-function fieldRow(f){
+function columnRow(f){
   const mark = {added:'+', changed:'~', dropped:'−', carried:''}[f.state];
   const text = f.text === '' ? '<span class="lin-null">(empty)</span>' : esc(f.text);
   const was = f.state === 'changed'
@@ -543,20 +543,20 @@ function saidOf(n, touched){
        + ` moved from <b>row ${n.base.row_number}</b> to <b>row ${n.row_number}</b>.</div>`;
 }
 function renderRowTab(n){
-  const fields = n.row_diff.fields;
-  const touched = fields.filter(f => f.state !== 'carried');
+  const columns = n.row_diff.columns;
+  const touched = columns.filter(c => c.state !== 'carried');
   // Nothing changed here → the "changed" scope would be an empty table, so the
   // whole row stands in rather than a blank pane.
-  const shown = (scope === 'changed' && touched.length) ? touched : fields;
+  const shown = (scope === 'changed' && touched.length) ? touched : columns;
   // With no parent nothing was compared, so there is no second view to offer.
   const picker = n.base ? `<div class="lin-scope">
       <button data-scope="changed" class="${scope==='changed'?'on':''}">Changed here (${touched.length})</button>
-      <button data-scope="all" class="${scope==='all'?'on':''}">Whole row (${fields.length})</button>
+      <button data-scope="all" class="${scope==='all'?'on':''}">Whole row (${columns.length})</button>
     </div>` : '';
   return `${picker}
     ${saidOf(n, touched)}
     ${baseLine(n)}
-    <table class="lin-row">${shown.map(fieldRow).join('')}</table>`;
+    <table class="lin-row">${shown.map(columnRow).join('')}</table>`;
 }
 // What this row was compared against. The origin says nothing when the title above
 // already names the file it was read from.

@@ -1,5 +1,4 @@
-"""One traced step's row as a list of fields, each marked against the parent row
-the walk came from — the transposed single-row form the lineage page reads."""
+"""One traced step's row, a line per column, marked against the parent it came from."""
 
 from __future__ import annotations
 
@@ -10,7 +9,7 @@ from app.web.diff_state import CellDiffState
 
 
 @dataclass(frozen=True)
-class RowField:
+class RowColumn:
     name: str
     state: CellDiffState
     text: str
@@ -21,7 +20,7 @@ class RowField:
 
 @dataclass(frozen=True)
 class RowDiff:
-    fields: list[RowField]
+    columns: list[RowColumn]
     added: int
     changed: int
     dropped: int
@@ -32,14 +31,14 @@ def build_row_diff(
 ) -> RowDiff:
     if parent_row is None:
         state = CellDiffState.added if is_origin else CellDiffState.carried
-        return _count_fields([
-            RowField(name=str(name), state=state, text=render_cell(value), was=None)
+        return _count_columns([
+            RowColumn(name=str(name), state=state, text=render_cell(value), was=None)
             for name, value in row.items()
         ])
-    return _count_fields(
-        [_compare_field(str(name), value, parent_row) for name, value in row.items()]
+    return _count_columns(
+        [_compare_column(str(name), value, parent_row) for name, value in row.items()]
         + [
-            RowField(name=str(name), state=CellDiffState.dropped,
+            RowColumn(name=str(name), state=CellDiffState.dropped,
                      text=render_cell(value), was=None)
             for name, value in parent_row.items()
             if str(name) not in row
@@ -49,10 +48,10 @@ def build_row_diff(
 
 def row_diff_to_dict(diff: RowDiff) -> dict[str, Any]:
     return {
-        "fields": [
-            {"name": field.name, "state": str(field.state.value),
-             "text": field.text, "was": field.was}
-            for field in diff.fields
+        "columns": [
+            {"name": column.name, "state": str(column.state.value),
+             "text": column.text, "was": column.was}
+            for column in diff.columns
         ],
         "added": diff.added,
         "changed": diff.changed,
@@ -64,23 +63,23 @@ def render_cell(value: Any) -> str:
     return "" if value is None else str(value)
 
 
-def _compare_field(name: str, value: Any, parent_row: dict[str, Any]) -> RowField:
+def _compare_column(name: str, value: Any, parent_row: dict[str, Any]) -> RowColumn:
     """Compared as RENDERED text: a difference nobody can see is not marked."""
     text = render_cell(value)
     if name not in parent_row:
-        return RowField(name=name, state=CellDiffState.added, text=text, was=None)
+        return RowColumn(name=name, state=CellDiffState.added, text=text, was=None)
     was = render_cell(parent_row[name])
     if was == text:
-        return RowField(name=name, state=CellDiffState.carried, text=text, was=None)
-    return RowField(name=name, state=CellDiffState.changed, text=text, was=was)
+        return RowColumn(name=name, state=CellDiffState.carried, text=text, was=None)
+    return RowColumn(name=name, state=CellDiffState.changed, text=text, was=was)
 
 
-def _count_fields(fields: list[RowField]) -> RowDiff:
+def _count_columns(columns: list[RowColumn]) -> RowDiff:
     def count(state: CellDiffState) -> int:
-        return sum(1 for field in fields if field.state is state)
+        return sum(1 for column in columns if column.state is state)
 
     return RowDiff(
-        fields=fields,
+        columns=columns,
         added=count(CellDiffState.added),
         changed=count(CellDiffState.changed),
         dropped=count(CellDiffState.dropped),

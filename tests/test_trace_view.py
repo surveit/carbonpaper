@@ -147,14 +147,14 @@ def test_missing_compiled_stage_degrades_gracefully():
     assert node["transform"]["detail"] is None
     # The row and its marks come off the run's own outputs, so an unreadable
     # workflow version costs the reader the transform, never the data.
-    assert [f["name"] for f in node["row_diff"]["fields"]] == ["facility_id", "score"]
+    assert [f["name"] for f in node["row_diff"]["columns"]] == ["facility_id", "score"]
 
 
 def test_a_node_carries_its_row_marked_against_its_parents():
     view = _view(_trace(), _stages())
     diff = view["nodes"][-1]["row_diff"]
     assert diff["added"] == 1 and diff["changed"] == 0
-    assert [(f["name"], f["state"]) for f in diff["fields"]] == [
+    assert [(f["name"], f["state"]) for f in diff["columns"]] == [
         ("facility_id", "carried"), ("score", "added"),
     ]
 
