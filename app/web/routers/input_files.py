@@ -56,8 +56,8 @@ async def input_file_check(project_id: str, run_id: str, stage: str, row: int,
     """Re-reads the file and compares the slice — a click, never a page load."""
     slice_ = _find_file(_load(project_id, run_id, stage, row, column), input)
     compared = compare_slice_to_the_file(
-        project_id, run_id, slice_.stage_id, _pick_rows(slice_, rows),
-        _pick_columns(slice_, columns))
+        project_id, run_id, slice_.stage_id, _choose_rows(slice_, rows),
+        _choose_columns(slice_, columns))
     return JSONResponse(compared.model_dump(mode="json"))
 
 
@@ -66,11 +66,11 @@ async def input_file_slice(project_id: str, run_id: str, stage: str, row: int,
                            column: str, input: str, rows: Basis = Basis.relevant,
                            columns: Basis = Basis.relevant):
     slice_ = _find_file(_load(project_id, run_id, stage, row, column), input)
-    wanted = _pick_columns(slice_, columns)
+    wanted = _choose_columns(slice_, columns)
     frame = read_frame_table(
         resolve_run_dir(project_id, run_id) / "outputs" / f"{slice_.stage_id}.parquet")
     return StreamingResponse(
-        io.StringIO(_render_as_csv(frame, _pick_rows(slice_, rows), wanted)),
+        io.StringIO(_render_as_csv(frame, _choose_rows(slice_, rows), wanted)),
         media_type="text/csv",
         headers={"Content-Disposition":
                  f'attachment; filename="{slice_.stage_id}-slice.csv"'})
@@ -90,13 +90,13 @@ def _find_file(view: InputFilesView, stage_id: StageId) -> InputFileSlice:
                         detail=f"this figure read no file at '{stage_id}'")
 
 
-def _pick_rows(slice_: InputFileSlice, rows: Basis) -> list[int]:
+def _choose_rows(slice_: InputFileSlice, rows: Basis) -> list[int]:
     if rows is Basis.all:
         return list(range(slice_.rows_read))
     return list(slice_.ordinals)
 
 
-def _pick_columns(slice_: InputFileSlice, columns: Basis) -> list[str]:
+def _choose_columns(slice_: InputFileSlice, columns: Basis) -> list[str]:
     if columns is Basis.all:
         return slice_.columns_read
     return slice_.columns_relevant
