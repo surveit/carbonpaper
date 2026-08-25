@@ -14,9 +14,9 @@ import pandas as pd
 
 from app.models import StageType, WorkflowStage
 from app.models.stage import is_grain_and_order_preserving
-from app.runtime.lineage import RowLineage, lineage_sidecar_path
+from app.runtime.lineage_sidecar import read_lineage_sidecar
 from app.runtime.manifest import resolve_output_path
-from app.core.frames import read_frame_file, read_frame_table
+from app.core.frames import read_frame_file
 from app.web.column_order import order_written_columns_first
 from app.web.diff_state import CellDiffState, ColumnDiffState
 from app.web.loading import PREVIEW_ROWS_SHOWN, render_frame_as_text
@@ -382,12 +382,11 @@ def _shape_filter_rows(
 def _read_kept_ordinals(
     run_dir: Path, stage_id: str, input_id: str, *, rows_out: int, rows_in: int
 ) -> Optional[list[int]]:
-    path = lineage_sidecar_path(run_dir, stage_id)
-    if not path.exists():
-        return None
     try:
-        lineage = RowLineage.from_table(read_frame_table(path))
+        lineage = read_lineage_sidecar(run_dir, stage_id).lineage
     except (OSError, ValueError):
+        return None
+    if lineage is None:
         return None
     if len(lineage) != rows_out:
         return None

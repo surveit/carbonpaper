@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.runtime.errors import MissingLineage, NotALoadStage
-from app.core.frames import read_frame_table
 from app.models.branch_analysis import (
     BranchId,
     BranchOption,
@@ -23,8 +22,9 @@ from app.runtime.branch_analysis.stage_code import (
     find_code_branches,
     read_decision_source,
 )
-from app.runtime.branches import RowBranches, branch_sidecar_path
-from app.runtime.lineage import EdgeKind, RowLineage, RowParent, lineage_sidecar_path
+from app.runtime.branches import RowBranches
+from app.runtime.lineage import EdgeKind, RowLineage, RowParent
+from app.runtime.lineage_sidecar import read_lineage_sidecar
 
 MERGE_EDGE = EdgeKind.contribution.value
 _LOOKS_UP = (StageType.enrich, StageType.expand)
@@ -57,9 +57,10 @@ def reconstruct_run_branches(
     run_dir: Path, stages: dict[StageId, WorkflowStage],
     ordered_stage_ids: list[StageId], row_counts: dict[StageId, int],
 ) -> WorkflowRunBranches:
-    lineages = {sid: _read_lineage(run_dir, sid) for sid in ordered_stage_ids}
-    arms_taken = {sid: taken for sid in ordered_stage_ids
-                  if (taken := _read_arm_sidecar(run_dir, sid)) is not None}
+    sidecars = {sid: read_lineage_sidecar(run_dir, sid) for sid in ordered_stage_ids}
+    lineages = {sid: sidecars[sid].lineage for sid in ordered_stage_ids}
+    arms_taken = {sid: sidecar.branches for sid, sidecar in sidecars.items()
+                  if sidecar.branches is not None}
     from_lineage = {
         sid: _read_branching_from_lineage(stages.get(sid), lineages[sid], row_counts)
         for sid in ordered_stage_ids}
@@ -338,16 +339,6 @@ def _count_rows_per_branch(
 
 
 # ─── reading the run ─────────────────────────────────────────────────────────
-
-def _read_arm_sidecar(run_dir: Path, stage_id: StageId) -> RowBranches | None:
-    path = branch_sidecar_path(run_dir, stage_id)
-    return RowBranches.from_table(read_frame_table(path)) if path.exists() else None
-
-
-def _read_lineage(run_dir: Path, stage_id: StageId) -> RowLineage | None:
-    path = lineage_sidecar_path(run_dir, stage_id)
-    return RowLineage.from_table(read_frame_table(path)) if path.exists() else None
-
 
 def find_stage_position(ordered_stage_ids: list[StageId], stage_id: StageId) -> int:
     return (ordered_stage_ids.index(stage_id) if stage_id in ordered_stage_ids

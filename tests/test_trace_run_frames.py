@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+import app.runtime.lineage_sidecar as lineage_sidecar_module
 import app.runtime.trace as trace_module
 from app.runtime.lineage import RowLineage, RowParent
 from app.runtime.trace import RunFrames, trace_row, trace_row_from, trace_to_dict
@@ -44,11 +45,12 @@ def test_each_output_and_sidecar_is_read_once_however_many_rows_are_traced(
 ):
     run_dir = _filtered_run(tmp_path)
     reads: list[str] = []
-    real = trace_module.read_frame_table
-    monkeypatch.setattr(
-        trace_module, "read_frame_table",
-        lambda path: (reads.append(path.name), real(path))[1],
-    )
+    for module in (trace_module, lineage_sidecar_module):
+        real = module.read_frame_table
+        monkeypatch.setattr(
+            module, "read_frame_table",
+            lambda path, real=real: (reads.append(path.name), real(path))[1],
+        )
     frames = RunFrames(run_dir)
     for row in range(2):
         trace_row_from(frames, "kept", row)

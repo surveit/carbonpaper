@@ -117,7 +117,7 @@ after injection — without that, the panel's JS (the tab strip, the run log) is
   columns, so it reports neither — a zero it never counted would be invented.
   Every other stage type keeps the plain output
   view, and any stage whose alignment can't be verified (missing frame,
-  row-count mismatch, absent sidecar) falls back to it.
+  row-count mismatch, no lineage recorded) falls back to it.
 
 ## Review queue (`queue.html`, `_queue_card.html`)
 

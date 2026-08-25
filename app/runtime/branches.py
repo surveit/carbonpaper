@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 
 import pyarrow as pa
 
@@ -72,7 +71,3 @@ class BranchRecorder:
         if not any(self._by_input.values()):
             return None
         return RowBranches([self._by_input.get(index) for index in kept_indices])
-
-
-def branch_sidecar_path(run_dir: Path, stage_id: str) -> Path:
-    return Path(run_dir) / "outputs" / f"{stage_id}.branch.parquet"

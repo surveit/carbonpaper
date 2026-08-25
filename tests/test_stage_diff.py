@@ -10,10 +10,10 @@ from pathlib import Path
 import pandas as pd
 
 from app.models.stage import Stage, StageType, is_grain_and_order_preserving, parse_stage
+from app.runtime.lineage_sidecar import resolve_lineage_sidecar_path
 from app.runtime.lineage import (
     TRACE_SOURCE_ROW_KEY,
     TRACE_SOURCE_STAGE_KEY,
-    lineage_sidecar_path,
 )
 from app.web.loading import PREVIEW_ROWS_SHOWN, load_output_preview
 from app.web.diff_state import CellDiffState, ColumnDiffState
@@ -112,7 +112,7 @@ def _write_lineage(run_dir: Path, stage_id: str, kept: list[int]) -> None:
     pd.DataFrame({
         TRACE_SOURCE_STAGE_KEY: [LOAD_ID] * len(kept),
         TRACE_SOURCE_ROW_KEY: kept,
-    }).to_parquet(lineage_sidecar_path(run_dir, stage_id), index=False)
+    }).to_parquet(resolve_lineage_sidecar_path(run_dir, stage_id), index=False)
 
 
 def _diff(run_dir: Path, stage_def: Stage, out_rel: str):
