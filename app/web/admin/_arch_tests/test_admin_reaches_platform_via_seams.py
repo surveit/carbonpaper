@@ -18,6 +18,13 @@ _SEAMS_BY_ROUTER = {
         "app.core.errors",
         "app.web.config",
     },
+    # The page over activity.py, which reads a run manifest — the router itself only
+    # renders what that module counted.
+    "activity_router.py": {
+        "app.web.admin.activity",
+        "app.web.breadcrumbs",
+        "app.web.config",
+    },
     # Moving cache entries between workspaces is its own seam, and the reason this
     # router is not a route on workspace_router.
     "cache_router.py": {

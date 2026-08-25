@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Instance activity{% endblock %}
+{% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
+{% macro funnel(f) %}
+<div class="funnel">
+    {% for step in f.steps %}
+    <div class="funnel-row">
+        <div class="funnel-label">
+            <strong>{{ step.label }}</strong>
+            <span class="funnel-basis">{{ step.basis }}</span>
+        </div>
+        <div class="funnel-track"><div class="funnel-fill" style="width: {{ (100 * step.share)|round(1) }}%;"></div></div>
+        <div class="funnel-count">{{ "{:,}".format(step.count) }}</div>
+        <div class="funnel-share">{{ (100 * step.share)|round|int }}%</div>
+    </div>
+    {% endfor %}
+</div>
+{% endmacro %}
+{% macro day_chart(series) %}
+<h3>{{ series.label }} <span class="chart-total">{{ "{:,}".format(series.total) }} in all</span></h3>
+<div class="day-chart">
+    {% for day in series.days %}
+    <div class="day-slot" title="{{ day.day }} — {{ day.count }}">
+        {# No bar at all on a day nothing was recorded: the bar's min-height would draw
+           that day a stub, which reads as a small count rather than as none. #}
+        {% if day.count %}<div class="day-bar" style="height: {{ (100 * day.count / series.peak)|round(1) }}%;"></div>{% endif %}
+        <div class="day-label">{{ day.day[5:] }}</div>
+    </div>
+    {% endfor %}
+</div>
+<p class="muted">{{ series.note }}. Tallest bar: {{ "{:,}".format(series.peak) }}. Every calendar day from {{ series.days[0].day }} to {{ series.days[-1].day }}, so a day with no bar recorded nothing.</p>
+{% endmacro %}
+{% block content %}
+<div class="dash-header">
+    <div class="dash-header-text">
+        <h1>Instance activity</h1>
+        <p class="lede">Is anyone using this instance, and how far do they get before they stop? Counted off the records this app already writes in the course of doing its job — project records, working copies, stored workflow versions, uploaded files and run manifests. None of it comes from tracking, because there is none: nothing in this app records a visit, a request, a browser or a person.</p>
+    </div>
+    <a href="/admin" class="btn">Back to admin</a>
+</div>
+
+{# Ahead of every figure on the page, not under them. A funnel implies the thing above
+   its first step was measured, and here it was not — so what is missing is read before
+   what is counted, rather than as a footnote to it. #}
+<div class="blind-spots">
+    <h2>What these records cannot say</h2>
+    <p class="lede">Each of these is unknown, not zero. No figure below estimates any of them, and none of them has a denominator these records hold.</p>
+    <dl>
+        <dt>How many people arrived</dt>
+        <dd>Nothing records a visit or a request. Someone who opened this instance and left wrote nothing down, so the funnel below has no top: it starts at the first act that stores a record. How many arrivals become a project is not a number this app can produce.</dd>
+
+        <dt>How many people these are</dt>
+        <dd>No record carries an identity. The projects counted below could be one person or as many people as there are projects. A version's <code>reviewer</code> is free text whoever saved it supplied, not someone this app authenticated.</dd>
+
+        <dt>Whether anyone took the guided tour</dt>
+        <dd>The tour's "already started" flag lives in the visitor's own browser storage and never reaches the server. Tour starts, how far they got and where they gave up are all invisible here.</dd>
+
+        <dt>Whether a finished run reached a reader</dt>
+        <dd>Exporting a run as a review packet writes no record, and neither does downloading a file a run published. The last step of the funnel — the work leaving this instance and going to someone — cannot be counted today.</dd>
+
+        <dt>Whether a quiet project was abandoned</dt>
+        <dd>A project with no run may have been given up on, or exported and finished somewhere else. These records say only that nothing further happened here.</dd>
+
+        <dt>When someone actually started</dt>
+        <dd><code>created_at</code> is when the record was written. A project imported from a bundle is stamped at import, and a project deleted from this instance keeps its record — deleting drops the working copy, not the row. So the project count includes projects nobody can open.</dd>
+
+        <dt>Whether a run with no ending is still going</dt>
+        <dd>A run whose process died writes no terminal status, so it reads the same as one still executing. The <code>running</code> figure below mixes the two and this page will not guess the split.</dd>
+
+        <dt>What the unread records held</dt>
+        <dd>{{ activity.unreadable_runs }} run manifest{{ "s" if activity.unreadable_runs != 1 }} this app can no longer parse — whatever they recorded is unread, not zero. {{ activity.runs_outside_a_project_record }} run{{ "s" if activity.runs_outside_a_project_record != 1 }} name a project id no project record covers, so they are counted as runs and sit in no project's funnel.</dd>
+    </dl>
+</div>
+
+{% if activity.first_day %}
+<h2>Projects</h2>
+<p class="muted">One row per project record; each step is a subset of the one above it, so a drop between two rows is a real drop.</p>
+{{ funnel(activity.projects) }}
+<p class="muted">{{ activity.versioned_projects }} of those also cut at least one stored workflow version. Projects marked private are counted here and named nowhere: {{ activity.private_projects }} of them.</p>
+
+<h2>Runs</h2>
+<p class="muted">One row per production run manifest. The {{ activity.eval_runs }} eval run{{ "s" if activity.eval_runs != 1 }} this instance holds are in none of these figures.</p>
+{{ funnel(activity.runs) }}
+<p class="muted">A run that published and then failed a later stage still counts as having published — a publish stage completing is an event, not a verdict on the whole run. {{ activity.halted_runs }} run{{ "s" if activity.halted_runs != 1 }} halted for human review, and {{ activity.runs_pinning_no_version }} pinned no workflow version.</p>
+
+<h2>Day by day</h2>
+<p class="muted">All four charts share one day axis, {{ activity.first_day }} to {{ activity.last_day }}, so they read against each other. Bars, never a line: nothing was measured between two days, so nothing is drawn between them.</p>
+{% for series in activity.series %}
+{{ day_chart(series) }}
+{% endfor %}
+
+<h2>Runs by status</h2>
+<table class="stages">
+    <thead><tr><th>status</th><th class="num-col">runs</th></tr></thead>
+    <tbody>
+        {% for count in activity.run_status %}
+        <tr>
+            <td><span class="run-status status-{{ count.label }}">{{ count.label }}</span></td>
+            <td class="num-col">{{ "{:,}".format(count.count) }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h2>Files uploaded</h2>
+<p class="muted">{{ "{:,}".format(activity.uploaded_files) }} file{{ "s" if activity.uploaded_files != 1 }} stored, weighing {{ "{:,.0f}".format(activity.uploaded_bytes / 1048576) }} MB. A run may also read a file from the server's own disk, which writes no record at all.</p>
+
+<h2>Nothing on this page names anything</h2>
+<p class="muted">No project name, title, file name, version message or run name appears above, and none should. A project's name is typed by whoever made it and can itself be the story they are working on. This page answers how far people get, which takes counts and no content.</p>
+{% else %}
+<div class="empty-state">
+    <h2>Nothing recorded yet</h2>
+    <p class="muted">This instance holds no project record, no uploaded file and no run, so there is nothing to count.</p>
+    <a href="/project/new" class="btn primary">＋ New project</a>
+</div>
+{% endif %}
+{% endblock %}

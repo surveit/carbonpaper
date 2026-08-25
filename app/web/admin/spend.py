@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Callable
-from datetime import date, timedelta
 from enum import Enum
 
 from pydantic import BaseModel
@@ -19,6 +18,7 @@ from app.core.agent.usage import LlmUsage
 from app.models.records.run_manifest import PRODUCTION_RUNS
 from app.services.project import list_project_listings
 from app.services.run import RunEntry, list_every_run_entry
+from app.web.admin.day_axis import days_spanned
 
 # What a model's name is shown as where the record does not carry one. Every run
 # before the `model` field existed is in this bucket, so it holds real money.
@@ -142,12 +142,7 @@ def _daily_counts(entries: list[SpendEntry]) -> list[SpendCount]:
     if not by_day:
         return []
     return [count_spend(day, by_day.get(day, []))
-            for day in _days_spanned(min(by_day), max(by_day))]
-
-
-def _days_spanned(first: str, last: str) -> list[str]:
-    start, end = date.fromisoformat(first), date.fromisoformat(last)
-    return [(start + timedelta(days=n)).isoformat() for n in range((end - start).days + 1)]
+            for day in days_spanned(min(by_day), max(by_day))]
 
 
 def _project_label(project_id: object, names: ProjectNames) -> str:

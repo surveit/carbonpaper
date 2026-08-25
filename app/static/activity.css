@@ -1,0 +1,87 @@
+/* The instance-activity page (admin_activity.html): the blind-spot panel it opens on,
+   and the two funnels. Its day charts are day-chart.css. No colour of its own — a count
+   is not a status, so nothing here takes one of the five state hues; the funnel fill is
+   the transfer ink and the blind-spot panel's rule is the same ink at full weight. */
+
+/* Opens the page, so it carries an accent rule rather than the quieter --border-strong
+   a spend-gap note takes: it is the first thing read, not a footnote to a figure. */
+.blind-spots {
+    box-sizing: border-box;
+    border: 1px solid var(--border-strong);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+    background: var(--sunk);
+    padding: 16px 20px;
+    margin: 0 0 26px;
+}
+
+.blind-spots h2 { margin: 0 0 4px; }
+
+.blind-spots .lede { margin-bottom: 12px; }
+
+.blind-spots dl { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px 28px; }
+
+.blind-spots dt { font-weight: 600; padding-top: 7px; }
+
+.blind-spots dd { margin: 2px 0 0; color: var(--muted); padding-bottom: 7px; }
+
+/* The question and what answers it side by side, once there is room for both to stay
+   readable; stacked below that, where two narrow columns would not be. */
+@media (min-width: 860px) {
+    .blind-spots dl { grid-template-columns: minmax(0, 17em) minmax(0, 1fr); }
+}
+
+.funnel {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--raised);
+    padding: 6px 18px;
+}
+
+.funnel-row {
+    display: grid;
+    grid-template-columns: minmax(0, 22em) minmax(0, 1fr) 5.5em 3.5em;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.funnel-row:last-child { border-bottom: none; }
+
+.funnel-label { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
+.funnel-basis { color: var(--muted); font-size: 12px; }
+
+.funnel-track {
+    box-sizing: border-box;
+    height: 14px;
+    background: var(--sunk-deep);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.funnel-fill { height: 100%; background: var(--accent); border-radius: 3px; }
+
+.funnel-count {
+    text-align: right;
+    font-size: 19px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.funnel-share {
+    text-align: right;
+    color: var(--muted);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* The count is the figure; the bar and the share only restate it. Narrow enough and
+   both go, rather than being squeezed to a width that shows a difference wrongly. */
+@media (max-width: 760px) {
+    .funnel-row { grid-template-columns: minmax(0, 1fr) 5em; }
+    .funnel-track, .funnel-share { display: none; }
+}
+
+.chart-total { color: var(--muted); font-weight: 400; font-size: 13px; }

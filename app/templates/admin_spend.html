@@ -4,16 +4,16 @@
 {% macro count_rows(counts, what) %}
 <table class="stages">
     <thead>
-        <tr><th>{{ what }}</th><th class="spend-num">cost</th><th class="spend-num">calls</th><th class="spend-num">in</th><th class="spend-num">out</th></tr>
+        <tr><th>{{ what }}</th><th class="num-col">cost</th><th class="num-col">calls</th><th class="num-col">in</th><th class="num-col">out</th></tr>
     </thead>
     <tbody>
         {% for t in counts %}
         <tr>
             <td>{{ t.label }}</td>
-            <td class="spend-num">${{ "%.2f"|format(t.cost_usd) }}</td>
-            <td class="spend-num">{{ "{:,}".format(t.calls) }}</td>
-            <td class="spend-num">{{ "{:,}".format(t.input_tokens) }}</td>
-            <td class="spend-num">{{ "{:,}".format(t.output_tokens) }}</td>
+            <td class="num-col">${{ "%.2f"|format(t.cost_usd) }}</td>
+            <td class="num-col">{{ "{:,}".format(t.calls) }}</td>
+            <td class="num-col">{{ "{:,}".format(t.input_tokens) }}</td>
+            <td class="num-col">{{ "{:,}".format(t.output_tokens) }}</td>
         </tr>
         {% endfor %}
     </tbody>
@@ -56,13 +56,13 @@
 <h2>By day</h2>
 {% if spend.by_day %}
 {% set peak = spend.by_day|map(attribute='cost_usd')|max %}
-<div class="spend-chart">
+<div class="day-chart">
     {% for day in spend.by_day %}
-    <div class="spend-bar-slot" title="{{ day.label }} — ${{ "%.2f"|format(day.cost_usd) }} over {{ day.entries }} entries">
+    <div class="day-slot" title="{{ day.label }} — ${{ "%.2f"|format(day.cost_usd) }} over {{ day.entries }} entries">
         {# No bar at all for a day nothing was recorded on: the bar's min-height would
            otherwise draw that day a stub, which reads as a small amount. #}
-        {% if day.cost_usd %}<div class="spend-bar" style="height: {{ (100 * day.cost_usd / peak)|round(1) }}%;"></div>{% endif %}
-        <div class="spend-bar-label">{{ day.label[5:] }}</div>
+        {% if day.cost_usd %}<div class="day-bar" style="height: {{ (100 * day.cost_usd / peak)|round(1) }}%;"></div>{% endif %}
+        <div class="day-label">{{ day.label[5:] }}</div>
     </div>
     {% endfor %}
 </div>
@@ -86,7 +86,7 @@
 <h2>Dearest {{ spend.biggest|length }}</h2>
 <table class="stages">
     <thead>
-        <tr><th>when</th><th>source</th><th>project</th><th>what</th><th class="spend-num">cost</th><th>model</th></tr>
+        <tr><th>when</th><th>source</th><th>project</th><th>what</th><th class="num-col">cost</th><th>model</th></tr>
     </thead>
     <tbody>
         {% for e in spend.biggest %}
@@ -95,7 +95,7 @@
             <td>{{ e.source.value }}</td>
             <td>{{ e.project }}</td>
             <td>{% if e.link %}<a href="{{ e.link }}">{{ e.label }}</a>{% else %}{{ e.label }}{% endif %}</td>
-            <td class="spend-num">${{ "%.2f"|format(e.usage.cost_usd) }}</td>
+            <td class="num-col">${{ "%.2f"|format(e.usage.cost_usd) }}</td>
             <td class="muted">{{ e.model }}</td>
         </tr>
         {% endfor %}

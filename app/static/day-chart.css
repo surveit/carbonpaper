@@ -1,0 +1,45 @@
+/* A day-by-day bar chart, shared by the two admin pages that draw one (admin_spend.html,
+   admin_activity.html). Bars, never a line: nothing was measured between two days, so
+   nothing is drawn between them. No colour of its own — the bars are the transfer ink,
+   since neither page plots a status and neither takes one of the five state hues. */
+
+/* Bars grow from a shared baseline, so the row is bottom-aligned and each slot owns
+   its own full height. box-sizing is set here because there is no global reset. */
+.day-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 180px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--raised);
+    overflow-x: auto;
+}
+
+.day-slot {
+    box-sizing: border-box;
+    flex: 1 1 0;
+    min-width: 20px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 4px;
+}
+
+/* min-height so a day well under the peak is still a mark on the page rather than an
+   invisible sliver reading as a day nothing happened on. A day at zero gets no bar
+   element at all, which is what keeps the two readings apart. */
+.day-bar {
+    background: var(--accent);
+    border-radius: 2px 2px 0 0;
+    min-height: 2px;
+}
+
+.day-label {
+    font-size: 10px;
+    color: var(--muted);
+    text-align: center;
+    white-space: nowrap;
+}

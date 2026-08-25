@@ -41,6 +41,13 @@ table.stages th {
     color: var(--muted);
 }
 table.stages tr:last-child td { border-bottom: 0; }
+
+/* Element-qualified to outrank `table.stages th, table.stages td` above, which
+   left-aligns every cell — the same reason run-page.css writes `td.row-num`. */
+table.stages th.num-col, table.stages td.num-col {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
 table.stages a { text-decoration: none; }
 
 .signal {
