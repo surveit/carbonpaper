@@ -14,6 +14,7 @@ from app.models import WorkflowStage
 from app.models.stages.code import PythonFrameFunctionStage, PythonRowFunctionStage
 from app.models.stages.input_data import InputDataStage
 from app.models.stages.join import EnrichStage, ExpandStage
+from app.web.stage_prose import say_what_a_stage_did
 from app.models.stages.llm_transform import LLMTransformStage
 from app.models.stages.signature import list_read_column_names
 from app.models.stages.starlark import StarlarkRowFunctionStage
@@ -156,6 +157,9 @@ def _build_node(
             "row_number": render_row_number(parent["row_ordinal"]),
         },
         "transform": _transform_of(stages.get(step["stage_id"])),
+        # The step line's two sentences; app/web/stage_prose.py writes the second.
+        "description": _describe_stage(stages.get(step["stage_id"])),
+        "says": _say_the_step(stages.get(step["stage_id"])),
         # Straight from the walk, which knew the fan-in it sampled from here.
         "sampled": step.get("sampled"),
         "links": _links_of(links, step["stage_id"], step["row_ordinal"]),
@@ -166,6 +170,14 @@ def _build_node(
             asdict(group) for group in _group_contributors(_contributions(step), links)
         ],
     }
+
+
+def _describe_stage(workflow_stage: WorkflowStage | None) -> str | None:
+    return None if workflow_stage is None else workflow_stage.stage.description
+
+
+def _say_the_step(workflow_stage: WorkflowStage | None) -> str | None:
+    return None if workflow_stage is None else say_what_a_stage_did(workflow_stage.stage)
 
 
 def _name_the_row(entry: dict[str, Any], links: PanelLinks) -> dict[str, Any]:

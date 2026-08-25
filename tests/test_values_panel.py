@@ -124,3 +124,41 @@ def test_a_column_the_stage_does_not_write_is_refused_in_the_pane(run_id):
         "?stage=by_portfolio&row=0&column=nothing_here")
     assert page.status_code == 200
     assert "writes no column" in page.text
+
+
+def _walk_at(run_id, stage, column, row):
+    return load_values_used(PROJECT, run_id, stage, column, row)
+
+
+def test_the_sheet_holds_the_rows_the_figure_came_through(run_id):
+    # Transport is G-003 (300) and G-004 (400), both east.
+    values = _walk_at(run_id, "by_portfolio", "total_amount", row=1)
+    # The head of the frame is G-001 and G-002, which are Health's.
+    east = _step(values, "load_east")
+    assert east.row_ordinals == [2, 3]
+    assert east.rows == [["300"], ["400"]]
+
+
+def test_a_stage_the_figure_came_through_no_row_of_says_so(run_id):
+    # G-004's west copy is the one the dedupe collapsed.
+    values = _walk_at(run_id, "by_portfolio", "total_amount", row=1)
+    assert _step(values, "load_west").rows_reached == 0
+    page = TestClient(app).get(
+        f"/project/{PROJECT}/runs/{run_id}/values/panel"
+        "?stage=by_portfolio&row=1&column=total_amount")
+    assert "No row of <code>load_west</code> fed this figure" in page.text
+
+
+def test_the_tab_says_what_to_do_with_it(run_id):
+    page = TestClient(app).get(
+        f"/project/{PROJECT}/runs/{run_id}/values/panel"
+        "?stage=by_portfolio&row=1&column=total_amount")
+    assert "Walk this value back to your input data" in page.text
+    assert "use the arrow keys" in page.text
+
+
+def test_a_step_leads_with_the_stage_description_and_says_the_mechanism(run_id):
+    page = TestClient(app).get(
+        f"/project/{PROJECT}/runs/{run_id}/stage/by_portfolio/row/1/trace/view")
+    assert "Lands each grant&#39;s portfolio. AGENCY-Z matches nothing." in page.text
+    assert "Combine both_regions data with load_agencies data on agency_code" in page.text

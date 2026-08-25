@@ -2,6 +2,7 @@
 # cache (app.core.stage_cache).
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -291,6 +292,21 @@ def load_output_row(run_dir: Path, rel_path: str | None, row: int) -> dict[str, 
 def load_output_preview(
     run_dir: Path, rel_path: str | None, rows_shown: int = PREVIEW_ROWS_SHOWN
 ) -> dict[str, Any] | None:
+    return _load_output_slice(run_dir, rel_path, lambda total: list(range(min(total, rows_shown))))
+
+
+def load_output_rows_at(
+    run_dir: Path, rel_path: str | None, ordinals: Sequence[int], rows_shown: int
+) -> dict[str, Any] | None:
+    """The preview's shape, for named rows: `ordinals` positional against `preview`."""
+    return _load_output_slice(
+        run_dir, rel_path,
+        lambda total: [o for o in ordinals if 0 <= o < total][:rows_shown])
+
+
+def _load_output_slice(
+    run_dir: Path, rel_path: str | None, pick: Callable[[int], list[int]]
+) -> dict[str, Any] | None:
     if not rel_path:
         return None
     try:
@@ -303,10 +319,12 @@ def load_output_preview(
         df = read_frame_file(path)
     except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
+    taken = pick(len(df))
     return {
         "columns": list(df.columns),
         "rows_total": len(df),
-        "preview": render_cells_as_text(df.head(rows_shown)),
+        "preview": render_cells_as_text(df.iloc[taken]),
+        "ordinals": taken,
     }
 
 

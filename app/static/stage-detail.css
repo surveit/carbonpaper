@@ -403,3 +403,7 @@ details pre { margin-top: 6px; max-height: 480px; overflow: auto; }
     line-height: 1.55;
 }
 
+
+/* An aggregate said in English: the shape, then a line per column it writes. */
+.agg-lead { font-size: 15px; font-weight: 600; margin: 0 0 2px; }
+.agg-note { color: var(--muted); font-size: 13px; margin: 0; }

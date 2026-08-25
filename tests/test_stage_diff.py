@@ -685,3 +685,48 @@ def test_a_dedupe_gets_the_same_dropped_rows_view(tmp_path: Path) -> None:
     assert [row.dropped for row in diff.rows] == [False, True, False, False]
     assert diff.rows[1].cells == ["b", "2"]
     assert diff.dropped_total == 1 and diff.kept_total == 3
+
+
+def test_at_rows_draws_the_named_rows_and_not_the_first(tmp_path: Path) -> None:
+    # One figure's rows sit wherever the run put them, not at the head.
+    total = PREVIEW_ROWS_SHOWN + 4
+    _write_output(tmp_path, LOAD_ID, _numbered_frame(total))
+    changed = _numbered_frame(total)
+    changed["name"] = changed["name"].str.upper()
+    out_rel = _write_output(tmp_path, "classify", changed)
+
+    diff = build_stage_diff(place_stage(_row_stage(_IN_COLUMNS)), tmp_path, out_rel,
+                            {LOAD_ID: _LOAD_PATH}, at_rows=[total - 1, 1])
+
+    assert isinstance(diff, RowAlignedDiff)
+    assert [row[0].text for row in diff.rows] == [
+        changed["name"].iloc[total - 1], changed["name"].iloc[1]]
+    # The counts stay the whole frame's — a window never restates the run.
+    assert diff.rows_total == total and diff.changed_cells_total == total
+
+
+def test_at_rows_drops_an_ordinal_the_frame_does_not_have(tmp_path: Path) -> None:
+    _write_output(tmp_path, LOAD_ID, _numbered_frame(3))
+    out_rel = _write_output(tmp_path, "classify", _numbered_frame(3))
+
+    diff = build_stage_diff(place_stage(_row_stage(_IN_COLUMNS)), tmp_path, out_rel,
+                            {LOAD_ID: _LOAD_PATH}, at_rows=[1, 99])
+
+    assert isinstance(diff, RowAlignedDiff) and len(diff.rows) == 1
+
+
+def test_a_drawn_row_carries_where_it_came_from(tmp_path: Path) -> None:
+    # The lineage link beside a row is built from this.
+    total = PREVIEW_ROWS_SHOWN + 4
+    _write_output(tmp_path, LOAD_ID, _numbered_frame(total))
+    out_rel = _write_output(tmp_path, "classify", _numbered_frame(total))
+    stage = place_stage(_row_stage(_IN_COLUMNS))
+
+    picked = build_stage_diff(stage, tmp_path, out_rel, {LOAD_ID: _LOAD_PATH},
+                              at_rows=[total - 1, 1])
+    head = build_stage_diff(stage, tmp_path, out_rel, {LOAD_ID: _LOAD_PATH})
+
+    assert isinstance(picked, RowAlignedDiff) and isinstance(head, RowAlignedDiff)
+    assert picked.row_ordinals == [total - 1, 1] and picked.opens_on_the_first is False
+    assert head.row_ordinals == list(range(PREVIEW_ROWS_SHOWN))
+    assert head.opens_on_the_first is True

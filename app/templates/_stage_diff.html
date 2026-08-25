@@ -78,7 +78,7 @@
   </table></div>
 {% else %}
   {% if diff.rows_total > diff.rows | length %}
-  <p class="muted">showing the first {{ diff.rows | length }} of {{ "{:,}".format(diff.rows_total) }} rows</p>
+  <p class="muted">showing {% if diff.opens_on_the_first %}the first {% endif %}{{ diff.rows | length }} of {{ "{:,}".format(diff.rows_total) }} rows</p>
   {% endif %}
   <div class="table-scroll{% if full_rows %} rows-full{% endif %}"><table class="data-preview">
     {# The class each state paints with — app/static/node-detail.css owns what they
@@ -115,7 +115,8 @@
     </tr></thead>
     <tbody>
     {% for row in diff.rows %}
-    <tr>{% if full_rows %}<td class="row-num muted">{{ loop.index0 | row_number }}</td>{% endif %}<td class="syw-cell">{% set trace_href = links.row_trace(stage.stage_id, loop.index0) %}{% if trace_href %}<a href="{{ trace_href }}" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a>{% endif %}</td>
+    {%- set ordinal = diff.row_ordinals[loop.index0] %}
+    <tr>{% if full_rows %}<td class="row-num muted">{{ ordinal | row_number }}</td>{% endif %}<td class="syw-cell">{% set trace_href = links.row_trace(stage.stage_id, ordinal) %}{% if trace_href %}<a href="{{ trace_href }}" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a>{% endif %}</td>
       {%- for cell in row %}
       {%- set column = diff.columns[loop.index0] %}
       {%- set klass = [cell_class[cell.state],

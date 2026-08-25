@@ -6,7 +6,7 @@ unverifiable yields None and the caller shows the plain output view."""
 
 from __future__ import annotations
 
-from collections.abc import Collection
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import ClassVar, Optional, Union
@@ -116,6 +116,8 @@ class RowAlignedDiff:
     inputs: list[DiffFrame]
     columns: list[DiffColumn]
     rows: list[list[DiffCell]]
+    # Positional against `rows`: where in the frame each one was drawn from.
+    row_ordinals: list[int]
     rows_total: int
     changed_cells_total: int
     added_column_names: list[str]
@@ -124,6 +126,11 @@ class RowAlignedDiff:
     @property
     def output_rows(self) -> int:
         return self.rows_total
+
+    @property
+    def opens_on_the_first(self) -> bool:
+        """False once `at_rows` picked them, where "the first N" would misname them."""
+        return self.row_ordinals == list(range(len(self.row_ordinals)))
 
     @property
     def count_labels(self) -> list[str]:
@@ -181,7 +188,9 @@ def build_stage_diff(
     output_path: Optional[str],
     output_by_id: dict[str, Optional[str]],
     rows_shown: int = PREVIEW_ROWS_SHOWN,
+    at_rows: Optional[Sequence[int]] = None,
 ) -> Optional[StageDiff]:
+    """`at_rows` names which rows to draw; without it the table opens on the first."""
     if workflow_stage is None:
         return None
     stage_def = workflow_stage.stage
@@ -193,11 +202,20 @@ def build_stage_diff(
     if input_df is None or output_df is None:
         return None
     inputs = _shape_input_frames(run_dir, input_ids, output_by_id, len(input_df))
+    drawn = _choose_rows(len(output_df), rows_shown, at_rows)
     if stage_def.type in FILTER_TYPES:
         return _build_filter_rows_diff(
             stage_def.id, inputs, run_dir, input_df, output_df, rows_shown
         )
-    return _build_row_aligned_diff(workflow_stage, inputs, input_df, output_df, rows_shown)
+    return _build_row_aligned_diff(workflow_stage, inputs, input_df, output_df, drawn)
+
+
+def _choose_rows(
+    rows_total: int, rows_shown: int, at_rows: Optional[Sequence[int]]
+) -> list[int]:
+    if at_rows is None:
+        return list(range(min(rows_total, rows_shown)))
+    return [row for row in at_rows if 0 <= row < rows_total][:rows_shown]
 
 
 def keep_diff_columns(diff: RowAlignedDiff, names: Collection[str]) -> RowAlignedDiff:
@@ -247,7 +265,7 @@ def _resolve_diff_input_ids(workflow_stage: WorkflowStage) -> Optional[list[str]
 
 def _build_row_aligned_diff(
     workflow_stage: WorkflowStage, inputs: list[DiffFrame],
-    input_df: pd.DataFrame, output_df: pd.DataFrame, rows_shown: int,
+    input_df: pd.DataFrame, output_df: pd.DataFrame, drawn: list[int],
 ) -> Optional[RowAlignedDiff]:
     if len(input_df) != len(output_df):
         return None
@@ -260,7 +278,8 @@ def _build_row_aligned_diff(
     return RowAlignedDiff(
         inputs=inputs,
         columns=columns,
-        rows=_shape_aligned_rows(in_text, out_text, columns, rows_shown),
+        rows=_shape_aligned_rows(in_text, out_text, columns, drawn),
+        row_ordinals=drawn,
         rows_total=len(output_df),
         changed_cells_total=sum(column.changed_cells for column in columns),
         added_column_names=[
@@ -315,23 +334,22 @@ def _shape_input_column(
 
 
 def _shape_aligned_rows(
-    in_text: pd.DataFrame, out_text: pd.DataFrame, columns: list[DiffColumn], rows_shown: int
+    in_text: pd.DataFrame, out_text: pd.DataFrame, columns: list[DiffColumn], drawn: list[int]
 ) -> list[list[DiffCell]]:
-    rows = min(len(out_text), rows_shown)
+    in_values = _take_column_lists(in_text, drawn)
     # Column-major, once per frame: reading each cell back as frame[name].iat[i] inside
     # the loop re-resolved its column every time — ~18µs a cell, and a 5,000-row export
     # shapes half a million of them.
-    in_values = _take_column_lists(in_text, rows)
-    out_values = _take_column_lists(out_text, rows)
+    out_values = _take_column_lists(out_text, drawn)
     return [
         [_shape_aligned_cell(in_values, out_values, column, i) for column in columns]
-        for i in range(rows)
+        for i in range(len(drawn))
     ]
 
 
-def _take_column_lists(text: pd.DataFrame, rows: int) -> dict[str, list[str]]:
+def _take_column_lists(text: pd.DataFrame, drawn: list[int]) -> dict[str, list[str]]:
     """Values, not cells: `text` is already all-string, so `_text_frame` did the str()."""
-    return {name: text[name].head(rows).tolist() for name in text.columns}
+    return {name: text[name].take(drawn).tolist() for name in text.columns}
 
 
 def _shape_aligned_cell(
@@ -390,10 +408,10 @@ def _shape_filter_rows(
         input_ordinal: output_ordinal for output_ordinal, input_ordinal in enumerate(kept)
     }
     window = min(len(in_text), rows_shown)
-    in_values = _take_column_lists(in_text, window)
+    in_values = _take_column_lists(in_text, list(range(window)))
     # The whole output, not the window: a kept row's ordinal indexes the output
     # frame, and the last row of an input window can sit anywhere in it.
-    out_values = _take_column_lists(out_text, len(out_text))
+    out_values = _take_column_lists(out_text, list(range(len(out_text))))
     names = list(in_text.columns)
     rows: list[FilterRow] = []
     for i in range(window):

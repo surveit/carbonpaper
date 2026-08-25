@@ -23,6 +23,7 @@ from starlette.types import Scope
 from app.core.paths import repo_root
 from app.core.utils import abbreviate_count
 from app.web.authored_code import describe_code_block, find_authored_code
+from app.web.stage_prose import plan_an_aggregate, say_what_a_stage_did
 from app.web.transform_block import name_transform_block
 from app.web.diagrams import TYPE_LABEL
 from app.web.file_sizes import describe_bytes, read_turn
@@ -157,3 +158,5 @@ templates.env.filters["turn"] = read_turn
 templates.env.filters["authored_code"] = find_authored_code
 templates.env.filters["code_block_copy"] = describe_code_block
 templates.env.filters["transform_block"] = name_transform_block
+templates.env.filters["aggregate_plan"] = plan_an_aggregate
+templates.env.filters["stage_says"] = say_what_a_stage_did

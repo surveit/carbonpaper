@@ -146,20 +146,19 @@
 {% endif %}
 
 {% if block == 'aggregate' %}
+{% set plan = stage | aggregate_plan %}
 <section class="exec-block">
     <h2>📊 Aggregate</h2>
-    <h3>group by</h3>
-    <p>{% for g in stage.aggregate.group_by %}<code>{{ g }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
-    <h3>aggregations</h3>
+    <p class="agg-lead">{{ plan.lead }}</p>
+    <p class="agg-note">The resulting columns are computed from the input data using the
+        following rules:</p>
     <table class="aggs">
-        <thead><tr><th>output</th><th>formula</th><th>value</th><th>where</th></tr></thead>
+        <thead><tr><th>column</th><th>how it was worked out</th></tr></thead>
         <tbody>
-            {% for a in stage.aggregate.aggregations %}
+            {% for out in plan.outputs %}
             <tr>
-                <td><code>{{ a.output_column }}</code></td>
-                <td><code>{{ a.formula }}</code></td>
-                <td>{% if a.value_column %}<code>{{ a.value_column }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
-                <td>{% if a.where %}<code>{{ a.where }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+                <td><code>{{ out.column }}</code></td>
+                <td>{{ out.does }}{% if out.from_column %} <code>{{ out.from_column }}</code>{% endif %}{{ out.then or "" }}</td>
             </tr>
             {% endfor %}
         </tbody>
