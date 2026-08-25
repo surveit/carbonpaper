@@ -8,7 +8,6 @@
 
 .if-toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
     margin-bottom: 14px; }
-.if-by { font-size: 12.5px; color: var(--muted); }
 .if-toggles { display: flex; gap: 16px; margin-left: auto; }
 .if-tg { display: flex; }
 .if-tg button { font: inherit; font-size: 12.5px; padding: 6px 12px;
@@ -30,6 +29,7 @@
 .if-need { background: var(--accent); }
 .if-num { color: var(--muted); font-variant-numeric: tabular-nums; }
 .if-num b { color: var(--fg); }
+.if-stage { font-size: 12px; color: var(--muted); }
 .if-cap { background: var(--state-warn-bg); color: var(--state-warn-ink);
     border: 1px solid var(--state-warn); border-radius: 3px; padding: 1px 6px;
     font-size: 11.5px; margin-left: 4px; }
@@ -38,7 +38,7 @@
 .if-sechead { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
 .if-sechead h3 { margin: 0; font-size: 12px; text-transform: uppercase;
     letter-spacing: .08em; color: var(--muted); }
-.if-basis { font-size: 12.5px; color: var(--muted); }
+.if-count { font-size: 12.5px; color: var(--muted); }
 
 /* Each row is the file detail page's own column row, wrapped so the toggles can
  * reach it: one per basis, and only one basis is shown. */
@@ -49,8 +49,6 @@
 .if-tab[data-columns="relevant"] .if-shape[data-relevant="no"],
 .if-tab[data-columns="relevant"] [data-relevant="no"]:is(th, td) { display: none; }
 .if-tab[data-rows="relevant"] tr[data-relevant="no"] { display: none; }
-.if-tab[data-rows="relevant"] .if-basis [data-when="all"],
-.if-tab[data-rows="all"] .if-basis [data-when="relevant"] { display: none; }
 
 .if-table { max-height: 380px; overflow: auto; border: 1px solid var(--border);
     border-radius: 8px; }

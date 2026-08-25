@@ -23,12 +23,12 @@
       {%- for file in view.files %}
       <option value="{{ file.stage_id }}" data-name="{{ file.filename }}"
               data-side="{{ file.size_label }}"
-              data-meta="read by {{ file.stage_id }} · {{ "{:,}".format(file.rows_relevant) }} of {{ "{:,}".format(file.rows_read) }} rows behind this figure"
+              data-meta="{{ file.stage_id }} · {{ "{:,}".format(file.rows_relevant) }} / {{ "{:,}".format(file.rows_read) }} rows"
               >{{ file.filename }}</option>
       {%- endfor %}
     </select>
     {% endcall %}
-    <span class="if-by">read by <code class="if-stage">{{ view.files[0].stage_id }}</code></span>
+    <code class="if-stage">{{ view.files[0].stage_id }}</code>
     <span class="if-toggles">
       <span class="if-tg" data-axis="rows">
         <button type="button" class="on" data-pick="relevant">Relevant rows</button
@@ -50,26 +50,20 @@
         <span class="if-track">
           <i class="if-read" style="width: {{ file.read_percent }}%"></i>
           <i class="if-need" style="width: {{ file.relevant_percent }}%"></i></span>
-        <span class="if-num"><b>{{ "{:,}".format(file.rows_relevant) }}</b> behind this
-          figure · {{ "{:,}".format(file.rows_read) }} the run read
-          {%- if file.rows_in_file %} · {{ "{:,}".format(file.rows_in_file) }} in the file
-          {%- else %} — the whole file{% endif %}
-          {%- if file.cap %} <span class="if-cap">capped at {{ "{:,}".format(file.cap) }}</span>{% endif %}
+        <span class="if-num"><b>{{ "{:,}".format(file.rows_relevant) }}</b> /
+          {{ "{:,}".format(file.rows_read) }}
+          {%- if file.rows_in_file %} / {{ "{:,}".format(file.rows_in_file) }} in file{% endif %}
+          {%- if file.cap %} <span class="if-cap">cap {{ "{:,}".format(file.cap) }}</span>{% endif %}
         </span></div>
       <div class="if-bar"><span class="if-bar-lab">columns</span>
         <span class="if-track"><i class="if-read" style="width: 100%"></i>
           <i class="if-need" style="width: {{ file.columns_percent }}%"></i></span>
-        <span class="if-num"><b>{{ file.columns_relevant | length }}</b> behind this
-          figure · {{ file.columns_read | length }} the run read</span></div>
+        <span class="if-num"><b>{{ file.columns_relevant | length }}</b> /
+          {{ file.columns_read | length }}</span></div>
     </div>
 
     <div class="if-sec">
-      <div class="if-sechead"><h3>Shape</h3>
-        <span class="if-basis">
-          <span data-when="relevant">over the {{ "{:,}".format(file.rows_relevant) }}
-            rows behind this figure</span>
-          <span data-when="all" hidden>over all {{ "{:,}".format(file.rows_read) }}
-            rows the run read</span></span></div>
+      <div class="if-sechead"><h3>Shape</h3></div>
       <div class="shape-list">
         <div class="shape-head"><span></span><span>column</span><span>filled</span>
           <span>distinct</span><span>values</span></div>
@@ -87,7 +81,7 @@
 
     <div class="if-sec">
       <div class="if-sechead"><h3>Preview</h3>
-        <span class="if-basis if-count"></span></div>
+        <span class="if-count"></span></div>
       <div class="table-scroll if-table"><table class="data-preview">
         <thead><tr><th class="if-rownum">{{ file.row_label }}</th>
           {%- for name in file.columns_read %}
@@ -110,8 +104,6 @@
 
     <div class="if-take">
       <a class="btn if-download" href="#" download>Download</a>
-      <span class="if-by">Every row of this file behind the figure, at the row number
-        it holds in the file.</span>
     </div>
   </section>
   {% endfor %}

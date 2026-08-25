@@ -57,7 +57,7 @@ window.InputFiles = window.InputFiles || (function () {
       if (head.offsetParent !== null) columns += 1;
     });
     var count = pane.querySelector(".if-count");
-    if (count) count.textContent = countOf(shown, "row") + " × " + countOf(columns, "column");
+    if (count) count.textContent = shown.toLocaleString() + " × " + columns;
     paintTake(tab, pane);
   }
 
