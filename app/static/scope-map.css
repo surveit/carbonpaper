@@ -60,8 +60,11 @@
 #scope-svg .scope-bar-mark { fill: var(--accent-deep); cursor: pointer; }
 #scope-svg text.scope-head, #scope-svg text.scope-out { cursor: help; }
 #scope-svg text.scope-node { cursor: pointer; }
-/* Rows this stage took out of the workflow, beside the frame count on the same line. */
-#scope-svg tspan.scope-out-gone { fill: var(--state-failed-ink); cursor: pointer; }
+/* Rows this stage took out of the workflow. An invitation to go and look at them,
+   which is what it shares with .scope-expand — not a fault, so not the failed ink. */
+#scope-svg text.scope-out-gone { font-size: 9.5px; font-variant-numeric: tabular-nums;
+  fill: var(--accent); cursor: pointer; text-decoration: underline; }
+#scope-svg text.scope-out-gone:hover { fill: var(--accent-deep); }
 #scope-svg .scope-bar-mark.is-implied { fill: var(--muted); }
 #scope-svg .scope-bar-mark.is-dim { opacity: 0.3; }
 #scope-svg .scope-leader { stroke: var(--border-strong); stroke-width: 1; fill: none; }

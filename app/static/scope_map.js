@@ -30,7 +30,9 @@
   var tableOf = function (stageId) {
     return '<table class="data-preview" data-stage="' + esc(stageId) + '">';
   };
-  var COLUMN = 300, BAR = 11, TOP = 52, GAP = 16;
+  var COLUMN = 300, BAR = 11, HEAD = 52, GAP = 16, CUT_LINE = 11;
+  // HEAD plus a line per removal the widest column names above its bar.
+  var TOP = HEAD;
   var LABEL_PITCH = 30;
   var SHORTEST_BAND = 260, TALLEST_BAND = 620, BAND_PER_NODE = 72, SWEEPS = 4;
 
@@ -202,6 +204,7 @@
     var scale = Math.min.apply(null, cols.map(function (c) {
       return (band - (c.nodes.length - 1) * GAP) / total;
     }).concat([band / total]));
+    TOP = HEAD + countCutLines() * CUT_LINE;
     var ribbons = gatherRibbons();
     orderNodes(ribbons);
     var x = 0;
@@ -410,38 +413,40 @@
       drawMergeControl(c);
   }
 
-  // Two facts about this stage on one line: how much of the frame here the figure
-  // descends from — a blank reads as missing, not as all of them — and what the
-  // stage took out of the workflow on the way in.
+  function countCutLines() {
+    return Math.max.apply(null, cols.map(function (c) {
+      return c.gone.length;
+    }).concat([0]));
+  }
+
+  // How much of the frame here the figure descends from, on every column that has
+  // one: a blank reads as missing, not as all of them.
   function drawScale(c, room) {
     var step = (D.scale || []).find(function (s) {
       return s.stage === c.id && s.rows_count;
     });
     var budget = Math.floor(room / 5.6);
-    var label = step
-      ? num(step.included_rows_count) + " of " + num(step.rows_count) +
-        (step.rows_count === 1 ? " row here" : " rows here")
+    var frame = step
+      ? '<text class="scope-out" data-tip="' + esc(c.id + " holds " +
+          num(step.rows_count) + " rows; this figure descends from " +
+          num(step.included_rows_count)) + '" x="' + c.x + '" y="39">' +
+        esc(clip(num(step.included_rows_count) + " of " + num(step.rows_count) +
+                 (step.rows_count === 1 ? " row here" : " rows here"), budget)) +
+        "</text>"
       : "";
-    var cut = c.gone.map(function (gone) {
-      return drawRemoval(c, gone, Math.max(12, budget - label.length - 3));
+    return frame + c.gone.map(function (gone, i) {
+      return drawRemoval(c, gone, i, budget);
     }).join("");
-    if (!label && !cut) return "";
-    var tip = step
-      ? c.id + " holds " + num(step.rows_count) + " rows; this figure descends from " +
-        num(step.included_rows_count)
-      : c.id;
-    return '<text class="scope-out" data-tip="' + esc(tip) + '" x="' + c.x +
-      '" y="39">' + esc(clip(label, budget)) + cut + "</text>";
   }
 
   // A count, never a ribbon: 44,963 drawn beside 40 to scale is the scale-mixing
   // that makes a lie. It counts rows of the frame this stage READ, one column left.
-  function drawRemoval(c, gone, room) {
+  function drawRemoval(c, gone, i, room) {
     var label = num(gone.rows) + (gone.rows === 1 ? " row" : " rows") + " filtered here";
-    return '<tspan class="scope-out-gone" data-cut="' + esc(c.id + SEP + gone.branch) +
+    return '<text class="scope-out-gone" data-cut="' + esc(c.id + SEP + gone.branch) +
       '" data-tip="' + esc(num(gone.rows) + (gone.rows === 1 ? " row was" : " rows were") +
-      " dropped from the workflow at this stage") + '">' +
-      esc("\u00a0\u00b7\u00a0" + clip(label, room)) + "</tspan>";
+      " dropped from the workflow at this stage; click to draw them") + '" x="' + c.x +
+      '" y="' + (39 + (i + 1) * CUT_LINE) + '">' + esc(clip(label, room)) + "</text>";
   }
 
   // Aliased or expanded, a merge stage offers the other reading of itself here.
@@ -581,8 +586,8 @@
     renderTabs();
     var cut = cols.some(function (c) { return c.gone.length; });
     byId("scope-legend").textContent = cut
-      ? "The red count beside a column is rows that stage took out of the workflow — " +
-        "click one to draw them. Nothing in the drawing is scaled to it."
+      ? "The underlined count under a column is rows that stage took out of the " +
+        "workflow — click one to draw them. Nothing in the drawing is scaled to it."
       : "";
   }
 
