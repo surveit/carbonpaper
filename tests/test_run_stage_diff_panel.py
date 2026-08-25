@@ -328,7 +328,7 @@ def test_a_filter_stage_shows_its_dropped_rows_in_place(run_ctx) -> None:
     assert "Dropped row" in html
     assert "input row 1" not in html
     assert "BETA" in html  # the dropped row's content is visible
-    assert "View lineage" in html  # kept rows keep their lineage links
+    assert "/trace/view" in html  # a kept row still opens its own lineage
     assert "output data" not in html  # the merged table IS the output view
 
 

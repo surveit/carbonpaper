@@ -230,6 +230,24 @@ table.data-preview.scratch th { background: var(--hover); }
 .stage-diff .diff-was { display: block; color: var(--muted); text-decoration: line-through; }
 .stage-diff tr.diff-row-dropped td { background: var(--state-failed-bg); color: var(--state-failed-ink); }
 
+/* The filter view's first column says in words what the tint says in colour, and
+   is empty on a kept row. Narrow: it holds two words or nothing. */
+.stage-diff th.diff-kept-col, .stage-diff td.diff-kept-col {
+    width: 1%;
+    white-space: nowrap;
+    font-size: 11px;
+}
+
+/* A row that opens its own lineage (static/cell-lineage.js). The cursor is the
+   affordance the deleted link column used to be; a clipped cell keeps zoom-in,
+   because there the first click reveals rather than leaves. The hovered cell
+   outlines rather than tints, so it reads over a column that already carries one. */
+table.data-preview tr[data-href] td:not(.cell-clip):not(.cell-url) { cursor: pointer; }
+table.data-preview tr[data-href] td:not(.cell-url):hover {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+
 /* The Relevant columns tab's two additions to the same table: the ONE cell the page
    is tracing, and a header that opens the stage that wrote its column. Both are
    inert on the outputs pane, which passes neither. The column keeps whatever
