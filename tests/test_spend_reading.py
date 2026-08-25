@@ -115,13 +115,42 @@ def test_a_chat_that_names_no_project_is_labelled_rather_than_dropped():
     assert [e.link for e in entries] == [f"/chat/{sid}"]
 
 
-def test_a_run_under_a_project_the_workspace_does_not_list_is_not_read():
-    """https://github.com/surveit/carbonpaper/issues/868"""
+def test_a_deleted_projects_runs_stay_in_the_total():
+    """Deleting a project unspends nothing, and its runs are still in the store."""
     _store_run("congresswatch", "20260816T090000",
                [_stage_record("score", LlmUsage(cost_usd=1.0, calls=1), "2026-08-16T09:00:00")])
     project_service.delete_project("congresswatch")
 
-    assert read_workspace_spend().total.cost_usd == 0.0
+    spend = read_workspace_spend()
+
+    assert spend.total.cost_usd == 1.0
+    assert [count.label for count in spend.by_project] == ["congresswatch"]
+
+
+def test_a_private_projects_runs_stay_in_the_total_under_its_bare_id():
+    """The money is counted; the name is not read, because no listing carries a private project."""
+    _store_run("congresswatch", "20260816T090000",
+               [_stage_record("score", LlmUsage(cost_usd=1.0, calls=1), "2026-08-16T09:00:00")])
+    project_service.set_project_private("congresswatch", True)
+
+    spend = read_workspace_spend()
+
+    assert spend.total.cost_usd == 1.0
+    assert [count.label for count in spend.by_project] == ["congresswatch"]
+
+
+def test_a_run_whose_project_record_never_existed_is_still_counted():
+    """The sweep reads the runs, so nothing about the project has to be on file."""
+    RunManifest(
+        id=RunManifest.compose_id("no_record_at_all", "20260816T090000", "runs"),
+        run_id="20260816T090000", started_at="2026-08-16T09:00:00",
+        project="no_record_at_all", workflow_version=None, human_review_queue_stats={},
+        status=RunStatus.OK,
+        stage_records=[_stage_record("score", LlmUsage(cost_usd=2.0, calls=1),
+                                     "2026-08-16T09:00:00")],
+    ).save()
+
+    assert read_workspace_spend().total.cost_usd == 2.0
 
 
 def test_the_admin_page_serves_the_figure():

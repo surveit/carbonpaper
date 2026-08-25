@@ -19,9 +19,11 @@ from app.models import Workflow, WorkflowStage
 from app.models.run_manifest import read_run_bindings
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.runtime.cancellation import discard_cancel
+from app.models.records.run_manifest import RunManifest
 from app.runtime.manifest import (
     RunEntry as RunEntry,
     list_run_entries as list_run_entries,
+    read_run_entry,
     read_run_manifest,
     read_stage_output_frame,
     resolve_output_path,
@@ -33,6 +35,18 @@ from app.services.run_manifest_metadata import name_run
 from app.services.versioning import load_version, load_version_stages, resolve_version_id
 from app.models.records.workflow_version import WorkflowVersion
 from app.services.workspace import resolve_run_dir, resolve_runs_dir
+
+
+def list_every_run_entry() -> list[RunEntry]:
+    """Every run the store holds. One outlives its project's working copy, and so does its cost."""
+    entries = [read_run_entry(*_split_run_key(key)) for key in RunManifest.list_ids()]
+    return sorted(entries, key=lambda entry: (entry.project, entry.area, entry.run_id))
+
+
+def _split_run_key(key: str) -> tuple[str, str, str]:
+    """`RunManifest.compose_id` undone. A run id may hold a slash; the first two segments may not."""
+    project_id, area, run_id = key.split("/", 2)
+    return project_id, area, run_id
 
 
 def start_run(

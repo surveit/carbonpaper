@@ -107,13 +107,15 @@ def list_run_entries(project_id: str, area: str = PRODUCTION_RUNS) -> list[RunEn
     # Ids first, then each payload on its own: one unreadable record must not take
     # down the listing of every other run.
     entries = [
-        _read_entry(doc_id, doc_id[len(prefix):], project_id, area)
+        read_run_entry(project_id, area, doc_id[len(prefix):])
         for doc_id in RunManifest.list_ids(prefix)
     ]
     return sorted(entries, key=lambda e: e.run_id)
 
 
-def _read_entry(doc_id: str, run_id: str, project_id: str, area: str) -> RunEntry:
+def read_run_entry(project_id: str, area: str, run_id: str) -> RunEntry:
+    """Tolerant: `raw` is None for a payload that is not even JSON, `manifest` for one this model rejects."""
+    doc_id = RunManifest.compose_id(project_id, run_id, area)
     raw = RunManifest.load_raw_or_none(doc_id)
     if raw is None:
         return RunEntry(run_id=run_id, project=project_id, area=area)
