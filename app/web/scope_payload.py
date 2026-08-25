@@ -37,7 +37,7 @@ from app.services.scope import (
     find_stages_on_route,
     measure_frame_scale,
 )
-from app.web.merge_alias import alias_the_merges
+from app.web.merge_alias import alias_the_merges, name_the_groups
 from app.web.config import render_row_number
 
 # Cells for a wider set than this are sampled; the counts never are.
@@ -117,28 +117,33 @@ class ScopeMap(BaseModel):
     branches: dict[BranchId, BranchOption]
     # Merge stages standing in for their groups. See docs/branch-analysis.md.
     aliased_merges: dict[StageId, AliasedMerge]
-    resolved_merge: StageId | None
+    resolved_merges: list[StageId]
+    # Resolved whatever the reader asked for, so it is the one that cannot be folded.
+    nearest_merge: StageId | None
     stages: list[DrawnStage]
     reach: list[BranchReach]
     scale: list[FrameScale]
 
 
 def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: str,
-                    outputs: Path, citation: StageOutputCellCitation) -> ScopeMap:
+                    outputs: Path, citation: StageOutputCellCitation,
+                    expand: frozenset[StageId] = frozenset()) -> ScopeMap:
     if citation.stage_id not in run_branches.stages:
         raise StageNotInRun(f"no stage '{citation.stage_id}' in this run")
     cited_frame, cited = _read_the_cited_cell(outputs, citation)
     covers = find_contributing_rows(run_branches, cited.stage_id, cited.row_ordinal)
     frame = read_frame_table(outputs / f"{covers.at_stage}.parquet")
     cited_row = [(cited.stage_id, cited.row_ordinal)]
-    # Only the nearest re-graining is resolved. docs/branch-analysis.md
+    # The nearest re-graining, plus any a reader expanded. docs/branch-analysis.md
     nearest = find_nearest_merge(run_branches, cited_row)
+    resolved = ({nearest} if nearest else set()) | set(expand)
     paths, _, index = group_rows_by_path(
         run_branches, covers.at_stage, covers.ordinals,
-        find_stages_on_route(run_branches, cited_row), nearest)
-    branches = _branches_on(run_branches, paths)
+        find_stages_on_route(run_branches, cited_row), resolved)
+    branches = _name_merge_groups(
+        run_branches, outputs, _branches_on(run_branches, paths))
     aliased = alias_the_merges(
-        run_branches, find_rows_reached_per_stage(run_branches, cited_row), nearest)
+        run_branches, find_rows_reached_per_stage(run_branches, cited_row), resolved)
     shown = covers.ordinals[:CELL_ROWS]
     return ScopeMap(
         project_id=project_id, run_id=run_id, citation=cited, covers=covers,
@@ -149,7 +154,8 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
         branch_paths=paths, branch_path_index=index,
         branches=branches,
         aliased_merges=aliased,
-        resolved_merge=nearest,
+        resolved_merges=sorted(resolved),
+        nearest_merge=nearest,
         # "show every stage" says every. docs/scope-map.md
         stages=_draw_stages(run_branches, find_stages_on_route(run_branches, cited_row)),
         reach=_count_reach(run_branches, branches, index, paths),
@@ -187,10 +193,11 @@ def read_cut(run_branches: WorkflowRunBranches, outputs: Path,
     if not ordinals or at_stage not in run_branches.branch_paths:
         return None
     behind = [(at_stage, ordinal) for ordinal in ordinals]
+    nearest = find_nearest_merge(run_branches, behind)
     paths, _, index = group_rows_by_path(
         run_branches, at_stage, ordinals,
         find_stages_on_route(run_branches, behind),
-        find_nearest_merge(run_branches, behind))
+        {nearest} if nearest else set())
     spread = Counter(index)
     shown = ordinals[:CUT_SAMPLE]
     frame = read_frame_table(outputs / f"{at_stage}.parquet")
@@ -231,10 +238,19 @@ def _branches_on(run_branches: WorkflowRunBranches, paths: list[BranchPath]
                  ) -> dict[BranchId, BranchOption]:
     touched = _stages_touched(run_branches, paths)
     held = {branch_id for path in paths for branch_id in path}
-    return {branch_id: _label_a_merge(option)
+    return {branch_id: option
             for branch_id, option in run_branches.branch_options.items()
             if branch_id in held or (option.stage_id in touched
                                      and not _is_aliased(option, held))}
+
+
+def _name_merge_groups(run_branches: WorkflowRunBranches, outputs: Path,
+                       branches: dict[BranchId, BranchOption]
+                       ) -> dict[BranchId, BranchOption]:
+    """A resolved merge's arms are groups, so each is named by its group_by values."""
+    named: dict[StageId, dict[RowOrdinal, str]] = {}
+    return {branch_id: _label_a_merge(option, named, run_branches, outputs)
+            for branch_id, option in branches.items()}
 
 
 def _is_aliased(option: BranchOption, held: set[BranchId]) -> bool:
@@ -242,12 +258,16 @@ def _is_aliased(option: BranchOption, held: set[BranchId]) -> bool:
     return option.reason is BranchReason.merge and option.id not in held
 
 
-def _label_a_merge(option: BranchOption) -> BranchOption:
-    """What a merge says IS the row it merged into, and naming a row is a reader's layer's."""
-    if option.merged_into_row_ordinal is None:
+def _label_a_merge(option: BranchOption, named: dict[StageId, dict[RowOrdinal, str]],
+                   run_branches: WorkflowRunBranches, outputs: Path) -> BranchOption:
+    ordinal = option.merged_into_row_ordinal
+    if ordinal is None:
         return option
+    if option.stage_id not in named:
+        named[option.stage_id] = name_the_groups(run_branches, outputs, option.stage_id)
+    keys = named[option.stage_id].get(ordinal)
     return option.model_copy(update={
-        "label": f"merged into row {render_row_number(option.merged_into_row_ordinal)}"})
+        "label": keys or f"merged into row {render_row_number(ordinal)}"})
 
 
 def _stages_touched(run_branches: WorkflowRunBranches,

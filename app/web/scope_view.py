@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from app.core.errors import StageNotInRun
-from app.models.branch_analysis import BranchId, BranchRole, FrameScale, MergeGroup
+from app.models.branch_analysis import BranchId, BranchRole, FrameScale
 from app.models.claims import StageOutputCellCitation
 from app.models.schema import StageId
 from app.models.workflow import Workflow
@@ -12,62 +11,26 @@ from app.runtime.branch_analysis import (
     reconstruct_run_branches,
 )
 from app.services import run as run_service
-from app.services.scope import (
-    find_lookup_table_stages,
-    find_rows_reached_per_stage,
-)
+from app.services.scope import find_lookup_table_stages
 from app.services.versioning import load_version_stages
 from app.services.workspace import resolve_run_dir
-from app.web.merge_alias import (
-    count_merge_groups,
-    read_group_by,
-    read_one_merge_group,
-    resolve_merge_groups,
-)
 from app.web.scope_payload import (
     CutRows,
-    read_cut,
     ScopeMap,
     build_scope_map,
     find_cuts_to_offer,
 )
 
 
-def load_scope_map(project_id: str, run_id: str, citation: StageOutputCellCitation
+def load_scope_map(project_id: str, run_id: str, citation: StageOutputCellCitation,
+                   expand: frozenset[StageId] = frozenset()
                    ) -> tuple[ScopeMap, dict[BranchId, CutRows], set[StageId]]:
     run_branches = read_run_branches(project_id, run_id)
     outputs = resolve_run_dir(project_id, run_id) / "outputs"
-    scope = build_scope_map(run_branches, project_id, run_id, outputs, citation)
+    scope = build_scope_map(run_branches, project_id, run_id, outputs, citation,
+                            expand)
     cuts = find_cuts_to_offer(run_branches, outputs, scope)
     return scope, cuts, find_lookup_table_stages(run_branches)
-
-
-def load_merge_groups(project_id: str, run_id: str,
-                      citation: StageOutputCellCitation, merge: StageId,
-                      offset: int) -> tuple[list[MergeGroup], int]:
-    """De-alias one merge stage: a page of its groups, and how many there are."""
-    run_branches = read_run_branches(project_id, run_id)
-    if merge not in run_branches.stages:
-        raise StageNotInRun(f"no stage '{merge}' in this run")
-    outputs = resolve_run_dir(project_id, run_id) / "outputs"
-    reached = find_rows_reached_per_stage(
-        run_branches, [(citation.stage_id, citation.row_ordinal)])
-    return (resolve_merge_groups(run_branches, outputs, merge,
-                                 reached.get(merge, set()), offset),
-            count_merge_groups(run_branches, merge))
-
-
-def load_one_merge_group(project_id: str, run_id: str, merge: StageId, ordinal: int
-                         ) -> tuple[CutRows | None, MergeGroup, list[str]]:
-    """The rows behind one group, what it stands for, and the keys that name it."""
-    run_branches = read_run_branches(project_id, run_id)
-    if merge not in run_branches.stages:
-        raise StageNotInRun(f"no stage '{merge}' in this run")
-    outputs = resolve_run_dir(project_id, run_id) / "outputs"
-    # Named before its rows are read: an ordinal the stage never grouped raises here.
-    named = read_one_merge_group(run_branches, outputs, merge, ordinal)
-    return (read_cut(run_branches, outputs, named.branch), named,
-            read_group_by(run_branches, merge))
 
 
 def say_what_the_rows_answer(scope: ScopeMap) -> str:

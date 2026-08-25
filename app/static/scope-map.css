@@ -87,10 +87,10 @@
 #scope-svg .scope-leader { stroke: var(--border-strong); stroke-width: 1; fill: none; }
 
 /* A stub is not drawn to scale: its count is true and its width is not. */
-/* A merge is drawn but not resolved, so its node is outlined rather than filled. */
-#scope-svg .scope-bar-mark[data-merge] { fill: var(--state-idle-bg);
-    stroke: var(--state-idle); stroke-width: 1; }
-#scope-svg text.scope-node[data-merge] { fill: var(--state-idle-ink); }
+/* Not a branch these rows missed: the other reading of a stage they all came through. */
+#scope-svg text.scope-expand { fill: var(--accent); font-size: 9.5px; cursor: pointer;
+    text-decoration: underline; }
+#scope-svg text.scope-expand:hover { fill: var(--accent-deep); }
 #scope-svg .scope-stub { stroke: var(--state-failed); stroke-width: 1;
   stroke-dasharray: 2 2; }
 #scope-svg text.scope-stub-label { fill: var(--state-failed-ink); font-size: 9.5px;

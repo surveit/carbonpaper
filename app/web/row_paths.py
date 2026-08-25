@@ -73,7 +73,7 @@ def find_paths_behind_figure(
     # One re-graining is resolved, as on the scope map. docs/branch-analysis.md
     taken = group_rows_by_path(run_branches, covers.at_stage, covers.ordinals,
                                find_stages_on_route(run_branches, [cited]),
-                               find_nearest_merge(run_branches, [cited]))
+                               _resolve_the_nearest(run_branches, cited))
     choices = find_sample_choices_behind(run_branches, *cited)
     shared = _find_branches_on_every_path(taken.paths)
     marked_row = walked.get(covers.at_stage)
@@ -82,6 +82,12 @@ def find_paths_behind_figure(
         paths=[_read_one_path(run_branches, path, on_it, shared, choices, marked_row)
                for path, on_it in zip(taken.paths, taken.ordinals)],
     )
+
+
+def _resolve_the_nearest(run_branches: WorkflowRunBranches,
+                         cited: RowRef) -> set[StageId]:
+    nearest = find_nearest_merge(run_branches, [cited])
+    return {nearest} if nearest else set()
 
 
 def _read_one_path(run_branches: WorkflowRunBranches, path: BranchPath,

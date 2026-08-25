@@ -167,34 +167,34 @@ too, and its rows are the ones merged into one output row (`_find_merged_rows`).
 ## Aliasing a merge
 
 A code branch has as many options as the code has arms. A merge has as many as the data has
-groups — 6,132 at one `group_by` in a run of 37,403 rows. So a reader is shown **one node per
-merge stage**, standing in for every group it made, and the groups themselves are fetched only
-when asked for. That standing-in is called **aliasing**, and asking for the groups is
-**de-aliasing**. Nothing about the run changes: the groups are in the lineage either way.
+groups — 6,132 at one `group_by` in a run of 37,403 rows. So a merge stage is drawn as **one
+node** standing in for every group it made. That standing-in is called **aliasing**, and it is
+a view choice only: the groups are in the lineage either way.
 
-One merge is left resolved — the re-graining nearest the cited cell, which is what the figure
-is composed of (`find_nearest_merge`). Every merge below it is aliased. Two consequences.
+One merge is resolved by default — the re-graining nearest the cited cell, which is what the
+figure is composed of (`find_nearest_merge`). Every merge below it is aliased, and the drawing's
+node count is then the workflow's branches rather than the data's groups. On a real figure over
+35 country-years, that is 2 nodes instead of 35.
 
-**A drawing's node count is the workflow's, not the data's.** Rows that differ only in which
-group they joined further down hold the same path, so they are one node. Without this, a figure
-over 35 rows drew 35 nodes.
+A reader expands one with `?expand=<stage_id>`, repeatable. An expanded merge is resolved like
+the nearest, so the drawing splits into a node per group those rows went into. The nearest merge
+is always resolved and so is never offered for folding.
 
-**The merge stage is still drawn.** Its column holds one node saying how many of its groups
-this figure came through, and clicking that node de-aliases it. An aliased merge that vanished
-from the drawing would hide the re-graining, which is the thing a reader most needs to see.
+**An arm of a resolved merge is named by its group keys** — `income_group = High income ·
+year_int = 2024`, read off the stage's own frame (`name_the_groups`), never the ordinal it
+landed on.
 
-**A sibling group is not a stub.** A merge stage's other groups are behind its aliased node,
-one page at a time (`app/web/merge_alias.py`), not one dashed stub each with a drill-in
-computed up front. `AliasedMerge` carries what the node says: the group_by columns, how many
-groups and rows the stage has, and how many of each this figure came through.
-
-`group_rows_by_path` takes `resolved_merge` as a required argument, never a defaulted one.
-`None` there is a real answer — a figure no merge fed has no re-graining to resolve — and it
-aliases every merge, so a caller that simply forgot to pass one would get a silently thinner
-drawing rather than an error.
+**The merge stage is still drawn while aliased.** Its column holds one node saying how many of
+its groups this figure came through. A merge that vanished from the drawing would hide the
+re-graining, which is the thing a reader most needs to see.
 
 A filter is untouched by any of this. Its `predicate` branch has its own id and its own stub,
 so aliasing a merge never hides what a stage removed.
+
+`group_rows_by_path` takes `resolved_merges` as a required argument, never a defaulted one. An
+empty set is a real answer — a figure no merge fed has no re-graining to resolve — and it
+aliases every merge, so a caller that simply forgot to pass one would get a silently thinner
+drawing rather than an error.
 
 ## Where the code lives
 
@@ -206,7 +206,7 @@ so aliasing a merge never hides what a stage removed.
 | `app/runtime/branch_analysis/stage_code.py` | the stage source a branch decided in |
 | `app/runtime/branch_analysis/rows_behind_a_branch.py` | which rows took one branch, and in which frame |
 | `app/services/scope.py` | answering a citation, measuring frame scale, finding the nearest merge |
-| `app/web/merge_alias.py` | a merge stage's groups: what its aliased node says, and de-aliasing it |
+| `app/web/merge_alias.py` | what an aliased merge's node says, and what names its groups |
 | `tests/scope_fixture.py` | twelve grants and fourteen stages, hitting every reason on purpose |
 
 `app/runtime/branch_analysis` reads a finished run rather than executing one, which is not the
