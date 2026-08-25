@@ -28,12 +28,22 @@ def test_a_runs_outputs_read_back_in_slug_order():
     ]
 
 
-def test_an_output_links_to_the_row_it_was_read_from():
+def test_an_output_links_to_the_cell_it_was_read_from():
     _publish("external-spend", "Paid to outside firms", 4461000.0)
     [output] = read_workflow_outputs(_PROJECT, _RUN)
     assert output.href == (
         f"/project/{_PROJECT}/runs/{_RUN}/stage/count_client_figures/row/0/trace/view"
+        "?column=external_spend"
     )
+
+
+def test_two_outputs_off_one_row_link_to_their_own_columns():
+    # Both figures are row 0 of the same stage, so only the column tells them apart.
+    _publish("external-spend", "Paid to outside firms", 4461000.0)
+    _publish("clients-paying", "Paying clients", 24, column="clients_paying")
+    assert [o.href.rsplit("?", 1)[1] for o in read_workflow_outputs(_PROJECT, _RUN)] == [
+        "column=clients_paying", "column=external_spend",
+    ]
 
 
 def test_another_runs_outputs_are_not_this_runs():

@@ -17,16 +17,20 @@ from app.models.claims import StageOutputRowCitation
 from app.models.records.citations import StageCitations
 
 
-def build_row_trace_url(project_id: str, run_id: str, stage_id: str, row_ordinal: int) -> str:
+def build_row_trace_url(
+    project_id: str, run_id: str, stage_id: str, row_ordinal: int, *, column: str | None = None
+) -> str:
     """Root-relative: does NOT resolve for an HTML file opened from disk."""
     if row_ordinal < 0:
         raise RowOutOfRange(f"row_ordinal must be >= 0, got {row_ordinal}")
-    return (
+    path = (
         f"/project/{_path_segment(project_id)}"
         f"/runs/{_path_segment(run_id)}"
         f"/stage/{_path_segment(stage_id)}"
         f"/row/{row_ordinal}/trace/view"
     )
+    # Named the column, the trace view leads with that cell instead of the whole row.
+    return path if column is None else f"{path}?column={quote(column, safe='')}"
 
 
 @dataclass(frozen=True)
@@ -56,7 +60,9 @@ class CitationProvider:
             stage_id=stage_id, row_ordinal=row_ordinal, column=column,
             label=label, value=render_cell(cell),
         ))
-        return build_row_trace_url(self.project, self.run_id, stage_id, row_ordinal)
+        return build_row_trace_url(
+            self.project, self.run_id, stage_id, row_ordinal, column=column
+        )
 
     def cite_row(self, stage_id: str, row_ordinal: int) -> str:
         self._require_row(stage_id, row_ordinal)
