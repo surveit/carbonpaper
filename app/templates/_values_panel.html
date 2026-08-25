@@ -29,8 +29,8 @@
   </div>
   <button class="vu-arrow" data-go="fwd" title="forward one stage (right arrow)">▶</button>
 </div>
-<p class="legend"><span><i class="diff-col-new"></i>written by this stage</span>
-  <span><i class="diff-cell-changed"></i>rewritten by this stage</span>
+<p class="legend"><span><i class="diff-col-new"></i>a column this stage wrote</span>
+  <span><i class="diff-cell-changed"></i>a cell this stage rewrote</span>
   <span><i class="diff-col-cited"></i>the value traced here</span></p>
 <div class="vu-scroll">
 {% for step in values.steps %}
@@ -60,24 +60,27 @@
     {# An input originates its rows and an aggregate rebuilds the frame, so
        neither has an input frame to paint over: the output table stands alone. #}
     <div class="preview-block stage-diff">
-      <div class="preview-head">output data
+      <div class="preview-head">output data <span class="muted">·
+        {% if step.rows_total > step.rows | length %}first {{ step.rows | length }} of {% endif %}
+        {{- "{:,}".format(step.rows_total) }} row{% if step.rows_total != 1 %}s{% endif %}</span>
         <span class="preview-actions"><a href="{{ links.stage_rows(step.stage_id) }}">view all rows</a>
         · <a href="{{ links.stage_csv(step.stage_id) }}">⬇ CSV</a></span></div>
       <div class="table-scroll"><table class="data-preview">
-        <thead><tr>
+        <thead><tr><th class="syw-col">lineage</th>
           {%- for column_state in step.columns %}
           {%- set klasses = [('diff-col-cited' if column_state.cited else ''),
                              ('diff-col-jump' if column_state.writer else '')] | select | join(' ') %}
           <th{% if klasses %} class="{{ klasses }}"{% endif %}
             {%- if column_state.writer %} data-jump="{{ column_state.writer }}"
             title="written by {{ column_state.writer }} — go there"{% endif %}>
-            {%- if column_state.cited %}<i class="diff-col-mine">the value</i>{% endif %}
+            {%- if column_state.cited %}<i class="diff-col-mine">the value</i>{% endif -%}
             <span class="diff-col-name">{{ column_state.name }}</span></th>
           {%- endfor %}
         </tr></thead>
         <tbody>
         {%- for row in step.rows %}
-          <tr>
+          <tr><td class="syw-cell"><a href="{{ links.row_trace(step.stage_id, loop.index0) }}"
+            target="_blank" rel="noopener">View lineage</a></td>
           {%- for cell in row %}
           <td{% if step.columns[loop.index0].cited %} class="diff-col-cited"{% endif %}>{{ cell | truncate(240) }}</td>
           {%- endfor %}
