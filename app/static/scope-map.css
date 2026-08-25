@@ -60,25 +60,16 @@
 #scope-svg .scope-bar-mark { fill: var(--accent-deep); cursor: pointer; }
 #scope-svg text.scope-head, #scope-svg text.scope-out { cursor: help; }
 #scope-svg text.scope-node { cursor: pointer; }
-#scope-svg text.scope-stub-label { cursor: pointer; }
+/* Rows this stage took out of the workflow, beside the frame count on the same line. */
+#scope-svg tspan.scope-out-gone { fill: var(--state-failed-ink); cursor: pointer; }
 #scope-svg .scope-bar-mark.is-implied { fill: var(--muted); }
 #scope-svg .scope-bar-mark.is-dim { opacity: 0.3; }
 #scope-svg .scope-leader { stroke: var(--border-strong); stroke-width: 1; fill: none; }
 
-/* A stub is not drawn to scale: its count is true and its width is not. */
 /* Not a branch these rows missed: the other reading of a stage they all came through. */
 #scope-svg text.scope-expand { fill: var(--accent); font-size: 9.5px; cursor: pointer;
     text-decoration: underline; }
 #scope-svg text.scope-expand:hover { fill: var(--accent-deep); }
-#scope-svg .scope-stub { stroke: var(--state-failed); stroke-width: 1;
-  stroke-dasharray: 2 2; }
-#scope-svg text.scope-stub-label { fill: var(--state-failed-ink); font-size: 9.5px;
-  cursor: pointer; }
-/* Amber and finer: these rows are still in the frame, so they are not a loss. */
-#scope-svg .scope-stub-off { stroke: var(--state-warn); stroke-width: 1;
-  stroke-dasharray: 1 3; }
-#scope-svg text.scope-stub-off-label { fill: var(--state-warn-ink); font-size: 9.5px;
-  cursor: help; }
 
 .scope-legend { font-size: 0.8rem; margin: 0.4rem 0 0.8rem; }
 

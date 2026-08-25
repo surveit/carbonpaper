@@ -5,8 +5,8 @@
  * branches, not one branch, so a row holding two arms of a split lands in its own
  * node and every row is in exactly one. docs/scope-map.md.
  *
- * Clicking a cut stub redraws for the rows behind it: the reason a set of rows is
- * missing is usually upstream of the stage that removed them.
+ * Clicking a removal count redraws for the rows behind it: the reason a set of rows
+ * is missing is usually upstream of the stage that removed them.
  */
 (function () {
   "use strict";
@@ -31,7 +31,7 @@
     return '<table class="data-preview" data-stage="' + esc(stageId) + '">';
   };
   var COLUMN = 300, BAR = 11, TOP = 52, GAP = 16;
-  var LABEL_PITCH = 30, STUB = 26;
+  var LABEL_PITCH = 30;
   var SHORTEST_BAND = 260, TALLEST_BAND = 620, BAND_PER_NODE = 72, SWEEPS = 4;
 
   var num = function (n) { return Number(n).toLocaleString("en-US"); };
@@ -102,7 +102,7 @@
     return Array.from(seen.values()).sort(function (a, b) { return b.rows - a.rows; });
   }
 
-  // A stub is for rows that LEFT here. An arm none of these rows took is not a
+  // A removal is rows that LEFT here. An arm none of these rows took is not a
   // loss — those rows carried on.
   function leftHere(branch) {
     return (D.branches[branch] || {}).role === "removes";
@@ -217,12 +217,10 @@
       x += COLUMN;
     });
     stackRibbons(ribbons);
-    var goneRows = Math.max.apply(null, cols.map(function (c) {
-      return stubCount(c) + ((c.alias || c.expanded) ? 1 : 0);
-    }).concat([0]));
+    var foot = cols.some(function (c) { return c.alias || c.expanded; }) ? 1 : 0;
     var height = Math.max.apply(null, cols.map(function (c) {
       return c.bottom;
-    }).concat([TOP])) + 14 + goneRows * 17;
+    }).concat([TOP])) + 14 + foot * 17;
 
     var svg = byId("scope-svg");
     svg.setAttribute("width", String(x));
@@ -409,29 +407,47 @@
       '" x="' + c.x + '" y="27">' +
       esc(clip(c.description || c.type, Math.floor(room / 5.6))) + "</text>" +
       drawScale(c, room) +
-      c.gone.map(function (g, i) { return drawStub(c, g, i); }).join("") +
-      drawOffPathStub(c) +
       drawMergeControl(c);
   }
 
-  // How much of the frame here the figure descends from, on every column that has
-  // one: a blank reads as missing, not as all of them. A count, never a ribbon —
-  // 45,061 drawn beside 40 to scale is the scale-mixing that makes a lie.
+  // Two facts about this stage on one line: how much of the frame here the figure
+  // descends from — a blank reads as missing, not as all of them — and what the
+  // stage took out of the workflow on the way in.
   function drawScale(c, room) {
-    var step = (D.scale || []).find(function (s) { return s.stage === c.id; });
-    if (!step || !step.rows_count) return "";
-    var label = num(step.included_rows_count) + " of " + num(step.rows_count) +
-      (step.rows_count === 1 ? " row here" : " rows here");
-    return '<text class="scope-out" data-tip="' + esc(c.id + " holds " +
-      num(step.rows_count) + " rows; this figure descends from " + num(step.included_rows_count)) +
-      '" x="' + c.x + '" y="39">' + esc(clip(label, Math.floor(room / 5.6))) +
-      "</text>";
+    var step = (D.scale || []).find(function (s) {
+      return s.stage === c.id && s.rows_count;
+    });
+    var budget = Math.floor(room / 5.6);
+    var label = step
+      ? num(step.included_rows_count) + " of " + num(step.rows_count) +
+        (step.rows_count === 1 ? " row here" : " rows here")
+      : "";
+    var cut = c.gone.map(function (gone) {
+      return drawRemoval(c, gone, Math.max(12, budget - label.length - 3));
+    }).join("");
+    if (!label && !cut) return "";
+    var tip = step
+      ? c.id + " holds " + num(step.rows_count) + " rows; this figure descends from " +
+        num(step.included_rows_count)
+      : c.id;
+    return '<text class="scope-out" data-tip="' + esc(tip) + '" x="' + c.x +
+      '" y="39">' + esc(clip(label, budget)) + cut + "</text>";
+  }
+
+  // A count, never a ribbon: 44,963 drawn beside 40 to scale is the scale-mixing
+  // that makes a lie. It counts rows of the frame this stage READ, one column left.
+  function drawRemoval(c, gone, room) {
+    var label = num(gone.rows) + (gone.rows === 1 ? " row" : " rows") + " filtered here";
+    return '<tspan class="scope-out-gone" data-cut="' + esc(c.id + SEP + gone.branch) +
+      '" data-tip="' + esc(num(gone.rows) + (gone.rows === 1 ? " row was" : " rows were") +
+      " dropped from the workflow at this stage") + '">' +
+      esc("\u00a0\u00b7\u00a0" + clip(label, room)) + "</tspan>";
   }
 
   // Aliased or expanded, a merge stage offers the other reading of itself here.
   function drawMergeControl(c) {
     if (!c.alias && !c.expanded) return "";
-    var y = c.bottom + 4 + stubCount(c) * 17;
+    var y = c.bottom + 4;
     var want = c.alias ? "1" : "0";
     var text = c.alias
       ? "split into " + num(c.alias.on_route_groups_count) + " groups"
@@ -443,46 +459,6 @@
     return '<text class="scope-expand" data-expand="' + esc(c.id) + '" data-want="' +
       want + '" data-tip="' + esc(tip) + '" x="' + (c.x + BAR + 12) + '" y="' +
       (y + 3) + '">' + esc(text) + "</text>";
-  }
-
-  // Rows the frame here still holds that this figure has no ancestor among. Not a
-  // removal: they are alive, and they went into a row the figure did not come through.
-  function countOffPath(c) {
-    var step = (D.scale || []).find(function (s) { return s.stage === c.id; });
-    return step ? step.rows_count - step.included_rows_count : 0;
-  }
-
-  function stubCount(c) {
-    return c.gone.length + (countOffPath(c) ? 1 : 0);
-  }
-
-  function drawOffPathStub(c) {
-    var rows = countOffPath(c);
-    if (!rows) return "";
-    var y = c.bottom + 4 + c.gone.length * 17;
-    var budget = Math.floor((COLUMN - BAR - STUB - 10) / 6.3);
-    return '<line class="scope-stub-off" x1="' + c.x + '" y1="' + y + '" x2="' +
-      (c.x + STUB) + '" y2="' + y + '"/>' +
-      '<text class="scope-stub-off-label" data-tip="' + esc(num(rows) +
-      (rows === 1 ? " row at this stage is present, but does not"
-                  : " rows at this stage are present, but do not") +
-      " contribute any information to the row under investigation") +
-      '" x="' + (c.x + STUB + 5) + '" y="' + (y + 3) + '">' +
-      esc(clip(num(rows) + (rows === 1 ? " row" : " rows") + " not on path", budget)) +
-      "</text>";
-  }
-
-  function drawStub(c, gone, i) {
-    var y = c.bottom + 4 + i * 17;
-    var budget = Math.floor((COLUMN - BAR - STUB - 10) / 6.3);
-    return '<line class="scope-stub" x1="' + c.x + '" y1="' + y + '" x2="' +
-      (c.x + STUB) + '" y2="' + y + '"/>' +
-      '<text class="scope-stub-label" data-cut="' + esc(c.id + SEP + gone.branch) +
-      '" data-tip="' + esc(num(gone.rows) + (gone.rows === 1 ? " row was" : " rows were") +
-      " dropped from the workflow at this stage") +
-      '" x="' + (c.x + STUB + 5) + '" y="' + (y + 3) + '">' +
-      esc(clip(num(gone.rows) + (gone.rows === 1 ? " row" : " rows") +
-               " filtered here", budget)) + "</text>";
   }
 
   // ── what is picked ───────────────────────────────────────────────────────
@@ -603,17 +579,10 @@
     renderBar();
     renderTable();
     renderTabs();
-    var stubs = cols.reduce(function (all, c) {
-      return all.concat(c.gone.map(function (g) { return g.rows; }));
-    }, [0]);
-    var widest = Math.max.apply(null, stubs);
-    var offPath = cols.some(countOffPath);
-    byId("scope-legend").textContent = widest || offPath
-      ? (widest ? "A red stub is rows the stage took out of the workflow — click one to " +
-          "draw them. Its count is true and its width is not: the biggest is " +
-          num(widest) + " against " + num(D.covers.ordinals.length) + " rows. " : "") +
-        (offPath ? "An amber stub is rows the frame here still holds that this figure " +
-          "did not come through." : "")
+    var cut = cols.some(function (c) { return c.gone.length; });
+    byId("scope-legend").textContent = cut
+      ? "The red count beside a column is rows that stage took out of the workflow — " +
+        "click one to draw them. Nothing in the drawing is scaled to it."
       : "";
   }
 

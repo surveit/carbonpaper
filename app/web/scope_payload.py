@@ -141,12 +141,13 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
     # The nearest re-graining, plus any a reader expanded. docs/branch-analysis.md
     nearest = find_nearest_merge(run_branches, cited_row)
     resolved = ({nearest} if nearest else set()) | set(expand)
+    route = find_stages_on_route(run_branches, cited_row)
     paths, _, index = group_rows_by_path(
         run_branches, covers.at_stage, covers.ordinals,
-        find_branches_that_tell_rows_apart(
-            run_branches, find_stages_on_route(run_branches, cited_row), resolved))
+        find_branches_that_tell_rows_apart(run_branches, route, resolved))
     branches = _name_merge_groups(
-        run_branches, outputs, _branches_on(run_branches, paths))
+        run_branches, outputs,
+        _branches_on(run_branches, paths) | _removals_on(run_branches, route))
     aliased = alias_the_merges(
         run_branches, find_rows_reached_per_stage(run_branches, cited_row), resolved)
     shown = covers.ordinals[:CELL_ROWS]
@@ -162,7 +163,7 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
         resolved_merges=sorted(resolved),
         nearest_merge=nearest,
         # "show every stage" says every. docs/scope-map.md
-        stages=_draw_stages(run_branches, find_stages_on_route(run_branches, cited_row)),
+        stages=_draw_stages(run_branches, route),
         reach=_count_reach(run_branches, branches, index, paths),
         scale=measure_frame_scale(run_branches, cited),
     )
@@ -248,6 +249,14 @@ def _branches_on(run_branches: WorkflowRunBranches, paths: list[BranchPath]
             for branch_id, option in run_branches.branch_options.items()
             if branch_id in held or (option.stage_id in touched
                                      and not _is_aliased(option, held))}
+
+
+def _removals_on(run_branches: WorkflowRunBranches, route: set[StageId]
+                 ) -> dict[BranchId, BranchOption]:
+    """A cut below the drawn grain is on no drawn path, so `_branches_on` misses it."""
+    return {branch_id: option
+            for branch_id, option in run_branches.branch_options.items()
+            if option.role is BranchRole.removes and option.stage_id in route}
 
 
 def _name_merge_groups(run_branches: WorkflowRunBranches, outputs: Path,
