@@ -38,12 +38,13 @@ def test_a_dedupe_names_the_keys_rows_share(stages):
 def test_a_whole_frame_aggregate_says_one_row_comes_out(stages):
     assert say_what_a_stage_did(stages["grant_totals"]) == (
         "Collapse every row into a single row of figures")
-    assert plan_an_aggregate(stages["grant_totals"]).lead == "Every row collapses into one row."
+    assert plan_an_aggregate(stages["grant_totals"]).lead == (
+        "Summarize every input row into a single row")
 
 
 def test_each_output_column_gets_a_sentence_the_source_column_sits_inside(stages):
     plan = plan_an_aggregate(stages["by_portfolio"])
-    assert plan.lead == "One row per portfolio."
+    assert plan.lead == "Summarize into one row per portfolio by grouping input rows"
     assert [(out.column, out.does, out.from_column) for out in plan.outputs] == [
         # `count` counts rows and reads no column, so there is nothing to name.
         ("grants", "how many rows there were", None),

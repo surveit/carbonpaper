@@ -65,8 +65,8 @@ class AggregatePlan(BaseModel):
 def plan_an_aggregate(stage: AggregateStage) -> AggregatePlan:
     keys = list(stage.aggregate.group_by)
     return AggregatePlan(
-        lead=(f"One row per {_and_list(keys)}."
-              if keys else "Every row collapses into one row."),
+        lead=(f"Summarize into one row per {_and_list(keys)} by grouping input rows"
+              if keys else "Summarize every input row into a single row"),
         grouped_by=keys,
         outputs=[_say_the_output(op) for op in stage.aggregate.aggregations],
     )
