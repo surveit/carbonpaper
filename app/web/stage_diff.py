@@ -6,9 +6,9 @@ unverifiable yields None and the caller shows the plain output view."""
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass, replace
 from pathlib import Path
-from collections.abc import Collection
 from typing import ClassVar, Optional, Union
 
 import pandas as pd
