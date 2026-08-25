@@ -30,7 +30,7 @@
   };
   var COLUMN = 300, BAR = 11, TOP = 52, GAP = 16;
   var LABEL_PITCH = 30, STUB = 26;
-  var SHORTEST_BAND = 170, BAND_PER_NODE = 46, SWEEPS = 4;
+  var SHORTEST_BAND = 260, TALLEST_BAND = 620, BAND_PER_NODE = 72, SWEEPS = 4;
 
   var num = function (n) { return Number(n).toLocaleString("en-US"); };
   // A cited cell is not always a number — a group key is a figure a reader may cite
@@ -106,21 +106,22 @@
     return (D.branches[branch] || {}).role === "removes";
   }
 
-  // A merge stage hangs under the frame it grouped, which is a column that is drawn.
-  function aliasesUnder(stageId) {
-    return Object.keys(D.aliased_merges || {})
-      .map(function (id) { return D.aliased_merges[id]; })
-      .filter(function (a) { return a.rows_live_in_stage_id === stageId; });
+  function aliasAt(stageId) {
+    return (D.aliased_merges || {})[stageId] || null;
   }
 
   function columns() {
     var drawn = D.stages.filter(function (stage) {
-      return D.covers.ordinals.some(function (_, i) {
-        return branchesAt(i, stage.id).length;
-      });
+      return showAll || aliasAt(stage.id) ||
+        D.covers.ordinals.some(function (_, i) {
+          return branchesAt(i, stage.id).length;
+        });
     });
     return drawn.map(function (stage) {
       var nodes = tally(stage);
+      var alias = aliasAt(stage.id);
+      // One node: the groups are aliased, so nothing here tells these rows apart.
+      if (alias) nodes.forEach(function (n) { n.aliasOf = alias; });
       if (stage.id === D.citation.stage_id && !D.drilled) {
         nodes.forEach(function (n) { n.isFigure = true; n.drawnRows = 1; });
       }
@@ -132,10 +133,7 @@
                !held.has(r.branch) && leftHere(r.branch);
       }).map(function (r) { return { branch: r.branch, rows: r.taken }; })
         .sort(function (a, b) { return b.rows - a.rows; });
-      var aliased = aliasesUnder(stage.id).map(function (a) {
-        return { alias: a, rows: a.rows_count };
-      });
-      return Object.assign({}, stage, { nodes: nodes, gone: gone.concat(aliased) });
+      return Object.assign({}, stage, { nodes: nodes, gone: gone, alias: alias });
     }).filter(function (c) { return c.nodes.length || c.gone.length; });
   }
 
@@ -149,7 +147,7 @@
       var next = D.covers.ordinals.map(function (_, i) {
         return running[i] + "|" + branchesAt(i, column.id).join(",");
       });
-      if (column.id === D.citation.stage_id || column.gone.length ||
+      if (column.id === D.citation.stage_id || column.gone.length || column.alias ||
           new Set(next).size > new Set(running).size) {
         kept.push(column);
         running = next;
@@ -169,12 +167,27 @@
   // ── the drawing ──────────────────────────────────────────────────────────
 
   function labelOf(node) {
+    if (node.aliasOf) {
+      return num(node.aliasOf.on_route_groups_count) + " of " +
+        num(node.aliasOf.groups_count) + " groups, by " +
+        (node.aliasOf.group_by.join(", ") || "the whole frame");
+    }
     if (node.isFigure) {
       return D.citation.column + " = " + figure(D.citation.value) +
         ", merged from " + num(node.rows);
     }
     var labels = node.branches.map(function (b) { return D.branches[b].label; });
     return labels.length ? labels.join(" + ") : "—";
+  }
+
+  function nodeTip(n) {
+    if (!n.aliasOf) {
+      return labelOf(n) + " — " + num(n.rows) + " row" + (n.rows === 1 ? "" : "s");
+    }
+    return n.aliasOf.stage_id + " grouped " + num(n.aliasOf.rows_count) +
+      " rows into " + num(n.aliasOf.groups_count) + ". These " + num(n.rows) +
+      " came through " + num(n.aliasOf.on_route_groups_count) +
+      " of them. Click to list the groups.";
   }
 
   function draw() {
@@ -236,7 +249,7 @@
     var most = Math.max.apply(null, cols.map(function (c) {
       return c.nodes.length;
     }).concat([1]));
-    return Math.min(COLUMN, Math.max(SHORTEST_BAND, most * BAND_PER_NODE));
+    return Math.min(TALLEST_BAND, Math.max(SHORTEST_BAND, most * BAND_PER_NODE));
   }
 
   function gatherRibbons() {
@@ -360,10 +373,13 @@
       return D.branches[b].reason !== "code";
     });
     var dim = pickedNode && n.key !== pickedNode;
+    var handle = n.aliasOf
+      ? 'data-merge="' + esc(n.aliasOf.stage_id) + '"'
+      : 'data-node="' + esc(n.key) + '"';
     var mark = '<rect class="scope-bar-mark' + (implied ? " is-implied" : "") +
-      (dim ? " is-dim" : "") + '" data-node="' + esc(n.key) + '" data-tip="' +
-      esc(labelOf(n) + " — " + num(n.rows) + " row" + (n.rows === 1 ? "" : "s")) +
-      '" x="' + c.x + '" y="' + n.y + '" width="' + BAR + '" height="' + n.h + '"/>';
+      (dim ? " is-dim" : "") + '" ' + handle + ' data-tip="' +
+      esc(nodeTip(n)) + '" x="' + c.x + '" y="' + n.y + '" width="' + BAR +
+      '" height="' + n.h + '"/>';
     var mid = n.y + n.h / 2;
     var leader = Math.abs(n.labelY - mid) > 2
       ? '<path class="scope-leader" d="M' + (c.x + BAR) + "," + mid + "H" +
@@ -373,8 +389,8 @@
     var full = labelOf(n);
     var short = clip(full, Math.floor(room / 6.1));
     return mark + leader +
-      '<text class="scope-node" data-node="' + esc(n.key) +
-      '" data-tip="' + esc(full) + '" x="' + tx +
+      '<text class="scope-node" ' + handle +
+      ' data-tip="' + esc(nodeTip(n)) + '" x="' + tx +
       '" y="' + (n.labelY + 3) + '">' +
       esc(short) + "</text>" +
       '<text class="scope-count" x="' + tx + '" y="' + (n.labelY + 14) + '">' +
@@ -407,36 +423,15 @@
 
   function drawStub(c, gone, i) {
     var y = c.bottom + 4 + i * 17;
-    var budget = Math.floor((COLUMN - BAR - STUB - 10) / 6.3);
-    var drawn = gone.alias ? aliasLabel(gone.alias) : cutLabel(c, gone);
-    return '<line class="scope-stub' + (gone.alias ? " is-alias" : "") +
-      '" x1="' + c.x + '" y1="' + y + '" x2="' + (c.x + STUB) + '" y2="' + y + '"/>' +
-      '<text class="scope-stub-label" ' + drawn.handle +
-      ' data-tip="' + esc(drawn.tip) + '" x="' + (c.x + STUB + 5) + '" y="' +
-      (y + 3) + '">' + esc(clip(drawn.text, budget)) + "</text>";
-  }
-
-  function cutLabel(c, gone) {
     var fact = D.branches[gone.branch];
-    return {
-      handle: 'data-cut="' + esc(c.id + SEP + gone.branch) + '"',
-      text: num(gone.rows) + " " + fact.label,
-      tip: fact.label + " — " + num(gone.rows) + " row" +
-        (gone.rows === 1 ? "" : "s") + ", none of them in this figure"
-    };
-  }
-
-  // How many groups there are is decided by the data, so none are drawn.
-  function aliasLabel(alias) {
-    var key = alias.group_by.length ? alias.group_by.join(", ") : "the whole frame";
-    return {
-      handle: 'data-merge="' + esc(alias.stage_id) + '"',
-      text: num(alias.groups_count) + " groups at " + alias.stage_id,
-      tip: alias.stage_id + " grouped " + num(alias.rows_count) + " rows into " +
-        num(alias.groups_count) + " by " + key + ". This figure came through " +
-        num(alias.on_route_groups_count) + " of them, holding " +
-        num(alias.on_route_rows_count) + " rows. Click to list the groups."
-    };
+    var budget = Math.floor((COLUMN - BAR - STUB - 10) / 6.3);
+    return '<line class="scope-stub" x1="' + c.x + '" y1="' + y + '" x2="' +
+      (c.x + STUB) + '" y2="' + y + '"/>' +
+      '<text class="scope-stub-label" data-cut="' + esc(c.id + SEP + gone.branch) +
+      '" data-tip="' + esc(fact.label + " \u2014 " + num(gone.rows) + " row" +
+      (gone.rows === 1 ? "" : "s") + ", none of them in this figure") +
+      '" x="' + (c.x + STUB + 5) + '" y="' + (y + 3) + '">' +
+      esc(clip(num(gone.rows) + " " + fact.label, budget)) + "</text>";
   }
 
   // ── what is picked ───────────────────────────────────────────────────────

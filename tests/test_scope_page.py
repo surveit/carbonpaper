@@ -292,3 +292,19 @@ def test_the_paths_pane_is_not_told_apart_by_an_aliased_merge(run_id):
     said = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", pane.text))
     assert "4 paths reach total_of_means" in said
     assert "merged:" not in pane.text
+
+
+def test_the_aliased_merge_is_its_own_column(run_id):
+    # Hung under the frame it grouped, it read as a fact about that other stage.
+    payload = TestClient(app).get(scope_url(
+        PROJECT, run_id, "total_of_means", "summed_means", 0, suffix=".json")).json()
+    drawn = [stage["id"] for stage in payload["stages"]]
+    assert "mean_by_portfolio" in drawn
+    assert drawn.index("one_row_per_grant") < drawn.index("mean_by_portfolio")
+
+
+def test_show_every_stage_can_reach_every_stage_on_the_route(run_id):
+    payload = TestClient(app).get(scope_url(
+        PROJECT, run_id, "total_of_means", "summed_means", 0, suffix=".json")).json()
+    assert ([stage["id"] for stage in payload["stages"]]
+            == [step["stage"] for step in payload["scale"]])

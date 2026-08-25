@@ -137,6 +137,8 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
         run_branches, covers.at_stage, covers.ordinals,
         find_stages_on_route(run_branches, cited_row), nearest)
     branches = _branches_on(run_branches, paths)
+    aliased = alias_the_merges(
+        run_branches, find_rows_reached_per_stage(run_branches, cited_row), nearest)
     shown = covers.ordinals[:CELL_ROWS]
     return ScopeMap(
         project_id=project_id, run_id=run_id, citation=cited, covers=covers,
@@ -146,10 +148,10 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
         columns=list(frame.column_names),
         branch_paths=paths, branch_path_index=index,
         branches=branches,
-        aliased_merges=alias_the_merges(
-            run_branches, find_rows_reached_per_stage(run_branches, cited_row), nearest),
+        aliased_merges=aliased,
         resolved_merge=nearest,
-        stages=_draw_stages(run_branches, _stages_touched(run_branches, paths)),
+        # "show every stage" says every. docs/scope-map.md
+        stages=_draw_stages(run_branches, find_stages_on_route(run_branches, cited_row)),
         reach=_count_reach(run_branches, branches, index, paths),
         scale=measure_frame_scale(run_branches, cited),
     )

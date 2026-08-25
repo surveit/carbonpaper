@@ -179,6 +179,10 @@ is composed of (`find_nearest_merge`). Every merge below it is aliased. Two cons
 group they joined further down hold the same path, so they are one node. Without this, a figure
 over 35 rows drew 35 nodes.
 
+**The merge stage is still drawn.** Its column holds one node saying how many of its groups
+this figure came through, and clicking that node de-aliases it. An aliased merge that vanished
+from the drawing would hide the re-graining, which is the thing a reader most needs to see.
+
 **A sibling group is not a stub.** A merge stage's other groups are behind its aliased node,
 one page at a time (`app/web/merge_alias.py`), not one dashed stub each with a drill-in
 computed up front. `AliasedMerge` carries what the node says: the group_by columns, how many
