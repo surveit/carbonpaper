@@ -493,8 +493,11 @@
 
   // ── what is picked ───────────────────────────────────────────────────────
 
+  // Selects, never toggles off: a second click on the thing you are reading
+  // emptying the panel reads as a bug. The chart background clears, and the bar
+  // beside the count says so.
   function pick(key) {
-    pickedNode = pickedNode === key ? null : key;
+    pickedNode = key;
     pickedRow = null;
     render();
   }
@@ -815,6 +818,19 @@
         ? ", " + num(table.rows.length) + " of them listed" : "");
   }
 
+  // Two stages, so both are named: the rows are a frame the cutting stage READ,
+  // and it is the reader that tells them apart from the ones that stayed.
+  function sayWhatCutThem(cut, branch) {
+    var at = byId("scope-at");
+    at.hidden = false;
+    at.innerHTML = "<b>" + num(cut.total) + "</b> row" +
+      (cut.total === 1 ? "" : "s") + " of <code>" + esc(cut.at_stage) +
+      "</code>, shaded by what <code>" +
+      esc((D.branches[branch] || {}).stage_id || cut.at_stage) + "</code> did with them" +
+      (cut.rows.length < cut.total
+        ? ", " + num(cut.rows.length) + " of them listed" : "");
+  }
+
   function loadStageRows(key, stageId, held) {
     if (!rowsPerNode[key]) {
       rowsPerNode[key] = fetch(rowsAddress(stageId, held)).then(function (reply) {
@@ -858,8 +874,7 @@
     // leave for the lineage of what they hold.
     host.querySelectorAll("tbody tr .scope-num").forEach(function (num) {
       num.onclick = function () {
-        var ordinal = Number(num.parentNode.dataset.row);
-        pickedRow = pickedRow === ordinal ? null : ordinal;
+        pickedRow = Number(num.parentNode.dataset.row);
         render();
       };
     });
@@ -895,6 +910,7 @@
       host.innerHTML = "";
       return;
     }
+    sayWhatCutThem(cut, branch);
     var head = headOf(cut.columns);
     var body = cut.rows.map(function (r) {
       return '<tr data-row="' + r.ordinal + '">' + rowOf(r, cut.columns);

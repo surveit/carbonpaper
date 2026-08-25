@@ -284,3 +284,26 @@ def test_the_held_branches_are_required_rather_than_defaulted(run_id):
                f"?stage=grant_totals&row=0&column=total_amount&at=load_east")
     # An empty `held` is a real node: the one holding no branch at this stage.
     assert TestClient(app).get(address).status_code == 422
+
+
+def test_a_cut_is_stated_by_the_stage_that_cut_it_not_the_frame_it_sits_in(run_id):
+    payload = TestClient(app).get(
+        scope_url(PROJECT, run_id, "grant_totals", "total_amount", 0, suffix=".json")).json()
+    # Each cut's rows sit in the frame BEFORE the stage that dropped them, so the
+    # frame's own stage reads columns that had nothing to do with them leaving.
+    read_first = {branch: (cut["at_stage"], cut["columns"][0]["name"],
+                           cut["columns"][0]["state"])
+                  for branch, cut in payload["cuts"].items()}
+    assert read_first == {
+        "funded|removed": ("size_band", "amount", "read"),
+        "one_row_per_grant|removed": ("funded", "grant_id", "read"),
+        "grants_only|removed": ("one_row_per_grant", "kind", "read"),
+    }
+
+
+def test_a_cut_shows_no_written_column_because_its_rows_never_reached_that_output(run_id):
+    payload = TestClient(app).get(
+        scope_url(PROJECT, run_id, "grant_totals", "total_amount", 0, suffix=".json")).json()
+    states = {column["state"]
+              for cut in payload["cuts"].values() for column in cut["columns"]}
+    assert states == {"read", "carried"}
