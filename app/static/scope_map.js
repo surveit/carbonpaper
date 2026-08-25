@@ -62,10 +62,16 @@
   var cell = function (value, column) {
     var text = String(value == null ? "" : value);
     var short = clip(text, 34);
-    var at = column === undefined ? "" : ' data-col="' + esc(column) + '"';
+    var at = column === undefined
+      ? "" : ' data-col="' + esc(column.name) + '"' + tintOf(column);
     return short === text
       ? "<td" + at + ">" + esc(text) + "</td>"
       : "<td" + at + ' data-tip="' + esc(text) + '">' + esc(short) + "</td>";
+  };
+  // What the stage this table is drawn at did to the column. Absent where no
+  // pinned version resolved, so the table then reads as it did before.
+  var tintOf = function (column) {
+    return column.state ? ' class="scope-col-' + esc(column.state) + '"' : "";
   };
   var byId = function (id) { return document.getElementById(id); };
 
@@ -682,7 +688,7 @@
     var stage = pickedStage();
     if (!stage) openTab = "rows";
     byId("scope-tabs").hidden = !stage;
-    byId("scope-table").hidden = openTab !== "rows";
+    byId("scope-rows").hidden = openTab !== "rows";
     byId("scope-transform").hidden = openTab !== "transform";
     document.querySelectorAll("#scope-tabs [data-tab]").forEach(function (button) {
       button.classList.toggle("active", button.dataset.tab === openTab);
@@ -796,7 +802,9 @@
 
   function headOf(columns) {
     return '<tr><th class="scope-num">row</th>' +
-      columns.map(function (c) { return "<th>" + esc(c) + "</th>"; }).join("") + "</tr>";
+      columns.map(function (c) {
+        return "<th" + tintOf(c) + ">" + esc(c.name) + "</th>";
+      }).join("") + "</tr>";
   }
 
   // Cells are positional against the map's `columns`, the way every table here is.

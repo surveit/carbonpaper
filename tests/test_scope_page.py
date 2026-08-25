@@ -117,7 +117,7 @@ def test_the_figure_carries_its_own_row_not_only_its_contributors(run_id):
         scope_url(PROJECT, run_id, "grant_totals", "total_amount", 0, suffix=".json")).json()
     cited = payload["cited_row"]
     # Cells are positional against the row's own columns, as every table here is.
-    by_name = dict(zip(cited["columns"], cited["cells"]))
+    by_name = dict(zip([c["name"] for c in cited["columns"]], cited["cells"]))
     assert by_name["total_amount"] == 2200
     assert by_name["grants"] == 5
     assert len(payload["covers"]["ordinals"]) == 5
@@ -209,3 +209,34 @@ def test_show_every_stage_can_reach_every_stage_on_the_route(run_id):
         PROJECT, run_id, "total_of_means", "summed_means", 0, suffix=".json")).json()
     assert ([stage["id"] for stage in payload["stages"]]
             == [step["stage"] for step in payload["scale"]])
+
+
+def test_the_columns_are_stated_by_what_the_stage_did_and_ordered_by_it(run_id):
+    payload = TestClient(app).get(
+        scope_url(PROJECT, run_id, "grant_totals", "total_amount", 0, suffix=".json")).json()
+    # grants_only is a filter over `kind`: it writes nothing and reads that one column.
+    assert payload["covers"]["at_stage"] == "grants_only"
+    assert payload["columns"][0] == {"name": "kind", "state": "read"}
+    assert {column["state"] for column in payload["columns"][1:]} == {"carried"}
+    # The cells follow the header, so a row still reads against the column above it.
+    kind = [row["cells"][0] for row in payload["rows"]]
+    assert kind == ["grant"] * len(payload["rows"])
+
+
+def test_a_stage_that_added_a_column_has_it_drawn_before_the_one_it_read(run_id):
+    payload = TestClient(app).get(
+        scope_url(PROJECT, run_id, "size_band", "band", 0, suffix=".json")).json()
+    # Nothing merged into this row, so the map covers the adding stage itself.
+    assert payload["covers"]["at_stage"] == "size_band"
+    # size_band adds band and digits off amount, which it reads.
+    columns = payload["columns"]
+    assert [column["name"] for column in columns][:3] == ["band", "digits", "amount"]
+    assert [column["state"] for column in columns][:3] == ["added", "added", "read"]
+    assert {column["state"] for column in columns[3:]} == {"carried"}
+
+
+def test_a_replaces_form_wrote_every_column_of_the_frame_it_handed_back(run_id):
+    payload = TestClient(app).get(
+        scope_url(PROJECT, run_id, "grant_totals", "total_amount", 0, suffix=".json")).json()
+    assert [column["state"] for column in payload["cited_row"]["columns"]] == \
+        ["added", "added"]

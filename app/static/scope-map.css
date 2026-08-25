@@ -94,8 +94,29 @@
 .scope-table td.scope-num { text-align: right; font-variant-numeric: tabular-nums;
   cursor: pointer; }
 .scope-table td[data-col] { cursor: pointer; }
-.scope-table tbody tr:hover { background: var(--hover); }
-.scope-table tbody tr.is-on { background: var(--info-bg); }
+
+/* What the stage this table is drawn at did to each column, in the tints the
+   Values used sheet already spends on the same four states (values-used.css).
+   The columns it only carried are also sorted right, so the ones the stage acted
+   on are the ones on screen before anything is scrolled. */
+.scope-table .scope-col-added,
+.scope-cols-legend .scope-col-added { background: var(--state-review-bg); color: var(--info-ink); }
+.scope-table .scope-col-rewritten,
+.scope-cols-legend .scope-col-rewritten { background: var(--warn-bg); color: var(--warn-ink); }
+.scope-table .scope-col-read,
+.scope-cols-legend .scope-col-read { background: var(--raised); color: var(--fg); }
+.scope-table .scope-col-carried,
+.scope-cols-legend .scope-col-carried { background: var(--sunk); color: var(--muted); }
+
+/* A tint is a fill on the cell, so the row it sits in has to paint over it to
+   read as hovered or picked at all. */
+.scope-table tbody tr:hover > td { background: var(--hover); }
+.scope-table tbody tr.is-on > td { background: var(--info-bg); }
+
+.scope-cols-legend { font-size: 0.78rem; color: var(--muted); margin: 0.6rem 0 0; }
+/* The read tint is the table's own white, so a swatch needs an edge to be one. */
+.scope-cols-legend span { border: 1px solid var(--border); border-radius: 3px;
+  padding: 0 0.4rem; margin-left: 0.35rem; }
 
 /* .stage-tabs sets display, which would otherwise beat the hidden attribute. */
 #scope-tabs[hidden] { display: none; }

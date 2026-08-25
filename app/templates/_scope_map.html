@@ -49,7 +49,17 @@
       <button data-tab="transform">Transform</button>
     </div>
   </div>
-  <div class="pane scope-table" data-pane="rows" id="scope-table"></div>
+  <div class="pane" data-pane="rows" id="scope-rows">
+    {# The tints are per stage, and which stage a table is drawn at changes as the
+       reader picks a cut, so the legend names the rule rather than the stage. #}
+    <p class="scope-cols-legend">the stage this table is drawn at
+      <span class="scope-col-added">wrote</span>
+      <span class="scope-col-rewritten">revised</span>
+      <span class="scope-col-read">read</span>
+      <span class="scope-col-carried">carried untouched</span>
+    </p>
+    <div class="scope-table" id="scope-table"></div>
+  </div>
   <div class="pane" data-pane="transform" id="scope-transform" hidden></div>
 </section>
 

@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from app.core.errors import RowOutOfRange, StageNotInRun
 from app.core.frames import read_frame_table
 from app.core.json_types import JsonScalar
+from app.models import WorkflowStage
 from app.models.branch_analysis import (
     BranchId,
     BranchOption,
@@ -36,6 +37,7 @@ from app.services.scope import (
     find_stages_on_route,
     measure_frame_scale,
 )
+from app.web.column_order import DrawnColumn, describe_frame_columns
 from app.web.merge_alias import (
     AliasedMerge,
     alias_the_merges,
@@ -78,7 +80,7 @@ class CitedRow(BaseModel):
 
     ordinal: RowOrdinal
     number: str
-    columns: list[str]
+    columns: list[DrawnColumn]
     cells: list[JsonScalar]
 
 
@@ -96,7 +98,7 @@ class CutRows(BaseModel):
     branch: BranchId
     at_stage: StageId
     total: int
-    columns: list[str]
+    columns: list[DrawnColumn]
     branch_paths: list[BranchPath]
     # Parallel to `branch_paths`: how many rows took each one.
     rows_per_branch_path: list[int]
@@ -115,7 +117,7 @@ class ScopeMap(BaseModel):
     # Set when `rows` was sampled, so a reader never mistakes a sample for the whole.
     sampled_from: int | None = None
     rows: list[DrawnRow]
-    columns: list[str]
+    columns: list[DrawnColumn]
     branch_paths: list[BranchPath]
     branch_path_index: list[int]
     branches: dict[BranchId, BranchOption]
@@ -150,12 +152,15 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
     aliased = alias_the_merges(
         run_branches, find_rows_reached_per_stage(run_branches, cited_row), resolved)
     shown = covers.ordinals[:CELL_ROWS]
+    columns = describe_frame_columns(
+        run_branches.stages.get(covers.at_stage), frame.column_names)
     return ScopeMap(
         project_id=project_id, run_id=run_id, citation=cited, covers=covers,
-        cited_row=_read_cited_row(cited_frame, cited.row_ordinal),
+        cited_row=_read_cited_row(cited_frame, cited.row_ordinal,
+                                  run_branches.stages.get(cited.stage_id)),
         sampled_from=len(covers.ordinals) if len(shown) < len(covers.ordinals) else None,
-        rows=read_rows(frame, shown, index),
-        columns=list(frame.column_names),
+        rows=read_rows(frame, shown, index, columns),
+        columns=columns,
         branch_paths=paths, branch_path_index=index,
         branches=branches,
         aliased_merges=aliased,
@@ -184,11 +189,13 @@ def _read_the_cited_cell(outputs: Path, citation: StageOutputCellCitation
         "value": _plain(frame.column(citation.column)[citation.row_ordinal])})
 
 
-def _read_cited_row(frame: pa.Table, ordinal: RowOrdinal) -> CitedRow:
+def _read_cited_row(frame: pa.Table, ordinal: RowOrdinal,
+                    workflow_stage: WorkflowStage | None) -> CitedRow:
+    columns = describe_frame_columns(workflow_stage, frame.column_names)
     return CitedRow(
         ordinal=ordinal, number=render_row_number(ordinal),
-        columns=list(frame.column_names),
-        cells=[_plain(frame.column(name)[ordinal]) for name in frame.column_names])
+        columns=columns,
+        cells=[_plain(frame.column(column.name)[ordinal]) for column in columns])
 
 
 def read_cut(run_branches: WorkflowRunBranches, outputs: Path,
@@ -207,12 +214,13 @@ def read_cut(run_branches: WorkflowRunBranches, outputs: Path,
     spread = Counter(index)
     shown = ordinals[:CUT_SAMPLE]
     frame = read_frame_table(outputs / f"{at_stage}.parquet")
+    columns = describe_frame_columns(run_branches.stages.get(at_stage), frame.column_names)
     return CutRows(
         branch=branch_id, at_stage=at_stage, total=len(ordinals),
-        columns=list(frame.column_names),
+        columns=columns,
         branch_paths=paths,
         rows_per_branch_path=[spread[i] for i in range(len(paths))],
-        rows=read_rows(frame, shown, index[:len(shown)]),
+        rows=read_rows(frame, shown, index[:len(shown)], columns),
         stages=_draw_stages(run_branches, _stages_touched(run_branches, paths)),
     )
 
@@ -232,8 +240,9 @@ def find_cuts_to_offer(run_branches: WorkflowRunBranches, outputs: Path,
 
 
 def read_rows(frame: pa.Table, ordinals: list[RowOrdinal],
-              branch_path_index: list[int]) -> list[DrawnRow]:
-    cells = [frame.column(name).to_pylist() for name in frame.column_names]
+              branch_path_index: list[int],
+              columns: list[DrawnColumn]) -> list[DrawnRow]:
+    cells = [frame.column(column.name).to_pylist() for column in columns]
     return [DrawnRow(ordinal=ordinal, number=render_row_number(ordinal),
                      branch_path_index=branch_path_index[position],
                      cells=[_plain(column[ordinal]) for column in cells])
