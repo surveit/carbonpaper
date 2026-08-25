@@ -23,6 +23,7 @@ from app.services.scope import (
     find_nearest_merge,
     find_stages_on_route,
 )
+from app.web.merge_alias import find_branches_that_tell_rows_apart
 
 
 @dataclass(frozen=True)
@@ -71,9 +72,11 @@ def find_paths_behind_figure(
     covers = find_contributing_rows(run_branches, *cited)
     _refuse_a_frame_with_no_paths(run_branches, covers.at_stage, covers.ordinals)
     # One re-graining is resolved, as on the scope map. docs/branch-analysis.md
-    taken = group_rows_by_path(run_branches, covers.at_stage, covers.ordinals,
-                               find_stages_on_route(run_branches, [cited]),
-                               _resolve_the_nearest(run_branches, cited))
+    taken = group_rows_by_path(
+        run_branches, covers.at_stage, covers.ordinals,
+        find_branches_that_tell_rows_apart(
+            run_branches, find_stages_on_route(run_branches, [cited]),
+            _resolve_the_nearest(run_branches, cited)))
     choices = find_sample_choices_behind(run_branches, *cited)
     shared = _find_branches_on_every_path(taken.paths)
     marked_row = walked.get(covers.at_stage)

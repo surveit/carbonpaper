@@ -191,10 +191,11 @@ re-graining, which is the thing a reader most needs to see.
 A filter is untouched by any of this. Its `predicate` branch has its own id and its own stub,
 so aliasing a merge never hides what a stage removed.
 
-`group_rows_by_path` takes `resolved_merges` as a required argument, never a defaulted one. An
-empty set is a real answer — a figure no merge fed has no re-graining to resolve — and it
-aliases every merge, so a caller that simply forgot to pass one would get a silently thinner
-drawing rather than an error.
+**Aliasing is a view choice, and only the view knows about it.** `group_rows_by_path` in
+`app.runtime` takes `told_apart_by` — the branch ids these rows may be told apart by — and
+knows nothing about merges or aliases. `find_branches_that_tell_rows_apart` composes the two
+facts that decide it: on the route, and, for a merge, at a stage the reader expanded. An empty
+set is a real answer, so it is a required argument rather than a defaulted one.
 
 ## Where the code lives
 
@@ -206,7 +207,7 @@ drawing rather than an error.
 | `app/runtime/branch_analysis/stage_code.py` | the stage source a branch decided in |
 | `app/runtime/branch_analysis/rows_behind_a_branch.py` | which rows took one branch, and in which frame |
 | `app/services/scope.py` | answering a citation, measuring frame scale, finding the nearest merge |
-| `app/web/merge_alias.py` | what an aliased merge's node says, and what names its groups |
+| `app/web/merge_alias.py` | `AliasedMerge`: which merges a drawing resolves, and what names their groups |
 | `tests/scope_fixture.py` | twelve grants and fourteen stages, hitting every reason on purpose |
 
 `app/runtime/branch_analysis` reads a finished run rather than executing one, which is not the

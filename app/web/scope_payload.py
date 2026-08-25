@@ -12,7 +12,6 @@ from app.core.errors import RowOutOfRange, StageNotInRun
 from app.core.frames import read_frame_table
 from app.core.json_types import JsonScalar
 from app.models.branch_analysis import (
-    AliasedMerge,
     BranchId,
     BranchOption,
     BranchPath,
@@ -37,7 +36,12 @@ from app.services.scope import (
     find_stages_on_route,
     measure_frame_scale,
 )
-from app.web.merge_alias import alias_the_merges, name_the_groups
+from app.web.merge_alias import (
+    AliasedMerge,
+    alias_the_merges,
+    find_branches_that_tell_rows_apart,
+    name_the_groups,
+)
 from app.web.config import render_row_number
 
 # Cells for a wider set than this are sampled; the counts never are.
@@ -139,7 +143,8 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
     resolved = ({nearest} if nearest else set()) | set(expand)
     paths, _, index = group_rows_by_path(
         run_branches, covers.at_stage, covers.ordinals,
-        find_stages_on_route(run_branches, cited_row), resolved)
+        find_branches_that_tell_rows_apart(
+            run_branches, find_stages_on_route(run_branches, cited_row), resolved))
     branches = _name_merge_groups(
         run_branches, outputs, _branches_on(run_branches, paths))
     aliased = alias_the_merges(
@@ -196,8 +201,9 @@ def read_cut(run_branches: WorkflowRunBranches, outputs: Path,
     nearest = find_nearest_merge(run_branches, behind)
     paths, _, index = group_rows_by_path(
         run_branches, at_stage, ordinals,
-        find_stages_on_route(run_branches, behind),
-        {nearest} if nearest else set())
+        find_branches_that_tell_rows_apart(
+            run_branches, find_stages_on_route(run_branches, behind),
+            {nearest} if nearest else set()))
     spread = Counter(index)
     shown = ordinals[:CUT_SAMPLE]
     frame = read_frame_table(outputs / f"{at_stage}.parquet")

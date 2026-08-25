@@ -4,13 +4,37 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pydantic import BaseModel
+
 from app.core.frames import read_frame_table
 from app.core.json_types import JsonScalar
-from app.models.branch_analysis import AliasedMerge, RowOrdinal
+from app.models.branch_analysis import BranchId, BranchReason, RowOrdinal
 from app.models.schema import StageId
 from app.models.stages.aggregate import AggregateStage
 from app.runtime.branch_analysis import WorkflowRunBranches
 from app.services.scope import find_merge_stage_ids
+
+
+class AliasedMerge(BaseModel):
+    """A merge stage drawn as one node, its groups left unresolved."""
+
+    stage_id: StageId
+    group_by: list[str]
+    groups_count: int
+    rows_count: int
+    on_route_groups_count: int
+    on_route_rows_count: int
+
+
+def find_branches_that_tell_rows_apart(run_branches: WorkflowRunBranches,
+                                       on_route: set[StageId],
+                                       resolved: set[StageId]) -> set[BranchId]:
+    """On the route — and, for a merge, at a stage this reader has expanded."""
+    return {branch_id
+            for branch_id, option in run_branches.branch_options.items()
+            if option.stage_id in on_route
+            and (option.reason is not BranchReason.merge
+                 or option.stage_id in resolved)}
 
 
 def alias_the_merges(run_branches: WorkflowRunBranches,

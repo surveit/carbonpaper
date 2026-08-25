@@ -57,17 +57,6 @@ class BranchOption(BaseModel):
     merged_into_row_ordinal: RowOrdinal | None = None
 
 
-class AliasedMerge(BaseModel):
-    """A merge stage drawn as one node, its groups left unresolved."""
-
-    stage_id: StageId
-    group_by: list[str]
-    groups_count: int
-    rows_count: int
-    on_route_groups_count: int
-    on_route_rows_count: int
-
-
 class RowSet(BaseModel):
     """Rows at one stage's grain: what a figure was computed from, or what a branch cut."""
 
