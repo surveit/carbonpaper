@@ -218,7 +218,7 @@
     });
     stackRibbons(ribbons);
     var goneRows = Math.max.apply(null, cols.map(function (c) {
-      return c.gone.length + ((c.alias || c.expanded) ? 1 : 0);
+      return stubCount(c) + ((c.alias || c.expanded) ? 1 : 0);
     }).concat([0]));
     var height = Math.max.apply(null, cols.map(function (c) {
       return c.bottom;
@@ -410,6 +410,7 @@
       esc(clip(c.description || c.type, Math.floor(room / 5.6))) + "</text>" +
       drawScale(c, room) +
       c.gone.map(function (g, i) { return drawStub(c, g, i); }).join("") +
+      drawOffPathStub(c) +
       drawMergeControl(c);
   }
 
@@ -430,7 +431,7 @@
   // Aliased or expanded, a merge stage offers the other reading of itself here.
   function drawMergeControl(c) {
     if (!c.alias && !c.expanded) return "";
-    var y = c.bottom + 4 + c.gone.length * 17;
+    var y = c.bottom + 4 + stubCount(c) * 17;
     var want = c.alias ? "1" : "0";
     var text = c.alias
       ? "split into " + num(c.alias.on_route_groups_count) + " groups"
@@ -442,6 +443,33 @@
     return '<text class="scope-expand" data-expand="' + esc(c.id) + '" data-want="' +
       want + '" data-tip="' + esc(tip) + '" x="' + (c.x + BAR + 12) + '" y="' +
       (y + 3) + '">' + esc(text) + "</text>";
+  }
+
+  // Rows the frame here still holds that this figure has no ancestor among. Not a
+  // removal: they are alive, and they went into a row the figure did not come through.
+  function countOffPath(c) {
+    var step = (D.scale || []).find(function (s) { return s.stage === c.id; });
+    return step ? step.rows_count - step.included_rows_count : 0;
+  }
+
+  function stubCount(c) {
+    return c.gone.length + (countOffPath(c) ? 1 : 0);
+  }
+
+  function drawOffPathStub(c) {
+    var rows = countOffPath(c);
+    if (!rows) return "";
+    var y = c.bottom + 4 + c.gone.length * 17;
+    var budget = Math.floor((COLUMN - BAR - STUB - 10) / 6.3);
+    return '<line class="scope-stub-off" x1="' + c.x + '" y1="' + y + '" x2="' +
+      (c.x + STUB) + '" y2="' + y + '"/>' +
+      '<text class="scope-stub-off-label" data-tip="' + esc(num(rows) +
+      (rows === 1 ? " row at this stage is present, but does not"
+                  : " rows at this stage are present, but do not") +
+      " contribute any information to the row under investigation") +
+      '" x="' + (c.x + STUB + 5) + '" y="' + (y + 3) + '">' +
+      esc(clip(num(rows) + (rows === 1 ? " row" : " rows") + " not on path", budget)) +
+      "</text>";
   }
 
   function drawStub(c, gone, i) {
@@ -579,10 +607,13 @@
       return all.concat(c.gone.map(function (g) { return g.rows; }));
     }, [0]);
     var widest = Math.max.apply(null, stubs);
-    byId("scope-legend").textContent = widest
-      ? "A dashed stub is a branch none of these rows took. Its count is true and its " +
-        "width is not — the biggest is " + num(widest) + " against " +
-        num(D.covers.ordinals.length) + " rows. Click one to draw those rows instead."
+    var offPath = cols.some(countOffPath);
+    byId("scope-legend").textContent = widest || offPath
+      ? (widest ? "A red stub is rows the stage took out of the workflow — click one to " +
+          "draw them. Its count is true and its width is not: the biggest is " +
+          num(widest) + " against " + num(D.covers.ordinals.length) + " rows. " : "") +
+        (offPath ? "An amber stub is rows the frame here still holds that this figure " +
+          "did not come through." : "")
       : "";
   }
 

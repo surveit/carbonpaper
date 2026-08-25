@@ -74,6 +74,11 @@
   stroke-dasharray: 2 2; }
 #scope-svg text.scope-stub-label { fill: var(--state-failed-ink); font-size: 9.5px;
   cursor: pointer; }
+/* Amber and finer: these rows are still in the frame, so they are not a loss. */
+#scope-svg .scope-stub-off { stroke: var(--state-warn); stroke-width: 1;
+  stroke-dasharray: 1 3; }
+#scope-svg text.scope-stub-off-label { fill: var(--state-warn-ink); font-size: 9.5px;
+  cursor: help; }
 
 .scope-legend { font-size: 0.8rem; margin: 0.4rem 0 0.8rem; }
 
