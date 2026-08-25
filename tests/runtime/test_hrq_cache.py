@@ -423,7 +423,7 @@ def test_a_cached_entry_holding_no_output_row_re_queues_the_row(tmp_path):
         project_id=PROJECT, stage_id="review",
         stage_fingerprint=stage.compute_definition_fingerprint(),
         input_fingerprint=compute_row_fingerprint(row),
-        input_row=row, output_row=None,
+        input_row=row, output_row=None, branches=None,
     )
 
     snapshot, _fingerprints = _halt_and_read_snapshot(

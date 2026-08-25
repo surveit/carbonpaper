@@ -32,6 +32,7 @@ def _record(project_id: str, *, stage_fingerprint: str, input_fingerprint: str, 
         input_fingerprint=input_fingerprint,
         input_row={"comment": "Diese Klimakleber sind eine Plage"},
         output_row={"is_abusive": verdict, "category": 9},
+        branches=["classify/0:if"],
     )
 
 
@@ -46,6 +47,7 @@ def test_export_then_import_moves_entries_under_the_destination_project():
     moved = StageCacheEntry.read_only().get("destination", _STAGE, "fp_a", "row_1")
     assert moved is not None
     assert moved.output_row == {"is_abusive": True, "category": 9}
+    assert moved.branches == ["classify/0:if"]
     assert moved.project == "destination"
 
 
@@ -155,6 +157,7 @@ def test_entries_matching_a_live_stage_definition_count_as_reachable(destination
     StageCacheEntry.read_write().record(
         project_id=_SOURCE, stage_id=stage_id, stage_fingerprint=fingerprint,
         input_fingerprint="row_1", input_row={"x": 1}, output_row={"y": 2},
+        branches=None,
     )
 
     report = import_stage_cache(export_stage_cache(_SOURCE), destination_project)
@@ -168,6 +171,7 @@ def test_entries_from_an_edited_stage_import_but_are_not_reachable(destination_p
     StageCacheEntry.read_write().record(
         project_id=_SOURCE, stage_id=stage_id, stage_fingerprint="fingerprint_from_an_older_edit",
         input_fingerprint="row_1", input_row={"x": 1}, output_row={"y": 2},
+        branches=None,
     )
 
     report = import_stage_cache(export_stage_cache(_SOURCE), destination_project)

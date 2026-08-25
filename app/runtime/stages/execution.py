@@ -26,8 +26,8 @@ from app.models.stage import (
 
 from app.core.agent.usage import LlmUsage
 from app.core.frames import collapse_null_forms, is_null_form, list_table_rows
-from app.core.stage_cache import StageCache, compute_row_fingerprint
-from ..branches import BranchRecorder
+from app.core.stage_cache import StageCache, StageCacheEntry, compute_row_fingerprint
+from ..branches import BranchesTaken, BranchRecorder
 
 from .frame_caching import (
     find_cached_frame,
@@ -295,6 +295,7 @@ def _run_row_mapper(
     # `map_group` stays bound here: _finish_mapped_frame tests it for the
     # PostMapRowMapper shape, which _StageExecution would hide.
     map_group = handler.make_group_mapper(workflow_stage, ctx, src)
+    recorder = map_group.branch_recorder if isinstance(map_group, _RowsInGroupsOfOne) else None
     caching = _open_row_caching(workflow_stage, ctx)
     execution = _StageExecution(
         map_group,
@@ -302,6 +303,7 @@ def _run_row_mapper(
         caching,
         ctx.run_log,
         stage.id,
+        recorder,
     )
     input_rows = list_table_rows(src)
     narrowed_rows = [_narrow_row(row, reads) for row in input_rows]
@@ -310,7 +312,7 @@ def _run_row_mapper(
     cached_results: list[Row | None] = (
         [None] * len(narrowed_rows)
         if caching is None
-        else _find_cached_rows(caching, narrowed_rows, ctx.run_log, stage.id)
+        else _find_cached_rows(caching, narrowed_rows, ctx.run_log, stage.id, recorder)
     )
     results = _fan_out(
         handler, execution, narrowed_rows, cached_results, workflow_stage, ctx
@@ -332,7 +334,6 @@ def _run_row_mapper(
         out_rows.append({**input_rows[index], **result})
         kept_indices.append(index)
     mapped = _finish_mapped_frame(out_rows, handler, map_group, workflow_stage, ctx)
-    recorder = map_group.branch_recorder if isinstance(map_group, _RowsInGroupsOfOne) else None
     # The driver, not the stage, knows which input ordinals survived.
     lineage = (
         kept_rows_lineage(workflow_stage.inputs[0].id, kept_indices)
@@ -515,7 +516,7 @@ class _RowCaching(NamedTuple):
     project: str
     stage_id: str
     stage_fingerprint: str
-    recorded_outputs: dict[str, Row]
+    recorded_entries: dict[str, StageCacheEntry]
     writer: StageCache | None
 
 
@@ -531,19 +532,16 @@ def _open_row_caching(workflow_stage: WorkflowStage, ctx: RunContext) -> _RowCac
         project,
         stage.id,
         stage_fingerprint,
-        {} if ctx.params.bust_cache else ctx.stage_cache.find_recorded_rows(
+        {} if ctx.params.bust_cache else ctx.stage_cache.find_recorded_entries(
             project, stage.id, stage_fingerprint
         ),
         ctx.stage_cache if isinstance(ctx.stage_cache, StageCache) else None,
     )
 
 
-def _find_cached_row(caching: _RowCaching, input_row: Row) -> Row | None:
-    recorded = caching.recorded_outputs.get(compute_row_fingerprint(input_row))
-    return None if recorded is None else {**recorded, ROW_CACHED_KEY: True}
-
-
-def _cache_row_output(caching: _RowCaching, input_row: Row, output_row: Row) -> None:
+def _cache_row_output(
+    caching: _RowCaching, input_row: Row, output_row: Row, branches: BranchesTaken
+) -> None:
     if caching.writer is None:
         return
     if _blocks_caching(output_row):
@@ -555,6 +553,7 @@ def _cache_row_output(caching: _RowCaching, input_row: Row, output_row: Row) -> 
         input_fingerprint=compute_row_fingerprint(input_row),
         input_row=input_row,
         output_row=_without_internal_columns(output_row),
+        branches=branches,
     )
 
 
@@ -564,15 +563,21 @@ def _without_internal_columns(row: Row) -> Row:
 
 
 def _find_cached_rows(
-    caching: _RowCaching, narrowed_rows: list[Row], log: RunLog | None, stage_id: str
+    caching: _RowCaching, narrowed_rows: list[Row], log: RunLog | None, stage_id: str,
+    recorder: BranchRecorder | None,
 ) -> list[Row | None]:
     """Answered BEFORE grouping: a hit taking a seat in a model call is a batch paid for and wasted."""
     cached_results: list[Row | None] = []
     for index, row in enumerate(narrowed_rows):
-        hit = _find_cached_row(caching, row)
-        if hit is not None:
-            emit_cached_row(log, stage_id, index)
-        cached_results.append(hit)
+        entry = caching.recorded_entries.get(compute_row_fingerprint(row))
+        if entry is None or entry.output_row is None:
+            cached_results.append(None)
+            continue
+        emit_cached_row(log, stage_id, index)
+        # The row is replayed whole: its branches are as much its output as its columns.
+        if recorder is not None:
+            recorder.replay_row(index, entry.branches)
+        cached_results.append({**entry.output_row, ROW_CACHED_KEY: True})
     return cached_results
 
 
@@ -587,6 +592,7 @@ class _StageExecution(NamedTuple):
     caching: _RowCaching | None
     log: RunLog | None
     stage_id: str
+    recorder: BranchRecorder | None
 
     def run_group(
         self, indices: Sequence[int], rows: Sequence[Row]
@@ -622,13 +628,18 @@ class _StageExecution(NamedTuple):
                 result.get(ROW_ERROR_KEY) if result else None,
             )
         if self.caching is not None:
-            for row, result in zip(rows, results):
+            for index, row, result in zip(indices, rows, results):
                 # A drop is not a recordable output: the store holds output ROWS,
                 # so a replayed drop would be indistinguishable from a miss. A row
                 # this function just failed carries _error, which also blocks it.
                 if result is not None:
-                    _cache_row_output(self.caching, row, result)
+                    _cache_row_output(
+                        self.caching, row, result, self.read_branches_taken(index))
         return results
+
+    def read_branches_taken(self, index: int) -> BranchesTaken:
+        """() for a row whose code holds no branch, which is not the None of a row that never ran."""
+        return None if self.recorder is None else self.recorder.branches_for(index)
 
 
 def _assert_row(row: object, stage_id: str) -> Row | None:

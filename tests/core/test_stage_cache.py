@@ -74,7 +74,7 @@ def test_stage_cache_record_then_get_roundtrips():
     cache.record(
         project_id="proj", stage_id="review", stage_fingerprint="sf1", input_fingerprint="if1",
         input_row={"id": "r1", "score": 0.4},
-        output_row={"id": "r1", "score": 0.4, "final_score": 0.4},
+        output_row={"id": "r1", "score": 0.4, "final_score": 0.4}, branches=["t/0:if"],
     )
     got = cache.get("proj", "review", "sf1", "if1")
     assert got is not None
@@ -86,7 +86,7 @@ def test_stage_cache_record_stores_and_returns_a_none_output_row():
     cache = StageCache()
     cache.record(
         project_id="proj", stage_id="review", stage_fingerprint="sf1", input_fingerprint="ift",
-        input_row={"id": "r1", "score": 0.4}, output_row=None,
+        input_row={"id": "r1", "score": 0.4}, output_row=None, branches=None,
     )
     got = cache.get("proj", "review", "sf1", "ift")
     assert got is not None
@@ -98,7 +98,7 @@ def test_record_converts_numpy_scalars_to_json_native_numbers():
     cache.record(
         project_id="proj", stage_id="review", stage_fingerprint="sf1", input_fingerprint="ifn",
         input_row={"id": "r1", "score": np.int64(3)},
-        output_row={"id": "r1", "final_score": np.float64(4.5)},
+        output_row={"id": "r1", "final_score": np.float64(4.5)}, branches=None,
     )
     got = cache.get("proj", "review", "sf1", "ifn")
     assert got is not None
@@ -113,7 +113,7 @@ def test_record_stores_under_the_passed_fingerprint_not_a_recomputed_one():
     assert pinned != compute_row_fingerprint(row)
     cache.record(
         project_id="proj", stage_id="review", stage_fingerprint="sf1", input_fingerprint=pinned,
-        input_row=row, output_row={"id": "r1", "final_score": 0.4},
+        input_row=row, output_row={"id": "r1", "final_score": 0.4}, branches=None,
     )
     assert cache.get("proj", "review", "sf1", pinned) is not None
     assert cache.get("proj", "review", "sf1", compute_row_fingerprint(row)) is None
@@ -128,56 +128,81 @@ def test_find_entries_scopes_by_stage_fingerprint_prefix():
     cache = StageCache()
     output = {"id": "r1", "score": 0.4, "final_score": 0.4}
     cache.record(project_id="proj", stage_id="review", stage_fingerprint="sf1",
-                 input_fingerprint="if1", input_row={"id": "r1"}, output_row=output)
+                 input_fingerprint="if1", input_row={"id": "r1"}, output_row=output, branches=None)
     cache.record(project_id="proj", stage_id="review", stage_fingerprint="sf1",
-                 input_fingerprint="if2", input_row={"id": "r1"}, output_row=output)
+                 input_fingerprint="if2", input_row={"id": "r1"}, output_row=output, branches=None)
     cache.record(project_id="proj", stage_id="review", stage_fingerprint="sf-other",
-                 input_fingerprint="if3", input_row={"id": "r1"}, output_row=output)
+                 input_fingerprint="if3", input_row={"id": "r1"}, output_row=output, branches=None)
     found = cache.find_entries("proj", "review", "sf1")
     assert {e.input_fingerprint for e in found} == {"if1", "if2"}
 
 
-# ── find_recorded_rows: the bulk read one stage execution makes ───────────────
+# ── find_recorded_entries: the bulk read one stage execution makes ───────────
 
-def test_find_recorded_rows_keys_every_output_row_by_its_input_fingerprint():
+def test_find_recorded_entries_keys_every_entry_by_its_input_fingerprint():
     cache = StageCache()
     cache.record(project_id="proj", stage_id="review", stage_fingerprint="sf1",
                  input_fingerprint="if1", input_row={"id": "r1"},
-                 output_row={"id": "r1", "final_score": 0.4})
+                 output_row={"id": "r1", "final_score": 0.4}, branches=None)
     cache.record(project_id="proj", stage_id="review", stage_fingerprint="sf1",
                  input_fingerprint="if2", input_row={"id": "r2"},
-                 output_row={"id": "r2", "final_score": 0.9})
-    assert cache.find_recorded_rows("proj", "review", "sf1") == {
+                 output_row={"id": "r2", "final_score": 0.9}, branches=None)
+    found = cache.find_recorded_entries("proj", "review", "sf1")
+    assert {key: entry.output_row for key, entry in found.items()} == {
         "if1": {"id": "r1", "final_score": 0.4},
         "if2": {"id": "r2", "final_score": 0.9},
     }
 
 
-def test_find_recorded_rows_skips_an_entry_that_recorded_no_output_row():
+def test_find_recorded_entries_returns_an_entry_that_recorded_no_output_row():
+    # Whether a non-answer answers a row is the driver's call, not this seam's.
     cache = StageCache()
     cache.record(project_id="proj", stage_id="review", stage_fingerprint="sf1",
-                 input_fingerprint="if1", input_row={"id": "r1"}, output_row=None)
-    assert cache.find_recorded_rows("proj", "review", "sf1") == {}
+                 input_fingerprint="if1", input_row={"id": "r1"}, output_row=None,
+                 branches=None)
+    found = cache.find_recorded_entries("proj", "review", "sf1")
+    assert list(found) == ["if1"] and found["if1"].output_row is None
 
 
-def test_find_recorded_rows_is_scoped_to_one_stage_definition():
+def test_find_recorded_entries_is_scoped_to_one_stage_definition():
     cache = StageCache()
     cache.record(project_id="proj", stage_id="review", stage_fingerprint="sf1",
-                 input_fingerprint="if1", input_row={"id": "r1"}, output_row={"v": 1})
+                 input_fingerprint="if1", input_row={"id": "r1"}, output_row={"v": 1},
+                 branches=None)
     cache.record(project_id="proj", stage_id="review", stage_fingerprint="sf-other",
-                 input_fingerprint="if2", input_row={"id": "r2"}, output_row={"v": 2})
+                 input_fingerprint="if2", input_row={"id": "r2"}, output_row={"v": 2},
+                 branches=None)
     cache.record(project_id="other-proj", stage_id="review", stage_fingerprint="sf1",
-                 input_fingerprint="if3", input_row={"id": "r3"}, output_row={"v": 3})
-    assert cache.find_recorded_rows("proj", "review", "sf1") == {"if1": {"v": 1}}
+                 input_fingerprint="if3", input_row={"id": "r3"}, output_row={"v": 3},
+                 branches=None)
+    found = cache.find_recorded_entries("proj", "review", "sf1")
+    assert {key: entry.output_row for key, entry in found.items()} == {"if1": {"v": 1}}
 
 
-def test_find_recorded_rows_is_available_on_the_read_only_view():
+def test_find_recorded_entries_is_available_on_the_read_only_view():
     StageCache().record(project_id="proj", stage_id="review", stage_fingerprint="sf1",
                         input_fingerprint="if1", input_row={"id": "r1"},
-                        output_row={"v": 1})
-    assert ReadOnlyStageCache().find_recorded_rows("proj", "review", "sf1") == {
-        "if1": {"v": 1}
-    }
+                        output_row={"v": 1}, branches=None)
+    found = ReadOnlyStageCache().find_recorded_entries("proj", "review", "sf1")
+    assert {key: entry.output_row for key, entry in found.items()} == {"if1": {"v": 1}}
+
+
+def test_record_stores_the_branches_the_row_took():
+    cache = StageCache()
+    cache.record(project_id="proj", stage_id="tier", stage_fingerprint="sf1",
+                 input_fingerprint="if1", input_row={"id": "r1"}, output_row={"v": 1},
+                 branches=["transform/0:elif0"])
+    got = cache.get("proj", "tier", "sf1", "if1")
+    assert got is not None and got.branches == ["transform/0:elif0"]
+
+
+def test_an_entry_stored_before_the_field_existed_reads_back_with_no_branches():
+    stored = {"id": _build_cache_id("p", "tier", "sf", "if"), "project": "p",
+              "stage_id": "tier", "stage_fingerprint": "sf", "input_fingerprint": "if",
+              "frozen_input": {"id": "a"}, "output_row": {"v": 1}}
+    get_store().write("stage_cache", stored["id"], stored, schema_version=2)
+    entry = StageCacheEntry.load_or_none(stored["id"])
+    assert entry is not None and entry.branches is None
 
 
 # ── read_only / read_write ────────────────────────────────────────────────────

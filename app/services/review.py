@@ -49,6 +49,8 @@ def record_decision(
         output_row=_build_output_row(
             queue, frozen_row, verdict, reviewed_values, review_notes, reviewer, reviewed_at
         ),
+        # A human decided this row; no code ran, so there is no branch to replay.
+        branches=None,
     )
 
 

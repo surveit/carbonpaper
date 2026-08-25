@@ -107,8 +107,17 @@ def test_a_dropped_row_is_found_in_the_frame_it_was_dropped_from(scoped):
     assert at_stage == "size_band" and len(ordinals) == 1
 
 
-def test_a_cached_stage_loses_its_code_arms_but_keeps_its_lineage_ones(scoped):
-    second = str(run_service.execute(PROJECT)["run_id"])
-    run = _read(second)
-    assert not [b for b in run.branch_options if b.startswith("size_band|transform")]
+def _size_band_arms(run) -> list[str]:
+    return sorted(b for b in run.branch_options if b.startswith("size_band|"))
+
+
+def test_a_cached_stage_keeps_its_code_arms_as_well_as_its_lineage_ones(scoped):
+    # A replayed row carries the branches it took, so a warm run reads like a cold one.
+    first, _run_id = scoped
+    run = _read(str(run_service.execute(PROJECT)["run_id"]))
+    assert _size_band_arms(run) == _size_band_arms(first) == [
+        "size_band|transform/1:elif0",
+        "size_band|transform/1:else",
+        "size_band|transform/1:if",
+    ]
     assert "funded|removed" in run.branch_options
