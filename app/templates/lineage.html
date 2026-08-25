@@ -373,7 +373,9 @@ const RUN_BASE = `/project/${encodeURIComponent(PROJECT)}`
 
 function lineageHref(stageId, row, column){
   const query = column ? `?column=${encodeURIComponent(column)}` : '';
-  return `${RUN_BASE}/stage/${encodeURIComponent(stageId)}/row/${row}/trace/view${query}`;
+  // The hash is which tab is open, and reading another row is the same question.
+  return `${RUN_BASE}/stage/${encodeURIComponent(stageId)}/row/${row}`
+       + `/trace/view${query}${location.hash}`;
 }
 
 const stagePick = document.getElementById('lin-stage');
