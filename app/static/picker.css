@@ -238,3 +238,63 @@
     .picker-popover { min-width: 100%; }
     .picker.sm .picker-popover { min-width: 200px; }
 }
+
+/* The figure size: this control IS the page's lede, not a field beside one. It reads the
+   way its own list does — the column names the line, the cell it holds sits under it at
+   heading size — and that list is the whole row, one option per column, so picking a
+   figure is reading the row. Quiet until pointed at: a headline in a box reads as a form. */
+.picker.figure { flex: 0 1 auto; min-width: 0; max-width: min(100%, 720px); }
+.picker.figure .picker-trigger {
+    flex: 0 1 auto;
+    min-height: 0;
+    /* pulled back by its own padding, so the value lines up with the page */
+    margin-left: -9px;
+    padding: 3px 9px 4px;
+    gap: 12px;
+    border-color: transparent;
+    border-radius: 9px;
+    background: transparent;
+}
+.picker.figure .picker-trigger:hover,
+.picker.figure.is-open .picker-trigger {
+    border-color: var(--border);
+    background: var(--hover);
+}
+/* The column over the cell, in both places: picker.js writes the name line first, and
+   here the value is the name. */
+.picker.figure .picker-value { display: flex; flex-direction: column; }
+.picker.figure .picker-name {
+    order: 2;
+    font-size: 27px;
+    font-weight: 650;
+    letter-spacing: -0.015em;
+    line-height: 1.12;
+}
+/* A sentence-long cell at heading size is four words and an ellipsis. */
+.picker.figure.is-long .picker-name { font-size: 19px; font-weight: 600; line-height: 1.3; }
+.picker.figure .picker-meta {
+    order: 1;
+    margin-top: 0;
+    color: var(--info-ink);
+    font-family: var(--mono);
+    font-size: 12.5px;
+}
+.picker.figure .picker-chevron { font-size: 13px; }
+.picker.figure .picker-popover { width: min(94vw, 640px); }
+.picker.figure .picker-list { max-height: 340px; }
+/* Column first: the grid swaps the two lines picker.js writes, so the list reads down
+   the frame's columns with the cell each one holds under its name. */
+.picker.figure .picker-option { grid-template-rows: auto auto; }
+.picker.figure .picker-option-meta {
+    grid-row: 1;
+    color: var(--info-ink);
+    font-family: var(--mono);
+}
+.picker.figure .picker-option-name {
+    grid-row: 2;
+    max-height: 2.9em;
+    overflow: hidden;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: normal;
+}
