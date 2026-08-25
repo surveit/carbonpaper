@@ -50,10 +50,9 @@
     </div>
   </div>
   <div class="pane" data-pane="rows" id="scope-rows">
-    {# The tints are per stage, and which stage a table is drawn at changes as the
-       reader picks a cut, so the legend names the rule rather than the stage. #}
-    {# Which frame the rows below are, written by scope_map.js when a pick moves the
-       table off the one the drawing is over. #}
+    {# Which frame the rows below are, and — for a cut, whose rows sit in a frame
+       the stage that dropped them only read — which stage the tints are stated by.
+       Written by scope_map.js, since both change as the reader picks. #}
     <p class="scope-at muted" id="scope-at" hidden></p>
     <p class="scope-cols-legend">the stage that acted on these rows
       <span class="scope-col-added">wrote</span>
