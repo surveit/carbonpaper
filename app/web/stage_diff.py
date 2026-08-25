@@ -116,6 +116,8 @@ class RowAlignedDiff:
     inputs: list[DiffFrame]
     columns: list[DiffColumn]
     rows: list[list[DiffCell]]
+    # Positional against `rows`: where in the frame each one was drawn from.
+    row_ordinals: list[int]
     rows_total: int
     changed_cells_total: int
     added_column_names: list[str]
@@ -124,6 +126,11 @@ class RowAlignedDiff:
     @property
     def output_rows(self) -> int:
         return self.rows_total
+
+    @property
+    def opens_on_the_first(self) -> bool:
+        """False once `at_rows` picked them, where "the first N" would misname them."""
+        return self.row_ordinals == list(range(len(self.row_ordinals)))
 
     @property
     def count_labels(self) -> list[str]:
@@ -272,6 +279,7 @@ def _build_row_aligned_diff(
         inputs=inputs,
         columns=columns,
         rows=_shape_aligned_rows(in_text, out_text, columns, drawn),
+        row_ordinals=drawn,
         rows_total=len(output_df),
         changed_cells_total=sum(column.changed_cells for column in columns),
         added_column_names=[
@@ -328,10 +336,10 @@ def _shape_input_column(
 def _shape_aligned_rows(
     in_text: pd.DataFrame, out_text: pd.DataFrame, columns: list[DiffColumn], drawn: list[int]
 ) -> list[list[DiffCell]]:
+    in_values = _take_column_lists(in_text, drawn)
     # Column-major, once per frame: reading each cell back as frame[name].iat[i] inside
     # the loop re-resolved its column every time — ~18µs a cell, and a 5,000-row export
     # shapes half a million of them.
-    in_values = _take_column_lists(in_text, drawn)
     out_values = _take_column_lists(out_text, drawn)
     return [
         [_shape_aligned_cell(in_values, out_values, column, i) for column in columns]
