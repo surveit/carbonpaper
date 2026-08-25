@@ -1,7 +1,6 @@
 {# The Paths pane: every path the rows behind this figure took, none collapsed.
    Context: pane (app.web.row_paths.PathsBehindFigure, or a refusal carrying
    `reason`), figure, links. #}
-<h2>How these rows got here</h2>
 {% if pane.reason is defined %}
 <p class="paths-none">This run cannot say: {{ pane.reason }}</p>
 {% else %}
@@ -9,15 +8,14 @@
    further up, which are not part of a path's identity. Relevant rows counts. #}
 <p class="paths-count">
   {% if pane.paths | length == 1 %}
-    Every row behind this one took the <b>same path</b>.
+    Every row behind this one took the <b>same pathway</b>.
   {% else %}
-    <b>{{ pane.paths | length }}</b> paths reach this row.
+    <b>{{ pane.paths | length }}</b> distinct pathways reach this row.
   {% endif %}
 </p>
 {% for path in pane.paths %}
   {% set body %}
-    <span class="path-rows">Path {{ path.number }} <span class="path-row-ref">· row
-      {{ path.example_ordinal | row_number }}</span></span>
+    <span class="path-name">Path {{ path.number }}</span>
     <span class="path-text">
       {%- for branch in path.tells_it_apart -%}
         <span class="{{ 'is-code' if branch.reason.value == 'code' }}"
@@ -37,7 +35,4 @@
     <div class="path-entry">{{ body }}</div>
   {% endif %}
 {% endfor %}
-<p class="paths-foot">Every path the run recorded, none folded into another. Left out: what
-  every path shares, and a load a join or union below it already accounts for — neither tells
-  one path from another. How many rows took each is <b>Relevant rows</b>.</p>
 {% endif %}
