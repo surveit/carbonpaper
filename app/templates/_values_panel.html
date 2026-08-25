@@ -56,7 +56,7 @@
     {# The same split the outputs pane draws — input frames, what the stage did to
        them, output frame — cut to the columns this value came through. #}
     {% if step.diff %}
-    {% with diff = step.diff, stage = step, full_rows = false,
+    {% with diff = step.diff, stage = step, full_rows = false, columns_are_cut = true,
             cited_column = values.column if step.stage_id == values.cited_stage else none,
             column_writers = step.column_writers %}
     {% include "_stage_diff.html" %}

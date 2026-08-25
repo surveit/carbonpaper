@@ -79,6 +79,17 @@ def test_an_input_stage_has_no_frame_to_paint_over(run_id):
     assert _step(values, "load_east").diff is None
 
 
+def _minimap_columns(values):
+    return [[node.stage_id for node in column] for column in values.minimap]
+
+
+def test_two_sources_of_one_stage_stack_rather_than_read_as_a_chain(run_id):
+    # Drawn one after another they read as the first flowing into the second.
+    columns = _minimap_columns(_walk(run_id, "by_portfolio", "portfolio"))
+    assert set(columns[0]) == {"load_agencies", "load_east", "load_west"}
+    assert columns[1:] == [["tag_portfolio"], ["by_portfolio"]]
+
+
 def test_an_aggregate_hands_back_a_new_sheet_and_says_which(run_id):
     values = _walk(run_id, "by_portfolio", "total_amount")
     assert _step(values, "by_portfolio").new_sheet == "per_group"

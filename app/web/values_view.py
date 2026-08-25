@@ -51,7 +51,8 @@ def load_values_used(
     _refuse_unknown_cell(stages, run_id, stage_id, column)
     walk = walk_column_back(stages, ColumnAt(stage_id, column))
     graph = build_writer_graph(walk, stages)
-    replayed = _order_stages_that_wrote(walk)
+    level = _rank_stages_by_graph_level(graph, _list_stages_that_wrote(walk))
+    replayed = sorted(level, key=lambda sid: (level[sid], sid))
     records = {entry.stage_id: entry for entry in record.stage_records}
     output_by_id = {entry.stage_id: entry.output_path for entry in record.stage_records}
     run_dir = resolve_run_dir(project_id, run_id)
@@ -65,7 +66,7 @@ def load_values_used(
                         order, cited=ColumnAt(stage_id, column))
             for sid in replayed
         ],
-        minimap=_build_minimap(walk, replayed, stages),
+        minimap=_build_minimap(level, replayed, stages),
         edges=_list_edges(graph),
         sources=_index_sources(graph),
         counts_rows=walk.find_stop_at(ColumnAt(stage_id, column)) is WalkStop.counts_rows,
@@ -83,10 +84,25 @@ def _refuse_unknown_cell(
         raise ColumnNotInFrame(f"stage '{stage_id}' writes no column '{column}'")
 
 
-def _order_stages_that_wrote(walk: ColumnWalk) -> list[StageId]:
-    """Root first, so the replay reads left to right like the workflow graph."""
-    wrote = {at.stage_id for at, node in walk.nodes.items() if node.wrote}
-    return sorted(wrote, key=lambda sid: (-walk.measure_depth_of_stage(sid), sid))
+def _list_stages_that_wrote(walk: ColumnWalk) -> set[StageId]:
+    return {at.stage_id for at, node in walk.nodes.items() if node.wrote}
+
+
+def _rank_stages_by_graph_level(
+    graph: WriterGraph, wrote: set[StageId]
+) -> dict[StageId, int]:
+    """One column right of its furthest parent, so two sources of one stage stack."""
+    level: dict[StageId, int] = {}
+
+    def measure(stage_id: StageId) -> int:
+        if stage_id not in level:
+            parents = [edge.from_stage for edge in graph.list_parents(stage_id)]
+            level[stage_id] = 0 if not parents else 1 + max(map(measure, parents))
+        return level[stage_id]
+
+    for stage_id in sorted(wrote):
+        measure(stage_id)
+    return level
 
 
 def _build_step(
@@ -184,17 +200,17 @@ def _say_why_no_sheet(
 
 
 def _build_minimap(
-    walk: ColumnWalk, replayed: list[StageId], stages: WorkflowStagesById
+    level: dict[StageId, int], replayed: list[StageId], stages: WorkflowStagesById
 ) -> list[list[MinimapNode]]:
-    by_depth: dict[int, list[StageId]] = defaultdict(list)
+    by_level: dict[int, list[StageId]] = defaultdict(list)
     for stage_id in replayed:
-        by_depth[walk.measure_depth_of_stage(stage_id)].append(stage_id)
+        by_level[level[stage_id]].append(stage_id)
     return [
         [
             MinimapNode(stage_id=sid, glyph=TYPE_GLYPH[stages[sid].stage.type])
-            for sid in by_depth[depth]
+            for sid in by_level[column]
         ]
-        for depth in sorted(by_depth, reverse=True)
+        for column in sorted(by_level)
     ]
 
 
