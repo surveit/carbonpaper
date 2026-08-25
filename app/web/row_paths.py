@@ -11,6 +11,7 @@ from app.models.branch_analysis import (
     BranchId,
     BranchOption,
     BranchPath,
+    BranchReason,
     RowOrdinal,
     RowRef,
 )
@@ -21,6 +22,7 @@ from app.services.scope import (
     find_contributing_rows,
     find_sample_choices_behind,
     find_nearest_merge,
+    find_stages_each_stage_feeds,
     find_stages_on_route,
 )
 from app.web.merge_alias import find_branches_that_tell_rows_apart
@@ -78,11 +80,12 @@ def find_paths_behind_figure(
             run_branches, find_stages_on_route(run_branches, [cited]),
             _resolve_the_nearest(run_branches, cited)))
     choices = find_sample_choices_behind(run_branches, *cited)
-    shared = _find_branches_on_every_path(taken.paths)
+    left_out = (_find_branches_on_every_path(taken.paths)
+                | _find_loads_a_branch_below_them_restates(run_branches, taken.paths))
     marked_row = walked.get(covers.at_stage)
     return PathsBehindFigure(
         at_stage=covers.at_stage,
-        paths=[_read_one_path(run_branches, path, on_it, shared, choices, marked_row)
+        paths=[_read_one_path(run_branches, path, on_it, left_out, choices, marked_row)
                for path, on_it in zip(taken.paths, taken.ordinals)],
     )
 
@@ -94,13 +97,13 @@ def _resolve_the_nearest(run_branches: WorkflowRunBranches,
 
 
 def _read_one_path(run_branches: WorkflowRunBranches, path: BranchPath,
-                   ordinals: list[RowOrdinal], shared: frozenset[BranchId],
+                   ordinals: list[RowOrdinal], left_out: frozenset[BranchId],
                    choices: Mapping[RowOrdinal, tuple[RowRef, ...]],
                    marked_row: RowOrdinal | None) -> PathBehindFigure:
     options = [run_branches.branch_options[branch_id] for branch_id in path]
     return PathBehindFigure(
         rows=len(ordinals),
-        tells_it_apart=[o for o in options if o.id not in shared],
+        tells_it_apart=[o for o in options if o.id not in left_out],
         whole_path=options,
         example_ordinal=ordinals[0],
         sample_choices=list(choices.get(ordinals[0], ())),
@@ -124,3 +127,44 @@ def _find_branches_on_every_path(paths: list[BranchPath]) -> frozenset[BranchId]
     if len(paths) < 2:
         return frozenset()
     return frozenset.intersection(*(frozenset(path) for path in paths))
+
+
+# A join or union under an input is WHY a row reached it, so it already says what
+# that input's load branch says. Correlation is not enough: two branches can split
+# the rows alike and still be different facts. docs/branch-analysis.md
+_SAYS_WHY_A_ROW_REACHED_AN_INPUT = {BranchReason.join, BranchReason.union}
+
+
+def _find_loads_a_branch_below_them_restates(
+    run_branches: WorkflowRunBranches, paths: list[BranchPath],
+) -> frozenset[BranchId]:
+    if len(paths) < 2:
+        return frozenset()
+    feeds = find_stages_each_stage_feeds(run_branches)
+    carried = _find_paths_carrying_each_branch(paths)
+    return frozenset(
+        branch_id for branch_id, option in run_branches.branch_options.items()
+        if option.reason is BranchReason.load and branch_id in carried
+        and carried[branch_id] <= _find_paths_reaching_that_input(
+            run_branches, carried, feeds[option.stage_id]))
+
+
+def _find_paths_reaching_that_input(run_branches: WorkflowRunBranches,
+                                    carried: dict[BranchId, frozenset[int]],
+                                    fed_stage_ids: set[StageId]) -> frozenset[int]:
+    below = [carried[branch_id] for branch_id, option
+             in run_branches.branch_options.items()
+             if option.stage_id in fed_stage_ids and branch_id in carried
+             and option.reason in _SAYS_WHY_A_ROW_REACHED_AN_INPUT]
+    return frozenset[int]().union(*below) if below else frozenset()
+
+
+def _find_paths_carrying_each_branch(
+    paths: list[BranchPath],
+) -> dict[BranchId, frozenset[int]]:
+    carrying: dict[BranchId, set[int]] = {}
+    for position, path in enumerate(paths):
+        for branch_id in path:
+            carrying.setdefault(branch_id, set()).add(position)
+    return {branch_id: frozenset(positions)
+            for branch_id, positions in carrying.items()}

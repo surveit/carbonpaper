@@ -18,12 +18,14 @@
 </p>
 {% for path in pane.paths %}
   {% set body %}
-    <span class="path-rows">follow <code>{{ pane.at_stage }}</code> row
-      {{ path.example_ordinal | row_number }}</span>
-    {% for branch in path.tells_it_apart %}
-      <span class="path-branch {{ 'is-code' if branch.reason.value == 'code' }}"
-            title="{{ branch.reason.value }} at {{ branch.stage_id }}">{{ branch.label }}</span>
-    {% endfor %}
+    <span class="path-rows">follow row {{ path.example_ordinal | row_number }}</span>
+    <span class="path-text">
+      {%- for branch in path.tells_it_apart -%}
+        <span class="{{ 'is-code' if branch.reason.value == 'code' }}"
+              title="{{ branch.reason.value }} at {{ branch.stage_id }}"
+              >{{ branch.label }}</span>{{ ", " if not loop.last }}
+      {%- endfor -%}
+    </span>
   {% endset %}
   {% set href = links.build_row_trace_for_figure(
        figure.stage_id, figure.row_ordinal, path.sample_choices) %}
@@ -36,7 +38,7 @@
     <div class="path-entry">{{ body }}</div>
   {% endif %}
 {% endfor %}
-<p class="paths-foot">Every path the run recorded, none folded into another. Branches every
-  path shares are left out — they tell none of them apart. How many rows took each, and what
-  each row stands for, is <b>Relevant rows</b>.</p>
+<p class="paths-foot">Every path the run recorded, none folded into another. Left out: what
+  every path shares, and a load a join or union below it already accounts for — neither tells
+  one path from another. How many rows took each is <b>Relevant rows</b>.</p>
 {% endif %}
