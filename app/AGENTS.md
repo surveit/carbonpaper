@@ -85,8 +85,8 @@ The counts are the summary, so a closed panel still says something is wrong.
   issue, which only warns its stage), one line per stage × column × message, stages in the
   run's own order.
 
-A deep link loads the panel through `_loadStage(id, {tab, reveal})`, which the panel serves by
-publishing `_selectTab` on its root element. `reveal` smooth-scrolls the panel's top to the top of the
+A deep link loads the panel through `_loadStage(id, {tab, reveal})`, which opens the named tab
+with `selectTab` (static/tabs.js). `reveal` smooth-scrolls the panel's top to the top of the
 run column; every click the reader aims — the guide's steps and output links, an issue link, a
 graph node — uses it, and a load they did not ask for (deep link, panel self-refresh) does not.
 

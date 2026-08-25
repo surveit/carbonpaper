@@ -31,10 +31,10 @@
 
   <div class="stage-tabs nr-tabs">
     <div class="tabs">
-      <button type="button" data-nrtab="inputs">Inputs</button>
-      <button type="button" data-nrtab="transform" class="active">Transform</button>
-      <button type="button" data-nrtab="outputs">Outputs</button>
-      <button type="button" data-nrtab="spec">Spec (JSON)</button>
+      <button type="button" data-tab="inputs">Inputs</button>
+      <button type="button" data-tab="transform" class="active">Transform</button>
+      <button type="button" data-tab="outputs">Outputs</button>
+      <button type="button" data-tab="spec">Spec (JSON)</button>
     </div>
   </div>
 
@@ -87,20 +87,3 @@
     </div>
   </div>
 </div>
-
-<script>
-// Injected via innerHTML; the parent re-creates this script so it runs. Tab
-// switching only — this panel has no writers. Scoped to this panel so it can't
-// collide with the working-copy review panel's identical markup.
-(function () {
-  const panel = document.getElementById('version-stage-panel');
-  if (!panel) return;
-  panel.querySelectorAll('[data-nrtab]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      const key = btn.dataset.nrtab;
-      panel.querySelectorAll('[data-nrtab]').forEach(b => b.classList.toggle('active', b === btn));
-      panel.querySelectorAll('[data-pane]').forEach(p => { p.hidden = p.dataset.pane !== key; });
-    });
-  });
-})();
-</script>
