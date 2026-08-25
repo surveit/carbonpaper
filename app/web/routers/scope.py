@@ -97,7 +97,7 @@ def _cite(run_id: str, stage: str, row: int, column: str) -> StageOutputCellCita
 
 def _payload(scope: ScopeMap, cuts: dict[BranchId, CutRows]) -> JsonDict:
     drawn = scope.model_dump(mode="json")
-    drawn["cuts"] = {branch: _drawn_cut(scope, cut) for branch, cut in cuts.items()}
+    drawn["cuts"] = {branch: _draw_the_cut(scope, cut) for branch, cut in cuts.items()}
     # Both, because the switch between them changes the layout, not just the styling.
     drawn["drawn"] = draw_the_scope(scope, every_stage=False).model_dump(mode="json")
     drawn["drawn_every_stage"] = draw_the_scope(
@@ -105,7 +105,7 @@ def _payload(scope: ScopeMap, cuts: dict[BranchId, CutRows]) -> JsonDict:
     return drawn
 
 
-def _drawn_cut(scope: ScopeMap, cut: CutRows) -> JsonDict:
+def _draw_the_cut(scope: ScopeMap, cut: CutRows) -> JsonDict:
     """A cut is a page of its own, so it arrives drawn rather than shaped in the browser."""
     at = build_scope_map_for_cut(scope, cut)
     drawn = cut.model_dump(mode="json")

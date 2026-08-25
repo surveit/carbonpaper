@@ -104,12 +104,12 @@ class Column:
 
 def choose_columns(facts: Facts, every_stage: bool) -> list[Column]:
     drawn = [_build_column(facts, stage) for stage in facts.scope.stages
-             if every_stage or _tells_rows_apart(facts, stage)]
+             if every_stage or _is_worth_a_column(facts, stage)]
     kept = [column for column in drawn if column.nodes or column.gone]
     return kept if every_stage else _keep_informative(facts, kept)
 
 
-def _tells_rows_apart(facts: Facts, stage: DrawnStage) -> bool:
+def _is_worth_a_column(facts: Facts, stage: DrawnStage) -> bool:
     return bool(facts.scope.aliased_merges.get(stage.id)) or any(
         facts.branches_at(group, stage.id) for group in facts.groups)
 
@@ -149,8 +149,7 @@ def node_key(stage_id: StageId, branches: tuple[BranchId, ...]) -> str:
     return stage_id + SEP + ",".join(branches)
 
 
-# A column adds nothing when every row it separates was already separated. The
-# cited cell's own stage is exempt: it is the figure, not a distinction.
+# A column adds nothing when every row it separates was already separated.
 def _keep_informative(facts: Facts, all_columns: list[Column]) -> list[Column]:
     running = [""] * len(facts.groups)
     arrived = [False] * len(facts.groups)
@@ -163,7 +162,7 @@ def _keep_informative(facts: Facts, all_columns: list[Column]) -> list[Column]:
                      for seen, group in zip(arrived, facts.groups))
         if not (brings or stage_id == facts.scope.citation.stage_id or column.gone
                 or column.alias or column.expanded
-                or _tells_apart_more(nxt, running, facts)):
+                or _is_a_finer_reading(nxt, running, facts)):
             continue
         kept.append(column)
         running = nxt
@@ -173,7 +172,7 @@ def _keep_informative(facts: Facts, all_columns: list[Column]) -> list[Column]:
 
 
 # Groups, not rows, so a set of them counts what a set of rows would have.
-def _tells_apart_more(nxt: list[str], running: list[str], facts: Facts) -> bool:
+def _is_a_finer_reading(nxt: list[str], running: list[str], facts: Facts) -> bool:
     return len(set(nxt)) > len(set(running))
 
 
@@ -218,8 +217,7 @@ def _node_at(facts: Facts, column: Column, group: Group) -> Node | None:
     return next((node for node in column.nodes if node.key == want), None)
 
 
-# Each column takes the average position of the columns either side, weighted by
-# rows, until the sweeps settle. The barycentre heuristic, and cheap at this size.
+# The barycentre heuristic: a column takes its neighbours' mean, weighted by rows.
 def order_nodes(columns: list[Column], ribbons: list[Ribbon]) -> None:
     for _ in range(SWEEPS):
         for down in range(1, len(columns)):
@@ -243,18 +241,17 @@ def _sort_column(columns: list[Column], ci: int, neighbour: int,
         got = pull.setdefault(here.key, [0.0, 0.0])
         got[0] += place[there.key] * ribbon.rows
         got[1] += ribbon.rows
-    columns[ci].nodes.sort(key=lambda node: _mean_place(pull, held, node))
+    columns[ci].nodes.sort(key=lambda node: _measure_mean_place(pull, held, node))
 
 
 # A node with nothing running to that neighbour has no opinion, so it stays put.
-def _mean_place(pull: dict[str, list[float]], held: dict[str, int],
+def _measure_mean_place(pull: dict[str, list[float]], held: dict[str, int],
                 node: Node) -> float:
     got = pull.get(node.key)
     return got[0] / got[1] if got and got[1] else float(held[node.key])
 
 
-# Each end is stacked in the order of the node at the OTHER end, so ribbons sharing
-# a node fan out instead of swapping over.
+# Each end is stacked in the order of the node at the OTHER end, so ribbons fan out.
 def stack_ribbons(ribbons: list[Ribbon]) -> None:
     for ribbon in ribbons:
         ribbon.h0 = ribbon.a.height * (ribbon.rows / max(1, ribbon.a.rows))
@@ -285,8 +282,7 @@ def place_bars(facts: Facts, columns: list[Column], top: float) -> None:
     scale = _measure_scale(facts, columns)
     entered = _where_each_group_enters(facts, columns)
     for ci, column in enumerate(columns):
-        # The rows already running past this column hold the top of the band, so a
-        # source joining here stacks below them instead of under their ribbons.
+        # The rows running past hold the top of the band, so a source stacks below.
         y = top + _count_running_past(facts, columns, ci, entered) * scale
         for node in column.nodes:
             node.height = max(2.0, (node.drawn_rows or node.rows) * scale)
@@ -296,8 +292,7 @@ def place_bars(facts: Facts, columns: list[Column], top: float) -> None:
         column.bottom = max(y, _place_labels(column.nodes, top))
 
 
-# A ribbon travelling further up or down than it runs across bulges rather than
-# flows, so the busiest column sets the height and COLUMN caps it.
+# A ribbon travelling further than it runs across bulges, so the busiest sets this.
 def _measure_scale(facts: Facts, columns: list[Column]) -> float:
     most = max([len(column.nodes) for column in columns] + [1])
     band = min(TALLEST_BAND, max(SHORTEST_BAND, most * BAND_PER_NODE))

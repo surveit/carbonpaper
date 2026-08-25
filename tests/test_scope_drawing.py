@@ -52,10 +52,7 @@ def test_every_row_is_on_one_bar_of_each_column_it_came_through(totals):
             assert len(seen) == len(set(seen)), f"{column.stage.id} drew a row twice"
 
 
-# A ratchet, not a clean rule. A ribbon that changes band between the columns it
-# runs between crosses whatever stands in the columns it skips, and the offset that
-# stacks a source below the rows in flight cannot know where those rows are going.
-# Entries may be removed, never added: a new one is a drawing that got worse.
+# A ratchet: entries may be removed, never added.
 KNOWN_COLLISIONS = frozenset({
     ("load_west", "load_west load_west|loaded",
      "load_east load_east|loaded>tag_portfolio tag_portfolio|missed:load_agencies"),

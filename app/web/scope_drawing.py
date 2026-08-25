@@ -187,8 +187,7 @@ def _say_what_the_bar_holds(node: Node, label: str) -> str:
             f"{node.alias_of.on_route_groups_count:,} of them. Click to list the groups.")
 
 
-# A count, never a ribbon: 44,963 drawn beside 40 to scale is the scale-mixing
-# that makes a lie. It counts rows of the frame this stage READ, one column left.
+# Its count is true and its width is not, so it is text and never a ribbon.
 def _render_removal(branch: BranchId, rows: int, line: int,
                     room: float) -> DrawnRemoval:
     return DrawnRemoval(
@@ -199,7 +198,6 @@ def _render_removal(branch: BranchId, rows: int, line: int,
             f"different set of rows, so the page around this one stops fitting.")
 
 
-# A merge splits on values, not on anything a person wrote, hence the last sentence.
 def _say_the_other_reading(column: Column) -> str:
     if column.alias is not None:
         return f"split into {column.alias.on_route_groups_count:,} groups"
