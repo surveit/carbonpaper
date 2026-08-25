@@ -94,7 +94,9 @@ def find_stages_each_row_came_through(
         ordinals: list[RowOrdinal]) -> list[list[StageId]]:
     """Per row: every frame it was a row of, which its branch path holds only part of."""
     memo: dict[tuple[StageId, RowOrdinal], frozenset[StageId]] = {}
-    return [sorted(_came_through(run_branches, at_stage, ordinal, memo))
+    # Rows of `at_stage` go on to be rows of everything the flow carries them into.
+    below = _walk_on_along_the_flow(run_branches, at_stage)
+    return [sorted(_came_through(run_branches, at_stage, ordinal, memo) | below)
             for ordinal in ordinals]
 
 
@@ -209,6 +211,19 @@ def _reach_upstream(run_branches: WorkflowRunBranches, rows: Sequence[RowRef]
                 seen.add(step)
                 front.append(step)
     return found
+
+
+def _walk_on_along_the_flow(run_branches: WorkflowRunBranches,
+                            from_stage: StageId) -> frozenset[StageId]:
+    carried: set[StageId] = set()
+    front = [from_stage]
+    while front:
+        sid = front.pop()
+        for below, stage in run_branches.stages.items():
+            if sid in find_subject_inputs(stage) and below not in carried:
+                carried.add(below)
+                front.append(below)
+    return frozenset(carried)
 
 
 def _walk_back_along_the_flow(run_branches: WorkflowRunBranches,
