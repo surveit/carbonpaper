@@ -267,10 +267,8 @@ def read_cut(run_branches: WorkflowRunBranches, outputs: Path,
     spread = Counter(index)
     shown = ordinals[:CUT_SAMPLE]
     frame = read_frame_table(outputs / f"{at_stage}.parquet")
-    # Stated by the stage that CUT them, not the one whose frame they sit in: the
-    # question this table answers is what told them apart, and these rows never
-    # reached the cutting stage's output, so nothing on them is its own writing.
     columns = describe_frame_columns(
+        # The stage that CUT them, not the frame they sit in — what told them apart.
         run_branches.stages.get(run_branches.branch_options[branch_id].stage_id),
         frame.column_names)
     return CutRows(

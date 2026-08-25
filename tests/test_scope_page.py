@@ -289,11 +289,10 @@ def test_the_held_branches_are_required_rather_than_defaulted(run_id):
 def test_a_cut_is_stated_by_the_stage_that_cut_it_not_the_frame_it_sits_in(run_id):
     payload = TestClient(app).get(
         scope_url(PROJECT, run_id, "grant_totals", "total_amount", 0, suffix=".json")).json()
-    # Each cut's rows sit in the frame BEFORE the stage that dropped them, so the
-    # frame's own stage reads columns that had nothing to do with them leaving.
     read_first = {branch: (cut["at_stage"], cut["columns"][0]["name"],
                            cut["columns"][0]["state"])
                   for branch, cut in payload["cuts"].items()}
+    # Each cut sits in the frame BEFORE the stage that dropped it.
     assert read_first == {
         "funded|removed": ("size_band", "amount", "read"),
         "one_row_per_grant|removed": ("funded", "grant_id", "read"),
