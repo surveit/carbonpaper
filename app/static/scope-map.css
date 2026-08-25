@@ -103,8 +103,9 @@
 
 /* The rows are the app's data-preview table; only the click is scope's own. */
 .scope-table { overflow-x: auto; }
-.scope-table td.scope-num { text-align: right; font-variant-numeric: tabular-nums; }
-.scope-table tbody tr { cursor: pointer; }
+.scope-table td.scope-num { text-align: right; font-variant-numeric: tabular-nums;
+  cursor: pointer; }
+.scope-table td[data-col] { cursor: pointer; }
 .scope-table tbody tr:hover { background: var(--hover); }
 .scope-table tbody tr.is-on { background: var(--info-bg); }
 

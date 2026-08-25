@@ -24,7 +24,9 @@
   var panels = {};
 
   var SEP = " ";
-  var TABLE = '<table class="data-preview">';
+  var tableOf = function (stageId) {
+    return '<table class="data-preview" data-stage="' + esc(stageId) + '">';
+  };
   var COLUMN = 300, BAR = 11, TOP = 52, GAP = 16;
   var LABEL_PITCH = 30, STUB = 26;
   var SHORTEST_BAND = 170, BAND_PER_NODE = 46, SWEEPS = 4;
@@ -52,12 +54,15 @@
     for (var n = first; n && last && n <= last; n++) lines.push(n);
     return lines;
   };
-  var cell = function (value) {
+  // `column` names the cell so it can be opened; a table drawn without one is
+  // read-only, which is what leaving it off says.
+  var cell = function (value, column) {
     var text = String(value == null ? "" : value);
     var short = clip(text, 34);
+    var at = column === undefined ? "" : ' data-col="' + esc(column) + '"';
     return short === text
-      ? "<td>" + esc(text) + "</td>"
-      : '<td data-tip="' + esc(text) + '">' + esc(short) + "</td>";
+      ? "<td" + at + ">" + esc(text) + "</td>"
+      : "<td" + at + ' data-tip="' + esc(text) + '">' + esc(short) + "</td>";
   };
   var byId = function (id) { return document.getElementById(id); };
 
@@ -661,14 +666,16 @@
       return nodeKeyForPath(pickedNode.split(SEP)[0], r.branch_path_index) === pickedNode;
     }).map(function (r) {
       return '<tr class="' + (r.ordinal === pickedRow ? "is-on" : "") +
-        '" data-row="' + r.ordinal + '">' + rowOf(r);
+        '" data-row="' + r.ordinal + '">' + rowOf(r, D.columns);
     }).join("");
     var host = byId("scope-table");
-    host.innerHTML = TABLE + "<thead>" + head + "</thead><tbody>" + body +
-      "</tbody></table>";
-    host.querySelectorAll("tbody tr").forEach(function (tr) {
-      tr.onclick = function () {
-        var ordinal = Number(tr.dataset.row);
+    host.innerHTML = tableOf(D.covers.at_stage) + "<thead>" + head + "</thead><tbody>" +
+      body + "</tbody></table>";
+    // The ordinal draws the row's path on the map above; the cells beside it
+    // leave for the lineage of what they hold.
+    host.querySelectorAll("tbody tr .scope-num").forEach(function (num) {
+      num.onclick = function () {
+        var ordinal = Number(num.parentNode.dataset.row);
         pickedRow = pickedRow === ordinal ? null : ordinal;
         render();
       };
@@ -690,15 +697,17 @@
   }
 
   // Cells are positional against the map's `columns`, the way every table here is.
-  function rowOf(r) {
+  function rowOf(r, columns) {
     return '<td class="scope-num">' + r.number + "</td>" +
-      r.cells.map(cell).join("") + "</tr>";
+      r.cells.map(function (value, i) { return cell(value, columns[i]); }).join("") +
+      "</tr>";
   }
 
   function renderCitedRow() {
     var row = D.cited_row;
-    byId("scope-table").innerHTML = TABLE + "<thead>" + headOf(row.columns) +
-      "</thead><tbody><tr>" + rowOf(row) + "</tbody></table>";
+    byId("scope-table").innerHTML = tableOf(D.citation.stage_id) + "<thead>" +
+      headOf(row.columns) + '</thead><tbody><tr data-row="' + row.ordinal + '">' +
+      rowOf(row, row.columns) + "</tbody></table>";
   }
 
   function renderCutTable(branch) {
@@ -709,10 +718,28 @@
       return;
     }
     var head = headOf(cut.columns);
-    var body = cut.rows.map(function (r) { return "<tr>" + rowOf(r); }).join("");
-    host.innerHTML = TABLE + "<thead>" + head + "</thead><tbody>" + body +
-      "</tbody></table>";
+    var body = cut.rows.map(function (r) {
+      return '<tr data-row="' + r.ordinal + '">' + rowOf(r, cut.columns);
+    }).join("");
+    host.innerHTML = tableOf(cut.at_stage) + "<thead>" + head + "</thead><tbody>" +
+      body + "</tbody></table>";
   }
+
+  // A cell is one figure's coordinate — stage, row, column — so it opens that
+  // figure's lineage. Drawn inside the lineage page's frame, the page that moves
+  // is the one holding the frame; opened on its own, that is this page.
+  byId("scope-table").addEventListener("click", function (event) {
+    var td = event.target.closest("td[data-col]");
+    if (!td) return;
+    var stage = td.closest("table").dataset.stage;
+    var ordinal = td.closest("tr").dataset.row;
+    if (!stage || ordinal === undefined) return;
+    window.top.location.href = "/project/" + encodeURIComponent(D.project_id) +
+      "/runs/" + encodeURIComponent(D.run_id) +
+      "/stage/" + encodeURIComponent(stage) +
+      "/row/" + encodeURIComponent(ordinal) +
+      "/trace/view?column=" + encodeURIComponent(td.dataset.col);
+  });
 
   byId("scope-tabs").onclick = function (event) {
     var button = event.target.closest("[data-tab]");
