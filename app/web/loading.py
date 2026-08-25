@@ -69,7 +69,7 @@ def _build_project_card(project_id: str) -> ProjectCard | None:
         n_schemas=n_schemas,
         n_runs=runs.real,
         n_test_runs=runs.tests,
-        status=runs.headline if n_versions is not None else ProjectStatus.ERRORED,
+        status=runs.headline if n_versions is not None else ProjectStatus.UNREADABLE,
     )
 
 
