@@ -29,7 +29,9 @@
 
   <div class="scope-controls">
     <span class="scope-here" id="scope-here" hidden></span>
-    <label class="switch scope-every"><input type="checkbox" id="scope-every-stage">
+    {# On by default: every column carries its own frame count and off-path count,
+       which a column dropped for separating nothing would take with it. #}
+    <label class="switch scope-every"><input type="checkbox" id="scope-every-stage" checked>
       <span class="switch-track"><span class="switch-knob"></span></span>
       <span class="switch-label">show every stage</span></label>
   </div>

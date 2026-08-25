@@ -853,6 +853,8 @@
 
   var every = byId("scope-every-stage");
   if (every) {
+    // The markup owns the default, and a reload restoring the box agrees with it.
+    showAll = every.checked;
     every.onchange = function () { showAll = every.checked; shape(); };
   }
   shape();
