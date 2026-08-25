@@ -141,6 +141,7 @@ def test_a_lineage_page_reaches_the_rest_of_the_packet_by_relative_path(tmp_path
         "../../assets/style.css", "../../assets/packet.css", "../../assets/favicon.svg",
         "../../index.html",
         # The Inputs pane names the input stage, and the packet writes that page.
+        "../../stages/source.html",
     }
 
 
@@ -211,6 +212,17 @@ _DEMO_MANIFEST = {
 }
 
 
+def test_the_packet_page_names_the_file_the_run_read(tmp_path):
+    """No server to ask, so the pane is rendered into the page rather than fetched."""
+    page = (_export_demo_packet(tmp_path) / "lineage/totals/0.html").read_text(encoding="utf-8")
+
+    assert "east.csv" in page
+    assert "row cap <b>50</b>" in page
+    # The packet has no /project/.../files route, so the name stands without a link.
+    assert '<a href' not in page.split("east.csv")[0].rsplit("<h2>", 1)[-1]
+    assert "read by " in page
+    # The pane says whose inputs these are, so the reader never reads them as the row's.
+    assert "These are the run's inputs" in page
 
 
 def _view_links(html: str) -> list[str]:

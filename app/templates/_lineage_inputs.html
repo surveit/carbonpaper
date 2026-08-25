@@ -1,0 +1,52 @@
+{# The Inputs pane of the lineage page: the files this RUN read. Rendered
+   server-side, so it stands in a review packet's folder as on the app. #}
+<div class="lin-inbody">
+{% if not inputs.files and not inputs.unnamed %}
+  <div class="empty-state">
+    <h2>This run records no input stage</h2>
+    <p>Nothing in the run's manifest reads data in, so there is no file to name.</p>
+  </div>
+{% else %}
+  <p class="lin-note"><b>Everything this run read.</b> These are the run's inputs, not
+    this row's own — a run may read data no part of this row descends from.</p>
+  {% for f in inputs.files %}
+  <section class="incard">
+    <div class="inhead">
+      <h2>{% if f.href %}<a href="{{ f.href }}">{{ f.filename }} ↗</a>
+        {% else %}{{ f.filename }}{% endif %}</h2>
+      {% if not f.href %}
+      <span class="inmiss">no file this project holds now hashes to the bytes this run
+        read, so there is no page for it</span>{% endif %}
+    </div>
+    <span class="inpath">{{ f.path }}</span>
+
+    <div class="instrip">
+      <span>read by {% if f.read_by_href %}<a href="{{ f.read_by_href }}"><code>{{
+        f.read_by }}</code></a>{% else %}<code>{{ f.read_by }}</code>{% endif %}</span>
+      <span><b>{{ "{:,}".format(f.rows_out) }}</b> rows out</span>
+      <span>{% if f.row_cap %}row cap <b>{{ "{:,}".format(f.row_cap) }}</b>
+        {% else %}no row cap was set{% endif %}</span>
+      {% if f.row_offset %}<span>after the first {{ "{:,}".format(f.row_offset) }} rows</span>
+      {% endif %}
+      {% if f.status %}<span>{{ f.status }}</span>{% endif %}
+    </div>
+  </section>
+  {% endfor %}
+
+  {% for s in inputs.unnamed %}
+  <section class="incard">
+    <div class="inhead">
+      <h2>{% if s.href %}<a href="{{ s.href }}"><code>{{ s.stage_id }}</code></a>
+        {% else %}<code>{{ s.stage_id }}</code>{% endif %}</h2>
+    </div>
+    <p class="inline-note">This run's manifest records no file for it, so the bytes it
+      read are not named here.</p>
+
+    <div class="instrip">
+      <span><b>{{ "{:,}".format(s.rows_out) }}</b> rows out</span>
+      {% if s.status %}<span>{{ s.status }}</span>{% endif %}
+    </div>
+  </section>
+  {% endfor %}
+{% endif %}
+</div>

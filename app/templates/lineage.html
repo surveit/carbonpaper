@@ -208,15 +208,7 @@ tr.lin-opens:hover td{background:var(--hover)}
 .inroutes{margin:7px 0 10px;padding-left:18px;color:var(--muted);font-size:12.5px;
   line-height:1.5}
 .inroutes code{background:var(--sunk-deep);padding:0 4px;border-radius:4px;color:var(--fg)}
-ul.infiles{list-style:none;margin:0;padding:0;font-size:12.5px}
-ul.infiles li{border-bottom:1px solid var(--border);padding:7px 0}
-ul.infiles li:last-child{border-bottom:0}
-.infile{font-weight:600}
 .inpath{display:block;color:var(--muted);font-size:11px;margin-top:2px;word-break:break-all}
-/* Where the row really sits: the one fact the reader came to this tab for. */
-.inrow{display:inline-block;background:var(--info-bg);color:var(--info-ink);
-  border:1px solid var(--info-bd);border-radius:6px;padding:0 6px;font-size:11px;
-  margin-left:5px}
 .inmiss{color:var(--state-warn-ink);font-size:11px;margin-left:5px}
 .inline-note{color:var(--muted);font-size:12px;margin:8px 0 0}
 .inline-note code{background:var(--sunk-deep);padding:0 4px;border-radius:4px}
@@ -326,11 +318,7 @@ ul.infiles li:last-child{border-bottom:0}
 {% endif %}
 </div>
 <div class="lin-pane hidden" data-pane="inputs">
-  <div class="empty-state">
-    <h2>The files behind this row are not listed here</h2>
-    <p>The Paths tab names the source stage each step read from. It does not say which
-      file that stage read, how many rows came out of it, or when it was read.</p>
-  </div>
+{% include "_lineage_inputs.html" %}
 </div>
 <div class="lin-pane hidden" data-pane="values">
 {% if offline or not view.nodes %}
