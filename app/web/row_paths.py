@@ -1,8 +1,4 @@
-"""The paths pane: the distinct routes the rows behind one figure took.
-
-Shaped here, beside app.web.scope_payload's own view models, because what a path
-shows depends on the paths it is shown beside.
-"""
+"""The paths pane: the distinct routes the rows behind one figure took."""
 
 from __future__ import annotations
 
