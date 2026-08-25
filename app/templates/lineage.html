@@ -332,9 +332,7 @@ tr.lin-opens:hover td{background:var(--hover)}
     {% endif %}
   </div>
 {% else %}
-  {# One column is one walk, so the reader picks which cell of the row to follow.
-     The chips are written by the script below, off the traced row's own fields. #}
-  <div class="lin-cols" id="values-cols"></div>
+  {# One column is one walk, so the walk follows the column the header names. #}
   <div id="values-root"></div>
 {% endif %}
 </div>
@@ -671,6 +669,7 @@ function showColumn(column){
   // still the way out of it. The address stays the one a figure links with.
   history.replaceState(null, '', lineageHref(COORD.stage_id, COORD.row, COORD.column));
   if(scopeColumn !== null && COORD.column) drawScopeFor(COORD.column);
+  if(valuesColumn !== null && COORD.column) walkValuesFor(COORD.column);
 }
 // A sentence-long cell set at headline size is a paragraph in 34px, so a long one
 // is stepped down to a size a whole value fits at.
@@ -711,21 +710,17 @@ document.getElementById('pagetabs').addEventListener('click', e => {
 });
 
 // ---- Values used: where one column came from, walked back over what each ----
-// stage read. Same chips as Relevant rows, because the question is also per
-// column: this one holds the column and lets go of the row.
-const valuesCols = document.getElementById('values-cols');
+// stage read. Same column as Relevant rows, off the header: this one holds the
+// column and lets go of the row.
 const valuesRoot = document.getElementById('values-root');
 let valuesColumn = null;
 
 function valuesUrlFor(column){
   const q = new URLSearchParams({stage: V.start_stage, row: V.start_row, column});
-  return `/project/${encodeURIComponent(PROJECT)}/runs/${encodeURIComponent(V.run_id)}`
-       + `/values/panel?${q}`;
+  return `${RUN_BASE}/values/panel?${q}`;
 }
 async function walkValuesFor(column){
   valuesColumn = column;
-  valuesCols.querySelectorAll('button').forEach(
-    b => b.classList.toggle('on', b.dataset.column === column));
   valuesRoot.innerHTML = '<p class="muted">loading…</p>';
   try {
     const answer = await fetch(valuesUrlFor(column));
@@ -739,30 +734,22 @@ async function walkValuesFor(column){
     valuesRoot.innerHTML = `<p class="muted">error: ${esc(failure)}</p>`;
   }
 }
-function renderValuesColumns(){
-  const columns = V.nodes[V.nodes.length - 1].row_diff.fields
-    .filter(f => f.state !== 'dropped').map(f => f.name);
-  valuesCols.innerHTML = '<span class="lin-colsnote">the column</span>'
-    + columns.map(c => `<button data-column="${esc(c)}">${esc(c)}</button>`).join('');
-  valuesCols.addEventListener('click', e => {
-    const picked = e.target.closest('button');
-    if(picked && picked.dataset.column !== valuesColumn) walkValuesFor(picked.dataset.column);
-  });
-  // A walk is a page load, so it waits until the reader opens the tab.
-  document.getElementById('pagetabs').addEventListener('click', e => {
-    const picked = e.target.closest('.lin-pagetab');
-    if(picked && picked.dataset.pane === 'values' && valuesColumn === null){
-      walkValuesFor(columns.includes(CITED_COLUMN) ? CITED_COLUMN : columns[0]);
-    }
-  });
-  // A count reads no column, so its panel sends the reader to the rows instead.
-  valuesRoot.addEventListener('click', e => {
-    if(e.target.closest('.vu-to-rows')){
-      document.querySelector('.lin-pagetab[data-pane="rows"]').click();
-    }
-  });
-}
-if(valuesCols && valuesRoot) renderValuesColumns();
+// The walk is a page load, so it waits until the reader opens the tab.
+document.getElementById('pagetabs').addEventListener('click', e => {
+  const picked = e.target.closest('.lin-pagetab');
+  if(!picked || picked.dataset.pane !== 'values' || !valuesRoot) return;
+  if(!COORD || !COORD.cells.length) return;
+  const column = COORD.column || COORD.cells[0].column;
+  if(valuesColumn === column) return;
+  if(columnPick.value !== column) chooseColumn(column);
+  walkValuesFor(column);
+});
+// A count reads no column, so its panel sends the reader to the rows instead.
+if(valuesRoot) valuesRoot.addEventListener('click', e => {
+  if(e.target.closest('.vu-to-rows')){
+    document.querySelector('.lin-pagetab[data-pane="rows"]').click();
+  }
+});
 
 render();
 
