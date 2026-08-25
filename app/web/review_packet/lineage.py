@@ -35,7 +35,7 @@ from app.web.row_paths import (
     PathsPane,
     find_paths_behind_figure,
 )
-from app.web.trace_view import build_trace_view
+from app.web.trace_view import build_trace_view, read_walked_rows
 
 _log = logging.getLogger(__name__)
 
@@ -149,7 +149,7 @@ def _write_page(
     trace_view = build_trace_view(trace, stages_by_id, links)
     html = templates.env.get_template("lineage.html").render(
         title=f"{stage_id} · row {render_row_number(row)}",
-        pane=_read_paths_pane(branches, stage_id, row),
+        pane=_read_paths_pane(branches, stage_id, row, trace_view),
         figure=CitedFigure(stage_id=stage_id, row_ordinal=row),
         links=links,
         view=trace_view,
@@ -262,12 +262,13 @@ def _read_run_branches(
 
 def _read_paths_pane(
     branches: WorkflowRunBranches | None, stage_id: str, row: int,
+    trace_view: dict[str, Any],
 ) -> PathsPane:
     if branches is None:
         return NoPathsToShow(
             reason="the version this run pinned is unreadable, so no stage's branches are known")
     figure = CitedFigure(stage_id=stage_id, row_ordinal=row)
     try:
-        return find_paths_behind_figure(branches, figure, marked_row=row)
+        return find_paths_behind_figure(branches, figure, read_walked_rows(trace_view))
     except (MissingLineage, StageNotInRun, RowOutOfRange) as no_paths:
         return NoPathsToShow(reason=str(no_paths))

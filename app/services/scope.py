@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from typing import Sequence
+
 from app.models.branch_analysis import (
     BranchId,
     FrameScale,
     RowOrdinal,
+    RowRef,
     RowSet,
 )
 from app.models.claims import StageOutputCellCitation
@@ -22,10 +25,24 @@ def find_contributing_rows(run_branches: WorkflowRunBranches,
                            stage_id: StageId, row_ordinal: RowOrdinal) -> RowSet:
     """Replace a merged row by the rows merged into it, until none was merged."""
     reached, at_stage, through = _expand(run_branches, stage_id, row_ordinal)
-    ordinals = sorted(set(reached))
+    ordinals = sorted(reached)
     return RowSet(at_stage=at_stage, ordinals=ordinals, regrained_at=through,
                   fed_by_no_rows=[ordinal for ordinal in ordinals
                                   if _fed_by_no_rows(run_branches, at_stage, ordinal)])
+
+
+def find_sample_choices_behind(run_branches: WorkflowRunBranches, stage_id: StageId,
+                               row_ordinal: RowOrdinal
+                               ) -> dict[RowOrdinal, tuple[RowRef, ...]]:
+    """Per row behind the cited one, the row to sample at each fan-in between."""
+    reached, _, _ = _expand(run_branches, stage_id, row_ordinal)
+    return reached
+
+
+def find_stages_on_route(run_branches: WorkflowRunBranches,
+                         rows: Sequence[RowRef]) -> set[StageId]:
+    """Every stage these rows came through. A branch anywhere else tells them nothing."""
+    return set(_reach_upstream(run_branches, rows))
 
 
 def find_merges_that_excluded(run_branches: WorkflowRunBranches,
@@ -41,7 +58,7 @@ def find_merges_that_excluded(run_branches: WorkflowRunBranches,
 def measure_frame_scale(run_branches: WorkflowRunBranches,
                         citation: StageOutputCellCitation) -> list[FrameScale]:
     """Per stage: rows in the frame, and how many of them reached the figure."""
-    reached = _reach_upstream(run_branches, citation.stage_id, citation.row_ordinal)
+    reached = _reach_upstream(run_branches, [(citation.stage_id, citation.row_ordinal)])
     return [FrameScale(stage=sid, rows_count=run_branches.row_counts[sid],
                        included_rows_count=len(reached[sid]))
             for sid in run_branches.ordered_stage_ids
@@ -54,15 +71,20 @@ def find_lookup_table_stages(run_branches: WorkflowRunBranches) -> set[StageId]:
 
 
 def _expand(run_branches: WorkflowRunBranches, stage_id: StageId, ordinal: RowOrdinal
-            ) -> tuple[list[RowOrdinal], StageId, list[StageId]]:
+            ) -> tuple[dict[RowOrdinal, tuple[RowRef, ...]], StageId, list[StageId]]:
+    """Each reached row against the rows a walk down to it has to sample."""
     merged_from = _merged_from(run_branches, stage_id, ordinal)
     if merged_from is None:
-        return [ordinal], stage_id, []
+        return {ordinal: ()}, stage_id, []
     # A merge names one input stage, whose rows were all merged or none were.
-    from_each_parent = [_expand(run_branches, parent.stage_id, parent.row_ordinal)
+    from_each_parent = [(parent, _expand(run_branches, parent.stage_id, parent.row_ordinal))
                         for parent in merged_from]
-    _, at_stage, below = from_each_parent[0]
-    gathered = [row for rows, _, _ in from_each_parent for row in rows]
+    _, (_, at_stage, below) = from_each_parent[0]
+    gathered: dict[RowOrdinal, tuple[RowRef, ...]] = {}
+    for parent, (reached, _, _) in from_each_parent:
+        step = (parent.stage_id, parent.row_ordinal)
+        for row, choices in reached.items():
+            gathered.setdefault(row, (step, *choices))
     return gathered, at_stage, [stage_id] + below
 
 
@@ -84,12 +106,12 @@ def _merged_from(run_branches: WorkflowRunBranches, stage_id: StageId,
     return merged or None
 
 
-def _reach_upstream(run_branches: WorkflowRunBranches, stage_id: StageId,
-                    ordinal: RowOrdinal) -> dict[StageId, set[RowOrdinal]]:
-    """Every (stage, row) the cited row came from, ignoring what each hop meant."""
+def _reach_upstream(run_branches: WorkflowRunBranches, rows: Sequence[RowRef]
+                    ) -> dict[StageId, set[RowOrdinal]]:
+    """Every (stage, row) the named rows came from, ignoring what each hop meant."""
     found: dict[StageId, set[RowOrdinal]] = {}
-    front = [(stage_id, ordinal)]
-    seen = {(stage_id, ordinal)}
+    front = list(rows)
+    seen = set(front)
     while front:
         sid, row = front.pop()
         found.setdefault(sid, set()).add(row)
@@ -109,5 +131,3 @@ def _one_hop_up(run_branches: WorkflowRunBranches, sid: StageId, row: RowOrdinal
     stage = run_branches.stages.get(sid)
     inputs = [ref.id for ref in stage.inputs] if stage else []
     return [(inputs[0], row)] if len(inputs) == 1 else []
-
-

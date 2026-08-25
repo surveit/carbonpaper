@@ -12,6 +12,8 @@ from app.models.schema import StageId
 BranchId = str
 # A row's position in its stage's output frame.
 RowOrdinal = int
+# One row of one stage, the way a link and a trace's contributor choice both spell it.
+RowRef = tuple[StageId, RowOrdinal]
 # The branches one row passed through, ordered by stage position then source line.
 BranchPath = tuple[BranchId, ...]
 

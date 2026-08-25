@@ -121,7 +121,6 @@ a.snavbtn:hover{background:var(--hover)}
   .step{grid-template-columns:52px 1fr;row-gap:2px}
   .step .right{grid-column:2;white-space:normal}
 }
-.lin-note{color:var(--muted);font-size:12.5px;margin:0 0 12px}
 /* A step is one line of the story AND the control that puts that row in the panel. */
 .step{display:grid;grid-template-columns:52px 1fr auto;gap:6px;align-items:baseline;width:100%;
   text-align:left;border:0;background:none;font:inherit;padding:5px 8px;border-radius:7px;
@@ -130,21 +129,23 @@ a.snavbtn:hover{background:var(--hover)}
 .step.on{background:var(--state-review-bg);border-left-color:var(--accent)}
 .stepno{color:var(--muted);font-size:11.5px}
 .step .right{white-space:nowrap}
-.sid{font-weight:600;color:var(--info-ink)}
-.row-chip{background:var(--info-bg);color:var(--info-ink);border:1px solid var(--info-bd);border-radius:6px;padding:0 6px;
-  font-size:12px;white-space:nowrap}
-.step.on .row-chip{background:var(--info-ink);color:var(--on-dark);border-color:var(--info-ink)}
+.sid{font-weight:600}
 .delta{font-size:11.5px;color:var(--muted);margin-left:4px}
 .delta .add{color:var(--state-review-ink)}
 .delta .chg{color:var(--state-warn-ink)}
-.claim-tag{font-size:10.5px;border-radius:5px;padding:0 5px;margin-left:3px;
-  background:var(--state-done-bg);color:var(--state-done-ink)}
 .nomatch{background:var(--warn-bg);color:var(--state-warn-ink);border-radius:5px;padding:0 5px;font-size:11.5px}
 /* A step names the row's other parents; opening one is the left pane's job, so
    here they are words rather than a second set of controls in the sentence. */
 .branch-name{color:var(--state-idle-ink)}
 .trunc{background:var(--warn-bg);color:var(--state-warn-ink);border-radius:8px;padding:8px 12px;
   font-size:13px;margin-bottom:12px}
+/* A break in the list, not another step: below it the walk stands on the row that
+   summarizes, above it on one of the rows summarized. The two ordinals belong to
+   different frames, so the halves must not read as one row moving along. */
+.sampled{display:grid;grid-template-columns:auto 1fr;gap:6px;margin:4px 0 4px 58px;
+  padding:5px 9px 5px 10px;border:1px solid var(--border);border-radius:7px;
+  background:var(--raised);font-size:11.5px;line-height:1.4;color:var(--muted)}
+.sampled a{color:inherit;font-weight:600}
 .lin-graph{margin-top:18px;border-top:1px solid var(--border);padding-top:10px}
 .lin-graph summary{cursor:pointer;font-size:13px;color:var(--muted)}
 .mermaid{background:var(--raised)}.nograph{color:var(--muted);font-size:13px}
@@ -184,7 +185,11 @@ tr.carried td.lin-v{color:var(--muted)}
 .lin-was{display:block;color:var(--muted);text-decoration:line-through;font-size:12px;margin-top:2px}
 .lin-was em{text-decoration:none;font-style:normal}
 .lin-null{color:var(--muted);font-style:italic}
-.lin-clip{max-height:5.2em;overflow:hidden;cursor:zoom-in}
+.lin-clip{max-height:5.2em;overflow:hidden}
+.lin-clip.is-clipped{cursor:zoom-in}
+/* A line of the row is the coordinate of one cell, so it opens that cell's lineage. */
+tr.lin-opens{cursor:pointer}
+tr.lin-opens:hover td{background:var(--hover)}
 
 /* Inputs: one card per input stage, in the order the ancestry found them. */
 .lin-inbody{overflow:auto;padding:16px 22px 40px;flex:1}
@@ -280,9 +285,6 @@ ul.infiles li:last-child{border-bottom:0}
     {% include "_row_paths.html" %}
   </div>
   <div class="lin-story">
-    <div class="lin-note">The steps below follow this one row, as it stood after each stage.
-      Which path it took, and what else the rows behind the figure did, is on the left.
-      Click a step to see the row.</div>
     <div id="steps"></div>
     <details class="lin-graph"><summary>Lineage graph</summary>
       <pre class="mermaid" id="mmd">{{ mermaid }}</pre>
@@ -404,11 +406,12 @@ const transformCache = {};
 // ---- The steps ------------------------------------------------------------
 function verb(n){
   const k = n.transform.kind, sid = `<span class="sid">${esc(n.stage_id)}</span>`;
-  if(k==='python') return `run python <span class="sid">${esc(n.stage_id)}()</span>`;
-  if(k==='starlark') return `run Starlark <span class="sid">${esc(n.stage_id)}()</span>`;
+  if(k==='python' || k==='starlark') return `run code ${sid} on row`;
+  // Whole-table code: it saw every row at once, so it did nothing "on row".
+  if(k==='python_frame') return `run code ${sid} on the table`;
   if(k==='llm') return `ask the LLM in ${sid}`;
   if(k==='union') return `carry through ${sid}`;
-  if(k==='filter_rows') return `keep the row through ${sid}`;
+  if(k==='filter_rows') return `run filter ${sid}`;
   if(k==='aggregate') return `run aggregation ${sid}`;
   if(k==='source') return n.source_file
     ? `read ${sid} from <span class="sid">${esc(n.source_file)}</span>`
@@ -433,9 +436,9 @@ function sentenceOf(n){
   // A fan-in names what it summarized. Only an aggregate has contributors, so
   // this and the join case never both apply.
   const groups = n.contributor_groups || [];
-  const from = groups.length
-    ? ' from ' + groups.map(g => groupName(g, groups.length > 1)).join('; ') : '';
-  return `${verb(n)}${from}`;
+  const on = groups.length
+    ? ' on ' + groups.map(g => groupName(g, groups.length > 1)).join('; ') : '';
+  return `${verb(n)}${on}`;
 }
 // A join leads with the reference row it brought in, and names the stage after
 // it: the row is what the reader traces next, and the added cells came from it,
@@ -450,43 +453,54 @@ function joinSentence(n){
 }
 function renderSteps(){
   let html = '';
-  // The banner is for a stop the story cannot otherwise show. A fan-in row says
-  // what it summarized in its own sentence, so it needs no second telling.
-  const fanIn = (V.nodes[0].contributor_groups || []).length > 0;
-  if(V.upstream.truncated && !fanIn){
+  if(V.upstream.truncated){
     html += `<div class="trunc">⋯ upstream not traced — ${esc(V.upstream.message)}</div>`;
   }
-  html += V.nodes.map((n, i) => `<button class="step ${i===sel?'on':''}" data-i="${i}">
+  html += V.nodes.map((n, i) => sampleOf(n, i) + `<button class="step ${i===sel?'on':''}" data-i="${i}">
       <span class="stepno">step ${n.step}</span>
       <span>${sentenceOf(n)}</span>
-      <span class="right">${n.role==='claim' ? '<span class="claim-tag">published claim</span> ' : ''}<span class="row-chip">row ${n.row_number}</span>${deltaOf(n)}</span>
+      <span class="right">${deltaOf(n)}</span>
     </button>`).join('');
   document.getElementById('steps').innerHTML = html;
+}
+// Drawn above the step the sampled row fed, which is where the sampling happened:
+// everything above the mark is that one row, this step is the summary.
+// A fan-in of one summarized nothing away, so there is no sample to disclose and
+// the step's own sentence already says it stood on one row.
+function sampleOf(n, i){
+  const s = n.sampled;
+  // The sampled row is the step above, so a mark at the top has nothing to name;
+  // the truncation banner is already the statement that the walk stopped there.
+  if(!s || !i || s.of < 2) return '';
+  const took = V.nodes[i - 1];
+  return `<div class="sampled"><span class="mark">↑</span><span>
+    Steps above follow <code>${esc(took.stage_id)}</code> row ${took.row_number}.
+    In the full run, ${s.of} rows were summarized into step ${n.step}.
+    ${allRowsLink(s, took, n)}</span></div>`;
+}
+function allRowsLink(s, took, n){
+  const label = `Explore all ${s.of} relevant rows`;
+  // Served: the tab whose scope map draws them, reached by clicking the tab so
+  // that its own lazy load fires. A folder has no server to draw that, so there
+  // the phrase goes to the cohort table the packet wrote.
+  if(!OFFLINE) return `<a href="#" class="to-rows">${label}</a>`;
+  const cohort = (n.contributor_groups || []).find(g => g.stage_id === took.stage_id);
+  return cohort && cohort.rows_link ? `<a href="${cohort.rows_link}">${label}</a>` : label;
 }
 
 // ---- The other parents, named in the sentence that owns them --------------
 function branchName(b){
   return `<span class="branch-name">${esc(b.stage_id)} row ${b.row_number}</span>`;
 }
-// A fan-in row has one contributor per input row it summarizes — fifty of them
-// reads as noise, so they collapse to a count. `contributor_groups` arrives
-// already grouped by the columns each cohort fed, from build_trace_view.
-//
 // `g.total` is the cohort's TRUE size, counted over the whole sidecar, so the
-// number here is never a bounded one. `g.named` is non-empty only for a cohort
-// small enough to name row by row. Where each of those rows can be OPENED is
+// number here is never a bounded one. Where each of those rows can be OPENED is
 // the left pane's business, so nothing here is a link.
 // `showColumns` only where there IS more than one cohort: with a single one the
 // columns are just the output's own, which is a list nobody needs to read.
 function groupName(g, showColumns){
-  const stage = esc(g.stage_id);
   const into = (showColumns && g.columns) ? ` into ${g.columns.map(esc).join(' and ')}` : '';
-  if(g.named.length){
-    const rows = g.named.map(b => b.row_number).join(' ');
-    return `<span class="branch-name">${stage} ${g.named.length > 1 ? 'rows' : 'row'} `
-         + `${rows}</span>${into}`;
-  }
-  return `<span class="branch-name">${g.total} rows of ${stage}</span>${into}`;
+  const rows = `${g.total} row${g.total > 1 ? 's' : ''}`;
+  return `<span class="branch-name">${rows} from ${esc(g.stage_id)}</span>${into}`;
 }
 
 // ---- The panel: the row first, its transform a tab away -------------------
@@ -496,12 +510,15 @@ function fanInOf(n){
   const total = groups.reduce((sum, g) => sum + g.total, 0);
   return `${total} row${total > 1 ? 's' : ''} of ${esc(groups[0].stage_id)}`;
 }
+// A dropped field is not in this row, so there is no cell of it to read and the
+// line stays inert — every other line opens the lineage of the cell it prints.
 function fieldRow(f){
   const mark = {added:'+', changed:'~', dropped:'−', carried:''}[f.state];
   const text = f.text === '' ? '<span class="lin-null">(empty)</span>' : esc(f.text);
   const was = f.state === 'changed'
     ? `<span class="lin-was">${f.was === '' ? '<em>(empty)</em>' : esc(f.was)}</span>` : '';
-  return `<tr class="${f.state}">
+  const opens = (OFFLINE || f.state === 'dropped') ? '' : ' lin-opens';
+  return `<tr class="${f.state}${opens}" data-column="${esc(f.name)}">
     <td class="lin-f" title="${esc(f.name)}"><span class="lin-mark">${mark}</span>${esc(f.name)}</td>
     <td class="lin-v"><div class="lin-clip">${text}${was}</div></td></tr>`;
 }
@@ -588,12 +605,27 @@ function render(){
   back.href = n.links.stage;
   back.title = `open ${n.stage_id} in this run's stage panel`;
   document.querySelectorAll('.lin-tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
-  if(tab === 'row') document.getElementById('pbody').innerHTML = renderRowTab(n);
+  if(tab === 'row'){
+    document.getElementById('pbody').innerHTML = renderRowTab(n);
+    markWhatIsClipped();
+  }
   else renderTransformTab(n);
+}
+// Only a value taller than its box hides anything, and only that one wants the
+// click that opens it — every other line is free to open its cell's lineage.
+function markWhatIsClipped(){
+  document.querySelectorAll('#pbody .lin-clip').forEach(
+    el => el.classList.toggle('is-clipped', el.scrollHeight > el.clientHeight + 1));
 }
 function select(i){ sel = i; tab = 'row'; render(); document.getElementById('pbody').scrollTop = 0; }
 
 document.getElementById('steps').addEventListener('click', e => {
+  const toRows = e.target.closest('.to-rows');
+  if(toRows){
+    e.preventDefault();
+    document.querySelector('.lin-pagetab[data-pane="rows"]').click();
+    return;
+  }
   const step = e.target.closest('.step'); if(step) select(+step.dataset.i);
 });
 document.querySelector('.lin-tabs').addEventListener('click', e => {
@@ -601,8 +633,13 @@ document.querySelector('.lin-tabs').addEventListener('click', e => {
 });
 document.getElementById('pbody').addEventListener('click', e => {
   if(e.target.dataset.scope){ scope = e.target.dataset.scope; render(); return; }
-  const clip = e.target.closest('.lin-clip');
-  if(clip) clip.style.maxHeight = clip.style.maxHeight ? '' : 'none';
+  // A clipped value hides part of itself, so the click that reveals it is not
+  // yet the click that leaves the page.
+  const clip = e.target.closest('.lin-clip.is-clipped');
+  if(clip){ clip.style.maxHeight = 'none'; clip.classList.remove('is-clipped'); return; }
+  const line = e.target.closest('tr.lin-opens');
+  const n = V.nodes[sel];
+  if(line) location.href = lineageHref(n.stage_id, n.row_ordinal, line.dataset.column);
 });
 // Graph node clicks arrive as a diagram:node event (static/diagram_nodes.js).
 onDiagramNode(sid => { const i = V.nodes.findIndex(n => n.stage_id === sid); if(i >= 0) select(i); });

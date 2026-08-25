@@ -52,7 +52,9 @@ def _transform_of(workflow_stage: WorkflowStage | None) -> dict[str, Any]:
         named = ", ".join(stage.connector.params.paths)
         src = named or (stage.source.doc if stage.source else None)
         return {"kind": "source", "detail": src or "originates the rows"}
-    if isinstance(stage, (PythonRowFunctionStage, PythonFrameFunctionStage)):
+    if isinstance(stage, PythonFrameFunctionStage):
+        return {"kind": "python_frame", "detail": resolve_function_code(stage)}
+    if isinstance(stage, PythonRowFunctionStage):
         # Full source: the whole module file for a module ref, the inline code
         # for an inline ref — never a partial snippet or a bare reference.
         return {"kind": "python", "detail": resolve_function_code(stage)}
@@ -100,12 +102,18 @@ def build_trace_view(
     }
 
 
+def read_walked_rows(view: dict[str, Any]) -> dict[str, int]:
+    """Which row of each stage this walk stood on, so a pane can mark the path it took."""
+    return {node["stage_id"]: node["row_ordinal"] for node in view["nodes"]}
+
+
 def _build_node(
     i: int, chrono: list[dict[str, Any]], stages: dict[str, WorkflowStage],
     links: PanelLinks, truncated: bool,
 ) -> dict[str, Any]:
     step = chrono[i]
-    parent = chrono[i - 1] if i else None
+    # A crossing's parent is at another grain, so a cell diff would read as a change.
+    parent = chrono[i - 1] if i and not step.get("sampled") else None
     diff = build_row_diff(
         step["row"],
         parent["row"] if parent else None,
@@ -138,6 +146,8 @@ def _build_node(
             "row_number": render_row_number(parent["row_ordinal"]),
         },
         "transform": _transform_of(stages.get(step["stage_id"])),
+        # Straight from the walk, which knew the fan-in it sampled from here.
+        "sampled": step.get("sampled"),
         "links": _links_of(links, step["stage_id"], step["row_ordinal"]),
         # Fan-in parents are NOT in `branches` — a row can have tens of
         # thousands, and `branches` is what the reader promotes one at a time.

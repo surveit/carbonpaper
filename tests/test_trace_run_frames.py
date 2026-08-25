@@ -30,7 +30,7 @@ def test_shared_reader_traces_identically_to_the_one_shot_call(tmp_path):
         )
 
 
-def test_the_filter_is_crossed_to_the_true_source_row(tmp_path):
+def test_the_filter_walks_through_to_the_true_source_row(tmp_path):
     run_dir = _filtered_run(tmp_path)
     trace = trace_row_from(RunFrames(run_dir), "kept", 1)
     assert [s.stage_id for s in trace.steps] == ["kept", "seeds"]

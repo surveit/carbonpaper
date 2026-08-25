@@ -2,7 +2,10 @@
 review packet writes it to a folder — so the same template asks for links here."""
 from __future__ import annotations
 
+from typing import Sequence
 from urllib.parse import quote, urlencode
+
+from app.models.branch_analysis import RowRef
 
 
 # aggregate makes its single row out of every input row, so a cohort runs to
@@ -45,11 +48,12 @@ class AppPanelLinks:
     def row_trace(self, stage_id: str, row: int) -> str:
         return f"{self._base}/stage/{_segment(stage_id)}/row/{row}/trace/view"
 
-    def build_row_trace_for_figure(self, stage_id: str, row: int,
-                             figure_stage: str, figure_row: int) -> str:
-        """That row's own story, with the pane still listing the paths to `figure_stage`."""
-        figure = urlencode({"figure": f"{figure_stage}:{figure_row}"})
-        return f"{self.row_trace(stage_id, row)}?{figure}"
+    def build_row_trace_for_figure(self, figure_stage: str, figure_row: int,
+                                   sample_choices: Sequence[RowRef]) -> str:
+        """The figure's own walk, told through the contributor named at each fan-in down."""
+        followed = "&".join(urlencode({"via": render_row_ref(ref)}) for ref in sample_choices)
+        walk = self.row_trace(figure_stage, figure_row)
+        return f"{walk}?{followed}" if followed else walk
 
     def review_queue(self, stage_id: str) -> str:
         return f"{self._base}/queue/{_segment(stage_id)}"
@@ -133,8 +137,10 @@ class PacketPanelLinks:
             return None
         return packet_lineage_href(self._root, stage_id, row)
 
-    def build_row_trace_for_figure(self, stage_id: str, row: int,
-                             figure_stage: str, figure_row: int) -> str | None:
+    def build_row_trace_for_figure(self, figure_stage: str, figure_row: int,
+                                   sample_choices: Sequence[RowRef]) -> str | None:
+        """A file carries no query string, so a path opens the page of the row it ends at."""
+        stage_id, row = sample_choices[-1] if sample_choices else (figure_stage, figure_row)
         return self.row_trace(stage_id, row)
 
     def review_queue(self, stage_id: str) -> None:
@@ -153,6 +159,18 @@ class PacketPanelLinks:
 def _segment(value: str) -> str:
     """safe='' so an id carrying a `/` cannot widen the path."""
     return quote(value, safe="")
+
+
+def render_row_ref(ref: RowRef) -> str:
+    return f"{ref[0]}:{ref[1]}"
+
+
+def read_row_ref(value: str) -> RowRef:
+    """The `via=` wire form, `<stage_id>:<row_ordinal>`. Raises on anything else."""
+    stage_id, _, row = value.rpartition(":")
+    if not stage_id or not row.isdigit():
+        raise ValueError(f"{value!r} is not a <stage_id>:<row_ordinal> pair")
+    return stage_id, int(row)
 
 # Either link set a trace view may be rendered against: the app's routes, or the
 # packet's relative files. `stage_rows` is the one that differs in TYPE — the
