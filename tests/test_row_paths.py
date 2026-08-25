@@ -97,7 +97,7 @@ def test_each_path_retells_the_figures_own_walk_through_a_row_that_took_it(scope
     links = AppPanelLinks(PROJECT, "R1")
 
     assert [path.example_ordinal for path in behind.paths] == [0, 5]
-    assert [links.build_row_trace_for_figure("by_portfolio", _HEALTH, path.crossings)
+    assert [links.build_row_trace_for_figure("by_portfolio", _HEALTH, path.sample_choices)
             for path in behind.paths] == [
         f"/project/{PROJECT}/runs/R1/stage/by_portfolio/row/{_HEALTH}/trace/view"
         f"?via=one_row_per_grant%3A{ordinal}" for ordinal in (0, 5)
@@ -133,7 +133,7 @@ def test_the_packet_sends_a_path_to_that_rows_own_page(scoped):
     behind = _behind(scoped, "by_portfolio", _HEALTH)
     links = PacketPanelLinks(to_root="../")
 
-    assert [links.build_row_trace_for_figure("by_portfolio", _HEALTH, path.crossings)
+    assert [links.build_row_trace_for_figure("by_portfolio", _HEALTH, path.sample_choices)
             for path in behind.paths] == [
         f"../lineage/one_row_per_grant/{ordinal}.html" for ordinal in (0, 5)
     ]

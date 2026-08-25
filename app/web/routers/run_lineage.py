@@ -20,7 +20,7 @@ from app.core.errors import (
 from app.runtime.errors import MissingLineage
 from app.services.loader import resolve_function_code
 from app.services import run as run_service
-from app.runtime.trace import ContributorChoice, Trace, trace_row, trace_to_dict
+from app.runtime.trace import RowSampleChoice, Trace, trace_row, trace_to_dict
 from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.panel_links import AppPanelLinks, read_row_ref
 from app.web import scope_view
@@ -95,9 +95,9 @@ def _walk_row(project_id: str, run_id: str, stage_id: str, row: int,
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-def _read_choices(via: list[str] | None) -> list[ContributorChoice]:
+def _read_choices(via: list[str] | None) -> list[RowSampleChoice]:
     try:
-        return [ContributorChoice(*read_row_ref(value)) for value in via or []]
+        return [RowSampleChoice(*read_row_ref(value)) for value in via or []]
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

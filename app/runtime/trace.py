@@ -30,20 +30,17 @@ def _is_row_preserving(stage_type: str) -> bool:
 
 
 @dataclass(frozen=True)
-class ContributorChoice:
-    """Which row a caller wants followed at the fan-in whose contributors live in `stage_id`."""
+class RowSampleChoice:
+    """Which row a caller wants sampled at the fan-in whose rows live in `stage_id`."""
 
     stage_id: str
     row_ordinal: int
 
 
 @dataclass(frozen=True)
-class Crossing:
-    """The contributor followed at a fan-in; `place` is 1-based within `of`, in row order."""
+class RowSample:
+    """Where the sampled row stood: 1-based `place` within `of`, in row order."""
 
-    stage_id: str
-    row_ordinal: int
-    columns: tuple[str, ...] | None
     place: int
     of: int
 
@@ -66,8 +63,8 @@ class StageTransform:
     source_row: int | None = None
     # How many files the stage read; None where the manifest did not record any binding.
     source_file_count: int | None = None
-    # Set where the walk left this row's grain for one of the rows summarized into it.
-    crossed: Crossing | None = None
+    # Set where the walk sampled one of the rows summarized into this one.
+    sampled: RowSample | None = None
 
 
 @dataclass
@@ -207,9 +204,9 @@ def _find_fan_in(stage_type: str, spine: RowParent | None,
                   key=lambda p: (p.stage_id, p.row_ordinal))
 
 
-def _choose_contributor(sid: str, fan_in: list[RowParent],
-                        pending: list[ContributorChoice]) -> RowParent | None:
-    """The lowest-numbered contributor, unless the caller named one at this fan-in."""
+def _sample_from_fan_in(sid: str, fan_in: list[RowParent],
+                        pending: list[RowSampleChoice]) -> RowParent | None:
+    """The lowest-numbered row of the fan-in, unless the caller named one here."""
     if not fan_in:
         return None
     if pending and pending[0].stage_id in {p.stage_id for p in fan_in}:
@@ -218,7 +215,7 @@ def _choose_contributor(sid: str, fan_in: list[RowParent],
 
 
 def _match_named_contributor(sid: str, fan_in: list[RowParent],
-                             choice: ContributorChoice) -> RowParent:
+                             choice: RowSampleChoice) -> RowParent:
     for parent in fan_in:
         if (parent.stage_id, parent.row_ordinal) == (choice.stage_id, choice.row_ordinal):
             return parent
@@ -228,7 +225,7 @@ def _match_named_contributor(sid: str, fan_in: list[RowParent],
     )
 
 
-def _refuse_a_choice_the_walk_never_met(pending: list[ContributorChoice]) -> None:
+def _refuse_a_choice_the_walk_never_met(pending: list[RowSampleChoice]) -> None:
     if not pending:
         return
     left = pending[0]
@@ -238,12 +235,11 @@ def _refuse_a_choice_the_walk_never_met(pending: list[ContributorChoice]) -> Non
     )
 
 
-def _build_crossing(fan_in: list[RowParent] | None,
-                    followed: RowParent | None) -> Crossing | None:
-    if fan_in is None or followed is None:
+def _read_row_sample(fan_in: list[RowParent] | None,
+                     sampled: RowParent | None) -> RowSample | None:
+    if fan_in is None or sampled is None:
         return None
-    return Crossing(followed.stage_id, followed.row_ordinal, followed.columns,
-                    fan_in.index(followed) + 1, len(fan_in))
+    return RowSample(fan_in.index(sampled) + 1, len(fan_in))
 
 
 def _advance(
@@ -303,13 +299,13 @@ class RunFrames:
 
 
 def trace_row(run_dir: Path, stage_id: str, row_ordinal: int,
-              follow: Sequence[ContributorChoice] = ()) -> Trace:
+              follow: Sequence[RowSampleChoice] = ()) -> Trace:
     """Raises only for caller errors (bad stage id, ordinal or choice); else a TraceEnd."""
     return trace_row_from(RunFrames(run_dir), stage_id, row_ordinal, follow)
 
 
 def trace_row_from(frames: RunFrames, stage_id: str, row_ordinal: int,
-                   follow: Sequence[ContributorChoice] = ()) -> Trace:
+                   follow: Sequence[RowSampleChoice] = ()) -> Trace:
     """As `trace_row`, over a reader many rows of one run share."""
     run_dir = frames.run_dir
     manifest = _load_manifest(run_dir)
@@ -339,7 +335,7 @@ def trace_row_from(frames: RunFrames, stage_id: str, row_ordinal: int,
         hops = frames.lineage_hops(sid, r)
         spine, branches = _split_spine(hops or [])
         fan_in = _find_fan_in(stage_type, spine, hops)
-        followed = None if fan_in is None else _choose_contributor(sid, fan_in, pending)
+        followed = None if fan_in is None else _sample_from_fan_in(sid, fan_in, pending)
         columns_parent_id = _columns_parent_id(parents, spine)
         parent_table = (
             frames.output(by_id[columns_parent_id])
@@ -357,7 +353,7 @@ def trace_row_from(frames: RunFrames, stage_id: str, row_ordinal: int,
             source_file=spine.source_file if spine else None,
             source_row=spine.row_ordinal if spine and spine.source_file else None,
             source_file_count=files_read.get(sid),
-            crossed=_build_crossing(fan_in, followed),
+            sampled=_read_row_sample(fan_in, followed),
         ))
 
         next_hop = _advance(
@@ -394,13 +390,9 @@ def trace_to_dict(trace: Trace) -> dict[str, Any]:
                 "source_file": step.source_file,
                 "source_row": step.source_row,
                 "source_file_count": step.source_file_count,
-                "crossed": None if step.crossed is None else {
-                    "stage_id": step.crossed.stage_id,
-                    "row_ordinal": step.crossed.row_ordinal,
-                    "columns": (None if step.crossed.columns is None
-                                else list(step.crossed.columns)),
-                    "place": step.crossed.place,
-                    "of": step.crossed.of,
+                "sampled": None if step.sampled is None else {
+                    "place": step.sampled.place,
+                    "of": step.sampled.of,
                 },
                 "branches": [
                     {

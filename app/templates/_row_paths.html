@@ -26,7 +26,7 @@
     {% endfor %}
   {% endset %}
   {% set href = links.build_row_trace_for_figure(
-       figure.stage_id, figure.row_ordinal, path.crossings) %}
+       figure.stage_id, figure.row_ordinal, path.sample_choices) %}
   {% if path.holds_the_marked_row %}
     <div class="path-entry on">{{ body }}</div>
   {% elif href %}

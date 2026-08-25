@@ -31,9 +31,10 @@ def find_contributing_rows(run_branches: WorkflowRunBranches,
                                   if _fed_by_no_rows(run_branches, at_stage, ordinal)])
 
 
-def find_crossings_behind(run_branches: WorkflowRunBranches, stage_id: StageId,
-                          row_ordinal: RowOrdinal) -> dict[RowOrdinal, tuple[RowRef, ...]]:
-    """Per row behind the cited one, the contributor to follow at each fan-in between."""
+def find_sample_choices_behind(run_branches: WorkflowRunBranches, stage_id: StageId,
+                               row_ordinal: RowOrdinal
+                               ) -> dict[RowOrdinal, tuple[RowRef, ...]]:
+    """Per row behind the cited one, the row to sample at each fan-in between."""
     reached, _, _ = _expand(run_branches, stage_id, row_ordinal)
     return reached
 
@@ -71,7 +72,7 @@ def find_lookup_table_stages(run_branches: WorkflowRunBranches) -> set[StageId]:
 
 def _expand(run_branches: WorkflowRunBranches, stage_id: StageId, ordinal: RowOrdinal
             ) -> tuple[dict[RowOrdinal, tuple[RowRef, ...]], StageId, list[StageId]]:
-    """Each reached row against the contributors a walk down to it has to follow."""
+    """Each reached row against the rows a walk down to it has to sample."""
     merged_from = _merged_from(run_branches, stage_id, ordinal)
     if merged_from is None:
         return {ordinal: ()}, stage_id, []
@@ -82,8 +83,8 @@ def _expand(run_branches: WorkflowRunBranches, stage_id: StageId, ordinal: RowOr
     gathered: dict[RowOrdinal, tuple[RowRef, ...]] = {}
     for parent, (reached, _, _) in from_each_parent:
         step = (parent.stage_id, parent.row_ordinal)
-        for row, crossings in reached.items():
-            gathered.setdefault(row, (step, *crossings))
+        for row, choices in reached.items():
+            gathered.setdefault(row, (step, *choices))
     return gathered, at_stage, [stage_id] + below
 
 

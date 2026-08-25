@@ -14,7 +14,7 @@ from app.runtime.lineage import (
     RowLineage,
 )
 from app.runtime.stages.aggregate import handle_aggregate
-from app.runtime.trace import Crossing, trace_row
+from app.runtime.trace import RowSample, trace_row
 from test_trace_helpers import write_run
 
 # Two firms and a MISSING one, so the dropna=False group is exercised throughout.
@@ -124,7 +124,8 @@ def test_the_walk_crosses_the_fan_in_and_still_names_what_it_left(tmp_path):
 
     assert [s.stage_id for s in trace.steps] == ["agg", "filings"]
     assert trace.end.reached_origin is True
-    assert trace.steps[0].crossed == Crossing("filings", 0, ("total",), 1, 2)
+    assert trace.steps[0].sampled == RowSample(1, 2)
+    assert (trace.steps[1].stage_id, trace.steps[1].row_ordinal) == ("filings", 0)
     assert [b.row_ordinal for b in trace.steps[0].branches] == [0, 2]
     assert all(b.kind == EdgeKind.contribution.value for b in trace.steps[0].branches)
 

@@ -113,7 +113,7 @@ def _build_node(
 ) -> dict[str, Any]:
     step = chrono[i]
     # A crossing's parent is at another grain, so a cell diff would read as a change.
-    parent = chrono[i - 1] if i and not step.get("crossed") else None
+    parent = chrono[i - 1] if i and not step.get("sampled") else None
     diff = build_row_diff(
         step["row"],
         parent["row"] if parent else None,
@@ -146,8 +146,8 @@ def _build_node(
             "row_number": render_row_number(parent["row_ordinal"]),
         },
         "transform": _transform_of(stages.get(step["stage_id"])),
-        # Straight from the walk, which knew the fan-in it crossed here.
-        "crossed": step.get("crossed"),
+        # Straight from the walk, which knew the fan-in it sampled from here.
+        "sampled": step.get("sampled"),
         "links": _links_of(links, step["stage_id"], step["row_ordinal"]),
         # Fan-in parents are NOT in `branches` — a row can have tens of
         # thousands, and `branches` is what the reader promotes one at a time.

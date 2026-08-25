@@ -1,4 +1,4 @@
-"""Crossing a fan-in: the default, a caller's pick, and what an unmarked list means."""
+"""RowSample a fan-in: the default, a caller's pick, and what an unmarked list means."""
 from __future__ import annotations
 
 from collections import Counter
@@ -16,14 +16,14 @@ from app.runtime.branch_analysis import WorkflowRunBranches, reconstruct_run_bra
 from app.runtime.lineage import EdgeKind, RowLineage, RowParent
 from app.runtime.manifest import read_run_manifest
 from app.runtime.trace import (
-    ContributorChoice,
+    RowSampleChoice,
     RunFrames,
     StageTransform,
     trace_row,
 )
 from app.services.project import save_working_copy_as_version
 from app.services.run import read_pinned_version
-from app.services.scope import find_crossings_behind
+from app.services.scope import find_sample_choices_behind
 from app.services.versioning import load_version_stages
 from app.services.workspace import resolve_run_dir
 from app.web.panel_links import AppPanelLinks, read_row_ref
@@ -75,23 +75,25 @@ def test_an_aggregate_row_traces_to_the_source_with_nothing_supplied(scoped):
     assert len(trace.steps) > 1
 
 
-def test_the_default_contributor_is_the_lowest_numbered_and_the_mark_says_so(scoped):
-    crossed = trace_row(scoped.run_dir, "by_portfolio", _HEALTH).steps[0].crossed
+def test_the_sampled_row_is_the_step_above_the_mark(scoped):
+    """`RowSample` names no row because the next step is it — the tie this holds."""
+    walk = trace_row(scoped.run_dir, "by_portfolio", _HEALTH)
+    sampled = walk.steps[0].sampled
 
-    assert crossed is not None
-    assert (crossed.stage_id, crossed.place) == ("one_row_per_grant", 1)
-    assert crossed.row_ordinal == min(
+    assert sampled is not None
+    assert (sampled.place, sampled.of) == (1, 5)  # 5 = the whole Health group
+    assert walk.steps[1].stage_id == "one_row_per_grant"
+    assert walk.steps[1].row_ordinal == min(
         parent.row_ordinal
         for parent in _fan_in_of(scoped, "by_portfolio", _HEALTH))
-    assert crossed.of == 5  # the whole Health group, so the reader knows what is left
 
 
-def test_a_named_contributor_is_followed_instead(scoped):
+def test_a_named_row_is_sampled_instead(scoped):
     walk = trace_row(scoped.run_dir, "by_portfolio", _HEALTH,
-                     [ContributorChoice("one_row_per_grant", 5)])
+                     [RowSampleChoice("one_row_per_grant", 5)])
 
-    assert walk.steps[0].crossed is not None
-    assert walk.steps[0].crossed.row_ordinal == 5
+    assert walk.steps[0].sampled is not None
+    assert walk.steps[0].sampled.of == 5
     assert _row_at(walk.steps, "one_row_per_grant") == 5
     assert walk.end.reached_origin is True
 
@@ -99,13 +101,13 @@ def test_a_named_contributor_is_followed_instead(scoped):
 def test_naming_a_row_that_never_fed_this_one_fails_loudly(scoped):
     with pytest.raises(ContributorNotInFanIn, match="not one of the 5 rows"):
         trace_row(scoped.run_dir, "by_portfolio", _HEALTH,
-                  [ContributorChoice("one_row_per_grant", 2)])
+                  [RowSampleChoice("one_row_per_grant", 2)])
 
 
 def test_naming_a_stage_the_walk_never_fans_in_over_fails_loudly(scoped):
     with pytest.raises(ContributorNotInFanIn, match="met no fan-in"):
         trace_row(scoped.run_dir, "by_portfolio", _HEALTH,
-                  [ContributorChoice("load_west", 0)])
+                  [RowSampleChoice("load_west", 0)])
 
 
 def test_a_step_with_no_crossing_mark_came_from_exactly_one_row(scoped):
@@ -114,7 +116,7 @@ def test_a_step_with_no_crossing_mark_came_from_exactly_one_row(scoped):
     for stage_id, row in _every_row(scoped):
         steps = trace_row(scoped.run_dir, stage_id, row).steps
         for step, parent in zip(steps, steps[1:]):
-            if step.crossed is None:
+            if step.sampled is None:
                 assert _is_one_row_edge(frames, step, parent), (
                     f"{stage_id} row {row}: {step.stage_id} row {step.row_ordinal} "
                     f"reached {parent.stage_id} row {parent.row_ordinal} unmarked")
@@ -123,7 +125,7 @@ def test_a_step_with_no_crossing_mark_came_from_exactly_one_row(scoped):
 def test_an_unmarked_step_list_that_ends_cleanly_ends_at_the_source(scoped):
     for stage_id, row in _every_row(scoped):
         trace = trace_row(scoped.run_dir, stage_id, row)
-        if any(step.crossed for step in trace.steps) or not trace.end.reached_origin:
+        if any(step.sampled for step in trace.steps) or not trace.end.reached_origin:
             continue
         assert trace.steps[-1].stage_type == StageType.input_data
 
@@ -143,7 +145,7 @@ def test_clicking_a_path_retells_the_figures_walk_through_that_rows_example(scop
 def test_the_page_marks_the_path_its_own_walk_took(scoped):
     """`walked` comes off the trace, so the pane's mark cannot disagree with the steps."""
     walk = trace_row(scoped.run_dir, "by_portfolio", _HEALTH,
-                     [ContributorChoice("one_row_per_grant", 5)])
+                     [RowSampleChoice("one_row_per_grant", 5)])
     walked = {step.stage_id: step.row_ordinal for step in walk.steps}
 
     pane = find_paths_behind_figure(
@@ -152,14 +154,14 @@ def test_the_page_marks_the_path_its_own_walk_took(scoped):
     marked = [path for path in pane.paths if path.holds_the_marked_row]
     assert len(marked) == 1
     assert _read_choices(_href(scoped, marked[0])) == [
-        ContributorChoice("one_row_per_grant", 5)]
+        RowSampleChoice("one_row_per_grant", 5)]
 
 
-def test_the_crossings_name_one_contributor_per_fan_in_level():
+def test_the_sample_choices_name_one_contributor_per_fan_in_level():
     """Two aggregates deep, the walk meets two fan-ins, so the pane's link names two."""
     run = _two_levels_of_merges()
 
-    assert find_crossings_behind(run, "top", 0) == {
+    assert find_sample_choices_behind(run, "top", 0) == {
         0: (("middle", 0), ("bottom", 0)),
         1: (("middle", 0), ("bottom", 1)),
         7: (("middle", 1), ("bottom", 7)),
@@ -213,9 +215,9 @@ def _row_at(steps: list[StageTransform], stage_id: str) -> int | None:
 def _href(scoped: ScopedRun, path: PathBehindFigure) -> str:
     """The link the pane's template builds for this path, which is what a reader clicks."""
     return AppPanelLinks(PROJECT, scoped.run_id).build_row_trace_for_figure(
-        "by_portfolio", _HEALTH, path.crossings)
+        "by_portfolio", _HEALTH, path.sample_choices)
 
 
-def _read_choices(href: str) -> list[ContributorChoice]:
-    return [ContributorChoice(*read_row_ref(value))
+def _read_choices(href: str) -> list[RowSampleChoice]:
+    return [RowSampleChoice(*read_row_ref(value))
             for value in parse_qs(urlparse(href).query).get("via", [])]

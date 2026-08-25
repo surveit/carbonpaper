@@ -212,7 +212,8 @@ def test_a_contributor_is_a_promotable_starting_point(tmp_path):
 
     assert [b.row_ordinal for b in trace.steps[0].branches] == list(range(len(FILINGS)))
     assert trace.end.reached_origin is True
-    assert (trace.steps[0].crossed.row_ordinal, trace.steps[0].crossed.of) == (0, len(FILINGS))
+    assert trace.steps[0].sampled.of == len(FILINGS)
+    assert trace.steps[1].row_ordinal == 0
     promoted = trace_row(run_dir, "filings", trace.steps[0].branches[4].row_ordinal)
     assert promoted.steps[0].row["amt"] == 50
     assert promoted.end.reached_origin is True

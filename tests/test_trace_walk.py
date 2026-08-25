@@ -68,7 +68,7 @@ def test_rowcount_mismatch_on_preserving_stage_stops_defensively(tmp_path):
     ])
     trace = trace_row(run_dir, "enrich", 0)
     assert [s.stage_id for s in trace.steps] == ["enrich"]          # enrich shown
-    assert trace.end.reached_origin is False                       # but not crossed
+    assert trace.end.reached_origin is False                       # but not to the origin
     assert "#58" in trace.end.message
 
 

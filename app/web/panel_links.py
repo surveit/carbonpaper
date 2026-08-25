@@ -49,9 +49,9 @@ class AppPanelLinks:
         return f"{self._base}/stage/{_segment(stage_id)}/row/{row}/trace/view"
 
     def build_row_trace_for_figure(self, figure_stage: str, figure_row: int,
-                                   crossings: Sequence[RowRef]) -> str:
+                                   sample_choices: Sequence[RowRef]) -> str:
         """The figure's own walk, told through the contributor named at each fan-in down."""
-        followed = "&".join(urlencode({"via": render_row_ref(ref)}) for ref in crossings)
+        followed = "&".join(urlencode({"via": render_row_ref(ref)}) for ref in sample_choices)
         walk = self.row_trace(figure_stage, figure_row)
         return f"{walk}?{followed}" if followed else walk
 
@@ -138,9 +138,9 @@ class PacketPanelLinks:
         return packet_lineage_href(self._root, stage_id, row)
 
     def build_row_trace_for_figure(self, figure_stage: str, figure_row: int,
-                                   crossings: Sequence[RowRef]) -> str | None:
+                                   sample_choices: Sequence[RowRef]) -> str | None:
         """A file carries no query string, so a path opens the page of the row it ends at."""
-        stage_id, row = crossings[-1] if crossings else (figure_stage, figure_row)
+        stage_id, row = sample_choices[-1] if sample_choices else (figure_stage, figure_row)
         return self.row_trace(stage_id, row)
 
     def review_queue(self, stage_id: str) -> None:
