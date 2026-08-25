@@ -20,6 +20,7 @@ from app.models.branch_analysis import (
     BranchRole,
     FrameScale,
     RowOrdinal,
+    RowRef,
     RowSet,
 )
 from app.models.claims import StageOutputCellCitation
@@ -106,6 +107,18 @@ class CutRows(BaseModel):
     stages: list[DrawnStage]
 
 
+class StageRows(BaseModel):
+    """One stage's rows on the route to a figure, read at that stage's own frame."""
+
+    stage_id: StageId
+    total: int
+    # Set when `rows` was cut to CELL_ROWS, so a sample never reads as the whole.
+    sampled_from: int | None = None
+    columns: list[DrawnColumn]
+    branch_paths: list[BranchPath]
+    rows: list[DrawnRow]
+
+
 class ScopeMap(BaseModel):
     """Which rows produced one cited figure, and what told them apart from the rest."""
 
@@ -171,6 +184,46 @@ def build_scope_map(run_branches: WorkflowRunBranches, project_id: str, run_id: 
         reach=_count_reach(run_branches, branches, index, paths),
         scale=measure_frame_scale(run_branches, cited),
     )
+
+
+def read_stage_rows(run_branches: WorkflowRunBranches, outputs: Path, scope: ScopeMap,
+                    stage_id: StageId, held: frozenset[BranchId],
+                    behind: BranchId | None = None) -> StageRows:
+    """`held` narrows to the rows holding exactly those branches here — one drawn node."""
+    if stage_id not in run_branches.stages:
+        raise StageNotInRun(f"no stage '{stage_id}' in this run")
+    reached = find_rows_reached_per_stage(run_branches, _seed_rows(run_branches, scope, behind))
+    ordinals = sorted(ordinal for ordinal in reached.get(stage_id, set())
+                      if _holds_here(run_branches, scope, stage_id, ordinal) == held)
+    frame = read_frame_table(outputs / f"{stage_id}.parquet")
+    columns = describe_frame_columns(run_branches.stages.get(stage_id), frame.column_names)
+    shown = ordinals[:CELL_ROWS]
+    paths, _, index = group_rows_by_path(run_branches, stage_id, shown, set(scope.branches))
+    return StageRows(
+        stage_id=stage_id, total=len(ordinals),
+        sampled_from=len(ordinals) if len(shown) < len(ordinals) else None,
+        columns=columns, branch_paths=paths,
+        rows=read_rows(frame, shown, index, columns))
+
+
+def _seed_rows(run_branches: WorkflowRunBranches, scope: ScopeMap,
+               behind: BranchId | None) -> list[RowRef]:
+    """The figure's own row, or — drilled into a cut — every row that took that branch."""
+    if behind is None:
+        return [(scope.citation.stage_id, scope.citation.row_ordinal)]
+    at_stage, ordinals = find_rows_that_took(run_branches, behind)
+    return [(at_stage, ordinal) for ordinal in ordinals]
+
+
+def _holds_here(run_branches: WorkflowRunBranches, scope: ScopeMap, stage_id: StageId,
+                ordinal: RowOrdinal) -> frozenset[BranchId]:
+    """The same set scope_map.js builds a node key from: drawn branches OF this stage."""
+    paths = run_branches.branch_paths.get(stage_id, [])
+    if ordinal >= len(paths):
+        return frozenset()
+    return frozenset(branch_id for branch_id in paths[ordinal]
+                     if branch_id in scope.branches
+                     and scope.branches[branch_id].stage_id == stage_id)
 
 
 def _read_the_cited_cell(outputs: Path, citation: StageOutputCellCitation

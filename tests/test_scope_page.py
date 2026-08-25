@@ -240,3 +240,47 @@ def test_a_replaces_form_wrote_every_column_of_the_frame_it_handed_back(run_id):
         scope_url(PROJECT, run_id, "grant_totals", "total_amount", 0, suffix=".json")).json()
     assert [column["state"] for column in payload["cited_row"]["columns"]] == \
         ["added", "added"]
+
+
+def rows_url(project: str, run_id: str, at: str, held: str, behind: str | None = None) -> str:
+    address = (f"/project/{project}/runs/{run_id}/scope/rows.json"
+               f"?stage=grant_totals&row=0&column=total_amount&at={at}&held={held}")
+    return address if behind is None else f"{address}&behind={behind}"
+
+
+def test_a_picked_stage_serves_its_own_rows_not_the_frame_the_drawing_is_over(run_id):
+    rows = TestClient(app).get(
+        rows_url(PROJECT, run_id, "load_east", "load_east|loaded")).json()
+    # The map is drawn over grants_only; load_east has neither portfolio nor band.
+    assert [column["name"] for column in rows["columns"]] == [
+        "grant_id", "region", "agency_code", "amount", "kind"]
+    assert rows["total"] == 4
+    assert {row["cells"][1] for row in rows["rows"]} == {"east"}
+
+
+def test_the_two_arms_of_one_stage_serve_different_rows(run_id):
+    client = TestClient(app)
+    small = client.get(
+        rows_url(PROJECT, run_id, "size_band", "size_band|transform/1:elif0")).json()
+    large = client.get(
+        rows_url(PROJECT, run_id, "size_band", "size_band|transform/1:else")).json()
+    assert small["total"] == 2 and large["total"] == 3
+    banded = {"small": small, "large": large}
+    for band, served in banded.items():
+        assert {row["cells"][0] for row in served["rows"]} == {band}
+
+
+def test_drilling_into_a_cut_serves_the_rows_that_took_that_branch(run_id):
+    # G-007 is the zero-amount grant funded dropped; it is the only row behind the cut.
+    rows = TestClient(app).get(rows_url(
+        PROJECT, run_id, "both_regions", "both_regions|from:load_east",
+        behind="funded|removed")).json()
+    assert rows["total"] == 1
+    assert rows["rows"][0]["cells"][0] == "G-007"
+
+
+def test_the_held_branches_are_required_rather_than_defaulted(run_id):
+    address = (f"/project/{PROJECT}/runs/{run_id}/scope/rows.json"
+               f"?stage=grant_totals&row=0&column=total_amount&at=load_east")
+    # An empty `held` is a real node: the one holding no branch at this stage.
+    assert TestClient(app).get(address).status_code == 422

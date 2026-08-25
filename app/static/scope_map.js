@@ -22,13 +22,17 @@
   var showAll = false;
   var openTab = "rows";
   var panels = {};
+  var rowsPerNode = {};
+  var drawn = {};
 
   var SEP = " ";
   // Gutter mark against a branch the drawn rows are here by. A glyph, not a tint:
   // highlight.js owns the code element's markup and rewrites it wholesale.
   var MARK = "\u25B8";
-  var tableOf = function (stageId) {
-    return '<table class="data-preview" data-stage="' + esc(stageId) + '">';
+  // `also` marks the one table whose row ordinals draw a path on the map above.
+  var tableOf = function (stageId, also) {
+    return '<table class="data-preview ' + (also || "") + '" data-stage="' +
+      esc(stageId) + '">';
   };
   var COLUMN = 300, BAR = 11, TOP = 52, GAP = 16;
   var LABEL_PITCH = 30, STUB = 26;
@@ -89,10 +93,6 @@
 
   function nodeKey(column, i) {
     return column.id + SEP + branchesAt(i, column.id).join(",");
-  }
-
-  function nodeKeyForPath(stageId, path) {
-    return stageId + SEP + branchesOn(path, stageId).join(",");
   }
 
   function tally(column) {
@@ -685,26 +685,31 @@
   // per stage, with the arm these rows took lit inside its code block.
 
   function renderTabs() {
-    var stage = pickedStage();
-    if (!stage) openTab = "rows";
-    byId("scope-tabs").hidden = !stage;
     byId("scope-rows").hidden = openTab !== "rows";
     byId("scope-transform").hidden = openTab !== "transform";
     document.querySelectorAll("#scope-tabs [data-tab]").forEach(function (button) {
       button.classList.toggle("active", button.dataset.tab === openTab);
     });
-    if (stage && openTab === "transform") showTransform(stage);
+    if (openTab === "transform") showTransform(tableStage());
   }
 
   function pickedStage() {
     return pickedNode ? pickedNode.split(SEP)[0] : null;
   }
 
+  // Both tabs answer for one stage, so a pick moves them together. With nothing
+  // picked that is the stage the drawing is over.
+  function tableStage() {
+    var cut = pickedCut();
+    if (cut) return ((D.cuts || {})[cut] || {}).at_stage || D.covers.at_stage;
+    return pickedStage() || D.covers.at_stage;
+  }
+
   function showTransform(stageId) {
     var host = byId("scope-transform");
-    if (host.dataset.node === pickedNode) return;
-    host.dataset.node = pickedNode;
-    var wanted = pickedNode;
+    var wanted = stageId + SEP + (pickedNode || "");
+    if (host.dataset.node === wanted) return;
+    host.dataset.node = wanted;
     host.textContent = "reading " + stageId + "…";
     loadPanel(stageId).then(function (html) {
       if (host.dataset.node !== wanted) return;
@@ -763,23 +768,92 @@
 
   function renderTable() {
     var cut = pickedCut();
+    byId("scope-at").hidden = true;
     if (cut) { renderCutTable(cut); return; }
-    if (pickedFigure()) { renderCitedRow(); return; }
+    if (pickedNode) { renderStageRows(pickedNode); return; }
+    renderCoveredRows();
+  }
+
+  // A pick names a stage, so the rows are read at THAT stage rather than filtered
+  // out of the frame the drawing is over — otherwise a stage every row came
+  // through redraws the same table it was already showing.
+  function renderStageRows(node) {
+    var stageId = node.split(SEP)[0];
+    var held = node.slice(stageId.length + 1);
+    var key = node + SEP + ((D.drilled || {}).branch || "");
+    var host = byId("scope-table");
+    if (drawn[key]) { drawStageRows(drawn[key]); return; }
+    host.innerHTML = '<p class="muted">reading ' + esc(stageId) + "\u2026</p>";
+    loadStageRows(key, stageId, held).then(function (table) {
+      drawn[key] = table;
+      if (pickedNode === node) renderTable();
+    }, function () {
+      if (pickedNode !== node) return;
+      host.innerHTML = '<p class="muted">This run kept no rows for ' +
+        esc(stageId) + ".</p>";
+    });
+  }
+
+  function drawStageRows(table) {
+    sayWhatIsDrawn(table);
+    byId("scope-table").innerHTML = tableOf(table.stage_id) +
+      "<thead>" + headOf(table.columns) + "</thead><tbody>" +
+      table.rows.map(function (r) {
+        return '<tr data-row="' + r.ordinal + '">' + rowOf(r, table.columns);
+      }).join("") + "</tbody></table>";
+  }
+
+  // The bar above counts rows of the frame the drawing is over. This table holds a
+  // different frame's rows, so it names whose they are rather than leave the count
+  // beside it to be read as this one.
+  function sayWhatIsDrawn(table) {
+    var at = byId("scope-at");
+    at.hidden = false;
+    at.innerHTML = "<b>" + num(table.total) + "</b> row" +
+      (table.total === 1 ? "" : "s") + " of <code>" + esc(table.stage_id) +
+      "</code>" + (table.sampled_from
+        ? ", " + num(table.rows.length) + " of them listed" : "");
+  }
+
+  function loadStageRows(key, stageId, held) {
+    if (!rowsPerNode[key]) {
+      rowsPerNode[key] = fetch(rowsAddress(stageId, held)).then(function (reply) {
+        if (!reply.ok) throw new Error(String(reply.status));
+        return reply.json();
+      });
+    }
+    return rowsPerNode[key];
+  }
+
+  // Built off the citation rather than off location.pathname: the same script runs
+  // in the frame the row lineage page holds, whose own address is /scope/panel.
+  function rowsAddress(stageId, held) {
+    var query = new URLSearchParams(location.search);
+    query.delete("cut");
+    query.set("stage", D.citation.stage_id);
+    query.set("row", D.citation.row_ordinal);
+    query.set("column", D.citation.column);
+    query.set("at", stageId);
+    query.set("held", held);
+    if (D.drilled) query.set("behind", D.drilled.branch);
+    return "/project/" + encodeURIComponent(D.project_id) + "/runs/" +
+      encodeURIComponent(D.run_id) + "/scope/rows.json?" + query.toString();
+  }
+
+  function renderCoveredRows() {
     var wanted = new Set(selected());
     var head = headOf(D.columns);
     var body = D.rows.filter(function (r) {
-      // Drilled, the drawn ordinals are synthetic counts; a sample row is placed by
-      // the path it is on instead.
-      if (!D.drilled) return wanted.has(r.ordinal);
-      if (!pickedNode) return true;
-      return nodeKeyForPath(pickedNode.split(SEP)[0], r.branch_path_index) === pickedNode;
+      // Drilled, the drawn ordinals are synthetic counts and every sample row is
+      // one of them, so there is nothing to select against.
+      return D.drilled || wanted.has(r.ordinal);
     }).map(function (r) {
       return '<tr class="' + (r.ordinal === pickedRow ? "is-on" : "") +
         '" data-row="' + r.ordinal + '">' + rowOf(r, D.columns);
     }).join("");
     var host = byId("scope-table");
-    host.innerHTML = tableOf(D.covers.at_stage) + "<thead>" + head + "</thead><tbody>" +
-      body + "</tbody></table>";
+    host.innerHTML = tableOf(D.covers.at_stage, "scope-pickable") + "<thead>" +
+      head + "</thead><tbody>" + body + "</tbody></table>";
     // The ordinal draws the row's path on the map above; the cells beside it
     // leave for the lineage of what they hold.
     host.querySelectorAll("tbody tr .scope-num").forEach(function (num) {
@@ -812,13 +886,6 @@
     return '<td class="scope-num">' + r.number + "</td>" +
       r.cells.map(function (value, i) { return cell(value, columns[i]); }).join("") +
       "</tr>";
-  }
-
-  function renderCitedRow() {
-    var row = D.cited_row;
-    byId("scope-table").innerHTML = tableOf(D.citation.stage_id) + "<thead>" +
-      headOf(row.columns) + '</thead><tbody><tr data-row="' + row.ordinal + '">' +
-      rowOf(row, row.columns) + "</tbody></table>";
   }
 
   function renderCutTable(branch) {

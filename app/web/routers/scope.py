@@ -25,6 +25,8 @@ router = APIRouter()
 _SCOPE_PATH = "/project/{project_id}/runs/{run_id}/scope"
 # Repeatable: `?expand=a&expand=b` resolves both merges. docs/branch-analysis.md
 _EXPAND = Query(default=None)
+# Required, and empty is a real answer: a drawn node may hold no branch at its stage.
+_HELD = Query()
 
 
 @router.get(_SCOPE_PATH, response_class=HTMLResponse)
@@ -58,6 +60,26 @@ async def scope_json(project_id: str, run_id: str, stage: str, row: int, column:
     except (StageNotInRun, RowOutOfRange, RunVersionUnresolvableError) as missing:
         raise HTTPException(status_code=404, detail=str(missing)) from missing
     return JSONResponse(_payload(scope, cuts))
+
+
+@router.get(f"{_SCOPE_PATH}/rows.json", response_class=JSONResponse)
+async def scope_stage_rows(project_id: str, run_id: str, stage: str, row: int, column: str,
+                           at: str, held: str = _HELD, behind: str | None = None,
+                           expand: list[str] | None = _EXPAND):
+    """One drawn node's rows, read at ITS stage — what the Rows tab shows beside Transform."""
+    citation = _cite(run_id, stage, row, column)
+    try:
+        rows = scope_view.load_stage_rows(project_id, run_id, citation, at,
+                                          frozenset(_held(held)), behind,
+                                          frozenset(expand or ()))
+    except (MissingLineage, StageNotInRun, RowOutOfRange,
+            RunVersionUnresolvableError) as missing:
+        raise HTTPException(status_code=404, detail=str(missing)) from missing
+    return JSONResponse(rows.model_dump(mode="json"))
+
+
+def _held(held: str) -> list[BranchId]:
+    return [branch for branch in held.split(",") if branch]
 
 
 @router.get(f"{_SCOPE_PATH}/panel", response_class=HTMLResponse)

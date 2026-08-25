@@ -41,9 +41,9 @@
   <p class="muted scope-legend" id="scope-legend"></p>
 
   <div class="scope-bar" id="scope-bar"></div>
-  {# Shown once a bar is picked: the rows it holds, and what the stage did to them.
-     The app's tab strip, so it reads as the run page's stage panel does. #}
-  <div class="stage-tabs" id="scope-tabs" hidden>
+  {# The rows under the drawing, and the stage that made them. The app's tab strip,
+     so it reads as the run page's stage panel does. #}
+  <div class="stage-tabs" id="scope-tabs">
     <div class="tabs">
       <button data-tab="rows" class="active">Rows</button>
       <button data-tab="transform">Transform</button>
@@ -52,6 +52,9 @@
   <div class="pane" data-pane="rows" id="scope-rows">
     {# The tints are per stage, and which stage a table is drawn at changes as the
        reader picks a cut, so the legend names the rule rather than the stage. #}
+    {# Which frame the rows below are, written by scope_map.js when a pick moves the
+       table off the one the drawing is over. #}
+    <p class="scope-at muted" id="scope-at" hidden></p>
     <p class="scope-cols-legend">the stage this table is drawn at
       <span class="scope-col-added">wrote</span>
       <span class="scope-col-rewritten">revised</span>

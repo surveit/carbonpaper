@@ -16,8 +16,10 @@ from app.services.workspace import resolve_run_dir
 from app.web.scope_payload import (
     CutRows,
     ScopeMap,
+    StageRows,
     build_scope_map,
     find_cuts_to_offer,
+    read_stage_rows,
 )
 
 
@@ -29,6 +31,15 @@ def load_scope_map(project_id: str, run_id: str, citation: StageOutputCellCitati
     scope = build_scope_map(run_branches, project_id, run_id, outputs, citation,
                             expand)
     return scope, find_cuts_to_offer(run_branches, outputs, scope)
+
+
+def load_stage_rows(project_id: str, run_id: str, citation: StageOutputCellCitation,
+                    at: StageId, held: frozenset[BranchId], behind: BranchId | None,
+                    expand: frozenset[StageId] = frozenset()) -> StageRows:
+    run_branches = read_run_branches(project_id, run_id)
+    outputs = resolve_run_dir(project_id, run_id) / "outputs"
+    scope = build_scope_map(run_branches, project_id, run_id, outputs, citation, expand)
+    return read_stage_rows(run_branches, outputs, scope, at, held, behind)
 
 
 def say_what_no_row_fed(scope: ScopeMap) -> str | None:
