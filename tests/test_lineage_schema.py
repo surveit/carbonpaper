@@ -5,18 +5,18 @@ import pyarrow as pa
 import pytest
 
 from app.core.frames import read_frame_table, write_frame_table
+from app.runtime.row_sidecar import resolve_row_sidecar_path
 from app.runtime.lineage import (
     LINEAGE_SCHEMA,
     EdgeKind,
     RowLineage,
     RowParent,
-    lineage_sidecar_path,
 )
 
 
 def _written(lineage: RowLineage, tmp_path) -> pa.Table:
     (tmp_path / "outputs").mkdir(parents=True, exist_ok=True)
-    path = lineage_sidecar_path(tmp_path, "a_stage")
+    path = resolve_row_sidecar_path(tmp_path, "a_stage")
     write_frame_table(lineage.to_table(), path)
     return read_frame_table(path)
 

@@ -47,8 +47,8 @@ Only **one** kind of branch is recorded while the run executes.
 
 `app/core/branch_source.py` rewrites a stage's Starlark before it runs, opening every
 `if` / `elif` / `else` / `try` / `except` with a call that reports itself. Each output row's list
-of arms lands in `<stage>.branch.parquet` beside its frame. That is the `code` reason, and it is
-the only one that costs anything to collect.
+of arms lands in the `_branches` column of `<stage>.lineage.parquet` beside its frame. That is
+the `code` reason, and it is the only one that costs anything to collect.
 
 A conditional expression — `1 if in_window else 0` — is recorded too, and it is the case a
 statement rewrite cannot reach: an arm is a value, with no suite to put a call above. So each arm
@@ -60,10 +60,10 @@ Two places a conditional expression is deliberately **not** recorded. Inside a c
 a lambda it runs per element and per call, so "which arm did this row take" has no one answer.
 And a `def`'s own decorators and defaults run where the `def` is written, not once per row.
 
-The other five are **worked out afterwards**, from the shape of the lineage sidecar. Lineage is
-already written for every stage: `<stage>.lineage.parquet` says, for each output row, which input
-rows it came from. `app/runtime/branch_analysis/run_branches.py` reads that graph and asks what
-decision must have produced its shape:
+The other five are **worked out afterwards**, from the shape of the same sidecar's other half.
+Its `_trace_source_*` columns say, for each output row, which input rows it came from.
+`app/runtime/branch_analysis/run_branches.py` reads that graph and asks what decision must have
+produced its shape:
 
 | reason | what the lineage looks like | function |
 |---|---|---|
@@ -203,7 +203,7 @@ set is a real answer, so it is a required argument rather than a defaulted one.
 |---|---|
 | `app/models/branch_analysis.py` | `BranchOption`, `BranchReason`, `BranchRole`, `BranchPath`, `RowSet`, `FrameScale` |
 | `app/core/branch_source.py` | finding and instrumenting a stage's branches, and locating the line one tests on |
-| `app/runtime/branch_analysis/run_branches.py` | reading the sidecars, working out the other five reasons, building a path per row |
+| `app/runtime/branch_analysis/run_branches.py` | reading the sidecar, working out the other five reasons, building a path per row |
 | `app/runtime/branch_analysis/stage_code.py` | the stage source a branch decided in |
 | `app/runtime/branch_analysis/rows_behind_a_branch.py` | which rows took one branch, and in which frame |
 | `app/services/scope.py` | answering a citation, measuring frame scale, finding the nearest merge |
@@ -211,5 +211,5 @@ set is a real answer, so it is a required argument rather than a defaulted one.
 | `tests/scope_fixture.py` | twelve grants and fourteen stages, hitting every reason on purpose |
 
 `app/runtime/branch_analysis` reads a finished run rather than executing one, which is not the
-runner's job. It sits inside `app.runtime` for now because that is where the sidecar readers are;
+runner's job. It sits inside `app.runtime` for now because that is where the sidecar reader is;
 see [issue 834](https://github.com/surveit/carbonpaper/issues/834) for pulling both out.

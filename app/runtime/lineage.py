@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable, Sequence
 
 import numpy as np
@@ -214,7 +213,3 @@ def grouped_contributions_lineage(
         ]
         for row_contributors in contributors
     ])
-
-
-def lineage_sidecar_path(run_dir: Path, stage_id: str) -> Path:
-    return Path(run_dir) / "outputs" / f"{stage_id}.lineage.parquet"

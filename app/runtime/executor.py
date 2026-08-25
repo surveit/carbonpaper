@@ -13,12 +13,7 @@ import pandas as pd
 import pyarrow as pa
 
 from app.core.errors import SubsetRunError
-from app.runtime.branches import RowBranches, branch_sidecar_path
-from app.core.frames import (
-    frame_to_table,
-    write_frame_table,
-    write_frame_table_with_csv_fallback,
-)
+from app.core.frames import frame_to_table, write_frame_table_with_csv_fallback
 from app.models import StageType, Workflow, WorkflowStage
 from app.models.run_manifest import (
     SCHEMA_REFUSAL_ERROR_TYPE,
@@ -38,12 +33,8 @@ from .manifest import RunManifest, create_run_manifest, write_manifest
 from .run_log import RUN_START, STAGE_DONE, STAGE_START, RunLog
 from .progress import StageProgressReporter
 from .stages import HANDLERS, StageHandler
-from .lineage import (
-    RowLineage,
-    concatenated_inputs_lineage,
-    kept_rows_lineage,
-    lineage_sidecar_path,
-)
+from .lineage import RowLineage, concatenated_inputs_lineage, kept_rows_lineage
+from .row_sidecar import write_row_sidecar
 from app.models.severity import UserFacingErrorSeverity
 from .key_coverage import find_key_coverage_issues
 from .validation import Issue, ValidationReport, validate_table
@@ -317,14 +308,6 @@ def _take_row_window(
     return table
 
 
-def _persist_row_lineage(lineage: RowLineage, sid: str, run_dir: Path) -> None:
-    write_frame_table(lineage.to_table(), lineage_sidecar_path(run_dir, sid))
-
-
-def _persist_row_branches(branches: RowBranches, sid: str, run_dir: Path) -> None:
-    write_frame_table(branches.to_table(), branch_sidecar_path(run_dir, sid))
-
-
 def _stage_row_lineage(
     workflow_stage: WorkflowStage, output: StageOutput,
     inputs: dict[str, pa.Table], window: _RowWindow,
@@ -385,10 +368,7 @@ def _finalize_stage_output(
         # frame it just loaded is the runtime's only handle on them: its window
         # is taken here rather than on an input frame that does not exist.
         table = _take_row_window(table, window, "loaded from the source", record)
-    if lineage is not None:
-        _persist_row_lineage(lineage, sid, run_dir)
-    if output.branches is not None:
-        _persist_row_branches(output.branches, sid, run_dir)
+    write_row_sidecar(run_dir, sid, lineage, output.branches)
 
     out_rep = validate_table(
         table, workflow_stage.output_schema, stage_id=sid, phase="output")

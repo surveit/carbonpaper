@@ -1,4 +1,4 @@
-"""A real run writes which branch each surviving row took, beside the frame."""
+"""A real run writes which branch each surviving row took, beside its lineage."""
 from __future__ import annotations
 
 import pandas as pd
@@ -6,7 +6,8 @@ import pytest
 
 from app.core.frames import read_frame_table
 from app.models import Stage, Workflow, parse_stage
-from app.runtime.branches import BRANCH_SCHEMA, RowBranches, branch_sidecar_path
+from app.runtime.branches import BRANCH_SCHEMA, RowBranches
+from app.runtime.row_sidecar import read_row_sidecar, resolve_row_sidecar_path
 from app.runtime.executor import execute_subset
 
 _COLS = [{"name": "a", "type": "str", "nullable": True},
@@ -66,7 +67,9 @@ def _run(workflow: Workflow, stage_ids: list[str], run_dir):
 
 
 def _sidecar(run_dir, stage_id: str) -> RowBranches:
-    return RowBranches.from_table(read_frame_table(branch_sidecar_path(run_dir, stage_id)))
+    branches = read_row_sidecar(run_dir, stage_id).branches
+    assert branches is not None
+    return branches
 
 
 def test_a_row_function_records_the_branch_every_row_took(tmp_path) -> None:
@@ -96,14 +99,15 @@ def should_include(row):
     assert _sidecar(run_dir, "kept").taken == [("should_include/0:if",)]
 
 
-def test_a_stage_whose_code_never_branches_writes_no_sidecar(tmp_path) -> None:
+def test_a_stage_whose_code_never_branches_records_no_branches(tmp_path) -> None:
     src = pd.DataFrame({"a": ["x", "y"], "b": [1, 2]})
     run_dir = tmp_path / "runs" / "r3"
     _run(Workflow(stages=[_load_stage("src", src, tmp_path),
                           _filter("kept", "src", "def should_include(row): return row['b'] > 0")]),
          ["src", "kept"], run_dir)
 
-    assert not branch_sidecar_path(run_dir, "kept").exists()
+    # The stage still writes its lineage, so the file is there without the half.
+    assert read_row_sidecar(run_dir, "kept").branches is None
 
 
 def test_a_stage_that_only_chooses_between_values_writes_one_too(tmp_path) -> None:
@@ -118,13 +122,13 @@ def test_a_stage_that_only_chooses_between_values_writes_one_too(tmp_path) -> No
     ]
 
 
-def test_the_sidecar_carries_one_schema(tmp_path) -> None:
+def test_a_stage_that_records_only_branches_writes_only_that_column(tmp_path) -> None:
     src = pd.DataFrame({"a": ["x"], "b": [5]})
     run_dir = tmp_path / "runs" / "r4"
     _run(Workflow(stages=[_load_stage("src", src, tmp_path), _row_function("tier", "src")]),
          ["src", "tier"], run_dir)
 
-    table = read_frame_table(branch_sidecar_path(run_dir, "tier"))
+    table = read_frame_table(resolve_row_sidecar_path(run_dir, "tier"))
     assert table.schema.equals(BRANCH_SCHEMA)
 
 
