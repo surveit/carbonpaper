@@ -1,16 +1,12 @@
-"""The Inputs pane: what the run read, and which of it this row came in at."""
+"""The Inputs pane: the files the run read, listed file first."""
 from __future__ import annotations
 
 import pandas as pd
 
 from app.core import files as file_store
 from app.models import Stage, Workflow, parse_stage
-from app.runtime.lineage import EdgeKind, RowLineage, RowParent
-from app.runtime.trace import trace_row, trace_to_dict
 from app.web.panel_links import AppPanelLinks, PacketPanelLinks
-from app.web.trace_inputs import build_input_catalog, select_row_inputs
-from app.web.trace_view import build_trace_view
-from test_trace_helpers import write_run
+from app.web.trace_inputs import build_input_catalog, read_run_inputs
 
 PROJECT = "proj"
 FILINGS = pd.DataFrame({"client": ["Acme", "Borealis"], "amount": [500, 1200]})
@@ -73,68 +69,48 @@ def _manifest(stage_ids: list[str], limits: dict[str, int] | None = None) -> dic
     }
 
 
-def _join_run(tmp_path):
-    lineage = RowLineage([[RowParent("filings", 0), RowParent("contracts", 0)],
-                          [RowParent("filings", 1)]])
-    return write_run(tmp_path, [
-        {"id": "filings", "type": "input_data", "parents": [], "df": FILINGS},
-        {"id": "contracts", "type": "input_data", "parents": [], "df": CONTRACTS},
-        {"id": "j", "type": "enrich", "parents": ["filings", "contracts"],
-         "df": JOINED, "lineage": lineage},
-    ])
+
+def _inputs(manifest, links=None):
+    return read_run_inputs(build_input_catalog(PROJECT, manifest),
+                           links or AppPanelLinks(PROJECT, "T1"))
 
 
-def _inputs(run_dir, stage: str, row: int, stages_by_id, manifest, links=None):
-    links = links or AppPanelLinks(PROJECT, "T1")
-    view = build_trace_view(
-        trace_to_dict(trace_row(run_dir, stage, row)), stages_by_id, links)
-    return select_row_inputs(
-        build_input_catalog(PROJECT, manifest), view, links)
+def _file(inputs, filename: str):
+    return next(f for f in inputs.files if f.filename == filename)
 
 
-def _by_id(inputs, stage_id: str):
-    return next(s for s in inputs.stages if s.stage_id == stage_id)
-
-
-def test_every_input_the_run_read_is_listed(tmp_path):
-    inputs = _inputs(_join_run(tmp_path), "j", 0,
-                     _join_workflow(), _manifest(["filings", "contracts"]))
+def test_every_file_the_run_read_is_listed(tmp_path):
+    inputs = _inputs(_manifest(["filings", "contracts"]))
 
     # The run's list, not the row's: the reference side is here on the same footing.
-    assert [s.stage_id for s in inputs.stages] == ["filings", "contracts"]
+    assert [f.filename for f in inputs.files] == ["east.csv", "contracts.csv"]
 
 
-def test_a_row_that_summarizes_its_inputs_still_names_the_file_behind_them(tmp_path):
-    """The walk stops before any input, and the run's inputs are the answer anyway."""
-    inputs = _inputs(_summed_run(tmp_path), "totals", 0, {}, _manifest(["filings"]))
+def test_the_pane_is_the_same_for_every_row_of_the_run(tmp_path):
+    """It reads the manifest and nothing else, so no walk can narrow or widen it."""
+    manifest = _manifest(["filings", "contracts"])
 
-    assert [f.filename for f in _by_id(inputs, "filings").files] == ["east.csv"]
+    assert _inputs(manifest) == _inputs(manifest)
 
 
-def test_the_file_names_itself_and_the_path_the_run_read(tmp_path):
-    read = _by_id(_inputs(_join_run(tmp_path), "j", 0, _join_workflow(),
-                          _manifest(["filings"])), "filings").files
+def test_a_file_names_the_stage_that_read_it(tmp_path):
+    read = _file(_inputs(_manifest(["filings"])), "east.csv")
 
-    assert [(f.filename, f.path) for f in read] == [("east.csv", "/data/east.csv")]
-    # This run recorded no file per row, so nothing claims which row of it this is.
-    assert read[0].source_row is None
+    assert (read.path, read.read_by) == ("/data/east.csv", "filings")
+    assert read.read_by_href is not None
 
 
 def test_a_file_whose_bytes_the_project_holds_links_its_page(tmp_path):
     file_store.ProjectFile(sha256=EAST_SHA, filename="east.csv",
                            byte_count=EAST_BYTES, project_id=PROJECT).save()
 
-    read = _by_id(_inputs(_join_run(tmp_path), "j", 0, _join_workflow(),
-                          _manifest(["filings"])), "filings").files[0]
+    read = _file(_inputs(_manifest(["filings"])), "east.csv")
     stored = file_store.ProjectFile.find(sha256=EAST_SHA)[0]
     assert read.href == f"/project/{PROJECT}/files/{stored.id}"
 
 
 def test_bytes_no_stored_file_holds_are_stated_as_unheld(tmp_path):
-    read = _by_id(_inputs(_join_run(tmp_path), "j", 0, _join_workflow(),
-                          _manifest(["filings"])), "filings").files[0]
-
-    assert read.href is None
+    assert _file(_inputs(_manifest(["filings"])), "east.csv").href is None
 
 
 def test_a_packet_offers_no_file_page(tmp_path):
@@ -142,41 +118,35 @@ def test_a_packet_offers_no_file_page(tmp_path):
     file_store.ProjectFile(sha256=EAST_SHA, filename="east.csv",
                            byte_count=EAST_BYTES, project_id=PROJECT).save()
 
-    read = _by_id(_inputs(_join_run(tmp_path), "j", 0, _join_workflow(),
-                          _manifest(["filings"]), links=PacketPanelLinks()),
-                  "filings").files[0]
+    read = _file(_inputs(_manifest(["filings"]), links=PacketPanelLinks()), "east.csv")
     assert read.href is None
 
 
 def test_the_row_cap_the_run_set_is_reported(tmp_path):
-    inputs = _inputs(_join_run(tmp_path), "j", 0, _join_workflow(),
-                     _manifest(["filings"], limits={"filings": 50}))
+    inputs = _inputs(_manifest(["filings"], limits={"filings": 50}))
 
-    assert _by_id(inputs, "filings").row_cap == 50
+    assert _file(inputs, "east.csv").row_cap == 50
 
 
 def test_what_the_stage_did_comes_off_its_own_record(tmp_path):
-    ran = _by_id(_inputs(_join_run(tmp_path), "j", 0, _join_workflow(),
-                         _manifest(["filings"])), "filings")
+    read = _file(_inputs(_manifest(["filings"])), "east.csv")
 
-    assert (ran.status, ran.rows_out) == ("ok", 2)
-    assert ran.read_at == "2026-08-13T18:16:47"
+    assert (read.status, read.rows_out) == ("ok", 2)
+
+
+def test_an_input_stage_the_manifest_names_no_file_for_is_listed_apart(tmp_path):
+    manifest = _manifest(["filings"])
+    manifest["input_bindings"] = {}
+
+    inputs = _inputs(manifest)
+    assert inputs.files == []
+    assert [s.stage_id for s in inputs.unnamed] == ["filings"]
 
 
 def test_a_stage_the_manifest_never_recorded_claims_nothing(tmp_path):
     manifest = _manifest(["filings"])
     manifest["stage_records"] = []
 
-    inputs = _inputs(_join_run(tmp_path), "j", 0, _join_workflow(), manifest)
+    inputs = _inputs(manifest)
     # No record, so no stage to list — the pane says the run records no input stage.
-    assert inputs.stages == []
-
-
-def _summed_run(tmp_path):
-    lineage = RowLineage([[RowParent("filings", 0, EdgeKind.contribution.value),
-                           RowParent("filings", 1, EdgeKind.contribution.value)]])
-    return write_run(tmp_path, [
-        {"id": "filings", "type": "input_data", "parents": [], "df": FILINGS},
-        {"id": "totals", "type": "aggregate", "parents": ["filings"],
-         "df": pd.DataFrame({"total": [1700]}), "lineage": lineage},
-    ])
+    assert (inputs.files, inputs.unnamed) == ([], [])

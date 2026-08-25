@@ -219,7 +219,8 @@ def test_the_packet_page_names_the_file_the_run_read(tmp_path):
     assert "east.csv" in page
     assert "row cap <b>50</b>" in page
     # The packet has no /project/.../files route, so the name stands without a link.
-    assert '<span class="infile">east.csv</span>' in page
+    assert '<a href' not in page.split("east.csv")[0].rsplit("<h2>", 1)[-1]
+    assert "read by " in page
     # The pane says whose inputs these are, so the reader never reads them as the row's.
     assert "These are the run's inputs" in page
 

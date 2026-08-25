@@ -35,7 +35,7 @@ from app.web.row_paths import (
     PathsPane,
     find_paths_behind_figure,
 )
-from app.web.trace_inputs import InputCatalog, build_input_catalog, select_row_inputs
+from app.web.trace_inputs import InputCatalog, build_input_catalog, read_run_inputs
 from app.web.trace_view import build_trace_view, read_walked_rows
 
 _log = logging.getLogger(__name__)
@@ -156,7 +156,7 @@ def _write_page(
         figure=CitedFigure(stage_id=stage_id, row_ordinal=row),
         links=links,
         view=trace_view,
-        inputs=select_row_inputs(catalog, trace_view, links),
+        inputs=read_run_inputs(catalog, links),
         project=view.project,
         crumbs=[
             Crumb(label=view.project or "run", href="../../index.html"),

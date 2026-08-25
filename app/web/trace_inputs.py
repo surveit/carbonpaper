@@ -1,9 +1,7 @@
-"""The lineage page's Inputs pane: what this run read, and where this row came in."""
+"""The lineage page's Inputs pane: the files this run read."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
-
 from pydantic import BaseModel
 
 from app.core import files as file_store
@@ -18,24 +16,27 @@ class InputFileView(BaseModel):
     path: str
     # None where no file this project holds hashes to the bytes the run read.
     href: str | None
-    # Where this row sits IN this file, on a run that recorded a file per row.
-    source_row: int | None
+    read_by: str
+    read_by_href: str | None
+    status: str
+    rows_out: int
+    # The run's row window on the stage that read it, absent where it took the whole file.
+    row_cap: int | None
+    row_offset: int | None
 
 
-class InputStageView(BaseModel):
+class UnnamedInputView(BaseModel):
+    """An input stage whose manifest names no file, so no bytes can be pointed at."""
+
     stage_id: str
     href: str | None
     status: str
     rows_out: int
-    read_at: str | None
-    # The run's row window on this stage, absent where it took the whole input.
-    row_cap: int | None
-    row_offset: int | None
-    files: list[InputFileView]
 
 
 class TraceInputsView(BaseModel):
-    stages: list[InputStageView]
+    files: list[InputFileView]
+    unnamed: list[UnnamedInputView]
 
 
 @dataclass(frozen=True)
@@ -68,53 +69,43 @@ def build_input_catalog(project_id: str, manifest: JsonDict) -> InputCatalog:
     )
 
 
-def select_row_inputs(
-    catalog: InputCatalog, view: dict[str, Any], links: PanelLinks
-) -> TraceInputsView:
-    """Every input the RUN read. Only `source_row` ties one to the traced row."""
+def read_run_inputs(catalog: InputCatalog, links: PanelLinks) -> TraceInputsView:
+    """Every file the RUN read. The same answer for every row of it."""
     return TraceInputsView(
-        stages=[_build_stage_view(catalog, links, stage_id, view)
-                for stage_id in catalog.input_stage_ids],
-    )
-
-
-def _build_stage_view(
-    catalog: InputCatalog, links: PanelLinks, stage_id: str, view: dict[str, Any],
-) -> InputStageView:
-    record = catalog.records.get(stage_id) or {}
-    return InputStageView(
-        stage_id=stage_id,
-        href=links.stage_anchor(stage_id),
-        status=str(record.get("status") or ""),
-        rows_out=int(record.get("output_row_count") or 0),
-        read_at=_read_optional_text(record.get("started_at")),
-        row_cap=catalog.limits.get(stage_id),
-        row_offset=catalog.offsets.get(stage_id),
-        files=[_build_file_view(catalog, links, binding, stage_id, view)
+        files=[_build_file_view(catalog, links, binding, stage_id)
+               for stage_id in catalog.input_stage_ids
                for binding in catalog.bindings.get(stage_id) or []],
+        unnamed=[_build_unnamed_view(catalog, links, stage_id)
+                 for stage_id in catalog.input_stage_ids
+                 if not catalog.bindings.get(stage_id)],
     )
 
 
 def _build_file_view(
-    catalog: InputCatalog, links: PanelLinks, binding: InputBinding,
-    stage_id: str, view: dict[str, Any],
+    catalog: InputCatalog, links: PanelLinks, binding: InputBinding, stage_id: str,
 ) -> InputFileView:
     stored = catalog.stored_by_sha.get(binding.sha256 or "")
+    record = catalog.records.get(stage_id) or {}
     return InputFileView(
         filename=binding.filename,
         path=binding.path,
         href=None if stored is None else links.file_page(stored.id),
-        source_row=_find_source_row(view, stage_id, binding.filename),
+        read_by=stage_id,
+        read_by_href=links.stage_anchor(stage_id),
+        status=str(record.get("status") or ""),
+        rows_out=int(record.get("output_row_count") or 0),
+        row_cap=catalog.limits.get(stage_id),
+        row_offset=catalog.offsets.get(stage_id),
     )
 
 
-def _find_source_row(view: dict[str, Any], stage_id: str, filename: str) -> int | None:
-    for node in view.get("nodes") or []:
-        if node["stage_id"] == stage_id and node.get("source_file") == filename:
-            row = node.get("source_row")
-            return None if row is None else int(row)
-    return None
-
-
-def _read_optional_text(value: Any) -> str | None:
-    return str(value) if value else None
+def _build_unnamed_view(
+    catalog: InputCatalog, links: PanelLinks, stage_id: str,
+) -> UnnamedInputView:
+    record = catalog.records.get(stage_id) or {}
+    return UnnamedInputView(
+        stage_id=stage_id,
+        href=links.stage_anchor(stage_id),
+        status=str(record.get("status") or ""),
+        rows_out=int(record.get("output_row_count") or 0),
+    )
