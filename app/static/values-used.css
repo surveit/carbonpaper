@@ -59,8 +59,17 @@ table.vu-sheet th.vu-linked:hover { outline: 2px solid var(--accent); outline-of
 .vu-col-carried { background: var(--sunk); color: var(--muted); }
 .vu-col-absent { background: repeating-linear-gradient(135deg, var(--sunk), var(--sunk) 4px, var(--sunk-deep) 4px, var(--sunk-deep) 8px); color: var(--border-strong); }
 table.vu-sheet th.vu-col-absent { font-weight: 400; }
-.vu-col-cited { background: var(--info-ink); color: var(--on-dark); }
+/* The header names the column being traced; the fill lands on the ONE cell the
+   reader is here about, so a column of six values does not read as six answers. */
+.vu-col-cited { background: var(--sunk); color: var(--fg); }
+table.vu-sheet th.vu-col-cited { background: var(--info-ink); color: var(--on-dark); }
 table.vu-sheet th.vu-col-cited i { color: var(--on-dark); }
+table.vu-sheet td.vu-cell-cited { background: var(--info-ink); color: var(--on-dark); font-weight: 600; }
+
+/* Which row of the frame, so the sheet is a place in the data and not six rows. */
+table.vu-sheet th.vu-rowno { width: 1%; white-space: nowrap; color: var(--muted); font-weight: 400; text-align: right; font-size: 10.5px; padding-right: 11px; }
+table.vu-sheet tr.vu-traced th.vu-rowno { color: var(--info-ink); font-weight: 700; }
+table.vu-sheet tr.vu-traced td { border-top: 1px solid var(--info-bd); border-bottom: 1px solid var(--info-bd); }
 
 .vu-what { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 11px; }
 /* base.css already makes an h3 the small caps label; only the spacing is ours. */

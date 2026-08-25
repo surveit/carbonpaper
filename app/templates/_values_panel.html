@@ -45,6 +45,10 @@
     {%- endif %}
     {% if step.unreadable %}
     <p class="vu-nosheet">No sheet for this stage — {{ step.unreadable }}.</p>
+    {% elif not step.rows_reached %}
+    <p class="vu-nosheet">No row of <code>{{ step.stage_id }}</code> fed this figure. It writes
+      a column the value came through, but this run recorded none of its
+      {{ "{:,}".format(step.rows_total) }} rows behind this one.</p>
     {% else %}
     <div class="vu-legend">
       <span><i class="vu-sw vu-col-added"></i>written here</span>
@@ -55,6 +59,7 @@
     </div>
     <div class="table-scroll"><table class="vu-sheet">
       <thead><tr>
+        <th class="vu-rowno" title="where the row sits in this stage's frame">row</th>
         {%- for column_state in step.columns %}
         {%- set klass = 'vu-col-cited' if column_state.cited else 'vu-col-' ~ column_state.state %}
         {%- if column_state.writer %}
@@ -67,16 +72,21 @@
       </tr></thead>
       <tbody>
       {%- for row in step.rows %}
-        <tr>
+        {%- set ordinal = step.row_ordinals[loop.index0] %}
+        {%- set traced = step.stage_id == values.cited_stage and ordinal == values.row %}
+        <tr{% if traced %} class="vu-traced"{% endif %}>
+        <th class="vu-rowno" scope="row">{{ ordinal | row_number }}</th>
         {%- for cell in row %}
         {%- set state = step.columns[loop.index0] %}
-        {{- data_cell(cell, 'vu-col-cited' if state.cited else 'vu-col-' ~ state.state, '', false) }}
+        {{- data_cell(cell, ('vu-cell-cited ' if traced and state.cited else '') ~ 'vu-col-' ~ state.state, '', false) }}
         {%- endfor %}
         </tr>
       {%- endfor %}
       </tbody>
     </table></div>
-    <p class="vu-sheetfoot">{{ step.rows | length }} of {{ "{:,}".format(step.rows_total) }} rows
+    <p class="vu-sheetfoot">{{ step.rows | length }} of the
+      {{ "{:,}".format(step.rows_reached) }} row{% if step.rows_reached != 1 %}s{% endif %}
+      this figure came through, out of {{ "{:,}".format(step.rows_total) }} on the frame
       · {{ step.columns | rejectattr('state', 'equalto', 'absent') | list | length }} of
       {{ step.columns_total }} columns, the ones this value came through</p>
     {% endif %}

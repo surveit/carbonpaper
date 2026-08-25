@@ -14,10 +14,12 @@ from app.models.schema import StageId
 from app.models.stages.aggregate import AggregateStage
 from app.models.stages.signature import ExtendsSignature
 from app.services import run as run_service
+from app.services.scope import find_rows_reached_per_stage
 from app.services.workspace import resolve_run_dir
 from app.web.diagrams import TYPE_GLYPH, TYPE_LABEL
 from app.web.diff_state import ColumnDiffState
-from app.web.loading import load_output_preview, load_run_record
+from app.web.scope_view import read_run_branches
+from app.web.loading import load_output_rows_at, load_run_record
 from app.web.values_payload import (
     MinimapEdge,
     MinimapNode,
@@ -56,13 +58,17 @@ def load_values_used(
     records = {entry.stage_id: entry for entry in record.stage_records}
     run_dir = resolve_run_dir(project_id, run_id)
     order = order_sheet_columns(walk)
+    # The frame's first rows read as the figure's own, sometimes to the number.
+    reached = find_rows_reached_per_stage(
+        read_run_branches(project_id, run_id), [(stage_id, row)])
     return ValuesUsed(
         cited_stage=stage_id,
         column=column,
         row=row,
         steps=[
             _build_step(stages[sid], records.get(sid), run_dir, walk, graph, order,
-                        cited=ColumnAt(stage_id, column))
+                        cited=ColumnAt(stage_id, column),
+                        reached=sorted(reached.get(sid, ())))
             for sid in replayed
         ],
         minimap=_build_minimap(walk, replayed, stages),
@@ -97,10 +103,11 @@ def _build_step(
     graph: WriterGraph,
     order: list[str],
     cited: ColumnAt,
+    reached: list[int],
 ) -> ValuesStep:
     stage = workflow_stage.stage
-    preview = None if record is None else load_output_preview(
-        run_dir, record.output_path, SHEET_ROWS_SHOWN)
+    preview = None if record is None else load_output_rows_at(
+        run_dir, record.output_path, reached, SHEET_ROWS_SHOWN)
     unreadable = _say_why_no_sheet(record, preview)
     on_frame = set() if preview is None else {str(name) for name in preview["columns"]}
     new_sheet = _find_new_sheet(stage)
@@ -123,6 +130,8 @@ def _build_step(
         rows=[] if preview is None else [
             [str(row.get(name, "")) for name in present] for row in preview["preview"]
         ],
+        row_ordinals=[] if preview is None else list(preview.get("ordinals", ())),
+        rows_reached=len(reached),
         columns_total=len(on_frame),
         unreadable=unreadable,
     )
