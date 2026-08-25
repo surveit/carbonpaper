@@ -24,6 +24,9 @@
   var panels = {};
 
   var SEP = " ";
+  // Gutter mark against a branch the drawn rows are here by. A glyph, not a tint:
+  // highlight.js owns the code element's markup and rewrites it wholesale.
+  var MARK = "\u25B8";
   var tableOf = function (stageId) {
     return '<table class="data-preview" data-stage="' + esc(stageId) + '">';
   };
@@ -693,7 +696,9 @@
   }
 
   // Which arm ran is what this page knows and the panel does not, so the panel's own
-  // code block gives way to the same source with those lines lit.
+  // code block gives way to the same source, marked. Rebuilt from `stage.code`: the
+  // arms' line numbers are counted against that, and a panel that resolved a module
+  // reference to find its source need not be showing it.
   function lightTheArm(host, stageId) {
     var lit = new Set(armsTaken().reduce(function (all, fact) {
       return all.concat(lineRange(fact));
@@ -701,11 +706,12 @@
     var block = host.querySelector(".code-block pre.code");
     var stage = D.stages.find(function (s) { return s.id === stageId; });
     if (!block || !lit.size || !stage || !stage.code) return;
-    block.outerHTML = '<pre class="scope-source">' + stage.code.split("\n")
-      .map(function (line, i) {
-        var text = esc(line) || " ";
-        return lit.has(i + 1) ? '<span class="is-lit">' + text + "</span>" : text;
-      }).join("\n") + "</pre>";
+    var lines = stage.code.split("\n");
+    block.outerHTML =
+      '<pre class="code scope-lit"><span class="scope-gutter" aria-hidden="true">' +
+      lines.map(function (_, i) { return lit.has(i + 1) ? MARK : " "; }).join("\n") +
+      '</span><code class="language-python">' + esc(stage.code) + "</code></pre>" +
+      '<p class="muted scope-lit-legend">' + MARK + " a branch on these rows' path.</p>";
   }
 
   function armsTaken() {
