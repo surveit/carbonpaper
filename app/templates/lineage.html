@@ -31,7 +31,8 @@ html,body{height:100%}
 body{display:flex;flex-direction:column;overflow:hidden}
 /* The figure is the picker (see .picker.figure in static/picker.css); the line under
    it is the coordinate, and every part of that is the control that moves to another. */
-.lin-head{flex:none;padding:10px 22px 9px;background:var(--raised)}
+.lin-head{flex:none;padding:10px 22px 9px;background:var(--raised);
+  display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
 .lin-head h1{font-size:17px;margin:0;font-weight:600;
   display:flex;align-items:baseline;gap:11px;flex-wrap:wrap}
 .lin-head h1 code{background:var(--sunk-deep);padding:1px 5px;border-radius:4px}
@@ -40,7 +41,7 @@ body{display:flex;flex-direction:column;overflow:hidden}
 .lin-why{border:1px solid var(--border);border-radius:50%;color:var(--muted);cursor:help;
   font-size:10px;line-height:14px;width:15px;height:15px;text-align:center;margin-top:5px}
 .lin-why[hidden]{display:none}
-.lin-coord{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:7px}
+.lin-coord{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .lin-word{color:var(--muted);font-size:12.5px}
 .lin-rowbox{width:5em;font:inherit;font-size:12.5px;padding:5px 8px;color:var(--fg);
   border:1px solid var(--border);border-radius:8px;background:var(--raised)}
@@ -128,6 +129,10 @@ a.snavbtn:hover{background:var(--hover)}
   .step .right{grid-column:2;white-space:normal}
 }
 /* A step is one line of the story AND the control that puts that row in the panel. */
+/* Two lines: the author's own sentence, then how the stage got there. */
+.said{font-weight:500}
+.mech{color:var(--muted);font-size:12px}
+.mech .sid{color:var(--info-ink)}
 .step{display:grid;grid-template-columns:52px 1fr auto;gap:6px;align-items:baseline;width:100%;
   text-align:left;border:0;background:none;font:inherit;padding:5px 8px;border-radius:7px;
   cursor:pointer;border-left:3px solid transparent}
@@ -260,7 +265,7 @@ tr.lin-opens:hover td{background:var(--hover)}
   </div>
 {% endif %}
   <div class="lin-coord">
-    <label class="lin-word" for="lin-stage">at</label>
+    <label class="lin-word" for="lin-stage">on</label>
     {% call picker("Stages of this run", hint="the ones this run wrote rows for",
                   search_label="a stage", size="sm") %}
     <select id="lin-stage" class="picker-native">
@@ -422,24 +427,24 @@ let sel = V.nodes.length - 1, tab = 'row', scope = 'changed';
 const transformCache = {};
 
 // ---- The steps ------------------------------------------------------------
+// The step leads with what the author said this stage is for; the mechanism and
+// the stage id follow it, because a reader who trusts the first line never needs
+// them. Both sentences are written in app/web/stage_prose.py.
 function verb(n){
-  const k = n.transform.kind, sid = `<span class="sid">${esc(n.stage_id)}</span>`;
-  if(k==='python' || k==='starlark') return `run code ${sid} on row`;
-  // Whole-table code: it saw every row at once, so it did nothing "on row".
-  if(k==='python_frame') return `run code ${sid} on the table`;
-  if(k==='llm') return `ask the LLM in ${sid}`;
-  if(k==='union') return `carry through ${sid}`;
-  if(k==='filter_rows') return `run filter ${sid}`;
-  if(k==='aggregate') return `run aggregation ${sid}`;
-  if(k==='source') return n.source_file
-    ? `read ${sid} from <span class="sid">${esc(n.source_file)}</span>`
-    : `read ${sid}`;
-  return sid;
+  const sid = `<span class="sid">${esc(n.stage_id)}</span>`;
+  if(!n.description && !n.says) return sid;
+  return `<span class="said">${esc(n.description || n.says)}</span>`;
+}
+function mechanismOf(n){
+  const sid = `<span class="sid">${esc(n.stage_id)}</span>`;
+  // With no description the mechanism is already the lead, so it is not said twice.
+  const said = n.description && n.says ? `${esc(n.says)} · ` : '';
+  return `<span class="mech">${said}${sid}</span>`;
 }
 // What the step did to the row, off the same compare the panel shows.
 function deltaOf(n){
   const d = n.row_diff, parts = [];
-  if(d.added) parts.push(`<span class="add">+${d.added} field${d.added>1?'s':''}</span>`);
+  if(d.added) parts.push(`<span class="add">+${d.added} column${d.added>1?'s':''}</span>`);
   if(d.changed) parts.push(`<span class="chg">~${d.changed} changed</span>`);
   if(d.dropped) parts.push(`−${d.dropped} dropped`);
   // "no cell changed" is a comparison's result; with no parent row there was no
@@ -455,19 +460,19 @@ function sentenceOf(n){
   // this and the join case never both apply.
   const groups = n.contributor_groups || [];
   const on = groups.length
-    ? ' on ' + groups.map(g => groupName(g, groups.length > 1)).join('; ') : '';
-  return `${verb(n)}${on}`;
+    ? ' — summarizing ' + groups.map(g => groupName(g, groups.length > 1)).join('; ') : '';
+  return `${verb(n)}<br>${mechanismOf(n)}${on}`;
 }
 // A join leads with the reference row it brought in, and names the stage after
 // it: the row is what the reader traces next, and the added cells came from it,
 // not from the stage. Matching none is a recorded fact, not an inference from
 // null cells, so it is stated in the same place.
 function joinSentence(n){
-  const kind = n.transform.kind, sid = `<span class="sid">${esc(n.stage_id)}</span>`;
   const branches = n.branches || [];
-  return branches.length
-    ? `${kind} with ${branches.map(branchName).join(' and ')} in ${sid}`
-    : `${kind} in ${sid} — <span class="nomatch">no reference row matched</span>`;
+  const matched = branches.length
+    ? ` — matched ${branches.map(branchName).join(' and ')}`
+    : ' — <span class="nomatch">nothing matched this row</span>';
+  return `${verb(n)}<br>${mechanismOf(n)}${matched}`;
 }
 function renderSteps(){
   let html = '';
@@ -528,9 +533,9 @@ function fanInOf(n){
   const total = groups.reduce((sum, g) => sum + g.total, 0);
   return `${total} row${total > 1 ? 's' : ''} of ${esc(groups[0].stage_id)}`;
 }
-// A dropped field is not in this row, so there is no cell of it to read and the
+// A dropped column is not in this row, so there is no cell of it to read and the
 // line stays inert — every other line opens the lineage of the cell it prints.
-function fieldRow(f){
+function columnRow(f){
   const mark = {added:'+', changed:'~', dropped:'−', carried:''}[f.state];
   const text = f.text === '' ? '<span class="lin-null">(empty)</span>' : esc(f.text);
   const was = f.state === 'changed'
@@ -546,20 +551,20 @@ function saidOf(n, touched){
        + ` moved from <b>row ${n.base.row_number}</b> to <b>row ${n.row_number}</b>.</div>`;
 }
 function renderRowTab(n){
-  const fields = n.row_diff.fields;
-  const touched = fields.filter(f => f.state !== 'carried');
+  const columns = n.row_diff.columns;
+  const touched = columns.filter(c => c.state !== 'carried');
   // Nothing changed here → the "changed" scope would be an empty table, so the
   // whole row stands in rather than a blank pane.
-  const shown = (scope === 'changed' && touched.length) ? touched : fields;
+  const shown = (scope === 'changed' && touched.length) ? touched : columns;
   // With no parent nothing was compared, so there is no second view to offer.
   const picker = n.base ? `<div class="lin-scope">
       <button data-scope="changed" class="${scope==='changed'?'on':''}">Changed here (${touched.length})</button>
-      <button data-scope="all" class="${scope==='all'?'on':''}">Whole row (${fields.length})</button>
+      <button data-scope="all" class="${scope==='all'?'on':''}">Whole row (${columns.length})</button>
     </div>` : '';
   return `${picker}
     ${saidOf(n, touched)}
     ${baseLine(n)}
-    <table class="lin-row">${shown.map(fieldRow).join('')}</table>`;
+    <table class="lin-row">${shown.map(columnRow).join('')}</table>`;
 }
 // What this row was compared against. The origin says nothing when the title above
 // already names the file it was read from.

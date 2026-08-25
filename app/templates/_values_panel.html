@@ -14,8 +14,10 @@
 {% else %}
 <div class="vu" data-project="{{ project }}" data-run="{{ run_id }}" data-row="{{ values.row }}">
 <script type="application/json" class="vu-nav">{{ nav | tojson }}</script>
-<p class="vu-say">This view shows only the stages that can affect
-  <code>{{ column }}</code> and how they transformed the data.</p>
+<p class="vu-say"><b>Walk this value back to your input data.</b> Step
+  <b>◀ back</b> or use the arrow keys <kbd class="vu-key">&larr;</kbd>
+  <kbd class="vu-key">&rarr;</kbd> to see the sheet one stage earlier, and what that stage
+  did to the value. Only the stages that could change <code>{{ column }}</code> are here.</p>
 <div class="vu-maprow">
   <button class="vu-arrow" data-go="back" title="back one stage (left arrow)">◀</button>
   <div class="vu-map"><svg class="vu-wires"></svg>
