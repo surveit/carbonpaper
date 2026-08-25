@@ -1,7 +1,7 @@
 """One cache entry per input ROW, keyed by (stage-definition, input) fingerprints."""
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import ClassVar
 import json
 
