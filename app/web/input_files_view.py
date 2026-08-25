@@ -78,8 +78,7 @@ class InputFileSlice(BaseModel):
         return _share(len(self.columns_relevant), len(self.columns_read))
 
 
-# A slice of a big file draws as nothing at all, and a bar drawn as nothing reads
-# as a bar that failed to draw.
+# Below this a bar reads as one that failed to draw.
 NARROWEST_BAR = 0.5
 
 
