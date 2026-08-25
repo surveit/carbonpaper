@@ -391,7 +391,9 @@
     return running;
   }
 
+  // The "—" key is the same whether a row passed through branchless or was never here.
   function nodeAt(ci, i) {
+    if (!cameThrough(i, cols[ci].id)) return null;
     var want = nodeKey(cols[ci], i);
     return cols[ci].nodes.find(function (n) { return n.key === want; });
   }
