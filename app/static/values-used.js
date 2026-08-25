@@ -37,6 +37,10 @@ window.ValuesUsed = window.ValuesUsed || (function(){
     // The pane owns its scroll, so the document never moves when a step changes;
     // the reader still wants the new sheet from the top.
     view.scroll.scrollTop = 0;
+    // An arrow that would do nothing says so, rather than swallowing the click.
+    view.pane.querySelector('.vu-arrow[data-go="back"]').disabled =
+      !(view.nav.sources[here] || []).length;
+    view.pane.querySelector('.vu-arrow[data-go="fwd"]').disabled = view.trail.length < 2;
     drawWires(view);
     applyTabs(view);
   }
@@ -49,7 +53,42 @@ window.ValuesUsed = window.ValuesUsed || (function(){
     if(view.tab === 'transform') loadTransform(view, at(view));
   }
 
+  // Along an edge, so the step is already on the route.
   function goTo(view, stageId){ view.trail.push(stageId); show(view); }
+
+  // A click lands anywhere on the map, so the trail is re-laid as the route from the
+  // figure to that stage. Pushing a jump made it a click history instead, leaving
+  // stages the value never came through lit as walked.
+  function jumpTo(view, stageId){
+    const seen = view.trail.indexOf(stageId);
+    if(seen >= 0) view.trail = view.trail.slice(0, seen + 1);
+    else if((view.nav.sources[at(view)] || []).some(s => s.stage_id === stageId))
+      view.trail.push(stageId);
+    else view.trail = findRoute(view, stageId);
+    show(view);
+  }
+
+  // Breadth-first over the sources, so a jump lands on the shortest route the
+  // value took from the figure to that stage. A stage off every route — which the
+  // minimap can hold, since it draws the whole walk — stands alone.
+  function findRoute(view, stageId){
+    const start = view.nav.cited_stage, cameFrom = {}, queue = [start];
+    cameFrom[start] = null;
+    while(queue.length){
+      const here = queue.shift();
+      if(here === stageId){
+        const route = [];
+        for(let step = stageId; step !== null; step = cameFrom[step]) route.unshift(step);
+        return route;
+      }
+      for(const source of view.nav.sources[here] || []){
+        if(source.stage_id in cameFrom) continue;
+        cameFrom[source.stage_id] = here;
+        queue.push(source.stage_id);
+      }
+    }
+    return [stageId];
+  }
 
   function stepBack(view){
     const sources = view.nav.sources[at(view)] || [];
@@ -129,11 +168,11 @@ window.ValuesUsed = window.ValuesUsed || (function(){
       const control = event.target.closest(CONTROLS);
       if(control) control.focus({preventScroll: true});
       const header = event.target.closest('th.diff-col-jump');
-      if(header) return goTo(view, header.dataset.jump);
+      if(header) return jumpTo(view, header.dataset.jump);
       const tab = event.target.closest('.vu-steptabs button');
       if(tab){ view.tab = tab.dataset.tab; return applyTabs(view); }
       const node = event.target.closest('.vu-node');
-      if(node) return goTo(view, node.dataset.node);
+      if(node) return jumpTo(view, node.dataset.node);
       const fork = event.target.closest('.vu-forkopt');
       if(fork){ closeFork(view); return goTo(view, fork.dataset.fork); }
       const arrow = event.target.closest('.vu-arrow');
