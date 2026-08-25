@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from app.core.errors import RowOutOfRange, StageNotInRun
+from app.runtime.branches import RowBranches
 from app.runtime.trace import trace_row
 from test_trace_helpers import write_run
 
@@ -28,6 +29,21 @@ def test_row_preserving_chain_traces_to_origin(tmp_path):
     assert trace.steps[0].columns_new == ["score"]               # new at enrich
     assert trace.steps[0].origin == "computed"
     assert trace.steps[1].columns_new == ["facility_id", "name"]  # origin: all new
+    assert trace.end.reached_origin is True
+
+
+def test_a_stage_that_recorded_only_its_branches_still_crosses(tmp_path):
+    seeds = pd.DataFrame({"facility_id": ["a", "b"], "name": ["A", "B"]})
+    # Branches ride in the lineage sidecar; no parents must not read as none.
+    run_dir = write_run(tmp_path, [
+        {"id": "seeds", "type": "input_data", "parents": [], "df": seeds},
+        {"id": "tier", "type": "python_row_function", "parents": ["seeds"],
+         "df": seeds.assign(tier=["high", "low"]),
+         "branches": RowBranches([("transform/0:if",), ("transform/0:else",)])},
+    ])
+
+    trace = trace_row(run_dir, "tier", 1)
+    assert [s.stage_id for s in trace.steps] == ["tier", "seeds"]
     assert trace.end.reached_origin is True
 
 
