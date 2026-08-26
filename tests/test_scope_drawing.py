@@ -150,3 +150,19 @@ def test_the_stages_below_the_rows_own_stage_are_still_drawn(run_id):  # noqa: F
         drawn = {column.stage.id: len(column.bars) for column in drawing.columns}
         assert drawn.get(scope.citation.stage_id), "the drawing stops above the figure"
         assert not [at for at, bars in drawn.items() if not bars]
+
+
+def test_a_cell_of_the_frame_it_was_read_into_is_merged_from_nothing(run_id):  # noqa: F811
+    scope = read_map(PROJECT, run_id, "load_east", "amount")
+    bar = next(b for d in both_drawings(scope) for c in d.columns
+               for b in c.bars if b.is_figure)
+    assert "merged from" not in bar.label
+    assert bar.label.startswith("amount = ")
+
+
+def test_one_column_is_drawn_no_taller_than_its_labels(run_id):  # noqa: F811
+    scope = read_map(PROJECT, run_id, "load_east", "amount")
+    for drawing in both_drawings(scope):
+        assert len(drawing.columns) == 1
+        assert not drawing.ribbons
+        assert drawing.height < 200, "a lone row was drawn as a slab"
