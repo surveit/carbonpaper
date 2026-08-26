@@ -21,6 +21,8 @@ from app.services.review_packet.views import RunView, build_run_view
 from app.services.run_guide import RunGuideView, build_run_guide_view
 from app.services.workspace import resolve_run_dir
 from app.web.diagrams import build_mermaid_graph
+from app.web.review_packet.claims import build_packet_claims
+from app.web.review_packet.front_page import build_packet_front_page
 from app.web.review_packet.lineage import write_packet_lineage
 from app.web.review_packet.pages import write_packet_pages
 
@@ -51,6 +53,10 @@ def export_review_packet(project_id: str, run_id: str, dest_root: Path) -> Revie
     with log_elapsed(_log, f"{project_id}/{run_id} lineage"):
         lineage = write_packet_lineage(
             root, run_dir, view, workflow_stages_by_id, manifest)
+    guide = _load_guide(project_id, manifest)
+    # `workflow_stages or None` is the difference between "nothing blocked"
+    # and "no edges to say what was blocked" — build_run_issues reads it.
+    issues = build_run_issues(manifest, workflow_stages or None)
     with log_elapsed(_log, f"{project_id}/{run_id} pages"):
         pages = write_packet_pages(
             root,
@@ -58,12 +64,15 @@ def export_review_packet(project_id: str, run_id: str, dest_root: Path) -> Revie
             view,
             data,
             lineage,
-            _load_guide(project_id, manifest),
+            guide,
             _build_diagram(workflow_stages, project_id, view),
-            # `workflow_stages or None` is the difference between "nothing blocked"
-            # and "no edges to say what was blocked" — build_run_issues reads it.
-            build_run_issues(manifest, workflow_stages or None),
+            issues,
             workflow_stages_by_id,
+            build_packet_front_page(
+                project_id, root, view, data, lineage, issues,
+                build_packet_claims(view.run_id or run_id, frozenset(lineage.traced)),
+                guide is not None,
+            ),
         )
     with log_elapsed(_log, f"{project_id}/{run_id} checksums"):
         checksums = write_checksums(root)

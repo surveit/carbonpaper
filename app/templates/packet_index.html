@@ -2,6 +2,28 @@
 {% block title %}Review packet · {{ run.project }} · {{ run.run_id }}{% endblock %}
 {% block content %}
 
+{# The first screenful is for someone who has never used this app and never will:
+   what the method set out to answer, and the run that answered it. The run's own
+   identifiers stay — they are how a second reader finds the same record — but under
+   the question rather than in place of it. #}
+<div class="packet-masthead">
+  <h1>{{ front.headline.title }}</h1>
+  {% if front.headline.standfirst %}<p class="packet-lede">{{ front.headline.standfirst }}</p>{% endif %}
+  <p class="packet-ground">
+    {%- if front.headline.started_at %}Run {{ front.headline.started_at }}{% else %}Run <code>{{ front.headline.run_id }}</code>{% endif %}
+    {%- if front.headline.duration %}<span class="sep">·</span>{{ front.headline.duration }}{% endif %}
+    <span class="sep">·</span>{{ front.headline.step_count }} step{{ "" if front.headline.step_count == 1 else "s" }}
+    <span class="sep">·</span><span class="run-status status-{{ run.status }}">{{ run.status }}</span>
+    <span class="sep">·</span>project <code>{{ front.headline.project_id }}</code>
+    <span class="sep">·</span>run <code>{{ front.headline.run_id }}</code>
+    {%- if front.headline.version_id %}<span class="sep">·</span>workflow version <code>{{ front.headline.version_id }}</code>{% endif %}
+  </p>
+</div>
+
+{% if run.is_test_run %}
+<p class="banner banner-review">🧪 <strong>Workflow test</strong> — this was a test run. Its numbers are not the project's published output.</p>
+{% endif %}
+
 {# The run view's own two columns (run-page.css): the guide is the LEFT spine, the
    body the work surface, and a packet whose version carries no guide takes the whole
    width. The rail is titled here, as the run page titles it, so the guide partial
@@ -17,42 +39,77 @@
 
 <div class="run-main">
 
-<div class="stage-header">
-  <h1>Run <code>{{ run.run_id }}</code></h1>
-  <span class="run-status status-{{ run.status }}">{{ run.status }}</span>
-  <p class="stage-id">project <strong>{{ run.project }}</strong> · started {{ run.started_at }}{% if run.finished_at %} · finished {{ run.finished_at }}{% endif %}{% if run.workflow_version %} · workflow version <code>{{ run.workflow_version }}</code>{% endif %}</p>
-</div>
-
-{% if run.is_test_run %}
-<p class="banner banner-review">🧪 <strong>Workflow test</strong> — this was a test run. Its numbers are not the project's published output.</p>
+{# The figures the run declared as its answer, in the publish stage's own words and
+   in the app's own outputs vocabulary (run-page.css). A packet has no rows route, so
+   a value opens the lineage page for its row where this packet wrote one. #}
+{% if front.claims.leads or front.claims.rest %}
+<section class="wf-outputs">
+  <h2>What this run published</h2>
+  <p class="wf-note">{% if front.claims.any_traced() %}Every figure was read from a row of a step's output, and opens that row.{% else %}Every figure was read from a row of a step's output; the step pages below hold those rows.{% endif %}</p>
+  {%- if front.claims.leads %}
+  <h3 class="wf-group">Headline claims</h3>
+  <div class="wf-leads{% if front.claims.leads | length > 2 %} crowded{% endif %}">
+    {%- for claim in front.claims.leads %}
+    <div class="wf-lead">
+      <span class="wf-big">{% if claim.href %}<a href="{{ claim.href }}"
+        title="Open the row this value was read from">{{ claim.value }}</a>{% else %}{{ claim.value }}{% endif %}</span>
+      <span class="wf-of">{{ claim.label | lower }}</span>
+    </div>
+    {%- endfor %}
+  </div>
+  {%- endif %}
+  {%- if front.claims.rest %}
+  <h3 class="wf-group">Secondary claims</h3>
+  <table class="wf-rest">
+    {%- for claim in front.claims.rest %}
+    <tr>
+      <th scope="row">{{ claim.label }}</th>
+      <td>{% if claim.href %}<a class="wf-value" href="{{ claim.href }}"
+             title="Open the row this value was read from">{{ claim.value }}</a>{% else %}<span class="wf-value">{{ claim.value }}</span>{% endif %}</td>
+    </tr>
+    {%- endfor %}
+  </table>
+  {%- endif %}
+</section>
 {% endif %}
 
-<p class="banner">📦 <strong>What this is.</strong> Everything this run read, did and produced —
-  enough to check the result without the software that made it. Read
-  <a href="methodology.md">methodology.md</a> for what the author set out to do,
-  {% if guide %}the run walkthrough beside this for what they say is worth scrutinising,{% endif %}
-  then each step for what actually ran.</p>
-
-{# What this run's own records say went wrong — the same index the run page carries
-   above its graph, and here the packet's only statement of it: a step page shows
-   its rows and its transform, not a verdict on them. #}
-{% include "_run_issues.html" %}
-
-{# The files a publish stage wrote, the same section the run page leads its results
-   with — here as relative links into artifacts/, so they open from the folder. #}
-{% if artifacts %}
+{# The files a publish stage wrote, as relative links into artifacts/, so they open
+   from the folder. Sized, because a stranger deciding what to open reads the size. #}
+{% if front.files %}
 <section>
   <h2>Run outputs</h2>
-  <ul class="run-outputs">
-    {% for path in artifacts %}<li><a href="{{ path }}">{{ path }}</a></li>{% endfor %}
+  <p class="muted packet-note">The files this run published, copied into this folder as it wrote them.</p>
+  <ul class="packet-files">
+    {% for file in front.files %}
+    <li><a href="{{ file.href }}">{{ file.name }}</a><span class="packet-file-note">{{ file.size }}{% if file.folder %} · {{ file.folder }}{% endif %}</span></li>
+    {% endfor %}
   </ul>
 </section>
 {% endif %}
 
+{# What a sceptic does next, counted rather than described: every line names a real
+   number this run recorded and points at the file or section holding it. #}
+<section class="packet-checks">
+  <h2>How to check this</h2>
+  <p class="muted packet-note">Everything named here is in this folder, and nothing on this page needs the software that made it.</p>
+  <ol>
+    {% for check in front.checks %}
+    <li><strong>{{ check.lead }}</strong> {{ check.text }}
+      {%- for link in check.links %} <a href="{{ link.href }}">{{ link.text }}{% if link.href.startswith("#") %} →{% endif %}</a>{% endfor %}</li>
+    {% endfor %}
+  </ol>
+</section>
+
+{# What this run's own records say went wrong — the same index the run page carries
+   above its graph, and here the packet's only statement of it: a step page shows
+   its rows and its transform, not a verdict on them. #}
+{% if issues.stopped or issues.flagged %}<h2>What the run flagged</h2>{% endif %}
+{% include "_run_issues.html" %}
+
 {# The figures the published files printed, in the words the publish stage gave
    them, each opening the rows behind it. #}
 {% if lineage.figures %}
-<section>
+<section id="packet-provenance">
   <h2>Row provenance</h2>
   <p class="muted">Every figure the published files print, and the rows it was counted from.</p>
   <table class="schema">
@@ -71,7 +128,7 @@
 {% endif %}
 
 {% if run.stages %}
-<section>
+<section id="packet-workflow">
   <h2>The workflow this run executed</h2>
   {# Zoom, pan and fullscreen through the app's own diagram_viewport.js. NOT the run
      page's minimap band: there the graph is navigation beside the work, here it is the
@@ -116,7 +173,7 @@
 </section>
 {% endif %}
 
-<section>
+<section id="packet-inputs">
   <h2>Inputs this run read</h2>
   {% if run.inputs %}
   <p class="muted packet-note">The hash is what the run recorded when it read the file — check the
@@ -158,6 +215,21 @@
 
 </div>{# /.run-main #}
 </div>{# /.run-shell #}
+
+{# Provenance: who wrote this folder, from which run, and the address the tool is at.
+   The address is TEXT, not an anchor — the packet loads and links nothing off this
+   machine, and an address a reader retypes still works with the network off. #}
+<div class="packet-colophon">
+  <p>Written by Carbon Paper on {{ front.colophon.written_at }}, from run
+    <code>{{ front.colophon.run_id }}</code> of project <code>{{ front.colophon.project_id }}</code>{% if front.colophon.version_id %},
+    pinned to workflow version <code>{{ front.colophon.version_id }}</code>{% endif %}.</p>
+  <p>{% if front.colophon.document_href or front.colophon.workflow_href %}The method it ran is
+    {%- if front.colophon.document_href %} <a href="{{ front.colophon.document_href }}">{{ front.colophon.document_href }}</a>{% endif %}
+    {%- if front.colophon.document_href and front.colophon.workflow_href %} and{% endif %}
+    {%- if front.colophon.workflow_href %} <a href="{{ front.colophon.workflow_href }}">{{ front.colophon.workflow_href }}</a>{% endif %},
+    in this folder. {% endif %}The tool that wrote it:
+    <code class="packet-source">{{ front.colophon.source_url }}</code></p>
+</div>
 
 {% if mermaid %}
 <script src="{{ node_script }}"></script>

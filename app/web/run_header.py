@@ -216,11 +216,11 @@ def list_artifact_links(
 def measure_elapsed_seconds(
     started_at: str | None, finished_at: str | None, *, still_running: bool
 ) -> float | None:
-    start = _read_timestamp(started_at)
+    start = read_timestamp(started_at)
     if start is None:
         return None
     if finished_at:
-        end = _read_timestamp(finished_at)
+        end = read_timestamp(finished_at)
     else:
         end = datetime.now(tz=start.tzinfo) if still_running else None
     if end is None:
@@ -393,7 +393,7 @@ def _read_text(value: object) -> str | None:
     return text or None
 
 
-def _read_timestamp(value: str | None) -> datetime | None:
+def read_timestamp(value: str | None) -> datetime | None:
     if value is None:
         return None
     try:

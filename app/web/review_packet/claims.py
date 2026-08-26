@@ -1,5 +1,4 @@
-"""The figures a run declared as its workflow outputs, addressed at the packet's own
-lineage pages rather than at routes the folder has no server for."""
+"""The figures a run published, addressed at the packet's own lineage pages."""
 from __future__ import annotations
 
 from pydantic import BaseModel
