@@ -10,6 +10,7 @@ Docs are in `docs/`. Index:
 - [llm-transform-output-spec.md](docs/llm-transform-output-spec.md) — what an `llm_transform` reply must carry: 1:1, append-only, 1:N as one array column.
 - [run-and-review-ui.md](docs/run-and-review-ui.md) — the operator screens and the routers, templates and CSS behind them.
 - [visual-language.md](docs/visual-language.md) — where colour comes from, error vs warning, the agent mark, and the arch tests holding each.
+- [figure-card.md](docs/figure-card.md) — the permalink for one published figure: what counts as one, what the receipt reads off, and why there is no `og:image`.
 - [run-manifest.md](docs/run-manifest.md) — a run's own record: areas, why `exclude_unset` is load-bearing, and the queue halt's sidecar.
 - [branch-analysis.md](docs/branch-analysis.md) — what a branch is, which are recorded and which are worked out, and what you can ask once every row carries them.
 - [self-hosting.md](docs/self-hosting.md) — serving it to other people: the file-upload endpoint and its quotas, and the Fly.io deploy.

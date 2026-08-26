@@ -97,6 +97,16 @@ def build_eval_run_crumbs(
     ]
 
 
+def build_figure_crumbs(project_id: str, run_id: str, *, label: str) -> list[Crumb]:
+    """No switcher: the figure card is read by someone with no other project in mind."""
+    return [
+        _home(),
+        _link(read_project_name(project_id), _project_href(project_id)),
+        _link(run_id, _run_href(project_id, run_id), is_code=True),
+        _here(label),
+    ]
+
+
 def build_home_crumbs(here: str) -> list[Crumb]:
     return [_home(), _here(here)]
 

@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse
 from app.models.citations import CitedValue
 from app.models.claims import StageOutputCellCitation
 from app.runtime.citations import read_citations
-from app.web.breadcrumbs import build_run_child_crumbs
+from app.web.breadcrumbs import build_figure_crumbs, build_run_child_crumbs
 from app.web.config import templates
 from app.web.figure_card import describe_figure_for_a_link_preview, load_figure_card
 from app.web.loading import load_run_record
@@ -50,7 +50,8 @@ async def figure_card_page(request: Request, project_id: str, run_id: str,
     return templates.TemplateResponse(
         request, "figure_card.html",
         {"card": card, "preview": describe_figure_for_a_link_preview(card),
-         "page_url": str(request.url)},
+         "page_url": str(request.url),
+         "crumbs": build_figure_crumbs(project_id, run_id, label=card.label)},
     )
 
 

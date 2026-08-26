@@ -36,12 +36,12 @@
     {% include "_stylesheets.html" %}
 </head>
 <body>
+<header>
+    {% include "_breadcrumbs.html" %}
+</header>
 <main class="fc-page">
 
-    <p class="fc-mark">
-        <a href="/">{% include "_wordmark.html" %}</a>
-        <span>a published figure, with its receipt</span>
-    </p>
+    <p class="fc-mark">a published figure, with its receipt</p>
 
     <div class="fc-claim">
         <p class="fc-label">{{ card.label }}</p>
