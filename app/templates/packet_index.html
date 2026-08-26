@@ -219,8 +219,9 @@
 </div>{# /.run-shell #}
 
 {# Provenance: who wrote this folder, from which run, and the address the tool is at.
-   The address is TEXT, not an anchor — the packet loads and links nothing off this
-   machine, and an address a reader retypes still works with the network off. #}
+   TEXT, not an anchor: the pages the packet writes for itself hold no outbound link,
+   and an address read off the page works with the network off either way. (A cell
+   value still renders whatever address its source supplied — that is the data.) #}
 <div class="packet-colophon">
   <p>Written by Carbon Paper on {{ front.colophon.written_at }}, from run
     <code>{{ front.colophon.run_id }}</code> of project <code>{{ front.colophon.project_id }}</code>{% if front.colophon.version_id %},
