@@ -199,17 +199,6 @@
 <script src="/static/run_log.js"></script>
 <script>
 (function () {
-  const tabs = document.querySelector('.stage-tabs');
-  const panes = document.querySelectorAll('.pane');
-  tabs.querySelectorAll('[data-tab]').forEach(function (button) {
-    button.addEventListener('click', function () {
-      tabs.querySelectorAll('[data-tab]').forEach(function (b) {
-        b.classList.toggle('active', b === button);
-      });
-      panes.forEach(function (p) { p.hidden = p.dataset.pane !== button.dataset.tab; });
-    });
-  });
-
   // Hides the rows that matched. A client-side filter, not a second fetch: the
   // whole rendered table is already here and the counts above it stay the run's.
   const failuresOnly = document.getElementById('failures-only');

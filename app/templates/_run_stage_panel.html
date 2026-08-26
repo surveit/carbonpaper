@@ -238,22 +238,6 @@
   if (!root || root._wired) return;
   root._wired = true;
 
-  // ── tabs ──
-  // Opens on the data: someone arriving from the run walkthrough, the graph or a deep
-  // link is checking the numbers this step produced; the code is what they descend
-  // to when the numbers look wrong. The markup opens the same pane, so the first
-  // paint needs no script.
-  let tab = 'data';
-  function apply() {
-    root.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-    root.querySelectorAll('.pane').forEach(p => { p.hidden = p.dataset.pane !== tab; });
-  }
-  root.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; apply(); }));
-  // The run page's issue index deep-links a line to the tab that answers it, so
-  // the panel publishes its switcher rather than each caller re-finding the buttons.
-  root._selectTab = function (name) { tab = name; apply(); };
-  apply();
-
   const meth = root.dataset.project, run = root.dataset.run, stage = root.dataset.stage;
 
   // ── this stage's run log ──

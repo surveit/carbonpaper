@@ -29,10 +29,10 @@
   {# ── Input → Transform → Output → Spec (schema view, like the runs Schema layer) ── #}
   <div class="stage-tabs nr-tabs">
     <div class="tabs">
-      <button type="button" data-nrtab="inputs">Inputs</button>
-      <button type="button" data-nrtab="transform" class="active">Transform</button>
-      <button type="button" data-nrtab="outputs">Outputs</button>
-      <button type="button" data-nrtab="spec">Spec (JSON)</button>
+      <button type="button" data-tab="inputs">Inputs</button>
+      <button type="button" data-tab="transform" class="active">Transform</button>
+      <button type="button" data-tab="outputs">Outputs</button>
+      <button type="button" data-tab="spec">Spec (JSON)</button>
     </div>
   </div>
 
@@ -111,15 +111,6 @@
   const STAGE_ID = panel.dataset.stageId;
   const EDIT_URL = `/project/${encodeURIComponent(PROJECT)}/node/${encodeURIComponent(STAGE_ID)}/edit`;
   const GENERATE_TESTS_URL = `/project/${encodeURIComponent(PROJECT)}/node/${encodeURIComponent(STAGE_ID)}/generate-tests`;
-
-  // ── Input/Transform/Output/Spec tabs ──
-  const tabs = panel.querySelectorAll('[data-nrtab]');
-  const panes = panel.querySelectorAll('.nr-panes .pane');
-  function showTab(name) {
-    tabs.forEach(b => b.classList.toggle('active', b.dataset.nrtab === name));
-    panes.forEach(p => { p.hidden = (p.dataset.pane !== name); });
-  }
-  tabs.forEach(b => b.addEventListener('click', () => showTab(b.dataset.nrtab)));
 
   const specEl = panel.querySelector('[data-role="spec"]');
   const editMsg = panel.querySelector('[data-role="edit-msg"]');

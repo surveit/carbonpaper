@@ -11,6 +11,7 @@
   });
 </script>
 <script src="/static/diagram_viewport.js"></script>
+<script src="/static/stage-panel.js"></script>
 {% endblock %}
 
 {# Its own trail, not the shell's: the last rung is THIS run, not the Runs section. #}
@@ -395,21 +396,11 @@
     document.getElementById('run-stage-section').hidden = false;
     panel.classList.add('loading');
     try {
-      const r = await fetch(`/project/${encodeURIComponent(PROJECT)}/runs/${encodeURIComponent(RUN_ID)}/stage/${encodeURIComponent(stageId)}/partial`);
-      if (!r.ok) { panel.innerHTML = `<div class="empty-state"><h2>Error</h2><p>${r.status} loading stage <code>${stageId}</code></p></div>`; return; }
-      panel.innerHTML = await r.text();
-      // innerHTML does not execute <script> tags — re-create them so the panel's
-      // tab-switching + scratch-preview JS runs.
-      panel.querySelectorAll('script').forEach(old => {
-        const s = document.createElement('script');
-        if (old.src) s.src = old.src; else s.textContent = old.textContent;
-        old.replaceWith(s);
-      });
-      // The re-created scripts have run by now, so the panel has published its
-      // tab switcher.
+      const url = `/project/${encodeURIComponent(PROJECT)}/runs/${encodeURIComponent(RUN_ID)}` +
+                  `/stage/${encodeURIComponent(stageId)}/partial`;
+      if (!await loadStagePanel(panel, url, stageId)) return;
       const card = panel.querySelector('.run-stage-panel');
-      if (opts && opts.tab && card && card._selectTab) card._selectTab(opts.tab);
-      if (location.hash !== `#${stageId}`) history.replaceState(null, '', `#${stageId}`);
+      if (opts && opts.tab && card) selectTab(card, opts.tab);
       focusGraphNode(stageId, { pulse: !opts || opts.pulse !== false,
                                 animate: !opts || opts.animate !== false });
       // Animated, so the reader sees where the page went rather than being

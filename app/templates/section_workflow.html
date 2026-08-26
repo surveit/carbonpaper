@@ -40,6 +40,7 @@
   });
 </script>
 <script src="/static/diagram_viewport.js"></script>
+<script src="/static/stage-panel.js"></script>
 {% endblock %}
 
 {% block section %}
@@ -160,44 +161,15 @@
   const wfDetail = document.getElementById('wf-detail');
 
   let activeStageId = null;
-  // Outline the open node in the graph so the open panel and the graph agree on
-  // which stage is selected. Retries briefly if the svg hasn't rendered yet (a deep-link
-  // on load races the async mermaid render).
-  function highlightGraphNode(stageId, _tries) {
-    const svg = document.querySelector('.diagram-viewport svg');
-    if (!svg) {
-      if (stageId && (_tries || 0) < 12) setTimeout(() => highlightGraphNode(stageId, (_tries || 0) + 1), 300);
-      return;
-    }
-    svg.querySelectorAll('g.node.wf-node-active').forEach(n => n.classList.remove('wf-node-active'));
-    if (!stageId) return;
-    const esc = (window.CSS && CSS.escape) ? CSS.escape(stageId) : stageId;
-    // mermaid renders each flowchart node as <g class="node …" id="flowchart-<id>-<n>">
-    let node = svg.querySelector('g.node[id^="flowchart-' + esc + '-"]');
-    if (!node) node = svg.querySelector('g.node[id*="' + esc + '"]');   // fallback across versions
-    if (node) node.classList.add('wf-node-active');
-  }
 
   async function loadStage(stageId) {
     if (!stageId || !panel) return;
     if (wfDetail) wfDetail.classList.add('loading');
     try {
-      const r = await fetch(`/project/${encodeURIComponent(METHODOLOGY)}/node/${encodeURIComponent(stageId)}/panel`);
-      if (!r.ok) {
-        panel.innerHTML = `<div class="empty-state"><h2>Error</h2><p>${r.status} loading stage <code>${stageId}</code></p></div>`;
-        return;
-      }
-      panel.innerHTML = await r.text();
-      // innerHTML does not execute <script> tags — re-create them so the panel's
-      // decision/edit JS runs (same trick run_detail.html uses for its stage panel).
-      panel.querySelectorAll('script').forEach(old => {
-        const s = document.createElement('script');
-        if (old.src) s.src = old.src; else s.textContent = old.textContent;
-        old.replaceWith(s);
-      });
-      if (location.hash !== `#${stageId}`) { history.replaceState(null, '', `#${stageId}`); }
+      const url = `/project/${encodeURIComponent(METHODOLOGY)}/node/${encodeURIComponent(stageId)}/panel`;
+      if (!await loadStagePanel(panel, url, stageId)) return;
       activeStageId = stageId;
-      highlightGraphNode(stageId);
+      outlineGraphNode(stageId);
       // The detail sits below the (possibly tall) graph — bring it into view.
       if (wfDetail) wfDetail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     } finally {
@@ -229,7 +201,7 @@
     mermaidEl.removeAttribute('data-processed');
     mermaidEl.textContent = src;
     try {
-      const refit = () => { const vp = mermaidEl.closest('.diagram-viewport'); if (vp && vp._refit) vp._refit(); highlightGraphNode(activeStageId); };
+      const refit = () => { const vp = mermaidEl.closest('.diagram-viewport'); if (vp && vp._refit) vp._refit(); outlineGraphNode(activeStageId); };
       const p = mermaid.run({ nodes: [mermaidEl] });
       if (p && p.then) p.then(refit); else refit();
     } catch (e) {}
