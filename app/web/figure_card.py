@@ -1,5 +1,4 @@
-"""One published figure as a page for a reader outside the project: the claim, the
-number, and what the run recorded behind it. Reads the scope map, adds nothing to it."""
+"""One published figure, for a reader outside the project. docs/figure-card.md"""
 
 from __future__ import annotations
 

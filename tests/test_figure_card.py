@@ -1,5 +1,4 @@
-"""The shareable figure card: what it claims, what it refuses, and what it will not
-guess when the run recorded no lineage."""
+"""What the figure card claims, refuses, and will not guess. docs/figure-card.md"""
 from __future__ import annotations
 
 import pytest
