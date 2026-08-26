@@ -5,8 +5,13 @@
 
 #input-files-root { padding: 16px 22px 0; }
 
+.if-lede { font-size: 13.5px; margin: 0 0 14px; max-width: 92ch; }
+
 .if-toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
     margin-bottom: 14px; }
+.if-choose { display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--border); }
+.if-choose p { margin: 0; font-size: 12.5px; color: var(--muted); max-width: 62ch; }
 .if-toggles { display: flex; gap: 16px; margin-left: auto; }
 .if-tg { display: flex; }
 .if-tg button { font: inherit; font-size: 12.5px; padding: 6px 12px;
@@ -56,7 +61,12 @@
 .if-table th { position: sticky; top: 0; }
 .if-rownum { text-align: right; color: var(--muted);
     font-variant-numeric: tabular-nums; }
-tr[data-relevant="no"] td { color: var(--muted); background: var(--sunk); }
+/* Shown but not read: the same greying wherever a column or row appears, so a cell
+ * in both reads the same as a cell in one. */
+.if-shape[data-relevant="no"] > .shape-col > summary { color: var(--muted);
+    background: var(--sunk); }
+tr[data-relevant="no"] td,
+.if-table :is(th, td)[data-relevant="no"] { color: var(--muted); background: var(--sunk); }
 .if-null { color: var(--muted); font-style: italic; }
 
 .if-download { text-decoration: none; white-space: nowrap; }

@@ -17,6 +17,9 @@
      data-row="{{ view.citation.row_ordinal }}"
      data-rows="relevant" data-columns="relevant">
 
+  <p class="if-lede">Explore input files by looking at their overall contents and which
+    contents were read to calculate the value(s) selected.</p>
+
   <div class="if-toolbar">
     {% call picker("Choose file", hint="The files this run read", size="sm") %}
     <select id="if-file" class="picker-native if-file">
@@ -29,14 +32,6 @@
     </select>
     {% endcall %}
     <code class="if-stage">{{ view.files[0].stage_id }}</code>
-    <span class="if-toggles">
-      <span class="if-tg" data-axis="rows">
-        <button type="button" class="on" data-pick="relevant">Relevant rows</button
-        ><button type="button" data-pick="all">All rows</button></span>
-      <span class="if-tg" data-axis="columns">
-        <button type="button" class="on" data-pick="relevant">Relevant columns</button
-        ><button type="button" data-pick="all">All columns</button></span>
-    </span>
   </div>
 
   {% for file in view.files %}
@@ -60,6 +55,18 @@
           <i class="if-need" style="width: {{ file.columns_percent }}%"></i></span>
         <span class="if-num"><b>{{ file.columns_relevant | length }}</b> /
           {{ file.columns_read | length }}</span></div>
+      <div class="if-choose">
+        <p>View input files by the data used to compute this figure, or all rows and
+          columns read by the run.</p>
+        <span class="if-toggles">
+          <span class="if-tg" data-axis="rows">
+            <button type="button" class="on" data-pick="relevant">Relevant rows</button
+            ><button type="button" data-pick="all">All rows</button></span>
+          <span class="if-tg" data-axis="columns">
+            <button type="button" class="on" data-pick="relevant">Relevant columns</button
+            ><button type="button" data-pick="all">All columns</button></span>
+        </span>
+      </div>
     </div>
 
     <div class="if-sec">
