@@ -12,6 +12,7 @@ from app.models.records.run_manifest import RunManifest
 from app.models.records.working_copy import WorkingCopy
 from app.models.run_manifest import StageRecord
 from app.models.stages.stage_base import StageType
+from app.services.workspace import resolve_project_dir
 from app.web.admin.activity import read_instance_activity
 
 client = TestClient(app)
@@ -37,8 +38,14 @@ def _store_run(
     ).save()
 
 
-def _store_project(project: str, *, stages_saved: bool, created_at: str) -> None:
-    Project(id=project, name=project, created_at=created_at).save()
+def _store_project(
+    project: str, *, stages_saved: bool, created_at: str,
+    private: bool = False, on_disk: bool = True,
+) -> None:
+    # A project IS its directory: the listing this page reads drops one without it.
+    if on_disk:
+        resolve_project_dir(project).mkdir(parents=True, exist_ok=True)
+    Project(id=project, name=project, created_at=created_at, private=private).save()
     if stages_saved:
         WorkingCopy(id=project, stages=[]).save()
 
@@ -91,7 +98,7 @@ def test_a_run_naming_no_project_record_is_counted_and_sits_in_no_project_rung()
 
     activity = read_instance_activity()
 
-    assert activity.runs_outside_a_project_record == 1
+    assert activity.run_totals.outside_any_visible_project == 1
     assert activity.runs.steps[0].count == 1
     assert [step.count for step in activity.projects.steps] == [0, 0, 0, 0]
 
@@ -101,7 +108,7 @@ def test_an_unparseable_manifest_is_counted_rather_than_passed_over():
 
     activity = read_instance_activity()
 
-    assert activity.unreadable_runs == 1
+    assert activity.run_totals.unreadable == 1
     assert activity.runs.steps[0].count == 0
 
 
@@ -113,7 +120,7 @@ def test_the_day_axis_holds_every_calendar_day_including_one_with_nothing_on_it(
 
     assert activity.first_day == "2026-08-16"
     assert activity.last_day == "2026-08-18"
-    runs_started = next(s for s in activity.series if s.label == "Runs started")
+    runs_started = next(c for c in activity.charts if c.label == "Runs started")
     assert [(day.day, day.count) for day in runs_started.days] == [
         ("2026-08-16", 0), ("2026-08-17", 0), ("2026-08-18", 1),
     ]
@@ -125,7 +132,7 @@ def test_eval_runs_are_counted_apart_from_every_run_figure():
 
     activity = read_instance_activity()
 
-    assert activity.eval_runs == 1
+    assert activity.run_totals.eval_area == 1
     assert activity.runs.steps[0].count == 0
     assert activity.projects.steps[2].count == 0
 
@@ -157,3 +164,33 @@ def test_an_instance_holding_nothing_counts_nothing_rather_than_dividing_by_it()
     assert activity.first_day is None
     assert [step.share for step in activity.projects.steps] == [0.0, 0.0, 0.0, 0.0]
     assert "Nothing recorded yet" in client.get("/admin/activity").text
+
+
+def test_a_private_project_is_counted_nowhere_and_its_run_sits_outside():
+    _store_project("hidden", stages_saved=True, created_at="2026-08-16T09:00:00",
+                   private=True)
+    _store_run("hidden", "20260816T090000")
+
+    activity = read_instance_activity()
+
+    assert [step.count for step in activity.projects.steps] == [0, 0, 0, 0]
+    assert activity.runs.steps[0].count == 1
+    assert activity.run_totals.outside_any_visible_project == 1
+
+
+def test_a_deleted_project_drops_out_while_its_run_is_still_counted():
+    _store_project("abandoned", stages_saved=True, created_at="2026-08-16T09:00:00",
+                   on_disk=False)
+    _store_run("abandoned", "20260816T090000")
+
+    activity = read_instance_activity()
+
+    assert activity.projects.steps[0].count == 0
+    assert activity.runs.steps[0].count == 1
+    assert activity.run_totals.outside_any_visible_project == 1
+
+
+def test_the_page_says_the_project_count_is_a_floor_rather_than_a_total():
+    body = client.get("/admin/activity").text
+
+    assert "The project count is a floor, not a total" in body

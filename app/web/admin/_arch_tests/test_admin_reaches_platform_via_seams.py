@@ -18,8 +18,7 @@ _SEAMS_BY_ROUTER = {
         "app.core.errors",
         "app.web.config",
     },
-    # The page over activity.py, which reads a run manifest — the router itself only
-    # renders what that module counted.
+    # activity.py reads a run manifest; the router only renders what it counted.
     "activity_router.py": {
         "app.web.admin.activity",
         "app.web.breadcrumbs",

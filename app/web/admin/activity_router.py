@@ -1,7 +1,4 @@
-"""The instance-activity page: who got how far, off records the app already writes.
-Read-only, and its own router rather than a route on `workspace_router`, which reaches
-the platform through four named seams and none of them reads a run manifest.
-"""
+"""Its own router, not a route on `workspace_router`: no seam of that one reads a manifest."""
 from __future__ import annotations
 
 from fastapi import APIRouter, Request

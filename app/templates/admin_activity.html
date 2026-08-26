@@ -16,19 +16,19 @@
     {% endfor %}
 </div>
 {% endmacro %}
-{% macro day_chart(series) %}
-<h3>{{ series.label }} <span class="chart-total">{{ "{:,}".format(series.total) }} in all</span></h3>
+{% macro day_chart(chart) %}
+<h3>{{ chart.label }} <span class="chart-total">{{ "{:,}".format(chart.total) }} in all</span></h3>
 <div class="day-chart">
-    {% for day in series.days %}
+    {% for day in chart.days %}
     <div class="day-slot" title="{{ day.day }} — {{ day.count }}">
         {# No bar at all on a day nothing was recorded: the bar's min-height would draw
            that day a stub, which reads as a small count rather than as none. #}
-        {% if day.count %}<div class="day-bar" style="height: {{ (100 * day.count / series.peak)|round(1) }}%;"></div>{% endif %}
+        {% if day.count %}<div class="day-bar" style="height: {{ (100 * day.count / chart.peak)|round(1) }}%;"></div>{% endif %}
         <div class="day-label">{{ day.day[5:] }}</div>
     </div>
     {% endfor %}
 </div>
-<p class="muted">{{ series.note }}. Tallest bar: {{ "{:,}".format(series.peak) }}. Every calendar day from {{ series.days[0].day }} to {{ series.days[-1].day }}, so a day with no bar recorded nothing.</p>
+<p class="muted">{{ chart.note }}. Tallest bar: {{ "{:,}".format(chart.peak) }}. Every calendar day from {{ chart.days[0].day }} to {{ chart.days[-1].day }}, so a day with no bar recorded nothing.</p>
 {% endmacro %}
 {% block content %}
 <div class="dash-header">
@@ -62,31 +62,34 @@
         <dd>A project with no run may have been given up on, or exported and finished somewhere else. These records say only that nothing further happened here.</dd>
 
         <dt>When someone actually started</dt>
-        <dd><code>created_at</code> is when the record was written. A project imported from a bundle is stamped at import, and a project deleted from this instance keeps its record — deleting drops the working copy, not the row. So the project count includes projects nobody can open.</dd>
+        <dd><code>created_at</code> is when the record was written, not when the work began. A project imported from a bundle is stamped at import.</dd>
+
+        <dt>How many projects there have ever been</dt>
+        <dd>The project count is a floor, not a total. A project marked private, and a project deleted out of the workspace, are both left out of every figure on this page — the one listing this page is allowed to read drops them, and counting them would be a listing of them. Someone who built a project and then deleted it is invisible here, and their runs fall into the count below.</dd>
 
         <dt>Whether a run with no ending is still going</dt>
         <dd>A run whose process died writes no terminal status, so it reads the same as one still executing. The <code>running</code> figure below mixes the two and this page will not guess the split.</dd>
 
         <dt>What the unread records held</dt>
-        <dd>{{ activity.unreadable_runs }} run manifest{{ "s" if activity.unreadable_runs != 1 }} this app can no longer parse — whatever they recorded is unread, not zero. {{ activity.runs_outside_a_project_record }} run{{ "s" if activity.runs_outside_a_project_record != 1 }} name a project id no project record covers, so they are counted as runs and sit in no project's funnel.</dd>
+        <dd>{{ activity.run_totals.unreadable }} run manifest{{ "s" if activity.run_totals.unreadable != 1 }} this app can no longer parse — whatever they recorded is unread, not zero. {{ activity.run_totals.outside_any_visible_project }} run{{ "s" if activity.run_totals.outside_any_visible_project != 1 }} name a project id no visible record covers — private, deleted or never recorded — so they are counted as runs and sit in no project's funnel.</dd>
     </dl>
 </div>
 
 {% if activity.first_day %}
 <h2>Projects</h2>
-<p class="muted">One row per project record; each step is a subset of the one above it, so a drop between two rows is a real drop.</p>
+<p class="muted">One row per project a reader may open; each step is a subset of the one above it, so a drop between two rows is a real drop. Private and deleted projects are in none of these rows.</p>
 {{ funnel(activity.projects) }}
-<p class="muted">{{ activity.versioned_projects }} of those also cut at least one stored workflow version. Projects marked private are counted here and named nowhere: {{ activity.private_projects }} of them.</p>
+<p class="muted">{{ activity.versioned_projects }} of those also cut at least one stored workflow version.</p>
 
 <h2>Runs</h2>
-<p class="muted">One row per production run manifest. The {{ activity.eval_runs }} eval run{{ "s" if activity.eval_runs != 1 }} this instance holds are in none of these figures.</p>
+<p class="muted">One row per production run manifest, whichever project it names. The {{ activity.run_totals.eval_area }} eval run{{ "s" if activity.run_totals.eval_area != 1 }} this instance holds are in none of these figures.</p>
 {{ funnel(activity.runs) }}
-<p class="muted">A run that published and then failed a later stage still counts as having published — a publish stage completing is an event, not a verdict on the whole run. {{ activity.halted_runs }} run{{ "s" if activity.halted_runs != 1 }} halted for human review, and {{ activity.runs_pinning_no_version }} pinned no workflow version.</p>
+<p class="muted">A run that published and then failed a later stage still counts as having published — a publish stage completing is an event, not a verdict on the whole run. {{ activity.run_totals.halted }} run{{ "s" if activity.run_totals.halted != 1 }} halted for human review, and {{ activity.run_totals.pinning_no_version }} pinned no workflow version.</p>
 
 <h2>Day by day</h2>
 <p class="muted">All four charts share one day axis, {{ activity.first_day }} to {{ activity.last_day }}, so they read against each other. Bars, never a line: nothing was measured between two days, so nothing is drawn between them.</p>
-{% for series in activity.series %}
-{{ day_chart(series) }}
+{% for chart in activity.charts %}
+{{ day_chart(chart) }}
 {% endfor %}
 
 <h2>Runs by status</h2>

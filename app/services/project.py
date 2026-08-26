@@ -258,9 +258,16 @@ def list_projects() -> list[str]:
 
 
 def list_project_listings() -> list[ProjectListing]:
-    """Every project a reader may see, and the only listing of them there is."""
     return [
         ProjectListing(id=record.id, name=record.display_name())
+        for record in list_visible_projects()
+    ]
+
+
+def list_visible_projects() -> list[Project]:
+    """Every project a reader may see, and the only place `private` is applied."""
+    return [
+        record
         # delete_project keeps the record and drops the working copy; project_exists sees that.
         for record in sorted(Project.list(), key=lambda r: r.id)
         if not record.private and project_exists(record.id)
