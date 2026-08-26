@@ -1,0 +1,32 @@
+{% extends "project_shell.html" %}
+{% block title %}Published figures · {{ project }}{% endblock %}
+
+{% block section %}
+<h1>Published figures</h1>
+{% if figures %}
+<p class="fc-index-lead">
+    Every value a publish stage in this run claimed, with the cell it claimed it from.
+    Each opens a page written for a reader outside this project — the claim, the number,
+    and what the run recorded behind it.
+</p>
+<table class="stages">
+    <thead>
+        <tr><th>What the report calls it</th><th>Value</th><th>Cell it came from</th></tr>
+    </thead>
+    <tbody>
+        {% for figure in figures %}
+        <tr>
+            <td><a href="{{ hrefs[loop.index0] }}">{{ figure.label }}</a></td>
+            <td>{{ figure.value }}</td>
+            <td><code>{{ figure.stage_id }}.{{ figure.column }}</code> row {{ figure.row_ordinal }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+    <h2>This run published no figures</h2>
+    <p>A publish stage claims a figure by citing the cell it came from; none here did.</p>
+</div>
+{% endif %}
+{% endblock %}

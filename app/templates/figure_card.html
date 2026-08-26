@@ -1,0 +1,177 @@
+{% macro rows(n) %}{{ "{:,}".format(n) }}<span class="fc-unit">row{% if n != 1 %}s{% endif %}</span>{% endmacro %}
+
+{% macro hand(steps, heading, did, did_not) %}
+<div class="fc-hand{% if not steps %} fc-hand-none{% endif %}">
+    <p class="fc-hand-n">{{ steps | length }}</p>
+    <p class="fc-hand-k">{{ heading }}</p>
+    <p class="fc-hand-d">{% if steps %}{{ did }}{% else %}{{ did_not }}{% endif %}</p>
+    {% if steps %}
+    <ul class="fc-hand-list">
+        {% for step in steps %}
+        <li><code>{{ step.stage_id }}</code> <span class="fc-hand-type">{{ step.type_label }}</span>
+            {% if step.description %}<span class="fc-hand-said">{{ step.description }}</span>{% endif %}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</div>
+{% endmacro %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ card.label }}: {{ card.value }}</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+    <meta name="description" content="{{ preview }}">
+    {# No og:image. Drawing one needs an image library this project does not carry,
+       and a stock picture would say nothing about the figure. #}
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="Carbon Paper">
+    <meta property="og:title" content="{{ card.label }}: {{ card.value }}">
+    <meta property="og:description" content="{{ preview }}">
+    <meta property="og:url" content="{{ page_url }}">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="{{ card.label }}: {{ card.value }}">
+    <meta name="twitter:description" content="{{ preview }}">
+    {% include "_stylesheets.html" %}
+</head>
+<body>
+<main class="fc-page">
+
+    <p class="fc-mark">
+        <a href="/">{% include "_wordmark.html" %}</a>
+        <span>a published figure, with its receipt</span>
+    </p>
+
+    <div class="fc-claim">
+        <p class="fc-label">{{ card.label }}</p>
+        <p class="fc-value">{{ card.value }}</p>
+        <p class="fc-verbatim">
+            The cell exactly as the run stored it. Nothing on this page rounds it or
+            gives it a unit.
+        </p>
+        <div class="fc-source">
+            <p class="fc-title">{{ card.document.title if card.document else card.project_name }}</p>
+            {% if card.document and card.document.opening %}
+            <p>{{ card.document.opening }}</p>
+            {% endif %}
+            <p>
+                Counted <time datetime="{{ card.counted_at }}">{{ card.counted_at }}</time>
+                by run <code>{{ card.run_id }}</code>, from workflow version
+                <code>{{ card.version_id }}</code>.
+            </p>
+        </div>
+    </div>
+
+    <h2 class="fc-section-head">What it was counted from</h2>
+    {% if card.receipt.reason is defined %}
+    <div class="fc-unknown">
+        <p><strong>This run cannot show which rows this figure came from.</strong></p>
+        <p class="fc-why">{{ card.receipt.reason }}</p>
+        <p>
+            So there is no row count, no source count and no list of what was dropped —
+            not because the answer is zero, but because this run did not record it. The
+            figure above still holds: the run checked it against the cell it came from
+            before printing it.
+        </p>
+    </div>
+    {% else %}
+    <div class="fc-receipt">
+        <div class="fc-line">
+            <p class="fc-count">{{ rows(card.receipt.counted_from_rows) }}</p>
+            <p class="fc-what">
+                went into this figure, at the step called
+                <code>{{ card.receipt.counted_from_stage }}</code>.
+                <span class="fc-note">Every one of them can be listed and opened.</span>
+            </p>
+        </div>
+        <div class="fc-line">
+            <p class="fc-count">{{ rows(card.receipt.read_from_rows) }}</p>
+            <p class="fc-what">
+                were read to begin with, at <code>{{ card.receipt.read_from_stage }}</code>.
+                <span class="fc-note">The widest frame this figure came through.</span>
+            </p>
+        </div>
+        {% for cut in card.receipt.taken_out %}
+        <div class="fc-line fc-out">
+            <p class="fc-count">{{ rows(cut.rows) }}</p>
+            <p class="fc-what">
+                were taken out on the way, at <code>{{ cut.at_stage }}</code> — {{ cut.why }}.
+            </p>
+        </div>
+        {% endfor %}
+        {% if card.receipt.unrecorded_rows %}
+        <div class="fc-line">
+            <p class="fc-count">{{ rows(card.receipt.unrecorded_rows) }}</p>
+            <p class="fc-what">
+                are counted in, and the run recorded nothing behind them.
+                <span class="fc-note">Where they came from, this run cannot say.</span>
+            </p>
+        </div>
+        {% endif %}
+    </div>
+    {% if card.receipt.reference_tables %}
+    <p class="fc-aside">
+        It also read
+        {% for table in card.receipt.reference_tables %}<code>{{ table }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+        as a reference table — looked things up in, rather than counted.
+    </p>
+    {% endif %}
+
+    <h2 class="fc-section-head">Who did the work</h2>
+    <div class="fc-hands">
+        {{ hand(card.receipt.steps.ran_as_code, "steps of code",
+                "Each runs the same way every time it is given the same rows.",
+                "No step on the route to this figure was code.") }}
+        {{ hand(card.receipt.steps.judged_by_a_model, "judged by an AI model",
+                "A model was asked to decide something, and its answer is inside this number.",
+                "No step on the route to this figure asked an AI model to decide anything.") }}
+        {{ hand(card.receipt.steps.signed_off_by_a_person, "signed off by a person",
+                "A person read these rows and approved them before anything counted them.",
+                "Nobody reviewed and approved these rows. This workflow has no review step on the route.") }}
+    </div>
+    {% endif %}
+
+    <h2 class="fc-section-head">Keep pulling</h2>
+    <div class="fc-pull">
+        {% if card.receipt.reason is not defined %}
+        <a href="{{ card.receipt.rows_href }}">
+            <span class="fc-pull-title">See the {{ "{:,}".format(card.receipt.counted_from_rows) }} rows this figure was counted from</span>
+            <span class="fc-pull-sub">Every row, and what told it apart from the rest.</span>
+        </a>
+        <a href="{{ card.receipt.trace_href }}">
+            <span class="fc-pull-title">Follow this figure back step by step</span>
+            <span class="fc-pull-sub">What each step received, what it did, and what it passed on.</span>
+        </a>
+        {% endif %}
+        <a href="{{ card.run_href }}">
+            <span class="fc-pull-title">Open the whole run</span>
+            <span class="fc-pull-sub">Every step, its output, and the rules it was given.</span>
+        </a>
+    </div>
+
+    <h2 class="fc-section-head">What this page does not know</h2>
+    <div class="fc-caveat">
+        <ul>
+            <li>
+                The number was checked against the cell it came from at the moment the
+                report was written. Nothing reads the finished report back, so the words
+                printed <em>around</em> the number are not checked here.
+            </li>
+            <li>
+                Every step is a rule somebody wrote. The rules are all readable, and
+                following the links above is how you check they say what this page says
+                they say.
+            </li>
+        </ul>
+    </div>
+
+    <p class="fc-foot">
+        Carbon Paper turns an investigation into a workflow where the deterministic steps
+        are predictable and the judgement calls are visible, so a published number can be
+        followed back to the rows it came from. This page is that link.
+    </p>
+
+</main>
+</body>
+</html>
