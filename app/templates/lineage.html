@@ -358,11 +358,12 @@ tr.lin-opens:hover td{background:var(--hover)}
 {% endif %}
 </div>
 <div class="lin-pane hidden" data-pane="inputs">
-{% if not offline and view.nodes %}
-{# What THIS figure needed of each file, above the run's own list of them. #}
+{% if offline or not view.nodes %}
+{# No server to ask what this figure needed, so the pane is the run's own list. #}
+{% include "_lineage_inputs.html" %}
+{% else %}
 <div id="input-files-root"></div>
 {% endif %}
-{% include "_lineage_inputs.html" %}
 </div>
 <div class="lin-pane hidden" data-pane="values">
 {% if offline or not view.nodes %}

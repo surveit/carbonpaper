@@ -36,6 +36,9 @@ class ColumnRow(BaseModel):
     facet: list[FacetValue]
     hidden_value_count: int
     shape: ColumnShape
+    # What the workflow DECLARED this column holds. None where nothing declares it —
+    # an uploaded file is read before any schema exists.
+    declared_type: str | None = None
 
 
 class ReadingRun(BaseModel):

@@ -68,7 +68,7 @@ window.InputFiles = window.InputFiles || (function () {
     if (!link) return;
     var rows = Number(pane.dataset["rows" + capitalised(tab.dataset.rows)]);
     var columns = Number(pane.dataset["columns" + capitalised(tab.dataset.columns)]);
-    link.textContent = "Download " + countOf(rows, "row") + " × " +
+    link.textContent = "⬇ Download " + countOf(rows, "row") + " × " +
       countOf(columns, "column") + " (CSV)";
     link.href = urlFor(tab, pane, "slice.csv");
   }

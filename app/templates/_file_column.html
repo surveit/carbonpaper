@@ -14,7 +14,7 @@
 {% set widest = column.facet | map(attribute='count') | max | default(1) %}
 <details class="shape-col{% if column.group == 'empty' %} dim{% endif %}" data-group="{{ column.group }}">
   <summary>
-    <span class="shape-kind">{{ column.kind.value }}</span>
+    <span class="shape-kind">{{ column.declared_type or column.kind.value }}</span>
     <span class="shape-name">{{ column.column }}</span>
     <span class="shape-fill">
       <span class="fill-track" title="{{ "{:,}".format(column.filled_count) }} filled · {{ "{:,}".format(column.blank_count) }} blank · {{ "{:,}".format(column.null_count) }} null">

@@ -81,7 +81,8 @@
 
     <div class="if-sec">
       <div class="if-sechead"><h3>Preview</h3>
-        <span class="if-count"></span></div>
+        <span class="if-count"></span>
+        <a class="btn primary if-download" href="#" download>⬇ Download</a></div>
       <div class="table-scroll if-table"><table class="data-preview">
         <thead><tr><th class="if-rownum">{{ file.row_label }}</th>
           {%- for name in file.columns_read %}
@@ -102,9 +103,6 @@
       </table></div>
     </div>
 
-    <div class="if-take">
-      <a class="btn if-download" href="#" download>Download</a>
-    </div>
   </section>
   {% endfor %}
 </div>
