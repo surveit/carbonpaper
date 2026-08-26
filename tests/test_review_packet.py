@@ -22,6 +22,9 @@ from app.web.loading import MAX_TABLE_ROWS
 from app.services.review_packet.checksums import compute_sha256
 from stage_seed import add_stage
 from app.services.methodology import write_methodology
+from app.services.review_packet.data import DOCUMENT_FILE
+from app.web.file_sizes import describe_bytes
+from app.web.review_packet.front_page import CARBON_PAPER_URL
 from run_seed import read_manifest, store_manifest
 
 _PROJECT = "proj"
@@ -643,3 +646,70 @@ def test_a_publish_stage_that_wrote_nothing_is_reported_not_skipped(project_dir,
     assert [o.path for o in packet.omitted] == ["artifacts/"]
     assert "report finished, but wrote no file" in packet.omitted[0].reason
     assert "wrote no file" in (packet.root / "index.html").read_text(encoding="utf-8")
+
+
+def test_the_index_opens_on_the_method_not_the_run_id(exported):
+    index = (exported.root / "index.html").read_text(encoding="utf-8")
+
+    assert "<h1>How we did it</h1>" in index
+    assert "We loaded items." in index
+    # The run id stays, under the question rather than as the heading.
+    assert f"<h1>Run <code>{exported.run_id}" not in index
+    assert exported.run_id in index
+
+
+def test_the_index_titles_itself_after_the_project_when_the_prose_has_no_heading(
+    project_dir, tmp_path
+):
+    _make_project(project_dir)
+    write_methodology(_PROJECT, "We loaded items and doubled them.\n")
+    _seed_version(project_dir)
+    run_id = run_service.start_run(_PROJECT)
+
+    packet = export_review_packet(_PROJECT, run_id, tmp_path / "packets")
+
+    assert f"<h1>{_PROJECT}</h1>" in (packet.root / "index.html").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_the_checks_count_what_this_run_actually_did(exported):
+    index = (exported.root / "index.html").read_text(encoding="utf-8")
+
+    assert "How to check this" in index
+    assert "No step in this run called an AI model" in index
+    assert "This run read 1 file." in index
+    assert f'href="{DOCUMENT_FILE}"' in index
+
+
+def test_every_section_a_check_points_at_is_on_the_page(exported):
+    index = (exported.root / "index.html").read_text(encoding="utf-8")
+
+    for anchor in re.findall(r'href="#([^"]+)"', index):
+        assert f'id="{anchor}"' in index, f"no #{anchor} on the index"
+
+
+def test_the_colophon_says_what_wrote_the_folder(exported):
+    index = (exported.root / "index.html").read_text(encoding="utf-8")
+    colophon = index[index.index("packet-colophon") :]
+
+    assert "Written by Carbon Paper on" in colophon
+    assert exported.run_id in colophon
+    assert CARBON_PAPER_URL in colophon
+
+
+def test_the_colophon_states_the_tools_address_without_linking_to_it(exported):
+    # An address written as text is still readable with the network off.
+    index = (exported.root / "index.html").read_text(encoding="utf-8")
+
+    assert f'href="{CARBON_PAPER_URL}"' not in index
+    assert f"<code class=\"packet-source\">{CARBON_PAPER_URL}</code>" in index
+
+
+def test_a_published_file_is_offered_with_its_size(project_dir, tmp_path):
+    packet = _run_publishing_project(project_dir, tmp_path, _PUBLISH_CODE)
+    index = (packet.root / "index.html").read_text(encoding="utf-8")
+
+    written = packet.root / "artifacts" / "build" / "index.html"
+    assert '<a href="artifacts/build/index.html">index.html</a>' in index
+    assert describe_bytes(written.stat().st_size) in index
