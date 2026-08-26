@@ -123,6 +123,8 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 10px;
+    /* A column with nothing to list is short; stretching it prints tint over nothing. */
+    align-items: start;
 }
 
 .fc-hand {
@@ -218,6 +220,9 @@
 }
 
 .fc-index-lead { max-width: 62ch; color: var(--muted); }
+
+/* The label is the whole point of the row, so it gets the width before the cell ref. */
+.fc-figures td:first-child { min-width: 24ch; }
 
 @media (max-width: 560px) {
     .fc-hands { grid-template-columns: minmax(0, 1fr); }
