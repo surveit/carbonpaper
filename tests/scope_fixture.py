@@ -321,3 +321,34 @@ def _tier_agencies() -> dict:
              "columns": [column("portfolio", "str", False)]}],
             "adds": [column("tier", "str", False)], "rewrites": []},
     }
+
+
+PUBLISH_CODE = '''
+def transform(df, output_dir, citation_provider):
+    url = citation_provider.cite_value(
+        "grant_totals", 0, "total_amount", df["total_amount"].iloc[0],
+        label="What the grants come to")
+    with open(output_dir + "/report.html", "w", encoding="utf-8") as report:
+        report.write("<p>" + str(df["total_amount"].iloc[0]) + " " + url + "</p>")
+    return []
+'''
+
+
+def publish_tail() -> list[dict]:
+    """A publish stage citing the total, so the run records one published figure."""
+    return [
+        {
+            "id": "publish_totals", "type": "publish",
+            "description": "Publish the total, cited back to the cell it came from.",
+            "inputs": [{"id": "grant_totals"}],
+            "publish": {"format": "html_report"},
+            "function": {
+                "kind": "inline",
+                "summary": "Writes one paragraph: the total and a link to its rows.",
+                "code": PUBLISH_CODE,
+            },
+            "signature": {"form": "replaces", "reads": [
+                {"input": "grant_totals",
+                 "columns": [column("total_amount", "int")]}], "produces": []},
+        },
+    ]

@@ -224,3 +224,10 @@
     .fc-value { font-size: 30px; }
     .fc-claim { padding: 22px 20px; }
 }
+
+/* The way in from the run page: the outputs section names the figures those files cite. */
+.run-outputs-figures {
+    margin: 10px 0 0;
+    font-size: 13px;
+    color: var(--muted);
+}

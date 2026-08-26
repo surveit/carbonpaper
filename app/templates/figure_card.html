@@ -56,7 +56,7 @@
             <p>{{ card.document.opening }}</p>
             {% endif %}
             <p>
-                Counted <time datetime="{{ card.counted_at }}">{{ card.counted_at }}</time>
+                Counted {{ card.counted_at | friendly_time }}
                 by run <code>{{ card.run_id }}</code>, from workflow version
                 <code>{{ card.version_id }}</code>.
             </p>
@@ -173,5 +173,6 @@
     </p>
 
 </main>
+<script src="/static/friendly-time.js"></script>
 </body>
 </html>
