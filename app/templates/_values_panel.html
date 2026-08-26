@@ -51,7 +51,7 @@
     {%- endif %}
     {% if step.unreadable %}
     <p class="vu-nosheet">No sheet for this stage — {{ step.unreadable }}.</p>
-    {% elif not step.rows_reached %}
+    {% elif not step.reached_rows %}
     <p class="vu-nosheet">No row of <code>{{ step.stage_id }}</code> fed this figure. It writes
       a column the value came through, but this run recorded none of its
       {{ "{:,}".format(step.rows_total) }} rows behind this one.</p>
@@ -64,7 +64,7 @@
     {% if step.diff %}
     {% with diff = step.diff, stage = step, full_rows = false,
             cited_column = values.column if step.stage_id == values.cited_stage else none,
-            column_writers = step.column_writers %}
+            reached_rows = step.reached_rows, column_writers = step.column_writers %}
     {% include "_stage_diff.html" %}
     {% endwith %}
     {% else %}
@@ -72,15 +72,14 @@
        neither has an input frame to paint over: the output table stands alone. #}
     <div class="preview-block stage-diff">
       <div class="preview-head">output data <span class="muted">·
-        {% if step.rows_total > step.rows | length %}first {{ step.rows | length }} of {% endif %}
+        {% if step.rows_total > step.rows | length %}{% if step.opens_on_the_first %}first {% endif %}{{ step.rows | length }} of {% endif %}
         {{- "{:,}".format(step.rows_total) }} row{% if step.rows_total != 1 %}s{% endif %}</span>
         <span class="preview-actions"><a href="{{ links.stage_rows(step.stage_id) }}">view all rows</a>
         · <a href="{{ links.stage_csv(step.stage_id) }}">⬇ CSV</a></span></div>
       <div class="table-scroll"><table class="data-preview">
-        <thead><tr><th class="syw-col">lineage</th>
+        <thead><tr><th class="row-num">#</th><th class="syw-col">lineage</th>
           {%- for column_state in step.columns %}
-          {%- set klasses = [('diff-col-cited' if column_state.cited else ''),
-                             ('diff-col-jump' if column_state.writer else '')] | select | join(' ') %}
+          {%- set klasses = 'diff-col-jump' if column_state.writer else '' %}
           <th{% if klasses %} class="{{ klasses }}"{% endif %}
             {%- if column_state.writer %} data-jump="{{ column_state.writer }}"
             title="written by {{ column_state.writer }} — go there"{% endif %}>
@@ -90,10 +89,14 @@
         </tr></thead>
         <tbody>
         {%- for row in step.rows %}
-          <tr><td class="syw-cell"><a href="{{ links.row_trace(step.stage_id, loop.index0) }}"
-            target="_blank" rel="noopener">View lineage</a></td>
+          {%- set ordinal = step.row_ordinals[loop.index0] %}
+          {%- set traced = ordinal in step.reached_rows %}
+          <tr{% if traced %} class="diff-row-mine"{% endif %}>
+            <td class="row-num {{ 'diff-row-num-mine' if traced else 'muted' }}">{{ ordinal | row_number }}</td>
+            <td class="syw-cell"><a href="{{ links.row_trace(step.stage_id, ordinal) }}"
+              target="_blank" rel="noopener">View lineage</a></td>
           {%- for cell in row %}
-          <td{% if step.columns[loop.index0].cited %} class="diff-col-cited"{% endif %}>{{ cell | truncate(240) }}</td>
+          <td{% if step.columns[loop.index0].cited and traced %} class="diff-col-cited"{% endif %}>{{ cell | truncate(240) }}</td>
           {%- endfor %}
           </tr>
         {%- endfor %}

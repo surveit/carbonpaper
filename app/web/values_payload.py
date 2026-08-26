@@ -7,7 +7,7 @@ from enum import Enum
 from pydantic import BaseModel
 
 from app.models.schema import StageId
-from app.web.stage_diff import RowAlignedDiff
+from app.web.stage_diff import RowAlignedDiff, opens_on_the_first
 
 
 class NewSheet(str, Enum):
@@ -40,10 +40,14 @@ class ValuesStep(BaseModel):
     rows: list[list[str]]
     # Positional against `rows`: where each one sits in the stage's own frame.
     row_ordinals: list[int]
-    # How many rows of this stage the figure came through, before the sheet's cap.
-    rows_reached: int
+    # Which rows of this stage the figure came through, before the sheet's cap.
+    reached_rows: list[int]
     columns_total: int
     unreadable: str | None
+
+    @property
+    def opens_on_the_first(self) -> bool:
+        return opens_on_the_first(self.row_ordinals)
 
     @property
     def column_writers(self) -> dict[str, StageId]:

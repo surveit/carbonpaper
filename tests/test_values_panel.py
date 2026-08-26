@@ -142,7 +142,7 @@ def test_the_sheet_holds_the_rows_the_figure_came_through(run_id):
 def test_a_stage_the_figure_came_through_no_row_of_says_so(run_id):
     # G-004's west copy is the one the dedupe collapsed.
     values = _walk_at(run_id, "by_portfolio", "total_amount", row=1)
-    assert _step(values, "load_west").rows_reached == 0
+    assert _step(values, "load_west").reached_rows == []
     page = TestClient(app).get(
         f"/project/{PROJECT}/runs/{run_id}/values/panel"
         "?stage=by_portfolio&row=1&column=total_amount")

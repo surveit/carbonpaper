@@ -40,8 +40,8 @@ from app.web.values_walk import (
     walk_column_back,
 )
 
-# A step has to sit on one screen beside the transform that made it.
-SHEET_ROWS_SHOWN = 6
+# The sheet's height, and so the neighbours a lone reached row is read against.
+SHEET_ROWS_SHOWN = 25
 
 
 def load_values_used(
@@ -123,11 +123,12 @@ def _build_step(
     reached: list[int],
 ) -> ValuesStep:
     stage = workflow_stage.stage
+    drawn = _widen_to_neighbours(reached, SHEET_ROWS_SHOWN)
     preview = None if record is None else load_output_rows_at(
-        run_dir, record.output_path, reached, SHEET_ROWS_SHOWN)
+        run_dir, record.output_path, drawn, SHEET_ROWS_SHOWN)
     unreadable = _say_why_no_sheet(record, preview)
     on_frame = set() if preview is None else {str(name) for name in preview["columns"]}
-    diff = _build_step_diff(workflow_stage, record, run_dir, output_by_id, order, reached)
+    diff = _build_step_diff(workflow_stage, record, run_dir, output_by_id, order, drawn)
     present = _resolve_present_columns(order, on_frame, unreadable)
     return ValuesStep(
         stage_id=stage.id,
@@ -144,10 +145,18 @@ def _build_step(
             [str(row.get(name, "")) for name in present] for row in preview["preview"]
         ],
         row_ordinals=[] if preview is None else list(preview.get("ordinals", ())),
-        rows_reached=len(reached),
+        reached_rows=reached,
         columns_total=len(on_frame),
         unreadable=unreadable,
     )
+
+
+def _widen_to_neighbours(reached: list[int], rows_shown: int) -> list[int]:
+    """One row alone says nothing about whether the stage treated it like the rest."""
+    if len(reached) != 1:
+        return reached
+    first = max(0, reached[0] - rows_shown // 2)
+    return list(range(first, first + rows_shown))
 
 
 def _build_step_diff(
