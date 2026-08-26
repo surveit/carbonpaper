@@ -32,6 +32,14 @@
     </select>
     {% endcall %}
     <code class="if-stage">{{ view.files[0].stage_id }}</code>
+    <span class="if-toggles">
+      <span class="if-tg" data-axis="rows">
+        <button type="button" class="on" data-pick="relevant">Relevant rows</button
+        ><button type="button" data-pick="all">All rows</button></span>
+      <span class="if-tg" data-axis="columns">
+        <button type="button" class="on" data-pick="relevant">Relevant columns</button
+        ><button type="button" data-pick="all">All columns</button></span>
+    </span>
   </div>
 
   {% for file in view.files %}
@@ -41,32 +49,20 @@
            data-columns-relevant="{{ file.columns_relevant | length }}"
            data-columns-all="{{ file.columns_read | length }}">
     <div class="if-bars">
-      <div class="if-bar"><span class="if-bar-lab">rows</span>
+      <div class="if-bar" data-axis="rows"><span class="if-bar-lab">rows</span>
         <span class="if-track">
           <i class="if-read" style="width: {{ file.read_percent }}%"></i>
           <i class="if-need" style="width: {{ file.relevant_percent }}%"></i></span>
-        <span class="if-num"><b>{{ "{:,}".format(file.rows_relevant) }}</b> /
-          {{ "{:,}".format(file.rows_read) }}
+        <span class="if-num"><span data-scope="relevant">{{ "{:,}".format(file.rows_relevant) }}</span>
+          relevant / <span data-scope="all">{{ "{:,}".format(file.rows_read) }}</span> read
           {%- if file.rows_in_file %} / {{ "{:,}".format(file.rows_in_file) }} in file{% endif %}
           {%- if file.cap %} <span class="if-cap">cap {{ "{:,}".format(file.cap) }}</span>{% endif %}
         </span></div>
-      <div class="if-bar"><span class="if-bar-lab">columns</span>
+      <div class="if-bar" data-axis="columns"><span class="if-bar-lab">columns</span>
         <span class="if-track"><i class="if-read" style="width: 100%"></i>
           <i class="if-need" style="width: {{ file.columns_percent }}%"></i></span>
-        <span class="if-num"><b>{{ file.columns_relevant | length }}</b> /
-          {{ file.columns_read | length }}</span></div>
-      <div class="if-choose">
-        <p>View input files by the data used to compute this figure, or all rows and
-          columns read by the run.</p>
-        <span class="if-toggles">
-          <span class="if-tg" data-axis="rows">
-            <button type="button" class="on" data-pick="relevant">Relevant rows</button
-            ><button type="button" data-pick="all">All rows</button></span>
-          <span class="if-tg" data-axis="columns">
-            <button type="button" class="on" data-pick="relevant">Relevant columns</button
-            ><button type="button" data-pick="all">All columns</button></span>
-        </span>
-      </div>
+        <span class="if-num"><span data-scope="relevant">{{ file.columns_relevant | length }}</span>
+          relevant / <span data-scope="all">{{ file.columns_read | length }}</span> read</span></div>
     </div>
 
     <div class="if-sec">
