@@ -54,8 +54,7 @@ def export_review_packet(project_id: str, run_id: str, dest_root: Path) -> Revie
         lineage = write_packet_lineage(
             root, run_dir, view, workflow_stages_by_id, manifest)
     guide = _load_guide(project_id, manifest)
-    # `workflow_stages or None` is the difference between "nothing blocked"
-    # and "no edges to say what was blocked" — build_run_issues reads it.
+    # `or None` says "no edges to name what was blocked", not "nothing blocked".
     issues = build_run_issues(manifest, workflow_stages or None)
     with log_elapsed(_log, f"{project_id}/{run_id} pages"):
         pages = write_packet_pages(

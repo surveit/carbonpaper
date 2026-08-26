@@ -95,7 +95,9 @@
   <ol>
     {% for check in front.checks %}
     <li><strong>{{ check.lead }}</strong> {{ check.text }}
-      {%- for link in check.links %} <a href="{{ link.href }}">{{ link.text }}{% if link.href.startswith("#") %} →{% endif %}</a>{% endfor %}</li>
+      {%- for link in check.links %}{% if not loop.first %} <span class="sep">·</span>{% endif %}
+      <a href="{{ link.href }}">{% if link.is_stage_id %}<code>{{ link.text }}</code>{% else %}{{ link.text }}{% endif %}{% if link.href.startswith("#") %} →{% endif %}</a>
+      {%- endfor %}</li>
     {% endfor %}
   </ol>
 </section>
@@ -223,12 +225,11 @@
   <p>Written by Carbon Paper on {{ front.colophon.written_at }}, from run
     <code>{{ front.colophon.run_id }}</code> of project <code>{{ front.colophon.project_id }}</code>{% if front.colophon.version_id %},
     pinned to workflow version <code>{{ front.colophon.version_id }}</code>{% endif %}.</p>
-  <p>{% if front.colophon.document_href or front.colophon.workflow_href %}The method it ran is
+  <p>{% if front.colophon.document_href or front.colophon.workflow_href %}The method it ran is in this folder:
     {%- if front.colophon.document_href %} <a href="{{ front.colophon.document_href }}">{{ front.colophon.document_href }}</a>{% endif %}
     {%- if front.colophon.document_href and front.colophon.workflow_href %} and{% endif %}
-    {%- if front.colophon.workflow_href %} <a href="{{ front.colophon.workflow_href }}">{{ front.colophon.workflow_href }}</a>{% endif %},
-    in this folder. {% endif %}The tool that wrote it:
-    <code class="packet-source">{{ front.colophon.source_url }}</code></p>
+    {%- if front.colophon.workflow_href %} <a href="{{ front.colophon.workflow_href }}">{{ front.colophon.workflow_href }}</a>{% endif %}.
+    {% endif %}The tool that wrote it: <code class="packet-source">{{ front.colophon.source_url }}</code></p>
 </div>
 
 {% if mermaid %}

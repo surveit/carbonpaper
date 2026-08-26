@@ -36,6 +36,8 @@ WORKFLOW_ANCHOR = "#packet-workflow"
 class PacketLink(BaseModel):
     text: str
     href: str
+    # A stage id, which the app sets in mono wherever it prints one.
+    is_stage_id: bool = False
 
 
 class PacketHeadline(BaseModel):
@@ -210,7 +212,11 @@ def _describe_the_judgement(view: RunView) -> PacketCheck:
         text=_say_where_judgement_entered(asked, queued),
         links=[
             *(
-                PacketLink(text=stage.stage_id, href=links.stage_anchor(stage.stage_id))
+                PacketLink(
+                    text=stage.stage_id,
+                    href=links.stage_anchor(stage.stage_id),
+                    is_stage_id=True,
+                )
                 for stage in [*asked, *queued]
             ),
             PacketLink(text="The workflow this run executed", href=WORKFLOW_ANCHOR),
