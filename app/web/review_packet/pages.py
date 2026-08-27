@@ -20,6 +20,7 @@ from app.services.review_packet.views import (
     StageView,
 )
 from app.services.run_guide import RunGuideView
+from app.web.review_packet.front_page import PacketFrontPage
 from app.web.column_order import order_preview_columns
 from app.web.config import templates
 from app.web.loading import load_output_preview, load_output_table
@@ -91,12 +92,15 @@ def write_packet_pages(
     diagram: str,
     issues: RunIssues,
     workflow_stages_by_id: dict[str, WorkflowStage],
+    front: PacketFrontPage,
 ) -> list[str]:
     written = _write_stylesheets(root)
     written.extend(_write_diagram_scripts(root))
     written.append(_write_asset(root, FAVICON))
     written.append(_write_diagram_source(root, diagram))
-    written.append(_write_index(root, view, data, lineage, guide, diagram, issues))
+    written.append(
+        _write_index(root, view, data, lineage, guide, diagram, issues, front)
+    )
     for stage in view.stages:
         written.append(
             _write_stage_page(
@@ -125,10 +129,12 @@ def _write_index(
     guide: RunGuideView | None,
     diagram: str,
     issues: RunIssues,
+    front: PacketFrontPage,
 ) -> str:
     html = _render(
         "packet_index.html",
         run=view,
+        front=front,
         lineage=lineage,
         lineage_dir_href=f"{LINEAGE_DIR}/index.html",
         guide=guide,

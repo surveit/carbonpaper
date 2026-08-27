@@ -59,3 +59,38 @@ body.packet .run-nav {
 
 .packet-good { background: var(--good-bg); color: var(--good-ink); }
 .packet-bad { background: var(--bad-bg); color: var(--bad-ink); }
+
+/* The first screenful. The app's run page opens on an id and a status chip, which
+   is what an operator looks for; a packet is opened by someone who has never used
+   the app, so the question the method asked leads and the ids follow it. */
+.packet-masthead { margin: 0 0 24px; }
+.packet-masthead h1 { margin: 0 0 10px; font-size: 30px; line-height: 1.2; max-width: 28ch; }
+.packet-lede { margin: 0 0 12px; max-width: 68ch; font-size: 15.5px; line-height: 1.55; }
+.packet-ground { margin: 0; font-size: 12.5px; color: var(--muted); }
+.packet-ground .sep { margin: 0 6px; color: var(--border-strong); }
+.packet-ground code { font-size: 11.5px; }
+
+.packet-checks { margin: 28px 0; }
+.packet-checks ol { margin: 8px 0 0; padding-left: 0; list-style: none; counter-reset: check; }
+.packet-checks li { counter-increment: check; position: relative; padding: 8px 0 8px 30px;
+  border-top: 1px solid var(--border); font-size: 14px; line-height: 1.55; max-width: 80ch; }
+.packet-checks li::before { content: counter(check); position: absolute; left: 0; top: 9px;
+  width: 19px; height: 19px; border-radius: 50%; background: var(--sunk-deep); color: var(--muted);
+  font-size: 11px; text-align: center; line-height: 19px; font-variant-numeric: tabular-nums; }
+
+.packet-files { list-style: none; margin: 8px 0 0; padding: 0; }
+.packet-files li { padding: 6px 0; border-top: 1px solid var(--border); font-size: 14px; }
+.packet-files a { font-family: var(--mono); font-size: 13.5px; }
+.packet-files .packet-file-note { color: var(--muted); font-size: 12.5px; margin-left: 8px; }
+
+/* Who wrote the folder and where the tool is. Set at the size of a credit line so it
+   reads as provenance a checker can follow up, never as a claim about the result. */
+.packet-colophon { margin: 44px 0 0; padding-top: 14px; border-top: 1px solid var(--border);
+  font-size: 12.5px; color: var(--muted); line-height: 1.7; max-width: 80ch; }
+.packet-colophon p { margin: 0 0 4px; }
+.packet-colophon code { font-size: 11.5px; }
+.packet-colophon .packet-source { font-size: 12px; word-break: break-all; }
+/* Read at text weight, not the ground line's rule weight: inside a sentence a
+   separator has to be seen to do its job. */
+.packet-checks .sep { color: var(--muted); }
+.packet-checks code { font-size: 12.5px; }
