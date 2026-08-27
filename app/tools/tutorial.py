@@ -22,6 +22,8 @@ from app.services import (
     workspace,
 )
 from app.services.project import WorkflowFile, import_project
+from app.services.errors import CacheArchiveRejected
+from app.services.stage_cache_transfer import import_stage_cache
 from app.services.project import find_projects_by_name
 from app.models.records.project import Project
 from app.services import methodology
@@ -34,6 +36,8 @@ _GUIDE = _DATA_DIR / "review_guides" / f"{_FIXTURE_STEM}.json"
 # The project id is minted at import, so the committed eval names no project and is
 # told which one it belongs to here.
 _EVAL = _DATA_DIR / "evals" / f"{_FIXTURE_STEM}.json"
+# Built by scripts/build_tutorial_cache.py from a run of the fixture beside it.
+TUTORIAL_CACHE_BUNDLE = _DATA_DIR / f"{_FIXTURE_STEM}.cache.zip"
 # The fixture carries no path for these — a committed file cannot know where the
 # workspace is — so each run says which file its input stage reads.
 _CSV_BY_STAGE_ID = {
@@ -78,17 +82,14 @@ class TutorialAgentReference(BaseModel):
 
 
 def seed_tutorial_project(ctx: TutorialContext) -> TutorialAgentReference:
-    name = _find_reusable_tour_project()
+    reused = _find_reusable_tour_project()
     # A second tour reuses what the first seeded: the workspace is not the tour's to
     # fill up, and re-importing would discard whatever the reader did to it.
-    if name is None:
-        for path in (_FIXTURE, _GUIDE, _EVAL, *_CSV_BY_STAGE_ID.values()):
-            if not path.is_file():
-                raise FileNotFoundError(f"the tutorial fixture needs {path}, which is missing")
-        name = import_project(
-            WorkflowFile.model_validate_json(_FIXTURE.read_text(encoding="utf-8")),
-        )
+    name = reused if reused is not None else import_tour_fixture()
     version_id = run_service.resolve_version(name, None)
+    if reused is None:
+        # A reader who edited the tour has moved past the bundle it no longer matches.
+        _seed_stage_cache(name)
     project_service.write_review_guide(
         name, version_id, ReviewGuideDraft.model_validate_json(
             _GUIDE.read_text(encoding="utf-8")
@@ -100,7 +101,7 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialAgentReference:
         project=_read_seeded_record(name),
         version_id=version_id,
         workflow=project_service.read_workflow_summary(name),
-        input_files=_store_tour_files(name),
+        input_files=store_tour_files(name),
         workflow_url=f"{ctx.base_url}project/{name}/workflow",
         guide_url=f"{ctx.base_url}project/{name}/workflow/version/{version_id}",
         runs_url_prefix=f"{ctx.base_url}project/{name}/runs/",
@@ -116,7 +117,34 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialAgentReference:
     )
 
 
-def _store_tour_files(project_id: str) -> dict[str, str]:
+def import_tour_fixture() -> str:
+    """The committed fixture as a runnable project, before the cache and the tour's extras."""
+    for path in (_FIXTURE, _GUIDE, _EVAL, *_CSV_BY_STAGE_ID.values()):
+        if not path.is_file():
+            raise FileNotFoundError(f"the tutorial fixture needs {path}, which is missing")
+    return import_project(
+        WorkflowFile.model_validate_json(_FIXTURE.read_text(encoding="utf-8")),
+    )
+
+
+def _seed_stage_cache(project_id: str) -> None:
+    """Without it the tour's first run spends the model stage, and needs a key to do it."""
+    if not TUTORIAL_CACHE_BUNDLE.is_file():
+        raise FileNotFoundError(
+            f"the tour needs {TUTORIAL_CACHE_BUNDLE}, which is missing. Build it with "
+            "`python -m scripts.build_tutorial_cache`."
+        )
+    report = import_stage_cache(TUTORIAL_CACHE_BUNDLE.read_bytes(), project_id)
+    if report.reachable == 0:
+        raise CacheArchiveRejected(
+            f"{TUTORIAL_CACHE_BUNDLE.name} carries {report.written} entries and the project "
+            f"just seeded from {_FIXTURE.name} can read none of them. The fixture's "
+            "stages have moved since the bundle was built; rebuild it with "
+            "`python -m scripts.build_tutorial_cache`."
+        )
+
+
+def store_tour_files(project_id: str) -> dict[str, str]:
     """stage id -> file id, stored the way an upload is so the tour shows the real flow."""
     stored = {}
     for stage_id, path in _CSV_BY_STAGE_ID.items():
