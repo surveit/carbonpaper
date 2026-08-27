@@ -73,7 +73,7 @@ def _render_findings(contents: PacketContents) -> list[str]:
         lines += [
             f"### {_render_cell(claim.value)}",
             "",
-            f"{claim.label} — column `{claim.column}` of {source}.",
+            f"{claim.label} — the first row's `{claim.column}` in {source}.",
             "",
         ]
     rest = [c for c in contents.claims if not c.primary]
@@ -257,7 +257,7 @@ _RECORDED_LAYOUT: tuple[tuple[str, str, str], ...] = (
     (MANIFEST_FILE, "The run's own record: statuses, row counts, validation", "yes"),
     (WORKFLOW_FILE, "The workflow version this run executed", "yes"),
     (DOCUMENT_FILE, "The prose the workflow was compiled from", "yes"),
-    (EVENTS_FILE, "The run's event log, carrying what each AI model was asked", "yes"),
+    (EVENTS_FILE, "The run's event log, with what any AI model was asked", "yes"),
     (CHECKSUMS_FILE, "SHA-256 of every file here but itself", "yes"),
     (README_FILE, "This page", _A_RENDERING_HELD),
 )
