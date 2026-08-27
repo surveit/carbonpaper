@@ -110,8 +110,8 @@ _SPEND_ROWS = pa.table({"client": ["Ballard", "Amsterdam & Partners"],
 
 def test_a_run_publishes_the_rows_of_the_table_its_stage_declared():
     [saved] = save_workflow_outputs(_workflow_stage([_TABLE]), _SPEND_ROWS, _RUN)
-    assert (saved.slug, saved.citation.row_start, saved.citation.row_end) == (
-        "client-spend", 0, 2)
+    rectangle = saved.citation.rectangle
+    assert (saved.slug, rectangle.row_start, rectangle.row_end) == ("client-spend", 0, 2)
     assert saved.citation.stage_id == "count_client_figures"
     assert saved.citation.run_id == "20260812T133317.816579"
 
@@ -143,12 +143,12 @@ _SOME_COLUMNS = WorkflowTableRule(kind="table", slug="client-names", label="Clie
 
 def test_a_table_naming_no_column_publishes_every_column_the_stage_produced():
     [saved] = save_workflow_outputs(_workflow_stage([_TABLE]), _SPEND_ROWS, _RUN)
-    assert saved.citation.columns == ["client", "external_spend"]
+    assert saved.citation.rectangle.columns == ["client", "external_spend"]
 
 
 def test_a_table_publishes_the_columns_it_named():
     [saved] = save_workflow_outputs(_workflow_stage([_SOME_COLUMNS]), _SPEND_ROWS, _RUN)
-    assert saved.citation.columns == ["client"]
+    assert saved.citation.rectangle.columns == ["client"]
 
 
 def test_a_column_the_stage_never_output_stops_the_run():
@@ -163,9 +163,9 @@ def test_one_stage_can_publish_two_tables_over_different_columns():
     both = save_workflow_outputs(
         _workflow_stage([_TABLE, _SOME_COLUMNS]), _SPEND_ROWS, _RUN
     )
-    assert [len(o.citation.columns) for o in both] == [2, 1]
+    assert [len(o.citation.rectangle.columns) for o in both] == [2, 1]
 
 
 def test_a_cited_row_range_counts_its_rows():
     [saved] = save_workflow_outputs(_workflow_stage([_TABLE]), _SPEND_ROWS, _RUN)
-    assert saved.citation.count_rows() == 2
+    assert saved.citation.rectangle.count_rows() == 2

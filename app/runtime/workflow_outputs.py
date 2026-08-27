@@ -6,7 +6,11 @@ import pyarrow as pa
 from app.core.frames import read_cell
 from app.core.ids import ID
 from app.models import WorkflowStage
-from app.models.claims import StageOutputCellCitation, StageOutputTableCitation
+from app.models.claims import (
+    RowsRectangle,
+    StageOutputCellCitation,
+    StageOutputTableCitation,
+)
 from app.models.records.workflow_output import WorkflowOutput
 from app.models.stages.stage_base import WorkflowFigureRule, WorkflowTableRule
 
@@ -95,7 +99,9 @@ def _publish_table(
         slug=declared.slug, label=declared.label, primary=declared.primary,
         citation=StageOutputTableCitation(
             run_id=identity.run_id, stage_id=stage_id,
-            row_start=0, row_end=table.num_rows,
-            columns=read_published_columns(declared, table),
+            rectangle=RowsRectangle(
+                row_start=0, row_end=table.num_rows,
+                columns=read_published_columns(declared, table),
+            ),
         ),
     )

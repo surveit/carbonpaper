@@ -42,7 +42,13 @@
     {% if selected_total %}
     <span class="alert">Showing {{ "{:,}".format(rows | length) }} of {{ "{:,}".format(rows_total) }} rows — the ones that fed the row you came from.</span>
     {% endif %}
+    {% if rectangle %}
+    <span class="alert">Showing rows {{ rectangle.row_start | row_number }}–{{ rectangle.row_end }} and {{ rectangle.columns | length }} column{% if rectangle.columns | length != 1 %}s{% endif %} of {{ "{:,}".format(rows_total) }} rows — the rectangle this run published.
+      <a href="{{ rows_url }}">Show the whole output instead</a></span>
+    <a class="btn primary" href="{{ links.stage_csv(stage_id, rectangle) }}">⬇ Download this CSV</a>
+    {% else %}
     <a class="btn primary" href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage_id }}/rows.csv">⬇ Download full CSV</a>
+    {% endif %}
     {% endif %}
 </div>
 

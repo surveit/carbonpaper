@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.models.claims import StageOutputCellCitation, StageOutputTableCitation
+from app.models.claims import (
+    RowsRectangle,
+    StageOutputCellCitation,
+    StageOutputTableCitation,
+)
 from app.models.records.workflow_output import WorkflowOutput
 from app.web.run_published import (
     PUBLISHED_PREVIEW_ROWS,
@@ -40,8 +44,8 @@ def _publish_table(slug: str, label: str, row_count: int, run_id: str = _RUN,
     WorkflowOutput(
         slug=slug, label=label, primary=primary,
         citation=StageOutputTableCitation(
-            run_id=run_id, stage_id=_STAGE, row_start=0, row_end=row_count,
-            columns=columns,
+            run_id=run_id, stage_id=_STAGE,
+            rectangle=RowsRectangle(row_start=0, row_end=row_count, columns=columns),
         ),
     ).save()
 
@@ -108,8 +112,11 @@ def test_a_published_table_reads_back_with_its_row_count_and_its_links():
     _publish_table("client-spend", "What each client paid", 24)
     [table] = _read().tables
     assert (table.label, table.row_count) == ("What each client paid", 24)
-    assert table.rows_url == f"/project/{_PROJECT}/runs/{_RUN}/stage/{_STAGE}/rows"
-    assert table.csv_url == f"{table.rows_url}.csv"
+    # Both links carry the rectangle, so they open what was published, not the frame.
+    rows = f"/project/{_PROJECT}/runs/{_RUN}/stage/{_STAGE}/rows"
+    query = "rows=0%3A24&columns=client&columns=external_spend"
+    assert table.rows_url == f"{rows}?{query}"
+    assert table.csv_url == f"{rows}.csv?{query}"
 
 
 def test_a_table_is_not_read_as_a_figure():
@@ -159,7 +166,7 @@ def test_a_primary_table_is_drawn_from_the_frame_the_run_wrote(tmp_path):
     _publish_table("client-spend", "What each client paid", 9, primary=True)
     [table] = _read(run_dir=tmp_path, manifest=manifest).tables
     assert table.preview.columns == ["client", "external_spend"]
-    assert table.preview.rows[0].cells == ["client 0", "0.0"]
+    assert [c.text for c in table.preview.rows[0].cells] == ["client 0", "0.0"]
 
 
 def test_a_drawn_table_holds_the_columns_cited_and_no_others(tmp_path):
@@ -169,7 +176,7 @@ def test_a_drawn_table_holds_the_columns_cited_and_no_others(tmp_path):
                    columns=["client"])
     [table] = _read(run_dir=tmp_path, manifest=manifest).tables
     assert table.preview.columns == ["client"]
-    assert table.preview.rows[0].cells == ["client 0"]
+    assert [c.text for c in table.preview.rows[0].cells] == ["client 0"]
 
 
 def test_a_drawn_table_shows_the_first_rows_only(tmp_path):
@@ -179,19 +186,19 @@ def test_a_drawn_table_shows_the_first_rows_only(tmp_path):
     assert len(table.preview.rows) == PUBLISHED_PREVIEW_ROWS
 
 
-def test_every_drawn_row_links_to_its_own_lineage(tmp_path):
+def test_every_drawn_cell_opens_its_own_lineage(tmp_path):
     manifest = _write_frame(tmp_path, rows=3)
     _publish_table("client-spend", "What each client paid", 3, primary=True)
     [table] = _read(run_dir=tmp_path, manifest=manifest).tables
-    assert [row.href for row in table.preview.rows] == [
-        f"/project/{_PROJECT}/runs/{_RUN}/stage/{_STAGE}/row/{n}/trace/view"
-        for n in range(3)
+    base = f"/project/{_PROJECT}/runs/{_RUN}/stage/{_STAGE}/row"
+    assert [c.href for c in table.preview.rows[1].cells] == [
+        f"{base}/1/trace/view?column=client",
+        f"{base}/1/trace/view?column=external_spend",
     ]
 
 
-def test_a_published_row_names_no_column(tmp_path):
-    # It claims the whole row, so the trace view is not sent to one cell of it.
-    manifest = _write_frame(tmp_path, rows=3)
-    _publish_table("client-spend", "What each client paid", 3, primary=True)
+def test_a_cell_keeps_its_own_row_ordinal_not_its_place_in_the_preview(tmp_path):
+    manifest = _write_frame(tmp_path, rows=40)
+    _publish_table("client-spend", "What each client paid", 40, primary=True)
     [table] = _read(run_dir=tmp_path, manifest=manifest).tables
-    assert all("column=" not in row.href for row in table.preview.rows)
+    assert "/row/4/trace/view" in table.preview.rows[4].cells[0].href

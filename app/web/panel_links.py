@@ -5,7 +5,10 @@ from __future__ import annotations
 from typing import Sequence
 from urllib.parse import quote, urlencode
 
+from pydantic import BaseModel
+
 from app.models.branch_analysis import RowRef
+from app.models.claims import RowsRectangle
 
 
 # aggregate makes its single row out of every input row, so a cohort runs to
@@ -29,8 +32,13 @@ class AppPanelLinks:
     def stage_anchor(self, stage_id: str) -> str:
         return f"{self._base}#{stage_id}"
 
-    def stage_rows(self, stage_id: str, ordinals: list[int] | None = None) -> str:
+    def stage_rows(
+        self, stage_id: str, ordinals: list[int] | None = None,
+        rectangle: RowsRectangle | None = None,
+    ) -> str:
         rows = f"{self._base}/stage/{_segment(stage_id)}/rows"
+        if rectangle is not None:
+            return f"{rows}?{render_rectangle_query(rectangle)}"
         # `ordinals` narrows the table to named rows. The caller bounds how many
         # it passes: they ride in the query string, and a request line has a
         # size limit the server enforces before any handler runs.
@@ -42,11 +50,13 @@ class AppPanelLinks:
         """`raw=1` or the diff partial's own page links back to itself."""
         return f"{self._base}/stage/{_segment(stage_id)}/rows?raw=1"
 
-    def stage_csv(self, stage_id: str) -> str:
-        return f"{self._base}/stage/{_segment(stage_id)}/rows.csv"
+    def stage_csv(self, stage_id: str, rectangle: RowsRectangle | None = None) -> str:
+        csv = f"{self._base}/stage/{_segment(stage_id)}/rows.csv"
+        return csv if rectangle is None else f"{csv}?{render_rectangle_query(rectangle)}"
 
-    def row_trace(self, stage_id: str, row: int) -> str:
-        return f"{self._base}/stage/{_segment(stage_id)}/row/{row}/trace/view"
+    def row_trace(self, stage_id: str, row: int, column: str | None = None) -> str:
+        trace = f"{self._base}/stage/{_segment(stage_id)}/row/{row}/trace/view"
+        return trace if column is None else f"{trace}?{urlencode({'column': column})}"
 
     def build_row_trace_for_figure(self, figure_stage: str, figure_row: int,
                                    sample_choices: Sequence[RowRef]) -> str:
@@ -109,7 +119,10 @@ class PacketPanelLinks:
     def stage_anchor(self, stage_id: str) -> str:
         return f"{self._root}stages/{_segment(stage_id)}.html"
 
-    def stage_rows(self, stage_id: str, ordinals: list[int] | None = None) -> None:
+    def stage_rows(
+        self, stage_id: str, ordinals: list[int] | None = None,
+        rectangle: RowsRectangle | None = None,
+    ) -> None:
         return None
 
     def contributor_rows(self, stage_id: str, ordinals: list[int] | None = None) -> str:
@@ -129,10 +142,11 @@ class PacketPanelLinks:
         """The uncapped rows are stage_csv's data/<id>.csv, linked beside this."""
         return None
 
-    def stage_csv(self, stage_id: str) -> str:
+    def stage_csv(self, stage_id: str, rectangle: RowsRectangle | None = None) -> str:
         return f"{self._root}data/{_segment(stage_id)}.csv"
 
-    def row_trace(self, stage_id: str, row: int) -> str | None:
+    def row_trace(self, stage_id: str, row: int, column: str | None = None) -> str | None:
+        """A page per row, so a column narrows nothing a file name could carry."""
         if self._traced is not None and (stage_id, row) not in self._traced:
             return None
         return packet_lineage_href(self._root, stage_id, row)
@@ -154,6 +168,45 @@ class PacketPanelLinks:
 
     def guide_stage(self, stage_id: str) -> str:
         return self.stage_anchor(stage_id)
+
+
+# `rows=<start>:<end>` and a repeated `columns=`, so a name holding a comma survives.
+ROWS_PARAM = "rows"
+COLUMNS_PARAM = "columns"
+
+
+def render_rectangle_query(rectangle: RowsRectangle) -> str:
+    return urlencode(
+        [(ROWS_PARAM, f"{rectangle.row_start}:{rectangle.row_end}")]
+        + [(COLUMNS_PARAM, name) for name in rectangle.columns]
+    )
+
+
+class RectangleRequest(BaseModel):
+    """What a URL asked for. `None`/empty are unknown here — only the frame settles them."""
+
+    row_start: int = 0
+    row_end: int | None = None
+    columns: list[str] = []
+
+
+def read_rectangle_query(
+    rows: str | None, columns: list[str] | None
+) -> RectangleRequest | None:
+    """None where neither half was asked for; raises on a `rows` that is not start:end."""
+    if rows is None and not columns:
+        return None
+    start, end = _read_row_range(rows)
+    return RectangleRequest(row_start=start, row_end=end, columns=list(columns or []))
+
+
+def _read_row_range(rows: str | None) -> tuple[int, int | None]:
+    if rows is None:
+        return 0, None
+    start, sep, end = rows.partition(":")
+    if not sep or not start.isdigit() or not end.isdigit():
+        raise ValueError(f"{rows!r} is not a <start>:<end> row range")
+    return int(start), int(end)
 
 
 def _segment(value: str) -> str:

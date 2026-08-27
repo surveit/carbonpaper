@@ -37,18 +37,23 @@ class StageOutputCellCitation(Citation):
     value: JsonScalar
 
 
-class StageOutputTableCitation(Citation):
-    # The rows and columns actually published, never the whole frame by assumption.
-    kind: Literal["stage_output_table"] = "stage_output_table"
-    run_id: ID
-    stage_id: ID
-    # Half-open, as a python slice reads: rows [row_start, row_end).
+class RowsRectangle(BaseModel):
+    """A table inside a stage's output: rows [row_start, row_end) by name-ordered columns."""
+
     row_start: int
     row_end: int
     columns: list[str]
 
     def count_rows(self) -> int:
         return self.row_end - self.row_start
+
+
+class StageOutputTableCitation(Citation):
+    # The rows and columns actually published, never the whole frame by assumption.
+    kind: Literal["stage_output_table"] = "stage_output_table"
+    run_id: ID
+    stage_id: ID
+    rectangle: RowsRectangle
 
 
 class StageOutputRowCitation(Citation):

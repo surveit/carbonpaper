@@ -5,8 +5,8 @@
   {%- set tables = header.published.tables %}
   <section class="wf-outputs">
     <h2>What this run published</h2>
-    <p class="wf-note">Every figure links to the row it was read from, and every
-      published row to its own lineage.</p>
+    <p class="wf-note">Every value links to its own lineage — the figure to the cell it
+      was read from, each published cell to the row and column behind it.</p>
     {%- if leads %}
     <h3 class="wf-group">Headline claims</h3>
     <div class="wf-leads{% if leads | length > 2 %} crowded{% endif %}">
@@ -30,15 +30,15 @@
         <a href="{{ table.csv_url }}">⬇ CSV</a>
       </p>
       {%- if table.preview %}
+      {# No lineage column: a cell IS a coordinate, so each one opens its own. #}
       <div class="table-scroll">
-      <table class="data-preview">
-        <thead><tr><th class="syw-col">trace</th>{% for c in table.preview.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+      <table class="data-preview wf-cells">
+        <thead><tr>{% for c in table.preview.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
         <tbody>
         {%- for row in table.preview.rows %}
         <tr>
-          <td class="syw-cell"><a href="{{ row.href }}" target="_blank" rel="noopener"
-              title="trace this row's provenance back through the pipeline">View lineage</a></td>
-          {%- for cell in row.cells %}<td class="cell-clip" title="{{ cell }}">{{ cell }}</td>{% endfor %}
+          {%- for cell in row.cells %}<td class="cell-clip"><a href="{{ cell.href }}"
+            title="{{ cell.text }} — open this cell's lineage">{{ cell.text }}</a></td>{% endfor %}
         </tr>
         {%- endfor %}
         </tbody>
