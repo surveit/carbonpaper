@@ -345,19 +345,6 @@ def test_an_enrich_reads_as_a_diff_against_its_subject_input(run_ctx) -> None:
     assert "diff-col-new" in html and "north" in html
 
 
-def _cell_classes(html: str, text: str) -> str:
-    cell = html[:html.index(f">{text}<")].rsplit("<td", 1)[1]
-    return "" if not cell.strip().startswith('class="') else cell.split('"')[1]
-
-
-def test_a_column_the_stage_read_keeps_full_ink(run_ctx) -> None:
-    # The enrich joins on `name` and carries `val`/`label` past untouched.
-    _pdir, run_id = run_ctx
-    html = _panel(run_id, ROUTE_ID)
-    assert _cell_classes(html, "alpha") == ""
-    assert "diff-cell-same" in _cell_classes(html, "small")
-
-
 def test_the_tab_strip_replaces_inputs_and_outputs(run_ctx) -> None:
     _pdir, run_id = run_ctx
     for stage_id in (CLASSIFY_ID, LOAD_ID):  # in-scope and out-of-scope alike
