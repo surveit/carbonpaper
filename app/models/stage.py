@@ -114,7 +114,7 @@ def validate_stage(spec: Any) -> list[str]:
 
 
 # docs/models-and-storage.md
-STAGE_SPEC_SCHEMA_VERSION = 7
+STAGE_SPEC_SCHEMA_VERSION = 8
 
 
 def stage_to_spec_dict(stage: Stage) -> dict[str, Any]:
