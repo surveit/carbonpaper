@@ -17,7 +17,9 @@ from arch import find_banned_words, scan_all_text
 # example test cases GENERATES them (test generation). A value computed from
 # other values is computed from / read off / built from / follows from the
 # thing it comes from — name that thing.
-BANNED_WORDS = {"canonical", "deriv"}
+
+# sorry/unfortunately: state the boundary, do not apologise. docs/visual-language.md
+BANNED_WORDS = {"canonical", "deriv", "sorry", "unfortunately"}
 
 _SCANNED_SUFFIXES = (".py", ".md", ".html", ".js", ".css")
 
