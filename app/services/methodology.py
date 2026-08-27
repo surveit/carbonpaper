@@ -27,3 +27,15 @@ def write_methodology(project_id: str, text: str) -> None:
 
 def exists(project_id: str) -> bool:
     return Methodology.exists(project_id)
+
+
+def read_opening_paragraph(project_id: str) -> str | None:
+    """What the project is for, in the author's own words — the first prose the document holds."""
+    text = read_methodology(project_id)
+    if not text:
+        return None
+    for block in text.split("\n\n"):
+        paragraph = " ".join(block.split())
+        if paragraph and not paragraph.startswith("#"):
+            return paragraph
+    return None

@@ -27,6 +27,7 @@ from app.web.stage_prose import plan_an_aggregate, say_what_a_stage_did
 from app.web.transform_block import name_transform_block
 from app.web.diagrams import TYPE_LABEL
 from app.web.file_sizes import describe_bytes, read_turn
+from app.web.markdown_render import render_markdown
 from app.services.workspace import (
     configure_projects_dir_from_env as configure_projects_dir_from_env,
     projects_dir as projects_dir,
@@ -136,6 +137,7 @@ def serves_an_open_demo() -> bool:
 templates.env.globals["serves_an_open_demo"] = serves_an_open_demo
 
 templates.env.filters["friendly_time"] = friendly_time
+templates.env.filters["markdown"] = render_markdown
 templates.env.filters["relative_time"] = relative_time
 templates.env.filters["friendly_duration"] = friendly_duration
 templates.env.filters["usd"] = usd

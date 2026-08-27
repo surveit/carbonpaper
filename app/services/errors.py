@@ -23,3 +23,9 @@ class CacheArchiveRejected(Exception):
 
 class ProjectArchiveRejected(Exception):
     """A project archive this workspace could not read a project out of."""
+
+
+class RunNotPublishable(Exception):
+    def __init__(self, run_id: str, refusals: list[str]):
+        self.refusals = refusals
+        super().__init__(f"{run_id}: {'; '.join(refusals)}")

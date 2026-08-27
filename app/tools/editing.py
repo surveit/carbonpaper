@@ -32,6 +32,8 @@ class EditingContext(BaseModel):
     project_id: str | None = None
     # The address this session's reader is on, written per turn off their own request.
     base_url: str
+    # What the link that opened this chat was for, so the opening turn names it.
+    task: str | None = None
 
 
 def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:

@@ -15,6 +15,31 @@ bite most often.
   Methodology · Glossary). `/project/<m>/workflow` carries the mermaid graph + inline
   node review (`/project/<m>/node/<id>/review-partial`); it has no nav row, and is
   reached from Versions.
+
+## The Overview page (`section_overview.html` ← `app.web.project_overview`)
+One **deliverable slot** and one **queue**. The slot is always present and says one of
+four things (`DeliverableState`): `published` · `publishable` · `refused` · `no_runs`.
+It shows the newest published run if there is one, otherwise the newest production run,
+so publishing pins what the page leads with.
+
+**Publishing a run** (`app.services.run_publication`) is the one act that makes a run's
+figures the project's numbers: it writes a `PublishedRun` record, and the packet export
+appears in place of the Publish button. Nothing is copied — the figures stay where the
+executor wrote them, and withdrawing removes only the project's claim on them.
+
+Three things refuse it, and each renders as a failed check under the figures:
+- **windowed** — a test run, or any stage carrying a row cap. Both finish every stage
+  over a slice, so both read as complete and are not output. The cap is drawn in the
+  error palette wherever an input is listed, never as a grey note.
+- **incomplete** — the run did not end `ok`.
+- **no_figures** — no stage declared one. A figure is written by the executor from
+  `Stage.workflow_outputs`, so a finished run cannot be given one after the fact; the
+  way through is a workflow edit, a version and a re-run.
+
+A queue row is a sentence and one link. Reviewing, publishing a version and publishing
+a run are app screens; every other row opens `/chat/agent/editing/new?project_id=…&task=…`,
+which `EditingContext.task` turns into the chat's opening turn.
+
 - `/project/<m>/runs`, `/runs/<id>` — run history + detail. `/runs/new` is the
   run-launch form (version picker, one path field + row cap per file input, and an
   **Advanced** fold holding the row-level cache checkbox) — the one surface where a run

@@ -28,6 +28,9 @@ from app.services import (
 )
 from app.services.loader import list_parsed_stages, resolve_function_code
 from app.services.workspace import LOADER_BOOKKEEPING_KEYS
+from app.web.project_overview import build_project_overview
+from app.services.errors import RunNotPublishable
+from app.services.run_publication import publish_run, withdraw_run
 from app.web.breadcrumbs import build_home_crumbs, build_version_crumbs, build_workflow_crumbs
 from app.web.config import templates
 from app.runtime.stage_tests import run_stage_tests
@@ -73,6 +76,25 @@ async def set_project_private(project_name: str, private: str = Form("")):
     """Stays on the project: a private one is gone from the home grid it would return to."""
     project_id = validate_project_or_404(project_name)
     project.set_project_private(project_id, private == "on")
+    return RedirectResponse(f"/project/{project_id}", status_code=303)
+
+
+@router.post("/project/{project_name}/runs/{run_id}/publish")
+async def publish_a_run(project_name: str, run_id: str):
+    """One act: the run's figures become the project's numbers and the packet turns on."""
+    project_id = validate_project_or_404(project_name)
+    try:
+        publish_run(project_id, run_id)
+    except RunNotPublishable as refused:
+        raise HTTPException(status_code=409, detail=str(refused)) from refused
+    return RedirectResponse(f"/project/{project_id}", status_code=303)
+
+
+@router.post("/project/{project_name}/runs/{run_id}/withdraw")
+async def withdraw_a_run(project_name: str, run_id: str):
+    """The figures stay where the run wrote them; only the project's claim on them goes."""
+    project_id = validate_project_or_404(project_name)
+    withdraw_run(project_id, run_id)
     return RedirectResponse(f"/project/{project_id}", status_code=303)
 
 
@@ -148,7 +170,11 @@ async def project_overview(request: Request, project_name: str):
     return templates.TemplateResponse(
         request,
         "section_overview.html",
-        {"state": shell_state(project_name, "overview"), "section": "overview"},
+        {
+            "state": shell_state(project_name, "overview"),
+            "section": "overview",
+            "overview": build_project_overview(project_name),
+        },
     )
 
 

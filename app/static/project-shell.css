@@ -202,109 +202,112 @@
 .vd-desc .byline { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
 .vd-desc.empty p { color: var(--muted); font-style: italic; font-size: 14px; }
 
-/* ═══ OVERVIEW section ═══ */
-.ov-head { margin-bottom: 18px; }
-
-.ov-title h1 { margin-bottom: 6px; }
-
-.ov-meta {
-    color: var(--muted);
-    font-size: 13px;
-    margin: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 8px;
-    align-items: center;
-}
-
+/* ═══ OVERVIEW section ═══
+   One deliverable slot and one queue. The slot is the run this project could hand
+   someone; its border is the verdict — plain while unpublished, good once published,
+   bad while something refuses it. Colour is carried by the checks and the status
+   pill as well, so the border alone never has to be read. */
+.ov-meta { color: var(--muted); font-size: 13px; margin: 0 0 20px; display: flex;
+    flex-wrap: wrap; gap: 6px 8px; align-items: center; }
 .ov-meta b { color: var(--fg); font-weight: 600; }
-
 .ov-dot { color: var(--border); }
+.ov-privacy { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
 
-.ov-privacy { display: flex; align-items: center; gap: 8px; }
+.ov-purpose { border-left: 3px solid var(--accent); padding: 1px 0 1px 16px;
+    margin: 0 0 26px; max-width: 88ch; }
+.ov-purpose-text p { margin: 0; font-size: 16.5px; line-height: 1.6; }
+.ov-purpose-src { display: block; margin-top: 7px; font-size: 12.5px; color: var(--muted); }
+.ov-purpose.absent { border-left-color: var(--border-strong); }
+.ov-purpose.absent p { margin: 0; color: var(--muted); font-size: 15px; }
 
-/* The prominent "do this next" CTA. */
-.ov-cta {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    margin: 4px 0 28px;
-    padding: 16px 22px;
-    background: var(--accent);
-    color: var(--on-dark);
-    border-radius: 10px;
-    text-decoration: none;
-    box-shadow: 0 1px 6px color-mix(in srgb, var(--accent) 25%, transparent);
-    transition: background 0.12s, transform 0.05s;
-}
+.ov-split { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+    gap: 20px; align-items: start; }
+@media (max-width: 1100px) { .ov-split { grid-template-columns: 1fr; } }
 
-.ov-cta:hover { background: var(--accent-deep); }
+.ov-slot-h { margin-top: 0; }
 
-.ov-cta:active { transform: translateY(1px); }
+.ov-deliver { border: 1px solid var(--border-strong); border-radius: 10px;
+    background: var(--raised); }
+.ov-deliver.reached { border-color: var(--good-bd); }
+.ov-deliver.refused { border-color: var(--bad-bd); }
 
-.ov-cta-kicker {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-    font-weight: 700;
-    opacity: 0.85;
-    background: color-mix(in srgb, var(--on-dark) 18%, transparent);
-    padding: 3px 9px;
-    border-radius: 5px;
-    flex: none;
-}
+.ov-deliver-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 13px 18px; border-bottom: 1px solid var(--border); }
+.ov-deliver-when { font-weight: 600; color: var(--fg); text-decoration: none; }
+.ov-deliver-when:hover { color: var(--accent); }
+.ov-deliver-cta { margin-left: auto; }
+/* A refusal is stated in the checks below; the control stays visible so the reader
+   can see what is being withheld rather than wondering where it went. */
+.btn.blocked { opacity: 0.45; cursor: not-allowed; }
 
-.ov-cta-label { font-size: 17px; font-weight: 600; flex: 1 1 auto; }
+.ov-claims { display: flex; gap: 34px; flex-wrap: wrap; padding: 16px 18px 14px; }
+.ov-claim .v { display: block; font-size: 30px; font-weight: 600; letter-spacing: -0.7px;
+    line-height: 1.1; }
+.ov-claim .v a { color: var(--fg); text-decoration: none; }
+.ov-claim .v a:hover { color: var(--accent); }
+.ov-claim .l { display: block; font-size: 12.5px; color: var(--muted); max-width: 24ch; }
 
-.ov-cta-arrow { font-size: 20px; flex: none; }
+.ov-checks { display: flex; flex-direction: column; gap: 1px; background: var(--border);
+    border-top: 1px solid var(--border); }
+.ov-check { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 10px;
+    align-items: start; background: var(--raised); padding: 9px 18px; font-size: 13px; }
+.ov-check.bad { background: var(--bad-bg); }
+.ov-check-mark { text-align: center; font-weight: 700; color: var(--good-ink); }
+.ov-check.bad .ov-check-mark { color: var(--bad-ink); }
+.ov-check .muted { display: block; font-size: 12px; margin-top: 1px; }
 
-.ov-status-h { margin-top: 8px; }
+.ov-rests { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px;
+    padding: 14px 18px; border-top: 1px solid var(--border); background: var(--sunk); }
+.ov-rests h5 { margin: 0 0 5px; font-size: 10.5px; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--muted); font-weight: 700; }
+.ov-rests p { margin: 0; font-size: 13px; }
+.ov-file { display: flex; gap: 8px; align-items: baseline; font-size: 13px; padding: 2px 0;
+    flex-wrap: wrap; }
+/* A cap is why a complete-looking run cannot be published, so it is never a grey note. */
+.ov-cap { background: var(--bad-bg); color: var(--bad-ink); border: 1px solid var(--bad-bd);
+    border-radius: 4px; padding: 0 6px; font-size: 11.5px; font-weight: 600; }
 
-.ov-tiles {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 14px;
-    margin: 8px 0 20px;
-}
+.ov-more { border-top: 1px solid var(--border); }
+.ov-more summary { padding: 10px 18px; font-size: 12.5px; color: var(--muted);
+    cursor: pointer; font-weight: 600; }
+.ov-rest-figures { padding: 0 18px 14px; display: grid; gap: 2px 22px;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.ov-rest-figures div { display: flex; gap: 10px; align-items: baseline; font-size: 13px;
+    padding: 3px 0; }
+.ov-rest-figures .n { flex: none; min-width: 96px; text-align: right; font-weight: 600; }
+.ov-rest-figures .k { color: var(--muted); }
 
-.ov-tile {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 14px 16px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--raised);
-    text-decoration: none;
-    color: var(--fg);
-    transition: box-shadow 0.12s, border-color 0.12s;
-}
+.ov-deliver-foot { border-top: 1px solid var(--border); padding: 11px 18px; font-size: 13px;
+    color: var(--muted); background: var(--sunk); border-radius: 0 0 9px 9px;
+    display: flex; align-items: center; gap: 12px; }
+.ov-deliver-foot form { margin: 0 0 0 auto; }
 
-.ov-tile:hover { border-color: var(--border-strong); box-shadow: 0 1px 6px var(--shadow); }
+.ov-deliver-empty { padding: 18px; }
+.ov-deliver-empty p { margin: 0 0 12px; font-size: 15px; }
 
-.ov-tile-k {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--muted);
-    font-weight: 700;
-}
+.ov-queue { border: 1px solid var(--border-strong); border-radius: 10px;
+    background: var(--raised); overflow: hidden; }
+.ov-q-row { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 11px;
+    align-items: start; padding: 11px 16px; border-bottom: 1px solid var(--border); }
+.ov-q-row:last-child { border-bottom: none; }
+.ov-q-n { font-size: 15px; font-weight: 600; text-align: right; line-height: 1.4; }
+.ov-q-n.tone-good { color: var(--good-ink); }
+.ov-q-n.tone-warn { color: var(--warn-ink); }
+.ov-q-n.tone-bad { color: var(--bad-ink); }
+.ov-q-n.tone-info { color: var(--info-ink); }
+.ov-q-n.tone-idle { color: var(--muted); }
+.ov-q-what { display: block; font-size: 13.5px; font-weight: 600; line-height: 1.35; }
+.ov-q-why { display: block; font-size: 12px; color: var(--muted); margin-top: 1px; }
 
-.ov-tile-v { font-size: 18px; font-weight: 600; letter-spacing: -0.2px; }
-
-.ov-tile-v.ok { color: var(--good-ink); }
-
-.ov-tile-v.warn { color: var(--warn-ink); }
-
-.ov-tile-v.locked { color: var(--warn-ink); font-size: 15px; }
-
-.ov-tile-v.none { color: var(--muted); font-weight: 500; }
-
-.ov-tile-sub { font-size: 12px; color: var(--muted); }
-
-.ov-tile-sub.review { color: var(--state-review-ink); font-weight: 600; }
-
-.ov-foot { font-size: 13px; margin-top: 8px; }
+/* Two shapes on purpose: a pill opens a conversation, a square button is an app screen. */
+.ov-ask { display: inline-flex; align-items: center; margin-top: 6px; padding: 3px 10px;
+    border: 1px solid var(--border-strong); border-radius: 20px; background: var(--sunk);
+    font-size: 12px; font-weight: 600; color: var(--accent); text-decoration: none; }
+.ov-ask:hover { background: var(--hover); border-color: var(--accent); }
+.ov-go { display: inline-flex; align-items: center; margin-top: 6px; padding: 4px 11px;
+    border-radius: 5px; background: var(--accent); color: var(--on-dark); font-size: 12px;
+    font-weight: 600; text-decoration: none; }
+.ov-go:hover { background: var(--accent-deep); }
 
 /* ═══ WORKFLOW section: empty-graph hint ═══ */
 .wf-empty-graph { margin: 14px 0; }
