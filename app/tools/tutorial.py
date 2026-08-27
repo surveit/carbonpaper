@@ -21,7 +21,7 @@ from app.services import (
     run as run_service,
     workspace,
 )
-from app.services.project import WorkflowFile, import_project
+from app.services.project import WorkflowFile, import_project, name_cache_sidecar
 from app.services.errors import CacheArchiveRejected
 from app.services.stage_cache_transfer import import_stage_cache
 from app.services.project import find_projects_by_name
@@ -37,7 +37,7 @@ _GUIDE = _DATA_DIR / "review_guides" / f"{_FIXTURE_STEM}.json"
 # told which one it belongs to here.
 _EVAL = _DATA_DIR / "evals" / f"{_FIXTURE_STEM}.json"
 # Built by scripts/build_tutorial_cache.py from a run of the fixture beside it.
-TUTORIAL_CACHE_BUNDLE = _DATA_DIR / f"{_FIXTURE_STEM}.cache.zip"
+TUTORIAL_CACHE_BUNDLE = name_cache_sidecar(_FIXTURE)
 # The fixture carries no path for these — a committed file cannot know where the
 # workspace is — so each run says which file its input stage reads.
 _CSV_BY_STAGE_ID = {

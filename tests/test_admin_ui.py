@@ -3,12 +3,19 @@ the real workspace.
 """
 from __future__ import annotations
 
+from io import BytesIO
+import json
+from urllib.parse import unquote_plus
+import zipfile
+
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import project, workspace
 from app.services.project import WorkflowFile
+from app.services.stage_cache_transfer import count_cached_entries
+from app.tools.tutorial import TUTORIAL_CACHE_BUNDLE
 
 client = TestClient(app)
 
@@ -192,3 +199,56 @@ def test_a_cache_upload_naming_an_unknown_destination_404s(workspace_root):
     )
 
     assert r.status_code == 404
+
+
+# ─── Archive: the project and the stage cache in one file ─────────────────────
+
+
+def _committed_cache_size() -> int:
+    with zipfile.ZipFile(BytesIO(TUTORIAL_CACHE_BUNDLE.read_bytes())) as bundle:
+        return int(json.loads(bundle.read("manifest.json"))["entry_count"])
+
+
+def test_loading_a_seed_bundle_brings_the_cache_committed_beside_it(workspace_root):
+    r = client.post(f"/admin/load/{_BUNDLE}", follow_redirects=False)
+
+    assert r.status_code == 303
+    seeded = count_cached_entries(_loaded_project_id())
+    assert seeded == _committed_cache_size()
+    # Reachable, not merely stored: the fixture that recorded it is the one just loaded.
+    assert f"{seeded:,} of them reachable" in unquote_plus(r.headers["location"])
+
+
+def test_downloading_with_cache_serves_an_archive_holding_both_halves(workspace_root):
+    client.post(f"/admin/load/{_BUNDLE}", follow_redirects=False)
+
+    r = client.get(f"/admin/export-with-cache/{_loaded_project_id()}")
+
+    assert r.status_code == 200
+    assert r.headers["content-disposition"] == f'attachment; filename="{_loaded_project_id()}.zip"'
+    with zipfile.ZipFile(BytesIO(r.content)) as archive:
+        assert set(archive.namelist()) == {"workflow.json", "manifest.json", "entries.jsonl"}
+        assert WorkflowFile.model_validate_json(archive.read("workflow.json")).name == _BUNDLE
+
+
+def test_an_uploaded_archive_carries_the_cache_into_the_project_it_mints(workspace_root):
+    client.post(f"/admin/load/{_BUNDLE}", follow_redirects=False)
+    seeded = count_cached_entries(_loaded_project_id())
+    archive = client.get(f"/admin/export-with-cache/{_loaded_project_id()}").content
+    _empty_workspace(workspace_root.parent / "second")
+
+    r = _upload(archive, "bundle.zip")
+
+    assert r.status_code == 303
+    # The cache follows the project into an id that did not exist when it was exported.
+    reimported = _loaded_project_id()
+    assert count_cached_entries(reimported) == seeded
+    assert f"{seeded:,} of them reachable" in unquote_plus(r.headers["location"])
+
+
+def test_a_cache_export_uploaded_as_a_project_is_refused_and_writes_nothing(workspace_root):
+    r = _upload(TUTORIAL_CACHE_BUNDLE.read_bytes(), "cache.zip")
+
+    assert r.status_code == 400
+    assert "no workflow.json in the archive" in r.json()["detail"]
+    assert project.list_projects() == []

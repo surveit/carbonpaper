@@ -6,8 +6,10 @@ unknown name 404s instead of reaching the seam with unsanitized input.
 """
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlencode
+import zipfile
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -16,7 +18,9 @@ from pydantic import ValidationError
 from app.seeds.seed import discover_workflow_files
 from app.services import project
 from app.services.project import (
-    WorkflowFile, read_project_name, export_project, import_project,
+    CacheImportReport, ProjectArchiveRejected, ProjectImportReport, WorkflowFile,
+    export_project, export_project_archive, import_bundle_file, import_project,
+    import_project_archive, read_project_name,
 )
 from app.web.config import templates
 
@@ -64,13 +68,17 @@ async def admin_index(request: Request, msg: str | None = None):
 
 @router.post("/admin/load/{bundle}")
 async def load_bundle(bundle: str):
-    wf = WorkflowFile.model_validate_json(_bundle_path(bundle).read_text(encoding="utf-8"))
+    path = _bundle_path(bundle)
+    try:
+        report = import_bundle_file(path)
+    except ProjectArchiveRejected as exc:
+        raise HTTPException(status_code=400, detail=f"'{path.name}': {exc}") from exc
     # Loading a bundle twice makes a SECOND project rather than being refused: a label
     # is not unique, so there is nothing to clash with and nothing to overwrite. The
     # message names the id, which is the only half that tells the two of them apart.
-    project_id = import_project(wf)
     return _redirect_to_admin(
-        f"Loaded '{read_project_name(project_id)}' ({project_id}) from bundle '{bundle}'."
+        f"Loaded '{read_project_name(report.project_id)}' ({report.project_id}) "
+        f"from bundle '{bundle}'." + _say_what_the_cache_import_did(report.cache)
     )
 
 
@@ -86,12 +94,52 @@ async def download_project(project_name: str) -> Response:
     )
 
 
+@router.get("/admin/export-with-cache/{project_name}")
+async def download_project_with_cache(project_name: str) -> Response:
+    project_id = _known_project(project_name)
+    # Named by id, as the cache export beside it is: the label rides inside the archive.
+    return Response(
+        content=export_project_archive(project_id),
+        media_type="application/zip",
+        headers={"content-disposition": f'attachment; filename="{project_id}.zip"'},
+    )
+
+
 @router.post("/admin/import")
 async def upload_project(file: UploadFile = File(...)):
-    wf = _parse_workflow_file(await file.read(), file.filename)
-    project_id = import_project(wf)
+    raw = await file.read()
+    if zipfile.is_zipfile(BytesIO(raw)):
+        report = _import_archive(raw, file.filename)
+        return _redirect_to_admin(
+            f"Imported '{read_project_name(report.project_id)}' ({report.project_id}) "
+            "from an uploaded archive." + _say_what_the_cache_import_did(report.cache)
+        )
+    project_id = import_project(_parse_workflow_file(raw, file.filename))
     return _redirect_to_admin(
         f"Imported '{read_project_name(project_id)}' ({project_id}) from an uploaded file."
+    )
+
+
+def _import_archive(raw: bytes, filename: str | None) -> ProjectImportReport:
+    try:
+        return import_project_archive(raw)
+    except ProjectArchiveRejected as exc:
+        raise HTTPException(status_code=400, detail=f"'{filename}': {exc}") from exc
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"'{filename}' is not a valid WorkflowFile document: {exc}",
+        ) from exc
+
+
+def _say_what_the_cache_import_did(cache: CacheImportReport | None) -> str:
+    """Reachable is what says the cache will be READ, so it is in the sentence."""
+    if cache is None:
+        return ""
+    stored = cache.written + cache.already_stored
+    return (
+        f" It brought {stored:,} cache rows, {cache.reachable:,} of them reachable "
+        "from the stages that came with it."
     )
 
 

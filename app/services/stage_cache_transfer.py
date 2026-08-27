@@ -74,6 +74,12 @@ def import_stage_cache(archive: bytes, destination_project_id: str) -> CacheImpo
     )
 
 
+def validate_cache_archive(archive: bytes) -> None:
+    """Raises what import would raise, before a caller writes what a refusal strands."""
+    with zipfile.ZipFile(BytesIO(archive)) as bundle:
+        _read_manifest(bundle)
+
+
 def count_cached_entries(project_id: str) -> int:
     return len(StageCacheEntry.read_only().find_project_entries(project_id))
 

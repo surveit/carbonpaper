@@ -4,7 +4,7 @@
 <div class="dash-header">
     <div class="dash-header-text">
         <h1>Workspace admin</h1>
-        <p class="lede">Load a packaged seed bundle into this workspace, download a project as a portable bundle file, or upload one back.</p>
+        <p class="lede">Load a packaged seed bundle into this workspace, download a project as a portable bundle file, or upload one back. The archive download carries the project's stage cache with it, so a run started here can be finished elsewhere without paying for those rows again.</p>
     </div>
     <a href="/admin/cache" class="btn">Stage cache</a>
     <a href="/admin/spend" class="btn">Model spend</a>
@@ -52,6 +52,7 @@
             <td><a href="/project/{{ p }}">{{ p }}</a></td>
             <td>
                 <a href="/admin/export/{{ p }}" class="btn" download>Download bundle</a>
+                <a href="/admin/export-with-cache/{{ p }}" class="btn" download>Download bundle + cache</a>
             </td>
         </tr>
         {% endfor %}
@@ -81,9 +82,9 @@ document.getElementById("reset-tour-btn").addEventListener("click", function () 
 </script>
 
 <h2>Upload a bundle</h2>
-<p class="muted">A bundle file downloaded from this or another workspace. The upload is rejected whole if it does not parse — a project is never partly written.</p>
+<p class="muted">A bundle file or an archive downloaded from this or another workspace. The upload is rejected whole if it does not parse — a project is never partly written, and neither is a cache. An archive imports its cache into the project it mints here.</p>
 <form method="post" action="/admin/import" enctype="multipart/form-data">
-    <input type="file" name="file" accept="application/json,.json" required>
+    <input type="file" name="file" accept="application/json,.json,application/zip,.zip" required>
     <button type="submit" class="btn">Upload</button>
 </form>
 {% endblock %}
