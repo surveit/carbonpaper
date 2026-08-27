@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping
 
+from fastapi import HTTPException
 from pydantic import BaseModel
 
 from app.core.json_types import JsonScalar
@@ -116,7 +117,7 @@ def _build_table(
         slug=output.slug,
         label=output.label,
         primary=output.primary,
-        row_count=citation.row_count,
+        row_count=citation.count_rows(),
         rows_url=base,
         csv_url=f"{base}.csv",
         preview=(
@@ -137,20 +138,24 @@ def _read_preview(
     output_path = _find_output_path(manifest, citation.stage_id)
     if output_path is None:
         return None
-    preview = loading.load_output_preview(run_dir, output_path, PUBLISHED_PREVIEW_ROWS)
-    if preview is None or "error" in preview:
+    drawn = range(
+        citation.row_start, min(citation.row_start + PUBLISHED_PREVIEW_ROWS, citation.row_end)
+    )
+    try:
+        preview = loading.load_selected_output_rows(run_dir, output_path, list(drawn))
+    except HTTPException:
         return None
-    columns = [str(name) for name in preview["columns"]]
+    # The citation's columns, not the frame's: the published table is what was cited.
     return TablePreview(
-        columns=columns,
+        columns=citation.columns,
         rows=[
             PublishedRow(
-                cells=[str(row.get(name, "")) for name in columns],
+                cells=[str(row.get(name, "")) for name in citation.columns],
                 href=run_service.build_row_trace_url(
-                    project_id, run_id, citation.stage_id, ordinal
+                    project_id, run_id, citation.stage_id, row[loading.SELECTED_ORDINAL_KEY]
                 ),
             )
-            for ordinal, row in enumerate(preview["preview"])
+            for row in preview["rows"]
         ],
     )
 

@@ -17,8 +17,40 @@ from .validation import Issue
 PUBLISHED_ROW = 0
 
 
-def find_output_row_issues(workflow_stage: WorkflowStage, table: pa.Table) -> list[Issue]:
-    figures = workflow_stage.stage.list_published_figures()
+def find_workflow_output_issues(
+    workflow_stage: WorkflowStage, table: pa.Table
+) -> list[Issue]:
+    stage = workflow_stage.stage
+    return _find_figure_row_issues(stage.list_published_figures(), table) + [
+        issue
+        for declared in stage.list_published_tables()
+        for issue in _find_table_column_issues(declared, table)
+    ]
+
+
+def save_workflow_outputs(
+    workflow_stage: WorkflowStage, table: pa.Table, identity: RunIdentity
+) -> list[WorkflowOutput]:
+    stage = workflow_stage.stage
+    published = [
+        _publish_figure(figure, workflow_stage.id, table, identity)
+        for figure in stage.list_published_figures()
+    ] + [
+        _publish_table(declared, workflow_stage.id, table, identity)
+        for declared in stage.list_published_tables()
+    ]
+    for output in published:
+        output.save()
+    return published
+
+
+def read_published_columns(declared: WorkflowTableRule, table: pa.Table) -> list[str]:
+    return list(declared.columns) if declared.columns else list(table.column_names)
+
+
+def _find_figure_row_issues(
+    figures: list[WorkflowFigureRule], table: pa.Table
+) -> list[Issue]:
     if not figures or table.num_rows == 1:
         return []
     columns = ", ".join(f"`{figure.column}`" for figure in figures)
@@ -29,19 +61,18 @@ def find_output_row_issues(workflow_stage: WorkflowStage, table: pa.Table) -> li
     )]
 
 
-def save_workflow_outputs(
-    workflow_stage: WorkflowStage, table: pa.Table, identity: RunIdentity
-) -> list[WorkflowOutput]:
-    published = [
-        _publish_figure(figure, workflow_stage.id, table, identity)
-        for figure in workflow_stage.stage.list_published_figures()
-    ]
-    declared_table = workflow_stage.stage.find_published_table()
-    if declared_table is not None:
-        published.append(_publish_table(declared_table, workflow_stage.id, table, identity))
-    for output in published:
-        output.save()
-    return published
+def _find_table_column_issues(
+    declared: WorkflowTableRule, table: pa.Table
+) -> list[Issue]:
+    missing = [c for c in declared.columns or [] if c not in table.column_names]
+    if not missing:
+        return []
+    return [Issue(
+        "error", None,
+        f"workflow output '{declared.slug}' publishes "
+        f"{', '.join(f'`{c}`' for c in missing)}, which this stage does not output — "
+        f"it has {', '.join(f'`{c}`' for c in table.column_names)}",
+    )]
 
 
 def _publish_figure(
@@ -63,6 +94,8 @@ def _publish_table(
     return WorkflowOutput(
         slug=declared.slug, label=declared.label, primary=declared.primary,
         citation=StageOutputTableCitation(
-            run_id=identity.run_id, stage_id=stage_id, row_count=table.num_rows,
+            run_id=identity.run_id, stage_id=stage_id,
+            row_start=0, row_end=table.num_rows,
+            columns=read_published_columns(declared, table),
         ),
     )

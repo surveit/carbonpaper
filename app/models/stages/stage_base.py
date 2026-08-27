@@ -152,16 +152,14 @@ STAGE_ID_DESCRIPTION = (
 )
 WORKFLOW_OUTPUTS_DESCRIPTION = (
     "What this workflow publishes as results, each with a slug that identifies it across "
-    "runs and a label a reader sees. Two kinds, and `kind` says which:\n"
-    "`figure` names one COLUMN and publishes its one cell. A figure is one cell, so a "
-    "stage declaring one must output exactly one row — aggregate first. That is a hard "
-    "refusal rather than a convention because a scalar read out of a many-row frame "
-    "drifts to a different row whenever the input data changes, and nothing about the "
-    "value it returns would look wrong.\n"
-    "`table` names no column and publishes this stage's WHOLE output frame — every row, "
-    "every column, each row linking to its own lineage. Declare one where the result the "
-    "work is for is a list rather than a number: the filings in scope, the contracts that "
-    "matched. A stage has one output frame, so it may declare at most one.\n"
+    "runs and a label a reader sees. `kind` says which of two.\n"
+    "`figure` names one COLUMN and publishes its one cell. A stage declaring one must "
+    "output exactly one row — aggregate first. Refused rather than conventional: a "
+    "scalar read out of a many-row frame drifts to a different row when the data "
+    "changes, and the value it returns never looks wrong.\n"
+    "`table` publishes this stage's rows, each linking to its own lineage. `columns` "
+    "names the ones a reader gets; omit it for every column the stage produced. A column "
+    "the stage did not produce stops the run.\n"
     "Mark `primary` on the one or two a reader should see first — the run leads with "
     "those and lists the rest, so marking everything primary is the same as marking "
     "nothing. A primary table is drawn on the run page; a secondary one is a line and a "
@@ -193,8 +191,9 @@ class WorkflowFigureRule(_WorkflowOutputFields):
 
 
 class WorkflowTableRule(_WorkflowOutputFields):
-    # No column: the published thing is the stage's whole output frame.
     kind: Literal["table"]
+    # None publishes every column the stage produced, so a whole frame stays one word.
+    columns: Optional[list[str]] = None
 
 
 WorkflowOutputRule = Annotated[
@@ -246,19 +245,6 @@ class AuthoredStageFields(_Base):
             return v
         return [{"id": item} if isinstance(item, str) else item for item in v]
 
-    @field_validator("workflow_outputs")
-    @classmethod
-    def _one_frame_is_one_table(
-        cls, v: Optional[list[WorkflowOutputRule]]
-    ) -> Optional[list[WorkflowOutputRule]]:
-        tables = [rule.slug for rule in v or [] if rule.kind == "table"]
-        if len(tables) > 1:
-            raise ValueError(
-                f"a stage has one output frame and published it as {len(tables)} tables "
-                f"({', '.join(tables)}) — keep one, or split the stage"
-            )
-        return v
-
     @property
     def input_ids(self) -> list[ID]:
         return [ref.id for ref in self.inputs]
@@ -266,11 +252,8 @@ class AuthoredStageFields(_Base):
     def list_published_figures(self) -> list[WorkflowFigureRule]:
         return [r for r in self.workflow_outputs or [] if isinstance(r, WorkflowFigureRule)]
 
-    def find_published_table(self) -> Optional[WorkflowTableRule]:
-        return next(
-            (r for r in self.workflow_outputs or [] if isinstance(r, WorkflowTableRule)),
-            None,
-        )
+    def list_published_tables(self) -> list[WorkflowTableRule]:
+        return [r for r in self.workflow_outputs or [] if isinstance(r, WorkflowTableRule)]
 
 
 # ── The per-type stage base ──────────────────────────────────────────────────

@@ -7,7 +7,7 @@ from app.models.stages.stage_base import WorkflowFigureRule, WorkflowTableRule
 from app.runtime.context import RunIdentity
 from app.runtime.workflow_outputs import (
     WorkflowOutput,
-    find_output_row_issues,
+    find_workflow_output_issues,
     save_workflow_outputs,
 )
 
@@ -87,19 +87,19 @@ def test_a_stage_declaring_nothing_publishes_nothing():
 
 def test_a_stage_that_did_not_reduce_to_one_row_is_refused():
     many = pa.table({"clients_paying": [1, 2, 3], "external_spend": [1.0, 2.0, 3.0]})
-    issues = find_output_row_issues(_workflow_stage([_SPEND]), many)
+    issues = find_workflow_output_issues(_workflow_stage([_SPEND]), many)
     assert len(issues) == 1
     assert "output 3 rows" in issues[0].message
     assert "`external_spend`" in issues[0].message
 
 
 def test_a_one_row_output_raises_no_issue():
-    assert find_output_row_issues(_workflow_stage([_SPEND]), _FIGURES) == []
+    assert find_workflow_output_issues(_workflow_stage([_SPEND]), _FIGURES) == []
 
 
 def test_a_stage_declaring_nothing_is_never_refused_for_its_row_count():
     many = pa.table({"clients_paying": [1, 2, 3], "external_spend": [1.0, 2.0, 3.0]})
-    assert find_output_row_issues(_workflow_stage(None), many) == []
+    assert find_workflow_output_issues(_workflow_stage(None), many) == []
 
 
 # ─── A table output: the whole frame, not one cell ───────────────────────────
@@ -108,9 +108,10 @@ _SPEND_ROWS = pa.table({"client": ["Ballard", "Amsterdam & Partners"],
                         "external_spend": [4180000.0, 281000.0]})
 
 
-def test_a_run_publishes_the_row_count_of_the_table_its_stage_declared():
+def test_a_run_publishes_the_rows_of_the_table_its_stage_declared():
     [saved] = save_workflow_outputs(_workflow_stage([_TABLE]), _SPEND_ROWS, _RUN)
-    assert (saved.slug, saved.citation.row_count) == ("client-spend", 2)
+    assert (saved.slug, saved.citation.row_start, saved.citation.row_end) == (
+        "client-spend", 0, 2)
     assert saved.citation.stage_id == "count_client_figures"
     assert saved.citation.run_id == "20260812T133317.816579"
 
@@ -121,14 +122,50 @@ def test_a_published_table_survives_the_store_as_a_table():
 
 
 def test_a_table_does_not_hold_the_stage_to_one_row():
-    assert find_output_row_issues(_workflow_stage([_TABLE]), _SPEND_ROWS) == []
+    assert find_workflow_output_issues(_workflow_stage([_TABLE]), _SPEND_ROWS) == []
 
 
 def test_a_figure_beside_a_table_still_holds_the_stage_to_one_row():
-    issues = find_output_row_issues(_workflow_stage([_SPEND, _TABLE]), _SPEND_ROWS)
+    issues = find_workflow_output_issues(_workflow_stage([_SPEND, _TABLE]), _SPEND_ROWS)
     assert len(issues) == 1 and "`external_spend`" in issues[0].message
 
 
 def test_a_stage_publishes_its_figures_and_its_table_together():
     saved = save_workflow_outputs(_workflow_stage([_SPEND, _TABLE]), _FIGURES, _RUN)
     assert [o.slug for o in saved] == ["external-spend", "client-spend"]
+
+
+# ─── Which columns a table publishes ─────────────────────────────────────────
+
+_SOME_COLUMNS = WorkflowTableRule(kind="table", slug="client-names", label="Clients",
+                                  columns=["client"])
+
+
+def test_a_table_naming_no_column_publishes_every_column_the_stage_produced():
+    [saved] = save_workflow_outputs(_workflow_stage([_TABLE]), _SPEND_ROWS, _RUN)
+    assert saved.citation.columns == ["client", "external_spend"]
+
+
+def test_a_table_publishes_the_columns_it_named():
+    [saved] = save_workflow_outputs(_workflow_stage([_SOME_COLUMNS]), _SPEND_ROWS, _RUN)
+    assert saved.citation.columns == ["client"]
+
+
+def test_a_column_the_stage_never_output_stops_the_run():
+    absent = WorkflowTableRule(kind="table", slug="client-spend", label="Spend",
+                               columns=["client", "retainer_usd"])
+    [issue] = find_workflow_output_issues(_workflow_stage([absent]), _SPEND_ROWS)
+    assert issue.severity == "error"
+    assert "`retainer_usd`" in issue.message and "client-spend" in issue.message
+
+
+def test_one_stage_can_publish_two_tables_over_different_columns():
+    both = save_workflow_outputs(
+        _workflow_stage([_TABLE, _SOME_COLUMNS]), _SPEND_ROWS, _RUN
+    )
+    assert [len(o.citation.columns) for o in both] == [2, 1]
+
+
+def test_a_cited_row_range_counts_its_rows():
+    [saved] = save_workflow_outputs(_workflow_stage([_TABLE]), _SPEND_ROWS, _RUN)
+    assert saved.citation.count_rows() == 2

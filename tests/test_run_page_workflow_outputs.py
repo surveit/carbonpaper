@@ -32,12 +32,16 @@ def _publish(slug: str, label: str, value, run_id: str = _RUN,
     ).save()
 
 
+_COLUMNS = ["client", "external_spend"]
+
+
 def _publish_table(slug: str, label: str, row_count: int, run_id: str = _RUN,
-                   primary: bool = False):
+                   primary: bool = False, columns: list[str] = _COLUMNS):
     WorkflowOutput(
         slug=slug, label=label, primary=primary,
         citation=StageOutputTableCitation(
-            run_id=run_id, stage_id=_STAGE, row_count=row_count,
+            run_id=run_id, stage_id=_STAGE, row_start=0, row_end=row_count,
+            columns=columns,
         ),
     ).save()
 
@@ -141,7 +145,8 @@ def _write_frame(run_dir: Path, rows: int) -> dict[str, object]:
     outputs.mkdir(parents=True, exist_ok=True)
     write_frame_file(
         pd.DataFrame({"client": [f"client {n}" for n in range(rows)],
-                      "external_spend": [1000.0 * n for n in range(rows)]}),
+                      "external_spend": [1000.0 * n for n in range(rows)],
+                      "working_note": ["scratch"] * rows}),
         outputs / f"{_STAGE}.parquet",
     )
     return {"stage_records": [
@@ -155,6 +160,16 @@ def test_a_primary_table_is_drawn_from_the_frame_the_run_wrote(tmp_path):
     [table] = _read(run_dir=tmp_path, manifest=manifest).tables
     assert table.preview.columns == ["client", "external_spend"]
     assert table.preview.rows[0].cells == ["client 0", "0.0"]
+
+
+def test_a_drawn_table_holds_the_columns_cited_and_no_others(tmp_path):
+    # The frame carries a working column; the published table cited two.
+    manifest = _write_frame(tmp_path, rows=3)
+    _publish_table("client-spend", "What each client paid", 3, primary=True,
+                   columns=["client"])
+    [table] = _read(run_dir=tmp_path, manifest=manifest).tables
+    assert table.preview.columns == ["client"]
+    assert table.preview.rows[0].cells == ["client 0"]
 
 
 def test_a_drawn_table_shows_the_first_rows_only(tmp_path):

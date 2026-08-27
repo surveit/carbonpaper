@@ -38,11 +38,17 @@ class StageOutputCellCitation(Citation):
 
 
 class StageOutputTableCitation(Citation):
-    # A whole output frame, so no row and no column — row_count is what it published.
+    # The rows and columns actually published, never the whole frame by assumption.
     kind: Literal["stage_output_table"] = "stage_output_table"
     run_id: ID
     stage_id: ID
-    row_count: int
+    # Half-open, as a python slice reads: rows [row_start, row_end).
+    row_start: int
+    row_end: int
+    columns: list[str]
+
+    def count_rows(self) -> int:
+        return self.row_end - self.row_start
 
 
 class StageOutputRowCitation(Citation):

@@ -77,9 +77,15 @@ def test_a_stage_publishes_its_whole_output_frame_as_a_table():
     assert (table.kind, table.slug) == ("table", "client-spend")
 
 
-def test_a_table_names_no_column():
+def test_a_table_naming_no_column_publishes_every_one_the_stage_produced():
     stage = _stage([{"kind": "table", "slug": "client-spend", "label": "Spend"}])
-    assert not hasattr(stage.workflow_outputs[0], "column")
+    assert stage.workflow_outputs[0].columns is None
+
+
+def test_a_table_can_name_the_columns_a_reader_gets():
+    stage = _stage([{"kind": "table", "slug": "client-spend", "label": "Spend",
+                     "columns": ["external_spend"]}])
+    assert stage.workflow_outputs[0].columns == ["external_spend"]
 
 
 def test_a_figure_and_a_table_can_be_published_together():
@@ -91,11 +97,13 @@ def test_a_figure_and_a_table_can_be_published_together():
     assert [o.kind for o in stage.workflow_outputs] == ["figure", "table"]
 
 
-def test_one_output_frame_cannot_be_two_tables():
-    with pytest.raises(ValidationError) as caught:
-        _stage([{"kind": "table", "slug": "a", "label": "A"},
-                {"kind": "table", "slug": "b", "label": "B"}])
-    assert "one output frame" in str(caught.value)
+def test_one_stage_can_publish_two_tables_over_different_columns():
+    stage = _stage([
+        {"kind": "table", "slug": "everything", "label": "Everything"},
+        {"kind": "table", "slug": "spend-only", "label": "Spend",
+         "columns": ["external_spend"]},
+    ])
+    assert [o.columns for o in stage.workflow_outputs] == [None, ["external_spend"]]
 
 
 def test_an_output_that_does_not_say_which_kind_is_refused():
