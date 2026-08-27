@@ -21,6 +21,7 @@ from app.models import (
     build_workflow,
 )
 from app.models.stages.llm_transform import LLMTransformStage
+from app.models.claims import RowsRectangle
 from app.models.records.queue_fingerprints import QueueFingerprints
 from app.runtime.manifest import read_run_manifest, resolve_output_path
 from app.models.records.run_manifest import RunManifest
@@ -39,6 +40,7 @@ from app.services.project import has_document, list_project_listings
 from app.services.project_record import read_project_name
 from app.services.terms import count_nouns
 from app.services.workspace import resolve_run_dir
+from app.web.panel_links import RectangleRequest
 from app.web.project_cards import ProjectCard, ProjectStatus, count_runs
 
 
@@ -263,6 +265,50 @@ def load_selected_output_rows(
         "capped": len([o for o in ordinals if 0 <= o < len(df)]) > len(rows),
         "selected_total": len(ordinals),
     }
+
+
+def load_output_rectangle(
+    run_dir: Path, rel_path: str | None, requested: RectangleRequest
+) -> dict[str, Any]:
+    df = read_output_df(run_dir, rel_path)
+    found = resolve_rectangle(list(df.columns), len(df), requested)
+    cut = df.iloc[found.row_start:found.row_end][found.columns]
+    rows = render_cells_as_text(cut.head(MAX_TABLE_ROWS))
+    for ordinal, row in zip(range(found.row_start, found.row_end), rows):
+        row[SELECTED_ORDINAL_KEY] = ordinal
+    return {
+        "columns": found.columns,
+        "rows": rows,
+        "rows_total": len(df),
+        "capped": found.count_rows() > len(rows),
+        "rectangle": found,
+    }
+
+
+def load_rectangle_csv_body(
+    run_dir: Path, rel_path: str | None, requested: RectangleRequest
+) -> bytes:
+    df = read_output_df(run_dir, rel_path)
+    found = resolve_rectangle(list(df.columns), len(df), requested)
+    return csv_download_body(df.iloc[found.row_start:found.row_end][found.columns])
+
+
+def resolve_rectangle(
+    columns: list[str], row_count: int, requested: RectangleRequest
+) -> RowsRectangle:
+    """The output's shape settles what the URL left open: its length and its columns."""
+    missing = [c for c in requested.columns if c not in columns]
+    if missing:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No column {', '.join(repr(c) for c in missing)} in this stage's output",
+        )
+    end = row_count if requested.row_end is None else min(requested.row_end, row_count)
+    return RowsRectangle(
+        row_start=min(requested.row_start, end),
+        row_end=end,
+        columns=requested.columns or list(columns),
+    )
 
 
 def load_output_row(run_dir: Path, rel_path: str | None, row: int) -> dict[str, Any] | None:

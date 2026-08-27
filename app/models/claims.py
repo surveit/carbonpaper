@@ -37,6 +37,25 @@ class StageOutputCellCitation(Citation):
     value: JsonScalar
 
 
+class RowsRectangle(BaseModel):
+    """A table inside a stage's output: rows [row_start, row_end) by name-ordered columns."""
+
+    row_start: int
+    row_end: int
+    columns: list[str]
+
+    def count_rows(self) -> int:
+        return self.row_end - self.row_start
+
+
+class StageOutputTableCitation(Citation):
+    # The rows and columns actually published, never the whole frame by assumption.
+    kind: Literal["stage_output_table"] = "stage_output_table"
+    run_id: ID
+    stage_id: ID
+    rectangle: RowsRectangle
+
+
 class StageOutputRowCitation(Citation):
     # A row pointed at with no value of its own — the show-the-work link.
     kind: Literal["stage_output_row"] = "stage_output_row"

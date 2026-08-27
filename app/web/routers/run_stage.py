@@ -9,7 +9,7 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.services.loader import resolve_function_code
@@ -34,6 +34,7 @@ from app.web.loading import (
     read_output_df,
     render_cells_as_text,
 )
+from app.web.panel_links import RectangleRequest, read_rectangle_query
 from app.web.run_stage_panel import not_executed_panel, resolve_panel_links
 from app.web.stage_diff import StageDiff, build_stage_diff
 
@@ -126,19 +127,26 @@ async def run_stage_partial(
 )
 async def run_stage_rows(
     request: Request, project_id: str, run_id: str, stage_id: str, raw: bool = False,
-    ordinals: str | None = None,
+    ordinals: str | None = None, rows: str | None = None,
+    columns: list[str] | None = Query(default=None),
 ):
     run_dir = resolve_run_dir(project_id, run_id)
     manifest = load_manifest(project_id, run_id)
     stage_record = manifest_stage(project_id, run_id, stage_id)
     pinned = run_service.load_pinned_stage_def(project_id, manifest, stage_id)
+    requested = _read_rectangle(ordinals, rows, columns)
     selected = _parse_ordinals(ordinals)
-    table = (
-        loading.load_selected_output_rows(run_dir, stage_record.get("output_path"), selected)
-        if selected is not None
-        else load_output_table(run_dir, stage_record.get("output_path"))
-    )
-    table["columns"] = order_written_columns_first(pinned.workflow_stage, table["columns"])
+    if requested is not None:
+        table = loading.load_output_rectangle(
+            run_dir, stage_record.get("output_path"), requested)
+    elif selected is not None:
+        table = loading.load_selected_output_rows(
+            run_dir, stage_record.get("output_path"), selected)
+    else:
+        table = load_output_table(run_dir, stage_record.get("output_path"))
+    if requested is None:
+        # A rectangle's column order is the one it was published in, not the stage's.
+        table["columns"] = order_written_columns_first(pinned.workflow_stage, table["columns"])
     return templates.TemplateResponse(
         request,
         "run_stage_rows.html",
@@ -154,7 +162,7 @@ async def run_stage_rows(
             # No diff over a filtered view: the diff aligns output rows to input
             # rows by position, which a subset cannot honour.
             "diff": (
-                None if selected is not None
+                None if selected is not None or requested is not None
                 else _build_full_rows_diff(manifest, pinned, run_dir, stage_record)
             ),
             "raw": raw,
@@ -165,6 +173,22 @@ async def run_stage_rows(
             **table,
         },
     )
+
+
+def _read_rectangle(
+    ordinals: str | None, rows: str | None, columns: list[str] | None
+) -> RectangleRequest | None:
+    """Both name rows, so asking with both would leave which one won unstated."""
+    if ordinals is not None and (rows is not None or columns):
+        raise HTTPException(
+            status_code=400,
+            detail="Pass `ordinals` for named rows or `rows`/`columns` for a rectangle, "
+                   "not both",
+        )
+    try:
+        return read_rectangle_query(rows, columns)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _parse_ordinals(ordinals: str | None) -> list[int] | None:
@@ -195,13 +219,21 @@ def _build_full_rows_diff(
 
 
 @router.get("/project/{project_id}/runs/{run_id}/stage/{stage_id}/rows.csv")
-async def run_stage_rows_csv(project_id: str, run_id: str, stage_id: str):
+async def run_stage_rows_csv(
+    project_id: str, run_id: str, stage_id: str, rows: str | None = None,
+    columns: list[str] | None = Query(default=None),
+):
     run_dir = resolve_run_dir(project_id, run_id)
     stage_record = manifest_stage(project_id, run_id, stage_id)
-    df = read_output_df(run_dir, stage_record.get("output_path"))
+    requested = _read_rectangle(None, rows, columns)
+    output_path = stage_record.get("output_path")
+    body = (
+        csv_download_body(read_output_df(run_dir, output_path)) if requested is None
+        else loading.load_rectangle_csv_body(run_dir, output_path, requested)
+    )
     filename = f"{project_id}__{run_id}__{stage_id}.csv"
     return Response(
-        content=csv_download_body(df),
+        content=body,
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

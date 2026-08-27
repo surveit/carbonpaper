@@ -9,7 +9,16 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from enum import Enum
-from typing import TYPE_CHECKING, Any, ClassVar, Optional, get_args
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Any,
+    ClassVar,
+    Literal,
+    Optional,
+    Union,
+    get_args,
+)
 
 from pydantic import (
     Field,
@@ -142,14 +151,19 @@ STAGE_ID_DESCRIPTION = (
     f"needs no gloss. HARD LIMIT: {STAGE_ID_MAX_CHARS} characters, refused above that."
 )
 WORKFLOW_OUTPUTS_DESCRIPTION = (
-    "Columns this workflow publishes as results, each with a slug that identifies it "
-    "across runs and a label a reader sees. A scalar output is one cell, so a stage "
-    "declaring one must output exactly one row — aggregate first. That is a hard "
-    "refusal rather than a convention because a scalar read out of a many-row frame "
-    "drifts to a different row whenever the input data changes, and nothing about the "
-    "value it returns would look wrong. Mark `primary` on the one or two a reader should "
-    "see first — the run leads with those and lists the rest, so marking everything "
-    "primary is the same as marking nothing."
+    "What this workflow publishes as results, each with a slug that identifies it across "
+    "runs and a label a reader sees. `kind` says which of two.\n"
+    "`figure` names one COLUMN and publishes its one cell. A stage declaring one must "
+    "output exactly one row — aggregate first. Refused rather than conventional: a "
+    "scalar read out of a many-row frame drifts to a different row when the data "
+    "changes, and the value it returns never looks wrong.\n"
+    "`table` publishes this stage's rows, each linking to its own lineage. `columns` "
+    "names the ones a reader gets; omit it for every column the stage produced. A column "
+    "the stage did not produce stops the run.\n"
+    "Mark `primary` on the one or two a reader should see first — the run leads with "
+    "those and lists the rest, so marking everything primary is the same as marking "
+    "nothing. A primary table is drawn on the run page; a secondary one is a line and a "
+    "link."
 )
 
 
@@ -163,13 +177,28 @@ STAGE_DESCRIPTION_DESCRIPTION = (
 
 
 # ── The shared field list ────────────────────────────────────────────────────
-class WorkflowOutputRule(_Base):
-    # A slug identifies the output across runs; the value it holds is per run.
+class _WorkflowOutputFields(_Base):
+    # A slug identifies the output across runs; what it holds is per run.
     slug: str
     label: str
-    column: str
     # Whether the run leads with this. Mark what the work rests on, not everything.
     primary: bool = False
+
+
+class WorkflowFigureRule(_WorkflowOutputFields):
+    kind: Literal["figure"]
+    column: str
+
+
+class WorkflowTableRule(_WorkflowOutputFields):
+    kind: Literal["table"]
+    # None publishes every column the stage produced, so a whole frame stays one word.
+    columns: Optional[list[str]] = None
+
+
+WorkflowOutputRule = Annotated[
+    Union[WorkflowFigureRule, WorkflowTableRule], Field(discriminator="kind")
+]
 
 
 class AuthoredStageFields(_Base):
@@ -219,6 +248,12 @@ class AuthoredStageFields(_Base):
     @property
     def input_ids(self) -> list[ID]:
         return [ref.id for ref in self.inputs]
+
+    def list_published_figures(self) -> list[WorkflowFigureRule]:
+        return [r for r in self.workflow_outputs or [] if isinstance(r, WorkflowFigureRule)]
+
+    def list_published_tables(self) -> list[WorkflowTableRule]:
+        return [r for r in self.workflow_outputs or [] if isinstance(r, WorkflowTableRule)]
 
 
 # ── The per-type stage base ──────────────────────────────────────────────────

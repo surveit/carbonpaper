@@ -271,3 +271,76 @@ def test_a_sequence_cell_survives_beside_a_masked_null():
 def test_a_date_keeps_its_compact_rendering_and_a_missing_one_is_blank():
     frame = pd.DataFrame({"d": pd.to_datetime(["2026-01-01", None])})
     assert list(render_frame_as_text(frame)["d"]) == ["2026-01-01", ""]
+
+
+# ─── The rectangle: a published table's address inside the output ────────────
+
+def _rows(client, query: str = "") -> str:
+    return client.get(f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows{query}").text
+
+
+def test_a_rectangle_draws_the_rows_it_names_and_no_others(examples_dir, client):
+    _write_run(examples_dir, _df(10))
+    body = _rows(client, "?rows=2:5")
+    assert "rowval_0002" in body and "rowval_0004" in body
+    assert "rowval_0001" not in body and "rowval_0005" not in body
+
+
+def test_a_rectangle_draws_the_columns_it_names_and_no_others(examples_dir, client):
+    _write_run(examples_dir, _df(3))
+    body = _rows(client, "?columns=name")
+    assert "rowval_0000" in body
+    assert "https://example.com/0" not in body
+
+
+def test_a_rectangle_row_keeps_the_ordinal_it_has_in_the_frame(examples_dir, client):
+    _write_run(examples_dir, _df(10))
+    body = _rows(client, "?rows=4:6")
+    assert f"/stage/{STAGE}/row/4/trace/view" in body
+    assert f"/stage/{STAGE}/row/0/trace/view" not in body
+
+
+def test_a_rectangle_offers_the_whole_output_beside_it(examples_dir, client):
+    _write_run(examples_dir, _df(10))
+    assert "Show the whole output instead" in _rows(client, "?rows=0:2")
+    assert "Show the whole output instead" not in _rows(client)
+
+
+def test_naming_rows_two_ways_at_once_is_refused(examples_dir, client):
+    _write_run(examples_dir, _df(10))
+    r = client.get(f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows?ordinals=1,2&rows=0:2")
+    assert r.status_code == 400
+
+
+def test_a_row_range_that_is_not_start_end_is_refused(examples_dir, client):
+    _write_run(examples_dir, _df(10))
+    assert client.get(
+        f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows?rows=first-two").status_code == 400
+
+
+def test_a_column_the_output_does_not_hold_is_refused(examples_dir, client):
+    _write_run(examples_dir, _df(3))
+    assert client.get(
+        f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows?columns=retainer").status_code == 404
+
+
+def test_a_row_range_past_the_end_stops_at_the_end(examples_dir, client):
+    _write_run(examples_dir, _df(3))
+    body = _rows(client, "?rows=1:99")
+    assert "rowval_0002" in body and "rowval_0000" not in body
+
+
+def test_the_csv_serves_the_rectangle_it_was_asked_for(examples_dir, client):
+    _write_run(examples_dir, _df(10))
+    r = client.get(
+        f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows.csv?rows=2:5&columns=name")
+    frame = pd.read_csv(io.StringIO(r.text))
+    assert list(frame.columns) == ["name"]
+    assert list(frame["name"]) == ["rowval_0002", "rowval_0003", "rowval_0004"]
+
+
+def test_the_csv_still_serves_the_whole_output_when_asked_for_nothing(examples_dir, client):
+    _write_run(examples_dir, _df(10))
+    r = client.get(f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows.csv")
+    frame = pd.read_csv(io.StringIO(r.text))
+    assert list(frame.columns) == ["name", "url"] and len(frame) == 10
