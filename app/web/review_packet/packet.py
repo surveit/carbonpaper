@@ -21,7 +21,8 @@ from app.services.review_packet.views import RunView, build_run_view
 from app.services.run_guide import RunGuideView, build_run_guide_view
 from app.services.workspace import resolve_run_dir
 from app.web.diagrams import build_mermaid_graph
-from app.web.review_packet.claims import build_packet_claims
+from app.web.panel_links import PacketPanelLinks
+from app.web.published_claims import read_published_claims
 from app.web.review_packet.front_page import build_packet_front_page
 from app.web.review_packet.lineage import write_packet_lineage
 from app.web.review_packet.pages import write_packet_pages
@@ -69,8 +70,10 @@ def export_review_packet(project_id: str, run_id: str, dest_root: Path) -> Revie
             workflow_stages_by_id,
             build_packet_front_page(
                 project_id, root, view, data, lineage, issues,
-                build_packet_claims(view.run_id or run_id, frozenset(lineage.traced)),
-                guide is not None,
+                read_published_claims(
+                    view.run_id or run_id,
+                    PacketPanelLinks(to_root="", traced=frozenset(lineage.traced)),
+                ),
             ),
         )
     with log_elapsed(_log, f"{project_id}/{run_id} checksums"):

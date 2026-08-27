@@ -11,11 +11,12 @@ from typing import Any, Literal, Mapping
 from pydantic import BaseModel
 
 from app.core.errors import RunVersionUnresolvableError
-from app.core.json_types import JsonScalar
-from app.models.records.workflow_output import WorkflowOutput
 from app.core.run_status import RunStatus, StageStatus
 from app.services import run as run_service
 from app.services.run_manifest_metadata import read_run_name
+from app.web.panel_links import AppPanelLinks
+from app.web.published_claims import PublishedClaims, read_published_claims
+from app.web.published_files import PublishedFile, list_published_files
 from app.web.stage_strip import (
     StageStrip,
     StatusCount,
@@ -41,11 +42,6 @@ class RunCta(BaseModel):
     aside: str | None = None
 
 
-class ArtifactLink(BaseModel):
-    name: str
-    url: str
-
-
 class VersionNote(BaseModel):
     """`message` or `error`, never both."""
 
@@ -68,15 +64,6 @@ class RestartOffer(BaseModel):
     note: str
 
 
-class WorkflowOutputView(BaseModel):
-    slug: str
-    label: str
-    value: str
-    primary: bool
-    # The row this value was read from, so a reader can open its lineage.
-    href: str
-
-
 class RunHeader(BaseModel):
     run_id: str
     # Empty when unnamed; the heading falls back to the start time.
@@ -86,10 +73,10 @@ class RunHeader(BaseModel):
     version: VersionNote
     strip: StageStrip
     cta: RunCta
-    artifacts: list[ArtifactLink]
+    artifacts: list[PublishedFile]
     live: RunLiveView
     restart: RestartOffer
-    workflow_outputs: list[WorkflowOutputView]
+    claims: PublishedClaims
 
 
 def build_run_header(
@@ -98,7 +85,7 @@ def build_run_header(
     strip = build_stage_strip(manifest)
     cta = choose_run_cta(project_id, run_id, manifest)
     return RunHeader(
-        workflow_outputs=read_workflow_outputs(project_id, run_id),
+        claims=read_published_claims(run_id, AppPanelLinks(project_id, run_id)),
         run_id=run_id,
         name=read_run_name(project_id, run_id),
         started_at=_read_text(manifest.get("started_at")),
@@ -106,7 +93,7 @@ def build_run_header(
         version=read_version_note(project_id, manifest.get("workflow_version")),
         strip=strip,
         cta=cta,
-        artifacts=list_artifact_links(project_id, run_id, run_dir, manifest),
+        artifacts=list_published_files(project_id, run_id, run_dir, manifest),
         live=_build_live_view(manifest, strip, cta),
         restart=describe_restart(manifest),
     )
@@ -184,33 +171,6 @@ def read_version_note(project_id: str, version_id: object) -> VersionNote:
     except RunVersionUnresolvableError as exc:
         return VersionNote(version_id=text, error=str(exc))
     return VersionNote(version_id=text, message=version.message or None)
-
-
-def list_artifact_links(
-    project_id: str, run_id: str, run_dir: Path, manifest: Mapping[str, Any]
-) -> list[ArtifactLink]:
-    if manifest.get("status") in (RunStatus.RUNNING, None):
-        return []
-    has_ok_publish = any(
-        record.get("type") == "publish"
-        and record.get("status") in (StageStatus.OK, StageStatus.VALIDATION_WARNINGS)
-        for record in read_stage_records(manifest)
-    )
-    artifacts_root = run_dir / "artifacts"
-    if not (has_ok_publish and artifacts_root.is_dir()):
-        return []
-    files = sorted(f for f in artifacts_root.rglob("*") if f.is_file())
-    index = next((f for f in files if f.name == "index.html"), None)
-    if index is not None:
-        files = [index]
-    return [
-        ArtifactLink(
-            name=f.name,
-            url=(f"/project/{project_id}/runs/{run_id}/artifact/"
-                 f"{f.relative_to(artifacts_root).as_posix()}"),
-        )
-        for f in files
-    ]
 
 
 def measure_elapsed_seconds(
@@ -400,26 +360,3 @@ def read_timestamp(value: str | None) -> datetime | None:
         return datetime.fromisoformat(value)
     except ValueError:
         return None
-
-
-def read_workflow_outputs(project_id: str, run_id: str) -> list[WorkflowOutputView]:
-    """Filtered in python: a run id sits inside the citation, which find() cannot select on."""
-    published = [o for o in WorkflowOutput.list() if o.citation.run_id == run_id]
-    return [
-        WorkflowOutputView(
-            slug=output.slug,
-            label=output.label,
-            primary=output.primary,
-            value=render_output_value(output.citation.value),
-            href=run_service.build_row_trace_url(
-                project_id, run_id, output.citation.stage_id, output.citation.row_ordinal,
-                column=output.citation.column,
-            ),
-        )
-        for output in sorted(published, key=lambda o: o.slug)
-    ]
-
-
-def render_output_value(value: JsonScalar) -> str:
-    """A null reads as absent rather than as the word None."""
-    return "—" if value is None else f"{value:,}" if isinstance(value, (int, float)) else str(value)

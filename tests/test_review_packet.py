@@ -496,6 +496,68 @@ def test_download_route_404s_for_a_run_that_does_not_exist(project_dir):
     assert response.status_code == 404
 
 
+def test_the_served_packet_is_the_same_bytes_as_the_downloaded_one(project_dir):
+    _make_project(project_dir)
+    _seed_version(project_dir)
+    run_id = run_service.start_run(_PROJECT)
+    client = _client()
+
+    served = client.get(f"/project/{_PROJECT}/runs/{run_id}/packet/index.html")
+    downloaded = client.get(f"/project/{_PROJECT}/runs/{run_id}/packet.zip")
+
+    assert served.status_code == 200
+    assert served.headers["content-type"].startswith("text/html")
+    with zipfile.ZipFile(io.BytesIO(downloaded.content)) as archive:
+        assert archive.read(f"{_PROJECT}-{run_id}/index.html") == served.content
+
+
+def test_the_packet_route_opens_on_the_index(project_dir):
+    _make_project(project_dir)
+    _seed_version(project_dir)
+    run_id = run_service.start_run(_PROJECT)
+
+    response = _client().get(
+        f"/project/{_PROJECT}/runs/{run_id}/packet", follow_redirects=False)
+
+    assert response.status_code == 307
+    assert response.headers["location"].endswith(f"/{run_id}/packet/index.html")
+
+
+def test_a_served_stage_page_resolves_the_indexs_own_relative_link(project_dir):
+    _make_project(project_dir)
+    _seed_version(project_dir)
+    run_id = run_service.start_run(_PROJECT)
+    client = _client()
+    base = f"/project/{_PROJECT}/runs/{run_id}/packet"
+
+    index = client.get(f"{base}/index.html").text
+    hrefs = re.findall(r'href="((?:stages|assets)/[^"]+)"', index)
+
+    assert hrefs, "the index links no stage page or asset"
+    for href in sorted(set(hrefs)):
+        assert client.get(f"{base}/{href}").status_code == 200, href
+
+
+def test_the_packet_route_serves_nothing_outside_the_packet(project_dir):
+    _make_project(project_dir)
+    _seed_version(project_dir)
+    run_id = run_service.start_run(_PROJECT)
+    # A client normalises a bare `../` away before it is ever sent.
+    escape = "%2e%2e%2f" * 8 + "etc%2fpasswd"
+
+    response = _client().get(f"/project/{_PROJECT}/runs/{run_id}/packet/{escape}")
+
+    assert response.status_code == 404
+    assert "not in this packet" in response.text
+
+
+def test_the_packet_route_404s_for_a_run_that_does_not_exist(project_dir):
+    _make_project(project_dir)
+    response = _client().get(
+        f"/project/{_PROJECT}/runs/20990101T000000/packet/index.html")
+    assert response.status_code == 404
+
+
 def _client():
     """Imported late: app.main mounts routers at import time."""
     from fastapi.testclient import TestClient
@@ -677,8 +739,8 @@ def test_the_checks_count_what_this_run_actually_did(exported):
     index = (exported.root / "index.html").read_text(encoding="utf-8")
 
     assert "How to check this" in index
-    assert "No step in this run called an AI model" in index
-    assert "This run read 1 file." in index
+    assert "no step called an AI model" in index
+    assert "1 file read" in index
     assert f'href="{DOCUMENT_FILE}"' in index
 
 

@@ -19,8 +19,9 @@ from app.services.review_packet.data import (
 )
 from app.services.review_packet.views import LineageReport, RunView, StageView
 from app.web.file_sizes import describe_bytes
+from app.web.published_files import PublishedFile
 from app.web.panel_links import PacketPanelLinks
-from app.web.review_packet.claims import PacketClaims
+from app.web.published_claims import PublishedClaims
 from app.web.run_header import format_duration, measure_elapsed_seconds, read_timestamp
 from app.web.run_issues import RunIssues
 
@@ -54,13 +55,6 @@ class PacketHeadline(BaseModel):
     version_id: str | None
 
 
-class PublishedFile(BaseModel):
-    name: str
-    folder: str
-    size: str
-    href: str
-
-
 class PacketCheck(BaseModel):
     lead: str
     text: str
@@ -81,7 +75,7 @@ class PacketColophon(BaseModel):
 
 class PacketFrontPage(BaseModel):
     headline: PacketHeadline
-    claims: PacketClaims
+    claims: PublishedClaims
     files: list[PublishedFile]
     checks: list[PacketCheck]
     colophon: PacketColophon
@@ -94,15 +88,14 @@ def build_packet_front_page(
     data: DataReport,
     lineage: LineageReport,
     issues: RunIssues,
-    claims: PacketClaims,
-    has_guide: bool,
+    claims: PublishedClaims,
 ) -> PacketFrontPage:
     written = frozenset(data.written)
     return PacketFrontPage(
         headline=build_packet_headline(project_id, view),
         claims=claims,
         files=[_read_published_file(root, path) for path in data.artifacts],
-        checks=find_packet_checks(view, lineage, issues, has_guide, written),
+        checks=find_packet_checks(view, lineage, issues, written),
         colophon=build_packet_colophon(view, written),
     )
 
@@ -138,77 +131,60 @@ def find_packet_checks(
     view: RunView,
     lineage: LineageReport,
     issues: RunIssues,
-    has_guide: bool,
     written: frozenset[str],
 ) -> list[PacketCheck]:
     found = (
-        _describe_the_method(has_guide, written),
-        _describe_the_traces(lineage),
-        _describe_the_sources(view),
-        _describe_the_judgement(view),
-        _describe_what_was_flagged(issues),
-        _describe_recomputing_it(),
+        _count_the_method(written),
+        _count_the_traces(lineage),
+        _count_the_sources(view),
+        _count_the_judgement(view),
+        _count_what_was_flagged(issues),
+        _count_what_recomputes_it(),
     )
     return [check for check in found if check is not None]
 
 
-def _describe_the_method(has_guide: bool, written: frozenset[str]) -> PacketCheck | None:
+def _count_the_method(written: frozenset[str]) -> PacketCheck | None:
     if DOCUMENT_FILE not in written:
         return None
-    walkthrough = (
-        " The run walkthrough beside this page is its author saying which steps are "
-        "worth scrutinising."
-        if has_guide
-        else ""
-    )
     return PacketCheck(
-        lead="Read the method.",
-        text=(
-            "The prose this workflow was compiled from, as it stood when the run "
-            f"started.{walkthrough}"
-        ),
+        lead="Method",
+        text="the prose this workflow was compiled from, as the run started.",
         links=[PacketLink(text=DOCUMENT_FILE, href=DOCUMENT_FILE)],
     )
 
 
-def _describe_the_traces(lineage: LineageReport) -> PacketCheck | None:
+def _count_the_traces(lineage: LineageReport) -> PacketCheck | None:
     if not lineage.figures:
         return None
     total = len(lineage.figures)
     traced = sum(1 for figure in lineage.figures if figure.href)
     return PacketCheck(
-        lead="Follow a figure back to its rows.",
-        text=(
-            f"{_count(total, 'figure')} published, "
-            + (
-                "and every one carries a row-by-row trace in this folder."
-                if traced == total
-                else f"{traced} of them carrying a row-by-row trace in this folder."
-            )
-        ),
+        lead="Figures",
+        text=f"{_count(total, 'figure')} published, {traced} traced to their rows here.",
         links=[PacketLink(text="Row provenance", href=PROVENANCE_ANCHOR)],
     )
 
 
-def _describe_the_sources(view: RunView) -> PacketCheck | None:
+def _count_the_sources(view: RunView) -> PacketCheck | None:
     if not view.inputs:
         return None
     return PacketCheck(
-        lead="Check the sources.",
+        lead="Sources",
         text=(
-            f"This run read {_count(len(view.inputs), 'file')}. Each is copied into "
-            "this folder beside the SHA-256 the run recorded as it read it."
+            f"{_count(len(view.inputs), 'file')} read, each copied into this folder "
+            "beside the SHA-256 the run recorded as it read it."
         ),
         links=[PacketLink(text="Inputs this run read", href=INPUTS_ANCHOR)],
     )
 
 
-def _describe_the_judgement(view: RunView) -> PacketCheck:
+def _count_the_judgement(view: RunView) -> PacketCheck:
     asked = _find_stages_of_type(view, StageType.llm_transform)
     queued = _find_stages_of_type(view, StageType.human_review_queue)
     links = PacketPanelLinks(to_root="")
     return PacketCheck(
-        lead="See where judgement entered.",
+        lead="Judgement",
         text=_say_where_judgement_entered(asked, queued),
         links=[
             *(
@@ -225,66 +201,56 @@ def _describe_the_judgement(view: RunView) -> PacketCheck:
 
 
 def _say_where_judgement_entered(asked: list[StageView], queued: list[StageView]) -> str:
-    if not asked and not queued:
-        return (
-            "No step in this run called an AI model, and no step put a row to a "
-            "person. Every step is code, and its code is on the step's own page."
-        )
-    return " ".join(
+    counted = [
         part
-        for part in (
-            _describe_model_steps(asked),
-            _describe_review_steps(queued),
-            "No other step asked anything of a model or a person.",
-        )
+        for part in (_describe_model_steps(asked), _describe_review_steps(queued))
         if part
-    )
+    ]
+    if not counted:
+        return "no step called an AI model, and no step put a row to a person."
+    return "; ".join(counted) + "; no other step asked a model or a person anything."
 
 
 def _describe_model_steps(stages: list[StageView]) -> str:
     if not stages:
         return ""
     rows = sum(stage.row_count for stage in stages)
-    return f"{_count(len(stages), 'step')} asked an AI model, over {_count(rows, 'row')}."
+    return f"{_count(len(stages), 'step')} asked an AI model over {_count(rows, 'row')}"
 
 
 def _describe_review_steps(stages: list[StageView]) -> str:
     if not stages:
         return ""
     rows = sum(stage.row_count for stage in stages)
-    return f"{_count(len(stages), 'step')} put {_count(rows, 'row')} to a person."
+    return f"{_count(len(stages), 'step')} put {_count(rows, 'row')} to a person"
 
 
-def _describe_what_was_flagged(issues: RunIssues) -> PacketCheck | None:
+def _count_what_was_flagged(issues: RunIssues) -> PacketCheck | None:
     counted = ((issues.error_count, "error"), (issues.warning_count, "warning"))
     named = [_count(total, noun) for total, noun in counted if total]
     if not named:
         return None
     return PacketCheck(
-        lead="Read what the run flagged about itself.",
+        lead="Flagged",
         text=" and ".join(named) + ", each naming the step it came from.",
         links=[PacketLink(text="What the run flagged", href=ISSUES_ANCHOR)],
     )
 
 
-def _describe_recomputing_it() -> PacketCheck:
+def _count_what_recomputes_it() -> PacketCheck:
     return PacketCheck(
-        lead="Recompute it.",
-        text=(
-            f"{DATA_DIR}/ holds one uncapped CSV per step, and {CHECKSUMS_FILE} "
-            "checks every file in this folder against the bytes that were written."
-        ),
+        lead="Recompute",
+        text=f"one uncapped CSV per step in {DATA_DIR}/, and a hash for every file here.",
         links=[PacketLink(text=CHECKSUMS_FILE, href=CHECKSUMS_FILE)],
     )
 
 
 def _read_published_file(root: Path, path: str) -> PublishedFile:
     name = path.rsplit("/", 1)[-1]
+    folder = path[: len(path) - len(name)]
+    size = describe_bytes((root / path).stat().st_size)
     return PublishedFile(
-        name=name,
-        folder=path[: len(path) - len(name)],
-        size=describe_bytes((root / path).stat().st_size),
-        href=path,
+        name=name, href=path, note=f"{size} · {folder}" if folder else size
     )
 
 

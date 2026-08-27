@@ -45,8 +45,10 @@ class AppPanelLinks:
     def stage_csv(self, stage_id: str) -> str:
         return f"{self._base}/stage/{_segment(stage_id)}/rows.csv"
 
-    def row_trace(self, stage_id: str, row: int) -> str:
-        return f"{self._base}/stage/{_segment(stage_id)}/row/{row}/trace/view"
+    def row_trace(self, stage_id: str, row: int, column: str | None = None) -> str:
+        """Named the column, the trace view leads with that cell rather than the row."""
+        walk = f"{self._base}/stage/{_segment(stage_id)}/row/{row}/trace/view"
+        return walk if column is None else f"{walk}?{urlencode({'column': column})}"
 
     def build_row_trace_for_figure(self, figure_stage: str, figure_row: int,
                                    sample_choices: Sequence[RowRef]) -> str:
@@ -132,7 +134,8 @@ class PacketPanelLinks:
     def stage_csv(self, stage_id: str) -> str:
         return f"{self._root}data/{_segment(stage_id)}.csv"
 
-    def row_trace(self, stage_id: str, row: int) -> str | None:
+    def row_trace(self, stage_id: str, row: int, column: str | None = None) -> str | None:
+        """`column` is dropped: a file carries no query string to open a cell with."""
         if self._traced is not None and (stage_id, row) not in self._traced:
             return None
         return packet_lineage_href(self._root, stage_id, row)

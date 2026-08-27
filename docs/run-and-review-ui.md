@@ -42,6 +42,13 @@ All routes live under `/project/{project}/…`.
   Resume re-runs any non-complete stage (error + downstream) and **reuses
   completed upstream outputs** — no re-running finished stages, no new LLM calls
   for them. (The same mechanism powers "continue after review".)
+- **The review packet, twice**: the toolbar offers **Open review packet**
+  (`GET …/runs/{id}/packet`, redirecting to `…/packet/index.html`) beside **Export review
+  packet** (`…/packet.zip`). Open serves the exported folder page by page, so the URL and
+  the download are the same bytes and the reader-facing view has an address to send someone
+  who has downloaded nothing. The folder is built on the first request and held in a temp
+  directory for the process's life (`app/web/routers/review_packet.py`); a first hit pays
+  the build, which for a 30-stage run is about 14 seconds.
 - **Restart run**: the toolbar menu (☰) carries the same `/resume` POST whatever the
   run's status says, including `running` — an executor that dies mid-run leaves the
   status behind it, and cancel needs a live executor to consume it. Nothing checks
