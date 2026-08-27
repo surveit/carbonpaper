@@ -23,6 +23,43 @@ border rather than a broken one — which looks designed. One list owns the orde
 `tests/arch/test_palette_loads_before_style.py` and
 `tests/arch/test_every_stylesheet_is_linked.py`.
 
+## Typography comes from one file too
+
+`app/static/base.css` is the only place a typeface may be NAMED. Three roles are
+declared there and referenced as `var(--ui)` / `var(--prose)` / `var(--mono)`; a stack
+written anywhere else fails `tests/arch/test_base_owns_typography.py`.
+
+The rule exists because the drift already happened twice. `--mono` was created when four
+fixed-width stacks had come apart across the sheets, one of them leading with
+`ui-monospace` — which Chromium does not implement, so there it falls through to whatever
+the reader has set as their browser's fixed-width font, while the sheet beside it named
+Consolas. Same page, two typefaces, no rule saying which. It then came back in template
+`<style>` blocks, which no scan was reading: six more `ui-monospace` spellings across
+three templates, plus one sheet re-spelling the whole `--mono` stack by hand and another
+hiding a second stack in a `var(--mono, ui-monospace, …)` fallback.
+
+So the scan reads BOTH places a face can be written — `app/static/*.css` and every
+`<style>` block under `app/templates/` — and a `var()` fallback carrying a stack counts
+as a literal, because that is a second answer to the same question.
+
+`font: inherit` and `font-family: inherit` name no face and are untouched.
+
+## A table class must match a rule
+
+Every class on a `<table>` matches a rule in some stylesheet, held by
+`tests/arch/test_every_table_class_is_styled.py`. The failure it catches is silent: a
+class matching nothing renders as a bare browser table beside styled ones, which reads
+as a choice rather than an omission. `class="table"` sat in two eval pages that way
+until PR #579, and nothing reported it.
+
+Reach for the shape whose page role matches — `.stages` for a list of things on a
+section page, `.schema` for config inside a pane, `.data-preview` inside `.table-scroll`
+for rows. Four more exist, each written for one surface: `.issue-table`, `.kv`,
+`.join-keys`/`.aggs`, `.files-table`. There is no generic `.table`.
+
+The scan reads template `<style>` blocks as well as `app/static`, so a table styled on
+its own page counts as styled.
+
 ## Three axes, one set of hues
 
 Green means good on all three, but they are separate token groups because they answer

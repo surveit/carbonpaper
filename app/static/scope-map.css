@@ -32,7 +32,7 @@
 #scope-svg text.scope-head-note { text-transform: none; letter-spacing: 0; }
 #scope-svg text.scope-out { font-size: 9.5px; fill: var(--muted);
   font-variant-numeric: tabular-nums; }
-#scope-svg text.scope-node { font-family: var(--mono, ui-monospace, Menlo, monospace);
+#scope-svg text.scope-node { font-family: var(--mono);
   font-size: 10.5px; }
 #scope-svg text.scope-count { fill: var(--muted); font-size: 9.5px;
   font-variant-numeric: tabular-nums; }
