@@ -88,8 +88,7 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialAgentReference:
     name = reused if reused is not None else import_tour_fixture()
     version_id = run_service.resolve_version(name, None)
     if reused is None:
-        # Only on a fresh seed: a reader who edited the tour moved its fingerprints,
-        # and the bundle they no longer match is not an error for them to hit.
+        # A reader who edited the tour has moved past the bundle it no longer matches.
         _seed_stage_cache(name)
     project_service.write_review_guide(
         name, version_id, ReviewGuideDraft.model_validate_json(
