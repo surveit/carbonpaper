@@ -15,9 +15,7 @@ def _view(trace: dict, stages: dict[str, WorkflowStage]) -> dict:
     return build_trace_view(trace, stages, AppPanelLinks("proj", "R1"))
 
 
-# The columns the traced rows carry: seeds emits facility_id, enrich adds score.
-# Every input declares the schema it expects and every non-publish stage declares
-# its output_schema (app/models/stage.py: Stage._schemas_declared).
+# seeds emits facility_id, enrich adds score; Stage._schemas_declared wants both.
 _SEEDS_SCHEMA = {"columns": [{"name": "facility_id", "type": "str", "nullable": True}]}
 _ENRICH_SCHEMA = {"columns": [{"name": "facility_id", "type": "str", "nullable": True},
                               {"name": "score", "type": "int", "nullable": True}]}

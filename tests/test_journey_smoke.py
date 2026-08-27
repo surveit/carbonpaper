@@ -92,7 +92,7 @@ def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path)
 
     # The published artifact exists on disk and the artifact route serves it.
     artifact = journey_project / "runs" / run_id / "artifacts" / "report" / "totals.csv"
-    assert artifact.is_file(), f"publish stage wrote no artifact at {artifact}"
+    assert artifact.is_file(), f"report stage wrote no artifact at {artifact}"
     served = client.get(f"/project/{journey_project.name}/runs/{run_id}/artifact/report/totals.csv")
     assert served.status_code == 200
 
@@ -103,7 +103,7 @@ def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path)
     assert totals[True] == 7
 
 
-def test_publish_stage_records_no_output_validation_issue(journey_project):
+def test_report_stage_records_no_output_validation_issue(journey_project):
     client.post(f"/project/{journey_project.name}/version", data={"message": "first version"})
     version_id = list_versions(journey_project.name)[0].version_id
     resp = client.post(f"/project/{journey_project.name}/versions/{version_id}/publish",
@@ -185,9 +185,9 @@ def _workflow_stages(authored_path: str) -> list[dict]:
             "signature": {"form": "replaces", "produces": totals_schema["columns"]},
         },
         {
-            "id": "report", "description": "Publish totals", "type": "publish",
+            "id": "report", "description": "Publish totals", "type": "report",
             "inputs": [{"id": "totals"}],
-            "publish": {"format": "csv", "destination": "report/"},
+            "report": {"format": "csv", "destination": "report/"},
             "signature": {"form": "replaces"},
             "function": {"kind": "inline", "code": (
                 "import pandas as pd\n"

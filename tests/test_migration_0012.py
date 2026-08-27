@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.models import parse_stage
+from conftest import apply_0017_rename
 from scripts.publish_template import NOTE_PREFIX, PublishTemplateUnreadable
 
 _REVISION = (Path(__file__).resolve().parents[1]
@@ -56,7 +57,7 @@ def test_a_stage_storing_a_template_loses_the_field_and_then_parses():
 
     stage = document["stages"][0]
     assert stage["publish"] == {"format": "csv"}
-    assert parse_stage(stage).publish.format is not None
+    assert parse_stage(apply_0017_rename(stage)).report.format is not None
 
 
 def test_what_the_template_said_is_kept_as_a_note():

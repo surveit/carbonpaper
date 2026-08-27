@@ -54,7 +54,7 @@ _BOOM = {
 _CLASSIFY_SCHEMA = {"columns": _LOAD_SCHEMA["columns"] + _CLASSIFY_ADDS}
 
 _PUBLISH = {
-    "id": "publish_report", "type": "publish", "description": "Publish",
+    "id": "publish_report", "type": "report", "description": "Publish",
     "inputs": [{"id": "classify"}],
     "function": {"kind": "inline", "code":
                  "def transform(df, output_dir):\n"
@@ -62,7 +62,7 @@ _PUBLISH = {
                  "    path = os.path.join(output_dir, 'report.json')\n"
                  "    df.to_json(path, orient='records')\n"
                  "    return df"},
-    "publish": {"format": "json"},
+    "report": {"format": "json"},
     "signature": {"form": "replaces"},
 }
 
@@ -136,7 +136,7 @@ def test_workflow_test_writes_a_real_run_marked_is_test_run(demo):
     assert manifest["parameters"]["is_test_run"] is True
 
 
-def test_workflow_test_runs_publish_scoped_to_its_own_run_dir(demo):
+def test_workflow_test_runs_the_report_scoped_to_its_own_run_dir(demo):
     _seed(demo, [_load_stage(demo), _CLASSIFY, _PUBLISH])
     result = run_workflow_test("demo")
     assert result["ok"] is True

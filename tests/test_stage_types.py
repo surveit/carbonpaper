@@ -23,7 +23,7 @@ def test_every_stage_type_has_exactly_one_model_in_the_stage_union() -> None:
 
 
 def test_every_stage_model_names_the_blocks_STAGE_TYPES_advertises() -> None:
-    """`publish` advertising only `publish` is what let the fingerprint miss the code it runs."""
+    """`report` advertising only `report` is what let the fingerprint miss the code it runs."""
     for cls in get_args(get_args(Stage)[0]):
         stage_type = get_args(cls.model_fields["type"].annotation)[0].value
         # `signature` is required on every stored model but is not a config

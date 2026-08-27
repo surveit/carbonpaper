@@ -76,7 +76,7 @@ def test_every_stage_type_has_a_display_label() -> None:
 
 
 def test_the_label_filter_reads_an_enum_member_not_its_repr() -> None:
-    # Bare `{{ stage.type }}` on a StageType renders "StageType.publish".
+    # Bare `{{ stage.type }}` on a StageType renders "StageType.report".
     assert label_stage_type(StageType.human_review_queue) == "review queue"
     assert label_stage_type("human_review_queue") == "review queue"
     assert label_stage_type("not_a_stage_type") == "not_a_stage_type"

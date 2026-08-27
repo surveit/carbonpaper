@@ -14,7 +14,7 @@ from pydantic import ValidationError
 from app.core.errors import DocumentNotFound, NoVersionToRunError, ReviewGuideValidationError
 from app.core.timestamp_ids import mint_timestamp_id
 from app.models import Stage
-from app.models.workflow import find_stages_reaching_publish, parse_workflow
+from app.models.workflow import find_stages_reaching_report, parse_workflow
 from app.models.records.review_guide import ReviewGuide
 from app.models.records.workflow_version import WorkflowVersion
 from app.core.utils import format_errors
@@ -90,25 +90,25 @@ def find_latest_review_guide(project_id: str, version_id: str) -> ReviewGuide | 
 def validate_review_guide(guide: ReviewGuide, stages: list[Stage]) -> None:
     refusals = [
         *_describe_stage_mismatch(guide, stages),
-        *_describe_unnarrated_stages_reaching_publish(guide, stages),
+        *_describe_unnarrated_stages_reaching_report(guide, stages),
         *_describe_sections_missing_data_description(guide),
     ]
     if refusals:
         raise ReviewGuideValidationError(" ".join(refusals))
 
 
-def _describe_unnarrated_stages_reaching_publish(
+def _describe_unnarrated_stages_reaching_report(
     guide: ReviewGuide, stages: list[Stage]
 ) -> list[str]:
-    hidden = sorted(set(guide.unnarrated) & find_stages_reaching_publish(stages))
+    hidden = sorted(set(guide.unnarrated) & find_stages_reaching_report(stages))
     if not hidden:
         return []
     return [
-        f"stage(s) listed unnarrated whose output reaches a publish stage: {hidden} — "
+        f"stage(s) listed unnarrated whose output reaches a report stage: {hidden} — "
         "each one's work is carried into the published files, so a reader checking a "
         "published figure may have to check it, and leaving it out of the walkthrough "
         "hides it. Narrate each in a section. `unnarrated` is only for a stage that "
-        "reaches NO publish stage."
+        "reaches NO report stage."
     ]
 
 

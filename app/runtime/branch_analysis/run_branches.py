@@ -129,14 +129,14 @@ def _read_branching_from_lineage(
 
 
 def _refuse_a_gap_in_the_lineage(stage: WorkflowStage) -> None:
-    """Absent lineage is a row-preserving type's contract, or a publish. Never a gap."""
+    """Absent lineage is a row-preserving type's contract, or a report. Never a gap."""
     if is_grain_and_order_preserving(stage.stage.type):
         return
-    if stage.stage.type == StageType.publish:
+    if stage.stage.type == StageType.report:
         return
     raise MissingLineage(
         f"stage '{stage.id}' is a {_name_the_type(stage)}, which neither preserves "
-        f"its rows nor publishes, so it owed a lineage sidecar and wrote none")
+        f"its rows nor reports, so it owed a lineage sidecar and wrote none")
 
 
 def _name_the_type(stage: WorkflowStage) -> str:

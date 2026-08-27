@@ -14,7 +14,7 @@ from app.core.errors import TraceLinksUnavailableError
 from app.main import app
 from app.models import parse_stage, Stage
 from app.runtime.context import RunContext
-from app.runtime.stages.publish import handle_publish
+from app.runtime.stages.report import handle_report
 from app.runtime.citations import build_row_trace_url
 from test_trace_helpers import write_run
 
@@ -47,7 +47,7 @@ def test_build_row_trace_url_percent_encodes_the_column():
     assert url.endswith("?column=score%20%26%20rank")
 
 
-# ── what the publish handler passes ───────────────────────────────────────────
+# ── what the report handler passes ───────────────────────────────────────────
 
 _CITING_PUBLISH_CODE = """
 import pathlib
@@ -76,13 +76,13 @@ def transform(df, output_dir):
 _NAME_COLUMN = [{"name": "name", "type": "str", "nullable": True}]
 
 
-def _publish_stage(code: str, input_columns=_NAME_COLUMN) -> Stage:
+def _report_stage(code: str, input_columns=_NAME_COLUMN) -> Stage:
     return parse_stage({
         "id": "report",
-        "type": "publish",
+        "type": "report",
         "description": "Report",
         "inputs": [{"id": "enrich"}],
-        "publish": {"format": "html_report", "destination": "build/"},
+        "report": {"format": "html_report", "destination": "build/"},
         "signature": {"form": "replaces"},
         "function": {"kind": "inline", "code": "import pandas as pd\n" + code},
     })
@@ -95,7 +95,7 @@ def test_handler_passes_a_service_when_the_function_declares_it(tmp_path):
     ctx = RunContext.for_workflow_run(
         run_dir=tmp_path / "run", project_id="palm", run_id="R1",
     )
-    result = handle_publish(place_stage(_publish_stage(_CITING_PUBLISH_CODE)), as_inputs({"enrich": _FRAME}), ctx)
+    result = handle_report(place_stage(_report_stage(_CITING_PUBLISH_CODE)), as_inputs({"enrich": _FRAME}), ctx)
     html = (tmp_path / "run" / "artifacts" / "build" / "index.html").read_text(encoding="utf-8")
     assert "/project/palm/runs/R1/stage/enrich/row/0/trace/view" in html
     assert "/project/palm/runs/R1/stage/enrich/row/1/trace/view" in html
@@ -106,7 +106,7 @@ def test_handler_leaves_a_function_without_the_keyword_untouched(tmp_path):
     ctx = RunContext.for_workflow_run(
         run_dir=tmp_path / "run", project_id="palm", run_id="R1",
     )
-    handle_publish(place_stage(_publish_stage(_PLAIN_PUBLISH_CODE)), as_inputs({"enrich": _FRAME}), ctx)
+    handle_report(place_stage(_report_stage(_PLAIN_PUBLISH_CODE)), as_inputs({"enrich": _FRAME}), ctx)
     html = (tmp_path / "run" / "artifacts" / "build" / "index.html").read_text(encoding="utf-8")
     assert html == "<p>no links</p>"
 
@@ -114,7 +114,7 @@ def test_handler_leaves_a_function_without_the_keyword_untouched(tmp_path):
 def test_handler_fails_loudly_when_a_scopeless_run_cannot_address_a_trace(tmp_path):
     ctx = RunContext.for_stages_outside_a_run(run_dir=tmp_path / "run")
     with pytest.raises(TraceLinksUnavailableError) as exc:
-        handle_publish(place_stage(_publish_stage(_CITING_PUBLISH_CODE)), as_inputs({"enrich": _FRAME}), ctx)
+        handle_report(place_stage(_report_stage(_CITING_PUBLISH_CODE)), as_inputs({"enrich": _FRAME}), ctx)
     assert "report" in str(exc.value)
 
 
@@ -135,8 +135,8 @@ def test_a_link_emitted_into_published_html_resolves(tmp_path, monkeypatch):
     )
     enrich_columns = [{"name": "facility_id", "type": "str", "nullable": True}, *_NAME_COLUMN,
                       {"name": "score", "type": "int", "nullable": True}]
-    handle_publish(
-        place_stage(_publish_stage(_CITING_PUBLISH_CODE, input_columns=enrich_columns)),
+    handle_report(
+        place_stage(_report_stage(_CITING_PUBLISH_CODE, input_columns=enrich_columns)),
         as_inputs({"enrich": enrich}), ctx)
     html = (run_dir / "artifacts" / "build" / "index.html").read_text(encoding="utf-8")
 

@@ -21,8 +21,7 @@ from run_seed import read_manifest
 
 client = TestClient(app)
 
-# The columns of the CSVs these fixtures write; every non-publish stage must
-# declare an output_schema (app/models/stage.py: Stage._schemas_declared).
+# The columns of the CSVs these fixtures write; Stage._schemas_declared wants them.
 _ROWS_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": False},
                             {"name": "val", "type": "int", "nullable": False}]}
 

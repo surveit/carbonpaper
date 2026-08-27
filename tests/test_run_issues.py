@@ -161,7 +161,7 @@ def test_a_pending_stage_on_another_fork_is_not_blamed_on_this_stop():
 
 
 def test_an_unreadable_version_drops_the_never_ran_clause_rather_than_guessing():
-    manifest = _manifest(_refusal("classify_issues"), _record("publish", "pending"))
+    manifest = _manifest(_refusal("classify_issues"), _record("report", "pending"))
 
     assert build_run_issues(manifest, None).stopped[0].never_ran == []
 

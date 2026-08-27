@@ -15,7 +15,7 @@ from app.models.stages.input_data import Connector
 from app.models.stages.join import JoinConfig
 from app.models.stages.llm_transform import LLMConfig
 from app.models.stages.filter_rows import FilterConfig
-from app.models.stages.publish import PublishConfig
+from app.models.stages.report import ReportConfig
 from app.models.stages.sort_rank import SortRankConfig
 from app.models.stages.starlark import StarlarkFunction
 from app.models.stages.starlark_filter import StarlarkFilter
@@ -25,7 +25,7 @@ from app.models.stages.union import UnionConfig
 # reaches the fingerprint cannot skip the classification below.
 _CONFIG_CLASSES = [
     Connector, LLMConfig, PythonFunction, JoinConfig, AggregateConfig, QueueConfig,
-    PublishConfig, UnionConfig, FilterConfig, StarlarkFunction,
+    ReportConfig, UnionConfig, FilterConfig, StarlarkFunction,
     ExplodeConfig, DedupeConfig, SortRankConfig, StarlarkFilter,
 ]
 
@@ -58,7 +58,7 @@ def _config_block_fields(stage_cls) -> set[str]:
 
 @pytest.mark.parametrize("stage_cls", get_args(get_args(Stage)[0]), ids=lambda c: c.__name__)
 def test_fingerprint_blocks_names_every_config_block_the_type_declares(stage_cls):
-    """Pins the bug where publish fingerprinted one of its two config blocks, so code edits kept the cache."""
+    """Pins the bug where a report fingerprinted one config block, so code edits kept the cache."""
     declared = _config_block_fields(stage_cls)
     # model_construct skips validation, so the blocks can be sentinels: this
     # asks which fields fingerprint_blocks() reads, not what is in them.

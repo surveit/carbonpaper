@@ -136,9 +136,9 @@ def _workflow_stages(source_path: str) -> list[dict]:
         },
         classify,
         {
-            "id": "report", "description": "Publish classified claims", "type": "publish",
+            "id": "report", "description": "Publish classified claims", "type": "report",
             "inputs": [{"id": "classify"}],
-            "publish": {"format": "csv", "destination": "report/"},
+            "report": {"format": "csv", "destination": "report/"},
             "signature": {"form": "replaces"},
             "function": {"kind": "inline", "code": (
                 "import pandas as pd\n"

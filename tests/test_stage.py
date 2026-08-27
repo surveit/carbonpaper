@@ -11,7 +11,7 @@ from app.core.llm import LLMModel
 from app.models.stages.aggregate import AggregationOp
 from app.models.stages.input_data import Connector
 from app.models.stages.llm_transform import LLMConfig
-from app.models.stages.publish import PublishFormat
+from app.models.stages.report import ReportFormat
 
 
 def S(**kw):
@@ -19,9 +19,7 @@ def S(**kw):
     return kw
 
 
-# Every stage must declare a schema on each input and (bar publish) an
-# output_schema, so tests aimed at some OTHER part of the contract still have to
-# carry both. These are the smallest ones that satisfy it.
+# The smallest schemas satisfying Stage._schemas_declared, for tests aimed elsewhere.
 _PK_ID_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}]}
 _QUEUE_IN_COLUMNS = [{"name": "id", "type": "str", "nullable": True},
                      {"name": "score", "type": "int", "nullable": True}]
@@ -133,21 +131,21 @@ def test_llm_transform_rejects_output_that_adds_no_columns():
             llm={"prompt_template": "do {id}"}))
 
 
-def test_publish_requires_the_function_block_it_actually_runs():
+def test_report_requires_the_function_block_it_actually_runs():
     with pytest.raises(ValidationError) as exc:
-        m.parse_stage(S(id="p", type="publish", inputs=[{"id": "a"}], publish={"format": "json"}))
+        m.parse_stage(S(id="p", type="report", inputs=[{"id": "a"}], report={"format": "json"}))
     assert any(
-        e["loc"] == ("publish", "function") and e["type"] == "missing"
+        e["loc"] == ("report", "function") and e["type"] == "missing"
         for e in exc.value.errors()
     )
 
 
-def test_publish_config_is_typed():
+def test_report_config_is_typed():
     s = m.parse_stage(S(
-        id="p", type="publish", inputs=[{"id": "a"}],
-        publish={"format": "json"}, signature={"form": "replaces"},
+        id="p", type="report", inputs=[{"id": "a"}],
+        report={"format": "json"}, signature={"form": "replaces"},
         function={"kind": "inline", "code": "def transform(row): return row"}))
-    assert s.publish.format == PublishFormat.json
+    assert s.report.format == ReportFormat.json
 
 
 def test_python_function_inline_needs_code():
@@ -661,11 +659,8 @@ def test_output_schema_issues_raise_when_the_stage_is_placed():
         ])
 
 
-# ── mandatory input schemas and signature ────────────────────────────────────
-# Every stage must declare a schema on every input and a signature, with two
-# one-sided exemptions: input_data takes no inputs (but its signature still says
-# what it produces), publish emits files not a table (so its signature produces
-# nothing) — but still declares its inputs.
+# ── input schemas and signature are mandatory; input_data has no inputs, report
+# produces nothing ──
 
 _INLINE_ROW_FN = {"kind": "inline", "code": "def transform(row): return row"}
 _LEFT_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "name", "type": "str", "nullable": True}]}
@@ -679,7 +674,7 @@ _HANDLE_BLOCK = {
     "aggregate": {"aggregate": {"group_by": ["name"],
                                 "aggregations": [{"output_column": "n", "formula": "count"}]}},
     "human_review_queue": {"queue": queue_columns("name", "human_name")},
-    "publish": {"publish": {"format": "json"}, "function": _INLINE_ROW_FN,
+    "report": {"report": {"format": "json"}, "function": _INLINE_ROW_FN,
                 "signature": {"form": "replaces"}},
 }
 _INPUT_IDS = {"enrich": ["facilities", "filings"], "expand": ["facilities", "filings"]}
@@ -767,12 +762,12 @@ def test_input_data_with_a_signature_accepted(tmp_path):
     assert m.parse_workflow([stage.model_dump(by_alias=True, exclude_none=True)]) is not None
 
 
-def test_publish_producing_nothing_accepted():
-    assert _placed("publish", declare_output=False).output_schema is None
+def test_report_producing_nothing_accepted():
+    assert _placed("report", declare_output=False).output_schema is None
 
 
-def test_publish_reads_what_its_upstream_supplies():
-    placed = _placed("publish", declare_output=False)
+def test_report_reads_what_its_upstream_supplies():
+    placed = _placed("report", declare_output=False)
     assert [c.name for c in placed.inputs[0].table_schema.columns] == [
         c["name"] for c in _LEFT_SCHEMA["columns"]]
 

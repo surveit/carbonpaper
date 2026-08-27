@@ -45,7 +45,7 @@ sections, in this order:
 
 1. **Run overview** — the header (grounding line, CTA, status bar) and the issue index.
    Everything about the run; nothing that is its result.
-2. **Run outputs** — the files a publish stage wrote, off `header.artifacts`, as links.
+2. **Run outputs** — the files a report stage wrote, off `header.artifacts`, as links.
    Absent when there are none. Never a button: a CTA is an imperative, a run that finished
    clean has none (`choose_run_cta` returns an empty `RunCta`), and a primary button sized
    to a filename was the widest thing on the page.
@@ -117,7 +117,7 @@ list and this version's guide. With no guide the narration lines are absent, not
   `.stage-caveat` `<details>`, closed, its whole warning in the summary line.
 - **Schema** — the static contract: the input schemas, then the output schema.
 - **Transform** — the *raw* transform config block (`_stage_executable.html`): llm prompt+model+tools,
-  join keys, aggregate ops, connector/queue/publish spec — plus the only link to the
+  join keys, aggregate ops, connector/queue/report spec — plus the only link to the
   simulate page below. An authored-code block (`function` / `filter`) reads **description → examples → code**:
   the block's plain-language `summary` leads, the test cases follow, and the source is rendered
   last and folded (`_stage_code.html`), because the reviewer is a journalist, not an engineer.
@@ -237,7 +237,7 @@ folded transform, the input rows with per-row checkboxes, the controls, then the
 column. Picking and reading the answer used to straddle two tabs of the run panel, which moved
 the reader off the rows they had just picked. The panel now links it from **Transform** and
 holds no picker. Running it posts `…/stage/<sid>/preview` (`runtime/preview.py`), which runs the
-handler **in memory** and persists nothing; refused for `publish`/`human_review_queue`/
+handler **in memory** and persists nothing; refused for `report`/`human_review_queue`/
 `input_data` (side effects), and the page 404s for those types and for an unreadable version.
 
 Every stage definition a run page shows or executes (panel, lineage panel, simulator)

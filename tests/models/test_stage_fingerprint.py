@@ -49,13 +49,13 @@ def _queue_stage(**queue_overrides):
     })
 
 
-def _publish_stage(code="def transform(df, output_dir, citation_provider):\n    return df\n", **overrides):
+def _report_stage(code="def transform(df, output_dir, citation_provider):\n    return df\n", **overrides):
     base = {
         "id": "report",
-        "type": "publish",
+        "type": "report",
         "description": "report",
         "inputs": [{"id": "src"}],
-        "publish": {"format": "html_report", "destination": "out/"},
+        "report": {"format": "html_report", "destination": "out/"},
         "function": {"kind": "inline", "code": code},
         "signature": {"form": "replaces"},
     }
@@ -118,17 +118,17 @@ def test_compute_definition_fingerprint_for_queue_reacts_to_context_columns():
     assert base.compute_definition_fingerprint() != changed.compute_definition_fingerprint()
 
 
-def test_compute_definition_fingerprint_for_publish_reacts_to_function_code():
-    base = _publish_stage()
-    changed = _publish_stage(
+def test_compute_definition_fingerprint_for_report_reacts_to_function_code():
+    base = _report_stage()
+    changed = _report_stage(
         code="def transform(df, output_dir, citation_provider):\n    return df.head(1)\n"
     )
     assert base.compute_definition_fingerprint() != changed.compute_definition_fingerprint()
 
 
-def test_compute_definition_fingerprint_for_publish_reacts_to_publish_block():
-    base = _publish_stage()
-    changed = _publish_stage(publish={"format": "html_report", "destination": "elsewhere/"})
+def test_compute_definition_fingerprint_for_report_reacts_to_report_block():
+    base = _report_stage()
+    changed = _report_stage(report={"format": "html_report", "destination": "elsewhere/"})
     assert base.compute_definition_fingerprint() != changed.compute_definition_fingerprint()
 
 

@@ -37,7 +37,7 @@ from app.models.stages.human_review_queue import HumanReviewQueueStage, QueueCon
 from app.models.stages.input_data import Connector, InputDataStage
 from app.models.stages.join import EnrichStage, ExpandStage, JoinConfig
 from app.models.stages.llm_transform import LLMConfig, LLMTransformStage
-from app.models.stages.publish import PublishConfig, PublishStage
+from app.models.stages.report import ReportConfig, ReportStage
 from app.models.stages.signature import (  # noqa: F401  (re-exported: the stage vocabulary lives here)
     ExtendsSignature,
     InputReads,
@@ -66,7 +66,7 @@ Stage = Annotated[
         ExpandStage,
         AggregateStage,
         HumanReviewQueueStage,
-        PublishStage,
+        ReportStage,
         UnionStage,
         FilterRowsStage,
         StarlarkRowFunctionStage,
@@ -113,12 +113,8 @@ def validate_stage(spec: Any) -> list[str]:
         return format_errors(err)
 
 
-# The version of the shape below: what a record embedding stages stamps into its
-# schema_version column, and what an alembic revision rewrites a payload up to.
-# v2: primary_key left the stage vocabulary (the data model keeps its own).
-# v3: `name` became `description` — a stage has one name, its id.
-# v4: an input's stored schema left — the graph resolves it (app.models.workflow).
-STAGE_SPEC_SCHEMA_VERSION = 4
+# docs/models-and-storage.md
+STAGE_SPEC_SCHEMA_VERSION = 7
 
 
 def stage_to_spec_dict(stage: Stage) -> dict[str, Any]:
@@ -149,7 +145,7 @@ class StageDraft(AuthoredStageFields):
     join: Optional[JoinConfig] = None
     aggregate: Optional[AggregateConfig] = None
     queue: Optional[QueueConfig] = None
-    publish: Optional[PublishConfig] = None
+    report: Optional[ReportConfig] = None
     union: Optional[UnionConfig] = None
     filter: Optional[FilterConfig] = None
     starlark: Optional[StarlarkFunction] = None

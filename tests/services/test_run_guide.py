@@ -471,14 +471,14 @@ def test_a_step_of_input_stages_alone_still_reports_its_output(project_dir):
 
 # ── list_written_columns on its own ──────────────────────────────────────────
 
-def test_a_publish_stage_producing_nothing_writes_no_columns():
-    publish = parse_stage({
-        "id": "write_it", "description": "Write it", "type": "publish",
+def test_a_report_stage_producing_nothing_writes_no_columns():
+    report = parse_stage({
+        "id": "write_it", "description": "Write it", "type": "report",
         "inputs": [{"id": "attach_source"}],
-        "publish": {"format": "csv", "destination": "out/"},
+        "report": {"format": "csv", "destination": "out/"},
         "signature": {"form": "replaces"},
         "function": {"kind": "inline",
                      "code": "def transform(df, output_dir):\n    return df\n"},
     })
     assert list_written_columns(
-        WorkflowStage(stage=publish, inputs=[], output_schema=None)) == []
+        WorkflowStage(stage=report, inputs=[], output_schema=None)) == []

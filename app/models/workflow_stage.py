@@ -27,7 +27,7 @@ class WorkflowStage:
     stage: "Stage"
     # In the stage's own `inputs` order, so inputs[0] is the anchor/subject.
     inputs: list[WorkflowStageInput]
-    # None only for publish, which emits files rather than a table.
+    # None only for report, which emits files rather than a table.
     output_schema: Optional[TableSchema]
 
     @property

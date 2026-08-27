@@ -27,7 +27,7 @@ from .human_review_queue import build_human_review_mapper
 from .input_data import preflight_input_data, read_input_data
 from .join import handle_enrich, handle_expand
 from .llm_transform import LLMTransformHandler
-from .publish import handle_publish
+from .report import handle_report
 from .reshape import handle_dedupe, handle_explode, handle_sort_rank
 from .python_functions import handle_python_frame_function, build_python_row_mapper
 from .starlark_filter import make_starlark_filter_mapper
@@ -54,7 +54,7 @@ HANDLERS: dict[StageType, StageHandler] = {
         build_human_review_mapper,
         trims_output_to_declared=True,
     ),
-    StageType.publish: FrameTransformHandler(handle_publish),
+    StageType.report: FrameTransformHandler(handle_report),
     StageType.union: FrameTransformHandler(handle_union),
     # Row-mapped with drops_rows: the runtime drives the predicate row by row
     # and does the selecting itself, so it holds the input ordinals that

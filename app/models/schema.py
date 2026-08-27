@@ -54,9 +54,7 @@ StageId: TypeAlias = ID
 TypeUnsafeUserStageConfigOverride: TypeAlias = dict[str, Any]
 
 
-# Shared by every authored-code block (python_row_function/python_frame_function,
-# publish's function block, filter_rows) — lives here, below `stage.py`, so a
-# config class defined in its own module can use it without a cycle.
+# Below `stage.py`, so a config class in its own module can use it without a cycle.
 class FunctionKind(str, Enum):
     inline = "inline"
 

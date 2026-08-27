@@ -117,7 +117,7 @@ TOOL_SCHEMAS: dict[str, ToolParameterProse] = {
         "stages": "The complete NEW stages: each with id (new and unique — the stage's only "
             "name), description, type, the "
             "config block(s) its type requires (connector / llm / function / ...; "
-            "`publish` needs BOTH its `publish` block and a `function` block), and a "
+            "`report` needs BOTH its `report` block and a `function` block), and a "
             "MANDATORY `signature` — that is where you declare what each input is read "
             "for. An entry in `inputs` carries the upstream stage id and nothing else; "
             "the columns go in `signature.reads`, keyed by the same id. Every id in "

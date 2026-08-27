@@ -15,7 +15,7 @@ _BANNED_PERSISTENCE_METHODS = frozenset({"save", "delete"})
 
 # Denied until listed, per tests/arch/test_contracts_are_whitelists.py.
 _MAY_WRITE_A_RUN_RECORD: Mapping[str, str] = {
-    "citations.py": "StageCitations — what a publish stage cited, per run",
+    "citations.py": "StageCitations — what a report stage cited, per run",
     "manifest.py": "RunManifest — the run's own record",
     "run_log.py": "RunLogChunk — the run's event log",
     "human_review_queue.py": "the queue this run halted on",

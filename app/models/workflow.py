@@ -99,30 +99,24 @@ def sort_stages_by_dependency(stages: Sequence[_StageT]) -> list[_StageT]:
     return ordered
 
 
-def validate_publish_is_terminal(stages: list[Stage]) -> list[str]:
-    publish_ids = {s.id for s in stages if s.type == StageType.publish}
+def validate_report_is_terminal(stages: list[Stage]) -> list[str]:
+    report_ids = {s.id for s in stages if s.type == StageType.report}
     return [
-        f"`{stage.id}`: input `{upstream}` is a publish stage — a publish stage "
+        f"`{stage.id}`: input `{upstream}` is a report stage — a report stage "
         f"writes files and produces no table, so it cannot be another stage's input"
         for stage in stages
         for upstream in stage.input_ids
-        if upstream in publish_ids
+        if upstream in report_ids
     ]
 
 
-def find_stages_reaching_publish(stages: Sequence[Stage]) -> set[str]:
+def find_stages_reaching_report(stages: Sequence[Stage]) -> set[str]:
     inputs_of = {stage.id: stage.input_ids for stage in stages}
     reaching: set[str] = set()
-    # Walked BACKWARD from the publish stages along `input_ids`, so a stage any number
-    # of hops upstream is found. A publish stage is terminal (validate_publish_is_terminal),
-    # so its ancestors are exactly the stages whose work the published files carry.
-    #
-    # Seeded from those stages' INPUTS, so a publish stage is not in the set it roots: it
-    # does not carry work into the publishing, it IS the publishing, and narrates itself.
-    # Nothing may read a publish stage, so the walk cannot reach one and add it back.
+    # Seeded from each report stage's INPUTS, so the report itself is not in the set it roots.
     frontier = [
         upstream
-        for stage in stages if stage.type == StageType.publish
+        for stage in stages if stage.type == StageType.report
         for upstream in stage.input_ids
     ]
     while frontier:
@@ -142,7 +136,7 @@ def graph_issues(stages: list[Stage]) -> list[str]:
     # back clean.
     structural = (
         validate_unique_ids(stages) + detect_cycle(stages)
-        + validate_inputs_resolve(stages) + validate_publish_is_terminal(stages)
+        + validate_inputs_resolve(stages) + validate_report_is_terminal(stages)
     )
     if structural:
         return structural
@@ -210,7 +204,7 @@ def _require_upstream_output(
     if output_schema is None:
         raise ValueError(
             f"`{stage.id}`: input `{upstream_id}` resolves no output schema — "
-            "publish is the only type exempt, and validate_publish_is_terminal "
+            "report is the only type exempt, and validate_report_is_terminal "
             "must run, and pass, before resolution"
         )
     return output_schema

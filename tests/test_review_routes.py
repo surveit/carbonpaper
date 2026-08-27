@@ -78,11 +78,7 @@ def _load_quotes_stage(root):
             }}
 
 
-# The reviewer columns app/services/review.py's _build_output_row (and the
-# runtime's pass-through/auto-approve rows) add on top of the frozen input row.
-# Every non-publish stage's signature must say what it outputs
-# (app/models/stage.py: Stage._schemas_declared), and the runtime PROJECTS the
-# stage's output onto exactly those columns.
+# What _build_output_row adds on top of the frozen input row, and all the runtime keeps.
 _REVIEW_COLUMNS = queue_added_columns()
 
 

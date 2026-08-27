@@ -143,8 +143,8 @@ def test_unknown_reference_override_stage(tmp_path):
 def test_an_override_stage_with_no_output_schema_is_reported_not_crashed_on(tmp_path):
     src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     pub = m.parse_stage(S(
-        id="pub", type="publish", inputs=_input_refs([src]),
-        publish={"format": "json"}, signature={"form": "replaces"},
+        id="pub", type="report", inputs=_input_refs([src]),
+        report={"format": "json"}, signature={"form": "replaces"},
         function={"kind": "inline", "code": "def transform(df, output_dir): return df"}))
     tgt = _row("tgt", [src], output_schema={
         "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})

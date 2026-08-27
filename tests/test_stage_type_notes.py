@@ -107,16 +107,16 @@ def _flat(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def test_publish_note_names_the_citation_call():
-    note = STAGE_TYPES["publish"].notes
-    assert note, "publish must carry a `notes` explanation"
+def test_report_note_names_the_citation_call():
+    note = STAGE_TYPES["report"].notes
+    assert note, "report must carry a `notes` explanation"
     # the authoring agent has to know the keyword to declare and the call to make
     assert "citation_provider" in note
     assert "citation_provider.cite_value(" in note
 
 
-def test_publish_note_reaches_the_editing_agent_prompt():
+def test_report_note_reaches_the_editing_agent_prompt():
     from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
 
-    note = STAGE_TYPES["publish"].notes
+    note = STAGE_TYPES["report"].notes
     assert note in EDITING_SYSTEM_PROMPT

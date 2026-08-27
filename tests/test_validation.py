@@ -173,7 +173,7 @@ def test_a_null_is_not_counted_as_out_of_range():
 
 
 def test_no_schema_declared_produces_no_issues():
-    # publish emits files, not a table, so declaring no schema is the expected case.
+    # report emits files, not a table, so declaring no schema is the expected case.
     report = validate_dataframe(pd.DataFrame({"a": [1]}), None, stage_id="s", phase="input")
     assert report.issues == []
     assert report.ok

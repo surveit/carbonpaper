@@ -1,4 +1,4 @@
-"""Handler for the publish stage type."""
+"""Handler for the report stage type."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import pyarrow as pa
 from app.core.errors import TraceLinksUnavailableError
 from app.core.frames import table_to_frame
 from app.models import WorkflowStage
-from app.models.stages.publish import PublishStage
+from app.models.stages.report import ReportStage
 
 from ..context import RunContext
 from ..citations import CitationProvider, save_citations
@@ -22,45 +22,43 @@ from .python_functions import _load_python_function
 CITATIONS_KWARG = "citation_provider"
 
 
-def handle_publish(
+def handle_report(
     workflow_stage: WorkflowStage, inputs: dict[str, pa.Table], ctx: RunContext
 ) -> StageOutput:
     """Gets the frames positionally, an `output_dir` kwarg, and `citation_provider` if declared."""
-    publish_stage = narrow_stage(workflow_stage, PublishStage)
-    output_dir = _prepare_output_dir(publish_stage, ctx)
-    fn = _load_python_function(publish_stage)
+    report_stage = narrow_stage(workflow_stage, ReportStage)
+    output_dir = _prepare_output_dir(report_stage, ctx)
+    fn = _load_python_function(report_stage)
     args = [table_to_frame(inputs[ref.id]) for ref in workflow_stage.inputs]
 
-    citation_provider = _resolve_citation_provider(fn, publish_stage, ctx, inputs)
+    citation_provider = _resolve_citation_provider(fn, report_stage, ctx, inputs)
     if citation_provider is None:
         return StageOutput.from_frame(fn(*args, output_dir=str(output_dir)))
     result = fn(*args, output_dir=str(output_dir), citation_provider=citation_provider)
-    # Saved after the call, so it holds what the artifact actually cited rather
-    # than what the stage could have cited. The review packet renders exactly this
-    # set: a row nothing published points at needs no page.
+    # Saved after the call: what the artifact cited, not what it could have cited.
     identity = ctx.require_identity()
-    save_citations(identity.project, identity.run_id, publish_stage.id, citation_provider)
+    save_citations(identity.project, identity.run_id, report_stage.id, citation_provider)
     return StageOutput.from_frame(result)
 
 
-def _prepare_output_dir(stage: PublishStage, ctx: RunContext) -> Path:
-    publish_cfg = stage.publish
+def _prepare_output_dir(stage: ReportStage, ctx: RunContext) -> Path:
+    report_cfg = stage.report
     output_dir = (
-        ctx.require_run_dir() / "artifacts" / Path(publish_cfg.destination or "build/").name
+        ctx.require_run_dir() / "artifacts" / Path(report_cfg.destination or "build/").name
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir
 
 
 def _resolve_citation_provider(
-    fn: Callable[..., Any], stage: PublishStage, ctx: RunContext,
+    fn: Callable[..., Any], stage: ReportStage, ctx: RunContext,
     inputs: dict[str, pa.Table],
 ) -> CitationProvider | None:
     if not _accepts_citation_provider(fn):
         return None
     if ctx.identity is None:
         raise TraceLinksUnavailableError(
-            f"publish stage {stage.id}: its function declares `{CITATIONS_KWARG}`, but "
+            f"report stage {stage.id}: its function declares `{CITATIONS_KWARG}`, but "
             "this run has no project scope (a preview, subset, or authored-test run), so "
             "no row-trace URL can be built"
         )

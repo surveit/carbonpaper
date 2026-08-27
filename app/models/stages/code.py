@@ -1,8 +1,4 @@
-"""The python-code block and its validation: the inline code a python_row_function /
-python_frame_function (or a publish stage's function block) carries must parse,
-compile, and define the function the runtime calls. Also holds the wording of the
-`summary` every authored-code block asks for, so PythonFunction and FilterConfig
-cannot drift apart."""
+"""Authored code must parse, compile and define the function the runtime calls."""
 from __future__ import annotations
 
 import ast
@@ -171,7 +167,7 @@ class PythonFunction(StageConfig):
             "`def transform(df, ..., *, progress) -> DataFrame` (inputs positional in "
             "declared order; it may declare the keyword-only progress callback, which "
             "accepts completed and total); "
-            "publish `def transform(df, ..., output_dir, citation_provider) -> DataFrame` (writes "
+            "report `def transform(df, ..., output_dir, citation_provider) -> DataFrame` (writes "
             "artifact files into output_dir; the returned frame lists them). When the "
             "function meets an input it cannot handle, it refuses instead of "
             f"returning: `raise {StepRefused.__name__}(\"...\")`, which needs no import — the name is "
@@ -271,7 +267,7 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
         notes=(
             "The runtime calls `transform(*frames)`: one POSITIONAL parameter per declared "
             "input, in `inputs` order — never by name, never a dict of frames. It receives no "
-            "output_dir and no citation_provider; writing files is publish's job. Return the output "
+            "output_dir and no citation_provider; writing files is the report's job. Return the output "
             "DataFrame."
         ),
     ),

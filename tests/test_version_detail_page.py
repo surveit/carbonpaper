@@ -19,8 +19,7 @@ from stage_seed import add_stage
 client = TestClient(app)
 
 
-# The columns of the CSV the `project` fixture writes; every non-publish stage
-# must declare its output_schema (app/models/stage.py: Stage._schemas_declared).
+# The columns of the CSV the `project` fixture writes; Stage._schemas_declared wants them.
 _ROWS_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": False},
                             {"name": "val", "type": "int", "nullable": False}]}
 

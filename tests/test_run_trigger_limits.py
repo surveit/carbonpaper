@@ -61,8 +61,7 @@ def project(tmp_path, monkeypatch):
     proj.mkdir(parents=True, exist_ok=True)
     data = proj / "a.csv"
     pd.DataFrame({"name": ["x", "y", "z"], "val": [1, 2, 3]}).to_csv(data, index=False)
-    # output_schema names the CSV's columns; every non-publish stage must declare
-    # one (app/models/stage.py: Stage._schemas_declared).
+    # output_schema names the CSV's columns; Stage._schemas_declared wants it.
     stage = {"id": "load", "description": "Load", "type": "input_data",
              "signature": {
                  "form": "replaces",

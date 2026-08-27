@@ -395,10 +395,9 @@ def test_the_seeding_tool_hands_back_the_stages_it_seeded(projects_root: Path) -
     assert [stage["id"] for stage in workflow["stages"]] == [
         s.id for s in load_workflow(workflow["name"])
     ]
-    # The three rules the script states: the last stage before the publish stage, the
-    # one stage whose behaviour is code, and the queue beat 3 links to.
-    assert by_type["publish"] == "publish_report"
+    # The script's three rules: the stage before the report, the coded one, beat 3's queue.
+    assert by_type["report"] == "publish_report"
     assert by_type["python_row_function"] == "clean_filings"
     assert by_type["human_review_queue"] == "review_contradictions"
-    feeds_publish = next(s for s in workflow["stages"] if s["id"] == by_type["publish"])
-    assert feeds_publish["inputs"] == ["review_contradictions"]
+    feeds_report = next(s for s in workflow["stages"] if s["id"] == by_type["report"])
+    assert feeds_report["inputs"] == ["review_contradictions"]

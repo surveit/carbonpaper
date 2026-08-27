@@ -150,11 +150,11 @@ def test_a_stage_with_no_summary_cannot_generate_examples():
 
 def test_generator_rejects_non_python_stages():
     bad = parse_stage({
-        "id": "pub", "description": "Publish", "type": "publish",
+        "id": "pub", "description": "Publish", "type": "report",
         "signature": {"form": "replaces"},
         "inputs": [{"id": "double"}],
         "function": {"kind": "inline", "code": "def transform(df, output_dir):\n    return df\n"},
-        "publish": {},
+        "report": {},
     })
     with pytest.raises(ValueError, match="can run them"):
         build_stage_test_generator(_NO_TERMS, bad, _sources())

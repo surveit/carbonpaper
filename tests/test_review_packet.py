@@ -551,8 +551,7 @@ def test_the_index_names_what_the_run_flagged_and_the_stage_page_does_not(
 
 # ── what the run published ────────────────────────────────────────────────────
 
-# Writes a nested tree, which is the shape that matters: a publish function picks
-# its own layout and links across it, so anything but a verbatim copy breaks it.
+# A nested tree: a report picks its own layout, so anything but a verbatim copy breaks it.
 _PUBLISH_CODE = """
 import pathlib
 
@@ -575,13 +574,13 @@ def transform(df, output_dir):
 """
 
 
-def _publish_stage(code):
+def _report_stage(code):
     return {
         "id": "report",
         "description": "Publish the report",
-        "type": "publish",
+        "type": "report",
         "inputs": [{"id": "double"}],
-        "publish": {"format": "html_report", "destination": "build/"},
+        "report": {"format": "html_report", "destination": "build/"},
         "signature": {"form": "replaces"},
         "function": {
             "kind": "inline",
@@ -593,7 +592,7 @@ def _publish_stage(code):
 
 def _run_publishing_project(project_dir, tmp_path, code):
     _make_project(project_dir)
-    stages = [_load_stage(project_dir), _double_stage(), _publish_stage(code)]
+    stages = [_load_stage(project_dir), _double_stage(), _report_stage(code)]
     _write_stage(project_dir, "03_report.json", stages[2])
     vid = versioning.create_version_from_stages(project_dir.name, stages, message="seed", reviewer="test"
     ).version_id
@@ -623,7 +622,7 @@ def test_index_leads_with_the_published_files(project_dir, tmp_path):
 
 def test_an_os_dotfile_is_not_reported_as_a_published_output(project_dir, tmp_path):
     _make_project(project_dir)
-    stages = [_load_stage(project_dir), _double_stage(), _publish_stage(_PUBLISH_CODE)]
+    stages = [_load_stage(project_dir), _double_stage(), _report_stage(_PUBLISH_CODE)]
     _write_stage(project_dir, "03_report.json", stages[2])
     vid = versioning.create_version_from_stages(project_dir.name, stages, message="seed", reviewer="test"
     ).version_id
@@ -637,7 +636,7 @@ def test_an_os_dotfile_is_not_reported_as_a_published_output(project_dir, tmp_pa
     assert ".DS_Store" not in (packet.root / "index.html").read_text(encoding="utf-8")
 
 
-def test_a_publish_stage_that_wrote_nothing_is_reported_not_skipped(project_dir, tmp_path):
+def test_a_report_stage_that_wrote_nothing_is_reported_not_skipped(project_dir, tmp_path):
     packet = _run_publishing_project(project_dir, tmp_path, _PUBLISH_NOTHING_CODE)
 
     assert [o.path for o in packet.omitted] == ["artifacts/"]

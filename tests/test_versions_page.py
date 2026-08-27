@@ -17,7 +17,7 @@ from stage_seed import add_stage
 
 client = TestClient(app)
 
-# Every non-publish stage declares its output_schema
+# Every non-report stage declares its output_schema
 # (app/models/stage.py: Stage._schemas_declared).
 _STAGE = {
     "id": "load",
@@ -74,12 +74,12 @@ def test_run_of_a_project_with_no_version_says_there_is_none(project: Path) -> N
 
 
 def test_run_of_unpublished_project_is_not_refused_for_being_unpublished(project: Path) -> None:
-    """The fixture's input authors no path, so the run stops there — never on publish."""
+    """The fixture's input authors no path, so the run stops there — never on the report."""
     project_service.save_working_copy_as_version(project.name, message="v1", reviewer="local")
     resp = client.post("/project/demo/run", follow_redirects=False)
     assert resp.status_code == 400
     detail = resp.json()["detail"]
-    assert "publish" not in detail.lower()
+    assert "report" not in detail.lower()
     assert "no file bound" in detail
 
 

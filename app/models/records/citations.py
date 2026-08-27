@@ -8,7 +8,7 @@ from app.models.claims import StageOutputRowCitation
 
 
 class StageCitations(PersistedModel):
-    """What one publish stage cited, in the order it said so."""
+    """What one report stage cited, in the order it said so."""
 
     collection: ClassVar[str] = "run_citations"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.RUN

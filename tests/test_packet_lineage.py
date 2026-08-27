@@ -35,8 +35,8 @@ _TYPE_EXTRAS = {
         "signature": {"form": "replaces", "reads": [_READS_SOURCE],
                       "produces": [*_COLUMNS, _TOTAL]},
     },
-    "publish": {
-        "publish": {"format": "html_report"},
+    "report": {
+        "report": {"format": "html_report"},
         "function": {"kind": "inline", "summary": "writes one file",
                      "code": "def transform(df, output_dir):\n    return []"},
         "signature": {"form": "replaces", "reads": [_READS_TOTALS], "produces": []},
@@ -65,7 +65,7 @@ def test_a_stage_id_carrying_a_slash_cannot_widen_the_path():
     assert links.row_trace("a/../../etc", 0) == "../lineage/a%2F..%2F..%2Fetc/0.html"
 
 
-def test_the_seeds_are_the_rows_the_publish_stage_linked(tmp_path):
+def test_the_seeds_are_the_rows_the_report_stage_linked(tmp_path):
     from app.runtime.citations import CitationProvider, save_citations
     from app.web.review_packet.lineage import _published_rows
 
@@ -79,7 +79,7 @@ def test_the_seeds_are_the_rows_the_publish_stage_linked(tmp_path):
 
 
 def test_a_run_that_published_no_links_gets_no_pages(tmp_path):
-    """Not a failure: a publish stage that declares no provider promises nothing."""
+    """Not a failure: a report stage that declares no provider promises nothing."""
     from app.web.review_packet.lineage import _published_rows
 
     (tmp_path / "outputs").mkdir(parents=True)
@@ -110,7 +110,7 @@ def _run_view(rows: int):
         stages=[
             stage("source", "input_data", 10, []),
             stage("totals", "aggregate", rows, ["source"]),
-            stage("report", "publish", 0, ["totals"]),
+            stage("report", "report", 0, ["totals"]),
         ],
         inputs=[],
     )

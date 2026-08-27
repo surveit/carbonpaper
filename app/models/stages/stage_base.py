@@ -69,7 +69,7 @@ class StageType(str, Enum):
     expand = "expand"
     aggregate = "aggregate"
     human_review_queue = "human_review_queue"
-    publish = "publish"
+    report = "report"
     # Both preserve exact per-row PROVENANCE (each output row traces to one
     # specific input row) but neither is grain-and-order preserving BY
     # POSITION: filter_rows drops rows, union interleaves rows from several
@@ -338,7 +338,7 @@ class AbstractStage(AuthoredStageFields):
             self.signature, ReplacesSignature
         ) and not self.signature.produces:
             issues.append(
-                "its signature produces no columns — only publish emits no table"
+                "its signature produces no columns — only report emits no table"
             )
         issues.extend(find_internal_namespace_column_issues(self))
         if issues:

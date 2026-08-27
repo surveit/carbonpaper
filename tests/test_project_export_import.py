@@ -92,7 +92,7 @@ def test_a_bundle_from_before_per_type_stages_still_imports(tmp_path):
                 "produces": [{"name": "entity_id", "type": "str", "nullable": False}],
             },
             "llm": None, "function": None, "join": None, "aggregate": None,
-            "queue": None, "publish": None, "union": None, "filter": None,
+            "queue": None, "report": None, "union": None, "filter": None,
         }],
     })
     wf = WorkflowFile.model_validate_json(legacy)

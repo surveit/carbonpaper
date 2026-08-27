@@ -24,7 +24,7 @@ EVENTS_FILE = "events.jsonl"
 WORKFLOW_FILE = "workflow.json"
 DOCUMENT_FILE = "methodology.md"
 
-PUBLISH_TYPE = "publish"
+REPORT_TYPE = "report"
 # The two statuses whose handler ran to the end, so its files are on disk. The same
 # pair app.web.run_header lists the run page's outputs from.
 PUBLISHED_STATUSES = frozenset({StageStatus.OK, StageStatus.VALIDATION_WARNINGS})
@@ -107,7 +107,7 @@ def _copy_published_artifacts(
     root: Path, run_dir: Path, view: RunView, report: DataReport
 ) -> None:
     source_root = run_dir / ARTIFACTS_DIR
-    # Verbatim, at depth: a publish function links across the layout it chose.
+    # Verbatim, at depth: a report function links across the layout it chose.
     files = sorted(
         p for p in source_root.rglob("*")
         if p.is_file() and not _is_hidden(p.relative_to(source_root))
@@ -125,7 +125,7 @@ def _report_unwritten_artifacts(view: RunView, report: DataReport) -> None:
     published = [
         s.stage_id
         for s in view.stages
-        if s.type == PUBLISH_TYPE and s.status in PUBLISHED_STATUSES
+        if s.type == REPORT_TYPE and s.status in PUBLISHED_STATUSES
     ]
     if not published:
         return

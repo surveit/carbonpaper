@@ -68,8 +68,7 @@ def test_an_undescribed_stage_does_not_block_the_version(
 ) -> None:
     _seed_project(tmp_path, expected_doubled=4.0, summary=None)
     response = client.post("/project/alpha/version", data={"message": "v1"})
-    # The live-LLM journey wrote a publish stage with no summary, published an
-    # artifact with it, and could not then pin the version that produced it.
+    # The live-LLM journey wrote a summary-less report, then could not pin its version.
     assert response.status_code == 200
     assert response.json()["ok"] is True
 
