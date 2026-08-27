@@ -20,7 +20,7 @@ Ready to get started? I'll seed a sample investigation and walk you through it.\
 # Written beside the words they answer: both are what the reader meets first.
 TUTORIAL_OPENING_OFFERS = [
     "Yes — seed the sample investigation",
-    "First: how is this different from a chatbot?",
+    "How is this different from a chatbot?",
 ]
 
 TUTORIAL_SYSTEM_PROMPT = """\
