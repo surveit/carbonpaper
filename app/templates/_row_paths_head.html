@@ -1,0 +1,17 @@
+{# Which of the pathways this row itself took. Context: pane (as _row_paths.html). #}
+{% set walked = pane.find_the_walked_path() if pane.reason is not defined else none %}
+{% if walked %}
+<div class="story-head">
+  <h2>Path {{ walked.number }}<span class="story-of"> of {{ pane.paths | length }}</span></h2>
+  {% if walked.tells_it_apart %}
+  <p class="story-sub">Told apart by
+    {%- for branch in walked.tells_it_apart %}
+    <span class="story-branch" title="{{ branch.reason.value }} at {{ branch.stage_id }}"
+      >{{ branch.label }}</span>{{ "," if not loop.last }}
+    {%- endfor %}
+  </p>
+  {% else %}
+  <p class="story-sub">Nothing told this path apart from the others.</p>
+  {% endif %}
+</div>
+{% endif %}

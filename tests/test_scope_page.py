@@ -201,8 +201,7 @@ def test_every_stage_the_map_draws_has_a_transform_to_show(run_id):
 def test_the_paths_pane_is_not_told_apart_by_an_aliased_merge(run_id):
     # Told apart by group, the 8 rows behind this figure are 5 paths, not 4.
     pane = TestClient(app).get(
-        f"/project/{PROJECT}/runs/{run_id}/stage/total_of_means/row/0/trace/view"
-        "?column=summed_means")
+        f"/project/{PROJECT}/runs/{run_id}/stage/total_of_means/row/0/paths/panel")
     assert pane.status_code == 200
     said = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", pane.text))
     assert "4 distinct pathways reach this row" in said

@@ -77,6 +77,7 @@ body{display:flex;flex-direction:column;overflow:hidden}
 .lin-snav h2{margin:0 0 8px;font-size:11px;color:var(--muted);
   text-transform:uppercase;letter-spacing:.05em}
 /* One entry per path the run recorded, none folded into another. */
+.paths-wait{display:flex;justify-content:center;padding:26px 0}
 .paths-count{font-size:12.5px;margin:0 0 10px;color:var(--muted);line-height:1.45}
 .paths-count code{background:var(--sunk-deep);padding:0 4px;border-radius:4px}
 .path-entry{display:block;padding:7px 8px;border-radius:8px;margin-bottom:5px;
@@ -299,25 +300,13 @@ tr.lin-opens:hover td{background:var(--hover)}
 {% if view.nodes %}
 <div class="lin-split">
   <div class="lin-snav">
-    {% include "_row_paths.html" %}
+    {# A folder has no server to ask, so the packet writes both halves in place. #}
+    {% if offline %}{% include "_row_paths.html" %}
+    {% else %}<div id="paths-nav" class="paths-wait"><span class="spinner"></span></div>{% endif %}
   </div>
   <div class="lin-story">
-    {% set walked = pane.find_the_walked_path() if pane.reason is not defined else none %}
-    {% if walked %}
-    <div class="story-head">
-      <h2>Path {{ walked.number }}<span class="story-of"> of {{ pane.paths | length }}</span></h2>
-      {% if walked.tells_it_apart %}
-      <p class="story-sub">Told apart by
-        {%- for branch in walked.tells_it_apart %}
-        <span class="story-branch" title="{{ branch.reason.value }} at {{ branch.stage_id }}"
-          >{{ branch.label }}</span>{{ "," if not loop.last }}
-        {%- endfor %}
-      </p>
-      {% else %}
-      <p class="story-sub">Nothing told this path apart from the others.</p>
-      {% endif %}
-    </div>
-    {% endif %}
+    {% if offline %}{% include "_row_paths_head.html" %}
+    {% else %}<div id="paths-head"></div>{% endif %}
     <div id="steps"></div>
     <details class="lin-graph"><summary>Lineage graph</summary>
       <pre class="mermaid" id="mmd">{{ mermaid }}</pre>
@@ -819,6 +808,36 @@ document.getElementById('pagetabs').addEventListener('click', e => {
   if(columnPick.value !== column) chooseColumn(column);
   readInputFilesFor(column);
 });
+
+// ---- The Paths pane: drawn after the page, not before it -----------------
+// The branch analysis behind it reads every row of every sidecar, which the walk
+// itself does not; asking for it here is what lets the page answer the click.
+const pathsNav = document.getElementById('paths-nav');
+
+async function readPaths(){
+  const q = new URLSearchParams(location.search);
+  const url = `${RUN_BASE}/stage/${encodeURIComponent(V.start_stage)}`
+            + `/row/${V.start_row}/paths/panel?${new URLSearchParams(
+                q.getAll('via').map(v => ['via', v]))}`;
+  try {
+    const answer = await fetch(url);
+    if(!answer.ok){
+      pathsNav.innerHTML = `<p class="paths-none">could not read the pathways (${answer.status})</p>`;
+      return;
+    }
+    const parts = document.createElement('div');
+    parts.innerHTML = await answer.text();
+    for (const part of parts.querySelectorAll('[data-paths-part]')) {
+      const into = document.getElementById('paths-' + part.dataset.pathsPart);
+      if(into) into.replaceChildren(...part.childNodes);
+    }
+  } catch(failure){
+    pathsNav.innerHTML = `<p class="paths-none">error: ${esc(failure)}</p>`;
+  } finally {
+    pathsNav.classList.remove('paths-wait');
+  }
+}
+if(pathsNav) readPaths();
 
 // A count reads no column, so its panel sends the reader to the rows instead.
 if(valuesRoot) valuesRoot.addEventListener('click', e => {
