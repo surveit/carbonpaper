@@ -17,6 +17,7 @@ from app.services import run as run_service
 from app.services.review_packet import ReviewPacket
 from app.services.review_packet.checksums import write_checksums
 from app.services.review_packet.data import write_packet_data
+from app.services.review_packet.readme import write_packet_readme
 from app.services.review_packet.views import RunView, build_run_view
 from app.services.run_guide import RunGuideView, build_run_guide_view
 from app.services.workspace import resolve_run_dir
@@ -65,6 +66,10 @@ def export_review_packet(project_id: str, run_id: str, dest_root: Path) -> Revie
             build_run_issues(manifest, workflow_stages or None),
             workflow_stages_by_id,
         )
+    # After the pages and before the checksums: it reads the packet back off disk,
+    # and it is one of the files checksums.txt covers.
+    with log_elapsed(_log, f"{project_id}/{run_id} readme"):
+        readme = write_packet_readme(root)
     with log_elapsed(_log, f"{project_id}/{run_id} checksums"):
         checksums = write_checksums(root)
 
@@ -72,7 +77,7 @@ def export_review_packet(project_id: str, run_id: str, dest_root: Path) -> Revie
         project=view.project or project_id,
         run_id=view.run_id or run_id,
         root=root,
-        files=sorted([*data.written, *pages, *lineage.written, checksums]),
+        files=sorted([*data.written, *pages, *lineage.written, readme, checksums]),
         omitted=data.omitted,
     )
 

@@ -182,11 +182,15 @@ def _write_csv(root: Path, source: Path, stage_id: str, report: DataReport) -> N
     report.written.append(relative)
 
 
+def build_input_copy_path(binding: InputBinding, index: int) -> str:
+    """The index keeps two files bound by one stage apart."""
+    return f"{INPUTS_DIR}/{index:02d}-{binding.stage_id}{Path(binding.path).suffix}"
+
+
 def _copy_input_file(
     root: Path, binding: InputBinding, project_id: str, index: int, report: DataReport
 ) -> None:
-    recorded = Path(binding.path)
-    relative = f"{INPUTS_DIR}/{index:02d}-{binding.stage_id}{recorded.suffix}"
+    relative = build_input_copy_path(binding, index)
     source = _locate_input(binding, project_id)
     if source is None:
         report.omitted.append(
