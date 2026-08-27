@@ -29,8 +29,11 @@ body.chat-page .ac-head { max-width: var(--chat-column); width: 100%; margin: 0 
    it in. Nothing here escapes the flow, so there is no height to reserve and no
    padding to keep in step with it. */
 body.chat-page { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+/* width is what stops the column moving: base.css gives main `margin: 0 auto`, and an auto
+   cross-axis margin on a flex item suppresses stretch, so main was sizing to its own
+   content — narrow on a one-line page, 1280 once a reply arrived. */
 body.chat-page > main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
-    padding: 12px 0 0; }
+    padding: 12px 0 0; width: 100%; }
 
 /* The panel's own root, in either host. Both put it inside a flex column that owns the
    viewport — `main` on the chat page, the rail's aside beside one — and the log below is
