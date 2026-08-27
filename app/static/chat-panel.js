@@ -573,6 +573,9 @@ window.ChatPanel.mount = function (root) {
   // Reattach to a turn already running on the server. `from=0` replays it whole: the store
   // holds a turn's blocks only once it has finished, so mid-turn the buffer is the transcript.
   if (cfg.active_turn) connect(cfg.active_turn, 0);
+  // A link that already named the job opens with that job as the reader's OWN first
+  // message, so the agent is working by the time the page settles rather than greeting.
+  if (cfg.opening_message && !SID) sendText(cfg.opening_message);
 };
 
 // Self-mounting, so neither host needs a call it could make too early. The rail mounts its

@@ -88,3 +88,14 @@ def test_a_queue_row_that_is_not_an_app_screen_opens_a_chat_carrying_the_task():
     assert errored[0].kind == "chat"
     assert errored[0].href.startswith("/chat/agent/editing/new?project_id=")
     assert "task=" in errored[0].href
+
+
+def test_a_seeded_chat_link_opens_with_no_greeting_and_the_task_as_the_first_message():
+    from app.core.agent import registry
+    import app.agents.compiler.config  # noqa: F401  (registers "editing")
+
+    context = {"project_id": _PROJECT, "base_url": "http://x/", "task": "Run it again."}
+    assert registry.render_opening_turn("editing", context).text == ""
+    assert registry.render_opening_turn(
+        "editing", {"project_id": _PROJECT, "base_url": "http://x/"}
+    ).text

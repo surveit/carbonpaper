@@ -35,19 +35,10 @@ def _render_opening_turn(context: BaseModel) -> OpeningTurn:
     assert isinstance(context, EditingContext)
     if context.project_id is None:
         return OpeningTurn(text=_BLANK_CHAT_OPENING)
-    name = read_project_name(context.project_id)
     if context.task:
-        return OpeningTurn(text=_TASK_OPENING.format(name=name, task=context.task))
-    return OpeningTurn(text=_PROJECT_OPENING.format(name=name))
-
-
-# The task is read back so the reader can correct it before anything runs.
-_TASK_OPENING = """\
-You're in {name}, and this is what the link you followed was for:
-
-> {task}
-
-Say go and I will start, or tell me what to do instead."""
+        # The task arrives as the reader's first message, so a greeting would talk over it.
+        return OpeningTurn(text="")
+    return OpeningTurn(text=_PROJECT_OPENING.format(name=read_project_name(context.project_id)))
 
 
 # `POST /chat/new` — nothing is bound yet, so the message is the three ways in, numbered
