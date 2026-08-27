@@ -18,7 +18,6 @@ from app.models.schema import StageId
 from app.models.stages.input_data import InputDataStage
 from app.models.records.run_manifest import RunManifest
 from app.models.workflow import Workflow
-from app.models.workflow_stage import WorkflowStage
 from app.runtime.manifest import read_run_manifest
 from app.services import run as run_service
 from app.services.input_check import SOURCE_ROW_COLUMN
@@ -104,13 +103,12 @@ def load_input_files(project_id: str, run_id: str,
                                  citation.stage_id, citation.column)
     outputs = resolve_run_dir(project_id, run_id) / "outputs"
     manifest = read_run_manifest(project_id, run_id)
-    reading = {placed.id: _read_declared_types(placed)
-               for placed in workflow.list_workflow_stages()
-               if isinstance(placed.stage, InputDataStage) and placed.id in reached}
+    reading = [placed.id for placed in workflow.list_workflow_stages()
+               if isinstance(placed.stage, InputDataStage) and placed.id in reached]
     files = [_build_one_file(outputs, manifest, stage_id, sorted(reached[stage_id]),
-                             sorted(behind.get(stage_id, ())), reading[stage_id])
+                             sorted(behind.get(stage_id, ())))
              # The run's order, not the workflow's: the reader met these files in it.
-             for stage_id in _in_the_order_the_run_read_them(manifest, list(reading))]
+             for stage_id in _in_the_order_the_run_read_them(manifest, reading)]
     return InputFilesView(citation=citation, files=files,
                           value=_read_the_cited_cell(outputs, citation))
 
@@ -122,15 +120,9 @@ def _in_the_order_the_run_read_them(manifest: RunManifest,
                                                    if stage_id in ran else len(ran)))
 
 
-def _read_declared_types(placed: WorkflowStage) -> dict[str, str]:
-    """What the stage says each column holds; a shape reads it rather than guessing."""
-    schema = placed.output_schema
-    return {column.name: column.type for column in schema.columns} if schema else {}
-
-
 def _build_one_file(outputs: Path, manifest: RunManifest, stage_id: StageId,
-                    ordinals: Sequence[RowOrdinal], relevant: Sequence[str],
-                    declared: dict[str, str]) -> InputFileSlice:
+                    ordinals: Sequence[RowOrdinal],
+                    relevant: Sequence[str]) -> InputFileSlice:
     frame = read_frame_table(outputs / f"{stage_id}.parquet")
     bound = _read_the_binding(manifest, stage_id)
     read = [str(name) for name in frame.column_names]
@@ -143,25 +135,18 @@ def _build_one_file(outputs: Path, manifest: RunManifest, stage_id: StageId,
                                                         frame.num_rows),
         cap=_read_the_cap(manifest, stage_id),
         columns_relevant=list(relevant), columns_read=read,
-        shape_over_relevant_rows=_measure_shape(
-            frame.take(pa.array(list(ordinals))), declared),
-        shape_over_every_row=_measure_shape(frame, declared),
+        shape_over_relevant_rows=_measure_shape(frame.take(pa.array(list(ordinals)))),
+        shape_over_every_row=_measure_shape(frame),
         row_label=("sheet row" if SOURCE_ROW_COLUMN in read else "row"),
         rows=_build_preview(frame, ordinals),
         ordinals=list(ordinals),
     )
 
 
-def _measure_shape(frame: pa.Table, declared: dict[str, str]) -> list[ColumnRow]:
+def _measure_shape(frame: pa.Table) -> list[ColumnRow]:
     rows = max(frame.num_rows, 1)
-    return [_with_declared_type(
-                build_column_row(_measure_one_column(frame, str(name)), rows), declared)
+    return [build_column_row(_measure_one_column(frame, str(name)), rows)
             for name in frame.column_names]
-
-
-def _with_declared_type(row: ColumnRow, declared: dict[str, str]) -> ColumnRow:
-    row.declared_type = declared.get(row.column)
-    return row
 
 
 def _measure_one_column(frame: pa.Table, column: str):

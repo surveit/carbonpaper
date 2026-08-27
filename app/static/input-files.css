@@ -66,8 +66,19 @@
     font-variant-numeric: tabular-nums; }
 /* Shown but not read: the same greying wherever a column or row appears, so a cell
  * in both reads the same as a cell in one. */
-.if-shape[data-relevant="no"] > .shape-col > summary { color: var(--muted);
-    background: var(--sunk); }
+/* A <details> carries a UA margin, which would show through as a band between two
+ * greyed rows. */
+.if-shape > .shape-col { margin: 0; }
+.if-shape[data-relevant="no"] { background: var(--sunk); }
+.if-shape[data-relevant="no"] .shape-name,
+.if-shape[data-relevant="no"] .shape-distinct { color: var(--muted); }
+.if-shape[data-relevant="no"] > .shape-col > summary { background: none; }
+
+/* The type is what the values say; the badge column goes and the row closes up. */
+.if-shape .shape-kind { display: none; }
+.if-shape-head,
+.if-shape > .shape-col > summary {
+    grid-template-columns: minmax(140px, 1.4fr) 128px 74px minmax(220px, 2fr); }
 tr[data-relevant="no"] td,
 .if-table :is(th, td)[data-relevant="no"] { color: var(--muted); background: var(--sunk); }
 .if-null { color: var(--muted); font-style: italic; }
