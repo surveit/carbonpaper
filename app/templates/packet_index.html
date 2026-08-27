@@ -90,11 +90,11 @@
      page's minimap band: there the graph is navigation beside the work, here it is the
      map of the whole run and gets the height, fitted to width with no zoom floor. #}
   {% if mermaid %}
-  {# The one thing on this page that needs the network: the renderer is fetched from a
-     CDN, so offline the graph does not draw and the step list below stays. #}
+  {# The graph is the one thing here the network is needed for, and the reader is
+     told so where they would otherwise wait for a picture that never arrives. #}
   <p class="lede">Click a node to open that step.
-    <span class="muted">Drag to pan · ⌘/Ctrl-scroll to zoom · drawn by a renderer fetched from
-    the network, so with none the step list below stands in.</span></p>
+    <span class="muted">Drag to pan · ⌘/Ctrl-scroll to zoom · the renderer comes from the
+    network; offline, the step list below stands in.</span></p>
   {# .workflow-full for the width: diagram_viewport.js collapses the svg to measure
      the viewport, so a block with no width of its own measures 0 and fits to nothing. #}
   <div class="workflow-full diagram-block">

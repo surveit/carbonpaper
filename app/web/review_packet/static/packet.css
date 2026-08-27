@@ -53,7 +53,6 @@ body.packet .run-nav {
    never draws, and this is then the only route to a step page. */
 .packet-steps { font-size: 13.5px; margin: 10px 0 0; line-height: 2; }
 
-.packet-note { font-size: 13px; margin: 4px 0 8px; max-width: 80ch; }
 .packet-num { text-align: right; font-variant-numeric: tabular-nums; }
 .packet-hash { font-size: 11px; word-break: break-all; }
 

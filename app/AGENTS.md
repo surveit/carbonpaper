@@ -43,7 +43,8 @@ sections, in this order:
 
 1. **Run overview** — the header (grounding line, CTA, status bar) and the issue index.
    Everything about the run; nothing that is its result.
-2. **Run outputs** — the files a publish stage wrote, off `header.artifacts`, as links.
+2. **Run outputs** — the files a publish stage wrote, off `header.artifacts`, as links
+   with their sizes (`_run_outputs.html`, shared with the review packet's index).
    Absent when there are none. Never a button: a CTA is an imperative, a run that finished
    clean has none (`choose_run_cta` returns an empty `RunCta`), and a primary button sized
    to a filename was the widest thing on the page.
@@ -53,8 +54,10 @@ sections, in this order:
    kind of always-on furniture this page was cut down to remove.
 
 The **toolbar** (`.run-toolbar`) shares Run overview's heading line (`.run-overview-head`,
-heading left, actions right — neither spends a row of its own): the review-packet export as a
-link, and beside it a menu button holding the raw manifest and the whole-run log
+heading left, actions right — neither spends a row of its own): the review packet, offered
+twice — **Open** (`…/runs/<id>/packet`, the exported folder served page by page, so there is a
+link to send someone who has downloaded nothing) and **Export** (the zip) — and beside them a
+menu button holding the raw manifest and the whole-run log
 (`.run-audit-menu`, closed on load, and closed again by Escape or a click outside it). The
 heading line, not the toolbar, is the menu's positioning context, so the menu can be bounded
 by the column's width instead of hanging off its left edge into `.run-main`'s clip.

@@ -90,7 +90,7 @@ async def read_review_packet_file(project_id: str, run_id: str, path: str):
     except RunNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     target = (root / path).resolve()
-    if not target.is_file() or not target.is_relative_to(root):
+    if not target.is_relative_to(root) or not target.is_file():
         raise HTTPException(status_code=404, detail=f"{path} is not in this packet")
     return FileResponse(target, media_type=_read_media_type(target))
 
