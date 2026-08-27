@@ -1,5 +1,4 @@
-"""A finished packet read back off its own folder — the only facts a README may state,
-since a reader on GitHub has this folder and nothing else."""
+"""A finished packet read back off its own folder, which is all a README may state."""
 from __future__ import annotations
 
 import csv
@@ -86,8 +85,7 @@ class PacketContents(BaseModel):
     sources: list[PacketSource]
     steps: list[PacketStep]
     flags: list[PacketFlag]
-    # False when the run pinned a version the export could not read. `steps` and
-    # `claims` are then empty for want of a graph, not because the run had none.
+    # False when the run pinned a version the export could not read.
     has_workflow: bool
 
 

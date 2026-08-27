@@ -1,5 +1,4 @@
-"""Reading order over a workflow graph: one branch carried to the step that joins it
-to another, then the branch that step was waiting on, then the join itself."""
+"""Reading order over a workflow graph: one branch at a time, every join last."""
 from __future__ import annotations
 
 from collections.abc import Sequence

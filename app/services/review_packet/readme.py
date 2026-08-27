@@ -1,5 +1,4 @@
-"""The packet's README: the finding, its sources and its steps as markdown, so the
-folder can be pushed to a repository and read with no server and no viewer."""
+"""The packet's README: its finding, sources and steps, as markdown a repository renders."""
 from __future__ import annotations
 
 import re
@@ -31,8 +30,7 @@ from app.services.review_packet.packet_contents import (
 
 README_FILE = "README.md"
 
-# GitHub stops rendering a README somewhere past 512 KB, so a table that grows with the
-# data is capped and the file holding all of it is linked instead.
+# GitHub stops rendering a README past about 512 KB.
 MAX_TABLE_ROWS = 200
 MAX_FLAG_CHARS = 240
 MAX_NAMED_PARENTS = 3
@@ -268,8 +266,7 @@ _WRITTEN_LAST = (CHECKSUMS_FILE, README_FILE)
 
 # ── Cells ────────────────────────────────────────────────────────────────────
 
-# Grouping is applied only to a plain number with no leading zero: `0001` is an
-# identifier a CSV lost the type of, and `1` would be a different value.
+# A leading zero is a type the CSV lost: `0001` is an identifier, not `1`.
 _PLAIN_NUMBER = re.compile(r"-?(0|[1-9][0-9]*)(\.[0-9]+)?")
 
 

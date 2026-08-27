@@ -66,8 +66,7 @@ def export_review_packet(project_id: str, run_id: str, dest_root: Path) -> Revie
             build_run_issues(manifest, workflow_stages or None),
             workflow_stages_by_id,
         )
-    # After the pages and before the checksums: it reads the packet back off disk,
-    # and it is one of the files checksums.txt covers.
+    # After the pages it reads back, and before the checksums that cover it.
     with log_elapsed(_log, f"{project_id}/{run_id} readme"):
         readme = write_packet_readme(root)
     with log_elapsed(_log, f"{project_id}/{run_id} checksums"):
