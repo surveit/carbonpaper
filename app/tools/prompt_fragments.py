@@ -98,7 +98,7 @@ def render_link_map(base_url: str) -> str:
 
 _PAGES = [
     ("the project", "/project/<project_id>"),
-    ("its methodology", "/project/<project_id>/document"),
+    ("its methodology", "/project/<project_id>/methodology"),
     ("the workflow", "/project/<project_id>/workflow"),
     ("one stage of it", "/project/<project_id>/workflow#<stage_id>"),
     ("its versions", "/project/<project_id>/workflow/versions"),

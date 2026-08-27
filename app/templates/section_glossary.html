@@ -8,7 +8,7 @@
   a card and nothing more — no zero, no empty table, no missing-value mark.
 
   Context the route passes:
-    state      = project_view.shell_state(mdir); section = "terms"
+    state      = project_view.shell_state(mdir); section = "glossary"
     terms      = services.terms.load_terms(project_id) | None when it would not load
     unreadable = why it would not load (str) | None
     kind_class = SCHEMA_KIND_CLASS ; kind_glyph = SCHEMA_KIND_GLYPH
@@ -22,7 +22,7 @@
 {% set with_columns = nouns | selectattr("columns") | list %}
 
 <div class="sec-head">
-  <h1>Terms</h1>
+  <h1>Glossary</h1>
   <p class="lede">The words this project is written in — the nouns for the things
     in its data, the verbs for the decisions it makes. Every stage description,
     generated example and run walkthrough is written in them, so the assistant uses

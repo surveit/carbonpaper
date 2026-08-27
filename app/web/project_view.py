@@ -20,7 +20,16 @@ class NavItem(BaseModel):
     children: list["NavItem"] = Field(default_factory=list)
 
 
+class NavGroup(BaseModel):
+    """A heading over its items, naming no page of its own."""
+
+    label: str
+    children: list[NavItem]
+
+
 NavItem.model_rebuild()
+
+NavBlock = NavItem | NavGroup
 
 
 class NextAction(BaseModel):
@@ -30,7 +39,7 @@ class NextAction(BaseModel):
 
 
 class ShellState(project.ProjectState):
-    nav: list[NavItem]
+    nav: list[NavBlock]
     crumbs: list[Crumb]
     next_action: NextAction
 
@@ -46,39 +55,37 @@ def validate_project_or_404(project_id: str) -> str:
 def shell_state(project_id: str, section: str) -> ShellState:
     state = project.project_state(validate_project_or_404(project_id))
     nav = build_nav(state.id)
-    return ShellState(
-        **state.model_dump(),
-        nav=nav,
-        crumbs=build_shell_crumbs(nav, section, state.id),
-        next_action=_next_action(state),
-    )
+    return _build_shell_state(state, nav, build_shell_crumbs(nav, section, state.id))
 
 
-def build_shell_crumbs(nav: list[NavItem], section: str, project_id: str) -> list[Crumb]:
-    for item in nav:
-        if item.key == section:
-            return build_section_crumbs(project_id, label=item.label)
-        for child in item.children:
-            if child.key == section:
-                return build_section_crumbs(
-                    project_id, label=child.label, parent=(item.label, item.href)
-                )
+def shell_state_off_nav(project_id: str, crumbs: list[Crumb]) -> ShellState:
+    """For a page the nav does not list: it brings the trail the nav cannot label."""
+    state = project.project_state(validate_project_or_404(project_id))
+    return _build_shell_state(state, build_nav(state.id), crumbs)
+
+
+def build_shell_crumbs(nav: list[NavBlock], section: str, project_id: str) -> list[Crumb]:
+    for block in nav:
+        crumbs = _find_section_crumbs(block, section, project_id)
+        if crumbs is not None:
+            return crumbs
     raise ValueError(f"no nav item for section '{section}' — the trail would be unlabelled")
 
 
-def build_nav(project_id: str) -> list[NavItem]:
+def build_nav(project_id: str) -> list[NavBlock]:
     base = f"/project/{project_id}"
     return [
         _nav_leaf("overview", "Overview", base),
-        _nav_leaf("document", "Document", f"{base}/document"),
-        _nav_leaf("terms", "Terms", f"{base}/terms"),
+        NavGroup(label="Workflow", children=[
+            _nav_leaf("versions", "Versions", f"{base}/workflow/versions"),
+            _nav_leaf("runs", "Runs", f"{base}/runs"),
+            _nav_leaf("evals", "Evals", f"{base}/evals"),
+        ]),
         _nav_leaf("files", "Files", f"{base}/files"),
-        _nav_leaf("workflow", "Workflow", f"{base}/workflow",
-                  children=[
-                      _nav_leaf("versions", "Versions", f"{base}/workflow/versions"),
-                      _nav_leaf("runs", "Runs", f"{base}/runs"),
-                      _nav_leaf("evals", "Evals", f"{base}/evals"),
-                  ]),
+        NavGroup(label="Documentation", children=[
+            _nav_leaf("methodology", "Methodology", f"{base}/methodology"),
+            _nav_leaf("glossary", "Glossary", f"{base}/glossary"),
+        ]),
     ]
 
 
@@ -94,7 +101,7 @@ def _next_action(state: project.ProjectState) -> NextAction:
         return NextAction(
             key="agree_terms",
             label="Agree the project's terms",
-            href=f"{base}/terms",
+            href=f"{base}/glossary",
         )
     # 2. No workflow → build it.
     if not workflow.present:
@@ -129,6 +136,27 @@ def _next_action(state: project.ProjectState) -> NextAction:
 # ─── Nav structure ────────────────────────────────────────────────────────────
 
 
+def _build_shell_state(
+    state: project.ProjectState, nav: list[NavBlock], crumbs: list[Crumb]
+) -> ShellState:
+    return ShellState(
+        **state.model_dump(), nav=nav, crumbs=crumbs, next_action=_next_action(state)
+    )
+
+
 def _nav_leaf(key: str, label: str, href: str,
               children: list[NavItem] | None = None) -> NavItem:
     return NavItem(key=key, label=label, href=href, children=children or [])
+
+
+def _find_section_crumbs(block: NavBlock, section: str, project_id: str) -> list[Crumb] | None:
+    # A group opens no page, so its children hang straight off the project rung.
+    parent: tuple[str, str] | None = None
+    if isinstance(block, NavItem):
+        if block.key == section:
+            return build_section_crumbs(project_id, label=block.label)
+        parent = (block.label, block.href)
+    for child in block.children:
+        if child.key == section:
+            return build_section_crumbs(project_id, label=child.label, parent=parent)
+    return None

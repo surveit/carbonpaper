@@ -119,6 +119,20 @@
 
 .app-nav-item.trail:not(.current) .app-nav-label { font-weight: 600; }
 
+/* A group heading: the label over an inset block, naming no page of its own. */
+.app-nav-group {
+    margin: 14px 0 2px;
+    padding: 0 10px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    font-weight: 700;
+    color: var(--muted);
+}
+
+.app-nav-group.trail { color: var(--accent); }
+
+
 .app-nav-label { min-width: 0; }
 
 .app-side-agent { margin-top: 10px; }

@@ -28,7 +28,7 @@ from app.services import (
 )
 from app.services.loader import list_parsed_stages, resolve_function_code
 from app.services.workspace import LOADER_BOOKKEEPING_KEYS
-from app.web.breadcrumbs import build_home_crumbs, build_version_crumbs
+from app.web.breadcrumbs import build_home_crumbs, build_version_crumbs, build_workflow_crumbs
 from app.web.config import templates
 from app.runtime.stage_tests import run_stage_tests
 from app.web.stage_test_views import build_certification, shape_test_views
@@ -44,7 +44,7 @@ from app.web.loading import (
     list_projects,
     load_stages_or_empty,
 )
-from app.web.project_view import shell_state, validate_project_or_404
+from app.web.project_view import shell_state, shell_state_off_nav, validate_project_or_404
 
 router = APIRouter()
 
@@ -140,11 +140,6 @@ async def generate_project(project_name: str):
 
 
 # ─── Unified PROJECT sections ────────────────────────────────────────────────
-# One project (examples/<name>/) is framed by a left-sidebar shell (project_shell)
-# with five sections — Overview / Document / Terms / Workflow / Runs. Each
-# section route passes the SAME status snapshot (project_view.shell_state) plus its
-# section name and the section-specific extras the matching section_*.html needs. The
-# shell reads ONLY from `state`.
 
 
 @router.get("/project/{project_name}", response_class=HTMLResponse)
@@ -157,20 +152,20 @@ async def project_overview(request: Request, project_name: str):
     )
 
 
-@router.get("/project/{project_name}/document", response_class=HTMLResponse)
-async def project_document(request: Request, project_name: str):
+@router.get("/project/{project_name}/methodology", response_class=HTMLResponse)
+async def project_methodology(request: Request, project_name: str):
     validate_project_or_404(project_name)
-    state = shell_state(project_name, "document")
+    state = shell_state(project_name, "methodology")
     document = methodology.read_methodology(project_name) or ""
     return templates.TemplateResponse(
         request,
-        "section_document.html",
-        {"state": state, "section": "document", "document": document},
+        "section_methodology.html",
+        {"state": state, "section": "methodology", "methodology": document},
     )
 
 
-@router.get("/project/{project_name}/terms", response_class=HTMLResponse)
-async def project_terms(request: Request, project_name: str):
+@router.get("/project/{project_name}/glossary", response_class=HTMLResponse)
+async def project_glossary(request: Request, project_name: str):
     validate_project_or_404(project_name)
     # write_terms refuses a word carrying two meanings, so stored terms that will not
     # load were hand-edited — say which word, rather than 500 on the page that shows them.
@@ -182,10 +177,10 @@ async def project_terms(request: Request, project_name: str):
         unreadable = []
     return templates.TemplateResponse(
         request,
-        "section_terms.html",
+        "section_glossary.html",
         {
-            "state": shell_state(project_name, "terms"),
-            "section": "terms",
+            "state": shell_state(project_name, "glossary"),
+            "section": "glossary",
             "terms": stored,
             "unreadable": "; ".join(unreadable),
             "kind_class": SCHEMA_KIND_CLASS,
@@ -207,7 +202,7 @@ async def project_workflow(request: Request, project_name: str):
         request,
         "section_workflow.html",
         {
-            "state": shell_state(project_name, "workflow"),
+            "state": shell_state_off_nav(project_name, build_workflow_crumbs(project_name)),
             "section": "workflow",
             "stages": stages,
             "mermaid": mermaid,

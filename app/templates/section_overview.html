@@ -51,21 +51,21 @@
 <h2 class="ov-status-h">Status</h2>
 <div class="ov-tiles">
 
-  {# Document #}
-  <a class="ov-tile" href="/project/{{ s.id }}/document">
-    <span class="ov-tile-k">Document</span>
+  {# Methodology #}
+  <a class="ov-tile" href="/project/{{ s.id }}/methodology">
+    <span class="ov-tile-k">Methodology</span>
     {% if s.has_document %}
       <span class="ov-tile-v ok">present</span>
       <span class="ov-tile-sub">source of record on disk</span>
     {% else %}
       <span class="ov-tile-v none">missing</span>
-      <span class="ov-tile-sub">no source document</span>
+      <span class="ov-tile-sub">no methodology stored</span>
     {% endif %}
   </a>
 
   {# Terms — counted over the nouns, which are where a project's words are stored. #}
-  <a class="ov-tile" href="/project/{{ s.id }}/terms">
-    <span class="ov-tile-k">Terms</span>
+  <a class="ov-tile" href="/project/{{ s.id }}/glossary">
+    <span class="ov-tile-k">Glossary</span>
     {% set dm = s.data_model %}
     {% if not dm.present %}
       <span class="ov-tile-v none">none</span>
@@ -116,7 +116,7 @@
 
 </div>
 
-<p class="ov-foot muted">A project is built in order: a source <b>document</b> → a
+<p class="ov-foot muted">A project is built in order: a source <b>methodology</b> → a
   <b>data model</b> (named schemas) → a <b>workflow</b> (typed stages) → immutable
   <b>versions</b> → <b>runs</b>. The <b>Next</b> action above is the first unfinished
   rung.</p>

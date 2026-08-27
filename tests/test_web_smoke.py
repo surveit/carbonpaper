@@ -120,13 +120,30 @@ def test_trigger_run_returns_400_on_invalid_dag(monkeypatch):
 def test_build_nav_groups_workflow_children(demo_project):
     from app.web.project_view import build_nav
 
-    nav = build_nav("demo")
-    assert [item.key for item in nav] == [
-        "overview", "document", "terms", "files", "workflow"]
-    workflow = nav[-1]
+    overview, workflow, files, documentation = build_nav("demo")
+    assert overview.key == "overview" and not overview.children
+    assert files.key == "files" and not files.children
+    assert workflow.label == "Workflow"
     assert [child.key for child in workflow.children] == ["versions", "runs", "evals"]
-    # The top-level items are leaves (only Workflow groups).
-    assert all(not item.children for item in nav[:-1])
+    assert documentation.label == "Documentation"
+    assert [child.key for child in documentation.children] == ["methodology", "glossary"]
+
+
+def test_a_group_heading_opens_no_page(demo_project):
+    from app.web.project_view import build_nav
+
+    _, workflow, _, documentation = build_nav("demo")
+    assert not hasattr(workflow, "href") and not hasattr(documentation, "href")
+    sidebar = client.get("/project/demo").text
+    assert '<div class="app-nav-group">Workflow</div>' in sidebar
+    assert '<div class="app-nav-group">Documentation</div>' in sidebar
+
+
+def test_the_stage_graph_keeps_a_trail_without_a_nav_row(demo_project):
+    """It is reached from Versions, so the trail is the only thing that labels it."""
+    page = client.get("/project/demo/workflow")
+    assert page.status_code == 200
+    assert '<span class="crumb-here" aria-current="page">Workflow</span>' in page.text
 
 
 def test_the_nav_carries_no_status_marks(demo_project):
@@ -134,7 +151,7 @@ def test_the_nav_carries_no_status_marks(demo_project):
 
     nav = build_nav("demo")
     fields = {name for item in nav for name in item.model_dump()}
-    assert fields == {"key", "label", "href", "children"}
+    assert fields <= {"key", "label", "href", "children"}
     assert "app-nav-glyph" not in client.get("/project/demo").text
 
 
@@ -205,8 +222,11 @@ def test_cmdk_palette_ranks_the_project_being_read_first(demo_project):
     rows = client.get("/cmdk_palette/index", params={"project_id": "demo"}).json()["rows"]
     kinds = [row["kind"] for row in rows]
     assert kinds.index("section") < kinds.index("stage")
-    assert [row["label"] for row in rows if row["kind"] == "section"][:3] == [
-        "Overview", "Document", "Terms"]
+    sections = [row["label"] for row in rows if row["kind"] == "section"]
+    assert sections[:3] == ["Overview", "Versions", "Runs"]
+    # Neither heading opens a page, so the palette cannot offer either one.
+    assert {"Workflow", "Documentation"}.isdisjoint(sections)
+    assert {"Files", "Methodology", "Glossary"} <= set(sections)
     assert [row["label"] for row in rows if row["kind"] == "stage"] == ["load", "extract"]
 
 

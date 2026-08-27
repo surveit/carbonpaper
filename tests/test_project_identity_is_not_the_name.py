@@ -126,7 +126,8 @@ def test_the_shown_name_is_the_title_where_one_is_authored(workspace_root: Path)
     assert find_projects_by_name("dsa_evidence_capture") == [Project.load(project_id)]
 
 
-_SECTIONS = ("", "/document", "/terms", "/workflow", "/workflow/versions", "/runs", "/evals")
+_SECTIONS = ("", "/methodology", "/glossary", "/workflow", "/workflow/versions",
+             "/runs", "/evals")
 
 
 def test_every_project_link_carries_the_id(workspace_root: Path) -> None:

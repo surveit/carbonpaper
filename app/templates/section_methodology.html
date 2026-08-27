@@ -1,26 +1,26 @@
 {% extends "project_shell.html" %}
 {#
-  DOCUMENT — the source methodology document, read-only.
+  METHODOLOGY — the source methodology document, read-only.
 
   Context:
-    state    = project.project_state(mdir); section = "document"
-    document = the project's stored methodology, read server-side by the route
-               (the template does NOT read the filesystem). None/"" when the
-               project has no document on disk.
+    state       = project.project_state(mdir); section = "methodology"
+    methodology = the project's stored methodology, read server-side by the route
+                  (the template does NOT read the filesystem). None/"" when the
+                  project has none on disk.
 
 #}
 {% block section %}
 <div class="sec-head">
-  <h1>Document</h1>
+  <h1>Methodology</h1>
   <p class="lede">The source of record. The data model and workflow are authored
     <strong>from</strong> this. Read-only here.</p>
 </div>
 
-{% if document %}
-  <div class="doc-prose">{{ document }}</div>
+{% if methodology %}
+  <div class="doc-prose">{{ methodology }}</div>
 {% else %}
   <div class="empty-state">
-    <h2>No source document</h2>
+    <h2>No methodology</h2>
     <p class="muted">This project has no stored methodology. A project authored
       through <strong>New project</strong> carries its pasted methodology here.</p>
   </div>
