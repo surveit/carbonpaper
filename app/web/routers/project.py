@@ -140,11 +140,6 @@ async def generate_project(project_name: str):
 
 
 # ─── Unified PROJECT sections ────────────────────────────────────────────────
-# One project (examples/<name>/) is framed by a left-sidebar shell (project_shell)
-# with Overview, the Workflow group, and the Documentation group. Each section route
-# passes the SAME status snapshot (project_view.shell_state) plus its section name and
-# the section-specific extras the matching section_*.html needs. The shell reads ONLY
-# from `state`.
 
 
 @router.get("/project/{project_name}", response_class=HTMLResponse)
