@@ -168,6 +168,7 @@ declare it as their `SCHEMA_VERSION`.
 | 5 | a report stage stopped storing `template`; the markup lives in `function.code` | `0012` |
 | 6 | a union's signature became `extends`, which declares nothing | `0014` |
 | 7 | the `publish` type, and its config block, became `report` | `0017` |
+| 8 | a workflow output names its `kind`; every stored one is a `figure` | `0018` |
 
 The counter sat at 4 while `0012` stamped 5 and `0014` stamped 6, so a migrated row and
 a freshly written one disagreed. It is one counter from 7 on.
