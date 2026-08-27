@@ -13,85 +13,91 @@ _StageT = TypeVar("_StageT", bound=StageInGraph)
 
 def sort_stages_by_branch(stages: Sequence[_StageT]) -> list[_StageT]:
     """Ties break on the given order — the first root, and the first freed child, lead."""
-    by_id = {stage.id: stage for stage in stages}
-    parents = {
-        stage_id: [upstream for upstream in stage.input_ids if upstream in by_id]
-        for stage_id, stage in by_id.items()
-    }
-    return [by_id[stage_id] for stage_id in _walk_one_branch_at_a_time(parents)]
+    return _walk_one_branch_at_a_time({stage.id: stage for stage in stages})
 
 
-def _walk_one_branch_at_a_time(parents: dict[ID, list[ID]]) -> list[ID]:
-    children = _collect_children(parents)
-    waiting = {stage_id: len(upstream) for stage_id, upstream in parents.items()}
-    roots = [stage_id for stage_id, upstream in parents.items() if not upstream]
-    stalled: list[ID] = []
-    walked: list[ID] = []
-    stack: list[ID] = []
-    while roots or stack:
-        if not stack:
-            stack.append(_take_root_the_stall_waits_on(roots, stalled, waiting, children))
-        stage_id = stack.pop()
-        walked.append(stage_id)
-        stack.extend(reversed(_free_children(stage_id, children, waiting, stalled)))
-    _refuse_unwalked(parents, walked)
-    return walked
+def _walk_one_branch_at_a_time(stages_by_id: dict[ID, _StageT]) -> list[_StageT]:
+    parents_by_id = _collect_parents_by_id(stages_by_id)
+    children_by_id = _collect_children_by_id(parents_by_id)
+    waiting_by_id = {stage_id: len(up) for stage_id, up in parents_by_id.items()}
+    root_ids = [stage_id for stage_id, up in parents_by_id.items() if not up]
+    stalled_ids: list[ID] = []
+    walked_ids: list[ID] = []
+    pending_ids: list[ID] = []
+    while root_ids or pending_ids:
+        if not pending_ids:
+            pending_ids.append(
+                _take_next_root_id(root_ids, stalled_ids, waiting_by_id, children_by_id)
+            )
+        stage_id = pending_ids.pop()
+        walked_ids.append(stage_id)
+        freed = _free_child_ids(stage_id, children_by_id, waiting_by_id, stalled_ids)
+        pending_ids.extend(reversed(freed))
+    _refuse_unwalked(parents_by_id, walked_ids)
+    return [stages_by_id[stage_id] for stage_id in walked_ids]
 
 
-def _take_root_the_stall_waits_on(
-    roots: list[ID],
-    stalled: Sequence[ID],
-    waiting: dict[ID, int],
-    children: dict[ID, list[ID]],
+def _take_next_root_id(
+    root_ids: list[ID],
+    stalled_ids: Sequence[ID],
+    waiting_by_id: dict[ID, int],
+    children_by_id: dict[ID, list[ID]],
 ) -> ID:
-    # A join is emitted only once its last parent has been, so the branch to pick up
-    # next is whichever one the join stopped at is still short of.
-    target = next((stage_id for stage_id in stalled if waiting[stage_id]), None)
-    taken = next(
-        (root for root in roots if target is not None and _reaches(root, target, children)),
-        roots[0],
+    """The branch to pick up next is the one the earliest stalled join is short of."""
+    target_id = next((s for s in stalled_ids if waiting_by_id[s]), None)
+    taken_id = next(
+        (r for r in root_ids if target_id is not None and _reaches(r, target_id, children_by_id)),
+        root_ids[0],
     )
-    roots.remove(taken)
-    return taken
+    root_ids.remove(taken_id)
+    return taken_id
 
 
-def _free_children(
+def _free_child_ids(
     stage_id: ID,
-    children: dict[ID, list[ID]],
-    waiting: dict[ID, int],
-    stalled: list[ID],
+    children_by_id: dict[ID, list[ID]],
+    waiting_by_id: dict[ID, int],
+    stalled_ids: list[ID],
 ) -> list[ID]:
-    freed: list[ID] = []
-    for child in children[stage_id]:
-        waiting[child] -= 1
-        if waiting[child] == 0:
-            freed.append(child)
-        elif child not in stalled:
-            stalled.append(child)
-    return freed
+    freed_ids: list[ID] = []
+    for child_id in children_by_id[stage_id]:
+        waiting_by_id[child_id] -= 1
+        if waiting_by_id[child_id] == 0:
+            freed_ids.append(child_id)
+        elif child_id not in stalled_ids:
+            stalled_ids.append(child_id)
+    return freed_ids
 
 
-def _reaches(start: ID, target: ID, children: dict[ID, list[ID]]) -> bool:
-    seen: set[ID] = set()
-    stack = [start]
-    while stack:
-        stage_id = stack.pop()
-        if stage_id == target:
+def _reaches(start_id: ID, target_id: ID, children_by_id: dict[ID, list[ID]]) -> bool:
+    seen_ids: set[ID] = set()
+    pending_ids = [start_id]
+    while pending_ids:
+        stage_id = pending_ids.pop()
+        if stage_id == target_id:
             return True
-        stack.extend(child for child in children[stage_id] if child not in seen)
-        seen.update(children[stage_id])
+        pending_ids.extend(c for c in children_by_id[stage_id] if c not in seen_ids)
+        seen_ids.update(children_by_id[stage_id])
     return False
 
 
-def _collect_children(parents: dict[ID, list[ID]]) -> dict[ID, list[ID]]:
-    children: dict[ID, list[ID]] = {stage_id: [] for stage_id in parents}
-    for stage_id, upstream in parents.items():
-        for parent in upstream:
-            children[parent].append(stage_id)
-    return children
+def _collect_parents_by_id(stages_by_id: dict[ID, _StageT]) -> dict[ID, list[ID]]:
+    """An input naming no stage here is dropped, so a join is not left waiting on it."""
+    return {
+        stage_id: [up for up in stage.input_ids if up in stages_by_id]
+        for stage_id, stage in stages_by_id.items()
+    }
 
 
-def _refuse_unwalked(parents: dict[ID, list[ID]], walked: Sequence[ID]) -> None:
-    unwalked = sorted(set(parents) - set(walked))
-    if unwalked:
-        raise ValueError(f"cyclic stages, cannot order: {unwalked}")
+def _collect_children_by_id(parents_by_id: dict[ID, list[ID]]) -> dict[ID, list[ID]]:
+    children_by_id: dict[ID, list[ID]] = {stage_id: [] for stage_id in parents_by_id}
+    for stage_id, parent_ids in parents_by_id.items():
+        for parent_id in parent_ids:
+            children_by_id[parent_id].append(stage_id)
+    return children_by_id
+
+
+def _refuse_unwalked(parents_by_id: dict[ID, list[ID]], walked_ids: Sequence[ID]) -> None:
+    unwalked_ids = sorted(set(parents_by_id) - set(walked_ids))
+    if unwalked_ids:
+        raise ValueError(f"cyclic stages, cannot order: {unwalked_ids}")

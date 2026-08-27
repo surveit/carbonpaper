@@ -26,6 +26,7 @@ _ALLOWED_WRITERS: dict[str, str] = {
     # These leave the system; they are not read back as state.
     "app/services/review_packet/data.py": "builds a downloadable review packet",
     "app/services/review_packet/checksums.py": "builds a downloadable review packet",
+    "app/services/review_packet/readme.py": "builds a downloadable review packet",
     "app/web/review_packet/pages.py": "builds a downloadable review packet",
     "app/web/review_packet/lineage.py": "builds a downloadable review packet",
 

@@ -95,7 +95,7 @@ def read_packet_contents(root: Path) -> PacketContents:
     run = build_run_view(_read_json_object(root / MANIFEST_FILE), None)
     workflow_file = root / WORKFLOW_FILE
     specs = _read_stage_specs(workflow_file)
-    row_counts = {stage.stage_id: stage.row_count for stage in run.stages}
+    row_counts_by_id = {stage.stage_id: stage.row_count for stage in run.stages}
     title, opening = _read_document_opening(root, run)
     return PacketContents(
         root=root,
@@ -103,8 +103,8 @@ def read_packet_contents(root: Path) -> PacketContents:
         opening=opening,
         run=run,
         claims=_read_claims(root, specs),
-        sources=_read_sources(root, run, row_counts),
-        steps=_read_steps(specs, row_counts),
+        sources=_read_sources(root, run, row_counts_by_id),
+        steps=_read_steps(specs, row_counts_by_id),
         flags=_read_flags(run),
         has_workflow=workflow_file.is_file(),
     )
@@ -153,12 +153,12 @@ def _read_cell(root: Path, stage_id: ID, column: str) -> str | None:
 
 
 def _read_sources(
-    root: Path, run: RunView, row_counts: dict[ID, int]
+    root: Path, run: RunView, row_counts_by_id: dict[ID, int]
 ) -> list[PacketSource]:
     return [
         PacketSource(
             binding=binding,
-            row_count=row_counts.get(binding.stage_id),
+            row_count=row_counts_by_id.get(binding.stage_id),
             copy_path=_find_input_copy(root, binding, index),
         )
         for index, binding in enumerate(run.inputs)
@@ -171,7 +171,7 @@ def _find_input_copy(root: Path, binding: InputBinding, index: int) -> str | Non
 
 
 def _read_steps(
-    specs: list[PacketStageSpec], row_counts: dict[ID, int]
+    specs: list[PacketStageSpec], row_counts_by_id: dict[ID, int]
 ) -> list[PacketStep]:
     declared = {spec.id for spec in specs}
     return [
@@ -179,7 +179,7 @@ def _read_steps(
             stage_id=spec.id,
             type=spec.type,
             description=spec.description,
-            row_count=row_counts.get(spec.id),
+            row_count=row_counts_by_id.get(spec.id),
             parent_ids=[up for up in spec.input_ids if up in declared],
         )
         for spec in sort_stages_by_branch(specs)

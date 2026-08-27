@@ -113,6 +113,18 @@ def _seed_version(root):
     return vid
 
 
+def test_packet_readme_opens_with_the_document_and_links_the_csvs(exported):
+    text = (exported.root / "README.md").read_text(encoding="utf-8")
+    assert text.startswith("# How we did it\n")
+    assert "[`double`](data/double.csv)" in text
+    assert "README.md" in exported.files
+
+
+def test_packet_readme_is_covered_by_the_checksums(exported):
+    lines = (exported.root / "checksums.txt").read_text(encoding="utf-8").splitlines()
+    assert "README.md" in {line.split("  ", 1)[1] for line in lines}
+
+
 def test_packet_holds_every_stage_output_as_csv(exported):
     load = pd.read_csv(exported.root / "data" / "load.csv")
     double = pd.read_csv(exported.root / "data" / "double.csv")

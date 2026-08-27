@@ -230,35 +230,36 @@ def _render_folder(contents: PacketContents) -> list[str]:
 
 def _render_recorded_rows(root: Path) -> list[list[str]]:
     return [
-        [f"`{path}`", role, "yes"]
-        for path, role in _RECORDED_LAYOUT
+        [f"`{path}`", role, held]
+        for path, role, held in _RECORDED_LAYOUT
         if path in _WRITTEN_LAST or (root / path).exists()
     ]
 
 
 def _render_rendering_rows(root: Path) -> list[list[str]]:
     """Whatever else the export left here: the app's own pages, which re-show the above."""
-    recorded = {path.split("/")[0] for path, _ in _RECORDED_LAYOUT}
+    recorded = {path.split("/")[0] for path, _, _ in _RECORDED_LAYOUT}
     return [
-        [f"`{entry.name}{'/' if entry.is_dir() else ''}`", _A_RENDERING, "no"]
+        [f"`{entry.name}{'/' if entry.is_dir() else ''}`", _A_RENDERING, _A_RENDERING_HELD]
         for entry in sorted(root.iterdir(), key=lambda p: p.name)
         if entry.name not in recorded
     ]
 
 
 _A_RENDERING = "A rendered view of the files above"
+_A_RENDERING_HELD = "no"
 
-_RECORDED_LAYOUT: tuple[tuple[str, str], ...] = (
-    (f"{DATA_DIR}/", "Every step's full output, one CSV each"),
-    (f"{RAW_DIR}/", "The same outputs as this app wrote them, types intact"),
-    (f"{INPUTS_DIR}/", "The source files, as read, at the recorded SHA-256"),
-    (f"{ARTIFACTS_DIR}/", "What the publish step wrote"),
-    (MANIFEST_FILE, "The run's own record: statuses, row counts, validation"),
-    (WORKFLOW_FILE, "The workflow version this run executed"),
-    (DOCUMENT_FILE, "The prose the workflow was compiled from"),
-    (EVENTS_FILE, "The run's event log, carrying what each AI model was asked"),
-    (CHECKSUMS_FILE, "SHA-256 of every other file here, this one included"),
-    (README_FILE, "This page, written from the files above"),
+_RECORDED_LAYOUT: tuple[tuple[str, str, str], ...] = (
+    (f"{DATA_DIR}/", "Every step's full output, one CSV each", "yes"),
+    (f"{RAW_DIR}/", "The same outputs as this app wrote them, types intact", "yes"),
+    (f"{INPUTS_DIR}/", "The source files, as read, at the recorded SHA-256", "yes"),
+    (f"{ARTIFACTS_DIR}/", "What the publish step wrote", "yes"),
+    (MANIFEST_FILE, "The run's own record: statuses, row counts, validation", "yes"),
+    (WORKFLOW_FILE, "The workflow version this run executed", "yes"),
+    (DOCUMENT_FILE, "The prose the workflow was compiled from", "yes"),
+    (EVENTS_FILE, "The run's event log, carrying what each AI model was asked", "yes"),
+    (CHECKSUMS_FILE, "SHA-256 of every file here but itself", "yes"),
+    (README_FILE, "This page", _A_RENDERING_HELD),
 )
 
 # Written after this page is composed, so neither is on disk to be found.
