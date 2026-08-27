@@ -6,6 +6,7 @@ from typing import Sequence
 from urllib.parse import quote, urlencode
 
 from app.models.branch_analysis import RowRef
+from app.runtime.citations import build_row_trace_url
 
 
 # aggregate makes its single row out of every input row, so a cohort runs to
@@ -23,6 +24,8 @@ CONTRIBUTORS_NAMED = 3
 
 class AppPanelLinks:
     def __init__(self, project_id: str, run_id: str) -> None:
+        self._project_id = project_id
+        self._run_id = run_id
         self._project = f"/project/{_segment(project_id)}"
         self._base = f"{self._project}/runs/{_segment(run_id)}"
 
@@ -54,6 +57,11 @@ class AppPanelLinks:
         followed = "&".join(urlencode({"via": render_row_ref(ref)}) for ref in sample_choices)
         walk = self.row_trace(figure_stage, figure_row)
         return f"{walk}?{followed}" if followed else walk
+
+    def claim_trace(self, stage_id: str, row: int, column: str | None) -> str:
+        """Named the column, the trace view leads with that cell."""
+        return build_row_trace_url(
+            self._project_id, self._run_id, stage_id, row, column=column)
 
     def review_queue(self, stage_id: str) -> str:
         return f"{self._base}/queue/{_segment(stage_id)}"
@@ -141,6 +149,10 @@ class PacketPanelLinks:
                                    sample_choices: Sequence[RowRef]) -> str | None:
         """A file carries no query string, so a path opens the page of the row it ends at."""
         stage_id, row = sample_choices[-1] if sample_choices else (figure_stage, figure_row)
+        return self.row_trace(stage_id, row)
+
+    def claim_trace(self, stage_id: str, row: int, column: str | None) -> str | None:
+        """A file carries no query string, so the column cannot be pre-opened."""
         return self.row_trace(stage_id, row)
 
     def review_queue(self, stage_id: str) -> None:

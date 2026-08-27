@@ -70,9 +70,10 @@
 /* A run's published files, as links. Deliberately NOT buttons: a button is an
    imperative, a finished run has none, and a primary button sized to a filename is
    the widest thing on the page for no reason. */
-.run-outputs { list-style: none; margin: 0; padding: 0; display: flex;
-    flex-direction: column; gap: 3px; }
+.run-outputs { list-style: none; margin: 0; padding: 0; }
+.run-outputs li { padding: 6px 0; border-top: 1px solid var(--border); font-size: 14px; }
 .run-outputs a { font-family: var(--mono); font-size: 13px; }
+.run-outputs .run-output-note { color: var(--muted); font-size: 12.5px; margin-left: 8px; }
 
 .diagram-minimap { position: relative; }
 /* ~3 rows of stage nodes at the floor zoom: enough to read the node you are on and

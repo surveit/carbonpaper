@@ -160,6 +160,11 @@
 <h2>Run overview</h2>
 <div class="run-toolbar">
   {% if not is_running %}
+  {# The same pages the export writes, served: somewhere to send a reader who has
+     downloaded nothing. #}
+  <a class="btn secondary sm" href="/project/{{ project }}/runs/{{ run_id }}/packet"
+     title="This run as a reader outside sees it: the finding, the figures and what to check next."><span
+       class="btn-icon" aria-hidden="true">📄</span> Open review packet</a>
   <a class="btn secondary sm js-packet-export"
      href="/project/{{ project }}/runs/{{ run_id }}/packet.zip"
      data-href="/project/{{ project }}/runs/{{ run_id }}/packet.zip"
@@ -215,24 +220,12 @@
 
 {# ── 2. WHAT THIS RUN PUBLISHED — its result, read AFTER the state of the run that
       produced it: a figure means nothing to a reader who does not yet know whether the
-      run finished. Every value links to the row it was read from. Absent until a stage
-      declares a workflow output. ── #}
-{% include "_run_published.html" %}
+      run finished. Absent until a stage declares a workflow output. ── #}
+{% with claims = header.claims %}{% include "_run_published.html" %}{% endwith %}
 
-{# ── 3. RUN OUTPUTS — the files this run published, listed as links. Never a button:
-      a CTA is an imperative and a finished run has none, and sizing a primary button
-      to a filename is how `venezuela_lobbying_q1q2_2026.xlsx` came to dominate the
-      page. Absent until a publish stage has actually written something. ── #}
-{% if header.artifacts %}
-<section class="run-section" id="run-outputs-section">
-<h2>Run outputs</h2>
-<ul class="run-outputs">
-  {% for artifact in header.artifacts %}
-  <li><a href="{{ artifact.url }}">{{ artifact.name }}</a></li>
-  {% endfor %}
-</ul>
-</section>
-{% endif %}
+{# ── 3. RUN OUTPUTS — the files this run published. Absent until a publish stage has
+      actually written something. ── #}
+{% with outputs = header.artifacts %}{% include "_run_outputs.html" %}{% endwith %}
 
 {# ── 4. RUN VISUAL SUMMARY — the workflow as a MINIMAP: a short band held at a readable zoom rather than
       the whole graph fitted to width. The reader's continuous act is picking a

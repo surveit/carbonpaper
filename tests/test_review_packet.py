@@ -677,8 +677,8 @@ def test_the_checks_count_what_this_run_actually_did(exported):
     index = (exported.root / "index.html").read_text(encoding="utf-8")
 
     assert "How to check this" in index
-    assert "No step in this run called an AI model" in index
-    assert "This run read 1 file." in index
+    assert "no step called an AI model" in index
+    assert "1 file read" in index
     assert f'href="{DOCUMENT_FILE}"' in index
 
 

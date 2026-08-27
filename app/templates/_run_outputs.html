@@ -1,0 +1,12 @@
+{# The files a publish stage wrote. `outputs` = app.web.published_files.PublishedFile.
+   Deliberately links, never buttons: a CTA is an imperative and a finished run has none. #}
+{% if outputs %}
+<section class="run-section" id="run-outputs-section">
+<h2>Run outputs</h2>
+<ul class="run-outputs">
+  {% for output in outputs %}
+  <li><a href="{{ output.href }}">{{ output.name }}</a>{% if output.note %}<span class="run-output-note">{{ output.note }}</span>{% endif %}</li>
+  {% endfor %}
+</ul>
+</section>
+{% endif %}

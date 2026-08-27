@@ -33,65 +33,20 @@
 {% if guide %}
 <div class="run-nav" id="run-nav">
   <div class="run-nav-head"><h2>Run walkthrough</h2></div>
-  {% with titled_by_host = true %}{% include "_run_guide.html" %}{% endwith %}
+  {% with titled_by_host = true, published_artifacts = front.files %}{% include "_run_guide.html" %}{% endwith %}
 </div>
 {% endif %}
 
 <div class="run-main">
 
-{# The figures the run declared as its answer, in the publish stage's own words and
-   in the app's own outputs vocabulary (run-page.css). A packet has no rows route, so
-   a value opens the lineage page for its row where this packet wrote one. #}
-{% if front.claims.leads or front.claims.rest %}
-<section class="wf-outputs">
-  <h2>What this run published</h2>
-  <p class="wf-note">{% if front.claims.any_traced() %}Every figure was read from a row of a step's output, and opens that row.{% else %}Every figure was read from a row of a step's output; the step pages below hold those rows.{% endif %}</p>
-  {%- if front.claims.leads %}
-  <h3 class="wf-group">Headline claims</h3>
-  <div class="wf-leads{% if front.claims.leads | length > 2 %} crowded{% endif %}">
-    {%- for claim in front.claims.leads %}
-    <div class="wf-lead">
-      <span class="wf-big">{% if claim.href %}<a href="{{ claim.href }}"
-        title="Open the row this value was read from">{{ claim.value }}</a>{% else %}{{ claim.value }}{% endif %}</span>
-      <span class="wf-of">{{ claim.label | lower }}</span>
-    </div>
-    {%- endfor %}
-  </div>
-  {%- endif %}
-  {%- if front.claims.rest %}
-  <h3 class="wf-group">Secondary claims</h3>
-  <table class="wf-rest">
-    {%- for claim in front.claims.rest %}
-    <tr>
-      <th scope="row">{{ claim.label }}</th>
-      <td>{% if claim.href %}<a class="wf-value" href="{{ claim.href }}"
-             title="Open the row this value was read from">{{ claim.value }}</a>{% else %}<span class="wf-value">{{ claim.value }}</span>{% endif %}</td>
-    </tr>
-    {%- endfor %}
-  </table>
-  {%- endif %}
-</section>
-{% endif %}
+{% with claims = front.claims %}{% include "_run_published.html" %}{% endwith %}
 
-{# The files a publish stage wrote, as relative links into artifacts/, so they open
-   from the folder. Sized, because a stranger deciding what to open reads the size. #}
-{% if front.files %}
-<section>
-  <h2>Run outputs</h2>
-  <p class="muted packet-note">The files this run published, copied into this folder as it wrote them.</p>
-  <ul class="packet-files">
-    {% for file in front.files %}
-    <li><a href="{{ file.href }}">{{ file.name }}</a><span class="packet-file-note">{{ file.size }}{% if file.folder %} · {{ file.folder }}{% endif %}</span></li>
-    {% endfor %}
-  </ul>
-</section>
-{% endif %}
+{% with outputs = front.files %}{% include "_run_outputs.html" %}{% endwith %}
 
-{# What a sceptic does next, counted rather than described: every line names a real
-   number this run recorded and points at the file or section holding it. #}
+{# Every line names a real number this run recorded and points at the file or
+   section holding it. #}
 <section class="packet-checks">
   <h2>How to check this</h2>
-  <p class="muted packet-note">Everything named here is in this folder, and nothing on this page needs the software that made it.</p>
   <ol>
     {% for check in front.checks %}
     <li><strong>{{ check.lead }}</strong> {{ check.text }}
@@ -113,7 +68,6 @@
 {% if lineage.figures %}
 <section id="packet-provenance">
   <h2>Row provenance</h2>
-  <p class="muted">Every figure the published files print, and the rows it was counted from.</p>
   <table class="schema">
     <thead><tr><th>Figure</th><th class="num">Value</th><th></th></tr></thead>
     <tbody>
@@ -136,7 +90,11 @@
      page's minimap band: there the graph is navigation beside the work, here it is the
      map of the whole run and gets the height, fitted to width with no zoom floor. #}
   {% if mermaid %}
-  <p class="lede muted">Click a node to open that step. Drag to pan · ⌘/Ctrl-scroll to zoom.</p>
+  {# The one thing on this page that needs the network: the renderer is fetched from a
+     CDN, so offline the graph does not draw and the step list below stays. #}
+  <p class="lede">Click a node to open that step.
+    <span class="muted">Drag to pan · ⌘/Ctrl-scroll to zoom · drawn by a renderer fetched from
+    the network, so with none the step list below stands in.</span></p>
   {# .workflow-full for the width: diagram_viewport.js collapses the svg to measure
      the viewport, so a block with no width of its own measures 0 and fits to nothing. #}
   <div class="workflow-full diagram-block">
@@ -178,9 +136,6 @@
 <section id="packet-inputs">
   <h2>Inputs this run read</h2>
   {% if run.inputs %}
-  <p class="muted packet-note">The hash is what the run recorded when it read the file — check the
-    copy in <code>inputs/</code> against it to confirm these are the same bytes. The full path each
-    file was read from is in <a href="manifest.json">manifest.json</a>.</p>
   <table class="stages">
     <thead><tr><th>step</th><th>file</th><th>SHA-256</th><th>bytes</th><th>source</th></tr></thead>
     <tbody>

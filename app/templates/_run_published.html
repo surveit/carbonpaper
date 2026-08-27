@@ -1,34 +1,31 @@
-{# What the run published, above the account of how it ran. #}
-{% if header.workflow_outputs %}
-  {%- set leads = header.workflow_outputs | selectattr('primary') | list %}
-  {%- set rest = header.workflow_outputs | rejectattr('primary') | list %}
+{# The figures this run declared as its answer. `claims` = app.web.published_claims.
+   A claim whose row the surface holds no page for renders unlinked, not omitted. #}
+{% if claims.any() %}
   <section class="wf-outputs">
     <h2>What this run published</h2>
-    <p class="wf-note">Every figure links to the row it was read from.</p>
-    {%- if leads %}
+    {%- if claims.leads %}
     <h3 class="wf-group">Headline claims</h3>
-    <div class="wf-leads{% if leads | length > 2 %} crowded{% endif %}">
-      {%- for output in leads %}
+    <div class="wf-leads{% if claims.leads | length > 2 %} crowded{% endif %}">
+      {%- for claim in claims.leads %}
       <div class="wf-lead">
-        <span class="wf-big"><a href="{{ output.href }}"
-          title="Open the row this value was read from">{{ output.value }}</a></span>
-        <span class="wf-of">{{ output.label | lower }}</span>
+        <span class="wf-big">{% if claim.href %}<a href="{{ claim.href }}"
+          title="Open the row this value was read from">{{ claim.value }}</a>{% else %}{{ claim.value }}{% endif %}</span>
+        <span class="wf-of">{{ claim.label | lower }}</span>
       </div>
       {%- endfor %}
     </div>
     {%- endif %}
-    {%- if rest %}
+    {%- if claims.rest %}
     <h3 class="wf-group">Secondary claims</h3>
     <table class="wf-rest">
-      {%- for output in rest %}
+      {%- for claim in claims.rest %}
       <tr>
-        <th scope="row">{{ output.label }}</th>
-        <td><a class="wf-value" href="{{ output.href }}"
-               title="Open the row this value was read from">{{ output.value }}</a></td>
+        <th scope="row">{{ claim.label }}</th>
+        <td>{% if claim.href %}<a class="wf-value" href="{{ claim.href }}"
+               title="Open the row this value was read from">{{ claim.value }}</a>{% else %}<span class="wf-value">{{ claim.value }}</span>{% endif %}</td>
       </tr>
       {%- endfor %}
     </table>
     {%- endif %}
   </section>
 {% endif %}
-
