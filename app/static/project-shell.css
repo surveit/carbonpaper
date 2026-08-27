@@ -227,7 +227,7 @@
 .ov-slot-h { margin-top: 0; }
 
 .ov-deliver { border: 1px solid var(--border-strong); border-radius: 10px;
-    background: var(--raised); }
+    background: var(--raised); overflow: hidden; }
 .ov-deliver.reached { border-color: var(--good-bd); }
 .ov-deliver.refused { border-color: var(--bad-bd); }
 
@@ -258,11 +258,13 @@
 
 .ov-rests { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px;
     padding: 14px 18px; border-top: 1px solid var(--border); background: var(--sunk); }
+.ov-rests > div { min-width: 0; }
 .ov-rests h5 { margin: 0 0 5px; font-size: 10.5px; text-transform: uppercase;
     letter-spacing: 0.5px; color: var(--muted); font-weight: 700; }
 .ov-rests p { margin: 0; font-size: 13px; }
 .ov-file { display: flex; gap: 8px; align-items: baseline; font-size: 13px; padding: 2px 0;
-    flex-wrap: wrap; }
+    flex-wrap: wrap; min-width: 0; }
+.ov-file code { overflow-wrap: anywhere; }
 /* A cap is why a complete-looking run cannot be published, so it is never a grey note. */
 .ov-cap { background: var(--bad-bg); color: var(--bad-ink); border: 1px solid var(--bad-bd);
     border-radius: 4px; padding: 0 6px; font-size: 11.5px; font-weight: 600; }
@@ -278,7 +280,7 @@
 .ov-rest-figures .k { color: var(--muted); }
 
 .ov-deliver-foot { border-top: 1px solid var(--border); padding: 11px 18px; font-size: 13px;
-    color: var(--muted); background: var(--sunk); border-radius: 0 0 9px 9px;
+    color: var(--muted); background: var(--sunk);
     display: flex; align-items: center; gap: 12px; }
 .ov-deliver-foot form { margin: 0 0 0 auto; }
 
