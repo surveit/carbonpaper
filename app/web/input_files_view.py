@@ -21,13 +21,13 @@ from app.models.workflow import Workflow
 from app.runtime.manifest import read_run_manifest
 from app.services import run as run_service
 from app.services.input_check import SOURCE_ROW_COLUMN
-from app.services.input_slice import find_columns_behind
 from app.services.scope import find_rows_reached_per_stage
 from app.services.versioning import load_version_stages
 from app.services.workspace import resolve_run_dir
 from app.web.file_detail_view import ColumnRow, build_column_row
 from app.web.file_sizes import describe_bytes
 from app.web.scope_view import read_run_branches
+from app.web.values_walk import ColumnAt, find_columns_behind
 
 # Rows shown beside the relevant ones when a reader widens the preview to the frame.
 OTHER_ROWS_SHOWN = 40
@@ -99,8 +99,8 @@ def load_input_files(project_id: str, run_id: str,
         branches, [(citation.stage_id, citation.row_ordinal)])
     workflow = Workflow(stages=load_version_stages(
         project_id, run_service.read_pinned_version(project_id, run_id)))
-    behind = find_columns_behind(workflow, set(reached),
-                                 citation.stage_id, citation.column)
+    behind = find_columns_behind(workflow.index_workflow_stages_by_id(), set(reached),
+                                 ColumnAt(citation.stage_id, citation.column))
     outputs = resolve_run_dir(project_id, run_id) / "outputs"
     manifest = read_run_manifest(project_id, run_id)
     reading = [placed.id for placed in workflow.list_workflow_stages()
