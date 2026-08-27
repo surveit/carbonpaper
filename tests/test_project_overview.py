@@ -90,6 +90,16 @@ def test_a_queue_row_that_is_not_an_app_screen_opens_a_chat_carrying_the_task():
     assert "task=" in errored[0].href
 
 
+def test_running_runs_are_summarised_with_how_long_the_longest_has_been():
+    _record_run(status=RunStatus.RUNNING)
+    from app.web.run_index import build_run_index_rows
+    rows = [r for r in build_run_index_rows(_PROJECT) if not r.is_test_run]
+    running = [row for row in build_queue(_PROJECT, rows, read_versions(_PROJECT))
+               if row.what.endswith("running")]
+    assert running[0].count == "1"
+    assert running[0].kind == "go"
+
+
 def test_a_seeded_chat_link_opens_with_no_greeting_and_the_task_as_the_first_message():
     from app.core.agent import registry
     import app.agents.compiler.config  # noqa: F401  (registers "editing")

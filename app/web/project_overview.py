@@ -182,12 +182,11 @@ def build_queue(
 ) -> list[QueueRow]:
     found = [
         find_reviews_waiting(project_id, rows),
-        find_unreadable_version(versions),
-        find_versions_never_run(project_id, rows, versions),
-        find_runs_still_marked_running(project_id, rows),
+        find_runs_running(project_id, rows),
+        find_newest_version_never_run(project_id, rows, versions),
         find_runs_that_errored(project_id, rows),
         find_missing_methodology(project_id),
-        find_unpublished_versions(project_id, versions),
+        find_unreadable_version(project_id, versions),
     ]
     return [row for row in found if row is not None]
 
@@ -204,49 +203,48 @@ def find_reviews_waiting(project_id: str, rows: list[RunIndexRow]) -> QueueRow |
     )
 
 
-def find_unreadable_version(versions: VersionsRead) -> QueueRow | None:
+def find_unreadable_version(project_id: str, versions: VersionsRead) -> QueueRow | None:
+    """Nothing a reader can hand-edit; the agent can read the payload and re-save it."""
     if versions.problem is None:
         return None
     return QueueRow(
         count="!", tone="bad", what="A stored version cannot be read",
         why=versions.problem,
-        label="Open the versions", href="#", kind="go",
+        label="Ask the agent to repair it",
+        href=build_chat_href(project_id, f"A stored version will not parse: {versions.problem}"),
+        kind="chat",
     )
 
 
-def find_versions_never_run(
+def find_newest_version_never_run(
     project_id: str, rows: list[RunIndexRow], versions: VersionsRead
 ) -> QueueRow | None:
-    pinned = next(
-        (row.version.version_id for row in rows
-         if row.version and row.version.version_id), None
-    )
-    if pinned is None:
+    """Only the newest one matters — nobody wants to run a version that has been superseded."""
+    if not versions.versions:
         return None
-    newer = [v for v in versions.versions if v.version_id > pinned]
-    if not newer:
+    newest = max(versions.versions, key=lambda version: version.version_id)
+    if any(row.version and row.version.version_id == newest.version_id for row in rows):
         return None
     return QueueRow(
-        count=str(len(newer)), tone="warn",
-        what=f"version{'s' if len(newer) != 1 else ''} never run",
-        why="the working copy has moved since anything executed",
+        count="", tone="warn", what="The newest version has never run",
+        why=(newest.message or newest.version_id),
         label="Ask the agent to run it",
         href=build_chat_href(project_id, "Run the newest version of this workflow."),
         kind="chat",
     )
 
 
-def find_runs_still_marked_running(project_id: str, rows: list[RunIndexRow]) -> QueueRow | None:
-    stuck = [row for row in rows if row.status == RunStatus.RUNNING]
-    if not stuck:
+def find_runs_running(project_id: str, rows: list[RunIndexRow]) -> QueueRow | None:
+    """Elapsed is the only tell: nothing records a heartbeat, so a crashed run reads as running."""
+    running = [row for row in rows if row.status == RunStatus.RUNNING]
+    if not running:
         return None
+    longest = max((row.duration or "" for row in running), key=len)
     return QueueRow(
-        count=str(len(stuck)), tone="warn",
-        what=f"run{'s' if len(stuck) != 1 else ''} still marked running",
-        why="no terminal status was ever written, so they hold no result and never will",
-        label="Ask the agent to clear them",
-        href=build_chat_href(project_id, "Some runs are stuck marked running. What happened?"),
-        kind="chat",
+        count=str(len(running)), tone="info",
+        what=f"run{'s' if len(running) != 1 else ''} running",
+        why=f"the longest for {longest}" if longest else "elapsed unrecorded",
+        label="Watch them", href=f"/project/{project_id}/runs", kind="go",
     )
 
 
@@ -276,18 +274,6 @@ def find_missing_methodology(project_id: str) -> QueueRow | None:
             project_id, "Write a methodology document for this project from its workflow."
         ),
         kind="chat",
-    )
-
-
-def find_unpublished_versions(project_id: str, versions: VersionsRead) -> QueueRow | None:
-    stored = versions.versions
-    if not stored or any(version.published for version in stored):
-        return None
-    return QueueRow(
-        count="", tone="warn", what="No version published",
-        why="nothing is nominated as the snapshot an outsider should cite",
-        label="Publish a version",
-        href=f"/project/{project_id}/workflow/versions", kind="go",
     )
 
 

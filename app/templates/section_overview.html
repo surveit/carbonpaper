@@ -147,7 +147,7 @@
   </div>
 
   <div>
-    <h3 class="ov-slot-h">{% if overview.queue %}Waiting on a person{% else %}Nothing is waiting on you{% endif %}</h3>
+    <h3 class="ov-slot-h">{% if overview.queue %}Outstanding{% else %}Nothing outstanding{% endif %}</h3>
     {% if overview.queue %}
     <div class="ov-queue">
       {% for row in overview.queue %}
@@ -166,7 +166,7 @@
       {% endfor %}
     </div>
     {% else %}
-    <p class="muted">Nothing outstanding that this page can see.</p>
+    <p class="muted">No halted run, no unrun version, and the document is written.</p>
     {% endif %}
   </div>
 </div>

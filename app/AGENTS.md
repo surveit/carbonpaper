@@ -38,9 +38,15 @@ A capped run still ends `ok`, correctly — a cap is a parameter, not a fault.
   `Stage.workflow_outputs`, so a finished run cannot be given one after the fact; the
   way through is a workflow edit, a version and a re-run.
 
-A queue row is a sentence and one link. Reviewing, publishing a version and publishing
-a run are app screens; every other row opens `/chat/agent/editing/new?project_id=…&task=…`,
-which `EditingContext.task` turns into the chat's opening turn.
+The right column is one row per outstanding thing, each a sentence and one link. Six of
+them: runs halted for review · runs running (with how long the longest has been, which is
+the only tell there is — nothing records a heartbeat, so a crashed run reads as running) ·
+the newest version never run · runs that errored · no methodology document · a stored
+version that will not parse.
+
+Reviewing and running are app screens; every other row opens
+`/chat/agent/editing/new?project_id=…&task=…`. A `task` suppresses the agent's opening turn
+and the panel sends it as the reader's OWN first message, so the agent starts on the job.
 
 - `/project/<m>/runs`, `/runs/<id>` — run history + detail. `/runs/new` is the
   run-launch form (version picker, one path field + row cap per file input, and an
