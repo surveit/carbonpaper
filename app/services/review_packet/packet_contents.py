@@ -42,7 +42,7 @@ class PacketStageSpec(BaseModel):
 
     @field_validator("workflow_outputs", mode="before")
     @classmethod
-    def _absent_is_none_declared(cls, value: Any) -> Any:
+    def _read_workflow_outputs(cls, value: Any) -> Any:
         return [] if value is None else value
 
 
