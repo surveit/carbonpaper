@@ -1,8 +1,4 @@
-"""Publishing a run: what refuses one, and the record that says it happened.
-
-A published run's figures are the project's numbers. Nothing is copied — the
-record names a run, and the figures stay where the executor wrote them.
-"""
+"""Publishing a run: what refuses one, and the record that says it happened."""
 from __future__ import annotations
 
 from typing import Any, Literal

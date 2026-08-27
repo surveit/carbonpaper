@@ -164,8 +164,7 @@ def test_workflow_page_points_to_versions_tab():
 def test_sidebar_nests_versions_runs_evals_under_workflow():
     html = client.get("/project/demo").text
     assert "app-nav-children" in html
-    # The parent is a GROUP LABEL, not a link. Asserting an href here passed only while
-    # the overview's workflow tile happened to render one.
+    # The parent is a group label, not a link.
     assert '<div class="app-nav-group">Workflow</div>' in html
     for child_href in ("/project/demo/workflow/versions", "/project/demo/runs", "/project/demo/evals"):
         assert f'href="{child_href}"' in html

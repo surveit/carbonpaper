@@ -41,8 +41,7 @@ def _render_opening_turn(context: BaseModel) -> OpeningTurn:
     return OpeningTurn(text=_PROJECT_OPENING.format(name=name))
 
 
-# Opened from a link that already named the job — the overview page's queue. The task is
-# read back so the reader can see what was carried in, and correct it before anything runs.
+# The task is read back so the reader can correct it before anything runs.
 _TASK_OPENING = """\
 You're in {name}, and this is what the link you followed was for:
 
