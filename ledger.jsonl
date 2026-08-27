@@ -2190,3 +2190,4 @@
 {"run_id":"33098116417","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33098116417","created":"2026-08-27T17:24:19Z","branch":"perf/lineage-lazy-row-decode","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"33098195807","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33098195807","created":"2026-08-27T17:24:42Z","branch":"feat/overview-publish-a-run","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"33098195807","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33098195807","created":"2026-08-27T17:25:05Z","branch":"feat/overview-publish-a-run","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"33098468097","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33098468097","created":"2026-08-27T17:27:46Z","branch":"feat/overview-publish-a-run","event":"pull_request","contracts_kept":16,"findings":[]}
