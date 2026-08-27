@@ -21,7 +21,7 @@
 .vu-wires path { fill: none; stroke: var(--border-strong); stroke-width: 1.5; }
 .vu-wires path.vu-hot { stroke: var(--accent); stroke-width: 2.5; }
 .vu-mapcol { display: flex; flex-direction: column; gap: 6px; position: relative; z-index: 1; }
-.vu-node { border: 1px solid var(--border-strong); background: var(--raised); border-radius: 7px; font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px; color: var(--muted); padding: 3px 8px; cursor: pointer; white-space: nowrap; text-align: left; }
+.vu-node { border: 1px solid var(--border-strong); background: var(--raised); border-radius: 7px; font: inherit; font-family: var(--mono); font-size: 10.5px; color: var(--muted); padding: 3px 8px; cursor: pointer; white-space: nowrap; text-align: left; }
 .vu-node:hover { background: var(--hover); }
 .vu-node.vu-seen { color: var(--fg); }
 .vu-node.vu-next { border-style: dashed; border-color: var(--accent); color: var(--fg); }
@@ -60,5 +60,5 @@
 .vu-forkopt { border: 1px solid var(--border-strong); background: var(--raised); border-radius: 9px; padding: 9px 12px; font: inherit; text-align: left; cursor: pointer; }
 .vu-forkopt:hover { background: var(--hover); }
 .vu-forkopt:focus-visible, .vu-modal-close:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--focus-halo); }
-.vu-forkopt b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; display: block; }
-.vu-forkopt span { font-size: 11.5px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.vu-forkopt b { font-family: var(--mono); font-size: 13px; display: block; }
+.vu-forkopt span { font-size: 11.5px; color: var(--muted); font-family: var(--mono); }

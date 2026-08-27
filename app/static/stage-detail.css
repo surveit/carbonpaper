@@ -393,16 +393,6 @@ details summary {
 details[open] summary { margin-bottom: 8px; }
 details pre { margin-top: 6px; max-height: 480px; overflow: auto; }
 
-.prose {
-    background: var(--raised);
-    border: 1px solid var(--border);
-    max-height: 480px;
-    overflow: auto;
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: 14px;
-    line-height: 1.55;
-}
-
 
 /* An aggregate said in English: the shape, then a line per column it writes. */
 .agg-lead { font-size: 15px; font-weight: 600; margin: 0 0 2px; }
