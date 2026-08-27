@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from collections import deque
+from collections import defaultdict, deque
 from dataclasses import dataclass
 from enum import Enum
+from typing import Collection, Iterable, Sequence
 
 from app.models import AbstractStage, StageType, WorkflowStage
 from app.models.schema import StageId
 from app.models.stages.aggregate import AggregateStage
+from app.models.stages.dedupe import DedupeStage
+from app.models.stages.filter_rows import FilterRowsStage
+from app.models.stages.join import JoinStage
 from app.models.stages.signature import transform_output_schema
 
 WorkflowStagesById = dict[StageId, WorkflowStage]
@@ -69,10 +73,12 @@ class WriterGraph:
         }
 
 
-def walk_column_back(stages: WorkflowStagesById, cited: ColumnAt) -> ColumnWalk:
+def walk_column_back(stages: WorkflowStagesById, cited: ColumnAt,
+                     also: Sequence[ColumnAt] = ()) -> ColumnWalk:
+    """`also` seeds the same walk from further columns; `cited` stays the one it is about."""
     nodes: dict[ColumnAt, WalkNode] = {}
-    depth = {cited: 0}
-    queue = deque([cited])
+    depth = {at: 0 for at in (cited, *also)}
+    queue = deque(depth)
     while queue:
         at = queue.popleft()
         if at in nodes:
@@ -89,6 +95,40 @@ def walk_column_back(stages: WorkflowStagesById, cited: ColumnAt) -> ColumnWalk:
             depth.setdefault(parent, depth[at] + 1)
             queue.append(parent)
     return ColumnWalk(cited=cited, nodes=nodes, depth=depth)
+
+
+def find_columns_behind(stages: WorkflowStagesById, on_route: Collection[StageId],
+                        cited: ColumnAt) -> dict[StageId, set[str]]:
+    """Every column the value passed through, plus what kept its rows in the set."""
+    walk = walk_column_back(
+        stages, cited, also=list(_find_columns_that_chose_the_rows(stages, on_route)))
+    behind: dict[StageId, set[str]] = defaultdict(set)
+    for at in walk.nodes:
+        behind[at.stage_id].add(at.column)
+    return dict(behind)
+
+
+def _find_columns_that_chose_the_rows(stages: WorkflowStagesById,
+                                      on_route: Collection[StageId]
+                                      ) -> Iterable[ColumnAt]:
+    """What told a stage's surviving rows from the rest: a predicate, a key, a group."""
+    for stage_id in on_route:
+        placed = stages.get(stage_id)
+        if placed is None:
+            continue
+        stage = placed.stage
+        if isinstance(stage, FilterRowsStage):
+            yield from _list_read_columns(stage)
+        elif isinstance(stage, JoinStage):
+            for key in stage.join.keys:
+                yield ColumnAt(placed.inputs[0].id, key.left)
+                yield ColumnAt(placed.inputs[1].id, key.right)
+        elif isinstance(stage, AggregateStage):
+            for group in stage.aggregate.group_by:
+                yield ColumnAt(placed.inputs[0].id, group)
+        elif isinstance(stage, DedupeStage):
+            for deduped_on in stage.dedupe.keys:
+                yield ColumnAt(placed.inputs[0].id, deduped_on)
 
 
 def build_writer_graph(walk: ColumnWalk, stages: WorkflowStagesById) -> WriterGraph:
@@ -150,6 +190,10 @@ def _find_parents(
         collapsed = _find_aggregate_parents(stage, workflow_stage.inputs[0].id, column)
         if collapsed is not None:
             return collapsed
+    if isinstance(stage, JoinStage):
+        landed = _find_landed_parent(stage, workflow_stage, column)
+        if landed is not None:
+            return landed
     return _list_read_columns(stage), None
 
 
@@ -165,6 +209,19 @@ def _find_aggregate_parents(
             return [], WalkStop.counts_rows
         return [ColumnAt(source_id, operation.value_column)], None
     return None
+
+
+def _find_landed_parent(
+    stage: JoinStage, workflow_stage: WorkflowStage, column: str
+) -> tuple[list[ColumnAt], WalkStop | None] | None:
+    """The reference column `enrich_with` names, plus the keys that chose its row."""
+    came_from = {landed: source for source, landed in stage.join.enrich_with.items()}
+    if column not in came_from:
+        return None
+    subject, reference = workflow_stage.inputs[0].id, workflow_stage.inputs[1].id
+    keys = [at for key in stage.join.keys
+            for at in (ColumnAt(subject, key.left), ColumnAt(reference, key.right))]
+    return [ColumnAt(reference, came_from[column]), *keys], None
 
 
 def _find_carrying_inputs(workflow_stage: WorkflowStage, column: str) -> list[ColumnAt]:

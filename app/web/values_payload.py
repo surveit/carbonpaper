@@ -1,4 +1,4 @@
-"""What the Values used tab is handed, one entry per stage that wrote."""
+"""What the Relevant columns tab is handed, one entry per stage that wrote."""
 
 from __future__ import annotations
 

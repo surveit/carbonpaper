@@ -7,8 +7,12 @@
     <p>Nothing in the run's manifest reads data in, so there is no file to name.</p>
   </div>
 {% else %}
+  {% if offline %}
+  {# Offline the pane is this list alone, with no figure-scoped panel above it to
+     tell the reader whose inputs these are. #}
   <p class="lin-note"><b>Everything this run read.</b> These are the run's inputs, not
     this row's own — a run may read data no part of this row descends from.</p>
+  {% endif %}
   {% for f in inputs.files %}
   <section class="incard">
     <div class="inhead">

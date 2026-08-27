@@ -1,10 +1,10 @@
-"""Tests for app/web/values_walk.py — the backward walk and the writer graph."""
+"""Tests for app/web/column_walk.py — the backward walk and the writer graph."""
 from __future__ import annotations
 
 import pytest
 
 from app import models as m
-from app.web.values_walk import (
+from app.web.column_walk import (
     ColumnAt,
     WalkStop,
     build_writer_graph,

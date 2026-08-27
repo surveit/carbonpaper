@@ -98,7 +98,9 @@
   </div>
   <div class="shape-list">
     <div class="shape-head"><span></span><span>column</span><span>filled</span><span>distinct</span><span>values</span></div>
+    {% with rows = file.contents.row_count %}
     {% for column in file.contents.columns %}{% include "_file_column.html" %}{% endfor %}
+    {% endwith %}
   </div>
   </div>
   </details>

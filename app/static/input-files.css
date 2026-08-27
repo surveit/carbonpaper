@@ -1,0 +1,86 @@
+/* input-files.css — the Input files tab: which rows and columns of each file a
+ * figure needed. Colour comes from palette.css only
+ * (tests/arch/test_palette_owns_colour.py).
+ */
+
+#input-files-root { padding: 16px 22px 0; }
+
+.if-lede { font-size: 13.5px; margin: 0 0 14px; max-width: 92ch; }
+
+.if-toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    margin-bottom: 14px; }
+.if-toggles { display: flex; gap: 16px; margin-left: auto; }
+.if-tg { display: flex; }
+.if-tg button { font: inherit; font-size: 12.5px; padding: 6px 12px;
+    border: 1px solid var(--border-strong); background: var(--raised);
+    color: var(--muted); cursor: pointer; }
+.if-tg button:first-of-type { border-radius: 6px 0 0 6px; }
+.if-tg button:last-of-type { border-radius: 0 6px 6px 0; border-left: 0; }
+.if-tg button.on { background: var(--accent); border-color: var(--accent);
+    color: var(--on-dark); font-weight: 600; }
+
+.if-bars { background: var(--raised); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 14px; display: grid; gap: 9px; }
+.if-bar { display: flex; align-items: center; gap: 12px; font-size: 12.5px; }
+.if-bar-lab { width: 56px; color: var(--muted); }
+.if-track { position: relative; display: block; flex: 0 0 340px; height: 10px;
+    background: var(--sunk-deep); border-radius: 5px; overflow: hidden; }
+.if-track i { position: absolute; top: 0; bottom: 0; left: 0; }
+.if-read { background: color-mix(in srgb, var(--accent) 28%, var(--bg)); }
+.if-need { background: var(--accent); }
+.if-num { color: var(--muted); font-variant-numeric: tabular-nums; }
+/* The bar is a statistic and does not move; the bold says which of its two numbers
+ * the view below is showing. */
+.if-tab[data-rows="relevant"] .if-bar[data-axis="rows"] [data-scope="relevant"],
+.if-tab[data-rows="all"] .if-bar[data-axis="rows"] [data-scope="all"],
+.if-tab[data-columns="relevant"] .if-bar[data-axis="columns"] [data-scope="relevant"],
+.if-tab[data-columns="all"] .if-bar[data-axis="columns"] [data-scope="all"] {
+    color: var(--fg); font-weight: 600; }
+.if-stage { font-size: 12px; color: var(--muted); }
+.if-cap { background: var(--state-warn-bg); color: var(--state-warn-ink);
+    border: 1px solid var(--state-warn); border-radius: 3px; padding: 1px 6px;
+    font-size: 11.5px; margin-left: 4px; }
+
+.if-sec { margin-top: 24px; }
+.if-sechead { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.if-sechead .if-download { margin-left: auto; }
+.if-sechead h3 { margin: 0; font-size: 12px; text-transform: uppercase;
+    letter-spacing: .08em; color: var(--muted); }
+.if-count { font-size: 12.5px; color: var(--muted); }
+
+/* Each row is the file detail page's own column row, wrapped so the toggles can
+ * reach it: one per basis, and only one basis is shown. */
+.if-shape:last-child .shape-col { border-bottom: none; }
+
+.if-tab[data-rows="relevant"] .if-shape[data-basis="all"],
+.if-tab[data-rows="all"] .if-shape[data-basis="relevant"] { display: none; }
+.if-tab[data-columns="relevant"] .if-shape[data-relevant="no"],
+.if-tab[data-columns="relevant"] [data-relevant="no"]:is(th, td) { display: none; }
+.if-tab[data-rows="relevant"] tr[data-relevant="no"] { display: none; }
+
+.if-table { max-height: 380px; overflow: auto; border: 1px solid var(--border);
+    border-radius: 8px; }
+.if-table table.data-preview { width: 100%; }
+.if-table th { position: sticky; top: 0; }
+.if-rownum { text-align: right; color: var(--muted);
+    font-variant-numeric: tabular-nums; }
+/* Shown but not read: the same greying wherever a column or row appears, so a cell
+ * in both reads the same as a cell in one. */
+/* A <details> carries a UA margin, which would show through as a band between two
+ * greyed rows. */
+.if-shape > .shape-col { margin: 0; }
+.if-shape[data-relevant="no"] { background: var(--sunk); }
+.if-shape[data-relevant="no"] .shape-name,
+.if-shape[data-relevant="no"] .shape-distinct { color: var(--muted); }
+.if-shape[data-relevant="no"] > .shape-col > summary { background: none; }
+
+/* The type is what the values say; the badge column goes and the row closes up. */
+.if-shape .shape-kind { display: none; }
+.if-shape-head,
+.if-shape > .shape-col > summary {
+    grid-template-columns: minmax(140px, 1.4fr) 128px 74px minmax(220px, 2fr); }
+tr[data-relevant="no"] td,
+.if-table :is(th, td)[data-relevant="no"] { color: var(--muted); background: var(--sunk); }
+.if-null { color: var(--muted); font-style: italic; }
+
+.if-download { text-decoration: none; white-space: nowrap; }

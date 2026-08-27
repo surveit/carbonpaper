@@ -83,7 +83,7 @@ def build_file_detail_view(project_id: str, file_id: str) -> FileDetailView:
 
 def _read_contents(project_id: str, file_id: str) -> FileContents:
     shape = read_file_shape(project_id, file_id)
-    columns = [_build_column_row(column, shape.row_count) for column in shape.columns]
+    columns = [build_column_row(column, shape.row_count) for column in shape.columns]
     return FileContents(
         row_count=shape.row_count, column_count=len(shape.columns),
         varying_count=sum(1 for row in columns if row.group == "varying"),
@@ -93,7 +93,7 @@ def _read_contents(project_id: str, file_id: str) -> FileContents:
     )
 
 
-def _build_column_row(column: ColumnShape, rows: int) -> ColumnRow:
+def build_column_row(column: ColumnShape, rows: int) -> ColumnRow:
     return ColumnRow(
         column=column.column, kind=column.kind,
         filled_percent=_share(column.filled_count, rows),

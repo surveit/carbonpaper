@@ -9,7 +9,7 @@
   The bar is drawn against the longest bar in the list and the number beside it is the
   share of every row, so a column where nothing dominates still fills its track.
 
-  Takes `column` (a file_detail_view.ColumnRow) and `file` (the page's view).
+  Takes `column` (a file_detail_view.ColumnRow) and `rows`, the rows it is over.
 #}
 {% set widest = column.facet | map(attribute='count') | max | default(1) %}
 <details class="shape-col{% if column.group == 'empty' %} dim{% endif %}" data-group="{{ column.group }}">
@@ -27,35 +27,12 @@
     </span>
     <span class="shape-distinct">{{ "{:,}".format(column.distinct_count) if column.distinct_count else "—" }}</span>
     <span class="shape-peek">
-      {%- if column.kind.value == 'empty' %}
-      <span class="muted">{{ "null" if column.null_count >= column.blank_count else "an empty string" }} in every row</span>
-      {%- elif column.shape.histogram %}
-      {% set tallest = column.shape.histogram | map(attribute='count') | max %}
-      <span class="spark">{% for bin in column.shape.histogram %}<i style="height: {{ (bin.count * 100 / tallest) | round(2) }}%"></i>{% endfor %}</span>
-      <span class="peek-note">{{ column.shape.numbers.min | round | int }} – {{ column.shape.numbers.max | round | int }} · median {{ column.shape.numbers.median | round | int }}</span>
-      {%- elif column.shape.timeline %}
-      {% set tallest = column.shape.timeline | map(attribute='count') | max %}
-      <span class="spark">{% for day in column.shape.timeline %}<i style="height: {{ (day.count * 100 / tallest) | round(2) }}%"></i>{% endfor %}</span>
-      <span class="peek-note">{{ column.shape.timeline[0].value }} – {{ column.shape.timeline[-1].value }}</span>
-      {%- elif column.shape.lengths %}
-      <span class="peek-note">{{ "{:,}".format(column.shape.lengths.min) }}–{{ "{:,}".format(column.shape.lengths.max) }} characters, median {{ "{:,}".format(column.shape.lengths.median) }}</span>
-      {%- else %}
-      <span class="seg-track">
-        {%- for value in column.shape.top %}<i style="width: {{ value.count * 100 / file.contents.row_count }}%" title="{{ value.value }} — {{ "{:,}".format(value.count) }}"></i>{% endfor %}
-        {%- set absent = column.blank_count + column.null_count %}
-        {%- if absent %}<i class="seg-absent" style="width: {{ absent * 100 / file.contents.row_count }}%" title="no value — {{ "{:,}".format(absent) }} rows"></i>{% endif %}
-      </span>
-      {%- set top_share = column.shape.top[0].count * 100 / file.contents.row_count %}
-      {# A share under a twentieth rounds to nothing and says nothing; the count says it. #}
-      <span class="peek-note">{{ column.shape.top[0].value | truncate(24, true, "…") }} ·
-        {% if column.filled_count == file.contents.row_count and top_share >= 5 %}{{ top_share | round | int }}%
-        {%- else %}{{ "{:,}".format(column.shape.top[0].count) }} rows{% endif %}</span>
-      {%- endif %}
+      {% include "_file_column_peek.html" %}
     </span>
   </summary>
   <div class="shape-facet">
     {% if column.kind.value == 'empty' %}
-    <p class="facet-note">Every one of the {{ "{:,}".format(file.contents.row_count) }} rows carries
+    <p class="facet-note">Every one of the {{ "{:,}".format(rows) }} rows carries
       {{ "null" if column.null_count >= column.blank_count else "an empty string" }} here. A stage
       reading this column reads nothing, whatever the export's header promises.</p>
     {% else %}
@@ -67,13 +44,13 @@
       <div><dt>max</dt><dd>{{ column.shape.numbers.max }}</dd></div>
     </dl>
     {% endif %}
-    {% if column.filled_count < file.contents.row_count and column.shape.top %}
+    {% if column.filled_count < rows and column.shape.top %}
     <div class="facet-scale" role="group" aria-label="What the shares are over">
-      <button type="button" class="on" data-scale="all">of all {{ "{:,}".format(file.contents.row_count) }} rows</button>
+      <button type="button" class="on" data-scale="all">of all {{ "{:,}".format(rows) }} rows</button>
       <button type="button" data-scale="filled">of the {{ "{:,}".format(column.filled_count) }} that carry a value</button>
     </div>
     {% endif %}
-    <table class="facet-values" data-rows="{{ file.contents.row_count }}" data-filled="{{ column.filled_count }}">
+    <table class="facet-values" data-rows="{{ rows }}" data-filled="{{ column.filled_count }}">
       <tbody>
         {% for value in column.facet %}
         <tr class="{{ 'fv-absent' if value.absent }}" data-count="{{ value.count }}">

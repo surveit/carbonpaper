@@ -13,8 +13,10 @@
 {# The header's three pickers; served only, because a folder has no other row to move to. #}
 {% if not offline %}<script src="/static/picker.js" defer></script>{% endif %}
 {% if not offline %}<script src="{{ static_root | default("/static/", true) }}breadcrumbs.js" defer></script>
-{# The packet's Values used pane is an empty state, so the script driving it is dead there. #}
+{# The packet's Relevant columns pane is an empty state, so its script is dead there. #}
 <script src="{{ static_root | default("/static/", true) }}values-used.js"></script>
+{# The Input files pane's own script; the packet's pane is the run list alone. #}
+<script src="{{ static_root | default("/static/", true) }}input-files.js"></script>
 {# Standalone, so it does not inherit base.html's painter. Its observer colours a
    panel swapped in by innerHTML, which is how every transform pane here arrives. #}
 <script src="{{ static_root | default("/static/", true) }}highlight.min.js"></script>
@@ -208,6 +210,9 @@ tr.lin-opens:hover td{background:var(--hover)}
 
 /* Inputs: one card per input stage, in the order the ancestry found them. */
 .lin-inbody{overflow:auto;padding:16px 22px 40px;flex:1}
+/* This pane holds two sections, so it scrolls rather than each of them. */
+.lin-pane[data-pane="inputs"]{overflow:auto}
+.lin-pane[data-pane="inputs"] .lin-inbody{overflow:visible;flex:none}
 .lin-inbody>*{max-width:1080px}
 .incard{border:1px solid var(--border);border-radius:10px;background:var(--raised);
   padding:12px 14px 10px;margin-bottom:14px}
@@ -286,7 +291,7 @@ tr.lin-opens:hover td{background:var(--hover)}
 <div class="lin-pagetabs" id="pagetabs">
   <button class="lin-pagetab on" data-pane="paths">Paths</button>
   <button class="lin-pagetab" data-pane="rows">Relevant rows</button>
-  <button class="lin-pagetab" data-pane="values">Values used</button>
+  <button class="lin-pagetab" data-pane="values">Relevant columns</button>
   <button class="lin-pagetab" data-pane="inputs">Input files</button>
 </div>
 <div class="lin-pane" data-pane="paths">
@@ -353,7 +358,12 @@ tr.lin-opens:hover td{background:var(--hover)}
 {% endif %}
 </div>
 <div class="lin-pane hidden" data-pane="inputs">
+{% if offline or not view.nodes %}
+{# No server to ask what this figure needed, so the pane is the run's own list. #}
 {% include "_lineage_inputs.html" %}
+{% else %}
+<div id="input-files-root"></div>
+{% endif %}
 </div>
 <div class="lin-pane hidden" data-pane="values">
 {% if offline or not view.nodes %}
@@ -706,6 +716,7 @@ function showColumn(column){
   history.replaceState(null, '', lineageHref(COORD.stage_id, COORD.row, COORD.column));
   if(scopeColumn !== null && COORD.column) drawScopeFor(COORD.column);
   if(valuesColumn !== null && COORD.column) walkValuesFor(COORD.column);
+  if(inputFilesColumn !== null && COORD.column) readInputFilesFor(COORD.column);
 }
 // A sentence-long cell at heading size is four words and an ellipsis, so a long one
 // is stepped down to a size that shows more of it.
@@ -743,9 +754,9 @@ document.getElementById('pagetabs').addEventListener('click', e => {
   drawScopeFor(column);
 });
 
-// ---- Values used: where one column came from, walked back over what each ----
-// stage read. The column is the header's, as it is for Relevant rows: this tab
-// holds it and lets go of the row.
+// ---- Relevant columns: where one column came from, over what each stage read.
+// The column is the header's, as it is for Relevant rows: this tab holds it and
+// lets go of the row.
 const valuesRoot = document.getElementById('values-root');
 let valuesColumn = null;
 
@@ -779,6 +790,35 @@ document.getElementById('pagetabs').addEventListener('click', e => {
   if(columnPick.value !== column) chooseColumn(column);
   walkValuesFor(column);
 });
+// ---- Input files: what this figure needed of each file the run read ---------
+const inputFilesRoot = document.getElementById('input-files-root');
+let inputFilesColumn = null;
+
+async function readInputFilesFor(column){
+  inputFilesColumn = column;
+  inputFilesRoot.innerHTML = '<p class="muted">loading…</p>';
+  try {
+    const q = new URLSearchParams({stage: V.start_stage, row: V.start_row, column});
+    const answer = await fetch(`${RUN_BASE}/input-files/panel?${q}`);
+    if(inputFilesColumn !== column) return;
+    inputFilesRoot.innerHTML = answer.ok
+      ? await answer.text()
+      : `<p class="muted">could not read the inputs for ${esc(column)} (${answer.status})</p>`;
+    InputFiles.mount(inputFilesRoot);
+  } catch(failure){
+    inputFilesRoot.innerHTML = `<p class="muted">error: ${esc(failure)}</p>`;
+  }
+}
+document.getElementById('pagetabs').addEventListener('click', e => {
+  const picked = e.target.closest('.lin-pagetab');
+  if(!picked || picked.dataset.pane !== 'inputs' || !inputFilesRoot) return;
+  if(!COORD || !COORD.cells.length) return;
+  const column = COORD.column || COORD.cells[0].column;
+  if(inputFilesColumn === column) return;
+  if(columnPick.value !== column) chooseColumn(column);
+  readInputFilesFor(column);
+});
+
 // A count reads no column, so its panel sends the reader to the rows instead.
 if(valuesRoot) valuesRoot.addEventListener('click', e => {
   if(e.target.closest('.vu-to-rows')){
