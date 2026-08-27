@@ -67,15 +67,18 @@
   <p class="muted">showing the first {{ diff.rows | length }} of {{ "{:,}".format(diff.input_total) }} input rows{% if diff.dropped_beyond_window %} — {{ "{:,}".format(diff.dropped_beyond_window) }} dropped row{% if diff.dropped_beyond_window != 1 %}s{% endif %} fall{% if diff.dropped_beyond_window == 1 %}s{% endif %} beyond them{% endif %}</p>
   {% endif %}
   <div class="table-scroll{% if full_rows %} rows-full{% endif %}"><table class="data-preview">
-    <thead><tr>{% if full_rows %}<th class="row-num">#</th>{% endif %}<th class="syw-col">lineage</th>{% for name in diff.columns %}<th>{{ name }}</th>{% endfor %}</tr></thead>
+    {# The label column is not the lineage column it replaced: a dropped row has no
+       output row to trace, and its tint alone would be colour carrying meaning. #}
+    <thead><tr>{% if full_rows %}<th class="row-num">#</th>{% endif %}<th class="diff-kept-col"></th>
+      {%- for name in diff.columns %}<th{% if links.opens_a_cell() %} data-column="{{ name }}"{% endif %}>{{ name }}</th>{% endfor %}</tr></thead>
     <tbody>
     {% for row in diff.rows %}
     {% set row_num %}{% if full_rows %}<td class="row-num muted">{{ row.input_ordinal | row_number }}</td>{% endif %}{% endset %}
     {% if row.dropped %}
-    <tr class="diff-row-dropped">{{ row_num }}<td class="syw-cell">Dropped row</td>
+    <tr class="diff-row-dropped">{{ row_num }}<td class="diff-kept-col">Dropped row</td>
       {%- for value in row.cells %}{{ data_cell(value, '', '', full_rows) }}{% endfor %}</tr>
     {% else %}
-    <tr>{{ row_num }}<td class="syw-cell">{% set trace_href = links.row_trace(stage.stage_id, row.output_ordinal) %}{% if trace_href %}<a href="{{ trace_href }}" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a>{% endif %}</td>
+    <tr{% set trace_href = links.row_trace(stage.stage_id, row.output_ordinal) %}{% if trace_href %} data-href="{{ trace_href }}"{% endif %}>{{ row_num }}<td class="diff-kept-col"></td>
       {%- for value in row.cells %}{% if value[:4] == 'http' %}<td class="cell-url"><a href="{{ value }}" target="_blank" rel="noopener">{{ value }}</a></td>{% else %}{{ data_cell(value, '', '', full_rows) }}{% endif %}{% endfor %}</tr>
     {% endif %}
     {% endfor %}
@@ -107,13 +110,14 @@
        neighbours a caller drew around them. #}
     {%- set mine = reached_rows | default([], true) %}
     {%- set numbered = full_rows or mine %}
-    <thead><tr>{% if numbered %}<th class="row-num">#</th>{% endif %}<th class="syw-col">lineage</th>
+    <thead><tr>{% if numbered %}<th class="row-num">#</th>{% endif %}
       {%- for column in diff.columns %}
       {%- set jump = writers.get(column.name) %}
       {%- set klasses = [cell_class[column.state] if column.state != 'carried' else '',
                          'diff-col-quiet' if column.name in quiet else '',
                          'diff-col-jump' if jump else ''] | select | join(' ') %}
       <th{% if klasses %} class="{{ klasses }}"{% endif %}
+        {%- if links.opens_a_cell() %} data-column="{{ column.name }}"{% endif %}
         {%- if jump %} data-jump="{{ jump }}" title="written by {{ jump }} — go there"
         {%- elif column.state != 'carried' %} title="{{ column_title[column.state] }}"{% endif %}>
         {%- if column.name == cited_column %}<span class="diff-col-mine">the value</span>{% endif -%}
@@ -125,7 +129,8 @@
     {% for row in diff.rows %}
     {%- set ordinal = diff.row_ordinals[loop.index0] %}
     {%- set traced = ordinal in mine %}
-    <tr{% if traced %} class="diff-row-mine"{% endif %}>{% if numbered %}<td class="row-num {{ 'diff-row-num-mine' if traced else 'muted' }}">{{ ordinal | row_number }}</td>{% endif %}<td class="syw-cell">{% set trace_href = links.row_trace(stage.stage_id, ordinal) %}{% if trace_href %}<a href="{{ trace_href }}" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a>{% endif %}</td>
+    {%- set trace_href = links.row_trace(stage.stage_id, ordinal) %}
+    <tr{% if traced %} class="diff-row-mine"{% endif %}{% if trace_href %} data-href="{{ trace_href }}"{% endif %}>{% if numbered %}<td class="row-num {{ 'diff-row-num-mine' if traced else 'muted' }}">{{ ordinal | row_number }}</td>{% endif %}
       {%- for cell in row %}
       {%- set column = diff.columns[loop.index0] %}
       {%- set klass = [cell_class[cell.state],

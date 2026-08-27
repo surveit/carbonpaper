@@ -21,7 +21,7 @@
 </div>
 
 <div class="rows-toolbar">
-    <span class="muted">Click any clipped cell to expand it (hover shows the full value).</span>
+    <span class="muted">Hover a cell for its whole value; click it for the lineage of that cell.</span>
     {% if diff_shown %}
     {% set shown = diff.rows | length %}
     {# The download these warnings name is the header's, on the output frame
@@ -57,15 +57,15 @@
 {% elif rows %}
 <div class="table-scroll rows-full">
 <table class="data-preview">
-    <thead><tr><th class="row-num">#</th><th class="syw-col">trace</th>{% for c in columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+    <thead><tr><th class="row-num">#</th>{% for c in columns %}<th data-column="{{ c }}">{{ c }}</th>{% endfor %}</tr></thead>
     <tbody>
     {% for row in rows %}
     {# A filtered view (?ordinals=) carries each row's OWN ordinal, so the number
        shown and the row the trace link opens stay the row's, not its position
        in the filtered list. #}
     {% set ordinal = row['_row_ordinal'] if '_row_ordinal' in row else loop.index0 %}
-    <tr><td class="row-num muted">{{ ordinal | row_number }}</td>
-        <td class="syw-cell"><a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage_id }}/row/{{ ordinal }}/trace/view" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a></td>
+    <tr data-href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage_id }}/row/{{ ordinal }}/trace/view">
+        <td class="row-num muted">{{ ordinal | row_number }}</td>
         {% for c in columns %}{% set v = row[c] | string | truncate(4000, True, '… (truncated — download the CSV for the full value)') %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td class="cell-clip" title="{{ v }}">{{ v }}</td>{% endif %}{% endfor %}
     </tr>
     {% endfor %}
