@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.models.workflow import parse_workflow
-from app.web.values_walk import ColumnAt, find_columns_behind
+from app.web.column_walk import ColumnAt, find_columns_behind
 from scope_fixture import stage_specs
 
 # What a `by_portfolio` row came through: the deduped grants and everything above them.

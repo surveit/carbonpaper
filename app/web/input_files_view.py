@@ -26,7 +26,7 @@ from app.services.workspace import resolve_run_dir
 from app.web.file_detail_view import ColumnRow, build_column_row
 from app.web.file_sizes import describe_bytes
 from app.web.scope_view import read_run_branches
-from app.web.values_walk import ColumnAt, find_columns_behind
+from app.web.column_walk import ColumnAt, find_columns_behind
 
 # Rows shown beside the relevant ones when a reader widens the preview to the frame.
 OTHER_ROWS_SHOWN = 40
