@@ -41,6 +41,13 @@ def test_it_opens_with_the_methodology_title_and_first_paragraph(packet):
     assert "Every filing, counted twice." in text
 
 
+def test_a_hard_wrapped_opening_paragraph_is_joined_not_cut_at_the_first_line(packet):
+    _write_document(packet, "# Title\n\nOne sentence\nover two lines.\n\nA second paragraph.\n")
+    text = _readme(packet)
+    assert "One sentence over two lines." in text
+    assert "A second paragraph." not in text
+
+
 def test_a_primary_claim_leads_with_its_value(packet):
     assert "### 42\n" in _readme(packet)
 
@@ -99,6 +106,13 @@ def test_it_states_the_run_the_version_and_the_status(packet):
 
 
 # ── Steps ────────────────────────────────────────────────────────────────────
+
+
+def test_the_widest_branch_leads_when_two_are_free_at_once(packet):
+    # q1 carries 12 rows and the alias lookup carries 1, so q1 is the main line.
+    _write_workflow(packet, [*_WORKFLOW, _stage("aliases", "input_data")])
+    _write_manifest(packet, _manifest(extra=[_record("aliases", 1)]))
+    assert _step_order(_readme(packet))[0] == "q1_export"
 
 
 def test_the_steps_run_one_branch_at_a_time(packet):
@@ -244,7 +258,7 @@ def _record(stage_id, rows, issues=()):
     }
 
 
-def _manifest(issues=(_issue("spend is null in 3 rows"),)):
+def _manifest(issues=(_issue("spend is null in 3 rows"),), extra=()):
     return {
         "project": "proj",
         "run_id": "20260101T000000",
@@ -262,6 +276,7 @@ def _manifest(issues=(_issue("spend is null in 3 rows"),)):
         "stage_records": [
             _record("q1_export", 12),
             _record("totals", 1, issues),
+            *extra,
         ],
     }
 

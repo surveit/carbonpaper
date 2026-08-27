@@ -182,8 +182,21 @@ def _read_steps(
             row_count=row_counts_by_id.get(spec.id),
             parent_ids=[up for up in spec.input_ids if up in declared],
         )
-        for spec in sort_stages_by_branch(specs)
+        for spec in sort_stages_by_branch(_widest_branch_first(specs, row_counts_by_id))
     ]
+
+
+def _widest_branch_first(
+    specs: list[PacketStageSpec], row_counts_by_id: dict[ID, int]
+) -> list[PacketStageSpec]:
+    """Where two branches are free at once, the one carrying more rows is the main line."""
+    return sorted(specs, key=lambda spec: -_count_rows_out(spec, row_counts_by_id))
+
+
+def _count_rows_out(spec: PacketStageSpec, row_counts_by_id: dict[ID, int]) -> int:
+    """A step the manifest holds no record of sorts last; nothing prints this number."""
+    recorded = row_counts_by_id.get(spec.id)
+    return 0 if recorded is None else recorded
 
 
 def _read_flags(run: RunView) -> list[PacketFlag]:
@@ -212,13 +225,17 @@ def _read_document_opening(root: Path, run: RunView) -> tuple[str, str]:
 
 
 def _read_first_paragraph(lines: list[str]) -> str:
+    """A markdown paragraph is hard-wrapped, so it runs to the blank line after it."""
+    paragraph: list[str] = []
     past_heading = False
     for line in lines:
         if line.startswith("#"):
             past_heading = True
         elif past_heading and line.strip():
-            return line.strip()
-    return ""
+            paragraph.append(line.strip())
+        elif paragraph:
+            break
+    return " ".join(paragraph)
 
 
 def _read_json_object(path: Path) -> dict[str, Any]:
