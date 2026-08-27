@@ -10,9 +10,10 @@ warning, and the arch test holding each. `app/templates/AGENTS.md` names the thr
 bite most often.
 
 ## Pages / routes
-- `/` project list · `/project/<m>` the project shell (Overview · Document · Terms ·
-  Workflow · Runs); the Workflow section carries the mermaid graph + inline node review
-  (`/project/<m>/node/<id>/review-partial`).
+- `/` project list · `/project/<m>` the project shell (Overview, the Workflow group
+  holding Files · Versions · Runs · Evals, and a Documentation group holding
+  Methodology · Terms); the Workflow section carries the mermaid graph + inline node
+  review (`/project/<m>/node/<id>/review-partial`).
 - `/project/<m>/runs`, `/runs/<id>` — run history + detail. `/runs/new` is the
   run-launch form (version picker, one path field + row cap per file input, and an
   **Advanced** fold holding the row-level cache checkbox) — the one surface where a run

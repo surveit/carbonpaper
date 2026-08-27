@@ -120,13 +120,22 @@ def test_trigger_run_returns_400_on_invalid_dag(monkeypatch):
 def test_build_nav_groups_workflow_children(demo_project):
     from app.web.project_view import build_nav
 
-    nav = build_nav("demo")
-    assert [item.key for item in nav] == [
-        "overview", "document", "terms", "files", "workflow"]
-    workflow = nav[-1]
-    assert [child.key for child in workflow.children] == ["versions", "runs", "evals"]
-    # The top-level items are leaves (only Workflow groups).
-    assert all(not item.children for item in nav[:-1])
+    overview, workflow, documentation = build_nav("demo")
+    assert overview.key == "overview" and not overview.children
+    assert workflow.key == "workflow"
+    assert [child.key for child in workflow.children] == [
+        "files", "versions", "runs", "evals"]
+    assert documentation.label == "Documentation"
+    assert [child.key for child in documentation.children] == ["methodology", "terms"]
+
+
+def test_a_group_heading_opens_no_page(demo_project):
+    from app.web.project_view import build_nav
+
+    documentation = build_nav("demo")[-1]
+    assert not hasattr(documentation, "href")
+    sidebar = client.get("/project/demo").text
+    assert '<div class="app-nav-group">Documentation</div>' in sidebar
 
 
 def test_the_nav_carries_no_status_marks(demo_project):
@@ -134,7 +143,7 @@ def test_the_nav_carries_no_status_marks(demo_project):
 
     nav = build_nav("demo")
     fields = {name for item in nav for name in item.model_dump()}
-    assert fields == {"key", "label", "href", "children"}
+    assert fields <= {"key", "label", "href", "children"}
     assert "app-nav-glyph" not in client.get("/project/demo").text
 
 
@@ -205,8 +214,11 @@ def test_cmdk_palette_ranks_the_project_being_read_first(demo_project):
     rows = client.get("/cmdk_palette/index", params={"project_id": "demo"}).json()["rows"]
     kinds = [row["kind"] for row in rows]
     assert kinds.index("section") < kinds.index("stage")
-    assert [row["label"] for row in rows if row["kind"] == "section"][:3] == [
-        "Overview", "Document", "Terms"]
+    sections = [row["label"] for row in rows if row["kind"] == "section"]
+    assert sections[:3] == ["Overview", "Workflow", "Files"]
+    # The Documentation heading opens no page, so the palette cannot offer it.
+    assert "Documentation" not in sections
+    assert {"Methodology", "Terms"} <= set(sections)
     assert [row["label"] for row in rows if row["kind"] == "stage"] == ["load", "extract"]
 
 

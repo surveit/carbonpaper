@@ -20,7 +20,16 @@ class NavItem(BaseModel):
     children: list["NavItem"] = Field(default_factory=list)
 
 
+class NavGroup(BaseModel):
+    """A heading over its items, naming no page of its own."""
+
+    label: str
+    children: list[NavItem]
+
+
 NavItem.model_rebuild()
+
+NavBlock = NavItem | NavGroup
 
 
 class NextAction(BaseModel):
@@ -30,7 +39,7 @@ class NextAction(BaseModel):
 
 
 class ShellState(project.ProjectState):
-    nav: list[NavItem]
+    nav: list[NavBlock]
     crumbs: list[Crumb]
     next_action: NextAction
 
@@ -54,31 +63,29 @@ def shell_state(project_id: str, section: str) -> ShellState:
     )
 
 
-def build_shell_crumbs(nav: list[NavItem], section: str, project_id: str) -> list[Crumb]:
-    for item in nav:
-        if item.key == section:
-            return build_section_crumbs(project_id, label=item.label)
-        for child in item.children:
-            if child.key == section:
-                return build_section_crumbs(
-                    project_id, label=child.label, parent=(item.label, item.href)
-                )
+def build_shell_crumbs(nav: list[NavBlock], section: str, project_id: str) -> list[Crumb]:
+    for block in nav:
+        crumbs = _find_section_crumbs(block, section, project_id)
+        if crumbs is not None:
+            return crumbs
     raise ValueError(f"no nav item for section '{section}' — the trail would be unlabelled")
 
 
-def build_nav(project_id: str) -> list[NavItem]:
+def build_nav(project_id: str) -> list[NavBlock]:
     base = f"/project/{project_id}"
     return [
         _nav_leaf("overview", "Overview", base),
-        _nav_leaf("document", "Document", f"{base}/document"),
-        _nav_leaf("terms", "Terms", f"{base}/terms"),
-        _nav_leaf("files", "Files", f"{base}/files"),
         _nav_leaf("workflow", "Workflow", f"{base}/workflow",
                   children=[
+                      _nav_leaf("files", "Files", f"{base}/files"),
                       _nav_leaf("versions", "Versions", f"{base}/workflow/versions"),
                       _nav_leaf("runs", "Runs", f"{base}/runs"),
                       _nav_leaf("evals", "Evals", f"{base}/evals"),
                   ]),
+        NavGroup(label="Documentation", children=[
+            _nav_leaf("methodology", "Methodology", f"{base}/methodology"),
+            _nav_leaf("terms", "Terms", f"{base}/terms"),
+        ]),
     ]
 
 
@@ -132,3 +139,16 @@ def _next_action(state: project.ProjectState) -> NextAction:
 def _nav_leaf(key: str, label: str, href: str,
               children: list[NavItem] | None = None) -> NavItem:
     return NavItem(key=key, label=label, href=href, children=children or [])
+
+
+def _find_section_crumbs(block: NavBlock, section: str, project_id: str) -> list[Crumb] | None:
+    # A group opens no page, so its children hang straight off the project rung.
+    parent: tuple[str, str] | None = None
+    if isinstance(block, NavItem):
+        if block.key == section:
+            return build_section_crumbs(project_id, label=block.label)
+        parent = (block.label, block.href)
+    for child in block.children:
+        if child.key == section:
+            return build_section_crumbs(project_id, label=child.label, parent=parent)
+    return None

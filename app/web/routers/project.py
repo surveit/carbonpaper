@@ -141,10 +141,10 @@ async def generate_project(project_name: str):
 
 # ─── Unified PROJECT sections ────────────────────────────────────────────────
 # One project (examples/<name>/) is framed by a left-sidebar shell (project_shell)
-# with five sections — Overview / Document / Terms / Workflow / Runs. Each
-# section route passes the SAME status snapshot (project_view.shell_state) plus its
-# section name and the section-specific extras the matching section_*.html needs. The
-# shell reads ONLY from `state`.
+# with Overview, the Workflow group, and the Documentation group. Each section route
+# passes the SAME status snapshot (project_view.shell_state) plus its section name and
+# the section-specific extras the matching section_*.html needs. The shell reads ONLY
+# from `state`.
 
 
 @router.get("/project/{project_name}", response_class=HTMLResponse)
@@ -157,15 +157,15 @@ async def project_overview(request: Request, project_name: str):
     )
 
 
-@router.get("/project/{project_name}/document", response_class=HTMLResponse)
-async def project_document(request: Request, project_name: str):
+@router.get("/project/{project_name}/methodology", response_class=HTMLResponse)
+async def project_methodology(request: Request, project_name: str):
     validate_project_or_404(project_name)
-    state = shell_state(project_name, "document")
+    state = shell_state(project_name, "methodology")
     document = methodology.read_methodology(project_name) or ""
     return templates.TemplateResponse(
         request,
-        "section_document.html",
-        {"state": state, "section": "document", "document": document},
+        "section_methodology.html",
+        {"state": state, "section": "methodology", "methodology": document},
     )
 
 

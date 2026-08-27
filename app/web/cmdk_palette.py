@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from app.services.loader import list_parsed_stages
 from app.services.project import ProjectListing, list_project_listings, project_exists
 from app.web.loading import load_stages_or_empty
-from app.web.project_view import NavItem, build_nav
+from app.web.project_view import NavBlock, NavItem, build_nav
 from app.web.run_index import RunIndexRow, build_run_index_rows, describe_run_outcome
 from app.web.stage_strip import describe_stage_status
 
@@ -69,7 +69,7 @@ def _build_rows_inside(here: str, current_run: str) -> list[CmdkPaletteRow]:
 def _build_section_rows(project_id: str) -> list[CmdkPaletteRow]:
     return [
         CmdkPaletteRow(kind=CmdkPaletteKind.SECTION, label=item.label, href=item.href)
-        for item in _flatten_nav(build_nav(project_id))
+        for item in _find_nav_pages(build_nav(project_id))
     ]
 
 
@@ -134,5 +134,7 @@ def _describe_row(project_id: str, here: str, detail: str) -> str:
     return f"{project_id} · {detail}" if detail else project_id
 
 
-def _flatten_nav(nav: list[NavItem]) -> list[NavItem]:
-    return [item for parent in nav for item in (parent, *parent.children)]
+def _find_nav_pages(nav: list[NavBlock]) -> list[NavItem]:
+    # A group heading opens no page, so it is nowhere the palette can jump to.
+    return [item for block in nav for item in (block, *block.children)
+            if isinstance(item, NavItem)]

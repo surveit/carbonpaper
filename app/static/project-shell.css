@@ -119,6 +119,32 @@
 
 .app-nav-item.trail:not(.current) .app-nav-label { font-weight: 600; }
 
+/* Documentation group: a heading naming no page, so its items sit flush with the
+   top-level ones rather than indented off a parent that opens. */
+.app-nav-group {
+    margin: 14px 0 2px;
+    padding: 0 10px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    font-weight: 700;
+    color: var(--muted);
+}
+
+.app-nav-group.trail { color: var(--accent); }
+
+.app-nav-children.under-group {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: none;
+}
+
+.app-nav-children.under-group .app-nav-item.child {
+    padding-top: 8px;
+    padding-bottom: 8px;
+    font-size: 14px;
+}
+
 .app-nav-label { min-width: 0; }
 
 .app-side-agent { margin-top: 10px; }
