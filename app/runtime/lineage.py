@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Iterable, Sequence
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, Sequence, overload
 
 import numpy as np
 import pandas as pd
@@ -59,9 +59,12 @@ class RowParent:
 class RowLineage:
     """Entry i is the list of parents of output row i, spine first, in output order."""
 
-    parents: list[list[RowParent]] = field(default_factory=list)
+    parents: Sequence[list[RowParent]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
+        # Walking a decoded sidecar here would undo what `from_table` avoids.
+        if isinstance(self.parents, _SidecarParents):
+            return
         for entry in self.parents:
             if not isinstance(entry, list):
                 raise ValueError("row lineage needs a list of parents per output row")
@@ -102,19 +105,67 @@ class RowLineage:
     @classmethod
     def from_table(cls, table: pa.Table) -> "RowLineage":
         """The absent columns are pre-multi-parent sidecars; old runs stay readable unmigrated."""
-        stage_cells = _column_cells(table, TRACE_SOURCE_STAGE_KEY)  # once, not per row:
-        # reading a column inside the loop re-boxes the whole column every time,
-        # which on a 45k-row sidecar costs seconds.
-        row_cells = _column_cells(table, TRACE_SOURCE_ROW_KEY)
-        kind_cells = _column_cells(table, TRACE_EDGE_KIND_KEY)
-        column_cells = _column_cells(table, TRACE_SOURCE_COLUMNS_KEY)
-        file_cells = _column_cells(table, TRACE_SOURCE_FILE_KEY)
-        sha_cells = _column_cells(table, TRACE_SOURCE_SHA_KEY)
-        return cls([
-            _read_parents(stage_cells[i], row_cells[i], kind_cells[i], column_cells[i],
-                          file_cells[i], sha_cells[i])
-            for i in range(table.num_rows)
-        ])
+        return cls(_SidecarParents(table))
+
+
+class _SidecarParents(Sequence[list[RowParent]]):
+    """A trace reads one row per stage; branch analysis reads every row of one."""
+
+    _KEYS = (TRACE_SOURCE_STAGE_KEY, TRACE_SOURCE_ROW_KEY, TRACE_EDGE_KIND_KEY,
+             TRACE_SOURCE_COLUMNS_KEY, TRACE_SOURCE_FILE_KEY, TRACE_SOURCE_SHA_KEY)
+
+    def __init__(self, table: pa.Table) -> None:
+        self._table = table
+        self._one_at_a_time: dict[int, list[RowParent]] = {}
+        self._every_row: list[list[RowParent]] | None = None
+
+    def __len__(self) -> int:
+        return self._table.num_rows
+
+    @overload
+    def __getitem__(self, index: int) -> list[RowParent]: ...
+    @overload
+    def __getitem__(self, index: slice) -> list[list[RowParent]]: ...
+
+    def __getitem__(self, index: int | slice) -> Any:
+        if isinstance(index, slice):
+            return self._read_every_row()[index]
+        if self._every_row is not None:
+            return self._every_row[index]
+        if index < 0:
+            index += len(self)
+        if not 0 <= index < len(self):
+            raise IndexError(index)
+        if index not in self._one_at_a_time:
+            self._one_at_a_time[index] = _read_parents(*self._cells_of_row(index))
+        return self._one_at_a_time[index]
+
+    def __iter__(self) -> Iterator[list[RowParent]]:
+        return iter(self._read_every_row())
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, _SidecarParents):
+            return self._read_every_row() == other._read_every_row()
+        if isinstance(other, Sequence):
+            return self._read_every_row() == list(other)
+        return NotImplemented
+
+    __hash__ = None  # type: ignore[assignment]
+
+    def _cells_of_row(self, index: int) -> list[Any]:
+        return [self._table.column(key)[index].as_py()
+                if key in self._table.column_names else None
+                for key in self._KEYS]
+
+    def _read_every_row(self) -> list[list[RowParent]]:
+        # Boxing each column once beats indexing it per row on a whole-sidecar read.
+        if self._every_row is None:
+            stages, rows, kinds, columns, files, shas = (
+                _column_cells(self._table, key) for key in self._KEYS)
+            self._every_row = [
+                _read_parents(stages[i], rows[i], kinds[i], columns[i], files[i], shas[i])
+                for i in range(len(self))]
+        return self._every_row
 
 
 def _read_parents(stages: Any, rows: Any, kinds: Any, columns: Any,
