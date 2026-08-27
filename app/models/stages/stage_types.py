@@ -15,7 +15,7 @@ from app.models.stages.input_data import STAGE_TYPE_SPECS as _INPUT_DATA
 from app.models.stages.join import STAGE_TYPE_SPECS as _JOIN
 from app.models.stages.llm_transform import STAGE_TYPE_SPECS as _LLM_TRANSFORM
 from app.models.stages.stage_type_spec import StageTypeSpec
-from app.models.stages.publish import STAGE_TYPE_SPECS as _PUBLISH
+from app.models.stages.report import STAGE_TYPE_SPECS as _REPORT
 from app.models.stages.sort_rank import STAGE_TYPE_SPECS as _SORT_RANK
 from app.models.stages.starlark import STAGE_TYPE_SPECS as _STARLARK
 from app.models.stages.starlark_filter import STAGE_TYPE_SPECS as _STARLARK_FILTER
@@ -30,7 +30,7 @@ STAGE_TYPES: dict[str, StageTypeSpec] = {
     **_JOIN,
     **_AGGREGATE,
     **_HUMAN_REVIEW_QUEUE,
-    **_PUBLISH,
+    **_REPORT,
     **_UNION,
     **_FILTER_ROWS,
     **_STARLARK,
@@ -62,7 +62,7 @@ AUTHORABLE_TYPES: dict[str, StageTypeSpec] = {
 # The types whose config carries authored code all owe a plain-language `summary`
 # and `corner_cases`, refused on write by app.services.stage_edit; their specs carry
 # the contract notes, pinned by tests/test_stage_type_notes.py.
-CODE_CARRYING_TYPES = ("python_row_function", "python_frame_function", "publish",
+CODE_CARRYING_TYPES = ("python_row_function", "python_frame_function", "report",
                        "filter_rows", "starlark_row_function", "starlark_filter_rows")
 
 # The subset a prompt states the code-description rule for: a withheld type's rule

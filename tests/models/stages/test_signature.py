@@ -436,13 +436,13 @@ def test_review_queue_add_outside_the_review_columns_rejected():
     assert "adds `hunch`, which the review runtime never writes" in _workflow_issues(spec)
 
 
-def test_publish_signature_must_produce_nothing():
+def test_report_signature_must_produce_nothing():
     spec = {
         "id": "report",
         "description": "Report",
-        "type": "publish",
+        "type": "report",
         "inputs": [{"id": "bills"}],
-        "publish": {"format": "csv"},
+        "report": {"format": "csv"},
         "function": {"kind": "inline", "code": "def transform(df, output_dir, citation_provider):\n    return df"},
         "signature": {
             "form": "replaces",
@@ -451,7 +451,7 @@ def test_publish_signature_must_produce_nothing():
         },
     }
     msg = _issues(spec)
-    assert "publish emits files, not a table" in msg
+    assert "report emits files, not a table" in msg
 
 
 # ── the schemas a stage's TESTS are stated in ────────────────────────────────

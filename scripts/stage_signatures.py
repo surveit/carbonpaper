@@ -24,7 +24,9 @@ _EXTENDS_TYPES = frozenset({
     "filter_rows", "human_review_queue", "enrich", "expand",
 })
 _REPLACES_TYPES = frozenset({
-    "python_frame_function", "aggregate", "union", "input_data", "publish",
+    "python_frame_function", "aggregate", "union", "input_data",
+    # Both spellings: 0006 reads what the store held, and 0017 renamed publish to report.
+    "publish", "report",
 })
 # The two types whose model REFUSES an empty read set, so a spec carrying one
 # does not load at all (app.models.stages.{filter_rows,human_review_queue}).
@@ -223,7 +225,7 @@ def _synthesize_replaces(spec: dict[str, Any], stage_type: str) -> dict[str, Any
     """A reshaping type: the outer IS `produces`; only the read set varies."""
     edges = _edges(spec)
     produces = _columns(spec.get("output_schema"))
-    if stage_type == StageType.publish:
+    if stage_type == StageType.report:
         return {"form": "replaces", "reads": _all_edge_reads(edges)}
     if stage_type in (StageType.union, StageType.input_data):
         # A union consumes no column; input_data has no input to read from.

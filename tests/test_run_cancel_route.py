@@ -92,7 +92,7 @@ def test_run_status_counts_include_a_cancelled_stage(examples_dir, client):
     _write_status_manifest(examples_dir, [
         ("load", "ok"),
         ("score", "cancelled"),
-        ("publish", "pending"),
+        ("report", "pending"),
     ])
 
     resp = client.get(f"/project/{PROJ}/runs/{RUN}/status")
@@ -134,7 +134,7 @@ def test_run_detail_page_offers_resume_for_a_cancelled_run(examples_dir, client)
     _write_status_manifest(examples_dir, [
         ("load", "ok"),
         ("score", "cancelled"),
-        ("publish", "pending"),
+        ("report", "pending"),
     ])
 
     page = client.get(f"/project/{PROJ}/runs/{RUN}")

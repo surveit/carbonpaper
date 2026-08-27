@@ -22,7 +22,7 @@ class ContributorNotInFanIn(ValueError):
 
 
 class CitationMismatch(ValueError):
-    """A publish stage cited a cell for a value that cell does not hold."""
+    """A report stage cited a cell for a value that cell does not hold."""
 
 
 class ColumnNotInFrame(ValueError):

@@ -156,8 +156,8 @@ def test_the_sandboxed_filter_is_the_offered_one():
     assert "filter_rows" not in AUTHORABLE_TYPES
 
 
-def test_publish_is_now_the_only_unsandboxed_type_still_offered():
+def test_report_is_now_the_only_unsandboxed_type_still_offered():
     """The burn-down's last step, pinned so finishing it shows up here."""
     from app.models.stages.stage_types import AUTHORABLE_CODE_CARRYING_TYPES
     unsandboxed = [t for t in AUTHORABLE_CODE_CARRYING_TYPES if not t.startswith("starlark_")]
-    assert unsandboxed == ["publish"]
+    assert unsandboxed == ["report"]

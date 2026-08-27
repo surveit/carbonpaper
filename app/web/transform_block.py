@@ -21,8 +21,8 @@ def name_transform_block(stage: AbstractStage) -> str:
             return "aggregate"
         case StageType.human_review_queue:
             return "queue"
-        case StageType.publish:
-            return "publish"
+        case StageType.report:
+            return "report"
         case StageType.dedupe:
             return "dedupe"
         case StageType.explode:

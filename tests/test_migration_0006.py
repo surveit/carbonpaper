@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from app.models import parse_stage, parse_workflow
-from conftest import drop_input_schemas, source_stage
+from conftest import drop_input_schemas, apply_0017_rename, source_stage
 from scripts.stage_signatures import SignatureUndeterminable, add_signature
 
 _EDGE = {"columns": [{"name": "id", "type": "str", "nullable": True},
@@ -105,15 +105,16 @@ def test_an_aggregate_reads_only_what_its_config_consumes():
     assert {c.name for e in stage.signature.reads for c in e.columns} == {"g", "x"}
 
 
-def test_a_publish_stage_produces_nothing():
+def test_a_report_stage_produces_nothing():
     spec = {
         "id": "pub", "description": "Pub", "type": "publish",
         "inputs": [{"id": "src", "schema": _EDGE}], "publish": {"format": "csv"},
         "function": {"kind": "inline", "summary": "s", "corner_cases": [],
                      "code": "def transform(df, output_dir):\n    return df"},
     }
-    stage = _migrated(spec)
-    assert stage.signature.produces == [] and _outputs(spec) == []
+    migrated = apply_0017_rename(spec)
+    add_signature(migrated)
+    assert parse_stage(drop_input_schemas(migrated)).signature.produces == []
 
 
 def test_the_synthesis_is_idempotent():

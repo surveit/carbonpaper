@@ -1,8 +1,4 @@
-"""A workflow test now carries project scope (RunContext.for_non_production_run
-with a project/run_id),
-so a publish stage that declares `citation_provider` must run successfully in one —
-previously TraceLinksUnavailableError, since a workflow test had no
-`ctx.identity`. The URL it builds must resolve to the run's own trace route."""
+"""A workflow test carries project scope, so a report may cite inside one."""
 from __future__ import annotations
 
 import json
@@ -24,11 +20,9 @@ _LOAD = {
     "signature": {"form": "replaces", "produces": _LOAD_SCHEMA["columns"]},
 }
 
-# The publish function's own `def transform(df, output_dir, citation_provider=None)`
-# signature is what makes handle_publish resolve a CitationProvider for it
-# (app.runtime.stages.publish._accepts_citation_provider).
+# The `citation_provider=None` kwarg is what makes handle_report resolve one.
 _PUBLISH = {
-    "id": "publish_report", "type": "publish", "description": "Publish",
+    "id": "publish_report", "type": "report", "description": "Publish",
     "inputs": [{"id": "load"}],
     "signature": {"form": "replaces"},
     "function": {"kind": "inline", "code":
@@ -39,7 +33,7 @@ _PUBLISH = {
                  "    with open(os.path.join(output_dir, 'urls.json'), 'w') as f:\n"
                  "        json.dump(urls, f)\n"
                  "    return df"},
-    "publish": {"format": "json"},
+    "report": {"format": "json"},
 }
 
 
@@ -60,7 +54,7 @@ def demo(tmp_path, monkeypatch):
     return demo
 
 
-def test_publish_stage_citations_work_in_a_workflow_test(demo):
+def test_report_stage_citations_work_in_a_workflow_test(demo):
     result = run_workflow_test("demo")
     assert result["ok"] is True, result["error"]
     assert result["stages_run"] == ["publish_report"]

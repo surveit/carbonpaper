@@ -173,12 +173,11 @@ LINEAGE_DIR = "lineage"
 class StageTraces(BaseModel):
     stage_id: str
     rows: list[int]
-    # Rows the publish stage linked, against rows reached because a linked row's
-    # trace named them. Only the first mean the publish stage reads this step.
+    # Rows the report linked directly; the rest were reached through a trace.
     published: int
     hrefs: list[str]
 
-    def is_publish_input(self) -> bool:
+    def is_report_input(self) -> bool:
         return self.published > 0
 
 
@@ -191,7 +190,7 @@ class LineageReport(BaseModel):
 
 
 class PublishedFigure(BaseModel):
-    """A figure the artifact printed, as the publish stage named it."""
+    """A figure the artifact printed, as the report stage named it."""
 
     label: str
     value: str | None

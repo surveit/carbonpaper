@@ -21,8 +21,7 @@ from app.models.records.review_guide import ReviewGuide
 from app.models.records.workflow_version import WorkflowVersion
 from stage_seed import add_stage
 
-# Every non-publish stage's signature must say what it outputs
-# (app/models/stages/stage_base.py: AbstractStage._schemas_declared).
+# AbstractStage._schemas_declared wants every non-report stage to say what it outputs.
 _ROWS_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": False}]}
 
 _LOAD_STAGE = {
@@ -445,12 +444,9 @@ def test_save_version_guide_reports_every_offending_id_at_once(tmp_path):
     assert "ghost" in message and "tally" in message and "load" in message
 
 
-# ── `unnarrated` may not hide a stage the published files carry ──────────────
-# The escape hatch a guide author reaches for when a stage will not fit a section.
-# A stage feeding publish is one a reader may have to check to trust a published
-# figure, so it must be narrated; a stage reaching no publish stage still may not be.
+# ── `unnarrated` may hide only a stage no report stage reads ────────────────
 
-def _published_version(project_dir: Path, publish_reads: str) -> str:
+def _published_version(project_dir: Path, report_reads: str) -> str:
     stages: list[dict] = [
         _LOAD_STAGE,
         {"id": "mid", "description": "Middle", "type": "python_frame_function",
@@ -461,9 +457,9 @@ def _published_version(project_dir: Path, publish_reads: str) -> str:
          "inputs": [{"id": "mid"}],
          "function": {"kind": "inline", "code": "def transform(df): return df"},
          "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]}},
-        {"id": "pub", "description": "Publish", "type": "publish",
-         "inputs": [{"id": publish_reads}],
-         "publish": {"format": "csv"},
+        {"id": "pub", "description": "Publish", "type": "report",
+         "inputs": [{"id": report_reads}],
+         "report": {"format": "csv"},
          "function": {"kind": "inline",
                       "code": "def transform(df, output_dir, citation_provider): return df"},
          "signature": {"form": "replaces"}},
@@ -472,8 +468,8 @@ def _published_version(project_dir: Path, publish_reads: str) -> str:
     ).version_id
 
 
-def test_save_version_guide_refuses_an_unnarrated_stage_that_feeds_publish(tmp_path):
-    vid = _published_version(tmp_path, publish_reads="mid")
+def test_save_version_guide_refuses_an_unnarrated_stage_that_feeds_report(tmp_path):
+    vid = _published_version(tmp_path, report_reads="mid")
     guide = _guide(tmp_path, vid, ["load", "checked", "pub"], ["mid"])
 
     with pytest.raises(ReviewGuideValidationError, match="mid"):
@@ -482,7 +478,7 @@ def test_save_version_guide_refuses_an_unnarrated_stage_that_feeds_publish(tmp_p
 
 
 def test_the_refusal_reaches_through_intermediate_stages(tmp_path):
-    vid = _published_version(tmp_path, publish_reads="mid")
+    vid = _published_version(tmp_path, report_reads="mid")
     guide = _guide(tmp_path, vid, ["mid", "checked", "pub"], ["load"])
 
     with pytest.raises(ReviewGuideValidationError) as exc:
@@ -490,8 +486,8 @@ def test_the_refusal_reaches_through_intermediate_stages(tmp_path):
     assert "'load'" in str(exc.value)
 
 
-def test_a_publish_stage_may_be_unnarrated_because_it_narrates_itself(tmp_path):
-    vid = _published_version(tmp_path, publish_reads="mid")
+def test_a_report_stage_may_be_unnarrated_because_it_narrates_itself(tmp_path):
+    vid = _published_version(tmp_path, report_reads="mid")
     guide = _guide(tmp_path, vid, ["load", "mid", "checked"], ["pub"])
 
     saved = save_version_guide(tmp_path.name, vid, guide)
@@ -499,16 +495,16 @@ def test_a_publish_stage_may_be_unnarrated_because_it_narrates_itself(tmp_path):
     assert saved.unnarrated == ["pub"]
 
 
-def test_the_stage_feeding_publish_is_refused_where_publish_itself_is_allowed(tmp_path):
-    vid = _published_version(tmp_path, publish_reads="mid")
+def test_the_stage_feeding_the_report_is_refused_where_the_report_itself_is_allowed(tmp_path):
+    vid = _published_version(tmp_path, report_reads="mid")
 
     save_version_guide(tmp_path.name, vid, _guide(tmp_path, vid, ["load", "mid", "checked"], ["pub"]))
     with pytest.raises(ReviewGuideValidationError, match="mid"):
         save_version_guide(tmp_path.name, vid, _guide(tmp_path, vid, ["load", "checked", "pub"], ["mid"]))
 
 
-def test_a_stage_reaching_no_publish_stage_may_still_be_unnarrated(tmp_path):
-    vid = _published_version(tmp_path, publish_reads="mid")
+def test_a_stage_reaching_no_report_stage_may_still_be_unnarrated(tmp_path):
+    vid = _published_version(tmp_path, report_reads="mid")
     guide = _guide(tmp_path, vid, ["load", "mid", "pub"], ["checked"])
 
     saved = save_version_guide(tmp_path.name, vid, guide)
@@ -518,14 +514,14 @@ def test_a_stage_reaching_no_publish_stage_may_still_be_unnarrated(tmp_path):
 
 
 def test_the_refusal_names_every_hidden_stage_and_says_why(tmp_path):
-    vid = _published_version(tmp_path, publish_reads="mid")
+    vid = _published_version(tmp_path, report_reads="mid")
     guide = _guide(tmp_path, vid, ["checked", "pub"], ["load", "mid"])
 
     with pytest.raises(ReviewGuideValidationError) as exc:
         save_version_guide(tmp_path.name, vid, guide)
     message = str(exc.value)
     assert "'load'" in message and "'mid'" in message
-    assert "reaches a publish stage" in message and "Narrate each in a section" in message
+    assert "reaches a report stage" in message and "Narrate each in a section" in message
 
 
 # ── the data sentence: required to WRITE a guide, optional in the store ──────

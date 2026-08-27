@@ -18,7 +18,7 @@ from app.models.stages.code import (
     PythonFrameFunctionStage,
     PythonRowFunctionStage,
 )
-from app.models.stages.publish import PublishStage
+from app.models.stages.report import ReportStage
 
 from ..branches import BranchRecorder
 from ..code import load_function
@@ -28,7 +28,7 @@ from .execution import RecordingRowMapper, Row, RowMapper, narrow_stage
 
 
 # The three types whose behaviour is a `function` block.
-CodeCarryingStage = PythonRowFunctionStage | PythonFrameFunctionStage | PublishStage
+CodeCarryingStage = PythonRowFunctionStage | PythonFrameFunctionStage | ReportStage
 
 
 def _load_python_function(

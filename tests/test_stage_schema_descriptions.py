@@ -44,7 +44,7 @@ def test_function_code_documents_the_three_signatures():
     d = _desc(PythonFunction, "code")
     assert "def transform(row" in d.replace("`", "")   # python_row_function
     assert "frame" in d                                 # python_frame_function
-    assert "output_dir" in d                            # publish
+    assert "output_dir" in d                            # report
 
 
 def test_column_type_documents_json_and_list_forms():

@@ -50,7 +50,7 @@ is driven and a `refuse(...)` call is translated to `StepRefused`); `enrich`/`ex
 non-unique reference, `expand` allows m:n fan-out); `aggregate`;
 `llm_transform` (row-mapped, bounded parallelism);
 `human_review_queue` (row fingerprint → cached decision or halt);
-`publish` (a `function` module that writes artifacts).
+`report` (a `function` module that writes artifacts).
 
 **A row-mapped stage sees only what its signature `reads`.**
 
@@ -119,7 +119,7 @@ stays the source of truth for stage status; this log is only ever the drill-down
 
 `validation.py` — DATA validation of a dataframe against a stage's resolved output
 schema (columns, types, enum vocabularies, ranges, nullability), distinct from the
-stage schemas in `app/models/`. `publish` is the one type that resolves none, and
+stage schemas in `app/models/`. `report` is the one type that resolves none, and
 the report says so rather than checking nothing silently. An error-severity issue in the OUTPUT report (missing column, failed coercion,
 value outside a declared enum, null in a non-nullable column) fails the
 stage: the record is `error` with an `OutputSchemaViolation` and downstream stages are blocked.

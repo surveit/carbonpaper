@@ -46,7 +46,7 @@ def _cta(manifest: dict):
 
 def test_a_running_run_offers_cancel_and_names_the_stage_it_is_on():
     cta = _cta(_manifest("running", [("load", "ok"), ("score", "running"),
-                                     ("publish", "pending")]))
+                                     ("report", "pending")]))
 
     assert cta.primary is not None
     assert cta.primary.label == "✕ Cancel run"
@@ -77,7 +77,7 @@ def test_the_aside_counts_every_stage_the_decision_releases():
     manifest = _manifest(
         "awaiting_review",
         [("load", "ok"), ("review", "awaiting_review"), ("score", "pending"),
-         ("publish", "pending")],
+         ("report", "pending")],
         halted_at=["review"],
     )
 
@@ -87,7 +87,7 @@ def test_the_aside_counts_every_stage_the_decision_releases():
 def test_a_failed_run_offers_a_re_run_that_keeps_the_completed_stages():
     cta = _cta(_manifest("errors", [("load", "ok"), ("tag", "validation_warnings"),
                                     ("score", "error"), ("rank", "error"),
-                                    ("publish", "pending")]))
+                                    ("report", "pending")]))
 
     assert cta.primary is not None
     assert cta.primary.label == "↻ Re-run 2 failed stages →"
@@ -99,7 +99,7 @@ def test_a_failed_run_offers_a_re_run_that_keeps_the_completed_stages():
 
 def test_a_cancelled_run_offers_resume_not_a_re_run_of_failures():
     cta = _cta(_manifest("cancelled", [("load", "ok"), ("score", "cancelled"),
-                                       ("publish", "pending")]))
+                                       ("report", "pending")]))
 
     assert cta.primary is not None
     assert cta.primary.label == "↻ Resume cancelled run →"
@@ -108,7 +108,7 @@ def test_a_cancelled_run_offers_resume_not_a_re_run_of_failures():
 
 
 def test_a_completed_run_asks_for_nothing():
-    cta = _cta(_manifest("ok", [("load", "ok"), ("publish", "ok")]))
+    cta = _cta(_manifest("ok", [("load", "ok"), ("report", "ok")]))
 
     # Its outputs are not an action: the run page lists them off header.artifacts, so
     # a long filename can no longer size a primary button.

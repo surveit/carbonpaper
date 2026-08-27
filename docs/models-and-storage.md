@@ -153,6 +153,25 @@ today's models write, and a model change moves the fixture with it. After
 `upgrade head` every document must be byte-identical, `schema_version` included, the
 uploaded bytes must be where they were, and `alembic_version` must read head.
 
+## `STAGE_SPEC_SCHEMA_VERSION`
+
+`app/models/stage.py` holds one counter for the shape of a stored stage spec: what a
+record embedding stages stamps into its `schema_version` column, and what an alembic
+revision rewrites a payload up to. `WorkflowVersion`, `WorkingCopy` and `Draft` all
+declare it as their `SCHEMA_VERSION`.
+
+| v | what moved | revision |
+|---|---|---|
+| 2 | `primary_key` left the stage vocabulary; the data model keeps its own | `0002` |
+| 3 | `name` became `description` — a stage has one name, its id | `0008` |
+| 4 | an input's stored schema left; the graph resolves it (`app.models.workflow`) | `0011` |
+| 5 | a report stage stopped storing `template`; the markup lives in `function.code` | `0012` |
+| 6 | a union's signature became `extends`, which declares nothing | `0014` |
+| 7 | the `publish` type, and its config block, became `report` | `0017` |
+
+The counter sat at 4 while `0012` stamped 5 and `0014` stamped 6, so a migrated row and
+a freshly written one disagreed. It is one counter from 7 on.
+
 The alternative considered and rejected was stamping a newly created store at head so
 the replay never happens. Alembic already writes `alembic_version` after its own
 upgrade, so the stamp was only ever missing for a store born outside alembic — and

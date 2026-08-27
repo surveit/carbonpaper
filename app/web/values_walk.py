@@ -134,7 +134,7 @@ def order_sheet_columns(walk: ColumnWalk) -> list[str]:
 
 
 def list_written_columns(stage: AbstractStage) -> set[str]:
-    # Never a publish stage, whose empty table the schema call asserts against.
+    # Never a report stage, whose empty table the schema call asserts against.
     return {column.name for column in transform_output_schema(stage).columns}
 
 

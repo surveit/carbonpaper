@@ -31,10 +31,6 @@ NAMED_SCHEMA_DESCRIPTION = (
     "with foreign keys on its columns."
 )
 
-PUBLISH_CONFIG_DESCRIPTION = (
-    "The code a publish stage RUNS lives in its `function` block, not here."
-)
-
 PYTHON_FRAME_FUNCTION_STAGE_TEST_DESCRIPTION = (
     "Any rows in → any rows out, or a refusal: a frame function may reshape freely."
 )
@@ -49,6 +45,10 @@ PYTHON_ROW_FUNCTION_STAGE_TEST_DESCRIPTION = "One row in → that one row out, o
 REPLACES_SIGNATURE_DESCRIPTION = (
     "The contract of a reshaping stage: nothing flows through, the output is\n"
     "exactly `produces`."
+)
+
+REPORT_CONFIG_DESCRIPTION = (
+    "The code a report stage RUNS lives in its `function` block, not here."
 )
 
 REVIEW_GUIDE_DRAFT_DESCRIPTION = (

@@ -18,7 +18,7 @@ NOTE_PREFIX = "was publish.template: "
 
 
 class PublishTemplateUnreadable(ValueError):
-    """A `publish` payload shaped like nothing PublishConfig ever wrote."""
+    """A `publish` payload shaped like nothing ReportConfig ever wrote."""
 
 
 def move_publish_template_to_notes(spec: dict[str, Any]) -> bool:

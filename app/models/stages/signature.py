@@ -88,7 +88,7 @@ class ReplacesSignature(_Base):
     produces: list[Column] = Field(
         default_factory=list,
         description=(
-            "Every output column, with its spec. Empty only for publish, which "
+            "Every output column, with its spec. Empty only for report, which "
             "emits files rather than a table."
         ),
     )

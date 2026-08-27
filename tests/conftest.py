@@ -5,7 +5,9 @@
 # .github/workflows/live-llm-smoke.yml.
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import pyarrow as pa
@@ -25,6 +27,8 @@ from app.runtime.context import (
     RunIdentity,
 )
 from app.services.versioning import load_version_stages, resolve_version_id
+
+_REVISION_0017 = "alembic/versions/0017_publish_stage_becomes_report.py"
 
 
 def pinned_stages(project_dir: Path, version_id: str | None = None) -> tuple[Workflow, str]:
@@ -219,6 +223,22 @@ def queue_added_columns(
 
 QUEUE_COLUMNS: dict[str, object] = queue_columns()
 
+
+
+def apply_0017_rename(spec: dict[str, object]) -> dict[str, object]:
+    """0017 runs after 0006 and 0012, whose fixtures still spell the type `publish`."""
+    renamed = {**spec}
+    _revision_0017()._rename_one_spec(renamed, "publish", "report")
+    return renamed
+
+
+def _revision_0017() -> Any:
+    path = Path(__file__).resolve().parents[1] / _REVISION_0017
+    spec = importlib.util.spec_from_file_location("_rev_0017", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def drop_input_schemas(spec: dict[str, object]) -> dict[str, object]:

@@ -1,6 +1,6 @@
 {% from "_sparkle.html" import sparkle %}
 {# The transform config block for a stage — connector / llm / function / filter / join /
-   union / aggregate / queue / publish. Used on both the static stage page and
+   union / aggregate / queue / report. Used on both the static stage page and
    the run-detail right panel.
 
    For the authored-code block this renders the plain-language summary and the
@@ -238,11 +238,11 @@
 </section>
 {% endif %}
 
-{% if block == 'publish' %}
+{% if block == 'report' %}
 <section class="exec-block">
-    <h2>📤 Publish</h2>
+    <h2>📤 Report</h2>
     <dl class="kv">
-        {% for k, v in stage.publish.model_dump(exclude_none=True).items() %}
+        {% for k, v in stage.report.model_dump(exclude_none=True).items() %}
         <dt>{{ k }}</dt>
         <dd>
             {% if v is mapping or (v is sequence and v is not string) %}

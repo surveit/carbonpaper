@@ -20,7 +20,7 @@ from app.core.agent.turns import TurnManager
 from app.core.errors import GenerationError, ReviewGuideValidationError
 from app.main import app
 from app.models import (
-    NamedSchema, SchemaLibrary, Terms, find_stages_reaching_publish, parse_stage,
+    NamedSchema, SchemaLibrary, Terms, find_stages_reaching_report, parse_stage,
 )
 from app.models.review_guide import ReviewGuideDraft, ReviewGuideStep
 from app.services import versioning, workspace
@@ -218,16 +218,16 @@ def test_render_guide_task_carries_the_words_the_guide_must_be_written_in(
 
 
 def _published_stages() -> list:
-    """`audit` hangs off `load` and is the one stage reaching no publish stage."""
+    """`audit` hangs off `load` and is the one stage reaching no report stage."""
     audit = {**_TRIPLE, "id": "audit", "description": "Audit"}
-    publish = {
-        "id": "pub", "description": "Publish", "type": "publish",
+    report = {
+        "id": "pub", "description": "Publish", "type": "report",
         "inputs": [{"id": "double"}],
-        "publish": {"format": "csv"}, "signature": {"form": "replaces"},
+        "report": {"format": "csv"}, "signature": {"form": "replaces"},
         "function": {"kind": "inline",
                      "code": "def transform(df, output_dir, citation_provider): return df"},
     }
-    return [parse_stage(s) for s in (_LOAD, _DOUBLE, audit, publish)]
+    return [parse_stage(s) for s in (_LOAD, _DOUBLE, audit, report)]
 
 
 def _duty_line(task: str, stage_id: str) -> str:
@@ -243,7 +243,7 @@ def test_each_stage_carries_the_requires_narration_flag() -> None:
     assert "requires_narration: true" in _duty_line(task, "load")
     assert "requires_narration: true" in _duty_line(task, "double")
     assert "requires_narration: false" in _duty_line(task, "audit")
-    # The publish stage narrates itself, so it carries the same flag as the leaf.
+    # The report stage narrates itself, so it carries the same flag as the leaf.
     assert "requires_narration: false" in _duty_line(task, "pub")
 
 
@@ -252,7 +252,7 @@ def test_the_flag_comes_from_the_walk_the_validator_refuses_on() -> None:
     task = compiler_review_guide.render_guide_task(
         stages, "20260101T000000", "Double the amount.", _NO_TERMS
     )
-    reaching = find_stages_reaching_publish(stages)
+    reaching = find_stages_reaching_report(stages)
 
     for stage in stages:
         flagged = "requires_narration: true" in _duty_line(task, stage.id)

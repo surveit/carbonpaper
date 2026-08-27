@@ -1,7 +1,4 @@
-"""A citation is a claim with its source attached: this value, under this name,
-is that cell of that row. The publish stage asserts it, this provider checks it
-against the row, and hands back the link. Nothing reads the artifact back, so
-that the stage PRINTED what it cited is the stage's word."""
+"""A value, under a name, in that cell of that row: checked against the row, then linked."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -37,8 +34,7 @@ def build_row_trace_url(
 class CitationProvider:
     project: str
     run_id: str
-    # This publish stage's own inputs, by stage id — the rows it can cite. Arrow,
-    # so a cited cell is what the run stored rather than what pandas made of it.
+    # The rows this stage may cite, as Arrow: the cell as stored, not as pandas read it.
     tables: Mapping[str, pa.Table]
     # `frozen` stops these being rebound, not written, which is what lets the
     # provider handed to authored code come back carrying what that code said.
@@ -53,8 +49,8 @@ class CitationProvider:
         if not _matches(value, cell):
             raise CitationMismatch(
                 f"'{label}' cites {stage_id}.{column} row {row_ordinal} for {value!r}, "
-                f"but that cell holds {cell!r} — publish renders what a stage computed, "
-                f"so a value it does not hold was made up in publish"
+                f"but that cell holds {cell!r} — report renders what a stage computed, "
+                f"so a value it does not hold was made up in the report"
             )
         self.citations.append(CitedValue(
             stage_id=stage_id, row_ordinal=row_ordinal, column=column,
@@ -81,7 +77,7 @@ class CitationProvider:
         table = self.tables.get(stage_id)
         if table is None:
             raise StageNotInRun(
-                f"this publish stage was not given '{stage_id}', so it cannot cite "
+                f"this report stage was not given '{stage_id}', so it cannot cite "
                 f"its rows — it holds {sorted(self.tables)}"
             )
         if not 0 <= row_ordinal < table.num_rows:
@@ -128,7 +124,7 @@ def save_citations(
 
 
 def read_citations(project_id: str, run_id: str) -> list[CitedValue]:
-    """Every value this run's publish stages cited. Empty where none declared a provider."""
+    """Every value this run's report stages cited. Empty where none declared a provider."""
     return [c for saved in _saved(project_id, run_id) for c in saved.citations]
 
 

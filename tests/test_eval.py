@@ -98,9 +98,9 @@ def test_human_review_queue_is_grain_and_order_preserving():
     assert s.is_grain_and_order_preserving is True
 
 
-def test_publish_not_grain_and_order_preserving():
-    s = m.parse_stage(S(id="pub", type="publish",
-                                 inputs=[{"id": "a"}], publish={},
+def test_report_not_grain_and_order_preserving():
+    s = m.parse_stage(S(id="pub", type="report",
+                                 inputs=[{"id": "a"}], report={},
                                  signature={"form": "replaces"},
                                  function={"kind": "inline", "code": "def transform(row): return row"}))
     assert s.is_grain_and_order_preserving is False

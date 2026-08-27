@@ -12,13 +12,13 @@ from app.models import find_stage_compiler_warnings, find_workflow_compiler_warn
 _SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}]}
 # Which signature form a type takes: the reshaping family replaces its input,
 # the anchored family extends it.
-_REPLACES_TYPES = {"python_frame_function", "aggregate", "union", "input_data", "publish"}
+_REPLACES_TYPES = {"python_frame_function", "aggregate", "union", "input_data", "report"}
 # The two the model refuses an empty read set on: each is handed only what it reads.
 _READS_THE_ROW_TYPES = {"filter_rows", "human_review_queue"}
 
 
 def _signature_for(type_, schema):
-    if type_ == "publish":
+    if type_ == "report":
         return {"form": "replaces"}
     if type_ in _REPLACES_TYPES:
         return {"form": "replaces", "produces": schema["columns"]}
@@ -129,12 +129,12 @@ def test_missing_description_outranks_missing_examples():
     assert _kinds(_stage(summary=None)) == ["undescribed"]
 
 
-def _publish_stage(stage_id="pub"):
+def _report_stage(stage_id="pub"):
     return m.parse_stage({
-        "id": stage_id, "description": "Pub", "type": "publish",
+        "id": stage_id, "description": "Pub", "type": "report",
         "signature": {"form": "replaces"},
         "inputs": [{"id": "up"}],
-        "publish": {"format": "csv"},
+        "report": {"format": "csv"},
         "function": {"kind": "inline", "summary": "Writes one file per row.",
                      "code": "def transform(df, output_dir, citation_provider):\n    return df"},
     })
@@ -142,11 +142,11 @@ def _publish_stage(stage_id="pub"):
 
 # ── the warning kinds ───────────────────────────────────────────────────
 def test_a_type_that_cannot_run_examples_warns_about_nothing():
-    assert _kinds(_publish_stage()) == []
+    assert _kinds(_report_stage()) == []
 
 
 def test_a_type_that_cannot_run_examples_still_owes_a_description():
-    stage = _publish_stage()
+    stage = _report_stage()
     stage.function.summary = None
     assert _kinds(stage) == ["undescribed"]
 

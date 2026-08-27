@@ -191,13 +191,13 @@ def list_artifact_links(
 ) -> list[ArtifactLink]:
     if manifest.get("status") in (RunStatus.RUNNING, None):
         return []
-    has_ok_publish = any(
-        record.get("type") == "publish"
+    has_ok_report = any(
+        record.get("type") == "report"
         and record.get("status") in (StageStatus.OK, StageStatus.VALIDATION_WARNINGS)
         for record in read_stage_records(manifest)
     )
     artifacts_root = run_dir / "artifacts"
-    if not (has_ok_publish and artifacts_root.is_dir()):
+    if not (has_ok_report and artifacts_root.is_dir()):
         return []
     files = sorted(f for f in artifacts_root.rglob("*") if f.is_file())
     index = next((f for f in files if f.name == "index.html"), None)

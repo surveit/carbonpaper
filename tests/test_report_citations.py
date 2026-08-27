@@ -1,8 +1,4 @@
-"""A publish stage asserts where a value came from; the provider checks the cell.
-
-The rows here are the counting stages of venezuela_lda_lobbying run
-20260812T133317.816579, and the labels are what its workbook prints.
-"""
+"""A report stage asserts where a value came from; the provider checks the cell."""
 from __future__ import annotations
 
 import pandas as pd
@@ -14,7 +10,7 @@ from app.models.citations import CitedValue
 from app.models.claims import StageOutputRowCitation
 from app.runtime.citations import CitationProvider
 from app.runtime.context import RunContext
-from app.runtime.stages.publish import handle_publish
+from app.runtime.stages.report import handle_report
 from conftest import as_inputs, place_stage
 
 _IN_HOUSE = pd.DataFrame([{
@@ -60,7 +56,7 @@ def test_a_citation_records_the_cell_the_name_and_where_it_sits():
 
 
 def test_a_sum_of_two_cells_is_refused_by_the_cell_it_claims():
-    # in_house_income_usd + in_house_expenses_usd, added in publish.
+    # in_house_income_usd + in_house_expenses_usd, added in the report.
     total = _IN_HOUSE["in_house_income_usd"].iloc[0] + _IN_HOUSE["in_house_expenses_usd"].iloc[0]
     with pytest.raises(CitationMismatch) as exc:
         _provider().cite_value(
@@ -79,7 +75,7 @@ def test_typesetting_the_cell_instead_of_passing_it_is_refused():
     assert "4461000.0" in str(exc.value)
 
 
-def test_cite_value_refuses_a_stage_this_publish_stage_was_not_given():
+def test_cite_value_refuses_a_stage_this_report_stage_was_not_given():
     with pytest.raises(StageNotInRun) as exc:
         _provider().cite_value("spend_by_firm", 0, "total_income_usd", 1.0, label="Firms")
     assert "spend_by_firm" in str(exc.value)
@@ -143,13 +139,13 @@ _SUMS_TWO_CELLS = _CITES_A_FIGURE.replace(
 )
 
 
-def _publish_stage(code: str) -> Stage:
+def _report_stage(code: str) -> Stage:
     return parse_stage({
         "id": "publish_venezuela_workbook",
-        "type": "publish",
+        "type": "report",
         "description": "Publish the workbook",
         "inputs": [{"id": "count_in_house_figures"}],
-        "publish": {"format": "html_report", "destination": "build/"},
+        "report": {"format": "html_report", "destination": "build/"},
         "signature": {"form": "replaces"},
         "function": {"kind": "inline", "code": "import pandas as pd\n" + code},
     })
@@ -160,8 +156,8 @@ def _run_publish(code: str, tmp_path):
         run_dir=tmp_path / "run",
         project_id="venezuela_lda_lobbying", run_id="R1",
     )
-    return handle_publish(
-        place_stage(_publish_stage(code)), as_inputs({"count_in_house_figures": _IN_HOUSE}), ctx
+    return handle_report(
+        place_stage(_report_stage(code)), as_inputs({"count_in_house_figures": _IN_HOUSE}), ctx
     )
 
 
@@ -174,6 +170,6 @@ def test_a_cited_figure_publishes(tmp_path):
     assert "$10,333,414.94" in html
 
 
-def test_a_figure_computed_in_publish_stops_the_stage(tmp_path):
+def test_a_figure_computed_in_the_report_stops_the_stage(tmp_path):
     with pytest.raises(CitationMismatch):
         _run_publish(_SUMS_TWO_CELLS, tmp_path)

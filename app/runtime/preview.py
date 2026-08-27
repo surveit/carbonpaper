@@ -1,9 +1,4 @@
-"""In-memory scratch re-run of a single stage.
-
-Hard guarantee: NOTHING is persisted. Handlers are called directly, never the
-runner, and the two stage types whose handlers touch disk (human_review_queue,
-publish) are refused - as is input_data, which has no upstream rows to subset.
-"""
+"""In-memory re-run of one stage. NOTHING is persisted, so disk-touching types are refused."""
 
 from __future__ import annotations
 

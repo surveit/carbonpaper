@@ -535,7 +535,7 @@ Create NEW stages in the workflow. `stages` is a LIST — submit every stage
 you are ready to author in ONE call; a list of one is the single-stage case.
 Each is a FULL stage, as the anatomy describes one. Its `id` is new, unique,
 and the stage's ONLY name — every surface shows it, so name the step well;
-use edit_stages to change an existing one. `publish` is the one type needing
+use edit_stages to change an existing one. `report` is the one type needing
 TWO blocks: its own and a `function`. There is no output_schema to send —
 the stage's output IS what its signature promises.
 

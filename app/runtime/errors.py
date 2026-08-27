@@ -14,7 +14,7 @@ class RunCancelled(Exception):
 # function that returned the wrong thing from one that refused: a refusal raises
 # StepRefused and satisfies an expected-failure test, this does not.
 class AuthoredFrameExpected(TypeError):
-    """An authored `transform`/publish function returned something other than a DataFrame."""
+    """An authored `transform`/report function returned something other than a DataFrame."""
 
     def __init__(self, message: str, returned: str) -> None:
         super().__init__(message)

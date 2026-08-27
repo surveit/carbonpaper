@@ -295,14 +295,14 @@ def test_a_read_of_the_wrong_type_is_flagged():
     assert "score" in issues[0] and "type" in issues[0]
 
 
-def _publish_upstream_stages():
+def _report_upstream_stages():
     """Built without the graph validator, which would reject the input from `pub`."""
     return [
         parse_stage(_producer()),
         parse_stage(
-            S(id="pub", type="publish",
+            S(id="pub", type="report",
               inputs=[{"id": "up"}],
-              publish={"format": "json"}, signature={"form": "replaces"},
+              report={"format": "json"}, signature={"form": "replaces"},
               function={"kind": "inline",
                         "code": "def transform(df, output_dir): return df"})),
         parse_stage(
@@ -313,13 +313,13 @@ def _publish_upstream_stages():
 
 def test_resolution_raises_on_an_upstream_resolving_no_output():
     with pytest.raises(ValueError, match="resolves no output schema"):
-        m.resolve_workflow_stages(_publish_upstream_stages())
+        m.resolve_workflow_stages(_report_upstream_stages())
 
 
-def test_graph_issues_reports_a_publish_upstream_instead_of_raising():
-    issues = m.validate_workflow(_publish_upstream_stages())
+def test_graph_issues_reports_a_report_upstream_instead_of_raising():
+    issues = m.validate_workflow(_report_upstream_stages())
     assert len(issues) == 1
-    assert "down" in issues[0] and "pub" in issues[0] and "publish stage" in issues[0]
+    assert "down" in issues[0] and "pub" in issues[0] and "report stage" in issues[0]
 
 
 def test_resolution_raises_on_an_input_naming_no_stage():
@@ -334,14 +334,10 @@ def test_graph_issues_reports_a_dangling_input_instead_of_raising():
     assert issues == ["`down`: input `up` references no stage"]
 
 
-# ── A publish stage may not be another stage's input (validate_publish_is_terminal) ─
-# A publish stage writes files instead of producing a table, so nothing downstream
-# can read from it. It is also the one type whose signature produces nothing,
-# so this check is what keeps resolution from meeting an upstream that supplies
-# nothing.
+# ── A report stage produces no table, so nothing may read it ────────────────
 def _publish(stage_id="pub", inputs=("load",)):
-    return S(id=stage_id, type="publish", inputs=[_in(i) for i in inputs],
-             publish={"format": "json"}, signature={"form": "replaces"},
+    return S(id=stage_id, type="report", inputs=[_in(i) for i in inputs],
+             report={"format": "json"}, signature={"form": "replaces"},
              function={"kind": "inline", "code": "def transform(df, output_dir): return df"})
 
 
@@ -359,15 +355,15 @@ def _loader():
     return S(id="load", type="input_data", connector={"kind": "file"}, signature={"form": "replaces", "produces": _K["columns"]})
 
 
-def test_validate_publish_is_terminal_flags_stage_reading_a_publish():
+def test_validate_report_is_terminal_flags_stage_reading_a_publish():
     stages = [parse_stage(s) for s in
               (_loader(), _publish(), _reader("down", "pub"))]
-    issues = m.validate_publish_is_terminal(stages)
+    issues = m.validate_report_is_terminal(stages)
     assert len(issues) == 1
     assert "down" in issues[0] and "pub" in issues[0]
 
 
-def test_validate_publish_is_terminal_reports_every_offending_edge():
+def test_validate_report_is_terminal_reports_every_offending_edge():
     stages = [parse_stage(s) for s in (
         _loader(), _publish("pub_a"), _publish("pub_b"),
         _reader("down_a", "pub_a"), _reader("down_b", "pub_b"),
@@ -382,65 +378,62 @@ def test_validate_publish_is_terminal_reports_every_offending_edge():
               "adds": _Y["columns"],
           }),
     )]
-    issues = m.validate_publish_is_terminal(stages)
+    issues = m.validate_report_is_terminal(stages)
     assert len(issues) == 4  # every offending edge in one pass, not just the first
 
 
-def test_validate_publish_is_terminal_clean_when_publish_is_terminal():
+def test_validate_report_is_terminal_clean_when_the_report_is_terminal():
     stages = [parse_stage(s) for s in (_loader(), _publish())]
-    assert m.validate_publish_is_terminal(stages) == []
+    assert m.validate_report_is_terminal(stages) == []
 
 
-def test_validate_publish_is_terminal_clean_with_several_unconsumed_publishes():
+def test_validate_report_is_terminal_clean_with_several_unconsumed_publishes():
     stages = [parse_stage(s) for s in
               (_loader(), _publish("pub_a"), _publish("pub_b"), _publish("pub_c"))]
-    assert m.validate_publish_is_terminal(stages) == []
+    assert m.validate_report_is_terminal(stages) == []
 
 
-# ── Which stages the published files carry (find_stages_reaching_publish) ────
-# The review guide uses this to refuse a guide that declares a publish-reaching stage
-# `unnarrated`. Under-reporting would hide a load-bearing stage, so the transitive
-# cases below are the ones that matter.
+# ── Which stages a report carries (find_stages_reaching_report) ─────────────
 
-def test_find_stages_reaching_publish_takes_the_direct_feeder():
+def test_find_stages_reaching_report_takes_the_direct_feeder():
     stages = [parse_stage(s) for s in (_loader(), _publish())]
-    assert m.find_stages_reaching_publish(stages) == {"load"}
+    assert m.find_stages_reaching_report(stages) == {"load"}
 
 
-def test_find_stages_reaching_publish_leaves_out_the_publish_stage_itself():
+def test_find_stages_reaching_report_leaves_out_the_report_stage_itself():
     stages = [parse_stage(s) for s in (_loader(), _publish())]
-    assert "pub" not in m.find_stages_reaching_publish(stages)
+    assert "pub" not in m.find_stages_reaching_report(stages)
 
 
-def test_find_stages_reaching_publish_reaches_through_intermediate_stages():
+def test_find_stages_reaching_report_reaches_through_intermediate_stages():
     stages = [parse_stage(s) for s in (
         _loader(), _reader("mid", "load"), _reader("near", "mid"), _publish(inputs=("near",)),
     )]
-    assert m.find_stages_reaching_publish(stages) == {"load", "mid", "near"}
+    assert m.find_stages_reaching_report(stages) == {"load", "mid", "near"}
 
 
-def test_find_stages_reaching_publish_leaves_out_a_stage_nothing_published_reads():
+def test_find_stages_reaching_report_leaves_out_a_stage_nothing_published_reads():
     stages = [parse_stage(s) for s in (
         _loader(), _reader("checked", "load"), _publish(inputs=("load",)),
     )]
-    assert m.find_stages_reaching_publish(stages) == {"load"}
+    assert m.find_stages_reaching_report(stages) == {"load"}
 
 
-def test_find_stages_reaching_publish_is_empty_without_a_publish_stage():
+def test_find_stages_reaching_report_is_empty_without_a_report_stage():
     stages = [parse_stage(s) for s in (_loader(), _reader("mid", "load"))]
-    assert m.find_stages_reaching_publish(stages) == set()
+    assert m.find_stages_reaching_report(stages) == set()
 
 
-def test_find_stages_reaching_publish_unions_over_several_publish_stages():
+def test_find_stages_reaching_report_unions_over_several_report_stages():
     stages = [parse_stage(s) for s in (
         _loader(), _reader("left", "load"), _reader("right", "load"),
         _publish("pub_a", inputs=("left",)), _publish("pub_b", inputs=("right",)),
     )]
-    assert m.find_stages_reaching_publish(stages) == {"load", "left", "right"}
+    assert m.find_stages_reaching_report(stages) == {"load", "left", "right"}
 
 
 def test_parse_workflow_rejects_stage_reading_a_publish():
-    with pytest.raises(ValidationError, match="publish"):
+    with pytest.raises(ValidationError, match="report"):
         m.parse_workflow([_loader(), _publish(), _reader("down", "pub")])
 
 

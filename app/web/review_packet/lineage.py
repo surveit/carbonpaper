@@ -84,7 +84,7 @@ def write_packet_lineage(
 
 
 def _named_figures(view: RunView, closure: set[tuple[str, int]]) -> list[PublishedFigure]:
-    """Every value a publish stage cited; a row it merely claimed carries no figure."""
+    """Every value a report stage cited; a row it merely claimed carries no figure."""
     return [
         PublishedFigure(
             label=target.label,
@@ -174,7 +174,7 @@ def _write_page(
 
 
 def _published_rows(view: RunView) -> list[tuple[str, int]]:
-    """The rows this run's publish stages cited, in the order they said so."""
+    """The rows this run's report stages cited, in the order they said so."""
     return read_cited_row_keys(view.project, view.run_id)
 
 

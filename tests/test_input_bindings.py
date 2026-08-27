@@ -15,10 +15,7 @@ from conftest import make_run_context, pinned_stages, place_stage
 from stage_seed import add_stage
 
 
-# Every input declares the schema it expects and every non-publish stage declares
-# its output_schema (app/models/stage.py: Stage._schemas_declared). The stages
-# these two helpers build are only ever bound/preflighted, never executed, so the
-# schema names the single column of the csv the file-writing tests here create.
+# The one column the file-writing tests here create; Stage._schemas_declared wants it.
 _X_SCHEMA = {"columns": [{"name": "x", "type": "int", "nullable": True}]}
 
 

@@ -1,8 +1,4 @@
-"""A run's artifact is served as its own file type.
-
-A publish stage writes whatever its format says, so an .xlsx is as ordinary as
-an HTML profile — and decoding a binary one as text is a 500.
-"""
+"""A run's artifact is served as its own file type; decoding a binary one as text is a 500."""
 from __future__ import annotations
 
 import pytest

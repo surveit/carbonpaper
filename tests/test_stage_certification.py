@@ -12,13 +12,13 @@ from app.web.stage_test_views import build_certification
 _SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}]}
 # Which signature form a type takes: the reshaping family replaces its input,
 # the anchored family extends it.
-_REPLACES_TYPES = {"python_frame_function", "aggregate", "union", "input_data", "publish"}
+_REPLACES_TYPES = {"python_frame_function", "aggregate", "union", "input_data", "report"}
 # The two the model refuses an empty read set on: each is handed only what it reads.
 _READS_THE_ROW_TYPES = {"filter_rows", "human_review_queue"}
 
 
 def _signature_for(type_, schema):
-    if type_ == "publish":
+    if type_ == "report":
         return {"form": "replaces"}
     if type_ in _REPLACES_TYPES:
         return {"form": "replaces", "produces": schema["columns"]}
@@ -101,10 +101,10 @@ def test_a_frame_function_is_certifiable_too():
 
 def test_a_code_carrying_type_that_cannot_run_examples_is_untestable():
     stage = m.parse_stage({
-        "id": "pub", "description": "Pub", "type": "publish",
+        "id": "pub", "description": "Pub", "type": "report",
         "signature": {"form": "replaces"},
         "inputs": [{"id": "up"}],
-        "publish": {"format": "csv"},
+        "report": {"format": "csv"},
         "function": {"kind": "inline", "summary": "Writes one file per row.",
                      "code": "def transform(df, output_dir, citation_provider):\n    return df"},
     })
@@ -126,12 +126,12 @@ def test_filter_rows_with_no_description_is_undescribed_not_untestable():
     assert build_certification(stage, []).status == "unsummarised"
 
 
-def test_publish_carries_a_function_so_it_still_gets_a_badge():
+def test_report_carries_a_function_so_it_still_gets_a_badge():
     stage = m.parse_stage({
-        "id": "pub", "description": "Pub", "type": "publish",
+        "id": "pub", "description": "Pub", "type": "report",
         "signature": {"form": "replaces"},
         "inputs": [{"id": "up"}],
-        "publish": {"format": "csv"},
+        "report": {"format": "csv"},
         "function": {"kind": "inline",
                      "code": "def transform(df, output_dir, citation_provider):\n    return df"},
     })

@@ -41,7 +41,7 @@ def say_what_a_stage_did(stage: AbstractStage) -> str:
             return "Put the rows in order and number them"
         case StageType.human_review_queue:
             return "Hand the rows to a person to decide"
-        case StageType.publish:
+        case StageType.report:
             return "Write the figures out"
     assert_never(stage.type)
 

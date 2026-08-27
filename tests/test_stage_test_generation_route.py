@@ -54,10 +54,10 @@ def _seed_project(root: Path) -> Path:
                      "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"},
     })
     add_stage(pdir, {
-        "id": "publish", "description": "Publish", "type": "publish",
+        "id": "report", "description": "Report", "type": "report",
         "inputs": [{"id": "double"}],
         "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [], "code": "def transform(df, output_dir):\n    return df\n"},
-        "publish": {}, "signature": {"form": "replaces"},
+        "report": {}, "signature": {"form": "replaces"},
     })
     _write_run(project_dir)
     return project_dir
@@ -189,7 +189,7 @@ def test_generate_tests_rejects_non_python_stage(client: TestClient, tmp_path: P
     _seed_project(tmp_path)
     before = len(SessionStore().list_sessions())
 
-    response = client.post("/project/alpha/node/publish/generate-tests")
+    response = client.post("/project/alpha/node/report/generate-tests")
 
     assert response.status_code == 400
     assert "can run them" in response.json()["detail"]
@@ -263,7 +263,7 @@ def test_review_partial_shows_generate_tests_button_for_python_stage(client: Tes
     assert "Generate tests" in response.text
 
 
-@pytest.mark.parametrize("stage_id", ["publish", "load"])
+@pytest.mark.parametrize("stage_id", ["report", "load"])
 def test_review_partial_hides_generate_tests_button_for_non_python_stage(
     client: TestClient, tmp_path: Path, stage_id: str
 ):

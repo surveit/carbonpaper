@@ -11,8 +11,7 @@ import pytest
 from app.core.errors import DraftNotFoundError
 from app.services import drafts, versioning
 
-# Every input declares the schema it expects and every non-publish stage declares
-# its output_schema (app/models/stage.py: Stage._schemas_declared).
+# Stage._schemas_declared wants an input schema and, bar report, an output.
 _ROWS_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": False}]}
 
 _STAGE = {

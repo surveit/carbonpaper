@@ -51,7 +51,7 @@ def test_is_row_preserving_matches_the_model_classification():
                        "human_review_queue"):
         assert _is_row_preserving(stage_type) is True
     for stage_type in ("python_frame_function", "enrich", "expand", "aggregate",
-                       "publish", "filter_rows", "union"):
+                       "report", "filter_rows", "union"):
         assert _is_row_preserving(stage_type) is False
     assert _is_row_preserving("not_a_stage_type") is False
 
