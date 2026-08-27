@@ -5,21 +5,18 @@
   Frames ONE project (a directory under examples/<name>/) with a fixed left sidebar
   = project name + the nav tree + a {% block section %} the section templates fill.
 
-  The nav is Overview, then Workflow with Files, Versions, Runs and Evals nested under
-  it (what a workflow runs on, its versioned snapshots, its executions, and the evals
-  that score them), then a Documentation group holding Methodology and Terms. Its
-  structure — labels and hrefs — is built in app.web.project_view.build_nav and
-  rendered here from `state.nav`.
+  The nav is Overview, a Workflow group holding Versions, Runs and Evals, Files, then a
+  Documentation group holding Methodology and Glossary. Its structure — labels and
+  hrefs — is built in app.web.project_view.build_nav and rendered here from `state.nav`.
+
+  Both groups are NavGroups: a label and children, no href. A heading opens nothing, so
+  the stage graph at /workflow has no row here and is reached from Versions.
 
   Context every section route passes:
     state    = project_view.shell_state(mdir)  — status snapshot + nav + next_action
-    section  = the active nav key (overview / workflow / files / versions / runs /
-               evals / methodology / terms); the matching item renders as `current`,
-               and the Workflow parent renders as `trail` when a child is active.
-
-  A NavGroup carries a label and children but no href: it heads its block and opens
-  nothing. Every NavItem is navigable — the workflow section renders whatever exists
-  (an empty state when nothing is authored yet).
+    section  = the active nav key (overview / versions / runs / evals / files /
+               methodology / glossary); the matching item renders as `current`, and its
+               group heading renders as `trail`.
 
   The nav carries NO status marks. It is a table of contents; every section's own
   page states what is there, what is wrong with it, and what is waiting, in words.
@@ -112,7 +109,7 @@
         <div class="app-nav-group{% if section in child_keys %} trail{% endif %}">{{ item.label }}</div>
         {% endif %}
         {% if item.children %}
-        <div class="app-nav-children{% if not item.href %} under-group{% endif %}">
+        <div class="app-nav-children">
           {% for child in item.children %}
           <a class="app-nav-item child {% if child.key == section %}current{% endif %}"
              href="{{ child.href }}"

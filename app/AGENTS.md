@@ -11,9 +11,10 @@ bite most often.
 
 ## Pages / routes
 - `/` project list · `/project/<m>` the project shell (Overview, the Workflow group
-  holding Files · Versions · Runs · Evals, and a Documentation group holding
-  Methodology · Terms); the Workflow section carries the mermaid graph + inline node
-  review (`/project/<m>/node/<id>/review-partial`).
+  holding Versions · Runs · Evals, Files, and a Documentation group holding
+  Methodology · Glossary). `/project/<m>/workflow` carries the mermaid graph + inline
+  node review (`/project/<m>/node/<id>/review-partial`); it has no nav row, and is
+  reached from Versions.
 - `/project/<m>/runs`, `/runs/<id>` — run history + detail. `/runs/new` is the
   run-launch form (version picker, one path field + row cap per file input, and an
   **Advanced** fold holding the row-level cache checkbox) — the one surface where a run

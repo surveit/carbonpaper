@@ -120,22 +120,30 @@ def test_trigger_run_returns_400_on_invalid_dag(monkeypatch):
 def test_build_nav_groups_workflow_children(demo_project):
     from app.web.project_view import build_nav
 
-    overview, workflow, documentation = build_nav("demo")
+    overview, workflow, files, documentation = build_nav("demo")
     assert overview.key == "overview" and not overview.children
-    assert workflow.key == "workflow"
-    assert [child.key for child in workflow.children] == [
-        "files", "versions", "runs", "evals"]
+    assert files.key == "files" and not files.children
+    assert workflow.label == "Workflow"
+    assert [child.key for child in workflow.children] == ["versions", "runs", "evals"]
     assert documentation.label == "Documentation"
-    assert [child.key for child in documentation.children] == ["methodology", "terms"]
+    assert [child.key for child in documentation.children] == ["methodology", "glossary"]
 
 
 def test_a_group_heading_opens_no_page(demo_project):
     from app.web.project_view import build_nav
 
-    documentation = build_nav("demo")[-1]
-    assert not hasattr(documentation, "href")
+    _, workflow, _, documentation = build_nav("demo")
+    assert not hasattr(workflow, "href") and not hasattr(documentation, "href")
     sidebar = client.get("/project/demo").text
+    assert '<div class="app-nav-group">Workflow</div>' in sidebar
     assert '<div class="app-nav-group">Documentation</div>' in sidebar
+
+
+def test_the_stage_graph_keeps_a_trail_without_a_nav_row(demo_project):
+    """It is reached from Versions, so the trail is the only thing that labels it."""
+    page = client.get("/project/demo/workflow")
+    assert page.status_code == 200
+    assert '<span class="crumb-here" aria-current="page">Workflow</span>' in page.text
 
 
 def test_the_nav_carries_no_status_marks(demo_project):
@@ -215,10 +223,10 @@ def test_cmdk_palette_ranks_the_project_being_read_first(demo_project):
     kinds = [row["kind"] for row in rows]
     assert kinds.index("section") < kinds.index("stage")
     sections = [row["label"] for row in rows if row["kind"] == "section"]
-    assert sections[:3] == ["Overview", "Workflow", "Files"]
-    # The Documentation heading opens no page, so the palette cannot offer it.
-    assert "Documentation" not in sections
-    assert {"Methodology", "Terms"} <= set(sections)
+    assert sections[:3] == ["Overview", "Versions", "Runs"]
+    # Neither heading opens a page, so the palette cannot offer either one.
+    assert {"Workflow", "Documentation"}.isdisjoint(sections)
+    assert {"Files", "Methodology", "Glossary"} <= set(sections)
     assert [row["label"] for row in rows if row["kind"] == "stage"] == ["load", "extract"]
 
 

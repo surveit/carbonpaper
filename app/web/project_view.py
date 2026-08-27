@@ -55,12 +55,13 @@ def validate_project_or_404(project_id: str) -> str:
 def shell_state(project_id: str, section: str) -> ShellState:
     state = project.project_state(validate_project_or_404(project_id))
     nav = build_nav(state.id)
-    return ShellState(
-        **state.model_dump(),
-        nav=nav,
-        crumbs=build_shell_crumbs(nav, section, state.id),
-        next_action=_next_action(state),
-    )
+    return _build_shell_state(state, nav, build_shell_crumbs(nav, section, state.id))
+
+
+def shell_state_off_nav(project_id: str, crumbs: list[Crumb]) -> ShellState:
+    """For a page the nav does not list: it brings the trail the nav cannot label."""
+    state = project.project_state(validate_project_or_404(project_id))
+    return _build_shell_state(state, build_nav(state.id), crumbs)
 
 
 def build_shell_crumbs(nav: list[NavBlock], section: str, project_id: str) -> list[Crumb]:
@@ -75,16 +76,15 @@ def build_nav(project_id: str) -> list[NavBlock]:
     base = f"/project/{project_id}"
     return [
         _nav_leaf("overview", "Overview", base),
-        _nav_leaf("workflow", "Workflow", f"{base}/workflow",
-                  children=[
-                      _nav_leaf("files", "Files", f"{base}/files"),
-                      _nav_leaf("versions", "Versions", f"{base}/workflow/versions"),
-                      _nav_leaf("runs", "Runs", f"{base}/runs"),
-                      _nav_leaf("evals", "Evals", f"{base}/evals"),
-                  ]),
+        NavGroup(label="Workflow", children=[
+            _nav_leaf("versions", "Versions", f"{base}/workflow/versions"),
+            _nav_leaf("runs", "Runs", f"{base}/runs"),
+            _nav_leaf("evals", "Evals", f"{base}/evals"),
+        ]),
+        _nav_leaf("files", "Files", f"{base}/files"),
         NavGroup(label="Documentation", children=[
             _nav_leaf("methodology", "Methodology", f"{base}/methodology"),
-            _nav_leaf("terms", "Terms", f"{base}/terms"),
+            _nav_leaf("glossary", "Glossary", f"{base}/glossary"),
         ]),
     ]
 
@@ -101,7 +101,7 @@ def _next_action(state: project.ProjectState) -> NextAction:
         return NextAction(
             key="agree_terms",
             label="Agree the project's terms",
-            href=f"{base}/terms",
+            href=f"{base}/glossary",
         )
     # 2. No workflow → build it.
     if not workflow.present:
@@ -134,6 +134,14 @@ def _next_action(state: project.ProjectState) -> NextAction:
 
 
 # ─── Nav structure ────────────────────────────────────────────────────────────
+
+
+def _build_shell_state(
+    state: project.ProjectState, nav: list[NavBlock], crumbs: list[Crumb]
+) -> ShellState:
+    return ShellState(
+        **state.model_dump(), nav=nav, crumbs=crumbs, next_action=_next_action(state)
+    )
 
 
 def _nav_leaf(key: str, label: str, href: str,

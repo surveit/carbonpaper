@@ -51,6 +51,10 @@ def build_section_crumbs(
     return [*_project_trail(project_id), *above, _here(label)]
 
 
+def build_workflow_crumbs(project_id: str) -> list[Crumb]:
+    return [*_project_trail(project_id), _here("Workflow")]
+
+
 def build_version_crumbs(project_id: str, version_id: str) -> list[Crumb]:
     return [
         *_project_trail(project_id),

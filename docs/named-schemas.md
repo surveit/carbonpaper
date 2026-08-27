@@ -65,7 +65,7 @@ fields, so a bundle written before verbs existed still imports.
 a project is handed them in: the MCP `read_terms`/`write_terms` tools store them, the
 editing agent gets them appended to its system prompt per session
 (`AgentConfig.render_session_prompt`), and both one-shot generators carry them in their
-task. A project with no words renders nothing at all. `/project/<id>/terms` is where a
+task. A project with no words renders nothing at all. `/project/<id>/glossary` is where a
 human reads them.
 
 **What is NOT here (yet):** no `schemas/` directory ships in any project;
