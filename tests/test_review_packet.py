@@ -542,8 +542,7 @@ def test_the_packet_route_serves_nothing_outside_the_packet(project_dir):
     _make_project(project_dir)
     _seed_version(project_dir)
     run_id = run_service.start_run(_PROJECT)
-    # Percent-encoded: a client normalises bare `../` away before it is ever sent,
-    # which would 404 on the router rather than on the guard being tested.
+    # A client normalises a bare `../` away before it is ever sent.
     escape = "%2e%2e%2f" * 8 + "etc%2fpasswd"
 
     response = _client().get(f"/project/{_PROJECT}/runs/{run_id}/packet/{escape}")

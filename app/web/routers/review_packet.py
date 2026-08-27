@@ -27,9 +27,7 @@ PACKET_ROUTE = "packet"
 # What mimetypes does not know but a reader still wants rendered rather than saved.
 _TEXT_SUFFIXES = frozenset({".mmd", ".jsonl", ".md"})
 
-# The served pages ARE the downloaded folder — one build, read back file by file, so
-# the URL and the zip can never say different things. Keyed per run, and thrown away
-# with the process: nothing edits a packet once it is written.
+# One build per run, read back file by file, so the URL and the zip cannot differ.
 _BUILT: dict[tuple[str, str], Path] = {}
 _BUILD_LOCK = threading.Lock()
 

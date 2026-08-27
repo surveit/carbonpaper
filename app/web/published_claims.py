@@ -49,5 +49,5 @@ def _build_claim(links: PanelLinks, output: WorkflowOutput) -> PublishedClaim:
     return PublishedClaim(
         label=output.label,
         value=render_output_value(citation.value),
-        href=links.claim_trace(citation.stage_id, citation.row_ordinal, citation.column),
+        href=links.row_trace(citation.stage_id, citation.row_ordinal, citation.column),
     )
