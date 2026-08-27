@@ -1,8 +1,4 @@
-"""Is a downloaded slice still a rectangle of the file the run read?
-
-The comparison lives here rather than in `app/`: it is a claim about the loader
-that this suite makes once, not something a page re-runs.
-"""
+"""Is a downloaded slice still a rectangle of the file the run read?"""
 from __future__ import annotations
 
 from dataclasses import dataclass
