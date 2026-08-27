@@ -1,4 +1,5 @@
 {% extends "project_shell.html" %}
+{% from "_input_files.html" import input_files %}
 {#
   OVERVIEW — what this project can hand someone, and what stands between it and that.
 
@@ -56,9 +57,11 @@
 
       {% if d.run_id %}
       <div class="ov-deliver-head">
-        <span class="run-status status-{{ d.status }}">{{ d.status | replace('_', ' ') }}</span>
-        <a class="ov-deliver-when" href="{{ d.run_href }}">{{ d.started_at | friendly_time }}</a>
-        <span class="muted">{{ d.stage_line }}{% if d.duration %} · {{ d.duration }}{% endif %}</span>
+        <div class="ov-deliver-facts">
+          <span class="run-status status-{{ d.status }}">{{ d.status | replace('_', ' ') }}</span>
+          <a class="ov-deliver-when" href="{{ d.run_href }}">{{ d.started_at | friendly_time }}</a>
+          <span class="muted">{{ d.stage_line }}{% if d.duration %} · {{ d.duration }}{% endif %}</span>
+        </div>
         {% if d.packet_href %}
         <a class="btn primary ov-deliver-cta" href="{{ d.packet_href }}">Export review packet</a>
         {% elif d.publish_href %}
@@ -87,28 +90,25 @@
         {% for check in d.checks %}
         <div class="ov-check{{ '' if check.ok else ' bad' }}">
           <span class="ov-check-mark">{{ '✓' if check.ok else '✕' }}</span>
-          <span><b>{{ check.headline }}</b><span class="muted">{{ check.detail }}</span></span>
+          <span><b>{{ check.headline }}</b><span class="muted">{{ check.detail }}</span>
+            {% if check.action %}
+            <a class="{{ 'ov-ask' if check.action.kind == 'chat' else 'ov-go' }}"
+               href="{{ check.action.href }}">{{ check.action.label }}</a>
+            {% endif %}</span>
         </div>
         {% endfor %}
       </div>
       {% endif %}
 
-      {% if d.version_message or d.inputs %}
+      {% if d.version_message or d.inputs or d.stage_caps %}
       <div class="ov-rests">
         <div>
-          <h5>Off this version</h5>
+          <h5>Workflow version</h5>
           <p>{{ d.version_message or 'No version recorded on this run.' }}</p>
         </div>
-        <div>
-          <h5>Reading these files</h5>
-          {% for input in d.inputs %}
-          <div class="ov-file"><code>{{ input.filename }}</code>
-            <span class="muted">{{ input.size }}</span>
-            {% if input.row_cap is not none %}<span class="ov-cap">first
-              {{ "{:,}".format(input.row_cap) }} rows</span>{% endif %}</div>
-          {% else %}
-          <p class="muted">This run bound no file inputs.</p>
-          {% endfor %}
+        <div class="ov-inputs">
+          <h5>Inputs</h5>
+          {{ input_files(d.inputs, d.stage_caps) }}
         </div>
       </div>
       {% endif %}

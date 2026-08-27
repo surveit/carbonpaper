@@ -1,5 +1,6 @@
 {% extends "project_shell.html" %}
 {% from "_picker.html" import picker %}
+{% from "_input_files.html" import input_files %}
 {#
   RUNS — the runs list.
 
@@ -154,25 +155,7 @@
         {%- endif %}
       </td>
       <td class="run-input-files">
-        {%- if r.inputs %}
-        <ul class="input-list">
-          {%- for i in r.inputs %}
-          <li title="{{ i.stage_id }} read {{ i.filename }}{% if i.sha256 %} — sha256 {{ i.sha256 }}{% endif %}">
-            {{ i.filename }}
-            {%- if i.hash_disambiguates %} <code class="input-hash">{{ i.sha256[:8] }}</code>{% endif %}
-            {%- if i.size %} <span class="muted">{{ i.size }}</span>{% endif %}
-            {%- if i.row_cap is not none %} <span class="row-cap">· first {{ "{:,}".format(i.row_cap) }} rows</span>{% endif %}
-          </li>
-          {%- endfor %}
-        </ul>
-        {%- else %}<span class="muted">no bound files</span>{% endif %}
-        {#- A cap on a stage that bound no file rides no filename, so it takes a line of
-            its own — led by "stage", because every other line in this cell is a file.
-            Outside the branch above: a run can bind no file and still cap a stage. #}
-        {%- for c in r.stage_caps %}
-        <span class="stage-cap">stage <code>{{ c.stage_id }}</code>
-          <span class="row-cap">· first {{ "{:,}".format(c.cap) }} rows</span></span>
-        {%- endfor %}
+        {{ input_files(r.inputs, r.stage_caps) }}
         {%- if r.inputs and r.runs_on_these_inputs > 1 and not input_filter %}
         <a class="input-siblings"
            href="/project/{{ state.id }}/runs?{% if view %}view={{ view }}&amp;{% endif %}inputs={{ r.input_key }}"

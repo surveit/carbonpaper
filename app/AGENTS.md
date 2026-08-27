@@ -20,7 +20,10 @@ bite most often.
 One **deliverable slot** and one **queue**. The slot is always present and says one of
 four things (`DeliverableState`): `published` · `publishable` · `refused` · `no_runs`.
 It shows the newest published run if there is one, otherwise the newest production run,
-so publishing pins what the page leads with.
+so publishing pins what the page leads with. Every failed check names the one move that
+clears it, so the card is never a dead end. The version and the files a run read are
+labelled and drawn exactly as the runs table labels and draws them — `_input_files.html`
+is that one component.
 
 **Publishing a run** (`app.services.run_publication`) is the one act that makes a run's
 figures the project's numbers: it writes a `PublishedRun` record, and the packet export

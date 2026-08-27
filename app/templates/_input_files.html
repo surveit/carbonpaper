@@ -1,0 +1,24 @@
+{#
+  The files a run read, and any cap on them — one component, so the runs table and the
+  overview's deliverable card cannot describe the same run's inputs differently.
+
+  `stage_caps` is separate because a cap on a stage that bound no file rides no filename.
+#}
+{% macro input_files(inputs, stage_caps) %}
+{%- if inputs %}
+<ul class="input-list">
+  {%- for i in inputs %}
+  <li title="{{ i.stage_id }} read {{ i.filename }}{% if i.sha256 %} — sha256 {{ i.sha256 }}{% endif %}">
+    {{ i.filename }}
+    {%- if i.hash_disambiguates %} <code class="input-hash">{{ i.sha256[:8] }}</code>{% endif %}
+    {%- if i.size %} <span class="muted">{{ i.size }}</span>{% endif %}
+    {%- if i.row_cap is not none %} <span class="row-cap">· first {{ "{:,}".format(i.row_cap) }} rows</span>{% endif %}
+  </li>
+  {%- endfor %}
+</ul>
+{%- else %}<span class="muted">no bound files</span>{% endif %}
+{%- for c in stage_caps %}
+<span class="stage-cap">stage <code>{{ c.stage_id }}</code>
+  <span class="row-cap">· first {{ "{:,}".format(c.cap) }} rows</span></span>
+{%- endfor %}
+{% endmacro %}

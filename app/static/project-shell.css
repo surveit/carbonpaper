@@ -231,11 +231,13 @@
 .ov-deliver.reached { border-color: var(--good-bd); }
 .ov-deliver.refused { border-color: var(--bad-bd); }
 
-.ov-deliver-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+.ov-deliver-head { display: flex; align-items: flex-start; gap: 14px;
     padding: 13px 18px; border-bottom: 1px solid var(--border); }
+.ov-deliver-facts { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    min-width: 0; flex: 1; }
 .ov-deliver-when { font-weight: 600; color: var(--fg); text-decoration: none; }
 .ov-deliver-when:hover { color: var(--accent); }
-.ov-deliver-cta { margin-left: auto; }
+.ov-deliver-cta { flex: none; margin: 0; }
 /* A refusal is stated in the checks below; the control stays visible so the reader
    can see what is being withheld rather than wondering where it went. */
 .btn.blocked { opacity: 0.45; cursor: not-allowed; }
@@ -255,6 +257,7 @@
 .ov-check-mark { text-align: center; font-weight: 700; color: var(--good-ink); }
 .ov-check.bad .ov-check-mark { color: var(--bad-ink); }
 .ov-check .muted { display: block; font-size: 12px; margin-top: 1px; }
+.ov-check .ov-ask, .ov-check .ov-go { margin-top: 7px; }
 
 .ov-rests { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px;
     padding: 14px 18px; border-top: 1px solid var(--border); background: var(--sunk); }
@@ -262,12 +265,9 @@
 .ov-rests h5 { margin: 0 0 5px; font-size: 10.5px; text-transform: uppercase;
     letter-spacing: 0.5px; color: var(--muted); font-weight: 700; }
 .ov-rests p { margin: 0; font-size: 13px; }
-.ov-file { display: flex; gap: 8px; align-items: baseline; font-size: 13px; padding: 2px 0;
-    flex-wrap: wrap; min-width: 0; }
-.ov-file code { overflow-wrap: anywhere; }
-/* A cap is why a complete-looking run cannot be published, so it is never a grey note. */
-.ov-cap { background: var(--bad-bg); color: var(--bad-ink); border: 1px solid var(--bad-bd);
-    border-radius: 4px; padding: 0 6px; font-size: 11.5px; font-weight: 600; }
+.ov-inputs .input-list { margin: 0; padding-left: 16px; font-size: 13px; }
+.ov-inputs .input-list li { overflow-wrap: anywhere; }
+.ov-inputs .stage-cap { display: block; font-size: 13px; margin-top: 4px; }
 
 .ov-more { border-top: 1px solid var(--border); }
 .ov-more summary { padding: 10px 18px; font-size: 12.5px; color: var(--muted);

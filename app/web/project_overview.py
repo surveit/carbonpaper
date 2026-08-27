@@ -16,7 +16,7 @@ from app.services.run_publication import (
     read_published_run,
 )
 from app.services.workspace import resolve_run_dir
-from app.web.run_index import RunIndexRow, build_run_index_rows
+from app.web.run_index import RunIndexRow, RunInputCell, StageRowCap, build_run_index_rows
 from app.web.run_published import RunPublished, read_published_outputs
 
 DeliverableState = Literal["published", "publishable", "refused", "no_runs"]
@@ -40,12 +40,13 @@ class OverviewCheck(BaseModel):
     ok: bool
     headline: str
     detail: str
+    action: OverviewCheckAction | None = None
 
 
-class OverviewInput(BaseModel):
-    filename: str
-    size: str
-    row_cap: int | None
+class OverviewCheckAction(BaseModel):
+    label: str
+    href: str
+    kind: Literal["chat", "go"]
 
 
 class Deliverable(BaseModel):
@@ -60,7 +61,8 @@ class Deliverable(BaseModel):
     published: RunPublished | None = None
     checks: list[OverviewCheck] = []
     version_message: str | None = None
-    inputs: list[OverviewInput] = []
+    inputs: list[RunInputCell] = []
+    stage_caps: list[StageRowCap] = []
     packet_href: str | None = None
     publish_href: str | None = None
     lead: str | None = None
@@ -113,7 +115,7 @@ def build_deliverable(
         heading=(
             "What you can hand someone" if is_published
             else "Ready to publish" if not refusals
-            else "Nothing to publish"
+            else "Latest run"
         ),
         run_id=row.run_id,
         run_href=f"/project/{project_id}/runs/{row.run_id}",
@@ -124,12 +126,10 @@ def build_deliverable(
         published=read_published_outputs(
             project_id, row.run_id, resolve_run_dir(project_id, row.run_id), manifest
         ),
-        checks=build_checks(refusals),
+        checks=build_checks(project_id, row, refusals),
         version_message=row.version.message if row.version else None,
-        inputs=[
-            OverviewInput(filename=cell.filename, size=cell.size, row_cap=cell.row_cap)
-            for cell in row.inputs
-        ],
+        inputs=row.inputs,
+        stage_caps=row.stage_caps,
         packet_href=(
             f"/project/{project_id}/runs/{row.run_id}/packet.zip" if is_published else None
         ),
@@ -148,10 +148,15 @@ def choose_deliverable_run(project_id: str, rows: list[RunIndexRow]) -> RunIndex
     return rows[0] if rows else None
 
 
-def build_checks(refusals: list[PublishRefusal]) -> list[OverviewCheck]:
+def build_checks(
+    project_id: str, row: RunIndexRow, refusals: list[PublishRefusal]
+) -> list[OverviewCheck]:
     if refusals:
         return [
-            OverviewCheck(ok=False, headline=refusal.headline, detail=refusal.detail)
+            OverviewCheck(
+                ok=False, headline=refusal.headline, detail=refusal.detail,
+                action=choose_refusal_action(project_id, row, refusal),
+            )
             for refusal in refusals
         ]
     return [
@@ -166,6 +171,34 @@ def build_checks(refusals: list[PublishRefusal]) -> list[OverviewCheck]:
             detail="Every stage validated its output against the schema its version declares.",
         ),
     ]
+
+
+def choose_refusal_action(
+    project_id: str, row: RunIndexRow, refusal: PublishRefusal
+) -> OverviewCheckAction:
+    """Every refusal names the one move that clears it, so the card is never a dead end."""
+    if refusal.kind == "windowed":
+        return OverviewCheckAction(
+            label="Ask the agent to run it whole", kind="chat",
+            href=build_chat_href(project_id, "Re-run this workflow with no row caps."),
+        )
+    if refusal.kind == "no_figures":
+        return OverviewCheckAction(
+            label="Ask the agent to declare figures", kind="chat",
+            href=build_chat_href(
+                project_id,
+                "Declare this workflow's summary figures as workflow outputs, then run it.",
+            ),
+        )
+    if row.status == RunStatus.AWAITING_REVIEW:
+        return OverviewCheckAction(
+            label="Review it", kind="go",
+            href=f"/project/{project_id}/runs/{row.run_id}",
+        )
+    return OverviewCheckAction(
+        label="Ask what went wrong", kind="chat",
+        href=build_chat_href(project_id, f"Why did the run {row.run_id} end {row.status}?"),
+    )
 
 
 def describe_missing_runs(versions: VersionsRead) -> str:
