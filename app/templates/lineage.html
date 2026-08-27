@@ -77,7 +77,15 @@ body{display:flex;flex-direction:column;overflow:hidden}
 .lin-snav h2{margin:0 0 8px;font-size:11px;color:var(--muted);
   text-transform:uppercase;letter-spacing:.05em}
 /* One entry per path the run recorded, none folded into another. */
-.paths-wait{display:flex;justify-content:center;padding:26px 0}
+/* The waiting shape of the pane, so the reader sees WHICH column is still coming.
+   A path entry's own box, breathing rather than sweeping — the page is quiet. */
+.paths-sk{height:31px;border-radius:8px;margin-bottom:5px;background:var(--border);
+  border-left:3px solid transparent;animation:paths-breathe 1.8s ease-in-out infinite}
+.paths-sk-last{animation-name:paths-breathe-faint}
+.paths-sk-title{height:15px;width:38%;margin-bottom:9px;border-left:0;border-radius:5px}
+.paths-sk-sub{height:10px;width:64%;margin-bottom:14px;border-left:0;border-radius:5px}
+@keyframes paths-breathe{0%,100%{opacity:1}50%{opacity:.45}}
+@keyframes paths-breathe-faint{0%,100%{opacity:.5}50%{opacity:.22}}
 .paths-count{font-size:12.5px;margin:0 0 10px;color:var(--muted);line-height:1.45}
 .paths-count code{background:var(--sunk-deep);padding:0 4px;border-radius:4px}
 .path-entry{display:block;padding:7px 8px;border-radius:8px;margin-bottom:5px;
@@ -302,11 +310,17 @@ tr.lin-opens:hover td{background:var(--hover)}
   <div class="lin-snav">
     {# A folder has no server to ask, so the packet writes both halves in place. #}
     {% if offline %}{% include "_row_paths.html" %}
-    {% else %}<div id="paths-nav" class="paths-wait"><span class="spinner"></span></div>{% endif %}
+    {% else %}<div id="paths-nav" class="paths-wait">
+      <p class="paths-count">Scanning all paths&hellip;</p>
+      <div class="paths-sk"></div><div class="paths-sk"></div><div class="paths-sk"></div>
+      <div class="paths-sk"></div><div class="paths-sk paths-sk-last"></div>
+    </div>{% endif %}
   </div>
   <div class="lin-story">
     {% if offline %}{% include "_row_paths_head.html" %}
-    {% else %}<div id="paths-head"></div>{% endif %}
+    {% else %}<div id="paths-head" class="paths-wait">
+      <div class="paths-sk paths-sk-title"></div><div class="paths-sk paths-sk-sub"></div>
+    </div>{% endif %}
     <div id="steps"></div>
     <details class="lin-graph"><summary>Lineage graph</summary>
       <pre class="mermaid" id="mmd">{{ mermaid }}</pre>
