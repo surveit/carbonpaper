@@ -1,4 +1,4 @@
-// The Values used tab's replay: which stage's sheet is on screen, and every way
+// The Relevant columns tab's replay: which stage's sheet is on screen, and every way
 // the reader moves between them. The sheets themselves are drawn by the server
 // (_values_panel.html); this file only ever changes which one is shown.
 window.ValuesUsed = window.ValuesUsed || (function(){

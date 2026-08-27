@@ -30,7 +30,7 @@
    click-to-expand and a title hover, truncated at 4000 characters rather than
    240, and the tall sticky-header scroll box.
 
-   `reached_rows` (the Values used tab's) names the rows the figure came
+   `reached_rows` (the Relevant columns tab's) names the rows the figure came
    through, which the tab draws neighbours around: those rows are marked, the
    cited column is painted on them alone, and the # column comes on so the rest
    can be read against them. #}
@@ -95,7 +95,7 @@
     {%- set column_mark = {'added': '+', 'dropped': '−'} %}
     {%- set column_title = {'added': 'added by this stage',
                             'dropped': 'dropped by this stage, carrying the input value'} %}
-    {# `column_writers` and `cited_column` are the Values used tab's: the column
+    {# `column_writers` and `cited_column` are the Relevant columns tab's: the column
        this page is tracing, and where each other one was written. Absent
        everywhere else, so the header is the plain one. #}
     {%- set writers = column_writers | default({}, true) %}

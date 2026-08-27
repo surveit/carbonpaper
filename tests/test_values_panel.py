@@ -1,4 +1,4 @@
-"""The Values used tab, over the twelve-row grants workflow in scope_fixture."""
+"""The Relevant columns tab, over the twelve-row grants workflow in scope_fixture."""
 from __future__ import annotations
 
 import pytest

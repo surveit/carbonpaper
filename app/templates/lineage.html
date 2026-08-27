@@ -13,7 +13,7 @@
 {# The header's three pickers; served only, because a folder has no other row to move to. #}
 {% if not offline %}<script src="/static/picker.js" defer></script>{% endif %}
 {% if not offline %}<script src="{{ static_root | default("/static/", true) }}breadcrumbs.js" defer></script>
-{# The packet's Values used pane is an empty state, so the script driving it is dead there. #}
+{# The packet's Relevant columns pane is an empty state, so its script is dead there. #}
 <script src="{{ static_root | default("/static/", true) }}values-used.js"></script>
 {# The Input files pane's own script; the packet's pane is the run list alone. #}
 <script src="{{ static_root | default("/static/", true) }}input-files.js"></script>
@@ -291,7 +291,7 @@ tr.lin-opens:hover td{background:var(--hover)}
 <div class="lin-pagetabs" id="pagetabs">
   <button class="lin-pagetab on" data-pane="paths">Paths</button>
   <button class="lin-pagetab" data-pane="rows">Relevant rows</button>
-  <button class="lin-pagetab" data-pane="values">Values used</button>
+  <button class="lin-pagetab" data-pane="values">Relevant columns</button>
   <button class="lin-pagetab" data-pane="inputs">Input files</button>
 </div>
 <div class="lin-pane" data-pane="paths">
@@ -754,7 +754,7 @@ document.getElementById('pagetabs').addEventListener('click', e => {
   drawScopeFor(column);
 });
 
-// ---- Values used: where one column came from, walked back over what each ----
+// ---- Relevant columns: where one column came from, over what each stage read --
 // stage read. The column is the header's, as it is for Relevant rows: this tab
 // holds it and lets go of the row.
 const valuesRoot = document.getElementById('values-root');
