@@ -27,10 +27,12 @@ figures the project's numbers: it writes a `PublishedRun` record, and the packet
 appears in place of the Publish button. Nothing is copied — the figures stay where the
 executor wrote them, and withdrawing removes only the project's claim on them.
 
-Three things refuse it, and each renders as a failed check under the figures:
+Three things refuse it, and each renders as a failed check under the figures. They are
+their OWN axis: a run's `status` says what the runner did, and none of these changes it.
+A capped run still ends `ok`, correctly — a cap is a parameter, not a fault.
 - **windowed** — a test run, or any stage carrying a row cap. Both finish every stage
-  over a slice, so both read as complete and are not output. The cap is drawn in the
-  error palette wherever an input is listed, never as a grey note.
+  over a slice, so both read as complete and neither can carry a claim. The cap is drawn
+  in the error palette wherever an input is listed, never as a grey note.
 - **incomplete** — the run did not end `ok`.
 - **no_figures** — no stage declared one. A figure is written by the executor from
   `Stage.workflow_outputs`, so a finished run cannot be given one after the fact; the
