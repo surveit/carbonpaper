@@ -20,7 +20,6 @@ from app.models.records.run_manifest import RunManifest
 from app.models.workflow import Workflow
 from app.runtime.manifest import read_run_manifest
 from app.services import run as run_service
-from app.services.input_check import SOURCE_ROW_COLUMN
 from app.services.scope import find_rows_reached_per_stage
 from app.services.versioning import load_version_stages
 from app.services.workspace import resolve_run_dir
@@ -31,6 +30,8 @@ from app.web.values_walk import ColumnAt, find_columns_behind
 
 # Rows shown beside the relevant ones when a reader widens the preview to the frame.
 OTHER_ROWS_SHOWN = 40
+# The 1-based sheet line a file loader stamps on each row, where the connector asks.
+SOURCE_ROW_COLUMN = "source_row"
 
 
 class Basis(str, Enum):
