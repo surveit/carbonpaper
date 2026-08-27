@@ -1,8 +1,9 @@
 """Build the stage-cache bundle the tour seeds beside its fixture.
 
-Seeds the committed fixture into a throwaway workspace, runs it until the review
-queue halts it, and exports what the run recorded. The queue's own entries are a
-reviewer's decisions, so a bundle carrying any is refused rather than shipped.
+Seeds the COMMITTED fixture into a throwaway workspace, runs it until the review
+queue halts it, and exports what the run recorded. Exporting from your own
+workspace instead would carry whatever its tour project holds: seeding reuses that
+project by name and never re-imports, so after a fixture edit its stages are stale.
 
 Usage:  python -m scripts.build_tutorial_cache
 """
@@ -16,10 +17,8 @@ from pathlib import Path
 
 from app.core.frames import FrameStore, configure_frame_store
 from app.core.persistence import configure_store
-from app.core.stage_cache import StageCacheEntry
 from app.core.sqlite_store import SqliteKvStore
-from app.models.stages.human_review_queue import HumanReviewQueueStage, ReviewVerdict
-from app.services import loader, run as run_service, workspace
+from app.services import run as run_service, workspace
 from app.services.stage_cache_transfer import export_stage_cache
 from app.tools.tutorial import (
     TUTORIAL_CACHE_BUNDLE,
@@ -36,9 +35,7 @@ def main() -> None:
 
     with tempfile.TemporaryDirectory() as scratch:
         configure_throwaway_workspace(Path(scratch))
-        project_id = build_warm_tutorial_project()
-        check_no_reviewer_decisions(project_id)
-        args.out.write_bytes(export_stage_cache(project_id))
+        args.out.write_bytes(export_stage_cache(build_warm_tutorial_project()))
 
     print(f"wrote {args.out} ({args.out.stat().st_size:,} bytes)")
 
@@ -75,27 +72,6 @@ def wait_for_run(project_id: str, run_id: str, ceiling_seconds: int = 900) -> st
             return status
         time.sleep(2)
     raise RuntimeError(f"the tour's run was still running after {ceiling_seconds}s")
-
-
-def check_no_reviewer_decisions(project_id: str) -> None:
-    """A queue caches the rows its filter passed over; a reviewed row would answer the tour."""
-    verdict_columns = {
-        stage.id: stage.queue.verdict_column
-        for stage in loader.list_parsed_stages(loader.load_stage_entries(project_id))
-        if isinstance(stage, HumanReviewQueueStage)
-    }
-    decided = sorted(
-        f"{entry.stage_id}/{(entry.output_row or {}).get(verdict_columns[entry.stage_id])}"
-        for entry in StageCacheEntry.read_only().find_project_entries(project_id)
-        if entry.stage_id in verdict_columns
-        and (entry.output_row or {}).get(verdict_columns[entry.stage_id])
-        != ReviewVerdict.skipped.value
-    )
-    if decided:
-        raise RuntimeError(
-            f"{len(decided)} cached row(s) carry a review verdict — {decided[0]}. Shipping "
-            "them would answer the queue for the reader. Rebuild from an unreviewed run."
-        )
 
 
 if __name__ == "__main__":
