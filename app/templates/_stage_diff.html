@@ -128,7 +128,10 @@
     <tr{% if traced %} class="diff-row-mine"{% endif %}>{% if numbered %}<td class="row-num {{ 'diff-row-num-mine' if traced else 'muted' }}">{{ ordinal | row_number }}</td>{% endif %}<td class="syw-cell">{% set trace_href = links.row_trace(stage.stage_id, ordinal) %}{% if trace_href %}<a href="{{ trace_href }}" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a>{% endif %}</td>
       {%- for cell in row %}
       {%- set column = diff.columns[loop.index0] %}
-      {%- set klass = [cell_class[cell.state],
+      {# An unchanged cell of a column the stage READ keeps full ink: it is what
+         the stage worked from. Only a passenger's cells go muted. #}
+      {%- set state_class = '' if cell.state == 'carried' and column.read else cell_class[cell.state] %}
+      {%- set klass = [state_class,
                        'diff-col-quiet' if column.name in quiet else '',
                        'diff-col-cited' if column.name == cited_column and traced else ''] | select | join(' ') %}
       {%- if cell.text[:4] == 'http' and cell.state != 'changed' %}<td class="cell-url {{ klass }}"><a href="{{ cell.text }}" target="_blank" rel="noopener">{{ cell.text }}</a></td>
