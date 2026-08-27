@@ -16,7 +16,7 @@ from app.models import Column, Stage, StageType
 from app.models.errors import StepRefused
 from app.models.stages.signature import ExtendsSignature
 from app.models.review_guide import ReviewGuideDraft
-from app.models.stages.human_review_queue import HumanReviewQueueStage
+from app.models.stages.human_review_queue import HumanReviewQueueStage, ReviewVerdict
 from app.runtime.context import RunContext, RunIdentity
 from app.runtime.stage_tests import run_stage_tests
 from app.runtime.stages import HANDLERS
@@ -908,3 +908,34 @@ def test_the_report_step_refuses_a_reviewed_judgment_nobody_reviewed(tmp_path):
 
     with pytest.raises(StepRefused, match="cannot say who reviewed it"):
         _publish_a_report(tmp_path, df)
+
+
+def test_the_seeded_cache_is_readable_by_the_project_it_lands_in(tmp_path):
+    reference = seed_tutorial_project(TutorialContext(base_url="http://localhost:8000/"))
+    entries = StageCacheEntry.read_only().find_project_entries(reference.project.id)
+    live = {
+        (stage.id, stage.compute_definition_fingerprint())
+        for stage in load_workflow(reference.project.id)
+    }
+    unreachable = [e.stage_id for e in entries if (e.stage_id, e.stage_fingerprint) not in live]
+    assert unreachable == [], (
+        "the committed bundle no longer matches the committed fixture — rebuild it "
+        "with `python -m scripts.build_tutorial_cache`"
+    )
+
+
+def test_the_seeded_cache_answers_every_filing_the_model_step_would_be_asked(tmp_path):
+    reference = seed_tutorial_project(TutorialContext(base_url="http://localhost:8000/"))
+    entries = StageCacheEntry.read_only().find_project_entries(reference.project.id)
+    judged = [entry for entry in entries if entry.stage_id == "judge_alignment"]
+    assert len(judged) == _ROWS_IN_CSV
+
+
+def test_the_seeded_cache_leaves_the_queue_for_the_reader(tmp_path):
+    reference = seed_tutorial_project(TutorialContext(base_url="http://localhost:8000/"))
+    entries = StageCacheEntry.read_only().find_project_entries(reference.project.id)
+    verdicts = {
+        (entry.output_row or {}).get("review_verdict")
+        for entry in entries if entry.stage_id == "review_contradictions"
+    }
+    assert verdicts == {ReviewVerdict.skipped.value}

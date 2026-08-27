@@ -250,8 +250,9 @@ def test_a_real_run_resolves_the_bound_csv_and_honours_the_row_cap(
     assert by_stage["lobbying_filings"]["output_row_count"] == 6
     # The join drops no filing, so the cap is what every later stage sees.
     assert by_stage["filings_with_commitments"]["output_row_count"] == 6
-    # No model is available offline, so the LLM stage is where this run stops.
-    assert by_stage["judge_alignment"]["status"] == "error"
+    # No model is available offline, so getting through here is the seeded cache.
+    assert by_stage["judge_alignment"]["status"] == "ok"
+    assert by_stage["judge_alignment"]["cached_rows"] == 6
 
 
 def test_the_tour_seeds_a_review_guide_the_reader_can_open(projects_root: Path) -> None:
@@ -289,7 +290,9 @@ def test_get_run_status_reads_the_manifest_back_without_waiting(
     assert status["stage_records"][0]["stage_id"] == "judge_alignment"
 
 
-def _run_the_tour_capped(monkeypatch: pytest.MonkeyPatch) -> tuple[dict[str, Any], str]:
+def _run_the_tour_capped(
+    monkeypatch: pytest.MonkeyPatch, bust_cache: bool = False
+) -> tuple[dict[str, Any], str]:
     monkeypatch.setattr(
         run_service, "_run_in_background", lambda target, *args: target(*args)
     )
@@ -297,7 +300,7 @@ def _run_the_tour_capped(monkeypatch: pytest.MonkeyPatch) -> tuple[dict[str, Any
     out = _call(
         next(t for t in _tools() if t.name == "run_workflow"),
         {"project_id": seeded["project"]["id"], "limits": {"lobbying_filings": 6},
-         "files": seeded["input_files"]},
+         "files": seeded["input_files"], "bust_cache": bust_cache},
     )
     return seeded, json.loads(out["content"][0]["text"])["run_id"]
 
@@ -369,7 +372,7 @@ def test_a_stage_that_did_not_finish_is_refused_rather_than_read(
     projects_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """An errored stage still wrote a frame — of nulls it never filled in."""
-    seeded, run_id = _run_the_tour_capped(monkeypatch)
+    seeded, run_id = _run_the_tour_capped(monkeypatch, bust_cache=True)
 
     out = _call(
         next(t for t in _tools() if t.name == "read_stage_output_rows"),
