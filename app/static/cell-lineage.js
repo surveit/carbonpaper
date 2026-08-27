@@ -5,7 +5,7 @@ document.addEventListener('click', function (event) {
     if (!event.target.closest) return;
     if (event.target.closest('a, button, input, label')) return;
     var cell = event.target.closest('td');
-    var row = cell && cell.closest('tr[data-href]');
+    var row = cell && cell.closest('table.data-preview tr[data-href]');
     if (!row) return;
     var href = row.dataset.href;
     var head = row.closest('table').tHead;

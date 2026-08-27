@@ -7,6 +7,6 @@ document.addEventListener('click', function (e) {
     if (e.target.tagName === 'A') return;
     // In a table whose rows open their own lineage the click is already spoken
     // for; the title attribute shows the whole value on hover instead.
-    if (cell.closest('tr[data-href]')) return;
+    if (cell.closest('table.data-preview tr[data-href]')) return;
     cell.classList.toggle('expanded');
 });
