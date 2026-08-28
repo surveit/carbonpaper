@@ -37,17 +37,20 @@ window.ChatRail = window.ChatRail || {};
     write(OPEN_KEY, "1");
   };
 
-  document.addEventListener("DOMContentLoaded", function () {
-    const opening = window.ChatRail.opening || {};
+  // Takes a session someone else opened, so a page can put a conversation in the rail
+  // without this learning whose it is. See tests/arch/test_chat_rail_names_no_agent.py.
+  window.ChatRail.open = function (sid, title) {
+    window.ChatRail.remember(sid, title);
+    wire(sid, title, fetch(`/chat/${sid}/panel`), true);
+  };
+
+  function wire(sid, title, pendingPanel, showNow) {
     const rail = document.getElementById("chat-rail");
     const tab = document.getElementById("chat-rail-tab");
-    // No session, or the chat page's own panel — <head> drew neither state, so there is
-    // nothing here to fill in.
-    if (!rail || !tab || !opening.sid) return;
-    const sid = opening.sid;
+    if (!rail || !tab) return;
     const shown = document.documentElement.classList;
 
-    const name = opening.title || "Conversation";
+    const name = title || "Conversation";
     rail.querySelector(".js-rail-title").textContent = name;
     rail.querySelector(".chat-rail-open-page").href = `/chat/${sid}`;
     tab.textContent = name;
@@ -58,7 +61,7 @@ window.ChatRail = window.ChatRail || {};
       write(OPEN_KEY, open ? "1" : "0");
     }
 
-    let pending = opening.panel;
+    let pending = pendingPanel;
     async function load() {
       if (!pending) return;
       const response = pending;
@@ -81,16 +84,25 @@ window.ChatRail = window.ChatRail || {};
       window.ChatPanel.mount(panel);
     }
 
-    tab.addEventListener("click", () => {
+    tab.onclick = () => {
       show(true);
       // Shut at <head> time means no request was made, so opening asks for it now.
       if (!pending && !rail.querySelector(".js-chat-config")) pending = fetch(`/chat/${sid}/panel`);
       load();
-    });
+    };
     // Shut, not dismissed: the tab stays, because the conversation is still theirs to come
     // back to. What ends it is opening a different one, which overwrites the id above.
-    rail.querySelector(".js-rail-close").addEventListener("click", () => show(false));
+    rail.querySelector(".js-rail-close").onclick = () => show(false);
 
+    if (showNow) show(true);
     load();
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    const opening = window.ChatRail.opening || {};
+    // No session, or the chat page's own panel — <head> drew neither state, so there is
+    // nothing here to fill in.
+    if (!opening.sid) return;
+    wire(opening.sid, opening.title, opening.panel, false);
   });
 })();

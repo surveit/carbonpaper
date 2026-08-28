@@ -47,9 +47,16 @@ the only tell there is — nothing records a heartbeat, so a crashed run reads a
 the newest version never run · runs that errored · no methodology document · a stored
 version that will not parse.
 
-Reviewing and running are app screens; every other row opens
-`/chat/agent/editing/new?project_id=…&task=…`. A `task` suppresses the agent's opening turn
-and the panel sends it as the reader's OWN first message, so the agent starts on the job.
+Reviewing and running are app screens. Every other row is an agent control: the sparkle
+macro, then the job in the imperative — `Run it whole`, not `Ask the agent to run it
+whole`. The words that name the agent ride in `.ov-by`, hidden visually and read aloud,
+because the mark is `aria-hidden` and may not carry the meaning alone.
+
+Clicking one opens that job in the CHAT RAIL on this page: `static/project-overview.js`
+creates the session, posts the task as the reader's own first message, and hands the id to
+`ChatRail.open` — which takes a session someone else opened, so the rail still never
+learns which agent is on the other end. The anchor keeps its `/chat/agent/editing/new`
+href, so a failed POST or no JS lands in the same conversation on its own page.
 
 - `/project/<m>/runs`, `/runs/<id>` — run history + detail. `/runs/new` is the
   run-launch form (version picker, one path field + row cap per file input, and an

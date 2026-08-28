@@ -21,6 +21,12 @@ from app.web.run_published import RunPublished, read_published_outputs
 
 DeliverableState = Literal["published", "publishable", "refused", "no_runs"]
 
+_RUN_NEWEST = "Run the newest version of this workflow."
+_RUN_UNCAPPED = "Re-run this workflow with no row caps."
+_DECLARE_FIGURES = "Declare this workflow's summary figures as workflow outputs, then run it."
+_WHY_ERRORED = "Why did the last run error?"
+_WRITE_METHODOLOGY = "Write a methodology document for this project from its workflow."
+
 
 class VersionsRead(BaseModel):
     """A stored version written before a model changed cannot be parsed, and must not 500 a page."""
@@ -47,6 +53,8 @@ class OverviewCheckAction(BaseModel):
     label: str
     href: str
     kind: Literal["chat", "go"]
+    # The words sent to the agent; the page opens them in the rail rather than following href.
+    task: str = ""
 
 
 class Deliverable(BaseModel):
@@ -76,6 +84,7 @@ class QueueRow(BaseModel):
     label: str
     href: str
     kind: Literal["chat", "go"]
+    task: str = ""
 
 
 class ProjectOverview(BaseModel):
@@ -179,16 +188,13 @@ def choose_refusal_action(
     """Every refusal names the one move that clears it, so the card is never a dead end."""
     if refusal.kind == "windowed":
         return OverviewCheckAction(
-            label="Ask the agent to run it whole", kind="chat",
-            href=build_chat_href(project_id, "Re-run this workflow with no row caps."),
+            label="Run it whole", kind="chat", task=_RUN_UNCAPPED,
+            href=build_chat_href(project_id, _RUN_UNCAPPED),
         )
     if refusal.kind == "no_figures":
         return OverviewCheckAction(
-            label="Ask the agent to declare figures", kind="chat",
-            href=build_chat_href(
-                project_id,
-                "Declare this workflow's summary figures as workflow outputs, then run it.",
-            ),
+            label="Declare the figures", kind="chat", task=_DECLARE_FIGURES,
+            href=build_chat_href(project_id, _DECLARE_FIGURES),
         )
     if row.status == RunStatus.AWAITING_REVIEW:
         return OverviewCheckAction(
@@ -196,7 +202,7 @@ def choose_refusal_action(
             href=f"/project/{project_id}/runs/{row.run_id}",
         )
     return OverviewCheckAction(
-        label="Ask what went wrong", kind="chat",
+        label="Explain it", kind="chat", task=f"Why did the run {row.run_id} end {row.status}?",
         href=build_chat_href(project_id, f"Why did the run {row.run_id} end {row.status}?"),
     )
 
@@ -243,9 +249,9 @@ def find_unreadable_version(project_id: str, versions: VersionsRead) -> QueueRow
     return QueueRow(
         count="!", tone="bad", what="A stored version cannot be read",
         why=versions.problem,
-        label="Ask the agent to repair it",
+        label="Repair it", kind="chat",
+        task=f"A stored version will not parse: {versions.problem}",
         href=build_chat_href(project_id, f"A stored version will not parse: {versions.problem}"),
-        kind="chat",
     )
 
 
@@ -261,9 +267,8 @@ def find_newest_version_never_run(
     return QueueRow(
         count="", tone="warn", what="The newest version has never run",
         why=(newest.message or newest.version_id),
-        label="Ask the agent to run it",
-        href=build_chat_href(project_id, "Run the newest version of this workflow."),
-        kind="chat",
+        label="Run it", kind="chat", task=_RUN_NEWEST,
+        href=build_chat_href(project_id, _RUN_NEWEST),
     )
 
 
@@ -289,9 +294,8 @@ def find_runs_that_errored(project_id: str, rows: list[RunIndexRow]) -> QueueRow
         count=str(len(errored)), tone="idle",
         what=f"run{'s' if len(errored) != 1 else ''} errored",
         why=f"the last on {(errored[0].started_at or 'an unrecorded date')[:10]}",
-        label="Ask what went wrong",
-        href=build_chat_href(project_id, "Why did the last run error?"),
-        kind="chat",
+        label="Explain the errors", kind="chat", task=_WHY_ERRORED,
+        href=build_chat_href(project_id, _WHY_ERRORED),
     )
 
 
@@ -302,11 +306,8 @@ def find_missing_methodology(project_id: str) -> QueueRow | None:
         count="", tone="warn", what="No methodology document",
         why="a review packet would open on a blank page, and nothing states what this "
             "project establishes",
-        label="Ask the agent to write one",
-        href=build_chat_href(
-            project_id, "Write a methodology document for this project from its workflow."
-        ),
-        kind="chat",
+        label="Write the document", kind="chat", task=_WRITE_METHODOLOGY,
+        href=build_chat_href(project_id, _WRITE_METHODOLOGY),
     )
 
 
