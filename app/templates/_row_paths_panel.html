@@ -1,0 +1,5 @@
+{# The two halves of the Paths pane that need the run's branch analysis, which is
+   slow enough that the page draws itself first and asks for these after. The page
+   puts each where it belongs. Context: pane, figure, links. #}
+<div data-paths-part="nav">{% include "_row_paths.html" %}</div>
+<div data-paths-part="head">{% include "_row_paths_head.html" %}</div>

@@ -21,6 +21,7 @@ from app.runtime.errors import MissingLineage
 from app.services.loader import resolve_function_code
 from app.services import run as run_service
 from app.runtime.trace import RowSampleChoice, Trace, trace_row, trace_to_dict
+from app.models.workflow_stage import WorkflowStage
 from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.panel_links import AppPanelLinks, read_row_ref
 from app.web import scope_view
@@ -121,20 +122,9 @@ async def run_stage_row_trace_view(
 ):
     run_record = load_run_record(project_id, run_id)
     manifest = run_record.to_dict()
-    trace = _walk_row(project_id, run_id, stage_id, row, via)
-
-    # Node detail and the graph both describe THIS run, so both read the version
-    # it pinned. With no resolvable version neither falls back to the working
-    # copy: the story still lists the ancestry, transforms show as "unknown",
-    # and no graph is drawn.
-    try:
-        stages_by_id = run_service.load_run_workflow(
-            project_id, manifest).index_workflow_stages_by_id()
-    except RunVersionUnresolvableError:
-        stages_by_id = {}
-
+    stages_by_id = _read_run_stages(project_id, manifest)
     links = AppPanelLinks(project_id, run_id)
-    view = build_trace_view(trace_to_dict(trace), stages_by_id, links)
+    view = _walk_row_into_view(project_id, run_id, stage_id, row, via, stages_by_id, links)
     ordered = [stages_by_id[n["stage_id"]].stage for n in view["nodes"]
                if n["stage_id"] in stages_by_id]
     mermaid = build_mermaid_graph(ordered, project_id) if len(ordered) == len(view["nodes"]) else ""
@@ -154,7 +144,6 @@ async def run_stage_row_trace_view(
             "view": view,
             "coordinate": coordinate,
             "inputs": read_run_inputs(build_input_catalog(project_id, manifest), links),
-            "pane": _read_paths_pane(project_id, run_id, stage_id, row, view),
             "figure": CitedFigure(stage_id=stage_id, row_ordinal=row),
             "links": links,
             "project": project_id,
@@ -162,6 +151,46 @@ async def run_stage_row_trace_view(
             "mermaid": mermaid,
         },
     )
+
+
+@router.get(
+    "/project/{project_id}/runs/{run_id}/stage/{stage_id}/row/{row}/paths/panel",
+    response_class=HTMLResponse,
+)
+async def run_stage_row_paths_panel(
+    request: Request, project_id: str, run_id: str, stage_id: str, row: int,
+    via: list[str] | None = _VIA,
+):
+    manifest = load_run_record(project_id, run_id).to_dict()
+    links = AppPanelLinks(project_id, run_id)
+    view = _walk_row_into_view(project_id, run_id, stage_id, row, via,
+                               _read_run_stages(project_id, manifest), links)
+    return templates.TemplateResponse(
+        request,
+        "_row_paths_panel.html",
+        {
+            "pane": _read_paths_pane(project_id, run_id, stage_id, row, view),
+            "figure": CitedFigure(stage_id=stage_id, row_ordinal=row),
+            "links": links,
+        },
+    )
+
+
+def _read_run_stages(project_id: str, manifest: dict[str, Any]) -> dict[str, WorkflowStage]:
+    """Node detail and the graph describe THIS run, so both read the version it pinned."""
+    try:
+        return run_service.load_run_workflow(
+            project_id, manifest).index_workflow_stages_by_id()
+    except RunVersionUnresolvableError:
+        # Never the working copy: the story still lists the ancestry, and no graph is drawn.
+        return {}
+
+
+def _walk_row_into_view(project_id: str, run_id: str, stage_id: str, row: int,
+                        via: list[str] | None, stages_by_id: dict[str, WorkflowStage],
+                        links: AppPanelLinks) -> dict[str, Any]:
+    return build_trace_view(
+        trace_to_dict(_walk_row(project_id, run_id, stage_id, row, via)), stages_by_id, links)
 
 
 def _read_paths_pane(project_id: str, run_id: str, stage_id: str, row: int,
