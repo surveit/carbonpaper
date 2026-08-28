@@ -6,8 +6,11 @@ record is found — it never invents a model, a creation date, or a label.
 
 from __future__ import annotations
 
+from io import BytesIO
+from pathlib import Path
 import shutil
 import re
+import zipfile
 from datetime import datetime
 from typing import Any, Sequence
 
@@ -37,8 +40,13 @@ from app.services import stage_edit, terms, versioning, workspace
 from app.services import loader
 from app.services import methodology
 from app.services import run as run_service
-from app.services.errors import WorkflowLoadError
+from app.services.errors import (
+    CacheArchiveRejected, ProjectArchiveRejected, WorkflowLoadError,
+)
 from app.services.project_record import read_project_name as read_project_name
+from app.services.stage_cache_transfer import (
+    CacheImportReport, export_stage_cache, import_stage_cache, validate_cache_archive,
+)
 from app.services.stage_edit import AddStagesResult, EditStageResult
 
 
@@ -448,3 +456,74 @@ def import_project(
             project_id, message=f"Imported '{label}'", reviewer="import"
         )
     return project_id
+
+
+# ─── The bundle and the stage cache in one archive ───────────────────────────
+
+_WORKFLOW_MEMBER = "workflow.json"
+
+
+class ProjectImportReport(BaseModel):
+    """`cache` is None for a bundle that came with none, never for one that was refused."""
+
+    project_id: str
+    cache: CacheImportReport | None
+
+
+def export_project_archive(project_id: str) -> bytes:
+    """The cache export with the bundle added, so /admin/import-cache still reads it."""
+    archive = BytesIO(export_stage_cache(project_id))
+    with zipfile.ZipFile(archive, "a", zipfile.ZIP_DEFLATED) as bundle:
+        bundle.writestr(_WORKFLOW_MEMBER, export_project(project_id).to_json())
+    return archive.getvalue()
+
+
+def import_project_archive(raw: bytes) -> ProjectImportReport:
+    return _import_workflow_with_cache(_read_workflow_member(raw), raw)
+
+
+def import_bundle_file(bundle_path: Path) -> ProjectImportReport:
+    """A committed bundle and the cache file beside it, which is how the tour ships one."""
+    sidecar = name_cache_sidecar(bundle_path)
+    return _import_workflow_with_cache(
+        WorkflowFile.model_validate_json(bundle_path.read_text(encoding="utf-8")),
+        sidecar.read_bytes() if sidecar.is_file() else None,
+    )
+
+
+def name_cache_sidecar(bundle_path: Path) -> Path:
+    """A committed bundle carries its cache beside it, since a bundle is a document."""
+    return bundle_path.with_name(f"{bundle_path.stem}.cache.zip")
+
+
+def _import_workflow_with_cache(
+    workflow: WorkflowFile, cache_archive: bytes | None
+) -> ProjectImportReport:
+    """The cache is read before the project is written, so a refusal leaves no project."""
+    if cache_archive is None:
+        return ProjectImportReport(project_id=import_project(workflow), cache=None)
+    _validate_cache_half(cache_archive)
+    project_id = import_project(workflow)
+    return ProjectImportReport(
+        project_id=project_id, cache=import_stage_cache(cache_archive, project_id)
+    )
+
+
+def _validate_cache_half(cache_archive: bytes) -> None:
+    """One refusal reaches the uploader, whichever half of the archive it came from."""
+    try:
+        validate_cache_archive(cache_archive)
+    except CacheArchiveRejected as exc:
+        raise ProjectArchiveRejected(str(exc)) from exc
+
+
+def _read_workflow_member(raw: bytes) -> WorkflowFile:
+    with zipfile.ZipFile(BytesIO(raw)) as bundle:
+        try:
+            payload = bundle.read(_WORKFLOW_MEMBER)
+        except KeyError as exc:
+            raise ProjectArchiveRejected(
+                f"no {_WORKFLOW_MEMBER} in the archive. A stage-cache export carries no "
+                "project — import it from /admin/cache, into a project that exists."
+            ) from exc
+    return WorkflowFile.model_validate_json(payload)

@@ -19,3 +19,7 @@ class SpecMigrationRefused(ValueError):
 
 class CacheArchiveRejected(Exception):
     """A stage-cache export this workspace could not read a single entry of."""
+
+
+class ProjectArchiveRejected(Exception):
+    """A project archive this workspace could not read a project out of."""
