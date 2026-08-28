@@ -15,10 +15,6 @@
 
   Context: state = project_view.shell_state(...), overview = build_project_overview(...).
 #}
-{% block section_head %}
-<script src="/static/project-overview.js" defer></script>
-{% endblock %}
-
 {% block section %}
 {% set s = state %}
 {% set d = overview.deliverable %}
@@ -99,7 +95,6 @@
             {% if check.action %}
             {% if check.action.kind == 'chat' %}
             <a class="ov-ask" href="{{ check.action.href }}"
-               data-agent-task="{{ check.action.task }}" data-project="{{ s.id }}"
                >{{ sparkle() }}{{ check.action.label }}<span class="ov-by">, with the agent</span></a>
             {% else %}
             <a class="ov-go" href="{{ check.action.href }}">{{ check.action.label }}</a>
@@ -168,7 +163,6 @@
           <span class="ov-q-why">{{ row.why }}</span>
           {% if row.kind == 'chat' %}
           <a class="ov-ask" href="{{ row.href }}"
-             data-agent-task="{{ row.task }}" data-project="{{ s.id }}"
              >{{ sparkle() }}{{ row.label }}<span class="ov-by">, with the agent</span></a>
           {% else %}
           <a class="ov-go" href="{{ row.href }}">{{ row.label }}</a>

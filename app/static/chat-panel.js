@@ -573,8 +573,8 @@ window.ChatPanel.mount = function (root) {
   // Reattach to a turn already running on the server. `from=0` replays it whole: the store
   // holds a turn's blocks only once it has finished, so mid-turn the buffer is the transcript.
   if (cfg.active_turn) connect(cfg.active_turn, 0);
-  // A link that already named the job opens with that job as the reader's OWN first
-  // message, so the agent is working by the time the page settles rather than greeting.
+  // A draft page opened from a link that already named the job sends it as the reader's
+  // own first message. Only a draft: SID is null until the first reply materializes one.
   if (cfg.opening_message && !SID) sendText(cfg.opening_message);
 };
 
