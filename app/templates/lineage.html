@@ -579,12 +579,25 @@ function baseLine(n){
   const text = n.base
     ? `compared against its parent, <code>${esc(n.base.stage_id)}</code>`
       + ` row ${n.base.row_number}.`
-    : (fanInOf(n)
-        ? `unmarked: this row summarizes ${fanInOf(n)}, so no single row precedes it.`
-        : (V.upstream.truncated
-            ? `unmarked: the walk stopped here, so which stage added what is unknown.`
-            : (n.source_file ? '' : `the origin row, read from the source — nothing precedes it.`)));
+    : unparentedLine(n);
   return `<p class="lin-base">${text}</p>`;
+}
+// Nothing preceded this row, so the marks came off the signature rather than a
+// comparison: a replacing stage wrote every column, an extending one is unknown.
+function unparentedLine(n){
+  const wrote = n.row_diff.added > 0;
+  if(fanInOf(n)){
+    return wrote
+      ? `this row summarizes ${fanInOf(n)}. No single row precedes it, and every`
+        + ` column below is one this stage wrote.`
+      : `unmarked: this row summarizes ${fanInOf(n)}, so no single row precedes it.`;
+  }
+  if(V.upstream.truncated){
+    return wrote
+      ? `the walk stopped here, but this stage writes every column it emits.`
+      : `unmarked: the walk stopped here, so which stage added what is unknown.`;
+  }
+  return n.source_file ? '' : `the origin row, read from the source — nothing precedes it.`;
 }
 // The file and both row numbers, in that order: the file row is where the row really
 // sits, and the stage's own number is what it became on the way in.

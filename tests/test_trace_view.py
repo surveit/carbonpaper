@@ -179,3 +179,45 @@ def test_a_branch_carries_its_own_links_so_the_page_builds_no_urls():
     ]
     branch = _view(trace, _stages())["nodes"][-1]["branches"][0]
     assert branch["links"]["trace"] == "/project/proj/runs/R1/stage/aliases/row/7/trace/view"
+
+
+def _trace_through_a_collapse() -> dict:
+    trace = _trace()
+    trace["start_stage"] = "totals"
+    trace["steps"].insert(0, {
+        "stage_id": "totals", "stage_type": "aggregate", "row_ordinal": 0,
+        "row": {"score_sum": 3}, "columns_new": ["score_sum"], "origin": "other",
+        "sampled": {"place": 1, "of": 2},
+    })
+    return trace
+
+
+def _stages_through_a_collapse() -> dict[str, WorkflowStage]:
+    authored = _authored_stages()
+    authored["totals"] = _stage({
+        "id": "totals", "type": "aggregate", "description": "Total the scores",
+        "inputs": [{"id": "enrich"}],
+        "aggregate": {"group_by": [],
+                   "aggregations": [{"output_column": "score_sum", "formula": "sum",
+                                     "value_column": "score"}]},
+        "signature": {
+            "form": "replaces",
+            "reads": [{"input": "enrich",
+                       "columns": [{"name": "score", "type": "int", "nullable": True}]}],
+            "produces": [{"name": "score_sum", "type": "int", "nullable": True}],
+        },
+    })
+    return Workflow(stages=list(authored.values())).index_workflow_stages_by_id()
+
+
+def test_a_collapsed_rows_columns_are_all_new_because_its_stage_replaces_its_input():
+    node = _view(_trace_through_a_collapse(), _stages_through_a_collapse())["nodes"][-1]
+    assert node["base"] is None  # the fan-in parent is at another grain
+    assert [(f["name"], f["state"]) for f in node["row_diff"]["columns"]] == [
+        ("score_sum", "added")]
+    assert node["row_diff"]["added"] == 1
+
+
+def test_a_collapsed_row_claims_nothing_when_the_run_pinned_an_unreadable_version():
+    node = _view(_trace_through_a_collapse(), {})["nodes"][-1]
+    assert [f["state"] for f in node["row_diff"]["columns"]] == ["carried"]

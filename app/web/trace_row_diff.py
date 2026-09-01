@@ -45,11 +45,12 @@ class RowDiff:
 
 
 def build_row_diff(
-    row: dict[str, Any], parent_row: Optional[dict[str, Any]], *, is_origin: bool,
-    read: frozenset[str] = frozenset(),
+    row: dict[str, Any], parent_row: Optional[dict[str, Any]], *,
+    writes_every_column: bool, read: frozenset[str] = frozenset(),
 ) -> RowDiff:
     if parent_row is None:
-        state = CellDiffState.added if is_origin else CellDiffState.carried
+        # With no row to compare against, the signature is what settles the marks.
+        state = CellDiffState.added if writes_every_column else CellDiffState.carried
         return _count_columns([
             RowColumn(name=str(name), state=state, text=render_cell(value), was=None,
                       read=str(name) in read)
