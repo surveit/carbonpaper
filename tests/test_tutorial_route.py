@@ -1,9 +1,4 @@
-"""The tour's door: the home page's redirect into it, and the draft/materialize routes
-behind it.
-
-Offline throughout — visiting the draft page runs no agent turn and creates nothing;
-materializing writes a session but still runs no turn.
-"""
+"""The tour's door: the home page's redirect into it, and the routes behind it."""
 from __future__ import annotations
 
 from pathlib import Path
