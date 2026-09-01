@@ -154,6 +154,17 @@ about to, call the macro.
 One more thing the mark cannot survive: `textContent`. A control that rebuilds its own
 label after a generation finishes must save and restore `innerHTML`.
 
+## An underlined figure opens its lineage
+
+A published figure that links to the row it was read from takes `.lineage-value`
+(`app/static/base.css`): text colour, underlined, accent on hover. The underline says a
+thing is a link and the colour says which kind — an ordinary link takes the accent, so a
+card of traceable numbers is not a blue page.
+
+One surface is exempt and says so inline: every cell of a published table is a lineage
+link, so `.wf-cells td a` stays plain until hover. Underlining all of them would draw the
+table rather than the links in it.
+
 ## Controls
 
 `.btn` is the base; `.primary` is the accent fill, `.secondary` the quieter outline,

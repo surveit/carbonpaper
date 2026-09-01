@@ -203,3 +203,10 @@ a { color: var(--accent); }
 .project-list li:hover { background: var(--hover); }
 .project-list a { text-decoration: none; font-weight: 500; }
 
+
+/* A published figure that opens the row it was read from. Sized in em so a 30px
+   headline and a 13px claim carry the same weight of line. */
+.lineage-value { color: var(--fg); font-variant-numeric: tabular-nums;
+    text-decoration: underline; text-decoration-color: var(--muted-dim);
+    text-decoration-thickness: 0.08em; text-underline-offset: 0.16em; }
+.lineage-value:hover { color: var(--accent); text-decoration-color: var(--accent); }

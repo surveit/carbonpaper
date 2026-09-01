@@ -24,17 +24,6 @@
   <span><b>{{ s.runs.n }}</b> run{{ '' if s.runs.n == 1 else 's' }}</span>
   <span class="ov-dot">·</span>
   <span><b>{{ s.workflow.n_stages }}</b> stage{{ '' if s.workflow.n_stages == 1 else 's' }}</span>
-  <span class="ov-dot">·</span>
-  <form class="ov-privacy" method="post" action="/project/{{ s.id }}/private">
-    {% if s.meta.private %}
-    <span><b>private</b> listed nowhere</span>
-    <button type="submit" class="btn sm">List it</button>
-    {% else %}
-    <input type="hidden" name="private" value="on">
-    <span><b>listed</b> on the projects page</span>
-    <button type="submit" class="btn sm">Make private</button>
-    {% endif %}
-  </form>
 </div>
 
 <div class="ov-split">
@@ -56,7 +45,7 @@
       <div class="ov-claims">
         {% for figure in d.published.figures if figure.primary %}
         <div class="ov-claim">
-          <span class="v"><a href="{{ figure.href }}"
+          <span class="v"><a class="lineage-value" href="{{ figure.href }}"
             title="Open the row this value was read from">{{ figure.value }}</a></span>
           <span class="l">{{ figure.label | lower }}</span>
         </div>
@@ -102,7 +91,8 @@
         <summary>{{ secondary | length }} more figure{{ '' if secondary | length == 1 else 's' }}</summary>
         <div class="ov-rest-figures">
           {% for figure in secondary %}
-          <div><span class="n"><a href="{{ figure.href }}">{{ figure.value }}</a></span>
+          <div><span class="n"><a class="lineage-value" href="{{ figure.href }}"
+            title="Open the row this value was read from">{{ figure.value }}</a></span>
             <span class="k">{{ figure.label | lower }}</span></div>
           {% endfor %}
         </div>
