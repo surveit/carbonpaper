@@ -67,6 +67,8 @@ class ChatPanelConfig(BaseModel):
     # A draft page stores nothing until the reader replies; these three materialize it.
     draft_agent_id: str | None = None
     draft_context: dict[str, str] | None = None
+    # Sent by the panel on mount, as the reader's own first message.
+    opening_message: str | None = None
 
 
 def _read_panel_context(sid: str, data: dict) -> dict:
@@ -144,6 +146,7 @@ async def draft_agent_chat(agent_id: str, request: Request):
             active_turn=None,
             draft_agent_id=agent_id,
             draft_context=context,
+            opening_message=context.get("task"),
         ),
     })
 

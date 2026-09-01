@@ -15,7 +15,13 @@ bite most often.
   Methodology · Glossary). `/project/<m>/workflow` carries the mermaid graph + inline
   node review (`/project/<m>/node/<id>/review-partial`); it has no nav row, and is
   reached from Versions.
-- `/project/<m>/runs`, `/runs/<id>` — run history + detail. `/runs/new` is the
+- **Overview** (`section_overview.html` ← `app.web.project_overview`) is the latest run and
+  what is outstanding. The run card carries the figures that run produced and the checks a
+  reader needs before treating them as the answer — a cap, a test run, an unfinished run,
+  no figures — and each outstanding row links to a screen or to a chat carrying the task.
+- `/project/<m>/runs`, `/runs/<id>` — run history + detail. `?status=` narrows the list to
+  one run status, its picker built from the rows the current view holds so it never offers
+  a status with nothing behind it; the overview's run rows link straight to their own. `/runs/new` is the
   run-launch form (version picker, one path field + row cap per file input, and an
   **Advanced** fold holding the row-level cache checkbox) — the one surface where a run
   is configured, which the history page's ▶ New run, the Workflow page's ▶ Run

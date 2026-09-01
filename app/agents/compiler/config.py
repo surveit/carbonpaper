@@ -35,8 +35,10 @@ def _render_opening_turn(context: BaseModel) -> OpeningTurn:
     assert isinstance(context, EditingContext)
     if context.project_id is None:
         return OpeningTurn(text=_BLANK_CHAT_OPENING)
-    return OpeningTurn(text=_PROJECT_OPENING.format(
-        name=read_project_name(context.project_id)))
+    if context.task:
+        # The task arrives as the reader's first message, so a greeting would talk over it.
+        return OpeningTurn(text="")
+    return OpeningTurn(text=_PROJECT_OPENING.format(name=read_project_name(context.project_id)))
 
 
 # `POST /chat/new` — nothing is bound yet, so the message is the three ways in, numbered

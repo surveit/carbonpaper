@@ -70,7 +70,7 @@ def test_project_page():
     r = client.get("/project/demo")
     assert r.status_code == 200
     assert "demo" in r.text                                 # project identity rendered
-    assert "Status" in r.text                               # the status-tiles heading
+    assert "ov-deliver" in r.text                           # the deliverable slot, in every state
 
 
 def test_project_shell_has_no_manual_edit_with_agent_control():
@@ -164,7 +164,8 @@ def test_workflow_page_points_to_versions_tab():
 def test_sidebar_nests_versions_runs_evals_under_workflow():
     html = client.get("/project/demo").text
     assert "app-nav-children" in html
-    assert 'href="/project/demo/workflow"' in html
+    # The parent is a group label, not a link.
+    assert '<div class="app-nav-group">Workflow</div>' in html
     for child_href in ("/project/demo/workflow/versions", "/project/demo/runs", "/project/demo/evals"):
         assert f'href="{child_href}"' in html
 

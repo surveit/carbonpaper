@@ -1,123 +1,146 @@
 {% extends "project_shell.html" %}
+{% from "_input_files.html" import input_files %}
+{% from "_sparkle.html" import sparkle %}
 {#
-  OVERVIEW — the project hub. Focus on what matters: identity, the 5 status tiles,
-  and a prominent "Next: <action>" CTA.
+  OVERVIEW — what this project can hand someone, and what stands between it and that.
 
-  Context: state = project.project_state(mdir); section = "overview".
-  Renders ONLY from `state`. Unknown facts (legacy model/date, no runs) show
-  truthfully as "unknown" / "—" / "none" — never a fabricated placeholder.
+  The page is the latest run plus a queue. The run card leads with the figures that run
+  produced and the checks a reader needs before treating them as the answer — a cap, a
+  test run, an unfinished run, no figures at all.
+
+  A queue row is a sentence and a link. Reviewing and running are app screens; every
+  other row opens a chat that already carries the project and the task.
+
+  Context: state = project_view.shell_state(...), overview = build_project_overview(...).
 #}
 {% block section %}
 {% set s = state %}
+{% set d = overview.deliverable %}
 
-<div class="ov-head">
-  <div class="ov-title">
-    <h1>{{ s.meta.display_name }}</h1>
-    {# A div, not a p: the privacy form below is flow content a <p> cannot hold. #}
-    <div class="ov-meta">
-      <span><b>model</b> {{ s.meta.model or 'unknown' }}</span>
-      <span class="ov-dot">·</span>
-      <span><b>created</b> {% if s.meta.created_at %}{{ s.meta.created_at | friendly_time }}{% else %}unknown{% endif %}</span>
-      {% if s.meta.source %}<span class="ov-dot">·</span><span><b>source</b> {{ s.meta.source }}</span>{% endif %}
-      <span class="ov-dot">·</span>
-      <span><b>dir</b> <code>examples/{{ s.id }}/</code></span>
-      <span class="ov-dot">·</span>
-      {# The one screen that says which a project is, because it is the one every
-         listing drops a private project from — including the way back to here. #}
-      <form class="ov-privacy" method="post" action="/project/{{ s.id }}/private">
-        {% if s.meta.private %}
-        <span><b>private</b> listed nowhere</span>
-        <button type="submit" class="btn sm">List it</button>
-        {% else %}
-        <input type="hidden" name="private" value="on">
-        <span><b>listed</b> on the projects page</span>
-        <button type="submit" class="btn sm">Make private</button>
-        {% endif %}
-      </form>
+<h1>{{ s.meta.display_name }}</h1>
+<div class="ov-meta">
+  <span><b>{{ s.versions }}</b> version{{ '' if s.versions == 1 else 's' }}</span>
+  <span class="ov-dot">·</span>
+  <span><b>{{ s.runs.n }}</b> run{{ '' if s.runs.n == 1 else 's' }}</span>
+  <span class="ov-dot">·</span>
+  <span><b>{{ s.workflow.n_stages }}</b> stage{{ '' if s.workflow.n_stages == 1 else 's' }}</span>
+  <span class="ov-dot">·</span>
+  <form class="ov-privacy" method="post" action="/project/{{ s.id }}/private">
+    {% if s.meta.private %}
+    <span><b>private</b> listed nowhere</span>
+    <button type="submit" class="btn sm">List it</button>
+    {% else %}
+    <input type="hidden" name="private" value="on">
+    <span><b>listed</b> on the projects page</span>
+    <button type="submit" class="btn sm">Make private</button>
+    {% endif %}
+  </form>
+</div>
+
+<div class="ov-split">
+  <div>
+    <h3 class="ov-slot-h">{{ d.heading }}</h3>
+    <div class="ov-deliver{% if d.state == 'warned' %} refused{% endif %}">
+
+      {% if d.run_id %}
+      <div class="ov-deliver-head">
+        <div class="ov-deliver-facts">
+          <span class="run-status status-{{ d.status }}">{{ d.status | replace('_', ' ') }}</span>
+          <a class="ov-deliver-when" href="{{ d.run_href }}">{{ d.started_at | friendly_time }}</a>
+          <span class="muted">{{ d.stage_line }}{% if d.duration %} · {{ d.duration }}{% endif %}</span>
+        </div>
+        <a class="btn ov-deliver-cta" href="{{ d.run_href }}">Open the run</a>
+      </div>
+
+      {% if d.published and d.published.figures %}
+      <div class="ov-claims">
+        {% for figure in d.published.figures if figure.primary %}
+        <div class="ov-claim">
+          <span class="v"><a href="{{ figure.href }}"
+            title="Open the row this value was read from">{{ figure.value }}</a></span>
+          <span class="l">{{ figure.label | lower }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if d.checks %}
+      <div class="ov-checks">
+        {% for check in d.checks %}
+        <div class="ov-check{{ '' if check.ok else ' bad' }}">
+          <span class="ov-check-mark">{{ '✓' if check.ok else '✕' }}</span>
+          <span><b>{{ check.headline }}</b><span class="muted">{{ check.detail }}</span>
+            {% if check.action %}
+            {% if check.action.kind == 'chat' %}
+            <a class="ov-ask" href="{{ check.action.href }}"
+               >{{ sparkle() }}{{ check.action.label }}<span class="ov-by">, with the agent</span></a>
+            {% else %}
+            <a class="ov-go" href="{{ check.action.href }}">{{ check.action.label }}</a>
+            {% endif %}
+            {% endif %}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if d.version_message or d.inputs or d.stage_caps %}
+      <div class="ov-rests">
+        <div>
+          <h5>Workflow version</h5>
+          <p>{{ d.version_message or 'No version recorded on this run.' }}</p>
+        </div>
+        <div class="ov-inputs">
+          <h5>Inputs</h5>
+          {{ input_files(d.inputs, d.stage_caps) }}
+        </div>
+      </div>
+      {% endif %}
+
+      {% set secondary = d.published.figures | rejectattr('primary') | list if d.published else [] %}
+      {% if secondary %}
+      <details class="ov-more">
+        <summary>{{ secondary | length }} more figure{{ '' if secondary | length == 1 else 's' }}</summary>
+        <div class="ov-rest-figures">
+          {% for figure in secondary %}
+          <div><span class="n"><a href="{{ figure.href }}">{{ figure.value }}</a></span>
+            <span class="k">{{ figure.label | lower }}</span></div>
+          {% endfor %}
+        </div>
+      </details>
+      {% endif %}
+
+      {% else %}
+      <div class="ov-deliver-empty">
+        <p>{{ d.lead }}</p>
+        <a class="btn primary" href="/project/{{ s.id }}/runs/new">Run the workflow</a>
+      </div>
+      {% endif %}
     </div>
   </div>
+
+  <div>
+    <h3 class="ov-slot-h">{% if overview.queue %}Outstanding{% else %}Nothing outstanding{% endif %}</h3>
+    {% if overview.queue %}
+    <div class="ov-queue">
+      {% for row in overview.queue %}
+      <div class="ov-q-row">
+        <span class="ov-q-n tone-{{ row.tone }}">{{ row.count }}</span>
+        <span>
+          <span class="ov-q-what">{{ row.what }}</span>
+          <span class="ov-q-why">{{ row.why }}</span>
+          {% if row.kind == 'chat' %}
+          <a class="ov-ask" href="{{ row.href }}"
+             >{{ sparkle() }}{{ row.label }}<span class="ov-by">, with the agent</span></a>
+          {% else %}
+          <a class="ov-go" href="{{ row.href }}">{{ row.label }}</a>
+          {% endif %}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">No halted run, no unrun version, and the document is written.</p>
+    {% endif %}
+  </div>
 </div>
-
-{# ── The prominent "do this next" call-to-action ─────────────────────────────── #}
-{% if s.next_action %}
-<a class="ov-cta" href="{{ s.next_action.href }}">
-  <span class="ov-cta-kicker">Next</span>
-  <span class="ov-cta-label">{{ s.next_action.label }}</span>
-  <span class="ov-cta-arrow">→</span>
-</a>
-{% endif %}
-
-{# ── Status panel: one tile per pipeline stage, truthful counts ──────────────── #}
-<h2 class="ov-status-h">Status</h2>
-<div class="ov-tiles">
-
-  {# Methodology #}
-  <a class="ov-tile" href="/project/{{ s.id }}/methodology">
-    <span class="ov-tile-k">Methodology</span>
-    {% if s.has_document %}
-      <span class="ov-tile-v ok">present</span>
-      <span class="ov-tile-sub">source of record on disk</span>
-    {% else %}
-      <span class="ov-tile-v none">missing</span>
-      <span class="ov-tile-sub">no methodology stored</span>
-    {% endif %}
-  </a>
-
-  {# Terms — counted over the nouns, which are where a project's words are stored. #}
-  <a class="ov-tile" href="/project/{{ s.id }}/glossary">
-    <span class="ov-tile-k">Glossary</span>
-    {% set dm = s.data_model %}
-    {% if not dm.present %}
-      <span class="ov-tile-v none">none</span>
-      <span class="ov-tile-sub">no words agreed yet</span>
-    {% else %}
-      <span class="ov-tile-v">{{ dm.n_schemas }} noun{% if dm.n_schemas != 1 %}s{% endif %}</span>
-    {% endif %}
-  </a>
-
-  {# Workflow (the typed-stage pipeline). #}
-  <a class="ov-tile" href="/project/{{ s.id }}/workflow">
-    <span class="ov-tile-k">Workflow</span>
-    {% if not s.workflow.present %}
-      <span class="ov-tile-v none">not built</span>
-      <span class="ov-tile-sub">no stages yet</span>
-    {% else %}
-      <span class="ov-tile-v">{{ s.workflow.n_stages }} stage{% if s.workflow.n_stages != 1 %}s{% endif %}</span>
-    {% endif %}
-  </a>
-
-  {# Runs #}
-  <a class="ov-tile" href="/project/{{ s.id }}/runs">
-    <span class="ov-tile-k">Runs</span>
-    {% if s.runs.n == 0 %}
-      <span class="ov-tile-v none">none</span>
-      <span class="ov-tile-sub">not run yet</span>
-    {% else %}
-      <span class="ov-tile-v">{{ s.runs.n }} run{% if s.runs.n != 1 %}s{% endif %}</span>
-      {% if s.runs.awaiting_review > 0 %}
-        <span class="ov-tile-sub review">{{ s.runs.awaiting_review }} awaiting review</span>
-      {% else %}
-        <span class="ov-tile-sub">latest: <span class="run-status status-{{ s.runs.latest_status }}">{{ s.runs.latest_status or 'unknown' }}</span></span>
-      {% endif %}
-    {% endif %}
-  </a>
-
-  {# Versions #}
-  <a class="ov-tile" href="/project/{{ s.id }}/workflow">
-    <span class="ov-tile-k">Versions</span>
-    {% if s.versions == 0 %}
-      <span class="ov-tile-v none">none</span>
-      <span class="ov-tile-sub">no immutable snapshots created</span>
-    {% else %}
-      <span class="ov-tile-v">{{ s.versions }}</span>
-      <span class="ov-tile-sub">immutable snapshot{% if s.versions != 1 %}s{% endif %}</span>
-    {% endif %}
-  </a>
-
-</div>
-
-<p class="ov-foot muted">A project is built in order: a source <b>methodology</b> → a
-  <b>data model</b> (named schemas) → a <b>workflow</b> (typed stages) → immutable
-  <b>versions</b> → <b>runs</b>. The <b>Next</b> action above is the first unfinished
-  rung.</p>
 {% endblock %}

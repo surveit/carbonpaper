@@ -28,6 +28,7 @@ from app.services import (
 )
 from app.services.loader import list_parsed_stages, resolve_function_code
 from app.services.workspace import LOADER_BOOKKEEPING_KEYS
+from app.web.project_overview import build_project_overview
 from app.web.breadcrumbs import build_home_crumbs, build_version_crumbs, build_workflow_crumbs
 from app.web.config import templates
 from app.runtime.stage_tests import run_stage_tests
@@ -148,7 +149,11 @@ async def project_overview(request: Request, project_name: str):
     return templates.TemplateResponse(
         request,
         "section_overview.html",
-        {"state": shell_state(project_name, "overview"), "section": "overview"},
+        {
+            "state": shell_state(project_name, "overview"),
+            "section": "overview",
+            "overview": build_project_overview(project_name),
+        },
     )
 
 
