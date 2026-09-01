@@ -14,7 +14,10 @@ from app.core.json_types import JsonDict
 from app.core.llm import LLMModel
 from app.models.stages.aggregate import RETIRED_FORMULAS
 from app.models.stages.stage_base import StageType
-from app.models.stages.stage_types import APPROVAL_REQUIRED_TYPES
+from app.models.stages.stage_types import (
+    APPROVAL_REQUIRED_TYPES,
+    SANDBOXED_COUNTERPART,
+)
 from app.services.code_approval import has_code_execution_approval
 from app.models import StageDraft, StageEdit
 from app.models.stages.code import SUMMARY_MAX_CHARS
@@ -109,10 +112,7 @@ CODE_EXECUTION_REFUSAL = (
     "Paper is not built for arbitrary code execution — a Python step runs on the "
     "machine hosting this project, with its permissions: it can read files, reach the "
     "network and install packages, and nothing here inspects what it does.{trace_cost}\n"
-    "Most of what this type is used for no longer needs it: `explode` unpacks a list "
-    "column into rows and a `starlark_row_function` after it can do the per-row work "
-    "sandboxed; `dedupe`, `sort_rank`, `aggregate`, `enrich`, `expand` and `union` cover "
-    "the rest of the reshapes. Try those first.\n"
+    "{write_this_instead}"
     "If this genuinely needs Python, tell the project's owner what it will do and why no "
     "declared stage fits, and ask whether to turn code execution on for this project. "
     "Only once THEY have answered yes, call `approve_code_execution`."
@@ -124,6 +124,29 @@ _FRAME_FUNCTION_TRACE_COST = (
     " It also reshapes the table opaquely, so a trace stops at it and a published "
     "figure cannot be walked back to the rows behind it."
 )
+
+
+COUNTERPART_CLAUSE = (
+    "`{counterpart}` does this same job sandboxed — no files, no network, no libraries — "
+    "and needs no approval at all. Write that instead unless this step genuinely needs "
+    "something only Python has.\n"
+)
+
+
+# The one withheld type with no sandboxed counterpart to point at.
+FRAME_FUNCTION_ALTERNATIVES = (
+    "Most of what this type is used for no longer needs it: `explode` unpacks a list "
+    "column into rows and a `starlark_row_function` after it can do the per-row work "
+    "sandboxed; `dedupe`, `sort_rank`, `aggregate`, `enrich`, `expand` and `union` cover "
+    "the rest of the reshapes. Try those first.\n"
+)
+
+
+def say_what_to_write_instead(stage_type: str) -> str:
+    counterpart = SANDBOXED_COUNTERPART.get(stage_type)
+    if counterpart is None:
+        return FRAME_FUNCTION_ALTERNATIVES
+    return COUNTERPART_CLAUSE.format(counterpart=counterpart)
 
 
 def find_unapproved_code_issues(
@@ -146,7 +169,8 @@ def find_unapproved_code_issues(
         if stage_type == StageType.python_frame_function else ""
     )
     return [CODE_EXECUTION_REFUSAL.format(
-        sid=candidate.get("id"), stage_type=stage_type, trace_cost=trace_cost)]
+        sid=candidate.get("id"), stage_type=stage_type, trace_cost=trace_cost,
+        write_this_instead=say_what_to_write_instead(str(stage_type)))]
 
 
 AGGREGATION_WHERE_REFUSAL = (
