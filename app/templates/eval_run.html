@@ -29,7 +29,7 @@
   <p class="stage-blurb"><a href="/project/{{ project }}/evals/{{ config.eval_id }}">{{ config.name }}</a>{% if config.description %} — {{ config.description }}{% endif %}</p>
   <p class="stage-facts">
     <span>{% if elapsed %}{% if run.is_running() %}running for <span id="eval-run-elapsed">{{ elapsed }}</span>{% else %}ran {{ elapsed }}{% endif %} · {% endif %}
-      {%- if rows and not rows.error %}{{ "{:,}".format(rows.rows_total) }} row{% if rows.rows_total != 1 %}s{% endif %} scored · {% endif %}
+      {%- if rows and not rows.error %}{{ rows.rows_total | figure }} row{% if rows.rows_total != 1 %}s{% endif %} scored · {% endif %}
       version <code>{{ run.workflow_version }}</code>
       {%- if run.finished_at %} · finished {{ run.finished_at | friendly_time }}{% endif %}</span>
   </p>
@@ -47,9 +47,9 @@
 {% if rows and not rows.error %}
 {% set passed = rows.rows_total - rows.rows_failed %}
 <dl class="stat-strip">
-  <div><dt>rows scored</dt><dd>{{ "{:,}".format(rows.rows_total) }}</dd></div>
-  <div><dt>passed</dt><dd>{{ "{:,}".format(passed) }}</dd></div>
-  <div><dt>failed</dt><dd>{{ "{:,}".format(rows.rows_failed) }}</dd></div>
+  <div><dt>rows scored</dt><dd>{{ rows.rows_total | figure }}</dd></div>
+  <div><dt>passed</dt><dd>{{ passed | figure }}</dd></div>
+  <div><dt>failed</dt><dd>{{ rows.rows_failed | figure }}</dd></div>
   {# Counted off the same table the rows below come from, so the tile and the
      table can never disagree. The stored rollup metrics are in Scoring. #}
   <div><dt>accuracy</dt><dd>{% if rows.rows_total %}{{ "%.1f"|format(100 * passed / rows.rows_total) }}%{% else %}—{% endif %}</dd></div>
@@ -79,7 +79,7 @@
   {% else %}
     <div class="preview-block">
       <div class="preview-head">scored rows
-        <span class="muted">· {% if rows.capped %}first {{ rows.rows | length }} of {% endif %}{{ "{:,}".format(rows.rows_total) }} row{% if rows.rows_total != 1 %}s{% endif %}</span>
+        <span class="muted">· {% if rows.capped %}first {{ rows.rows | length }} of {% endif %}{{ rows.rows_total | figure }} row{% if rows.rows_total != 1 %}s{% endif %}</span>
         <span class="preview-actions">
           <label class="rows-filter"><input type="checkbox" id="failures-only"
             {% if not rows.rows_failed %}disabled{% endif %}> failures only</label>
@@ -133,7 +133,7 @@
           {# Off this run's own result table. A rule the run did not score — the
              config changed since — gets a dash, never a borrowed count. #}
           <td>{% set check_count = (rows.checks if rows else []) | selectattr('column', 'equalto', check.output_column) | first %}
-            {%- if check_count %}{{ "{:,}".format(check_count.matched) }} / {{ "{:,}".format(rows.rows_total) }}
+            {%- if check_count %}{{ check_count.matched | figure }} / {{ rows.rows_total | figure }}
             {%- elif run.is_running() %}<span class="muted">not scored yet</span>
             {%- else %}<span class="muted">not scored in this run</span>{% endif %}</td>
         </tr>

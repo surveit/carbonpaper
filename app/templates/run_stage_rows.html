@@ -17,7 +17,7 @@
 {% set diff_shown = diff and not raw %}
 <div class="run-topbar">
     <h1><code>{{ stage_id }}</code> output</h1>
-    <p class="stage-id">run <code>{{ run_id }}</code> · <code>{{ output_path }}</code> · {{ "{:,}".format(rows_total) }} row{% if rows_total != 1 %}s{% endif %}</p>
+    <p class="stage-id">run <code>{{ run_id }}</code> · <code>{{ output_path }}</code> · {{ rows_total | figure }} row{% if rows_total != 1 %}s{% endif %}</p>
 </div>
 
 <div class="rows-toolbar">
@@ -29,21 +29,21 @@
     {% if diff.kind == 'filter_rows' and diff.input_total > shown %}
     {# The merged table's rows are INPUT rows, so both numbers here are the
        input's — and the CSV holds the output, which is the kept rows only. #}
-    <span class="alert warn">⚠ Showing first {{ "{:,}".format(shown) }} of {{ "{:,}".format(diff.input_total) }} input rows — the output frame's ⬇ CSV link above holds the complete output (the kept rows).</span>
+    <span class="alert warn">⚠ Showing first {{ shown | figure }} of {{ diff.input_total | figure }} input rows — the output frame's ⬇ CSV link above holds the complete output (the kept rows).</span>
     {% elif diff.kind != 'filter_rows' and diff.rows_total > shown %}
-    <span class="alert warn">⚠ Showing first {{ "{:,}".format(shown) }} of {{ "{:,}".format(diff.rows_total) }} rows — the output frame's ⬇ CSV link above holds the complete data.</span>
+    <span class="alert warn">⚠ Showing first {{ shown | figure }} of {{ diff.rows_total | figure }} rows — the output frame's ⬇ CSV link above holds the complete data.</span>
     {% endif %}
     {% else %}
     <span class="view-note">Showing the raw output table.{% if diff %}
         <a href="{{ rows_url }}">Show it as a diff against its input instead</a>{% endif %}</span>
     {% if capped %}
-    <span class="alert warn">⚠ Showing first {{ "{:,}".format(rows | length) }} of {{ "{:,}".format(rows_total) }} rows — download the CSV for the complete data.</span>
+    <span class="alert warn">⚠ Showing first {{ rows | length | figure }} of {{ rows_total | figure }} rows — download the CSV for the complete data.</span>
     {% endif %}
     {% if selected_total %}
-    <span class="alert">Showing {{ "{:,}".format(rows | length) }} of {{ "{:,}".format(rows_total) }} rows — the ones that fed the row you came from.</span>
+    <span class="alert">Showing {{ rows | length | figure }} of {{ rows_total | figure }} rows — the ones that fed the row you came from.</span>
     {% endif %}
     {% if rectangle %}
-    <span class="alert">Showing rows {{ rectangle.row_start | row_number }}–{{ rectangle.row_end }} and {{ rectangle.columns | length }} column{% if rectangle.columns | length != 1 %}s{% endif %} of {{ "{:,}".format(rows_total) }} rows — the rectangle this run published.
+    <span class="alert">Showing rows {{ rectangle.row_start | row_number }}–{{ rectangle.row_end }} and {{ rectangle.columns | length }} column{% if rectangle.columns | length != 1 %}s{% endif %} of {{ rows_total | figure }} rows — the rectangle this run published.
       <a href="{{ rows_url }}">Show the whole output instead</a></span>
     <a class="btn primary" href="{{ links.stage_csv(stage_id, rectangle) }}">⬇ Download this CSV</a>
     {% else %}

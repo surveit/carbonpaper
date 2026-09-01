@@ -25,7 +25,7 @@
     <div class="wf-table">
       <p class="wf-table-head">
         <span class="wf-table-label">{{ table.label }}</span>
-        <span class="wf-table-count">{{ "{:,}".format(table.row_count) }} row{% if table.row_count != 1 %}s{% endif %}</span>
+        <span class="wf-table-count">{{ table.row_count | figure }} row{% if table.row_count != 1 %}s{% endif %}</span>
         <a href="{{ table.rows_url }}">View all rows →</a>
         <a href="{{ table.csv_url }}">⬇ CSV</a>
       </p>
@@ -46,7 +46,7 @@
       </div>
       {%- if table.row_count > table.preview.rows | length %}
       <p class="wf-table-more">Showing the first {{ table.preview.rows | length }} of
-        {{ "{:,}".format(table.row_count) }} rows.</p>
+        {{ table.row_count | figure }} rows.</p>
       {%- endif %}
       {%- endif %}
     </div>

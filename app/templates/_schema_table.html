@@ -22,7 +22,7 @@
 {% macro schema_table(schema) %}
 {{ columns_table(schema.columns if schema else []) }}
 {% if schema and schema.columns and schema.estimated_rows %}
-<p class="schema-meta"><span><b>est rows:</b> {{ "{:,}".format(schema.estimated_rows) }}</span></p>
+<p class="schema-meta"><span><b>est rows:</b> {{ schema.estimated_rows | figure }}</span></p>
 {% endif %}
 {% endmacro %}
 

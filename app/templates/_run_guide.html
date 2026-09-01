@@ -37,7 +37,7 @@
 
 {% from "_stage_code.html" import prose_with_column_chips %}
 
-{% macro row_word(n) %}{{ "{:,}".format(n) }} row{% if n != 1 %}s{% endif %}{% endmacro %}
+{% macro row_word(n) %}{{ n | figure }} row{% if n != 1 %}s{% endif %}{% endmacro %}
 {% macro column_word(n) %}{{ n }} column{% if n != 1 %}s{% endif %}{% endmacro %}
 
 {# The size shown ON the link: abbreviated, `45.1k × 15`. The pair form is used only

@@ -24,7 +24,7 @@
         {% for p in projects %}
         <tr>
             <td><a href="/project/{{ p.id }}">{{ p.id }}</a></td>
-            <td class="spend-num">{{ "{:,}".format(p.entry_count) }}</td>
+            <td class="spend-num">{{ p.entry_count | figure }}</td>
             <td><a href="/admin/export-cache/{{ p.id }}" class="btn" download>Download cache</a></td>
         </tr>
         {% endfor %}

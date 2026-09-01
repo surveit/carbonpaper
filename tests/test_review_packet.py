@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 
 import app.services.run as run_service
+from app.web.figure_text import render_figure
 from app.models.review_guide import ReviewGuideStep
 from app.services import versioning, workspace
 from app.models.records.review_guide import ReviewGuide
@@ -354,7 +355,7 @@ def test_a_capped_stage_page_names_the_true_total_and_points_at_the_csv(
     packet = export_review_packet(_PROJECT, run_id, tmp_path / "packets")
 
     page = (packet.root / "stages" / "double.html").read_text(encoding="utf-8")
-    assert f"first {PACKET_MAX_TABLE_ROWS} of {rows:,} rows" in page
+    assert f"first {PACKET_MAX_TABLE_ROWS} of {render_figure(rows)} rows" in page
     assert 'href="../data/double.csv"' in page
     assert f"n{rows - 1}" not in page, "the cap did not actually truncate"
 

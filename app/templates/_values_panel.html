@@ -36,7 +36,7 @@
   <section class="vu-step" data-step="{{ step.stage_id }}">
     <div class="vu-stephead"><code class="vu-sid">{{ step.stage_id }}</code>
       <span class="vu-kind">{{ step.glyph }} {{ step.label }}</span>
-      <span class="vu-rows">{{ "{:,}".format(step.rows_total) }} row{% if step.rows_total != 1 %}s{% endif %}</span>
+      <span class="vu-rows">{{ step.rows_total | figure }} row{% if step.rows_total != 1 %}s{% endif %}</span>
     </div>
     {# The same two tabs the Paths pane hangs off a step: the rows, and the code
        that made them. #}
@@ -54,7 +54,7 @@
     {% elif not step.reached_rows %}
     <p class="vu-nosheet">No row of <code>{{ step.stage_id }}</code> fed this figure. It writes
       a column the value came through, but this run recorded none of its
-      {{ "{:,}".format(step.rows_total) }} rows behind this one.</p>
+      {{ step.rows_total | figure }} rows behind this one.</p>
     {% else %}
     <p class="legend"><span><i class="diff-col-new"></i>a column this stage wrote</span>
       <span><i class="diff-cell-changed"></i>a cell this stage rewrote</span>
@@ -73,7 +73,7 @@
     <div class="preview-block stage-diff">
       <div class="preview-head">output data <span class="muted">·
         {% if step.rows_total > step.rows | length %}{% if step.opens_on_the_first %}first {% endif %}{{ step.rows | length }} of {% endif %}
-        {{- "{:,}".format(step.rows_total) }} row{% if step.rows_total != 1 %}s{% endif %}</span>
+        {{- step.rows_total | figure }} row{% if step.rows_total != 1 %}s{% endif %}</span>
         <span class="preview-actions"><a href="{{ links.stage_rows(step.stage_id) }}">view all rows</a>
         · <a href="{{ links.stage_csv(step.stage_id) }}">⬇ CSV</a></span></div>
       <div class="table-scroll"><table class="data-preview">

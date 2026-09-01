@@ -38,7 +38,7 @@
 <span class="diff-frame {{ klass }}"><span class="diff-frame-head"><span class="diff-frame-role">{{ role }}</span>
     <code class="diff-frame-id">{{ frame_id }}</code></span>
     <span class="diff-frame-meta">
-    {%- if rows_total is not none %}{{ "{:,}".format(rows_total) }} row{% if rows_total != 1 %}s{% endif %} · {% endif -%}
+    {%- if rows_total is not none %}{{ rows_total | figure }} row{% if rows_total != 1 %}s{% endif %} · {% endif -%}
     {%- set raw_href = links.stage_rows_raw(frame_id) %}
     {%- if raw_href %}<a href="{{ raw_href }}" title="every row of this frame, raw">all rows</a>
     · {% endif -%}
@@ -64,7 +64,7 @@
   {{ diff_head(diff.inputs, stage.stage_id, diff.output_rows, diff.count_labels) }}
 {% if diff.kind == 'filter_rows' %}
   {% if diff.input_total > diff.rows | length %}
-  <p class="muted">showing the first {{ diff.rows | length }} of {{ "{:,}".format(diff.input_total) }} input rows{% if diff.dropped_beyond_window %} — {{ "{:,}".format(diff.dropped_beyond_window) }} dropped row{% if diff.dropped_beyond_window != 1 %}s{% endif %} fall{% if diff.dropped_beyond_window == 1 %}s{% endif %} beyond them{% endif %}</p>
+  <p class="muted">showing the first {{ diff.rows | length }} of {{ diff.input_total | figure }} input rows{% if diff.dropped_beyond_window %} — {{ diff.dropped_beyond_window | figure }} dropped row{% if diff.dropped_beyond_window != 1 %}s{% endif %} fall{% if diff.dropped_beyond_window == 1 %}s{% endif %} beyond them{% endif %}</p>
   {% endif %}
   <div class="table-scroll{% if full_rows %} rows-full{% endif %}"><table class="data-preview">
     {# The label column is not the lineage column it replaced: a dropped row has no
@@ -86,7 +86,7 @@
   </table></div>
 {% else %}
   {% if diff.rows_total > diff.rows | length %}
-  <p class="muted">showing {% if diff.opens_on_the_first %}the first {% endif %}{{ diff.rows | length }} of {{ "{:,}".format(diff.rows_total) }} rows</p>
+  <p class="muted">showing {% if diff.opens_on_the_first %}the first {% endif %}{{ diff.rows | length }} of {{ diff.rows_total | figure }} rows</p>
   {% endif %}
   <div class="table-scroll{% if full_rows %} rows-full{% endif %}"><table class="data-preview">
     {# The class each state paints with — app/static/node-detail.css owns what they

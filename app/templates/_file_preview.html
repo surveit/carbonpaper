@@ -2,7 +2,7 @@
   <p class="file-preview-facts">
     <strong>{{ preview.filename }}</strong>
     <span>{{ preview.format | upper }}</span>
-    <span>{% if preview.row_count > preview.rows | length %}First {{ "{:,}".format(preview.rows | length) }} of {% endif %}{{ "{:,}".format(preview.row_count) }} row{% if preview.row_count != 1 %}s{% endif %}</span>
+    <span>{% if preview.row_count > preview.rows | length %}First {{ preview.rows | length | figure }} of {% endif %}{{ preview.row_count | figure }} row{% if preview.row_count != 1 %}s{% endif %}</span>
   </p>
   {% if preview.columns %}
     {% if preview.rows %}

@@ -285,7 +285,7 @@ tr.lin-opens:hover td{background:var(--hover)}
                   search_label="a stage", size="sm") %}
     <select id="lin-stage" class="picker-native">
       {% for pick in coordinate.stages %}
-      <option value="{{ pick.stage_id }}" data-side="{{ "{:,}".format(pick.rows) }} rows" data-meta="{{ pick.type_label }}"{% if pick.stage_id == coordinate.stage_id %} selected{% endif %}>{{ pick.stage_id }}</option>
+      <option value="{{ pick.stage_id }}" data-side="{{ pick.rows | figure }} rows" data-meta="{{ pick.type_label }}"{% if pick.stage_id == coordinate.stage_id %} selected{% endif %}>{{ pick.stage_id }}</option>
       {% endfor %}
     </select>
     {% endcall %}
@@ -294,7 +294,7 @@ tr.lin-opens:hover td{background:var(--hover)}
            value="{{ coordinate.row_number }}" min="1"
            {% if coordinate.rows %}max="{{ coordinate.rows }}"{% endif %}>
     {# Stated only where the run counted them: a stage with no frame has no last row. #}
-    {% if coordinate.rows %}<span class="lin-word">of {{ "{:,}".format(coordinate.rows) }}</span>{% endif %}
+    {% if coordinate.rows %}<span class="lin-word">of {{ coordinate.rows | figure }}</span>{% endif %}
   </div>
 {% endif %}
 </div>

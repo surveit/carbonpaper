@@ -27,10 +27,10 @@
     <div class="instrip">
       <span>read by {% if f.read_by_href %}<a href="{{ f.read_by_href }}"><code>{{
         f.read_by }}</code></a>{% else %}<code>{{ f.read_by }}</code>{% endif %}</span>
-      <span><b>{{ "{:,}".format(f.rows_out) }}</b> rows out</span>
-      <span>{% if f.row_cap %}row cap <b>{{ "{:,}".format(f.row_cap) }}</b>
+      <span><b>{{ f.rows_out | figure }}</b> rows out</span>
+      <span>{% if f.row_cap %}row cap <b>{{ f.row_cap | figure }}</b>
         {% else %}no row cap was set{% endif %}</span>
-      {% if f.row_offset %}<span>after the first {{ "{:,}".format(f.row_offset) }} rows</span>
+      {% if f.row_offset %}<span>after the first {{ f.row_offset | figure }} rows</span>
       {% endif %}
       {% if f.status %}<span>{{ f.status }}</span>{% endif %}
     </div>
@@ -47,7 +47,7 @@
       read are not named here.</p>
 
     <div class="instrip">
-      <span><b>{{ "{:,}".format(s.rows_out) }}</b> rows out</span>
+      <span><b>{{ s.rows_out | figure }}</b> rows out</span>
       {% if s.status %}<span>{{ s.status }}</span>{% endif %}
     </div>
   </section>
