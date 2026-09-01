@@ -156,8 +156,17 @@ def test_the_sandboxed_filter_is_the_offered_one():
     assert "filter_rows" not in AUTHORABLE_TYPES
 
 
-def test_report_is_now_the_only_unsandboxed_type_still_offered():
-    """The burn-down's last step, pinned so finishing it shows up here."""
+def test_no_unsandboxed_code_type_is_offered_any_more():
+    """The burn-down is finished: every code-carrying type on offer runs sandboxed."""
     from app.models.stages.stage_types import AUTHORABLE_CODE_CARRYING_TYPES
     unsandboxed = [t for t in AUTHORABLE_CODE_CARRYING_TYPES if not t.startswith("starlark_")]
-    assert unsandboxed == ["report"]
+    assert unsandboxed == []
+
+
+def test_every_withheld_type_but_the_frame_one_names_what_to_write_instead():
+    from app.models.stages.stage_types import AUTHORABLE_TYPES, SANDBOXED_COUNTERPART
+    without = set(APPROVAL_REQUIRED_TYPES) - set(SANDBOXED_COUNTERPART)
+    assert without == {"python_frame_function"}
+    for withheld, sandboxed in SANDBOXED_COUNTERPART.items():
+        assert withheld in APPROVAL_REQUIRED_TYPES
+        assert sandboxed in AUTHORABLE_TYPES

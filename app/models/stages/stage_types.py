@@ -51,8 +51,15 @@ STAGE_TYPES: dict[str, StageTypeSpec] = {
 # step it cannot express would conclude the step is impossible rather than ask.
 # A stored stage of either type keeps loading and running.
 APPROVAL_REQUIRED_TYPES = (
-    "python_row_function", "python_frame_function", "filter_rows",
+    "python_row_function", "python_frame_function", "filter_rows", "report",
 )
+
+# The sandboxed type that does the same job — what the refusal points at.
+SANDBOXED_COUNTERPART: dict[str, str] = {
+    "python_row_function": "starlark_row_function",
+    "filter_rows": "starlark_filter_rows",
+    "report": "starlark_report",
+}
 
 # What the authoring prompts list. STAGE_TYPES stays whole: the runtime, the
 # diagrams and the trace all read it for types a stored workflow may still carry.
