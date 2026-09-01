@@ -275,9 +275,18 @@
 
 .ov-queue { border: 1px solid var(--border-strong); border-radius: 10px;
     background: var(--raised); overflow: hidden; }
-.ov-q-row { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 11px;
+/* The whole row is the link, so the sentence is what a reader clicks and the arrow is
+   the only chrome. The ask sits above the stretched anchor, the one control beside it. */
+.ov-q-row { position: relative; display: grid;
+    grid-template-columns: 30px minmax(0, 1fr) auto; gap: 11px;
     align-items: start; padding: 11px 16px; border-bottom: 1px solid var(--border); }
 .ov-q-row:last-child { border-bottom: none; }
+.ov-q-row:hover { background: var(--hover); }
+.ov-q-open { text-decoration: none; color: inherit; }
+.ov-q-open::after { content: ""; position: absolute; inset: 0; }
+.ov-q-row .agent-link { position: relative; z-index: 1; }
+.ov-q-arrow { color: var(--muted); font-size: 14px; line-height: 1.4; }
+.ov-q-row:hover .ov-q-arrow { color: var(--accent); }
 .ov-q-n { font-size: 15px; font-weight: 600; text-align: right; line-height: 1.4; }
 .ov-q-n.tone-good { color: var(--good-ink); }
 .ov-q-n.tone-warn { color: var(--warn-ink); }

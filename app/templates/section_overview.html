@@ -114,12 +114,13 @@
       {% for row in overview.queue %}
       <div class="ov-q-row">
         <span class="ov-q-n tone-{{ row.tone }}">{{ row.count }}</span>
-        <span>
-          <span class="ov-q-what">{{ row.what }}</span>
-          <span class="ov-q-why">{{ row.why }}</span>
-          <a class="ov-go" href="{{ row.href }}">{{ row.label }}</a>
+        <span class="ov-q-body">
+          <a class="ov-q-open" href="{{ row.href }}" title="{{ row.label }}">
+            <span class="ov-q-what">{{ row.what }}</span>
+            <span class="ov-q-why">{{ row.why }}</span></a>
           {% if row.ask %}{{ agent_link(row.ask.href, row.ask.label) }}{% endif %}
         </span>
+        <span class="ov-q-arrow" aria-hidden="true">→</span>
       </div>
       {% endfor %}
     </div>
