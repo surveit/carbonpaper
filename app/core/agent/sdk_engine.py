@@ -30,6 +30,7 @@ from pydantic import ValidationError
 from app.core.agent.errors import AccountLimitReached
 from app.core.agent.store import OFFER_NEXT_STEPS, NextSteps
 from app.core.agent.usage import LlmUsage
+from app.core.json_types import JsonDict
 from app.core.llm_sdk import CLI_PATH as _CLI_PATH
 from app.core.ids import ID
 
@@ -178,9 +179,10 @@ class ClaudeAgentSdkEngine:
                             # Its own part type, so the page draws buttons and the
                             # reader is never shown the plumbing behind them.
                             hidden_tool_result_ids.add(block.id)
-                            emit({"kind": "offer", "options": offered.options})
+                            options = render_offered_options(offered)
+                            emit({"kind": "offer", "options": options})
                             assistant_parts.append(
-                                {"type": "offer", "options": offered.options})
+                                {"type": "offer", "options": options})
                             continue
                         if bare == "submit_answer":
                             hidden_tool_result_ids.add(block.id)
@@ -242,6 +244,11 @@ class ClaudeAgentSdkEngine:
             {"role": "assistant", "parts": assistant_parts},
         ]
         return transcript, session_id
+
+
+def render_offered_options(offered: NextSteps) -> list[JsonDict]:
+    """Both destinations are JSON: the SSE wire, and the stored transcript."""
+    return [option.model_dump(mode="json") for option in offered.options]
 
 
 def _read_offered_steps(tool_name: str, payload: Any) -> NextSteps | None:
