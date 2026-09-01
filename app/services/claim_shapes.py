@@ -49,10 +49,12 @@ def _write_one(project_id: ID, entry: AuthoredClaimShape, stored_by_id: dict[ID,
             label=entry.label,
             requires=entry.requires,
             importance=entry.importance,
+            qualifiers=entry.qualifiers,
         ).save()
         return
     held.label = entry.label
     held.importance = entry.importance
+    held.qualifiers = entry.qualifiers
     # Refused above once anything is claimed, so a published claim cannot be rewritten.
     held.requires = entry.requires
     held.save()

@@ -17,11 +17,14 @@ from app.services.errors import ClaimShapesRefused
 _PROJECT = "ai_lobbying"
 # The two figures that run really published, with the coverage each one asserts.
 _SPEND = AuthoredClaimShape(
-    label="Paid to outside firms to lobby on AI, in dollars",
+    label="Reported by outside firms as received for AI lobbying in the United States, in dollars",
     requires=DataUniverseRequirement.closed, importance=ClaimImportance.primary,
+    qualifiers=["Income no firm reported. Filing is required by law, so a firm that did "
+                "not file is not in this figure."],
 )
 _CORPUS = AuthoredClaimShape(
-    label="Rows read across both exports", requires=DataUniverseRequirement.closed, importance=ClaimImportance.secondary,
+    label="Clients that paid a US outside firm for AI lobbying",
+    requires=DataUniverseRequirement.closed, importance=ClaimImportance.secondary,
 )
 
 
@@ -37,10 +40,11 @@ def _claim(shape_id: str, value: float = 63027729.0) -> Claim:
 
 
 # ── authoring ────────────────────────────────────────────────────────────────
-def test_an_authored_shape_comes_back_with_an_id_and_what_it_covers():
+def test_an_authored_shape_comes_back_with_an_id_what_it_covers_and_its_qualifiers():
     [stored] = claim_shapes.write_claim_shapes(_PROJECT, [_SPEND])
 
     assert (stored.label, stored.requires) == (_SPEND.label, "closed")
+    assert stored.qualifiers == _SPEND.qualifiers
     assert stored.id
 
 
@@ -85,7 +89,7 @@ def test_an_id_edits_the_shape_it_names_rather_than_adding_another():
 
 # ── what is refused ──────────────────────────────────────────────────────────
 def test_two_entries_sharing_a_label_are_refused_whole():
-    with pytest.raises(ClaimShapesRefused, match="Rows read across both exports"):
+    with pytest.raises(ClaimShapesRefused, match="Clients that paid a US outside firm"):
         claim_shapes.write_claim_shapes(_PROJECT, [_CORPUS, _CORPUS])
 
     assert claim_shapes.load_claim_shapes(_PROJECT) == []
@@ -176,4 +180,6 @@ def test_the_glossary_page_shows_what_the_project_claims_and_what_it_covers(tmp_
 
     assert response.status_code == 200
     assert _SPEND.label in response.text
-    assert "Covers this is all of them." in response.text
+    assert ">closed</span>" in response.text
+    assert "it IS this number." in response.text          # the tooltip explains the word
+    assert "Income no firm reported." in response.text    # the qualifier is on the page

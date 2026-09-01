@@ -18,15 +18,15 @@ class ClaimImportance(str, Enum):
 
 class DataUniverseRequirement(str, Enum):
     open = "open"
-    equal_coverage = "equal_coverage"
     closed = "closed"
 
 
-# What each requirement asserts, in the words a reader of the figure gets.
-DATA_UNIVERSE_PROSE = {
-    "open": "at least these — more may exist",
-    "equal_coverage": "the same ground as what it is compared against",
-    "closed": "this is all of them",
+# The word is the fact and goes on the page; this explains it on hover.
+DATA_UNIVERSE_TOOLTIP = {
+    "open": "The dataset holds only the events it captured, so this figure is a floor: "
+            "the real number is AT LEAST this.",
+    "closed": "The dataset holds every event of this kind, so this figure is the total: "
+              "it IS this number.",
 }
 
 
@@ -38,6 +38,7 @@ class AuthoredClaimShape(_Base):
     label: str
     requires: DataUniverseRequirement
     importance: ClaimImportance
+    qualifiers: list[str] = []
 
 
 class Citation(BaseModel):

@@ -154,20 +154,31 @@ other way to learn one. An empty result means none have been agreed yet.""",
         },
         description="""\
 Store what this project claims. A shape is a figure the project promises to
-report, named before any stage computes it, and `requires` says what its
-number covers:
+report, named before any stage computes it.
 
-  open            at least these — more may exist
-  closed          this is all of them
-  equal_coverage  the same ground as what it is compared against
+`requires` asks ONE question about the dataset the figure is computed from:
+does it hold every event of this kind?
 
-There is no default. A run is later checked against `requires` before its
-figure can be published, so a shape that overstates coverage turns a capped
-run into a false public statement. That check is the only thing standing
-between a windowed run and a number a reader will treat as complete.
+  closed  it does, so the figure is the total — it IS that number. A register
+          everyone is required to file into is closed.
+  open    it holds only the events it captured, so the figure is a floor —
+          the real number is AT LEAST that. A scraped corpus, an FOI reply or
+          a hand-assembled list is open.
 
-  {"label": "Paid to outside firms to lobby on AI, in dollars",
-   "requires": "closed", "importance": "primary"}
+There is no default, and it is not a question about the world: a closed
+dataset can still miss events, and that belongs in `qualifiers`. A run that
+read only a window of its rows cannot publish a closed figure, because
+totalling a slice turns "is" into "at least".
+
+`qualifiers` are the lines a reader must read before using the number: what
+it counts that they would not expect, and what it cannot see. Write one for
+every way the figure differs from the thing its label suggests.
+
+  {"label": "Reported by outside firms as received for AI lobbying in the "
+            "United States, in dollars",
+   "requires": "closed", "importance": "primary",
+   "qualifiers": ["Income no firm reported. Filing is required by law, so a "
+                  "firm that did not file is not in this figure."]}
 
 REFUSED WHOLE, with nothing written, when two entries share a label, when a
 label this project already claims arrives without that shape's id, when an

@@ -21,7 +21,7 @@ from app.models import (
     stage_to_json,
     validate_named_schema,
 )
-from app.models.claims import DATA_UNIVERSE_PROSE
+from app.models.claims import DATA_UNIVERSE_TOOLTIP
 from app.services import (
     claim_shapes, code_approval, generation, methodology, project, terms, versioning,
 )
@@ -136,7 +136,7 @@ async def project_documentation(request: Request, project_name: str, tab: str = 
             "methodology": document,
             "terms": stored,
             "shapes": claim_shapes.load_claim_shapes(project_name),
-            "coverage": DATA_UNIVERSE_PROSE,
+            "coverage": DATA_UNIVERSE_TOOLTIP,
             "unreadable": "; ".join(unreadable),
             "kind_class": SCHEMA_KIND_CLASS,
             "kind_glyph": SCHEMA_KIND_GLYPH,
