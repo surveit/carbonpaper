@@ -14,7 +14,7 @@
    disclosure, and the two shapes have to draw the individual call identically. #}
 {# Replies the reader may click instead of typing: the agent's own words, sent as the
    reader's next message. Only the newest turn's are live — see agent-chat.css. #}
-{% macro offer_row(options) %}<div class="ac-offers">{% for option in options %}{% if option.url %}<a class="ac-offer ac-offer-link" href="{{ option.url }}" target="_blank" rel="noopener">{{ option.text }}<span class="ac-offer-arrow" aria-hidden="true">↗</span></a>{% else %}<button type="button" class="ac-offer">{{ option.text }}</button>{% endif %}{% endfor %}</div>{% endmacro %}
+{% macro offer_row(options) %}<div class="ac-offers">{% for option in options %}{% if option.url %}<a class="ac-offer ac-offer-link" href="{{ option.url }}">{{ option.text }}<span class="ac-offer-arrow" aria-hidden="true">↗</span></a>{% else %}<button type="button" class="ac-offer">{{ option.text }}</button>{% endif %}{% endfor %}</div>{% endmacro %}
 {% macro tool_row(call) %}<details class="ac-tool"><summary title="{{ call.label or call.name }}">Called a tool: {{ call.name }}</summary><pre class="ac-tool-json">{{ call.args }}</pre></details>{% endmacro %}
 {# Read once by mount() in chat-panel.js. A JSON island rather than a run of `const`
    declarations, because the rail's copy arrives as markup and never executes. #}
@@ -91,7 +91,7 @@
     <button type="button" class="ac-clip js-chat-clip" title="Attach a data file">📎</button>
     <input type="file" class="js-chat-file" hidden />
     <textarea class="ac-input js-chat-input" rows="1" autocomplete="off"
-      placeholder="Message… (Enter to send, Shift+Enter for a new line)"></textarea>
+      placeholder="Enter your message"></textarea>
     <button class="ac-send js-chat-send">Send</button>
   </div>
 {% endif %}

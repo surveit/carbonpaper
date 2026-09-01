@@ -17,13 +17,31 @@
     background: var(--bg); border-left: 1px solid var(--border);
 }
 
-/* Both states are decided in <head> (see _chat_rail_head.html), so the column is reserved
- * in the first layout rather than appearing a reflow later. No class = no conversation to
- * carry, and neither the rail nor its tab is drawn. */
-.chat-rail, .chat-rail-tab { display: none; }
+/* Open is decided in <head> (see _chat_rail_head.html), so the column is reserved in the
+ * first layout rather than appearing a reflow later. No class = no conversation named in
+ * the address, and only the button below is drawn. */
+.chat-rail { display: none; }
 .chat-rail-open .chat-rail { display: flex; }
 .chat-rail-open body { padding-right: var(--chat-rail-w); }
-.chat-rail-shut .chat-rail-tab { display: block; }
+.chat-rail-open .chat-ask { display: none; }
+.chat-is-the-page .chat-ask { display: none; }
+
+/* The whole rail is one custom property wide, and body's padding reads the same one, so
+ * dragging this writes --chat-rail-w and the page reflows with it. Wider than it looks:
+ * a 4px target is a miss, and the extra reach sits over the page, not the conversation. */
+.chat-rail-grip {
+    position: absolute; top: 0; bottom: 0; left: -3px; width: 9px; z-index: 1;
+    cursor: col-resize; touch-action: none;
+}
+.chat-rail-grip::after {
+    content: ""; position: absolute; inset: 0 auto 0 3px; width: 1px; background: none;
+}
+.chat-rail-grip:hover::after, .chat-rail-grip:focus-visible::after,
+.chat-rail-dragging .chat-rail-grip::after { background: var(--accent); }
+.chat-rail-grip:focus-visible { outline: none; }
+/* Nothing on the page should catch the pointer, or take a selection, mid-drag. */
+.chat-rail-dragging { cursor: col-resize; user-select: none; }
+.chat-rail-dragging .chat-rail, .chat-rail-dragging main { pointer-events: none; }
 
 .chat-rail-head {
     display: flex; align-items: center; gap: 8px; flex: 0 0 auto;
@@ -40,16 +58,17 @@
 .chat-rail-x { font-size: 17px; }
 .chat-rail-open-page:hover, .chat-rail-x:hover { color: var(--fg); }
 
-/* Shut, the conversation is one vertical tab against the right edge — the only thing left
- * saying it is still there. Turned sideways because the page is the wide thing here. */
-.chat-rail-tab {
-    position: fixed; top: 96px; right: 0; z-index: 50;
-    writing-mode: vertical-rl; font: inherit; font-size: 11.5px; letter-spacing: .04em;
-    max-height: 260px; overflow: hidden; padding: 12px 5px; cursor: pointer;
-    color: var(--muted); background: var(--raised);
-    border: 1px solid var(--border); border-right: 0; border-radius: 6px 0 0 6px;
+/* The way in, on every page, in the one place. White rather than filled: the mark is drawn
+ * in the transfer ink (base.css .sparkle), so a filled accent pill would erase it. */
+.chat-ask {
+    position: fixed; right: 20px; bottom: 20px; z-index: 50;
+    display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+    padding: 9px 15px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500;
+    color: var(--fg); background: var(--raised);
+    border: 1px solid var(--border-strong); border-radius: 20px;
+    box-shadow: 0 4px 14px var(--shadow);
 }
-.chat-rail-tab:hover { color: var(--fg); border-color: var(--border-strong); }
+.chat-ask:hover { background: var(--hover); }
 
 /* ═══ The panel, at 400px instead of 1280 ═══ */
 /* The page's conversation styles are written against --chat-column and a composer fixed to
@@ -75,6 +94,7 @@
 /* Below this the rail would be most of the screen, so the conversation is the full page at
  * /chat/<id> instead, reached from Chats in the header. */
 @media (max-width: 860px) {
-    .chat-rail-open .chat-rail, .chat-rail-shut .chat-rail-tab { display: none; }
+    .chat-rail-open .chat-rail { display: none; }
     .chat-rail-open body { padding-right: 0; }
+    .chat-rail-open .chat-ask { display: inline-flex; }
 }

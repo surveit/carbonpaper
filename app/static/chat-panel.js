@@ -30,11 +30,13 @@ window.ChatPanel.mount = function (root) {
     }
     const link = document.createElement("a");
     link.className = "ac-offer ac-offer-link"; link.href = option.url;
-    link.target = "_blank"; link.rel = "noopener";
     link.textContent = option.text;
     const arrow = el("ac-offer-arrow", "↗");
     arrow.setAttribute("aria-hidden", "true");
     link.appendChild(arrow);
+    // A streamed offer is built here and never passes the mount-time sweep, so it is
+    // stamped on the way out — otherwise it is the one link that drops the conversation.
+    keepInAppLinkInPlace(link);
     return link;
   }
 
@@ -59,12 +61,31 @@ window.ChatPanel.mount = function (root) {
   // carries no reading place, and the panel it lands beside is a second copy, not this one.
   // Undone here rather than at the renderer because origin is a fact about the browser, and
   // the server behind a proxy does not have it. An external link keeps its new tab.
-  function keepInAppLinksInPlace(region) {
-    region.querySelectorAll("a[target=_blank]").forEach((a) => {
-      if (!isInThisApp(a)) return;
-      a.removeAttribute("target");
-      a.removeAttribute("rel");
-    });
+  // An Offer's url is validated to be a path in THIS app, so an offer link is always one
+  // of these — which is why it is drawn without a target of its own.
+  function keepInAppLinkInPlace(a) {
+    if (!isInThisApp(a)) return;
+    a.removeAttribute("target");
+    a.removeAttribute("rel");
+    carryTheConversation(a);
+  }
+
+  // WHAT THE LINK CARRIES. The page it opens draws this conversation beside it, because the
+  // address is where the rail reads which one is open (_chat_rail_head.html). Written onto
+  // the href rather than caught at click time, so what the reader sees on hover, copies, or
+  // opens in a new tab is the same address either way.
+  function carryTheConversation(a) {
+    if (!SID) return;
+    const url = new URL(a.href, location.href);
+    url.searchParams.set(window.ChatRail.PARAM, SID);
+    a.href = url.pathname + url.search + url.hash;
+  }
+
+  // A draft's links are drawn before the first reply materializes a session, so they are
+  // stamped again the moment there is one to name.
+  function readyEveryLink() {
+    root.querySelectorAll(".ac-msg.assistant .ac-body a[href], .ac-offer-link")
+      .forEach(keepInAppLinkInPlace);
   }
 
   // HOW IT IS DRAWN. A link the agent wrote on a line of its own is a handover — the thing it
@@ -79,7 +100,7 @@ window.ChatPanel.mount = function (root) {
   }
 
   function readyReplyLinks(region) {
-    keepInAppLinksInPlace(region);
+    region.querySelectorAll("a[href]").forEach(keepInAppLinkInPlace);
     markHandovers(region);
   }
 
@@ -358,6 +379,7 @@ window.ChatPanel.mount = function (root) {
     const data = await r.json();
     if (!data.ok) throw new Error(data.error || "could not start this chat");
     SID = data.sid;
+    readyEveryLink();
     root.dispatchEvent(new CustomEvent("chat-panel:session", {detail: {sid: SID}, bubbles: true}));
     return SID;
   }
@@ -569,6 +591,7 @@ window.ChatPanel.mount = function (root) {
   }
 
   log.querySelectorAll(".ac-msg.assistant .ac-body").forEach(readyReplyLinks);
+  log.querySelectorAll(".ac-offer-link").forEach(keepInAppLinkInPlace);
   restoreReadingPlace();
   // Reattach to a turn already running on the server. `from=0` replays it whole: the store
   // holds a turn's blocks only once it has finished, so mid-turn the buffer is the transcript.

@@ -121,24 +121,16 @@ def _draft_title(agent_id: str, context: dict) -> str:
     return f"{name}: {project_id}" if project_id else name
 
 
-@router.get("/chat/agent/{agent_id}/new", response_class=HTMLResponse)
-async def draft_agent_chat(agent_id: str, request: Request):
-    """Visiting creates nothing; the composer materializes on the first reply."""
-    if not registry.is_registered(agent_id):
-        raise HTTPException(status_code=404, detail="Unknown agent")
-    context = dict(request.query_params) | {"base_url": str(request.base_url)}
+def _read_draft_panel_context(agent_id: str, context: dict) -> dict:
+    """A conversation that is only on screen: nothing is stored until the reader replies."""
     opening = registry.render_opening_turn(agent_id, context)
-    history = [_draft_opening_bubble(opening)] if opening and opening.text else []
-    title = _draft_title(agent_id, context)
-    return templates.TemplateResponse(request, "chat.html", {
-        "history": history,
+    return {
+        "history": [_draft_opening_bubble(opening)] if opening and opening.text else [],
         "pending_user": None,
         "view_only": False,
         "backend_error": _backend_error(),
-        "title": title,
-        "crumbs": build_chat_crumbs(title),
         "config": ChatPanelConfig(
-            title=title,
+            title=_draft_title(agent_id, context),
             session_id=None,
             session_project=context.get("project_id"),
             projects=project_service.list_project_listings(),
@@ -148,7 +140,31 @@ async def draft_agent_chat(agent_id: str, request: Request):
             draft_context=context,
             opening_message=context.get("task"),
         ),
+    }
+
+
+@router.get("/chat/agent/{agent_id}/new", response_class=HTMLResponse)
+async def draft_agent_chat(agent_id: str, request: Request):
+    """Visiting creates nothing; the composer materializes on the first reply."""
+    if not registry.is_registered(agent_id):
+        raise HTTPException(status_code=404, detail="Unknown agent")
+    context = dict(request.query_params) | {"base_url": str(request.base_url)}
+    title = _draft_title(agent_id, context)
+    return templates.TemplateResponse(request, "chat.html", {
+        **_read_draft_panel_context(agent_id, context),
+        "title": title,
+        "crumbs": build_chat_crumbs(title),
     })
+
+
+@router.get("/chat/agent/{agent_id}/new/panel", response_class=HTMLResponse)
+async def new_chat_panel(agent_id: str, request: Request):
+    """The draft page's panel with no page around it, for a host that has its own."""
+    if not registry.is_registered(agent_id):
+        raise HTTPException(status_code=404, detail="Unknown agent")
+    context = dict(request.query_params) | {"base_url": str(request.base_url)}
+    return templates.TemplateResponse(
+        request, "_chat_panel.html", _read_draft_panel_context(agent_id, context))
 
 
 @router.post("/chat/agent/{agent_id}/sessions")

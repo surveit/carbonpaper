@@ -939,9 +939,11 @@ def test_a_queue_whose_upstream_is_not_an_llm_transform_renders_and_links(tmp_pa
     html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
     for fp in fingerprints["input_fingerprints"]:
         assert f'data-input-fingerprint="{fp}"' in html
-    assert 'data-target="human_label"' in html
-    assert "AI" not in html
-    assert 'class="field-control"' in html
+    # <main> alone: the shell offers an AI chat on every page.
+    queue = html.split("<main>", 1)[1].split("</main>", 1)[0]
+    assert 'data-target="human_label"' in queue
+    assert "AI" not in queue
+    assert 'class="field-control"' in queue
 
     assert _lineage_urls(project, run_id) == [
         f"/project/{project}/runs/{run_id}/stage/label/row/{o}/trace/view"
