@@ -83,7 +83,13 @@ def test_mcp_descriptions_cover_exactly_the_registered_tools() -> None:
     # agents, which run with the CLI's built-ins disabled — the CLI client connecting
     # HERE brings its own. The list may shrink; a new name on it is the two surfaces
     # diverging again, which is what this file exists to catch.
-    assert find_tool_names() - registered <= {"get_current_project", "sleep"}
+    assert find_tool_names() - registered <= {
+        "get_current_project", "get_current_url", "sleep"
+    }, (
+        "get_current_url joined this list for the same reason as get_current_project: "
+        "both are facts about a reader sitting in a browser — which project their session "
+        "opened on, which page they have open now — and an MCP client is neither."
+    )
 
 
 def test_a_tool_carries_its_body_here_or_on_its_surface_never_both() -> None:
