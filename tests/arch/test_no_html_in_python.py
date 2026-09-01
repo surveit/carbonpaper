@@ -23,20 +23,17 @@ _HTML_TAG_PATTERN = re.compile(
     r"<(?:" + "|".join(_BANNED_TAGS) + r")(?![a-zA-Z0-9_])", re.IGNORECASE
 )
 
-# Pre-existing offenders that are not the page-fragment-in-Python leak this
-# rule targets. A ratchet: new entries are forbidden — a new offender must be
-# fixed, not added here.
-#
-# - app/web/diagrams.py: a Mermaid flowchart node label embeds a `<span
-#   style=...>` fragment for in-node text styling. Mermaid.js reads this as
-#   diagram source, rendered client-side by the Mermaid library, not as a page
-#   fragment produced by this app's own Jinja templates — there is no
-#   app/templates/*.html this markup could move into. Keyed by line number, so
-#   an edit above one of them re-anchors the entry rather than adding one.
+# Not the leak this rule targets. A new entry needs a human decision on the record.
+
+# Keyed by line number: an edit above one re-anchors it rather than adding one.
 _ALLOWLIST: frozenset[tuple[str, int]] = frozenset(
     {
+        # Mermaid node-label markup, rendered client-side by Mermaid.js.
         ("app/web/diagrams.py", 199),
         ("app/web/diagrams.py", 352),
+
+        # A prompt's worked example, not a page fragment. Approved on PR #945.
+        ("app/models/stages/starlark_report.py", 67),
     }
 )
 
