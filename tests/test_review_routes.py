@@ -939,9 +939,7 @@ def test_a_queue_whose_upstream_is_not_an_llm_transform_renders_and_links(tmp_pa
     html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
     for fp in fingerprints["input_fingerprints"]:
         assert f'data-input-fingerprint="{fp}"' in html
-    # The shell offers an AI chat on every page, so this reads <main> alone: what is under
-    # test is the queue's own markup, which must not present a row function's value as
-    # something a model suggested. The two assertions either side anchor the region.
+    # <main> alone: the shell offers an AI chat on every page.
     queue = html.split("<main>", 1)[1].split("</main>", 1)[0]
     assert 'data-target="human_label"' in queue
     assert "AI" not in queue
