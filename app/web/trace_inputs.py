@@ -64,8 +64,7 @@ def build_input_catalog(project_id: str, manifest: JsonDict) -> InputCatalog:
         records={str(record.get("stage_id")): record for record in records},
         limits=dict(parameters.get("limits") or {}),
         offsets=dict(parameters.get("offsets") or {}),
-        stored_by_sha={record.sha256: record
-                       for record in file_store.list_project_files(project_id)},
+        stored_by_sha=file_store.index_project_files_by_sha(project_id),
     )
 
 

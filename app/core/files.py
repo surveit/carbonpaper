@@ -151,15 +151,10 @@ def resolve_stored_path(record: ProjectFile) -> Path:
     return (files_root() / record.id / record.filename).resolve()
 
 
-def find_stored_file(project_id: ID, path: str) -> ProjectFile | None:
-    """None for a path the store never held: a run may read anywhere on disk."""
-    stored = Path(path)
-    if stored.parent.parent != files_root():
-        return None
-    record = ProjectFile.load_or_none(stored.parent.name)
-    if record is None or record.project_id != project_id:
-        return None
-    return record if record.filename == stored.name else None
+def index_project_files_by_sha(project_id: ID) -> dict[str, ProjectFile]:
+    """Newest wins: re-sending the same bytes makes a second record, not a second file."""
+    newest_first = list_project_files(project_id)
+    return {record.sha256: record for record in reversed(newest_first)}
 
 
 def list_project_files(project_id: ID | None) -> list[ProjectFile]:
