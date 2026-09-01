@@ -208,6 +208,13 @@ tr.carried td.lin-v{color:var(--muted)}
 tr.inert td{background:var(--sunk-deep)}
 tr.inert td.lin-f,tr.inert td.lin-v{color:var(--muted-dim)}
 .lin-mark{font-weight:700;margin-right:4px}
+.lin-legend{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 9px}
+.lin-key{font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:9px}
+.lin-key.read{background:var(--raised);color:var(--muted)}
+.lin-key.changed{background:var(--state-warn-bg);color:var(--state-warn-ink)}
+.lin-key.added{background:var(--state-review-bg);color:var(--state-review-ink)}
+.lin-key.dropped{background:var(--state-failed-bg);color:var(--state-failed-ink)}
+.lin-key.untouched{background:var(--sunk-deep);color:var(--muted-dim)}
 .lin-was{display:block;color:var(--muted);text-decoration:line-through;font-size:12px;margin-top:2px}
 .lin-was em{text-decoration:none;font-style:normal}
 .lin-null{color:var(--muted);font-style:italic}
@@ -563,14 +570,35 @@ function saidOf(n, touched){
   return `<div class="lin-said lin-said-idle">No cell changed — the row kept every value and`
        + ` moved from <b>row ${n.base.row_number}</b> to <b>row ${n.row_number}</b>.</div>`;
 }
+// The order the table groups by: what the stage read, then what it wrote, then the rest.
+const COLUMN_GROUPS = [
+  ['read', 'Carried through unchanged, and this stage’s transform reads it.'],
+  ['changed', 'This stage wrote a value over the parent’s, struck through beneath it.'],
+  ['added', 'The parent row has no such column.'],
+  ['dropped', 'The parent row carried it and this stage’s output does not.'],
+  ['untouched', 'Unchanged, and nothing here read it.'],
+];
+// `inert` is the diff's word for a carried column no signature reads.
+function groupOf(c){
+  if(c.state !== 'carried') return c.state;
+  return c.inert ? 'untouched' : 'read';
+}
+function legendKey(name, tip, count){
+  const mark = {changed:'~ ', added:'+ ', dropped:'\u2212 '}[name] || '';
+  return `<span class="lin-key ${name} has-tip" data-tip="${tip}" tabindex="0">`
+       + `${mark}${count} ${name}</span>`;
+}
 function renderRowTab(n){
   const columns = n.row_diff.columns;
-  const touched = columns.filter(c => c.state !== 'carried');
-  const carried = columns.filter(c => c.state === 'carried');
-  const shown = touched.concat(carried);
+  const grouped = COLUMN_GROUPS.map(([name, tip]) => ({
+    name, tip, members: columns.filter(c => groupOf(c) === name),
+  })).filter(g => g.members.length);
+  const shown = grouped.flatMap(g => g.members);
+  const legend = grouped.map(g => legendKey(g.name, g.tip, g.members.length)).join('');
   return `
-    ${saidOf(n, touched)}
+    ${saidOf(n, columns.filter(c => c.state !== 'carried'))}
     ${baseLine(n)}
+    <div class="lin-legend">${legend}</div>
     <table class="lin-row">${shown.map(columnRow).join('')}</table>`;
 }
 // What this row was compared against. The origin says nothing when the title above
