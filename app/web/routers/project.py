@@ -186,10 +186,25 @@ async def project_workflow(request: Request, project_name: str):
 async def project_workflow_versions(request: Request, project_name: str):
     validate_project_or_404(project_name)
     versions = versioning.list_versions(project_name)
+    if not versions:
+        return templates.TemplateResponse(
+            request,
+            "versions.html",
+            {"state": shell_state(project_name, "versions"), "section": "versions",
+             "versions": versions},
+        )
+    newest = versions[0]
     return templates.TemplateResponse(
         request,
-        "versions.html",
-        {"state": shell_state(project_name, "versions"), "section": "versions", "versions": versions},
+        "version_detail.html",
+        {
+            "state": shell_state(project_name, "versions"),
+            "section": "versions",
+            "version": newest,
+            "versions": versions,
+            "showing_newest": True,
+            "mermaid": build_mermaid_graph(newest.stages, project_name),
+        },
     )
 
 
@@ -216,6 +231,8 @@ async def project_workflow_version(request: Request, project_name: str, version_
             "section": "versions",
             "crumbs": build_version_crumbs(project_name, version_id),
             "version": version,
+            "versions": versioning.list_versions(project_name),
+            "showing_newest": False,
             "mermaid": build_mermaid_graph(version.stages, project_name),
         },
     )

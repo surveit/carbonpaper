@@ -10,7 +10,7 @@
 {% block title %}{{ state.meta.display_name }} · Version {{ version.version_id }}{% endblock %}
 
 {# Its own trail, not the shell's: the last rung is THIS version, and it switches. #}
-{% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
+{% block breadcrumbs %}{% with crumbs = crumbs or state.crumbs %}{% include "_breadcrumbs.html" %}{% endwith %}{% endblock %}
 
 {% block section_head %}
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
@@ -25,14 +25,16 @@
 {% block section %}
 <div class="sec-head wf-head">
   <div class="wf-head-title">
-    <h1>Version <code>{{ version.version_id }}</code></h1>
+    <h1>{% if showing_newest %}Workflow{% else %}Version <code>{{ version.version_id }}</code>{% endif %}</h1>
     {# The app's own words about what a version IS, kept apart from the author's
        words about what THIS one does — the two used to run together in one grey
        sentence, which read the authored half as chrome. #}
-    <p class="vd-meta">Read-only snapshot
-      {%- if version.parent_version %}<span class="sep">·</span>cut from
+    <p class="vd-meta">{% if showing_newest %}Saved {{ version.created_at | friendly_time }}{% else %}Read-only snapshot{% endif %}
+      {%- if not showing_newest %}
+        {%- if version.parent_version %}<span class="sep">·</span>cut from
         <a href="/project/{{ state.id }}/workflow/version/{{ version.parent_version }}"><code>{{ version.parent_version }}</code></a>
-      {%- else %}<span class="sep">·</span>first version{% endif %}
+        {%- else %}<span class="sep">·</span>first version{% endif %}
+      {%- endif %}
       <span class="sep">·</span>{{ version.stages | length }} stage{{ '' if version.stages | length == 1 else 's' }}</p>
   </div>
   <div class="actions wf-actions">
@@ -43,6 +45,31 @@
        class="btn primary">▶ Run this version</a>
   </div>
 </div>
+
+{# HISTORY — every version this project has cut, newest first, with the one on
+   screen marked. A disclosure rather than a page: reading the current workflow is
+   what nearly every visit is for, and comparing two versions is the rare errand. #}
+{% if versions %}
+<details class="vd-history"{% if not showing_newest %} open{% endif %}>
+  <summary>History <span class="muted">— {{ versions | length }} version{{ '' if versions | length == 1 else 's' }}</span></summary>
+  <table class="stages">
+    <thead><tr><th>created</th><th>name</th><th>contents</th><th></th></tr></thead>
+    <tbody>
+      {% for v in versions %}
+      <tr{% if v.version_id == version.version_id %} class="vd-history-here"{% endif %}>
+        <td>{{ v.created_at | friendly_time }}</td>
+        <td>
+          {%- if v.message %}<a href="/project/{{ state.id }}/workflow/version/{{ v.version_id }}">{{ v.message }}</a>
+          {%- else %}<a class="muted" href="/project/{{ state.id }}/workflow/version/{{ v.version_id }}">saved without a name</a>{% endif -%}
+        </td>
+        <td class="muted">{{ v.stages | length }} stage{{ '' if v.stages | length == 1 else 's' }}</td>
+        <td>{% if v.version_id == version.version_id %}<span class="muted">showing</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</details>
+{% endif %}
 
 {# The author's own sentence about what THIS version does, under a header that says
    whose words these are. A version cut without one says so — nothing is written in

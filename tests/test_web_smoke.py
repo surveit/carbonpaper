@@ -117,14 +117,14 @@ def test_trigger_run_returns_400_on_invalid_dag(monkeypatch):
 # ─── Sidebar: Workflow group (Versions / Runs / Evals) + no lock ──────────────
 
 
-def test_build_nav_groups_workflow_children(demo_project):
+def test_build_nav_lists_the_workflow_runs_and_evals_flat(demo_project):
     from app.web.project_view import build_nav
 
-    overview, workflow, files, documentation = build_nav("demo")
+    overview, workflow, runs, evals, files, documentation = build_nav("demo")
     assert overview.key == "overview" and not overview.children
     assert files.key == "files" and not files.children
-    assert workflow.label == "Workflow"
-    assert [child.key for child in workflow.children] == ["versions", "runs", "evals"]
+    assert [item.label for item in (workflow, runs, evals)] == ["Workflow", "Runs", "Evals"]
+    assert not any(item.children for item in (workflow, runs, evals))
     assert documentation.label == "Documentation"
     assert [child.key for child in documentation.children] == ["methodology", "glossary"]
 
@@ -132,10 +132,9 @@ def test_build_nav_groups_workflow_children(demo_project):
 def test_a_group_heading_opens_no_page(demo_project):
     from app.web.project_view import build_nav
 
-    _, workflow, _, documentation = build_nav("demo")
-    assert not hasattr(workflow, "href") and not hasattr(documentation, "href")
+    *_, documentation = build_nav("demo")
+    assert not hasattr(documentation, "href")
     sidebar = client.get("/project/demo").text
-    assert '<div class="app-nav-group">Workflow</div>' in sidebar
     assert '<div class="app-nav-group">Documentation</div>' in sidebar
 
 
@@ -161,13 +160,11 @@ def test_workflow_page_points_to_versions_tab():
     assert 'href="/project/demo/workflow/versions"' in html     # which links there
 
 
-def test_sidebar_nests_versions_runs_evals_under_workflow():
+def test_sidebar_lists_the_workflow_runs_and_evals_as_siblings():
     html = client.get("/project/demo").text
-    assert "app-nav-children" in html
-    # The parent is a group label, not a link.
-    assert '<div class="app-nav-group">Workflow</div>' in html
-    for child_href in ("/project/demo/workflow/versions", "/project/demo/runs", "/project/demo/evals"):
-        assert f'href="{child_href}"' in html
+    assert '<div class="app-nav-group">Workflow</div>' not in html
+    for href in ("/project/demo/workflow/versions", "/project/demo/runs", "/project/demo/evals"):
+        assert f'href="{href}"' in html
 
 
 def test_sidebar_has_no_workflow_lock():
@@ -217,9 +214,9 @@ def test_cmdk_palette_ranks_the_project_being_read_first(demo_project):
     kinds = [row["kind"] for row in rows]
     assert kinds.index("section") < kinds.index("stage")
     sections = [row["label"] for row in rows if row["kind"] == "section"]
-    assert sections[:3] == ["Overview", "Versions", "Runs"]
+    assert sections[:3] == ["Overview", "Workflow", "Runs"]
     # Neither heading opens a page, so the palette cannot offer either one.
-    assert {"Workflow", "Documentation"}.isdisjoint(sections)
+    assert "Documentation" not in sections
     assert {"Files", "Methodology", "Glossary"} <= set(sections)
     assert [row["label"] for row in rows if row["kind"] == "stage"] == ["load", "extract"]
 
