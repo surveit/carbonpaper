@@ -179,6 +179,8 @@ a.snavbtn:hover{background:var(--hover)}
 .lin-phead h2{margin:0;font-size:15px}
 .lin-phead h2 code{background:var(--sunk-deep);padding:1px 6px;border-radius:5px;font-size:14px}
 .lin-ptype{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.lin-phrase{text-transform:none;letter-spacing:0;font-size:11.5px}
+.lin-ptype .lin-why{display:inline-block;margin:0 0 0 3px;vertical-align:-3px}
 .lin-back{float:right;font-size:12px}
 .lin-tabs{display:flex;gap:14px;margin-top:8px}
 .lin-tabs button{border:0;background:none;font:inherit;font-size:13px;color:var(--muted);padding:6px 0;
@@ -187,8 +189,6 @@ a.snavbtn:hover{background:var(--hover)}
 .lin-pbody{overflow:auto;padding:12px 18px 40px;flex:1}
 .lin-base{color:var(--muted);font-size:12px;margin:0 0 10px}
 .lin-base code{background:var(--sunk-deep);padding:0 4px;border-radius:4px}
-.lin-said{border-radius:7px;padding:8px 11px;font-size:12.5px;margin-bottom:10px}
-.lin-said-idle{background:var(--state-idle-bg);color:var(--state-idle-ink)}
 /* The row, transposed: one FIELD per line, so a wide row needs no horizontal
    scroll and the cells the step touched are on screen without hunting. Marks
    and tints are the run panel's diff vocabulary, turned on its side. */
@@ -208,7 +208,6 @@ tr.carried td.lin-v{color:var(--muted)}
 tr.inert td{background:var(--sunk-deep)}
 tr.inert td.lin-f,tr.inert td.lin-v{color:var(--muted-dim)}
 .lin-mark{font-weight:700;margin-right:4px}
-.lin-legend{display:flex;justify-content:flex-end;margin:0 0 5px}
 .lin-was{display:block;color:var(--muted);text-decoration:line-through;font-size:12px;margin-top:2px}
 .lin-was em{text-decoration:none;font-style:normal}
 .lin-null{color:var(--muted);font-style:italic}
@@ -559,10 +558,11 @@ function columnRow(f){
     <td class="lin-f" title="${esc(f.name)}"><span class="lin-mark">${mark}</span>${esc(f.name)}</td>
     <td class="lin-v"><div class="lin-clip">${text}${was}</div></td></tr>`;
 }
-function saidOf(n, touched){
-  if(touched.length || !n.base) return '';
-  return `<div class="lin-said lin-said-idle">No cell changed — the row kept every value and`
-       + ` moved from <b>row ${n.base.row_number}</b> to <b>row ${n.row_number}</b>.</div>`;
+// What became of THIS row here, where neither the marks below nor `baseLine` say it:
+// a row with no parent to compare against, and a row every cell of which survived.
+function phraseOf(n){
+  if(!n.base) return n.source_file ? 'new row read from the input file' : '';
+  return n.row_diff.columns.some(c => c.state !== 'carried') ? '' : 'no cell changed';
 }
 // The order the table groups by: what the stage read, then what it wrote, then the rest.
 const COLUMN_GROUPS = ['read', 'changed', 'added', 'dropped', 'untouched'];
@@ -578,10 +578,7 @@ function renderRowTab(n){
   const columns = n.row_diff.columns;
   const shown = COLUMN_GROUPS.flatMap(g => columns.filter(c => groupOf(c) === g));
   return `
-    ${saidOf(n, columns.filter(c => c.state !== 'carried'))}
     ${baseLine(n)}
-    <div class="lin-legend"><span class="lin-why has-tip" tabindex="0"
-      data-tip="${COLOUR_TIP}">?</span></div>
     <table class="lin-row">${shown.map(columnRow).join('')}</table>`;
 }
 // What this row was compared against. The origin says nothing when the title above
@@ -636,10 +633,18 @@ async function renderTransformTab(n){
   // pane it is still looking at.
   if(V.nodes[sel] === n && tab === 'transform') body.innerHTML = transformCache[n.stage_id];
 }
+// The colour key belongs to the row table, so it goes with it when the tab does.
+function subheaderOf(n){
+  const phrase = phraseOf(n);
+  return `${esc(n.stage_type_label)} · step ${n.step} of ${V.nodes.length}`
+    + (phrase ? ` · <span class="lin-phrase">${phrase}</span>` : '')
+    + (tab === 'row'
+        ? ` <span class="lin-why has-tip" tabindex="0" data-tip="${COLOUR_TIP}">?</span>` : '');
+}
 function render(){
   renderSteps();
   const n = V.nodes[sel];
-  document.getElementById('ptype').textContent = `${n.stage_type_label} · step ${n.step} of ${V.nodes.length}`;
+  document.getElementById('ptype').innerHTML = subheaderOf(n);
   document.getElementById('ptitle').innerHTML =
     `<code>${esc(n.stage_id)}</code> ${sourceTitle(n)}`;
   const back = document.getElementById('back');
