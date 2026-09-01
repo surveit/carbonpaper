@@ -205,6 +205,14 @@ def list_written_column_names(stage: "AbstractStage") -> list[str]:
     return [column.name for column in [*signature.rewrites, *signature.adds]]
 
 
+def list_rewritten_column_names(stage: "AbstractStage") -> set[str]:
+    """The subset of the written columns the stage overwrote rather than introduced."""
+    signature = stage.signature
+    if not isinstance(signature, ExtendsSignature):
+        return set()
+    return {column.name for column in signature.rewrites}
+
+
 def list_read_column_names(stage: "AbstractStage") -> set[str]:
     """Consumed by the transform; a column that merely flows through is not one."""
     signature = stage.signature

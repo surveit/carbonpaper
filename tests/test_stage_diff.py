@@ -373,10 +373,11 @@ def test_an_enrich_that_dropped_a_subject_column_shows_it_carrying_the_input_val
     assert diff is not None
     assert diff.removed_column_names == ["val"]
     assert [(c.name, c.state) for c in diff.columns] == [
+        ("name", ColumnDiffState.carried),
         ("extra", ColumnDiffState.added),
-        ("val", ColumnDiffState.dropped),
-        ("name", ColumnDiffState.carried)]
-    dropped_cells = [row[1] for row in diff.rows]
+        ("val", ColumnDiffState.dropped)]
+    at = [c.name for c in diff.columns].index("val")
+    dropped_cells = [row[at] for row in diff.rows]
     assert [cell.text for cell in dropped_cells] == ["1", "2"]
     assert all(cell.state is CellDiffState.dropped for cell in dropped_cells)
 

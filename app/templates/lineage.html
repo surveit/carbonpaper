@@ -565,19 +565,12 @@ function phraseOf(n){
   if(!n.base) return n.source_file ? 'new row read from the input file' : '';
   return n.row_diff.columns.some(c => c.state !== 'carried') ? '' : 'no cell changed';
 }
-// The order the table groups by: what the stage read, then what it wrote, then the rest.
-const COLUMN_GROUPS = ['read', 'changed', 'added', 'dropped', 'untouched'];
 const COLOUR_TIP = 'White — read by this stage as input. Blue — added by this stage. '
   + 'Orange — changed by this stage. Red — dropped by this stage. '
   + 'Grey — inert: neither read nor written here.';
-// `inert` is the diff's word for a carried column no signature reads.
-function groupOf(c){
-  if(c.state !== 'carried') return c.state;
-  return c.inert ? 'untouched' : 'read';
-}
+// Grouped and ordered by app.web.column_order, which every table here shares.
 function renderRowTab(n){
-  const columns = n.row_diff.columns;
-  const shown = COLUMN_GROUPS.flatMap(g => columns.filter(c => groupOf(c) === g));
+  const shown = n.row_diff.columns;
   return `
     <div class="lin-baseline">${baseLine(n)}
       <span class="lin-why has-tip" tabindex="0" data-tip="${COLOUR_TIP}">?</span></div>

@@ -18,7 +18,7 @@ from app.runtime.errors import PreviewError
 from app.runtime.preview import PREVIEWABLE_TYPES, run_stage_preview
 from app.web import loading
 from app.web.breadcrumbs import build_run_child_crumbs
-from app.web.column_order import order_preview_columns, order_written_columns_first
+from app.web.column_order import order_columns_by_signature, order_preview_columns
 from app.web.config import EVENT_TAIL, label_stage_type, templates
 from app.web.eval_coverage import find_eval_coverages
 from app.web.stage_test_views import build_certification, shape_test_views
@@ -146,7 +146,8 @@ async def run_stage_rows(
         table = load_output_table(run_dir, stage_record.get("output_path"))
     if requested is None:
         # A rectangle's column order is the one it was published in, not the stage's.
-        table["columns"] = order_written_columns_first(pinned.workflow_stage, table["columns"])
+        table["columns"] = order_columns_by_signature(
+            pinned.workflow_stage, table["columns"])
     return templates.TemplateResponse(
         request,
         "run_stage_rows.html",
