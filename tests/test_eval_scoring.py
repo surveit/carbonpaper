@@ -84,3 +84,18 @@ def test_checked_column_clashing_with_override_is_read_from_output_prefixed_colu
     result = score_expected_outputs(config, override, target, dataset, target_df)
     assert list(result.per_row["label__expected"]) == ["x", "y"]   # from output.label
     assert list(result.per_row["row_passed"]) == [True, False]
+
+
+def test_null_expectation_passes_only_on_a_null_answer(tmp_path):
+    override = _stage("ov", [{"name": "doc_id", "type": "str", "nullable": True}], tmp_path)
+    target = _stage("tg", [{"name": "doc_id", "type": "str", "nullable": True}, {"name": "grant_usd", "type": "float", "nullable": True}], tmp_path)
+    config = _config([ExpectedOutput(output_column="grant_usd", metric="exact")])
+    dataset = pd.DataFrame({
+        "doc_id": ["oai-2024-blog", "coefficient-2025-rfp", "mozilla-2024-award"],
+        "grant_usd": [None, None, 750_000.0]})     # the first two documents state no figure
+    target_df = pd.DataFrame({
+        "doc_id": ["oai-2024-blog", "coefficient-2025-rfp", "mozilla-2024-award"],
+        "grant_usd": [None, 5_000_000.0, None]})   # read nothing, invented one, missed one
+
+    result = score_expected_outputs(config, override, target, dataset, target_df)
+    assert list(result.per_row["row_passed"]) == [True, False, False]
