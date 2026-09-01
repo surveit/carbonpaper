@@ -2400,3 +2400,4 @@
 {"run_id":"33562168344","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33562168344","created":"2026-09-01T21:39:55Z","branch":"feat/per-tenant-access","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"33563200973","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33563200973","created":"2026-09-01T21:50:57Z","branch":"feat/chat-knows-the-page","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"33563200973","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33563200973","created":"2026-09-01T21:51:44Z","branch":"feat/chat-knows-the-page","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"33563337624","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33563337624","created":"2026-09-01T21:52:23Z","branch":"fix/drop-traceback-from-tool-result","event":"pull_request","contracts_kept":16,"findings":[]}
