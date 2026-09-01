@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from app.core.run_status import RunStatus
+from app.core.timestamp_ids import read_iso_stamp
 from app.runtime.manifest import list_run_entries
 from app.models.run_manifest import (
     records_a_test_run,
@@ -61,6 +63,8 @@ class ProjectCard:
     n_runs: int
     n_test_runs: int
     status: ProjectStatus
+    # Orders the home page. None sorts last: no run, no edit, nothing to be newer than.
+    last_activity: datetime | None
 
     @property
     def status_label(self) -> str:
@@ -68,17 +72,20 @@ class ProjectCard:
 
 
 @dataclass(frozen=True)
-class RunCount:
+class RunSummary:
     real: int
     tests: int
     # IN_PROGRESS for a project that has yet to produce a real run: it is still
     # being set up, which is the same unfinished state a running one is in.
     headline: ProjectStatus
+    # A workflow test counts: running one is working on the project.
+    latest_start: datetime | None
 
 
-def count_runs(project_id: str) -> RunCount:
+def read_run_summary(project_id: str) -> RunSummary:
     real = tests = 0
     headline: ProjectStatus | None = None
+    starts: list[datetime] = []
     for entry in reversed(list_run_entries(project_id)):
         # Read off the RAW payload, so a run written before a field was renamed
         # still counts; one that is not even JSON is dropped, not counted
@@ -87,14 +94,19 @@ def count_runs(project_id: str) -> RunCount:
         manifest = entry.raw
         if manifest is None:
             continue
+        # Max, not first: entries arrive by run id, and a run id need not be a stamp.
+        started = read_iso_stamp(manifest.get("started_at"))
+        if started is not None:
+            starts.append(started)
         if records_a_test_run(manifest):
             tests += 1
             continue
         real += 1
         if headline is None:
             headline = _read_headline(manifest)
-    return RunCount(real=real, tests=tests,
-                    headline=headline or ProjectStatus.IN_PROGRESS)
+    return RunSummary(real=real, tests=tests,
+                      headline=headline or ProjectStatus.IN_PROGRESS,
+                      latest_start=max(starts, default=None))
 
 
 def _read_headline(manifest: dict[str, Any]) -> ProjectStatus | None:

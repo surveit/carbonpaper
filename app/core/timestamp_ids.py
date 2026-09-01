@@ -37,3 +37,13 @@ def now_iso() -> str:
             now = _last_stamp + timedelta(microseconds=1)
         _last_stamp = now
     return now.isoformat(timespec="microseconds")
+
+
+def read_iso_stamp(value: object) -> datetime | None:
+    """None for anything `now_iso`/`isoformat` did not write, so a bad stamp orders nothing."""
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None

@@ -33,22 +33,34 @@ from app.services.loader import (
     list_parsed_stages,
     load_stage_entries,
     read_stage_specs,
+    read_working_copy_edited_at,
 )
 from app.services.errors import WorkflowLoadError
 from app.services.versioning import list_versions, load_version_stages
 from app.services.project import has_document, list_project_listings
-from app.services.project_record import read_project_name
+from app.services.project_record import read_project_edited_at, read_project_name
 from app.services.terms import count_nouns
 from app.services.workspace import resolve_run_dir
 from app.web.panel_links import RectangleRequest
-from app.web.project_cards import ProjectCard, ProjectStatus, count_runs
+from app.web.project_cards import (
+    ProjectCard,
+    ProjectStatus,
+    RunSummary,
+    read_run_summary,
+)
 
 
 # ─── Projects & stages ──────────────────────────────────────────────────
 
 def list_projects() -> list[ProjectCard]:
     cards = [_build_project_card(listing.id) for listing in list_project_listings()]
-    return [card for card in cards if card is not None]
+    return sorted((card for card in cards if card is not None),
+                  key=_rank_by_recency, reverse=True)
+
+
+def _rank_by_recency(card: ProjectCard) -> tuple[bool, datetime]:
+    # The bool holds the undated cards last; `reverse=True` has no `last=` to do it.
+    return (card.last_activity is not None, card.last_activity or datetime.min)
 
 
 def _build_project_card(project_id: str) -> ProjectCard | None:
@@ -56,7 +68,7 @@ def _build_project_card(project_id: str) -> ProjectCard | None:
     has_workflow = n_stages > 0
     n_schemas = count_nouns(project_id)
     has_schemas = n_schemas > 0
-    runs = count_runs(project_id)
+    runs = read_run_summary(project_id)
     carries_document = has_document(project_id)
     if not (has_workflow or has_schemas or carries_document):
         return None
@@ -73,7 +85,16 @@ def _build_project_card(project_id: str) -> ProjectCard | None:
         n_runs=runs.real,
         n_test_runs=runs.tests,
         status=runs.headline if n_versions is not None else ProjectStatus.UNREADABLE,
+        last_activity=_read_last_activity(project_id, runs),
     )
+
+
+def _read_last_activity(project_id: str, runs: RunSummary) -> datetime | None:
+    """Three records touch a project, and each is blind to the other two."""
+    stamps = [runs.latest_start,
+              read_working_copy_edited_at(project_id),
+              read_project_edited_at(project_id)]
+    return max((s for s in stamps if s is not None), default=None)
 
 
 def _count_stored_versions(project_id: str) -> int | None:

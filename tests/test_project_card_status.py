@@ -10,7 +10,7 @@ from app.main import app
 from app.services import workspace
 from project_seed import seed_project
 from app.web.loading import list_projects
-from app.web.project_cards import ProjectStatus, count_runs
+from app.web.project_cards import ProjectStatus, read_run_summary
 from app.services.methodology import write_methodology
 from run_seed import store_manifest
 
@@ -58,7 +58,7 @@ def _make_project(root, name, runs=()):
 )
 def test_every_run_status_has_a_headline(examples_root, run_status, expected):
     proj = _make_project(examples_root, "p", [("20260101T000000", {"status": run_status})])
-    assert count_runs(proj.name).headline is expected
+    assert read_run_summary(proj.name).headline is expected
 
 
 def test_the_mapping_covers_every_run_status():
@@ -75,7 +75,7 @@ def test_the_headline_is_the_newest_run(examples_root):
         ("20260101T000000", {"status": RunStatus.ERRORS}),
         ("20260102T000000", {"status": RunStatus.OK}),
     ])
-    assert count_runs(proj.name).headline is ProjectStatus.COMPLETED
+    assert read_run_summary(proj.name).headline is ProjectStatus.COMPLETED
 
 
 def test_a_test_run_never_sets_the_headline(examples_root):
@@ -83,16 +83,16 @@ def test_a_test_run_never_sets_the_headline(examples_root):
         ("20260101T000000", {"status": RunStatus.ERRORS}),
         ("20260102T000000", {"status": RunStatus.OK, "is_test": True}),
     ])
-    run_count = count_runs(proj.name)
-    assert run_count.headline is ProjectStatus.ERRORED
-    assert (run_count.real, run_count.tests) == (1, 1)
+    summary = read_run_summary(proj.name)
+    assert summary.headline is ProjectStatus.ERRORED
+    assert (summary.real, summary.tests) == (1, 1)
 
 
 def test_a_project_with_no_runs_is_in_progress(examples_root):
     proj = _make_project(examples_root, "p")
-    run_count = count_runs(proj.name)
-    assert run_count.headline is ProjectStatus.IN_PROGRESS
-    assert (run_count.real, run_count.tests) == (0, 0)
+    summary = read_run_summary(proj.name)
+    assert summary.headline is ProjectStatus.IN_PROGRESS
+    assert (summary.real, summary.tests) == (0, 0)
 
 
 def test_a_status_this_app_does_not_define_falls_through(examples_root):
@@ -100,9 +100,9 @@ def test_a_status_this_app_does_not_define_falls_through(examples_root):
         ("20260101T000000", {"status": RunStatus.ERRORS}),
         ("20260102T000000", {"status": "teleported"}),
     ])
-    run_count = count_runs(proj.name)
-    assert run_count.headline is ProjectStatus.ERRORED
-    assert run_count.real == 2
+    summary = read_run_summary(proj.name)
+    assert summary.headline is ProjectStatus.ERRORED
+    assert summary.real == 2
 
 
 # ── what the page renders ────────────────────────────────────────────────────
