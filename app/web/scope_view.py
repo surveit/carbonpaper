@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.web.figure_text import render_figure
 from app.core.errors import StageNotInRun
 from app.models.branch_analysis import BranchId, BranchRole
 from app.models.claims import StageOutputCellCitation
@@ -73,17 +74,17 @@ def say_what_no_row_fed(scope: ScopeMap) -> str | None:
     named = len(scope.covers.ordinals)
     if unfed == named:
         return (f"No row fed this figure: the run recorded nothing behind the "
-                f"{unfed:,} row{'' if unfed == 1 else 's'} it names at "
+                f"{render_figure(unfed)} row{'' if unfed == 1 else 's'} it names at "
                 f"{scope.covers.at_stage}.")
-    return (f"The run recorded nothing behind {unfed:,} of the {named:,} rows this "
+    return (f"The run recorded nothing behind {render_figure(unfed)} of the {render_figure(named)} rows this "
             f"figure names at {scope.covers.at_stage}.")
 
 
 def say_why_rows_left(cut: CutRows, role: BranchRole) -> str:
     if role is BranchRole.removes:
-        return (f"{cut.total:,} row{'' if cut.total == 1 else 's'} the run took out "
+        return (f"{render_figure(cut.total)} row{'' if cut.total == 1 else 's'} the run took out "
                 f"here. What they did differently is upstream of this stage.")
-    return (f"{cut.total:,} row{'' if cut.total == 1 else 's'} still in the frame, "
+    return (f"{render_figure(cut.total)} row{'' if cut.total == 1 else 's'} still in the frame, "
             f"merged into a row this figure did not come through.")
 
 

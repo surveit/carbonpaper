@@ -9,6 +9,7 @@ from typing import Any, Sequence
 import pyarrow as pa
 from pydantic import BaseModel
 
+from app.web.figure_text import render_figure
 from app.core.file_shape import VALUES_KEPT, measure_column_shape
 from app.core.frames import read_frame_table
 from app.core.json_types import JsonScalar
@@ -171,7 +172,7 @@ def _build_preview_row(frame: pa.Table, ordinal: RowOrdinal,
     cells = [frame.column(name)[ordinal].as_py() for name in frame.column_names]
     stamped = (frame.column(SOURCE_ROW_COLUMN)[ordinal].as_py()
                if SOURCE_ROW_COLUMN in frame.column_names else None)
-    return PreviewRow(label=f"{stamped if stamped is not None else ordinal + 1:,}",
+    return PreviewRow(label=f"{render_figure(stamped if stamped is not None else ordinal + 1)}",
                       relevant=relevant, cells=cells)
 
 
