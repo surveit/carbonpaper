@@ -46,6 +46,9 @@ def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
     def get_current_project() -> str | None:
         return ctx.project_id
 
+    def get_current_url() -> str | None:
+        return base + ctx.page if ctx.page else None
+
     def create_project(name: str, document: str) -> Project:
         return shared.create_project(name, document, source="editing agent")
 
@@ -75,6 +78,7 @@ def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
 
     tools: list[Callable[..., Any]] = [
         get_current_project,
+        get_current_url,
         create_project,
         edit_stages,
         add_stage,
@@ -106,6 +110,7 @@ def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
 # Empty dict = no args. A shared-body tool's prose lives in app.tools.tool_specs instead.
 TOOL_SCHEMAS: dict[str, ToolParameterProse] = {
     "get_current_project": {},
+    "get_current_url": {},
     "create_project": {
         "name": "What to CALL the project — a label, shown to the human. Two projects may "
             "share one; the id you work with comes back from this call.",
@@ -148,6 +153,7 @@ TOOL_SCHEMAS: dict[str, ToolParameterProse] = {
 # behind a click-to-expand disclosure in the UI.
 TOOL_LABELS: dict[str, str] = {
     "get_current_project": "Checking the current project",
+    "get_current_url": "Checking the page you have open",
     "create_project": "Creating the project",
     "edit_stages": "Editing the workflow's stages",
     "add_stage": "Adding a stage",

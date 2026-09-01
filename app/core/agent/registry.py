@@ -44,8 +44,6 @@ class AgentConfig(BaseModel):
     # it says is the agent's business; returning "" appends nothing, not a heading
     # over nothing.
     render_session_prompt: Callable[[BaseModel], str] | None = None
-    # Prose for THIS turn, prepended to the reader's message so the cached prefix holds.
-    render_turn_note: Callable[[BaseModel], str] | None = None
 
 
 # Given a validated context, return the bound tools for one agent.
@@ -89,7 +87,6 @@ def build_engine(
         tool_labels={s.name: s.label for s in specs} | config.extra_tool_labels,
         model=config.model,
         thinking=config.thinking,
-        turn_note=config.render_turn_note(ctx) if config.render_turn_note else "",
     )
 
 

@@ -11,7 +11,7 @@ from app.core.agent.registry import render_system_prompt
 from app.main import app
 from app.services import project as project_service
 from app.services import workspace
-from app.tools.editing import EditingContext
+from app.tools.editing import EditingContext, build_editing_tools
 from app.web.chat_router import read_chat_context
 
 _STATIC = Path(__file__).resolve().parents[1] / "app/static"
@@ -73,32 +73,34 @@ def test_a_link_that_names_the_project_outranks_the_page_it_was_clicked_on(
 # ── what each turn carries ───────────────────────────────────────────────────
 
 
-def test_the_note_names_the_page_the_reader_is_on_now() -> None:
-    note = _turn_note(page="/project/p1/runs/r1/lineage")
-
-    assert "https://carbon.example/project/p1/runs/r1/lineage" in note
-
-
-def test_a_turn_reporting_no_page_says_nothing_about_one() -> None:
-    assert _turn_note(page=None) == ""
+def test_the_tool_answers_with_the_page_the_reader_is_on_now() -> None:
+    assert _ask_current_url(page="/project/p1/runs/r1/lineage") == (
+        "https://carbon.example/project/p1/runs/r1/lineage")
 
 
-def test_the_page_stays_out_of_the_system_prompt(tmp_path) -> None:
-    """The conversation is cached behind this string; a per-turn line may not move it."""
+def test_a_turn_reporting_no_page_answers_nothing_rather_than_a_guess() -> None:
+    assert _ask_current_url(page=None) is None
+
+
+def test_nothing_the_reader_did_not_type_reaches_the_conversation(tmp_path) -> None:
+    """The page arrives as a tool result, so no turn holds words the reader never wrote."""
     project_id = _make_project(tmp_path)
     context = EditingContext(
         project_id=project_id, base_url=_BASE_URL, page="/project/p1/runs/r1/lineage")
 
     prompt = render_system_prompt(EDITING_CONFIG, context)
 
+    # Not in the system prompt either: it is the cached prefix, and the page moves.
     assert "/runs/r1/lineage" not in prompt
     assert prompt == render_system_prompt(
         EDITING_CONFIG, context.model_copy(update={"page": "/files"}))
 
 
-def test_the_hook_the_editing_agent_registered_is_the_one_that_runs() -> None:
-    # Without this, every turn-note test above would pass on an agent carrying no hook.
-    assert EDITING_CONFIG.render_turn_note is not None
+def test_the_prompt_names_the_tool_that_reads_it(tmp_path) -> None:
+    # A tool the model is never told to reach for is one it answers "this" without.
+    context = EditingContext(base_url=_BASE_URL)
+
+    assert "get_current_url" in render_system_prompt(EDITING_CONFIG, context)
 
 
 # ── what the client sends ────────────────────────────────────────────────────
@@ -120,10 +122,10 @@ def test_both_hosts_report_the_page_through_the_one_reader() -> None:
     assert "window.ChatPanel.here()" in rail
 
 
-def _turn_note(page: str | None) -> str:
-    render = EDITING_CONFIG.render_turn_note
-    assert render is not None
-    return render(EditingContext(base_url=_BASE_URL, page=page))
+def _ask_current_url(page: str | None) -> str | None:
+    specs = build_editing_tools(EditingContext(base_url=_BASE_URL, page=page))
+    spec = next(s for s in specs if s.name == "get_current_url")
+    return spec.fn()
 
 
 def _request(query: str):

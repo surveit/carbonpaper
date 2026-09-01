@@ -89,11 +89,8 @@ class ClaudeAgentSdkEngine:
         max_turns: int | None = None,
         thinking: ThinkingConfig | None = None,
         builtin_tools: list[str] | None = None,
-        turn_note: str = "",
     ) -> None:
         self._system_prompt = system_prompt
-        # Rides the reader's message, so a per-turn note never moves the cached prefix.
-        self._turn_note = turn_note
         self._mcp_server = mcp_server
         self._allowed_tools = allowed_tools
         # The CLI's own built-in tools (Bash, Read, Write, WebSearch, …) this run may
@@ -142,9 +139,6 @@ class ClaudeAgentSdkEngine:
             kw["cli_path"] = _CLI_PATH
         return ClaudeAgentOptions(**kw)
 
-    def _with_turn_note(self, prompt: str) -> str:
-        return f"{self._turn_note}\n\n{prompt}" if self._turn_note else prompt
-
     async def stream_turn(
         self,
         prompt: str,
@@ -161,8 +155,7 @@ class ClaudeAgentSdkEngine:
         assistant_parts: list[dict[str, Any]] = []
         hidden_tool_result_ids: set[ID] = set()
         session_id: ID | None = None
-        async for msg in query(prompt=self._with_turn_note(prompt),
-                               options=self._options(resume)):
+        async for msg in query(prompt=prompt, options=self._options(resume)):
             if isinstance(msg, AssistantMessage):
                 for block in msg.content:
                     if isinstance(block, ThinkingBlock):

@@ -15,6 +15,7 @@ from app.tools.submitted_stage import SubmittedStage
 _EXPECTED_TOOL_NAMES = {
     "list_projects",
     "get_current_project",
+    "get_current_url",
     "create_project",
     "read_workflow_summary",
     "read_stage_output_rows",

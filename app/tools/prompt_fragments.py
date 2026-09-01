@@ -87,6 +87,9 @@ def render_link_map(base_url: str) -> str:
         "# Links",
         f"Your reader is in a browser at {base} — write the WHOLE address, since a bare "
         "path is text on their screen rather than something they can click.",
+        "They move between the pages below while this conversation stays open, so which "
+        "one they have in front of them is not something the conversation records. "
+        "`get_current_url` reads it; call it before answering \"this\" or \"here\".",
         "",
         *(f"  {label:<20}{base}{path}" for label, path in _PAGES),
         "",

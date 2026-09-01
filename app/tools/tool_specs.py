@@ -600,6 +600,10 @@ the methodology the user gives you.
 What it reports is the binding this session was OPENED with, so it keeps
 returning nothing after create_project. That is not a failure: carry the id
 create_project returned and pass it yourself.""",
+    "get_current_url": """\
+The page the reader has open right now, which moves as they browse. Call it when
+they say "this" or "here", and read the ids out of the address instead of asking
+for one. Nothing if the chat surface did not report a page.""",
     "save_version": """\
 Freeze the project's CURRENT workflow into an immutable version — the snapshot
 a run or a workflow test executes. Born UNPUBLISHED: only a human publishes.
