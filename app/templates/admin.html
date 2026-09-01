@@ -71,7 +71,7 @@
    has taken the tour. That is why it is a plain button with inline JS, unlike every
    other action on this page, which is a form posting to the server. #}
 <h2>Guided tour</h2>
-<p class="muted">Resets this browser's "tour already started" flag, so the tour CTA on the projects page offers to take it fresh.</p>
+<p class="muted">Resets this browser's "tour already started" flag, so the projects page sends it to the tour again on the next visit.</p>
 <button type="button" class="btn" id="reset-tour-btn">Reset guided tour for this browser</button>
 <script>
 document.getElementById("reset-tour-btn").addEventListener("click", function () {

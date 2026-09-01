@@ -1,9 +1,4 @@
-"""The tour's door: the home zero state's only CTA, and the draft/materialize routes
-behind it.
-
-Offline throughout — visiting the draft page runs no agent turn and creates nothing;
-materializing writes a session but still runs no turn.
-"""
+"""The tour's door: the home page's redirect into it, and the routes behind it."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -20,7 +15,6 @@ from app.services.methodology import write_methodology
 
 client = TestClient(app)
 
-_CTA = "Take a guided tour on sample data"
 _DRAFT_URL = "/chat/agent/tutorial/new"
 
 
@@ -48,65 +42,72 @@ def _materialize_the_tour() -> str:
     return data["sid"]
 
 
-def test_the_tour_block_offers_only_the_tour() -> None:
-    """The tour markup is its own block: no second door inside it."""
+def test_the_home_page_offers_no_tour_button() -> None:
+    """The button a browser that has not toured would have had to click is gone."""
     page = client.get("/")
     assert page.status_code == 200
-    assert "New here? Take the guided tour" in page.text
-    assert _CTA in page.text
-    assert f'href="{_DRAFT_URL}"' in page.text
-    assert 'class="btn primary" id="tour-cta"' in page.text
-
-    tour_state = page.text.split('id="tour-state"')[1].split("</div>")[0]
-    assert "New project" not in tour_state, "the tour block grew a second door"
+    assert "guided tour" not in page.text.lower()
+    assert "tour-cta" not in page.text
 
 
 def test_new_project_stays_reachable_from_the_header() -> None:
-    """The path to a blank project lives in the header regardless of tour visibility."""
+    """The path to a blank project lives in the header, above the redirect."""
     page = client.get("/")
 
-    header = page.text.split('class="dash-header"')[1].split('id="tour-state"')[0]
+    header = page.text.split('class="dash-header"')[1].split("<script>")[0]
     assert 'href="/project/new"' in header
     assert "＋ New project" in header
 
 
-def test_the_tour_visibility_is_decided_client_side_by_this_browser() -> None:
-    """No server-side tour state exists: the page ships both states and lets JS choose."""
-    page = client.get("/")
+def _tour_script(page: str) -> str:
+    """The home page's own script, not the shell's — several ship above it."""
+    return page.split('const KEY = "carbonpaper.tour.started"')[1].split("</script>")[0]
 
-    assert 'id="tour-state"' in page.text
-    assert 'id="projects-state"' in page.text
-    assert 'localStorage.setItem(KEY, "1")' in page.text
-    assert '"carbonpaper.tour.started"' in page.text
-    assert 'document.documentElement.classList.add("tour-unstarted")' in page.text
+
+def test_an_untoured_browser_is_sent_to_the_tour_and_the_visit_is_recorded() -> None:
+    """The write comes first: without it the next visit redirects again, forever."""
+    script = _tour_script(client.get("/").text)
+
+    assert script.index('localStorage.setItem(KEY, "1")') < script.index(
+        f'location.replace("{_DRAFT_URL}")'
+    )
+
+
+def test_a_browser_that_cannot_record_the_visit_stays_on_the_page() -> None:
+    """Redirecting a browser whose write failed would strand it: every visit, no way back."""
+    script = _tour_script(client.get("/").text)
+
+    assert "catch (e) { sent = true; }" in script
+    assert 'if (localStorage.getItem(KEY) !== "1") sent = true;' in script
+
+
+def test_the_page_claims_nothing_about_what_this_reader_has_done() -> None:
     for claim in ("you have taken", "you've taken", "tour complete", "already toured"):
-        assert claim not in page.text.lower(), claim
+        assert claim not in client.get("/").text.lower(), claim
 
 
-def test_the_project_list_ships_inside_the_block_the_tour_replaces(
+def test_the_project_list_is_what_the_page_itself_renders(
     examples_root: Path,
 ) -> None:
-    """Both list shapes sit inside #projects-state, which is what .tour-unstarted hides."""
+    """Both list shapes render server-side; the redirect is what takes a reader off them."""
     _make_project(examples_root)
-    with_projects = client.get("/").text
-    assert "already-here" in with_projects.split('id="projects-state"')[1]
+    assert "already-here" in client.get("/").text
 
     workspace.set_projects_dir(examples_root / "empty")
     (examples_root / "empty").mkdir()
-    assert "No projects yet" in client.get("/").text.split('id="projects-state"')[1]
+    assert "No projects yet" in client.get("/").text
 
 
-def test_a_home_page_with_projects_still_ships_the_tour_markup(
+def test_the_redirect_ships_whatever_the_project_list_holds(
     examples_root: Path,
 ) -> None:
-    """Tour visibility no longer depends on project count — the browser decides."""
+    """Being sent to the tour does not depend on project count — the browser decides."""
     _make_project(examples_root)
     page = client.get("/")
     assert page.status_code == 200
     assert "already-here" in page.text
     assert "No projects yet" not in page.text
-    assert _CTA in page.text
-    assert 'id="tour-state"' in page.text
+    assert f'location.replace("{_DRAFT_URL}")' in page.text
 
 
 def test_visiting_the_draft_page_creates_nothing() -> None:

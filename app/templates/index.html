@@ -9,30 +9,23 @@
     <a href="/project/new" class="btn primary new-methodology-btn">＋ New project</a>
 </div>
 
-{# One door, not two: a browser that has not started the tour gets the tour INSTEAD of
-   the list, whatever it holds. Which of the two that is is a fact about THIS BROWSER,
-   so it is not server-rendered — both blocks ship, the script below stamps the root
-   element, and dashboard.css decides which one paints. #}
-<div class="empty-state" id="tour-state">
-    <h2>New here? Take the guided tour</h2>
-    <p class="muted">It seeds a small investigation over sample data, runs it for real, and hands you the record — so the first workflow you read is one you watched run.</p>
-    <a href="/chat/agent/tutorial/new" class="btn primary" id="tour-cta"
-       title="Seeds a seven-stage workflow over real, sourced advocacy records, and runs it with you.">Take a guided tour on sample data</a>
-</div>
+{# A browser that has never been sent to the tour is sent now, rather than shown a page
+   whose only content is the button that goes there. Which browsers those are the server
+   does not know, so the choice is made here, above the list, which never paints first. #}
 <script>
 (function () {
   const KEY = "carbonpaper.tour.started";
-  document.getElementById("tour-cta").addEventListener("click", function () {
-    try { localStorage.setItem(KEY, "1"); } catch (e) { /* private mode */ }
-  });
-  let started = false;
-  try { started = localStorage.getItem(KEY) === "1"; } catch (e) { /* ignore */ }
-  // Stamped from here, above the list's own markup, so the list never paints first.
-  if (!started) document.documentElement.classList.add("tour-unstarted");
+  let sent = true;
+  try {
+    sent = localStorage.getItem(KEY) === "1";
+    localStorage.setItem(KEY, "1");
+    // A browser that cannot record the visit would be sent again on every visit.
+    if (localStorage.getItem(KEY) !== "1") sent = true;
+  } catch (e) { sent = true; }
+  if (!sent) location.replace("/chat/agent/tutorial/new");
 })();
 </script>
 
-<div id="projects-state">
 {% if projects %}
 <div class="project-grid">
     {% for m in projects %}
@@ -79,5 +72,4 @@
     <p class="muted">Paste how your investigation works, and it becomes a chain of simple, inspectable steps you can run and rerun.</p>
 </div>
 {% endif %}
-</div>
 {% endblock %}

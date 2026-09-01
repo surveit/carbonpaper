@@ -27,12 +27,6 @@
 
 .new-methodology-btn { flex: none; white-space: nowrap; }
 
-/* The home page is EITHER the tour or the list. index.html stamps .tour-unstarted on
-   the root before the list's markup is parsed, so the swap costs no flash of the
-   list. Unstamped — the browser has toured, or runs no JS — the list is what shows. */
-#tour-state { display: none; }
-.tour-unstarted #tour-state { display: block; }
-.tour-unstarted #projects-state { display: none; }
 
 /* min(600px, 100%), not a bare 600px: a bare track floor is a HARD floor, so on a
    viewport narrower than one card the column keeps its 600px and the whole page
