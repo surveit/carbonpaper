@@ -103,6 +103,25 @@ def test_the_prompt_names_the_tool_that_reads_it(tmp_path) -> None:
     assert "get_current_url" in render_system_prompt(EDITING_CONFIG, context)
 
 
+def test_the_binding_is_prompt_prose_because_it_never_moves(tmp_path) -> None:
+    """A session's project is settled when it opens, so a tool would re-answer one fact."""
+    project_id = _make_project(tmp_path)
+
+    prompt = render_system_prompt(
+        EDITING_CONFIG, EditingContext(project_id=project_id, base_url=_BASE_URL))
+
+    assert project_id in prompt
+    assert "get_current_project" not in prompt
+
+
+def test_a_chat_bound_to_nothing_is_told_the_two_ways_on(tmp_path) -> None:
+    prompt = render_system_prompt(EDITING_CONFIG, EditingContext(base_url=_BASE_URL))
+
+    # Never a guess: the reader picks an existing project, or names a new one.
+    assert "opened in no project" in prompt
+    assert "list_projects" in prompt and "create_project" in prompt
+
+
 # ── what the client sends ────────────────────────────────────────────────────
 
 

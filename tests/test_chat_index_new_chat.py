@@ -1,6 +1,6 @@
 """The /chat index's New chat control: a chat opens bound to NO project, so the
 control names none and needs none to exist. The agent asks which project it edits,
-which `get_current_project` reports honestly as None until one is bound.
+which the session note reports honestly as none until one is bound.
 """
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from app.core.agent.store import open_session_store
 from app.main import app
 from app.core.agent.sdk_engine import ClaudeAgentSdkEngine
 from app.services.project import create_project, list_projects
-from app.tools.editing import EditingContext, build_editing_tools
+from app.tools.editing import EditingContext
 
 client = TestClient(app)
 _store = open_session_store()
@@ -22,10 +22,9 @@ _READER = {"base_url": "http://testserver/"}
 
 
 def read_current_project(sid: str) -> str | None:
-    """What the session's own stored context binds `get_current_project` to."""
-    context = (_store.load(sid).get("context") or {}) | _READER
-    tools = build_editing_tools(EditingContext.model_validate(context))
-    return next(t for t in tools if t.name == "get_current_project").fn()
+    """What the session's own stored context binds the conversation to."""
+    stored = (_store.load(sid).get("context") or {}) | _READER
+    return EditingContext.model_validate(stored).project_id
 
 
 def open_session(agent_id: str, context: dict | None = None) -> str:

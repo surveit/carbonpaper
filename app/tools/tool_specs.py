@@ -11,7 +11,8 @@ from app.tools.types import AgentTool, ToolParameterProse
 
 # An id is a stamp, not a label: the prose has to send the model to look one up.
 PROJECT_ID = (
-    "The project's id, from list_projects or get_current_project — an opaque stamp like "
+    "The project's id, from list_projects or the address get_current_url returns — an "
+    "opaque stamp like "
     "`20260818T090501.047918`, never a name you can guess."
 )
 
@@ -587,19 +588,6 @@ the issues are returned. You cannot change a stage's id this way.
 
 Edit several stages at once by sending several entries — they are validated and
 written as one workflow, which is what edits that only make sense together need.""",
-    "get_current_project": """\
-Return the id of the project this session is editing, or nothing if this
-session was opened without one. Call this FIRST. If it returns an id, pass
-that id as `project_id` to the other tools.
-
-If it returns nothing, no project is bound, and there are two ways on: an
-EXISTING project, which list_projects names and the user picks — never guess,
-and never pick one for them — or a NEW one, which create_project starts from
-the methodology the user gives you.
-
-What it reports is the binding this session was OPENED with, so it keeps
-returning nothing after create_project. That is not a failure: carry the id
-create_project returned and pass it yourself.""",
     "get_current_url": """\
 The page the reader has open right now, which moves as they browse. Call it when
 they say "this" or "here", and read the ids out of the address instead of asking
