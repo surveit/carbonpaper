@@ -45,7 +45,7 @@
     <div class="preview-head">
         <a href="/project/{{ project }}/runs/{{ run_id }}#{{ ip.id }}"><code>{{ ip.id }}</code></a>
         {% if not loop.first %}<span class="muted">· read in full by the transform; only the first input's rows are picked</span>{% endif %}
-        {% if ip.preview and ip.preview.preview %}{% set shown = ip.preview.preview | length %}<span class="muted">· {% if ip.preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ "{:,}".format(ip.preview.rows_total) }} row{% if ip.preview.rows_total != 1 %}s{% endif %}</span>{% endif %}
+        {% if ip.preview and ip.preview.preview %}{% set shown = ip.preview.preview | length %}<span class="muted">· {% if ip.preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ ip.preview.rows_total | figure }} row{% if ip.preview.rows_total != 1 %}s{% endif %}</span>{% endif %}
     </div>
     {% if ip.preview and ip.preview.preview %}
     {% set selectable = loop.first %}

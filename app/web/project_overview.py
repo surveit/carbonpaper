@@ -6,6 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from app.web.figure_text import render_figure
 from app.core.run_status import RunStatus
 from app.models.records.workflow_version import WorkflowVersion
 from app.services import methodology, run as run_service, versioning
@@ -159,7 +160,7 @@ def find_windowed_warning(project_id: str, row: RunIndexRow) -> OverviewCheck | 
     capped += [(cap.stage_id, cap.cap) for cap in row.stage_caps]
     if not capped:
         return None
-    named = ", ".join(f"{stage} (first {cap:,} rows)" for stage, cap in sorted(capped))
+    named = ", ".join(f"{stage} (first {render_figure(cap)} rows)" for stage, cap in sorted(capped))
     return OverviewCheck(
         ok=False, headline="This run was capped.",
         detail=f"{named} read a window of its input, so every figure counted below it counts "

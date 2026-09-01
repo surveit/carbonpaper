@@ -13,6 +13,7 @@ from app.models.claims import StageOutputCellCitation, StageOutputTableCitation
 from app.models.records.workflow_output import WorkflowOutput
 from app.services import run as run_service
 from app.web import loading
+from app.web.figure_text import render_figure
 from app.web.panel_links import AppPanelLinks
 
 # Enough to show what the table holds; the full-rows page is where the data lives.
@@ -89,7 +90,7 @@ def read_published_outputs(
 
 def render_output_value(value: JsonScalar) -> str:
     """A null reads as absent rather than as the word None."""
-    return "—" if value is None else f"{value:,}" if isinstance(value, (int, float)) else str(value)
+    return "—" if value is None else render_figure(value)
 
 
 def _build_figure(

@@ -85,7 +85,7 @@ def test_a_run_that_published_nothing_shows_nothing():
     assert not published and published.figures == [] and published.tables == []
 
 
-def test_a_number_reads_with_thousands_separators():
+def test_a_number_reads_with_group_marks():
     assert render_output_value(4461000.0) == "4,461,000.0"
     assert render_output_value(24) == "24"
 

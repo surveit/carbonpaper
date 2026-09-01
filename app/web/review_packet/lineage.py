@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from app.web.figure_text import render_figure
 from app.core.json_types import JsonDict
 from app.models import WorkflowStage
 from app.core.frames import write_frame_file, table_to_frame
@@ -60,8 +61,8 @@ def write_packet_lineage(
     closure = _find_closure(frames, view)
     if len(closure) > PACKET_MAX_LINEAGE_PAGES:
         return LineageReport(written=[], traced=set(), refused=(
-            f"{len(closure):,} rows feed the rows this run published, over the "
-            f"{PACKET_MAX_LINEAGE_PAGES:,}-page limit — no lineage page was written, "
+            f"{render_figure(len(closure))} rows feed the rows this run published, over the "
+            f"{render_figure(PACKET_MAX_LINEAGE_PAGES)}-page limit — no lineage page was written, "
             "because a partial set would leave some rows looking unsourced"
         ))
     traced = frozenset(closure)

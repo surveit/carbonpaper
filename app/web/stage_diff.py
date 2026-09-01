@@ -13,6 +13,7 @@ from typing import ClassVar, Optional, Union
 
 import pandas as pd
 
+from app.web.figure_text import render_figure
 from app.models import StageType, WorkflowStage
 from app.models.stages.signature import list_read_column_names
 from app.models.stage import is_grain_and_order_preserving
@@ -460,7 +461,7 @@ def _read_frame(run_dir: Path, rel_path: Optional[str]) -> Optional[pd.DataFrame
 
 
 def _render_count(count: int, noun: str) -> str:
-    return f"{count:,} {noun}{'' if count == 1 else 's'}"
+    return f"{render_figure(count)} {noun}{'' if count == 1 else 's'}"
 
 
 def _text_frame(df: pd.DataFrame) -> pd.DataFrame:

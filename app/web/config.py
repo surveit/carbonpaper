@@ -20,6 +20,7 @@ from starlette.types import Scope
 # never as its return value: binding the path at import time would give every
 # router its own stale copy, which is exactly what set_projects_dir() exists to
 # avoid.
+from app.web.figure_text import render_figure
 from app.core.paths import repo_root
 from app.core.utils import abbreviate_count
 from app.web.authored_code import describe_code_block, find_authored_code
@@ -140,6 +141,7 @@ templates.env.filters["relative_time"] = relative_time
 templates.env.filters["friendly_duration"] = friendly_duration
 templates.env.filters["usd"] = usd
 templates.env.filters["plain_value"] = plain_value
+templates.env.filters["figure"] = render_figure
 # Every type tag goes through this, so a new stage type cannot reach the screen as
 # a raw slug on one surface and a label on another.
 templates.env.filters["label_stage_type"] = label_stage_type

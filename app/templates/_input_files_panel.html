@@ -26,7 +26,7 @@
       {%- for file in view.files %}
       <option value="{{ file.stage_id }}" data-name="{{ file.filename }}"
               data-side="{{ file.size_label }}"
-              data-meta="{{ file.stage_id }} · {{ "{:,}".format(file.rows_relevant) }} / {{ "{:,}".format(file.rows_read) }} rows"
+              data-meta="{{ file.stage_id }} · {{ file.rows_relevant | figure }} / {{ file.rows_read | figure }} rows"
               >{{ file.filename }}</option>
       {%- endfor %}
     </select>
@@ -53,10 +53,10 @@
         <span class="if-track">
           <i class="if-read" style="width: {{ file.read_percent }}%"></i>
           <i class="if-need" style="width: {{ file.relevant_percent }}%"></i></span>
-        <span class="if-num"><span data-scope="relevant">{{ "{:,}".format(file.rows_relevant) }}</span>
-          relevant / <span data-scope="all">{{ "{:,}".format(file.rows_read) }}</span> read
-          {%- if file.rows_in_file %} / {{ "{:,}".format(file.rows_in_file) }} in file{% endif %}
-          {%- if file.cap %} <span class="if-cap">cap {{ "{:,}".format(file.cap) }}</span>{% endif %}
+        <span class="if-num"><span data-scope="relevant">{{ file.rows_relevant | figure }}</span>
+          relevant / <span data-scope="all">{{ file.rows_read | figure }}</span> read
+          {%- if file.rows_in_file %} / {{ file.rows_in_file | figure }} in file{% endif %}
+          {%- if file.cap %} <span class="if-cap">cap {{ file.cap | figure }}</span>{% endif %}
         </span></div>
       <div class="if-bar" data-axis="columns"><span class="if-bar-lab">columns</span>
         <span class="if-track"><i class="if-read" style="width: 100%"></i>

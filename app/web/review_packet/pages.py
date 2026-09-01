@@ -64,6 +64,7 @@ TOOLTIP_SCRIPT = "tooltip.js"
 DIAGRAM_SCRIPTS = (NODE_SCRIPT, VIEWPORT_SCRIPT, TOOLTIP_SCRIPT)
 # Vendored, or a packet's tables would open nothing: the link column is gone.
 CELL_LINEAGE_SCRIPT = "cell-lineage.js"
+FIGURE_SCRIPT = "figure_text.js"
 
 # The tokenizer and its caller, vendored so a stage page colours its code offline.
 # The theme rides in the concatenated stylesheet, which already follows the app's
@@ -161,7 +162,7 @@ def _write_diagram_source(root: Path, diagram: str) -> str:
 
 def _write_diagram_scripts(root: Path) -> list[str]:
     return [_write_asset(root, name)
-            for name in (*DIAGRAM_SCRIPTS, CELL_LINEAGE_SCRIPT)]
+            for name in (*DIAGRAM_SCRIPTS, CELL_LINEAGE_SCRIPT, FIGURE_SCRIPT)]
 
 
 def _write_asset(root: Path, name: str) -> str:

@@ -33,7 +33,7 @@
   <p class="file-facts">
     <span class="type-tag">{{ file.format }}</span>
     <span>{{ file.size }}</span>
-    {% if file.contents %}<span>{{ "{:,}".format(file.contents.row_count) }} rows × {{ file.contents.column_count }} columns</span>{% endif %}
+    {% if file.contents %}<span>{{ file.contents.row_count | figure }} rows × {{ file.contents.column_count }} columns</span>{% endif %}
     <span>added {{ file.added | friendly_time }}</span>
     <span><code class="files-hash">{{ file.sha256[:12] }}…</code></span>
   </p>
@@ -68,7 +68,7 @@
 {% if file.contents %}
 <section class="file-section">
   <details class="file-rows">
-    <summary><h2>First rows</h2><span class="muted">{{ file.contents.preview.rows | length }} of {{ "{:,}".format(file.contents.row_count) }}</span></summary>
+    <summary><h2>First rows</h2><span class="muted">{{ file.contents.preview.rows | length }} of {{ file.contents.row_count | figure }}</span></summary>
     <div class="file-fold">
       {% with preview = file.contents.preview %}{% include "_file_preview.html" %}{% endwith %}
     </div>
@@ -88,7 +88,7 @@
     <p class="file-section-lede">{{ file.contents.column_count }} columns — <strong>{{ file.contents.varying_count }} vary</strong>
       {%- if file.contents.constant_count %}, {{ file.contents.constant_count }} hold one value for every row{% endif %}
       {%- if file.contents.empty_count %}, {{ file.contents.empty_count }} hold no value at all{% endif %}.
-      Every count is over all {{ "{:,}".format(file.contents.row_count) }} rows, not the sample below.</p>
+      Every count is over all {{ file.contents.row_count | figure }} rows, not the sample below.</p>
   </div>
   <div class="shape-filters">
     <button type="button" class="shape-filter on" data-filter="all">All {{ file.contents.column_count }}</button>

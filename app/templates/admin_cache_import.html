@@ -13,12 +13,12 @@
 {% set total = report.written + report.already_stored %}
 {% if report.reachable %}
 <div class="banner ok">
-    <p><strong>{{ "{:,}".format(report.reachable) }} of {{ "{:,}".format(total) }} imported entries are reachable</strong>
+    <p><strong>{{ report.reachable | figure }} of {{ total | figure }} imported entries are reachable</strong>
        from the stages in this project right now.</p>
 </div>
 {% else %}
 <div class="banner bad">
-    <p><strong>None of the {{ "{:,}".format(total) }} imported entries are reachable.</strong>
+    <p><strong>None of the {{ total | figure }} imported entries are reachable.</strong>
        Every stage in this project has a different definition from the one that recorded them, so
        nothing here will be read and the next run pays for these rows again. The export came from a
        workspace whose stages differ — match them, or export again from one that does.</p>
@@ -32,15 +32,15 @@
     <tbody>
         <tr>
             <td>rows</td>
-            <td class="spend-num">{{ "{:,}".format(report.written) }}</td>
-            <td class="spend-num">{{ "{:,}".format(report.already_stored) }}</td>
+            <td class="spend-num">{{ report.written | figure }}</td>
+            <td class="spend-num">{{ report.already_stored | figure }}</td>
         </tr>
     </tbody>
 </table>
 <p class="muted">Nothing was replaced: an id already stored keeps the output it holds.</p>
 {% if report.frames_skipped %}
 <div class="banner banner-warn">
-    <p>⚠ <strong>{{ "{:,}".format(report.frames_skipped) }} whole-frame entries in this export were not
+    <p>⚠ <strong>{{ report.frames_skipped | figure }} whole-frame entries in this export were not
        imported.</strong> They came from a workspace that still cached a stage's whole output frame.
        Nothing reads one now — a frame-shaped stage recomputes every run — so they were left in the
        archive. The row entries above imported normally.</p>
@@ -58,8 +58,8 @@ either machine since the export moves that fingerprint, and its entries are stor
         {% for s in report.stages %}
         <tr>
             <td><code>{{ s.stage_id }}</code></td>
-            <td class="spend-num">{{ "{:,}".format(s.imported) }}</td>
-            <td class="spend-num">{{ "{:,}".format(s.reachable) }}</td>
+            <td class="spend-num">{{ s.imported | figure }}</td>
+            <td class="spend-num">{{ s.reachable | figure }}</td>
             <td>
                 {% if s.reachable == s.imported %}<span class="badge ok">definition matches</span>
                 {% elif s.reachable %}<span class="badge warn">definition changed for some</span>

@@ -24,8 +24,8 @@
     {% if stage_def %}<p class="stage-blurb">{{ stage_def.description }}</p>{% endif %}
     <p class="stage-facts">
         <span class="run-status status-{{ stage.status }}">{{ stage.status }}</span>
-        <span>{{ stage.elapsed_ms | friendly_duration }} · {{ "{:,}".format(stage.output_row_count or 0) }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}
-        {%- if stage.llm_usage and stage.llm_usage.calls %} · {{ "{:,}".format(stage.llm_usage.calls) }} model call{% if stage.llm_usage.calls != 1 %}s{% endif %}, {{ stage.llm_usage.cost_usd | usd }}{% endif %}
+        <span>{{ stage.elapsed_ms | friendly_duration }} · {{ stage.output_row_count or 0 | figure }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}
+        {%- if stage.llm_usage and stage.llm_usage.calls %} · {{ stage.llm_usage.calls | figure }} model call{% if stage.llm_usage.calls != 1 %}s{% endif %}, {{ stage.llm_usage.cost_usd | usd }}{% endif %}
         {%- if stage.finished_at %} · finished {{ stage.finished_at | friendly_time }}{% endif %}</span>
     </p>
 </div>
@@ -123,7 +123,7 @@
             {%- else %}none
             {%- endif %}</dd></div>
         {% if u and u.calls %}
-        <div><dt>calls</dt><dd>{{ "{:,}".format(u.calls) }}</dd></div>
+        <div><dt>calls</dt><dd>{{ u.calls | figure }}</dd></div>
         {% if batch and batch > 1 %}<div><dt>rows per call</dt><dd>up to {{ batch }}</dd></div>{% endif %}
         <div><dt>cost</dt><dd>{{ u.cost_usd | usd }}</dd></div>
         {% else %}
@@ -137,7 +137,7 @@
     {# A positive replay count is this run's evidence that cache rows supplied
        the output; an absent count means no replay conclusion is available. #}
     <p class="muted"><b>Reused, not recomputed.</b>
-        {{ "{:,}".format(stage.cached_rows) }} of {{ "{:,}".format(stage.output_row_count or 0) }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}{% if stage.output_row_count and stage.output_row_count > 0 %} ({{ ((stage.cached_rows / stage.output_row_count) * 100) | round(0) | int }}%){% endif %} came back from results an earlier run already produced,
+        {{ stage.cached_rows | figure }} of {{ stage.output_row_count or 0 | figure }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}{% if stage.output_row_count and stage.output_row_count > 0 %} ({{ ((stage.cached_rows / stage.output_row_count) * 100) | round(0) | int }}%){% endif %} came back from results an earlier run already produced,
         so the model was not called for those cached rows and those rows incurred no cost in this run.</p>
     {% endif %}
     {% endif %}
@@ -148,7 +148,7 @@
     {% if diff %}{% include "_stage_diff.html" %}
     {% elif preview and preview.preview %}
     <div class="preview-block">
-      <div class="preview-head">output data {% set shown = preview.preview | length %}<span class="muted">· {% if preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ "{:,}".format(preview.rows_total) }} row{% if preview.rows_total != 1 %}s{% endif %}</span>
+      <div class="preview-head">output data {% set shown = preview.preview | length %}<span class="muted">· {% if preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ preview.rows_total | figure }} row{% if preview.rows_total != 1 %}s{% endif %}</span>
         <span class="preview-actions">{% set rows_href = links.stage_rows(stage.stage_id) %}{% if rows_href %}· <a href="{{ rows_href }}">view all rows</a>{% endif %}
         · <a href="{{ links.stage_csv(stage.stage_id) }}">⬇ CSV</a></span></div>
       {% include "_output_table.html" %}
@@ -168,8 +168,8 @@
     {% if u and u.calls and batch and batch > 1 %}
     <details class="stage-caveat">
       <summary>⚠ Rows were judged in batches of up to {{ batch }}, not one by one</summary>
-      <p class="banner banner-warn">This run answered {{ "{:,}".format(stage.output_row_count or 0) }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}
-        in {{ "{:,}".format(u.calls) }} model call{% if u.calls != 1 %}s{% endif %}, and the last call
+      <p class="banner banner-warn">This run answered {{ stage.output_row_count or 0 | figure }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}
+        in {{ u.calls | figure }} model call{% if u.calls != 1 %}s{% endif %}, and the last call
         holds whatever is left over. The size is a deliberate trade: fewer, larger calls cost less to
         run, and a row judged beside others is judged less independently than one judged alone.
         A row's answer could have been swayed by the others in its call.</p>
@@ -186,7 +186,7 @@
       <div class="preview-block input-preview">
         <div class="preview-head">
           <a href="{{ links.stage_anchor(ip.id) }}"><code>{{ ip.id }}</code></a>
-          {% if ip.preview and ip.preview.preview %}{% set shown = ip.preview.preview | length %}<span class="muted">· {% if ip.preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ "{:,}".format(ip.preview.rows_total) }} row{% if ip.preview.rows_total != 1 %}s{% endif %}</span>
+          {% if ip.preview and ip.preview.preview %}{% set shown = ip.preview.preview | length %}<span class="muted">· {% if ip.preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ ip.preview.rows_total | figure }} row{% if ip.preview.rows_total != 1 %}s{% endif %}</span>
           {# Omitted in the packet: the id beside it already opens that stage's own
              full table, so this would be the same destination twice. #}
           <span class="preview-actions">{% set rows_href = links.stage_rows(ip.id) %}{% if rows_href %}· <a href="{{ rows_href }}">view all rows</a>{% endif %}

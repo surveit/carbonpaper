@@ -11,16 +11,16 @@
 <span class="spark">{% for day in column.shape.timeline %}<i style="height: {{ (day.count * 100 / tallest) | round(2) }}%"></i>{% endfor %}</span>
 <span class="peek-note">{{ column.shape.timeline[0].value }} – {{ column.shape.timeline[-1].value }}</span>
 {%- elif column.shape.lengths %}
-<span class="peek-note">{{ "{:,}".format(column.shape.lengths.min) }}–{{ "{:,}".format(column.shape.lengths.max) }} characters, median {{ "{:,}".format(column.shape.lengths.median) }}</span>
+<span class="peek-note">{{ column.shape.lengths.min | figure }}–{{ column.shape.lengths.max | figure }} characters, median {{ column.shape.lengths.median | figure }}</span>
 {%- else %}
 <span class="seg-track">
-  {%- for value in column.shape.top %}<i style="width: {{ value.count * 100 / rows }}%" title="{{ value.value }} — {{ "{:,}".format(value.count) }}"></i>{% endfor %}
+  {%- for value in column.shape.top %}<i style="width: {{ value.count * 100 / rows }}%" title="{{ value.value }} — {{ value.count | figure }}"></i>{% endfor %}
   {%- set absent = column.blank_count + column.null_count %}
-  {%- if absent %}<i class="seg-absent" style="width: {{ absent * 100 / rows }}%" title="no value — {{ "{:,}".format(absent) }} rows"></i>{% endif %}
+  {%- if absent %}<i class="seg-absent" style="width: {{ absent * 100 / rows }}%" title="no value — {{ absent | figure }} rows"></i>{% endif %}
 </span>
 {%- set top_share = column.shape.top[0].count * 100 / rows %}
 {# A share under a twentieth rounds to nothing and says nothing; the count says it. #}
 <span class="peek-note">{{ column.shape.top[0].value | truncate(24, true, "…") }} ·
   {% if column.filled_count == rows and top_share >= 5 %}{{ top_share | round | int }}%
-  {%- else %}{{ "{:,}".format(column.shape.top[0].count) }} rows{% endif %}</span>
+  {%- else %}{{ column.shape.top[0].count | figure }} rows{% endif %}</span>
 {%- endif %}

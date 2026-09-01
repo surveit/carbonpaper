@@ -10,6 +10,8 @@
        stage node. Loaded for EVERY page (not per-diagram-page) so a page that
        renders the graph can never miss it; see static/diagram_nodes.js. #}
     <script src="/static/diagram_nodes.js"></script>
+    {# Defines window.Figures, which every page that prints a number reads. #}
+    <script src="/static/figure_text.js"></script>
     {# Before the first paint: it reserves the rail's column and starts its fetch. #}
     {% include "_chat_rail_head.html" %}
     {% block head_extra %}{% endblock %}

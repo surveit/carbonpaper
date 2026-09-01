@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from app.web.figure_text import render_figure
 from app.models.branch_analysis import BranchId, RowOrdinal
 from app.models.schema import StageId
 from app.web.scope_layout import (
@@ -137,12 +138,12 @@ def _render_column(facts: Facts, column: Column) -> DrawnColumn:
         removals=[_render_removal(branch, rows, line, room)
                   for line, (branch, rows) in enumerate(column.gone)],
         scale_label="" if step is None else _clip(
-            f"{step.included_rows_count:,} of {step.rows_count:,}"
+            f"{render_figure(step.included_rows_count)} of {render_figure(step.rows_count)}"
             f"{' row at ' if step.rows_count == 1 else ' rows at '}"
             f"{column.stage.glyph} {column.stage.id}", room // 5.6),
         scale_tip="" if step is None else
-        f"{column.stage.id} holds {step.rows_count:,} rows; this figure descends "
-        f"from {step.included_rows_count:,}",
+        f"{column.stage.id} holds {render_figure(step.rows_count)} rows; this figure descends "
+        f"from {render_figure(step.included_rows_count)}",
         merge_label=_say_the_other_reading(column),
         merge_wants=column.alias is not None)
 
@@ -169,25 +170,25 @@ def _reach_for_the_label(node: Node) -> float | None:
 def _label_of(facts: Facts, node: Node) -> str:
     if node.alias_of is not None:
         by = ", ".join(node.alias_of.group_by) or "the whole frame"
-        return (f"{node.alias_of.on_route_groups_count:,} of "
-                f"{node.alias_of.groups_count:,} groups, by {by}")
+        return (f"{render_figure(node.alias_of.on_route_groups_count)} of "
+                f"{render_figure(node.alias_of.groups_count)} groups, by {by}")
     if node.is_figure:
         cited = facts.scope.citation
         named = f"{cited.column} = {_say_the_figure(cited.value)}"
         # A cell of the frame it was read into was merged from nothing.
         if facts.scope.covers.at_stage == cited.stage_id and node.rows == 1:
             return named
-        return f"{named}, merged from {node.rows:,}"
+        return f"{named}, merged from {render_figure(node.rows)}"
     labels = [facts.scope.branches[b].label for b in node.branches]
     return " + ".join(labels) if labels else "—"
 
 
 def _say_what_the_bar_holds(node: Node, label: str) -> str:
     if node.alias_of is None:
-        return f"{label} — {node.rows:,} row{'' if node.rows == 1 else 's'}"
-    return (f"{node.alias_of.stage_id} grouped {node.alias_of.rows_count:,} rows into "
-            f"{node.alias_of.groups_count:,}. These {node.rows:,} came through "
-            f"{node.alias_of.on_route_groups_count:,} of them. Click to list the groups.")
+        return f"{label} — {render_figure(node.rows)} row{'' if node.rows == 1 else 's'}"
+    return (f"{node.alias_of.stage_id} grouped {render_figure(node.alias_of.rows_count)} rows into "
+            f"{render_figure(node.alias_of.groups_count)}. These {render_figure(node.rows)} came through "
+            f"{render_figure(node.alias_of.on_route_groups_count)} of them. Click to list the groups.")
 
 
 # Its count is true and its width is not, so it is text and never a ribbon.
@@ -195,18 +196,18 @@ def _render_removal(branch: BranchId, rows: int, line: int,
                     room: float) -> DrawnRemoval:
     return DrawnRemoval(
         branch=branch, line=line,
-        label=_clip(f"{rows:,} row{'' if rows == 1 else 's'} filtered here", room - 2),
-        tip=f"{rows:,} row{' was' if rows == 1 else 's were'} dropped from the "
+        label=_clip(f"{render_figure(rows)} row{'' if rows == 1 else 's'} filtered here", room - 2),
+        tip=f"{render_figure(rows)} row{' was' if rows == 1 else 's were'} dropped from the "
             f"workflow at this stage. Click to draw them in a new tab: they are a "
             f"different set of rows, so the page around this one stops fitting.")
 
 
 def _say_the_other_reading(column: Column) -> str:
     if column.alias is not None:
-        return f"split into {column.alias.on_route_groups_count:,} groups"
+        return f"split into {render_figure(column.alias.on_route_groups_count)} groups"
     if column.expanded:
         held = len(column.nodes)
-        return f"fold {held:,} group{' back' if held == 1 else 's back'}"
+        return f"fold {render_figure(held)} group{' back' if held == 1 else 's back'}"
     return ""
 
 
@@ -216,7 +217,7 @@ def _say_the_figure(value: object) -> str:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return str(value)
     return f"{value:,.2f}".rstrip("0").rstrip(".") if isinstance(value, float) \
-        else f"{value:,}"
+        else f"{render_figure(value)}"
 
 
 def _clip(text: str, room: float) -> str:

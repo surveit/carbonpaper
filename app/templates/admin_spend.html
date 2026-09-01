@@ -11,9 +11,9 @@
         <tr>
             <td>{{ t.label }}</td>
             <td class="spend-num">${{ "%.2f"|format(t.cost_usd) }}</td>
-            <td class="spend-num">{{ "{:,}".format(t.calls) }}</td>
-            <td class="spend-num">{{ "{:,}".format(t.input_tokens) }}</td>
-            <td class="spend-num">{{ "{:,}".format(t.output_tokens) }}</td>
+            <td class="spend-num">{{ t.calls | figure }}</td>
+            <td class="spend-num">{{ t.input_tokens | figure }}</td>
+            <td class="spend-num">{{ t.output_tokens | figure }}</td>
         </tr>
         {% endfor %}
     </tbody>
@@ -31,8 +31,8 @@
 <div class="spend-total">
     <div class="spend-figure">${{ "%.2f"|format(spend.total.cost_usd) }}</div>
     <div class="spend-figure-note">
-        over {{ "{:,}".format(spend.total.calls) }} calls in {{ "{:,}".format(spend.total.entries) }} run stages and chat turns ·
-        {{ "{:,}".format(spend.total.input_tokens) }} tokens in, {{ "{:,}".format(spend.total.output_tokens) }} out
+        over {{ spend.total.calls | figure }} calls in {{ spend.total.entries | figure }} run stages and chat turns ·
+        {{ spend.total.input_tokens | figure }} tokens in, {{ spend.total.output_tokens | figure }} out
     </div>
 </div>
 

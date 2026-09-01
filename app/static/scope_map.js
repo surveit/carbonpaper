@@ -39,14 +39,12 @@
   var LABEL_PITCH = 30;
   var SHORTEST_BAND = 260, TALLEST_BAND = 620, BAND_PER_NODE = 72, SWEEPS = 4;
 
-  var num = function (n) { return Number(n).toLocaleString("en-US"); };
+  var num = function (n) { return window.Figures.text(Number(n)); };
   // A cited cell is not always a number — a group key is a figure a reader may cite
   // too, and Number("Facebook") prints NaN where the frame holds a name.
   var figure = function (value) {
     if (value === null || value === undefined) return "(empty)";
-    return typeof value === "number"
-      ? value.toLocaleString("en-US", { maximumFractionDigits: 2 })
-      : String(value);
+    return window.Figures.text(value);
   };
   var esc = function (s) {
     return String(s == null ? "" : s).replace(/[&<>]/g, function (c) {
