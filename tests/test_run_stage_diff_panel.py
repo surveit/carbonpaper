@@ -182,18 +182,20 @@ def _diff_header(html: str) -> str:
     return html.split('class="preview-block stage-diff"')[1].split("</thead>")[0]
 
 
-def test_the_columns_the_stage_wrote_are_drawn_at_the_left_edge(run_ctx) -> None:
-    # The output frame puts `label` last, behind a horizontal scroll.
+def test_the_columns_are_drawn_read_then_rewritten_then_added(run_ctx) -> None:
+    # classify uppercases `name` and adds `label`, which the frame puts last.
     _pdir, run_id = run_ctx
     header = _diff_header(_panel(run_id, CLASSIFY_ID))
-    assert header.index(">label<") < header.index(">name<") < header.index(">junk<")
+    assert (header.index(">val<") < header.index(">junk<")
+            < header.index(">name<") < header.index(">label<"))
 
 
-def test_the_raw_rows_view_leads_with_the_same_columns(run_ctx) -> None:
-    # The plain table has no + mark to find an added column by.
+def test_the_raw_rows_view_orders_by_the_signature_alone(run_ctx) -> None:
     _pdir, run_id = run_ctx
+    # classify declares no rewrite, so only the diff can move `name`.
     header = _rows_page(run_id, CLASSIFY_ID, "?raw=1").split("</thead>")[0]
-    assert header.index(">label<") < header.index(">name<") < header.index(">junk<")
+    assert (header.index(">name<") < header.index(">val<")
+            < header.index(">junk<") < header.index(">label<"))
 
 
 def test_the_rail_states_the_counts_of_what_the_stage_did_in_one_line(run_ctx) -> None:

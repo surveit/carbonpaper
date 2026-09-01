@@ -151,10 +151,7 @@
       <div class="preview-head">output data {% set shown = preview.preview | length %}<span class="muted">· {% if preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ "{:,}".format(preview.rows_total) }} row{% if preview.rows_total != 1 %}s{% endif %}</span>
         <span class="preview-actions">{% set rows_href = links.stage_rows(stage.stage_id) %}{% if rows_href %}· <a href="{{ rows_href }}">view all rows</a>{% endif %}
         · <a href="{{ links.stage_csv(stage.stage_id) }}">⬇ CSV</a></span></div>
-      <div class="table-scroll"><table class="data-preview">
-        <thead><tr>{% for c in preview.columns %}<th{% if links.opens_a_cell() %} data-column="{{ c }}"{% endif %}>{{ c }}</th>{% endfor %}</tr></thead>
-        <tbody>{% for row in preview.preview %}<tr{% set trace_href = links.row_trace(stage.stage_id, loop.index0) %}{% if trace_href %} data-href="{{ trace_href }}"{% endif %}>{% for c in preview.columns %}{% set v = row[c] | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}</tr>{% endfor %}</tbody>
-      </table></div>
+      {% include "_output_table.html" %}
     </div>
     {% elif preview and preview.error %}<p class="muted"><em>output preview unavailable: {{ preview.error }}</em></p>
     {% elif stage.output_path %}<p class="muted"><em>output file missing on disk: <code>{{ stage.output_path }}</code></em></p>

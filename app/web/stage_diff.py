@@ -19,7 +19,11 @@ from app.models.stage import is_grain_and_order_preserving
 from app.runtime.lineage_sidecar import read_lineage_sidecar
 from app.runtime.manifest import resolve_output_path
 from app.core.frames import read_frame_file
-from app.web.column_order import order_written_columns_first
+from app.web.column_order import (
+    ColumnGroup,
+    find_column_group,
+    order_columns_by_group,
+)
 from app.web.diff_state import CellDiffState, ColumnDiffState
 from app.web.loading import PREVIEW_ROWS_SHOWN, render_frame_as_text
 
@@ -100,13 +104,14 @@ class DiffColumn:
     read: bool = False
 
     @property
+    def group(self) -> ColumnGroup:
+        return find_column_group(self.state.value, read=self.read,
+                                 changed=bool(self.changed_cells))
+
+    @property
     def inert(self) -> bool:
         """Nothing happened to it here, and nothing here read it."""
-        return (
-            self.state is ColumnDiffState.carried
-            and not self.changed_cells
-            and not self.read
-        )
+        return self.group is ColumnGroup.untouched
 
 
 @dataclass(frozen=True)
@@ -275,8 +280,7 @@ def _build_row_aligned_diff(
         return None
     in_text = _text_frame(input_df)
     out_text = _text_frame(output_df)
-    columns = _order_diff_columns(
-        workflow_stage,
+    columns = order_columns_by_group(
         _shape_aligned_columns(
             in_text, out_text, list_read_column_names(workflow_stage.stage)))
     return RowAlignedDiff(
@@ -293,22 +297,6 @@ def _build_row_aligned_diff(
             column.name for column in columns if column.state is ColumnDiffState.dropped
         ],
     )
-
-
-def _order_diff_columns(
-    workflow_stage: WorkflowStage, columns: list[DiffColumn]
-) -> list[DiffColumn]:
-    by_name = {column.name: column for column in columns}
-    ordered_names = order_written_columns_first(workflow_stage, list(by_name))
-    touched = [
-        name for name in ordered_names
-        if by_name[name].state is not ColumnDiffState.carried
-        or by_name[name].changed_cells
-    ]
-    touched_names = set(touched)
-    return [by_name[name] for name in [
-        *touched, *(name for name in ordered_names if name not in touched_names)
-    ]]
 
 
 def _shape_aligned_columns(

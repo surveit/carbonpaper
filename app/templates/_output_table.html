@@ -1,0 +1,14 @@
+{# A stage's output rows, with nothing drawn over them: the shape for a stage that
+   has no diff. `ordinals` names each row where the rows are a subset of the frame;
+   without it they are the frame's first, and the position is the ordinal. #}
+<div class="table-scroll"><table class="data-preview">
+  <thead><tr>{% for c in preview.columns %}<th{% if links.opens_a_cell() %} data-column="{{ c }}"{% endif %}>{{ c }}</th>{% endfor %}</tr></thead>
+  <tbody>{% for row in preview.preview %}
+  {%- set ordinal = ordinals[loop.index0] if ordinals else loop.index0 %}
+  {%- set trace_href = links.row_trace(stage.stage_id, ordinal) %}
+  <tr{% if trace_href %} data-href="{{ trace_href }}"{% endif %}>
+    {%- for c in preview.columns %}{% set v = row[c] | string %}
+    {%- if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>
+    {%- else %}<td>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}</tr>
+  {%- endfor %}</tbody>
+</table></div>

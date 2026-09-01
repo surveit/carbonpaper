@@ -1,13 +1,10 @@
-"""Presentation order for a stage's output table (app.web.column_order): the
-columns its signature says it wrote lead, everything else keeps frame order.
-A stage whose pinned version did not resolve has no signature and keeps frame
-order — never an invented one."""
+"""Order for a stage's table, from the signature alone: read, rewritten, added, rest."""
 from __future__ import annotations
 
 from app.models import WorkflowStage
 from app.models.stage import parse_stage
 from app.models.stages.signature import list_written_column_names
-from app.web.column_order import order_preview_columns, order_written_columns_first
+from app.web.column_order import order_columns_by_signature, order_preview_columns
 from conftest import place_stage, reads_of
 
 LOAD_ID = "load"
@@ -50,29 +47,30 @@ def _replaces_stage() -> WorkflowStage:
     }))
 
 
-def test_the_columns_the_stage_wrote_lead_and_the_rest_keep_frame_order() -> None:
-    ordered = order_written_columns_first(
+def test_what_the_stage_read_leads_then_the_rewrite_then_the_addition() -> None:
+    # classify reads all three, rewrites `name` and adds `label`.
+    ordered = order_columns_by_signature(
         _extends_stage(), ["name", "val", "junk", "label"])
 
-    assert ordered == ["name", "label", "val", "junk"]
+    assert ordered == ["val", "junk", "name", "label"]
 
 
 def test_a_replaces_stage_keeps_frame_order() -> None:
     # Nothing flows through it, so no subset of its output is the stage's own work.
-    ordered = order_written_columns_first(_replaces_stage(), ["name", "total"])
+    ordered = order_columns_by_signature(_replaces_stage(), ["name", "total"])
 
     assert ordered == ["name", "total"]
     assert list_written_column_names(_replaces_stage().stage) == []
 
 
 def test_an_unresolvable_stage_definition_keeps_frame_order() -> None:
-    assert order_written_columns_first(None, ["name", "val"]) == ["name", "val"]
+    assert order_columns_by_signature(None, ["name", "val"]) == ["name", "val"]
 
 
 def test_a_declared_column_the_frame_does_not_carry_is_not_invented() -> None:
-    ordered = order_written_columns_first(_extends_stage(), ["name", "val"])
+    ordered = order_columns_by_signature(_extends_stage(), ["name", "val"])
 
-    assert ordered == ["name", "val"]
+    assert ordered == ["val", "name"]
 
 
 def test_the_preview_table_is_reordered_without_touching_its_rows() -> None:
@@ -83,7 +81,7 @@ def test_the_preview_table_is_reordered_without_touching_its_rows() -> None:
     ordered = order_preview_columns(table, _extends_stage())
 
     assert ordered is not None
-    assert ordered["columns"] == ["name", "label", "val", "junk"]
+    assert ordered["columns"] == ["val", "junk", "name", "label"]
     assert ordered["preview"] == rows
     assert table["columns"] == ["name", "val", "junk", "label"]
 

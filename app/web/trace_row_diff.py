@@ -5,6 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from app.web.column_order import (
+    ColumnGroup,
+    find_column_group,
+    order_columns_by_group,
+)
 from app.web.diff_state import CellDiffState
 
 
@@ -20,9 +25,14 @@ class RowColumn:
     read: bool = False
 
     @property
+    def group(self) -> ColumnGroup:
+        return find_column_group(self.state.value, read=self.read,
+                                 changed=self.state is CellDiffState.changed)
+
+    @property
     def inert(self) -> bool:
         """Nothing happened to it here, and nothing here read it."""
-        return self.state is CellDiffState.carried and not self.read
+        return self.group is ColumnGroup.untouched
 
 
 @dataclass(frozen=True)
@@ -87,6 +97,8 @@ def _compare_column(
 
 
 def _count_columns(columns: list[RowColumn]) -> RowDiff:
+    columns = order_columns_by_group(columns)
+
     def count(state: CellDiffState) -> int:
         return sum(1 for column in columns if column.state is state)
 
