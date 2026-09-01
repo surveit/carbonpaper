@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any
 
 from app.core.run_status import RunStatus
-from app.core.timestamp_ids import read_iso_stamp
+from app.core.timestamp_ids import read_orderable_stamp
 from app.runtime.manifest import list_run_entries
 from app.models.run_manifest import (
     records_a_test_run,
@@ -95,7 +95,7 @@ def read_run_summary(project_id: str) -> RunSummary:
         if manifest is None:
             continue
         # Max, not first: entries arrive by run id, and a run id need not be a stamp.
-        started = read_iso_stamp(manifest.get("started_at"))
+        started = read_orderable_stamp(manifest.get("started_at"))
         if started is not None:
             starts.append(started)
         if records_a_test_run(manifest):

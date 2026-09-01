@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -58,9 +58,12 @@ def list_projects() -> list[ProjectCard]:
                   key=_rank_by_recency, reverse=True)
 
 
+_UNDATED = datetime.min.replace(tzinfo=timezone.utc)
+
+
 def _rank_by_recency(card: ProjectCard) -> tuple[bool, datetime]:
     # The bool holds the undated cards last; `reverse=True` has no `last=` to do it.
-    return (card.last_activity is not None, card.last_activity or datetime.min)
+    return (card.last_activity is not None, card.last_activity or _UNDATED)
 
 
 def _build_project_card(project_id: str) -> ProjectCard | None:

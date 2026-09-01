@@ -11,7 +11,7 @@ from datetime import datetime
 from pydantic import ValidationError
 
 from app.core.errors import DocumentNotFound
-from app.core.timestamp_ids import read_iso_stamp
+from app.core.timestamp_ids import read_orderable_stamp
 from app.core.json_types import JsonDict
 from app.models.stage import Stage, parse_stage, stage_to_spec_dict
 from app.models.workflow import Workflow, validate_workflow
@@ -93,7 +93,7 @@ def read_stage_specs(project_id: str) -> list[JsonDict]:
 def read_working_copy_edited_at(project_id: str) -> datetime | None:
     """When the stages were last SAVED; None for a project that has never had any."""
     raw = WorkingCopy.load_raw_or_none(project_id)
-    return None if raw is None else read_iso_stamp(raw.get("updated_at"))
+    return None if raw is None else read_orderable_stamp(raw.get("updated_at"))
 
 
 def save_stages(project_id: str, stages: list[Stage]) -> None:

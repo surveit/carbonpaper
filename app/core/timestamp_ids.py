@@ -40,10 +40,18 @@ def now_iso() -> str:
 
 
 def read_iso_stamp(value: object) -> datetime | None:
-    """None for anything `now_iso`/`isoformat` did not write, so a bad stamp orders nothing."""
+    """Naive stays naive: what basis a stamp without an offset carries is not known here."""
     if not isinstance(value, str):
         return None
     try:
         return datetime.fromisoformat(value)
     except ValueError:
         return None
+
+
+def read_orderable_stamp(value: object) -> datetime | None:
+    """Reads a naive stamp as local, which only a sort position may assume — never a duration."""
+    moment = read_iso_stamp(value)
+    if moment is None:
+        return None
+    return moment if moment.tzinfo else moment.astimezone()

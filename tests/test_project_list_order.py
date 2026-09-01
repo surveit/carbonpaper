@@ -69,6 +69,13 @@ def test_a_rename_dates_a_project(examples_root):
     assert _order() == ["renamed", "ran"]
 
 
+def test_an_offset_bearing_stamp_compares_with_a_naive_one(examples_root):
+    """A hand-recovered manifest carries `+00:00` where `datetime.now()` writes none."""
+    _seed_project("naive", [("20260101T000000", "2026-01-01T09:00:00")])
+    _seed_project("offset_bearing", [("20260601T000000", "2026-06-01T09:00:00+00:00")])
+    assert _order() == ["offset_bearing", "naive"]
+
+
 def test_a_project_no_record_dates_sorts_last(examples_root):
     _seed_project("broken_stamp")
     _restamp_record("broken_stamp", "not a timestamp")
