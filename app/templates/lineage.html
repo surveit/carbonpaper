@@ -179,19 +179,17 @@ a.snavbtn:hover{background:var(--hover)}
 .lin-phead h2{margin:0;font-size:15px}
 .lin-phead h2 code{background:var(--sunk-deep);padding:1px 6px;border-radius:5px;font-size:14px}
 .lin-ptype{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.lin-phrase{text-transform:none;letter-spacing:0;font-size:11.5px}
 .lin-back{float:right;font-size:12px}
 .lin-tabs{display:flex;gap:14px;margin-top:8px}
 .lin-tabs button{border:0;background:none;font:inherit;font-size:13px;color:var(--muted);padding:6px 0;
   cursor:pointer;border-bottom:2px solid transparent}
 .lin-tabs button.on{color:var(--fg);border-bottom-color:var(--accent);font-weight:600}
 .lin-pbody{overflow:auto;padding:12px 18px 40px;flex:1}
-.lin-scope{display:inline-flex;border:1px solid var(--border);border-radius:7px;overflow:hidden;margin-bottom:10px}
-.lin-scope button{border:0;background:var(--raised);font:inherit;font-size:12px;color:var(--muted);padding:4px 11px;cursor:pointer}
-.lin-scope button.on{background:var(--info-ink);color:var(--on-dark)}
-.lin-base{color:var(--muted);font-size:12px;margin:0 0 10px}
+.lin-baseline{display:flex;align-items:flex-start;gap:10px;margin:0 0 10px}
+.lin-base{color:var(--muted);font-size:12px;margin:0;flex:1;min-width:0}
+.lin-baseline .lin-why{flex:none;margin-top:0}
 .lin-base code{background:var(--sunk-deep);padding:0 4px;border-radius:4px}
-.lin-said{border-radius:7px;padding:8px 11px;font-size:12.5px;margin-bottom:10px}
-.lin-said-idle{background:var(--state-idle-bg);color:var(--state-idle-ink)}
 /* The row, transposed: one FIELD per line, so a wide row needs no horizontal
    scroll and the cells the step touched are on screen without hunting. Marks
    and tints are the run panel's diff vocabulary, turned on its side. */
@@ -439,7 +437,7 @@ if(rowBox) rowBox.addEventListener('change', () => {
 </script>
 {% if view.nodes %}
 <script>
-let sel = V.nodes.length - 1, tab = 'row', scope = 'changed';
+let sel = V.nodes.length - 1, tab = 'row';
 const transformCache = {};
 
 // ---- The steps ------------------------------------------------------------
@@ -561,25 +559,28 @@ function columnRow(f){
     <td class="lin-f" title="${esc(f.name)}"><span class="lin-mark">${mark}</span>${esc(f.name)}</td>
     <td class="lin-v"><div class="lin-clip">${text}${was}</div></td></tr>`;
 }
-function saidOf(n, touched){
-  if(touched.length || !n.base) return '';
-  return `<div class="lin-said lin-said-idle">No cell changed — the row kept every value and`
-       + ` moved from <b>row ${n.base.row_number}</b> to <b>row ${n.row_number}</b>.</div>`;
+// What became of THIS row here, where neither the marks below nor `baseLine` say it:
+// a row with no parent to compare against, and a row every cell of which survived.
+function phraseOf(n){
+  if(!n.base) return n.source_file ? 'new row read from the input file' : '';
+  return n.row_diff.columns.some(c => c.state !== 'carried') ? '' : 'no cell changed';
+}
+// The order the table groups by: what the stage read, then what it wrote, then the rest.
+const COLUMN_GROUPS = ['read', 'changed', 'added', 'dropped', 'untouched'];
+const COLOUR_TIP = 'White — read by this stage as input. Blue — added by this stage. '
+  + 'Orange — changed by this stage. Red — dropped by this stage. '
+  + 'Grey — inert: neither read nor written here.';
+// `inert` is the diff's word for a carried column no signature reads.
+function groupOf(c){
+  if(c.state !== 'carried') return c.state;
+  return c.inert ? 'untouched' : 'read';
 }
 function renderRowTab(n){
   const columns = n.row_diff.columns;
-  const touched = columns.filter(c => c.state !== 'carried');
-  // Nothing changed here → the "changed" scope would be an empty table, so the
-  // whole row stands in rather than a blank pane.
-  const shown = (scope === 'changed' && touched.length) ? touched : columns;
-  // With no parent nothing was compared, so there is no second view to offer.
-  const picker = n.base ? `<div class="lin-scope">
-      <button data-scope="changed" class="${scope==='changed'?'on':''}">Changed here (${touched.length})</button>
-      <button data-scope="all" class="${scope==='all'?'on':''}">Whole row (${columns.length})</button>
-    </div>` : '';
-  return `${picker}
-    ${saidOf(n, touched)}
-    ${baseLine(n)}
+  const shown = COLUMN_GROUPS.flatMap(g => columns.filter(c => groupOf(c) === g));
+  return `
+    <div class="lin-baseline">${baseLine(n)}
+      <span class="lin-why has-tip" tabindex="0" data-tip="${COLOUR_TIP}">?</span></div>
     <table class="lin-row">${shown.map(columnRow).join('')}</table>`;
 }
 // What this row was compared against. The origin says nothing when the title above
@@ -593,7 +594,7 @@ function baseLine(n){
         : (V.upstream.truncated
             ? `unmarked: the walk stopped here, so which stage added what is unknown.`
             : (n.source_file ? '' : `the origin row, read from the source — nothing precedes it.`)));
-  return text ? `<p class="lin-base">${text}</p>` : '';
+  return `<p class="lin-base">${text}</p>`;
 }
 // The file and both row numbers, in that order: the file row is where the row really
 // sits, and the stage's own number is what it became on the way in.
@@ -634,10 +635,15 @@ async function renderTransformTab(n){
   // pane it is still looking at.
   if(V.nodes[sel] === n && tab === 'transform') body.innerHTML = transformCache[n.stage_id];
 }
+function subheaderOf(n){
+  const phrase = phraseOf(n);
+  return `${esc(n.stage_type_label)} · step ${n.step} of ${V.nodes.length}`
+    + (phrase ? ` · <span class="lin-phrase">${phrase}</span>` : '');
+}
 function render(){
   renderSteps();
   const n = V.nodes[sel];
-  document.getElementById('ptype').textContent = `${n.stage_type_label} · step ${n.step} of ${V.nodes.length}`;
+  document.getElementById('ptype').innerHTML = subheaderOf(n);
   document.getElementById('ptitle').innerHTML =
     `<code>${esc(n.stage_id)}</code> ${sourceTitle(n)}`;
   const back = document.getElementById('back');
@@ -671,7 +677,6 @@ document.querySelector('.lin-tabs').addEventListener('click', e => {
   if(e.target.dataset.tab){ tab = e.target.dataset.tab; render(); }
 });
 document.getElementById('pbody').addEventListener('click', e => {
-  if(e.target.dataset.scope){ scope = e.target.dataset.scope; render(); return; }
   // A clipped value hides part of itself, so the click that reveals it is not
   // yet the click that leaves the page.
   const clip = e.target.closest('.lin-clip.is-clipped');
