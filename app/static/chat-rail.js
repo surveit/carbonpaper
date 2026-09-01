@@ -80,7 +80,54 @@ window.ChatRail = window.ChatRail || {};
       delete panel.dataset.chatMounted;
     });
 
+    wireResize(rail);
+
     const opening = window.ChatRail.opening || {};
     if (opening.panel) mount(opening.panel);
   });
+
+  // Dragged from the left edge. The floor is what the conversation needs to stay a
+  // conversation; the ceiling leaves the page it sits beside worth reading.
+  const NARROWEST = 320;
+
+  function widestHere() { return Math.min(760, Math.round(window.innerWidth * 0.6)); }
+
+  function wireResize(rail) {
+    const grip = document.getElementById("chat-rail-grip");
+    if (!grip) return;
+    const root = document.documentElement;
+
+    function setWidth(px) {
+      const width = Math.max(NARROWEST, Math.min(widestHere(), Math.round(px)));
+      root.style.setProperty("--chat-rail-w", width + "px");
+      return width;
+    }
+
+    grip.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      grip.setPointerCapture(event.pointerId);
+      root.classList.add("chat-rail-dragging");
+      const move = (e) => setWidth(window.innerWidth - e.clientX);
+      const up = (e) => {
+        grip.removeEventListener("pointermove", move);
+        grip.removeEventListener("pointerup", up);
+        root.classList.remove("chat-rail-dragging");
+        remember(setWidth(window.innerWidth - e.clientX));
+      };
+      grip.addEventListener("pointermove", move);
+      grip.addEventListener("pointerup", up);
+    });
+
+    // Arrow keys, because a drag handle nobody can reach by keyboard is not a control.
+    grip.addEventListener("keydown", (event) => {
+      const step = event.key === "ArrowLeft" ? 24 : event.key === "ArrowRight" ? -24 : 0;
+      if (!step) return;
+      event.preventDefault();
+      remember(setWidth(rail.getBoundingClientRect().width + step));
+    });
+  }
+
+  function remember(width) {
+    try { localStorage.setItem("chat-rail:width", String(width)); } catch (e) { /* private mode */ }
+  }
 })();

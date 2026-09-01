@@ -26,6 +26,23 @@
 .chat-rail-open .chat-ask { display: none; }
 .chat-is-the-page .chat-ask { display: none; }
 
+/* The whole rail is one custom property wide, and body's padding reads the same one, so
+ * dragging this writes --chat-rail-w and the page reflows with it. Wider than it looks:
+ * a 4px target is a miss, and the extra reach sits over the page, not the conversation. */
+.chat-rail-grip {
+    position: absolute; top: 0; bottom: 0; left: -3px; width: 9px; z-index: 1;
+    cursor: col-resize; touch-action: none;
+}
+.chat-rail-grip::after {
+    content: ""; position: absolute; inset: 0 auto 0 3px; width: 1px; background: none;
+}
+.chat-rail-grip:hover::after, .chat-rail-grip:focus-visible::after,
+.chat-rail-dragging .chat-rail-grip::after { background: var(--accent); }
+.chat-rail-grip:focus-visible { outline: none; }
+/* Nothing on the page should catch the pointer, or take a selection, mid-drag. */
+.chat-rail-dragging { cursor: col-resize; user-select: none; }
+.chat-rail-dragging .chat-rail, .chat-rail-dragging main { pointer-events: none; }
+
 .chat-rail-head {
     display: flex; align-items: center; gap: 8px; flex: 0 0 auto;
     padding: 10px 12px; border-bottom: 1px solid var(--border);

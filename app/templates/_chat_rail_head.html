@@ -21,6 +21,12 @@ window.ChatRail.PARAM = "chat";
   // offering to open one. Its address is what says so.
   var onChatPage = /^\/chat(\/|$)/.test(location.pathname);
   if (onChatPage) document.documentElement.classList.add("chat-is-the-page");
+  // HOW WIDE, unlike WHICH conversation, is a fact about this browser and not about the
+  // page — so it is the one thing here that is stored. Read before the first paint for the
+  // same reason the class is: the column has to lay out at its width, not jump to it.
+  var width = null;
+  try { width = localStorage.getItem("chat-rail:width"); } catch (e) { /* private mode */ }
+  if (width) document.documentElement.style.setProperty("--chat-rail-w", width + "px");
   var sid = new URLSearchParams(location.search).get(window.ChatRail.PARAM);
   window.ChatRail.opening = {sid: sid, panel: null};
   if (!sid || onChatPage) return;
