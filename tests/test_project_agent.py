@@ -27,6 +27,8 @@ _EXPECTED_TOOL_NAMES = {
     "write_review_guide",
     "read_terms",
     "write_terms",
+    "read_claim_shapes",
+    "write_claim_shapes",
     "get_project_status",
     "generate_stage_tests",
     "run_stage_tests",

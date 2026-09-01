@@ -83,7 +83,7 @@ def _publish_figure(
     figure: WorkflowFigureRule, stage_id: ID, table: pa.Table, identity: RunIdentity
 ) -> WorkflowOutput:
     return WorkflowOutput(
-        slug=figure.slug, label=figure.label, primary=figure.primary,
+        slug=figure.slug, label=figure.label, primary=figure.primary, shape_id=figure.shape_id,
         citation=StageOutputCellCitation(
             run_id=identity.run_id, stage_id=stage_id,
             row_ordinal=PUBLISHED_ROW, column=figure.column,

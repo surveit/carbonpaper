@@ -5,7 +5,7 @@ together, so binding it is a single lookup and no half of it can go missing.
 from __future__ import annotations
 
 from app.core.agent.bound_tool import BoundToolSpec, bind_by_signature
-from app.tools import shared
+from app.tools import claim_shapes as claim_shape_tools, shared
 from app.tools.shared import MAX_OUTPUT_ROWS, MAX_RUNS_LISTED, MAX_SLEEP_SECONDS
 from app.tools.types import AgentTool, ToolParameterProse
 
@@ -132,6 +132,51 @@ which thing it meant.
 What is stored reaches every agent that writes prose about this project and
 is shown to the human on the project's Terms page. Agree the words with the
 user before you store them — never invent one to fill the list out.""",
+    ),
+    "read_claim_shapes": AgentTool(
+        fn=claim_shape_tools.read_claim_shapes,
+        label="Reading what the project claims",
+        parameters={"project_id": PROJECT_ID},
+        description="""\
+What this project claims: one shape per figure it promises to report, each
+with the coverage that figure asserts. Read this before you name `shape` on
+a stage's figure — the id you send there comes from here, and there is no
+other way to learn one. An empty result means none have been agreed yet.""",
+    ),
+    "write_claim_shapes": AgentTool(
+        fn=claim_shape_tools.write_claim_shapes,
+        label="Storing what the project claims",
+        parameters={
+            "project_id": PROJECT_ID,
+            "shapes": "The shapes to add or edit. An entry with an `id` edits that shape; "
+                "one without is new. Sending fewer retires none — stages and published "
+                "claims point at these.",
+        },
+        description="""\
+Store what this project claims. A shape is a figure the project promises to
+report, named before any stage computes it, and `requires` says what its
+number covers:
+
+  open            at least these — more may exist
+  closed          this is all of them
+  equal_coverage  the same ground as what it is compared against
+
+There is no default. A run is later checked against `requires` before its
+figure can be published, so a shape that overstates coverage turns a capped
+run into a false public statement. That check is the only thing standing
+between a windowed run and a number a reader will treat as complete.
+
+  {"label": "Paid to outside firms to lobby on AI, in dollars",
+   "requires": "closed", "importance": "primary"}
+
+REFUSED WHOLE, with nothing written, when two entries share a label, when a
+label this project already claims arrives without that shape's id, when an
+id names no shape here, or when `requires` changes on a shape something has
+already been claimed under — what a published claim asserts about its own
+coverage cannot be edited after the fact.
+
+The human reads these on the project's Terms page. Agree them with the user;
+never coin one to fill the list out.""",
     ),
     "get_project_status": AgentTool(
         fn=shared.get_project_status,

@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from app.core.json_types import JsonScalar
 from app.core.ids import ID
+from app.models.schema import _Base
 
 
 class ClaimImportance(str, Enum):
@@ -20,6 +21,23 @@ class DataUniverseRequirement(str, Enum):
     equal_coverage = "equal_coverage"
     closed = "closed"
 
+
+# What each requirement asserts, in the words a reader of the figure gets.
+DATA_UNIVERSE_PROSE = {
+    "open": "at least these — more may exist",
+    "equal_coverage": "the same ground as what it is compared against",
+    "closed": "this is all of them",
+}
+
+
+
+class AuthoredClaimShape(_Base):
+    """One entry of what a project claims, as written. `id` names a shape already stored."""
+
+    id: ID | None = None
+    label: str
+    requires: DataUniverseRequirement
+    importance: ClaimImportance
 
 
 class Citation(BaseModel):

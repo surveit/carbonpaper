@@ -60,7 +60,7 @@ def test_allowed_names_cover_every_tool(examples_root: Path) -> None:
     _server, allowed, _tools = _build("congresswatch")
     specs = build_editing_tools(EditingContext(project_id="congresswatch", base_url="http://reader.test/"))
     assert set(allowed) == {f"mcp__tools__{spec.name}" for spec in specs}
-    assert len(allowed) == 28
+    assert len(allowed) == 30
 
 
 def test_read_stage_handler_returns_text_content(examples_root: Path) -> None:

@@ -16,11 +16,13 @@ from app.models.records.claims import Claim, ClaimShape
 
 _TOTAL = 4461000.0
 _RUN = "20260807T142707"
+_PROJECT = "venezuela_lobbying_q1_q2_2026"
+_VERSION = "20260807T142650.104112"
 
 
 def _shape() -> ClaimShape:
     return ClaimShape(
-        project_id="venezuela_lobbying_q1_q2_2026",
+        project_id=_PROJECT,
         label="Total paid to outside lobbying firms to lobby on Venezuela",
         requires=DataUniverseRequirement.closed,
         importance=ClaimImportance.primary,
@@ -30,7 +32,9 @@ def _shape() -> ClaimShape:
 def _claim(shape: ClaimShape, run_id: str = _RUN) -> Claim:
     table = pa.table({"total_income_usd": [_TOTAL]})
     return Claim(
+        project_id=_PROJECT,
         shape_id=shape.id,
+        workflow_version_id=_VERSION,
         citation=StageOutputCellCitation(
             run_id=run_id, stage_id="paid_totals", row_ordinal=0,
             column="total_income_usd", value=read_cell(table, "total_income_usd", 0),

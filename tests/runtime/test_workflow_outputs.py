@@ -169,3 +169,16 @@ def test_one_stage_can_publish_two_tables_over_different_columns():
 def test_a_cited_row_range_counts_its_rows():
     [saved] = save_workflow_outputs(_workflow_stage([_TABLE]), _SPEND_ROWS, _RUN)
     assert saved.citation.rectangle.count_rows() == 2
+
+
+def test_a_figure_carries_the_shape_its_rule_names_and_nothing_when_it_names_none():
+    claimed = WorkflowFigureRule(
+        kind="figure", slug="external-spend", label="Paid to outside lobbying firms",
+        column="external_spend", shape_id="7c1f9a2e",
+    )
+
+    saved = save_workflow_outputs(_workflow_stage([claimed, _CLIENTS]), _FIGURES, _RUN)
+
+    assert [(o.slug, o.shape_id) for o in saved] == [
+        ("external-spend", "7c1f9a2e"), ("clients-paying", None),
+    ]

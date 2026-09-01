@@ -160,6 +160,10 @@ WORKFLOW_OUTPUTS_DESCRIPTION = (
     "`table` publishes this stage's rows, each linking to its own lineage. `columns` "
     "names the ones a reader gets; omit it for every column the stage produced. A column "
     "the stage did not produce stops the run.\n"
+    "A `figure` may also name the `shape_id` it fills — one of the claim shapes this "
+    "project has authored, by its id. Read them first; never coin one here, and leave it "
+    "out rather than guessing, because a figure claiming the wrong coverage is worse than "
+    "one claiming none.\n"
     "Mark `primary` on the one or two a reader should see first — the run leads with "
     "those and lists the rest, so marking everything primary is the same as marking "
     "nothing. A primary table is drawn on the run page; a secondary one is a line and a "
@@ -188,6 +192,8 @@ class _WorkflowOutputFields(_Base):
 class WorkflowFigureRule(_WorkflowOutputFields):
     kind: Literal["figure"]
     column: str
+    # The project's claim shape this fills; without one the figure cannot be minted.
+    shape_id: Optional[ID] = None
 
 
 class WorkflowTableRule(_WorkflowOutputFields):

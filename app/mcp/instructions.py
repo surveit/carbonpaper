@@ -81,6 +81,9 @@ record, and it returns the project record, whose `id` every other tool takes.
              and read_stage_output_rows when the question is about a ROW
   TERMS      read_terms to see what is agreed, then write_terms once the user has
              agreed the rest. Every later phase writes in those words.
+             read_claim_shapes and write_claim_shapes are the same act for the
+             figures this project promises to report, and what each one covers.
+             Agree them here; BUILD names one on the figure that fills it.
   PLANNING   (no tools — this is where you ask the user)
   BUILD      add_stage, edit_stages, delete_stage, then generate_stage_tests and
              loop edit_stages -> run_stage_tests until they pass. Still BUILD.
