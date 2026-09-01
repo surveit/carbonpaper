@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import pyarrow as pa
+import pytest
+from pydantic import ValidationError
 
 from app.core.frames import read_cell
 from app.models.claims import (
     ClaimImportance,
     DataUniverseRequirement,
+    RowsRectangle,
     StageOutputCellCitation,
+    StageOutputTableCitation,
 )
 from app.models.records.claims import Claim, ClaimShape
 
@@ -56,3 +60,33 @@ def test_claims_of_one_shape_are_found_together_across_runs():
     assert sorted(c.citation.run_id for c in Claim.find(shape_id=shape.id)) == [
         "20260807T142707", "20260812T133317",
     ]
+
+
+def test_a_claim_can_cite_a_published_table():
+    """A project's deliverable is as often a table as a figure — the DSA evidence table is one."""
+    shape = ClaimShape(
+        project_id="hate_on_activist_pages",
+        label="Comments meeting the DSA complaint bar",
+        requires=DataUniverseRequirement.open,
+        importance=ClaimImportance.primary,
+    )
+    shape.save()
+    claim = Claim(
+        shape_id=shape.id,
+        citation=StageOutputTableCitation(
+            run_id=_RUN, stage_id="publish_evidence_table",
+            rectangle=RowsRectangle(row_start=0, row_end=18, columns=["comment_text", "severity_tier"]),
+        ),
+    )
+    claim.save()
+    read = Claim.load(claim.id)
+    assert isinstance(read.citation, StageOutputTableCitation)
+    assert read.citation.rectangle.row_end == 18
+
+
+def test_a_citation_still_has_to_say_which_kind_it_is():
+    with pytest.raises(ValidationError):
+        Claim(shape_id="whatever", citation={
+            "run_id": _RUN, "stage_id": "paid_totals", "row_ordinal": 0,
+            "column": "total_income_usd", "value": _TOTAL,
+        })

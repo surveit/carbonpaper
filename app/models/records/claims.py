@@ -7,7 +7,7 @@ from app.core.record import PersistedModel, PersistenceScope
 from app.models.claims import (
     ClaimImportance,
     DataUniverseRequirement,
-    StageOutputCellCitation,
+    PublishedCitation,
 )
 
 
@@ -27,4 +27,6 @@ class Claim(PersistedModel):
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
 
     shape_id: ID
-    citation: StageOutputCellCitation
+    # The same union a workflow output carries: a project's deliverable is as often a
+    # table as a figure, and a claim that cannot cite one cannot describe the work.
+    citation: PublishedCitation
