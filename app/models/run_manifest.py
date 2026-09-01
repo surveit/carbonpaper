@@ -124,8 +124,7 @@ class ReadFile(BaseModel):
     path: str
     sha256: str
     bytes: int
-    # None where the run read outside the file store, and on every run before this
-    # was recorded — the bytes are what those have to be found by.
+    # None outside the store, and on every run recorded before this field existed.
     file_id: str | None = None
 
     @property
