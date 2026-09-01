@@ -109,7 +109,9 @@ stays the source of truth for stage status; this log is only ever the drill-down
   the reply is validated by construction rather than parsed from prose. Run per row by the
   row driver under bounded parallelism.
 - **A stage declaring `llm.tools` researches.** The names (from
-  `models.stages.llm_transform.GRANTABLE_TOOLS`) are granted to the agent alongside
+  `models.stages.llm_transform.GRANTABLE_TOOLS`, which is `WebSearch` and `WebFetch`;
+  `Bash` still loads for two frozen versions but may not be granted again) are granted
+  to the agent alongside
   `submit_answer`, and the row moves onto the research budget — `RESEARCH_TIMEOUT_S` and
   `RESEARCH_MAX_TURNS` instead of `DEFAULT_TIMEOUT_S` and the submit-only turn cap — because
   searching and reading documents is the work, not overhead on top of it. Such a stage is NOT
