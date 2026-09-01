@@ -24,6 +24,7 @@
 .chat-rail-open .chat-rail { display: flex; }
 .chat-rail-open body { padding-right: var(--chat-rail-w); }
 .chat-rail-open .chat-ask { display: none; }
+.chat-is-the-page .chat-ask { display: none; }
 
 .chat-rail-head {
     display: flex; align-items: center; gap: 8px; flex: 0 0 auto;

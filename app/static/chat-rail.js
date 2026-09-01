@@ -32,8 +32,8 @@ window.ChatRail = window.ChatRail || {};
   document.addEventListener("DOMContentLoaded", function () {
     const rail = document.getElementById("chat-rail");
     const ask = document.getElementById("chat-ask");
-    // The chat page is its own host and draws neither of these.
-    if (!rail || !ask) return;
+    // The chat page is its own host: <head> marked it, and neither control belongs there.
+    if (!rail || !ask || document.documentElement.classList.contains("chat-is-the-page")) return;
     const shown = document.documentElement.classList;
     const panel = rail.querySelector(".js-rail-panel");
     const title = rail.querySelector(".js-rail-title");

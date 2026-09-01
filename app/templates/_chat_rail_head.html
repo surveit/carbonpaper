@@ -17,12 +17,13 @@ window.ChatRail.PARAM = "chat";
   // The address is the whole opener: nothing stored, nothing to expire, and a reader
   // handed the URL lands in the same conversation. A link out of a reply carries the
   // parameter itself — see keepInAppLinksInPlace in static/chat-panel.js.
+  // A chat surface IS the conversation: it draws its own panel, and needs no button
+  // offering to open one. Its address is what says so.
+  var onChatPage = /^\/chat(\/|$)/.test(location.pathname);
+  if (onChatPage) document.documentElement.classList.add("chat-is-the-page");
   var sid = new URLSearchParams(location.search).get(window.ChatRail.PARAM);
   window.ChatRail.opening = {sid: sid, panel: null};
-  if (!sid) return;
-  // The chat page draws its own panel. It is the one page whose address says so, and
-  // asking here costs nothing — the alternative is reserving a column it then removes.
-  if (/^\/chat\//.test(location.pathname)) return;
+  if (!sid || onChatPage) return;
   document.documentElement.classList.add("chat-rail-open");
   window.ChatRail.opening.panel = fetch("/chat/" + sid + "/panel");
 })();
