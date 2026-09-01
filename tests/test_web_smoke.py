@@ -84,7 +84,7 @@ def test_workflow_section_offers_the_editing_agent():
     """Authoring has a way in from the app: a link to a chat bound to this project."""
     r = client.get("/project/demo/workflow")
     assert 'href="/chat/agent/editing/new?project_id=demo"' in r.text
-    assert "Edit with agent" in r.text
+    assert "Edit the workflow" in r.text and ", with the agent" in r.text
 
 
 def test_workflow_section_renders_the_graph():

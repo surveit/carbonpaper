@@ -33,6 +33,8 @@
     border-color: var(--accent);
 }
 .btn.primary:hover { background: var(--accent-deep); }
+/* A filled button paints over the transfer ink, so the mark takes the label's colour. */
+.btn.primary .sparkle { fill: currentColor; }
 
 /* A real action the reader came to do, ranked below the one being urged. Sibling
    of .primary by GEOMETRY — same corner, same padding rhythm — spending no hue,

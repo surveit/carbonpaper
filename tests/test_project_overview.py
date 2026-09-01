@@ -65,7 +65,7 @@ def test_a_capped_run_warns_and_names_the_stage_it_windowed():
     assert deliverable.state == "warned"
     capped = [check for check in deliverable.checks if check.headline == "This run was capped."]
     assert "ingest_normalize" in capped[0].detail
-    assert capped[0].action.kind == "chat"
+    assert capped[0].action.opens_a_chat()
 
 
 def test_a_running_run_is_not_said_to_have_ended():
@@ -79,21 +79,21 @@ def test_a_halted_run_is_offered_its_review_rather_than_a_chat():
     _publish_a_figure()
     waiting = _build().checks[0]
     assert waiting.headline == "This run is waiting on a review."
-    assert waiting.action.kind == "go" and waiting.action.href.endswith(_RUN)
+    assert not waiting.action.opens_a_chat() and waiting.action.href.endswith(_RUN)
 
 
 def test_a_run_that_wrote_no_figure_says_why_none_can_be_added_now():
     _record_run()
     warning = _build().checks[0]
     assert warning.headline == "This run produced no figures."
-    assert warning.action.kind == "chat"
+    assert warning.action.opens_a_chat()
 
 
 def test_a_queue_row_that_is_not_an_app_screen_opens_a_chat_carrying_the_task():
     _record_run(status=RunStatus.ERRORS)
     errored = [row for row in build_queue(_PROJECT, _rows(), read_versions(_PROJECT))
                if row.what.endswith("errored")]
-    assert errored[0].kind == "chat"
+    assert errored[0].opens_a_chat()
     assert "task=" in errored[0].href
 
 
