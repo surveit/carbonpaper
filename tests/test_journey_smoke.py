@@ -50,7 +50,6 @@ def test_offline_journey_reaches_its_artifact(journey_project, tmp_path):
     assert resp.status_code == 200, resp.text
     assert resp.json()["ok"] is True, resp.text
 
-    # author -> version -> run -> artifact. A version is cut, never approved.
     # The run form offers a binding field for the file input stage.
     resp = client.get(f"/project/{journey_project.name}/runs/new")
     assert resp.status_code == 200

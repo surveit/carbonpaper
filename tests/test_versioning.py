@@ -186,9 +186,6 @@ def test_a_stored_queue_stage_written_before_queue_sort_still_loads(tmp_path):
 
 
 # ── find_latest_version_id / resolve_version_id ──────────────────────────────
-#
-# Every stored version is runnable: a version is cut, never approved, so
-# neither resolver has anything to filter on. Only an empty store stops a run.
 
 def _store_version(project_dir: Path, vid: str) -> str:
     WorkflowVersion(id=f"{project_dir.name}/{vid}", version_id=vid, created_at=vid,

@@ -1,8 +1,4 @@
-"""Immutable, committable snapshots of a workflow, plus the guide authored about one.
-
-`version_id` is the LOCAL id every public function here takes, never the composite
-store id. A version is cut, never approved: publishing is a property of what a run
-publishes, not of the workflow that produced it."""
+"""Immutable snapshots of a workflow, and the guide authored about one."""
 
 from __future__ import annotations
 

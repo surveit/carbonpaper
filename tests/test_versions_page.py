@@ -1,7 +1,4 @@
-"""Route tests for the versions LIST page: it lists what has been cut and never
-changes anything
-and redirects to that detail page, and the run trigger refuses only a project with
-no stored version."""
+"""Route tests for the versions LIST page: it lists, and changes nothing."""
 from __future__ import annotations
 
 from pathlib import Path
