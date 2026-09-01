@@ -137,7 +137,7 @@ def test_a_lineage_page_reaches_the_rest_of_the_packet_by_relative_path(tmp_path
     outward = {h for h in _relative_links(page) if "lineage/" not in h}
     assert outward == {
         "../../assets/diagram_nodes.js", "../../assets/tooltip.js",
-        "../../assets/cell-lineage.js",
+        "../../assets/cell-lineage.js", "../../assets/figure_text.js",
         "../../assets/palette.css",
         "../../assets/style.css", "../../assets/packet.css", "../../assets/favicon.svg",
         "../../index.html",
