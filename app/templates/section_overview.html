@@ -36,7 +36,6 @@
         <div class="ov-deliver-facts">
           <span class="run-status status-{{ d.status }}">{{ d.status | replace('_', ' ') }}</span>
           <a class="ov-deliver-when" href="{{ d.run_href }}">{{ d.started_at | friendly_time }}</a>
-          <span class="muted">{{ d.stage_line }}{% if d.duration %} · {{ d.duration }}{% endif %}</span>
         </div>
         <a class="btn ov-deliver-cta" href="{{ d.run_href }}">Open the run</a>
       </div>
@@ -108,7 +107,7 @@
   </div>
 
   <div>
-    <h3 class="ov-slot-h">{% if overview.queue %}Outstanding{% else %}Nothing outstanding{% endif %}</h3>
+    <h3 class="ov-slot-h">{% if overview.queue %}Outstanding{% else %}All clear{% endif %}</h3>
     {% if overview.queue %}
     <div class="ov-queue">
       {% for row in overview.queue %}
@@ -125,7 +124,8 @@
       {% endfor %}
     </div>
     {% else %}
-    <p class="muted">No halted run, no unrun version, and the document is written.</p>
+    <p class="muted">Nothing is waiting on you: no halted run, no unrun version,
+      and the document is written.</p>
     {% endif %}
   </div>
 </div>

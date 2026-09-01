@@ -62,8 +62,6 @@ class Deliverable(BaseModel):
     run_id: str | None = None
     run_href: str = ""
     started_at: str = ""
-    duration: str = ""
-    stage_line: str = ""
     status: str = ""
     published: RunPublished | None = None
     checks: list[OverviewCheck] = []
@@ -130,8 +128,6 @@ def build_deliverable(
         run_id=row.run_id,
         run_href=f"/project/{project_id}/runs/{row.run_id}",
         started_at=row.started_at or "",
-        duration=row.duration or "",
-        stage_line=row.result_summary or "",
         status=row.status,
         published=published,
         checks=checks,
