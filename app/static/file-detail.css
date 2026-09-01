@@ -39,8 +39,9 @@
     border: 1px solid var(--border); background: var(--raised); color: var(--muted);
     cursor: pointer; }
 .shape-filter:hover { border-color: var(--border-strong); color: var(--fg); }
-.shape-filter.on { background: var(--sunk-deep); border-color: var(--border-strong);
-    color: var(--fg); font-weight: 600; }
+.shape-filter.on { background: var(--picked-bg); border-color: var(--picked-edge);
+    color: var(--picked-ink); font-weight: 600; }
+.shape-filter.on:hover { background: var(--picked-hover); }
 
 .shape-list { border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
     background: var(--raised); }
@@ -107,8 +108,9 @@
     padding: 2px 9px; border: 1px solid var(--border); background: var(--raised); }
 .facet-scale button:first-child { border-radius: 4px 0 0 4px; }
 .facet-scale button:last-child { border-radius: 0 4px 4px 0; border-left: none; }
-.facet-scale button.on { background: var(--sunk-deep); border-color: var(--border-strong);
-    color: var(--fg); font-weight: 600; }
+.facet-scale button.on { background: var(--picked-bg); border-color: var(--picked-edge);
+    color: var(--picked-ink); font-weight: 600; }
+.facet-scale button.on:hover { background: var(--picked-hover); }
 
 .facet-values { width: 100%; max-width: 640px; border-collapse: collapse; font-size: 13px; }
 .facet-values td { padding: 3px 8px 3px 0; vertical-align: middle; }
