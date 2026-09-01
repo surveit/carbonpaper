@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal
+from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.core.json_types import JsonScalar
 from app.core.ids import ID
@@ -54,6 +54,11 @@ class StageOutputTableCitation(Citation):
     run_id: ID
     stage_id: ID
     rectangle: RowsRectangle
+
+
+PublishedCitation = Annotated[
+    Union[StageOutputCellCitation, StageOutputTableCitation], Field(discriminator="kind")
+]
 
 
 class StageOutputRowCitation(Citation):
