@@ -34,6 +34,10 @@ class EditingContext(BaseModel):
     base_url: str
     # What the link that opened this chat was for, so the opening turn names it.
     task: str | None = None
+    # Where the reader is THIS turn. None when the client did not report a page.
+    page: str | None = None
+    # The page the chat was started from, which is what binds it to a project.
+    opened_on: str | None = None
 
 
 def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:

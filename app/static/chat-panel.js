@@ -7,6 +7,15 @@
 // Mounting reads `active_turn` off the config and reattaches from event 0.
 window.ChatPanel = window.ChatPanel || {};
 
+// The page the reader is reading, for the agent beside it. Null on a chat surface: a
+// conversation is not something to be answered questions about. Which addresses those
+// are is decided once, in <head> (_chat_rail_head.html), and read back off the mark it
+// leaves rather than tested a second time here.
+window.ChatPanel.here = function () {
+  if (document.documentElement.classList.contains("chat-is-the-page")) return null;
+  return location.pathname + location.search;
+};
+
 window.ChatPanel.mount = function (root) {
   if (root.dataset.chatMounted) return;
   root.dataset.chatMounted = "1";
@@ -469,7 +478,7 @@ window.ChatPanel.mount = function (root) {
     catch (e) { streaming = false; const b = newAssistant(); b.error(e.message); return; }
     const r = await fetch(`/chat/${sid}/message`, {
       method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({text})
+      body: JSON.stringify({text, page: window.ChatPanel.here()})
     });
     const data = await r.json();
     if (!data.ok) {

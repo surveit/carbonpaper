@@ -68,7 +68,9 @@ window.ChatRail = window.ChatRail || {};
     // the other end is the entry point's business (_chat_ask_button.html), never the rail's.
     ask.addEventListener("click", () => {
       show(true);
-      mount(fetch(`/chat/agent/${encodeURIComponent(ask.dataset.agent)}/new/panel`));
+      const opened = window.ChatPanel.here();
+      const on = opened ? `?opened_on=${encodeURIComponent(opened)}` : "";
+      mount(fetch(`/chat/agent/${encodeURIComponent(ask.dataset.agent)}/new/panel${on}`));
     });
 
     // Closed, not hidden: the address stops naming a conversation, so a reload does not
