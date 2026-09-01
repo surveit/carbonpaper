@@ -283,3 +283,43 @@ def test_options_load_no_mcp_servers_but_the_one_passed_in() -> None:
         system_prompt="sp", mcp_server=object(), allowed_tools=[]
     )
     assert engine._options(None).strict_mcp_config is True
+
+
+def test_an_offer_survives_the_json_the_sse_route_writes(monkeypatch: Any) -> None:
+    # A model on this wire kills the SSE connection, losing every event after it.
+    async def fake_query(*, prompt: str, options: Any) -> Any:
+        yield _Asst([
+            _Text("Take a look at any of these."),
+            _Tool(f"mcp__tools__{se.OFFER_NEXT_STEPS}", {"options": [
+                {"text": "Open the review queue", "url": "/project/p/runs/r/queue/s"},
+                {"text": "Tell me more first"},
+            ]}),
+        ])
+        yield _Asst([_Text("I'll be here.")])
+        yield _Done()
+
+    monkeypatch.setattr(se, "query", fake_query)
+    monkeypatch.setattr(se, "AssistantMessage", _Asst)
+    monkeypatch.setattr(se, "UserMessage", _User)
+    monkeypatch.setattr(se, "ResultMessage", _Done)
+    monkeypatch.setattr(se, "TextBlock", _Text)
+    monkeypatch.setattr(se, "ToolUseBlock", _Tool)
+    monkeypatch.setattr(se, "ToolResultBlock", _Result)
+    monkeypatch.setattr(se, "ThinkingBlock", type("Nope", (), {}))
+
+    events: list[dict[str, Any]] = []
+    engine = se.ClaudeAgentSdkEngine(
+        system_prompt="sp", mcp_server=object(), allowed_tools=[], tool_labels={})
+    transcript, _ = asyncio.run(
+        engine.stream_turn("where next?", message_history=[], emit=events.append))
+
+    on_the_wire = [json.loads(json.dumps(event)) for event in events]
+    offer = next(e for e in on_the_wire if e["kind"] == "offer")
+    assert [o["text"] for o in offer["options"]] == [
+        "Open the review queue", "Tell me more first"]
+    assert offer["options"][0]["url"] == "/project/p/runs/r/queue/s"
+    # The text after it is what a reader loses when the connection dies at the offer.
+    assert [e["text"] for e in on_the_wire if e["kind"] == "text"] == [
+        "Take a look at any of these.", "I'll be here."]
+    stored = [p for m in transcript for p in m["parts"] if p.get("type") == "offer"]
+    assert stored and stored[0]["options"][0]["text"] == "Open the review queue"
