@@ -11,6 +11,7 @@ from app.web.column_order import (
     order_columns_by_group,
 )
 from app.web.diff_state import CellDiffState
+from app.web.figure_text import render_figure
 
 
 @dataclass(frozen=True)
@@ -79,7 +80,7 @@ def row_diff_to_dict(diff: RowDiff) -> dict[str, Any]:
 
 
 def render_cell(value: Any) -> str:
-    return "" if value is None else str(value)
+    return "" if value is None else render_figure(value)
 
 
 def _compare_column(

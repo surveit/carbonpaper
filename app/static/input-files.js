@@ -57,7 +57,7 @@ window.InputFiles = window.InputFiles || (function () {
       if (head.offsetParent !== null) columns += 1;
     });
     var count = pane.querySelector(".if-count");
-    if (count) count.textContent = shown.toLocaleString() + " × " + columns;
+    if (count) count.textContent = window.Figures.text(shown) + " × " + columns;
     paintTake(tab, pane);
   }
 
@@ -88,7 +88,7 @@ window.InputFiles = window.InputFiles || (function () {
   }
 
   function countOf(many, thing) {
-    return many.toLocaleString() + " " + thing + (many === 1 ? "" : "s");
+    return window.Figures.text(many) + " " + thing + (many === 1 ? "" : "s");
   }
 
   function escapeText(text) {
