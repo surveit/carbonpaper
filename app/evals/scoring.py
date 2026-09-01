@@ -96,8 +96,10 @@ def _roll_up_metrics(checks: list[_Check], per_row: pd.DataFrame) -> dict[str, A
 
 
 def _value_matches(expected: Any, actual: Any, metric: str, tolerance: float | None) -> bool:
-    if pd.isna(expected) or pd.isna(actual):
-        return False
+    expected_is_null, actual_is_null = pd.isna(expected), pd.isna(actual)
+    if expected_is_null or actual_is_null:
+        # a null expectation asserts the row has no value, which only a null answer meets
+        return expected_is_null and actual_is_null
     if metric == ScoringMetric.exact:
         return bool(expected == actual)
     if metric == ScoringMetric.abs_tol:
