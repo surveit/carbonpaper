@@ -10,19 +10,20 @@
    Inline and duplicated in no other file: a <script src> could not beat the paint. #}
 <script>
 window.ChatRail = window.ChatRail || {};
+// The one spelling of it. Nothing is loaded yet, so it cannot be read from a file that
+// then hands it to the rail and the panel — they read it from here instead.
+window.ChatRail.PARAM = "chat";
 (function () {
-  var sid = null, open = true, title = null;
-  try {
-    sid = localStorage.getItem("chat-rail:session");
-    open = localStorage.getItem("chat-rail:open") !== "0";
-    title = localStorage.getItem("chat-rail:title");
-  } catch (e) { /* private mode: no rail, and nothing breaks */ }
-  window.ChatRail.opening = {sid: sid, open: open, title: title, panel: null};
+  // The address is the whole opener: nothing stored, nothing to expire, and a reader
+  // handed the URL lands in the same conversation. A link out of a reply carries the
+  // parameter itself — see keepInAppLinksInPlace in static/chat-panel.js.
+  var sid = new URLSearchParams(location.search).get(window.ChatRail.PARAM);
+  window.ChatRail.opening = {sid: sid, panel: null};
   if (!sid) return;
   // The chat page draws its own panel. It is the one page whose address says so, and
   // asking here costs nothing — the alternative is reserving a column it then removes.
   if (/^\/chat\//.test(location.pathname)) return;
-  document.documentElement.classList.add(open ? "chat-rail-open" : "chat-rail-shut");
-  if (open) window.ChatRail.opening.panel = fetch("/chat/" + sid + "/panel");
+  document.documentElement.classList.add("chat-rail-open");
+  window.ChatRail.opening.panel = fetch("/chat/" + sid + "/panel");
 })();
 </script>

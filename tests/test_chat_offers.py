@@ -124,5 +124,12 @@ def test_a_link_is_an_anchor_that_opens_a_page_and_a_reply_is_a_button() -> None
     ])
 
     assert '<a class="ac-offer ac-offer-link" href="/project/p/runs/r/queue/s"' in rendered
-    assert 'target="_blank"' in rendered
     assert '<button type="button" class="ac-offer">Trace a row back to its source</button>' in rendered
+
+
+def test_a_link_offer_opens_in_this_tab() -> None:
+    """A new tab lands beside a second copy of the rail, not this conversation."""
+    rendered = render_offers([{"text": "Open the review queue", "url": "/project/p/q"}])
+
+    assert 'target="_blank"' not in rendered
+    assert "noopener" not in rendered

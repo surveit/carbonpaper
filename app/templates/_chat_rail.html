@@ -2,20 +2,22 @@
    that want one, on the same reasoning as the ⌘K palette: a conversation the reader
    carries between pages cannot be a thing individual pages remember to offer.
 
-   Empty markup. Which session is open lives in localStorage and the panel arrives from
-   GET /chat/<sid>/panel, so no route below this hands a page any chat state — see
-   static/chat-rail.js.
+   Empty markup. Which session is open is read off the address and the panel arrives
+   from GET /chat/<sid>/panel, so no route below this hands a page any chat state —
+   see static/chat-rail.js.
 
-   Whether the rail is THERE is decided in <head>, before the first paint: the class on
-   <html> is what reserves the column, and everything here only fills it. #}
+   Whether the rail is THERE is decided in <head>: the class on <html> is what reserves
+   the column, and everything here only fills it. #}
+{% from "_sparkle.html" import sparkle %}
 <aside class="chat-rail" id="chat-rail" aria-label="Conversation">
   <div class="chat-rail-head">
     <span class="chat-rail-title js-rail-title"></span>
-    <a class="chat-rail-open-page" href="#" title="Open this conversation on its own page">↗</a>
+    <a class="chat-rail-open-page" href="/chat" title="Open this conversation on its own page">↗</a>
     <button type="button" class="chat-rail-x js-rail-close"
             title="Close the conversation" aria-label="Close the conversation">×</button>
   </div>
   <div class="chat-panel chat-host-rail js-rail-panel"></div>
 </aside>
-{# The way back in, and the only thing on screen when the rail is shut. #}
-<button type="button" class="chat-rail-tab" id="chat-rail-tab"></button>
+{# One control, one place, one behaviour: it opens a new conversation about wherever the
+   reader is. Coming back to an earlier one is the address they were handed. #}
+<button type="button" class="chat-ask" id="chat-ask">{{ sparkle() }} Ask AI</button>

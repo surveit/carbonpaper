@@ -55,8 +55,18 @@ def test_every_link_is_rendered_to_open_in_a_new_tab() -> None:
 def test_the_client_is_what_keeps_an_in_app_link_in_this_tab() -> None:
     """Grounded against the shipped client, since nothing else here executes it."""
     client_source = _CHAT_CLIENT.read_text(encoding="utf-8")
-    assert 'querySelectorAll("a[target=_blank]")' in client_source
+    assert "function keepInAppLinkInPlace" in client_source
     assert 'a.removeAttribute("target")' in client_source
+
+
+def test_an_in_app_link_carries_the_conversation_it_was_offered_in() -> None:
+    """The address is what reopens the rail beside the page, so the link writes it."""
+    client_source = _CHAT_CLIENT.read_text(encoding="utf-8")
+    assert "url.searchParams.set(window.ChatRail.PARAM, SID)" in client_source
+    # The name itself is spelled once, before any script can be loaded to hold it.
+    head = (_CHAT_CLIENT.parent.parent / "templates" / "_chat_rail_head.html").read_text(
+        encoding="utf-8")
+    assert 'window.ChatRail.PARAM = "chat"' in head
 
 
 def test_raw_html_in_assistant_text_is_escaped_not_executed() -> None:

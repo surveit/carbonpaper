@@ -50,10 +50,28 @@ class AgentConfig(BaseModel):
 BuildTools = Callable[[BaseModel], list[BoundToolSpec]]
 
 _registry: dict[str, tuple[AgentConfig, BuildTools]] = {}
+_default_agent_id: ID | None = None
 
 
-def register(agent_id: ID, config: AgentConfig, build_tools: BuildTools) -> None:
+def register(
+    agent_id: ID, config: AgentConfig, build_tools: BuildTools, *, default: bool = False
+) -> None:
+    """`default` claims the agent a reader reaches without asking for one by name."""
+    global _default_agent_id
+    if default and _default_agent_id not in (None, agent_id):
+        raise ValueError(
+            f"{_default_agent_id!r} is already the default agent; {agent_id!r} cannot be too"
+        )
     _registry[agent_id] = (config, build_tools)
+    if default:
+        _default_agent_id = agent_id
+
+
+def read_default_agent_id() -> ID:
+    """A surface that opens a chat asks here rather than naming one."""
+    if _default_agent_id is None:
+        raise ValueError("no agent registered itself as the default")
+    return _default_agent_id
 
 
 def is_registered(agent_id: ID) -> bool:

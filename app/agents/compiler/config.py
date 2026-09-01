@@ -90,4 +90,6 @@ def _build_editing_tools(context: BaseModel) -> list[BoundToolSpec]:
     return build_editing_tools(context)
 
 
-register("editing", CONFIG, _build_editing_tools)
+# The default: the launcher in the shell opens a chat without naming an agent, and
+# this is the one it reaches. See registry.read_default_agent_id.
+register("editing", CONFIG, _build_editing_tools, default=True)

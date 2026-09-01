@@ -15,16 +15,10 @@
   {% include "_chat_panel.html" %}
 </div>
 <script>
-// Opening a session here is what makes the rail carry it everywhere else, so following a
-// link out of a reply lands on a page that already has this conversation open. Deferred to
-// DOMContentLoaded because base.html loads chat-rail.js below this block, not above it.
+// A draft page stores nothing until the reader replies; the panel says when it has, and the
+// address stops being /chat/agent/<id>/new so a reload returns to the conversation.
 document.addEventListener('DOMContentLoaded', function () {
-  const root = document.querySelector('[data-chat-panel]');
-  const sid = {{ config.session_id | tojson }};
-  if (sid) window.ChatRail.remember(sid, {{ config.title | tojson }});
-  // A draft page stores nothing until the reader replies; the panel says when it has.
-  root.addEventListener('chat-panel:session', (e) => {
-    window.ChatRail.remember(e.detail.sid, {{ config.title | tojson }});
+  document.querySelector('[data-chat-panel]').addEventListener('chat-panel:session', (e) => {
     history.replaceState(null, "", `/chat/${e.detail.sid}`);
   });
 });
