@@ -162,3 +162,39 @@ def test_a_blank_cell_is_refused_rather_than_read_as_a_number(tmp_path):
     with pytest.raises(ValueError) as exc:
         _run(code, tmp_path)
     assert "say what an absent figure should read as" in str(exc.value)
+
+
+# ── the stage page ────────────────────────────────────────────────────────────
+
+def test_the_stage_panel_shows_the_sandboxed_report_and_its_code(tmp_path):
+    """The one seam a new code-carrying type reaches every surface through."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from app.services import workspace
+    from stage_seed import add_stage
+
+    compiled = tmp_path / "alpha"
+    compiled.mkdir(parents=True, exist_ok=True)
+    add_stage(compiled, {
+        "id": "figures", "description": "Figures", "type": "input_data",
+        "connector": {"kind": "file"},
+        "signature": {"form": "replaces",
+                      "produces": [{"name": "spend", "type": "float", "nullable": False}]},
+    })
+    add_stage(compiled, {
+        **_stage('def transform(figures):\n    emit_file("index.html", "<p>x</p>")\n')
+        .model_dump(exclude_unset=True),
+        "inputs": [{"id": "figures"}],
+        "signature": {"form": "replaces",
+                      "reads": [{"input": "figures",
+                                 "columns": [{"name": "spend", "type": "float",
+                                              "nullable": False}]}],
+                      "produces": []},
+    })
+    workspace.set_projects_dir(tmp_path)
+
+    html = TestClient(app).get("/project/alpha/node/write_report/panel").text
+    assert "Sandboxed report" in html
+    assert "emit_file" in html
+    assert "Writes the in-house lobbying spend out as one page." in html
