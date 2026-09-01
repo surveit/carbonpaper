@@ -211,7 +211,6 @@
     flex-wrap: wrap; gap: 6px 8px; align-items: center; }
 .ov-meta b { color: var(--fg); font-weight: 600; }
 .ov-dot { color: var(--border); }
-.ov-privacy { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
 
 .ov-split { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
     gap: 20px; align-items: start; }
