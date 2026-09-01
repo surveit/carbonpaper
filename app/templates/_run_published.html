@@ -12,7 +12,7 @@
     <div class="wf-leads{% if leads | length > 2 %} crowded{% endif %}">
       {%- for output in leads %}
       <div class="wf-lead">
-        <span class="wf-big"><a href="{{ output.href }}"
+        <span class="wf-big"><a class="lineage-value" href="{{ output.href }}"
           title="Open the row this value was read from">{{ output.value }}</a></span>
         <span class="wf-of">{{ output.label | lower }}</span>
       </div>
@@ -58,7 +58,7 @@
       {%- for output in rest %}
       <tr>
         <th scope="row">{{ output.label }}</th>
-        <td><a class="wf-value" href="{{ output.href }}"
+        <td><a class="wf-value lineage-value" href="{{ output.href }}"
                title="Open the row this value was read from">{{ output.value }}</a></td>
       </tr>
       {%- endfor %}

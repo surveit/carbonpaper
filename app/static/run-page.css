@@ -443,12 +443,9 @@ td.row-num, th.row-num { text-align: right; color: var(--idle-bd); font-variant-
 .wf-leads { padding: 0 0 .3rem; margin: 0; }
 .wf-lead { display: flex; align-items: baseline; gap: .55rem; flex-wrap: wrap; padding: .5rem 0; }
 .wf-lead + .wf-lead { border-top: 1px solid var(--border); }
-.wf-lead .wf-big { font-size: 2.1rem; line-height: 1.05; letter-spacing: -.03em;
-  font-variant-numeric: tabular-nums; }
+.wf-lead .wf-big { font-size: 2.1rem; line-height: 1.05; letter-spacing: -.03em; }
 .wf-leads.crowded .wf-big { font-size: 1.7rem; }
 .wf-lead .wf-of { font-size: .92rem; color: var(--muted); }
-.wf-lead a { color: var(--fg); text-decoration: none; border-bottom: 2px solid var(--border); }
-.wf-lead a:hover { border-bottom-color: var(--accent); color: var(--accent); }
 
 /* A published table. The primary one is drawn — a result that is a list is only a
    claim once a reader can see what is in it — and a secondary one is its head alone. */
@@ -469,6 +466,4 @@ td.row-num, th.row-num { text-align: right; color: var(--idle-bd); font-variant-
 .wf-rest tr + tr { border-top: 1px solid var(--border); }
 .wf-rest th, .wf-rest td { padding: .32rem .6rem .32rem 0; text-align: left; vertical-align: baseline; }
 .wf-rest th { font-weight: 400; color: var(--muted); font-size: .84rem; width: 52%; }
-.wf-rest .wf-value { font-variant-numeric: tabular-nums; font-size: .93rem; white-space: nowrap;
-  color: var(--fg); text-decoration: none; border-bottom: 1px solid var(--border); }
-.wf-rest .wf-value:hover { border-bottom-color: var(--accent); color: var(--accent); }
+.wf-rest .wf-value { font-size: .93rem; white-space: nowrap; }

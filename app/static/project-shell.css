@@ -233,8 +233,6 @@
 .ov-claims { display: flex; gap: 34px; flex-wrap: wrap; padding: 16px 18px 14px; }
 .ov-claim .v { display: block; font-size: 30px; font-weight: 600; letter-spacing: -0.7px;
     line-height: 1.1; }
-.ov-claim .v a { color: var(--fg); text-decoration: none; }
-.ov-claim .v a:hover { color: var(--accent); }
 .ov-claim .l { display: block; font-size: 12.5px; color: var(--muted); max-width: 24ch; }
 
 .ov-checks { display: flex; flex-direction: column; gap: 1px; background: var(--border);
