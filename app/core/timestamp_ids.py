@@ -37,3 +37,21 @@ def now_iso() -> str:
             now = _last_stamp + timedelta(microseconds=1)
         _last_stamp = now
     return now.isoformat(timespec="microseconds")
+
+
+def read_iso_stamp(value: object) -> datetime | None:
+    """Naive stays naive: what basis a stamp without an offset carries is not known here."""
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def read_orderable_stamp(value: object) -> datetime | None:
+    """Reads a naive stamp as local, which only a sort position may assume — never a duration."""
+    moment = read_iso_stamp(value)
+    if moment is None:
+        return None
+    return moment if moment.tzinfo else moment.astimezone()

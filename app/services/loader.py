@@ -6,10 +6,12 @@ the ONE place that reaches the store for it: nothing else names the collection.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from pydantic import ValidationError
 
 from app.core.errors import DocumentNotFound
+from app.core.timestamp_ids import read_orderable_stamp
 from app.core.json_types import JsonDict
 from app.models.stage import Stage, parse_stage, stage_to_spec_dict
 from app.models.workflow import Workflow, validate_workflow
@@ -86,6 +88,12 @@ def read_stage_specs(project_id: str) -> list[JsonDict]:
         return []
     stages = document.get("stages")
     return [s for s in stages if isinstance(s, dict)] if isinstance(stages, list) else []
+
+
+def read_working_copy_edited_at(project_id: str) -> datetime | None:
+    """When the stages were last SAVED; None for a project that has never had any."""
+    raw = WorkingCopy.load_raw_or_none(project_id)
+    return None if raw is None else read_orderable_stamp(raw.get("updated_at"))
 
 
 def save_stages(project_id: str, stages: list[Stage]) -> None:
