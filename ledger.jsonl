@@ -2230,3 +2230,4 @@
 {"run_id":"33501087041","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33501087041","created":"2026-09-01T11:11:27Z","branch":"fix/lineage-drop-scope-picker","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"33501308045","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33501308045","created":"2026-09-01T11:13:20Z","branch":"feat/chat-rail-follows-links","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"33501308045","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33501308045","created":"2026-09-01T11:13:52Z","branch":"feat/chat-rail-follows-links","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"33501608726","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33501608726","created":"2026-09-01T11:16:48Z","branch":"feat/chat-rail-follows-links","event":"pull_request","contracts_kept":16,"findings":[]}
