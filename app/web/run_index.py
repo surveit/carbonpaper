@@ -176,8 +176,7 @@ class _IndexContext(BaseModel):
     ambiguous_filenames: set[str]
     run_counts: Counter[str]
     seen_versions: dict[str, VersionNote] = {}
-    # The join the lineage page's Inputs pane makes too: bytes, not a path. A run
-    # records where it read, which is often nowhere this app owns.
+    # Bytes, not a path: a run records where it read, which this app may not own.
     stored_by_sha: dict[str, ProjectFile] = {}
 
 
