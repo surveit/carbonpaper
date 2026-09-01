@@ -65,19 +65,6 @@ _RULES: tuple[ProtectedAttributeRule, ...] = (
             "three sites that used to hand-roll {stage.id: stage for stage "
             "in workflow.stages})."
         ),
-        # app/services/drafts.py's `Draft` is a SEPARATE Pydantic model (not
-        # Workflow) with its own `stages: list[Stage]` field; the module is
-        # documented as that field's sole lifecycle manager (mutable scratch
-        # space an agent/edit-buffer assembles before freezing into a
-        # version — see the module docstring). Name-based matching can't
-        # tell `d.stages` (Draft) from `workflow.stages` (Workflow) apart, so
-        # without this exemption Draft's own legitimate self-mutation
-        # (`d.stages = kept + [stage]`) would hard-fail the mutation check,
-        # which has no allowlist to absorb it. Draft's stages never belonged
-        # in this row.
-        exempt_paths=frozenset({
-            _REPO_ROOT / "app" / "services" / "drafts.py",
-        }),
     ),
 )
 
@@ -212,7 +199,7 @@ def test_find_source_files_excludes_owner_and_exempt_paths(tmp_path: Path) -> No
     owner_dir = tmp_path / "core" / "models"
     owner_dir.mkdir(parents=True)
     (owner_dir / "workflow.py").write_text("", encoding="utf-8")
-    exempt_file = tmp_path / "services" / "drafts.py"
+    exempt_file = tmp_path / "services" / "exempted.py"
     exempt_file.parent.mkdir(parents=True)
     exempt_file.write_text("", encoding="utf-8")
     other_file = tmp_path / "services" / "runner.py"

@@ -23,7 +23,6 @@ _SEAM = (
     "app/models",                  # defines both Stage and WorkflowStage
     "app/services/loader.py",      # reads the compiled stage JSON off disk
     "app/services/stage_edit.py",  # writes an author's edit of one stage back
-    "app/services/drafts.py",      # holds a spec mid-edit, before it is a workflow
     "app/services/versioning.py",  # stores and loads a version's stage list
     "app/services/project.py",     # writes the stages a new project starts with
     "app/seeds",                   # ships stage specs as authored JSON
