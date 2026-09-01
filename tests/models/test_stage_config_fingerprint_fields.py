@@ -19,6 +19,7 @@ from app.models.stages.report import ReportConfig
 from app.models.stages.sort_rank import SortRankConfig
 from app.models.stages.starlark import StarlarkFunction
 from app.models.stages.starlark_filter import StarlarkFilter
+from app.models.stages.starlark_report import StarlarkReport
 from app.models.stages.union import UnionConfig
 
 # Every class a stage's `fingerprint_blocks()` can return, so a block that
@@ -26,7 +27,7 @@ from app.models.stages.union import UnionConfig
 _CONFIG_CLASSES = [
     Connector, LLMConfig, PythonFunction, JoinConfig, AggregateConfig, QueueConfig,
     ReportConfig, UnionConfig, FilterConfig, StarlarkFunction,
-    ExplodeConfig, DedupeConfig, SortRankConfig, StarlarkFilter,
+    ExplodeConfig, DedupeConfig, SortRankConfig, StarlarkFilter, StarlarkReport,
 ]
 
 
