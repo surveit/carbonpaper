@@ -36,9 +36,9 @@ def handle_starlark_report(
     """Gets one list of row dicts per declared input, and writes through the emitter."""
     stage = narrow_stage(workflow_stage, StarlarkReportStage)
     emitter = ArtifactEmitter(prepare_artifact_dir(stage.starlark_report.destination, ctx))
-    citations = _build_citation_builtins(stage, ctx, inputs)
+    citations = _resolve_stage_citations(stage, ctx, inputs)
     failure = HostCallFailure()
-    handle = _compile(stage, emitter, citations.provider_builtins(), failure)
+    handle = _compile(stage, emitter, citations.build_citation_builtins(), failure)
     frames = [_marshal_table(inputs[ref.id]) for ref in workflow_stage.inputs]
     try:
         handle(*frames)
@@ -118,7 +118,7 @@ class _StageCitations:
         self._provider = provider
         self._unavailable_because = unavailable_because
 
-    def provider_builtins(self) -> dict[str, Callable[..., Any]]:
+    def build_citation_builtins(self) -> dict[str, Callable[..., Any]]:
         return {CITE_VALUE_BUILTIN: self._cite_value, CITE_ROW_BUILTIN: self._cite_row}
 
     def save_what_was_cited(self, stage_id: str) -> None:
@@ -140,7 +140,7 @@ class _StageCitations:
         return self._provider
 
 
-def _build_citation_builtins(
+def _resolve_stage_citations(
     stage: StarlarkReportStage, ctx: RunContext, inputs: dict[str, pa.Table]
 ) -> _StageCitations:
     """A scopeless run still runs the code — it fails only if the code cites something."""
