@@ -195,13 +195,6 @@ def test_nav_zero_lands_the_shell_collapsed():
     assert 'class="app-shell side-collapsed"' not in client.get("/project/demo/workflow").text
 
 
-def test_new_project_page_shows_mcp_connect():
-    resp = client.get("/project/new")
-    assert resp.status_code == 200
-    assert "claude mcp add" in resp.text
-    assert "carbon_paper" in resp.text
-
-
 def test_display_cell_serializes_datetimes():
     """A pd.Timestamp the Jinja `tojson` filter cannot serialize 500s the review-queue page."""
     import datetime as dt

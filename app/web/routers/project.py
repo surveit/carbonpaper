@@ -1,5 +1,3 @@
-# Route order matters: the literal /project/new is declared on THIS router BEFORE
-# the /project/{project_id} section routes, so "new" is never captured as a project.
 from __future__ import annotations
 
 import json
@@ -29,7 +27,7 @@ from app.services import (
 from app.services.loader import list_parsed_stages, resolve_function_code
 from app.services.workspace import LOADER_BOOKKEEPING_KEYS
 from app.web.project_overview import build_project_overview
-from app.web.breadcrumbs import build_home_crumbs, build_version_crumbs, build_workflow_crumbs
+from app.web.breadcrumbs import build_version_crumbs, build_workflow_crumbs
 from app.web.config import templates
 from app.runtime.stage_tests import run_stage_tests
 from app.web.stage_test_views import build_certification, shape_test_views
@@ -81,49 +79,6 @@ async def set_project_private(project_name: str, private: str = Form("")):
 async def delete_project(project_name: str):
     project.delete_project(validate_project_or_404(project_name))
     return RedirectResponse("/", status_code=303)
-
-
-# ─── New project (paste doc → project) ───────────────────────────────────────
-# Create a project working copy directly under examples/<name>/. The DIRECTORY is the
-# authoring session (no separate compilation id): the pasted document lands at
-# examples/<name>/document.md and the chat transcript at chat.jsonl, so the gated
-# authoring streams below key off the project NAME, not a comp id.
-#
-# DECLARED HERE, before the /project/{project_id} section routes below, so the literal
-# /project/new is matched first (FastAPI matches in declaration order) — otherwise the
-# {project_id} catch-all would capture "new" as a project name.
-
-
-@router.get("/project/new", response_class=HTMLResponse)
-async def new_project_form(request: Request):
-    return templates.TemplateResponse(
-        request,
-        "compile_new_methodology.html",
-        {
-            "crumbs": build_home_crumbs("New project"),
-            "default_name": "",
-            "default_doc": "",
-        },
-    )
-
-
-@router.post("/project/new")
-async def new_project_submit(
-    name: str = Form(...),
-    doc_text: str = Form(...),
-    model: str = Form("sonnet"),
-):
-    try:
-        project_id = project.create_project(
-            name, doc_text, model=model, source="pasted document").id
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    doc = methodology.read_methodology(project_id) or doc_text
-    # Kick off data-model generation. It runs as a LIVE chat turn; land the user on it
-    # so they watch the model being authored (it streams while it runs, then persists
-    # as the session's transcript).
-    session_id = generation.start_generation(project_id, document=doc, model=model)
-    return RedirectResponse(url=f"/chat/{session_id}", status_code=303)
 
 
 @router.post("/project/{project_name}/generate")
