@@ -8,8 +8,8 @@
   produced and the checks a reader needs before treating them as the answer — a cap, a
   test run, an unfinished run, no figures at all.
 
-  A queue row is a sentence and a link. Reviewing and running are app screens; every
-  other row opens a chat that already carries the project and the task.
+  A queue row is a sentence and a link to the object it is about. The chat is a second,
+  marked link beside it, and absent where the work is the reader's own.
 
   Context: state = project_view.shell_state(...), overview = build_project_overview(...).
 #}
@@ -114,15 +114,13 @@
       {% for row in overview.queue %}
       <div class="ov-q-row">
         <span class="ov-q-n tone-{{ row.tone }}">{{ row.count }}</span>
-        <span>
-          <span class="ov-q-what">{{ row.what }}</span>
-          <span class="ov-q-why">{{ row.why }}</span>
-          {% if row.opens_a_chat() %}
-          {{ agent_link(row.href, row.label) }}
-          {% else %}
-          <a class="ov-go" href="{{ row.href }}">{{ row.label }}</a>
-          {% endif %}
+        <span class="ov-q-body">
+          <a class="ov-q-open" href="{{ row.href }}" title="{{ row.label }}">
+            <span class="ov-q-what">{{ row.what }}</span>
+            <span class="ov-q-why">{{ row.why }}</span></a>
+          {% if row.ask %}{{ agent_link(row.ask.href, row.ask.label) }}{% endif %}
         </span>
+        <span class="ov-q-arrow" aria-hidden="true">→</span>
       </div>
       {% endfor %}
     </div>
