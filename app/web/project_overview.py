@@ -4,10 +4,10 @@ from __future__ import annotations
 from urllib.parse import urlencode
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from app.web.figure_text import render_figure
-from app.core.run_status import RunStatus
+from app.core.run_status import RunStatus, StageStatus
 from app.models.records.workflow_version import WorkflowVersion
 from app.services import methodology, run as run_service, versioning
 from app.services.errors import WorkflowLoadError
@@ -74,10 +74,24 @@ class Deliverable(BaseModel):
 
 
 class QueueRow(ActionLink):
+    # 1: nothing moves until a person acts. 2: it stopped and will not restart itself.
+    rank: Literal[1, 2]
     count: str
     tone: Literal["good", "warn", "bad", "info", "idle"]
     what: str
     why: str
+    # Absent where the work is the reader's own, as deciding a queued row is.
+    ask: ActionLink | None = None
+
+    @model_validator(mode="after")
+    def _the_row_goes_to_a_screen_and_only_the_ask_to_a_chat(self) -> QueueRow:
+        if self.opens_a_chat():
+            raise ValueError(f"queue row '{self.what}' links to {self.href}: a row is "
+                             "navigation, so it names an app screen and the chat is `ask`")
+        if self.ask is not None and not self.ask.opens_a_chat():
+            raise ValueError(f"queue row '{self.what}' offers {self.ask.href} as its ask, "
+                             "which is not a chat — build it with build_chat_href")
+        return self
 
 
 class ProjectOverview(BaseModel):
@@ -226,13 +240,12 @@ def build_queue(
 ) -> list[QueueRow]:
     found = [
         find_reviews_waiting(project_id, rows),
-        find_runs_running(project_id, rows),
-        find_newest_version_never_run(project_id, rows, versions),
-        find_runs_that_errored(project_id, rows),
-        find_missing_methodology(project_id),
         find_unreadable_version(project_id, versions),
+        find_newest_version_never_run(project_id, rows, versions),
+        find_missing_methodology(project_id),
+        *find_runs_that_errored(project_id, rows),
     ]
-    return [row for row in found if row is not None]
+    return sorted((row for row in found if row is not None), key=lambda row: row.rank)
 
 
 def find_reviews_waiting(project_id: str, rows: list[RunIndexRow]) -> QueueRow | None:
@@ -240,7 +253,7 @@ def find_reviews_waiting(project_id: str, rows: list[RunIndexRow]) -> QueueRow |
     if not waiting:
         return None
     return QueueRow(
-        count=str(len(waiting)), tone="info",
+        rank=1, count=str(len(waiting)), tone="info",
         what=f"run{'s' if len(waiting) != 1 else ''} halted for review",
         why="a person has to decide the queued rows before the stages behind them run",
         label="Review", href=f"/project/{project_id}/runs?status=awaiting_review",
@@ -252,10 +265,12 @@ def find_unreadable_version(project_id: str, versions: VersionsRead) -> QueueRow
     if versions.problem is None:
         return None
     return QueueRow(
-        count="!", tone="bad", what="A stored version cannot be read",
+        rank=1, count="!", tone="bad", what="A stored version cannot be read",
         why=versions.problem,
-        label="Repair it",
-        href=build_chat_href(project_id, f"A stored version will not parse: {versions.problem}"),
+        label="Versions", href=f"/project/{project_id}/workflow/versions",
+        ask=ask_the_agent(
+            project_id, "Repair it", f"A stored version will not parse: {versions.problem}"
+        ),
     )
 
 
@@ -269,49 +284,57 @@ def find_newest_version_never_run(
     if any(row.version and row.version.version_id == newest.version_id for row in rows):
         return None
     return QueueRow(
-        count="", tone="warn", what="The newest version has never run",
+        rank=1, count="", tone="warn", what="The newest version has never run",
         why=(newest.message or newest.version_id),
-        label="Run it",
-        href=build_chat_href(project_id, _RUN_NEWEST),
+        label="Start a run", href=f"/project/{project_id}/runs/new",
+        ask=ask_the_agent(project_id, "Run it", _RUN_NEWEST),
     )
 
 
-def find_runs_running(project_id: str, rows: list[RunIndexRow]) -> QueueRow | None:
-    """Elapsed is the only tell: nothing records a heartbeat, so a crashed run reads as running."""
-    running = [row for row in rows if row.status == RunStatus.RUNNING]
-    if not running:
-        return None
-    longest = max((row.duration or "" for row in running), key=len)
-    return QueueRow(
-        count=str(len(running)), tone="info",
-        what=f"run{'s' if len(running) != 1 else ''} running",
-        why=f"the longest for {longest}" if longest else "elapsed unrecorded",
-        label="Watch them", href=f"/project/{project_id}/runs?status=running",
-    )
-
-
-def find_runs_that_errored(project_id: str, rows: list[RunIndexRow]) -> QueueRow | None:
+def find_runs_that_errored(project_id: str, rows: list[RunIndexRow]) -> list[QueueRow]:
+    """One row per input set: an errored run never clears itself, so every one would stay."""
     errored = [row for row in rows if row.status == RunStatus.ERRORS]
-    if not errored:
-        return None
+    newest_per_input: dict[str, RunIndexRow] = {}
+    for row in errored:
+        newest_per_input.setdefault(row.input_key, row)
+    return [build_errored_row(project_id, row) for row in newest_per_input.values()]
+
+
+def build_errored_row(project_id: str, row: RunIndexRow) -> QueueRow:
+    stage = name_the_stage_that_errored(row)
     return QueueRow(
-        count=str(len(errored)), tone="idle",
-        what=f"run{'s' if len(errored) != 1 else ''} errored",
-        why=f"the last on {(errored[0].started_at or 'an unrecorded date')[:10]}",
-        label="Explain the errors",
-        href=build_chat_href(project_id, _WHY_ERRORED),
+        rank=2, count="✕", tone="idle",
+        what=f"{row.name or row.run_id} errored{f' at {stage}' if stage else ''}",
+        why=describe_other_runs_on_these_inputs(row),
+        label="Open the run", href=f"/project/{project_id}/runs/{row.run_id}",
+        ask=ask_the_agent(project_id, "Explain it", f"Why did the run {row.run_id} error?"),
     )
+
+
+def name_the_stage_that_errored(row: RunIndexRow) -> str:
+    if row.strip is None:
+        return ""
+    errored = [square for square in row.strip.squares if square.status == StageStatus.ERROR]
+    return errored[0].stage_id if errored else ""
+
+
+def describe_other_runs_on_these_inputs(row: RunIndexRow) -> str:
+    started = (row.started_at or "an unrecorded date")[:10]
+    earlier = row.runs_on_these_inputs - 1
+    if earlier < 1:
+        return started
+    return f"{started}, and {earlier} earlier run{'s' if earlier != 1 else ''} on these inputs"
 
 
 def find_missing_methodology(project_id: str) -> QueueRow | None:
     if methodology.exists(project_id):
         return None
     return QueueRow(
-        count="", tone="warn", what="No methodology document",
+        rank=1, count="", tone="warn", what="No methodology document",
         why="a review packet would open on a blank page, and nothing states what this "
             "project establishes",
-        label="Write the document",
-        href=build_chat_href(project_id, _WRITE_METHODOLOGY),
+        label="Methodology", href=f"/project/{project_id}/methodology",
+        ask=ask_the_agent(project_id, "Write the document", _WRITE_METHODOLOGY),
     )
 
 

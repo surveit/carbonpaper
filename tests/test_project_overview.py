@@ -1,12 +1,17 @@
 """The latest-run card: the figures it produced, and what a reader must know about them."""
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
 from app.core.run_status import RunStatus
 from app.models.claims import StageOutputCellCitation
 from app.models.records.run_manifest import RunManifest
 from app.models.records.workflow_output import WorkflowOutput
 from app.models.run_parameters import RunParameters
-from app.web.project_overview import build_deliverable, build_queue, read_versions
+from app.web.project_overview import (
+    QueueRow, build_chat_href, build_deliverable, build_queue, read_versions,
+)
 from app.web.run_index import build_run_index_rows
 
 _PROJECT = "venezuela_lobbying_q1_q2_2026"
@@ -89,12 +94,30 @@ def test_a_run_that_wrote_no_figure_says_why_none_can_be_added_now():
     assert warning.action.opens_a_chat()
 
 
-def test_a_queue_row_that_is_not_an_app_screen_opens_a_chat_carrying_the_task():
+def test_an_errored_run_is_its_own_row_going_to_that_run():
     _record_run(status=RunStatus.ERRORS)
     errored = [row for row in build_queue(_PROJECT, _rows(), read_versions(_PROJECT))
-               if row.what.endswith("errored")]
-    assert errored[0].opens_a_chat()
-    assert "task=" in errored[0].href
+               if _RUN in row.what]
+    assert errored[0].href.endswith(f"/runs/{_RUN}") and not errored[0].opens_a_chat()
+    assert errored[0].ask is not None and _RUN in errored[0].ask.href
+
+
+def test_a_row_may_not_send_the_reader_to_a_chat():
+    with pytest.raises(ValidationError, match="a row is navigation"):
+        QueueRow(rank=2, count="", tone="idle", what="w", why="y",
+                 label="Explain it", href=build_chat_href(_PROJECT, "why?"))
+
+
+def test_the_review_row_offers_no_agent_because_the_deciding_is_the_readers():
+    _record_run(status=RunStatus.AWAITING_REVIEW)
+    queue = build_queue(_PROJECT, _rows(), read_versions(_PROJECT))
+    assert [row for row in queue if row.label == "Review"][0].ask is None
+
+
+def test_the_queue_puts_what_blocks_a_person_above_what_stopped():
+    _record_run(status=RunStatus.ERRORS)
+    queue = build_queue(_PROJECT, _rows(), read_versions(_PROJECT))
+    assert [row.rank for row in queue] == sorted(row.rank for row in queue)
 
 
 def test_the_run_rows_link_to_the_runs_they_are_about():
