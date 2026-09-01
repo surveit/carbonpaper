@@ -17,6 +17,7 @@ from app.models.stages.join import EnrichStage, ExpandStage
 from app.web.stage_prose import say_what_a_stage_did
 from app.models.stages.llm_transform import LLMTransformStage
 from app.models.stages.signature import list_read_column_names
+from app.models.stages.signature import ReplacesSignature
 from app.models.stages.starlark import StarlarkRowFunctionStage
 from app.runtime.lineage import EdgeKind
 from app.services.loader import resolve_function_code
@@ -117,6 +118,14 @@ def _list_reads_at(stages: dict[str, WorkflowStage], stage_id: str) -> frozenset
     return frozenset(list_read_column_names(workflow_stage.stage))
 
 
+def _writes_every_column_at(stages: dict[str, WorkflowStage], stage_id: str) -> bool:
+    """A replacing stage passes nothing through, so no parent row is needed to mark it."""
+    workflow_stage = stages.get(stage_id)
+    return workflow_stage is not None and isinstance(
+        workflow_stage.stage.signature, ReplacesSignature
+    )
+
+
 def _build_node(
     i: int, chrono: list[dict[str, Any]], stages: dict[str, WorkflowStage],
     links: PanelLinks, truncated: bool,
@@ -127,7 +136,7 @@ def _build_node(
     diff = build_row_diff(
         step["row"],
         parent["row"] if parent else None,
-        is_origin=(i == 0 and not truncated),
+        writes_every_column=_writes_every_column_at(stages, step["stage_id"]),
         read=_list_reads_at(stages, step["stage_id"]),
     )
     return {
