@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from app.web.figure_text import GROUP_MARK, render_figure
+from app.web.figure_text import render_figure
 
 _CLIENT = Path(__file__).resolve().parents[1] / "app" / "static" / "figure_text.js"
 
@@ -22,7 +22,7 @@ def test_a_bool_is_not_a_figure():
 
 @pytest.mark.parametrize("value", _CASES)
 def test_grouping_keeps_every_digit(value):
-    assert render_figure(value).replace(GROUP_MARK, "") == str(value)
+    assert render_figure(value).replace(",", "") == str(value)
 
 
 def test_four_digits_stay_bare():
@@ -30,10 +30,8 @@ def test_four_digits_stay_bare():
     assert render_figure(10000) != "10000"
 
 
-def test_the_mark_is_not_a_plain_space():
-    """Else a grouped number would collide with string data in the row diff."""
-    assert GROUP_MARK != " "
-    assert render_figure("10 000") == "10 000"
+def test_a_string_is_never_grouped():
+    assert render_figure("10000") == "10000"
 
 
 @pytest.mark.parametrize("value", _CASES)

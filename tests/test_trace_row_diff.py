@@ -72,3 +72,10 @@ def test_the_payload_names_each_state_as_a_plain_string():
     assert payload["columns"] == [
         {"name": "a", "state": "changed", "text": "x", "was": "y", "inert": False}]
     assert (payload["added"], payload["changed"], payload["dropped"]) == (0, 1, 0)
+
+
+def test_parsing_a_grouped_string_to_a_number_still_reads_as_changed():
+    diff = build_row_diff({"paid": 10000}, {"paid": "10,000"}, is_origin=False)
+    column = diff.columns[0]
+    assert column.state is CellDiffState.changed
+    assert (column.text, column.was) == ("10,000", "10,000")

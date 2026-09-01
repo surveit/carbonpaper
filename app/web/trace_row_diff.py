@@ -86,15 +86,20 @@ def render_cell(value: Any) -> str:
 def _compare_column(
     name: str, value: Any, parent_row: dict[str, Any], read: frozenset[str]
 ) -> RowColumn:
-    """Compared as RENDERED text: a difference nobody can see is not marked."""
+    """Compared unformatted, so a grouped number never equals the string beside it."""
     text = render_cell(value)
     if name not in parent_row:
         return RowColumn(name=name, state=CellDiffState.added, text=text, was=None)
-    was = render_cell(parent_row[name])
-    if was == text:
+    if _render_exactly(parent_row[name]) == _render_exactly(value):
         return RowColumn(name=name, state=CellDiffState.carried, text=text, was=None,
                          read=name in read)
-    return RowColumn(name=name, state=CellDiffState.changed, text=text, was=was)
+    return RowColumn(name=name, state=CellDiffState.changed, text=text,
+                     was=render_cell(parent_row[name]))
+
+
+def _render_exactly(value: Any) -> str:
+    """The comparison key: grouping would make the string "10,000" equal the number."""
+    return "" if value is None else str(value)
 
 
 def _count_columns(columns: list[RowColumn]) -> RowDiff:

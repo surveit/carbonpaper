@@ -106,14 +106,14 @@ def test_the_link_shows_the_abbreviated_size() -> None:
     html = _render(_section(_union()))
 
     assert "45.1k" in html
-    assert "45\u202f061 rows × 15 columns" in html
+    assert "45,061 rows × 15 columns" in html
 
 
 def test_the_exact_count_rides_on_the_links_own_title() -> None:
     html = _render(_section(_union()))
 
     [title] = re.findall(r'<a class="guide-output"[^>]*title="([^"]*)"', html)
-    assert title.startswith("45\u202f061 rows × 15 columns")
+    assert title.startswith("45,061 rows × 15 columns")
 
 
 @pytest.mark.parametrize(

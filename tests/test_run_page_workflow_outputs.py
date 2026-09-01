@@ -77,7 +77,7 @@ def test_two_outputs_off_one_row_link_to_their_own_columns():
 def test_another_runs_outputs_are_not_this_runs():
     _publish("external-spend", "Paid to outside firms", 4461000.0)
     _publish("external-spend", "Paid to outside firms", 5000000.0, run_id="20260806T163146")
-    assert [o.value for o in _read().figures] == ["4\u202f461\u202f000.0"]
+    assert [o.value for o in _read().figures] == ["4,461,000.0"]
 
 
 def test_a_run_that_published_nothing_shows_nothing():
@@ -86,7 +86,7 @@ def test_a_run_that_published_nothing_shows_nothing():
 
 
 def test_a_number_reads_with_group_marks():
-    assert render_output_value(4461000.0) == "4\u202f461\u202f000.0"
+    assert render_output_value(4461000.0) == "4,461,000.0"
     assert render_output_value(24) == "24"
 
 
