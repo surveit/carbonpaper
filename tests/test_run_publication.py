@@ -98,3 +98,16 @@ def test_publishing_a_refused_run_raises_and_records_nothing():
     with pytest.raises(RunNotPublishable):
         publish_run(_PROJECT, _RUN)
     assert read_published_run(_PROJECT, _RUN) is None
+
+
+def test_a_running_run_is_not_said_to_have_ended():
+    _record_run(status=RunStatus.RUNNING)
+    _publish_a_figure()
+    refusals = find_publish_refusals(_PROJECT, _RUN)
+    assert [r.headline for r in refusals] == ["This run has not completed."]
+
+
+def test_a_run_that_really_ended_says_how():
+    _record_run(status=RunStatus.ERRORS)
+    _publish_a_figure()
+    assert find_publish_refusals(_PROJECT, _RUN)[0].headline == "This run ended errors."

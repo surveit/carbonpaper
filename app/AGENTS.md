@@ -56,7 +56,9 @@ Clicking one opens `/chat/agent/editing/new?project_id=…&task=…`. A `task` s
 agent's opening turn, and the panel sends it as the reader's own first message, so the
 agent is working by the time the page settles rather than greeting and waiting.
 
-- `/project/<m>/runs`, `/runs/<id>` — run history + detail. `/runs/new` is the
+- `/project/<m>/runs`, `/runs/<id>` — run history + detail. `?status=` narrows the list to
+  one run status, its picker built from the rows the current view holds so it never offers
+  a status with nothing behind it; the overview's run rows link straight to their own. `/runs/new` is the
   run-launch form (version picker, one path field + row cap per file input, and an
   **Advanced** fold holding the row-level cache checkbox) — the one surface where a run
   is configured, which the history page's ▶ New run, the Workflow page's ▶ Run

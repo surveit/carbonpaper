@@ -107,6 +107,18 @@
     {% endfor %}
   </select>
   {% endcall %}
+  {# Off the rows this view holds, so it never offers a status with nothing behind it.
+     `view` rides along: narrowing by status must not silently drop back to production. #}
+  {% call picker("Filter runs by status", size="sm") %}
+  <select id="runs-status" class="picker-native runs-view-select"
+          onchange="location.href='/project/{{ state.id }}/runs?view={{ view }}&status=' + this.value">
+    {% for choice in status_choices %}
+    <option value="{{ choice.status }}" data-name="{{ choice.label }}"
+            data-side="{{ choice.count }}"
+            {% if status_filter == choice.status %}selected{% endif %}>{{ choice.label }} ({{ choice.count }})</option>
+    {% endfor %}
+  </select>
+  {% endcall %}
   {% if runs %}
   <label class="runs-filter">Filter
     <input type="search" id="runs-filter" autocomplete="off"

@@ -238,7 +238,7 @@ def find_reviews_waiting(project_id: str, rows: list[RunIndexRow]) -> QueueRow |
         count=str(len(waiting)), tone="info",
         what=f"run{'s' if len(waiting) != 1 else ''} halted for review",
         why="a person has to decide the queued rows before the stages behind them run",
-        label="Review", href=f"/project/{project_id}/runs", kind="go",
+        label="Review", href=f"/project/{project_id}/runs?status=awaiting_review", kind="go",
     )
 
 
@@ -282,7 +282,7 @@ def find_runs_running(project_id: str, rows: list[RunIndexRow]) -> QueueRow | No
         count=str(len(running)), tone="info",
         what=f"run{'s' if len(running) != 1 else ''} running",
         why=f"the longest for {longest}" if longest else "elapsed unrecorded",
-        label="Watch them", href=f"/project/{project_id}/runs", kind="go",
+        label="Watch them", href=f"/project/{project_id}/runs?status=running", kind="go",
     )
 
 

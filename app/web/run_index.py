@@ -83,6 +83,12 @@ class RunViewChoice(BaseModel):
     count: int
 
 
+class RunStatusChoice(BaseModel):
+    status: str
+    label: str
+    count: int
+
+
 def build_run_index_rows(
     project_id: str, *, view: str | None = None, input_key: str | None = None,
     file_sha256: str | None = None,
@@ -105,6 +111,15 @@ def build_run_view_choices(project_id: str) -> list[RunViewChoice]:
     return [
         RunViewChoice(view=view, label=_RUN_VIEW_LABELS[view], count=counts[view])
         for view in RUN_VIEWS
+    ]
+
+
+def build_run_status_choices(rows: list[RunIndexRow]) -> list[RunStatusChoice]:
+    """Off the rows on the page, so the list never offers a status this view cannot show."""
+    counts = Counter(row.status for row in rows)
+    return [RunStatusChoice(status="", label="Any status", count=len(rows))] + [
+        RunStatusChoice(status=status, label=describe_run_outcome(status), count=count)
+        for status, count in sorted(counts.items())
     ]
 
 

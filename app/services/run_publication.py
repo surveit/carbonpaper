@@ -89,10 +89,17 @@ def find_incomplete_refusal(manifest: dict[str, Any]) -> PublishRefusal | None:
         return None
     return PublishRefusal(
         kind="incomplete",
-        headline=f"This run ended {status or 'unknown'}.",
+        headline=_describe_incompleteness(status),
         detail="Only a run that finished every stage cleanly can be the source of a published "
                "figure.",
     )
+
+
+def _describe_incompleteness(status: object) -> str:
+    """A running run has not ENDED anything, so the word every other status takes is wrong."""
+    if status == RunStatus.RUNNING:
+        return "This run has not completed."
+    return f"This run ended {status or 'unknown'}."
 
 
 def find_missing_figure_refusal(run_id: str) -> PublishRefusal | None:

@@ -109,3 +109,12 @@ def test_a_seeded_chat_link_opens_with_no_greeting_and_the_task_as_the_first_mes
     assert registry.render_opening_turn(
         "editing", {"project_id": _PROJECT, "base_url": "http://x/"}
     ).text
+
+
+def test_the_run_rows_link_to_the_runs_they_are_about():
+    _record_run(status=RunStatus.AWAITING_REVIEW)
+    from app.web.run_index import build_run_index_rows
+    rows = [r for r in build_run_index_rows(_PROJECT) if not r.is_test_run]
+    queue = build_queue(_PROJECT, rows, read_versions(_PROJECT))
+    review = [row for row in queue if row.label == "Review"]
+    assert review[0].href.endswith("/runs?status=awaiting_review")
