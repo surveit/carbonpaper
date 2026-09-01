@@ -7,6 +7,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 {% include "_stylesheets.html" %}
 <script src="/static/tooltip.js"></script>
+{# The fetched table is the run page's, and these are the scripts it expects.
+   `base` because a frame is what holds it: a cell opens its lineage as a page. #}
+<base target="_top">
+<script src="/static/cell-lineage.js"></script>
+<script src="/static/cell-expand.js"></script>
 <style>
 body { padding: 14px 18px 28px; }
 </style></head><body>

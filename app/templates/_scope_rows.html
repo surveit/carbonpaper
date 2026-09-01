@@ -1,0 +1,8 @@
+{# The stage data table, shell-less, for the Relevant rows tab. Whatever the run
+   page shows for this stage, cut to the rows the figure came through: the diff
+   where one exists (which is where the colours are), the plain output otherwise. #}
+{% if diff %}{% include "_stage_diff.html" %}
+{% else %}
+<p class="muted"><em>No comparison against <code>{{ stage.stage_id }}</code>'s input, so
+  this stage's own table is the whole of what it says.</em></p>
+{% endif %}

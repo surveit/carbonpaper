@@ -20,6 +20,7 @@
   var showAll = false;
   var openTab = "rows";
   var panels = {};
+  var rowTables = {};
 
   var SEP = " ";
   // Says the link leaves this page, the way it does anywhere else.
@@ -422,32 +423,41 @@
     }).filter(function (fact) { return fact && fact.reason === "code"; });
   }
 
+  // The rows are the run page's own table for the picked stage, fetched whole. The
+  // colours, the marks and the +/- are that table's; nothing here re-decides them.
   function renderTable() {
     if (pickedFigure()) { renderCitedRow(); return; }
-    var wanted = new Set(selected());
-    var head = headOf(D.columns);
-    var body = D.rows.filter(function (r) {
-      // Drilled, the drawn ordinals are synthetic counts; a sample row is placed by
-      // the path it is on instead.
-      if (!D.drilled) return wanted.has(r.ordinal);
-      if (!pickedNode) return true;
-      return nodeKeyForPath(pickedNode.split(SEP)[0], r.branch_path_index) === pickedNode;
-    }).map(function (r) {
-      return '<tr class="' + (r.ordinal === pickedRow ? "is-on" : "") +
-        '" data-row="' + r.ordinal + '">' + rowOf(r, D.columns);
-    }).join("");
+    var stage = pickedStage() || D.covers.at_stage;
     var host = byId("scope-table");
-    host.innerHTML = tableOf(D.covers.at_stage) + "<thead>" + head + "</thead><tbody>" +
-      body + "</tbody></table>";
-    // The ordinal draws the row's path on the map above; the cells beside it
-    // leave for the lineage of what they hold.
-    host.querySelectorAll("tbody tr .scope-num").forEach(function (num) {
-      num.onclick = function () {
-        var ordinal = Number(num.parentNode.dataset.row);
-        pickedRow = pickedRow === ordinal ? null : ordinal;
-        render();
-      };
+    if (host.dataset.stage === stage) return;
+    host.dataset.stage = stage;
+    host.innerHTML = '<p class="muted">loading\u2026</p>';
+    loadRows(stage).then(function (html) {
+      if (host.dataset.stage !== stage) return;
+      host.innerHTML = html;
+    }).catch(function (failure) {
+      if (host.dataset.stage !== stage) return;
+      host.innerHTML = '<p class="muted">could not read ' + esc(stage) +
+        " (" + esc(failure.message) + ")</p>";
     });
+  }
+
+  function loadRows(stageId) {
+    if (!rowTables[stageId]) {
+      rowTables[stageId] = fetch(rowsAddress(stageId)).then(function (reply) {
+        if (!reply.ok) throw new Error(String(reply.status));
+        return reply.text();
+      });
+    }
+    return rowTables[stageId];
+  }
+
+  function rowsAddress(stageId) {
+    var query = new URLSearchParams({
+      stage: D.citation.stage_id, row: D.citation.row_ordinal,
+      column: D.citation.column, at: stageId });
+    return "/project/" + encodeURIComponent(D.project_id) + "/runs/" +
+      encodeURIComponent(D.run_id) + "/scope/rows?" + query.toString();
   }
 
   // The figure's node is ONE output row, not a slice of what fed it.
@@ -472,6 +482,7 @@
 
   function renderCitedRow() {
     var row = D.cited_row;
+    byId("scope-table").dataset.stage = "";
     byId("scope-table").innerHTML = tableOf(D.citation.stage_id) + "<thead>" +
       headOf(row.columns) + '</thead><tbody><tr data-row="' + row.ordinal + '">' +
       rowOf(row, row.columns) + "</tbody></table>";

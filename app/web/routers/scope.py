@@ -89,6 +89,18 @@ async def scope_panel(request: Request, project_id: str, run_id: str,
     )
 
 
+@router.get(f"{_SCOPE_PATH}/rows", response_class=HTMLResponse)
+async def scope_rows(request: Request, project_id: str, run_id: str,
+                     stage: str, row: int, at: str):
+    """One stage's own data table, cut to the rows the cited figure came through."""
+    try:
+        table = scope_view.load_the_rows_that_reached(project_id, run_id, stage, row, at)
+    except (MissingLineage, StageNotInRun, RowOutOfRange,
+            RunVersionUnresolvableError) as no_rows:
+        return HTMLResponse(f"<p class='muted'>{no_rows}</p>")
+    return templates.TemplateResponse(request, "_scope_rows.html", table)
+
+
 def _cite(run_id: str, stage: str, row: int, column: str) -> StageOutputCellCitation:
     # The cell's value is read back from the frame, so the caller need not carry it.
     return StageOutputCellCitation(run_id=run_id, stage_id=stage, row_ordinal=row,
