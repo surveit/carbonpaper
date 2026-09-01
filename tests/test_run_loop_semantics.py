@@ -13,7 +13,6 @@ from app.main import app
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
 from app.services import run as run_service
-from app.services import versioning
 from app.services.errors import WorkflowLoadError
 from app.services.loader import load_workflow
 from app.services.project import save_working_copy_as_version
@@ -37,8 +36,7 @@ _SCORED_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True},
 
 
 def _seed_version(root):
-    vid = save_working_copy_as_version(root.name, message="test seed", reviewer="test").version_id
-    versioning.publish_version(root.name, vid, reviewer="human")
+    vid = save_working_copy_as_version(root.name, message="test seed").version_id
     return vid
 
 

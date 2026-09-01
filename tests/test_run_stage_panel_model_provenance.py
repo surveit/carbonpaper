@@ -14,7 +14,6 @@ from app.core.agent.usage import LlmUsage
 from app.main import app
 from app.runtime.runner import execute_run
 from app.services import project as project_service
-from app.services import versioning
 from conftest import pinned_stages
 from stage_seed import add_stage
 
@@ -68,8 +67,7 @@ def _build_project(
 
     monkeypatch.setattr(
         "app.runtime.stages.llm_transform.call_llm_batch", fake_call_llm_batch)
-    version_id = project_service.save_working_copy_as_version(pdir.name, message="v1", reviewer="test").version_id
-    versioning.publish_version(pdir.name, version_id, reviewer="test")
+    project_service.save_working_copy_as_version(pdir.name, message="v1")
     return pdir
 
 

@@ -13,7 +13,6 @@ from fastapi.testclient import TestClient
 import app.services.run as run_service
 from app.main import app
 from app.services.project import create_project
-from app.services.versioning import list_versions
 from app.services import workspace
 from stage_seed import add_stage
 from run_seed import manifest_exists, read_manifest
@@ -45,18 +44,11 @@ def assert_run_ok(status: dict, project_dir, run_id: str) -> None:
     )
 
 
-def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path):
+def test_offline_journey_reaches_its_artifact(journey_project, tmp_path):
     # Version the working copy through the web endpoint.
     resp = client.post(f"/project/{journey_project.name}/version", data={"message": "first version"})
     assert resp.status_code == 200, resp.text
     assert resp.json()["ok"] is True, resp.text
-
-    # Publish it — the human-approval signal. A run no longer requires it, but it
-    # stays in the journey: author -> version -> publish -> run -> artifact.
-    version_id = list_versions(journey_project.name)[0].version_id
-    resp = client.post(f"/project/{journey_project.name}/versions/{version_id}/publish",
-                       follow_redirects=False)
-    assert resp.status_code == 303, resp.text
 
     # The run form offers a binding field for the file input stage.
     resp = client.get(f"/project/{journey_project.name}/runs/new")
@@ -105,11 +97,6 @@ def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path)
 
 def test_report_stage_records_no_output_validation_issue(journey_project):
     client.post(f"/project/{journey_project.name}/version", data={"message": "first version"})
-    version_id = list_versions(journey_project.name)[0].version_id
-    resp = client.post(f"/project/{journey_project.name}/versions/{version_id}/publish",
-                       follow_redirects=False)
-    assert resp.status_code == 303, resp.text
-
     resp = client.post(f"/project/{journey_project.name}/run", follow_redirects=False)
     assert resp.status_code == 303, resp.text
     run_id = resp.headers["location"].rstrip("/").rsplit("/", 1)[-1]

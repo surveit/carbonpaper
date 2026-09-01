@@ -41,7 +41,7 @@ def run_id(projects_root):
                                   "columns": [column("amount", "int", False)]}],
                        "adds": [column("doubled", "int", False)], "rewrites": []}},
     ])
-    save_working_copy_as_version(PROJECT, message="fixture", reviewer="test")
+    save_working_copy_as_version(PROJECT, message="fixture")
     return str(run_service.execute(PROJECT)["run_id"])
 
 

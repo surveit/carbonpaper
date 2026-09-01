@@ -147,7 +147,7 @@ def _stages_by_id(view) -> dict:
 
 
 def _version_with_guide(project_dir: Path, **overrides) -> str:
-    version = create_version_from_stages(project_dir.name, _STAGES, message="v1", reviewer="ada"
+    version = create_version_from_stages(project_dir.name, _STAGES, message="v1"
     )
     guide = ReviewGuide(
         project=project_dir.name,
@@ -162,7 +162,7 @@ def _version_with_guide(project_dir: Path, **overrides) -> str:
 # ── no guide, no panel ───────────────────────────────────────────────────────
 
 def test_no_view_when_the_pinned_version_carries_no_guide(project_dir):
-    version = create_version_from_stages(project_dir.name, _STAGES, message="v1", reviewer="ada"
+    version = create_version_from_stages(project_dir.name, _STAGES, message="v1"
     )
     assert build_run_guide_view("demo", _manifest(version.version_id)) is None
 

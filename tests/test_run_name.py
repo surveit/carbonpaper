@@ -99,7 +99,7 @@ def runnable_project(tmp_path: Path, monkeypatch):
                      "signature": {"form": "replaces", "produces": _ROWS_SCHEMA},
                      "connector": {"kind": "file",
                                    "params": {"path": str(data), "format": "csv"}}})
-    save_working_copy_as_version(proj.name, message="v1", reviewer="test")
+    save_working_copy_as_version(proj.name, message="v1")
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(run_service, "_run_in_background",
                         lambda target, *args: target(*args))

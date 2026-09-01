@@ -20,7 +20,7 @@ def save_working_copy_as_version(
         if parent_version is not None:
             versioning.validate_version_exists(project_id, parent_version)
         version = project_service.save_working_copy_as_version(
-            project_id, message=message, reviewer="agent", parent_version=parent_version
+            project_id, message=message, parent_version=parent_version
         )
     except STAGE_TOOL_ERRORS as exc:
         return {"ok": False, "issues": [str(exc)]}

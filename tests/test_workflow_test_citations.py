@@ -48,7 +48,7 @@ def demo(tmp_path, monkeypatch):
                                               "format": "csv"}})
     WorkflowVersion(
         id="demo/v1", version_id="v1", created_at="2026-07-10T00:00:00",
-        message="seed", reviewer="test", published=False,
+        message="seed",
         stages=[parse_stage(s) for s in (load, _PUBLISH)],
     ).save()
     return demo

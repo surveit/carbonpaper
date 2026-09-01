@@ -12,7 +12,7 @@ import app.services.run as run_service
 from app.core.files import ProjectFile, save_upload
 from app.main import app
 from app.runtime.manifest import read_run_manifest
-from app.services import versioning, workspace
+from app.services import workspace
 from app.services.project import save_working_copy_as_version
 from app.web.run_inputs import build_run_input_choices
 from run_seed import store_manifest
@@ -33,9 +33,8 @@ def project(tmp_path, monkeypatch) -> Path:
             {"name": "val", "type": "int", "nullable": False}]},
         "connector": {"kind": "file",
                       "params": {"path": str(proj / "a.csv"), "format": "csv"}}})
-    version_id = save_working_copy_as_version(
-        proj.name, message="seed", reviewer="test").version_id
-    versioning.publish_version(proj.name, version_id, reviewer="human")
+    save_working_copy_as_version(
+        proj.name, message="seed").version_id
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setenv("CARBON_PAPER_FILES_ROOT", str(tmp_path / "files"))
     monkeypatch.setattr(run_service, "_run_in_background",

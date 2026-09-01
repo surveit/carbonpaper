@@ -14,7 +14,6 @@ from app.services.project import save_working_copy_as_version
 from app.services.versioning import (
     create_version_from_stages,
     list_versions,
-    publish_version,
 )
 from stage_seed import add_stage, set_stages
 from run_seed import read_manifest
@@ -37,8 +36,8 @@ def project_two_versions(tmp_path, monkeypatch):
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
     add_stage(proj, stage)
-    save_working_copy_as_version(proj.name, message="v1", reviewer="test")
-    save_working_copy_as_version(proj.name, message="v2", reviewer="test")
+    save_working_copy_as_version(proj.name, message="v1")
+    save_working_copy_as_version(proj.name, message="v2")
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(run_service, "_run_in_background",
                         lambda target, *args: target(*args))
@@ -107,26 +106,25 @@ def _seed_load_stage(proj):
     add_stage(proj, stage)
 
 
-def test_run_picker_offers_unpublished_versions_too(tmp_path, monkeypatch):
+def test_run_picker_offers_every_stored_version(tmp_path, monkeypatch):
     proj = tmp_path / "demo"
     _seed_load_stage(proj)
-    published = save_working_copy_as_version(proj.name, message="approved", reviewer="test").version_id
-    unpublished = save_working_copy_as_version(proj.name, message="draft", reviewer="test").version_id
-    publish_version(proj.name, published, reviewer="test")  # only the older one
+    older = save_working_copy_as_version(proj.name, message="approved").version_id
+    newer = save_working_copy_as_version(proj.name, message="draft").version_id
     workspace.set_projects_dir(tmp_path)
 
     resp = client.get("/project/demo/runs/new")
     assert resp.status_code == 200
-    assert published in resp.text
-    assert unpublished in resp.text
-    assert f'value="{unpublished}" selected' in resp.text  # newest, published or not
+    assert older in resp.text
+    assert newer in resp.text
+    assert f'value="{newer}" selected' in resp.text  # the newest is preselected
     assert 'name="version_id"' in resp.text
 
 
 def test_run_form_shown_when_the_only_version_is_unpublished(tmp_path, monkeypatch):
     proj = tmp_path / "demo"
     _seed_load_stage(proj)
-    vid = save_working_copy_as_version(proj.name, message="unpublished", reviewer="test").version_id
+    vid = save_working_copy_as_version(proj.name, message="unpublished").version_id
     workspace.set_projects_dir(tmp_path)
 
     resp = client.get("/project/demo/runs/new")
@@ -164,9 +162,9 @@ def project_versions_diff_paths(tmp_path, monkeypatch):
                            "params": {"path": str(path), "format": "csv"}}}])
 
     _author(a)
-    save_working_copy_as_version(proj.name, message="v1 reads a.csv", reviewer="test")
+    save_working_copy_as_version(proj.name, message="v1 reads a.csv")
     _author(b)
-    save_working_copy_as_version(proj.name, message="v2 reads b.csv", reviewer="test")
+    save_working_copy_as_version(proj.name, message="v2 reads b.csv")
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(run_service, "_run_in_background",
                         lambda target, *args: target(*args))
@@ -230,7 +228,7 @@ def _store_version_without_working_copy(tmp_path) -> str:
           "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
           "connector": {"kind": "file",
                         "params": {"path": str(data), "format": "csv"}}}],
-        message="rebuilt elsewhere", reviewer="test",
+        message="rebuilt elsewhere",
     ).version_id
 
 

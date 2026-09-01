@@ -167,7 +167,7 @@ def _write_wyoming_project(root):
 def test_the_gap_reaches_the_run_issue_index(tmp_path):
     # The unit tests above prove the check; this proves a reviewer is shown it.
     _write_wyoming_project(tmp_path)
-    save_working_copy_as_version(tmp_path.name, message="wyoming", reviewer="test")
+    save_working_copy_as_version(tmp_path.name, message="wyoming")
     workflow, version = pinned_stages(tmp_path)
     manifest = execute_run(tmp_path / "runs", tmp_path.name, workflow, version)
 

@@ -66,7 +66,7 @@ def _seed_store_through_the_app() -> str:
     outcome = project_service.add_stages(project_id, _stage_drafts(upload))
     assert not outcome.failed and not outcome.batch_issues and not outcome.skipped, outcome
     project_service.save_working_copy_as_version(
-        project_id, message="first version", reviewer="replay test")
+        project_id, message="first version")
     return project_id
 
 

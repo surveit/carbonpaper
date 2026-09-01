@@ -789,7 +789,7 @@ def _three_filings() -> pd.DataFrame:
                 "ai_judgment": "Matches",
                 "ai_justification": "Said it would build offshore wind; this filing asks for that.",
                 "reviewed_judgment": "Matches", "review_verdict": _SKIPPED,
-                "reviewer": None, "reviewed_at": None, "review_notes": None,
+                "reviewed_at": None, "review_notes": None,
             },
             {
                 "filing_id": "F-3", "client": "Silent Holdings", "registrant": "Firm C",
@@ -798,7 +798,7 @@ def _three_filings() -> pd.DataFrame:
                 "public_commitment": None, "commitment_source": None,
                 "ai_judgment": _NO_COMMITMENT, "ai_justification": None,
                 "reviewed_judgment": _NO_COMMITMENT, "review_verdict": _SKIPPED,
-                "reviewer": None, "reviewed_at": None, "review_notes": None,
+                "reviewed_at": None, "review_notes": None,
             },
         ]
     )

@@ -88,10 +88,10 @@ _QUEUE = {
 }
 
 
-def _seed(demo, stage_dicts, *, version_id="v1", published=False, created_at="2026-07-10T00:00:00"):
+def _seed(demo, stage_dicts, *, version_id="v1", created_at="2026-07-10T00:00:00"):
     WorkflowVersion(
         id=f"{demo.name}/{version_id}", version_id=version_id, created_at=created_at,
-        message="seed", reviewer="test", published=published,
+        message="seed",
         stages=[parse_stage(s) for s in stage_dicts],
     ).save()
 
@@ -183,25 +183,25 @@ def test_workflow_test_raises_when_no_source_stage(demo):
     # Build the version document directly; the guard fires before Workflow build.
     WorkflowVersion(
         id=f"{demo.name}/v1", version_id="v1", created_at="2026-07-10T00:00:00",
-        message="seed", reviewer="test", published=True,
+        message="seed",
         stages=[parse_stage(standalone)],
     ).save()
     with pytest.raises(NoWorkflowTestSourceError):
         run_workflow_test("demo")
 
 
-def test_workflow_test_runs_an_explicit_unpublished_version(demo):
-    _seed(demo, [_load_stage(demo), _CLASSIFY], version_id="v1", published=False)
+def test_workflow_test_runs_an_explicitly_named_version(demo):
+    _seed(demo, [_load_stage(demo), _CLASSIFY], version_id="v1")
     result = run_workflow_test("demo", version_id="v1")
     assert result["ok"] is True
     assert result["version_id"] == "v1"
 
 
-def test_workflow_test_default_picks_newest_version_even_when_unpublished(demo):
+def test_workflow_test_default_picks_the_newest_version(demo):
     _seed(demo, [_load_stage(demo), _CLASSIFY],
-          version_id="20260101T000000", published=True, created_at="2026-01-01T00:00:00")
+          version_id="20260101T000000", created_at="2026-01-01T00:00:00")
     _seed(demo, [_load_stage(demo), _CLASSIFY],
-          version_id="20260201T000000", published=False, created_at="2026-02-01T00:00:00")
+          version_id="20260201T000000", created_at="2026-02-01T00:00:00")
     result = run_workflow_test("demo")
     assert result["version_id"] == "20260201T000000"
 

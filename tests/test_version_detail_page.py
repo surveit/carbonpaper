@@ -47,13 +47,12 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return pdir
 
 
-def test_version_detail_renders_frozen_graph_and_publish(project: Path) -> None:
-    meta = project_service.save_working_copy_as_version(project.name, message="v1", reviewer="local")
+def test_version_detail_renders_the_frozen_graph(project: Path) -> None:
+    meta = project_service.save_working_copy_as_version(project.name, message="v1")
     page = client.get(f"/project/demo/workflow/version/{meta.version_id}")
     assert page.status_code == 200
     assert meta.version_id in page.text
     assert "mermaid" in page.text          # the graph rendered
-    assert "/publish" in page.text          # unpublished → Publish control present
     assert "Run this version" in page.text  # ...and runnable all the same
     # The way back is the Versions rung of the header trail, not a button of this
     # page's own — no page carries a back link of its own any more.
@@ -61,7 +60,7 @@ def test_version_detail_renders_frozen_graph_and_publish(project: Path) -> None:
 
 
 def test_version_detail_does_not_offer_to_generate_a_guide(project: Path) -> None:
-    meta = project_service.save_working_copy_as_version(project.name, message="v1", reviewer="local")
+    meta = project_service.save_working_copy_as_version(project.name, message="v1")
 
     page = client.get(f"/project/demo/workflow/version/{meta.version_id}")
 
@@ -69,7 +68,7 @@ def test_version_detail_does_not_offer_to_generate_a_guide(project: Path) -> Non
 
 
 def test_version_detail_labels_the_authored_description(project: Path) -> None:
-    meta = project_service.save_working_copy_as_version(project.name, message="Nine flat categories, no severity.", reviewer="local"
+    meta = project_service.save_working_copy_as_version(project.name, message="Nine flat categories, no severity."
     )
 
     page = client.get(f"/project/demo/workflow/version/{meta.version_id}")
@@ -81,7 +80,7 @@ def test_version_detail_labels_the_authored_description(project: Path) -> None:
 
 
 def test_version_detail_says_when_no_description_was_written(project: Path) -> None:
-    meta = project_service.save_working_copy_as_version(project.name, message="", reviewer="local")
+    meta = project_service.save_working_copy_as_version(project.name, message="")
 
     page = client.get(f"/project/demo/workflow/version/{meta.version_id}")
 
@@ -103,7 +102,7 @@ def _save_covering_guide(project_dir: Path, version_id: str) -> None:
 
 
 def test_version_detail_drops_the_offer_once_a_guide_exists(project: Path) -> None:
-    meta = project_service.save_working_copy_as_version(project.name, message="v1", reviewer="local")
+    meta = project_service.save_working_copy_as_version(project.name, message="v1")
     _save_covering_guide(project, meta.version_id)
 
     page = client.get(f"/project/demo/workflow/version/{meta.version_id}")
@@ -116,7 +115,7 @@ def test_version_detail_404_for_unknown_version(project: Path) -> None:
 
 
 def test_run_this_version_opens_the_run_form_on_this_version(project: Path) -> None:
-    meta = project_service.save_working_copy_as_version(project.name, message="v1", reviewer="local")
+    meta = project_service.save_working_copy_as_version(project.name, message="v1")
     vid = meta.version_id
 
     page = client.get(f"/project/demo/workflow/version/{vid}")
@@ -130,12 +129,9 @@ def test_run_this_version_opens_the_run_form_on_this_version(project: Path) -> N
     assert f'value="{vid}" selected' in form.text
 
 
-def test_run_this_version_offered_whether_or_not_it_is_published(project: Path) -> None:
-    meta = project_service.save_working_copy_as_version(project.name, message="v1", reviewer="local")
+def test_run_this_version_is_offered(project: Path) -> None:
+    meta = project_service.save_working_copy_as_version(project.name, message="v1")
     vid = meta.version_id
     link = f'href="/project/demo/runs/new?version_id={vid}"'
 
-    assert link in client.get(f"/project/demo/workflow/version/{vid}").text
-
-    versioning.publish_version(project.name, vid, reviewer="local")
     assert link in client.get(f"/project/demo/workflow/version/{vid}").text

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 
 from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.core.agent.store import MessageRole, PartType, open_session_store
 from app.services import generation, stage_edit, versioning
@@ -138,7 +138,6 @@ async def create_version_route(project_id: str, message: str = Form(...)):
         version = project_service.save_working_copy_as_version(
             project_id,
             message=message,
-            reviewer="local",
             # The latest existing version — None for the very first one.
             parent_version=versioning.find_latest_version_id(project_id),
         )
@@ -158,16 +157,3 @@ async def create_version_route(project_id: str, message: str = Form(...)):
     return JSONResponse({"ok": True, "version": version.model_dump(mode="json")})
 
 
-@router.post("/project/{project_id}/versions/{version_id}/publish")
-async def publish_version_route(project_id: str, version_id: str):
-    validate_project_or_404(project_id)
-    try:
-        versioning.publish_version(project_id, version_id, reviewer="local")
-    except FileNotFoundError as exc:
-        # Also how a malformed version_id lands here — any shape but the timestamp
-        # versioning.load_version expects finds no document.
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    # Only ever posted from the version's own detail page, so go back there in one hop.
-    return RedirectResponse(
-        url=f"/project/{project_id}/workflow/version/{version_id}", status_code=303
-    )

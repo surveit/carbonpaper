@@ -35,7 +35,7 @@ def _make_project(root: Path) -> str:
         ]},
     }
     add_stage(root, stage)
-    save_working_copy_as_version(root.name, message="seed", reviewer="test")
+    save_working_copy_as_version(root.name, message="seed")
     return str(run_service.execute(_PROJECT)["run_id"])
 
 

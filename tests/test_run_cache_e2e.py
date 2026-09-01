@@ -12,7 +12,6 @@ import pandas as pd
 from pandas.testing import assert_frame_equal
 
 from app.runtime.runner import execute_run
-from app.services import versioning
 from app.services import project as project_service
 from conftest import pinned_stages
 from stage_seed import add_stage
@@ -120,8 +119,7 @@ def _write_stage(root: Path, filename: str, spec: dict[str, object]) -> None:
 
 def _publish_a_version(root: Path) -> str:
     version = project_service.save_working_copy_as_version(
-        root.name, message="cache e2e", reviewer="test")
-    versioning.publish_version(root.name, version.version_id, reviewer="human")
+        root.name, message="cache e2e")
     return version.version_id
 
 

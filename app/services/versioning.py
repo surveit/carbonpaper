@@ -1,12 +1,7 @@
-"""Immutable, committable snapshots of a workflow, plus the guide authored about one.
-
-`version_id` is the LOCAL id every public function here takes, never the composite
-store id. A version is born unpublished, and a stored document carrying no
-`published` key reads as unpublished."""
+"""Immutable snapshots of a workflow, and the guide authored about one."""
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from pydantic import ValidationError
@@ -27,7 +22,6 @@ def create_version_from_stages(
     stages: list[dict[str, Any]],
     *,
     message: str,
-    reviewer: str,
     parent_version: str | None = None,
 ) -> WorkflowVersion:
     workflow = parse_workflow(stages)
@@ -42,28 +36,9 @@ def create_version_from_stages(
         version_id=version_id,
         parent_version=parent_version,
         message=message,
-        reviewer=reviewer,
         stages=workflow.stages,
         schemas=schemas,
-        published=False,
     )
-    v.save()
-    return v
-
-
-def publish_version(project_id: str, version_id: str, *, reviewer: str) -> WorkflowVersion:
-    doc_id = f"{project_id}/{version_id}"
-    try:
-        v = WorkflowVersion.load(doc_id)
-    except DocumentNotFound as exc:
-        raise FileNotFoundError(f"No version '{version_id}' for project '{project_id}'") from exc
-    except ValidationError as exc:
-        raise _invalid_version_document(doc_id, exc) from exc
-    if v.published:
-        return v
-    v.published = True
-    v.published_at = datetime.now().isoformat(timespec="seconds")
-    v.published_by = reviewer
     v.save()
     return v
 

@@ -64,10 +64,7 @@ async def runs_picker(request: Request, project_id: str, current: str = ""):
     ))
 
 
-# A published version is the only runnable one, so publish state is the first thing a
-# reader picks by; the authored message is the second. Neither is invented where absent.
-_PUBLISHED = "published"
-_UNPUBLISHED = "unpublished"
+# The authored message is what a reader picks by, and it is not invented where absent.
 _NO_DESCRIPTION = "No description"
 
 
@@ -82,8 +79,6 @@ def _version_row(project_id: str, version: WorkflowVersion, current: str) -> Pic
         label=version.version_id,
         href=f"/project/{project_id}/workflow/version/{version.version_id}",
         is_code=True,
-        badge=_PUBLISHED if version.published else _UNPUBLISHED,
-        badge_kind="ok" if version.published else "pending",
         description=version.message or _NO_DESCRIPTION,
         timestamp=version.created_at,
         meta=f"{len(version.stages)} stages",

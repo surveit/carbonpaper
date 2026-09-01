@@ -175,11 +175,11 @@ def test_eval_detail_shows_no_versions_note_when_project_has_no_version():
     assert "no workflow version" in r.text.lower()
 
 
-def test_eval_detail_offers_a_version_select_newest_first_marking_unpublished():
+def test_eval_detail_offers_a_version_select_newest_first():
     WorkflowVersion(id="demo/v1", version_id="v1", created_at="2026-07-10T00:00:00",
-                    message="m", reviewer="r", published=True).save()
+                    message="m").save()
     WorkflowVersion(id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
-                    message="m", reviewer="agent", published=False).save()
+                    message="m").save()
 
     r = client.get("/project/demo/evals/label_check")
     assert r.status_code == 200
@@ -187,8 +187,6 @@ def test_eval_detail_offers_a_version_select_newest_first_marking_unpublished():
     v2_pos = r.text.index('value="v2-draft"')
     v1_pos = r.text.index('value="v1"')
     assert v2_pos < v1_pos          # newest (v2-draft) listed first
-    assert "v2-draft · unpublished" in r.text
-    assert "v1 · unpublished" not in r.text
 
 
 # ── The run page's scored rows, its log, and what it says when it has neither ──

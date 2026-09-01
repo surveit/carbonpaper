@@ -13,7 +13,7 @@ import pandas as pd
 import pytest
 
 from app.runtime.runner import execute_run
-from app.services import versioning, workspace
+from app.services import workspace
 from app.services import project as project_service
 from app.services.workflow_test import run_workflow_test
 from conftest import pinned_stages
@@ -62,8 +62,7 @@ def _write_project(root: Path) -> Path:
 
 
 def _publish(root: Path) -> str:
-    version = project_service.save_working_copy_as_version(root.name, message="e2e", reviewer="test")
-    versioning.publish_version(root.name, version.version_id, reviewer="human")
+    version = project_service.save_working_copy_as_version(root.name, message="e2e")
     return version.version_id
 
 

@@ -29,7 +29,7 @@ def _execute(project: str, stages: list[dict], projects_root) -> str:
     data = projects_root / project / "data"
     write_inputs(data)
     set_stages(project, stages)
-    save_working_copy_as_version(project, message="fixture", reviewer="test")
+    save_working_copy_as_version(project, message="fixture")
     return str(run_service.execute(project)["run_id"])
 
 

@@ -15,7 +15,7 @@ from app.runtime.errors import RunCancelled
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stage_output import StageOutput
 from app.runtime.stages import HANDLERS, human_review_queue
-from app.services import review, versioning
+from app.services import review
 from app.core.stage_cache import StageCache, compute_row_fingerprint
 from app.services.project import save_working_copy_as_version
 from conftest import (
@@ -291,7 +291,7 @@ def test_legacy_decisions_parquet_never_read(tmp_path):
     decisions_dir.mkdir(parents=True, exist_ok=True)
     pd.DataFrame([{
         "content_hash": "whatever", "decision": "approve", "modified_score": None,
-        "reviewer": "local", "reviewed_at": "2026-07-01T00:00:00", "source_run_id": "run0",
+        "reviewed_at": "2026-07-01T00:00:00", "source_run_id": "run0",
     }]).to_parquet(decisions_dir / "review.parquet", index=False)
 
     stage = _stage()
@@ -600,8 +600,7 @@ def _write_stage(root, filename, stage):
 
 
 def _seed_version(root):
-    vid = save_working_copy_as_version(root.name, message="test seed", reviewer="test").version_id
-    versioning.publish_version(root.name, vid, reviewer="human")
+    save_working_copy_as_version(root.name, message="test seed")
 
 
 def _load_stage(root):

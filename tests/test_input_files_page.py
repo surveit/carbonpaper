@@ -21,7 +21,7 @@ def run_id(projects_root):
     data = projects_root / PROJECT / "data"
     write_inputs(data)
     set_stages(PROJECT, stage_specs(data))
-    save_working_copy_as_version(PROJECT, message="fixture", reviewer="test")
+    save_working_copy_as_version(PROJECT, message="fixture")
     return str(run_service.execute(PROJECT)["run_id"])
 
 

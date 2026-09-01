@@ -8,7 +8,6 @@ from fastapi.testclient import TestClient
 
 import app.services.run as run_service
 from app.main import app
-from app.services import versioning
 from app.services import workspace
 from app.services.project import save_working_copy_as_version
 from app.web.routers.runs import _read_bust_cache
@@ -43,8 +42,7 @@ def project(tmp_path, monkeypatch):
                  ],
              }}
     add_stage(proj, stage)
-    vid = save_working_copy_as_version(proj.name, message="seed", reviewer="test").version_id
-    versioning.publish_version(proj.name, vid, reviewer="human")
+    save_working_copy_as_version(proj.name, message="seed")
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(run_service, "_run_in_background",
                         lambda target, *args: target(*args))
