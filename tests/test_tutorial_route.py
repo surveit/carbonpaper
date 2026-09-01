@@ -50,12 +50,12 @@ def test_the_home_page_offers_no_tour_button() -> None:
     assert "tour-cta" not in page.text
 
 
-def test_new_project_stays_reachable_from_the_header() -> None:
-    """The path to a blank project lives in the header, above the redirect."""
+def test_new_project_opens_the_editing_agent_from_the_header() -> None:
+    """A project starts in the chat that can make one, not in a form."""
     page = client.get("/")
 
     header = page.text.split('class="dash-header"')[1].split("<script>")[0]
-    assert 'href="/project/new"' in header
+    assert 'href="/chat/agent/editing/new"' in header
     assert "＋ New project" in header
 
 

@@ -62,8 +62,9 @@ taken it once.
 
 ### Your own question
 
-1. **＋ New project**, and paste your write-up of how the investigation works. The
-   data model is generated from it as a live chat turn, and you land on that chat.
+1. **＋ New project** opens a chat with the editing agent. Tell it how the
+   investigation works, or upload the write-up and the data it runs on, and it
+   creates the project.
 2. Author the stages by talking to the agent in the same chat. The project's five
    sections — Overview, Document, Terms, Workflow, Runs — are the left sidebar.
 3. **Get your data file onto the server.** A run reads its inputs off the server's
