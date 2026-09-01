@@ -135,6 +135,8 @@ def serves_an_open_demo() -> bool:
 # FLY_APP_NAME on every machine, so nothing has to be remembered in fly.toml —
 # a deploy that forgot a flag would be a public app quietly claiming privacy.
 templates.env.globals["serves_an_open_demo"] = serves_an_open_demo
+# Overridden per render by the review packet, whose pages sit at varying depths.
+templates.env.globals["static_root"] = "/static/"
 
 templates.env.filters["friendly_time"] = friendly_time
 templates.env.filters["relative_time"] = relative_time

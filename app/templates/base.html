@@ -1,22 +1,12 @@
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}Workflow{% endblock %}</title>
-    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-    {% include "_stylesheets.html" %}
-    {# Defines window.dvNode — the callback build_mermaid_graph writes into every
-       stage node. Loaded for EVERY page (not per-diagram-page) so a page that
-       renders the graph can never miss it; see static/diagram_nodes.js. #}
-    <script src="/static/diagram_nodes.js"></script>
-    {# Defines window.Figures, which every page that prints a number reads. #}
-    <script src="/static/figure_text.js"></script>
+{# The app's shell: the trail, the rail, ⌘K, and the scripts every served page expects. #}
+{% extends "standalone_base.html" %}
+
+{% block shell_head %}
     {# Before the first paint: it reserves the rail's column and starts its fetch. #}
     {% include "_chat_rail_head.html" %}
-    {% block head_extra %}{% endblock %}
-</head>
-<body class="{% block body_class %}{% endblock %}">
+{% endblock %}
+
+{% block body %}
     <header>
         {# The trail is the whole left side and the ONLY way back: no page adds a
            back link of its own. A page with no trail to pass (an error, a partial
@@ -33,26 +23,25 @@
        click-to-expand without wiring it. #}
     {# Loaded for every page rather than the stage pages alone, on the same reasoning
        as diagram_nodes.js above: a page holding a code block cannot then miss it. #}
-    <script src="/static/highlight.min.js"></script>
-    <script src="/static/code-highlight.js"></script>
-    <script src="/static/cell-expand.js"></script>
-    <script src="/static/cell-lineage.js"></script>
-    <script src="/static/row-link.js"></script>
-    <script src="/static/tabs.js"></script>
-    <script src="/static/friendly-time.js"></script>
-    <script src="/static/breadcrumbs.js"></script>
-    <script src="/static/demo-notice.js"></script>
-    <script src="/static/picker.js"></script>
-    <script src="/static/tooltip.js"></script>
+    <script src="{{ static_root }}highlight.min.js"></script>
+    <script src="{{ static_root }}code-highlight.js"></script>
+    <script src="{{ static_root }}cell-expand.js"></script>
+    <script src="{{ static_root }}cell-lineage.js"></script>
+    <script src="{{ static_root }}row-link.js"></script>
+    <script src="{{ static_root }}tabs.js"></script>
+    <script src="{{ static_root }}friendly-time.js"></script>
+    <script src="{{ static_root }}breadcrumbs.js"></script>
+    <script src="{{ static_root }}demo-notice.js"></script>
+    <script src="{{ static_root }}picker.js"></script>
+    <script src="{{ static_root }}tooltip.js"></script>
     {# The conversation follows the reader between pages, so like ⌘K below it the rail is
        part of the shell rather than something each page remembers to offer. chat-panel.js
        mounts a panel wherever one is drawn; chat-rail.js is what puts one here. #}
     {% include "_chat_rail.html" %}
-    <script src="/static/chat-panel.js"></script>
-    <script src="/static/chat-rail.js"></script>
+    <script src="{{ static_root }}chat-panel.js"></script>
+    <script src="{{ static_root }}chat-rail.js"></script>
     {# ⌘K from anywhere, so the shell is in the shell rather than on the pages it
        reaches. See static/cmdk-palette.js. #}
     {% include "_cmdk_palette.html" %}
-    <script src="/static/cmdk-palette.js"></script>
-</body>
-</html>
+    <script src="{{ static_root }}cmdk-palette.js"></script>
+{% endblock %}

@@ -160,7 +160,6 @@
 </div>{# /.run-shell #}
 
 {% if mermaid %}
-<script src="{{ node_script }}"></script>
 <script src="{{ mermaid_url }}" integrity="{{ mermaid_sri }}" crossorigin="anonymous"></script>
 <script>
   // mermaid resolves the graph's `click … call dvNode(…)` binding by name at click

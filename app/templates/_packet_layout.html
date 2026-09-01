@@ -1,17 +1,10 @@
 {# The packet's page shell. Deliberately NOT project_shell.html: that carries the
-   sidebar, live polling and run controls, which are navigation and actions a
-   sealed offline record has none of. #}
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}Review packet{% endblock %}</title>
-<link rel="icon" href="{{ icon }}" type="image/svg+xml">
-{% for sheet in assets %}<link rel="stylesheet" href="{{ sheet }}">
-{% endfor %}
-</head>
-<body class="packet">
+   sidebar, live polling and run controls, which a sealed offline record has none of. #}
+{% extends "standalone_base.html" %}
+{% block title %}Review packet{% endblock %}
+{% block body_class %}packet{% endblock %}
+
+{% block body %}
 <header>
   <span class="brand">{% include "_wordmark.html" %}</span>
   <span class="packet-kicker">review packet</span>
@@ -21,5 +14,4 @@
 {% block content %}{% endblock %}
 </main>
 {% block scripts %}{% endblock %}
-</body>
-</html>
+{% endblock %}

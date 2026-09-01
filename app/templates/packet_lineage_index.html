@@ -1,9 +1,8 @@
-<!doctype html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" href="{{ icon }}" type="image/svg+xml">
-<title>Row provenance · review packet</title>
-{% for sheet in assets %}<link rel="stylesheet" href="{{ sheet }}">
-{% endfor %}</head><body class="packet">
+{% extends "standalone_base.html" %}
+{% block title %}Row provenance · review packet{% endblock %}
+{% block body_class %}packet{% endblock %}
+
+{% block body %}
 <header class="packet-head">
   <a class="packet-back" href="{{ index_href }}">&lsaquo; Review packet</a>
   <h1>Row provenance</h1>
@@ -20,4 +19,5 @@
     <p class="muted">{% for row in stage.rows %}<a href="../{{ stage.hrefs[loop.index0] }}">{{ row | row_number }}</a>{% if not loop.last %} {% endif %}{% endfor %}</p>
   </section>
   {% endfor %}
-</main></body></html>
+</main>
+{% endblock %}
