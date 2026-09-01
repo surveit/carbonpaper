@@ -2353,3 +2353,4 @@
 {"run_id":"33558235613","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33558235613","created":"2026-09-01T20:57:06Z","branch":"fix/run-inputs-as-links","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"33558235613","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33558235613","created":"2026-09-01T20:57:57Z","branch":"fix/run-inputs-as-links","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"33558389061","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33558389061","created":"2026-09-01T20:58:57Z","branch":"fix/project-list-recent-first","event":"pull_request","contracts_kept":16,"findings":[]}
+{"run_id":"33558389061","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33558389061","created":"2026-09-01T20:59:15Z","branch":"fix/project-list-recent-first","event":"pull_request","contracts_kept":null,"findings":[]}
