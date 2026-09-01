@@ -121,3 +121,11 @@ Also `app/AGENTS.md` (web layer), `app/runtime/AGENTS.md` (the Runner), `README.
   artifacts — keep them in scratch or the PR description, never commit them. Committed docs
   describe what the code does *today* (reference docs like `docs/architecture.md`), not what we
   plan to do.
+- **Push freely before the PR exists; open it when you are ready to hand over the link; push
+  every commit after that.** CI runs on `pull_request` and on pushes to `master` and nothing
+  else, so pushing a branch with no PR open triggers no run and costs nothing. Opening the PR
+  starts the meter — every push then re-runs it, billed a whole minute per job — so open it
+  once the work is finished and the local gates are green, not as a placeholder at the start.
+  After that a reviewer may be reading, and a commit held back locally means they review stale
+  code. Between 2026-08-01 and 2026-08-13, 415 of 694 `pull_request` runs (60%) were repeats on
+  a branch whose PR was already open.
