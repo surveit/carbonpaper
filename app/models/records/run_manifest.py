@@ -117,3 +117,11 @@ class RunManifest(PersistedModel):
     def to_dict(self) -> dict[str, Any]:
         """What this run RECORDED — the boundary shape every reader consumes."""
         return self.model_dump(exclude_unset=True, exclude=_STORE_BOOKKEEPING)
+
+    def to_dict_without_tracebacks(self) -> dict[str, Any]:
+        """A traceback names host paths, and its reader quotes them onward."""
+        return self.model_dump(
+            exclude_unset=True,
+            exclude={**dict.fromkeys(_STORE_BOOKKEEPING, True),
+                     "stage_records": {"__all__": {"error": {"traceback"}}}},
+        )

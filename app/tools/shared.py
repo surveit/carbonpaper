@@ -289,7 +289,7 @@ def run_workflow_test(
 
 def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
     validate_project_exists(project_id)
-    return run_service.read_run_status(project_id, run_id)
+    return run_service.read_run_status_without_tracebacks(project_id, run_id)
 
 
 class RunListing(BaseModel):

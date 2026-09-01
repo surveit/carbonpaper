@@ -273,7 +273,7 @@ def test_get_run_status_reads_the_manifest_back_without_waiting(
     projects_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The tour polls: a `running` status is an answer, not an error to recover from."""
-    monkeypatch.setattr(run_service, "read_run_status", lambda p, r: {
+    monkeypatch.setattr(run_service, "read_run_status_without_tracebacks", lambda p, r: {
         "run_id": r, "status": "running",
         "stage_records": [
             {"stage_id": "judge_alignment", "status": "running", "output_row_count": 0}

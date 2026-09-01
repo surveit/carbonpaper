@@ -356,7 +356,9 @@ listing cut to `limit` reads as the window it is.""",
         description="""\
 The current manifest of one production run as a dict: its overall status
 (running / ok / errors / halted), per-stage statuses, and run metadata. Poll
-this after run_workflow to follow progress and see the outcome. An unknown or
+this after run_workflow to follow progress and see the outcome. An errored stage
+carries `type` and `message`; the traceback behind them is on the run page, which
+is where you send whoever needs it. An unknown or
 expired run_id returns {ok: False, error} rather than a fabricated status.""",
     ),
     "sleep": AgentTool(
