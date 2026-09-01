@@ -2272,3 +2272,4 @@
 {"run_id":"33516315029","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33516315029","created":"2026-09-01T13:56:13Z","branch":"fix/scope-rows-diff-colours","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"33516712192","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33516712192","created":"2026-09-01T13:59:52Z","branch":"intro/lineage-and-risk-tools","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"33516712192","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33516712192","created":"2026-09-01T14:00:24Z","branch":"intro/lineage-and-risk-tools","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"33517513496","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33517513496","created":"2026-09-01T14:07:40Z","branch":"intro/lineage-and-risk-tools","event":"pull_request","contracts_kept":16,"findings":[]}
