@@ -15,7 +15,7 @@ from app.services import run as run_service
 from app.services.scope import find_rows_reached_per_stage
 from app.services.versioning import load_version_stages
 from app.services.workspace import resolve_run_dir
-from app.web.loading import load_manifest
+from app.web.loading import MAX_TABLE_ROWS, load_manifest, load_output_rows_at
 from app.web.run_stage_panel import resolve_panel_links
 from app.web.stage_diff import build_stage_diff
 from app.web.scope_payload import (
@@ -57,7 +57,10 @@ def load_the_rows_that_reached(project_id: str, run_id: str, stage_id: StageId,
              for entry in manifest.get("stage_records", [])},
             at_rows=at_rows),
         "links": resolve_panel_links(project_id, run_id),
-        "reached_rows": at_rows,
+        "ordinals": at_rows,
+        "preview": load_output_rows_at(
+            resolve_run_dir(project_id, run_id), record.get("output_path"),
+            at_rows, MAX_TABLE_ROWS),
         "full_rows": True,
     }
 

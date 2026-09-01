@@ -240,13 +240,8 @@ table.data-preview.scratch th { background: var(--hover); }
 
 /* A row that opens its own lineage (static/cell-lineage.js). The cursor is the
    affordance the deleted link column used to be; a clipped cell keeps zoom-in,
-   because there the first click reveals rather than leaves. The hovered cell
-   outlines rather than tints, so it reads over a column that already carries one. */
+   because there the first click reveals rather than leaves. */
 table.data-preview tr[data-href] td:not(.cell-url) { cursor: pointer; }
-table.data-preview tr[data-href] td:not(.cell-url):hover {
-    outline: 2px solid var(--accent);
-    outline-offset: -2px;
-}
 /* The underline says the value opens something. It takes no colour of its own:
    colour on a data table already answers what the stage did to the column, and a
    link hue there would be a second thing to read a cell for. --border-strong is
