@@ -9,7 +9,6 @@ import app.runtime.stages.execution as execution
 from app.runtime.cancellation import consume_cancel, request_cancel
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
-from app.services import versioning
 from app.services.project import save_working_copy_as_version
 from conftest import pinned_stages, resumed_stages
 from stage_seed import add_stage
@@ -29,8 +28,7 @@ _SCORED_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True},
 
 
 def _seed_version(root):
-    vid = save_working_copy_as_version(root.name, message="test seed", reviewer="test").version_id
-    versioning.publish_version(root.name, vid, reviewer="human")
+    vid = save_working_copy_as_version(root.name, message="test seed").version_id
     return vid
 
 

@@ -42,7 +42,7 @@
   <select name="version_id" id="eval-run-version" class="picker-native">
     {% for v in versions %}
     <option value="{{ v.version_id }}" data-name="{{ v.version_id }}"
-            {% if not v.published %}data-side="unpublished"{% endif %}>{{ v.version_id }}{% if not v.published %} · unpublished{% endif %}</option>
+            data-side="{{ v.message or 'no description' }}">{{ v.version_id }}</option>
     {% endfor %}
   </select>
   {% endcall %}

@@ -11,7 +11,6 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.runtime.runner import execute_run
 from app.services import project as project_service
-from app.services import versioning
 from app.services import workspace
 from conftest import pinned_stages
 from stage_seed import add_stage
@@ -202,9 +201,8 @@ def _run_a_pinned_version(tmp_path) -> tuple[TestClient, str]:
         ]},
     })
     workspace.set_projects_dir(tmp_path)
-    version_id = project_service.save_working_copy_as_version(
-        "described", message="v1", reviewer="test").version_id
-    versioning.publish_version("described", version_id, reviewer="test")
+    project_service.save_working_copy_as_version(
+        "described", message="v1").version_id
     run = execute_run(project_dir / "runs", "described", *pinned_stages(project_dir))
     return TestClient(app), str(run["run_id"])
 

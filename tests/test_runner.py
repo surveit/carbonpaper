@@ -15,7 +15,6 @@ from app.models.records.run_manifest import RunManifest
 from app.runtime.trace import trace_row
 from app.runtime.stages import llm_transform as lt
 from app.services.loader import WorkflowLoadError
-from app.services import versioning
 from app.services.project import save_working_copy_as_version
 from app.services.versioning import list_versions
 from conftest import pinned_stages, resumed_stages
@@ -33,7 +32,7 @@ _ID_TEXT_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True},
 
 
 def _seed_version(root):
-    return save_working_copy_as_version(root.name, message="test seed", reviewer="test").version_id
+    return save_working_copy_as_version(root.name, message="test seed").version_id
 
 
 def _make_project(root):
@@ -548,10 +547,9 @@ def test_run_without_a_version_fails_loudly(tmp_path):
 
 def test_the_newest_version_runs_even_when_an_older_one_is_the_published_one(tmp_path):
     _make_project(tmp_path)
-    published_id = _seed_version(tmp_path)
-    versioning.publish_version(tmp_path.name, published_id, reviewer="human")
+    _seed_version(tmp_path)
 
-    newer = save_working_copy_as_version(tmp_path.name, message="unpublished newer", reviewer="test").version_id
+    newer = save_working_copy_as_version(tmp_path.name, message="unpublished newer").version_id
 
     manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
     assert manifest["workflow_version"] == newer
@@ -560,7 +558,7 @@ def test_the_newest_version_runs_even_when_an_older_one_is_the_published_one(tmp
 
 def test_run_with_no_published_version_succeeds(tmp_path):
     _make_project(tmp_path)
-    vid = save_working_copy_as_version(tmp_path.name, message="unpublished", reviewer="test").version_id
+    vid = save_working_copy_as_version(tmp_path.name, message="unpublished").version_id
 
     manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
     assert manifest["workflow_version"] == vid
@@ -569,7 +567,7 @@ def test_run_with_no_published_version_succeeds(tmp_path):
 
 def test_run_with_explicit_unpublished_id_succeeds(tmp_path):
     _make_project(tmp_path)
-    unpublished_id = save_working_copy_as_version(tmp_path.name, message="unpublished", reviewer="test").version_id
+    unpublished_id = save_working_copy_as_version(tmp_path.name, message="unpublished").version_id
 
     manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path, unpublished_id))
     assert manifest["workflow_version"] == unpublished_id
@@ -585,7 +583,7 @@ def test_create_version_rejects_invalid_working_copy(tmp_path):
     add_stage(tmp_path, bad)
 
     with pytest.raises(WorkflowLoadError) as exc:
-        save_working_copy_as_version(tmp_path.name, message="x", reviewer="test")
+        save_working_copy_as_version(tmp_path.name, message="x")
     assert any("params.path" in i for i in exc.value.issues)
     assert list_versions(tmp_path.name) == []  # snapshotted nothing
 
@@ -601,7 +599,7 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
 
     # You cannot make a version from it, and it writes nothing.
     with pytest.raises(WorkflowLoadError):
-        save_working_copy_as_version(tmp_path.name, message="x", reviewer="test")
+        save_working_copy_as_version(tmp_path.name, message="x")
     assert list_versions(tmp_path.name) == []
 
     # A run refuses (no version) and does NOT auto-create one — nothing on disk.

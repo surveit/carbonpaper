@@ -1,12 +1,11 @@
 {% extends "project_shell.html" %}
 {#
   VERSION DETAIL — one immutable workflow version, read-only. Its frozen stage
-  graph plus metadata (message, published state) and the actions that target this
-  version: run this version (any version runs), and publish while it is unpublished.
+  graph, the message whoever cut it wrote, and the one action that targets it:
+  run this version.
 
   Context: state; section="versions"; version (the versioning.load_version
-           WorkflowVersion, `published` among its own attributes); mermaid
-           (frozen graph string).
+           WorkflowVersion); mermaid (frozen graph string).
 #}
 {% block title %}{{ state.meta.display_name }} · Version {{ version.version_id }}{% endblock %}
 
@@ -37,14 +36,6 @@
       <span class="sep">·</span>{{ version.stages | length }} stage{{ '' if version.stages | length == 1 else 's' }}</p>
   </div>
   <div class="actions wf-actions">
-    {% if version.published %}
-    <span class="muted">✓ published {{ version.published_at | friendly_time }}</span>
-    {% else %}
-    <form action="/project/{{ state.id }}/versions/{{ version.version_id }}/publish" method="post" style="display:inline">
-      <button type="submit" class="btn">Publish</button>
-    </form>
-    <span class="muted">unpublished</span>
-    {% endif %}
     {# To the run form with this version pre-picked, not straight into a run: which
        file each input reads and how many rows it takes are decisions of the run, and
        this page cannot make them. #}
@@ -60,7 +51,6 @@
   <p class="vd-desc-kicker">Description</p>
   {% if version.message %}
   <p>{{ version.message }}</p>
-  {% if version.reviewer %}<p class="byline">written by {{ version.reviewer }} when this version was cut</p>{% endif %}
   {% else %}
   <p>No description — this version was cut without one.</p>
   {% endif %}

@@ -43,7 +43,7 @@ def _picker_hrefs(crumbs: list[breadcrumbs.Crumb]) -> list[str]:
 
 
 def test_every_switcher_rung_points_at_a_route_that_answers(project: Path) -> None:
-    meta = project_service.save_working_copy_as_version(project.name, message="v1", reviewer="local")
+    meta = project_service.save_working_copy_as_version(project.name, message="v1")
     trails = [
         breadcrumbs.build_section_crumbs("demo", label="Runs"),
         breadcrumbs.build_version_crumbs("demo", meta.version_id),
@@ -56,8 +56,8 @@ def test_every_switcher_rung_points_at_a_route_that_answers(project: Path) -> No
         assert client.get(href).status_code == 200, f"{href} does not resolve"
 
 
-def test_the_version_rung_lists_versions_with_their_publish_state(project: Path) -> None:
-    meta = project_service.save_working_copy_as_version(project.name, message="Nine flat categories.", reviewer="local"
+def test_the_version_rung_lists_versions_with_their_message(project: Path) -> None:
+    meta = project_service.save_working_copy_as_version(project.name, message="Nine flat categories."
     )
     trail = breadcrumbs.build_version_crumbs("demo", meta.version_id)
 
@@ -65,11 +65,10 @@ def test_the_version_rung_lists_versions_with_their_publish_state(project: Path)
 
     assert meta.version_id in body
     assert "Nine flat categories." in body
-    assert "unpublished" in body
 
 
 def test_a_version_with_no_message_is_said_to_have_none(project: Path) -> None:
-    meta = project_service.save_working_copy_as_version(project.name, message="", reviewer="local")
+    meta = project_service.save_working_copy_as_version(project.name, message="")
     trail = breadcrumbs.build_version_crumbs("demo", meta.version_id)
 
     body = client.get(_picker_hrefs(trail)[-1]).text

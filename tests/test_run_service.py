@@ -52,7 +52,7 @@ def _make_project(root):
 
 
 def _seed_version(root):
-    return save_working_copy_as_version(root.name, message="seed", reviewer="test").version_id
+    return save_working_copy_as_version(root.name, message="seed").version_id
 
 
 def test_start_run_returns_run_id_and_writes_ok_manifest(project_dir):

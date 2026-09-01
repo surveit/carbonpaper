@@ -57,8 +57,7 @@ def test_versioned_project_is_ready_to_run(examples_root):
     proj = _make_document_only_project(examples_root, name="versioned")
     WorkflowVersion(
         id=f"{proj.name}/20260101T000000", version_id="20260101T000000",
-        created_at="2026-01-01T00:00:00", message="seed", reviewer="test",
-        published=True,
+        created_at="2026-01-01T00:00:00", message="seed",
     ).save()
     [card] = list_projects()
     assert card.is_ready is True
@@ -70,8 +69,7 @@ def test_unpublished_only_project_is_ready(examples_root):
     proj = _make_document_only_project(examples_root, name="drafted")
     WorkflowVersion(
         id=f"{proj.name}/20260101T000000", version_id="20260101T000000",
-        created_at="2026-01-01T00:00:00", message="agent draft", reviewer="agent",
-        published=False,
+        created_at="2026-01-01T00:00:00", message="agent draft",
     ).save()
     [card] = list_projects()
     assert card.is_ready is True

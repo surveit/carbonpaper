@@ -44,7 +44,7 @@ def scoped(projects_root):
     data = projects_root / PROJECT / "data"
     write_inputs(data)
     set_stages(PROJECT, stage_specs(data))
-    save_working_copy_as_version(PROJECT, message="fixture", reviewer="test")
+    save_working_copy_as_version(PROJECT, message="fixture")
     run_id = str(run_service.execute(PROJECT)["run_id"])
     manifest = read_run_manifest(PROJECT, run_id).to_dict()
     order = [r["stage_id"] for r in manifest["stage_records"]]

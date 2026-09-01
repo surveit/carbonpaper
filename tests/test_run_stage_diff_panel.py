@@ -16,7 +16,6 @@ import app.web.loading as loading
 from app.main import app
 from app.runtime.lineage_sidecar import resolve_lineage_sidecar_path
 from app.runtime.runner import execute_run
-from app.services import versioning
 from app.services import project as project_service
 from conftest import pinned_stages, reads_of
 from stage_seed import add_stage
@@ -133,8 +132,7 @@ def run_ctx(tmp_path: Path) -> tuple[Path, str]:
                   "route": ["north", "south", "east"]}).to_csv(routes, index=False)
     _seed_workflow(pdir, data, routes)
     workspace.set_projects_dir(tmp_path)
-    version_id = project_service.save_working_copy_as_version(pdir.name, message="v1", reviewer="test").version_id
-    versioning.publish_version(pdir.name, version_id, reviewer="test")
+    project_service.save_working_copy_as_version(pdir.name, message="v1")
     run_id = str(execute_run(pdir / "runs", pdir.name, *pinned_stages(pdir))["run_id"])
     return pdir, run_id
 

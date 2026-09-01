@@ -10,7 +10,7 @@ import pytest
 
 import app.services.run as run_service
 from app.core.errors import RunVersionUnresolvableError
-from app.services import versioning, workspace
+from app.services import workspace
 from app.services.project import save_working_copy_as_version
 from stage_seed import add_stage
 
@@ -28,8 +28,7 @@ def project(tmp_path):
              "connector": {"kind": "file",
                            "params": {"path": str(authored), "format": "csv"}}}
     add_stage(proj, stage)
-    vid = save_working_copy_as_version(proj.name, message="seed", reviewer="t").version_id
-    versioning.publish_version(proj.name, vid, reviewer="human")
+    vid = save_working_copy_as_version(proj.name, message="seed").version_id
     workspace.set_projects_dir(tmp_path)
     return proj, vid
 

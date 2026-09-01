@@ -18,7 +18,7 @@ from app.main import app
 from app.models.records.queue_fingerprints import QueueFingerprints
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
-from app.services import review, versioning
+from app.services import review
 from app.core.stage_cache import StageCacheEntry
 from app.services.project import save_working_copy_as_version
 from app.models import WorkflowStage, parse_stage
@@ -33,8 +33,7 @@ PROJECT = "queue_route_journey"
 
 
 def _seed_version(root):
-    vid = save_working_copy_as_version(root.name, message="test seed", reviewer="test").version_id
-    versioning.publish_version(root.name, vid, reviewer="human")
+    save_working_copy_as_version(root.name, message="test seed")
 
 
 def _with_queue_signature(stage, input_columns):

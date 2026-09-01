@@ -440,7 +440,7 @@ def test_add_stage_input_schema_omits_the_server_owned_fields(tmp_path, monkeypa
     assert not {"tests", "eval", "review", "source"} & set(defs["SubmittedStage"]["properties"])
 
 
-def test_mcp_save_version_snapshots_the_working_copy_unpublished(tmp_path, monkeypatch):
+def test_mcp_save_version_snapshots_the_working_copy(tmp_path, monkeypatch):
     from app.mcp import server
     from app.services import versioning
 
@@ -455,8 +455,6 @@ def test_mcp_save_version_snapshots_the_working_copy_unpublished(tmp_path, monke
     [version] = versioning.list_versions(pdir.name)
     assert saved["version_id"] == version.version_id
     assert version.message == "first cut"
-    assert version.reviewer == "agent"
-    assert version.published is False
     assert {s.id for s in version.stages} == {"load", "double", "untested"}
 
 

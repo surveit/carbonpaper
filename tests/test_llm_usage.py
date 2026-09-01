@@ -93,7 +93,6 @@ def test_row_usage_sums_across_rows_into_ctx(monkeypatch):
 def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
 
     from app.runtime.runner import execute_run
-    from app.services import versioning
     from app.services.project import save_working_copy_as_version
 
     monkeypatch.setattr(lt, "call_llm", _fake_call_llm(
@@ -128,8 +127,7 @@ def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
                 "llm": {"prompt_template": "{text}"}}
     add_stage(tmp_path, load)
     add_stage(tmp_path, classify)
-    vid = save_working_copy_as_version(tmp_path.name, message="seed", reviewer="test").version_id
-    versioning.publish_version(tmp_path.name, vid, reviewer="human")
+    save_working_copy_as_version(tmp_path.name, message="seed")
 
     manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
 

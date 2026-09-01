@@ -68,7 +68,7 @@ def project(tmp_path, monkeypatch):
     demo.mkdir()
     WorkflowVersion(
         id="demo/v1", version_id="v1", created_at="2026-07-10T00:00:00",
-        message="seed", reviewer="test",
+        message="seed",
         stages=[parse_stage(_load(tmp_path)), parse_stage(_CLASSIFY)],
     ).save()
 
@@ -138,7 +138,7 @@ def test_run_eval_through_a_queue_stage_records_an_error_never_a_score(project):
     repo_root, demo, _config = project
     WorkflowVersion(
         id="demo/v-queue", version_id="v-queue", created_at="2026-07-12T00:00:00",
-        message="queue pathway", reviewer="test",
+        message="queue pathway",
         stages=[parse_stage(_load(repo_root)), parse_stage(_QUEUE_REVIEW)],
     ).save()
     pd.DataFrame({"doc_id": ["a", "b"], "score": [1, 2], "human_score": [1, 2]}).to_csv(
@@ -179,9 +179,8 @@ def test_run_eval_scores_an_explicit_unpublished_version(project):
     repo_root, demo, config = project
     WorkflowVersion(
         id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
-        message="agent draft", reviewer="agent",
+        message="agent draft",
         stages=[parse_stage(_load(repo_root)), parse_stage(_CLASSIFY)],
-        published=False,
     ).save()
     run = run_eval(demo.name, config, version_id="v2-draft")
     assert run.status == "scored"
@@ -192,9 +191,8 @@ def test_run_eval_none_version_id_resolves_to_newest_overall(project):
     repo_root, demo, config = project
     WorkflowVersion(
         id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
-        message="agent draft", reviewer="agent",
+        message="agent draft",
         stages=[parse_stage(_load(repo_root)), parse_stage(_CLASSIFY)],
-        published=False,
     ).save()
     run = run_eval(demo.name, config)
     assert run.workflow_version == "v2-draft"
@@ -373,9 +371,8 @@ def test_trigger_route_scores_an_explicitly_selected_unpublished_version(project
     save_eval_config(demo.name, config)
     WorkflowVersion(
         id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
-        message="agent draft", reviewer="agent",
+        message="agent draft",
         stages=[parse_stage(_load(repo_root)), parse_stage(_CLASSIFY)],
-        published=False,
     ).save()
     workspace.set_projects_dir(repo_root)
 

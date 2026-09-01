@@ -12,7 +12,6 @@ from pydantic import ValidationError
 
 import app.services.run as run_service
 from app.main import app
-from app.services import versioning
 from app.services import workspace
 from app.services.project import save_working_copy_as_version
 from app.core.files import (
@@ -45,8 +44,7 @@ def project(tmp_path, monkeypatch):
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
     add_stage(proj, stage)
-    vid = save_working_copy_as_version(proj.name, message="seed", reviewer="test").version_id
-    versioning.publish_version(proj.name, vid, reviewer="human")
+    save_working_copy_as_version(proj.name, message="seed")
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setenv("CARBON_PAPER_FILES_ROOT", str(tmp_path / "files"))
     monkeypatch.setattr(run_service, "_run_in_background",
@@ -120,8 +118,7 @@ def test_unbound_input_returns_400(project):
     stage = read_stage(project, "load")
     stage["connector"]["params"] = {}
     add_stage(project, stage)
-    vid = save_working_copy_as_version(project.name, message="unbound", reviewer="test").version_id
-    versioning.publish_version(project.name, vid, reviewer="human")
+    save_working_copy_as_version(project.name, message="unbound")
 
     resp = client.post("/project/demo/run",
                        data={"binding__load": ""}, follow_redirects=False)
@@ -225,7 +222,7 @@ def test_required_file_picker_keeps_native_form_validation(project):
     stage = read_stage(project, "load")
     stage["connector"]["params"] = {}
     add_stage(project, stage)
-    save_working_copy_as_version("demo", message="unbound", reviewer="test")
+    save_working_copy_as_version("demo", message="unbound")
 
     body = client.get("/project/demo/runs/new").text
     picker = body.split('class="picker" data-picker', 1)[1].split("</select>", 1)[0]

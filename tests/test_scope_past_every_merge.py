@@ -132,7 +132,7 @@ def scoped(projects_root):
     pd.DataFrame(SALES, columns=["region", "amount"]).to_csv(
         data / "sales.csv", index=False)
     set_stages(PROJECT, stage_specs(data))
-    save_working_copy_as_version(PROJECT, message="fixture", reviewer="test")
+    save_working_copy_as_version(PROJECT, message="fixture")
     run_id = str(run_service.execute(PROJECT)["run_id"])
     manifest = read_run_manifest(PROJECT, run_id).to_dict()
     order = [record["stage_id"] for record in manifest["stage_records"]]

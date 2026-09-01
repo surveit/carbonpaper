@@ -9,7 +9,7 @@ from app.models.stage import STAGE_SPEC_SCHEMA_VERSION, Stage
 
 
 class WorkflowVersion(PersistedModel):
-    """`id` is the composite `{project_id}/{version_id}`; `published` is a signal, not a gate on running."""
+    """`id` is the composite `{project_id}/{version_id}`."""
 
     collection: ClassVar[str] = "workflow_version"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
@@ -20,9 +20,5 @@ class WorkflowVersion(PersistedModel):
     version_id: str
     parent_version: str | None = None
     message: str
-    reviewer: str
     stages: list[Stage] = Field(default_factory=list)
     schemas: list[dict[str, Any]] = Field(default_factory=list)
-    published: bool = False
-    published_at: str | None = None
-    published_by: str | None = None

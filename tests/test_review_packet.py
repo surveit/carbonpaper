@@ -108,9 +108,8 @@ def _double_stage():
 
 
 def _seed_version(root):
-    vid = versioning.create_version_from_stages(root.name, [_load_stage(root), _double_stage()], message="seed", reviewer="test"
+    vid = versioning.create_version_from_stages(root.name, [_load_stage(root), _double_stage()], message="seed"
     ).version_id
-    versioning.publish_version(root.name, vid, reviewer="human")
     return vid
 
 
@@ -595,9 +594,8 @@ def _run_publishing_project(project_dir, tmp_path, code):
     _make_project(project_dir)
     stages = [_load_stage(project_dir), _double_stage(), _report_stage(code)]
     _write_stage(project_dir, "03_report.json", stages[2])
-    vid = versioning.create_version_from_stages(project_dir.name, stages, message="seed", reviewer="test"
+    versioning.create_version_from_stages(project_dir.name, stages, message="seed"
     ).version_id
-    versioning.publish_version(project_dir.name, vid, reviewer="human")
     run_id = run_service.start_run(_PROJECT)
     return export_review_packet(_PROJECT, run_id, tmp_path / "packets")
 
@@ -625,9 +623,8 @@ def test_an_os_dotfile_is_not_reported_as_a_published_output(project_dir, tmp_pa
     _make_project(project_dir)
     stages = [_load_stage(project_dir), _double_stage(), _report_stage(_PUBLISH_CODE)]
     _write_stage(project_dir, "03_report.json", stages[2])
-    vid = versioning.create_version_from_stages(project_dir.name, stages, message="seed", reviewer="test"
+    versioning.create_version_from_stages(project_dir.name, stages, message="seed"
     ).version_id
-    versioning.publish_version(project_dir.name, vid, reviewer="human")
     run_id = run_service.start_run(_PROJECT)
     (project_dir / "runs" / run_id / "artifacts" / "build" / ".DS_Store").write_bytes(b"\x00")
 

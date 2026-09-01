@@ -56,7 +56,7 @@ def demo(tmp_path):
     }
     WorkflowVersion(
         id="demo/v1", version_id="v1", created_at="2026-08-01T00:00:00",
-        message="seed", reviewer="test", published=False,
+        message="seed",
         stages=[parse_stage(load), parse_stage(_CLASSIFY)],
     ).save()
     return project
@@ -134,7 +134,7 @@ def test_reading_a_stage_that_wrote_no_output_is_loud(demo):
                                     "def transform(row):\n    raise ValueError('boom')"})
     WorkflowVersion(
         id="demo/v2", version_id="v2", created_at="2026-08-02T00:00:00",
-        message="broken", reviewer="test", published=False,
+        message="broken",
         stages=[parse_stage(s) for s in (_load_stage(demo), bad)],
     ).save()
     result = run_workflow_test("demo", version_id="v2", limit=2)

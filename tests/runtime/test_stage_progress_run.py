@@ -54,7 +54,7 @@ def _find_stage(manifest, stage_id: str):
 def test_row_progress_is_persisted_when_every_row_comes_from_cache(tmp_path):
     _add_source(tmp_path)
     _add_row_stage(tmp_path)
-    save_working_copy_as_version(tmp_path.name, message="seed", reviewer="test")
+    save_working_copy_as_version(tmp_path.name, message="seed")
 
     execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
     replayed = execute_run(
@@ -99,7 +99,7 @@ def test_resume_starts_a_new_progress_sequence_for_the_rerun(tmp_path):
         },
         "function": {"kind": "inline", "code": code},
     })
-    save_working_copy_as_version(tmp_path.name, message="seed", reviewer="test")
+    save_working_copy_as_version(tmp_path.name, message="seed")
 
     first = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
     assert first["status"] == "errors"

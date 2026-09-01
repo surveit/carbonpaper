@@ -2,9 +2,7 @@
 {#
   VERSIONS — every immutable version of a project, newest-first. A child of the
   Workflow group in the shell.
-  Published state shows read-only here; publishing is an approval act that
-  happens on a version's own detail page, after looking at it — this list never
-  carries a publish form.
+  A version is cut, never approved: nothing here publishes anything.
 
   Context the route passes:
     state    = project_view.shell_state(pdir); section = "versions"
@@ -27,22 +25,15 @@
 {% if versions %}
 <table class="stages">
     <thead>
-        <tr><th>version</th><th>created</th><th>message</th><th>parent</th><th>published</th></tr>
+        <tr><th>version</th><th>created</th><th>message</th><th>parent</th></tr>
     </thead>
     <tbody>
         {% for v in versions %}
         <tr>
             <td><a href="/project/{{ state.id }}/workflow/version/{{ v.version_id }}"><code>{{ v.version_id }}</code></a></td>
             <td>{{ v.created_at | friendly_time }}</td>
-            <td>{{ v.message or '' }}{% if v.reviewer %} <span class="muted">— {{ v.reviewer }}</span>{% endif %}</td>
+            <td>{{ v.message or '' }}</td>
             <td>{% if v.parent_version %}<code>{{ v.parent_version }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
-            <td>
-                {% if v.published %}
-                <span class="muted">✓ {% if v.published_at %}{{ v.published_at | friendly_time }}{% else %}published{% endif %}</span>
-                {% else %}
-                <span class="muted">unpublished</span>
-                {% endif %}
-            </td>
         </tr>
         {% endfor %}
     </tbody>

@@ -57,7 +57,7 @@ def demo(projects_root: Path, tmp_path: Path) -> str:
     (projects_root / "demo").mkdir(parents=True, exist_ok=True)
     WorkflowVersion(
         id="demo/v1", version_id="v1", created_at="2026-07-10T00:00:00",
-        message="seed", reviewer="test",
+        message="seed",
         stages=[parse_stage(_LOAD), parse_stage(_CLASSIFY)],
     ).save()
     cases = tmp_path / "cases.csv"

@@ -248,21 +248,13 @@ def test_latest_version_id_none_when_no_versions(tmp_path: Path):
 def test_latest_version_id_returns_newest(tmp_path: Path):
     for vid in ("20260101T000000", "20260201T000000"):
         WorkflowVersion(id=f"{tmp_path.name}/{vid}", version_id=vid, created_at="x",
-                message="m", reviewer="r").save()
+                message="m").save()
     assert latest_version_id(tmp_path.name) == "20260201T000000"
 
 
-def test_latest_version_id_includes_unpublished_draft(tmp_path: Path):
+def test_latest_version_id_returns_the_only_version(tmp_path: Path):
     WorkflowVersion(id=f"{tmp_path.name}/20260101T000000", version_id="20260101T000000",
-            created_at="x", message="m", reviewer="r", published=True).save()
-    WorkflowVersion(id=f"{tmp_path.name}/20260201T000000", version_id="20260201T000000",
-            created_at="x", message="m", reviewer="r", published=False).save()
-    assert latest_version_id(tmp_path.name) == "20260201T000000"
-
-
-def test_latest_version_id_returns_the_only_unpublished_version(tmp_path: Path):
-    WorkflowVersion(id=f"{tmp_path.name}/20260101T000000", version_id="20260101T000000",
-            created_at="x", message="m", reviewer="r", published=False).save()
+            created_at="x", message="m").save()
     assert latest_version_id(tmp_path.name) == "20260101T000000"
 
 

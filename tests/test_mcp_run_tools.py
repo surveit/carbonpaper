@@ -31,7 +31,7 @@ def _make_run_project(root):
         },
     }
     add_stage(root, stage)
-    return save_working_copy_as_version(root.name, message="seed", reviewer="test").version_id
+    return save_working_copy_as_version(root.name, message="seed").version_id
 
 
 _LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
@@ -65,7 +65,7 @@ def _make_workflow_test_project(root):
                                       "format": "csv"}})
     WorkflowVersion(
         id=f"{root.name}/v1", version_id="v1", created_at="2026-07-10T00:00:00",
-        message="seed", reviewer="test", published=False,
+        message="seed",
         stages=[parse_stage(s) for s in (load, _CLASSIFY)],
     ).save()
 

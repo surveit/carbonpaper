@@ -305,7 +305,6 @@ def save_working_copy_as_version(
     project_id: str,
     *,
     message: str,
-    reviewer: str,
     parent_version: str | None = None,
 ) -> versioning.WorkflowVersion:
     """Strict-loads the working copy, so an invalid one raises and no version is written."""
@@ -318,7 +317,6 @@ def save_working_copy_as_version(
         project_id,
         [stage_to_spec_dict(s) for s in stages],
         message=message,
-        reviewer=reviewer,
         parent_version=parent_version,
     )
 
@@ -452,9 +450,7 @@ def import_project(
     terms.write_terms(project_id, Terms(nouns=wf.data_model, verbs=wf.verbs))
     if wf.stages:
         loader.save_stages(project_id, list(wf.stages))
-        save_working_copy_as_version(
-            project_id, message=f"Imported '{label}'", reviewer="import"
-        )
+        save_working_copy_as_version(project_id, message=f"Imported '{label}'")
     return project_id
 
 

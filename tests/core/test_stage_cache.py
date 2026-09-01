@@ -60,8 +60,7 @@ def test_old_shape_entry_fails_loudly_on_load():
     old = {"id": _build_cache_id("p", "review", "sf", "if"), "project": "p", "stage_id": "review",
            "stage_fingerprint": "sf", "input_fingerprint": "if", "source_run_id": "r",
            "frozen_input": {"id": "a", "score": 1},
-           "human": {"decision": "approve", "modified_score": None, "reviewer": "local",
-                     "reviewed_at": "2026-07-01T00:00:00"}}
+           "human": {"decision": "approve", "modified_score": None, "reviewed_at": "2026-07-01T00:00:00"}}
     get_store().write("stage_cache", old["id"], old, schema_version=1)
     with pytest.raises(ValidationError):
         StageCacheEntry.load_or_none(old["id"])

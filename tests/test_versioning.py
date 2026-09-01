@@ -3,7 +3,6 @@ store (conftest.fresh_store).
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -16,7 +15,7 @@ from app.models.review_guide import ReviewGuideStep
 from app.core.persistence import get_store
 from app.services.loader import WorkflowLoadError
 from app.services.project import save_working_copy_as_version
-from app.services.versioning import create_version_from_stages, list_versions, load_version, find_latest_review_guide, find_latest_version_id, load_version_stages, publish_version, resolve_version_id, save_version_guide
+from app.services.versioning import create_version_from_stages, list_versions, load_version, find_latest_review_guide, find_latest_version_id, load_version_stages, resolve_version_id, save_version_guide
 from app.models.records.review_guide import ReviewGuide
 from app.models.records.workflow_version import WorkflowVersion
 from stage_seed import add_stage
@@ -42,13 +41,10 @@ def _seed(project_dir: Path, stage: dict = _LOAD_STAGE) -> None:
 
 def test_create_version_returns_meta_and_round_trips(tmp_path):
     _seed(tmp_path)
-    meta = save_working_copy_as_version(tmp_path.name, message="first cut", reviewer="ada")
+    meta = save_working_copy_as_version(tmp_path.name, message="first cut")
 
     assert meta.message == "first cut"
-    assert meta.reviewer == "ada"
     assert meta.parent_version is None
-    assert meta.published is False
-    assert meta.published_at is None
 
     [listed] = list_versions(tmp_path.name)
     assert listed == meta
@@ -59,23 +55,11 @@ def test_create_version_returns_meta_and_round_trips(tmp_path):
     assert stage.id == "load"
 
 
-def test_create_version_records_parent(tmp_path, monkeypatch):
-    """version_id has 1-second resolution, so the clock is monkeypatched to strictly advance."""
+def test_create_version_records_parent(tmp_path):
     _seed(tmp_path)
-    base = datetime(2026, 1, 1, 12, 0, 0)
-    tick = {"n": 0}
 
-    class _AdvancingClock:
-        @staticmethod
-        def now() -> datetime:
-            tick["n"] += 1
-            return base + timedelta(seconds=tick["n"])
-
-    import app.services.versioning as versioning_module
-    monkeypatch.setattr(versioning_module, "datetime", _AdvancingClock)
-
-    first = save_working_copy_as_version(tmp_path.name, message="v1", reviewer="ada")
-    second = save_working_copy_as_version(tmp_path.name, message="v2", reviewer="ada",
+    first = save_working_copy_as_version(tmp_path.name, message="v1")
+    second = save_working_copy_as_version(tmp_path.name, message="v2",
                                       parent_version=first.version_id)
     assert second.version_id != first.version_id
     assert second.parent_version == first.version_id
@@ -83,7 +67,7 @@ def test_create_version_records_parent(tmp_path, monkeypatch):
 
 def test_create_version_no_compiled_dir_raises_file_not_found(tmp_path):
     with pytest.raises(FileNotFoundError):
-        save_working_copy_as_version(tmp_path.name, message="x", reviewer="test")
+        save_working_copy_as_version(tmp_path.name, message="x")
     assert list_versions(tmp_path.name) == []
 
 
@@ -96,7 +80,7 @@ def test_create_version_invalid_workflow_raises_and_writes_nothing(tmp_path):
     add_stage(tmp_path, bad)
 
     with pytest.raises(WorkflowLoadError) as exc:
-        save_working_copy_as_version(tmp_path.name, message="x", reviewer="test")
+        save_working_copy_as_version(tmp_path.name, message="x")
     assert any("params.path" in i for i in exc.value.issues)
     assert list_versions(tmp_path.name) == []
 
@@ -104,8 +88,8 @@ def test_create_version_invalid_workflow_raises_and_writes_nothing(tmp_path):
 def test_create_version_twice_within_a_second_keeps_both(tmp_path):
     _seed(tmp_path)
 
-    save_working_copy_as_version(tmp_path.name, message="first", reviewer="test")
-    save_working_copy_as_version(tmp_path.name, message="second", reviewer="test")
+    save_working_copy_as_version(tmp_path.name, message="first")
+    save_working_copy_as_version(tmp_path.name, message="second")
 
     assert [v.message for v in list_versions(tmp_path.name)] == ["second", "first"]
 
@@ -114,8 +98,8 @@ def test_versions_are_scoped_per_project(tmp_path):
     proj_a, proj_b = tmp_path / "alpha", tmp_path / "beta"
     _seed(proj_a)
     _seed(proj_b)
-    meta_a = save_working_copy_as_version(proj_a.name, message="a", reviewer="test")
-    meta_b = save_working_copy_as_version(proj_b.name, message="b", reviewer="test")
+    meta_a = save_working_copy_as_version(proj_a.name, message="a")
+    meta_b = save_working_copy_as_version(proj_b.name, message="b")
     assert [v.version_id for v in list_versions(proj_a.name)] == [meta_a.version_id]
     assert [v.version_id for v in list_versions(proj_b.name)] == [meta_b.version_id]
 
@@ -129,14 +113,14 @@ def test_list_versions_empty_when_none_created(tmp_path):
 def test_list_versions_newest_first(tmp_path):
     for vid in ("20260101T000000", "20260201T000000", "20260115T000000"):
         WorkflowVersion(id=f"{tmp_path.name}/{vid}", version_id=vid, created_at=vid,
-                message="m", reviewer="r").save()
+                message="m").save()
     assert [v.version_id for v in list_versions(tmp_path.name)] == [
         "20260201T000000", "20260115T000000", "20260101T000000"]
 
 
 def test_list_versions_errors_on_a_corrupt_document(tmp_path):
     _seed(tmp_path)
-    save_working_copy_as_version(tmp_path.name, message="good", reviewer="test")
+    save_working_copy_as_version(tmp_path.name, message="good")
     get_store().write("workflow_version", f"{tmp_path.name}/20260101T000000", {"bogus": "data"})
     with pytest.raises(WorkflowLoadError, match="20260101T000000"):
         list_versions(tmp_path.name)
@@ -154,18 +138,18 @@ def test_load_version_stages_missing_raises_file_not_found(tmp_path):
         load_version_stages(tmp_path.name, "nope")
 
 
-def test_stored_version_missing_published_reads_as_unpublished(tmp_path):
-    """Writes a raw dict to the store, so the READ path — not construction — applies the default."""
+def test_a_stored_version_still_carrying_the_retired_publish_keys_is_refused(tmp_path):
+    """What alembic 0020 exists to prevent: PersistedModel forbids extra keys."""
     vid = "20260101T000000"
     data = {
         "id": f"{tmp_path.name}/{vid}", "version_id": vid,
         "created_at": "2026-01-01T00:00:00", "parent_version": None,
-        "message": "legacy", "reviewer": "human",
+        "message": "legacy", "reviewer": "human", "published": False,
         "stages": [], "schemas": [],
     }
     get_store().write("workflow_version", f"{tmp_path.name}/{vid}", data)
-    meta = load_version(tmp_path.name, vid)
-    assert meta.published is False
+    with pytest.raises(WorkflowLoadError):
+        load_version(tmp_path.name, vid)
 
 
 def test_a_stored_queue_stage_written_before_queue_sort_still_loads(tmp_path):
@@ -194,49 +178,21 @@ def test_a_stored_queue_stage_written_before_queue_sort_still_loads(tmp_path):
     get_store().write("workflow_version", f"{tmp_path.name}/{vid}", {
         "id": f"{tmp_path.name}/{vid}", "version_id": vid,
         "created_at": "2026-01-01T00:00:00", "parent_version": None,
-        "message": "legacy", "reviewer": "human",
-        "stages": [stage], "schemas": [],
+        "message": "legacy", "stages": [stage], "schemas": [],
     })
 
     [loaded] = load_version_stages(tmp_path.name, vid)
     assert loaded.queue.sort == []
 
 
-# ── publish_version ──────────────────────────────────────────────────────────
-
-def test_publish_version_stamps_and_is_idempotent(tmp_path):
-    _seed(tmp_path)
-    vid = save_working_copy_as_version(tmp_path.name, message="x", reviewer="ada").version_id
-
-    meta = publish_version(tmp_path.name, vid, reviewer="human-1")
-    assert meta.published is True
-    assert meta.published_at is not None
-    assert meta.published_by == "human-1"
-
-    # Idempotent: a second publish keeps the FIRST publisher, doesn't error.
-    again = publish_version(tmp_path.name, vid, reviewer="human-2")
-    assert again.published is True
-    assert again.published_by == "human-1"
-    assert again.published_at == meta.published_at
-
-    reloaded = load_version(tmp_path.name, vid)
-    assert reloaded.published is True
-    assert reloaded.published_by == "human-1"
-
-
-def test_publish_version_unknown_id_raises_file_not_found(tmp_path):
-    with pytest.raises(FileNotFoundError):
-        publish_version(tmp_path.name, "nope", reviewer="human")
-
-
 # ── find_latest_version_id / resolve_version_id ──────────────────────────────
 #
-# Publication is a human review signal, not a runtime precondition: neither
-# resolver reads `published`. Only an empty store stops a run.
+# Every stored version is runnable: a version is cut, never approved, so
+# neither resolver has anything to filter on. Only an empty store stops a run.
 
-def _store_version(project_dir: Path, vid: str, *, published: bool = False) -> str:
+def _store_version(project_dir: Path, vid: str) -> str:
     WorkflowVersion(id=f"{project_dir.name}/{vid}", version_id=vid, created_at=vid,
-                    message="m", reviewer="r", published=published).save()
+                    message="m").save()
     return vid
 
 
@@ -245,24 +201,24 @@ def test_find_latest_version_id_is_none_when_the_project_stores_none(tmp_path):
 
 
 def test_find_latest_version_id_returns_the_newest_whatever_its_published_state(tmp_path):
-    _store_version(tmp_path, "20260101T000000", published=True)
-    newest = _store_version(tmp_path, "20260201T000000", published=False)
+    _store_version(tmp_path, "20260101T000000")
+    newest = _store_version(tmp_path, "20260201T000000")
     assert find_latest_version_id(tmp_path.name) == newest
 
 
 def test_resolve_version_id_defaults_to_the_newest_stored_version(tmp_path):
-    _store_version(tmp_path, "20260101T000000", published=True)
-    newest = _store_version(tmp_path, "20260201T000000", published=False)
+    _store_version(tmp_path, "20260101T000000")
+    newest = _store_version(tmp_path, "20260201T000000")
     assert resolve_version_id(tmp_path.name, None) == newest
 
 
 def test_resolve_version_id_returns_a_named_unpublished_version(tmp_path):
-    vid = _store_version(tmp_path, "20260101T000000", published=False)
+    vid = _store_version(tmp_path, "20260101T000000")
     assert resolve_version_id(tmp_path.name, vid) == vid
 
 
 def test_resolve_version_id_returns_a_named_published_version(tmp_path):
-    vid = _store_version(tmp_path, "20260101T000000", published=True)
+    vid = _store_version(tmp_path, "20260101T000000")
     assert resolve_version_id(tmp_path.name, vid) == vid
 
 
@@ -279,13 +235,11 @@ def test_resolve_version_id_raises_when_the_project_stores_no_version_at_all(tmp
 
 # ── create_version_from_stages: the single write chokepoint ─────────────────
 
-def test_create_version_from_stages_valid_is_loadable_and_unpublished(tmp_path):
-    meta = create_version_from_stages(tmp_path.name, [_LOAD_STAGE], message="from stages", reviewer="ada",
+def test_create_version_from_stages_valid_is_loadable(tmp_path):
+    meta = create_version_from_stages(tmp_path.name, [_LOAD_STAGE], message="from stages",
         parent_version="prior-id",
     )
-    assert meta.published is False
     assert meta.parent_version == "prior-id"
-    assert meta.reviewer == "ada"
 
     [stage] = load_version_stages(tmp_path.name, meta.version_id)
     assert isinstance(stage, AbstractStage)
@@ -304,7 +258,7 @@ def test_create_version_from_stages_invalid_raises_and_writes_nothing(tmp_path):
         "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
     }
     with pytest.raises(pydantic.ValidationError):
-        create_version_from_stages(tmp_path.name, [dangling_input], message="bad", reviewer="ada",
+        create_version_from_stages(tmp_path.name, [dangling_input], message="bad",
         )
     assert list_versions(tmp_path.name) == []
 
@@ -319,7 +273,7 @@ _TALLY_STAGE = {
 
 
 def _two_stage_version(project_dir: Path) -> str:
-    return create_version_from_stages(project_dir.name, [_LOAD_STAGE, _TALLY_STAGE], message="two", reviewer="ada",
+    return create_version_from_stages(project_dir.name, [_LOAD_STAGE, _TALLY_STAGE], message="two",
     ).version_id
 
 
@@ -464,7 +418,7 @@ def _published_version(project_dir: Path, report_reads: str) -> str:
                       "code": "def transform(df, output_dir, citation_provider): return df"},
          "signature": {"form": "replaces"}},
     ]
-    return create_version_from_stages(project_dir.name, stages, message="published", reviewer="ada",
+    return create_version_from_stages(project_dir.name, stages, message="published",
     ).version_id
 
 
@@ -628,9 +582,7 @@ def test_a_version_document_with_an_embedded_guide_fails_loudly(tmp_path):
     data = {
         "id": f"{tmp_path.name}/{vid}", "version_id": vid,
         "created_at": "2026-01-01T00:00:00", "parent_version": None,
-        "message": "legacy", "reviewer": "human",
-        "stages": [], "schemas": [], "published": False,
-        "guide": {"steps": [], "unnarrated": []},
+        "message": "legacy", "stages": [], "schemas": [], "guide": {"steps": [], "unnarrated": []},
     }
     get_store().write("workflow_version", f"{tmp_path.name}/{vid}", data)
     with pytest.raises(WorkflowLoadError, match="guide"):

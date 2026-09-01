@@ -14,7 +14,6 @@ import app.services.workspace as workspace
 from app.core.errors import RunVersionUnresolvableError
 from app.main import app
 from app.runtime.runner import execute_run
-from app.services import versioning
 from app.services import project as project_service
 from app.services.run import load_run_workflow
 from conftest import pinned_stages
@@ -55,8 +54,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _run_once(project_dir: Path) -> str:
-    version_id = project_service.save_working_copy_as_version(project_dir.name, message="v1", reviewer="test").version_id
-    versioning.publish_version(project_dir.name, version_id, reviewer="test")
+    project_service.save_working_copy_as_version(project_dir.name, message="v1")
     return str(execute_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir))["run_id"])
 
 
