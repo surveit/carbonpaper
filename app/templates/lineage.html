@@ -9,6 +9,7 @@
 {% if not offline %}<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>{% endif %}
 {# standalone page (does not extend base.html), so it loads the node dispatcher itself #}
 <script src="{{ static_root | default("/static/", true) }}diagram_nodes.js"></script>
+<script src="{{ static_root | default("/static/", true) }}figure_text.js"></script>
 <script src="{{ static_root | default("/static/", true) }}tooltip.js"></script>
 <script src="{{ static_root | default("/static/", true) }}cell-lineage.js"></script>
 {# The header's three pickers; served only, because a folder has no other row to move to. #}
