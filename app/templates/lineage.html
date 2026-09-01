@@ -185,9 +185,6 @@ a.snavbtn:hover{background:var(--hover)}
   cursor:pointer;border-bottom:2px solid transparent}
 .lin-tabs button.on{color:var(--fg);border-bottom-color:var(--accent);font-weight:600}
 .lin-pbody{overflow:auto;padding:12px 18px 40px;flex:1}
-.lin-scope{display:inline-flex;border:1px solid var(--border);border-radius:7px;overflow:hidden;margin-bottom:10px}
-.lin-scope button{border:0;background:var(--raised);font:inherit;font-size:12px;color:var(--muted);padding:4px 11px;cursor:pointer}
-.lin-scope button.on{background:var(--info-ink);color:var(--on-dark)}
 .lin-base{color:var(--muted);font-size:12px;margin:0 0 10px}
 .lin-base code{background:var(--sunk-deep);padding:0 4px;border-radius:4px}
 .lin-said{border-radius:7px;padding:8px 11px;font-size:12.5px;margin-bottom:10px}
@@ -439,7 +436,7 @@ if(rowBox) rowBox.addEventListener('change', () => {
 </script>
 {% if view.nodes %}
 <script>
-let sel = V.nodes.length - 1, tab = 'row', scope = 'changed';
+let sel = V.nodes.length - 1, tab = 'row';
 const transformCache = {};
 
 // ---- The steps ------------------------------------------------------------
@@ -569,15 +566,9 @@ function saidOf(n, touched){
 function renderRowTab(n){
   const columns = n.row_diff.columns;
   const touched = columns.filter(c => c.state !== 'carried');
-  // Nothing changed here → the "changed" scope would be an empty table, so the
-  // whole row stands in rather than a blank pane.
-  const shown = (scope === 'changed' && touched.length) ? touched : columns;
-  // With no parent nothing was compared, so there is no second view to offer.
-  const picker = n.base ? `<div class="lin-scope">
-      <button data-scope="changed" class="${scope==='changed'?'on':''}">Changed here (${touched.length})</button>
-      <button data-scope="all" class="${scope==='all'?'on':''}">Whole row (${columns.length})</button>
-    </div>` : '';
-  return `${picker}
+  const carried = columns.filter(c => c.state === 'carried');
+  const shown = touched.concat(carried);
+  return `
     ${saidOf(n, touched)}
     ${baseLine(n)}
     <table class="lin-row">${shown.map(columnRow).join('')}</table>`;
@@ -671,7 +662,6 @@ document.querySelector('.lin-tabs').addEventListener('click', e => {
   if(e.target.dataset.tab){ tab = e.target.dataset.tab; render(); }
 });
 document.getElementById('pbody').addEventListener('click', e => {
-  if(e.target.dataset.scope){ scope = e.target.dataset.scope; render(); return; }
   // A clipped value hides part of itself, so the click that reveals it is not
   // yet the click that leaves the page.
   const clip = e.target.closest('.lin-clip.is-clipped');
