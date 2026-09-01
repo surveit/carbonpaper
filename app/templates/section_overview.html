@@ -1,6 +1,6 @@
 {% extends "project_shell.html" %}
 {% from "_input_files.html" import input_files %}
-{% from "_sparkle.html" import sparkle %}
+{% from "_agent_link.html" import agent_link %}
 {#
   OVERVIEW — what this project can hand someone, and what stands between it and that.
 
@@ -60,9 +60,8 @@
           <span class="ov-check-mark">{{ '✓' if check.ok else '✕' }}</span>
           <span><b>{{ check.headline }}</b><span class="muted">{{ check.detail }}</span>
             {% if check.action %}
-            {% if check.action.kind == 'chat' %}
-            <a class="ov-ask" href="{{ check.action.href }}"
-               >{{ sparkle() }}{{ check.action.label }}<span class="ov-by">, with the agent</span></a>
+            {% if check.action.opens_a_chat() %}
+            {{ agent_link(check.action.href, check.action.label) }}
             {% else %}
             <a class="ov-go" href="{{ check.action.href }}">{{ check.action.label }}</a>
             {% endif %}
@@ -118,9 +117,8 @@
         <span>
           <span class="ov-q-what">{{ row.what }}</span>
           <span class="ov-q-why">{{ row.why }}</span>
-          {% if row.kind == 'chat' %}
-          <a class="ov-ask" href="{{ row.href }}"
-             >{{ sparkle() }}{{ row.label }}<span class="ov-by">, with the agent</span></a>
+          {% if row.opens_a_chat() %}
+          {{ agent_link(row.href, row.label) }}
           {% else %}
           <a class="ov-go" href="{{ row.href }}">{{ row.label }}</a>
           {% endif %}

@@ -17,6 +17,9 @@ from app.web.run_published import RunPublished, read_published_outputs
 
 DeliverableState = Literal["clean", "warned", "no_runs"]
 
+# What the reader sees when a row sends them here instead of to an app screen.
+_CHAT_PREFIX = "/chat/"
+
 _RUN_NEWEST = "Run the newest version of this workflow."
 _RUN_UNCAPPED = "Re-run this workflow with no row caps."
 _DECLARE_FIGURES = "Declare this workflow's summary figures as workflow outputs, then run it."
@@ -42,13 +45,15 @@ class OverviewCheck(BaseModel):
     ok: bool
     headline: str
     detail: str
-    action: OverviewCheckAction | None = None
+    action: ActionLink | None = None
 
 
-class OverviewCheckAction(BaseModel):
+class ActionLink(BaseModel):
     label: str
     href: str
-    kind: Literal["chat", "go"]
+
+    def opens_a_chat(self) -> bool:
+        return self.href.startswith(_CHAT_PREFIX)
 
 
 class Deliverable(BaseModel):
@@ -68,14 +73,11 @@ class Deliverable(BaseModel):
     lead: str | None = None
 
 
-class QueueRow(BaseModel):
+class QueueRow(ActionLink):
     count: str
     tone: Literal["good", "warn", "bad", "info", "idle"]
     what: str
     why: str
-    label: str
-    href: str
-    kind: Literal["chat", "go"]
 
 
 class ProjectOverview(BaseModel):
@@ -177,8 +179,8 @@ def find_incomplete_warning(project_id: str, row: RunIndexRow) -> OverviewCheck 
             ok=False, headline="This run is waiting on a review.",
             detail="The stages behind the queue have not run, so what it has produced so far is "
                    "only part of the answer.",
-            action=OverviewCheckAction(
-                label="Review it", kind="go",
+            action=ActionLink(
+                label="Review it",
                 href=f"/project/{project_id}/runs/{row.run_id}",
             ),
         )
@@ -204,9 +206,9 @@ def find_no_figures_warning(project_id: str, published: RunPublished) -> Overvie
     )
 
 
-def ask_the_agent(project_id: str, label: str, task: str) -> OverviewCheckAction:
-    return OverviewCheckAction(
-        label=label, kind="chat", href=build_chat_href(project_id, task)
+def ask_the_agent(project_id: str, label: str, task: str) -> ActionLink:
+    return ActionLink(
+        label=label, href=build_chat_href(project_id, task)
     )
 
 
@@ -241,7 +243,7 @@ def find_reviews_waiting(project_id: str, rows: list[RunIndexRow]) -> QueueRow |
         count=str(len(waiting)), tone="info",
         what=f"run{'s' if len(waiting) != 1 else ''} halted for review",
         why="a person has to decide the queued rows before the stages behind them run",
-        label="Review", href=f"/project/{project_id}/runs?status=awaiting_review", kind="go",
+        label="Review", href=f"/project/{project_id}/runs?status=awaiting_review",
     )
 
 
@@ -252,7 +254,7 @@ def find_unreadable_version(project_id: str, versions: VersionsRead) -> QueueRow
     return QueueRow(
         count="!", tone="bad", what="A stored version cannot be read",
         why=versions.problem,
-        label="Repair it", kind="chat",
+        label="Repair it",
         href=build_chat_href(project_id, f"A stored version will not parse: {versions.problem}"),
     )
 
@@ -269,7 +271,7 @@ def find_newest_version_never_run(
     return QueueRow(
         count="", tone="warn", what="The newest version has never run",
         why=(newest.message or newest.version_id),
-        label="Run it", kind="chat",
+        label="Run it",
         href=build_chat_href(project_id, _RUN_NEWEST),
     )
 
@@ -284,7 +286,7 @@ def find_runs_running(project_id: str, rows: list[RunIndexRow]) -> QueueRow | No
         count=str(len(running)), tone="info",
         what=f"run{'s' if len(running) != 1 else ''} running",
         why=f"the longest for {longest}" if longest else "elapsed unrecorded",
-        label="Watch them", href=f"/project/{project_id}/runs?status=running", kind="go",
+        label="Watch them", href=f"/project/{project_id}/runs?status=running",
     )
 
 
@@ -296,7 +298,7 @@ def find_runs_that_errored(project_id: str, rows: list[RunIndexRow]) -> QueueRow
         count=str(len(errored)), tone="idle",
         what=f"run{'s' if len(errored) != 1 else ''} errored",
         why=f"the last on {(errored[0].started_at or 'an unrecorded date')[:10]}",
-        label="Explain the errors", kind="chat",
+        label="Explain the errors",
         href=build_chat_href(project_id, _WHY_ERRORED),
     )
 
@@ -308,10 +310,10 @@ def find_missing_methodology(project_id: str) -> QueueRow | None:
         count="", tone="warn", what="No methodology document",
         why="a review packet would open on a blank page, and nothing states what this "
             "project establishes",
-        label="Write the document", kind="chat",
+        label="Write the document",
         href=build_chat_href(project_id, _WRITE_METHODOLOGY),
     )
 
 
 def build_chat_href(project_id: str, task: str) -> str:
-    return "/chat/agent/editing/new?" + urlencode({"project_id": project_id, "task": task})
+    return f"{_CHAT_PREFIX}agent/editing/new?" + urlencode({"project_id": project_id, "task": task})

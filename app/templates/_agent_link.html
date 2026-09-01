@@ -1,0 +1,15 @@
+{#
+  THE LINK INTO A CONVERSATION, drawn in one place. A page about an object sends the
+  reader to objects, so the one link that opens the agent instead has to look unlike the
+  rest: the mark, and — because the mark is aria-hidden — ", with the agent" for a reader
+  it cannot reach.
+
+  `cls` is the shape the surrounding row needs: the default pill, or `btn` where the link
+  sits in a row of buttons. Callers pass a label that says what gets done, never what the
+  agent is; the macro adds the agent.
+#}
+{% from "_sparkle.html" import sparkle %}
+{% macro agent_link(href, label, cls="agent-link") %}
+<a class="{{ cls }}" href="{{ href }}">{{ sparkle() }} {{ label }}<span
+   class="agent-by">, with the agent</span></a>
+{%- endmacro %}

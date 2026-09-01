@@ -1,4 +1,6 @@
 {% extends "project_shell.html" %}
+{% from "_agent_link.html" import agent_link %}
+{% set chat_href = "/chat/agent/editing/new?" + {'project_id': state.id} | urlencode %}
 {#
   WORKFLOW — the typed-stage pipeline. Master-detail layout, TOP-BOTTOM:
     · the mermaid graph (build_mermaid_graph), full-width on TOP in a zoomable /
@@ -61,7 +63,7 @@
     {# Authoring, in the app: opens a chat bound to this project's editing agent, which
        is the same agent an MCP client talks to. Nothing is created by the link itself —
        see app.web.chat_router.draft_agent_chat. #}
-    <a href="/chat/agent/editing/new?{{ {'project_id': state.id} | urlencode }}" class="btn">✎ Edit with agent</a>
+    {{ agent_link(chat_href, 'Edit the workflow', cls='btn') }}
     <a href="/project/{{ state.id }}/runs" class="btn">All runs</a>
   </div>
 </div>
@@ -127,7 +129,7 @@
           <h2>No workflow yet</h2>
           <p class="muted">This workflow is authored stage by stage by the editing agent.
             Stages appear here as they are added.</p>
-          <a href="/chat/agent/editing/new?{{ {'project_id': state.id} | urlencode }}" class="btn primary">✎ Edit with agent</a>
+          {{ agent_link(chat_href, 'Edit the workflow', cls='btn primary') }}
         </div>
       </div>
       {% endif %}
