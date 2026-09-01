@@ -34,6 +34,9 @@ window.ChatPanel.mount = function (root) {
     const arrow = el("ac-offer-arrow", "↗");
     arrow.setAttribute("aria-hidden", "true");
     link.appendChild(arrow);
+    // A streamed offer is built here and never passes the mount-time sweep, so it is
+    // stamped on the way out — otherwise it is the one link that drops the conversation.
+    keepInAppLinkInPlace(link);
     return link;
   }
 
