@@ -4,14 +4,12 @@
 {#
   OVERVIEW — what this project can hand someone, and what stands between it and that.
 
-  The page is one deliverable slot plus a queue. The slot is always present and says
-  something different in each state (app.web.project_overview.DeliverableState):
-  published / publishable / refused / no_runs. Publishing a run is the one act that
-  turns its figures into the project's numbers and turns on the packet export.
+  The page is the latest run plus a queue. The run card leads with the figures that run
+  produced and the checks a reader needs before treating them as the answer — a cap, a
+  test run, an unfinished run, no figures at all.
 
-  A queue row is a sentence and a link. Only reviewing, publishing a version and
-  publishing a run are app screens; every other row opens a chat that already carries
-  the project and the task.
+  A queue row is a sentence and a link. Reviewing and running are app screens; every
+  other row opens a chat that already carries the project and the task.
 
   Context: state = project_view.shell_state(...), overview = build_project_overview(...).
 #}
@@ -39,22 +37,10 @@
   </form>
 </div>
 
-{% if overview.purpose %}
-<div class="ov-purpose">
-  <div class="ov-purpose-text">{{ overview.purpose | markdown }}</div>
-  <span class="ov-purpose-src">The opening of the methodology ·
-    <a href="/project/{{ s.id }}/methodology">read the document</a></span>
-</div>
-{% else %}
-<div class="ov-purpose absent">
-  <p>No methodology document, so nothing here states what this project establishes.</p>
-</div>
-{% endif %}
-
 <div class="ov-split">
   <div>
     <h3 class="ov-slot-h">{{ d.heading }}</h3>
-    <div class="ov-deliver{% if d.state == 'published' %} reached{% elif d.state == 'refused' %} refused{% endif %}">
+    <div class="ov-deliver{% if d.state == 'warned' %} refused{% endif %}">
 
       {% if d.run_id %}
       <div class="ov-deliver-head">
@@ -63,15 +49,7 @@
           <a class="ov-deliver-when" href="{{ d.run_href }}">{{ d.started_at | friendly_time }}</a>
           <span class="muted">{{ d.stage_line }}{% if d.duration %} · {{ d.duration }}{% endif %}</span>
         </div>
-        {% if d.packet_href %}
-        <a class="btn primary ov-deliver-cta" href="{{ d.packet_href }}">Export review packet</a>
-        {% elif d.publish_href %}
-        <form class="ov-deliver-cta" method="post" action="{{ d.publish_href }}">
-          <button type="submit" class="btn primary">Publish this run</button>
-        </form>
-        {% else %}
-        <span class="btn ov-deliver-cta blocked" aria-disabled="true">Publish this run</span>
-        {% endif %}
+        <a class="btn ov-deliver-cta" href="{{ d.run_href }}">Open the run</a>
       </div>
 
       {% if d.published and d.published.figures %}
@@ -129,17 +107,6 @@
           {% endfor %}
         </div>
       </details>
-      {% endif %}
-
-      {% if d.state == 'publishable' %}
-      <div class="ov-deliver-foot">Publishing marks these figures as this project's numbers and
-        turns on the review packet. Until then the run is a result you have looked at.</div>
-      {% elif d.state == 'published' %}
-      <div class="ov-deliver-foot">Every figure links to the row it was read from.
-        <form method="post" action="/project/{{ s.id }}/runs/{{ d.run_id }}/withdraw">
-          <button type="submit" class="btn sm">Withdraw</button>
-        </form>
-      </div>
       {% endif %}
 
       {% else %}

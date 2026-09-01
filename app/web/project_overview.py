@@ -10,16 +10,11 @@ from app.core.run_status import RunStatus
 from app.models.records.workflow_version import WorkflowVersion
 from app.services import methodology, run as run_service, versioning
 from app.services.errors import WorkflowLoadError
-from app.services.run_publication import (
-    PublishRefusal,
-    find_publish_refusals,
-    read_published_run,
-)
 from app.services.workspace import resolve_run_dir
 from app.web.run_index import RunIndexRow, RunInputCell, StageRowCap, build_run_index_rows
 from app.web.run_published import RunPublished, read_published_outputs
 
-DeliverableState = Literal["published", "publishable", "refused", "no_runs"]
+DeliverableState = Literal["clean", "warned", "no_runs"]
 
 _RUN_NEWEST = "Run the newest version of this workflow."
 _RUN_UNCAPPED = "Re-run this workflow with no row caps."
@@ -53,8 +48,6 @@ class OverviewCheckAction(BaseModel):
     label: str
     href: str
     kind: Literal["chat", "go"]
-    # The words sent to the agent; the page opens them in the rail rather than following href.
-    task: str = ""
 
 
 class Deliverable(BaseModel):
@@ -71,8 +64,6 @@ class Deliverable(BaseModel):
     version_message: str | None = None
     inputs: list[RunInputCell] = []
     stage_caps: list[StageRowCap] = []
-    packet_href: str | None = None
-    publish_href: str | None = None
     lead: str | None = None
 
 
@@ -84,11 +75,9 @@ class QueueRow(BaseModel):
     label: str
     href: str
     kind: Literal["chat", "go"]
-    task: str = ""
 
 
 class ProjectOverview(BaseModel):
-    purpose: str | None
     deliverable: Deliverable
     queue: list[QueueRow]
 
@@ -97,7 +86,6 @@ def build_project_overview(project_id: str) -> ProjectOverview:
     rows = [row for row in build_run_index_rows(project_id) if not row.is_test_run]
     versions = read_versions(project_id)
     return ProjectOverview(
-        purpose=methodology.read_opening_paragraph(project_id),
         deliverable=build_deliverable(project_id, rows, versions),
         queue=build_queue(project_id, rows, versions),
     )
@@ -109,101 +97,115 @@ def build_project_overview(project_id: str) -> ProjectOverview:
 def build_deliverable(
     project_id: str, rows: list[RunIndexRow], versions: VersionsRead
 ) -> Deliverable:
-    row = choose_deliverable_run(project_id, rows)
-    if row is None:
+    if not rows:
         return Deliverable(
-            state="no_runs",
-            heading="Nothing to hand over",
-            lead=describe_missing_runs(versions),
+            state="no_runs", heading="No run yet", lead=describe_missing_runs(versions)
         )
-    refusals = find_publish_refusals(project_id, row.run_id)
-    is_published = read_published_run(project_id, row.run_id) is not None
+    row = rows[0]
     manifest = run_service.read_run_status(project_id, row.run_id)
+    published = read_published_outputs(
+        project_id, row.run_id, resolve_run_dir(project_id, row.run_id), manifest
+    )
+    checks = build_checks(project_id, row, published)
     return Deliverable(
-        state="published" if is_published else "refused" if refusals else "publishable",
-        heading=(
-            "What you can hand someone" if is_published
-            else "Ready to publish" if not refusals
-            else "Latest run"
-        ),
+        state="warned" if any(not check.ok for check in checks) else "clean",
+        heading="Latest run",
         run_id=row.run_id,
         run_href=f"/project/{project_id}/runs/{row.run_id}",
         started_at=row.started_at or "",
         duration=row.duration or "",
         stage_line=row.result_summary or "",
         status=row.status,
-        published=read_published_outputs(
-            project_id, row.run_id, resolve_run_dir(project_id, row.run_id), manifest
-        ),
-        checks=build_checks(project_id, row, refusals),
+        published=published,
+        checks=checks,
         version_message=row.version.message if row.version else None,
         inputs=row.inputs,
         stage_caps=row.stage_caps,
-        packet_href=(
-            f"/project/{project_id}/runs/{row.run_id}/packet.zip" if is_published else None
-        ),
-        publish_href=(
-            f"/project/{project_id}/runs/{row.run_id}/publish"
-            if not refusals and not is_published else None
+    )
+
+
+# ─── What a reader should know before treating this run's figures as the answer ──
+
+
+def build_checks(
+    project_id: str, row: RunIndexRow, published: RunPublished
+) -> list[OverviewCheck]:
+    found = [
+        find_windowed_warning(project_id, row),
+        find_incomplete_warning(project_id, row),
+        find_no_figures_warning(project_id, published),
+    ]
+    warnings = [warning for warning in found if warning is not None]
+    return warnings or [
+        OverviewCheck(
+            ok=True, headline="Finished clean, over the whole input.",
+            detail="Every stage validated its output against the schema its version declares, "
+                   "and every input step read its whole file.",
+        )
+    ]
+
+
+def find_windowed_warning(project_id: str, row: RunIndexRow) -> OverviewCheck | None:
+    """A test run and a capped run fail the same way: complete over a slice of the rows."""
+    if row.is_test_run:
+        return OverviewCheck(
+            ok=False, headline="This was a test run.",
+            detail="A test run reads a window of the rows. It can finish every stage and write "
+                   "the same files a production run writes, and its numbers are still not this "
+                   "project's numbers.",
+            action=ask_the_agent(project_id, "Run it whole", _RUN_UNCAPPED),
+        )
+    capped = [(cell.stage_id, cell.row_cap) for cell in row.inputs if cell.row_cap is not None]
+    capped += [(cap.stage_id, cap.cap) for cap in row.stage_caps]
+    if not capped:
+        return None
+    named = ", ".join(f"{stage} (first {cap:,} rows)" for stage, cap in sorted(capped))
+    return OverviewCheck(
+        ok=False, headline="This run was capped.",
+        detail=f"{named} read a window of its input, so every figure counted below it counts "
+               f"a slice.",
+        action=ask_the_agent(project_id, "Run it whole", _RUN_UNCAPPED),
+    )
+
+
+def find_incomplete_warning(project_id: str, row: RunIndexRow) -> OverviewCheck | None:
+    if row.status == RunStatus.OK:
+        return None
+    if row.status == RunStatus.AWAITING_REVIEW:
+        return OverviewCheck(
+            ok=False, headline="This run is waiting on a review.",
+            detail="The stages behind the queue have not run, so what it has produced so far is "
+                   "only part of the answer.",
+            action=OverviewCheckAction(
+                label="Review it", kind="go",
+                href=f"/project/{project_id}/runs/{row.run_id}",
+            ),
+        )
+    return OverviewCheck(
+        ok=False,
+        headline=("This run has not completed." if row.status == RunStatus.RUNNING
+                  else f"This run ended {row.status}."),
+        detail="Only a run that finished every stage cleanly produces the whole answer.",
+        action=ask_the_agent(
+            project_id, "Explain it", f"Why did the run {row.run_id} end {row.status}?"
         ),
     )
 
 
-def choose_deliverable_run(project_id: str, rows: list[RunIndexRow]) -> RunIndexRow | None:
-    """The published run if there is one, so publishing pins what the page leads with."""
-    for row in rows:
-        if read_published_run(project_id, row.run_id) is not None:
-            return row
-    return rows[0] if rows else None
+def find_no_figures_warning(project_id: str, published: RunPublished) -> OverviewCheck | None:
+    if published:
+        return None
+    return OverviewCheck(
+        ok=False, headline="This run produced no figures.",
+        detail="A figure is declared on a stage and written while the run executes, so a run "
+               "that did not carry the declaration never wrote the cell.",
+        action=ask_the_agent(project_id, "Declare the figures", _DECLARE_FIGURES),
+    )
 
 
-def build_checks(
-    project_id: str, row: RunIndexRow, refusals: list[PublishRefusal]
-) -> list[OverviewCheck]:
-    if refusals:
-        return [
-            OverviewCheck(
-                ok=False, headline=refusal.headline, detail=refusal.detail,
-                action=choose_refusal_action(project_id, row, refusal),
-            )
-            for refusal in refusals
-        ]
-    return [
-        OverviewCheck(
-            ok=True,
-            headline="No row caps.",
-            detail="Every input step read its whole file.",
-        ),
-        OverviewCheck(
-            ok=True,
-            headline="Finished clean.",
-            detail="Every stage validated its output against the schema its version declares.",
-        ),
-    ]
-
-
-def choose_refusal_action(
-    project_id: str, row: RunIndexRow, refusal: PublishRefusal
-) -> OverviewCheckAction:
-    """Every refusal names the one move that clears it, so the card is never a dead end."""
-    if refusal.kind == "windowed":
-        return OverviewCheckAction(
-            label="Run it whole", kind="chat", task=_RUN_UNCAPPED,
-            href=build_chat_href(project_id, _RUN_UNCAPPED),
-        )
-    if refusal.kind == "no_figures":
-        return OverviewCheckAction(
-            label="Declare the figures", kind="chat", task=_DECLARE_FIGURES,
-            href=build_chat_href(project_id, _DECLARE_FIGURES),
-        )
-    if row.status == RunStatus.AWAITING_REVIEW:
-        return OverviewCheckAction(
-            label="Review it", kind="go",
-            href=f"/project/{project_id}/runs/{row.run_id}",
-        )
+def ask_the_agent(project_id: str, label: str, task: str) -> OverviewCheckAction:
     return OverviewCheckAction(
-        label="Explain it", kind="chat", task=f"Why did the run {row.run_id} end {row.status}?",
-        href=build_chat_href(project_id, f"Why did the run {row.run_id} end {row.status}?"),
+        label=label, kind="chat", href=build_chat_href(project_id, task)
     )
 
 
@@ -250,7 +252,6 @@ def find_unreadable_version(project_id: str, versions: VersionsRead) -> QueueRow
         count="!", tone="bad", what="A stored version cannot be read",
         why=versions.problem,
         label="Repair it", kind="chat",
-        task=f"A stored version will not parse: {versions.problem}",
         href=build_chat_href(project_id, f"A stored version will not parse: {versions.problem}"),
     )
 
@@ -267,7 +268,7 @@ def find_newest_version_never_run(
     return QueueRow(
         count="", tone="warn", what="The newest version has never run",
         why=(newest.message or newest.version_id),
-        label="Run it", kind="chat", task=_RUN_NEWEST,
+        label="Run it", kind="chat",
         href=build_chat_href(project_id, _RUN_NEWEST),
     )
 
@@ -294,7 +295,7 @@ def find_runs_that_errored(project_id: str, rows: list[RunIndexRow]) -> QueueRow
         count=str(len(errored)), tone="idle",
         what=f"run{'s' if len(errored) != 1 else ''} errored",
         why=f"the last on {(errored[0].started_at or 'an unrecorded date')[:10]}",
-        label="Explain the errors", kind="chat", task=_WHY_ERRORED,
+        label="Explain the errors", kind="chat",
         href=build_chat_href(project_id, _WHY_ERRORED),
     )
 
@@ -306,7 +307,7 @@ def find_missing_methodology(project_id: str) -> QueueRow | None:
         count="", tone="warn", what="No methodology document",
         why="a review packet would open on a blank page, and nothing states what this "
             "project establishes",
-        label="Write the document", kind="chat", task=_WRITE_METHODOLOGY,
+        label="Write the document", kind="chat",
         href=build_chat_href(project_id, _WRITE_METHODOLOGY),
     )
 

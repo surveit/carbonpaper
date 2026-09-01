@@ -15,47 +15,10 @@ bite most often.
   Methodology · Glossary). `/project/<m>/workflow` carries the mermaid graph + inline
   node review (`/project/<m>/node/<id>/review-partial`); it has no nav row, and is
   reached from Versions.
-
-## The Overview page (`section_overview.html` ← `app.web.project_overview`)
-One **deliverable slot** and one **queue**. The slot is always present and says one of
-four things (`DeliverableState`): `published` · `publishable` · `refused` · `no_runs`.
-It shows the newest published run if there is one, otherwise the newest production run,
-so publishing pins what the page leads with. Every failed check names the one move that
-clears it, so the card is never a dead end. The version and the files a run read are
-labelled and drawn exactly as the runs table labels and draws them — `_input_files.html`
-is that one component.
-
-**Publishing a run** (`app.services.run_publication`) is the one act that makes a run's
-figures the project's numbers: it writes a `PublishedRun` record, and the packet export
-appears in place of the Publish button. Nothing is copied — the figures stay where the
-executor wrote them, and withdrawing removes only the project's claim on them.
-
-Three things refuse it, and each renders as a failed check under the figures. They are
-their OWN axis: a run's `status` says what the runner did, and none of these changes it.
-A capped run still ends `ok`, correctly — a cap is a parameter, not a fault.
-- **windowed** — a test run, or any stage carrying a row cap. Both finish every stage
-  over a slice, so both read as complete and neither can carry a claim. The cap is drawn
-  in the error palette wherever an input is listed, never as a grey note.
-- **incomplete** — the run did not end `ok`.
-- **no_figures** — no stage declared one. A figure is written by the executor from
-  `Stage.workflow_outputs`, so a finished run cannot be given one after the fact; the
-  way through is a workflow edit, a version and a re-run.
-
-The right column is one row per outstanding thing, each a sentence and one link. Six of
-them: runs halted for review · runs running (with how long the longest has been, which is
-the only tell there is — nothing records a heartbeat, so a crashed run reads as running) ·
-the newest version never run · runs that errored · no methodology document · a stored
-version that will not parse.
-
-Reviewing and running are app screens. Every other row is an agent control: the sparkle
-macro, then the job in the imperative — `Run it whole`, not `Ask the agent to run it
-whole`. The words that name the agent ride in `.ov-by`, hidden visually and read aloud,
-because the mark is `aria-hidden` and may not carry the meaning alone.
-
-Clicking one opens `/chat/agent/editing/new?project_id=…&task=…`. A `task` suppresses the
-agent's opening turn, and the panel sends it as the reader's own first message, so the
-agent is working by the time the page settles rather than greeting and waiting.
-
+- **Overview** (`section_overview.html` ← `app.web.project_overview`) is the latest run and
+  what is outstanding. The run card carries the figures that run produced and the checks a
+  reader needs before treating them as the answer — a cap, a test run, an unfinished run,
+  no figures — and each outstanding row links to a screen or to a chat carrying the task.
 - `/project/<m>/runs`, `/runs/<id>` — run history + detail. `?status=` narrows the list to
   one run status, its picker built from the rows the current view holds so it never offers
   a status with nothing behind it; the overview's run rows link straight to their own. `/runs/new` is the
