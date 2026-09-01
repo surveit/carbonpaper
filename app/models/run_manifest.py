@@ -124,6 +124,9 @@ class ReadFile(BaseModel):
     path: str
     sha256: str
     bytes: int
+    # None where the run read outside the file store, and on every run before this
+    # was recorded — the bytes are what those have to be found by.
+    file_id: str | None = None
 
     @property
     def filename(self) -> str:
@@ -147,6 +150,7 @@ class InputBinding(BaseModel):
     sha256: str | None = None
     bytes: int | None = None
     source: str | None = None
+    file_id: str | None = None
 
 
 def read_input_bindings(raw: dict[str, Any]) -> list[InputBinding]:
@@ -165,7 +169,7 @@ def _read_one_stages_files(stage_id: ID, record: dict[str, Any]) -> list[InputBi
     return [
         # `source` sits on the stage's record; every file it read was bound the same way.
         InputBinding(stage_id=stage_id, path=f.path, filename=f.filename,
-                     sha256=f.sha256, bytes=f.bytes, source=source)
+                     sha256=f.sha256, bytes=f.bytes, source=source, file_id=f.file_id)
         for f in files
     ]
 

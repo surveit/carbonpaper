@@ -4,6 +4,7 @@ from filling."""
 from __future__ import annotations
 
 import enum
+from dataclasses import dataclass
 import hashlib
 import os
 import tempfile
@@ -151,10 +152,33 @@ def resolve_stored_path(record: ProjectFile) -> Path:
     return (files_root() / record.id / record.filename).resolve()
 
 
-def index_project_files_by_sha(project_id: ID) -> dict[str, ProjectFile]:
-    """Newest wins: re-sending the same bytes makes a second record, not a second file."""
+def find_stored_file_id(path: Path) -> ID | None:
+    """The record these bytes are stored as, or None for a path the store does not own."""
+    if path.parent.parent != files_root():
+        return None
+    record = ProjectFile.load_or_none(path.parent.name)
+    return None if record is None or record.filename != path.name else record.id
+
+
+@dataclass(frozen=True)
+class ProjectFileIndex:
+    """One project's files, by both keys a run may name them by."""
+
+    by_id: dict[ID, ProjectFile]
+    by_sha: dict[str, ProjectFile]
+
+    def find(self, file_id: str | None, sha256: str | None) -> ProjectFile | None:
+        """The id first: bytes cannot tell two sends of the same file apart, and an id can."""
+        return self.by_id.get(file_id or "") or self.by_sha.get(sha256 or "")
+
+
+def index_project_files(project_id: ID) -> ProjectFileIndex:
     newest_first = list_project_files(project_id)
-    return {record.sha256: record for record in reversed(newest_first)}
+    return ProjectFileIndex(
+        by_id={record.id: record for record in newest_first},
+        # Newest wins: re-sending the same bytes makes a second record, not a second file.
+        by_sha={record.sha256: record for record in reversed(newest_first)},
+    )
 
 
 def list_project_files(project_id: ID | None) -> list[ProjectFile]:

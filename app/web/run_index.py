@@ -9,7 +9,7 @@ from collections.abc import Iterable
 
 from pydantic import BaseModel
 
-from app.core.files import ProjectFile, index_project_files_by_sha
+from app.core.files import ProjectFileIndex, index_project_files
 from app.core.run_status import RunStatus
 from app.models.run_manifest import UNREADABLE_RUN_STATUS, InputBinding, read_input_bindings
 from app.runtime.manifest import RunEntry, list_run_entries
@@ -30,7 +30,7 @@ class RunInputCell(BaseModel):
     hash_disambiguates: bool = False
     # How many of the file's rows this run read, when it did not read them all.
     row_cap: int | None = None
-    # None where no file this project holds now hashes to the bytes this run read.
+    # None where this project holds no file the run named and none with its bytes.
     href: str | None = None
 
 
@@ -176,8 +176,8 @@ class _IndexContext(BaseModel):
     ambiguous_filenames: set[str]
     run_counts: Counter[str]
     seen_versions: dict[str, VersionNote] = {}
-    # Bytes, not a path: a run records where it read, which this app may not own.
-    stored_by_sha: dict[str, ProjectFile] = {}
+    # A run records where it read, which this app may not own; this holds what it does.
+    stored: ProjectFileIndex = ProjectFileIndex(by_id={}, by_sha={})
 
 
 def _build_every_row(project_id: str, view: str | None) -> list[RunIndexRow]:
@@ -192,7 +192,7 @@ def _build_every_row(project_id: str, view: str | None) -> list[RunIndexRow]:
         names=read_run_names(project_id),
         ambiguous_filenames=find_ambiguous_filenames(bindings.values()),
         run_counts=Counter(compose_input_key(b) for b in bindings.values()),
-        stored_by_sha=index_project_files_by_sha(project_id),
+        stored=index_project_files(project_id),
     )
     return [_build_row(entry, bindings[entry.run_id], context) for entry in entries]
 
@@ -265,7 +265,7 @@ def find_unbound_stage_caps(
 def _build_input_cell(
     binding: InputBinding, context: _IndexContext, limits: dict[str, int], run_id: str
 ) -> RunInputCell:
-    stored = context.stored_by_sha.get(binding.sha256 or "")
+    stored = context.stored.find(binding.file_id, binding.sha256)
     links = AppPanelLinks(context.project_id, run_id)
     return RunInputCell(
         stage_id=binding.stage_id,

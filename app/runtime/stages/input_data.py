@@ -14,6 +14,7 @@ from typing import Any
 import pandas as pd
 
 from app.core.errors import FrameConcatMismatchError
+from app.core.files import find_stored_file_id
 from app.core.frames import concat_tables, frame_to_table
 from app.core.source_files import FileFormat, read_source_file
 from app.models import (
@@ -74,7 +75,7 @@ def _weigh_file(path: Path) -> ReadFile:
     with path.open("rb") as handle:
         digest = hashlib.file_digest(handle, "sha256")
     return ReadFile(path=str(path), sha256=digest.hexdigest(),
-                    bytes=path.stat().st_size)
+                    bytes=path.stat().st_size, file_id=find_stored_file_id(path))
 
 
 def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> StageOutput:
