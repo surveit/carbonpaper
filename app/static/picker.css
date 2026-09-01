@@ -164,14 +164,19 @@
     text-align: left;
     cursor: pointer;
 }
-.picker-option:hover,
-.picker-option:focus-visible {
+.picker-option:hover:not([aria-current="true"]),
+.picker-option:focus-visible:not([aria-current="true"]) {
     outline: none;
     background: var(--sunk);
 }
 .picker-option[aria-current="true"] {
-    box-shadow: inset 3px 0 0 var(--accent);
-    background: var(--sunk);
+    background: var(--picked-bg);
+    color: var(--picked-ink);
+}
+.picker-option[aria-current="true"]:hover,
+.picker-option[aria-current="true"]:focus-visible {
+    outline: none;
+    background: var(--picked-hover);
 }
 .picker-option-name {
     min-width: 0;

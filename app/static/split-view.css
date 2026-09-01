@@ -63,15 +63,4 @@
 .empty-state .btn,
 .empty-state form { margin-top: 18px; }
 
-/* Compact stage list in left pane */
-table.stages.compact td, table.stages.compact th {
-    padding: 5px 10px;
-    font-size: 13px;
-}
-table.stages.compact tr.active td {
-    background: var(--warn-bg);
-}
-table.stages.compact tr.active td a code {
-    background: var(--raised);
-}
 

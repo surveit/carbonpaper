@@ -152,4 +152,19 @@
     --verdict-neutral-bg: var(--idle-bg); --verdict-neutral-bd: var(--idle-bd);
     --verdict-fail-bg: var(--bad-bg);     --verdict-fail-bd: var(--bad-bd);
     --verdict-warn-bg: var(--warn-bg);    --verdict-warn-bd: var(--warn-bd);
+
+    /* ── Picked: which one of a set you are on ────────────────────────────
+       A picker's rows, a segmented toggle (the rows/columns axis on an input
+       file, a facet's linear/log scale) — anywhere a set offers one at a time.
+       Fill and ink, no left bar: a 3px inset rule drawn inside a corner radius
+       is eaten by the curve, and the sites doing it disagreed about how much.
+       Not for the nav's current section (a filled accent pill) or a tab strip
+       (an underline): those say WHERE YOU ARE, not which one you chose.
+       Sunk one step past --hover so a picked row survives being hovered. */
+    --picked-bg: var(--sunk-deep);
+    --picked-edge: var(--border-strong);
+    --picked-ink: var(--fg);
+    /* One step toward its own edge, so the cursor lifts a picked row rather than
+       draining it to the paper --hover (tests/arch/test_hover_stays_in_its_hue.py). */
+    --picked-hover: color-mix(in srgb, var(--picked-edge) 16%, var(--picked-bg));
 }
