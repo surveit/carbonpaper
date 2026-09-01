@@ -48,7 +48,7 @@ class InputCatalog:
     records: dict[str, JsonDict]
     limits: dict[str, int]
     offsets: dict[str, int]
-    stored_by_sha: dict[str, file_store.ProjectFile]
+    stored: file_store.ProjectFileIndex
 
 
 def build_input_catalog(project_id: str, manifest: JsonDict) -> InputCatalog:
@@ -64,8 +64,7 @@ def build_input_catalog(project_id: str, manifest: JsonDict) -> InputCatalog:
         records={str(record.get("stage_id")): record for record in records},
         limits=dict(parameters.get("limits") or {}),
         offsets=dict(parameters.get("offsets") or {}),
-        stored_by_sha={record.sha256: record
-                       for record in file_store.list_project_files(project_id)},
+        stored=file_store.index_project_files(project_id),
     )
 
 
@@ -84,7 +83,7 @@ def read_run_inputs(catalog: InputCatalog, links: PanelLinks) -> TraceInputsView
 def _build_file_view(
     catalog: InputCatalog, links: PanelLinks, binding: InputBinding, stage_id: str,
 ) -> InputFileView:
-    stored = catalog.stored_by_sha.get(binding.sha256 or "")
+    stored = catalog.stored.find(binding.file_id, binding.sha256)
     record = catalog.records.get(stage_id) or {}
     return InputFileView(
         filename=binding.filename,

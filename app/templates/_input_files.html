@@ -9,7 +9,7 @@
 <ul class="input-list">
   {%- for i in inputs %}
   <li title="{{ i.stage_id }} read {{ i.filename }}{% if i.sha256 %} — sha256 {{ i.sha256 }}{% endif %}">
-    {{ i.filename }}
+    {% if i.href %}<a href="{{ i.href }}">{{ i.filename }}</a>{% else %}{{ i.filename }}{% endif %}
     {%- if i.hash_disambiguates %} <code class="input-hash">{{ i.sha256[:8] }}</code>{% endif %}
     {%- if i.size %} <span class="muted">{{ i.size }}</span>{% endif %}
     {%- if i.row_cap is not none %} <span class="row-cap">· first {{ i.row_cap | figure }} rows</span>{% endif %}

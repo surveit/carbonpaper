@@ -9,12 +9,14 @@ from collections.abc import Iterable
 
 from pydantic import BaseModel
 
+from app.core.files import ProjectFileIndex, index_project_files
 from app.core.run_status import RunStatus
 from app.models.run_manifest import UNREADABLE_RUN_STATUS, InputBinding, read_input_bindings
 from app.runtime.manifest import RunEntry, list_run_entries
 from app.models.records.run_manifest import RunManifest
 from app.services.run_manifest_metadata import read_archived_run_ids, read_run_names
 from app.web.file_sizes import describe_bytes
+from app.web.panel_links import AppPanelLinks
 from app.web.run_header import VersionNote, describe_run_duration, read_version_note
 from app.web.stage_strip import StageStrip, build_stage_strip, describe_stage_counts
 
@@ -28,6 +30,8 @@ class RunInputCell(BaseModel):
     hash_disambiguates: bool = False
     # How many of the file's rows this run read, when it did not read them all.
     row_cap: int | None = None
+    # None where this project holds no file the run named and none with its bytes.
+    href: str | None = None
 
 
 class StageRowCap(BaseModel):
@@ -172,6 +176,8 @@ class _IndexContext(BaseModel):
     ambiguous_filenames: set[str]
     run_counts: Counter[str]
     seen_versions: dict[str, VersionNote] = {}
+    # A run records where it read, which this app may not own; this holds what it does.
+    stored: ProjectFileIndex = ProjectFileIndex(by_id={}, by_sha={})
 
 
 def _build_every_row(project_id: str, view: str | None) -> list[RunIndexRow]:
@@ -186,6 +192,7 @@ def _build_every_row(project_id: str, view: str | None) -> list[RunIndexRow]:
         names=read_run_names(project_id),
         ambiguous_filenames=find_ambiguous_filenames(bindings.values()),
         run_counts=Counter(compose_input_key(b) for b in bindings.values()),
+        stored=index_project_files(project_id),
     )
     return [_build_row(entry, bindings[entry.run_id], context) for entry in entries]
 
@@ -230,7 +237,7 @@ def _build_row(
         outcome=describe_run_outcome(str(manifest.status)),
         is_test_run=manifest.parameters.is_test_run,
         inputs=[
-            _build_input_cell(b, context.ambiguous_filenames, manifest.parameters.limits)
+            _build_input_cell(b, context, manifest.parameters.limits, entry.run_id)
             for b in bindings
         ],
         stage_caps=find_unbound_stage_caps(manifest.parameters.limits, bindings),
@@ -256,15 +263,18 @@ def find_unbound_stage_caps(
 
 
 def _build_input_cell(
-    binding: InputBinding, ambiguous: set[str], limits: dict[str, int]
+    binding: InputBinding, context: _IndexContext, limits: dict[str, int], run_id: str
 ) -> RunInputCell:
+    stored = context.stored.find(binding.file_id, binding.sha256)
+    links = AppPanelLinks(context.project_id, run_id)
     return RunInputCell(
         stage_id=binding.stage_id,
         filename=binding.filename,
         size=describe_bytes(binding.bytes) if binding.bytes is not None else "",
         sha256=binding.sha256,
-        hash_disambiguates=bool(binding.sha256) and binding.filename in ambiguous,
+        hash_disambiguates=bool(binding.sha256) and binding.filename in context.ambiguous_filenames,
         row_cap=limits.get(binding.stage_id),
+        href=None if stored is None else links.file_page(stored.id),
     )
 
 
