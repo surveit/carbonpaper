@@ -64,9 +64,11 @@ window.ChatRail = window.ChatRail || {};
       openPage.href = `/chat/${event.detail.sid}`;
     });
 
+    // Whichever agent the button asks for, forwarded without being read: which one is on
+    // the other end is the entry point's business (_chat_ask_button.html), never the rail's.
     ask.addEventListener("click", () => {
       show(true);
-      mount(fetch("/chat/new/panel"));
+      mount(fetch(`/chat/agent/${encodeURIComponent(ask.dataset.agent)}/new/panel`));
     });
 
     // Closed, not hidden: the address stops naming a conversation, so a reload does not

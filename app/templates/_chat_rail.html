@@ -8,7 +8,6 @@
 
    Whether the rail is THERE is decided in <head>: the class on <html> is what reserves
    the column, and everything here only fills it. #}
-{% from "_sparkle.html" import sparkle %}
 <aside class="chat-rail" id="chat-rail" aria-label="Conversation">
   <div class="chat-rail-head">
     <span class="chat-rail-title js-rail-title"></span>
@@ -18,6 +17,4 @@
   </div>
   <div class="chat-panel chat-host-rail js-rail-panel"></div>
 </aside>
-{# One control, one place, one behaviour: it opens a new conversation about wherever the
-   reader is. Coming back to an earlier one is the address they were handed. #}
-<button type="button" class="chat-ask" id="chat-ask">{{ sparkle() }} Ask AI</button>
+{% include "_chat_ask_button.html" %}

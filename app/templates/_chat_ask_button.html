@@ -1,0 +1,10 @@
+{# The way into a conversation, on every page, in one place.
+
+   An ENTRY POINT, so this is where an agent is named — the same job
+   _new_chat_button.html does for the chat pages. The rail it opens holds a session id
+   and nothing else: it reads `data-agent` and forwards it, so a page wanting a
+   different agent changes only this line. #}
+{% from "_sparkle.html" import sparkle %}
+<button type="button" class="chat-ask" id="chat-ask" data-agent="editing">
+  {{ sparkle() }} Ask AI
+</button>

@@ -157,14 +157,14 @@ async def draft_agent_chat(agent_id: str, request: Request):
     })
 
 
-# Declared above /chat/{sid}/panel, which would otherwise read "new" as a session id.
-@router.get("/chat/new/panel", response_class=HTMLResponse)
-async def new_chat_panel(request: Request):
-    """The shell's way in: a draft panel with no page around it, for a host that has one."""
-    context = {"base_url": str(request.base_url)}
+@router.get("/chat/agent/{agent_id}/new/panel", response_class=HTMLResponse)
+async def new_chat_panel(agent_id: str, request: Request):
+    """The draft page's panel with no page around it, for a host that has its own."""
+    if not registry.is_registered(agent_id):
+        raise HTTPException(status_code=404, detail="Unknown agent")
+    context = dict(request.query_params) | {"base_url": str(request.base_url)}
     return templates.TemplateResponse(
-        request, "_chat_panel.html",
-        _read_draft_panel_context(registry.read_default_agent_id(), context))
+        request, "_chat_panel.html", _read_draft_panel_context(agent_id, context))
 
 
 @router.post("/chat/agent/{agent_id}/sessions")

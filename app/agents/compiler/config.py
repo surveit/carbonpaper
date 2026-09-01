@@ -90,5 +90,4 @@ def _build_editing_tools(context: BaseModel) -> list[BoundToolSpec]:
     return build_editing_tools(context)
 
 
-# The one a shell that names no agent reaches. registry.read_default_agent_id.
-register("editing", CONFIG, _build_editing_tools, default=True)
+register("editing", CONFIG, _build_editing_tools)
