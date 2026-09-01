@@ -9,6 +9,7 @@ from collections.abc import Iterable
 
 from pydantic import BaseModel
 
+from app.core.files import find_stored_file
 from app.core.run_status import RunStatus
 from app.models.run_manifest import UNREADABLE_RUN_STATUS, InputBinding, read_input_bindings
 from app.runtime.manifest import RunEntry, list_run_entries
@@ -28,6 +29,8 @@ class RunInputCell(BaseModel):
     hash_disambiguates: bool = False
     # How many of the file's rows this run read, when it did not read them all.
     row_cap: int | None = None
+    # None where the run read a path the file store never held, so no page shows it.
+    href: str | None = None
 
 
 class StageRowCap(BaseModel):
@@ -230,7 +233,8 @@ def _build_row(
         outcome=describe_run_outcome(str(manifest.status)),
         is_test_run=manifest.parameters.is_test_run,
         inputs=[
-            _build_input_cell(b, context.ambiguous_filenames, manifest.parameters.limits)
+            _build_input_cell(b, context.ambiguous_filenames,
+                              manifest.parameters.limits, context.project_id)
             for b in bindings
         ],
         stage_caps=find_unbound_stage_caps(manifest.parameters.limits, bindings),
@@ -256,8 +260,9 @@ def find_unbound_stage_caps(
 
 
 def _build_input_cell(
-    binding: InputBinding, ambiguous: set[str], limits: dict[str, int]
+    binding: InputBinding, ambiguous: set[str], limits: dict[str, int], project_id: str
 ) -> RunInputCell:
+    stored = find_stored_file(project_id, binding.path)
     return RunInputCell(
         stage_id=binding.stage_id,
         filename=binding.filename,
@@ -265,6 +270,7 @@ def _build_input_cell(
         sha256=binding.sha256,
         hash_disambiguates=bool(binding.sha256) and binding.filename in ambiguous,
         row_cap=limits.get(binding.stage_id),
+        href=None if stored is None else f"/project/{project_id}/files/{stored.id}",
     )
 
 

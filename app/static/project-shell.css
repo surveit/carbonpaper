@@ -251,7 +251,7 @@
 .ov-rests h5 { margin: 0 0 5px; font-size: 10.5px; text-transform: uppercase;
     letter-spacing: 0.5px; color: var(--muted); font-weight: 700; }
 .ov-rests p { margin: 0; font-size: 13px; }
-.ov-inputs .input-list { margin: 0; padding-left: 16px; font-size: 13px; }
+.ov-inputs .input-list { margin: 0; padding-left: 0; font-size: 13px; }
 .ov-inputs .input-list li { overflow-wrap: anywhere; }
 .ov-inputs .stage-cap { display: block; font-size: 13px; margin-top: 4px; }
 
