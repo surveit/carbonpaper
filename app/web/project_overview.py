@@ -84,7 +84,7 @@ class QueueRow(ActionLink):
     ask: ActionLink | None = None
 
     @model_validator(mode="after")
-    def _the_row_goes_to_a_screen_and_only_the_ask_to_a_chat(self) -> QueueRow:
+    def _refuse_a_chat_anywhere_but_the_ask(self) -> QueueRow:
         if self.opens_a_chat():
             raise ValueError(f"queue row '{self.what}' links to {self.href}: a row is "
                              "navigation, so it names an app screen and the chat is `ask`")
