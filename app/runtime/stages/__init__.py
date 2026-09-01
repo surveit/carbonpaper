@@ -32,6 +32,7 @@ from .reshape import handle_dedupe, handle_explode, handle_sort_rank
 from .python_functions import handle_python_frame_function, build_python_row_mapper
 from .starlark_filter import make_starlark_filter_mapper
 from .starlark_functions import build_starlark_row_mapper
+from .starlark_report import handle_starlark_report
 from .union import handle_union
 
 Preflight = Callable[[WorkflowStage], tuple[list[str], dict[str, Any] | None]]
@@ -55,6 +56,7 @@ HANDLERS: dict[StageType, StageHandler] = {
         trims_output_to_declared=True,
     ),
     StageType.report: FrameTransformHandler(handle_report),
+    StageType.starlark_report: FrameTransformHandler(handle_starlark_report),
     StageType.union: FrameTransformHandler(handle_union),
     # Row-mapped with drops_rows: the runtime drives the predicate row by row
     # and does the selecting itself, so it holds the input ordinals that

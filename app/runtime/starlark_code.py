@@ -2,6 +2,7 @@
 authored code can see — and how it refuses a row — is settled here."""
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, Callable
 
 import starlark
@@ -41,9 +42,9 @@ class StarlarkFunctionHandle:
         self._frozen = frozen
         self._function_name = function_name
 
-    def __call__(self, row: dict[str, Any]) -> object:
+    def __call__(self, *args: Any) -> object:
         try:
-            return self._frozen.call(self._function_name, row)
+            return self._frozen.call(self._function_name, *args)
         except starlark.StarlarkError as exc:
             reason = _find_refusal_message(str(exc))
             if reason is None:
@@ -54,8 +55,10 @@ class StarlarkFunctionHandle:
 def compile_starlark_function(
     source: str, function_name: str, default_name: str,
     recorder: BranchRecorder | None = None,
+    extra_builtins: Mapping[str, Callable[..., object]] | None = None,
 ) -> StarlarkFunctionHandle | None:
     builtins: dict[str, Callable[..., object]] = {REFUSE_BUILTIN: _refuse}
+    builtins.update(extra_builtins or {})
     if recorder is not None:
         source, _ = instrument_branches(source)
         builtins[RECORDER_NAME] = recorder.record

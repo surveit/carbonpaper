@@ -9,6 +9,7 @@ from app.models.stages.code import AuthoredCode, PythonFunction
 from app.models.stages.filter_rows import FilterConfig
 from app.models.stages.starlark import StarlarkFunction
 from app.models.stages.starlark_filter import StarlarkFilter
+from app.models.stages.starlark_report import StarlarkReport
 from app.models.stages.stage_base import AbstractStage
 
 
@@ -41,6 +42,12 @@ BLOCK_COPY: dict[type[AuthoredCode], CodeBlockCopy] = {
         note="Keeps the rows this predicate returns `True` for; every kept row passes "
              "through unchanged, in order.",
         caption="the predicate behind the summary above",
+    ),
+    StarlarkReport: CodeBlockCopy(
+        glyph="🛡️📤", heading="Sandboxed report",
+        note="Writes files through `emit_file` and `emit_table` and reaches nothing else; "
+             "every figure and row it links comes from `cite_value` / `cite_row`.",
+        caption="the code behind the summary above",
     ),
 }
 
