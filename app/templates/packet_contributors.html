@@ -1,9 +1,8 @@
-<!doctype html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" href="{{ icon }}" type="image/svg+xml">
-<title>{{ owner_stage }} row {{ owner_row | row_number }} · contributing rows</title>
-{% for sheet in assets %}<link rel="stylesheet" href="{{ sheet }}">
-{% endfor %}</head><body class="packet">
+{% extends "standalone_base.html" %}
+{% block title %}{{ owner_stage }} row {{ owner_row | row_number }} · contributing rows{% endblock %}
+{% block body_class %}packet{% endblock %}
+
+{% block body %}
 <header class="packet-head">
   <a class="packet-back" href="{{ owner_href }}">&lsaquo; {{ owner_stage }} row {{ owner_row | row_number }}</a>
   <h1>The rows that fed it</h1>
@@ -24,4 +23,5 @@
     </tr>{% endfor %}
     </tbody>
   </table></div>
-</main></body></html>
+</main>
+{% endblock %}

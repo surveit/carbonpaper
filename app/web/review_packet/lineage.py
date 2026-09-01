@@ -186,6 +186,7 @@ def _write_directory(root: Path, stages: list[StageTraces], total: int) -> str:
         total=total,
         assets=[f"../{ASSETS_DIR}/{name}" for name in STYLESHEETS],
         icon=f"../{ASSETS_DIR}/{FAVICON}",
+        static_root=f"../{ASSETS_DIR}/",
         index_href="../index.html",
     )
     path = root / relative
@@ -240,6 +241,7 @@ def _write_one_cohort(
             owner_href=f"{row}.html",
             assets=[f"../../{ASSETS_DIR}/{name}" for name in STYLESHEETS],
             icon=f"../../{ASSETS_DIR}/{FAVICON}",
+            static_root=f"../../{ASSETS_DIR}/",
             index_href="../../index.html",
         ),
         encoding="utf-8",

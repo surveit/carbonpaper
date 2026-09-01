@@ -1,31 +1,24 @@
 {% from "_picker.html" import picker %}
-<!doctype html><html><head><meta charset="utf-8">
-{# standalone page, so it repeats what base.html would have given it #}
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>lineage · {{ title }}</title>
-<link rel="icon" href="{{ static_root | default("/static/", true) }}favicon.svg" type="image/svg+xml">
-{% if assets %}{% for sheet in assets %}<link rel="stylesheet" href="{{ sheet }}">
-{% endfor %}{% else %}{% include "_stylesheets.html" %}{% endif %}
+{# The row lineage page. Served it is part of the app; written into a review packet
+   it is a file in a zip with no server to ask, which is what `offline` says. #}
+{% extends "standalone_base.html" %}
+{% block title %}lineage · {{ title }}{% endblock %}
+
+{% block head_extra %}
 {% if not offline %}<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>{% endif %}
-{# standalone page (does not extend base.html), so it loads the node dispatcher itself #}
-<script src="{{ static_root | default("/static/", true) }}diagram_nodes.js"></script>
-<script src="{{ static_root | default("/static/", true) }}figure_text.js"></script>
-<script src="{{ static_root | default("/static/", true) }}tooltip.js"></script>
-<script src="{{ static_root | default("/static/", true) }}cell-lineage.js"></script>
+<script src="{{ static_root }}tooltip.js"></script>
+<script src="{{ static_root }}cell-lineage.js"></script>
 {# The header's three pickers; served only, because a folder has no other row to move to. #}
-{% if not offline %}<script src="/static/picker.js" defer></script>{% endif %}
-{% if not offline %}<script src="{{ static_root | default("/static/", true) }}breadcrumbs.js" defer></script>
+{% if not offline %}<script src="{{ static_root }}picker.js" defer></script>
+<script src="{{ static_root }}breadcrumbs.js" defer></script>
 {# The packet's Relevant columns pane is an empty state, so its script is dead there. #}
-<script src="{{ static_root | default("/static/", true) }}values-used.js"></script>
+<script src="{{ static_root }}values-used.js"></script>
 {# The Input files pane's own script; the packet's pane is the run list alone. #}
-<script src="{{ static_root | default("/static/", true) }}input-files.js"></script>
+<script src="{{ static_root }}input-files.js"></script>
 {# Standalone, so it does not inherit base.html's painter. Its observer colours a
    panel swapped in by innerHTML, which is how every transform pane here arrives. #}
-<script src="{{ static_root | default("/static/", true) }}highlight.min.js"></script>
-<script src="{{ static_root | default("/static/", true) }}code-highlight.js"></script>
-{# Served live this page is part of the app, so the conversation follows the reader here as
-   it does everywhere else. Written into a review packet it is a file in a zip: no server to
-   fetch a panel from and no session to carry, which is what `offline` says. #}
+<script src="{{ static_root }}highlight.min.js"></script>
+<script src="{{ static_root }}code-highlight.js"></script>
 {% include "_chat_rail_head.html" %}{% endif %}
 <style>
 /* The page is exactly the viewport: header, then two columns that scroll inside
@@ -248,7 +241,10 @@ tr.lin-opens:hover td{background:var(--hover)}
   border-top:1px solid var(--border);color:var(--muted);font-size:11.5px}
 .instrip b{color:var(--fg)}
 .hidden{display:none}
-</style></head><body>
+</style>
+{% endblock %}
+
+{% block body %}
 {# Standalone (see the head above), so the trail is rendered here rather than
    inherited — a page with no trail is a page with no way back. #}
 <header>{% include "_breadcrumbs.html" %}
@@ -876,4 +872,4 @@ if(asked) asked.click();
 {% if not offline %}{% include "_chat_rail.html" %}
 <script src="/static/chat-panel.js"></script>
 <script src="/static/chat-rail.js"></script>{% endif %}
-</body></html>
+{% endblock %}

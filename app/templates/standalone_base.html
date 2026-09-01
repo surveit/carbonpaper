@@ -1,0 +1,22 @@
+{# The document itself. `static_root` is "/static/" served, a relative path in a packet. #}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Workflow{% endblock %}</title>
+    <link rel="icon" href="{{ icon | default(static_root ~ 'favicon.svg', true) }}" type="image/svg+xml">
+    {# A packet names its own concatenated sheets; served, the cascade order is the app's. #}
+    {% block stylesheets %}{% if assets %}{% for sheet in assets %}<link rel="stylesheet" href="{{ sheet }}">
+    {% endfor %}{% else %}{% include "_stylesheets.html" %}{% endif %}{% endblock %}
+    {# window.Figures and window.dvNode: what a page's other scripts read, so no document
+       can be written without them. #}
+    <script src="{{ static_root }}figure_text.js"></script>
+    <script src="{{ static_root }}diagram_nodes.js"></script>
+    {% block shell_head %}{% endblock %}
+    {% block head_extra %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+{% block body %}{% endblock %}
+</body>
+</html>

@@ -1,21 +1,21 @@
-{# The scope map as its own bare document, for the frame the row lineage page's
-   Relevant rows tab holds. No project shell: the tab is already inside one, and a
-   second sidebar and trail inside a pane is chrome the reader has to look past.
-   `reason` instead of `scope` where no map can be drawn. #}
-<!doctype html><html><head><meta charset="utf-8">
-<title>Scope of {{ citation.stage_id }}.{{ citation.column }}</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-{% include "_stylesheets.html" %}
-<script src="/static/figure_text.js"></script>
-<script src="/static/tooltip.js"></script>
-{# The fetched table is the run page's, and these are the scripts it expects.
-   `base` because a frame is what holds it: a cell opens its lineage as a page. #}
+{# The scope map with no shell, for the frame the row lineage page's Relevant rows
+   tab holds. A second sidebar and trail inside a pane is chrome to look past. #}
+{% extends "standalone_base.html" %}
+{% block title %}Scope of {{ citation.stage_id }}.{{ citation.column }}{% endblock %}
+
+{% block head_extra %}
+{# The fetched table is the run page's, and these are the scripts it expects. #}
+<script src="{{ static_root }}tooltip.js"></script>
+<script src="{{ static_root }}cell-lineage.js"></script>
+<script src="{{ static_root }}cell-expand.js"></script>
+{# A frame is what holds this: a cell opens its lineage as a page, not in the pane. #}
 <base target="_top">
-<script src="/static/cell-lineage.js"></script>
-<script src="/static/cell-expand.js"></script>
 <style>
 body { padding: 14px 18px 28px; }
-</style></head><body>
+</style>
+{% endblock %}
+
+{% block body %}
 {% if reason %}
 <section class="scope">
   <p class="banner banner-warn">
@@ -26,4 +26,4 @@ body { padding: 14px 18px 28px; }
 {% else %}
 {% include "_scope_map.html" %}
 {% endif %}
-</body></html>
+{% endblock %}
