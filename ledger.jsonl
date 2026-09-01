@@ -2384,3 +2384,4 @@
 {"run_id":"33560362638","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33560362638","created":"2026-09-01T21:20:09Z","branch":"feat/chat-knows-the-page","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"33560483153","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33560483153","created":"2026-09-01T21:20:31Z","branch":"feat/chat-knows-the-page","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"33560483153","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33560483153","created":"2026-09-01T21:21:24Z","branch":"feat/chat-knows-the-page","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"33560798152","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33560798152","created":"2026-09-01T21:24:01Z","branch":"fix/run-inputs-as-links","event":"pull_request","contracts_kept":16,"findings":[]}
