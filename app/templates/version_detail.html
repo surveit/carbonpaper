@@ -29,7 +29,7 @@
       {%- if version.message %}{{ version.message }}
       {%- else %}<span class="muted">Saved without a description</span>{% endif -%}
     </h1>
-    <p class="vd-meta">{{ version.created_at | friendly_time }}</p>
+    <p class="vd-meta">Saved on {{ version.created_at | friendly_time }}</p>
   </div>
   <div class="actions wf-actions">
     {% if versions %}
