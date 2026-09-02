@@ -118,7 +118,6 @@ def test_a_transform_exception_stays_engineer_facing_in_the_same_section():
     stop = issues.stopped[0]
     assert stop.kind is StopKind.crash
     assert (stop.error_type, stop.error_message) == ("KeyError", "'client_name'")
-    assert stop.traceback is not None
 
 
 def test_an_authored_refusal_is_the_datas_story_not_the_codes():
@@ -302,7 +301,7 @@ def test_what_only_a_stop_carries_is_nested_under_its_own_line():
 
     assert html.count("<tr ") == 1
     assert '<div class="issue-more">' in html
-    assert "<summary>traceback</summary>" in html
+    assert "Traceback (most recent call last)" not in html
 
 
 def test_the_index_opens_closed_with_its_counts_still_on_screen():

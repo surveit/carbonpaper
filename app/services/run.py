@@ -153,6 +153,11 @@ def read_run_status(project_id: str, run_id: str) -> dict[str, Any]:
     return read_run_manifest(project_id, run_id).to_dict()
 
 
+def read_run_status_without_tracebacks(project_id: str, run_id: str) -> dict[str, Any]:
+    """What an agent may read: the run page keeps the traceback, behind its own disclosure."""
+    return read_run_manifest(project_id, run_id).to_dict_without_tracebacks()
+
+
 def _count_output_columns(run_dir: Path, output_path: str | None) -> int | None:
     try:
         path = resolve_output_path(run_dir, output_path)

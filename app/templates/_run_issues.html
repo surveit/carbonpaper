@@ -15,8 +15,8 @@
   it declares (the data owner's), its authored code refused the input it was handed
   (the author's), or the code broke (the engineer's). The first links the panel's
   Data tab, the other two its Transform tab. What only a stop has — the columns it
-  refused, the reason its author wrote, the traceback, the stages downstream that
-  never ran — is nested under its own line.
+  refused, the reason its author wrote, the stages downstream that never ran — is
+  nested under its own line.
 
   Drawn with the issue table the Workflow page's compiler warnings also use.
 
@@ -49,9 +49,6 @@
     <p class="issue-reason">{{ stop.error_message }}</p>
     {% else %}
     <p class="issue-raised">{{ stop.error_message }}</p>
-    {% endif %}
-    {% if stop.traceback and stop.kind != 'schema' %}
-    <details class="issue-traceback"><summary>traceback</summary><pre>{{ stop.traceback }}</pre></details>
     {% endif %}
     {% if stop.never_ran %}
     {# The named ids stop at six and the remainder is counted out loud — a list this

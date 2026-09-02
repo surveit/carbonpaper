@@ -45,7 +45,6 @@
 <section class="run-error">
     <h3>Error</h3>
     <p><strong>{{ stage.error.type }}</strong>: {{ stage.error.message }}</p>
-    {% if stage.error.traceback %}<details><summary>traceback</summary><pre>{{ stage.error.traceback }}</pre></details>{% endif %}
 </section>
 {% endif %}
 {% if stage.status == 'awaiting_review' %}

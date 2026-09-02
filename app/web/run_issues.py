@@ -45,7 +45,6 @@ class StoppedStage(BaseModel):
     kind: StopKind
     error_type: str
     error_message: str
-    traceback: str | None
     issues: list[ValidationIssue]
     # Downstream of this stage and never reached. Empty when the pinned version
     # could not be read: its edges are the only thing that says so.
@@ -117,7 +116,6 @@ def _view_stopped_stage(
         kind=_KIND_BY_ERROR_TYPE.get(error_type, StopKind.crash),
         error_type=error_type,
         error_message=str(error.get("message") or ""),
-        traceback=_read_optional_text(error.get("traceback")),
         issues=[
             issue
             for issue in _read_stage_issues(record)

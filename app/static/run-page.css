@@ -118,7 +118,7 @@
       print a stop nests under its own line. ── */
 .run-issues { margin: 0 0 1.1rem; }
 /* A stop names things no other line has room for: the columns it refused, the
-   reason its author wrote, its traceback, the stages it left unrun. They read as
+   reason its author wrote, the stages it left unrun. They read as
    that line's footnote — smaller than the message they hang off. */
 .issue-more { margin: .3rem 0 .1rem; font-size: .95em; }
 .issue-more > * { margin: .25rem 0 0; }
@@ -128,8 +128,6 @@
    string gets the monospace. */
 .issue-reason { max-width: 80ch; }
 .issue-raised { font-family: var(--mono); font-size: .95em; }
-.issue-traceback > summary { cursor: pointer; color: var(--muted); }
-.issue-traceback pre { max-height: 15em; overflow: auto; margin: .3rem 0 0; }
 .issue-blocked { color: var(--state-failed-ink); }
 
 /* The issue panel + table (_issue_table.html), shared by this page's "Worth a look"
