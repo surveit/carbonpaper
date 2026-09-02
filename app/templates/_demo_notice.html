@@ -8,8 +8,8 @@
   reader gets the strip and no dialog, which is the right way round: a blocking
   overlay that script cannot dismiss would lock the app instead of warning about it.
 
-  `starts_a_project` is what opens it on load; every other page serves it closed for
-  demo-notice.js to open when a file is about to leave the reader's machine.
+  `starts_a_project` is what opens it on load. Every other page serves it closed and
+  never opens it, so reading the app costs no acknowledgement.
 #}
 <div class="demo-strip">
   <b>Demo</b>
