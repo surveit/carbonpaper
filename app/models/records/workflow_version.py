@@ -22,7 +22,10 @@ class WorkflowVersion(PersistedModel):
 
     version_id: str
     parent_version: str | None = None
-    # Held when a version is written, not here: descriptions stored before it still load.
-    message: str
+    message: str = Field(
+        description=f"Names this version in {MAX_MESSAGE_CHARS} characters or fewer. "
+                    f"Held where a version is written, so longer ones stored before "
+                    f"the ceiling still load."
+    )
     stages: list[Stage] = Field(default_factory=list)
     schemas: list[dict[str, Any]] = Field(default_factory=list)

@@ -127,8 +127,9 @@ TOOL_SCHEMAS: dict[str, ToolParameterProse] = {
     },
     "save_version": {
         "project_id": PROJECT_ID,
-        "message": "What this version changes and why — shown to the human reviewer "
-            "deciding whether to publish it.",
+        "message": "What this version changes, in 150 characters or fewer — it NAMES the "
+            "version in a list a reader scans, so a longer one is refused rather than "
+            "trimmed. Say what changed, not why or how.",
         "parent_version": "The version you started this edit FROM, if you loaded one. Omit otherwise: "
             "nothing is inferred from what else the project has stored.",
     },
