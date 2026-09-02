@@ -24,11 +24,6 @@
     </div>
   </div>
 
-  <div class="nr-meta">
-    <span class="nr-scope muted">Frozen in version <code>{{ version_id }}</code> — read-only. To change this stage, edit it on the
-      <a href="/project/{{ project }}/workflow">working copy</a> and cut a new version.</span>
-  </div>
-
   <div class="stage-tabs nr-tabs">
     <div class="tabs">
       <button type="button" data-tab="inputs">Inputs</button>
@@ -40,7 +35,7 @@
 
   <div class="panes nr-panes">
     <div class="pane" data-pane="inputs" hidden>
-      {% if workflow_stage is none %}<p class="muted"><em>Input schemas unavailable — the workflow graph does not resolve.</em></p>
+      {% if workflow_stage is none %}<p class="muted"><em>Input schemas unavailable — the flow chart does not resolve.</em></p>
       {% elif workflow_stage.inputs %}
         {% for inp in workflow_stage.inputs %}
         <div class="schema-card">

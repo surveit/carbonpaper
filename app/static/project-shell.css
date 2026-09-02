@@ -320,12 +320,19 @@
 .wf-right.loading { opacity: 0.5; }
 
 
-/* HISTORY on the workflow page: a disclosure, because reading the current
-   workflow is what nearly every visit is for. */
-.vd-history { margin: 18px 0 8px; border: 1px solid var(--border); border-radius: 6px;
-    background: var(--raised); }
-.vd-history > summary { padding: 10px 14px; cursor: pointer; font-weight: 600; font-size: 14px; }
-.vd-history > summary:hover { background: var(--hover); }
-.vd-history[open] > summary { border-bottom: 1px solid var(--border); }
-.vd-history table { margin: 0; }
-.vd-history-here { background: var(--sunk); }
+/* The version on screen is the page's subject; the others sit behind a menu. */
+.vd-name { margin: 0 0 4px; }
+.vd-history { position: relative; }
+.vd-history > summary { list-style: none; cursor: pointer; }
+.vd-history > summary::-webkit-details-marker { display: none; }
+.vd-history-n { margin-left: 6px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.vd-history-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20;
+    min-width: 320px; max-height: 60vh; overflow-y: auto; padding: 4px;
+    background: var(--raised); border: 1px solid var(--border-strong);
+    border-radius: 6px; box-shadow: 0 6px 20px var(--shadow); }
+.vd-history-row { display: block; padding: 7px 10px; border-radius: 4px; text-decoration: none; }
+.vd-history-row:hover { background: var(--hover); }
+.vd-history-row.here { background: var(--sunk-deep); }
+.vd-history-when { display: block; font-size: 11.5px; color: var(--muted);
+    font-variant-numeric: tabular-nums; }
+.vd-history-msg { display: block; font-size: 13px; color: var(--fg); margin-top: 1px; }

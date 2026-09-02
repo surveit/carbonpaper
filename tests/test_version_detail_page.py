@@ -67,16 +67,14 @@ def test_version_detail_does_not_offer_to_generate_a_guide(project: Path) -> Non
     assert 'data-role="generate-guide"' not in page.text
 
 
-def test_version_detail_labels_the_authored_description(project: Path) -> None:
+def test_the_description_is_the_page_heading(project: Path) -> None:
     meta = project_service.save_working_copy_as_version(project.name, message="Nine flat categories, no severity."
     )
 
     page = client.get(f"/project/demo/workflow/version/{meta.version_id}")
 
-    assert "vd-desc-kicker" in page.text
+    assert '<h1 class="vd-name">' in page.text
     assert "Nine flat categories, no severity." in page.text
-    # The boilerplate no longer runs into the authored half.
-    assert "A read-only snapshot of the workflow. Nine flat" not in page.text
 
 
 def test_version_detail_says_when_no_description_was_written(project: Path) -> None:
@@ -84,7 +82,7 @@ def test_version_detail_says_when_no_description_was_written(project: Path) -> N
 
     page = client.get(f"/project/demo/workflow/version/{meta.version_id}")
 
-    assert "this version was cut without one" in page.text
+    assert "Saved without a description" in page.text
 
 
 def _save_covering_guide(project_dir: Path, version_id: str) -> None:
