@@ -78,6 +78,20 @@ Two different things you can ask a human for, with different bars:
   state plainly why that specific warning is safe to ignore here. A warning you leave
   unmentioned spends the reviewer's attention on something you already knew about."""
 
+ROW_LINEAGE_PAGE_NOTE = """\
+# The row lineage page
+Where ONE value in one row came from, in four tabs the reader is looking at:
+- Paths — the distinct routes rows took to reach this row, told apart by the BRANCHES
+  they took. A branch is one decision the run made that came out differently for
+  different rows, read back off what the run wrote, never predicted from the code.
+- Relevant rows — the rows behind the figure, grouped by the branches they took.
+- Relevant columns — where the cited column came from, replayed one stage at a time.
+- Input files — each source file the figure read, sliced to the rows and columns it used.
+
+Asked how the page works, explain it to someone who has never seen it: no stage ids, no
+column names, no branch ids. They are looking at the page, not at the workflow."""
+
+
 # ─── The pages a session can link its reader to ──────────────────
 
 

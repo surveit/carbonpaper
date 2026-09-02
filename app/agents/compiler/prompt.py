@@ -17,6 +17,7 @@ from app.tools.prompt_fragments import (
     HOW_YOU_WORK_NOTE,
     REVIEW_GUIDE_NOTE,
     ROLE_NOTE,
+    ROW_LINEAGE_PAGE_NOTE,
     SIGNATURE_CONTRACT_NOTE,
     WORKED_STAGE_EXAMPLE,
     render_stage_anatomy,
@@ -30,6 +31,7 @@ def build_editing_system_prompt() -> str:
         HOW_YOU_WORK_NOTE,
         REVIEW_GUIDE_NOTE,
         HANDOVER_BARS_NOTE,
+        ROW_LINEAGE_PAGE_NOTE,
         f"# Project lifecycle\n{AUTHORING_LIFECYCLE_GUIDANCE}",
         f"# Rules for workflows\n\n## Constrain inputs as tightly as possible\n"
         f"{ENUM_FROM_DATA_GUIDANCE}\n\n"

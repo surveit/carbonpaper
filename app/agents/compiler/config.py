@@ -7,9 +7,9 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from app.agents.compiler.opening import choose_opening_turn
 from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
 from app.models.terms import render_terms
-from app.services.project_record import read_project_name
 from app.services import terms as terms_service
 from app.tools.editing import EditingContext, build_editing_tools
 from app.tools.prompt_fragments import render_link_map
@@ -58,39 +58,10 @@ def _render_project_terms(context: EditingContext) -> str:
 
 def _render_opening_turn(context: BaseModel) -> OpeningTurn:
     assert isinstance(context, EditingContext)
-    if context.project_id is None:
-        return OpeningTurn(text=_BLANK_CHAT_OPENING)
     if context.task:
         # The task arrives as the reader's first message, so a greeting would talk over it.
         return OpeningTurn(text="")
-    return OpeningTurn(text=_PROJECT_OPENING.format(name=read_project_name(context.project_id)))
-
-
-# `POST /chat/new` — nothing is bound yet, so the message is the three ways in, numbered
-# so a reply of "the first one" names one of them.
-_BLANK_CHAT_OPENING = """\
-I build the workflows in Carbon Paper — the stages that turn your data into a result \
-someone else can check.
-
-Three ways to start:
-
-1. Upload your data and describe the investigation you want to run on it.
-2. Upload a methodology document, and the input data it is meant to run on.
-3. Describe changes you want made to a project that already exists.
-
-Attach a file with the paperclip below, or drop one anywhere on this conversation."""
-
-
-# `/project/<id>/edit-agent` — the reader already has a project, so the offer is what
-# can be done TO one. Every line is a tool this agent holds; publishing is not one.
-_PROJECT_OPENING = """\
-You're in {name}. I edit its workflow, and show you what the edit does:
-
-1. Add, edit or remove stages.
-2. Run it — all of it, or a slice of rows as a test — and read the rows each stage produced.
-3. Save the result as a version, with a walkthrough for whoever reviews it.
-
-Publishing a version stays yours. Say what you want changed."""
+    return choose_opening_turn(context.opened_on, context.project_id is not None)
 
 
 CONFIG = AgentConfig(
@@ -104,8 +75,7 @@ CONFIG = AgentConfig(
     # has agreed by then rather than in what the process started with. The address is
     # read per turn, so it is where this reader is rather than where the session opened.
     render_session_prompt=_render_session_note,
-    # Written, not generated: the same words for every reader, and the model is told
-    # them, so "the first one" resolves to a numbered line above.
+    # Written, not generated: instant, and it cannot be wrong about a page it never read.
     render_opening_turn=_render_opening_turn,
 )
 
