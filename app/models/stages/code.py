@@ -250,10 +250,11 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
             "that Starlark's builtin-only environment cannot express. "
             "Takes exactly ONE input — to combine data from another input use enrich/expand, "
             "or python_frame_function. "
-            "`transform(row)` is handed a plain dict and must return a plain dict, and that "
-            "dict IS the output row: a key you do not return is absent from the output, so "
-            "carry columns through explicitly (`return {**row, ...}`). The function is shown "
-            "neither the frame nor the row's position, so it cannot fan out, drop or reorder."
+            "`transform(row)` is handed a plain dict and must return a plain dict. The "
+            "runtime rejoins it onto the input row itself, so a key you do not return still "
+            "flows through unchanged — only a rewrite or an add needs an explicit key. The "
+            "function is shown neither the frame nor the row's position, so it cannot fan "
+            "out, drop or reorder."
         ),
     ),
     "python_frame_function": StageTypeSpec(

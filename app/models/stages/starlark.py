@@ -65,9 +65,9 @@ _FUNCTION_DESCRIPTION = (
 
 _CODE_DESCRIPTION = (
     "Inline Starlark defining `function` (default `transform`): `def transform(row): "
-    "...`, one row dict in, one row dict out, and the returned dict IS the output row "
-    "(a key you do not return is absent — carry columns through with `return "
-    "dict(row, key=value)`). " + STARLARK_LANGUAGE_NOTE + " " + _VALUE_MARSHALLING_NOTE +
+    "...`, one row dict in, one row dict out; the runtime rejoins the returned dict onto "
+    "the input row, so a key you do not return still flows through unchanged (only a "
+    "rewrite or an add needs an explicit key). " + STARLARK_LANGUAGE_NOTE + " " + _VALUE_MARSHALLING_NOTE +
     " " + _DATE_COLUMN_NOTE +
     " Call `refuse(\"reason\")` to decline a row you cannot honestly process; call "
     "`fail(\"reason\")` only for a bug. Module-level variables are frozen after "
@@ -198,9 +198,9 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
         notes=(
             STARLARK_LANGUAGE_NOTE +
             " The step cannot read or write anything outside its row. "
-            "`transform(row)` is handed a plain dict and must return a "
-            "plain dict, and that dict IS the output row: a key you do not return is "
-            "absent, so carry columns through explicitly (`return dict(row, key=value)`). "
+            "`transform(row)` is handed a plain dict and must return a plain dict. The "
+            "runtime rejoins it onto the input row, so a key you do not return still "
+            "flows through unchanged — only a rewrite or an add needs an explicit key. "
             + _VALUE_MARSHALLING_NOTE + " " + _DATE_COLUMN_NOTE + " An integer "
             "beyond 2**63-1 stops the step rather than losing precision. Call "
             "`refuse(\"reason\")` to decline a row you cannot honestly process. "
