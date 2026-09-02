@@ -188,8 +188,7 @@ def _render_terms_section(stored: Terms | None, unreadable: str = "") -> str:
     template = templates.env.get_template("section_methodology.html")
     context = template.new_context({
         "state": {"id": _PROJECT},
-        # Non-empty, so the Methodology tab's own empty-state never fires — these
-        # tests are about the Glossary tab only.
+        # Non-empty, so it never shows the Methodology tab's own empty-state.
         "methodology": "Stub methodology text.",
         "active_tab": "glossary",
         "terms": stored,
