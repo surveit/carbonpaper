@@ -34,6 +34,12 @@ def test_nothing_is_said_off_fly() -> None:
     assert "demo-gate" not in html
 
 
+def read_gate_tag(path: str) -> str:
+    gate = re.search(r"<dialog[^>]*\bclass=\"demo-gate\"[^>]*>", client.get(path).text)
+    assert gate is not None, f"{path} serves no demo gate"
+    return gate.group(0)
+
+
 def test_the_strip_and_the_gate_are_on_every_page_of_the_deploy(on_fly) -> None:
     for path in ("/", "/chat"):
         html = client.get(path).text
@@ -42,6 +48,10 @@ def test_the_strip_and_the_gate_are_on_every_page_of_the_deploy(on_fly) -> None:
 
 
 def test_the_gate_is_served_closed(on_fly) -> None:
-    gate = re.search(r"<dialog[^>]*\bclass=\"demo-gate\"[^>]*>", client.get("/").text)
-    assert gate is not None, "the deploy serves no demo gate"
-    assert " open" not in gate.group(0)
+    assert " open" not in read_gate_tag("/")
+
+
+def test_only_the_chat_that_starts_a_project_opens_the_gate_on_load(on_fly) -> None:
+    assert "data-open-on-load" in read_gate_tag("/chat/agent/editing/new")
+    for path in ("/", "/chat", "/chat/agent/editing/new?project_id=demo"):
+        assert "data-open-on-load" not in read_gate_tag(path), path

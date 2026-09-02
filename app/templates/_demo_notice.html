@@ -1,17 +1,19 @@
 {#
-  The open-demo notice: a standing strip, and a gate over the first visit.
+  The open-demo notice: a standing strip, and a gate over the moments content goes in.
 
-  Both state the same four facts, which are properties of this deploy having no
-  accounts — a stage is exec'd Python in the app process (app/runtime/code.py), so
-  nothing here can be walled off per visitor and no permission would hold.
+  Both state the same three facts, which are properties of this deploy having no
+  accounts, so nothing here can be walled off per visitor.
 
   The gate is rendered CLOSED and opened by demo-notice.js. With no JavaScript a
   reader gets the strip and no dialog, which is the right way round: a blocking
   overlay that script cannot dismiss would lock the app instead of warning about it.
+
+  `starts_a_project` is what opens it on load. Every other page serves it closed and
+  never opens it, so reading the app costs no acknowledgement.
 #}
 <div class="demo-strip">
-  <b>Open demo</b>
-  <span>Anything you put here is public.</span>
+  <b>Demo</b>
+  <span>Do not upload private data.</span>
   <span class="demo-strip-sep">·</span>
   <button type="button" class="demo-strip-toggle" id="demo-strip-toggle" aria-expanded="false"
           aria-controls="demo-strip-more">what that means</button>
@@ -20,23 +22,20 @@
   <ul>
     <li>Every project is open to every visitor. There is no private project.</li>
     <li>Anyone can run or delete anything, and delete cannot be undone.</li>
-    <li>A stage is Python that runs on this server and can read every project's files.</li>
     <li>Nothing here is guaranteed to be kept — a deploy can take the whole store.</li>
   </ul>
 </div>
 
-<dialog class="demo-gate" id="demo-gate" aria-labelledby="demo-gate-heading">
-  <span class="demo-gate-kicker">Open demo</span>
-  <h2 id="demo-gate-heading">Anything you put here is public.</h2>
-  <p class="demo-gate-lede">This deploy has no accounts and nothing separating one visitor
-    from another. Four things follow, and none of them are configurable:</p>
+<dialog class="demo-gate" id="demo-gate" aria-labelledby="demo-gate-heading"
+        {% if starts_a_project | default(false) %}data-open-on-load{% endif %}>
+  <h2 id="demo-gate-heading">This is a demo. Do not upload private data.</h2>
+  <p class="demo-gate-lede">Carbon Paper runs here as a demo so anyone can try it. Three
+    things follow:</p>
   <ul class="demo-facts">
     <li><b>Every project is open to every visitor</b>, including the one you are about to
       make. There is no private project.</li>
     <li><b>Anyone can run or delete anything.</b> Delete takes the runs with it and cannot
       be undone.</li>
-    <li><b>A stage is Python that runs on this server</b> and can read every project's
-      files. Whoever writes one can read what you uploaded.</li>
     <li><b>Nothing here is guaranteed to be kept.</b> A deploy can take the whole store, and
       a workflow you build today may not load next week.</li>
   </ul>
@@ -50,8 +49,4 @@
     <button type="button" class="btn primary" id="demo-gate-continue" disabled
             title="Tick the box to enable this">Continue to the demo</button>
   </div>
-  {# Said out loud, because a checkbox looks like a control and this one is not: it
-     gates nothing server-side and there is no account to record it against. #}
-  <p class="demo-gate-note">This is a notice, not a control. Ticking it records nothing and
-    protects nothing — the four facts above stay true either way.</p>
 </dialog>

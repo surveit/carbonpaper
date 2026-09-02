@@ -173,6 +173,8 @@ async def draft_agent_chat(agent_id: str, request: Request):
         **_read_draft_panel_context(agent_id, context),
         "title": title,
         "crumbs": build_chat_crumbs(title),
+        # A draft with no project is the one door to a new one. See _demo_notice.html.
+        "starts_a_project": not context.get("project_id"),
     })
 
 

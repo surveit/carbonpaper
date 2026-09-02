@@ -1,8 +1,8 @@
-// Wires _demo_notice.html: the strip's disclosure, and the gate over a first visit.
+// Wires _demo_notice.html: the strip's disclosure, and the gate.
 //
-// Whether this BROWSER has been shown the gate — not whether the person read it, and
-// not a fact about an account, since there are none. Same reasoning as the tour flag
-// on the home page: nothing server-side records either.
+// The gate opens where a project starts, not on arrival, so reading is never blocked.
+// Whether this BROWSER has been shown it — not whether the person read it, and not a
+// fact about an account, since there are none. Same as the home page's tour flag.
 (function () {
     const KEY = "carbonpaper.demo-notice.acknowledged";
 
@@ -19,6 +19,7 @@
 
     const gate = document.getElementById("demo-gate");
     if (!gate || typeof gate.showModal !== "function") return;
+    if (!gate.hasAttribute("data-open-on-load")) return;
 
     let acknowledged = false;
     try { acknowledged = localStorage.getItem(KEY) === "1"; } catch (e) { /* private mode */ }

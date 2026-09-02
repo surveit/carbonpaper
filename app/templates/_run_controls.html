@@ -106,12 +106,6 @@
   <div class="run-inputs">
     {% for row in choices.inputs %}{{ input_row(row.stage_id, row.authored_path, choices.files, row.selected_file_ids, row.limit) }}{% endfor %}
   </div>
-  {# The one place a file leaves the reader's machine, so the one place the strip's
-     standing fact is worth repeating in the specific. #}
-  {% if serves_an_open_demo() %}
-  <p class="demo-upload-note">Open demo — this file becomes readable by every visitor and
-    by any stage anyone writes. Upload only what can be made public.</p>
-  {% endif %}
   <details class="run-advanced"{% if choices.bust_cache %} open{% endif %}>
     <summary>Advanced</summary>
     <label class="run-bust-cache">
@@ -135,6 +129,12 @@
       <span>or choose one from this device</span>
     </button>
     <input type="file" class="run-upload-input" hidden>
+    {# In the dialog, not on the form behind it: this is the screen the file is
+       picked on, and the form's own copy would sit under the scrim. #}
+    {% if serves_an_open_demo() %}
+    <p class="demo-upload-note">Demo — this file becomes readable by every visitor.
+      Do not upload private data.</p>
+    {% endif %}
     <div class="run-upload-selection" hidden>
       <strong class="run-upload-filename"></strong>
       <span class="run-upload-size"></span>
