@@ -34,24 +34,23 @@ def test_a_longer_route_is_matched_before_the_route_it_sits_under() -> None:
     lineage = find_page_opening(
         "/project/p1/runs/r1/stage/parse/row/0/trace/view")
     run = find_page_opening("/project/p1/runs/r1")
-    project = find_page_opening("/project/p1")
 
-    assert lineage is not None and "this value" in lineage.says
-    assert run is not None and "run" in run.says
-    assert project is not None and project.route == "/project/{project_name}"
+    assert lineage is not None and "row lineage" in lineage.says
+    assert run is not None and "this run" in run.says
+    # A project page has no entry of its own: the fallback already says these words.
+    assert find_page_opening("/project/p1") is None
 
 
 def test_a_page_no_opening_answers_falls_back_rather_than_guessing() -> None:
     assert find_page_opening("/admin") is None
     assert find_page_opening("/project/p1/runs/r1/scope") is None
 
-    turn = choose_opening_turn("/admin", "lobbying_spend")
+    turn = choose_opening_turn("/admin", in_project=True)
 
-    assert turn.text == "How can I help with lobbying_spend?"
+    assert turn.text == "Hello. What do you want to do with this project?"
 
 
-def test_an_opening_on_a_page_outside_any_project_names_no_project() -> None:
-    turn = choose_opening_turn("/files", None)
+def test_an_opening_outside_any_project_offers_the_ways_in() -> None:
+    turn = choose_opening_turn("/files", in_project=False)
 
-    assert "{name}" not in turn.text
-    assert turn.offers
+    assert turn.text == "Hello. What would you like to do today?"

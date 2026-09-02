@@ -10,7 +10,6 @@ from pydantic import BaseModel
 from app.agents.compiler.opening import choose_opening_turn
 from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
 from app.models.terms import render_terms
-from app.services.project_record import read_project_name
 from app.services import terms as terms_service
 from app.tools.editing import EditingContext, build_editing_tools
 from app.tools.prompt_fragments import render_link_map
@@ -62,8 +61,7 @@ def _render_opening_turn(context: BaseModel) -> OpeningTurn:
     if context.task:
         # The task arrives as the reader's first message, so a greeting would talk over it.
         return OpeningTurn(text="")
-    name = read_project_name(context.project_id) if context.project_id else None
-    return choose_opening_turn(context.opened_on, name)
+    return choose_opening_turn(context.opened_on, context.project_id is not None)
 
 
 CONFIG = AgentConfig(

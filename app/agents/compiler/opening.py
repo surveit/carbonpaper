@@ -16,12 +16,12 @@ class PageOpening(BaseModel):
     offers: list[str]
 
 
-def choose_opening_turn(path: str | None, project_name: str | None) -> OpeningTurn:
-    """`path` is where the chat was opened, `project_name` what to call the project there."""
-    page = find_page_opening(path) if project_name else None
+def choose_opening_turn(path: str | None, in_project: bool) -> OpeningTurn:
+    """Every page below sits under /project/<id>, so one outside a project has no words here."""
+    page = find_page_opening(path) if in_project else None
     if page is None:
-        return _fallback_turn(project_name)
-    return OpeningTurn(text=page.says.format(name=project_name), offers=page.offers)
+        return _fallback_turn(in_project)
+    return OpeningTurn(text=page.says, offers=page.offers)
 
 
 def find_page_opening(path: str | None) -> PageOpening | None:
@@ -45,17 +45,13 @@ def _matches_route(segments: list[str], route: str) -> bool:
     )
 
 
-def _fallback_turn(project_name: str | None) -> OpeningTurn:
-    if project_name is None:
+def _fallback_turn(in_project: bool) -> OpeningTurn:
+    if not in_project:
         return OpeningTurn(text=_NO_PROJECT_SAYS, offers=_NO_PROJECT_OFFERS)
-    return OpeningTurn(
-        text=_PROJECT_SAYS.format(name=project_name), offers=_PROJECT_OFFERS)
+    return OpeningTurn(text=_PROJECT_SAYS, offers=_PROJECT_OFFERS)
 
 
-_NO_PROJECT_SAYS = (
-    "How can I help? I build the workflows here — the stages that turn your data into a "
-    "result someone else can check."
-)
+_NO_PROJECT_SAYS = "Hello. What would you like to do today?"
 
 _NO_PROJECT_OFFERS = [
     "Start from data I have",
@@ -63,7 +59,7 @@ _NO_PROJECT_OFFERS = [
     "Change a project that exists",
 ]
 
-_PROJECT_SAYS = "How can I help with {name}?"
+_PROJECT_SAYS = "Hello. What do you want to do with this project?"
 
 _PROJECT_OFFERS = [
     "Explain what this project does",
@@ -76,40 +72,36 @@ _PROJECT_OFFERS = [
 PAGE_OPENINGS = [
     PageOpening(
         route="/project/{project_id}/runs/{run_id}/stage/{stage_id}/row/{row}/trace/view",
-        says="How can I help with this value?",
-        offers=[
-            "Explain how this value was built",
-            "Check this value for mistakes",
-            "Show me the rows behind it",
-        ],
+        says="Hello. What do you want to do with this row lineage?",
+        offers=["Explain how to use this page", "Explain how this value was built"],
     ),
     PageOpening(
         route="/project/{project_name}/workflow/version/{version_id}",
-        says="How can I help with this saved version of {name}?",
+        says="Hello. What do you want to do with this saved version?",
         offers=["Explain what changed in this version", "Run this version as a test"],
     ),
     PageOpening(
         route="/project/{project_name}/workflow/versions",
-        says="How can I help with {name}'s saved versions?",
+        says="Hello. What do you want to do with these saved versions?",
         offers=["Compare the saved versions", "Which version did the last run use?"],
     ),
     PageOpening(
         route="/project/{project_id}/runs/{run_id}",
-        says="How can I help with this {name} run?",
+        says="Hello. What do you want to do with this run?",
         offers=[
             "Explain what happened",
-            "Review the run for possible mistakes",
+            "Review the run for potential errors",
             "Rerun with different inputs",
         ],
     ),
     PageOpening(
         route="/project/{project_id}/runs",
-        says="How can I help with {name}'s runs?",
+        says="Hello. What do you want to do with these runs?",
         offers=["Compare the recent runs", "Start a new run"],
     ),
     PageOpening(
         route="/project/{project_name}/workflow",
-        says="How can I help with the {name} workflow?",
+        says="Hello. What do you want to do with this workflow?",
         offers=[
             "Explain what this workflow does",
             "Edit the workflow",
@@ -117,24 +109,13 @@ PAGE_OPENINGS = [
         ],
     ),
     PageOpening(
-        # Nothing here reads the document, so neither offer claims to have read it.
-        route="/project/{project_name}/methodology",
-        says="How can I help with the {name} methodology?",
-        offers=["Explain what this workflow does", "Edit the workflow"],
-    ),
-    PageOpening(
         route="/project/{project_name}/glossary",
-        says="How can I help with {name}'s agreed words?",
+        says="Hello. What do you want to do with these words?",
         offers=["What do these terms control?", "Add a term"],
     ),
     PageOpening(
         route="/project/{project_id}/files",
-        says="How can I help with {name}'s files?",
+        says="Hello. What do you want to do with these files?",
         offers=["What's in this data?", "Use one of these as an input"],
-    ),
-    PageOpening(
-        route="/project/{project_name}",
-        says=_PROJECT_SAYS,
-        offers=_PROJECT_OFFERS,
     ),
 ]
