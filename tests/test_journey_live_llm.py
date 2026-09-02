@@ -13,7 +13,6 @@ from fastapi.testclient import TestClient
 import app.services.run as run_service
 from app.main import app
 from app.services.project import create_project
-from app.services.versioning import list_versions
 from stage_seed import set_stages
 from test_journey_smoke import _point_examples_dir_at, assert_run_ok
 
@@ -40,7 +39,7 @@ def test_the_offline_seal_lets_this_tier_reach_the_real_sdk() -> None:
     assert sdk_engine.query is query
 
 
-def test_live_llm_journey_reaches_a_published_artifact(live_project):
+def test_live_llm_journey_reaches_its_artifact(live_project):
     from app.runtime.options import agent_available
     assert agent_available(), (
         "live_llm tier needs claude-agent-sdk + the claude CLI. Install both "
@@ -51,13 +50,6 @@ def test_live_llm_journey_reaches_a_published_artifact(live_project):
     resp = client.post(f"/project/{project}/version", data={"message": "live smoke"})
     assert resp.status_code == 200, resp.text
     assert resp.json()["ok"] is True, resp.text
-
-    # Publish it — the human-approval signal. A run no longer requires it, but it
-    # stays in the journey: author -> version -> publish -> run -> artifact.
-    version_id = list_versions(live_project.name)[0].version_id
-    resp = client.post(f"/project/{project}/versions/{version_id}/publish",
-                       follow_redirects=False)
-    assert resp.status_code == 303, resp.text
 
     resp = client.post(f"/project/{project}/run", data={}, follow_redirects=False)
     assert resp.status_code == 303, resp.text
