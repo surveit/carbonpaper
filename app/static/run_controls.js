@@ -154,11 +154,22 @@
     function openDialog(row) {
       var pick = row.querySelector("select.file-pick");
       if (!pick) return;
-      resetDialog();
-      targetPick = pick;
-      dialog.querySelector(".run-upload-stage").textContent =
-        row.querySelector(".run-input-name code").textContent;
-      dialog.showModal();
+      // The last point before the bytes go, so the open demo says so here if it has not
+      // said so yet. Off the deploy the dialog opens with nothing in between.
+      askDemoGate(function () {
+        resetDialog();
+        targetPick = pick;
+        dialog.querySelector(".run-upload-stage").textContent =
+          row.querySelector(".run-input-name code").textContent;
+        dialog.showModal();
+      });
+    }
+
+    // Nothing listening means nothing to say, so the dialog opens. See demo-notice.js.
+    function askDemoGate(proceed) {
+      var ask = new CustomEvent("demo-gate:ask", {cancelable: true, detail: {proceed: proceed}});
+      document.dispatchEvent(ask);
+      if (!ask.defaultPrevented) proceed();
     }
 
     async function uploadFile() {

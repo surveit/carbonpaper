@@ -418,6 +418,19 @@ window.ChatPanel.mount = function (root) {
               `cut it down.`);
       return;
     }
+    // The last point before the bytes go, so the open demo says so here if it has not
+    // said so yet. Off the deploy this runs `routeFile` with nothing in between.
+    askDemoGate(() => routeFile(file));
+  }
+
+  // Nothing listening means nothing to say, so the file goes. See demo-notice.js.
+  function askDemoGate(proceed) {
+    const ask = new CustomEvent("demo-gate:ask", {cancelable: true, detail: {proceed}});
+    document.dispatchEvent(ask);
+    if (!ask.defaultPrevented) proceed();
+  }
+
+  function routeFile(file) {
     // A project the session already works on takes the file with no question asked.
     if (cfg.session_project) { storeFile(file, cfg.session_project); return; }
     if (!cfg.projects.length) { storeFile(file, ""); return; }
