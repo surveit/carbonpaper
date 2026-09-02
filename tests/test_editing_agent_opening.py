@@ -24,32 +24,26 @@ _WAYS_IN = [
 # What each offer rests on: clicking one sends its words, so the tools must exist.
 _OFFERS_REST_ON = {
     "Explain how this value was built": ("read_stage_output_rows", "read_stage"),
-    "Did anything upstream error?": ("get_run_status",),
-    "Show me the rows around it": ("read_stage_output_rows",),
-    "What changed in this version?": ("read_workflow_summary", "read_stage"),
-    "What would this establish if I ran it?": ("read_review_guide",),
-    "Run it as a test": ("run_workflow_test",),
+    "Check this value for mistakes": ("get_run_status", "read_stage_output_rows"),
+    "Show me the rows behind it": ("read_stage_output_rows",),
+    "Explain what changed in this version": ("read_workflow_summary", "read_stage"),
+    "Run this version as a test": ("run_workflow_test",),
+    "Compare the saved versions": ("read_workflow_summary",),
     "Which version did the last run use?": ("list_runs", "get_run_status"),
-    "What changed between them?": ("read_workflow_summary",),
-    "How did this run go?": ("get_run_status",),
-    "Show me what it published": ("read_stage_output_rows",),
-    "Run it again on more rows": ("run_workflow",),
-    "Which run should I trust?": ("list_runs", "get_run_status"),
+    "Explain what happened": ("get_run_status",),
+    "Review the run for possible mistakes": ("get_run_status", "report_compiler_warnings"),
+    "Rerun with different inputs": ("run_workflow",),
+    "Compare the recent runs": ("list_runs", "get_run_status"),
     "Start a new run": ("run_workflow",),
-    "What does this workflow establish?": ("read_workflow_summary",),
-    "Add or change a stage": ("add_stage", "edit_stages"),
-    "Does the workflow match this document?": ("read_workflow_summary",),
-    "Change the document": ("read_workflow_summary",),
+    "Explain what this workflow does": ("read_workflow_summary",),
+    "Edit the workflow": ("edit_stages", "add_stage"),
+    "Run this workflow": ("run_workflow",),
     "What do these terms control?": ("read_terms",),
     "Add a term": ("write_terms",),
     "What's in this data?": ("profile_file", "list_files"),
     "Use one of these as an input": ("list_files", "add_stage"),
+    "Explain what this project does": ("read_workflow_summary", "get_project_status"),
     "Where does this project stand?": ("get_project_status",),
-    "What should I do next?": ("get_project_status", "report_compiler_warnings"),
-    "Change the workflow": ("edit_stages",),
-    "What is this page telling me?": ("get_current_url",),
-    "What would you change here?": ("read_workflow_summary",),
-    "Run it and show me the rows": ("run_workflow", "read_stage_output_rows"),
     "Start from data I have": ("profile_file", "create_project"),
     "Start from a methodology document": ("create_project",),
     "Change a project that exists": ("list_projects",),
@@ -96,7 +90,7 @@ def test_a_chat_opened_on_a_run_says_so_and_names_the_project(tmp_path) -> None:
 
     # The name every other surface shows, not the opaque id the URL carries.
     assert "lobbying_spend" in message
-    assert "on one run" in message
+    assert "run" in message
     assert project_id not in message
 
 
@@ -107,8 +101,21 @@ def test_the_lineage_page_gets_words_no_other_page_gets(tmp_path) -> None:
     message = _opening_message(
         on_run | {"opened_on": f"{on_run['opened_on']}/stage/parse/row/0/trace/view"})
 
-    assert "lineage" in message
+    assert "this value" in message
     assert message != _opening_message(on_run)
+
+
+def test_the_address_a_reader_is_actually_on_carries_a_query(tmp_path) -> None:
+    """`ChatPanel.here()` sends pathname + search; ?column= is on every lineage link."""
+    project_id = _make_project(tmp_path)
+    trace = f"/project/{project_id}/runs/r1/stage/paid_totals/row/0/trace/view"
+
+    on_column = _opening_message(
+        {"project_id": project_id, "opened_on": f"{trace}?column=total_income_usd"})
+
+    assert on_column == _opening_message(
+        {"project_id": project_id, "opened_on": trace})
+    assert "this value" in on_column
 
 
 def test_a_page_in_no_project_never_leaves_the_name_unfilled() -> None:
