@@ -28,6 +28,7 @@ from app.web.stage_prose import plan_an_aggregate, say_what_a_stage_did
 from app.web.transform_block import name_transform_block
 from app.web.diagrams import TYPE_LABEL
 from app.web.file_sizes import describe_bytes, read_turn
+from app.web.run_issues import read_crash_type
 from app.services.workspace import (
     configure_projects_dir_from_env as configure_projects_dir_from_env,
     projects_dir as projects_dir,
@@ -164,3 +165,5 @@ templates.env.filters["code_block_copy"] = describe_code_block
 templates.env.filters["transform_block"] = name_transform_block
 templates.env.filters["aggregate_plan"] = plan_an_aggregate
 templates.env.filters["stage_says"] = say_what_a_stage_did
+# Only a crash's type is news; the other two stops arrive already worded.
+templates.env.filters["crash_type"] = read_crash_type
