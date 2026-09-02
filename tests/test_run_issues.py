@@ -233,7 +233,7 @@ def _render(manifest: dict[str, Any], stages: Any = None) -> str:
 
 def test_each_stop_story_is_worded_apart_in_the_markup():
     assert "the data changed" in _render(_manifest(_refusal("classify_issues")))
-    assert ("Input validation failed on publish_workbook"
+    assert ("this stage does not handle this data"
             in _render(_manifest(_refused("publish_workbook"))))
     assert "the code broke" in _render(_manifest(_crash("publish_report")))
 
@@ -252,7 +252,7 @@ def test_a_crash_deep_links_the_panels_transform_tab_instead():
 def test_an_authored_refusal_leads_with_its_reason_and_not_its_exception_name():
     html = _render(_manifest(_refused("publish_workbook")))
 
-    assert "Input validation failed on publish_workbook" in html
+    assert "this stage does not handle this data" in html
     assert "which this workbook has no wording for" in html
     assert StepRefused.__name__ not in html
     assert 'data-stage-tab="transform"' in html

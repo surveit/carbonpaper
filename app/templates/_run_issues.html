@@ -37,7 +37,7 @@
        message=(
          "the data changed — refused its own output; it does not match the schema this stage declares"
            if stop.kind == 'schema' else
-         "Input validation failed on " ~ stop.stage_id
+         "this stage does not handle this data — either the data is wrong or the stage needs a rule for it"
            if stop.kind == 'refused' else
          "the code broke — raised " ~ stop.error_type ~ " while it ran")) %}
     {% if stop.kind == 'schema' %}
