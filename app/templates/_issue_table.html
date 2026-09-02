@@ -45,7 +45,7 @@
 
    Called with a {% call %} block, the block renders UNDER the message as that
    line's own footnote — what a stop names and nothing else has room for (the
-   columns it refused, its traceback, what it blocked). The index is still one
+   columns it refused, what it blocked). The index is still one
    line per issue; this is that line's small print. #}
 {% macro issue_row(severity, stage_id, message, subject=none, tab=none, tags=(), href="#") %}
 <tr class="sev-{{ severity }}">
