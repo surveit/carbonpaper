@@ -34,6 +34,8 @@ class EditingContext(BaseModel):
     page: str | None = None
     # The page the chat was started from, which is what binds it to a project.
     opened_on: str | None = None
+    # Names this session's draft. Two sessions editing one project never share stages.
+    session_id: str | None = None
 
 
 def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:

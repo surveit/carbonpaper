@@ -24,6 +24,7 @@ _GRANDFATHERED: frozenset[str] = frozenset({
     "manifest.py::RunManifest",
     "run_log.py::RunEventChunk",
     "human_review_queue.py::QueueFingerprints",
+    "drafts.py::Draft",
     "loader.py::WorkingCopy",
     "methodology.py::Methodology",
     "project.py::Project",

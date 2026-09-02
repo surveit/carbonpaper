@@ -44,11 +44,13 @@ def build_session_engine(
     data = _store.load(session_id)
     return build_engine(
         data["agent_id"],
-        _turn_context(data.get("context") or {}, base_url, page),
+        _turn_context(data.get("context") or {}, base_url, page, session_id),
         opening_message=read_opening_message(data.get("messages") or []),
     )
 
 
-def _turn_context(context: dict, base_url: str, page: str | None = None) -> dict:
+def _turn_context(
+    context: dict, base_url: str, page: str | None = None, session_id: ID | None = None
+) -> dict:
     """The stored context plus where THIS reader is now, not where the session opened."""
-    return context | {"base_url": base_url, "page": page}
+    return context | {"base_url": base_url, "page": page, "session_id": session_id}
