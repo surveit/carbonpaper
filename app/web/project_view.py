@@ -76,11 +76,9 @@ def build_nav(project_id: str) -> list[NavBlock]:
     base = f"/project/{project_id}"
     return [
         _nav_leaf("overview", "Overview", base),
-        NavGroup(label="Workflow", children=[
-            _nav_leaf("versions", "Versions", f"{base}/workflow/versions"),
-            _nav_leaf("runs", "Runs", f"{base}/runs"),
-            _nav_leaf("evals", "Evals", f"{base}/evals"),
-        ]),
+        _nav_leaf("versions", "Workflow", f"{base}/workflow/versions"),
+        _nav_leaf("runs", "Runs", f"{base}/runs"),
+        _nav_leaf("evals", "Evals", f"{base}/evals"),
         _nav_leaf("files", "Files", f"{base}/files"),
         NavGroup(label="Documentation", children=[
             _nav_leaf("methodology", "Methodology", f"{base}/methodology"),

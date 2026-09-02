@@ -10,7 +10,7 @@
 {% block title %}{{ state.meta.display_name }} · Version {{ version.version_id }}{% endblock %}
 
 {# Its own trail, not the shell's: the last rung is THIS version, and it switches. #}
-{% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
+{% block breadcrumbs %}{% with crumbs = crumbs or state.crumbs %}{% include "_breadcrumbs.html" %}{% endwith %}{% endblock %}
 
 {% block section_head %}
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
@@ -25,17 +25,30 @@
 {% block section %}
 <div class="sec-head wf-head">
   <div class="wf-head-title">
-    <h1>Version <code>{{ version.version_id }}</code></h1>
-    {# The app's own words about what a version IS, kept apart from the author's
-       words about what THIS one does — the two used to run together in one grey
-       sentence, which read the authored half as chrome. #}
-    <p class="vd-meta">Read-only snapshot
-      {%- if version.parent_version %}<span class="sep">·</span>cut from
-        <a href="/project/{{ state.id }}/workflow/version/{{ version.parent_version }}"><code>{{ version.parent_version }}</code></a>
-      {%- else %}<span class="sep">·</span>first version{% endif %}
-      <span class="sep">·</span>{{ version.stages | length }} stage{{ '' if version.stages | length == 1 else 's' }}</p>
+    <h1 class="vd-name" id="vd-name">
+      {%- if version.message %}{{ version.message }}
+      {%- else %}<span class="muted">Saved without a description</span>{% endif -%}
+    </h1>
+    <p class="vd-meta">Saved on {{ version.created_at | friendly_time }}</p>
   </div>
   <div class="actions wf-actions">
+    {% if versions %}
+    {# The version on screen is the subject; the rest are a errand behind a menu. #}
+    <details class="vd-history">
+      <summary class="btn">History<span class="vd-history-n">{{ versions | length }}</span></summary>
+      <div class="vd-history-menu">
+        {% for v in versions %}
+        <a class="vd-history-row{% if v.version_id == version.version_id %} here{% endif %}"
+           href="/project/{{ state.id }}/workflow/version/{{ v.version_id }}">
+          <span class="vd-history-when">{{ v.created_at | friendly_time }}</span>
+          <span class="vd-history-msg">
+            {%- if v.message %}{{ v.message }}{% else %}<span class="muted">no description</span>{% endif -%}
+          </span>
+        </a>
+        {% endfor %}
+      </div>
+    </details>
+    {% endif %}
     {# To the run form with this version pre-picked, not straight into a run: which
        file each input reads and how many rows it takes are decisions of the run, and
        this page cannot make them. #}
@@ -44,17 +57,21 @@
   </div>
 </div>
 
-{# The author's own sentence about what THIS version does, under a header that says
-   whose words these are. A version cut without one says so — nothing is written in
-   its place, and the absence is a fact about the version, not a gap in the page. #}
-<div class="vd-desc{% if not version.message %} empty{% endif %}">
-  <p class="vd-desc-kicker">Description</p>
-  {% if version.message %}
-  <p>{{ version.message }}</p>
-  {% else %}
-  <p>No description — this version was cut without one.</p>
-  {% endif %}
-</div>
+<script>
+// The heading is one line; a description long enough to be cut opens on click.
+(function () {
+  const h = document.getElementById("vd-name");
+  if (!h || h.scrollWidth <= h.clientWidth) return;
+  h.classList.add("is-clipped");
+  h.tabIndex = 0;
+  h.setAttribute("role", "button");
+  const show = () => h.classList.toggle("vd-name-open");
+  h.addEventListener("click", show);
+  h.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); show(); }
+  });
+})();
+</script>
 
 <div class="wf-stack"><div class="wf-top">
   <div class="diagram-block">
@@ -78,7 +95,7 @@
 <div class="wf-detail" id="wf-detail">
   <div id="stage-panel">
     <div class="empty-state"><h2>Pick a stage</h2>
-      <p>Click a node in the graph above to see how it was defined when this version was cut.</p></div>
+      <p>Click a stage in the flow chart above to see more details.</p></div>
   </div>
 </div>
 </div>

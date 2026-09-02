@@ -37,9 +37,9 @@ TYPE_CLASS = {
 TYPE_GLYPH = {
     "input_data": "⬆️",
     "llm_transform": "✨",
-    "python_row_function": "🔂",
+    "python_row_function": "⚠️",
     "python_frame_function": "🧨",
-    "starlark_row_function": "🛡️",
+    "starlark_row_function": "⚙️",
     "starlark_filter_rows": "🔽",
     "enrich": "🔗",
     "expand": "🌿",
@@ -61,9 +61,9 @@ TYPE_GLYPH = {
 TYPE_LABEL = {
     "input_data": "input",
     "llm_transform": "model transform",
-    "python_row_function": "row function",
+    "python_row_function": "run code dangerously",
     "python_frame_function": "table function",
-    "starlark_row_function": "sandboxed row function",
+    "starlark_row_function": "run code",
     "starlark_filter_rows": "sandboxed filter",
     "enrich": "enrich",
     "expand": "expand",

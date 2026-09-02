@@ -11,7 +11,7 @@ from app.core.timestamp_ids import mint_timestamp_id
 from app.models import Stage
 from app.models.workflow import find_stages_reaching_report, parse_workflow
 from app.models.records.review_guide import ReviewGuide
-from app.models.records.workflow_version import WorkflowVersion
+from app.models.records.workflow_version import MAX_MESSAGE_CHARS, WorkflowVersion
 from app.core.utils import format_errors
 from app.services.errors import WorkflowLoadError
 from app.services.terms import load_terms
@@ -24,6 +24,12 @@ def create_version_from_stages(
     message: str,
     parent_version: str | None = None,
 ) -> WorkflowVersion:
+    if len(message) > MAX_MESSAGE_CHARS:
+        raise WorkflowLoadError(
+            f"{project_id}: version description",
+            [f"{len(message)} characters; a description names the version in "
+             f"{MAX_MESSAGE_CHARS} or fewer"],
+        )
     workflow = parse_workflow(stages)
 
     version_id = mint_timestamp_id()

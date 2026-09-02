@@ -39,7 +39,7 @@
   <div class="panes nr-panes">
     {# ── Inputs: the schema of each upstream output this stage consumes ── #}
     <div class="pane" data-pane="inputs" hidden>
-      {% if workflow_stage is none %}<p class="muted"><em>Input schemas unavailable — the workflow graph does not resolve.</em></p>
+      {% if workflow_stage is none %}<p class="muted"><em>Input schemas unavailable — the flow chart does not resolve.</em></p>
       {% elif workflow_stage.inputs %}
         {% for inp in workflow_stage.inputs %}
         <div class="schema-card">

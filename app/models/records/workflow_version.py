@@ -8,6 +8,9 @@ from app.core.record import PersistedModel, PersistenceScope
 from app.models.stage import STAGE_SPEC_SCHEMA_VERSION, Stage
 
 
+MAX_MESSAGE_CHARS = 150
+
+
 class WorkflowVersion(PersistedModel):
     """`id` is the composite `{project_id}/{version_id}`."""
 
@@ -19,6 +22,9 @@ class WorkflowVersion(PersistedModel):
 
     version_id: str
     parent_version: str | None = None
-    message: str
+    message: str = Field(
+        description=f"What identifies this version to a reader in {MAX_MESSAGE_CHARS} "
+                    f"characters or fewer."
+    )
     stages: list[Stage] = Field(default_factory=list)
     schemas: list[dict[str, Any]] = Field(default_factory=list)
