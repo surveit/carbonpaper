@@ -20,9 +20,34 @@ from app.core.agent.bound_tool import BoundToolSpec
 def _render_session_note(context: BaseModel) -> str:
     assert isinstance(context, EditingContext)
     return "\n\n".join(
-        part for part in [render_link_map(context.base_url), _render_project_terms(context)]
+        part for part in [
+            _render_project_binding(context),
+            render_link_map(context.base_url),
+            _render_project_terms(context),
+        ]
         if part
     )
+
+
+def _render_project_binding(context: EditingContext) -> str:
+    # Settled when the chat opened and never reassigned, so it belongs in the prompt.
+    if context.project_id is None:
+        return _NO_PROJECT_BOUND
+    return _PROJECT_BOUND.format(project_id=context.project_id)
+
+
+_PROJECT_BOUND = """\
+# This conversation
+It opened in project `{project_id}` — pass that id to any tool wanting one, unless the
+reader moves you to another. `get_current_url` says which page they are on now, which
+may be a different project or none."""
+
+
+_NO_PROJECT_BOUND = """\
+# This conversation
+It opened in no project. There are two ways on: an EXISTING one, which list_projects
+names and the reader picks — never guess, and never pick for them — or a NEW one, which
+create_project starts from the methodology they give you. Carry the id it returns."""
 
 
 def _render_project_terms(context: EditingContext) -> str:

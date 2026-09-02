@@ -5,6 +5,7 @@ the registry (app.core.agent.registry) rather than knowing any concrete agent.
 from __future__ import annotations
 
 import json
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
@@ -43,6 +44,24 @@ templates.env.filters["markdown"] = render_markdown
 router = APIRouter()
 _store = open_session_store()
 _turns = default_turn_manager()
+
+
+def read_chat_context(request: Request) -> dict:
+    """Both draft routes build the context the same way, so a chat opens the same either way."""
+    context = dict(request.query_params) | {"base_url": str(request.base_url)}
+    if "project_id" not in context:
+        found = _read_project_on_page(context.get("opened_on", ""))
+        if found:
+            context["project_id"] = found
+    return context
+
+
+def _read_project_on_page(page: str) -> str | None:
+    # Every project page is /project/<id>/…, so a chat started on one opens bound to it.
+    parts = urlparse(page).path.strip("/").split("/")
+    if len(parts) < 2 or parts[0] != "project":
+        return None
+    return parts[1] if project_service.project_exists(parts[1]) else None
 
 
 def _backend_error() -> str | None:
@@ -148,7 +167,7 @@ async def draft_agent_chat(agent_id: str, request: Request):
     """Visiting creates nothing; the composer materializes on the first reply."""
     if not registry.is_registered(agent_id):
         raise HTTPException(status_code=404, detail="Unknown agent")
-    context = dict(request.query_params) | {"base_url": str(request.base_url)}
+    context = read_chat_context(request)
     title = _draft_title(agent_id, context)
     return templates.TemplateResponse(request, "chat.html", {
         **_read_draft_panel_context(agent_id, context),
@@ -162,7 +181,7 @@ async def new_chat_panel(agent_id: str, request: Request):
     """The draft page's panel with no page around it, for a host that has its own."""
     if not registry.is_registered(agent_id):
         raise HTTPException(status_code=404, detail="Unknown agent")
-    context = dict(request.query_params) | {"base_url": str(request.base_url)}
+    context = read_chat_context(request)
     return templates.TemplateResponse(
         request, "_chat_panel.html", _read_draft_panel_context(agent_id, context))
 
@@ -236,7 +255,8 @@ async def post_message(sid: str, request: Request):
     agent_id = data.get("agent_id")
     if not agent_id:
         raise HTTPException(status_code=400, detail="session has no bound agent")
-    engine = build_session_engine(sid, str(request.base_url))
+    engine = build_session_engine(
+        sid, str(request.base_url), page=(body or {}).get("page"))
     _store.set_pending_user(sid, text)
     turn_id = _turns.start(engine=engine, store=_store, session_id=sid, prompt=text)
     return JSONResponse({"ok": True, "turn_id": turn_id})

@@ -14,7 +14,7 @@ from app.tools.submitted_stage import SubmittedStage
 
 _EXPECTED_TOOL_NAMES = {
     "list_projects",
-    "get_current_project",
+    "get_current_url",
     "create_project",
     "read_workflow_summary",
     "read_stage_output_rows",
@@ -62,7 +62,6 @@ def test_a_session_bound_to_no_project_can_build_one_from_nothing(tmp_path) -> N
     workspace.set_projects_dir(tmp_path)
     call = _tools_of(EditingContext(project_id=None, base_url="http://reader.test/"))
 
-    assert call["get_current_project"]() is None
     created = call["create_project"](name="GLP-1 lobbying", document="Follow the filings.")
 
     project_id = created.id
@@ -74,13 +73,13 @@ def test_a_session_bound_to_no_project_can_build_one_from_nothing(tmp_path) -> N
 
 
 def test_creating_a_project_does_not_rebind_the_session(tmp_path) -> None:
-    """The prose promises this — a session's binding is what it was OPENED with."""
+    """The session note promises this — a binding is what the chat was OPENED with."""
     workspace.set_projects_dir(tmp_path)
-    call = _tools_of(EditingContext(project_id=None, base_url="http://reader.test/"))
+    context = EditingContext(project_id=None, base_url="http://reader.test/")
 
-    call["create_project"](name="second", document="Follow the filings.")
+    _tools_of(context)["create_project"](name="second", document="Follow the filings.")
 
-    assert call["get_current_project"]() is None
+    assert context.project_id is None
 
 
 def _tools_of(ctx: EditingContext) -> dict[str, Callable[..., Any]]:

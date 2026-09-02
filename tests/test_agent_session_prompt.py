@@ -8,7 +8,7 @@ from collections.abc import Iterator
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from app.agents.compiler.config import CONFIG as EDITING_CONFIG
+from app.agents.compiler.config import CONFIG as EDITING_CONFIG, _render_project_binding
 from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
 from app.core.agent import registry
 from app.core.agent.registry import AgentConfig, build_engine, register, render_system_prompt
@@ -16,6 +16,7 @@ from app.models import NamedSchema, SchemaLibrary, Terms, Verb
 from app.services import terms as terms_service
 from app.services import project as project_service
 from app.services import workspace
+from app.tools.editing import EditingContext
 from app.tools.prompt_fragments import render_link_map
 
 _FILING = NamedSchema(
@@ -110,12 +111,17 @@ def test_the_editing_agent_is_handed_its_projects_words(tmp_path) -> None:
     assert "- flag — Mark a row for a human to decide on." in prompt
 
 
-def test_a_project_that_has_agreed_no_words_appends_only_the_links(tmp_path) -> None:
+def test_a_project_that_has_agreed_no_words_appends_no_words(tmp_path) -> None:
     project_id = _project_with(tmp_path, None)
+    context = EditingContext(project_id=project_id, **_READER)
 
     prompt = build_engine("editing", {"project_id": project_id} | _READER)._system_prompt
 
-    assert prompt == f"{EDITING_SYSTEM_PROMPT}\n\n{render_link_map(_READER['base_url'])}"
+    assert prompt == "\n\n".join([
+        EDITING_SYSTEM_PROMPT,
+        _render_project_binding(context),
+        render_link_map(_READER["base_url"]),
+    ])
 
 
 def test_the_editing_agent_is_handed_the_pages_it_can_link_to(tmp_path) -> None:
@@ -151,7 +157,11 @@ def test_a_session_bound_to_no_project_is_still_told_where_its_reader_is(tmp_pat
 
     prompt = build_engine("editing", dict(_READER))._system_prompt
 
-    assert prompt == f"{EDITING_SYSTEM_PROMPT}\n\n{render_link_map(_READER['base_url'])}"
+    assert prompt == "\n\n".join([
+        EDITING_SYSTEM_PROMPT,
+        _render_project_binding(EditingContext(**_READER)),
+        render_link_map(_READER["base_url"]),
+    ])
 
 
 def test_the_hook_the_editing_agent_registered_is_the_one_that_runs() -> None:

@@ -37,16 +37,18 @@ def _opening_parts(opening: OpeningTurn) -> list[dict[str, Any]]:
     return parts
 
 
-def build_session_engine(session_id: ID, base_url: str) -> ClaudeAgentSdkEngine:
+def build_session_engine(
+    session_id: ID, base_url: str, page: str | None = None
+) -> ClaudeAgentSdkEngine:
     """The opening message comes off the stored transcript, so page and model read the same words."""
     data = _store.load(session_id)
     return build_engine(
         data["agent_id"],
-        _turn_context(data.get("context") or {}, base_url),
+        _turn_context(data.get("context") or {}, base_url, page),
         opening_message=read_opening_message(data.get("messages") or []),
     )
 
 
-def _turn_context(context: dict, base_url: str) -> dict:
-    """The stored context plus the address THIS reader is on, not the one it opened on."""
-    return context | {"base_url": base_url}
+def _turn_context(context: dict, base_url: str, page: str | None = None) -> dict:
+    """The stored context plus where THIS reader is now, not where the session opened."""
+    return context | {"base_url": base_url, "page": page}

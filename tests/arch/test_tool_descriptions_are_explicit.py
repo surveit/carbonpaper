@@ -78,12 +78,11 @@ def test_no_mcp_tool_carries_a_docstring() -> None:
 def test_mcp_descriptions_cover_exactly_the_registered_tools() -> None:
     registered = {name for name, _, _ in find_mcp_tools(_MCP_SERVER)}
     assert registered - find_tool_names() == set()
-    # Spec entries the other surface owns and this one deliberately lacks:
-    # get_current_project is a session's own binding, and `sleep` exists for in-process
-    # agents, which run with the CLI's built-ins disabled — the CLI client connecting
-    # HERE brings its own. The list may shrink; a new name on it is the two surfaces
-    # diverging again, which is what this file exists to catch.
-    assert find_tool_names() - registered <= {"get_current_project", "sleep"}
+    # This list may SHRINK; a new name on it is the two surfaces diverging again.
+    assert find_tool_names() - registered <= {"get_current_url", "sleep"}, (
+        "get_current_url is a fact about a reader sitting in a browser — which page they "
+        "have open — and an MCP client is not one."
+    )
 
 
 def test_a_tool_carries_its_body_here_or_on_its_surface_never_both() -> None:
