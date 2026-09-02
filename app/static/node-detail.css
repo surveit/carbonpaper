@@ -191,8 +191,11 @@ table.data-preview.scratch th { background: var(--hover); }
 
 /* The row a Relevant columns sheet was opened on: banded, ruled down its left edge,
    its number out of muted. One class and one element, so it loses the tie to
-   every column tint below and their cells survive the band. */
-.stage-diff .diff-row-mine td { background: var(--hover); }
+   every column tint below and their cells survive the band. --info-bg, not
+   --hover: the gray family below means "the stage didn't touch this" (see
+   diff-col-quiet), so the traced row needs its own tint or it reads as unused
+   instead of the one row that mattered. */
+.stage-diff .diff-row-mine td { background: var(--info-bg); }
 .stage-diff .diff-row-mine td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .stage-diff td.diff-row-num-mine { color: var(--fg); font-weight: 700; }
 
