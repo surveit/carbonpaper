@@ -125,17 +125,18 @@ def test_build_nav_lists_the_workflow_runs_and_evals_flat(demo_project):
     assert files.key == "files" and not files.children
     assert [item.label for item in (workflow, runs, evals)] == ["Workflow", "Runs", "Evals"]
     assert not any(item.children for item in (workflow, runs, evals))
-    assert documentation.label == "Documentation"
-    assert [child.key for child in documentation.children] == ["methodology", "glossary"]
+    assert documentation.key == "documentation" and not documentation.children
+    assert documentation.href == "/project/demo/methodology"
 
 
-def test_a_group_heading_opens_no_page(demo_project):
+def test_the_nav_holds_no_group_headings(demo_project):
+    """Every nav item is now a leaf; nothing opens no page of its own."""
     from app.web.project_view import build_nav
 
-    *_, documentation = build_nav("demo")
-    assert not hasattr(documentation, "href")
+    nav = build_nav("demo")
+    assert all(hasattr(item, "href") for item in nav)
     sidebar = client.get("/project/demo").text
-    assert '<div class="app-nav-group">Documentation</div>' in sidebar
+    assert "app-nav-group" not in sidebar
 
 
 def test_the_stage_graph_keeps_a_trail_without_a_nav_row(demo_project):
@@ -215,9 +216,7 @@ def test_cmdk_palette_ranks_the_project_being_read_first(demo_project):
     assert kinds.index("section") < kinds.index("stage")
     sections = [row["label"] for row in rows if row["kind"] == "section"]
     assert sections[:3] == ["Overview", "Workflow", "Runs"]
-    # Neither heading opens a page, so the palette cannot offer either one.
-    assert "Documentation" not in sections
-    assert {"Files", "Methodology", "Glossary"} <= set(sections)
+    assert {"Evals", "Files", "Documentation"} <= set(sections)
     assert [row["label"] for row in rows if row["kind"] == "stage"] == ["load", "extract"]
 
 

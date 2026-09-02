@@ -10,11 +10,12 @@ warning, and the arch test holding each. `app/templates/AGENTS.md` names the thr
 bite most often.
 
 ## Pages / routes
-- `/` project list · `/project/<m>` the project shell (Overview, the Workflow group
-  holding Versions · Runs · Evals, Files, and a Documentation group holding
-  Methodology · Glossary). `/project/<m>/workflow` carries the mermaid graph + inline
-  node review (`/project/<m>/node/<id>/review-partial`); it has no nav row, and is
-  reached from Versions.
+- `/` project list · `/project/<m>` the project shell (Overview, Workflow, Runs, Evals,
+  Files, and Documentation — one page, `/project/<m>/methodology`, holding the
+  Methodology and Glossary tabs; `?tab=glossary` opens on the Glossary tab, and
+  `/project/<m>/glossary` redirects there). `/project/<m>/workflow` carries the mermaid
+  graph + inline node review (`/project/<m>/node/<id>/review-partial`); it has no nav
+  row, and is reached from Workflow's own page.
 - **Overview** (`section_overview.html` ← `app.web.project_overview`) is the latest run and
   what is outstanding. The run card carries the figures that run produced and the checks a
   reader needs before treating them as the answer — a cap, a test run, an unfinished run,

@@ -30,11 +30,11 @@
 <div class="project-grid">
     {% for m in projects %}
     {# Ready projects open on the overview; a project still in setup opens where
-       setup continues: the workflow section once a workflow exists, else Terms,
-       which is the first thing a project agrees. #}
+       setup continues: the workflow section once a workflow exists, else the
+       Glossary tab, which is the first thing a project agrees. #}
     {% if m.is_ready %}{% set open_url = "/project/" ~ m.id %}
     {% elif m.has_workflow %}{% set open_url = "/project/" ~ m.id ~ "/workflow" %}
-    {% else %}{% set open_url = "/project/" ~ m.id ~ "/glossary" %}{% endif %}
+    {% else %}{% set open_url = "/project/" ~ m.id ~ "/methodology?tab=glossary" %}{% endif %}
     <div class="project-card">
         <form class="project-delete" method="post" action="/project/{{ m.id }}/delete"
               onsubmit="return confirm('Delete project &#39;{{ m.label }}&#39; and all its runs? This cannot be undone.');">
