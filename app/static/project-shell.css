@@ -321,7 +321,13 @@
 
 
 /* The version on screen is the page's subject; the others sit behind a menu. */
-.vd-name { margin: 0 0 4px; }
+.vd-name { margin: 0 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vd-name.is-clipped { cursor: pointer; }
+.vd-name.is-clipped:hover { color: var(--accent); }
+.vd-name.is-clipped:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.vd-name-open { white-space: normal; overflow: visible; }
+/* ellipsis needs the flex child to be allowed to shrink */
+.wf-head-title { min-width: 0; }
 .vd-history { position: relative; }
 .vd-history > summary { list-style: none; cursor: pointer; }
 .vd-history > summary::-webkit-details-marker { display: none; }

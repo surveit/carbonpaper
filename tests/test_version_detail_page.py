@@ -73,7 +73,7 @@ def test_the_description_is_the_page_heading(project: Path) -> None:
 
     page = client.get(f"/project/demo/workflow/version/{meta.version_id}")
 
-    assert '<h1 class="vd-name">' in page.text
+    assert 'class="vd-name"' in page.text
     assert "Nine flat categories, no severity." in page.text
 
 

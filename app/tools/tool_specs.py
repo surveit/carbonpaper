@@ -594,7 +594,12 @@ they say "this" or "here", and read the ids out of the address instead of asking
 for one. Nothing if the chat surface did not report a page.""",
     "save_version": """\
 Freeze the project's CURRENT workflow into an immutable version — the snapshot
-a run or a workflow test executes. Born UNPUBLISHED: only a human publishes.
+a run or a workflow test executes.
+
+`message` NAMES the version for a reader scanning a list: one line, 150
+characters at the outside, and a longer one is refused rather than trimmed.
+Say what changed, not why or how — "Carry every spelling of the firm name"
+rather than a paragraph of release notes.
 
 `parent_version` is the version YOU started this edit from. Supply it only when you
 actually loaded that version; it is recorded verbatim as this snapshot's ancestor,

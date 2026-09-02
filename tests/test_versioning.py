@@ -584,3 +584,17 @@ def test_a_version_document_with_an_embedded_guide_fails_loudly(tmp_path):
     get_store().write("workflow_version", f"{tmp_path.name}/{vid}", data)
     with pytest.raises(WorkflowLoadError, match="guide"):
         load_version(tmp_path.name, vid)
+
+
+def test_a_description_longer_than_the_ceiling_is_refused(tmp_path):
+    _seed(tmp_path)
+    with pytest.raises(WorkflowLoadError) as caught:
+        save_working_copy_as_version(tmp_path.name, message="x" * 151)
+    assert "150" in str(caught.value)
+    assert list_versions(tmp_path.name) == []
+
+
+def test_a_description_at_the_ceiling_is_kept(tmp_path):
+    _seed(tmp_path)
+    meta = save_working_copy_as_version(tmp_path.name, message="x" * 150)
+    assert meta.message == "x" * 150

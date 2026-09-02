@@ -17,6 +17,9 @@ from app.services.errors import WorkflowLoadError
 from app.services.terms import load_terms
 
 
+MAX_MESSAGE_CHARS = 150
+
+
 def create_version_from_stages(
     project_id: str,
     stages: list[dict[str, Any]],
@@ -24,6 +27,12 @@ def create_version_from_stages(
     message: str,
     parent_version: str | None = None,
 ) -> WorkflowVersion:
+    if len(message) > MAX_MESSAGE_CHARS:
+        raise WorkflowLoadError(
+            f"{project_id}: version description",
+            [f"{len(message)} characters; a description names the version in "
+             f"{MAX_MESSAGE_CHARS} or fewer"],
+        )
     workflow = parse_workflow(stages)
 
     version_id = mint_timestamp_id()

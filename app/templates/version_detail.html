@@ -25,7 +25,7 @@
 {% block section %}
 <div class="sec-head wf-head">
   <div class="wf-head-title">
-    <h1 class="vd-name">
+    <h1 class="vd-name" id="vd-name">
       {%- if version.message %}{{ version.message }}
       {%- else %}<span class="muted">Saved without a description</span>{% endif -%}
     </h1>
@@ -56,6 +56,22 @@
        class="btn primary">▶ Run this version</a>
   </div>
 </div>
+
+<script>
+// The heading is one line; a description long enough to be cut opens on click.
+(function () {
+  const h = document.getElementById("vd-name");
+  if (!h || h.scrollWidth <= h.clientWidth) return;
+  h.classList.add("is-clipped");
+  h.tabIndex = 0;
+  h.setAttribute("role", "button");
+  const show = () => h.classList.toggle("vd-name-open");
+  h.addEventListener("click", show);
+  h.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); show(); }
+  });
+})();
+</script>
 
 <div class="wf-stack"><div class="wf-top">
   <div class="diagram-block">
