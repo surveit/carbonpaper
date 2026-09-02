@@ -275,6 +275,31 @@ jobs:
           marker: "<!-- vocabulary-report -->"
           body-file: vocabulary-body.md
 
+      # Not a taste call like the reports above it: an element wearing a class no
+      # stylesheet declares renders with no rules, and the suite cannot see it.
+      - id: unstyled
+        if: always() && steps.import-graph.conclusion != 'skipped'
+        run: |
+          uv run --frozen python -m scripts.unstyled_classes > head-unstyled.json
+          uv run --frozen python -m scripts.unstyled_classes --root base > base-unstyled.json
+          uv run --frozen python -m scripts.unstyled_classes --markdown head-unstyled.json base-unstyled.json \
+            > unstyled-body.md
+      - name: Upload raw unstyled-class snapshots
+        if: always() && steps.unstyled.conclusion == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unstyled-class-snapshots
+          path: |
+            head-unstyled.json
+            base-unstyled.json
+          retention-days: 14
+      - name: Upsert unstyled-classes comment
+        if: always() && steps.unstyled.conclusion == 'success'
+        uses: ./.github/actions/upsert-pr-comment
+        with:
+          marker: "<!-- unstyled-classes -->"
+          body-file: unstyled-body.md
+
 
   # Its own job, not a step in `reports`, because it RUNS the suite and `reports`
   # holds two checkouts: the base copy at base/ doubles the tree, and the arch
