@@ -89,7 +89,8 @@ def render_link_map(base_url: str) -> str:
         "path is text on their screen rather than something they can click.",
         "They move between the pages below while this conversation stays open, so which "
         "one they have in front of them is not something the conversation records. "
-        "`get_current_url` reads it; call it before answering \"this\" or \"here\".",
+        "`get_current_url` reads it; call it before answering anything that assumes "
+        "you can see what they see.",
         "",
         *(f"  {label:<20}{base}{path}" for label, path in _PAGES),
         "",
