@@ -1,7 +1,4 @@
-"""The /chat index's New chat control: a chat opens bound to NO project, so the
-control names none and needs none to exist. The agent asks which project it edits,
-which the session note reports honestly as none until one is bound.
-"""
+"""The /chat index's New chat control: it opens a chat bound to NO project."""
 from __future__ import annotations
 
 from fastapi.testclient import TestClient

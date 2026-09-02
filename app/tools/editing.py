@@ -1,7 +1,4 @@
-"""The in-process tools the editing agent calls to read and edit a project's workflow.
-
-Tools go through the name-based `app.services` surfaces and never build a filesystem
-path. A missing stage or column raises, never an invented default."""
+"""The in-process tools the editing agent calls to read and edit a project's workflow."""
 
 from __future__ import annotations
 
