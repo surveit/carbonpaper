@@ -127,7 +127,7 @@ def test_the_header_offers_every_stage_this_run_wrote_rows_for(tmp_path, monkeyp
     client = _project_run(tmp_path, monkeypatch)  # seeds and enrich, 2 rows each
     body = client.get("/project/proj/runs/R1/stage/enrich/row/1/trace/view").text
     assert '<option value="seeds" data-side="2 rows"' in body
-    assert '<option value="enrich" data-side="2 rows" data-meta="run code dangerously" selected>' in body
+    assert '<option value="enrich" data-side="2 rows" data-meta="dangerously run code" selected>' in body
 
 
 def test_the_header_bounds_the_row_box_by_the_stage_it_reads(tmp_path, monkeypatch):
