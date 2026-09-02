@@ -113,20 +113,10 @@ async def project_overview(request: Request, project_name: str):
 
 
 @router.get("/project/{project_name}/methodology", response_class=HTMLResponse)
-async def project_methodology(request: Request, project_name: str):
+async def project_documentation(request: Request, project_name: str, tab: str = "methodology"):
     validate_project_or_404(project_name)
-    state = shell_state(project_name, "methodology")
+    state = shell_state(project_name, "documentation")
     document = methodology.read_methodology(project_name) or ""
-    return templates.TemplateResponse(
-        request,
-        "section_methodology.html",
-        {"state": state, "section": "methodology", "methodology": document},
-    )
-
-
-@router.get("/project/{project_name}/glossary", response_class=HTMLResponse)
-async def project_glossary(request: Request, project_name: str):
-    validate_project_or_404(project_name)
     # write_terms refuses a word carrying two meanings, so stored terms that will not
     # load were hand-edited — say which word, rather than 500 on the page that shows them.
     try:
@@ -137,16 +127,24 @@ async def project_glossary(request: Request, project_name: str):
         unreadable = []
     return templates.TemplateResponse(
         request,
-        "section_glossary.html",
+        "section_methodology.html",
         {
-            "state": shell_state(project_name, "glossary"),
-            "section": "glossary",
+            "state": state,
+            "section": "documentation",
+            "active_tab": "glossary" if tab == "glossary" else "methodology",
+            "methodology": document,
             "terms": stored,
             "unreadable": "; ".join(unreadable),
             "kind_class": SCHEMA_KIND_CLASS,
             "kind_glyph": SCHEMA_KIND_GLYPH,
         },
     )
+
+
+@router.get("/project/{project_name}/glossary", response_class=HTMLResponse)
+async def project_glossary_redirect(project_name: str):
+    # Kept for an old bookmark; the page itself is now the Glossary tab below.
+    return RedirectResponse(url=f"/project/{project_name}/methodology?tab=glossary")
 
 
 @router.get("/project/{project_name}/workflow", response_class=HTMLResponse)

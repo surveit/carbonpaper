@@ -80,10 +80,7 @@ def build_nav(project_id: str) -> list[NavBlock]:
         _nav_leaf("runs", "Runs", f"{base}/runs"),
         _nav_leaf("evals", "Evals", f"{base}/evals"),
         _nav_leaf("files", "Files", f"{base}/files"),
-        NavGroup(label="Documentation", children=[
-            _nav_leaf("methodology", "Methodology", f"{base}/methodology"),
-            _nav_leaf("glossary", "Glossary", f"{base}/glossary"),
-        ]),
+        _nav_leaf("documentation", "Documentation", f"{base}/methodology"),
     ]
 
 
@@ -99,7 +96,7 @@ def _next_action(state: project.ProjectState) -> NextAction:
         return NextAction(
             key="agree_terms",
             label="Agree the project's terms",
-            href=f"{base}/glossary",
+            href=f"{base}/methodology?tab=glossary",
         )
     # 2. No workflow → build it.
     if not workflow.present:

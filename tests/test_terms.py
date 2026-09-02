@@ -183,11 +183,15 @@ def test_a_noun_that_is_only_a_word_is_rendered_under_its_title():
     assert "- issue_text — Issue text" in block
 
 
-# ── the Glossary section, rendered over a word with a table and a word without ──
+# ── the Glossary tab, rendered over a word with a table and a word without ──
 def _render_terms_section(stored: Terms | None, unreadable: str = "") -> str:
-    template = templates.env.get_template("section_glossary.html")
+    template = templates.env.get_template("section_methodology.html")
     context = template.new_context({
         "state": {"id": _PROJECT},
+        # Non-empty, so the Methodology tab's own empty-state never fires — these
+        # tests are about the Glossary tab only.
+        "methodology": "Stub methodology text.",
+        "active_tab": "glossary",
         "terms": stored,
         "unreadable": unreadable,
         "kind_class": SCHEMA_KIND_CLASS,
@@ -249,7 +253,7 @@ def _get_terms_page(tmp_path, stored: Terms | None):
     write_methodology((project_dir).name, "Follow the filings.")
     if stored is not None:
         terms.write_terms("vocab", stored)
-    return TestClient(app).get("/project/vocab/glossary")
+    return TestClient(app).get("/project/vocab/methodology?tab=glossary")
 
 
 def test_the_route_renders_both_halves_of_what_the_project_stored(tmp_path):
@@ -265,7 +269,7 @@ def test_the_route_renders_both_halves_of_what_the_project_stored(tmp_path):
     assert "A company that filed." in response.text            # the noun
     assert "Mark a row for a human to decide on." in response.text   # the verb
     assert "firm_id" in response.text                          # the noun's columns
-    assert 'href="/project/vocab/glossary"' in response.text   # its own nav entry
+    assert 'href="/project/vocab/methodology"' in response.text   # its own nav entry
 
 
 def test_the_route_renders_a_project_that_has_agreed_no_words(tmp_path):

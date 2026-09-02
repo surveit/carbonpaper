@@ -109,8 +109,8 @@ PAGE_OPENINGS = [
         ],
     ),
     PageOpening(
-        route="/project/{project_name}/glossary",
-        says="Hello. What do you want to do with these words?",
+        route="/project/{project_name}/methodology",
+        says="Hello. What do you want to do with this project's documentation?",
         offers=["What do these terms control?", "Add a term"],
     ),
     PageOpening(
