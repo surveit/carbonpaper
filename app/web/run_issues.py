@@ -31,6 +31,16 @@ _KIND_BY_ERROR_TYPE = {
 }
 
 
+def read_stop_kind(error_type: str) -> StopKind:
+    return _KIND_BY_ERROR_TYPE.get(error_type, StopKind.crash)
+
+
+def read_crash_type(error_type: object) -> str:
+    """Empty for the two stops that say it in words already; a crash's type IS the diagnosis."""
+    named = str(error_type or "")
+    return named if read_stop_kind(named) == StopKind.crash else ""
+
+
 class ValidationIssue(BaseModel):
     severity: str
     column: str | None
@@ -113,7 +123,7 @@ def _view_stopped_stage(
     error_type = str(error.get("type") or "")
     return StoppedStage(
         stage_id=stage_id,
-        kind=_KIND_BY_ERROR_TYPE.get(error_type, StopKind.crash),
+        kind=read_stop_kind(error_type),
         error_type=error_type,
         error_message=str(error.get("message") or ""),
         issues=[

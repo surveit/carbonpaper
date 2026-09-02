@@ -114,6 +114,10 @@ guide narrates, and how many it narrates nobody — every figure COUNTED off thi
 list and this version's guide. With no guide the narration lines are absent, not zeroed.
 
 ## The stage panel — three tabs (`run_stage_partial` → `_run_stage_panel.html`)
+An **Error** section sits above the tabs on a stopped stage. It leads with the message and
+shows the exception name only for a crash (`crash_type` filter → `read_crash_type`): a schema
+stop and an authored `StepRefused` are already worded for a reader, so their type is noise —
+the same call the issue index makes, off the same `read_stop_kind`.
 **Data │ Schema │ Transform**, one flat strip; it opens on Data:
 - **Data** — what this run's stage produced: its output — rendered as a **diff against its
   input** where the stage type permits one (below) — then validation **as part of the

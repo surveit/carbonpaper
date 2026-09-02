@@ -44,7 +44,8 @@
 {% if stage.error %}
 <section class="run-error">
     <h3>Error</h3>
-    <p><strong>{{ stage.error.type }}</strong>: {{ stage.error.message }}</p>
+    {% set crash_type = stage.error.type | crash_type %}
+    <p>{% if crash_type %}<strong>{{ crash_type }}</strong>: {% endif %}{{ stage.error.message }}</p>
 </section>
 {% endif %}
 {% if stage.status == 'awaiting_review' %}
