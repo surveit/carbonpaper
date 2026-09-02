@@ -94,7 +94,6 @@
 {% if code_block %}
 {% set copy = code_block | code_block_copy %}
 <section class="exec-block">
-    <h2>{{ copy.glyph }} {{ copy.heading }}</h2>
     {{ stage_summary(code_block.summary) }}
     {{ stage_corner_cases(code_block.corner_cases) }}
     {{ stage_eval_check(eval_coverages) }}

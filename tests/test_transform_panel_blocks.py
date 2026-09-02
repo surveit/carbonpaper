@@ -96,7 +96,7 @@ def test_filter_rows_panel_shows_the_predicate_source(client: TestClient) -> Non
     response = client.get("/project/alpha/node/select_incidental_filings/panel")
     assert response.status_code == 200
     html = response.text
-    assert "Row filter" in html
+    assert "Keeps the rows this predicate returns" in html
     assert "should_include" in html
     assert "row[&#39;relevance&#39;] == &#39;incidental&#39;" in html
 
