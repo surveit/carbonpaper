@@ -11,13 +11,10 @@ from app.core.timestamp_ids import mint_timestamp_id
 from app.models import Stage
 from app.models.workflow import find_stages_reaching_report, parse_workflow
 from app.models.records.review_guide import ReviewGuide
-from app.models.records.workflow_version import WorkflowVersion
+from app.models.records.workflow_version import MAX_MESSAGE_CHARS, WorkflowVersion
 from app.core.utils import format_errors
 from app.services.errors import WorkflowLoadError
 from app.services.terms import load_terms
-
-
-MAX_MESSAGE_CHARS = 150
 
 
 def create_version_from_stages(
