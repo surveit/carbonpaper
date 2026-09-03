@@ -288,6 +288,24 @@ def test_decide_404_on_unknown_fingerprint_and_writes_nothing(tmp_path, monkeypa
     assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
 
 
+def test_decide_refuses_a_snapshot_that_disagrees_with_its_sidecar(tmp_path, monkeypatch):
+    """The sidecar names the row; only recomputing proves the snapshot still holds that row."""
+    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    record = QueueFingerprints.load(
+        QueueFingerprints.compose_id(PROJECT, run_id, "review"))
+    misfiled = "0" * len(record.input_fingerprints[0])
+    record.input_fingerprints = [misfiled, *record.input_fingerprints[1:]]
+    record.save()
+
+    client = TestClient(app)
+    with pytest.raises(ValueError, match="disagrees with its fingerprint sidecar"):
+        client.post(
+            f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
+            data=_decide_data(misfiled, {"human_score": 1}),
+        )
+    assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
+
+
 # ── 3. The verdict is SETTLED from submitted vs pre-filled values ───────────
 
 

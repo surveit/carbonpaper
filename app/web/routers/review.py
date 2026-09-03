@@ -4,12 +4,13 @@ import json
 from collections.abc import Mapping
 from datetime import datetime
 
-import pandas as pd
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import ValidationError
 
 from app.core.errors import ReviewValidationError
+from app.core.frames import restore_row_read_from_frame
+from app.core.stage_cache import compute_row_fingerprint
 from app.models import TableSchema, Workflow, WorkflowNotFormed, WorkflowStage
 from app.models.stages.human_review_queue import QueueConfig, resolve_queue_config
 from app.services import review
@@ -111,7 +112,7 @@ async def queue_decide(
         review.record_decision(
             project_id=project_id, stage=stage_def,
             stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
-            frozen_row={str(k): v for k, v in row.items()},
+            frozen_row=row,
             verdict=verdict,
             reviewed_values=_validate_reviewed_values(stage_def, queue, supplied),
             review_notes=_normalise_review_notes(review_notes),
@@ -267,18 +268,32 @@ def _describe_rejections(exc: ValidationError) -> str:
 
 def _resolve_queue_row(
     project_id: str, run_id: str, stage_id: str, input_fingerprint: str
-) -> tuple[str, pd.Series]:
-    """Assumes the sidecar's fingerprint list is positionally aligned with the snapshot."""
+) -> tuple[str, dict[str, object]]:
+    """The row a decision is filed against, checked to be the row that fingerprint names."""
     fingerprints = load_queue_fingerprints(project_id, run_id, stage_id)
     snapshot = queue_snapshot(project_id, run_id, stage_id)
     if fingerprints is not None and snapshot is not None:
         if input_fingerprint in fingerprints.input_fingerprints:
             position = fingerprints.input_fingerprints.index(input_fingerprint)
             if position < len(snapshot):
-                row = snapshot.iloc[position]
-                assert isinstance(row, pd.Series)
+                row = restore_row_read_from_frame(snapshot.iloc[position].to_dict())
+                _require_row_matches_its_fingerprint(row, input_fingerprint, position, stage_id)
                 return fingerprints.stage_fingerprint, row
     raise HTTPException(
         status_code=404,
         detail=f"No queued row with input_fingerprint '{input_fingerprint}'",
     )
+
+
+def _require_row_matches_its_fingerprint(
+    row: Mapping[str, object], input_fingerprint: str, position: int, stage_id: str
+) -> None:
+    """The snapshot and its sidecar are two files; only this makes their alignment a fact."""
+    recomputed = compute_row_fingerprint(row)
+    if recomputed != input_fingerprint:
+        raise ValueError(
+            f"queue snapshot for stage '{stage_id}' disagrees with its fingerprint sidecar: "
+            f"the row at position {position} hashes to {recomputed}, but the sidecar files it "
+            f"under {input_fingerprint}. A decision recorded here would be attributed to a row "
+            "the reviewer was not shown."
+        )

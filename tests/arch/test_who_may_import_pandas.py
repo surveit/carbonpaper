@@ -49,7 +49,6 @@ _MAY_IMPORT_PANDAS: Mapping[str, str] = {
     "app/web/stage_diff.py": "aligns two frames column by column for the diff",
     "app/web/queue_view.py": "renders the review queue",
     "app/web/eval_run_view.py": "renders an eval run's scored rows",
-    "app/web/routers/review.py": "renders a reviewer's decision back",
 }
 
 

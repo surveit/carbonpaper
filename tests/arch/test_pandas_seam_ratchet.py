@@ -47,7 +47,6 @@ _ALLOWLIST: Mapping[str, int] = {
     "app/web/eval_run_view.py": 6,
     "app/web/loading.py": 6,
     "app/web/queue_view.py": 4,
-    "app/web/routers/review.py": 1,
     "app/web/stage_diff.py": 9,
 }
 
