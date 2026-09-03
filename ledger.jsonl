@@ -2691,3 +2691,4 @@
 {"run_id":"33778687928","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33778687928","created":"2026-09-03T16:27:40Z","branch":"feat/tour-ai-lobbying-fixture","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"33778688323","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33778688323","created":"2026-09-03T16:29:39Z","branch":"feat/tour-ai-lobbying-fixture","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"33778687928","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33778687928","created":"2026-09-03T16:30:18Z","branch":"feat/tour-ai-lobbying-fixture","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"33781996521","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33781996521","created":"2026-09-03T17:01:09Z","branch":"master","event":"push","contracts_kept":16,"findings":[]}
