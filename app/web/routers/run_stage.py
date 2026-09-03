@@ -19,14 +19,11 @@ from app.runtime.errors import PreviewError
 from app.runtime.preview import PREVIEWABLE_TYPES, run_stage_preview
 from app.web import loading
 from app.web.breadcrumbs import build_run_child_crumbs
-from app.web.column_order import order_columns_by_signature, order_preview_columns
-from app.web.config import EVENT_TAIL, label_stage_type, templates
-from app.web.eval_coverage import find_eval_coverages
-from app.web.stage_test_views import build_certification, shape_test_views
+from app.web.column_order import order_columns_by_signature
+from app.web.config import label_stage_type, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH
 from app.services.workspace import resolve_run_dir
 from app.web.loading import (
-    build_llm_example,
     csv_download_body,
     load_manifest,
     load_output_preview,
@@ -36,11 +33,8 @@ from app.web.loading import (
     render_cells_as_text,
 )
 from app.web.panel_links import RectangleRequest, read_rectangle_query
-from app.web.run_stage_panel import (
-    find_queue_link,
-    not_executed_panel,
-    resolve_panel_links,
-)
+from app.web.run_stage_panel import not_executed_panel, resolve_panel_links
+from app.web.run_stage_view import build_run_stage_panel
 from app.web.stage_diff import StageDiff, build_stage_diff
 
 router = APIRouter()
@@ -53,80 +47,22 @@ router = APIRouter()
 def run_stage_partial(
     request: Request, project_id: str, run_id: str, stage_id: str
 ):
-    run_dir = resolve_run_dir(project_id, run_id)
     manifest = load_manifest(project_id, run_id)
     stage_record = next(
         (s for s in manifest.get("stage_records", []) if s.get("stage_id") == stage_id),
         None,
     )
-
     # The panel's Schema tier and Transform detail describe what THIS run
     # executed, so they read the version it pinned. With no resolvable version
     # there is no stage definition to show and the panel says why.
-    pinned = run_service.load_pinned_stage_def(project_id, manifest, stage_id)
-    stage_def = None if pinned.workflow_stage is None else pinned.workflow_stage.stage
     if stage_record is None:
         # A stage the graph draws but this run never executed (a workflow test
         # injects its input stages) — see app.web.run_stage_panel.
+        pinned = run_service.load_pinned_stage_def(project_id, manifest, stage_id)
         return not_executed_panel(request, project_id, run_id, manifest, stage_id, pinned)
-
-    # The stage's own columns lead; its inputs are drawn as the upstream stage
-    # wrote them, since nothing on that frame is this stage's work.
-    output_preview = order_preview_columns(
-        load_output_preview(run_dir, stage_record.get("output_path")), pinned.workflow_stage)
-    output_by_id = {
-        s.get("stage_id"): s.get("output_path") for s in manifest.get("stage_records", [])
-    }
-    input_previews: list[dict[str, Any]] = []
-    if stage_def is not None:
-        for input_id in stage_def.input_ids:
-            input_previews.append(
-                {
-                    "id": input_id,
-                    "preview": load_output_preview(run_dir, output_by_id.get(input_id)),
-                }
-            )
-
-    function_code = resolve_function_code(stage_def)
-    llm_example = build_llm_example(pinned.workflow_stage, input_previews)
-    links = resolve_panel_links(project_id, run_id)
-
+    panel = build_run_stage_panel(project_id, run_id, stage_id, manifest, stage_record)
     return templates.TemplateResponse(
-        request,
-        "_run_stage_panel.html",
-        {
-            "project": project_id,
-            "run_id": run_id,
-            "stage": stage_record,
-            "stage_def": stage_def,
-            "workflow_stage": pinned.workflow_stage,
-            "stage_def_error": pinned.error,
-            "preview": output_preview,
-            # None for every stage type outside the diff's scope, and for any
-            # stage whose alignment can't be verified — the pane then shows the
-            # plain output view (app.web.stage_diff).
-            "diff": build_stage_diff(
-                pinned.workflow_stage, run_dir,
-                stage_record.get("output_path"), output_by_id
-            ),
-            "input_previews": input_previews,
-            "function_code": function_code,
-            "llm_example": llm_example,
-            "test_views": (views := shape_test_views(pinned.workflow_stage)),
-            "certification": build_certification(pinned.workflow_stage, views),
-            # Judged against the version THIS run pinned, so each verdict is about the
-            # code that produced this run's rows. Empty where no eval targets the stage.
-            "eval_coverages": find_eval_coverages(
-                project_id, stage_id, manifest.get("workflow_version")),
-            "previewable": stage_def is not None and stage_def.type in PREVIEWABLE_TYPES,
-            "links": links,
-            # One queue page, halted or finished; the panel picks the words for it.
-            "queue_link": find_queue_link(links, project_id, run_id, stage_id),
-            "event_tail": EVENT_TAIL,
-            "type_glyph": TYPE_GLYPH,
-            "type_class": TYPE_CLASS,
-        },
-    )
+        request, "_run_stage_panel.html", panel.as_context())
 
 
 @router.get(

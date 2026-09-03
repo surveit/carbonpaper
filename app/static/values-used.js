@@ -1,6 +1,6 @@
-// The Relevant columns tab's replay: which stage's sheet is on screen, and every way
-// the reader moves between them. The sheets themselves are drawn by the server
-// (_values_panel.html); this file only ever changes which one is shown.
+// The Relevant columns tab's walk: which stage is on screen, and every way the
+// reader moves between them. Each stage's panel is the RUN PAGE'S OWN, fetched
+// scoped to the rows behind this figure — this file never draws one.
 window.ValuesUsed = window.ValuesUsed || (function(){
   const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 
@@ -9,7 +9,7 @@ window.ValuesUsed = window.ValuesUsed || (function(){
     if(!pane) return;
     const nav = JSON.parse(root.querySelector('.vu-nav').textContent);
     const view = {
-      pane, nav, trail: [nav.cited_stage], tab: 'data',
+      pane, nav, trail: [nav.cited_stage],
       map: pane.querySelector('.vu-map'),
       scroll: pane.querySelector('.vu-scroll'),
       modal: pane.querySelector('.vu-modal'),
@@ -42,15 +42,7 @@ window.ValuesUsed = window.ValuesUsed || (function(){
       !(view.nav.sources[here] || []).length;
     view.pane.querySelector('.vu-arrow[data-go="fwd"]').disabled = view.trail.length < 2;
     drawWires(view);
-    applyTabs(view);
-  }
-
-  function applyTabs(view){
-    view.pane.querySelectorAll('.vu-steptabs button').forEach(
-      button => button.classList.toggle('on', button.dataset.tab === view.tab));
-    view.pane.querySelectorAll('.vu-pane').forEach(
-      pane => pane.classList.toggle('vu-off', pane.dataset.tab !== view.tab));
-    if(view.tab === 'transform') loadTransform(view, at(view));
+    loadPanel(view, here);
   }
 
   // Along an edge, so the step is already on the route.
@@ -117,19 +109,32 @@ window.ValuesUsed = window.ValuesUsed || (function(){
 
   function closeFork(view){ view.modal.hidden = true; }
 
-  async function loadTransform(view, stageId){
-    const slot = view.pane.querySelector(`.vu-transform[data-transform="${CSS.escape(stageId)}"]`);
+  function runBase(view){
+    return `/project/${encodeURIComponent(view.pane.dataset.project)}`
+         + `/runs/${encodeURIComponent(view.pane.dataset.run)}`;
+  }
+
+  // The run page's own panel for this stage, cut to the rows behind the figure.
+  async function loadPanel(view, stageId){
+    const slot = view.pane.querySelector(`.vu-panel[data-panel="${CSS.escape(stageId)}"]`);
     if(!slot || view.loaded[stageId]) return;
     view.loaded[stageId] = true;
-    const base = `/project/${encodeURIComponent(view.pane.dataset.project)}`
-               + `/runs/${encodeURIComponent(view.pane.dataset.run)}`;
-    const url = `${base}/stage/${encodeURIComponent(stageId)}`
-              + `/lineage_panel?row=${encodeURIComponent(view.pane.dataset.row)}`;
+    const query = new URLSearchParams({
+      stage: view.nav.cited_stage, row: view.pane.dataset.row,
+      column: view.nav.column,
+    });
     slot.innerHTML = '<p class="muted">loading…</p>';
     try {
-      const answer = await fetch(url);
+      const answer = await fetch(
+        `${runBase(view)}/stage/${encodeURIComponent(stageId)}/traced?${query}`);
       slot.innerHTML = answer.ok ? await answer.text()
         : `<p class="muted">could not load ${esc(stageId)} (${answer.status})</p>`;
+      // The panel ships its own wiring, which innerHTML does not run.
+      slot.querySelectorAll('script').forEach(source => {
+        const run = document.createElement('script');
+        run.textContent = source.textContent;
+        source.replaceWith(run);
+      });
     } catch(failure){
       view.loaded[stageId] = false;
       slot.innerHTML = `<p class="muted">error: ${esc(failure)}</p>`;
@@ -156,7 +161,7 @@ window.ValuesUsed = window.ValuesUsed || (function(){
     }).join('');
   }
 
-  const CONTROLS = '.vu-node, .vu-arrow, .vu-forkopt, .vu-modal-close, th.diff-col-jump, .vu-steptabs button';
+  const CONTROLS = '.vu-node, .vu-arrow, .vu-forkopt, .vu-modal-close, th.diff-col-jump';
 
   function wire(view){
     // Focusing a control inside a horizontally scrolling strip makes the browser
@@ -169,8 +174,6 @@ window.ValuesUsed = window.ValuesUsed || (function(){
       if(control) control.focus({preventScroll: true});
       const header = event.target.closest('th.diff-col-jump');
       if(header) return jumpTo(view, header.dataset.jump);
-      const tab = event.target.closest('.vu-steptabs button');
-      if(tab){ view.tab = tab.dataset.tab; return applyTabs(view); }
       const node = event.target.closest('.vu-node');
       if(node) return jumpTo(view, node.dataset.node);
       const fork = event.target.closest('.vu-forkopt');

@@ -93,6 +93,10 @@
        look like — and the mark that says the same thing without colour. The
        name sits in its own span so a dropped column's strike takes the name
        and leaves the − readable. #}
+    {# `plain` is the Relevant columns tab's: there the column cards above the table
+       say which columns these are, so a second telling in colour is dropped and the
+       +/− marks carry the read. Everywhere else the diff is tinted. #}
+    {%- set plain = plain | default(false, true) %}
     {%- set cell_class = {'added': 'diff-col-new', 'dropped': 'diff-col-dropped',
                           'changed': 'diff-cell-changed', 'carried': 'diff-cell-same'} %}
     {%- set column_mark = {'added': '+', 'dropped': '−'} %}
@@ -113,14 +117,14 @@
     <thead><tr>{% if numbered %}<th class="row-num">#</th>{% endif %}
       {%- for column in diff.columns %}
       {%- set jump = writers.get(column.name) %}
-      {%- set klasses = [cell_class[column.state] if column.state != 'carried' else '',
-                         'diff-col-quiet' if column.name in quiet else '',
+      {%- set klasses = [cell_class[column.state] if column.state != 'carried' and not plain else '',
+                         'diff-col-quiet' if column.name in quiet and not plain else '',
                          'diff-col-jump' if jump else ''] | select | join(' ') %}
       <th{% if klasses %} class="{{ klasses }}"{% endif %}
         {%- if links.opens_a_cell() %} data-column="{{ column.name }}"{% endif %}
         {%- if jump %} data-jump="{{ jump }}" title="written by {{ jump }} — go there"
         {%- elif column.state != 'carried' %} title="{{ column_title[column.state] }}"{% endif %}>
-        {%- if column.name == cited_column %}<span class="diff-col-mine">the value</span>{% endif -%}
+        {%- if column.name == cited_column and not plain %}<span class="diff-col-mine">the value</span>{% endif -%}
         {%- if column.state != 'carried' %}<span class="diff-mark">{{ column_mark[column.state] }}</span>{% endif -%}
         <span class="diff-col-name">{{ column.name }}</span></th>
       {%- endfor %}
@@ -130,15 +134,15 @@
     {%- set ordinal = diff.row_ordinals[loop.index0] %}
     {%- set traced = ordinal in mine %}
     {%- set trace_href = links.row_trace(stage.stage_id, ordinal) %}
-    <tr{% if traced %} class="diff-row-mine"{% endif %}{% if trace_href %} data-href="{{ trace_href }}"{% endif %}>{% if numbered %}<td class="row-num {{ 'diff-row-num-mine' if traced else 'muted' }}">{{ ordinal | row_number }}</td>{% endif %}
+    <tr{% if traced and not plain %} class="diff-row-mine"{% endif %}{% if trace_href %} data-href="{{ trace_href }}"{% endif %}>{% if numbered %}<td class="row-num {{ 'diff-row-num-mine' if traced and not plain else 'muted' }}">{{ ordinal | row_number }}</td>{% endif %}
       {%- for cell in row %}
       {%- set column = diff.columns[loop.index0] %}
       {# An unchanged cell of a column the stage READ keeps full ink: it is what
          the stage worked from. Only a passenger's cells go muted. #}
-      {%- set state_class = '' if cell.state == 'carried' and column.read else cell_class[cell.state] %}
+      {%- set state_class = '' if plain or (cell.state == 'carried' and column.read) else cell_class[cell.state] %}
       {%- set klass = [state_class,
-                       'diff-col-quiet' if column.name in quiet else '',
-                       'diff-col-cited' if column.name == cited_column and traced else ''] | select | join(' ') %}
+                       'diff-col-quiet' if column.name in quiet and not plain else '',
+                       'diff-col-cited' if column.name == cited_column and traced and not plain else ''] | select | join(' ') %}
       {%- if cell.text[:4] == 'http' and cell.state != 'changed' %}<td class="cell-url {{ klass }}"><a href="{{ cell.text }}" target="_blank" rel="noopener">{{ cell.text }}</a></td>
       {%- else %}{{ data_cell(cell.text, klass, cell.was, full_rows) }}
       {%- endif %}

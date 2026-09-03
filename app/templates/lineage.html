@@ -13,6 +13,8 @@
 <script src="{{ static_root }}breadcrumbs.js" defer></script>
 {# The packet's Relevant columns pane is an empty state, so its script is dead there. #}
 <script src="{{ static_root }}values-used.js"></script>
+{# Each stage opens the run page's own panel: its tab strip is tabs.js's. #}
+<script src="{{ static_root }}tabs.js"></script>
 {# The Input files pane's own script; the packet's pane is the run list alone. #}
 <script src="{{ static_root }}input-files.js"></script>
 {# Standalone, so it does not inherit base.html's painter. Its observer colours a

@@ -113,7 +113,11 @@ graph arrives with `.diagram-survey` under it: how many stages the run has, how 
 guide narrates, and how many it narrates nobody — every figure COUNTED off this run's stage
 list and this version's guide. With no guide the narration lines are absent, not zeroed.
 
-## The stage panel — three tabs (`run_stage_partial` → `_run_stage_panel.html`)
+## The stage panel — three tabs (`app.web.run_stage_view` → `_run_stage_panel.html`)
+Built by `build_run_stage_panel`, which the run page calls unscoped and the row-lineage
+page calls with a `TraceScope` — the same panel, cut to the rows behind one figure. A
+scoped panel counts its rows as `N of M rows behind this figure`, says the model spend is
+the whole stage's, and carries no run log: nothing in that feed is per-row.
 An **Error** section sits above the tabs on a stopped stage. It leads with the message and
 shows the exception name only for a crash (`crash_type` filter → `read_crash_type`): a schema
 stop and an authored `StepRefused` are already worded for a reader, so their type is noise —
