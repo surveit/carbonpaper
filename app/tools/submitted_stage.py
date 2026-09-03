@@ -14,7 +14,7 @@ from pydantic.json_schema import SkipJsonSchema
 
 from app.models.stage import SERVER_OWNED_STAGE_FIELDS, StageDraft, StageEdit
 from app.tools.shared import EditedStages
-from app.services import project as project_service
+from app.services import project as project_service, stage_edit
 
 
 # The strip runs BEFORE validation because both tool surfaces bind this model as an
@@ -41,9 +41,9 @@ class SubmittedStage(StageDraft):
 
 
 def add_stages_reporting_drops(
-    project_id: str, stages: Sequence[SubmittedStage]
+    store: stage_edit.StageSpecStore, stages: Sequence[SubmittedStage]
 ) -> dict[str, Any]:
-    result = project_service.add_stages_reporting_outcome(project_id, stages)
+    result = project_service.add_stages_reporting_outcome(store, stages)
     warnings = _find_dropped_field_warnings(stages, result["added"])
     if warnings:
         result["warnings"] = warnings
@@ -51,7 +51,7 @@ def add_stages_reporting_drops(
 
 
 def edit_stages_reporting_drops(
-    project_id: str, edits: Sequence[StageEdit]
+    store: stage_edit.StageSpecStore, edits: Sequence[StageEdit]
 ) -> EditedStages:
     trimmed: list[StageEdit] = []
     warnings: list[str] = []
@@ -59,7 +59,7 @@ def edit_stages_reporting_drops(
         changes, dropped = _drop_server_owned_from_json(edit.changes_json)
         trimmed.append(StageEdit(stage_id=edit.stage_id, changes_json=changes))
         warnings += _describe_dropped_fields(edit.stage_id, dropped)
-    result = project_service.edit_stages(project_id, trimmed)
+    result = project_service.edit_stages(store, trimmed)
     return EditedStages(
         ok=result.ok,
         edited=[edit.stage_id for edit in trimmed] if result.ok else [],

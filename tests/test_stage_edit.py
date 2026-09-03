@@ -49,7 +49,7 @@ def _seed(tmp_path: Path) -> str:
 def test_valid_edit_writes(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
     edited = json.dumps({**_VALID, "description": "Score every row"})
-    result = stage_edit.edit_stage_spec(pdir, "score", edited)
+    result = stage_edit.edit_stage_spec(stage_edit.open_working_copy(pdir), "score", edited)
     # The writer reports only success; it no longer computes the review colour.
     assert result.ok is True and not result.issues
     assert _score(pdir)["description"] == "Score every row"
@@ -58,14 +58,14 @@ def test_valid_edit_writes(tmp_path: Path) -> None:
 def test_invalid_edit_writes_nothing(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
     before = _score(pdir)
-    result = stage_edit.edit_stage_spec(pdir, "score", json.dumps({"id": "score", "type": "not_a_real_type", "description": "x"}))
+    result = stage_edit.edit_stage_spec(stage_edit.open_working_copy(pdir), "score", json.dumps({"id": "score", "type": "not_a_real_type", "description": "x"}))
     assert result.ok is False and result.issues
     assert _score(pdir) == before
 
 
 def test_id_mismatch_rejected(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
-    result = stage_edit.edit_stage_spec(pdir, "score", json.dumps({**_VALID, "id": "renamed"}))
+    result = stage_edit.edit_stage_spec(stage_edit.open_working_copy(pdir), "score", json.dumps({**_VALID, "id": "renamed"}))
     assert result.ok is False and any("must equal" in i for i in result.issues)
 
 
@@ -76,7 +76,7 @@ def test_missing_stage_file_raises(tmp_path: Path) -> None:
     valid_ghost = {"id": "ghost", "description": "x", "type": "input_data",
                    "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]}}
     with pytest.raises(FileNotFoundError):
-        stage_edit.edit_stage_spec(pdir, "ghost", json.dumps(valid_ghost))
+        stage_edit.edit_stage_spec(stage_edit.open_working_copy(pdir), "ghost", json.dumps(valid_ghost))
 
 
 def _score(project: str) -> dict:
@@ -88,7 +88,7 @@ def _patch(project: str, stage_id: str, changes: dict) -> stage_edit.EditStageRe
 
 
 def _patch_many(project: str, changes_by_stage: dict[str, dict]) -> stage_edit.EditStageResult:
-    return stage_edit.patch_stage_specs(project, [
+    return stage_edit.patch_stage_specs(stage_edit.open_working_copy(project), [
         StageEdit(stage_id=stage_id, changes_json=json.dumps(changes))
         for stage_id, changes in changes_by_stage.items()
     ])
@@ -176,7 +176,7 @@ def test_add_stage_creates_new_stage_referencing_existing_input(tmp_path: Path) 
                "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
                "adds": [{"name": "score", "type": "float", "nullable": False}],
            }}
-    result = stage_edit.add_stage_spec(pdir, json.dumps(new))
+    result = stage_edit.add_stage_spec(stage_edit.open_working_copy(pdir), json.dumps(new))
     assert result.ok is True and not result.issues
     # a new stage lands at the end of the stored list; order is presentation only
     assert [s["id"] for s in read_stages(pdir)] == ["load", "score"]
@@ -194,7 +194,7 @@ def test_add_stage_rejects_dangling_input(tmp_path: Path) -> None:
                "reads": [{"input": "does_not_exist", "columns": _IN_SCHEMA["columns"]}],
                "adds": [{"name": "score", "type": "float", "nullable": False}],
            }}
-    result = stage_edit.add_stage_spec(pdir, json.dumps(new))
+    result = stage_edit.add_stage_spec(stage_edit.open_working_copy(pdir), json.dumps(new))
     assert result.ok is False
     assert any("does_not_exist" in i for i in result.issues)
     # nothing written for the rejected stage
@@ -205,17 +205,17 @@ def test_add_stage_rejects_duplicate_id(tmp_path: Path) -> None:
     pdir = _seed_load(tmp_path)
     dup = {"id": "load", "description": "Load again", "type": "input_data",
            "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _IN_SCHEMA["columns"]}}
-    result = stage_edit.add_stage_spec(pdir, json.dumps(dup))
+    result = stage_edit.add_stage_spec(stage_edit.open_working_copy(pdir), json.dumps(dup))
     assert result.ok is False and any("already exists" in i for i in result.issues)
 
 
 def test_remove_stage_rejected_when_a_downstream_depends_on_it(tmp_path: Path) -> None:
     # score inputs from load, so removing load would leave a dangling edge.
     pdir = _seed(tmp_path)
-    result = stage_edit.delete_stage_spec(pdir, "load")
+    result = stage_edit.delete_stage_spec(stage_edit.open_working_copy(pdir), "load")
     assert result.ok is False
     assert any("load" in issue for issue in result.issues)
-    assert "load" in stage_edit._current_specs(pdir)
+    assert "load" in stage_edit.open_working_copy(pdir).read()
 
 
 def test_remove_stage_deletes_the_stage_and_its_file(tmp_path: Path) -> None:
@@ -228,18 +228,18 @@ def test_remove_stage_deletes_the_stage_and_its_file(tmp_path: Path) -> None:
                "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
                "adds": [{"name": "score", "type": "float", "nullable": False}],
            }}
-    assert stage_edit.add_stage_spec(pdir, json.dumps(new)).ok is True
+    assert stage_edit.add_stage_spec(stage_edit.open_working_copy(pdir), json.dumps(new)).ok is True
 
-    result = stage_edit.delete_stage_spec(pdir, "score")
+    result = stage_edit.delete_stage_spec(stage_edit.open_working_copy(pdir), "score")
     assert result.ok is True and not result.issues
-    assert "score" not in stage_edit._current_specs(pdir)
+    assert "score" not in stage_edit.open_working_copy(pdir).read()
     assert [s["id"] for s in read_stages(pdir)] == ["load"]
 
 
 def test_remove_nonexistent_stage_raises(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
     with pytest.raises(FileNotFoundError):
-        stage_edit.delete_stage_spec(pdir, "ghost")
+        stage_edit.delete_stage_spec(stage_edit.open_working_copy(pdir), "ghost")
 
 
 # ─── An empty workflow is a legitimate starting state ────────────────────────
@@ -256,13 +256,13 @@ def _seed_empty(tmp_path: Path) -> str:
 
 def test_add_stage_creates_the_first_stage_of_an_empty_workflow(tmp_path: Path) -> None:
     pdir = _seed_empty(tmp_path)
-    result = stage_edit.add_stage_spec(pdir, json.dumps(_FIRST_STAGE))
+    result = stage_edit.add_stage_spec(stage_edit.open_working_copy(pdir), json.dumps(_FIRST_STAGE))
     assert result.ok is True and not result.issues
-    assert set(stage_edit._current_specs(pdir)) == {"load"}
+    assert set(stage_edit.open_working_copy(pdir).read()) == {"load"}
 
 
 def test_add_stage_creates_the_first_stage_when_no_working_copy_is_stored() -> None:
-    result = stage_edit.add_stage_spec("delta", json.dumps(_FIRST_STAGE))
+    result = stage_edit.add_stage_spec(stage_edit.open_working_copy("delta"), json.dumps(_FIRST_STAGE))
     assert result.ok is True and not result.issues
     assert [s["id"] for s in read_stages("delta")] == ["load"]
 
@@ -271,7 +271,7 @@ def test_add_stage_still_refuses_when_the_existing_workflow_is_unloadable() -> N
     # A stored stage that does not parse is a BROKEN workflow, not an empty one.
     set_stages("epsilon", [{"id": "broken", "description": "Broken", "type": "not_a_real_type"}])
     with pytest.raises(WorkflowLoadError):
-        stage_edit.add_stage_spec("epsilon", json.dumps(_FIRST_STAGE))
+        stage_edit.add_stage_spec(stage_edit.open_working_copy("epsilon"), json.dumps(_FIRST_STAGE))
     assert [s["id"] for s in read_stages("epsilon")] == ["broken"]
 
 
@@ -283,19 +283,19 @@ def test_add_stage_still_refuses_when_the_stored_document_is_unparseable() -> No
         (WorkingCopy.collection, "zeta"),
     )
     with pytest.raises(json.JSONDecodeError):
-        stage_edit.add_stage_spec("zeta", json.dumps(_FIRST_STAGE))
+        stage_edit.add_stage_spec(stage_edit.open_working_copy("zeta"), json.dumps(_FIRST_STAGE))
 
 
 def test_remove_stage_on_an_empty_workflow_raises(tmp_path: Path) -> None:
     pdir = _seed_empty(tmp_path)
     with pytest.raises(FileNotFoundError):
-        stage_edit.delete_stage_spec(pdir, "load")
+        stage_edit.delete_stage_spec(stage_edit.open_working_copy(pdir), "load")
 
 
 def test_edit_stage_on_an_empty_workflow_raises(tmp_path: Path) -> None:
     pdir = _seed_empty(tmp_path)
     with pytest.raises(FileNotFoundError):
-        stage_edit.edit_stage_spec(pdir, "load", json.dumps(_FIRST_STAGE))
+        stage_edit.edit_stage_spec(stage_edit.open_working_copy(pdir), "load", json.dumps(_FIRST_STAGE))
 
 
 def test_patch_stage_on_an_empty_workflow_raises(tmp_path: Path) -> None:
@@ -341,7 +341,7 @@ def test_one_bad_edit_writes_none_of_the_batch(tmp_path: Path) -> None:
 
 def test_two_patches_to_one_stage_compose(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
-    result = stage_edit.patch_stage_specs(pdir, [
+    result = stage_edit.patch_stage_specs(stage_edit.open_working_copy(pdir), [
         StageEdit(stage_id="score", changes_json=json.dumps({"cache": True})),
         StageEdit(stage_id="score", changes_json=json.dumps({"description": "Twice"})),
     ])
@@ -351,7 +351,7 @@ def test_two_patches_to_one_stage_compose(tmp_path: Path) -> None:
 
 def test_changes_that_are_not_a_json_object_are_refused_by_stage(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
-    result = stage_edit.patch_stage_specs(pdir, [
+    result = stage_edit.patch_stage_specs(stage_edit.open_working_copy(pdir), [
         StageEdit(stage_id="score", changes_json="[1, 2]"),
     ])
     assert result.ok is False and any("score" in issue for issue in result.issues)

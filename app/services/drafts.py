@@ -14,8 +14,9 @@ from app.models import (
     validate_workflow,
 )
 from app.models.records.draft import Draft
+from app.core.json_types import JsonDict
 from app.core.utils import format_errors, build_word_triplet_id
-from app.services import versioning, workspace
+from app.services import stage_edit, versioning, workspace
 
 
 class DraftView(BaseModel):
@@ -146,6 +147,22 @@ def save_version(
     d.parent_version = meta.version_id
     d.save()
     return SaveResult(ok=True, version_id=meta.version_id)
+
+
+def open_session_stages(name: str, session_id: str) -> stage_edit.StageSpecStore:
+    """The store an edit made in this session reads and writes, seeding the draft if new."""
+    project = workspace.validate_project_id(name)
+    open_session_draft(project, session_id)
+
+    def read() -> dict[str, JsonDict]:
+        return {s.id: stage_to_spec_dict(s) for s in _load(project, session_id).stages}
+
+    def write(specs: list[JsonDict]) -> None:
+        d = _load(project, session_id)
+        d.stages = [parse_stage(spec) for spec in specs]
+        d.save()
+
+    return stage_edit.StageSpecStore(project_id=project, read=read, write=write)
 
 
 # ─── internals ───────────────────────────────────────────────────────────────
