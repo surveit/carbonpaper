@@ -117,7 +117,7 @@ def read_stage(project_id: str, stage_id: str) -> str:
 
 def delete_stage(project_id: str, stage_id: str) -> dict[str, Any]:
     try:
-        result = project_service.delete_stage(project_id, stage_id)
+        result = project_service.delete_stage_from_working_copy(project_id, stage_id)
     except STAGE_TOOL_ERRORS as exc:
         return {"ok": False, "issues": [str(exc)]}
     return {"ok": result.ok, "issues": result.issues}

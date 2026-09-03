@@ -30,6 +30,7 @@ from app.services import terms, versioning
 from app.services.loader import load_workflow
 from app.services.methodology import read_methodology
 from app.services.stage_edit import (
+    open_working_copy,
     find_description_issues,
     find_unnamed_model_issues,
     patch_stage_specs,
@@ -157,7 +158,7 @@ def _finish_stage_tests(
             "submitted an empty test suite"
         )
     result = patch_stage_specs(
-        project_id, [StageEdit(stage_id=stage_id, changes_json=json.dumps({"tests": tests}))]
+        open_working_copy(project_id), [StageEdit(stage_id=stage_id, changes_json=json.dumps({"tests": tests}))]
     )
     if not result.ok:
         raise GenerationError(
