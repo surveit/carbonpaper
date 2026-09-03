@@ -9,7 +9,7 @@ import pyarrow as pa
 from pydantic import BaseModel
 
 from app.core.errors import RowOutOfRange, StageNotInRun
-from app.core.frames import convert_cell_to_json_value, read_frame_table, read_native_scalar
+from app.core.frames import convert_cell_to_json_value, read_frame_table, read_native_cell_as_json
 from app.core.json_types import JsonScalar
 from app.models.branch_analysis import (
     BranchId,
@@ -215,14 +215,14 @@ def _read_the_cited_cell(outputs: Path, citation: StageOutputCellCitation
     if citation.row_ordinal >= frame.num_rows:
         raise RowOutOfRange(f"stage '{citation.stage_id}' has {frame.num_rows} rows")
     return frame, citation.model_copy(update={
-        "value": _plain(frame.column(citation.column)[citation.row_ordinal])})
+        "value": read_native_cell_as_json(frame, citation.column, citation.row_ordinal)})
 
 
 def _read_cited_row(frame: pa.Table, ordinal: RowOrdinal) -> CitedRow:
     return CitedRow(
         ordinal=ordinal, number=render_row_number(ordinal),
         columns=list(frame.column_names),
-        cells=[_plain(frame.column(name)[ordinal]) for name in frame.column_names])
+        cells=[read_native_cell_as_json(frame, name, ordinal) for name in frame.column_names])
 
 
 def read_cut(run_branches: WorkflowRunBranches, outputs: Path, branch_id: BranchId,
@@ -291,7 +291,7 @@ def read_rows(frame: pa.Table, ordinals: list[RowOrdinal],
     cells = [frame.column(name).to_pylist() for name in frame.column_names]
     return [DrawnRow(ordinal=ordinal, number=render_row_number(ordinal),
                      branch_path_index=branch_path_index[position],
-                     cells=[_plain(column[ordinal]) for column in cells])
+                     cells=[convert_cell_to_json_value(column[ordinal]) for column in cells])
             for position, ordinal in enumerate(ordinals)]
 
 
@@ -390,8 +390,3 @@ def _draw_stage(run_branches: WorkflowRunBranches, sid: StageId,
         glyph=TYPE_GLYPH[authored.type],
         position=position, description=authored.description or "",
         code=read_stage_code(stage) or read_decision_source(stage))
-
-
-def _plain(value: object) -> JsonScalar:
-    return convert_cell_to_json_value(
-        read_native_scalar(value) if hasattr(value, "as_py") else value)

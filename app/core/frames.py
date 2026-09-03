@@ -492,11 +492,22 @@ def convert_row_to_json_cells(row: dict[str, Any]) -> dict[str, JsonScalar]:
 def convert_cell_to_json_value(value: object) -> JsonScalar:
     """A null stays null: a blank cell a reader reads as blank must not arrive as "None"."""
     cell = collapse_null_forms(value)
+    # JSON has no Infinity either; collapse_null_forms stays NaN-only for write-time callers.
+    if isinstance(cell, float) and not math.isfinite(cell):
+        return None
     if cell is None or isinstance(cell, (bool, int, float, str)):
         return cell
     if isinstance(cell, _dt.datetime):
         return _render_moment(cell)
     return convert_cell_to_json_native(cell)
+
+
+def read_native_cell_as_json(table: pa.Table, column: str, row_ordinal: int) -> JsonScalar:
+    return convert_cell_to_json_value(read_native_cell(table, column, row_ordinal))
+
+
+def read_native_scalar_as_json(scalar: pa.Scalar) -> JsonScalar:
+    return convert_cell_to_json_value(read_native_scalar(scalar))
 
 
 def _render_moment(moment: _dt.datetime) -> str:

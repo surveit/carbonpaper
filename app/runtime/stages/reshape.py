@@ -10,7 +10,7 @@ from typing import Sequence
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from app.core.frames import convert_cell_to_json_value, read_native_cell
+from app.core.frames import read_native_cell_as_json
 from app.models import WorkflowStage
 from app.models.errors import StepRefused
 from app.models.stages.dedupe import DedupeKeep, DedupeStage
@@ -142,7 +142,7 @@ def _name_the_duplicates(
     table: pa.Table, keys: Sequence[str], ordinal: int, members: int
 ) -> str:
     named = ", ".join(
-        f"{key}={convert_cell_to_json_value(read_native_cell(table, key, ordinal))!r}"
+        f"{key}={read_native_cell_as_json(table, key, ordinal)!r}"
         for key in keys
     )
     return f"the {members} rows with {named}"
