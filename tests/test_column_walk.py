@@ -8,6 +8,7 @@ from app.web.column_walk import (
     ColumnAt,
     WalkStop,
     build_writer_graph,
+    find_columns_behind,
     find_nearest_writer_upstream,
     order_sheet_columns,
     walk_column_back,
@@ -47,6 +48,44 @@ def _row_function(stage_id, source, reads, adds=(), rewrites=()):
             "reads": [{"input": source, "columns": [_column(name) for name in reads]}],
             "adds": [_column(name) for name in adds],
             "rewrites": [_column(name) for name in rewrites],
+        },
+    })
+
+
+def _filter_rows(stage_id, source, reads):
+    return m.parse_stage({
+        "id": stage_id, "description": stage_id, "type": "filter_rows",
+        "inputs": [{"id": source}],
+        "filter": {"code": "def should_include(row): return True"},
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": source, "columns": [_column(name) for name in reads]}],
+        },
+    })
+
+
+def _starlark_filter_rows(stage_id, source, reads):
+    return m.parse_stage({
+        "id": stage_id, "description": stage_id, "type": "starlark_filter_rows",
+        "inputs": [{"id": source}],
+        "starlark_filter": {"code": "def should_include(row): return True"},
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": source, "columns": [_column(name) for name in reads]}],
+        },
+    })
+
+
+def _row_count(stage_id, source):
+    return m.parse_stage({
+        "id": stage_id, "description": stage_id, "type": "aggregate",
+        "inputs": [{"id": source}],
+        "aggregate": {"group_by": [], "aggregations": [
+            {"formula": "count", "output_column": "row_count"},
+        ]},
+        "signature": {
+            "form": "replaces", "reads": [],
+            "produces": [_column("row_count", "int")],
         },
     })
 
@@ -147,3 +186,18 @@ def test_the_oldest_column_holds_the_first_slot(stages):
     walk = walk_column_back(stages, ColumnAt("spend_by_client", "client_matched"))
     order = order_sheet_columns(walk)
     assert order.index("client") < order.index("client_matched")
+
+
+@pytest.mark.parametrize("filter_stage", [_filter_rows, _starlark_filter_rows])
+def test_a_filters_read_column_is_behind_a_count_it_gated(filter_stage):
+    """A predicate's own reads pick which rows a count includes — python or starlark."""
+    stages = m.Workflow(stages=[
+        _filings("input_q1_filings"),
+        filter_stage("kept_rows", "input_q1_filings", reads=["expenses"]),
+        _row_count("row_count", "kept_rows"),
+    ]).index_workflow_stages_by_id()
+    behind = find_columns_behind(
+        stages, {"input_q1_filings", "kept_rows", "row_count"},
+        ColumnAt("row_count", "row_count"),
+    )
+    assert behind.get("input_q1_filings") == {"expenses"}
