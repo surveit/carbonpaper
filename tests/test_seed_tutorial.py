@@ -11,6 +11,7 @@ import pytest
 from app.evals.compatibility import validate_eval_compatibility
 from app.evals.dataset_columns import get_injected_columns
 from app.evals.store import load_eval_config
+from app.core.files import list_project_files
 from app.core.stage_cache import StageCacheEntry
 from app.models import Column, Stage, StageType
 from app.models.errors import StepRefused
@@ -650,6 +651,22 @@ def test_the_tour_seeds_the_eval_beside_the_review_guide(projects_root):
     assert [check.output_column for check in stored.expected_outputs] == [_JUDGED_COLUMN]
     # run_eval takes the id, so the tour is handed it rather than slicing it off a URL.
     assert seeded.eval_id == _EVAL_ID
+
+
+def test_a_second_tour_links_into_the_first_and_writes_nothing_over_it(projects_root):
+    first = seed_tutorial_project(TutorialContext(base_url=_BASE_URL))
+    guide = project.read_review_guide(first.project.id, first.version_id)
+    renamed = load_eval_config(first.project.id, _EVAL_ID)
+    renamed.name = "the name a reader gave it"
+    renamed.save()
+
+    second = seed_tutorial_project(TutorialContext(base_url=_BASE_URL))
+
+    assert second.project.id == first.project.id
+    assert project.read_review_guide(second.project.id, second.version_id).id == guide.id
+    assert load_eval_config(second.project.id, _EVAL_ID).name == renamed.name
+    assert second.input_files == first.input_files
+    assert len(list_project_files(second.project.id)) == len(_CSV_BY_STAGE_ID)
 
 
 def test_the_committed_eval_names_no_project_of_its_own():

@@ -90,13 +90,8 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialAgentReference:
     if reused is None:
         # A reader who edited the tour has moved past the bundle it no longer matches.
         _seed_stage_cache(name)
-    project_service.write_review_guide(
-        name, version_id, ReviewGuideDraft.model_validate_json(
-            _GUIDE.read_text(encoding="utf-8")
-        )
-    )
-    eval_config = read_seed_eval_config(name)
-    project_service.write_eval_config(name, eval_config)
+    _write_review_guide_if_absent(name, version_id)
+    eval_config = _read_or_write_eval_config(name)
     return TutorialAgentReference(
         project=_read_seeded_record(name),
         version_id=version_id,
@@ -144,13 +139,43 @@ def _seed_stage_cache(project_id: str) -> None:
         )
 
 
+def _write_review_guide_if_absent(project_id: str, version_id: str) -> None:
+    # A reader who rewrote the tour's guide keeps their words; a second tour links in.
+    if project_service.read_review_guide(project_id, version_id) is not None:
+        return
+    project_service.write_review_guide(
+        project_id, version_id,
+        ReviewGuideDraft.model_validate_json(_GUIDE.read_text(encoding="utf-8")),
+    )
+
+
+def _read_or_write_eval_config(project_id: str) -> EvalConfig:
+    seeded = read_seed_eval_config(project_id)
+    stored = project_service.read_eval_config(project_id, seeded.eval_id)
+    if stored is not None:
+        return stored
+    project_service.write_eval_config(project_id, seeded)
+    return seeded
+
+
 def store_tour_files(project_id: str) -> dict[str, str]:
     """stage id -> file id, stored the way an upload is so the tour shows the real flow."""
-    stored = {}
-    for stage_id, path in _CSV_BY_STAGE_ID.items():
-        with path.open("rb") as handle:
-            stored[stage_id] = file_store.save_upload(path.name, handle, project_id).id
-    return stored
+    already_stored = file_store.index_project_files(project_id)
+    return {
+        stage_id: _store_tour_file(already_stored, project_id, path)
+        for stage_id, path in _CSV_BY_STAGE_ID.items()
+    }
+
+
+def _store_tour_file(
+    already_stored: file_store.ProjectFileIndex, project_id: str, path: Path
+) -> str:
+    # A second tour reads the bytes the first stored rather than uploading them again.
+    match = already_stored.find(None, file_store.compute_sha256(path))
+    if match is not None:
+        return match.id
+    with path.open("rb") as handle:
+        return file_store.save_upload(path.name, handle, project_id).id
 
 
 def read_seed_eval_config(project_id: str) -> EvalConfig:
