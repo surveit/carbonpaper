@@ -17,7 +17,6 @@ from app.models.records.claims import Claim, ClaimShape
 _TOTAL = 4461000.0
 _RUN = "20260807T142707"
 _PROJECT = "venezuela_lobbying_q1_q2_2026"
-_VERSION = "20260807T142650.104112"
 
 
 def _shape() -> ClaimShape:
@@ -34,7 +33,6 @@ def _claim(shape: ClaimShape, run_id: str = _RUN) -> Claim:
     return Claim(
         created_by_project_id=_PROJECT,
         shape_id=shape.id,
-        workflow_version_id=_VERSION,
         citation=StageOutputCellCitation(
             run_id=run_id, stage_id="paid_totals", row_ordinal=0,
             column="total_income_usd", value=read_cell(table, "total_income_usd", 0),
@@ -78,7 +76,6 @@ def test_a_claim_can_cite_a_published_table():
     claim = Claim(
         created_by_project_id="hate_on_activist_pages",
         shape_id=shape.id,
-        workflow_version_id="20260807T142650.104112",
         citation=StageOutputTableCitation(
             run_id=_RUN, stage_id="publish_evidence_table",
             rectangle=RowsRectangle(row_start=0, row_end=18, columns=["comment_text", "severity_tier"]),

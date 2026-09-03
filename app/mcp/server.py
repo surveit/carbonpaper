@@ -13,7 +13,7 @@ from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.types import Receive, Scope, Send
 
 from app.mcp.instructions import INSTRUCTIONS
-from app.models.claims import AuthoredClaimShape
+from app.models.claims import ClaimShapeInput
 from app.models.records.claims import ClaimShape
 from app.tools import claim_shapes as claim_shape_tools, shared, working_copy
 from app.models.stage import StageEdit
@@ -131,7 +131,7 @@ def read_claim_shapes(project_id: str) -> list[ClaimShape]:
 
 @mcp.tool(description=read_tool_description("write_claim_shapes"))
 def write_claim_shapes(
-    project_id: str, shapes: list[AuthoredClaimShape]
+    project_id: str, shapes: list[ClaimShapeInput]
 ) -> list[ClaimShape]:
     return claim_shape_tools.write_claim_shapes(project_id, shapes)
 

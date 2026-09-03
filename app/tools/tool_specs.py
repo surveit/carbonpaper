@@ -148,9 +148,9 @@ other way to learn one. An empty result means none have been agreed yet.""",
         label="Storing what the project claims",
         parameters={
             "project_id": PROJECT_ID,
-            "shapes": "The shapes to add or edit. An entry with an `id` edits that shape; "
-                "one without is new. Sending fewer retires none — stages and published "
-                "claims point at these.",
+            "shapes": "The shapes to add. A shape is never edited — every claim under it "
+                "asserts what it said — so send only new ones. Sending fewer retires "
+                "none; stages and published claims point at these.",
         },
         description="""\
 Store what this project claims: a figure the project promises to report,
@@ -174,9 +174,8 @@ before using the number, and what it cannot see.
    "qualifiers": ["Counts only lobbying that was filed. Filing is required "
                   "by law, so the gap should be small."]}
 
-REFUSED WHOLE on a repeated label, a label already claimed sent without its
-id, an id this project does not hold, or a `requires` change on a shape
-something has been claimed under.
+REFUSED WHOLE on a repeated label, or a label this project already claims —
+a stored shape cannot be edited, so a wrong one is retired and replaced.
 
 Agree these with the user; never coin one to fill the list out.""",
     ),

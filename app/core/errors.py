@@ -25,6 +25,10 @@ class ClaimIsImmutable(ValueError):
     """A claim is written once: what a reader saw and what is stored can never disagree."""
 
 
+class ClaimShapeIsImmutable(ValueError):
+    """A shape is written once: every claim under it asserts what it said."""
+
+
 class CitationMismatch(ValueError):
     """A report stage cited a cell for a value that cell does not hold."""
 
