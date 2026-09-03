@@ -458,14 +458,6 @@ def find_arrow_list_value_type(arrow_type: pa.DataType) -> pa.DataType | None:
     return None
 
 
-def restore_row_read_from_frame(row: Mapping[Any, Any]) -> dict[str, Any]:
-    """An array cell reads back as numpy; `str()` renders it `['a' 'b']`, which parses as nothing."""
-    return {
-        str(name): value.tolist() if isinstance(value, np.ndarray) else value
-        for name, value in row.items()
-    }
-
-
 def convert_cell_to_json_native(value: object) -> JsonScalar:
     if isinstance(value, np.generic):
         native = value.item()
