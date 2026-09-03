@@ -1,16 +1,11 @@
-"""Architecture: `cache` defaults to true on llm_transform and human_review_queue alone.
-
-Caching a stage costs storage and a per-row fingerprint to skip work usually cheaper than
-the fingerprint. It pays only where a recompute spends a model call or a human's
-attention, so a new type defaults OFF and an author turns it on per stage.
-"""
+"""Architecture: `cache` defaults to true on llm_transform alone."""
 from __future__ import annotations
 
 from typing import get_args
 
 from app.models.stage import Stage
 
-CACHE_BY_DEFAULT = {"llm_transform", "human_review_queue"}
+CACHE_BY_DEFAULT = {"llm_transform"}
 
 
 def collect_cache_defaults() -> dict[str, bool]:

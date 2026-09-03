@@ -12,6 +12,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.stage_cache import ReadOnlyStageCache, StageCache, StageCacheEntry
+from app.models.review_ledger import ReviewLedger
 
 from .run_log import RunLog
 from .progress import StageProgressReporter
@@ -41,6 +42,8 @@ class RunContext(BaseModel):
     # write via the writable `StageCache` subclass). None alongside
     # `identity is None` — enforced by the validator.
     stage_cache: ReadOnlyStageCache | None = None
+    # A decided row's source of truth, read before stage_cache. Covaries with identity.
+    decisions: ReviewLedger | None = None
     # What the caller asked of this run (row windows, cache busting, queue bypass,
     # bindings) — the same object the manifest records, so the settings executed
     # under and the settings written down cannot drift.
@@ -76,11 +79,12 @@ class RunContext(BaseModel):
 
     @model_validator(mode="after")
     def _identity_and_cache_covary(self) -> RunContext:
-        if (self.identity is None) != (self.stage_cache is None):
+        project_scoped = {self.identity is None, self.stage_cache is None, self.decisions is None}
+        if len(project_scoped) != 1:
             raise ValueError(
-                "RunContext.identity and RunContext.stage_cache must both be "
-                "set or both be None — a run either has project scope (both) "
-                "or it doesn't (neither)"
+                "RunContext.identity, RunContext.stage_cache and RunContext.decisions "
+                "must all be set or all be None — a run either has project scope "
+                "(all three) or it doesn't (none)"
             )
         return self
 
@@ -121,6 +125,7 @@ class RunContext(BaseModel):
             run_dir=run_dir,
             identity=RunIdentity(project=project_id, run_id=run_id),
             stage_cache=StageCacheEntry.read_write(),
+            decisions=ReviewLedger(project_id),
             params=params,
         )
 
@@ -136,6 +141,7 @@ class RunContext(BaseModel):
             run_dir=run_dir,
             identity=RunIdentity(project=project_id, run_id=run_id),
             stage_cache=StageCacheEntry.read_only(),
+            decisions=ReviewLedger(project_id),
             params=params.model_copy(
                 update={"is_test_run": True, "queue_auto_approve": True}),
         )

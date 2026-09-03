@@ -37,7 +37,7 @@ the output, write `outputs/<stage>.parquet`, append to the run record.
   queueable row halts again.
 - **Halt + resume:** `human_review_queue` returns an `AwaitingReview` on its `StageOutput`;
   the run marks `awaiting_review` and persists the pending queue. `resume_run(...)` reloads completed
-  outputs and continues once cached decisions exist for the pending rows.
+  outputs and continues once a decision — ledger or cache — exists for every pending row.
 
 ## `stages/` — one module per stage type (`HANDLERS`)
 `input_data` connector `file` (csv/tsv/parquet/json/geojson; `_read_geojson` flattens a
@@ -49,30 +49,34 @@ is driven and a `refuse(...)` call is translated to `StepRefused`); `enrich`/`ex
 (left join of inputs[1] into inputs[0]; `enrich` verifies m:1 and fails the run on a
 non-unique reference, `expand` allows m:n fan-out); `aggregate`;
 `llm_transform` (row-mapped, bounded parallelism);
-`human_review_queue` (row fingerprint → cached decision or halt);
+`human_review_queue` (row fingerprint → recorded decision or halt);
 `report` (a `function` module that writes artifacts).
 
 **A row-mapped stage sees only what its signature `reads`.**
 
-**Row caching is a property of the handler SHAPE, not of a stage type.** There is one row
-driver (`execution._run_row_mapper`): it narrows every row to the declared reads, answers
-what it can from the cache, groups what is left, and records each group as it lands. The only
-thing a stage type varies is `group_size` — one for every type but a batched `llm_transform`,
-whose model call takes N — so every row-mapped type is keyed, recorded, logged, ordered and
-rejoined by the same code. A group that completed therefore survives a later group's failure
-with no batch-specific persistence anywhere. Hits are resolved before the grouping, so a
-replayed row never takes a seat in a model call. No stage module resolves a cache. The store is `app.core.stage_cache` — `find_recorded_rows` is one bulk read per
-execution, keyed by (stage-definition fingerprint, input-row fingerprint), and `record`
-needs the write-capable `StageCache` accessor; the runtime holds that execution's state and
-decides only whether caching applies and whether a result may be recorded. A row carrying
-`_error`/`_deferred` is never recorded and no internal column is ever part of a recorded row,
-so a hit reports no spend. `Stage.cache` decides whether a stage caches at all — no read,
-no write when it is false — and is outside the definition fingerprint. It defaults to true
-only on `llm_transform` and `human_review_queue`, the two types whose recompute spends a
-model call or a human's attention; every other type recomputes unless its author turns
-caching on. There is no per-registration row opt-out: `human_review_queue` runs under the same
-interceptor, which replays a human's recorded decision before its mapper is called, so that
-mapper only ever passes a row through or defers it.
+**Row caching is a property of the handler SHAPE, not of a stage type — except the one type
+that opts all the way out.** There is one row driver (`execution._run_row_mapper`): it narrows
+every row to the declared reads, answers what it can from the cache, groups what is left, and
+records each group as it lands. The only thing a stage type varies is `group_size` — one for
+every type but a batched `llm_transform`, whose model call takes N — so every row-mapped type
+but `human_review_queue` is keyed, recorded, logged, ordered and rejoined by the same code. A
+group that completed therefore survives a later group's failure with no batch-specific
+persistence anywhere. Hits are resolved before the grouping, so a replayed row never takes a
+seat in a model call. The store is `app.core.stage_cache` — `find_recorded_rows` is one bulk
+read per execution, keyed by (stage-definition fingerprint, input-row fingerprint), and
+`record` needs the write-capable `StageCache` accessor; the runtime holds that execution's
+state and decides only whether caching applies and whether a result may be recorded. A row
+carrying `_error`/`_deferred` is never recorded and no internal column is ever part of a
+recorded row, so a hit reports no spend. `Stage.cache` decides whether a stage caches at all —
+no read, no write when it is false — and is outside the definition fingerprint. It defaults to
+true only on `llm_transform`, the one type whose recompute spends a model call; every other
+type recomputes unless its author turns caching on. `human_review_queue.cache` is fixed
+`False` (`Literal[False]`, no author may turn it on): the generic interceptor never touches
+this type, because a human decision is never merely "recomputable work to skip" — it is the
+one thing a deleted cache row must never be allowed to lose. Its own mapper
+(`_QueueRowMapper`, `app/runtime/stages/human_review_queue.py`) resolves a queueable row
+itself, `RunContext.decisions` (a `ReviewLedger`, `app/models/review_ledger.py`) first and
+`RunContext.stage_cache` on a miss — see `docs/run-manifest.md`.
 
 ## `run_log.py` — the per-run event log
 `_execute_stages` opens a `RunLog` on the run's `run_events` chunks for every entry path and

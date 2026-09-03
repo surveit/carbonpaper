@@ -58,8 +58,9 @@ def record_decision(
         project_id=project_id, stage_id=stage.id,
         stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
         input_row=frozen_row,
-        output_row=_build_output_row(
-            queue, frozen_row, verdict, reviewed_values, review_notes, reviewer, reviewed_at
+        output_row=queue.build_reviewed_row(
+            frozen_row, verdict=verdict.value, reviewed_values=reviewed_values,
+            reviewer=reviewer, reviewed_at=reviewed_at, review_notes=review_notes,
         ),
         # A human decided this row; no code ran, so there is no branch to replay.
         branches=None,
@@ -117,24 +118,3 @@ def _validate_notes_match_declared_column(queue: QueueConfig, review_notes: str 
         raise ReviewValidationError(
             "review_notes was supplied but the stage declares no review_notes_column"
         )
-
-
-def _build_output_row(
-    queue: QueueConfig,
-    frozen_row: Mapping[str, object],
-    verdict: ReviewVerdict,
-    reviewed_values: Mapping[str, object],
-    review_notes: str | None,
-    reviewer: str,
-    reviewed_at: str,
-) -> Mapping[str, object]:
-    output_row: dict[str, object] = {
-        **frozen_row,
-        **reviewed_values,
-        queue.verdict_column: verdict.value,
-        queue.reviewer_column: reviewer,
-        queue.reviewed_at_column: reviewed_at,
-    }
-    if queue.review_notes_column is not None:
-        output_row[queue.review_notes_column] = review_notes
-    return output_row

@@ -507,7 +507,8 @@ def test_cache_is_read_once_per_stage_execution(tmp_path, monkeypatch):
     assert len(calls) == 1
 
 
-def test_queue_stats_hold_when_every_row_is_served_from_the_cache(tmp_path, monkeypatch):
+def test_no_row_re_defers_when_every_row_is_already_decided(tmp_path, monkeypatch):
+    """Resolution now lives INSIDE the mapper, so every row reaches __call__ — none may re-defer."""
     stage = _stage(flt="flag == 'review'", input_columns=_FLAGGED_COLUMNS)
     src = _alternating_src()
 
@@ -515,17 +516,17 @@ def test_queue_stats_hold_when_every_row_is_served_from_the_cache(tmp_path, monk
         stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
     _approve_every_row(snapshot, fingerprints)
 
-    mapped: list[int] = []
-    call = human_review_queue._QueueRowMapper.__call__
+    deferred: list[int] = []
+    defer_row = human_review_queue._defer_row
 
-    def counting_call(self, row, index):
-        mapped.append(index)
-        return call(self, row, index)
+    def counting_defer(row, index):
+        deferred.append(index)
+        return defer_row(row, index)
 
-    monkeypatch.setattr(human_review_queue._QueueRowMapper, "__call__", counting_call)
+    monkeypatch.setattr(human_review_queue, "_defer_row", counting_defer)
     out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
 
-    assert mapped == []
+    assert deferred == []
     assert contribution_of(out).human_review_queue_stats == {
         "items_queued_total": 2, "items_passed_through": 2,
         "items_pending": 0, "items_decided": 2,

@@ -84,14 +84,24 @@ cache exists to replay recomputable work, and deleting a cache row must never de
 the one thing nothing can regenerate. `app.services.review.record_decision` writes
 two things when a reviewer submits a queue card:
 
-- `StageCacheEntry` (`app/core/stage_cache.py`), exactly as for any other stage — the
-  replay path a resumed run reads to skip a row a human already decided, and the
-  cross-project transport `/admin/cache` copies.
+- `StageCacheEntry` (`app/core/stage_cache.py`), exactly as for any other stage — a
+  copy computed from the ledger row, and the cross-project transport `/admin/cache` copies.
 - `ReviewDecision` (`app/models/records/review_decision.py`), an append-only row: verdict,
   the reviewed values, the note, the reviewer, both fingerprints, and the
   `workflow_version` the run was pinned to. Nothing ever edits or deletes a
   `ReviewDecision` — a correction is a new row, keyed the same way, so every past
   judgment stays on record even after a later one supersedes it.
+
+A resumed run reads the ledger first. `HumanReviewQueueStage.cache` is fixed `False` —
+the generic row-driver cache (`app.runtime.stages.execution`) never touches this stage
+type, so it cannot race the ledger for the same row. Instead `_QueueRowMapper` resolves
+each queueable row itself: `RunContext.decisions` (a `ReviewLedger`,
+`app/models/review_ledger.py`) first, `RunContext.stage_cache` on a miss. The ledger wins
+on disagreement — a cache entry imported from another project may hold a value this
+project's own reviewer later overrode — and the cache stays the sole replay path for a
+decision that predates the ledger, or one transported with no ledger row behind it.
+`ReviewLedger` is the only way `app.runtime` ever sees a decision: no module under it
+imports `ReviewDecision` or calls `.save()`/`.delete()` on one.
 
 `app.services.review.find_latest_decision` reads the newest row for a match key,
 ordered by the record's own `created_at` — never by `reviewed_at`, which a reviewer's
