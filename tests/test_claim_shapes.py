@@ -1,6 +1,8 @@
 """A shape is added, never edited, and never retired by absence."""
 from __future__ import annotations
 
+from uuid import uuid4
+
 import pytest
 from pydantic import ValidationError
 
@@ -8,18 +10,22 @@ from app.core.errors import ClaimIsImmutable, ClaimShapeIsImmutable
 from app.models.claims import (
     ClaimImportance,
     ClaimShapeInput,
+    ClaimStatus,
     DataUniverseRequirement,
     StageOutputCellCitation,
 )
 from app.models.records.claims import Claim, ClaimShape
+from app.models.schema import Column
 from app.services import claim_shapes
 from app.services.errors import ClaimShapeWriteRefused
 
 _PROJECT = "ai_lobbying"
 # The two figures that run really published, with the coverage each one asserts.
+_TIME = Column(name="period_start", type="date", nullable=False)
 _SPEND = ClaimShapeInput(
     label="Reported by outside firms as received for AI lobbying in the United States, in dollars",
     requires=DataUniverseRequirement.closed, importance=ClaimImportance.primary,
+    context=[_TIME],
     qualifiers=["Income no firm reported. Filing is required by law, so a firm that did "
                 "not file is not in this figure."],
 )
@@ -29,8 +35,9 @@ _CORPUS = ClaimShapeInput(
 )
 
 
-def _claim(shape_id: str, value: float = 63027729.0) -> Claim:
+def _claim(shape_id: str, value: float = 63027729.0, claim_id: str = "") -> Claim:
     return Claim(
+        id=claim_id or uuid4().hex,
         created_by_project_id=_PROJECT, shape_id=shape_id,
         citation=StageOutputCellCitation(
             run_id="20260901T103753.789399", stage_id="ai_spend_totals",
@@ -45,6 +52,7 @@ def test_an_authored_shape_comes_back_with_an_id_what_it_covers_and_its_qualifie
 
     assert (stored.label, stored.requires) == (_SPEND.label, "closed")
     assert stored.qualifiers == _SPEND.qualifiers
+    assert [column.name for column in stored.context] == ["period_start"]
     assert stored.id
 
 
@@ -107,12 +115,24 @@ def test_a_shape_cannot_be_written_over_by_id():
 
 
 # ── a claim is written once ──────────────────────────────────────────────────
-def test_saving_a_claim_a_second_time_raises():
+def test_a_claims_status_is_the_only_thing_that_may_move():
+    claim = _claim("some_shape")
+    claim.save()
+
+    claim.status = ClaimStatus.approved
+    claim.save()
+
+    assert Claim.load(claim.id).status == ClaimStatus.approved
+    with pytest.raises(ValidationError):
+        claim.shape_id = "another_shape"
+
+
+def test_a_claim_cannot_be_written_over_by_id():
     claim = _claim("some_shape")
     claim.save()
 
     with pytest.raises(ClaimIsImmutable):
-        claim.save()
+        _claim("a_different_shape", claim_id=claim.id).save()
 
 
 def test_a_claim_can_be_deleted_and_the_shape_claimed_again():

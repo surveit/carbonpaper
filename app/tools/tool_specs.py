@@ -153,29 +153,50 @@ other way to learn one. An empty result means none have been agreed yet.""",
                 "none; stages and published claims point at these.",
         },
         description="""\
-Store what this project claims: a figure the project promises to report,
-named before any stage computes it.
+Store what this project claims. A shape is a METRIC, not a sentence: the
+thing measured, tied to the methodology that measures it. "US lobbying spend
+on AI" is a shape. "$63m paid to outside firms in the first half of 2026" is
+not — the number and the period are a claim.
 
-`requires` asks ONE question about the dataset the figure comes from — does
-it hold every event of this kind?
+The line between the two is the METHODOLOGY, not how often something varies.
+A scope the method is inextricably tied to belongs in the metric: this data
+is US lobbying filings, so US is part of what is being measured and no
+different method would give another country. A scope the same method would
+measure again for another value is `context`.
 
-  closed  it does, so the figure IS that number (a register everyone must
+`context` are the columns each claim of this shape sits on — the period,
+whatever else it is sliced by — as ordinary columns: {"name": "period_start",
+"type": "date", "nullable": false}. One shape and one context is ONE FACT,
+so a second number for the same context is refused.
+
+`requires` asks ONE question about the dataset the metric is computed from —
+does it hold every event of this kind?
+
+  closed  it does, so the number IS the total (a register everyone must
           file into)
-  open    it holds only what was captured, so the figure is a floor — AT
-          LEAST that number (a scraped corpus)
+  open    it holds only what was captured, so the number is a floor — AT
+          LEAST that (a scraped corpus)
 
-No default. It is not a question about the world: a closed dataset can still
+No default, and not a question about the world: a closed dataset can still
 miss events, and that belongs in `qualifiers` — what a reader must know
 before using the number, and what it cannot see.
 
-  {"label": "Reported by outside firms as received for AI lobbying in the "
-            "United States, in dollars",
+  {"label": "US lobbying spend on AI, reported by outside firms",
    "requires": "closed", "importance": "primary",
+   "template": "Outside firms reported ${value} in AI lobbying income "
+               "for ${period_start} to ${period_end}.",
+   "context": [{"name": "period_start", "type": "date", "nullable": false},
+               {"name": "period_end", "type": "date", "nullable": false}],
    "qualifiers": ["Counts only lobbying that was filed. Filing is required "
                   "by law, so the gap should be small."]}
 
 REFUSED WHOLE on a repeated label, or a label this project already claims —
 a stored shape cannot be edited, so a wrong one is retired and replaced.
+
+`template` is the sentence a claim's own words are suggested from. It
+asserts nothing — a person writes or rewrites the claim itself — so it is
+the one thing on a shape that may be rewritten later, from a claim that read
+better.
 
 Agree these with the user; never coin one to fill the list out.""",
     ),

@@ -31,3 +31,11 @@ class ClaimShapeWriteRefused(ValueError):
     def __init__(self, refusals: list[str]) -> None:
         super().__init__("; ".join(refusals))
         self.refusals = refusals
+
+
+class ClaimRefused(ValueError):
+    """Nothing is written unless the claim may stand."""
+
+    def __init__(self, refusals: list[str]) -> None:
+        super().__init__("; ".join(refusals))
+        self.refusals = refusals
