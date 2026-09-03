@@ -23,7 +23,7 @@ import pyarrow as pa
 
 import app.web.routers.review as review_routes
 from app.core.frames import write_frame_table
-from app.core.stage_cache import StageCacheEntry, compute_row_fingerprint
+from app.core.stage_cache import StageCache, StageCacheEntry, compute_row_fingerprint
 from app.services.project import save_working_copy_as_version
 from app.models import WorkflowStage, parse_stage
 from app.models.stages.human_review_queue import ReviewVerdict
@@ -81,7 +81,7 @@ def _load_quotes_stage(root):
             }}
 
 
-# What _build_output_row adds on top of the frozen input row, and all the runtime keeps.
+# What build_reviewed_row adds on top of the frozen input row, and all the runtime keeps.
 _REVIEW_COLUMNS = queue_added_columns()
 
 
@@ -138,14 +138,14 @@ def _decide_data(fp, reviewed, prefilled=None, reviewer="Ada", **extra):
     }
 
 
-def _build_and_halt(tmp_path, monkeypatch):
+def _build_and_halt(tmp_path, monkeypatch, project: str = PROJECT):
     # The returned `input_fingerprints` are POSITIONALLY aligned to the snapshot's rows.
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(
         lt, "call_llm", lambda stage_id, llm_config, row, **kw: {"score": 1}
     )
 
-    project_dir = tmp_path / PROJECT
+    project_dir = tmp_path / project
     _write_stage(project_dir, "01_load.json", _load_quotes_stage(project_dir))
     _write_stage(project_dir, "02_score.json", _score_stage())
     _write_stage(project_dir, "03_review.json", _review_stage())
@@ -157,7 +157,7 @@ def _build_and_halt(tmp_path, monkeypatch):
 
     run_dir = project_dir / "runs" / manifest["run_id"]
     snapshot = pd.read_parquet(run_dir / "queue" / "review.parquet")
-    fingerprints = _read_fingerprints(PROJECT, run_dir.name)
+    fingerprints = _read_fingerprints(project, run_dir.name)
     return project_dir, manifest["run_id"], run_dir, snapshot, fingerprints
 
 
@@ -176,6 +176,7 @@ def _put_cached_decision(
         },
         review_notes=None,
         reviewer="local", reviewed_at="2026-07-01T00:00:00",
+        workflow_version=None,
     )
 
 
@@ -672,6 +673,7 @@ def test_a_bool_select_opens_on_the_recorded_value_of_a_decided_row(tmp_path, mo
         frozen_row={"id": snapshot.iloc[0]["id"], "flag": bool(snapshot.iloc[0]["flag"])},
         verdict=ReviewVerdict.modify, reviewed_values={"human_flag": True},
         review_notes=None, reviewer="Ada", reviewed_at="2026-07-01T00:00:00",
+        workflow_version=None,
     )
 
     html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
@@ -1800,6 +1802,7 @@ def test_progress_and_resume_are_seeded_from_the_whole_queue_not_a_page(tmp_path
             verdict=ReviewVerdict.approve,
             reviewed_values={"human_score": int(row["score"])},
             review_notes=None, reviewer="local", reviewed_at="2026-07-01T00:00:00",
+            workflow_version=None,
         )
 
     html = TestClient(app).get(f"/project/{PAGED_PROJECT}/runs/{run_id}/queue/review").text
@@ -1976,3 +1979,114 @@ def test_a_stage_that_never_queued_anything_is_not_offered_as_a_queue_to_read(
         f"/project/{PROJECT}/runs/{run_id}/stage/score/partial").text
 
     assert "/queue/" not in html
+
+
+# ── 15. The ledger survives a deleted stage cache ────────────────────────────
+
+
+def _delete_every_cache_entry(project: str) -> None:
+    for entry in StageCacheEntry.read_only().find_project_entries(project):
+        StageCacheEntry.delete(entry.id)
+
+
+def test_deleting_the_stage_cache_after_every_row_is_decided_still_completes_the_run(
+    tmp_path, monkeypatch
+):
+    """The invariant this task exists for: a deleted cache must never re-ask a decided row."""
+    project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    client = TestClient(app)
+    for fp, submitted in zip(fingerprints["input_fingerprints"], ["1", "7"]):
+        r = client.post(
+            f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
+            data=_decide_data(fp, {"human_score": submitted},
+                              prefilled={"human_score": "1"}, reviewer="Priya"),
+        )
+        assert r.status_code == 200, r.text
+
+    _delete_every_cache_entry(PROJECT)
+    assert StageCacheEntry.read_only().find_project_entries(PROJECT) == []
+
+    resumed = runner.resume_run(project_dir / "runs" / run_id, project_dir.name, run_id,
+                                *resumed_stages(project_dir, run_id))
+    assert resumed["status"] == "ok"
+
+    out = pd.read_parquet(project_dir / "runs" / run_id / "outputs" / "review.parquet")
+    assert sorted(out["human_score"].tolist()) == [1.0, 7.0]
+    assert (out["reviewer_id"] == "Priya").all()
+    assert sorted(out["decision"].tolist()) == ["approve", "modify"]
+
+
+def test_ledger_wins_over_a_stage_cache_entry_recording_a_different_value(
+    tmp_path, monkeypatch
+):
+    """A cache entry can disagree with the ledger — e.g. imported from elsewhere; the ledger must win."""
+    project_dir, run_id, run_dir, snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    stage_fingerprint = fingerprints["stage_fingerprint"]
+    first_fp, second_fp = fingerprints["input_fingerprints"]
+    first_row, second_row = snapshot.iloc[0], snapshot.iloc[1]
+
+    for fp, row in ((first_fp, first_row), (second_fp, second_row)):
+        _put_cached_decision(PROJECT, "review", stage_fingerprint, fp, row, ReviewVerdict.approve)
+
+    # No matching ledger row: a stale/imported cache entry, with a different value.
+    StageCache().record(
+        project_id=PROJECT, stage_id="review", stage_fingerprint=stage_fingerprint,
+        input_fingerprint=first_fp,
+        input_row={"id": first_row["id"], "quote": first_row["quote"],
+                   "score": int(first_row["score"])},
+        output_row={
+            "id": first_row["id"], "quote": first_row["quote"], "score": int(first_row["score"]),
+            "human_score": 999, "decision": "modify", "reviewer_id": "impostor",
+            "reviewed_at": "2020-01-01T00:00:00", "review_notes": None,
+        },
+        branches=None,
+    )
+
+    resumed = runner.resume_run(run_dir, PROJECT, run_id, *resumed_stages(project_dir, run_id))
+    assert resumed["status"] == "ok"
+
+    out = pd.read_parquet(run_dir / "outputs" / "review.parquet")
+    decided_row = out.loc[out["id"] == first_row["id"]].iloc[0]
+    assert decided_row["human_score"] == int(first_row["score"])  # the ledger's value
+    assert decided_row["reviewer_id"] == "local"  # never "impostor"
+
+
+def test_a_cache_only_decision_from_another_project_still_replays(tmp_path, monkeypatch):
+    """`/admin/cache` imports a cache with no ledger row behind it; that transport must still work."""
+    source_project = f"{PROJECT}_source"
+    dest_project = f"{PROJECT}_dest"
+    src_project_dir, _src_run_id, _src_run_dir, src_snapshot, src_fingerprints = _build_and_halt(
+        tmp_path, monkeypatch, project=source_project)
+    for fp, row in zip(src_fingerprints["input_fingerprints"], src_snapshot.iterrows()):
+        _put_cached_decision(
+            source_project, "review", src_fingerprints["stage_fingerprint"], fp, row[1],
+            ReviewVerdict.approve)
+
+    dest_project_dir, dest_run_id, dest_run_dir, _dest_snapshot, dest_fingerprints = _build_and_halt(
+        tmp_path, monkeypatch, project=dest_project)
+    assert dest_fingerprints["stage_fingerprint"] == src_fingerprints["stage_fingerprint"]
+    assert dest_fingerprints["input_fingerprints"] == src_fingerprints["input_fingerprints"]
+
+    cache = StageCache()
+    review_entries = [
+        entry for entry in cache.find_project_entries(source_project)
+        if entry.stage_id == "review"
+    ]
+    assert review_entries
+    for entry in review_entries:
+        assert cache.copy_entry_into(entry, dest_project)
+    # No ReviewDecision row exists for dest_project at all — only the copied cache.
+    assert review.find_latest_decision(
+        project_id=dest_project, stage_id="review",
+        stage_fingerprint=dest_fingerprints["stage_fingerprint"],
+        input_fingerprint=dest_fingerprints["input_fingerprints"][0],
+    ) is None
+
+    resumed = runner.resume_run(
+        dest_project_dir / "runs" / dest_run_id, dest_project, dest_run_id,
+        *resumed_stages(dest_project_dir, dest_run_id))
+    assert resumed["status"] == "ok"
+
+    out = pd.read_parquet(dest_run_dir / "outputs" / "review.parquet")
+    assert sorted(out["human_score"].tolist()) == sorted(int(s) for s in src_snapshot["score"])
+    assert (out["reviewer_id"] == "local").all()

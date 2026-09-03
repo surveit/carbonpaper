@@ -1,8 +1,4 @@
-"""Handler for the human_review_queue stage type.
-
-Every input row yields exactly one output row in its own input position; a row with
-no cached decision is marked deferred, never defaulted. On any deferral the mapper
-writes a fingerprints sidecar POSITIONALLY aligned to the snapshot's rows, and halts."""
+"""Handler for the human_review_queue stage type. docs/run-manifest.md"""
 
 from __future__ import annotations
 
@@ -18,6 +14,7 @@ from app.core.frames import table_to_frame
 from app.core.frames import write_frame_file_with_csv_fallback
 from app.core.predicate import parse_predicate
 from app.models import AbstractStage, WorkflowStage
+from app.models.review_ledger import DecidedRow, ReviewLedger
 from app.models.stage_contribution import QueueStats, StageContribution
 from app.models.stages.human_review_queue import (
     HumanReviewQueueStage,
@@ -26,7 +23,7 @@ from app.models.stages.human_review_queue import (
     ReviewVerdict,
     SortDirection,
 )
-from app.core.stage_cache import compute_row_fingerprint
+from app.core.stage_cache import ReadOnlyStageCache, StageCacheEntry, compute_row_fingerprint
 from app.models.records.queue_fingerprints import QueueFingerprints
 
 from ..context import RunContext, RunIdentity
@@ -86,13 +83,39 @@ class _QueueRowMapper:
         src: pd.DataFrame,
     ) -> None:
         self._queue = queue
-        _require_project_scope(ctx, queue_stage.id)
+        identity, stage_cache, decisions = _require_project_scope(ctx, queue_stage.id)
         self._queueable = _compute_queueable_mask(src, queue.filter, queue_stage.id)
+        self._decisions: dict[str, DecidedRow] = {}
+        self._cached: dict[str, StageCacheEntry] = {}
+        # bust_cache re-asks a human — a re-ask, never a loss: the ledger keeps every answer.
+        if not ctx.params.bust_cache:
+            stage_fingerprint = queue_stage.compute_definition_fingerprint()
+            self._decisions = decisions.find_recorded_decisions(queue_stage.id, stage_fingerprint)
+            self._cached = stage_cache.find_recorded_entries(
+                identity.project, queue_stage.id, stage_fingerprint)
 
     def __call__(self, row: Row, index: int) -> Row:
         if not self._queueable[index]:
             return _skip_row(self._queue, row)
+        decided = self._resolve_decided_row(row)
+        if decided is not None:
+            return decided
         return _defer_row(row, index)
+
+    def _resolve_decided_row(self, row: Row) -> Row | None:
+        """The ledger first: a cache entry imported from elsewhere must never outrank it."""
+        fingerprint = compute_row_fingerprint(row)
+        decision = self._decisions.get(fingerprint)
+        if decision is not None:
+            return self._queue.build_reviewed_row(
+                row, verdict=decision.verdict, reviewed_values=decision.reviewed_values,
+                reviewer=decision.reviewer, reviewed_at=decision.reviewed_at,
+                review_notes=decision.review_notes,
+            )
+        entry = self._cached.get(fingerprint)
+        if entry is not None and entry.output_row is not None:
+            return dict(entry.output_row)
+        return None
 
     def finish_mapped_rows(
         self,
@@ -121,13 +144,16 @@ class _QueueRowMapper:
 # --- _QueueRowMapper.__init__: once per stage execution ------------------------
 
 
-def _require_project_scope(ctx: RunContext, sid: str) -> None:
-    if ctx.identity is None or ctx.stage_cache is None:
+def _require_project_scope(
+    ctx: RunContext, sid: str
+) -> tuple[RunIdentity, ReadOnlyStageCache, ReviewLedger]:
+    if ctx.identity is None or ctx.stage_cache is None or ctx.decisions is None:
         raise ValueError(
             f"human_review_queue '{sid}' requires a project-scoped (production) "
-            "run: RunContext.identity and RunContext.stage_cache must both be "
-            "set, but this run carries neither."
+            "run: RunContext.identity, RunContext.stage_cache and "
+            "RunContext.decisions must all be set, but this run carries none of them."
         )
+    return ctx.identity, ctx.stage_cache, ctx.decisions
 
 
 def _compute_queueable_mask(src: pd.DataFrame, flt: str | None, sid: str) -> list[bool]:
@@ -171,15 +197,11 @@ def _approve_row(queue: QueueConfig, row: Row, index: int) -> Row:
 
 
 def _add_review_columns(queue: QueueConfig, row: Row, verdict: ReviewVerdict) -> Row:
-    added: Row = {
-        target: row[source] for source, target in queue.reviewed_columns.items()
-    }
-    added[queue.verdict_column] = verdict.value
-    added[queue.reviewer_column] = pd.NA
-    added[queue.reviewed_at_column] = pd.NA
-    if queue.review_notes_column is not None:
-        added[queue.review_notes_column] = pd.NA
-    return {**row, **added}
+    reviewed_values = {target: row[source] for source, target in queue.reviewed_columns.items()}
+    return queue.build_reviewed_row(
+        row, verdict=verdict.value, reviewed_values=reviewed_values,
+        reviewer=pd.NA, reviewed_at=pd.NA, review_notes=pd.NA,
+    )
 
 
 # --- finish_mapped_rows: the deferred rows, the snapshot and its sidecar ------

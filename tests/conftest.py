@@ -16,6 +16,7 @@ import pytest
 from app.core.errors import LLMError
 from app.core.stage_cache import ReadOnlyStageCache
 from app.models import Stage, TableSchema, Workflow, WorkflowStage, WorkflowStageInput
+from app.models.review_ledger import ReviewLedger
 from app.models.stages.signature import promised_output_schema, transform_input_schemas
 from app.models.stage_contribution import StageContribution
 from app.runtime.manifest import read_run_manifest
@@ -178,14 +179,18 @@ def make_run_context(
     run_dir: Path = Path("."),
     identity: RunIdentity | None = None,
     stage_cache: ReadOnlyStageCache | None = None,
+    decisions: ReviewLedger | None = None,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
     bust_cache: bool = False,
     queue_auto_approve: bool = False,
 ) -> RunContext:
+    # Built here so a caller naming `identity` need not also pass a matching ledger.
+    if decisions is None and identity is not None:
+        decisions = ReviewLedger(identity.project)
     return RunContext(
         run_dir=run_dir,
-        identity=identity, stage_cache=stage_cache,
+        identity=identity, stage_cache=stage_cache, decisions=decisions,
         params=RunParameters(
             limits=dict(limits or {}), offsets=dict(offsets or {}),
             bust_cache=bust_cache, queue_auto_approve=queue_auto_approve,

@@ -5,8 +5,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from app.core.errors import ReviewValidationError
-from app.core.stage_cache import StageCacheEntry
+from app.core.stage_cache import StageCacheEntry, to_json_safe_row
 from app.models import WorkflowStage
+from app.models.records.review_decision import ReviewDecision
 from app.models.stages.human_review_queue import (
     QueueConfig,
     ReviewVerdict,
@@ -36,22 +37,47 @@ def record_decision(
     verdict: ReviewVerdict, reviewed_values: Mapping[str, object],
     review_notes: str | None,
     reviewer: str, reviewed_at: str,
+    workflow_version: str | None,
 ) -> None:
     """`reviewed_values` is keyed by TARGET column name, already coerced by the caller."""
     queue = _require_queue_config(stage)
     _validate_verdict_came_from_a_human(verdict)
     _validate_reviewed_values_match_declared_columns(queue, reviewed_values)
     _validate_notes_match_declared_column(queue, review_notes)
+    # The ledger first: a failure after this costs a replay, not the judgement.
+    ReviewDecision(
+        project=project_id, stage_id=stage.id,
+        stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
+        frozen_input=to_json_safe_row(frozen_row),
+        verdict=verdict, reviewed_values=to_json_safe_row(reviewed_values),
+        review_notes=review_notes,
+        reviewer=reviewer, reviewed_at=reviewed_at,
+        workflow_version=workflow_version,
+    ).save()
     StageCacheEntry.read_write().record(
         project_id=project_id, stage_id=stage.id,
         stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
         input_row=frozen_row,
-        output_row=_build_output_row(
-            queue, frozen_row, verdict, reviewed_values, review_notes, reviewer, reviewed_at
+        output_row=queue.build_reviewed_row(
+            frozen_row, verdict=verdict.value, reviewed_values=reviewed_values,
+            reviewer=reviewer, reviewed_at=reviewed_at, review_notes=review_notes,
         ),
         # A human decided this row; no code ran, so there is no branch to replay.
         branches=None,
     )
+
+
+def find_latest_decision(
+    *, project_id: str, stage_id: str, stage_fingerprint: str, input_fingerprint: str,
+) -> ReviewDecision | None:
+    decisions = ReviewDecision.find(
+        project=project_id, stage_id=stage_id,
+        stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
+    )
+    if not decisions:
+        return None
+    # created_at is this record's own stamp; reviewed_at is caller-supplied, not a clock we control.
+    return max(decisions, key=lambda decision: decision.created_at)
 
 
 def _require_queue_config(workflow_stage: WorkflowStage) -> QueueConfig:
@@ -92,24 +118,3 @@ def _validate_notes_match_declared_column(queue: QueueConfig, review_notes: str 
         raise ReviewValidationError(
             "review_notes was supplied but the stage declares no review_notes_column"
         )
-
-
-def _build_output_row(
-    queue: QueueConfig,
-    frozen_row: Mapping[str, object],
-    verdict: ReviewVerdict,
-    reviewed_values: Mapping[str, object],
-    review_notes: str | None,
-    reviewer: str,
-    reviewed_at: str,
-) -> Mapping[str, object]:
-    output_row: dict[str, object] = {
-        **frozen_row,
-        **reviewed_values,
-        queue.verdict_column: verdict.value,
-        queue.reviewer_column: reviewer,
-        queue.reviewed_at_column: reviewed_at,
-    }
-    if queue.review_notes_column is not None:
-        output_row[queue.review_notes_column] = review_notes
-    return output_row

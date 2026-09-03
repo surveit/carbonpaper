@@ -22,7 +22,6 @@ from app.models.stages.stage_base import AbstractStage, StageInput, StageType
 from app.models.stages.shared import find_predicate_column_issues
 from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ExtendsSignature
-from app.models.stages.warnings import CompilerWarning, warn
 
 if TYPE_CHECKING:
     from app.models.workflow_stage import WorkflowStageInput
@@ -119,21 +118,45 @@ class QueueConfig(StageConfig):
             )
         return v
 
+    def build_reviewed_row(
+        self,
+        row: Mapping[str, object],
+        *,
+        verdict: str,
+        reviewed_values: Mapping[str, object],
+        reviewer: object,
+        reviewed_at: object,
+        review_notes: object,
+    ) -> dict[str, object]:
+        """The row a decision produces, human or the runtime's own skip/approve."""
+        output_row: dict[str, object] = {
+            **row,
+            **reviewed_values,
+            self.verdict_column: verdict,
+            self.reviewer_column: reviewer,
+            self.reviewed_at_column: reviewed_at,
+        }
+        if self.review_notes_column is not None:
+            output_row[self.review_notes_column] = review_notes
+        return output_row
+
 
 class HumanReviewQueueStage(AbstractStage):
     type: Literal[StageType.human_review_queue]
     queue: QueueConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
     signature: ExtendsSignature
-    # On, against the default: the recorded decision IS the cache entry, so a run
-    # that consults none halts on every queueable row a human has already judged.
-    cache: bool = True
+    # The ledger replays a decision now, so the row cache must not race it for a row.
+    cache: bool = False
+
+    @field_validator("cache")
+    @classmethod
+    def _cache_never_arms_this_stage(cls, v: bool) -> bool:
+        """Stored specs predate the ledger and still say true; refusing them would strand a version."""
+        return False
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"queue": self.queue}
-
-    def find_handle_compiler_warnings(self) -> list[CompilerWarning]:
-        return find_queue_warnings(self)
 
     def find_config_column_issues(
         self, inputs: Sequence["WorkflowStageInput"]
@@ -186,14 +209,6 @@ class HumanReviewQueueStage(AbstractStage):
                 self.id, self.queue, inputs[0].table_schema, adds_by_name)
             + _find_review_record_target_issues(self.id, self.queue, adds_by_name)
         )
-
-
-def find_queue_warnings(stage: "HumanReviewQueueStage") -> list[CompilerWarning]:
-    if stage.cache:
-        return []
-    return [warn(stage, "nondeterministic",
-                 "caching is off, so no recorded decision is replayed and every run "
-                 "puts rows a human already judged back in front of one")]
 
 
 def _index_adds_by_name(signature: ExtendsSignature) -> dict[str, Column]:

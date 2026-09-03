@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from app.core.errors import ReviewValidationError
 from app.core.stage_cache import compute_row_fingerprint
 from app.models import TableSchema, Workflow, WorkflowNotFormed, WorkflowStage
+from app.models.records.run_manifest import RunManifest
 from app.models.stages.human_review_queue import QueueConfig, resolve_queue_config
 from app.services import review
 from app.web.breadcrumbs import build_run_child_crumbs
@@ -101,7 +102,8 @@ def queue_decide(
 ):
     stage_def = _require_queue_stage(load_stages(project_id).workflow, stage_id)
     queue = _require_queue_config(stage_def)
-    _refuse_a_closed_queue(project_id, run_id, stage_id)
+    run_record = load_run_record(project_id, run_id)
+    _refuse_a_closed_queue(run_record, stage_id)
     attributed_to = _require_reviewer_name(reviewer)
     supplied = _parse_posted_values(reviewed_values, "reviewed_values")
     prefilled = _parse_posted_values(prefilled_values, "prefilled_values")
@@ -118,6 +120,7 @@ def queue_decide(
             review_notes=_normalise_review_notes(review_notes),
             reviewer=attributed_to,
             reviewed_at=datetime.now().isoformat(timespec="seconds"),
+            workflow_version=run_record.workflow_version,
         )
     except ReviewValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -171,9 +174,9 @@ def _require_queue_config(stage_def: WorkflowStage) -> QueueConfig:
     return queue
 
 
-def _refuse_a_closed_queue(project_id: str, run_id: str, stage_id: str) -> None:
+def _refuse_a_closed_queue(run_record: RunManifest, stage_id: str) -> None:
     """A decision recorded now would be cached against rows this run already emitted."""
-    closed = _find_closed_note(project_id, run_id, stage_id)
+    closed = find_review_closed_note(run_record.find_stage_record(stage_id))
     if closed is not None:
         raise HTTPException(status_code=409, detail=closed)
 
