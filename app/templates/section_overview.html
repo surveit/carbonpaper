@@ -40,6 +40,24 @@
         <a class="btn ov-deliver-cta" href="{{ d.run_href }}">Open the run</a>
       </div>
 
+      {% if d.counts and (d.counts.claimed or d.counts.in_review or d.counts.skipped or d.counts.waiting) %}
+      <div class="ov-decisions">
+        {% if d.counts.claimed %}<span class="badge ok">{{ d.counts.claimed }} claimed</span>{% endif %}
+        {% if d.counts.in_review %}<span class="badge awaiting">{{ d.counts.in_review }} in review</span>{% endif %}
+        {% if d.counts.skipped %}<span class="badge">{{ d.counts.skipped }} skipped</span>{% endif %}
+        {% if d.counts.waiting %}
+        <b>{{ d.counts.waiting }} claim{{ '' if d.counts.waiting == 1 else 's' }} to write</b>
+        <a class="btn primary" href="{{ d.publish_href }}">Write them</a>
+        {% elif d.counts.in_review %}
+        <b>{{ d.counts.in_review }} waiting on review</b>
+        <a class="btn primary" href="{{ d.publish_href }}">Review them</a>
+        {% else %}
+        <span class="muted">every claim decided</span>
+        <a class="btn" href="{{ d.publish_href }}">See them</a>
+        {% endif %}
+      </div>
+      {% endif %}
+
       {% if d.published and d.published.figures %}
       <div class="ov-claims">
         {% for figure in d.published.figures if figure.primary %}
