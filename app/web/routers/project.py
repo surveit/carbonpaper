@@ -21,8 +21,9 @@ from app.models import (
     stage_to_json,
     validate_named_schema,
 )
+from app.models.claims import DATA_UNIVERSE_TOOLTIP
 from app.services import (
-    code_approval, generation, methodology, project, terms, versioning,
+    claim_shapes, code_approval, generation, methodology, project, terms, versioning,
 )
 from app.services.loader import list_parsed_stages, resolve_function_code
 from app.services.workspace import LOADER_BOOKKEEPING_KEYS
@@ -134,6 +135,8 @@ async def project_documentation(request: Request, project_name: str, tab: str = 
             "active_tab": "glossary" if tab == "glossary" else "methodology",
             "methodology": document,
             "terms": stored,
+            "shapes": claim_shapes.load_claim_shapes(project_name),
+            "coverage": DATA_UNIVERSE_TOOLTIP,
             "unreadable": "; ".join(unreadable),
             "kind_class": SCHEMA_KIND_CLASS,
             "kind_glyph": SCHEMA_KIND_GLYPH,

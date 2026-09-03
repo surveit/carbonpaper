@@ -23,3 +23,11 @@ class CacheArchiveRejected(Exception):
 
 class ProjectArchiveRejected(Exception):
     """A project archive this workspace could not read a project out of."""
+
+
+class ClaimShapeWriteRefused(ValueError):
+    """The WRITE is refused, whole: a bad entry takes the batch with it."""
+
+    def __init__(self, refusals: list[str]) -> None:
+        super().__init__("; ".join(refusals))
+        self.refusals = refusals

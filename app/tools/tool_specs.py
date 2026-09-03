@@ -5,7 +5,7 @@ together, so binding it is a single lookup and no half of it can go missing.
 from __future__ import annotations
 
 from app.core.agent.bound_tool import BoundToolSpec, bind_by_signature
-from app.tools import shared
+from app.tools import claim_shapes as claim_shape_tools, shared
 from app.tools.shared import MAX_OUTPUT_ROWS, MAX_RUNS_LISTED, MAX_SLEEP_SECONDS
 from app.tools.types import AgentTool, ToolParameterProse
 
@@ -132,6 +132,53 @@ which thing it meant.
 What is stored reaches every agent that writes prose about this project and
 is shown to the human on the project's Terms page. Agree the words with the
 user before you store them — never invent one to fill the list out.""",
+    ),
+    "read_claim_shapes": AgentTool(
+        fn=claim_shape_tools.read_claim_shapes,
+        label="Reading what the project claims",
+        parameters={"project_id": PROJECT_ID},
+        description="""\
+What this project claims: one shape per figure it promises to report, each
+with the coverage that figure asserts. Read this before you name `shape` on
+a stage's figure — the id you send there comes from here, and there is no
+other way to learn one. An empty result means none have been agreed yet.""",
+    ),
+    "write_claim_shapes": AgentTool(
+        fn=claim_shape_tools.write_claim_shapes,
+        label="Storing what the project claims",
+        parameters={
+            "project_id": PROJECT_ID,
+            "shapes": "The shapes to add or edit. An entry with an `id` edits that shape; "
+                "one without is new. Sending fewer retires none — stages and published "
+                "claims point at these.",
+        },
+        description="""\
+Store what this project claims: a figure the project promises to report,
+named before any stage computes it.
+
+`requires` asks ONE question about the dataset the figure comes from — does
+it hold every event of this kind?
+
+  closed  it does, so the figure IS that number (a register everyone must
+          file into)
+  open    it holds only what was captured, so the figure is a floor — AT
+          LEAST that number (a scraped corpus)
+
+No default. It is not a question about the world: a closed dataset can still
+miss events, and that belongs in `qualifiers` — what a reader must know
+before using the number, and what it cannot see.
+
+  {"label": "Reported by outside firms as received for AI lobbying in the "
+            "United States, in dollars",
+   "requires": "closed", "importance": "primary",
+   "qualifiers": ["Counts only lobbying that was filed. Filing is required "
+                  "by law, so the gap should be small."]}
+
+REFUSED WHOLE on a repeated label, a label already claimed sent without its
+id, an id this project does not hold, or a `requires` change on a shape
+something has been claimed under.
+
+Agree these with the user; never coin one to fill the list out.""",
     ),
     "get_project_status": AgentTool(
         fn=shared.get_project_status,

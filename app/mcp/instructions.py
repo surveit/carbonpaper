@@ -81,7 +81,11 @@ record, and it returns the project record, whose `id` every other tool takes.
              and read_stage_output_rows when the question is about a ROW
   TERMS      read_terms to see what is agreed, then write_terms once the user has
              agreed the rest. Every later phase writes in those words.
-  PLANNING   (no tools — this is where you ask the user)
+             read_claim_shapes to see what is already promised.
+  PLANNING   write_claim_shapes once you and the user agree what the workflow is
+             for. A shape is a figure this project promises to report, so the
+             shapes ARE the expected outcome — everything you build after this
+             exists to fulfil them, and a workflow that cannot is not done.
   BUILD      add_stage, edit_stages, delete_stage, then generate_stage_tests and
              loop edit_stages -> run_stage_tests until they pass. Still BUILD.
              If a write is refused because the step needs unsandboxed Python,

@@ -21,6 +21,10 @@ class ContributorNotInFanIn(ValueError):
     """A trace was told to follow a contributor the run's lineage does not record."""
 
 
+class ClaimIsImmutable(ValueError):
+    """A claim is written once: what a reader saw and what is stored can never disagree."""
+
+
 class CitationMismatch(ValueError):
     """A report stage cited a cell for a value that cell does not hold."""
 

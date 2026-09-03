@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from app.core.json_types import JsonScalar
 from app.core.ids import ID
+from app.models.schema import _Base
 
 
 class ClaimImportance(str, Enum):
@@ -17,9 +18,27 @@ class ClaimImportance(str, Enum):
 
 class DataUniverseRequirement(str, Enum):
     open = "open"
-    equal_coverage = "equal_coverage"
     closed = "closed"
 
+
+# The word is the fact and goes on the page; this explains it on hover.
+DATA_UNIVERSE_TOOLTIP = {
+    "open": "The dataset holds only the events it captured, so this figure is a floor: "
+            "the real number is AT LEAST this.",
+    "closed": "The dataset holds every event of this kind, so this figure is the total: "
+              "it IS this number.",
+}
+
+
+
+class AuthoredClaimShape(_Base):
+    """One entry of what a project claims, as written. `id` names a shape already stored."""
+
+    id: ID | None = None
+    label: str
+    requires: DataUniverseRequirement
+    importance: ClaimImportance
+    qualifiers: list[str] = []
 
 
 class Citation(BaseModel):
