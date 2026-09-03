@@ -429,7 +429,6 @@ def export_project(project_id: str) -> WorkflowFile:
     if document is None:
         raise ValueError(f"project '{project_id}' has no document — cannot export")
     project_terms = terms.load_terms(project_id)
-    stages = loader.list_parsed_stages(loader.load_stage_entries(project_id))
     return WorkflowFile(
         name=meta.name,
         document=document,
@@ -437,8 +436,21 @@ def export_project(project_id: str) -> WorkflowFile:
         source=meta.source,
         data_model=project_terms.nouns,
         verbs=project_terms.verbs,
-        stages=stages,
+        stages=_read_latest_version_stages(project_id),
     )
+
+
+def _read_latest_version_stages(project_id: str) -> list[Stage]:
+    """A version is what a run pins and what an importer can run; a working copy is neither."""
+    version_id = versioning.find_latest_version_id(project_id)
+    if version_id is not None:
+        return versioning.load_version_stages(project_id, version_id)
+    if loader.exists(project_id):
+        raise ValueError(
+            f"project '{project_id}' has stages but no version, and a bundle carries "
+            "versioned stages — save the working copy as a version first"
+        )
+    return []
 
 
 def import_project(
