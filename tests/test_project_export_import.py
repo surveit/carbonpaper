@@ -1,8 +1,4 @@
-"""project.py's export/import round-trip: export_project reads a project's
-latest version through the service loaders into a WorkflowFile; import_project
-writes a WorkflowFile back through the service writers. The behavior worth
-covering end-to-end is that round trip (carried through actual JSON text —
-WorkflowFile.to_json / model_validate_json, the form a real caller uses)."""
+"""The export/import round trip, carried through the JSON text a real caller uses."""
 from __future__ import annotations
 
 import json

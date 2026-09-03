@@ -429,8 +429,7 @@ def export_project(project_id: str) -> WorkflowFile:
     if document is None:
         raise ValueError(f"project '{project_id}' has no document — cannot export")
     project_terms = terms.load_terms(project_id)
-    # A version is what a run pins and what an importer can run; a working copy is
-    # neither, and one that was never versioned cannot be run here either.
+    # A run pins a version, never the working copy.
     latest = versioning.find_latest_version_id(project_id)
     return WorkflowFile(
         name=meta.name,
