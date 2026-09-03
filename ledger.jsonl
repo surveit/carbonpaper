@@ -2596,3 +2596,4 @@
 {"run_id":"33757958592","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33757958592","created":"2026-09-03T12:55:15Z","branch":"fix/claims-are-immutable","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"33757912041","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33757912041","created":"2026-09-03T12:55:26Z","branch":"fix/claims-are-immutable","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"33757939651","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33757939651","created":"2026-09-03T12:55:57Z","branch":"fix/claims-are-immutable","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"33758026772","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33758026772","created":"2026-09-03T12:55:59Z","branch":"feat/claim-submissions","event":"pull_request","contracts_kept":16,"findings":[]}
