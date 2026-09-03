@@ -272,7 +272,7 @@ WORKED_STAGE_EXAMPLE = """\
       {"case": "reported_amount is blank", "expected": "amount_usd is blank too"},
       {"case": "reported_amount is not in dollars", "expected": "the step refuses the row"}
     ],
-    "code": "def transform(row):\\n    reported = row['reported_amount']\\n    if reported == None:\\n        return dict(row, amount_usd = None)\\n    if not reported.startswith('$'):\\n        refuse('reported_amount %s is not US dollars' % reported)\\n    return dict(row, amount_usd = float(reported[1:].replace(',', '')))\\n"
+    "code": "def transform(row):\\n    reported = row['reported_amount']\\n    if reported == None:\\n        return dict(row, **{'amount_usd': None})\\n    if not reported.startswith('$'):\\n        refuse('reported_amount %s is not US dollars' % reported)\\n    return dict(row, **{'amount_usd': float(reported[1:].replace(',', ''))})\\n"
   }
 }
 ```"""

@@ -13,6 +13,7 @@ from typing import Sequence
 
 from app.core.llm import LLMModel
 from app.models.stages.aggregate import RETIRED_FORMULAS
+from app.models.stages.stage_base import StageType
 from app.models.stages.stage_types import APPROVAL_REQUIRED_TYPES
 from app.services.code_approval import has_code_execution_approval
 from app.models import StageDraft, StageEdit
@@ -120,9 +121,7 @@ CODE_EXECUTION_REFUSAL = (
     "stage '{sid}': `{stage_type}` runs Python this project has not approved. Carbon "
     "Paper is not built for arbitrary code execution — a Python step runs on the "
     "machine hosting this project, with its permissions: it can read files, reach the "
-    "network and install packages, and nothing here inspects what it does. It also "
-    "reshapes the table opaquely, so a trace stops at it and a published figure cannot "
-    "be walked back to the rows behind it.\n"
+    "network and install packages, and nothing here inspects what it does.{trace_cost}\n"
     "Most of what this type is used for no longer needs it: `explode` unpacks a list "
     "column into rows and a `starlark_row_function` after it can do the per-row work "
     "sandboxed; `dedupe`, `sort_rank`, `aggregate`, `enrich`, `expand` and `union` cover "
@@ -130,6 +129,13 @@ CODE_EXECUTION_REFUSAL = (
     "If this genuinely needs Python, tell the project's owner what it will do and why no "
     "declared stage fits, and ask whether to turn code execution on for this project. "
     "Only once THEY have answered yes, call `approve_code_execution`."
+)
+
+
+# The other two gated types keep per-row provenance, so only this one costs the trace.
+_FRAME_FUNCTION_TRACE_COST = (
+    " It also reshapes the table opaquely, so a trace stops at it and a published "
+    "figure cannot be walked back to the rows behind it."
 )
 
 
@@ -148,7 +154,12 @@ def find_unapproved_code_issues(
         return []
     if has_code_execution_approval(project_id):
         return []
-    return [CODE_EXECUTION_REFUSAL.format(sid=candidate.get("id"), stage_type=stage_type)]
+    trace_cost = (
+        _FRAME_FUNCTION_TRACE_COST
+        if stage_type == StageType.python_frame_function else ""
+    )
+    return [CODE_EXECUTION_REFUSAL.format(
+        sid=candidate.get("id"), stage_type=stage_type, trace_cost=trace_cost)]
 
 
 AGGREGATION_WHERE_REFUSAL = (
