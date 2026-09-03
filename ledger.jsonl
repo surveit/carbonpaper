@@ -2639,3 +2639,4 @@
 {"run_id":"33770276712","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33770276712","created":"2026-09-03T15:02:57Z","branch":"fix/starlark-filter-column-walk","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"33770883605","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33770883605","created":"2026-09-03T15:08:49Z","branch":"fix/blocking-table-loads","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"33770883605","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33770883605","created":"2026-09-03T15:09:27Z","branch":"fix/blocking-table-loads","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"33771003013","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33771003013","created":"2026-09-03T15:10:01Z","branch":"feat/closed-queue-reads-output","event":"pull_request","contracts_kept":16,"findings":[]}
