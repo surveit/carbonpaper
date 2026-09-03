@@ -50,6 +50,23 @@ def test_export_then_import_moves_entries_under_the_destination_project():
     assert moved.project == "destination"
 
 
+def test_a_row_carrying_a_unicode_line_separator_survives_the_round_trip():
+    """U+2028 is a line break to str.splitlines but not to json.dumps, so it splits a record."""
+    StageCacheEntry.read_write().record(
+        project_id=_SOURCE, stage_id=_STAGE, stage_fingerprint="fp_a",
+        input_fingerprint="row_1",
+        input_row={"specific_issues": "Issues related to AI.\u2028Trade promotion."},
+        output_row={"is_abusive": False, "category": 1}, branches=[],
+    )
+
+    report = import_stage_cache(export_stage_cache(_SOURCE), "destination")
+
+    assert report.written == 1
+    moved = StageCacheEntry.read_only().get("destination", _STAGE, "fp_a", "row_1")
+    assert moved is not None
+    assert moved.output_row == {"is_abusive": False, "category": 1}
+
+
 def test_the_source_project_keeps_its_own_entries():
     _record(_SOURCE, stage_fingerprint="fp_a", input_fingerprint="row_1", verdict=True)
 
