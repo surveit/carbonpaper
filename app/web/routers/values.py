@@ -49,7 +49,7 @@ async def values_panel(request: Request, project_id: str, run_id: str,
     "/project/{project_id}/runs/{run_id}/stage/{stage_id}/traced",
     response_class=HTMLResponse,
 )
-async def traced_stage_panel(request: Request, project_id: str, run_id: str,
+async def values_stage_panel(request: Request, project_id: str, run_id: str,
                              stage_id: str, stage: str, row: int, column: str):
     """The run page's own stage panel, cut to the rows behind one figure."""
     manifest = load_manifest(project_id, run_id)
