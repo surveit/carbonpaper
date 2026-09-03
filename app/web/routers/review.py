@@ -17,8 +17,8 @@ from app.web.breadcrumbs import build_run_child_crumbs
 from app.web.config import templates
 from app.web.loading import (
     find_workflow_stage,
-    load_manifest,
     load_queue_fingerprints,
+    load_run_record,
     load_stages,
     queue_snapshot,
 )
@@ -27,6 +27,7 @@ from app.web.queue_view import (
     build_queue_page,
     find_definition_drift,
     find_positioned_item,
+    find_review_closed_note,
     require_reviewed_column,
 )
 
@@ -35,7 +36,6 @@ router = APIRouter()
 
 @router.get("/project/{project_id}/runs/{run_id}/queue/{stage_id}", response_class=HTMLResponse)
 async def queue_page(request: Request, project_id: str, run_id: str, stage_id: str):
-    manifest = load_manifest(project_id, run_id)
     stage_def = _require_queue_stage(load_stages(project_id).workflow, stage_id)
     queue = _require_queue_config(stage_def)
     drift, page = _build_page(project_id, run_id, stage_id, stage_def, queue)
@@ -52,7 +52,6 @@ async def queue_page(request: Request, project_id: str, run_id: str, stage_id: s
             "definition_drift": drift,
             "review_notes_column": queue.review_notes_column,
             "page": page,
-            "manifest_status": manifest.get("status"),
         },
     )
 
@@ -101,6 +100,7 @@ async def queue_decide(
 ):
     stage_def = _require_queue_stage(load_stages(project_id).workflow, stage_id)
     queue = _require_queue_config(stage_def)
+    _refuse_a_closed_queue(project_id, run_id, stage_id)
     attributed_to = _require_reviewer_name(reviewer)
     supplied = _parse_posted_values(reviewed_values, "reviewed_values")
     prefilled = _parse_posted_values(prefilled_values, "prefilled_values")
@@ -141,8 +141,15 @@ def _build_page(
     page = build_queue_page(
         project_id, run_id, stage_def, queue,
         queue_snapshot(project_id, run_id, stage_id), fingerprints, drift,
+        _find_closed_note(project_id, run_id, stage_id),
     )
     return drift, page
+
+
+def _find_closed_note(project_id: str, run_id: str, stage_id: str) -> str | None:
+    """The one authority on whether this queue still takes decisions: the run's own record."""
+    return find_review_closed_note(
+        load_run_record(project_id, run_id).find_stage_record(stage_id))
 
 
 # --- stage lookup, shared by every route ---------------------------------------
@@ -161,6 +168,13 @@ def _require_queue_config(stage_def: WorkflowStage) -> QueueConfig:
     queue = resolve_queue_config(stage_def.stage)
     assert queue is not None  # _require_queue_stage admits only human_review_queue
     return queue
+
+
+def _refuse_a_closed_queue(project_id: str, run_id: str, stage_id: str) -> None:
+    """A decision recorded now would be cached against rows this run already emitted."""
+    closed = _find_closed_note(project_id, run_id, stage_id)
+    if closed is not None:
+        raise HTTPException(status_code=409, detail=closed)
 
 
 def _validate_stage_definition_unchanged(

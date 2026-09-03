@@ -11,8 +11,10 @@ import math
 import pandas as pd
 from fastapi import HTTPException
 
+from app.core.run_status import StageStatus
 from app.core.stage_cache import StageCacheEntry
 from app.models import Column, WorkflowStage
+from app.models.run_manifest import StageRecord
 from app.models.schema import STR_COLUMN_TYPE
 from app.models.stages.human_review_queue import QueueConfig, ReviewVerdict
 from app.runtime.citations import build_row_trace_url
@@ -90,6 +92,8 @@ class PositionedItem:
 
 @dataclass(frozen=True)
 class QueuePage:
+    # Why the queue takes no more decisions; None while its stage awaits review.
+    closed_note: str | None
     reviewed_fields: list[ReviewedField]
     review_notes_label: str | None
     context_columns: list[QueuedColumn]
@@ -104,7 +108,7 @@ class QueuePage:
 def build_queue_page(
     project_id: str, run_id: str, stage_def: WorkflowStage, queue: QueueConfig,
     snapshot: pd.DataFrame | None, fingerprints: QueueFingerprints | None,
-    drift: str | None,
+    drift: str | None, closed_note: str | None,
 ) -> QueuePage:
     described = describe_queued_columns(stage_def, snapshot)
     lineage = resolve_lineage(stage_def, fingerprints)
@@ -124,6 +128,7 @@ def build_queue_page(
         )
     reviewed_count = sum(1 for item in items if item.prior_decision is not None)
     return QueuePage(
+        closed_note=closed_note,
         reviewed_fields=fields,
         review_notes_label=(
             None if queue.review_notes_column is None
@@ -161,6 +166,40 @@ def find_definition_drift(stage_def: WorkflowStage, halted_fingerprint: str) -> 
         "Its recorded decisions describe the definition it halted under, so they "
         "cannot be shown or added to. Restore that definition, or start a new run."
     )
+
+
+# What a closed queue says, per status its own stage reached.
+_USED_THE_DECISIONS = (
+    "because this run has moved on and used these decisions, they can no longer be modified"
+)
+_CLOSED_BY_STAGE_STATUS: dict[StageStatus, str] = {
+    StageStatus.OK: _USED_THE_DECISIONS,
+    StageStatus.VALIDATION_WARNINGS: _USED_THE_DECISIONS,
+    StageStatus.ERROR:
+        "because the stage stopped with an error, its decisions can no longer be modified",
+    StageStatus.CANCELLED:
+        "because the run was cancelled, its decisions can no longer be modified",
+    StageStatus.RUNNING: "the stage is running, so nothing here can be modified",
+    StageStatus.PENDING:
+        "the stage has not run yet in this run, so there is nothing here to modify",
+}
+
+_NO_STAGE_RECORD = (
+    "this run holds no record of the stage, so there is nothing here to modify"
+)
+
+
+def find_review_closed_note(stage_record: StageRecord | None) -> str | None:
+    """None only while the stage is halted for review, which is when a decision counts."""
+    if stage_record is not None and stage_record.status is StageStatus.AWAITING_REVIEW:
+        return None
+    said = (
+        _NO_STAGE_RECORD if stage_record is None
+        else _CLOSED_BY_STAGE_STATUS.get(
+            stage_record.status,
+            f"the stage is {stage_record.status}, so nothing here can be modified")
+    )
+    return f"Read-only: {said}"
 
 
 def require_reviewed_column(stage_def: WorkflowStage, target: str) -> Column:

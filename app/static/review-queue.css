@@ -150,6 +150,9 @@
     background: color-mix(in srgb, var(--warn-bg) 30%, var(--raised));
 }
 .reviewed-field .field-name { font-weight: 600; font-size: 13px; }
+/* Where the control stands on an open queue, so a reader's eye finds the answer
+   in the same place down a closed card. */
+.reviewed-field .field-recorded { font-size: 14px; font-weight: 500; }
 .reviewed-field .field-control {
     padding: 5px 8px; border: 1px solid var(--border-strong); border-radius: 3px;
     font: inherit; font-size: 14px; background: var(--raised);
@@ -216,6 +219,10 @@
 }
 
 .decide-gate { font-size: 13px; color: var(--muted); }
+
+/* The page's first line, above even the reviewer instructions: it changes what
+   every row below it means. */
+.queue-closed { margin-top: 0; }
 
 .definition-drift {
     margin: 16px 0; padding: 12px 16px; border-radius: 5px;

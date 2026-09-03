@@ -7,6 +7,9 @@
 {% block head_extra %}<script src="/static/queue-paginate.js"></script>{% endblock %}
 
 {% block content %}
+{% if page.closed_note %}
+<p class="banner queue-closed">🔒 {{ page.closed_note }}</p>
+{% endif %}
 {# What the reviewer is here to decide, before the queue and before the gate onto it:
    the rest of this page is a list of rows, and a row means nothing until the question
    has been read. Open, not a disclosure — a fold is how a reader skips it. #}
@@ -23,21 +26,25 @@
     <p class="stage-id">{{ stage_def.description }} · run <code>{{ run_id }}</code></p>
 </div>
 
+{% if not page.closed_note %}
 <div class="reviewer-gate">
     <label for="reviewer-name">Reviewing as</label>
     <input type="text" id="reviewer-name" placeholder="your name" autocomplete="name" autofocus>
     <span class="muted" id="reviewer-hint"></span>
 </div>
+{% endif %}
 
 <div class="queue-progress">
     <div class="bar"><div class="fill" id="progress-fill" style="width: {{ (100 * page.reviewed_count / page.total) | round if page.total else 0 }}%"></div></div>
     <p><strong id="reviewed-count">{{ page.reviewed_count }}</strong> of <strong>{{ page.total }}</strong> reviewed</p>
     {# Always rendered so the script can reveal it on the decision that completes
        the queue; no inline `display`, which would outrank the hidden attribute. #}
+    {% if not page.closed_note %}
     <form id="resume-run" action="/project/{{ project }}/runs/{{ run_id }}/resume" method="post"
           {% if not page.all_reviewed %}hidden{% endif %}>
         <button type="submit" class="btn primary">▶ Resume run</button>
     </form>
+    {% endif %}
 </div>
 
 {% if page.schema_note %}<p class="queue-note">{{ page.schema_note }}</p>{% endif %}
@@ -72,6 +79,9 @@
   const DECIDE_URL = `/project/${PROJECT}/runs/${RUN_ID}/queue/${STAGE_ID}/decide`;
   const CARD_URL = `/project/${PROJECT}/runs/${RUN_ID}/queue/${STAGE_ID}/card`;
   const TOTAL = {{ page.total | tojson }};
+  // A closed queue records nothing, so the page keeps only what READING it needs:
+  // the pager. Every control that would post is absent from the cards themselves.
+  const CLOSED = {{ (page.closed_note is not none) | tojson }};
   const REVIEWER_KEY = 'carbon_paper.reviewer';
 
   // The CTA's word IS the verdict the reviewer is about to record, so every state
@@ -146,16 +156,21 @@
   }
 
   showPage(0);
-  shippedCards.forEach(function (card) { rememberRecorded(card); syncCard(card); });
-  nameInput.value = localStorage.getItem(REVIEWER_KEY) || '';
-  syncReviewerGate();
-  // Reveal as soon as there is a name, but hide (and forget) only once the
-  // reviewer leaves the field: select-all-and-retype passes through a blank
-  // value mid-keystroke, which must not tear the queue down under them.
-  nameInput.addEventListener('input', function () {
-    if (reviewerName()) syncReviewerGate();
-  });
-  nameInput.addEventListener('blur', syncReviewerGate);
+  if (CLOSED) {
+    queueItems.hidden = false;
+    renderPager();
+  } else {
+    shippedCards.forEach(function (card) { rememberRecorded(card); syncCard(card); });
+    nameInput.value = localStorage.getItem(REVIEWER_KEY) || '';
+    syncReviewerGate();
+    // Reveal as soon as there is a name, but hide (and forget) only once the
+    // reviewer leaves the field: select-all-and-retype passes through a blank
+    // value mid-keystroke, which must not tear the queue down under them.
+    nameInput.addEventListener('input', function () {
+      if (reviewerName()) syncReviewerGate();
+    });
+    nameInput.addEventListener('blur', syncReviewerGate);
+  }
 
   // ── One field ──────────────────────────────────────────────────────────────
   // Every control is live from the moment the card renders, so a field has one
@@ -325,27 +340,29 @@
     if (revert) revertField(fieldOf(revert));
   });
 
-  document.addEventListener('change', function (ev) {
-    const card = ev.target.closest('.queue-card');
-    if (card) syncCard(card);
-  });
+  if (!CLOSED) {
+    document.addEventListener('change', function (ev) {
+      const card = ev.target.closest('.queue-card');
+      if (card) syncCard(card);
+    });
 
-  document.addEventListener('input', function (ev) {
-    const card = ev.target.closest('.queue-card');
-    if (!card) return;
-    growTextarea(ev.target);
-    syncCard(card);
-  });
+    document.addEventListener('input', function (ev) {
+      const card = ev.target.closest('.queue-card');
+      if (!card) return;
+      growTextarea(ev.target);
+      syncCard(card);
+    });
 
-  document.addEventListener('submit', function (ev) {
-    const form = ev.target.closest('.review-form');
-    if (!form) return;
-    ev.preventDefault();
-    const cta = form.querySelector('[data-cta]');
-    if (cta && cta.disabled) return;
-    const card = form.closest('.queue-card');
-    if (card) submitDecision(card);
-  });
+    document.addEventListener('submit', function (ev) {
+      const form = ev.target.closest('.review-form');
+      if (!form) return;
+      ev.preventDefault();
+      const cta = form.querySelector('[data-cta]');
+      if (cta && cta.disabled) return;
+      const card = form.closest('.queue-card');
+      if (card) submitDecision(card);
+    });
+  }
 })();
 </script>
 {% endblock %}

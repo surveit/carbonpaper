@@ -51,10 +51,13 @@
 {% if stage.status == 'awaiting_review' %}
 <section class="banner banner-review">
     <p>⏸ A model proposed a judgement on <strong>{{ stage.output_row_count }} item{% if stage.output_row_count != 1 %}s{% endif %}</strong> and the run paused here for a person to decide them. Nothing downstream runs until each one is kept or changed; the rest of the workflow then picks up from those decisions.</p>
-    {% if links.review_queue(stage.stage_id) %}<p><a href="{{ links.review_queue(stage.stage_id) }}" class="btn primary">Open review queue →</a></p>{% endif %}
+    {% if queue_link %}<p><a href="{{ queue_link }}" class="btn primary">Open review queue →</a></p>{% endif %}
 </section>
 {% elif stage.status == 'pending' %}
 <p class="muted"><em>This stage hasn't run yet.</em></p>
+{% elif queue_link %}
+{# The same page, after the run moved on: it is read-only there, so the word is not "review". #}
+<p><a href="{{ queue_link }}" class="btn">👤 Read the review decisions →</a></p>
 {% endif %}
 
 {# ── Tab bar ── #}

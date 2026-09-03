@@ -27,7 +27,7 @@
            The stored column each answer lands in is named once, on the decided
            card's recorded line at the foot. #}
         <div class="reviewed-fields">
-        <p class="field-column-heading">Columns to review</p>
+        <p class="field-column-heading">{% if page.closed_note %}Columns reviewed{% else %}Columns to review{% endif %}</p>
         {% for field in page.reviewed_fields %}
         {% set field_id = 'rf-' ~ item.input_fingerprint ~ '-' ~ field.target %}
         {# The control is LIVE from the moment the card renders, holding `prefill` —
@@ -45,6 +45,10 @@
              data-target="{{ field.target }}" data-prefill="{{ prefill_text }}">
             <label class="field-name" for="{{ field_id }}"
                    {% if field.description %}title="{{ field.description }}"{% endif %}>{{ field.source }}</label>
+            {% if page.closed_note %}
+            {# The recorded value itself, not a control holding it: nothing here takes input. #}
+            <span class="field-recorded">{% if prefill is none %}<em>no value</em>{% else %}{{ prefill }}{% endif %}</span>
+            {% else %}
             {% if field.control == 'radio' %}
             {# One name per field per card, so two cards' groups never join. The label
                is the hit target and the input itself is off-screen: the pill IS the
@@ -87,6 +91,7 @@
                 <button type="button" class="btn-field" data-field-revert
                         aria-label="Revert {{ field.source }}" aria-controls="{{ field_id }}">↩ Revert</button>
             </span>
+            {% endif %}
             {# Only where the record departs from what the stage produced: everywhere
                else the control above is already showing that value. #}
             {% if item.departs_from_received.get(field.target) %}
@@ -97,7 +102,7 @@
         </div>
         {% endfor %}
         </div>
-        {% if review_notes_column %}
+        {% if review_notes_column and not page.closed_note %}
         <label class="review-notes">
             <span>{{ page.review_notes_label }}</span>
             {# Live on a decided card too: the note is part of what the CTA re-records,
@@ -106,6 +111,11 @@
                       placeholder="Include any reasoning or citations for your decision">{{ item.prior_decision.review_notes if item.prior_decision and item.prior_decision.review_notes else '' }}</textarea>
         </label>
         {% endif %}
+        {% if page.closed_note %}
+        {% if not item.prior_decision %}
+        <p class="decide-gate">No decision was recorded for this row.</p>
+        {% endif %}
+        {% else %}
         {# The gate says what the CTA is about to record, so the button points at it —
            one id per card, off the same fingerprint `field_id` is built from. #}
         {% set gate_id = 'gate-' ~ item.input_fingerprint %}
@@ -121,6 +131,7 @@
                     {% if item.prior_decision %}disabled{% endif %}>{% if item.prior_decision %}✓ Recorded{% else %}✓ Approve{% endif %}</button>
             <span class="decide-gate" id="{{ gate_id }}" role="status">{% if item.prior_decision %}recorded as it stands — edit a column to record a change{% else %}{{ columns }} column{{ 's' if columns != 1 }} · nothing changed{% endif %}</span>
         </div>
+        {% endif %}
     </form>
     {# Below the controls, so recording a decision adds nothing above the place
        the reviewer just clicked. #}

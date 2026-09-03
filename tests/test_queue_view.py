@@ -124,7 +124,8 @@ def test_the_context_table_omits_the_columns_under_review():
     stage = _queue_stage(_LABEL_COLUMNS)
     snapshot = pd.DataFrame({"id": ["a"], "score": [2], "label": ["high"]})
 
-    page = queue_view.build_queue_page("p", "r", stage, stage.stage.queue, snapshot, None, None)
+    page = queue_view.build_queue_page("p", "r", stage, stage.stage.queue, snapshot,
+                                    fingerprints=None, drift=None, closed_note=None)
 
     assert [column.name for column in page.context_columns] == ["id", "score"]
 
@@ -133,7 +134,8 @@ def test_declared_context_columns_are_the_ordered_subset_shown():
     stage = _queue_stage(_LABEL_COLUMNS, context_columns=["score", "id"])
     snapshot = pd.DataFrame({"id": ["a"], "score": [2], "label": ["high"]})
 
-    page = queue_view.build_queue_page("p", "r", stage, stage.stage.queue, snapshot, None, None)
+    page = queue_view.build_queue_page("p", "r", stage, stage.stage.queue, snapshot,
+                                    fingerprints=None, drift=None, closed_note=None)
 
     assert [column.name for column in page.context_columns] == ["score", "id"]
 
@@ -142,7 +144,8 @@ def test_an_empty_context_columns_list_shows_no_noneditable_columns():
     stage = _queue_stage(_LABEL_COLUMNS, context_columns=[])
     snapshot = pd.DataFrame({"id": ["a"], "score": [2], "label": ["high"]})
 
-    page = queue_view.build_queue_page("p", "r", stage, stage.stage.queue, snapshot, None, None)
+    page = queue_view.build_queue_page("p", "r", stage, stage.stage.queue, snapshot,
+                                    fingerprints=None, drift=None, closed_note=None)
 
     assert page.context_columns == []
 
@@ -371,6 +374,7 @@ def test_a_record_departs_from_the_received_value_only_where_the_two_differ(
 
 def _page_of(*input_fingerprints: str) -> queue_view.QueuePage:
     return queue_view.QueuePage(
+        closed_note=None,
         reviewed_fields=[], review_notes_label=None, context_columns=[],
         schema_note=None, lineage_note=None,
         items=[
