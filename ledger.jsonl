@@ -2672,3 +2672,4 @@
 {"run_id":"33774240313","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33774240313","created":"2026-09-03T15:43:26Z","branch":"perf/cache-run-branches-on-disk","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"33774240313","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33774240313","created":"2026-09-03T15:44:02Z","branch":"perf/cache-run-branches-on-disk","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"33774633621","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33774633621","created":"2026-09-03T15:47:21Z","branch":"feat/tour-ai-lobbying-fixture","event":"pull_request","contracts_kept":16,"findings":[]}
+{"run_id":"33774740223","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33774740223","created":"2026-09-03T15:48:24Z","branch":"feat/run-workflow-multi-file","event":"pull_request","contracts_kept":16,"findings":[]}
