@@ -14,6 +14,7 @@ import pandas as pd
 from openpyxl.worksheet.worksheet import Worksheet
 
 from app.core.frames import (
+    STR_TYPE_NAME,
     read_frame_file,
     read_source_csv,
     read_source_excel,
@@ -46,6 +47,20 @@ _FORMAT_BY_SUFFIX: dict[str, FileFormat] = {
 # `False` (json only) for no inference at all. Which of the three a caller wants depends
 # on whether it has a declared schema, so this layer takes the answer rather than one.
 SourceDtype = Mapping[Hashable, Any] | type | bool | None
+
+
+# app.core cannot import app.models' Column.type, so callers pass plain strings.
+_TEXT_ON_DISK_TYPES = frozenset({STR_TYPE_NAME, "json", "date", "datetime"})
+
+
+def text_on_disk_columns(column_types: Mapping[str, str], fmt: FileFormat) -> list[str]:
+    """Columns to pin to `str` so a type pandas infers (a zero-padded id) survives."""
+    if fmt in (FileFormat.csv, FileFormat.tsv, FileFormat.xlsx):
+        return [name for name, type_ in column_types.items()
+                if type_ in _TEXT_ON_DISK_TYPES or type_.startswith("list[")]
+    if fmt == FileFormat.json:
+        return [name for name, type_ in column_types.items() if type_ == STR_TYPE_NAME]
+    return []
 
 
 def find_file_format(path: str) -> FileFormat | None:

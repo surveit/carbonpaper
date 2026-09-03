@@ -16,11 +16,9 @@ import pandas as pd
 from app.core.errors import FrameConcatMismatchError
 from app.core.files import find_stored_file_id
 from app.core.frames import concat_tables, frame_to_table
-from app.core.source_files import FileFormat, read_source_file
+from app.core.source_files import FileFormat, read_source_file, text_on_disk_columns
 from app.models import (
     DATE_COLUMN_TYPES,
-    JSON_COLUMN_TYPE,
-    STR_COLUMN_TYPE,
     TableSchema,
     WorkflowStage,
 )
@@ -32,21 +30,7 @@ from ..lineage import RowLineage, RowParent
 from ..stage_output import StageOutput
 from .execution import narrow_stage
 
-# Column types a text-on-disk file (csv) stores as text and that something
-# downstream re-reads as text: `str` itself, `date`/`datetime` (parsed below by
-# pd.to_datetime, which needs the original characters — on an int-inferred
-# YYYYMMDD column it would read the digits as nanoseconds), and
-# `json`/`list[X]` (parsed by the `list_columns` path or by a later stage).
-# Letting pandas guess any of them is the silent-data-loss case: a zero-padded
-# `002` declared `str` comes back as the integer 2.
-_TEXT_ON_DISK_TYPES = frozenset({STR_COLUMN_TYPE, JSON_COLUMN_TYPE}) | DATE_COLUMN_TYPES
-
-# The formats pandas type-INFERS, and so the only ones the declared schema has
-# anything to add to. xlsx is one of them: a workbook does type its cells, but
-# pd.read_excel hands openpyxl's values to the same inference csv goes through,
-# so a cell the sheet marks as text still comes back a number. parquet is read
-# through arrow, which hands pandas an already-typed column; geojson is built
-# from json.loads dicts.
+# The formats pandas type-infers, mirrored in app.core.source_files's own copy.
 _INFERRING_FORMATS = frozenset(
     {FileFormat.csv, FileFormat.tsv, FileFormat.json, FileFormat.xlsx}
 )
@@ -158,35 +142,16 @@ def _read_one_file(
 
 
 def _read_dtype(
-    schema: TableSchema | None, fmt: str, params: FileConnectorParams
+    schema: TableSchema | None, fmt: FileFormat, params: FileConnectorParams
 ) -> dict[Hashable, Any] | None:
     """Keyed `Hashable`, not `str`: pandas' `dtype=` Mapping key is invariant, so dict[str, …] fails."""
-    pinned: dict[Hashable, Any] = {name: str for name in _text_on_disk_columns(schema, fmt)}
+    column_types = {} if schema is None else {c.name: c.type for c in schema.columns}
+    pinned: dict[Hashable, Any] = {
+        name: str for name in text_on_disk_columns(column_types, fmt)}
     # An explicit `dtype` param wins per column name: the author's declaration of how
     # to READ the file beats what we infer from the declaration of what it CONTAINS.
     pinned.update(params.dtype or {})
     return pinned or None
-
-
-def _text_on_disk_columns(schema: TableSchema | None, fmt: str) -> list[str]:
-    if schema is None:
-        return []
-    # csv holds nothing but text, so every text-on-disk type — and `list[X]`, whose
-    # cells the `list_columns` path re-reads as text — is pinned to str and typed
-    # afterwards by code that knows the declaration. xlsx pins the same set: a cell
-    # holds one scalar, never a real list or dict, and a date pinned to str is
-    # re-read below by pd.to_datetime, which round-trips a genuine Excel date and
-    # rescues a compact YYYYMMDD one that inference would call a number.
-    if fmt in (FileFormat.csv, FileFormat.tsv, FileFormat.xlsx):
-        return [c.name for c in schema.columns
-                if c.type in _TEXT_ON_DISK_TYPES or c.type.startswith("list[")]
-    # json (lines) carries real JSON types, so only `str` is pinned: a JSON string
-    # "002" is still coerced to the integer 2 without it, but a `list[X]`/`json`
-    # column arrives as a real list/dict that `_parse_list_cell` already handles and
-    # stringifying would corrupt.
-    if fmt == FileFormat.json:
-        return [c.name for c in schema.columns if c.type == STR_COLUMN_TYPE]
-    return []
 
 
 def _date_columns(

@@ -406,8 +406,11 @@ def _is_date_cell(value: Any) -> bool:
     return isinstance(value, (_dt.date, np.datetime64))
 
 
+# Shared with app.core.source_files.text_on_disk_columns, so "str" is named once.
+STR_TYPE_NAME = "str"
+
 CELL_TYPE_PREDICATES: Mapping[str, Callable[[Any], bool]] = {
-    "str": _is_str_cell,
+    STR_TYPE_NAME: _is_str_cell,
     "int": _is_int_cell,
     "float": _is_float_cell,
     "bool": is_bool_cell,
@@ -437,7 +440,7 @@ def is_schema_type_satisfied_by_arrow_type(arrow_type: pa.DataType, type_name: s
         return (
             types.is_floating(arrow_type) or types.is_integer(arrow_type)
         ) and not types.is_boolean(arrow_type)
-    if type_name == "str":
+    if type_name == STR_TYPE_NAME:
         return types.is_string(arrow_type) or types.is_large_string(arrow_type)
     if type_name in ("datetime", "date"):
         return types.is_timestamp(arrow_type) or types.is_date(arrow_type)
