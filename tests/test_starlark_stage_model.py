@@ -203,7 +203,12 @@ def _compilable_idioms_from(description: str) -> list[str]:
         "expected a `return ...` row-merge idiom quoted in this authoring-guidance "
         f"text, found none: {description!r}"
     )
-    return [re.sub(r"=\s*\w+", "=1", match) for match in matches]
+    return [_with_placeholders_bound(match) for match in matches]
+
+
+def _with_placeholders_bound(idiom: str) -> str:
+    """`column` and `value` are prose placeholders, not names the module binds."""
+    return re.sub(r"\bvalue\b", "1", re.sub(r"=\s*\w+", "=1", idiom))
 
 
 @pytest.mark.parametrize("description", [
@@ -219,3 +224,20 @@ def test_authoring_guidance_teaches_a_row_merge_idiom_the_parser_accepts(descrip
     # syntax starlark-pyo3's parser rejects outright, so every stage authored by
     # following the guidance would fail to save. Checks EVERY quoted `return ...`
     # idiom in the passage, not just the first — a passage may quote more than one.
+
+
+# Either spelling of the column-name placeholder in the quoted idiom.
+_COLUMN_PLACEHOLDER = re.compile(r'"column"|\bkey\b')
+_SPACED_COLUMN = '"total spend"'
+
+
+@pytest.mark.parametrize("description", [
+    StarlarkFunction.model_fields["code"].description,
+    STAGE_TYPES["starlark_row_function"].notes,
+], ids=["StarlarkFunction.code field description", "STAGE_TYPES notes"])
+def test_the_taught_idiom_can_carry_a_column_whose_name_has_a_space(description):
+    # Regression: `dict(row, key=value)` parses only while the column is an identifier.
+    for idiom in _compilable_idioms_from(description):
+        spaced = _COLUMN_PLACEHOLDER.sub(_SPACED_COLUMN, idiom)
+        code = f"def transform(row):\n    {spaced}\n"
+        assert StarlarkFunction(code=code).code == code

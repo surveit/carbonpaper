@@ -77,6 +77,15 @@ def test_a_python_row_function_is_gated_too():
     assert stage_edit.find_unapproved_code_issues("some-project", row_stage) != []
 
 
+def test_only_the_frame_function_is_charged_with_ending_the_trace():
+    """The row function is grain-and-order preserving and the filter records its cuts."""
+    for kept in ("python_row_function", "filter_rows"):
+        refusal = stage_edit.find_unapproved_code_issues(
+            "some-project", dict(_FRAME_STAGE, type=kept))[0]
+        assert "trace" not in refusal, kept
+        assert "network" in refusal, kept
+
+
 def test_a_sandboxed_stage_is_never_gated():
     sandboxed = dict(_FRAME_STAGE, type="starlark_row_function")
     assert stage_edit.find_unapproved_code_issues("some-project", sandboxed) == []
