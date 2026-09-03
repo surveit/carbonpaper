@@ -138,12 +138,13 @@ jobs:
           junit: junit.xml
           token: ${{ github.token }}
 
-  # The three reports share one job because Actions bills every job a whole minute:
-  # each is seconds of work, so as separate jobs they cost three billed minutes and
-  # three checkout-plus-`uv sync` pairs. `if: always()` on each later report keeps
-  # what separate jobs gave — a broken lexicon script still lets vocabulary compute
-  # and post — while a report's own failure still stops that report's upload and
-  # comment, and reddens the job.
+  # The reports share one job so they share a checkout-plus-`uv sync` pair, and so
+  # `if: always()` on each later report keeps what separate jobs gave — a broken lexicon
+  # script still lets vocabulary compute and post — while a report's own failure still
+  # stops that report's upload and comment, and reddens the job.
+  #
+  # A red `reports` therefore means a report script BROKE. Never that a report found
+  # something: findings are the `warnings` job, so the two states are legible apart.
   #
   # Informational only, each upserted as one marker-tagged PR comment edited in place
   # on later pushes rather than posting a new comment each time. Never a required
@@ -243,12 +244,8 @@ jobs:
       # established as non-verb, so it catches the case the ratchet structurally can't — a
       # first bad verb use of a word nobody has flagged yet. Diffed against BASE, not
       # `lexicon.json`: the registry lags `app/`, so comparing to it would flag every PR for
-      # pre-existing drift instead of only what that PR introduces. `reports` carries no
-      # required-status-check, so a red step here surfaces the finding without blocking.
-      - name: New verb usage of an established word (non-blocking)
-        if: always() && steps.lexicon.conclusion == 'success'
-        run: uv run --frozen python -m scripts.lexicon --check-new-verbs head-lexicon.json base-lexicon.json --annotate
-
+      # pre-existing drift instead of only what that PR introduces. The check this
+      # feeds lives in the `warnings` job, not here.
       # Wider and noisier than the lexicon report by design: comment prose is ~2,900 of
       # the ~3,400 words here, and a new word in a sentence is usually just a sentence.
       # A distinct report, and a distinct comment, precisely so the two firing rates can
@@ -342,6 +339,40 @@ jobs:
   #
   # Report-only for now, like the three in `reports` — two weeks of real firings
   # decide whether an added line no test reaches should ever block.
+  # One check for every finding the reports make, so the checks list carries a single
+  # line a human reads as "something wants your eye" rather than three that each mean
+  # a different kind of nothing. Deliberately NOT in branch protection's required list:
+  # a person merges past it, and that merge is the acceptance.
+  #
+  # There is no suppression path on purpose — no inline marker, no allowlist, no label.
+  # An agent's only way to clear this check is to change the code, so a finding it
+  # decided to wave through cannot leave as a green tick.
+  warnings:
+    if: github.event_name == 'pull_request'
+    needs: reports
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      # `reports` computed these; recomputing them here would run every scan twice.
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "*-snapshot*"
+          merge-multiple: true
+      - name: Findings
+        run: uv run --frozen python -m scripts.findings
+
   added-coverage:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
