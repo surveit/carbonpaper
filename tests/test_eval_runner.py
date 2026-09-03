@@ -88,6 +88,43 @@ def project(tmp_path, monkeypatch):
     return tmp_path, demo, config
 
 
+def test_a_declared_str_column_that_looks_numeric_reads_as_text(tmp_path, monkeypatch):
+    """A numeric-looking `str` column must not silently become an int/float."""
+    monkeypatch.setattr(paths, "REPO_ROOT", tmp_path)
+    demo = tmp_path / "demo"
+    demo.mkdir()
+    load = _load(tmp_path)
+    load["signature"]["produces"].append({"name": "year", "type": "str", "nullable": False})
+    WorkflowVersion(
+        id="demo/v1", version_id="v1", created_at="2026-07-10T00:00:00",
+        message="seed",
+        stages=[parse_stage(load), parse_stage(_CLASSIFY)],
+    ).save()
+
+    data = demo / "eval_data"
+    data.mkdir()
+    # Plain read_csv infers int64 here — what a `str`-declared column must survive.
+    pd.DataFrame({
+        "doc_id": ["a", "b"], "score": [1, -1], "year": ["2026", "2026"],
+        "label": ["pos", "neg"],
+    }).to_csv(data / "cases.csv", index=False)
+    config = EvalConfig(
+        eval_id="year_check", project="demo", name="Year check",
+        override_stage="load", target_stage="classify",
+        table=TableRef(path="demo/eval_data/cases.csv", format=FileFormat.csv,
+                       table_schema=TableSchema(columns=[
+                           {"name": "doc_id", "type": "str", "nullable": True},
+                           {"name": "score", "type": "int", "nullable": True},
+                           {"name": "year", "type": "str", "nullable": False},
+                           {"name": "label", "type": "str", "nullable": True}])),
+        expected_outputs=[ExpectedOutput(output_column="label", metric="exact")])
+
+    run = run_eval(demo.name, config)
+
+    assert run.status == "scored"
+    assert run.metrics["rows_scored"] == 2
+
+
 def test_run_eval_scores_the_pathway(project):
     repo_root, demo, config = project
     run = run_eval(demo.name, config)
