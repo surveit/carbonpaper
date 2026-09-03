@@ -14,6 +14,10 @@ from app.models.stages.dedupe import DedupeStage
 from app.models.stages.filter_rows import FilterRowsStage
 from app.models.stages.join import JoinStage
 from app.models.stages.signature import transform_output_schema
+from app.models.stages.starlark_filter import StarlarkFilterRowsStage
+
+# Same "keeps a subset of one input's rows, reads-only" shape, two predicate languages.
+FILTER_STAGE_TYPES = (FilterRowsStage, StarlarkFilterRowsStage)
 
 WorkflowStagesById = dict[StageId, WorkflowStage]
 
@@ -117,7 +121,7 @@ def _find_columns_that_chose_the_rows(stages: WorkflowStagesById,
         if placed is None:
             continue
         stage = placed.stage
-        if isinstance(stage, FilterRowsStage):
+        if isinstance(stage, FILTER_STAGE_TYPES):
             yield from _list_read_columns(stage)
         elif isinstance(stage, JoinStage):
             for key in stage.join.keys:
