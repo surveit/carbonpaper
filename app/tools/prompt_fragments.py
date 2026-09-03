@@ -160,10 +160,11 @@ intended without also filtering join mismatches for example."""
 # ─── The anatomy every stage shares ──────────────────────────────
 
 _WHAT_EVERY_STAGE_DECLARES = """\
-Every stage declares: `id` (its one name), `description`, `inputs` (the stage ids it
-reads, each with the schema it expects), `signature`, and exactly one config block
-named by its type. An input's declared schema must be a subset of what that upstream
-stage's signature promises.
+Every stage declares: `id` (its one name), `description` (one verb-first line —
+"Normalize spend", never "Spend normalization" — so the lineage view reads as an
+action, not a second label), `inputs` (the stage ids it reads, each with the schema it
+expects), `signature`, and exactly one config block named by its type. An input's
+declared schema must be a subset of what that upstream stage's signature promises.
 
 Results are recorded and replayed across runs only for `llm_transform` and
 `human_review_queue`; set `cache: true` on another stage when its code is expensive

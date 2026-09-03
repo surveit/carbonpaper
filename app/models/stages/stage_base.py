@@ -174,8 +174,10 @@ WORKFLOW_OUTPUTS_DESCRIPTION = (
 STAGE_DESCRIPTION_DESCRIPTION = (
     "ONE line saying what this step does, shown UNDER the id and as the graph node's "
     "tooltip — never as a heading and never as a label, so it must not restate the id "
-    "in prose. Say what the id cannot: the reason the step exists, what it decides, "
-    "which snapshot it is. Plain language, no Python vocabulary. HARD LIMIT: "
+    "in prose. Starts with a verb (\"Normalize spend\", not \"Spend normalization\") — "
+    "a noun phrase reads as a second label, not an action. Say what the id cannot: the "
+    "reason the step exists, what it decides, which snapshot it is. Plain language, no "
+    "Python vocabulary. HARD LIMIT: "
     f"{STAGE_DESCRIPTION_MAX_CHARS} characters, refused above that."
 )
 
