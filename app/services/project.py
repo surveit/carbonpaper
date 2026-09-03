@@ -368,6 +368,10 @@ def write_review_guide(
 _STORE_FIELDS = {"id", "created_at", "updated_at"}
 
 
+def read_eval_config(name: str, eval_id: str) -> EvalConfig | None:
+    return EvalConfig.load_or_none(EvalConfig.compose_id(name, eval_id))
+
+
 def write_eval_config(name: str, config: EvalConfig) -> None:
     """Writes what app.evals.store reads back; that package is a leaf app.tools cannot import."""
     EvalConfig(

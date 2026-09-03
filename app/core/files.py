@@ -160,6 +160,15 @@ def find_stored_file_id(path: Path) -> ID | None:
     return None if record is None or record.filename != path.name else record.id
 
 
+def compute_sha256(path: Path) -> str:
+    """The digest `ProjectFile.sha256` holds, for a caller asking whether bytes are stored."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(_CHUNK_BYTES), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 @dataclass(frozen=True)
 class ProjectFileIndex:
     """One project's files, by both keys a run may name them by."""

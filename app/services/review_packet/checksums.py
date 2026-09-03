@@ -2,12 +2,11 @@
 reviewer verifies the folder with `shasum -c checksums.txt` and no other tool."""
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
-CHECKSUMS_FILE = "checksums.txt"
+from app.core.files import compute_sha256 as compute_sha256
 
-_READ_CHUNK_BYTES = 1 << 20
+CHECKSUMS_FILE = "checksums.txt"
 
 
 def write_checksums(root: Path) -> str:
@@ -18,14 +17,6 @@ def write_checksums(root: Path) -> str:
     ]
     (root / CHECKSUMS_FILE).write_text("\n".join(lines) + "\n", encoding="utf-8")
     return CHECKSUMS_FILE
-
-
-def compute_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(_READ_CHUNK_BYTES), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _list_packet_files(root: Path) -> list[Path]:
