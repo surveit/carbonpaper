@@ -433,7 +433,8 @@ def export_project(project_id: str) -> WorkflowFile:
     if document is None:
         raise ValueError(f"project '{project_id}' has no document — cannot export")
     project_terms = terms.load_terms(project_id)
-    stages = loader.list_parsed_stages(loader.load_stage_entries(project_id))
+    # A run pins a version, never the working copy.
+    latest = versioning.find_latest_version_id(project_id)
     return WorkflowFile(
         name=meta.name,
         document=document,
@@ -441,7 +442,7 @@ def export_project(project_id: str) -> WorkflowFile:
         source=meta.source,
         data_model=project_terms.nouns,
         verbs=project_terms.verbs,
-        stages=stages,
+        stages=versioning.load_version_stages(project_id, latest) if latest else [],
     )
 
 

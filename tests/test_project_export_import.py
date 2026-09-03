@@ -1,8 +1,4 @@
-"""project.py's export/import round-trip: export_project reads a project's
-working copy through the service loaders into a WorkflowFile; import_project
-writes a WorkflowFile back through the service writers. The behavior worth
-covering end-to-end is that round trip (carried through actual JSON text —
-WorkflowFile.to_json / model_validate_json, the form a real caller uses)."""
+"""The export/import round trip, carried through the JSON text a real caller uses."""
 from __future__ import annotations
 
 import json
@@ -21,7 +17,9 @@ from app.models import (
     Verb,
     stage_to_spec_dict,
 )
-from app.models.stages.input_data import Connector, ConnectorKind, InputDataStage
+from app.models.stages.input_data import (
+    Connector, ConnectorKind, FileConnectorParams, FileFormat, InputDataStage,
+)
 from app.models.stages.signature import ReplacesSignature
 from app.services import project, terms, versioning, workspace
 from app.services.loader import load_stage_entries, save_stages
@@ -34,6 +32,40 @@ _TINY_LIBRARY = SchemaLibrary(schemas=[NamedSchema(
              NamedColumn(name="entity_name", type="str", nullable=True)],
 )])
 _FLAG = Verb(name="flag", definition="Mark a filing for a human to decide on.")
+
+
+def _input_stage(stage_id: str) -> InputDataStage:
+    return InputDataStage(
+        id=stage_id, description=stage_id, type=StageType.input_data,
+        connector=Connector(
+            kind=ConnectorKind.file, params=FileConnectorParams(format=FileFormat.csv)),
+        signature=ReplacesSignature(produces=[
+            Column(name="entity_id", type="str", nullable=False),
+            Column(name="entity_name", type="str", nullable=True),
+        ]),
+    )
+
+
+def test_a_bundle_carries_the_latest_versions_stages_not_the_working_copy(tmp_path):
+    workspace.set_projects_dir(tmp_path)
+    name = project.create_project("Versioned", "Count the filings.", source="test").id
+    terms.write_terms(name, Terms(nouns=_TINY_LIBRARY, verbs=[]))
+    save_stages(name, [_input_stage("load_entities")])
+    project.save_working_copy_as_version(name, message="What a run would pin")
+
+    save_stages(name, [_input_stage("load_entities"), _input_stage("load_later")])
+
+    assert [stage.id for stage in export_project(name).stages] == ["load_entities"]
+
+
+def test_a_project_whose_stages_were_never_versioned_exports_none_of_them(tmp_path):
+    """An unversioned working copy cannot be run here either, so a bundle of it carries no stages."""
+    workspace.set_projects_dir(tmp_path)
+    name = project.create_project("Unversioned", "Count the filings.", source="test").id
+    terms.write_terms(name, Terms(nouns=_TINY_LIBRARY, verbs=[]))
+    save_stages(name, [_input_stage("load_entities")])
+
+    assert export_project(name).stages == []
 
 
 def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_path):
@@ -57,6 +89,8 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
         ]),
     )
     save_stages(name, [stage])
+    # export_project reads the latest version, so the working copy is saved as one.
+    project.save_working_copy_as_version(name, message="Round trip")
 
     exported = export_project(name)
     wf = WorkflowFile.model_validate_json(exported.to_json())
