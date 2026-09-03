@@ -143,12 +143,26 @@ def test_skipping_an_output_leaves_a_declined_claim_rather_than_nothing():
 
 
 # ── one shape and one context is one fact ────────────────────────────────────
-def test_the_same_context_twice_is_refused_as_a_restatement():
+def test_the_same_context_again_supersedes_rather_than_being_refused():
+    """Two claims of one fact cannot both stand, and the newer one is the project's answer."""
     _a_run_of_two_shapes()
-    standing = _approve(claims.submit_claim(_PROJECT, _RUN, "ai-spend", _H1, _TEXT))
+    first = _approve(claims.submit_claim(_PROJECT, _RUN, "ai-spend", _H1, _TEXT))
 
-    with pytest.raises(ClaimRefused, match=f"restates claim {standing.id}"):
-        claims.submit_claim(_PROJECT, _RUN, "ai-spend", _H1, _TEXT)
+    second = claims.submit_claim(_PROJECT, _RUN, "ai-spend", _H1, "Revised: $63m.")
+
+    assert Claim.load(first.id).status == ClaimStatus.superseded
+    assert second.status == ClaimStatus.submitted
+
+
+def test_a_superseded_claim_stands_no_more_and_blocks_nothing():
+    ids = _a_run_of_two_shapes()
+    first = claims.submit_claim(_PROJECT, _RUN, "ai-spend", _H1, _TEXT)
+    claims.submit_claim(_PROJECT, _RUN, "ai-spend", _H1, "Revised: $63m.")
+
+    standing = claims.load_claims_of_shape(_PROJECT, ids[_SPEND.label])
+
+    assert [claim.text for claim in standing] == ["Revised: $63m."]
+    assert Claim.load(first.id).text == _TEXT   # it is history, not deleted
 
 
 def test_a_different_period_is_a_series_and_goes_through():
@@ -169,16 +183,18 @@ def test_a_declined_claim_no_longer_stands_in_the_way():
     assert claim.status == ClaimStatus.submitted
 
 
-def test_a_claim_is_re_checked_at_approval_because_the_ground_can_move():
+def test_approving_still_refuses_a_claim_something_equivalent_overtook():
+    """Two submitted claims of one fact can race; only one may end up standing."""
     _a_run_of_two_shapes()
-    first = claims.submit_claim(_PROJECT, _RUN, "ai-spend", _H1, _TEXT)
-    _approve(claims.submit_claim(_PROJECT, _RUN, "ai-clients", _H1, _TEXT))
-    second = Claim.load(first.id)
-    second.status = ClaimStatus.submitted
+    first = claims.submit_claim(_PROJECT, _RUN, "ai-clients", _H1, _TEXT)
+    first.status = ClaimStatus.submitted
+    claims.submit_claim(_PROJECT, _RUN, "ai-clients", _H1, "A second write of the same fact.")
+    revived = Claim.load(first.id)
+    revived.status = ClaimStatus.submitted
+    revived.save()
 
     with pytest.raises(ClaimRefused, match="restates claim"):
-        _approve(claims.submit_claim(_PROJECT, _RUN, "ai-clients", _H1, _TEXT))
-    assert second.id == first.id
+        _approve(revived)
 
 
 # ── a closed shape needs the whole input ─────────────────────────────────────

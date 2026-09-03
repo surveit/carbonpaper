@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from app.services import claims as claims_service
 from app.services.errors import ClaimRefused
 from app.web.breadcrumbs import Crumb, build_section_crumbs
-from app.web.claims_view import build_publish_view, read_whether_the_run_read_everything
+from app.web.claims_view import build_publish_view
 from app.web.config import templates
 from app.web.project_view import shell_state_off_nav, validate_project_or_404
 from app.web.run_index import RunIndexRow, build_run_index_rows
@@ -45,23 +45,6 @@ async def submit_claim(request: Request, project_id: str, run_id: str, slug: str
     _refusing_400(lambda: claims_service.submit_claim(
         project_id, run_id, slug, context, str(form.get("text", ""))
     ))
-    return _back_to_the_page(project_id, run_id)
-
-
-@router.post("/project/{project_id}/runs/{run_id}/approve/{claim_id}")
-async def approve_claim(project_id: str, run_id: str, claim_id: str):
-    validate_project_or_404(project_id)
-    run = _read_run(project_id, run_id)
-    _refusing_400(lambda: claims_service.approve_claim(
-        project_id, claim_id, read_whether_the_run_read_everything(run)
-    ))
-    return _back_to_the_page(project_id, run_id)
-
-
-@router.post("/project/{project_id}/runs/{run_id}/reject/{claim_id}")
-async def reject_claim(project_id: str, run_id: str, claim_id: str):
-    validate_project_or_404(project_id)
-    _refusing_400(lambda: claims_service.decline_claim(project_id, claim_id))
     return _back_to_the_page(project_id, run_id)
 
 

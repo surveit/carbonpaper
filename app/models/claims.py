@@ -17,11 +17,12 @@ class ClaimImportance(str, Enum):
 
 
 class ClaimStatus(str, Enum):
-    """A claim is proposed, then stood behind or refused. The only field that may move."""
+    """Proposed, then stood behind, refused, or replaced. The only field that may move."""
 
     submitted = "submitted"
     approved = "approved"
     declined = "declined"
+    superseded = "superseded"
 
 
 class DataUniverseRequirement(str, Enum):

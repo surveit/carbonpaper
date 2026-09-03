@@ -129,15 +129,17 @@ def test_a_claim_with_no_sentence_is_refused(tmp_path):
     assert "write it" in response.text
 
 
-def test_approving_is_what_makes_the_claim_stand(tmp_path):
+def test_writing_the_same_context_again_supersedes_rather_than_refusing(tmp_path):
     client = _a_run(tmp_path)
     client.post(f"{_BASE}/submit/ai-spend", data=_FORM)
-    [claim] = Claim.find(created_by_project_id=_PROJECT)
+    [first] = Claim.find(created_by_project_id=_PROJECT)
 
-    response = client.post(f"{_BASE}/approve/{claim.id}")
+    response = client.post(f"{_BASE}/submit/ai-spend", data={**_FORM, "text": "Revised."})
 
     assert response.status_code == 303
-    assert Claim.load(claim.id).status == "approved"
+    assert Claim.load(first.id).status == "superseded"
+    standing = [c for c in Claim.find(created_by_project_id=_PROJECT) if c.status == "submitted"]
+    assert [c.text for c in standing] == ["Revised."]
 
 
 def test_a_closed_metric_cannot_stand_on_a_capped_run(tmp_path):

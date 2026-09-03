@@ -12,6 +12,8 @@ from app.models.schema import TableSchema
 from app.services.claim_shapes import load_claim_shape
 from app.services.errors import ClaimRefused
 
+_STILL_STANDS = (ClaimStatus.submitted, ClaimStatus.approved)
+
 
 def submit_claim(
     project_id: ID, run_id: ID, slug: str, context: JsonDict, text: str
@@ -20,7 +22,8 @@ def submit_claim(
     output = read_workflow_run_output_by_slug(run_id, slug)
     shape = _require_shape(project_id, output.shape_id)
     held = read_context(shape, context)
-    validate_nothing_equivalent_stands(project_id, shape, held)
+    for standing in find_equivalent_claims(project_id, shape.id, held):
+        _set_status(standing, ClaimStatus.superseded)
     claim = Claim(
         created_by_project_id=project_id, shape_id=shape.id,
         context=held, citation=output.citation, text=_require_text(text),
@@ -66,10 +69,10 @@ def load_claim(project_id: ID, claim_id: ID) -> Claim:
 
 
 def load_claims_of_shape(project_id: ID, shape_id: ID) -> list[Claim]:
-    """Standing or awaiting review, oldest first. A declined claim is nobody's history."""
+    """Standing or awaiting review, oldest first. A claim that was replaced stands no more."""
     claims = Claim.find(created_by_project_id=project_id, shape_id=shape_id)
     return sorted(
-        (claim for claim in claims if claim.status != ClaimStatus.declined),
+        (claim for claim in claims if claim.status in _STILL_STANDS),
         key=lambda claim: claim.created_at,
     )
 
@@ -105,7 +108,7 @@ def read_workflow_run_output_by_slug(run_id: ID, slug: str) -> WorkflowOutput:
 def find_equivalent_claims(
     project_id: ID, shape_id: ID, context: JsonDict, besides_claim_id: ID = ""
 ) -> list[Claim]:
-    """Same shape, same context: the same fact, so two of them cannot both be right."""
+    """Same shape, same context: the same fact, so only the newest of them stands."""
     return [
         claim for claim in load_claims_of_shape(project_id, shape_id)
         if claim.id != besides_claim_id and claim.context == context

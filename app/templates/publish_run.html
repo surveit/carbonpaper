@@ -26,10 +26,6 @@
 {% set i = loop.index %}
 <form id="submit-{{ i }}" method="post" action="{{ base }}/submit/{{ card.slug }}"></form>
 <form id="skip-{{ i }}" method="post" action="{{ base }}/skip/{{ card.slug }}"></form>
-{% if card.claim_id %}
-<form id="approve-{{ i }}" method="post" action="{{ base }}/approve/{{ card.claim_id }}"></form>
-<form id="reject-{{ i }}" method="post" action="{{ base }}/reject/{{ card.claim_id }}"></form>
-{% endif %}
 
 <article class="mint-fig{{ ' is-warn' if card.restates and card.status != 'approved' }}">
   <div class="mint-top">
@@ -85,7 +81,8 @@
   {% if card.blocked %}
   <div class="mint-alert">⚠ <span>{{ card.blocked }}</span></div>
   {% elif card.restates and card.status != 'approved' %}
-  <div class="mint-alert">⚠ <span><b>This restates a claim that already stands.</b></span></div>
+  <div class="mint-alert">⚠ <span><b>This replaces a claim of the same context.</b>
+    Writing it supersedes the one below.</span></div>
   {% endif %}
 
   {% if card.standing %}
@@ -113,9 +110,7 @@
 
   {% if card.status == 'submitted' %}
   <div class="mint-act">
-    <span class="muted">Up for review. It stands behind nothing until it is approved.</span>
-    <button class="btn primary" type="submit" form="approve-{{ i }}">Approve</button>
-    <button class="btn" type="submit" form="reject-{{ i }}">Reject</button>
+    <span class="muted">Written, and waiting on review. It stands behind nothing yet.</span>
   </div>
   {% elif card.status == 'declined' and not card.blocked %}
   <div class="mint-act">
