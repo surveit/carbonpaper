@@ -169,7 +169,7 @@ whatever else it is sliced by — as ordinary columns: {"name": "period_start",
 "type": "date", "nullable": false}. One shape and one context is ONE FACT,
 so a second number for the same context is refused.
 
-`requires` asks ONE question about the dataset the metric is computed from —
+`universe` asks ONE question about the dataset the metric is computed from —
 does it hold every event of this kind?
 
   closed  it does, so the number IS the total (a register everyone must
@@ -182,7 +182,7 @@ miss events, and that belongs in `qualifiers` — what a reader must know
 before using the number, and what it cannot see.
 
   {"label": "US lobbying spend on AI, reported by outside firms",
-   "requires": "closed", "importance": "primary",
+   "universe": "closed", "importance": "primary",
    "template": "Outside firms reported ${value} in AI lobbying income "
                "for ${period_start} to ${period_end}.",
    "context": [{"name": "period_start", "type": "date", "nullable": false},

@@ -15,26 +15,12 @@
 #}
 {% block section %}
 {% set base = "/project/" ~ state.id ~ "/runs/" ~ publish.run_id %}
-{% set n = publish.counts %}
 
 <div class="sec-head">
   <h1>Publish from this run</h1>
   <p class="lede">A claim is a sentence someone will publish. Write it, and review decides
     whether it stands.</p>
 </div>
-
-{% if publish.cards %}
-<div class="mint-tally">
-  <div><span class="n">{{ n.claimed }}</span><span class="k">claimed</span></div>
-  <div class="{{ 'todo' if n.in_review else 'zero' }}">
-    <span class="n">{{ n.in_review }}</span><span class="k">in review</span></div>
-  <div><span class="n">{{ n.skipped }}</span><span class="k">skipped</span></div>
-  <div class="{{ 'todo' if n.waiting else 'zero' }}">
-    <span class="n">{{ n.waiting }}</span><span class="k">waiting on you</span></div>
-  <div class="{{ '' if n.blocked else 'zero' }}">
-    <span class="n">{{ n.blocked }}</span><span class="k">blocked by the run</span></div>
-</div>
-{% endif %}
 
 {% for card in publish.cards %}
 {% set i = loop.index %}
@@ -50,15 +36,16 @@
     <div class="mint-kicker">
       {%- if card.status == 'approved' %}Claimed
       {%- elif card.status == 'submitted' %}In review
-      {%- elif card.status == 'declined' %}Skipped
+      {%- elif card.status == 'declined' %}Skipped — write it to claim it after all
       {%- else %}Write the claim{% endif -%}
     </div>
 
-    {% if card.status %}
+    {% if card.status and card.status != 'declined' %}
     <p class="mint-sentence">{{ card.text }}</p>
     {% else %}
     <textarea class="mint-sentence" name="text" form="submit-{{ i }}" rows="2"
-              placeholder="the sentence you would publish">{{ card.suggested_text }}</textarea>
+              placeholder="the sentence you would publish"
+              required>{{ card.suggested_text }}</textarea>
     {% endif %}
 
     <div class="mint-row">
@@ -66,7 +53,11 @@
       <span>{{ card.metric }}</span>
       <a class="mint-value" href="{{ card.href }}"
          title="Open the row this value was read from">{{ card.value }}</a>
-      <span class="has-tip" tabindex="0" data-tip="{{ card.coverage_tooltip }}">{{ card.coverage }}</span>
+    </div>
+
+    <div class="mint-row">
+      <span class="mint-row-k">universe</span>
+      <span class="has-tip" tabindex="0" data-tip="{{ card.universe_tooltip }}">{{ card.universe }}</span>
     </div>
 
     {% if card.context %}
@@ -76,7 +67,8 @@
       <label class="mint-dim">{{ field.name }}
         <input type="{{ field.input_type }}" name="context.{{ field.name }}"
                value="{{ field.value }}" form="submit-{{ i }}"
-               aria-label="{{ field.name }}" {% if card.status %}disabled{% endif %}>
+               aria-label="{{ field.name }}" required
+               {% if card.status and card.status != 'declined' %}disabled{% endif %}>
       </label>
       {% endfor %}
     </div>
@@ -93,8 +85,7 @@
   {% if card.blocked %}
   <div class="mint-alert">⚠ <span>{{ card.blocked }}</span></div>
   {% elif card.restates and card.status != 'approved' %}
-  <div class="mint-alert">⚠ <span><b>This restates a claim that already stands.</b>
-    Same context, so one of the two is wrong. Say what is different about this one.</span></div>
+  <div class="mint-alert">⚠ <span><b>This restates a claim that already stands.</b></span></div>
   {% endif %}
 
   {% if card.standing %}
@@ -126,8 +117,11 @@
     <button class="btn primary" type="submit" form="approve-{{ i }}">Approve</button>
     <button class="btn" type="submit" form="reject-{{ i }}">Reject</button>
   </div>
-  {% elif card.status == 'declined' %}
-  <div class="mint-act"><span class="muted">Skipped for this run.</span></div>
+  {% elif card.status == 'declined' and not card.blocked %}
+  <div class="mint-act">
+    <span class="muted">Skipped for this run.</span>
+    <button class="btn primary" type="submit" form="submit-{{ i }}">Claim it after all</button>
+  </div>
   {% elif not card.status and not card.blocked %}
   <div class="mint-act">
     <button class="btn primary" type="submit" form="submit-{{ i }}">Submit for review</button>

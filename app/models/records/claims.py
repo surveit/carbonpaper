@@ -25,7 +25,7 @@ class ClaimShape(PersistedModel):
     project_id: ID = Field(frozen=True)
     # Authored before any stage exists, so it declares no stage and no column.
     label: str = Field(frozen=True)
-    requires: DataUniverseRequirement = Field(frozen=True)
+    universe: DataUniverseRequirement = Field(frozen=True)
     importance: ClaimImportance = Field(frozen=True)
     # Read these before using the number.
     qualifiers: list[str] = Field(default=[], frozen=True)

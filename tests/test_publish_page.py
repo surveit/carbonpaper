@@ -24,7 +24,7 @@ _RUN = "20260901T103753.789399"
 _BASE = f"/project/{_PROJECT}/runs/{_RUN}"
 _SPEND = ClaimShapeInput(
     label="US lobbying spend on AI, reported by outside firms",
-    requires=DataUniverseRequirement.closed, importance=ClaimImportance.primary,
+    universe=DataUniverseRequirement.closed, importance=ClaimImportance.primary,
     template="Outside firms reported ${value} in AI lobbying income.",
     context=[
         Column(name="period_start", type="date", nullable=False),
@@ -148,10 +148,20 @@ def test_a_closed_metric_cannot_stand_on_a_capped_run(tmp_path):
     assert "turns &#39;is&#39; into &#39;at least&#39;" in page
 
 
-def test_skipping_leaves_a_declined_claim_and_the_counts_say_so(tmp_path):
+def test_a_skipped_output_can_still_be_claimed_after_all(tmp_path):
     client = _a_run(tmp_path)
-
     client.post(f"{_BASE}/skip/ai-spend")
 
-    assert [c.status for c in Claim.find(created_by_project_id=_PROJECT)] == ["declined"]
-    assert "skipped" in client.get(f"{_BASE}/publish").text
+    page = client.get(f"{_BASE}/publish").text
+    assert "Claim it after all" in page
+
+    client.post(f"{_BASE}/submit/ai-spend", data=_FORM)
+
+    statuses = sorted(c.status for c in Claim.find(created_by_project_id=_PROJECT))
+    assert statuses == ["declined", "submitted"]   # the skip stays; the claim is new
+
+
+def test_the_form_stops_an_empty_sentence_or_context_before_the_server_does(tmp_path):
+    page = _a_run(tmp_path).get(f"{_BASE}/publish").text
+
+    assert page.count("required") >= 3   # the sentence and both date inputs

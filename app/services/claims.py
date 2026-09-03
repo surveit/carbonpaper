@@ -75,12 +75,16 @@ def load_claims_of_shape(project_id: ID, shape_id: ID) -> list[Claim]:
 
 
 def load_run_claims(project_id: ID, run_id: ID) -> dict[str, Claim]:
-    """This run's own claim per shape. The citation carries the run; find() cannot select on it."""
-    return {
-        claim.shape_id: claim
-        for claim in Claim.find(created_by_project_id=project_id)
-        if claim.citation.run_id == run_id
-    }
+    """This run's live claim per shape, or its skip. A skip can be claimed after all."""
+    held: dict[str, Claim] = {}
+    for claim in sorted(
+        (c for c in Claim.find(created_by_project_id=project_id) if c.citation.run_id == run_id),
+        key=lambda claim: claim.created_at,
+    ):
+        standing = held.get(claim.shape_id)
+        if standing is None or standing.status == ClaimStatus.declined:
+            held[claim.shape_id] = claim
+    return held
 
 
 def read_workflow_run_outputs(run_id: ID) -> list[WorkflowOutput]:
@@ -125,7 +129,7 @@ def read_context(shape: ClaimShape, context: JsonDict) -> JsonDict:
 
 
 def validate_run_covers_the_shape(shape: ClaimShape, run_read_everything: bool) -> None:
-    if shape.requires == DataUniverseRequirement.closed and not run_read_everything:
+    if shape.universe == DataUniverseRequirement.closed and not run_read_everything:
         raise ClaimRefused([
             f"{shape.label!r} is closed, and this run read a window — "
             "totalling a slice turns 'is' into 'at least'"

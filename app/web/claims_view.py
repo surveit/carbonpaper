@@ -47,8 +47,8 @@ class ClaimCard(BaseModel):
     metric: str
     value: str
     href: str
-    coverage: str
-    coverage_tooltip: str
+    universe: str
+    universe_tooltip: str
     qualifiers: list[str]
     context: list[ContextField]
     suggested_text: str
@@ -75,7 +75,7 @@ class PublishView(BaseModel):
     cards: list[ClaimCard]
 
 
-COVERAGE_TOOLTIP = {
+UNIVERSE_TOOLTIP = {
     DataUniverseRequirement.closed: "The dataset holds every event of this kind, so this "
                                     "figure is the total: it IS this number.",
     DataUniverseRequirement.open: "The dataset holds only the events it captured, so this "
@@ -136,8 +136,8 @@ def _build_card(
         href=build_row_trace_url(
             project_id, output.citation.run_id, output.citation.stage_id, 0
         ),
-        coverage=shape.requires,
-        coverage_tooltip=COVERAGE_TOOLTIP[DataUniverseRequirement(shape.requires)],
+        universe=shape.universe,
+        universe_tooltip=UNIVERSE_TOOLTIP[DataUniverseRequirement(shape.universe)],
         qualifiers=shape.qualifiers,
         context=context,
         suggested_text=_write_the_suggestion(shape.template, output.citation, proposed),
@@ -158,7 +158,7 @@ def _read_value(cited: PublishedCitation) -> str:
 
 
 def _find_blocked_reason(shape: ClaimShape, blocked: str) -> str | None:
-    if not blocked or shape.requires == DataUniverseRequirement.open:
+    if not blocked or shape.universe == DataUniverseRequirement.open:
         return None
     return f"{blocked} Totalling a slice turns 'is' into 'at least'."
 

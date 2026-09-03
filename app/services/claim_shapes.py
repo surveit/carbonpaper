@@ -31,7 +31,7 @@ def write_claim_shapes(project_id: ID, authored: list[ClaimShapeInput]) -> list[
         ClaimShape(
             project_id=project_id,
             label=entry.label,
-            requires=entry.requires,
+            universe=entry.universe,
             importance=entry.importance,
             qualifiers=entry.qualifiers,
             context=entry.context,

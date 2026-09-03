@@ -11,7 +11,7 @@ def _shape(project_id: str, label: str = _LABEL) -> ClaimShape:
     return ClaimShape(
         project_id=project_id,
         label=label,
-        requires=DataUniverseRequirement.closed,
+        universe=DataUniverseRequirement.closed,
         importance=ClaimImportance.primary,
     )
 

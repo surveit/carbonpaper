@@ -43,7 +43,7 @@ class ClaimShapeInput(_Base):
     """What a caller sends to author one shape. A stored shape is never edited, so no id."""
 
     label: str
-    requires: DataUniverseRequirement
+    universe: DataUniverseRequirement
     importance: ClaimImportance
     qualifiers: list[str] = []
     # The axes a claim of this shape sits on, as ordinary columns.

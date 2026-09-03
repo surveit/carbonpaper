@@ -31,12 +31,12 @@ _PERIOD = [
 ]
 _SPEND = ClaimShapeInput(
     label="Reported by outside firms as received for AI lobbying in the United States, in dollars",
-    requires=DataUniverseRequirement.closed, importance=ClaimImportance.primary,
+    universe=DataUniverseRequirement.closed, importance=ClaimImportance.primary,
     context=_PERIOD,
 )
 _CLIENTS = ClaimShapeInput(
     label="Clients that paid a US outside firm for AI lobbying",
-    requires=DataUniverseRequirement.open, importance=ClaimImportance.secondary,
+    universe=DataUniverseRequirement.open, importance=ClaimImportance.secondary,
     context=_PERIOD,
 )
 

@@ -24,14 +24,14 @@ _PROJECT = "ai_lobbying"
 _TIME = Column(name="period_start", type="date", nullable=False)
 _SPEND = ClaimShapeInput(
     label="Reported by outside firms as received for AI lobbying in the United States, in dollars",
-    requires=DataUniverseRequirement.closed, importance=ClaimImportance.primary,
+    universe=DataUniverseRequirement.closed, importance=ClaimImportance.primary,
     context=[_TIME],
     qualifiers=["Income no firm reported. Filing is required by law, so a firm that did "
                 "not file is not in this figure."],
 )
 _CORPUS = ClaimShapeInput(
     label="Clients that paid a US outside firm for AI lobbying",
-    requires=DataUniverseRequirement.closed, importance=ClaimImportance.secondary,
+    universe=DataUniverseRequirement.closed, importance=ClaimImportance.secondary,
 )
 
 
@@ -50,7 +50,7 @@ def _claim(shape_id: str, value: float = 63027729.0, claim_id: str = "") -> Clai
 def test_an_authored_shape_comes_back_with_an_id_what_it_covers_and_its_qualifiers():
     [stored] = claim_shapes.write_claim_shapes(_PROJECT, [_SPEND])
 
-    assert (stored.label, stored.requires) == (_SPEND.label, "closed")
+    assert (stored.label, stored.universe) == (_SPEND.label, "closed")
     assert stored.qualifiers == _SPEND.qualifiers
     assert [column.name for column in stored.context] == ["period_start"]
     assert stored.id
@@ -75,7 +75,7 @@ def test_a_shape_left_out_of_a_later_write_is_not_retired():
     claim_shapes.write_claim_shapes(_PROJECT, [_SPEND, _CORPUS])
 
     claim_shapes.write_claim_shapes(_PROJECT, [
-        ClaimShapeInput(label="Paying clients", requires=DataUniverseRequirement.open, importance=ClaimImportance.secondary)
+        ClaimShapeInput(label="Paying clients", universe=DataUniverseRequirement.open, importance=ClaimImportance.secondary)
     ])
 
     assert len(claim_shapes.load_claim_shapes(_PROJECT)) == 3
@@ -101,7 +101,7 @@ def test_a_stored_shape_cannot_be_edited_at_all():
     [stored] = claim_shapes.write_claim_shapes(_PROJECT, [_SPEND])
 
     with pytest.raises(ValidationError):
-        stored.requires = DataUniverseRequirement.open
+        stored.universe = DataUniverseRequirement.open
 
 
 def test_a_shape_cannot_be_written_over_by_id():
@@ -110,7 +110,7 @@ def test_a_shape_cannot_be_written_over_by_id():
     with pytest.raises(ClaimShapeIsImmutable):
         ClaimShape(
             id=stored.id, project_id=_PROJECT, label="Something else",
-            requires=DataUniverseRequirement.open, importance=ClaimImportance.primary,
+            universe=DataUniverseRequirement.open, importance=ClaimImportance.primary,
         ).save()
 
 
@@ -148,7 +148,7 @@ def test_a_claim_can_be_deleted_and_the_shape_claimed_again():
 def test_a_shape_is_only_a_shape_of_its_own_project():
     ClaimShape(
         project_id="venezuela_lda_lobbying", label="Filing rows read from the two exports",
-        requires=DataUniverseRequirement.closed, importance=ClaimImportance.primary,
+        universe=DataUniverseRequirement.closed, importance=ClaimImportance.primary,
     ).save()
     claim_shapes.write_claim_shapes(_PROJECT, [_CORPUS])
 
@@ -183,7 +183,7 @@ def test_a_template_naming_something_no_claim_can_fill_is_refused():
         claim_shapes.write_claim_shapes(_PROJECT, [
             ClaimShapeInput(
                 label="US lobbying spend on AI",
-                requires=DataUniverseRequirement.closed,
+                universe=DataUniverseRequirement.closed,
                 importance=ClaimImportance.primary,
                 template="Firms reported ${value} for ${period}.",
                 context=[Column(name="period_start", type="date", nullable=False)],
