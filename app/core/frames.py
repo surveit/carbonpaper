@@ -473,7 +473,16 @@ def convert_cell_to_json_value(value: object) -> object:
     cell = collapse_null_forms(value)
     if cell is None or isinstance(cell, (bool, int, float, str)):
         return cell
+    if isinstance(cell, _dt.datetime):
+        return _render_moment(cell)
     return convert_cell_to_json_native(cell)
+
+
+def _render_moment(moment: _dt.datetime) -> str:
+    # Midnight reads as a date, which is what astype(str) gives a whole column of them.
+    if moment.time() == _dt.time():
+        return moment.date().isoformat()
+    return moment.isoformat(sep=" ")
 
 
 class FrameStore:

@@ -59,4 +59,19 @@ def test_trace_to_dict_serializes_a_parsed_date_column(tmp_path):
     ])
     payload = trace_to_dict(trace_row(run_dir, "enrich", 0))
     assert json.loads(json.dumps(payload)) == payload
-    assert payload["steps"][0]["row"]["closed"].startswith("2020-10-14")
+    # The date the table shows, not the midnight the dtype carries.
+    assert payload["steps"][0]["row"]["closed"] == "2020-10-14"
+
+
+def test_trace_to_dict_keeps_a_time_that_is_not_midnight(tmp_path):
+    seeds = pd.DataFrame({
+        "case_id": ["a"],
+        "filed": pd.to_datetime(["2020-10-14 09:35:00"]),
+    })
+    enrich = seeds.assign(score=[1])
+    run_dir = write_run(tmp_path, [
+        {"id": "seeds", "type": "input_data", "parents": [], "df": seeds},
+        {"id": "enrich", "type": "python_row_function", "parents": ["seeds"], "df": enrich},
+    ])
+    payload = trace_to_dict(trace_row(run_dir, "enrich", 0))
+    assert payload["steps"][0]["row"]["filed"] == "2020-10-14 09:35:00"
