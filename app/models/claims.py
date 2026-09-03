@@ -65,6 +65,14 @@ class RowsRectangle(BaseModel):
     def count_rows(self) -> int:
         return self.row_end - self.row_start
 
+    def is_whole_output(self, columns: list[str], row_count: int) -> bool:
+        # By set: a reordering cuts no cell, and the question here is what was cut.
+        return (
+            self.row_start == 0
+            and self.row_end == row_count
+            and set(self.columns) == set(columns)
+        )
+
 
 class StageOutputTableCitation(Citation):
     # The rows and columns actually published, never the whole frame by assumption.

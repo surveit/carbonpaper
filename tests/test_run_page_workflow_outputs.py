@@ -130,11 +130,6 @@ def test_the_primary_table_is_drawn_first():
     assert [t.slug for t in _read().tables] == ["z-primary", "a-secondary"]
 
 
-def test_a_secondary_table_is_a_line_and_a_link_rather_than_a_preview():
-    _publish_table("client-spend", "What each client paid", 24)
-    assert _read().tables[0].preview is None
-
-
 def test_a_primary_table_whose_frame_is_gone_still_reads_back():
     # The record says what was published; the frame it previews may be pruned.
     _publish_table("client-spend", "What each client paid", 24, primary=True)
@@ -166,6 +161,14 @@ def test_a_primary_table_is_drawn_from_the_frame_the_run_wrote(tmp_path):
     _publish_table("client-spend", "What each client paid", 9, primary=True)
     [table] = _read(run_dir=tmp_path, manifest=manifest).tables
     assert table.preview.columns == ["client", "external_spend"]
+    assert [c.text for c in table.preview.rows[0].cells] == ["client 0", "0.0"]
+
+
+def test_a_secondary_table_is_drawn_as_well_as_linked(tmp_path):
+    manifest = _write_frame(tmp_path, rows=9)
+    _publish_table("client-spend", "What each client paid", 9)
+    [table] = _read(run_dir=tmp_path, manifest=manifest).tables
+    assert not table.primary
     assert [c.text for c in table.preview.rows[0].cells] == ["client 0", "0.0"]
 
 
