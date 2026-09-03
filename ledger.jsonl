@@ -2703,3 +2703,4 @@
 {"run_id":"33784538343","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33784538343","created":"2026-09-03T17:27:25Z","branch":"fix/verify-queued-row-fingerprint","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"33784870714","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33784870714","created":"2026-09-03T17:30:08Z","branch":"feat/mint-claims-screen","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"33784870714","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33784870714","created":"2026-09-03T17:31:00Z","branch":"feat/mint-claims-screen","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"33785916370","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33785916370","created":"2026-09-03T17:40:50Z","branch":"feat/claim-submissions","event":"pull_request","contracts_kept":16,"findings":[]}
