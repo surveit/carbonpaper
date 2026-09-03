@@ -26,7 +26,7 @@ _ROW_CAP = 6
 
 
 @router.get("/pickers/projects", response_class=HTMLResponse)
-async def projects_picker(request: Request, current: str = ""):
+def projects_picker(request: Request, current: str = ""):
     return _render(request, Picker(
         heading="Projects",
         rows=[
@@ -41,7 +41,7 @@ async def projects_picker(request: Request, current: str = ""):
 
 
 @router.get("/pickers/project/{project_id}/versions", response_class=HTMLResponse)
-async def versions_picker(request: Request, project_id: str, current: str = ""):
+def versions_picker(request: Request, project_id: str, current: str = ""):
     _refuse_unknown_project(project_id)
     versions = list_versions(project_id)  # newest-first
     return _render(request, Picker(
@@ -53,7 +53,7 @@ async def versions_picker(request: Request, project_id: str, current: str = ""):
 
 
 @router.get("/pickers/project/{project_id}/runs", response_class=HTMLResponse)
-async def runs_picker(request: Request, project_id: str, current: str = ""):
+def runs_picker(request: Request, project_id: str, current: str = ""):
     _refuse_unknown_project(project_id)
     runs = build_run_index_rows(project_id)  # newest-first
     return _render(request, Picker(

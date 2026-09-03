@@ -110,7 +110,7 @@ def _read_panel_context(sid: str, data: dict) -> dict:
 
 
 @router.get("/chat", response_class=HTMLResponse)
-async def chat_index(request: Request):
+def chat_index(request: Request):
     all_sessions = _store.list_sessions()
     # Load full sessions to check context; filter out those marked hidden at the route level.
     visible_sessions = []
@@ -163,7 +163,7 @@ def _read_draft_panel_context(agent_id: str, context: dict) -> dict:
 
 
 @router.get("/chat/agent/{agent_id}/new", response_class=HTMLResponse)
-async def draft_agent_chat(agent_id: str, request: Request):
+def draft_agent_chat(agent_id: str, request: Request):
     """Visiting creates nothing; the composer materializes on the first reply."""
     if not registry.is_registered(agent_id):
         raise HTTPException(status_code=404, detail="Unknown agent")
@@ -179,7 +179,7 @@ async def draft_agent_chat(agent_id: str, request: Request):
 
 
 @router.get("/chat/agent/{agent_id}/new/panel", response_class=HTMLResponse)
-async def new_chat_panel(agent_id: str, request: Request):
+def new_chat_panel(agent_id: str, request: Request):
     """The draft page's panel with no page around it, for a host that has its own."""
     if not registry.is_registered(agent_id):
         raise HTTPException(status_code=404, detail="Unknown agent")
@@ -202,7 +202,7 @@ async def new_agent_session(agent_id: str, request: Request):
 
 
 @router.get("/chat/{sid}", response_class=HTMLResponse)
-async def chat_page(request: Request, sid: str):
+def chat_page(request: Request, sid: str):
     if not _store.exists(sid):
         raise HTTPException(status_code=404, detail="Session not found")
     data = _store.load(sid)
@@ -214,7 +214,7 @@ async def chat_page(request: Request, sid: str):
 
 
 @router.get("/chat/{sid}/panel", response_class=HTMLResponse)
-async def chat_panel(request: Request, sid: str):
+def chat_panel(request: Request, sid: str):
     """The panel with no page around it, for a host that has its own. static/chat-rail.js."""
     if not _store.exists(sid):
         raise HTTPException(status_code=404, detail="Session not found")
@@ -265,7 +265,7 @@ async def post_message(sid: str, request: Request):
 
 
 @router.get("/chat/{sid}/turn/{turn_id}/stream")
-async def stream_turn(sid: str, turn_id: str, request: Request):
+def stream_turn(sid: str, turn_id: str, request: Request):
     try:
         from_index = int(request.query_params.get("from", "0"))
     except ValueError:
@@ -292,7 +292,7 @@ class RenderedReply(BaseModel):
 
 
 @router.get("/chat/{sid}/rendered-reply")
-async def get_rendered_reply(sid: str) -> RenderedReply:
+def get_rendered_reply(sid: str) -> RenderedReply:
     """One segment per text block of the reply, in order; the client swaps only on an exact match."""
     if not _store.exists(sid):
         raise HTTPException(status_code=404, detail="Session not found")
@@ -311,7 +311,7 @@ class RenderMarkdownReply(BaseModel):
 
 
 @router.post("/chat/{sid}/render-markdown")
-async def render_markdown_text(sid: str, body: RenderMarkdownRequest) -> RenderMarkdownReply:
+def render_markdown_text(sid: str, body: RenderMarkdownRequest) -> RenderMarkdownReply:
     """Renders one already-complete text block, for a client re-rendering it mid-turn."""
     if not _store.exists(sid):
         raise HTTPException(status_code=404, detail="Session not found")
@@ -319,7 +319,7 @@ async def render_markdown_text(sid: str, body: RenderMarkdownRequest) -> RenderM
 
 
 @router.get("/chat/{sid}/messages")
-async def get_messages(sid: str):
+def get_messages(sid: str):
     if not _store.exists(sid):
         raise HTTPException(status_code=404, detail="Session not found")
     return JSONResponse(_store.load(sid))

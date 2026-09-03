@@ -17,6 +17,7 @@ router = APIRouter()
 
 @router.post("/project/{project_id}/workflow/version/{version_id}/guide")
 async def generate_version_guide(project_id: str, version_id: str):
+    # async: start_review_guide_generation calls asyncio.create_task, needing a running loop.
     validate_project_or_404(project_id)
     model = project_service.project_meta(project_id).model or "sonnet"
     try:

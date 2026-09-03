@@ -26,13 +26,13 @@ router = APIRouter()
 
 
 @router.get("/project/{project_id}/workflow/graph")
-async def workflow_graph(project_id: str):
+def workflow_graph(project_id: str):
     stages = list_parsed_stages(load_stages(project_id).entries)
     return JSONResponse({"mermaid": build_mermaid_graph(stages, project_id)})
 
 
 @router.get("/project/{project_id}/node/{stage_id}/panel", response_class=HTMLResponse)
-async def node_panel(request: Request, project_id: str, stage_id: str):
+def node_panel(request: Request, project_id: str, stage_id: str):
     listing = load_stages(project_id)
     stage = find_parsed_stage(listing.entries, stage_id)
     if stage is None:
@@ -61,7 +61,7 @@ async def node_panel(request: Request, project_id: str, stage_id: str):
 
 
 @router.post("/project/{project_id}/node/{stage_id}/edit")
-async def node_edit(
+def node_edit(
     project_id: str,
     stage_id: str,
     spec_text: str = Form(...),
@@ -86,6 +86,7 @@ async def node_generate_tests(project_id: str, stage_id: str):
     validate_project_or_404(project_id)
     model = project_service.project_meta(project_id).model or "sonnet"
     try:
+        # async: this calls asyncio.create_task, needing a running loop.
         session_id = generation.start_stage_test_generation(
             project_id, stage_id=stage_id, model=model
         )
@@ -97,7 +98,7 @@ async def node_generate_tests(project_id: str, stage_id: str):
 
 
 @router.get("/project/{project_id}/generation-session/{sid}/status")
-async def generation_session_status(project_id: str, sid: str):
+def generation_session_status(project_id: str, sid: str):
     del project_id  # URL-namespaced only; sessions are looked up by id, not by project.
     store = open_session_store()
     if not store.exists(sid):
@@ -126,7 +127,7 @@ def _find_generation_failure(messages: list[dict]) -> str | None:
 
 
 @router.post("/project/{project_id}/version")
-async def create_version_route(project_id: str, message: str = Form(...)):
+def create_version_route(project_id: str, message: str = Form(...)):
     validate_project_or_404(project_id)
 
     # No compiler gate: a version is a snapshot of what the author has, and the

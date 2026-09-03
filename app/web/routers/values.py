@@ -20,7 +20,7 @@ router = APIRouter()
 @router.get(
     "/project/{project_id}/runs/{run_id}/values/panel", response_class=HTMLResponse
 )
-async def values_panel(request: Request, project_id: str, run_id: str,
+def values_panel(request: Request, project_id: str, run_id: str,
                        stage: str, row: int, column: str):
     """The column's walk, shell-less: the row lineage page holds it inside a tab."""
     try:
