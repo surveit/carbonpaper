@@ -65,6 +65,10 @@ DIAGRAM_SCRIPTS = (NODE_SCRIPT, VIEWPORT_SCRIPT, TOOLTIP_SCRIPT)
 # Vendored, or a packet's tables would open nothing: the link column is gone.
 CELL_LINEAGE_SCRIPT = "cell-lineage.js"
 FIGURE_SCRIPT = "figure_text.js"
+# What the stage panel needs and base.html, which no packet page extends, supplies.
+TABS_SCRIPT = "tabs.js"
+FRIENDLY_TIME_SCRIPT = "friendly-time.js"
+PANEL_SCRIPTS = (TABS_SCRIPT, FRIENDLY_TIME_SCRIPT)
 
 # The tokenizer and its caller, vendored so a stage page colours its code offline.
 # The theme rides in the concatenated stylesheet, which already follows the app's
@@ -96,7 +100,7 @@ def write_packet_pages(
     workflow_stages_by_id: dict[str, WorkflowStage],
 ) -> list[str]:
     written = _write_stylesheets(root)
-    written.extend(_write_diagram_scripts(root))
+    written.extend(_write_vendored_scripts(root))
     written.append(_write_asset(root, FAVICON))
     written.append(_write_diagram_source(root, diagram))
     written.append(_write_index(root, view, data, lineage, guide, diagram, issues))
@@ -160,9 +164,10 @@ def _write_diagram_source(root: Path, diagram: str) -> str:
     return _write_text(root / WORKFLOW_DIAGRAM_FILE, diagram, WORKFLOW_DIAGRAM_FILE)
 
 
-def _write_diagram_scripts(root: Path) -> list[str]:
+def _write_vendored_scripts(root: Path) -> list[str]:
     return [_write_asset(root, name)
-            for name in (*DIAGRAM_SCRIPTS, CELL_LINEAGE_SCRIPT, FIGURE_SCRIPT)]
+            for name in (*DIAGRAM_SCRIPTS, CELL_LINEAGE_SCRIPT, FIGURE_SCRIPT,
+                         *PANEL_SCRIPTS)]
 
 
 def _write_asset(root: Path, name: str) -> str:
@@ -185,6 +190,7 @@ def _write_stage_page(
         icon=f"../{ASSETS_DIR}/{FAVICON}",
         static_root=f"../{ASSETS_DIR}/",
         cell_script=f"../{ASSETS_DIR}/{CELL_LINEAGE_SCRIPT}",
+        panel_scripts=[f"../{ASSETS_DIR}/{name}" for name in PANEL_SCRIPTS],
         index_href="../index.html",
         **_build_panel_context(run_dir, view, stage, workflow_stage, traced),
     )

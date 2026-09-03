@@ -640,3 +640,25 @@ def test_a_report_stage_that_wrote_nothing_is_reported_not_skipped(project_dir, 
     assert [o.path for o in packet.omitted] == ["artifacts/"]
     assert "report finished, but wrote no file" in packet.omitted[0].reason
     assert "wrote no file" in (packet.root / "index.html").read_text(encoding="utf-8")
+
+
+# A packet page gets none of base.html's scripts, so each hook it draws names its own.
+_HOOK_NEEDS_SCRIPT = {
+    "stage-tabs": "tabs.js",
+    "<time datetime": "friendly-time.js",
+    "data-tip": "tooltip.js",
+    "cell-clip": "cell-expand.js",
+    "js-run-row": "row-link.js",
+}
+
+
+def test_every_hook_a_packet_page_draws_has_the_script_that_binds_it(exported):
+    for page in exported.root.rglob("*.html"):
+        html = page.read_text(encoding="utf-8")
+        loaded = re.findall(r'<script[^>]*\bsrc="([^"]+)"', html)
+        for hook, script in _HOOK_NEEDS_SCRIPT.items():
+            if hook not in _markup_of(page):
+                continue
+            assert any(src.endswith(script) for src in loaded), (
+                f"{page.name} draws {hook!r} but loads no {script}"
+            )

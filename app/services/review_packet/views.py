@@ -184,7 +184,8 @@ class StageTraces(BaseModel):
 class LineageReport(BaseModel):
     written: list[str]
     traced: set[tuple[str, int]]
-    refused: str | None
+    # The walk ran out of budget before it ran out of rows.
+    stops_short: bool
     stages: list[StageTraces] = []
     figures: list[PublishedFigure] = []
 

@@ -188,6 +188,11 @@ def _demo_run(tmp_path):
 
 
 def _export_demo_packet(tmp_path):
+    _export_demo_lineage(tmp_path)
+    return tmp_path / "packet"
+
+
+def _export_demo_lineage(tmp_path):
     from app.runtime.citations import CitationProvider, save_citations
     from app.web.review_packet.lineage import write_packet_lineage
 
@@ -199,8 +204,7 @@ def _export_demo_packet(tmp_path):
 
     root = tmp_path / "packet"
     root.mkdir()
-    write_packet_lineage(root, run_dir, _run_view(2), {}, _DEMO_MANIFEST)
-    return root
+    return write_packet_lineage(root, run_dir, _run_view(2), {}, _DEMO_MANIFEST)
 
 
 # What the run recorded of the one file it read — the Inputs pane's whole source.
@@ -333,3 +337,25 @@ def test_the_packet_ships_no_syntax_highlighter():
         "the app still links it; this test guards the packet's exclusion, "
         "and would otherwise pass by the sheet simply having been deleted"
     )
+
+
+def test_a_walk_wider_than_the_budget_writes_its_nearest_rows_and_says_it_stopped(
+    tmp_path, monkeypatch
+):
+    """One corpus-wide total reaches every input row, which used to write no page."""
+    from app.web.review_packet import lineage as packet_lineage
+
+    monkeypatch.setattr(packet_lineage, "PACKET_MAX_LINEAGE_PAGES", 2)
+    report = _export_demo_lineage(tmp_path)
+    root = tmp_path / "packet"
+
+    assert report.stops_short
+    assert len(report.traced) == 2
+    pages = sorted(p.name for p in root.glob("lineage/*/*.html") if ".from-" not in p.name)
+    assert pages == ["0.html", "1.html"], "the two rows the report stage linked"
+    assert "The walk back stops here" in (
+        root / "lineage" / "index.html").read_text(encoding="utf-8")
+
+
+def test_a_walk_inside_the_budget_claims_no_rows_are_missing(tmp_path):
+    assert not _export_demo_lineage(tmp_path).stops_short

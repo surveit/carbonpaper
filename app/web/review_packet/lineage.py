@@ -3,10 +3,10 @@ the same view model the served lineage page uses."""
 from __future__ import annotations
 
 import logging
+from collections import deque
 from pathlib import Path
 from typing import Any
 
-from app.web.figure_text import render_figure
 from app.core.json_types import JsonDict
 from app.models import WorkflowStage
 from app.core.frames import write_frame_file, table_to_frame
@@ -41,11 +41,8 @@ from app.web.trace_view import build_trace_view, read_walked_rows
 
 _log = logging.getLogger(__name__)
 
-# A page per traced row. Reached only by a run whose terminal stages are very wide;
-# past it the packet writes NO lineage at all rather than a partial set, because a
-# row linking to a page that was never written is the one failure this whole surface
-# exists to avoid — a dead link reads as "checked" until the reader clicks it.
-PACKET_MAX_LINEAGE_PAGES = 20_000
+# A budget, not a refusal: an unwritten row is linked from nowhere, so the walk stops.
+PACKET_MAX_LINEAGE_PAGES = 1_000
 
 
 def write_packet_lineage(
@@ -58,33 +55,30 @@ def write_packet_lineage(
     # Read once for the whole packet: every page below scopes this same catalog.
     catalog = build_input_catalog(view.project, manifest)
     published = set(_published_rows(view))
-    closure = _find_closure(frames, view)
-    if len(closure) > PACKET_MAX_LINEAGE_PAGES:
-        return LineageReport(written=[], traced=set(), refused=(
-            f"{render_figure(len(closure))} rows feed the rows this run published, over the "
-            f"{render_figure(PACKET_MAX_LINEAGE_PAGES)}-page limit — no lineage page was written, "
-            "because a partial set would leave some rows looking unsourced"
-        ))
-    traced = frozenset(closure)
+    # One past the budget, so the extra row is what says the walk had further to go.
+    walked = _walk_back_from_figures(frames, view, PACKET_MAX_LINEAGE_PAGES + 1)
+    stops_short = len(walked) > PACKET_MAX_LINEAGE_PAGES
+    reached = set(walked[:PACKET_MAX_LINEAGE_PAGES])
+    traced = frozenset(reached)
     written = [
         path
-        for stage_id, row in sorted(closure)
+        for stage_id, row in sorted(reached)
         for path in _write_page(root, frames, branches, view, stages_by_id,
                                 catalog, stage_id, row, traced)
     ]
-    stages = _group_by_stage(sorted(closure), published)
-    figures = _named_figures(view, closure)
+    stages = _group_by_stage(sorted(reached), published)
+    figures = _named_figures(view, reached)
     if written:
         # No directory where there is nothing to list: a run that published no
         # links promises no provenance, and an empty page implies otherwise.
-        written.append(_write_directory(root, stages, len(closure)))
+        written.append(_write_directory(root, stages, len(reached), stops_short))
     return LineageReport(
-        written=written, traced=set(closure), refused=None,
+        written=written, traced=reached, stops_short=stops_short,
         stages=stages, figures=figures,
     )
 
 
-def _named_figures(view: RunView, closure: set[tuple[str, int]]) -> list[PublishedFigure]:
+def _named_figures(view: RunView, reached: set[tuple[str, int]]) -> list[PublishedFigure]:
     """Every value a report stage cited; a row it merely claimed carries no figure."""
     return [
         PublishedFigure(
@@ -94,7 +88,7 @@ def _named_figures(view: RunView, closure: set[tuple[str, int]]) -> list[Publish
             row_ordinal=target.row_ordinal,
             href=(
                 packet_lineage_href("", target.stage_id, target.row_ordinal)
-                if (target.stage_id, target.row_ordinal) in closure else None
+                if (target.stage_id, target.row_ordinal) in reached else None
             ),
         )
         for target in read_citations(view.project, view.run_id)
@@ -118,19 +112,21 @@ def _group_by_stage(
     ]
 
 
-def _find_closure(frames: RunFrames, view: RunView) -> set[tuple[str, int]]:
-    """Every row reachable from a published link, following the branches a trace names."""
-    pending = _published_rows(view)
+def _walk_back_from_figures(
+    frames: RunFrames, view: RunView, limit: int
+) -> list[tuple[str, int]]:
+    """Rows reachable from a published link, nearest first, stopping at `limit`."""
+    pending = deque(_published_rows(view))
+    reached: list[tuple[str, int]] = []
     seen: set[tuple[str, int]] = set()
-    while pending:
-        row = pending.pop()
+    while pending and len(reached) < limit:
+        row = pending.popleft()
         if row in seen:
             continue
         seen.add(row)
-        if len(seen) > PACKET_MAX_LINEAGE_PAGES:
-            return seen
+        reached.append(row)
         pending.extend(_branches_of(frames, *row))
-    return seen
+    return reached
 
 
 def _branches_of(frames: RunFrames, stage_id: str, row: int) -> list[tuple[str, int]]:
@@ -142,7 +138,8 @@ def _branches_of(frames: RunFrames, stage_id: str, row: int) -> list[tuple[str, 
 
 
 def _write_page(
-    root: Path, frames: RunFrames, branches: WorkflowRunBranches | None, view: RunView,
+    root: Path, frames: RunFrames, branches: WorkflowRunBranches | MissingLineage,
+    view: RunView,
     stages_by_id: dict[str, WorkflowStage], catalog: InputCatalog, stage_id: str,
     row: int, traced: frozenset[tuple[str, int]],
 ) -> list[str]:
@@ -179,11 +176,15 @@ def _published_rows(view: RunView) -> list[tuple[str, int]]:
     return read_cited_row_keys(view.project, view.run_id)
 
 
-def _write_directory(root: Path, stages: list[StageTraces], total: int) -> str:
+def _write_directory(
+    root: Path, stages: list[StageTraces], total: int, stops_short: bool
+) -> str:
     relative = f"{LINEAGE_DIR}/index.html"
     html = templates.env.get_template("packet_lineage_index.html").render(
         stages=stages,
         total=total,
+        stops_short=stops_short,
+        budget=PACKET_MAX_LINEAGE_PAGES,
         assets=[f"../{ASSETS_DIR}/{name}" for name in STYLESHEETS],
         icon=f"../{ASSETS_DIR}/{FAVICON}",
         static_root=f"../{ASSETS_DIR}/",
@@ -255,25 +256,25 @@ def _cell(value: Any) -> str:
 
 def _read_run_branches(
     run_dir: Path, view: RunView, stages_by_id: dict[str, WorkflowStage]
-) -> WorkflowRunBranches | None:
-    """None where this run's lineage cannot be read; the pages then say so."""
+) -> WorkflowRunBranches | MissingLineage:
+    """The branches, or the reason there are none — which every page then prints."""
     if not stages_by_id:
-        return None
+        return MissingLineage(
+            "the version this run pinned is unreadable, so no stage's branches are known")
     order = [stage.stage_id for stage in view.stages]
     rows = {stage.stage_id: stage.row_count for stage in view.stages}
     try:
         return reconstruct_run_branches(run_dir, stages_by_id, order, rows)
-    except MissingLineage:
-        return None
+    except MissingLineage as missing:
+        return missing
 
 
 def _read_paths_pane(
-    branches: WorkflowRunBranches | None, stage_id: str, row: int,
+    branches: WorkflowRunBranches | MissingLineage, stage_id: str, row: int,
     trace_view: dict[str, Any],
 ) -> PathsPane:
-    if branches is None:
-        return NoPathsToShow(
-            reason="the version this run pinned is unreadable, so no stage's branches are known")
+    if isinstance(branches, MissingLineage):
+        return NoPathsToShow(reason=str(branches))
     figure = CitedFigure(stage_id=stage_id, row_ordinal=row)
     try:
         return find_paths_behind_figure(branches, figure, read_walked_rows(trace_view))
