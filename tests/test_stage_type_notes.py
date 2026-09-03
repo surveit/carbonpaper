@@ -115,8 +115,17 @@ def test_report_note_names_the_citation_call():
     assert "citation_provider.cite_value(" in note
 
 
-def test_report_note_reaches_the_editing_agent_prompt():
+def test_the_offered_report_type_is_the_sandboxed_one():
+    """`report` is withheld pending approval, so its note is not what the agent reads."""
     from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
 
-    note = STAGE_TYPES["report"].notes
-    assert note in EDITING_SYSTEM_PROMPT
+    assert STAGE_TYPES["starlark_report"].notes in EDITING_SYSTEM_PROMPT
+    assert STAGE_TYPES["report"].notes not in EDITING_SYSTEM_PROMPT
+
+
+def test_the_sandboxed_report_prompt_names_every_builtin_the_runtime_binds():
+    """A builtin the prompt omits is one an author never calls; one it invents fails to compile."""
+    from app.models.stages.starlark_report import BUILTIN_SURFACE_NOTE, REPORT_BUILTINS
+
+    for builtin in REPORT_BUILTINS:
+        assert f"`{builtin}(" in BUILTIN_SURFACE_NOTE, builtin

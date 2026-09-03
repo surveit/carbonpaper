@@ -45,7 +45,7 @@ STARLARK_LANGUAGE_NOTE = (
     "Recursion runs but is bounded by a call-stack limit, so it cannot loop forever."
 )
 
-_VALUE_MARSHALLING_NOTE = (
+VALUE_MARSHALLING_NOTE = (
     "Values arrive as strings, numbers, booleans, None, lists and dicts; dates and "
     "timestamps as ISO-8601 strings and every missing value as None."
 )
@@ -67,7 +67,7 @@ _CODE_DESCRIPTION = (
     "Inline Starlark defining `function` (default `transform`): `def transform(row): "
     "...`, one row dict in, one row dict out, and the returned dict IS the output row "
     "(a key you do not return is absent — carry columns through with `return "
-    "dict(row, key=value)`). " + STARLARK_LANGUAGE_NOTE + " " + _VALUE_MARSHALLING_NOTE +
+    "dict(row, key=value)`). " + STARLARK_LANGUAGE_NOTE + " " + VALUE_MARSHALLING_NOTE +
     " " + _DATE_COLUMN_NOTE +
     " Call `refuse(\"reason\")` to decline a row you cannot honestly process; call "
     "`fail(\"reason\")` only for a bug. Module-level variables are frozen after "
@@ -201,7 +201,7 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
             "`transform(row)` is handed a plain dict and must return a "
             "plain dict, and that dict IS the output row: a key you do not return is "
             "absent, so carry columns through explicitly (`return dict(row, key=value)`). "
-            + _VALUE_MARSHALLING_NOTE + " " + _DATE_COLUMN_NOTE + " An integer "
+            + VALUE_MARSHALLING_NOTE + " " + _DATE_COLUMN_NOTE + " An integer "
             "beyond 2**63-1 stops the step rather than losing precision. Call "
             "`refuse(\"reason\")` to decline a row you cannot honestly process. "
             "Module-level variables freeze after load — keep state in locals."

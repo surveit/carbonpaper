@@ -47,6 +47,7 @@ from app.models.stages.signature import (  # noqa: F401  (re-exported: the stage
 from app.models.stages.sort_rank import SortRankConfig, SortRankStage
 from app.models.stages.starlark import StarlarkFunction, StarlarkRowFunctionStage
 from app.models.stages.starlark_filter import StarlarkFilter, StarlarkFilterRowsStage
+from app.models.stages.starlark_report import StarlarkReport, StarlarkReportStage
 from app.models.stages.union import UnionConfig, UnionStage
 from app.core.utils import format_errors
 from app.models.tool_schema_prompts import STAGE_DRAFT_DESCRIPTION, STAGE_EDIT_DESCRIPTION
@@ -71,6 +72,7 @@ Stage = Annotated[
         FilterRowsStage,
         StarlarkRowFunctionStage,
         StarlarkFilterRowsStage,
+        StarlarkReportStage,
         ExplodeStage,
         DedupeStage,
         SortRankStage,
@@ -150,6 +152,7 @@ class StageDraft(AuthoredStageFields):
     filter: Optional[FilterConfig] = None
     starlark: Optional[StarlarkFunction] = None
     starlark_filter: Optional[StarlarkFilter] = None
+    starlark_report: Optional[StarlarkReport] = None
     explode: Optional[ExplodeConfig] = None
     dedupe: Optional[DedupeConfig] = None
     sort_rank: Optional[SortRankConfig] = None

@@ -10,7 +10,11 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from app.core.agent.agent import SUBMIT_ANSWER_TOOL, Agent
-from app.models.stages.llm_transform import GRANTABLE_TOOLS, LLMConfig
+from app.models.stages.llm_transform import (
+    GRANTABLE_TOOLS,
+    KNOWN_TOOL_NAMES,
+    LLMConfig,
+)
 from app.runtime import llm as runtime_llm
 from app.runtime.options import (
     DEFAULT_TIMEOUT_S,
@@ -55,8 +59,28 @@ def test_batching_still_allowed_without_tools():
     assert _config(batch_size=8).batch_size == 8
 
 
-def test_grantable_set_covers_search_fetch_and_extraction():
-    assert {"WebSearch", "WebFetch", "Bash"} <= GRANTABLE_TOOLS
+def test_a_stage_may_be_granted_the_open_web_and_nothing_on_this_machine():
+    assert GRANTABLE_TOOLS == {"WebSearch", "WebFetch"}
+
+
+def test_bash_still_loads_because_two_frozen_versions_carry_it():
+    """The write-time refusal names Bash by name, so it must stay the only such name."""
+    assert KNOWN_TOOL_NAMES - GRANTABLE_TOOLS == {"Bash"}
+    assert _config(tools=["Bash"]).tools == ["Bash"]
+
+
+def test_granting_bash_to_a_new_stage_is_refused():
+    from app.services.stage_edit import find_ungrantable_tool_issues
+
+    issues = find_ungrantable_tool_issues({"id": "research", "llm": {"tools": ["Bash"]}})
+    assert issues and "`Bash`" in issues[0]
+
+
+def test_a_stored_stage_that_already_grants_bash_stays_editable():
+    from app.services.stage_edit import find_ungrantable_tool_issues
+
+    candidate = {"id": "research", "llm": {"tools": ["Bash"], "temperature": 0.0}}
+    assert find_ungrantable_tool_issues(candidate, {"research": {"llm": {"tools": ["Bash"]}}}) == []
 
 
 # ── plumbing: tools reach the agent ──────────────────────────────────────────

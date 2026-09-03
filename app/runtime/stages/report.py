@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import inspect
-from pathlib import Path
 from typing import Any, Callable
 
 import pyarrow as pa
@@ -13,6 +12,7 @@ from app.core.frames import table_to_frame
 from app.models import WorkflowStage
 from app.models.stages.report import ReportStage
 
+from ..artifacts import prepare_artifact_dir
 from ..context import RunContext
 from ..citations import CitationProvider, save_citations
 from ..stage_output import StageOutput
@@ -27,7 +27,7 @@ def handle_report(
 ) -> StageOutput:
     """Gets the frames positionally, an `output_dir` kwarg, and `citation_provider` if declared."""
     report_stage = narrow_stage(workflow_stage, ReportStage)
-    output_dir = _prepare_output_dir(report_stage, ctx)
+    output_dir = prepare_artifact_dir(report_stage.report.destination, ctx)
     fn = _load_python_function(report_stage)
     args = [table_to_frame(inputs[ref.id]) for ref in workflow_stage.inputs]
 
@@ -39,15 +39,6 @@ def handle_report(
     identity = ctx.require_identity()
     save_citations(identity.project, identity.run_id, report_stage.id, citation_provider)
     return StageOutput.from_frame(result)
-
-
-def _prepare_output_dir(stage: ReportStage, ctx: RunContext) -> Path:
-    report_cfg = stage.report
-    output_dir = (
-        ctx.require_run_dir() / "artifacts" / Path(report_cfg.destination or "build/").name
-    )
-    output_dir.mkdir(parents=True, exist_ok=True)
-    return output_dir
 
 
 def _resolve_citation_provider(

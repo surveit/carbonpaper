@@ -78,7 +78,9 @@ class StageType(str, Enum):
     expand = "expand"
     aggregate = "aggregate"
     human_review_queue = "human_review_queue"
+    # Two artifact writers: starlark_report writes through builtins, report host Python.
     report = "report"
+    starlark_report = "starlark_report"
     # Both preserve exact per-row PROVENANCE (each output row traces to one
     # specific input row) but neither is grain-and-order preserving BY
     # POSITION: filter_rows drops rows, union interleaves rows from several

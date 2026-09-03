@@ -19,6 +19,7 @@ from app.models.stages.report import STAGE_TYPE_SPECS as _REPORT
 from app.models.stages.sort_rank import STAGE_TYPE_SPECS as _SORT_RANK
 from app.models.stages.starlark import STAGE_TYPE_SPECS as _STARLARK
 from app.models.stages.starlark_filter import STAGE_TYPE_SPECS as _STARLARK_FILTER
+from app.models.stages.starlark_report import STAGE_TYPE_SPECS as _STARLARK_REPORT
 from app.models.stages.union import STAGE_TYPE_SPECS as _UNION
 
 # app.agents.compiler.prompt and app.mcp.server render this into their system
@@ -35,6 +36,7 @@ STAGE_TYPES: dict[str, StageTypeSpec] = {
     **_FILTER_ROWS,
     **_STARLARK,
     **_STARLARK_FILTER,
+    **_STARLARK_REPORT,
     **_EXPLODE,
     **_DEDUPE,
     **_SORT_RANK,
@@ -49,8 +51,15 @@ STAGE_TYPES: dict[str, StageTypeSpec] = {
 # step it cannot express would conclude the step is impossible rather than ask.
 # A stored stage of either type keeps loading and running.
 APPROVAL_REQUIRED_TYPES = (
-    "python_row_function", "python_frame_function", "filter_rows",
+    "python_row_function", "python_frame_function", "filter_rows", "report",
 )
+
+# The sandboxed type that does the same job — what the refusal points at.
+SANDBOXED_COUNTERPART: dict[str, str] = {
+    "python_row_function": "starlark_row_function",
+    "filter_rows": "starlark_filter_rows",
+    "report": "starlark_report",
+}
 
 # What the authoring prompts list. STAGE_TYPES stays whole: the runtime, the
 # diagrams and the trace all read it for types a stored workflow may still carry.
@@ -63,7 +72,8 @@ AUTHORABLE_TYPES: dict[str, StageTypeSpec] = {
 # and `corner_cases`, refused on write by app.services.stage_edit; their specs carry
 # the contract notes, pinned by tests/test_stage_type_notes.py.
 CODE_CARRYING_TYPES = ("python_row_function", "python_frame_function", "report",
-                       "filter_rows", "starlark_row_function", "starlark_filter_rows")
+                       "filter_rows", "starlark_row_function", "starlark_filter_rows",
+                       "starlark_report")
 
 # The subset a prompt states the code-description rule for: a withheld type's rule
 # is still enforced on a stored stage, but stating it beside the offered types

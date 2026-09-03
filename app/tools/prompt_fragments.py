@@ -18,6 +18,7 @@ from app.models.stages.signature import (
 )
 from app.models.stages.stage_types import (
     APPROVAL_REQUIRED_TYPES,
+    SANDBOXED_COUNTERPART,
     AUTHORABLE_CODE_CARRYING_TYPES as AUTHORABLE_CODE_CARRYING_TYPES,
     AUTHORABLE_TYPES,
     CODE_CARRYING_TYPES,
@@ -219,14 +220,17 @@ def render_type_catalog(indent: str = "    ") -> str:
 # never reached. It does not repeat the warning: the refusal on write carries that,
 # in front of the actual stage.
 CODE_EXECUTION_ESCAPE_NOTE = (
-    "Three more types exist and are deliberately not listed above, because a project "
+    "More types exist and are deliberately not listed above, because a project "
     "only gets them once its owner has turned on code execution: "
     + ", ".join(f"`{name}`" for name in APPROVAL_REQUIRED_TYPES) + ". They "
     "run Python unsandboxed — files, network, installing packages — and the frame one "
     "also ends the row trace, so a figure downstream of it cannot be walked back. "
-    "Everything above beats all three: `starlark_filter_rows` is `filter_rows` "
-    "sandboxed, and a `starlark_row_function` does per-row work `python_row_function` "
-    "used to. Between the Python ones, the row one keeps the trace.\n"
+    "Everything above beats all of them, because each has a sandboxed counterpart above "
+    "that does the same job: "
+    + ", ".join(f"`{python_type}` → `{sandboxed}`"
+                for python_type, sandboxed in SANDBOXED_COUNTERPART.items())
+    + ". Only `python_frame_function` has none. Between the Python ones, the row one "
+    "keeps the trace.\n"
     "Do not assume you may use one, and do not write one to find out. If a step "
     "genuinely needs Python, tell the project's owner in plain words what it will do and "
     "why nothing above fits, ask whether to turn code execution on, and WAIT for their "
