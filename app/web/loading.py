@@ -401,12 +401,18 @@ def _load_output_slice(
 # ─── Queue snapshots ──────────────────────────────────────────────────────────
 
 def queue_snapshot(project_id: str, run_id: str, stage_id: str) -> pd.DataFrame | None:
+    path = find_queue_snapshot_path(project_id, run_id, stage_id)
+    return None if path is None else read_frame_file(path)
+
+
+def find_queue_snapshot_path(project_id: str, run_id: str, stage_id: str) -> Path | None:
+    """A run that halted for review here left the rows it halted on; nothing removes them."""
     run_dir = resolve_run_dir(project_id, run_id)
-    for ext in (".parquet", ".csv"):
-        p = run_dir / "queue" / f"{stage_id}{ext}"
-        if p.exists():
-            return read_frame_file(p)
-    return None
+    return next(
+        (path for ext in (".parquet", ".csv")
+         if (path := run_dir / "queue" / f"{stage_id}{ext}").exists()),
+        None,
+    )
 
 
 def load_queue_fingerprints(project_id: str, run_id: str, stage_id: str) -> QueueFingerprints | None:

@@ -1835,3 +1835,100 @@ def test_two_identical_rows_share_one_decision_and_both_carry_it(tmp_path, monke
     assert len(out) == 2
     assert list(out["human_score"]) == [99, 99]
     assert list(out["decision"]) == ["modify", "modify"]
+
+
+# ── 14. A finished queue: the decisions stay readable, and take no more ─────
+
+
+def _decide_and_resume(tmp_path, monkeypatch):
+    """A run carried right through its queue — one row approved, one changed."""
+    project_dir, run_id, run_dir, snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    client = TestClient(app)
+    for fp, submitted in zip(fingerprints["input_fingerprints"], ["1", "7"]):
+        r = client.post(
+            f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
+            data=_decide_data(fp, {"human_score": submitted},
+                              prefilled={"human_score": "1"}, reviewer="Ada"),
+        )
+        assert r.status_code == 200, r.text
+    resumed = runner.resume_run(project_dir / "runs" / run_id, project_dir.name, run_id,
+                                *resumed_stages(project_dir, run_id))
+    assert resumed["status"] == "ok"
+    return project_dir, run_id, run_dir, snapshot, fingerprints
+
+
+def _shipped_cards(html: str) -> str:
+    """The card markup alone: the page's own script names every control it can draw."""
+    start = html.index('<template id="queue-cards">')
+    return html[start:html.index("</template>", start)]
+
+
+def test_a_finished_queue_shows_every_decision_and_offers_nothing_to_press(tmp_path, monkeypatch):
+    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _decide_and_resume(
+        tmp_path, monkeypatch)
+
+    html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
+
+    assert ("Read-only: because this run has moved on and used these decisions, "
+            "they can no longer be modified") in html
+    # Both rows are still there, each carrying the decision it was recorded with.
+    for fp in fingerprints["input_fingerprints"]:
+        assert f'data-input-fingerprint="{fp}"' in html
+    assert html.count("decided-approve") == 1
+    assert html.count("decided-modify") == 1
+    # The values read as values: no control holds one, so nothing can be typed over.
+    cards = _shipped_cards(html)
+    assert cards.count('class="field-recorded"') == 2
+    assert "Columns reviewed" in cards and "Columns to review" not in cards
+    assert 'class="field-control"' not in cards
+    assert "data-cta" not in cards
+    assert "data-field-revert" not in cards
+    # Nothing asks for a name, and nothing offers to move the run along.
+    assert 'id="reviewer-name"' not in html
+    assert 'id="resume-run"' not in html
+
+
+def test_a_finished_queue_refuses_a_decision_rather_than_recording_a_late_one(
+    tmp_path, monkeypatch
+):
+    """A late decision would sit in the cache contradicting the rows this run emitted."""
+    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _decide_and_resume(
+        tmp_path, monkeypatch)
+    fp = fingerprints["input_fingerprints"][0]
+
+    r = TestClient(app).post(
+        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
+        data=_decide_data(fp, {"human_score": "42"}, prefilled={"human_score": "1"}),
+    )
+
+    assert r.status_code == 409
+    assert "can no longer be modified" in r.json()["detail"]
+    entry = StageCacheEntry.read_only().get(
+        PROJECT, "review", fingerprints["stage_fingerprint"], fp)
+    assert entry is not None
+    assert entry.output_row["human_score"] == 1  # the decision the run actually used
+
+
+def test_the_stage_panel_points_at_the_decisions_once_the_run_has_moved_on(
+    tmp_path, monkeypatch
+):
+    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _decide_and_resume(
+        tmp_path, monkeypatch)
+
+    html = TestClient(app).get(
+        f"/project/{PROJECT}/runs/{run_id}/stage/review/partial").text
+
+    assert f'href="/project/{PROJECT}/runs/{run_id}/queue/review"' in html
+    assert "Read the review decisions" in html
+
+
+def test_a_stage_that_never_queued_anything_is_not_offered_as_a_queue_to_read(
+    tmp_path, monkeypatch
+):
+    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _decide_and_resume(
+        tmp_path, monkeypatch)
+
+    html = TestClient(app).get(
+        f"/project/{PROJECT}/runs/{run_id}/stage/score/partial").text
+
+    assert "/queue/" not in html

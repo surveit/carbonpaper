@@ -35,7 +35,11 @@ from app.web.loading import (
     render_cells_as_text,
 )
 from app.web.panel_links import RectangleRequest, read_rectangle_query
-from app.web.run_stage_panel import not_executed_panel, resolve_panel_links
+from app.web.run_stage_panel import (
+    find_queue_link,
+    not_executed_panel,
+    resolve_panel_links,
+)
 from app.web.stage_diff import StageDiff, build_stage_diff
 
 router = APIRouter()
@@ -84,6 +88,7 @@ async def run_stage_partial(
 
     function_code = resolve_function_code(stage_def)
     llm_example = build_llm_example(pinned.workflow_stage, input_previews)
+    links = resolve_panel_links(project_id, run_id)
 
     return templates.TemplateResponse(
         request,
@@ -113,7 +118,9 @@ async def run_stage_partial(
             "eval_coverages": find_eval_coverages(
                 project_id, stage_id, manifest.get("workflow_version")),
             "previewable": stage_def is not None and stage_def.type in PREVIEWABLE_TYPES,
-            "links": resolve_panel_links(project_id, run_id),
+            "links": links,
+            # One queue page, halted or finished; the panel picks the words for it.
+            "queue_link": find_queue_link(links, project_id, run_id, stage_id),
             "event_tail": EVENT_TAIL,
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,

@@ -14,11 +14,21 @@ from app.services.loader import resolve_function_code
 from app.services.run import RunStageDef
 from app.web.config import templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH
+from app.web.loading import find_queue_snapshot_path
 from app.web.panel_links import AppPanelLinks
 
 
 def resolve_panel_links(project_id: str, run_id: str) -> AppPanelLinks:
     return AppPanelLinks(project_id, run_id)
+
+
+def find_queue_link(
+    links: AppPanelLinks, project_id: str, run_id: str, stage_id: str
+) -> str | None:
+    """None where this run left no queue here; a page reading "no items" is a dead link."""
+    if find_queue_snapshot_path(project_id, run_id, stage_id) is None:
+        return None
+    return links.review_queue(stage_id)
 
 
 def not_executed_panel(

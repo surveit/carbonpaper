@@ -237,6 +237,27 @@ The page counts the decisions it has recorded on top of
 `page.reviewed_count` to move the progress bar, and reveals the **Resume run**
 button (rendered `hidden`) once that count reaches the total.
 
+**A queue closes with its halt.** The snapshot and its fingerprints sidecar
+outlive the halt — nothing deletes them, and a resume that finds every row
+decided rewrites neither — so the page still renders after the run moves on.
+What settles whether it takes decisions is the run's own record of THAT stage
+(`find_review_closed_note`): `awaiting_review` and only that leaves it open.
+Anything else fills `QueuePage.closed_note`, which says why in a sentence and is
+what both templates read. A closed page draws the recorded value where the
+control stood, no reviewer gate, no Resume, and no CTA; the script keeps the
+pager and registers nothing that posts. `queue_decide` refuses with a 409 on the
+same note, so the read-only page is a consequence of the refusal rather than a
+substitute for it — a decision recorded after the resume would sit in the stage
+cache contradicting the rows this run already emitted.
+
+The way back in is the stage panel. There is one destination either way, so
+there is one link: `find_queue_link` returns it wherever this run left a queue
+snapshot and None elsewhere, and the stage's status picks the words — **Open
+review queue** on a halted stage, **Read the review decisions** once the run has
+moved on. The snapshot, not the stage type, is what the link is keyed on: a
+queue stage whose filter excluded every row wrote none, and offering a page that
+reads "no items to review" is a dead link.
+
 ## One file (`file_detail.html`, `_file_column.html`)
 
 `/project/<id>/files/<file_id>`, which the Files table's rows open. Four sections under
