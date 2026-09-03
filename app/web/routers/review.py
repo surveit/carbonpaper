@@ -9,7 +9,6 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import ValidationError
 
 from app.core.errors import ReviewValidationError
-from app.core.frames import restore_row_read_from_frame
 from app.core.stage_cache import compute_row_fingerprint
 from app.models import TableSchema, Workflow, WorkflowNotFormed, WorkflowStage
 from app.models.stages.human_review_queue import QueueConfig, resolve_queue_config
@@ -22,6 +21,7 @@ from app.web.loading import (
     load_run_record,
     load_stages,
     queue_snapshot,
+    queue_snapshot_rows,
 )
 from app.web.queue_view import (
     QueuePage,
@@ -271,12 +271,14 @@ def _resolve_queue_row(
 ) -> tuple[str, dict[str, object]]:
     """The row a decision is filed against, checked to be the row that fingerprint names."""
     fingerprints = load_queue_fingerprints(project_id, run_id, stage_id)
-    snapshot = queue_snapshot(project_id, run_id, stage_id)
-    if fingerprints is not None and snapshot is not None:
+    # Not `queue_snapshot`: that pair is for presentation and renders a list cell
+    # through numpy, where the run held — and hashed — a list.
+    rows = queue_snapshot_rows(project_id, run_id, stage_id)
+    if fingerprints is not None and rows is not None:
         if input_fingerprint in fingerprints.input_fingerprints:
             position = fingerprints.input_fingerprints.index(input_fingerprint)
-            if position < len(snapshot):
-                row = restore_row_read_from_frame(snapshot.iloc[position].to_dict())
+            if position < len(rows):
+                row = rows[position]
                 _require_row_matches_its_fingerprint(row, input_fingerprint, position, stage_id)
                 return fingerprints.stage_fingerprint, row
     raise HTTPException(

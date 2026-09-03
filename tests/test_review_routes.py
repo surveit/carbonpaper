@@ -19,7 +19,11 @@ from app.models.records.queue_fingerprints import QueueFingerprints
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
 from app.services import review
-from app.core.stage_cache import StageCacheEntry
+import pyarrow as pa
+
+import app.web.routers.review as review_routes
+from app.core.frames import write_frame_table
+from app.core.stage_cache import StageCacheEntry, compute_row_fingerprint
 from app.services.project import save_working_copy_as_version
 from app.models import WorkflowStage, parse_stage
 from app.models.stages.human_review_queue import ReviewVerdict
@@ -286,6 +290,28 @@ def test_decide_404_on_unknown_fingerprint_and_writes_nothing(tmp_path, monkeypa
     )
     assert r.status_code == 404
     assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
+
+
+def test_resolve_queue_row_reproduces_an_array_cell_the_run_hashed(tmp_path):
+    """The presentation pair renders a list cell through numpy; only the runtime pair reads it back."""
+    workspace.set_projects_dir(tmp_path)
+    run_id = "arrayrun"
+    queue_dir = tmp_path / PROJECT / "runs" / run_id / "queue"
+    queue_dir.mkdir(parents=True)
+    rows = [{"id": "r0", "score": 1, "tags": ["a", "b"]},
+            {"id": "r1", "score": 2, "tags": ["c"]}]
+    write_frame_table(pa.Table.from_pylist(rows), queue_dir / "review.parquet")
+    QueueFingerprints(
+        id=QueueFingerprints.compose_id(PROJECT, run_id, "review"),
+        stage_fingerprint="sf",
+        input_fingerprints=[compute_row_fingerprint(row) for row in rows],
+        row_ordinals=[0, 1],
+    ).save()
+
+    for position, row in enumerate(rows):
+        _, resolved = review_routes._resolve_queue_row(
+            PROJECT, run_id, "review", compute_row_fingerprint(row))
+        assert resolved == row, f"row {position} did not come back as the run held it"
 
 
 def test_decide_refuses_a_snapshot_that_disagrees_with_its_sidecar(tmp_path, monkeypatch):

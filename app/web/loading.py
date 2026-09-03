@@ -12,7 +12,9 @@ import pandas as pd
 from fastapi import HTTPException
 
 from app.core.errors import RunNotFoundError, NoVersionToRunError, StageOutputMissing
-from app.core.frames import list_rows, read_frame_file, render_frame_as_csv_text
+from app.core.frames import (
+    list_rows, list_table_rows, read_frame_file, read_frame_table, render_frame_as_csv_text,
+)
 from app.models import (
     StageType,
     Workflow,
@@ -403,6 +405,12 @@ def _load_output_slice(
 def queue_snapshot(project_id: str, run_id: str, stage_id: str) -> pd.DataFrame | None:
     path = find_queue_snapshot_path(project_id, run_id, stage_id)
     return None if path is None else read_frame_file(path)
+
+
+def queue_snapshot_rows(project_id: str, run_id: str, stage_id: str) -> list[dict[str, Any]] | None:
+    """The rows as the runtime held them. `queue_snapshot` renders; this reconstructs."""
+    path = find_queue_snapshot_path(project_id, run_id, stage_id)
+    return None if path is None else list_table_rows(read_frame_table(path))
 
 
 def find_queue_snapshot_path(project_id: str, run_id: str, stage_id: str) -> Path | None:
