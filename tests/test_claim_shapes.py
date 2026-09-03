@@ -1,12 +1,13 @@
-"""A shape is added and edited, never retired by absence, and frozen once claimed."""
+"""A shape is added, never edited, and never retired by absence."""
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
-from app.core.errors import ClaimIsImmutable
+from app.core.errors import ClaimIsImmutable, ClaimShapeIsImmutable
 from app.models.claims import (
-    AuthoredClaimShape,
     ClaimImportance,
+    ClaimShapeInput,
     DataUniverseRequirement,
     StageOutputCellCitation,
 )
@@ -16,13 +17,13 @@ from app.services.errors import ClaimShapeWriteRefused
 
 _PROJECT = "ai_lobbying"
 # The two figures that run really published, with the coverage each one asserts.
-_SPEND = AuthoredClaimShape(
+_SPEND = ClaimShapeInput(
     label="Reported by outside firms as received for AI lobbying in the United States, in dollars",
     requires=DataUniverseRequirement.closed, importance=ClaimImportance.primary,
     qualifiers=["Income no firm reported. Filing is required by law, so a firm that did "
                 "not file is not in this figure."],
 )
-_CORPUS = AuthoredClaimShape(
+_CORPUS = ClaimShapeInput(
     label="Clients that paid a US outside firm for AI lobbying",
     requires=DataUniverseRequirement.closed, importance=ClaimImportance.secondary,
 )
@@ -31,7 +32,6 @@ _CORPUS = AuthoredClaimShape(
 def _claim(shape_id: str, value: float = 63027729.0) -> Claim:
     return Claim(
         created_by_project_id=_PROJECT, shape_id=shape_id,
-        workflow_version_id="20260901T103742.393151",
         citation=StageOutputCellCitation(
             run_id="20260901T103753.789399", stage_id="ai_spend_totals",
             row_ordinal=0, column="ai_spend", value=value,
@@ -67,24 +67,10 @@ def test_a_shape_left_out_of_a_later_write_is_not_retired():
     claim_shapes.write_claim_shapes(_PROJECT, [_SPEND, _CORPUS])
 
     claim_shapes.write_claim_shapes(_PROJECT, [
-        AuthoredClaimShape(label="Paying clients", requires=DataUniverseRequirement.open, importance=ClaimImportance.secondary)
+        ClaimShapeInput(label="Paying clients", requires=DataUniverseRequirement.open, importance=ClaimImportance.secondary)
     ])
 
     assert len(claim_shapes.load_claim_shapes(_PROJECT)) == 3
-
-
-def test_an_id_edits_the_shape_it_names_rather_than_adding_another():
-    [stored] = claim_shapes.write_claim_shapes(_PROJECT, [_SPEND])
-
-    edited = claim_shapes.write_claim_shapes(_PROJECT, [
-        AuthoredClaimShape(
-            id=stored.id, label="Paid to outside firms to lobby on AI",
-            requires=DataUniverseRequirement.closed, importance=ClaimImportance.primary,
-        )
-    ])
-
-    assert [s.id for s in edited] == [stored.id]
-    assert edited[0].label == "Paid to outside firms to lobby on AI"
 
 
 # ── what is refused ──────────────────────────────────────────────────────────
@@ -95,43 +81,29 @@ def test_two_entries_sharing_a_label_are_refused_whole():
     assert claim_shapes.load_claim_shapes(_PROJECT) == []
 
 
-def test_a_label_this_project_already_claims_is_refused_without_its_id():
+def test_a_label_this_project_already_claims_is_refused():
     claim_shapes.write_claim_shapes(_PROJECT, [_SPEND])
 
-    with pytest.raises(ClaimShapeWriteRefused, match="send that shape's id"):
+    with pytest.raises(ClaimShapeWriteRefused, match="cannot be edited"):
         claim_shapes.write_claim_shapes(_PROJECT, [_SPEND])
 
 
-def test_an_id_this_project_does_not_hold_is_refused():
-    with pytest.raises(ClaimShapeWriteRefused, match="holds no shape"):
-        claim_shapes.write_claim_shapes(_PROJECT, [
-            AuthoredClaimShape(
-                id="d0e4d2a0", label="Paying clients", requires=DataUniverseRequirement.open, importance=ClaimImportance.secondary,
-            )
-        ])
-
-
-def test_what_a_shape_covers_can_change_until_something_is_claimed_under_it():
+def test_a_stored_shape_cannot_be_edited_at_all():
+    """Every claim under a shape asserts what it said, so the words cannot move afterwards."""
     [stored] = claim_shapes.write_claim_shapes(_PROJECT, [_SPEND])
-    widened = AuthoredClaimShape(
-        id=stored.id, label=_SPEND.label, requires=DataUniverseRequirement.open, importance=ClaimImportance.primary,
-    )
 
-    assert claim_shapes.write_claim_shapes(_PROJECT, [widened])[0].requires == "open"
+    with pytest.raises(ValidationError):
+        stored.requires = DataUniverseRequirement.open
 
 
-def test_what_a_shape_covers_freezes_once_it_is_claimed():
+def test_a_shape_cannot_be_written_over_by_id():
     [stored] = claim_shapes.write_claim_shapes(_PROJECT, [_SPEND])
-    _claim(stored.id).save()
 
-    with pytest.raises(ClaimShapeWriteRefused, match="claimed 1 time"):
-        claim_shapes.write_claim_shapes(_PROJECT, [
-            AuthoredClaimShape(
-                id=stored.id, label=_SPEND.label, requires=DataUniverseRequirement.open, importance=ClaimImportance.primary,
-            )
-        ])
-
-    assert claim_shapes.load_claim_shapes(_PROJECT)[0].requires == "closed"
+    with pytest.raises(ClaimShapeIsImmutable):
+        ClaimShape(
+            id=stored.id, project_id=_PROJECT, label="Something else",
+            requires=DataUniverseRequirement.open, importance=ClaimImportance.primary,
+        ).save()
 
 
 # ── a claim is written once ──────────────────────────────────────────────────

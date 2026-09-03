@@ -31,10 +31,9 @@ DATA_UNIVERSE_TOOLTIP = {
 
 
 
-class AuthoredClaimShape(_Base):
-    """One entry of what a project claims, as written. `id` names a shape already stored."""
+class ClaimShapeInput(_Base):
+    """What a caller sends to author one shape. A stored shape is never edited, so no id."""
 
-    id: ID | None = None
     label: str
     requires: DataUniverseRequirement
     importance: ClaimImportance
