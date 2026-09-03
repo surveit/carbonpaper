@@ -9,7 +9,7 @@ import pyarrow as pa
 from pydantic import BaseModel
 
 from app.core.errors import RowOutOfRange, StageNotInRun
-from app.core.frames import read_frame_table
+from app.core.frames import convert_cell_to_json_value, read_frame_table
 from app.core.json_types import JsonScalar
 from app.models.branch_analysis import (
     BranchId,
@@ -394,8 +394,4 @@ def _draw_stage(run_branches: WorkflowRunBranches, sid: StageId,
 
 def _plain(value: object) -> JsonScalar:
     plain = value.as_py() if hasattr(value, "as_py") else value
-    if isinstance(plain, float) and plain != plain:
-        return None
-    if isinstance(plain, (str, int, float, bool)) or plain is None:
-        return plain
-    return str(plain)  # a list cell, so the table can show it
+    return convert_cell_to_json_value(plain)

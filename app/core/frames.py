@@ -455,7 +455,7 @@ def find_arrow_list_value_type(arrow_type: pa.DataType) -> pa.DataType | None:
     return None
 
 
-def convert_cell_to_json_native(value: object) -> object:
+def convert_cell_to_json_native(value: object) -> JsonScalar:
     if isinstance(value, np.generic):
         native = value.item()
         if native is None or isinstance(native, (bool, int, float, str)):
@@ -464,11 +464,11 @@ def convert_cell_to_json_native(value: object) -> object:
     return str(value)
 
 
-def convert_row_to_json_cells(row: dict[str, Any]) -> dict[str, Any]:
+def convert_row_to_json_cells(row: dict[str, Any]) -> dict[str, JsonScalar]:
     return {name: convert_cell_to_json_value(value) for name, value in row.items()}
 
 
-def convert_cell_to_json_value(value: object) -> object:
+def convert_cell_to_json_value(value: object) -> JsonScalar:
     """A null stays null: a blank cell a reader reads as blank must not arrive as "None"."""
     cell = collapse_null_forms(value)
     if cell is None or isinstance(cell, (bool, int, float, str)):
