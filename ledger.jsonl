@@ -2520,3 +2520,4 @@
 {"run_id":"33656884344","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33656884344","created":"2026-09-02T16:46:48Z","branch":"fix/row-function-docstring-carry-through","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"33658079048","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33658079048","created":"2026-09-02T16:57:59Z","branch":"fix/traced-row-color","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"33658079048","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33658079048","created":"2026-09-02T16:58:41Z","branch":"fix/traced-row-color","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"33740574595","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33740574595","created":"2026-09-03T09:45:47Z","branch":"feat/review-queue-read-only","event":"pull_request","contracts_kept":16,"findings":[]}
