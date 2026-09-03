@@ -120,6 +120,16 @@ def test_a_queue_that_narrows_its_reads_carries_no_false_schema_note():
     assert [c.name for c in described.columns] == ["id", "label"]
 
 
+def test_a_run_that_never_halted_here_carries_no_schema_note_either():
+    """No snapshot is a run that sailed through on cached decisions, not a mismatch."""
+    stage = _queue_stage(_LABEL_COLUMNS, reads=["id", "label"])
+
+    described = queue_view.describe_queued_columns(stage, None)
+
+    assert described.schema_note is None
+    assert described.columns == []
+
+
 def test_a_schema_and_snapshot_that_disagree_are_reported_not_papered_over():
     stage = _queue_stage(_LABEL_COLUMNS)
     snapshot = pd.DataFrame({"id": ["a"], "label": ["high"], "extra": [1]})

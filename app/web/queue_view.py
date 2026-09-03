@@ -243,7 +243,7 @@ def find_multiline_sources(source_texts: Mapping[str, list[str]]) -> frozenset[s
 def describe_queued_columns(
     stage_def: WorkflowStage, snapshot: pd.DataFrame | None
 ) -> DescribedColumns:
-    names = [str(c) for c in snapshot.columns] if snapshot is not None else []
+    names = [] if snapshot is None else [str(c) for c in snapshot.columns]
     declared = {column.name: column for column in _declared_read_columns(stage_def)}
     return DescribedColumns(
         columns=[
@@ -253,7 +253,8 @@ def describe_queued_columns(
             )
             for name in names
         ],
-        schema_note=_find_schema_discrepancy(sorted(declared), names),
+        # No snapshot is a run that never halted here, not a disagreement to report.
+        schema_note=None if snapshot is None else _find_schema_discrepancy(sorted(declared), names),
     )
 
 
