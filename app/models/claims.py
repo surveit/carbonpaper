@@ -48,6 +48,8 @@ class ClaimShapeInput(_Base):
     qualifiers: list[str] = []
     # The axes a claim of this shape sits on, as ordinary columns.
     context: list[Column] = []
+    # The sentence a claim's own words are suggested from; it asserts nothing.
+    template: str = ""
 
 
 class Citation(BaseModel):
