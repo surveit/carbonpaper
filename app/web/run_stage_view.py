@@ -66,6 +66,7 @@ class RunStagePanel:
     previewable: bool
     links: AppPanelLinks
     queue_link: str | None
+    shapes_href: str
     scope: TraceScope | None
     event_tail: int = EVENT_TAIL
     type_glyph: dict[str, str] = field(default_factory=lambda: TYPE_GLYPH)
@@ -127,6 +128,7 @@ def build_run_stage_panel(
         previewable=stage_def is not None and stage_def.type in PREVIEWABLE_TYPES,
         links=links,
         queue_link=find_queue_link(links, project_id, run_id, stage_id),
+        shapes_href=links.read_stage_shapes(stage_id),
         scope=scope,
     )
 

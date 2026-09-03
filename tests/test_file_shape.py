@@ -77,3 +77,26 @@ def test_a_short_set_of_repeated_values_is_a_category():
 def test_it_refuses_to_show_no_values_at_all():
     with pytest.raises(ValueError, match="max_values"):
         measure_column_shape("col", COUNTRY, null_count=0, max_values=0)
+
+
+def test_a_declared_str_of_digits_is_not_measured_as_a_number() -> None:
+    # Texas district ids, as the STAAR export writes them: zero-padded and text.
+    ids = ["001902", "001903", "001904", "001906"]
+    sniffed = measure_column_shape("district_id", ids, null_count=0, max_values=8)
+    assert sniffed.kind is ColumnKind.NUMBER
+    assert sniffed.numbers is not None and sniffed.numbers.min == 1902.0
+    declared = measure_column_shape(
+        "district_id", ids, null_count=0, max_values=8, may_read_as_number=False)
+    assert declared.kind is not ColumnKind.NUMBER
+    assert declared.numbers is None
+    assert declared.histogram == []
+    # The values themselves are what a reader gets instead of a range.
+    assert [seen.value for seen in declared.top] == ids
+
+
+def test_the_declared_type_only_takes_the_number_reading_away() -> None:
+    days = ["2026-01-02", "2026-01-02", "2026-01-03"]
+    shape = measure_column_shape(
+        "filed_on", days, null_count=0, max_values=8, may_read_as_number=False)
+    assert shape.kind is ColumnKind.DATE
+    assert [seen.value for seen in shape.timeline] == ["2026-01-02", "2026-01-03"]

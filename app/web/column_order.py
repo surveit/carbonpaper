@@ -61,19 +61,24 @@ def order_columns_by_signature(
 ) -> list[str]:
     """The same order as a diff table, for a view with no input frame to compare."""
     if workflow_stage is None:
-        # No resolvable pinned version: nothing declares what this stage wrote,
-        # so the frame's own order stands rather than an invented one.
         return list(names)
+    grouped = group_columns_by_signature(workflow_stage, names)
+    return [name for group in _DRAWN_IN_ORDER for name in grouped.get(group, ())]
+
+
+def group_columns_by_signature(
+    workflow_stage: WorkflowStage, names: Sequence[str]
+) -> dict[ColumnGroup, list[str]]:
+    """Drawing order, and each name under the heading naming what the stage did to it."""
     read = list_read_column_names(workflow_stage.stage)
     rewritten = list_rewritten_column_names(workflow_stage.stage)
     introduced = set(list_written_column_names(workflow_stage.stage)) - rewritten
-
-    def group_of(name: str) -> ColumnGroup:
+    grouped: dict[ColumnGroup, list[str]] = {group: [] for group in _DRAWN_IN_ORDER}
+    for name in names:
         state = ColumnDiffState.added if name in introduced else ColumnDiffState.carried
-        return find_column_group(state.value, read=name in read,
-                                 changed=name in rewritten)
-
-    return sorted(names, key=lambda name: _DRAWN_IN_ORDER.index(group_of(name)))
+        grouped[find_column_group(state.value, read=name in read,
+                                  changed=name in rewritten)].append(name)
+    return {group: found for group, found in grouped.items() if found}
 
 
 def order_preview_columns(
