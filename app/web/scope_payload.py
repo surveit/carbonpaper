@@ -393,5 +393,4 @@ def _draw_stage(run_branches: WorkflowRunBranches, sid: StageId,
 
 
 def _plain(value: object) -> JsonScalar:
-    plain = value.as_py() if hasattr(value, "as_py") else value
-    return convert_cell_to_json_value(plain)
+    return convert_cell_to_json_value(value.as_py() if hasattr(value, "as_py") else value)

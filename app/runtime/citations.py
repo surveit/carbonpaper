@@ -9,6 +9,7 @@ import pandas as pd
 import pyarrow as pa
 
 from app.core.errors import CitationMismatch, RowOutOfRange, StageNotInRun
+from app.core.frames import convert_cell_to_json_value
 from app.models.citations import CitedValue
 from app.models.claims import StageOutputRowCitation
 from app.models.records.citations import StageCitations
@@ -90,9 +91,8 @@ class CitationProvider:
 
 def render_cell(cell: Any) -> str:
     """NaN and None both read empty — a cited absence is not the string 'nan'."""
-    if _is_null(cell):
-        return ""
-    return str(cell)
+    plain = convert_cell_to_json_value(cell)
+    return "" if plain is None else str(plain)
 
 
 def _matches(claimed: Any, cell: Any) -> bool:
