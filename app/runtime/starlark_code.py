@@ -23,9 +23,8 @@ from .branches import BranchRecorder
 # fail("StepRefused: x") renders as "error: fail: StepRefused: x".
 _REFUSAL_MARKER = f"\nerror: {StepRefused.__name__}: "
 
-# The span decoration starlark-pyo3 appends after a message; always last, so the
-# author's own text is everything before the LAST occurrence.
-_SPAN_MARKER = "\n --> "
+# The gutter before "-->" widens past a two-digit line number, so this scans.
+_SPAN_PREFIX = "--> "
 
 # starlark-pyo3 renders exactly one "error: " line per failure, always the FIRST
 # one in the text — the traceback frames above it never start a line this way.
@@ -75,5 +74,17 @@ def _find_refusal_message(text: str) -> str | None:
     if first_error_line == -1 or not text.startswith(_REFUSAL_MARKER, first_error_line):
         return None
     rest = text[first_error_line + len(_REFUSAL_MARKER):]
-    end = rest.rfind(_SPAN_MARKER)
-    return rest if end == -1 else rest[:end]
+    span_start = _find_span_line_start(rest)
+    return rest if span_start == -1 else rest[:span_start]
+
+
+def _find_span_line_start(rest: str) -> int:
+    """Index of the newline before the last "--> " diagnostic line, or -1."""
+    search_from = len(rest)
+    while True:
+        newline = rest.rfind("\n", 0, search_from)
+        if newline == -1:
+            return -1
+        if rest[newline + 1:].lstrip(" ").startswith(_SPAN_PREFIX):
+            return newline
+        search_from = newline
