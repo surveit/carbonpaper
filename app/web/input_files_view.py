@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from enum import Enum
 from pathlib import Path
 from typing import Any, Sequence
 
 import pyarrow as pa
 from pydantic import BaseModel
 
+from app.web.basis import Basis as Basis
 from app.web.figure_text import render_figure
 from app.core.file_shape import VALUES_KEPT, measure_column_shape
 from app.core.frames import convert_cell_to_json_value, read_frame_table
@@ -33,13 +33,6 @@ from app.web.column_walk import ColumnAt, find_columns_behind
 OTHER_ROWS_SHOWN = 40
 # The 1-based sheet line a file loader stamps on each row, where the connector asks.
 SOURCE_ROW_COLUMN = "source_row"
-
-
-class Basis(str, Enum):
-    """Which rows, or which columns, every panel of the tab is about."""
-
-    relevant = "relevant"
-    all = "all"
 
 
 class PreviewRow(BaseModel):
