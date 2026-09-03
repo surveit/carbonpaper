@@ -1,5 +1,12 @@
 """Reading a finished run's branches back off its sidecars. See docs/branch-analysis.md."""
 
+from app.runtime.branch_analysis.branch_cache import (
+    BranchCacheStamp as BranchCacheStamp,
+    StageFrameSize as StageFrameSize,
+    load_run_branches as load_run_branches,
+    read_branch_cache as read_branch_cache,
+    write_branch_cache as write_branch_cache,
+)
 from app.runtime.branch_analysis.rows_behind_a_branch import (
     find_rows_that_took as find_rows_that_took,
 )

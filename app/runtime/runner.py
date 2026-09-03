@@ -20,16 +20,19 @@ from app.core.frames import read_frame_table
 from app.models import StageType, Workflow, WorkflowStage
 from app.models.run_parameters import RunParameters
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
-from app.core.run_status import StageStatus
+from app.core.run_status import StageStatus, is_run_still_going
 
+from .branch_analysis import load_run_branches
 from .context import RunContext
 from .executor import _execute_stages, topological_sort
 from .manifest import (
+    RunManifest,
     read_run_manifest,
     create_run_manifest,
     resolve_output_path,
     write_manifest,
 )
+from .errors import MissingLineage, NotALoadStage
 from .stages import PREFLIGHTS
 
 
@@ -115,7 +118,26 @@ def prepare_run(
 def run_prepared(prep: dict[str, Any]) -> dict[str, Any]:
     manifest = _execute_stages(prep["ordered"], prep["ctx"], prep["manifest"],
                                prep["run_dir"], outputs_so_far={})
+    _build_branch_cache(manifest, prep["ordered"], prep["run_dir"])
     return manifest.to_dict()
+
+
+def _build_branch_cache(
+    manifest: RunManifest, ordered: list[WorkflowStage], run_dir: Path,
+) -> None:
+    """Built here, off the request path: a page would spend a run's own time on it."""
+    if manifest.workflow_version is None or is_run_still_going(manifest.status):
+        return
+    sized = [(record.stage_id, record.output_row_count)
+             for record in manifest.stage_records if record.output_path]
+    rows = dict(sized)
+    try:
+        load_run_branches(run_dir, {stage.id: stage for stage in ordered if stage.id in rows},
+                          [stage_id for stage_id, _ in sized], rows,
+                          manifest.workflow_version)
+    # Left unkept, the reader works it out and says why on the page, as it did before.
+    except (MissingLineage, NotALoadStage, OSError, pa_lib.ArrowException):
+        return
 
 
 def execute_run(
@@ -194,4 +216,6 @@ def resume_run(
     # "halted for review" banner and queue links while the stage re-runs. The
     # loop re-adds `halted_at` if a stage halts again; otherwise it stays gone.
     manifest.clear_halt()
-    return _execute_stages(ordered, ctx, manifest, run_dir, outputs_so_far).to_dict()
+    settled = _execute_stages(ordered, ctx, manifest, run_dir, outputs_so_far)
+    _build_branch_cache(settled, ordered, run_dir)
+    return settled.to_dict()

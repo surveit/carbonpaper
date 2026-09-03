@@ -8,8 +8,10 @@ from app.models.branch_analysis import BranchId, BranchRole
 from app.models.claims import StageOutputCellCitation
 from app.models.schema import StageId
 from app.models.workflow import Workflow
+from app.core.run_status import is_run_still_going
 from app.runtime.branch_analysis import (
     WorkflowRunBranches,
+    load_run_branches,
     reconstruct_run_branches,
 )
 from app.services import run as run_service
@@ -96,10 +98,12 @@ def read_run_branches(project_id: str, run_id: str) -> WorkflowRunBranches:
     order = [record["stage_id"] for record in records_with_a_frame]
     rows = {record["stage_id"]: record["output_row_count"]
             for record in records_with_a_frame}
-    stages = load_version_stages(project_id,
-                                 run_service.read_pinned_version(project_id, run_id))
+    pinned_version_id = run_service.read_pinned_version(project_id, run_id)
+    stages = load_version_stages(project_id, pinned_version_id)
     workflow = Workflow(stages=stages)
     placed = {stage.id: workflow.find_workflow_stage(stage.id)
               for stage in stages if stage.id in rows}
-    return reconstruct_run_branches(resolve_run_dir(project_id, run_id), placed,
-                                    order, rows)
+    run_dir = resolve_run_dir(project_id, run_id)
+    if is_run_still_going(manifest["status"]):
+        return reconstruct_run_branches(run_dir, placed, order, rows)
+    return load_run_branches(run_dir, placed, order, rows, pinned_version_id)

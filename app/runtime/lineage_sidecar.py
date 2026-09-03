@@ -6,11 +6,11 @@ from pathlib import Path
 
 import pyarrow as pa
 
-from app.core.frames import read_frame_table, write_frame_table
+from app.core.frames import read_frame_column_names, read_frame_table, write_frame_table
 
 from .branches import BRANCHES_KEY, RowBranches
 from .errors import LineageSidecarLengthMismatch
-from .lineage import TRACE_SOURCE_STAGE_KEY, RowLineage
+from .lineage import LINEAGE_KEYS, TRACE_SOURCE_STAGE_KEY, RowLineage
 
 
 @dataclass(frozen=True)
@@ -45,6 +45,17 @@ def read_lineage_sidecar(run_dir: Path, stage_id: str) -> LineageSidecar:
     if branches is None:
         branches = _read_branches(_read_table(_pre_merge_branch_path(run_dir, stage_id)))
     return LineageSidecar(lineage=_read_lineage(table), branches=branches)
+
+
+def read_row_lineage(run_dir: Path, stage_id: str) -> RowLineage | None:
+    """As `read_lineage_sidecar` for a caller wanting no branches: `_branches` stays undecoded."""
+    path = resolve_lineage_sidecar_path(run_dir, stage_id)
+    if not path.exists():
+        return None
+    held = [key for key in LINEAGE_KEYS if key in read_frame_column_names(path)]
+    if TRACE_SOURCE_STAGE_KEY not in held:
+        return None
+    return RowLineage.from_table(read_frame_table(path, columns=held))
 
 
 def _joined_table(lineage: RowLineage | None, branches: RowBranches | None) -> pa.Table:

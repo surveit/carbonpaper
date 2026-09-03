@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -30,9 +31,9 @@ MERGE_EDGE = EdgeKind.contribution.value
 _LOOKS_UP = (StageType.enrich, StageType.expand)
 
 BranchesPerRow = list[tuple[BranchId, ...]]
-LineagePerStage = dict[StageId, RowLineage | None]
+LineagePerStage = Mapping[StageId, RowLineage | None]
 RowsReachingEachInput = dict[StageId, list[bool]]
-MergesPerRow = dict[StageId, dict[RowOrdinal, tuple[BranchId, ...]]]
+MergesPerRow = Mapping[StageId, Mapping[RowOrdinal, tuple[BranchId, ...]]]
 
 
 @dataclass
@@ -40,7 +41,7 @@ class WorkflowRunBranches:
     """Every branch the run recorded, and the ones each row of each stage holds."""
 
     branch_options: dict[BranchId, BranchOption]
-    branch_paths: dict[StageId, list[BranchPath]]
+    branch_paths: Mapping[StageId, list[BranchPath]]
     # How many rows took each branch, run-wide. Free forward, invisible backward.
     row_count_per_branch_id: Counter[BranchId]
     merges_per_row: MergesPerRow
