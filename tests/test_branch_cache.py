@@ -1,6 +1,8 @@
 """The branch analysis read back off disk answers as the one worked out from the run."""
 from __future__ import annotations
 
+import shutil
+
 import pytest
 
 import app.services.run as run_service
@@ -124,9 +126,36 @@ def test_a_cache_left_without_its_stamp_is_not_read(run_facts):
 def test_a_run_still_going_writes_no_cache(run_facts, monkeypatch):
     """Its records still grow, so a cache written now would be stale before it was read."""
     run_dir, _, _, _, _ = run_facts
+    shutil.rmtree(run_dir / "branches", ignore_errors=True)  # the finished run kept one
     monkeypatch.setattr("app.services.run.read_run_status",
                         lambda project_id, run_id: {
                             **read_run_manifest(project_id, run_id).to_dict(),
                             "status": "running"})
     read_run_branches(PROJECT, run_dir.name)
     assert not (run_dir / "branches").exists()
+
+
+def test_a_finished_run_leaves_the_analysis_kept(projects_root):
+    """The runner's stamp must match the reader's, or the reader rebuilds and this bought nothing."""
+    data = projects_root / PROJECT / "data"
+    write_inputs(data)
+    set_stages(PROJECT, stage_specs(data))
+    save_working_copy_as_version(PROJECT, message="fixture")
+    run_id = str(run_service.execute(PROJECT)["run_id"])
+
+    assert (resolve_run_dir(PROJECT, run_id) / "branches").exists()
+
+
+def test_the_reader_takes_what_the_run_kept_without_working_it_out(projects_root, monkeypatch):
+    data = projects_root / PROJECT / "data"
+    write_inputs(data)
+    set_stages(PROJECT, stage_specs(data))
+    save_working_copy_as_version(PROJECT, message="fixture")
+    run_id = str(run_service.execute(PROJECT)["run_id"])
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("the run kept the analysis and the reader worked it out anyway")
+
+    monkeypatch.setattr("app.runtime.branch_analysis.branch_cache."
+                        "reconstruct_run_branches", refuse)
+    assert read_run_branches(PROJECT, run_id).ordered_stage_ids
