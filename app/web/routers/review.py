@@ -35,7 +35,7 @@ router = APIRouter()
 
 
 @router.get("/project/{project_id}/runs/{run_id}/queue/{stage_id}", response_class=HTMLResponse)
-async def queue_page(request: Request, project_id: str, run_id: str, stage_id: str):
+def queue_page(request: Request, project_id: str, run_id: str, stage_id: str):
     stage_def = _require_queue_stage(load_stages(project_id).workflow, stage_id)
     queue = _require_queue_config(stage_def)
     drift, page = _build_page(project_id, run_id, stage_id, stage_def, queue)
@@ -60,7 +60,7 @@ async def queue_page(request: Request, project_id: str, run_id: str, stage_id: s
     "/project/{project_id}/runs/{run_id}/queue/{stage_id}/card/{input_fingerprint}",
     response_class=HTMLResponse,
 )
-async def queue_card_partial(
+def queue_card_partial(
     request: Request, project_id: str, run_id: str, stage_id: str, input_fingerprint: str
 ):
     stage_def = _require_queue_stage(load_stages(project_id).workflow, stage_id)
@@ -88,7 +88,7 @@ async def queue_card_partial(
 
 
 @router.post("/project/{project_id}/runs/{run_id}/queue/{stage_id}/decide")
-async def queue_decide(
+def queue_decide(
     project_id: str,
     run_id: str,
     stage_id: str,

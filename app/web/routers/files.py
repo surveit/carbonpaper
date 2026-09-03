@@ -20,7 +20,7 @@ router = APIRouter()
 
 
 @router.get("/project/{project_id}/files", response_class=HTMLResponse)
-async def files_page(request: Request, project_id: str):
+def files_page(request: Request, project_id: str):
     if not project_exists(project_id):
         raise HTTPException(status_code=404, detail=f"No project '{project_id}'")
     return templates.TemplateResponse(
@@ -67,7 +67,7 @@ async def preview_project_file(request: Request, project_id: str, file_id: str):
 
 
 @router.post("/project/{project_id}/files/{file_id}/delete")
-async def delete_project_file(project_id: str, file_id: str, confirm: str = Form("")):
+def delete_project_file(project_id: str, file_id: str, confirm: str = Form("")):
     """Deleting is the one thing here that cannot be undone, so it takes a POST and a
     typed confirmation."""
     if not project_exists(project_id):
@@ -86,7 +86,7 @@ async def delete_project_file(project_id: str, file_id: str, confirm: str = Form
 
 
 @router.post("/project/{project_id}/files/{file_id}/provenance")
-async def record_file_provenance(project_id: str, file_id: str,
+def record_file_provenance(project_id: str, file_id: str,
                                  completeness: str = Form(...), lineage: str = Form("")):
     if not project_exists(project_id):
         raise HTTPException(status_code=404, detail=f"No project '{project_id}'")

@@ -24,7 +24,7 @@ router = APIRouter()
 
 
 @router.get("/project/{project_id}/runs/new", response_class=HTMLResponse)
-async def run_new(request: Request, project_id: str, version_id: str | None = None,
+def run_new(request: Request, project_id: str, version_id: str | None = None,
                   from_run: str | None = None):
     if not project_exists(project_id):
         raise HTTPException(status_code=404, detail=f"No project '{project_id}'")
@@ -61,7 +61,7 @@ async def run_new(request: Request, project_id: str, version_id: str | None = No
 
 
 @router.get("/project/{project_id}/run-inputs")
-async def run_inputs(project_id: str, version_id: str | None = None):
+def run_inputs(project_id: str, version_id: str | None = None):
     """The chosen version's file inputs AND the project's files, so one fetch rebuilds
     every picker."""
     if not project_exists(project_id):

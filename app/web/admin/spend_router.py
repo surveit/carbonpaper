@@ -18,7 +18,7 @@ PAGE_TITLE = "Model spend"
 
 
 @router.get("/admin/spend", response_class=HTMLResponse)
-async def spend_page(request: Request) -> HTMLResponse:
+def spend_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "admin_spend.html",

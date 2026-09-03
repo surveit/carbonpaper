@@ -13,14 +13,14 @@ router = APIRouter()
 
 
 @router.post("/project/{project_id}/runs/{run_id}/archive")
-async def archive_project_run(project_id: str, run_id: str):
+def archive_project_run(project_id: str, run_id: str):
     _refuse_unrecorded_run(validate_project_or_404(project_id), run_id)
     archive_run(project_id, run_id)
     return RedirectResponse(url=f"/project/{project_id}/runs", status_code=303)
 
 
 @router.post("/project/{project_id}/runs/{run_id}/unarchive")
-async def unarchive_project_run(project_id: str, run_id: str):
+def unarchive_project_run(project_id: str, run_id: str):
     _refuse_unrecorded_run(validate_project_or_404(project_id), run_id)
     unarchive_run(project_id, run_id)
     return RedirectResponse(
@@ -29,7 +29,7 @@ async def unarchive_project_run(project_id: str, run_id: str):
 
 
 @router.post("/project/{project_id}/runs/{run_id}/name")
-async def name_project_run(project_id: str, run_id: str, name: str = Form(default="")):
+def name_project_run(project_id: str, run_id: str, name: str = Form(default="")):
     _refuse_unrecorded_run(validate_project_or_404(project_id), run_id)
     name_run(project_id, run_id, name)
     return RedirectResponse(

@@ -31,7 +31,7 @@ _UNREADABLE = (MissingLineage, StageNotInRun, RowOutOfRange, ColumnNotInFrame,
 
 
 @router.get(f"{_BASE}/panel", response_class=HTMLResponse)
-async def input_files_panel(request: Request, project_id: str, run_id: str,
+def input_files_panel(request: Request, project_id: str, run_id: str,
                             stage: str, row: int, column: str):
     """The files this figure read, shell-less: the row lineage page holds it in a tab."""
     try:
@@ -49,7 +49,7 @@ async def input_files_panel(request: Request, project_id: str, run_id: str,
 
 
 @router.get(f"{_BASE}/slice.csv")
-async def input_file_slice(project_id: str, run_id: str, stage: str, row: int,
+def input_file_slice(project_id: str, run_id: str, stage: str, row: int,
                            column: str, input: str, rows: Basis = Basis.relevant,
                            columns: Basis = Basis.relevant):
     slice_ = _find_file(_load(project_id, run_id, stage, row, column), input)

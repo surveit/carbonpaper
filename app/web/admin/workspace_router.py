@@ -14,6 +14,7 @@ import zipfile
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
+from starlette.concurrency import run_in_threadpool
 
 from app.seeds.seed import discover_workflow_files
 from app.services import project
@@ -52,7 +53,7 @@ def _redirect_to_admin(msg: str) -> RedirectResponse:
 # ─── Page ────────────────────────────────────────────────────────────────
 
 @router.get("/admin", response_class=HTMLResponse)
-async def admin_index(request: Request, msg: str | None = None):
+def admin_index(request: Request, msg: str | None = None):
     return templates.TemplateResponse(
         request,
         "admin.html",
@@ -67,7 +68,7 @@ async def admin_index(request: Request, msg: str | None = None):
 # ─── Actions ───────────────────────────────────────────────────────────────
 
 @router.post("/admin/load/{bundle}")
-async def load_bundle(bundle: str):
+def load_bundle(bundle: str):
     path = _bundle_path(bundle)
     try:
         report = import_bundle_file(path)
@@ -83,7 +84,7 @@ async def load_bundle(bundle: str):
 
 
 @router.get("/admin/export/{project_name}")
-async def download_project(project_name: str) -> Response:
+def download_project(project_name: str) -> Response:
     project_id = _known_project(project_name)
     bundle = export_project(project_id)
     # The bundle's own name, which is the slug — a shown name may carry spaces and dashes.
@@ -95,7 +96,7 @@ async def download_project(project_name: str) -> Response:
 
 
 @router.get("/admin/export-with-cache/{project_name}")
-async def download_project_with_cache(project_name: str) -> Response:
+def download_project_with_cache(project_name: str) -> Response:
     project_id = _known_project(project_name)
     # Named by id, as the cache export beside it is: the label rides inside the archive.
     return Response(
@@ -108,13 +109,17 @@ async def download_project_with_cache(project_name: str) -> Response:
 @router.post("/admin/import")
 async def upload_project(file: UploadFile = File(...)):
     raw = await file.read()
+    return await run_in_threadpool(_do_upload_project, raw, file.filename)
+
+
+def _do_upload_project(raw: bytes, filename: str | None) -> RedirectResponse:
     if zipfile.is_zipfile(BytesIO(raw)):
-        report = _import_archive(raw, file.filename)
+        report = _import_archive(raw, filename)
         return _redirect_to_admin(
             f"Imported '{read_project_name(report.project_id)}' ({report.project_id}) "
             "from an uploaded archive." + _say_what_the_cache_import_did(report.cache)
         )
-    project_id = import_project(_parse_workflow_file(raw, file.filename))
+    project_id = import_project(_parse_workflow_file(raw, filename))
     return _redirect_to_admin(
         f"Imported '{read_project_name(project_id)}' ({project_id}) from an uploaded file."
     )

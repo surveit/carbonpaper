@@ -53,7 +53,7 @@ router = APIRouter()
 # ─── Home dashboard ──────────────────────────────────────────────────────────
 
 @router.get("/", response_class=HTMLResponse)
-async def index(request: Request):
+def index(request: Request):
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -62,14 +62,14 @@ async def index(request: Request):
 
 
 @router.post("/project/{project_name}/code-execution/withdraw")
-async def withdraw_code_execution(project_name: str):
+def withdraw_code_execution(project_name: str):
     """Only stops NEW python stages being written; ones already stored keep running."""
     code_approval.withdraw_code_execution_approval(validate_project_or_404(project_name))
     return RedirectResponse(f"/project/{project_name}", status_code=303)
 
 
 @router.post("/project/{project_name}/private")
-async def set_project_private(project_name: str, private: str = Form("")):
+def set_project_private(project_name: str, private: str = Form("")):
     """Stays on the project: a private one is gone from the home grid it would return to."""
     project_id = validate_project_or_404(project_name)
     project.set_project_private(project_id, private == "on")
@@ -77,13 +77,13 @@ async def set_project_private(project_name: str, private: str = Form("")):
 
 
 @router.post("/project/{project_name}/delete")
-async def delete_project(project_name: str):
+def delete_project(project_name: str):
     project.delete_project(validate_project_or_404(project_name))
     return RedirectResponse("/", status_code=303)
 
 
 @router.post("/project/{project_name}/generate")
-async def generate_project(project_name: str):
+def generate_project(project_name: str):
     validate_project_or_404(project_name)
     document = methodology.read_methodology(project_name)
     if document is None:
@@ -100,7 +100,7 @@ async def generate_project(project_name: str):
 
 
 @router.get("/project/{project_name}", response_class=HTMLResponse)
-async def project_overview(request: Request, project_name: str):
+def project_overview(request: Request, project_name: str):
     validate_project_or_404(project_name)
     return templates.TemplateResponse(
         request,
@@ -114,7 +114,7 @@ async def project_overview(request: Request, project_name: str):
 
 
 @router.get("/project/{project_name}/methodology", response_class=HTMLResponse)
-async def project_documentation(request: Request, project_name: str, tab: str = "methodology"):
+def project_documentation(request: Request, project_name: str, tab: str = "methodology"):
     validate_project_or_404(project_name)
     state = shell_state(project_name, "documentation")
     document = methodology.read_methodology(project_name) or ""
@@ -145,13 +145,13 @@ async def project_documentation(request: Request, project_name: str, tab: str = 
 
 
 @router.get("/project/{project_name}/glossary", response_class=HTMLResponse)
-async def project_glossary_redirect(project_name: str):
+def project_glossary_redirect(project_name: str):
     # Kept for an old bookmark; the page itself is now the Glossary tab below.
     return RedirectResponse(url=f"/project/{project_name}/methodology?tab=glossary")
 
 
 @router.get("/project/{project_name}/workflow", response_class=HTMLResponse)
-async def project_workflow(request: Request, project_name: str):
+def project_workflow(request: Request, project_name: str):
     validate_project_or_404(project_name)
     listing = load_stages_or_empty(project_name)
     parsed = list_parsed_stages(listing.entries)
@@ -184,7 +184,7 @@ async def project_workflow(request: Request, project_name: str):
 
 
 @router.get("/project/{project_name}/workflow/versions", response_class=HTMLResponse)
-async def project_workflow_versions(request: Request, project_name: str):
+def project_workflow_versions(request: Request, project_name: str):
     validate_project_or_404(project_name)
     versions = versioning.list_versions(project_name)
     if not versions:
@@ -210,7 +210,7 @@ async def project_workflow_versions(request: Request, project_name: str):
 
 
 @router.get("/project/{project_name}/versions")
-async def versions_redirect(project_name: str):
+def versions_redirect(project_name: str):
     return RedirectResponse(
         url=f"/project/{project_name}/workflow/versions", status_code=307
     )
@@ -218,7 +218,7 @@ async def versions_redirect(project_name: str):
 
 @router.get("/project/{project_name}/workflow/version/{version_id}",
             response_class=HTMLResponse)
-async def project_workflow_version(request: Request, project_name: str, version_id: str):
+def project_workflow_version(request: Request, project_name: str, version_id: str):
     validate_project_or_404(project_name)
     try:
         version = versioning.load_version(project_name, version_id)
@@ -243,7 +243,7 @@ async def project_workflow_version(request: Request, project_name: str, version_
     "/project/{project_name}/workflow/version/{version_id}/stage/{stage_id}/partial",
     response_class=HTMLResponse,
 )
-async def version_stage_partial(
+def version_stage_partial(
     request: Request, project_name: str, version_id: str, stage_id: str
 ):
     validate_project_or_404(project_name)
@@ -284,7 +284,7 @@ async def version_stage_partial(
 
 
 @router.post("/project/{project_name}/schema/{schema_name}/edit")
-async def edit_schema(project_name: str, schema_name: str, json_text: str = Form(...)):
+def edit_schema(project_name: str, schema_name: str, json_text: str = Form(...)):
     validate_project_or_404(project_name)
 
     # Parse — a parse error is the reviewer's, surfaced as a 400 issue, file untouched.

@@ -9,6 +9,7 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from app.services import project
 from app.services.stage_cache_transfer import (
@@ -28,7 +29,7 @@ class ProjectCacheSize(BaseModel):
 
 
 @router.get("/admin/cache", response_class=HTMLResponse)
-async def cache_page(request: Request, msg: str | None = None) -> HTMLResponse:
+def cache_page(request: Request, msg: str | None = None) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "admin_cache.html",
@@ -44,7 +45,7 @@ async def cache_page(request: Request, msg: str | None = None) -> HTMLResponse:
 
 
 @router.get("/admin/export-cache/{project_name}")
-async def download_cache(project_name: str) -> Response:
+def download_cache(project_name: str) -> Response:
     project_id = _known_project(project_name)
     return Response(
         content=export_stage_cache(project_id),
@@ -63,7 +64,7 @@ async def upload_cache(
 ) -> Response:
     project_id = _known_project(destination)
     try:
-        report = import_stage_cache(await file.read(), project_id)
+        report = await run_in_threadpool(import_stage_cache, await file.read(), project_id)
     except CacheArchiveRejected as exc:
         return _redirect_to_cache_page(str(exc))
     return templates.TemplateResponse(

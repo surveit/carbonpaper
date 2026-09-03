@@ -29,7 +29,7 @@ _EXPAND = Query(default=None)
 
 
 @router.get(_SCOPE_PATH, response_class=HTMLResponse)
-async def scope_page(request: Request, project_id: str, run_id: str,
+def scope_page(request: Request, project_id: str, run_id: str,
                      stage: str, row: int, column: str,
                      expand: list[str] | None = _EXPAND):
     citation = _cite(run_id, stage, row, column)
@@ -50,7 +50,7 @@ async def scope_page(request: Request, project_id: str, run_id: str,
 
 
 @router.get(f"{_SCOPE_PATH}.json", response_class=JSONResponse)
-async def scope_json(project_id: str, run_id: str, stage: str, row: int, column: str,
+def scope_json(project_id: str, run_id: str, stage: str, row: int, column: str,
                      expand: list[str] | None = _EXPAND):
     citation = _cite(run_id, stage, row, column)
     try:
@@ -62,7 +62,7 @@ async def scope_json(project_id: str, run_id: str, stage: str, row: int, column:
 
 
 @router.get(f"{_SCOPE_PATH}/panel", response_class=HTMLResponse)
-async def scope_panel(request: Request, project_id: str, run_id: str,
+def scope_panel(request: Request, project_id: str, run_id: str,
                       stage: str, row: int, column: str,
                       expand: list[str] | None = _EXPAND):
     """The same map, shell-less, for the frame the row lineage page holds it in."""
@@ -90,7 +90,7 @@ async def scope_panel(request: Request, project_id: str, run_id: str,
 
 
 @router.get(f"{_SCOPE_PATH}/rows", response_class=HTMLResponse)
-async def scope_rows(request: Request, project_id: str, run_id: str,
+def scope_rows(request: Request, project_id: str, run_id: str,
                      stage: str, row: int, at: str):
     """One stage's own data table, cut to the rows the cited figure came through."""
     try:
