@@ -171,7 +171,7 @@ def _build_preview_row(frame: pa.Table, ordinal: RowOrdinal,
                        relevant: bool) -> PreviewRow:
     cells = [convert_cell_to_json_value(frame.column(name)[ordinal].as_py())
              for name in frame.column_names]
-    stamped = (frame.column(SOURCE_ROW_COLUMN)[ordinal].as_py()
+    stamped = (convert_cell_to_json_value(frame.column(SOURCE_ROW_COLUMN)[ordinal].as_py())
                if SOURCE_ROW_COLUMN in frame.column_names else None)
     return PreviewRow(label=f"{render_figure(stamped if stamped is not None else ordinal + 1)}",
                       relevant=relevant, cells=cells)
@@ -212,5 +212,4 @@ def _read_the_count_the_note_states(note: str) -> int | None:
 def _read_the_cited_cell(outputs: Path,
                          citation: StageOutputCellCitation) -> JsonScalar:
     frame = read_frame_table(outputs / f"{citation.stage_id}.parquet")
-    cell = frame.column(citation.column)[citation.row_ordinal].as_py()
-    return convert_cell_to_json_value(cell)
+    return convert_cell_to_json_value(frame.column(citation.column)[citation.row_ordinal].as_py())

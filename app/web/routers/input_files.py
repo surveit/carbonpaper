@@ -14,7 +14,7 @@ from app.core.errors import (
     RunVersionUnresolvableError,
     StageNotInRun,
 )
-from app.core.frames import read_frame_table
+from app.core.frames import convert_cell_to_json_value, read_frame_table
 from app.models.claims import StageOutputCellCitation
 from app.models.schema import StageId
 from app.runtime.errors import MissingLineage
@@ -95,5 +95,6 @@ def _render_as_csv(frame, ordinals: list[int], columns: list[str]) -> str:
     writer.writerow(columns)
     picked = {name: frame.column(name) for name in columns}
     for ordinal in ordinals:
-        writer.writerow([picked[name][ordinal].as_py() for name in columns])
+        writer.writerow([convert_cell_to_json_value(picked[name][ordinal].as_py())
+                         for name in columns])
     return sheet.getvalue()
