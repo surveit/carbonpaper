@@ -16,6 +16,7 @@ from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stage_output import StageOutput
 from app.runtime.stages import HANDLERS, human_review_queue
 from app.services import review
+from app.core.frames import read_frame_file, restore_row_read_from_frame
 from app.core.stage_cache import StageCache, compute_row_fingerprint
 from app.services.project import save_working_copy_as_version
 from conftest import (
@@ -206,6 +207,56 @@ def test_fingerprints_stable_across_parquet_round_trip(tmp_path):
 
     roundtripped = [compute_row_fingerprint(row.to_dict()) for _, row in reloaded.iterrows()]
     assert original == roundtripped
+
+
+_ARRAY_COLUMNS = [
+    *_SCORED_COLUMNS,
+    {"name": "tags", "type": "list[str]", "nullable": True},
+]
+
+
+def _src_with_array(rows: int = 2) -> pd.DataFrame:
+    return pd.DataFrame({
+        "id": [f"r{i}" for i in range(rows)],
+        "score": list(range(rows)),
+        "tags": [[f"t{i}a", f"t{i}b"] for i in range(rows)],
+    })
+
+
+def test_an_array_column_survives_the_queue_snapshot_round_trip(tmp_path):
+    stage = _stage(input_columns=_ARRAY_COLUMNS)
+    src = _src_with_array(2)
+    expected = [compute_row_fingerprint(row.to_dict()) for _, row in src.iterrows()]
+
+    ctx = _ctx(tmp_path, run_id="arr1")
+    queue_path = require_awaiting_review(_run_queue_stage(stage, {"scored": src}, ctx)).queue_path
+    snapshot = read_frame_file(queue_path)
+
+    restored = [restore_row_read_from_frame(row.to_dict()) for _, row in snapshot.iterrows()]
+    assert [compute_row_fingerprint(row) for row in restored] == expected
+
+
+def test_an_approved_array_column_is_still_an_array_on_resume(tmp_path):
+    stage = _stage(input_columns=_ARRAY_COLUMNS)
+    src = _src_with_array(2)
+
+    ctx = _ctx(tmp_path, run_id="arr2")
+    queue_path = require_awaiting_review(_run_queue_stage(stage, {"scored": src}, ctx)).queue_path
+    fingerprints = _read_fingerprints(PROJECT, "arr2", queue_path.stem)
+    snapshot = read_frame_file(queue_path)
+    for (_, row), fingerprint in zip(snapshot.iterrows(), fingerprints["input_fingerprints"]):
+        review.record_decision(
+            project_id=PROJECT, stage=place_stage(stage),
+            stage_fingerprint=fingerprints["stage_fingerprint"],
+            input_fingerprint=fingerprint,
+            frozen_row=restore_row_read_from_frame(row.to_dict()),
+            verdict=ReviewVerdict.approve,
+            reviewed_values={"human_score": row["score"]},
+            review_notes=None, reviewer="local", reviewed_at="2026-07-01T00:00:00",
+        )
+
+    resumed = rows_of(_run_queue_stage(stage, {"scored": src}, _ctx(tmp_path, run_id="arr3")))
+    assert [list(cell) for cell in resumed["tags"]] == [["t0a", "t0b"], ["t1a", "t1b"]]
 
 
 def test_input_fingerprint_matches_original_row_before_any_review_record_stamped(tmp_path):
