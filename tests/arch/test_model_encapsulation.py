@@ -57,6 +57,8 @@ _RULES: tuple[ProtectedAttributeRule, ...] = (
     ProtectedAttributeRule(
         attribute="stages",
         owner=_REPO_ROOT / "app" / "core" / "models",
+        # Draft.stages is a different model's field of the same name; it manages its own.
+        exempt_paths=frozenset({_REPO_ROOT / "app" / "services" / "drafts.py"}),
         rationale=(
             "Workflow.stages is app/models' to index, project, or "
             "filter — a caller that needs 'the stage with this id' or 'the "

@@ -94,6 +94,10 @@ class ProjectExistsError(Exception):
     pass
 
 
+class DraftNotFoundError(Exception):
+    pass
+
+
 class MissingInputBindingError(Exception):
     pass
 
