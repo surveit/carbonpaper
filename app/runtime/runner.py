@@ -118,14 +118,14 @@ def prepare_run(
 def run_prepared(prep: dict[str, Any]) -> dict[str, Any]:
     manifest = _execute_stages(prep["ordered"], prep["ctx"], prep["manifest"],
                                prep["run_dir"], outputs_so_far={})
-    _keep_branch_analysis(manifest, prep["ordered"], prep["run_dir"])
+    _build_branch_cache(manifest, prep["ordered"], prep["run_dir"])
     return manifest.to_dict()
 
 
-def _keep_branch_analysis(
+def _build_branch_cache(
     manifest: RunManifest, ordered: list[WorkflowStage], run_dir: Path,
 ) -> None:
-    """Worked out here, off the request path: a page would spend a run's own time on it."""
+    """Built here, off the request path: a page would spend a run's own time on it."""
     if manifest.workflow_version is None or is_run_still_going(manifest.status):
         return
     sized = [(record.stage_id, record.output_row_count)
@@ -217,5 +217,5 @@ def resume_run(
     # loop re-adds `halted_at` if a stage halts again; otherwise it stays gone.
     manifest.clear_halt()
     settled = _execute_stages(ordered, ctx, manifest, run_dir, outputs_so_far)
-    _keep_branch_analysis(settled, ordered, run_dir)
+    _build_branch_cache(settled, ordered, run_dir)
     return settled.to_dict()

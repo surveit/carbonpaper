@@ -159,3 +159,4 @@ def test_the_reader_takes_what_the_run_kept_without_working_it_out(projects_root
     monkeypatch.setattr("app.runtime.branch_analysis.branch_cache."
                         "reconstruct_run_branches", refuse)
     assert read_run_branches(PROJECT, run_id).ordered_stage_ids
+
