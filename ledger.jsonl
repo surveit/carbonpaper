@@ -2616,3 +2616,4 @@
 {"run_id":"33760267102","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33760267102","created":"2026-09-03T13:18:06Z","branch":"fix/prompt-defects-starlark-carry-and-trace","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"33760267102","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33760267102","created":"2026-09-03T13:18:56Z","branch":"fix/prompt-defects-starlark-carry-and-trace","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"33760532337","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33760532337","created":"2026-09-03T13:20:34Z","branch":"feat/values-tab-full-dag","event":"pull_request","contracts_kept":16,"findings":[]}
+{"run_id":"33760532337","run_url":"https://github.com/surveit/carbonpaper/actions/runs/33760532337","created":"2026-09-03T13:21:31Z","branch":"feat/values-tab-full-dag","event":"pull_request","contracts_kept":null,"findings":[]}
