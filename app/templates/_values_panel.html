@@ -21,17 +21,26 @@
   <b>◀ back</b> or use the arrow keys <kbd class="vu-key">&larr;</kbd>
   <kbd class="vu-key">&rarr;</kbd> to see the sheet one stage earlier, and what that stage
   did to the value. Each stage opens the run page's own panel for it, cut to the rows
-  behind this figure. Only the stages that could change <code>{{ column }}</code> are here.</p>
+  behind this figure. The map is the whole run: a stage greyed out is one
+  <code>{{ column }}</code> never came through.</p>
 <div class="vu-maprow">
   <button class="vu-arrow" data-go="back" title="back one stage (left arrow)">◀</button>
-  <div class="vu-map"><svg class="vu-wires"></svg>
-    {%- for map_column in values.minimap %}
-    <div class="vu-mapcol">
-      {%- for node in map_column %}
-      <button class="vu-node" data-node="{{ node.stage_id }}">{{ node.glyph }} {{ node.stage_id }}</button>
-      {%- endfor %}
+  {# The run's own workflow graph, through the same builder, band and viewport the run
+     page's minimap uses — so a stage sits where the reader already saw it sit. #}
+  <div class="workflow-full diagram-block diagram-minimap vu-graph">
+    <div class="diagram-tools">
+      <button type="button" data-zoom="in" title="Zoom in" aria-label="Zoom in">+</button>
+      <button type="button" data-zoom="out" title="Zoom out" aria-label="Zoom out">−</button>
+      <button type="button" data-zoom="reset" title="Back to the minimap's own zoom"
+              aria-label="Back to the minimap's own zoom">↔</button>
+      <button type="button" class="diagram-fs" title="Fullscreen"
+              aria-label="Show the whole workflow fullscreen">⛶</button>
     </div>
-    {%- endfor %}
+    <div class="diagram-viewport" data-zoom-floor="0.5">
+      <pre class="mermaid">
+{{ values.mermaid }}
+      </pre>
+    </div>
   </div>
   <button class="vu-arrow" data-go="fwd" title="forward one stage (right arrow)">▶</button>
 </div>
@@ -42,12 +51,5 @@
   </section>
 {% endfor %}
 </div>
-<div class="vu-modal" hidden><div class="vu-modal-card">
-  <button class="vu-modal-close" type="button">close</button>
-  <h3 class="vu-modal-title"></h3>
-  <p class="vu-modal-say">These are separate datasets. Each one is its own path, with its
-    own transformations to agree with &mdash; walking one says nothing about the others.</p>
-  <div class="vu-forklist"></div>
-</div></div>
 </div>
 {% endif %}

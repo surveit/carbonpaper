@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from typing import Any, Sequence
 
+from pydantic import BaseModel
+
 from app.models import AbstractStage
 from app.core.run_status import StageStatus
 
@@ -255,21 +257,42 @@ def _node_view(s: AbstractStage | dict[str, Any]) -> dict[str, Any]:
     }
 
 
+class DiagramOverlay(BaseModel):
+    # A second reading of the same graph, drawn over the run-status one.
+    notes: dict[str, str] = {}
+    # Stage id -> the body of its mermaid `style` line, replacing the status stroke.
+    styles: dict[str, str] = {}
+    # Stages with no `click` binding, so the reader cannot open what is not there.
+    unclickable: set[str] = set()
+    # (upstream, downstream) -> the label its edge carries.
+    edge_labels: dict[tuple[str, str], str] = {}
+
+
 def build_mermaid_graph(
     stages: Sequence[AbstractStage] | Sequence[dict[str, Any]],
     project_id: str,
     status_by_id: dict[str, str] | None = None,
+    overlay: DiagramOverlay | None = None,
 ) -> str:
     nodes = [_node_view(s) for s in stages]
+    drawn = overlay or DiagramOverlay()
+    known = {n["id"] for n in nodes}
     lines = ["flowchart LR"]
     for n in nodes:
-        lines.extend(_render_workflow_node_lines(n, status_by_id or {}))
+        lines.extend(_render_workflow_node_lines(n, status_by_id or {}, drawn))
     for n in nodes:
         sid = n["id"]
         for upstream in n["input_ids"]:
-            lines.append(f"    {upstream} --> {sid}")
+            if upstream in known:
+                lines.append(_render_edge_line(upstream, sid, drawn))
     lines.extend(_render_node_classdefs())
     return "\n".join(lines)
+
+
+def _render_edge_line(upstream: str, sid: str, drawn: DiagramOverlay) -> str:
+    label = drawn.edge_labels.get((upstream, sid))
+    arrow = "-->" if label is None else f"-->|{label}|"
+    return f"    {upstream} {arrow} {sid}"
 
 
 # One neutral surface for every stage type: the node's glyph and its type-name
@@ -318,32 +341,38 @@ _STATUS_DASH: dict[str, str] = {StageStatus.RUNNING: "6 4"}
 
 
 def _render_workflow_node_lines(
-    n: dict[str, Any], status_by_id: dict[str, str]
+    n: dict[str, Any], status_by_id: dict[str, str], drawn: DiagramOverlay
 ) -> list[str]:
     sid = n["id"]
     stype = n["type"]
     status = status_by_id.get(sid)
-    label = _build_workflow_node_label(n, status)
-    lines = [
-        f"    {sid}[{label}]:::{TYPE_CLASS.get(stype, _FALLBACK_NODE_CLASS)}",
-        f'    click {sid} call dvNode("{sid}") "{_build_node_tooltip(n)}"',
-    ]
-    stroke_line = _resolve_stroke_line(sid, status)
+    label = _build_workflow_node_label(n, status, drawn.notes.get(sid))
+    lines = [f"    {sid}[{label}]:::{TYPE_CLASS.get(stype, _FALLBACK_NODE_CLASS)}"]
+    if sid not in drawn.unclickable:
+        lines.append(f'    click {sid} call dvNode("{sid}") "{_build_node_tooltip(n)}"')
+    overlaid = drawn.styles.get(sid)
+    stroke_line = (f"    style {sid} {overlaid}" if overlaid is not None
+                   else _resolve_stroke_line(sid, status))
     if stroke_line is not None:
         lines.append(stroke_line)
     return lines
 
 
 # Always two lines: a third for the flags made a flagged node taller than the rest.
-def _build_workflow_node_label(n: dict[str, Any], status: str | None) -> str:
+def _build_workflow_node_label(
+    n: dict[str, Any], status: str | None, note: str | None = None
+) -> str:
     stype = n["type"]
     title = " ".join(filter(None, [
         _STATUS_GLYPH.get(status or "", ""), TYPE_GLYPH.get(stype, ""), n["id"],
     ]))
-    subtitle = " ".join(filter(None, [
-        TYPE_LABEL.get(stype, stype),
-        "📊" if n["has_eval"] else "",
-        "👤" if n["has_review"] else "",
+    subtitle = " · ".join(filter(None, [
+        " ".join(filter(None, [
+            TYPE_LABEL.get(stype, stype),
+            "📊" if n["has_eval"] else "",
+            "👤" if n["has_review"] else "",
+        ])),
+        note or "",
     ]))
     return (
         f'"<b>{title}</b>'

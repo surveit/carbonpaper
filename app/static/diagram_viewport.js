@@ -272,18 +272,27 @@
     });
   }
 
-  async function boot() {
-    var vps = Array.prototype.slice.call(document.querySelectorAll(".diagram-viewport"));
-    if (!vps.length) return;
+  // Render and wire every viewport under `root`, which a page whose graph arrives
+  // by fetch calls itself: boot() below ran while that pane was not yet in the DOM.
+  async function renderDiagramViewports(root) {
+    var scope = root || document;
+    var vps = Array.prototype.slice.call(scope.querySelectorAll(".diagram-viewport"));
+    if (!vps.length) return vps;
     if (window.mermaid) {
       initMermaidTheme();
-      try { await mermaid.run({ querySelector: ".diagram-viewport .mermaid" }); }
+      var pres = vps.map(function (vp) { return vp.querySelector(".mermaid"); })
+        .filter(Boolean);
+      try { if (pres.length) await mermaid.run({ nodes: pres }); }
       catch (e) { console.error("mermaid render failed", e); }
     }
     vps.forEach(initDiagramViewport);
+    return vps;
   }
 
+  function boot() { return renderDiagramViewports(document); }
+
   window.initDiagramViewport = initDiagramViewport;
+  window.renderDiagramViewports = renderDiagramViewports;
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 })();

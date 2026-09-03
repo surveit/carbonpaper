@@ -1,5 +1,5 @@
 /* The row lineage page's Relevant columns tab: the minimap, the sheet replayed one
-   stage at a time, and the fork modal. Class names are its own, so where this
+   stage at a time. Class names are its own, so where this
    sheet sits in the cascade is free. */
 
 /* The tab owns a scroll region of its own (.vu-scroll), so changing stage never
@@ -11,42 +11,20 @@
 .vu-say code { background: var(--sunk-deep); border-radius: 4px; padding: 1px 5px; color: var(--fg); }
 .vu-to-rows { border: 0; background: none; font: inherit; color: var(--accent); cursor: pointer; padding: 0; text-decoration: underline; }
 
-/* ── the minimap: the writer stages, left to right like the workflow ───────── */
+/* ── the minimap: the run's own workflow graph, in the shared 200px band ──── */
 .vu-maprow { flex: none; display: flex; align-items: stretch; gap: 8px; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
 .vu-arrow { border: 1px solid var(--border-strong); background: var(--raised); border-radius: 9px; font: inherit; font-size: 13px; color: var(--muted); padding: 0 12px; cursor: pointer; align-self: center; }
 .vu-arrow:hover:not(:disabled) { background: var(--hover); }
 .vu-arrow:disabled { opacity: 0.35; cursor: default; }
-.vu-map { position: relative; display: flex; gap: 38px; overflow-x: auto; padding: 8px 2px 12px; flex: 1; }
-.vu-wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
-.vu-wires path { fill: none; stroke: var(--border-strong); stroke-width: 1.5; }
-.vu-wires path.vu-hot { stroke: var(--accent); stroke-width: 2.5; }
-.vu-mapcol { display: flex; flex-direction: column; gap: 6px; position: relative; z-index: 1; }
-.vu-node { border: 1px solid var(--border-strong); background: var(--raised); border-radius: 7px; font: inherit; font-family: var(--mono); font-size: 10.5px; color: var(--muted); padding: 3px 8px; cursor: pointer; white-space: nowrap; text-align: left; }
-.vu-node:hover { background: var(--hover); }
-.vu-node.vu-seen { color: var(--fg); }
-.vu-node.vu-next { border-style: dashed; border-color: var(--accent); color: var(--fg); }
-.vu-node.vu-on { border-color: var(--accent); border-width: 2px; padding: 2px 7px; color: var(--fg); font-weight: 600; }
-.vu-node:focus-visible, .vu-arrow:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--focus-halo); }
-
-/* The shared legend, sized to a pane rather than to a page. */
-.vu .legend { margin: 0 2px 11px; font-size: 11px; }
+.vu-arrow:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--focus-halo); }
+.vu-graph { flex: 1; min-width: 0; }
+.vu-graph .diagram-viewport { height: 200px; }
+/* A stage the value never came through is not a place to go, so it does not
+   answer the pointer the way the clickable ones do. */
+.vu-graph .mermaid .node:not(.clickable) { cursor: default; }
 
 /* ── one step ─────────────────────────────────────────────────────────────── */
 .vu-scroll { flex: 1; min-height: 0; overflow: auto; padding-bottom: 60px; }
 .vu-step { display: none; }
 .vu-step.vu-on { display: block; }
 .vu-nosheet { color: var(--muted); font-size: 12.5px; padding: 12px; border: 1px dashed var(--border-strong); border-radius: 9px; }
-
-/* ── the fork: a review decision, so it takes the screen ───────────────────── */
-.vu-modal { position: fixed; inset: 0; background: var(--scrim); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 34px; }
-.vu-modal[hidden] { display: none; }
-.vu-modal-card { background: var(--raised); border-radius: 12px; max-width: 720px; width: 100%; max-height: 100%; overflow: auto; padding: 16px 20px 22px; }
-.vu-modal-card h3 { margin: 0 0 3px; font-size: 15px; text-transform: none; letter-spacing: 0; color: var(--fg); }
-.vu-modal-say { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
-.vu-modal-close { float: right; border: 1px solid var(--border-strong); background: var(--raised); border-radius: 7px; font: inherit; font-size: 12px; padding: 3px 10px; cursor: pointer; }
-.vu-forklist { display: flex; flex-direction: column; gap: 7px; margin-top: 11px; }
-.vu-forkopt { border: 1px solid var(--border-strong); background: var(--raised); border-radius: 9px; padding: 9px 12px; font: inherit; text-align: left; cursor: pointer; }
-.vu-forkopt:hover { background: var(--hover); }
-.vu-forkopt:focus-visible, .vu-modal-close:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--focus-halo); }
-.vu-forkopt b { font-family: var(--mono); font-size: 13px; display: block; }
-.vu-forkopt span { font-size: 11.5px; color: var(--muted); font-family: var(--mono); }
