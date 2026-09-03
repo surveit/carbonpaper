@@ -138,9 +138,10 @@ def _read_manifest(bundle: zipfile.ZipFile) -> CacheArchiveManifest:
 
 def _read_entries(bundle: zipfile.ZipFile) -> list[StageCacheEntry]:
     raw = bundle.read(_ENTRIES_FILE).decode("utf-8")
+    # split, not splitlines: json.dumps leaves U+2028 raw, and splitlines breaks on it.
     return [
         StageCacheEntry.model_validate(json.loads(line))
-        for line in raw.splitlines()
+        for line in raw.split("\n")
         if line.strip()
     ]
 
