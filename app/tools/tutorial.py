@@ -29,7 +29,7 @@ from app.models.records.project import Project
 from app.services import methodology
 from app.tools.types import ToolProse
 
-_FIXTURE_STEM = "tutorial_lobbying_triage"
+_FIXTURE_STEM = "ai_lobbying_spend_2026"
 _DATA_DIR = Path(__file__).resolve().parents[1] / "seeds" / "data"
 _FIXTURE = _DATA_DIR / f"{_FIXTURE_STEM}.json"
 _GUIDE = _DATA_DIR / "review_guides" / f"{_FIXTURE_STEM}.json"
@@ -38,11 +38,9 @@ _GUIDE = _DATA_DIR / "review_guides" / f"{_FIXTURE_STEM}.json"
 _EVAL = _DATA_DIR / "evals" / f"{_FIXTURE_STEM}.json"
 # Built by scripts/build_tutorial_cache.py from a run of the fixture beside it.
 TUTORIAL_CACHE_BUNDLE = name_cache_sidecar(_FIXTURE)
-# The fixture carries no path for these — a committed file cannot know where the
-# workspace is — so each run says which file its input stage reads.
-_CSV_BY_STAGE_ID = {
-    "lobbying_filings": _DATA_DIR / f"{_FIXTURE_STEM}.csv",
-    "public_commitments": _DATA_DIR / "tutorial_public_commitments.csv",
+# A committed file cannot name where the workspace is, so a run says that.
+_INPUT_FILES_BY_STAGE_ID = {
+    "input_filings": [_DATA_DIR / "lda_data_Q1_2026.xlsx", _DATA_DIR / "lda_data_Q2_2026.xlsx"],
 }
 
 
@@ -59,8 +57,8 @@ class TutorialAgentReference(BaseModel):
     # The stages as seeded: the tour reads its stage ids and types off this rather than
     # off a name written into its prompt.
     workflow: workspace.WorkflowSummary
-    # Pass straight to run_workflow's `files`: which stored file each input step reads.
-    input_files: dict[str, str]
+    # Pass straight to run_workflow's `files`: which stored file(s) each input step reads.
+    input_files: dict[str, list[str]]
     workflow_url: str
     guide_url: str
     runs_url_prefix: str
@@ -114,12 +112,16 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialAgentReference:
 
 def import_tour_fixture() -> str:
     """The committed fixture as a runnable project, before the cache and the tour's extras."""
-    for path in (_FIXTURE, _GUIDE, _EVAL, *_CSV_BY_STAGE_ID.values()):
+    for path in (_FIXTURE, _GUIDE, _EVAL, *_all_input_paths()):
         if not path.is_file():
             raise FileNotFoundError(f"the tutorial fixture needs {path}, which is missing")
     return import_project(
         WorkflowFile.model_validate_json(_FIXTURE.read_text(encoding="utf-8")),
     )
+
+
+def _all_input_paths() -> list[Path]:
+    return [path for paths in _INPUT_FILES_BY_STAGE_ID.values() for path in paths]
 
 
 def _seed_stage_cache(project_id: str) -> None:
@@ -158,12 +160,12 @@ def _read_or_write_eval_config(project_id: str) -> EvalConfig:
     return seeded
 
 
-def store_tour_files(project_id: str) -> dict[str, str]:
-    """stage id -> file id, stored the way an upload is so the tour shows the real flow."""
+def store_tour_files(project_id: str) -> dict[str, list[str]]:
+    """stage id -> file ids, stored the way an upload is so the tour shows the real flow."""
     already_stored = file_store.index_project_files(project_id)
     return {
-        stage_id: _store_tour_file(already_stored, project_id, path)
-        for stage_id, path in _CSV_BY_STAGE_ID.items()
+        stage_id: [_store_tour_file(already_stored, project_id, path) for path in paths]
+        for stage_id, paths in _INPUT_FILES_BY_STAGE_ID.items()
     }
 
 

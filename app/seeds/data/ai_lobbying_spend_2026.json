@@ -1,0 +1,1442 @@
+{
+  "name": "ai_lobbying_spend_2026",
+  "document": "# How much was paid to lobby on artificial intelligence in 2026\n\n## The question\n\nAcross the Senate LDA disclosures for Q1 and Q2 2026, how much did clients pay outside\nlobbying firms to lobby on artificial intelligence?\n\n## The corpus\n\nTwo exports, read exactly as filed: `lda_data_Q1_2026.xlsx` and `lda_data_Q2_2026.xlsx`.\nEvery Senate LDA filing here is real and public record, not a sample. Each\ncarries one row per filing per issue area, so a filing that lobbied on three issue\nareas is three rows stating the same money once each.\n\n## Step 1 - find the rows that mention AI\n\nSearch each row's own `specific_issues` and `issue_codes` for six terms, on word\nboundaries, ignoring case: artificial intelligence, AI, machine learning, large language\nmodel (and LLM), deepfake, algorithmic. This is a net, not a judgement: it catches\nalgorithmic trading and airline codes on purpose, and leaves the deciding to step 2.\n\nEvery row that matches none of the six is dropped and enters no figure. A filing that\nlobbied on AI without using one of these terms is outside what this run can see.\n\n## Step 2 - judge whether the filing is really about AI\n\nAsk a model, one row at a time, whether the filing's own issue text says the lobbying was\nabout artificial intelligence - its regulation, funding, procurement, or its use in some\nsector - or whether the term is incidental. It answers with a verdict and a one-sentence\nbasis quoting the text it decided on. A row with no verdict is dropped: no verdict is not\na yes.\n\n## Step 3 - read the money as filed\n\nRead `income` and `expenses` as plain dollar numbers. Blank counts as zero: the filing is\nreporting it received or spent nothing. Anything else that is not a plain number, and any\nnegative amount, stops the run rather than being interpreted.\n\n## Step 4 - separate paid lobbying from in-house\n\nA filing whose type begins with `Registration` is a registration. A filing whose\nregistrant and client are the same name as filed is in-house. Everything else is one\norganisation paying another. Names are compared exactly as filed; nothing here merges two\nspellings of one organisation.\n\n## Step 5 - one row per filing\n\nCollapse the surviving rows to one per `filing_uuid`. A column the rows of one filing\ndisagree on stops the run rather than being picked from; the per-issue-area fields are\ncarried as lists.\n\n## Step 6 - a person confirms every paid filing\n\nBefore anything is published, every paid filing the model read as being about AI is put\nin front of a person, largest reported spend first. They confirm or overturn the\nmodel's reading; overturning one drops the filing from every figure below.\n\n## The published figures\n\nOver the paid filings a person confirmed: the reported income summed exactly as filed,\nthe filings behind it, and the distinct firms and clients. In-house spending is reported\nseparately, on the model's reading alone, and is never added to it.",
+  "model": "sonnet",
+  "source": "mcp",
+  "data_model": {
+    "schemas": []
+  },
+  "verbs": [],
+  "stages": [
+    {
+      "id": "input_filings",
+      "type": "input_data",
+      "description": "Both Senate LDA exports, one row per filing per issue area.",
+      "inputs": [],
+      "cache": false,
+      "compiler_notes": [],
+      "signature": {
+        "form": "replaces",
+        "reads": [],
+        "produces": [
+          {
+            "name": "year",
+            "type": "str",
+            "nullable": false,
+            "description": "Filing year as the export carries it."
+          },
+          {
+            "name": "type",
+            "type": "str",
+            "nullable": false,
+            "description": "Filing type, e.g. '1st Quarter - Report', 'Registration'."
+          },
+          {
+            "name": "date_posted",
+            "type": "str",
+            "nullable": false,
+            "description": "Date the filing was posted, as filed."
+          },
+          {
+            "name": "client",
+            "type": "str",
+            "nullable": false,
+            "description": "Client name exactly as typed into the filing system."
+          },
+          {
+            "name": "client_state",
+            "type": "str",
+            "nullable": true,
+            "description": "Client state, blank where the filing gives none."
+          },
+          {
+            "name": "client_country",
+            "type": "str",
+            "nullable": false,
+            "description": "Client country as filed."
+          },
+          {
+            "name": "registrant",
+            "type": "str",
+            "nullable": false,
+            "description": "Registrant (lobbying firm) name exactly as filed."
+          },
+          {
+            "name": "income",
+            "type": "str",
+            "nullable": true,
+            "description": "Income reported by an outside firm, as text; blank where none is reported."
+          },
+          {
+            "name": "expenses",
+            "type": "str",
+            "nullable": true,
+            "description": "Expenses reported by an organisation lobbying on its own account, as text."
+          },
+          {
+            "name": "issue_codes",
+            "type": "str",
+            "nullable": true,
+            "description": "The filing's issue-area codes; one of the two issue fields."
+          },
+          {
+            "name": "specific_issues",
+            "type": "str",
+            "nullable": true,
+            "description": "The filing's own free-text account of what it lobbied on; the other issue field."
+          },
+          {
+            "name": "lobbyists",
+            "type": "str",
+            "nullable": true,
+            "description": "Named lobbyists on the filing."
+          },
+          {
+            "name": "filing_uuid",
+            "type": "str",
+            "nullable": false,
+            "description": "The filing's identifier; rows of one filing share it."
+          },
+          {
+            "name": "export_row",
+            "type": "int",
+            "nullable": false,
+            "description": "1-based row number of this row in its export file."
+          }
+        ]
+      },
+      "connector": {
+        "kind": "file",
+        "params": {
+          "paths": [],
+          "format": "xlsx",
+          "list_columns": [],
+          "parse_dates": [],
+          "sheet_name": 0,
+          "header_row": 0,
+          "first_column": 0,
+          "source_row_column": "export_row"
+        },
+        "refresh": "ad_hoc",
+        "notes": "Read as text throughout: the money fields are declared `str` so a figure is read exactly as filed, and judged later."
+      }
+    },
+    {
+      "id": "find_ai_mentions",
+      "type": "python_row_function",
+      "description": "Marks the rows whose own issue text uses an AI term.",
+      "inputs": [
+        {
+          "id": "input_filings"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "Python rather than Starlark because the AI term list is matched on word boundaries, which needs a regular expression."
+      ],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "input_filings",
+            "columns": [
+              {
+                "name": "specific_issues",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "issue_codes",
+                "type": "str",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "mentions_ai",
+            "type": "bool",
+            "nullable": false,
+            "description": "True where an AI term appears in this row's own issue text."
+          },
+          {
+            "name": "ai_terms_found",
+            "type": "str",
+            "nullable": false,
+            "description": "The terms that matched, semicolon-separated; blank where none did."
+          }
+        ],
+        "rewrites": []
+      },
+      "function": {
+        "kind": "inline",
+        "summary": "Searches the row's `specific_issues` and `issue_codes` for six AI terms, on word boundaries, ignoring case. It decides nothing: `algorithmic` also catches algorithmic trading, and the next steps separate that from AI lobbying.",
+        "corner_cases": [
+          {
+            "case": "both issue fields are blank",
+            "expected": "no term matches and the row is marked False"
+          },
+          {
+            "case": "the text holds `AI` inside a longer word, such as `AIR` or `SAID`",
+            "expected": "no match \u2014 the term is matched on word boundaries"
+          },
+          {
+            "case": "the text holds `A.I.`",
+            "expected": "no match; the term list does not carry the dotted spelling"
+          },
+          {
+            "case": "the text holds `algorithmic trading`",
+            "expected": "matched, and left for the judgement step to reject"
+          }
+        ],
+        "code": "import re\n\nTERMS = (\n    (\"artificial intelligence\", r\"artificial intelligence\"),\n    (\"AI\", r\"(?<![A-Za-z])AI(?![A-Za-z])\"),\n    (\"machine learning\", r\"machine learning\"),\n    (\"large language model\", r\"(?<![A-Za-z])(?:LLM|large language model)s?(?![A-Za-z])\"),\n    (\"deepfake\", r\"deep ?fakes?\"),\n    (\"algorithmic\", r\"algorithmic\"),\n)\n\n\ndef transform(row):\n    text = \" || \".join(\n        part for part in (row[\"specific_issues\"], row[\"issue_codes\"]) if part\n    )\n    found = [name for name, pattern in TERMS if re.search(pattern, text, re.IGNORECASE)]\n    return {\n        **row,\n        \"mentions_ai\": bool(found),\n        \"ai_terms_found\": \"; \".join(found),\n    }\n",
+        "requirements": []
+      }
+    },
+    {
+      "id": "keep_ai_candidates",
+      "type": "filter_rows",
+      "description": "Drops every row whose issue text uses no AI term.",
+      "inputs": [
+        {
+          "id": "find_ai_mentions"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "find_ai_mentions",
+            "columns": [
+              {
+                "name": "mentions_ai",
+                "type": "bool",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "adds": [],
+        "rewrites": []
+      },
+      "filter": {
+        "summary": "Keeps the rows the scan marked. Every other row is dropped here and appears nowhere downstream, so no figure below can rest on a filing whose issue text never uses an AI term.",
+        "corner_cases": [
+          {
+            "case": "a filing lobbied on AI but never used one of the six terms",
+            "expected": "dropped here, and missing from every figure \u2014 the term list is the limit of what this run can see"
+          }
+        ],
+        "code": "def should_include(row):\n    return row[\"mentions_ai\"]\n"
+      }
+    },
+    {
+      "id": "judge_ai_substance",
+      "type": "llm_transform",
+      "description": "Asks whether the filing's own issue text is really about AI.",
+      "inputs": [
+        {
+          "id": "keep_ai_candidates"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "Grain is 1:1 \u2014 the judgement is a reading of one row's text and drops nothing."
+      ],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "keep_ai_candidates",
+            "columns": [
+              {
+                "name": "client",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "registrant",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "type",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "issue_codes",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "specific_issues",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "ai_terms_found",
+                "type": "str",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "is_about_ai",
+            "type": "bool",
+            "nullable": true,
+            "description": "True where the issue text says the lobbying was about AI."
+          },
+          {
+            "name": "ai_basis",
+            "type": "str",
+            "nullable": true,
+            "description": "One sentence naming the part of the issue text the verdict rests on."
+          }
+        ],
+        "rewrites": []
+      },
+      "llm": {
+        "prompt_instructions": "You are reading one row of a US Senate lobbying disclosure (an LDA filing), for a newsroom building a public figure: how much was paid to lobby on artificial intelligence in 2026.\n\nA keyword scan already found an AI term in this row's issue text. That scan cannot tell \"we lobbied on the AI Act\" from \"we lobbied on Medicare; also AI in radiology came up\" from a false positive like an airline code or \"Bahrain (AI)\". Deciding which of those this is, is your whole job.\n\nYour answer decides whether this filing's reported dollars enter the published total. A reviewer sees your verdict and your basis next to the filing's own issue text, and can overrule either. Nothing else about the run is shown to you: not the amount, not the client's size, not what any other filing was judged. Judge the text in front of you.\n\nReturn a JSON object with exactly these two fields:\n\n1. \"is_about_ai\": true when the filing's own issue text says this lobbying was about artificial intelligence \u2014 its regulation, funding, procurement, or its use in some sector. false when the AI term is incidental, is part of an unrelated name or code, or the text does not support the reading.\n\n2. \"ai_basis\": one short sentence, quoting or naming the part of the issue text you decided on. Where you answered false, say what the term turned out to be.\n\nWorked example. Issue text: \"H.R. 5628, the Artificial Intelligence Accountability Act; oversight of automated decision systems in hiring.\" \u2192\n{\"is_about_ai\": true, \"ai_basis\": \"Names the Artificial Intelligence Accountability Act and oversight of automated hiring decisions.\"}\n",
+        "prompt_data_template": "Filing:\n- Client: {client}\n- Registrant: {registrant}\n- Filing type: {type}\n- Terms the scan matched: {ai_terms_found}\n\nIssue-area codes as filed:\n{issue_codes}\n\nThe filing's own account of what it lobbied on:\n{specific_issues}\n",
+        "model": "claude-haiku-4-5",
+        "temperature": 0.0,
+        "max_retries": 8,
+        "response_format": "json",
+        "batch_size": 10,
+        "thinking": "disabled"
+      }
+    },
+    {
+      "id": "keep_ai_lobbying",
+      "type": "filter_rows",
+      "description": "Drops the rows the judgement read as not about AI.",
+      "inputs": [
+        {
+          "id": "judge_ai_substance"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "judge_ai_substance",
+            "columns": [
+              {
+                "name": "is_about_ai",
+                "type": "bool",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "adds": [],
+        "rewrites": []
+      },
+      "filter": {
+        "summary": "Keeps the rows judged to be about AI. A row the judgement left blank is dropped: no verdict is not a yes.",
+        "corner_cases": [
+          {
+            "case": "`is_about_ai` is blank because the model returned no verdict",
+            "expected": "the row is dropped, and its dollars enter no figure"
+          }
+        ],
+        "code": "def should_include(row):\n    return row[\"is_about_ai\"] == True\n"
+      }
+    },
+    {
+      "id": "read_reported_money",
+      "type": "python_row_function",
+      "description": "Reads the two reported money fields as dollars, or stops the run.",
+      "inputs": [
+        {
+          "id": "keep_ai_lobbying"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "Python rather than Starlark because telling an unreadable money field from a number needs a failed conversion to be caught, which Starlark cannot express."
+      ],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "keep_ai_lobbying",
+            "columns": [
+              {
+                "name": "income",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "expenses",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "filing_uuid",
+                "type": "str",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "income_usd",
+            "type": "float",
+            "nullable": false,
+            "description": "Income reported by an outside firm, in dollars; zero where the filing reports none."
+          },
+          {
+            "name": "expenses_usd",
+            "type": "float",
+            "nullable": false,
+            "description": "Expenses reported by an organisation lobbying on its own account, in dollars."
+          }
+        ],
+        "rewrites": []
+      },
+      "function": {
+        "kind": "inline",
+        "summary": "Reads `income` and `expenses` as plain dollar numbers. Blank, or the word None, counts as zero \u2014 the filing is reporting it received or spent nothing. Anything else that is not a plain number, or a negative amount, stops the run.",
+        "corner_cases": [
+          {
+            "case": "`income` or `expenses` is blank",
+            "expected": "read as zero \u2014 the filing is saying it received or spent nothing"
+          },
+          {
+            "case": "the field holds the word `None`",
+            "expected": "read as zero, the same as blank"
+          },
+          {
+            "case": "the field holds text that is not a number at all",
+            "expected": "the step fails and the run stops, naming the filing and the field"
+          },
+          {
+            "case": "the amount is dressed as currency, such as `$45,000.00`",
+            "expected": "the step fails and the run stops: stripping the formatting would be a normalisation nobody authorised"
+          },
+          {
+            "case": "the amount is negative",
+            "expected": "the step fails and the run stops; whether it is a refund, a correction or an error is a decision for a person"
+          },
+          {
+            "case": "the amount has cents, e.g. 111650.94",
+            "expected": "kept exactly, not rounded"
+          }
+        ],
+        "code": "def transform(row):\n    return {\n        **row,\n        \"income_usd\": _read_money(row[\"income\"], \"income\", row[\"filing_uuid\"]),\n        \"expenses_usd\": _read_money(row[\"expenses\"], \"expenses\", row[\"filing_uuid\"]),\n    }\n\n\ndef _read_money(value, field, filing_uuid):\n    if value is None or value != value:\n        return 0.0\n    text = str(value).strip()\n    if text == \"\" or text == \"None\":\n        return 0.0\n    try:\n        amount = float(text)\n    except ValueError:\n        raise StepRefused(\n            f\"filing {filing_uuid}: {field} reads {text!r}, which is not a number. \"\n            \"Reading it as zero would enter the published totals as if the filing had \"\n            \"reported nothing, so this is a question for a person.\"\n        )\n    if amount < 0:\n        raise StepRefused(\n            f\"filing {filing_uuid}: {field} reports {text!r}, a negative amount. Nothing in \"\n            \"the filing says whether it is a refund, a correction or an error, and counting \"\n            \"it, dropping it and subtracting it are three different published totals.\"\n        )\n    return amount\n",
+        "requirements": []
+      }
+    },
+    {
+      "id": "flag_in_house_filings",
+      "type": "starlark_row_function",
+      "description": "Sorts each filing into paid-to-an-outside-firm, in-house, or a new registration.",
+      "inputs": [
+        {
+          "id": "read_reported_money"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "read_reported_money",
+            "columns": [
+              {
+                "name": "type",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "registrant",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "client",
+                "type": "str",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "filing_class",
+            "type": "str",
+            "nullable": false,
+            "description": "Which of the three kinds of filing this is.",
+            "enum": [
+              "external_paid",
+              "in_house",
+              "registration"
+            ]
+          }
+        ],
+        "rewrites": []
+      },
+      "starlark": {
+        "summary": "Sorts each filing into one of three: `registration` where it declares a new relationship, `in_house` where the firm and the client are the same name as filed, `external_paid` where one organisation paid another. The comparison is on the names as filed, so a firm that spells itself two ways is read as two organisations.",
+        "corner_cases": [
+          {
+            "case": "the filing type begins with `Registration`, including an amendment",
+            "expected": "classed `registration` whatever the two names are"
+          },
+          {
+            "case": "the firm and the client are the same organisation under two spellings",
+            "expected": "classed `external_paid` \u2014 nothing here merges names"
+          },
+          {
+            "case": "the filing is a termination",
+            "expected": "classed like any other report; it still reports what was received for the period it covers"
+          }
+        ],
+        "code": "def transform(row):\n    if row[\"type\"].startswith(\"Registration\"):\n        filing_class = \"registration\"\n    elif row[\"registrant\"] == row[\"client\"]:\n        filing_class = \"in_house\"\n    else:\n        filing_class = \"external_paid\"\n    return dict(row, filing_class=filing_class)\n"
+      }
+    },
+    {
+      "id": "ai_filings",
+      "type": "aggregate",
+      "description": "One row per filing. A filing states its money once, however many issue areas it was reported under.",
+      "inputs": [
+        {
+          "id": "flag_in_house_filings"
+        }
+      ],
+      "cache": false,
+      "compiler_notes": [
+        "Formula `only` carries a column the rows of one filing agree on and STOPS the run naming the values where they do not, so no figure below rests on which row sorted first. The per-issue-area columns are carried as lists instead."
+      ],
+      "signature": {
+        "form": "replaces",
+        "reads": [
+          {
+            "input": "flag_in_house_filings",
+            "columns": [
+              {
+                "name": "filing_uuid",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "year",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "type",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "date_posted",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "client",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "client_state",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "client_country",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "registrant",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "income",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "expenses",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "issue_codes",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "specific_issues",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "lobbyists",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "export_row",
+                "type": "int",
+                "nullable": false
+              },
+              {
+                "name": "ai_terms_found",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "ai_basis",
+                "type": "str",
+                "nullable": true
+              },
+              {
+                "name": "income_usd",
+                "type": "float",
+                "nullable": false
+              },
+              {
+                "name": "expenses_usd",
+                "type": "float",
+                "nullable": false
+              },
+              {
+                "name": "filing_class",
+                "type": "str",
+                "nullable": false,
+                "enum": [
+                  "external_paid",
+                  "in_house",
+                  "registration"
+                ]
+              },
+              {
+                "name": "is_about_ai",
+                "type": "bool",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "produces": [
+          {
+            "name": "filing_uuid",
+            "type": "str",
+            "nullable": false,
+            "description": "The filing's identifier."
+          },
+          {
+            "name": "year",
+            "type": "str",
+            "nullable": false,
+            "description": "Filing year as the export carries it."
+          },
+          {
+            "name": "type",
+            "type": "str",
+            "nullable": false,
+            "description": "Filing type, as filed."
+          },
+          {
+            "name": "date_posted",
+            "type": "str",
+            "nullable": false,
+            "description": "Date the filing was posted, as filed."
+          },
+          {
+            "name": "client",
+            "type": "str",
+            "nullable": false,
+            "description": "Client name exactly as filed."
+          },
+          {
+            "name": "client_state",
+            "type": "str",
+            "nullable": true,
+            "description": "Client state, blank where none is given."
+          },
+          {
+            "name": "client_country",
+            "type": "str",
+            "nullable": false,
+            "description": "Client country as filed."
+          },
+          {
+            "name": "registrants_as_filed",
+            "type": "list[str]",
+            "nullable": false,
+            "description": "Every spelling of the firm's name across the rows that reported this filing."
+          },
+          {
+            "name": "income",
+            "type": "str",
+            "nullable": true,
+            "description": "Income as filed, as text."
+          },
+          {
+            "name": "expenses",
+            "type": "str",
+            "nullable": true,
+            "description": "Expenses as filed, as text."
+          },
+          {
+            "name": "income_usd",
+            "type": "float",
+            "nullable": false,
+            "description": "Income in dollars, once per filing."
+          },
+          {
+            "name": "expenses_usd",
+            "type": "float",
+            "nullable": false,
+            "description": "Expenses in dollars, once per filing."
+          },
+          {
+            "name": "filing_class",
+            "type": "str",
+            "nullable": false,
+            "description": "Which of the three kinds of filing this is.",
+            "enum": [
+              "external_paid",
+              "in_house",
+              "registration"
+            ]
+          },
+          {
+            "name": "issue_codes_as_filed",
+            "type": "list[str]",
+            "nullable": false,
+            "description": "Every issue-code list this filing was reported under."
+          },
+          {
+            "name": "issue_text_as_filed",
+            "type": "list[str]",
+            "nullable": false,
+            "description": "Every issue-text account this filing was reported under."
+          },
+          {
+            "name": "ai_terms_as_found",
+            "type": "list[str]",
+            "nullable": false,
+            "description": "The AI terms matched in each of those accounts."
+          },
+          {
+            "name": "ai_bases",
+            "type": "list[str]",
+            "nullable": false,
+            "description": "The judgement's basis for each of those accounts."
+          },
+          {
+            "name": "lobbyists_as_filed",
+            "type": "list[str]",
+            "nullable": false,
+            "description": "Every lobbyist list across the rows that reported this filing."
+          },
+          {
+            "name": "export_row_numbers",
+            "type": "list[int]",
+            "nullable": false,
+            "description": "Where this filing sits in each of those files, in the same order."
+          },
+          {
+            "name": "ai_rows",
+            "type": "int",
+            "nullable": false,
+            "description": "How many AI-judged rows of the exports this one filing was carried by."
+          },
+          {
+            "name": "is_about_ai",
+            "type": "bool",
+            "nullable": true,
+            "description": "Whether the judgement read this filing's lobbying as about AI."
+          }
+        ]
+      },
+      "aggregate": {
+        "group_by": [
+          "filing_uuid"
+        ],
+        "aggregations": [
+          {
+            "output_column": "year",
+            "formula": "only",
+            "value_column": "year"
+          },
+          {
+            "output_column": "type",
+            "formula": "only",
+            "value_column": "type"
+          },
+          {
+            "output_column": "date_posted",
+            "formula": "only",
+            "value_column": "date_posted"
+          },
+          {
+            "output_column": "client",
+            "formula": "only",
+            "value_column": "client"
+          },
+          {
+            "output_column": "client_state",
+            "formula": "only",
+            "value_column": "client_state"
+          },
+          {
+            "output_column": "client_country",
+            "formula": "only",
+            "value_column": "client_country"
+          },
+          {
+            "output_column": "registrants_as_filed",
+            "formula": "list",
+            "value_column": "registrant"
+          },
+          {
+            "output_column": "income",
+            "formula": "only",
+            "value_column": "income"
+          },
+          {
+            "output_column": "expenses",
+            "formula": "only",
+            "value_column": "expenses"
+          },
+          {
+            "output_column": "income_usd",
+            "formula": "only",
+            "value_column": "income_usd"
+          },
+          {
+            "output_column": "expenses_usd",
+            "formula": "only",
+            "value_column": "expenses_usd"
+          },
+          {
+            "output_column": "filing_class",
+            "formula": "only",
+            "value_column": "filing_class"
+          },
+          {
+            "output_column": "issue_codes_as_filed",
+            "formula": "list",
+            "value_column": "issue_codes"
+          },
+          {
+            "output_column": "issue_text_as_filed",
+            "formula": "list",
+            "value_column": "specific_issues"
+          },
+          {
+            "output_column": "ai_terms_as_found",
+            "formula": "list",
+            "value_column": "ai_terms_found"
+          },
+          {
+            "output_column": "ai_bases",
+            "formula": "list",
+            "value_column": "ai_basis"
+          },
+          {
+            "output_column": "lobbyists_as_filed",
+            "formula": "list",
+            "value_column": "lobbyists"
+          },
+          {
+            "output_column": "export_row_numbers",
+            "formula": "list",
+            "value_column": "export_row"
+          },
+          {
+            "output_column": "ai_rows",
+            "formula": "count"
+          },
+          {
+            "output_column": "is_about_ai",
+            "formula": "only",
+            "value_column": "is_about_ai"
+          }
+        ]
+      }
+    },
+    {
+      "id": "select_external_filings",
+      "type": "filter_rows",
+      "description": "Keeps the AI filings where one organisation paid another to lobby.",
+      "inputs": [
+        {
+          "id": "ai_filings"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "ai_filings",
+            "columns": [
+              {
+                "name": "filing_class",
+                "type": "str",
+                "nullable": false,
+                "enum": [
+                  "external_paid",
+                  "in_house",
+                  "registration"
+                ]
+              }
+            ]
+          }
+        ],
+        "adds": [],
+        "rewrites": []
+      },
+      "filter": {
+        "summary": "Keeps only the filings an earlier step labelled `external_paid`. It reads that label and nothing else: it re-checks no names or amounts, and changes no row. In-house lobbying is real spending and is reported separately, not added to this figure.",
+        "corner_cases": [
+          {
+            "case": "a row's `filing_class` disagrees with its own names or type",
+            "expected": "the label decides; this step re-checks nothing"
+          },
+          {
+            "case": "no filing carries this label",
+            "expected": "every row is dropped and the total comes out empty, which is a result, not a failure"
+          }
+        ],
+        "code": "def should_include(row):\n    return row[\"filing_class\"] == \"external_paid\"\n"
+      }
+    },
+    {
+      "id": "review_ai_spend",
+      "type": "human_review_queue",
+      "description": "Put Every Published Filing in Front of a Person",
+      "inputs": [
+        {
+          "id": "select_external_filings"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "These are the filings behind the headline figure \u2014 what clients paid outside firms to lobby on AI. Nothing here is published on a model's say-so alone.",
+        "queue.sort is by reported income, descending: a reviewer working from the top decides the largest dollars first.",
+        "The reviewer's answer is ADDED as reviewed_is_about_ai; the model's is_about_ai is never overwritten, so the run records both and the figure names which it summed."
+      ],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "select_external_filings",
+            "columns": [
+              {
+                "name": "filing_uuid",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "client",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "registrants_as_filed",
+                "type": "list[str]",
+                "nullable": false
+              },
+              {
+                "name": "issue_text_as_filed",
+                "type": "list[str]",
+                "nullable": false
+              },
+              {
+                "name": "ai_terms_as_found",
+                "type": "list[str]",
+                "nullable": false
+              },
+              {
+                "name": "ai_bases",
+                "type": "list[str]",
+                "nullable": false
+              },
+              {
+                "name": "income_usd",
+                "type": "float",
+                "nullable": false
+              },
+              {
+                "name": "is_about_ai",
+                "type": "bool",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "reviewed_is_about_ai",
+            "type": "bool",
+            "nullable": true,
+            "description": "Whether a person confirmed this filing's lobbying was about AI; the model's own answer stays in `is_about_ai`."
+          },
+          {
+            "name": "review_verdict",
+            "type": "str",
+            "nullable": false,
+            "description": "'approve' where the reviewer kept the model's reading, 'modify' where they overturned it.",
+            "enum": [
+              "approve",
+              "modify",
+              "skipped"
+            ]
+          },
+          {
+            "name": "reviewer",
+            "type": "str",
+            "nullable": true,
+            "description": "The name the reviewer decided under."
+          },
+          {
+            "name": "reviewed_at",
+            "type": "str",
+            "nullable": true,
+            "description": "When the reviewer recorded that decision."
+          },
+          {
+            "name": "review_notes",
+            "type": "str",
+            "nullable": true
+          }
+        ],
+        "rewrites": []
+      },
+      "queue": {
+        "reviewer_instructions": "This client paid an outside firm these dollars, and a model read the filing as being about AI. You are deciding whether that reading holds, because these dollars are the published figure.\n\nApprove where the filing's own issue text says the lobbying was about AI \u2014 its regulation, funding, procurement, or its use in some sector. Overturn it where the AI term is incidental: a passing mention, an unrelated sense of the word, or one clause in a filing about something else.\n\nJudge the text in front of you. The amount is shown because it says how much rests on the decision, not because a large filing deserves a different answer.",
+        "reviewed_columns": {
+          "is_about_ai": "reviewed_is_about_ai"
+        },
+        "context_columns": [
+          "client",
+          "registrants_as_filed",
+          "issue_text_as_filed",
+          "ai_bases",
+          "ai_terms_as_found",
+          "income_usd"
+        ],
+        "verdict_column": "review_verdict",
+        "reviewer_column": "reviewer",
+        "reviewed_at_column": "reviewed_at",
+        "review_notes_column": "review_notes",
+        "sort": [
+          {
+            "column": "income_usd",
+            "direction": "descending"
+          }
+        ]
+      }
+    },
+    {
+      "id": "confirm_ai_spend",
+      "type": "filter_rows",
+      "description": "Drops the filings a person did not confirm.",
+      "inputs": [
+        {
+          "id": "review_ai_spend"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "review_ai_spend",
+            "columns": [
+              {
+                "name": "reviewed_is_about_ai",
+                "type": "bool",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "adds": [],
+        "rewrites": []
+      },
+      "filter": {
+        "summary": "Keeps the filings a person confirmed were about AI. A filing the reviewer overturned is dropped and its dollars enter no published figure.",
+        "corner_cases": [
+          {
+            "case": "the reviewer overturned the model's reading, or left no answer",
+            "expected": "the filing is dropped, and the published total falls by its income"
+          }
+        ],
+        "code": "def should_include(row):\n    return row[\"reviewed_is_about_ai\"] == True\n"
+      }
+    },
+    {
+      "id": "ai_spend_by_client",
+      "type": "aggregate",
+      "description": "What each client paid outside firms to lobby on AI, and to how many firms.",
+      "inputs": [
+        {
+          "id": "confirm_ai_spend"
+        }
+      ],
+      "cache": false,
+      "compiler_notes": [],
+      "signature": {
+        "form": "replaces",
+        "reads": [
+          {
+            "input": "confirm_ai_spend",
+            "columns": [
+              {
+                "name": "client",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "income_usd",
+                "type": "float",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "produces": [
+          {
+            "name": "client",
+            "type": "str",
+            "nullable": false,
+            "description": "The paying client, as filed."
+          },
+          {
+            "name": "income_usd_total",
+            "type": "float",
+            "nullable": false,
+            "description": "Reported income summed exactly as filed, once per filing."
+          },
+          {
+            "name": "filings",
+            "type": "int",
+            "nullable": false,
+            "description": "Paid AI filings behind that total."
+          }
+        ]
+      },
+      "aggregate": {
+        "group_by": [
+          "client"
+        ],
+        "aggregations": [
+          {
+            "output_column": "income_usd_total",
+            "formula": "sum",
+            "value_column": "income_usd"
+          },
+          {
+            "output_column": "filings",
+            "formula": "count"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ai_spend_totals",
+      "type": "aggregate",
+      "description": "The headline figures, over the paid AI filings alone.",
+      "inputs": [
+        {
+          "id": "confirm_ai_spend"
+        }
+      ],
+      "cache": false,
+      "compiler_notes": [],
+      "signature": {
+        "form": "replaces",
+        "reads": [
+          {
+            "input": "confirm_ai_spend",
+            "columns": [
+              {
+                "name": "income_usd",
+                "type": "float",
+                "nullable": false
+              },
+              {
+                "name": "client",
+                "type": "str",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "produces": [
+          {
+            "name": "filings",
+            "type": "int",
+            "nullable": true,
+            "description": "Paid AI filings."
+          },
+          {
+            "name": "total_income_usd",
+            "type": "float",
+            "nullable": true,
+            "description": "Their reported income, summed exactly as filed."
+          },
+          {
+            "name": "distinct_clients",
+            "type": "int",
+            "nullable": true,
+            "description": "Distinct paying clients."
+          }
+        ]
+      },
+      "workflow_outputs": [
+        {
+          "slug": "ai-spend",
+          "label": "Paid to outside firms to lobby on AI, in dollars",
+          "primary": true,
+          "kind": "figure",
+          "column": "total_income_usd"
+        },
+        {
+          "slug": "ai-filings",
+          "label": "Paid filings behind that total",
+          "primary": true,
+          "kind": "figure",
+          "column": "filings"
+        },
+        {
+          "slug": "ai-clients",
+          "label": "Paying clients",
+          "primary": false,
+          "kind": "figure",
+          "column": "distinct_clients"
+        }
+      ],
+      "aggregate": {
+        "group_by": [],
+        "aggregations": [
+          {
+            "output_column": "filings",
+            "formula": "count"
+          },
+          {
+            "output_column": "total_income_usd",
+            "formula": "sum",
+            "value_column": "income_usd"
+          },
+          {
+            "output_column": "distinct_clients",
+            "formula": "count_distinct",
+            "value_column": "client"
+          }
+        ]
+      }
+    },
+    {
+      "id": "in_house_ai_filings",
+      "type": "filter_rows",
+      "description": "Keeps the AI filings an organisation reported for its own staff.",
+      "inputs": [
+        {
+          "id": "ai_filings"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [],
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "ai_filings",
+            "columns": [
+              {
+                "name": "filing_class",
+                "type": "str",
+                "nullable": false,
+                "enum": [
+                  "external_paid",
+                  "in_house",
+                  "registration"
+                ]
+              }
+            ]
+          }
+        ],
+        "adds": [],
+        "rewrites": []
+      },
+      "filter": {
+        "summary": "Keeps the filings labelled `in_house`. These report expenses an organisation states for its own lobbying, which is a different number from money paid to an outside firm and is never added to it.",
+        "corner_cases": [
+          {
+            "case": "no filing carries this label",
+            "expected": "every row is dropped and the sheet comes out empty"
+          }
+        ],
+        "code": "def should_include(row):\n    return row[\"filing_class\"] == \"in_house\"\n"
+      }
+    },
+    {
+      "id": "in_house_ai_totals",
+      "type": "aggregate",
+      "description": "What organisations reported spending on their own AI lobbying.",
+      "inputs": [
+        {
+          "id": "in_house_ai_filings"
+        }
+      ],
+      "cache": false,
+      "compiler_notes": [],
+      "signature": {
+        "form": "replaces",
+        "reads": [
+          {
+            "input": "in_house_ai_filings",
+            "columns": [
+              {
+                "name": "expenses_usd",
+                "type": "float",
+                "nullable": false
+              },
+              {
+                "name": "client",
+                "type": "str",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "produces": [
+          {
+            "name": "filings",
+            "type": "int",
+            "nullable": true,
+            "description": "In-house AI filings."
+          },
+          {
+            "name": "total_expenses_usd",
+            "type": "float",
+            "nullable": true,
+            "description": "Their reported expenses, summed exactly as filed."
+          },
+          {
+            "name": "distinct_organisations",
+            "type": "int",
+            "nullable": true,
+            "description": "Distinct organisations reporting them."
+          }
+        ]
+      },
+      "workflow_outputs": [
+        {
+          "slug": "in-house-ai-spend",
+          "label": "Reported by organisations for their own AI lobbying, in dollars",
+          "primary": false,
+          "kind": "figure",
+          "column": "total_expenses_usd"
+        }
+      ],
+      "aggregate": {
+        "group_by": [],
+        "aggregations": [
+          {
+            "output_column": "filings",
+            "formula": "count"
+          },
+          {
+            "output_column": "total_expenses_usd",
+            "formula": "sum",
+            "value_column": "expenses_usd"
+          },
+          {
+            "output_column": "distinct_organisations",
+            "formula": "count_distinct",
+            "value_column": "client"
+          }
+        ]
+      }
+    },
+    {
+      "id": "corpus_totals",
+      "type": "aggregate",
+      "description": "How big the corpus this question was asked of is.",
+      "inputs": [
+        {
+          "id": "input_filings"
+        }
+      ],
+      "cache": false,
+      "compiler_notes": [],
+      "signature": {
+        "form": "replaces",
+        "reads": [
+          {
+            "input": "input_filings",
+            "columns": [
+              {
+                "name": "filing_uuid",
+                "type": "str",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "produces": [
+          {
+            "name": "total_rows",
+            "type": "int",
+            "nullable": true,
+            "description": "Rows across both exports."
+          },
+          {
+            "name": "distinct_filings",
+            "type": "int",
+            "nullable": true,
+            "description": "Distinct filings among them."
+          }
+        ]
+      },
+      "workflow_outputs": [
+        {
+          "slug": "corpus-rows",
+          "label": "Rows read across both exports",
+          "primary": false,
+          "kind": "figure",
+          "column": "total_rows"
+        }
+      ],
+      "aggregate": {
+        "group_by": [],
+        "aggregations": [
+          {
+            "output_column": "total_rows",
+            "formula": "count"
+          },
+          {
+            "output_column": "distinct_filings",
+            "formula": "count_distinct",
+            "value_column": "filing_uuid"
+          }
+        ]
+      }
+    }
+  ]
+}

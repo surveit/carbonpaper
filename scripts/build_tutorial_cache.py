@@ -54,8 +54,8 @@ def build_warm_tutorial_project() -> str:
         project_id,
         version_id=run_service.resolve_version(project_id, None),
         bindings={
-            stage_id: uploads.resolve_files_binding(project_id, [file_id])
-            for stage_id, file_id in store_tour_files(project_id).items()
+            stage_id: uploads.resolve_files_binding(project_id, file_ids)
+            for stage_id, file_ids in store_tour_files(project_id).items()
         },
     )
     status = wait_for_run(project_id, run_id)

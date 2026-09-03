@@ -24,7 +24,6 @@ from app.models.stages.input_data import InputDataStage
 from app.services import project as project_service
 from app.services.uploads import resolve_files_binding
 from app.services.loader import load_workflow
-from app.runtime.trace import trace_row, trace_to_dict
 from app.tools.editing import EditingContext, build_editing_tools
 from app.agents.tutorial.config import build_tutorial_tools
 from app.tools.tutorial import TutorialAgentReference, TutorialContext
@@ -93,14 +92,14 @@ def test_the_seeded_project_keeps_no_path_of_its_own(projects_root: Path) -> Non
 
     assert seeded["project"]["id"] in project_service.list_projects()
     files = seeded["input_files"]
-    assert set(files) == {"lobbying_filings", "public_commitments"}
-    # A file the project holds, named by its record id, not a path baked into the workflow.
-    assert all(resolve_files_binding(seeded["project"]["id"], [file_id])["paths"]
-               for file_id in files.values())
+    assert set(files) == {"input_filings"}
+    # The files the project holds, named by their record ids, not paths baked into the workflow.
+    assert all(resolve_files_binding(seeded["project"]["id"], file_ids)["paths"]
+               for file_ids in files.values())
 
     sources = [s for s in load_workflow(seeded["project"]["id"])
                if isinstance(s, InputDataStage)]
-    assert [s.connector.params.paths for s in sources] == [[], []]
+    assert [s.connector.params.paths for s in sources] == [[]]
 
 
 def test_a_second_tour_reuses_the_project_the_first_one_seeded(projects_root: Path) -> None:
@@ -210,12 +209,12 @@ def test_run_workflow_passes_limits_through_to_the_run_service(
     monkeypatch.setattr(run_service, "read_run_status", lambda p, r: {"status": "ok"})
 
     tool = next(t for t in _tools() if t.name == "run_workflow")
-    out = _call(tool, {"project_id": seeded["project"]["id"], "limits": {"lobbying_filings": 6},
+    out = _call(tool, {"project_id": seeded["project"]["id"], "limits": {"input_filings": 500},
                        "files": seeded["input_files"]})
     started = json.loads(out["content"][0]["text"])
 
     assert seen["project"] == seeded["project"]["id"]
-    assert seen["limits"] == {"lobbying_filings": 6}
+    assert seen["limits"] == {"input_filings": 500}
     assert seen["version_id"] is None
     # The same {run_id, status} the MCP surface returns — no tour-shaped extra field.
     assert started == {"run_id": "20260810T101112", "status": "ok"}
@@ -241,18 +240,18 @@ def test_a_real_run_resolves_the_bound_csv_and_honours_the_row_cap(
     seeded = _seed_a_tour()
 
     tool = next(t for t in _tools() if t.name == "run_workflow")
-    out = _call(tool, {"project_id": seeded["project"]["id"], "limits": {"lobbying_filings": 6},
+    out = _call(tool, {"project_id": seeded["project"]["id"], "limits": {"input_filings": 500},
                        "files": seeded["input_files"]})
     started = json.loads(out["content"][0]["text"])
 
     status = run_service.read_run_status(seeded["project"]["id"], started["run_id"])
     by_stage = {r["stage_id"]: r for r in status["stage_records"]}
-    assert by_stage["lobbying_filings"]["output_row_count"] == 6
-    # The join drops no filing, so the cap is what every later stage sees.
-    assert by_stage["filings_with_commitments"]["output_row_count"] == 6
+    # 1:1 with the source, so the cap is what this stage sees exactly.
+    assert by_stage["find_ai_mentions"]["output_row_count"] == 500
     # No model is available offline, so getting through here is the seeded cache.
-    assert by_stage["judge_alignment"]["status"] == "ok"
-    assert by_stage["judge_alignment"]["cached_rows"] == 6
+    assert by_stage["judge_ai_substance"]["status"] == "ok"
+    assert by_stage["judge_ai_substance"]["cached_rows"] == \
+        by_stage["judge_ai_substance"]["output_row_count"] > 0
 
 
 def test_the_tour_seeds_a_review_guide_the_reader_can_open(projects_root: Path) -> None:
@@ -276,7 +275,7 @@ def test_get_run_status_reads_the_manifest_back_without_waiting(
     monkeypatch.setattr(run_service, "read_run_status_without_tracebacks", lambda p, r: {
         "run_id": r, "status": "running",
         "stage_records": [
-            {"stage_id": "judge_alignment", "status": "running", "output_row_count": 0}
+            {"stage_id": "judge_ai_substance", "status": "running", "output_row_count": 0}
         ],
     })
     seeded = _seed_a_tour()
@@ -287,7 +286,7 @@ def test_get_run_status_reads_the_manifest_back_without_waiting(
 
     assert out.get("is_error") is not True
     assert status["status"] == "running"
-    assert status["stage_records"][0]["stage_id"] == "judge_alignment"
+    assert status["stage_records"][0]["stage_id"] == "judge_ai_substance"
 
 
 def _run_the_tour_capped(
@@ -299,7 +298,7 @@ def _run_the_tour_capped(
     seeded = _seed_a_tour()
     out = _call(
         next(t for t in _tools() if t.name == "run_workflow"),
-        {"project_id": seeded["project"]["id"], "limits": {"lobbying_filings": 6},
+        {"project_id": seeded["project"]["id"], "limits": {"input_filings": 50},
          "files": seeded["input_files"], "bust_cache": bust_cache},
     )
     return seeded, json.loads(out["content"][0]["text"])["run_id"]
@@ -323,14 +322,14 @@ def test_each_row_comes_back_with_the_whole_link_to_its_own_lineage(
     """Nothing is left for the tour to join: an ordinal it guessed would link a wrong row."""
     seeded, run_id = _run_the_tour_capped(monkeypatch)
 
-    links = _read_lineage_links(seeded["project"]["id"], run_id, "filings_with_commitments")
+    links = _read_lineage_links(seeded["project"]["id"], run_id, "find_ai_mentions")
 
-    assert links["row_count"] == 6
-    assert [row["ordinal"] for row in links["rows"]] == list(range(6))
+    assert links["row_count"] == 50
+    assert [row["ordinal"] for row in links["rows"]] == list(range(50))
     for row in links["rows"]:
         assert row["lineage_url"] == (
             f"{seeded['runs_url_prefix']}{run_id}"
-            f"/stage/filings_with_commitments/row/{row['ordinal']}/trace/view"
+            f"/stage/find_ai_mentions/row/{row['ordinal']}/trace/view"
         )
 
 
@@ -340,32 +339,12 @@ def test_a_blank_cell_reaches_the_tour_blank(
     """The tour picks its absence row off these values — "None" as text would read as one."""
     seeded, run_id = _run_the_tour_capped(monkeypatch)
 
-    rows = _read_lineage_links(seeded["project"]["id"], run_id, "filings_with_commitments")["rows"]
+    rows = _read_lineage_links(seeded["project"]["id"], run_id, "find_ai_mentions")["rows"]
 
-    blank = [row for row in rows if row["values"]["public_commitment"] is None]
-    filled = [row for row in rows if row["values"]["public_commitment"] is not None]
+    blank = [row for row in rows if row["values"]["income"] is None]
+    filled = [row for row in rows if row["values"]["income"] is not None]
     assert blank and filled
     assert all(row["values"]["client"] for row in rows)
-
-
-def test_the_row_the_tour_calls_an_absence_is_the_one_with_no_second_parent(
-    projects_root: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Beat 4's claim, checked against the trace the link opens."""
-    seeded, run_id = _run_the_tour_capped(monkeypatch)
-    run_dir = projects_root / seeded["project"]["id"] / "runs" / run_id
-
-    rows = _read_lineage_links(seeded["project"]["id"], run_id, "filings_with_commitments")["rows"]
-
-    for row in rows:
-        trace = trace_to_dict(trace_row(run_dir, "filings_with_commitments", row["ordinal"]))
-        joined = next(s for s in trace["steps"] if s["stage_id"] == "filings_with_commitments")
-        matched = row["values"]["public_commitment"] is not None
-        assert bool(joined["branches"]) is matched, row["values"]["client"]
-        # The chain the reader walks: back through the check to the filing as filed.
-        assert [step["stage_id"] for step in trace["steps"]] == [
-            "filings_with_commitments", "clean_filings", "lobbying_filings"
-        ]
 
 
 def test_a_stage_that_did_not_finish_is_refused_rather_than_read(
@@ -376,13 +355,13 @@ def test_a_stage_that_did_not_finish_is_refused_rather_than_read(
 
     out = _call(
         next(t for t in _tools() if t.name == "read_stage_output_rows"),
-        {"project_id": seeded["project"]["id"], "run_id": run_id, "stage_id": "judge_alignment"},
+        {"project_id": seeded["project"]["id"], "run_id": run_id, "stage_id": "judge_ai_substance"},
     )
 
     assert out["is_error"] is True
     assert "is 'error'" in out["content"][0]["text"]
-    assert run_service.read_stage_output(seeded["project"]["id"], run_id, "judge_alignment")[
-        "ai_judgment"
+    assert run_service.read_stage_output(seeded["project"]["id"], run_id, "judge_ai_substance")[
+        "is_about_ai"
     ].isna().all(), "the frame the refusal is protecting the tour from"
 
 
@@ -395,9 +374,7 @@ def test_the_seeding_tool_hands_back_the_stages_it_seeded(projects_root: Path) -
     assert [stage["id"] for stage in workflow["stages"]] == [
         s.id for s in load_workflow(workflow["name"])
     ]
-    # The script's three rules: the stage before the report, the coded one, beat 3's queue.
-    assert by_type["report"] == "publish_report"
-    assert by_type["python_row_function"] == "clean_filings"
-    assert by_type["human_review_queue"] == "review_contradictions"
-    feeds_report = next(s for s in workflow["stages"] if s["id"] == by_type["report"])
-    assert feeds_report["inputs"] == ["review_contradictions"]
+    assert by_type["llm_transform"] == "judge_ai_substance"
+    assert by_type["human_review_queue"] == "review_ai_spend"
+    reviews_it = next(s for s in workflow["stages"] if s["id"] == by_type["human_review_queue"])
+    assert reviews_it["inputs"] == ["select_external_filings"]
