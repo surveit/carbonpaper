@@ -8,8 +8,12 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from app.services import project as project_service, versioning
+from app.services import project as project_service, stage_edit, versioning
 from app.tools.shared import EditedStages, STAGE_TOOL_ERRORS, validate_project_exists
+
+
+def open_to_write(project_id: str) -> stage_edit.StageSpecStore:
+    return project_service.open_working_copy_to_write(project_id)
 
 
 def save_working_copy_as_version(

@@ -45,7 +45,7 @@ class StageSpecStore:
 def open_working_copy(project_id: str) -> StageSpecStore:
     return StageSpecStore(
         project_id=project_id,
-        read=lambda: _working_copy_specs(project_id),
+        read=lambda: _read_working_copy_specs(project_id),
         write=lambda specs: save_stage_specs(project_id, specs),
     )
 
@@ -90,7 +90,7 @@ def _merge_patch(target: object, patch: object) -> object:
     return base
 
 
-def _working_copy_specs(project_id: str) -> dict[str, JsonDict]:
+def _read_working_copy_specs(project_id: str) -> dict[str, JsonDict]:
     """An EMPTY workflow reads as {}; a load failure raises — never read a failure as emptiness."""
     if not has_working_copy(project_id) or not read_stage_specs(project_id):
         return {}
