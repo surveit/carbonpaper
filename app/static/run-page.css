@@ -425,8 +425,8 @@ td.row-num, th.row-num { text-align: right; color: var(--idle-bd); font-variant-
 .eval-checks td { vertical-align: middle; }
 .eval-checks td code { margin-right: 4px; }
 
-/* What the run published. Under the status line and above the stage strip: the
-   outputs are the answer the run exists to produce, the stages are how it got there. */
+/* The run's results. Under the status line and above the stage strip: the
+   values are the answer the run exists to produce, the stages are how it got there. */
 .wf-outputs { background: var(--raised); border: 1px solid var(--border); border-radius: 8px;
   padding: 1rem 1.15rem 1.05rem; margin: 0 0 1.2rem; box-shadow: 0 1px 3px var(--shadow); }
 .wf-outputs h2 { margin: 0 0 .1rem; font-size: 1.02rem; letter-spacing: -.01em; font-weight: 600; }

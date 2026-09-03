@@ -1,12 +1,11 @@
-{# What the run published, above the account of how it ran. #}
+{# The run's results, above the account of how it ran. #}
 {% if header.published %}
   {%- set leads = header.published.figures | selectattr('primary') | list %}
   {%- set rest = header.published.figures | rejectattr('primary') | list %}
   {%- set tables = header.published.tables %}
   <section class="wf-outputs">
-    <h2>What this run published</h2>
-    <p class="wf-note">Every value links to its own lineage — the figure to the cell it
-      was read from, each published cell to the row and column behind it.</p>
+    <h2>Results of this run</h2>
+    <p class="wf-note">Each value can be clicked to view how it was computed.</p>
     {%- if leads %}
     <h3 class="wf-group">Headline claims</h3>
     <div class="wf-leads{% if leads | length > 2 %} crowded{% endif %}">

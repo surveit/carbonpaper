@@ -214,10 +214,10 @@
 {% include "_run_issues.html" %}
 </section>
 
-{# ── 2. WHAT THIS RUN PUBLISHED — its result, read AFTER the state of the run that
-      produced it: a figure means nothing to a reader who does not yet know whether the
-      run finished. Every value links to the row it was read from. Absent until a stage
-      declares a workflow output. ── #}
+{# ── 2. RESULTS OF THIS RUN — read AFTER the state of the run that produced them: a
+      figure means nothing to a reader who does not yet know whether the run finished.
+      Every value opens how it was computed. Absent until a stage declares a workflow
+      output. ── #}
 {% include "_run_published.html" %}
 
 {# ── 3. RUN OUTPUTS — the files this run published, listed as links. Never a button:
