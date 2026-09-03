@@ -175,3 +175,17 @@ def test_the_documentation_page_shows_what_the_project_claims_and_what_it_covers
     assert ">closed</span>" in response.text
     assert "it IS this number." in response.text          # the tooltip explains the word
     assert "Income no firm reported." in response.text    # the qualifier is on the page
+
+
+def test_a_template_naming_something_no_claim_can_fill_is_refused():
+    """The page offers a sentence, so a placeholder with nothing behind it must not ship."""
+    with pytest.raises(ClaimShapeWriteRefused, match=r"\['period'\]"):
+        claim_shapes.write_claim_shapes(_PROJECT, [
+            ClaimShapeInput(
+                label="US lobbying spend on AI",
+                requires=DataUniverseRequirement.closed,
+                importance=ClaimImportance.primary,
+                template="Firms reported ${value} for ${period}.",
+                context=[Column(name="period_start", type="date", nullable=False)],
+            )
+        ])

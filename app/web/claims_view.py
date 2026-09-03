@@ -1,6 +1,8 @@
 """The publish page: what a run could claim, what it has claimed, and in what words."""
 from __future__ import annotations
 
+from string import Template
+
 from pydantic import BaseModel
 
 from app.core.ids import ID
@@ -119,11 +121,12 @@ def _build_card(
     blocked: str,
 ) -> ClaimCard:
     claim = held_by_shape_id.get(shape.id)
-    context = _build_context(shape, claim)
+    standing_claims = claims_service.load_claims_of_shape(project_id, shape.id)
+    context = _build_context(shape, claim, standing_claims)
     proposed = {field.name: field.value for field in context}
     standing = [
         _build_standing(project_id, other, proposed)
-        for other in claims_service.load_claims_of_shape(project_id, shape.id)
+        for other in standing_claims
         if claim is None or other.id != claim.id
     ]
     return ClaimCard(
@@ -137,7 +140,7 @@ def _build_card(
         coverage_tooltip=COVERAGE_TOOLTIP[DataUniverseRequirement(shape.requires)],
         qualifiers=shape.qualifiers,
         context=context,
-        suggested_text=shape.template,
+        suggested_text=_write_the_suggestion(shape.template, output.citation, proposed),
         claim_id=claim.id if claim else None,
         status=claim.status if claim else None,
         text=claim.text if claim else "",
@@ -160,8 +163,16 @@ def _find_blocked_reason(shape: ClaimShape, blocked: str) -> str | None:
     return f"{blocked} Totalling a slice turns 'is' into 'at least'."
 
 
-def _build_context(shape: ClaimShape, claim: Claim | None) -> list[ContextField]:
-    held = claim.context if claim else {}
+def _write_the_suggestion(template: str, cited: PublishedCitation, context: JsonDict) -> str:
+    """Filled in, never offered with the placeholders showing: it is a sentence to edit."""
+    return Template(template).safe_substitute(value=_read_value(cited), **context)
+
+
+def _build_context(
+    shape: ClaimShape, claim: Claim | None, standing: list[Claim]
+) -> list[ContextField]:
+    """A rebuild usually keeps every column but the period, so the newest claim pre-fills."""
+    held = claim.context if claim else (standing[-1].context if standing else {})
     return [_build_field(column, held) for column in shape.context]
 
 

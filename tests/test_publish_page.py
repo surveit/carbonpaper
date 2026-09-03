@@ -74,12 +74,39 @@ def test_only_an_output_that_names_a_shape_is_on_the_page(tmp_path):
     assert "Counts only lobbying that was filed." in page
 
 
-def test_the_sentence_starts_from_the_shape_s_template(tmp_path):
+def test_the_suggested_sentence_arrives_filled_in_not_as_a_template(tmp_path):
     page = _a_run(tmp_path).get(f"{_BASE}/publish").text
 
-    assert "Outside firms reported ${value} in AI lobbying income." in page
+    assert "Outside firms reported 63,027,729.0 in AI lobbying income." in page
+    assert "${value}" not in page
     assert 'name="context.period_start"' in page
     assert 'type="date"' in page
+
+
+def test_the_context_pre_fills_from_the_newest_standing_claim(tmp_path):
+    client = _a_run(tmp_path)
+    client.post(f"{_BASE}/submit/ai-spend", data=_FORM)
+    [claim] = Claim.find(created_by_project_id=_PROJECT)
+    client.post(f"{_BASE}/approve/{claim.id}")
+    WorkflowOutput(
+        slug="ai-spend", label="ai-spend", primary=True, shape_id=claim.shape_id,
+        citation=StageOutputCellCitation(
+            run_id="20260902T090000.000000", stage_id="ai_spend_totals", row_ordinal=0,
+            column="ai_spend", value=71000000.0,
+        ),
+    ).save()
+    RunManifest(
+        id=RunManifest.compose_id(_PROJECT, "20260902T090000.000000"),
+        run_id="20260902T090000.000000", started_at="2026-09-02T09:00:00", project=_PROJECT,
+        workflow_version="20260901T103742.393151", parameters=RunParameters(),
+        input_bindings={}, human_review_queue_stats={}, dropped_columns={},
+        status=RunStatus.OK, stage_records=[],
+    ).save()
+
+    page = client.get(f"/project/{_PROJECT}/runs/20260902T090000.000000/publish").text
+
+    assert 'value="2026-01-01"' in page   # the period the standing claim used
+    assert "nothing — the same claim" in page
 
 
 def test_submitting_writes_the_sentence_and_puts_it_in_review(tmp_path):

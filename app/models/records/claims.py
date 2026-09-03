@@ -31,8 +31,7 @@ class ClaimShape(PersistedModel):
     qualifiers: list[str] = Field(default=[], frozen=True)
     # The axes a claim of this shape sits on, as ordinary columns.
     context: list[Column] = Field(default=[], frozen=True)
-    # The sentence a claim's own words are suggested from. It asserts nothing, so
-    # unlike everything else here it may be rewritten from a claim that read better.
+    # A suggestion, not an assertion, so it is the one thing here that may be rewritten.
     template: str = ""
 
     def save(self) -> None:
