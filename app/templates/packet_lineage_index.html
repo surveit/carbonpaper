@@ -8,8 +8,14 @@
   <h1>Row provenance</h1>
 </header>
 <main class="packet-main">
-  <p class="muted">{{ total }} rows in this run can be traced back to the data they came from.
+  <p class="muted">{{ total | figure }} rows in this run can be traced back to the data they came from.
   Each opens the stages that produced it, in order, ending at the source file.</p>
+  {% if stops_short %}
+  <p class="banner banner-warn">The walk back stops here. These are the {{ budget | figure }} rows
+    closest to the figures the run published; more rows fed those, and this folder holds no page
+    for them — a row with no page is linked from nowhere rather than linked to nothing. The full
+    rows of every step are in <code>data/</code>.</p>
+  {% endif %}
   {% for stage in stages %}
   <section id="{{ stage.stage_id }}">
     <h2><code>{{ stage.stage_id }}</code>

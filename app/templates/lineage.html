@@ -5,11 +5,13 @@
 {% block title %}lineage · {{ title }}{% endblock %}
 
 {% block head_extra %}
-{% if not offline %}<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>{% endif %}
+{# Served only: offline these arrive with the rest of base.html's set (see
+   PACKET_SKIPS_SCRIPT), and loading them twice would double every listener. #}
+{% if not offline %}<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script src="{{ static_root }}tooltip.js"></script>
 <script src="{{ static_root }}cell-lineage.js"></script>
-{# The header's three pickers; served only, because a folder has no other row to move to. #}
-{% if not offline %}<script src="{{ static_root }}picker.js" defer></script>
+{# The header's three pickers; a folder has no other row to move to. #}
+<script src="{{ static_root }}picker.js" defer></script>
 <script src="{{ static_root }}breadcrumbs.js" defer></script>
 {# The packet's Relevant columns pane is an empty state, so its script is dead there. #}
 <script src="{{ static_root }}diagram_viewport.js"></script>

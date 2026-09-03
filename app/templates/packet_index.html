@@ -147,7 +147,7 @@
       <tr><td><a href="workflow.json">workflow.json</a></td><td>the frozen step definitions this run executed</td></tr>
       <tr><td><a href="manifest.json">manifest.json</a></td><td>the run's own record: timings, statuses, checks, input bindings</td></tr>
       <tr><td><a href="events.jsonl">events.jsonl</a></td><td>the run event log, including the prompt text sent to the model</td></tr>
-      {% if lineage.traced %}<tr><td><a href="{{ lineage_dir_href }}"><code>lineage/</code></a></td><td>one page per traceable row, and the rows each figure was counted from</td></tr>{% endif %}
+      {% if lineage.traced %}<tr><td><a href="{{ lineage_dir_href }}"><code>lineage/</code></a></td><td>one page per traceable row, and the rows each figure was counted from{% if lineage.stops_short %} — for the {{ lineage.traced | length | figure }} rows closest to the published figures, where the walk back stops{% endif %}</td></tr>{% endif %}
       <tr><td><code>data/</code></td><td>one CSV per step, uncapped; <code>data/raw/</code> holds the files the run actually wrote</td></tr>
       {# The command rides on the row: it was the one thing the page footer carried
          that is written nowhere else, and a hash nobody can check is not evidence. #}
