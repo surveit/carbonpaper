@@ -176,6 +176,7 @@ def _put_cached_decision(
         },
         review_notes=None,
         reviewer="local", reviewed_at="2026-07-01T00:00:00",
+        workflow_version=None,
     )
 
 
@@ -672,6 +673,7 @@ def test_a_bool_select_opens_on_the_recorded_value_of_a_decided_row(tmp_path, mo
         frozen_row={"id": snapshot.iloc[0]["id"], "flag": bool(snapshot.iloc[0]["flag"])},
         verdict=ReviewVerdict.modify, reviewed_values={"human_flag": True},
         review_notes=None, reviewer="Ada", reviewed_at="2026-07-01T00:00:00",
+        workflow_version=None,
     )
 
     html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
@@ -1800,6 +1802,7 @@ def test_progress_and_resume_are_seeded_from_the_whole_queue_not_a_page(tmp_path
             verdict=ReviewVerdict.approve,
             reviewed_values={"human_score": int(row["score"])},
             review_notes=None, reviewer="local", reviewed_at="2026-07-01T00:00:00",
+            workflow_version=None,
         )
 
     html = TestClient(app).get(f"/project/{PAGED_PROJECT}/runs/{run_id}/queue/review").text

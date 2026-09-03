@@ -76,3 +76,23 @@ row as index *n* of the other.
 
 `row_ordinals` is `None` on a record stored before the runtime recorded them. That is an
 unknowable position, and it stays `None` rather than being guessed.
+
+## The human decision itself: a ledger, not a cache entry
+
+A human judgment is not recomputable, so it cannot live only in the stage cache — a
+cache exists to replay recomputable work, and deleting a cache row must never destroy
+the one thing nothing can regenerate. `app.services.review.record_decision` writes
+two things when a reviewer submits a queue card:
+
+- `StageCacheEntry` (`app/core/stage_cache.py`), exactly as for any other stage — the
+  replay path a resumed run reads to skip a row a human already decided, and the
+  cross-project transport `/admin/cache` copies.
+- `ReviewDecision` (`app/models/records/review_decision.py`), an append-only row: verdict,
+  the reviewed values, the note, the reviewer, both fingerprints, and the
+  `workflow_version` the run was pinned to. Nothing ever edits or deletes a
+  `ReviewDecision` — a correction is a new row, keyed the same way, so every past
+  judgment stays on record even after a later one supersedes it.
+
+`app.services.review.find_latest_decision` reads the newest row for a match key,
+ordered by the record's own `created_at` — never by `reviewed_at`, which a reviewer's
+client supplies and this code does not control.

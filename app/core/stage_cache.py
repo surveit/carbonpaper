@@ -65,7 +65,7 @@ def compute_row_fingerprint(row: Mapping[str, object]) -> str:
     return compute_short_hash(payload)
 
 
-def _to_json_safe_row(row: Mapping[str, object]) -> JsonDict:
+def to_json_safe_row(row: Mapping[str, object]) -> JsonDict:
     """Numbers stay numbers: this row is read back as stage output, where a stringified score corrupts it."""
     normalized = {key: collapse_null_forms(value) for key, value in row.items()}
     safe: JsonDict = json.loads(
@@ -120,8 +120,8 @@ class StageCache(ReadOnlyStageCache):
             stage_id=stage_id,
             stage_fingerprint=stage_fingerprint,
             input_fingerprint=input_fingerprint,
-            frozen_input=_to_json_safe_row(input_row),
-            output_row=None if output_row is None else _to_json_safe_row(output_row),
+            frozen_input=to_json_safe_row(input_row),
+            output_row=None if output_row is None else to_json_safe_row(output_row),
             branches=None if branches is None else list(branches),
         ).save()
 

@@ -116,6 +116,7 @@ def _put_approval(
         },
         review_notes=None,
         reviewer="local", reviewed_at="2026-07-01T00:00:00",
+        workflow_version=None,
     )
 
 

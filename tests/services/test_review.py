@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+import pandas as pd
 import pytest
 
 from app.core.errors import ReviewValidationError
 from app.core.stage_cache import StageCacheEntry
 from app.models import Stage, parse_stage
+from app.models.records.review_decision import ReviewDecision
 from app.models.stages.human_review_queue import ReviewVerdict
 from app.services import review
 from conftest import place_stage, queue_columns, reads_of
@@ -56,6 +58,9 @@ def _record(
     frozen_row: Mapping[str, object] = FROZEN_ROW,
     reviewed_values: Mapping[str, object] | None = None,
     review_notes: str | None = None,
+    reviewer: str = "Ada",
+    reviewed_at: str = "2026-07-22T10:00:00",
+    workflow_version: str | None = None,
 ) -> None:
     review.record_decision(
         project_id="proj", stage=place_stage(stage if stage is not None else _stage()),
@@ -63,12 +68,20 @@ def _record(
         frozen_row=frozen_row, verdict=verdict,
         reviewed_values={"human_score": 1} if reviewed_values is None else reviewed_values,
         review_notes=review_notes,
-        reviewer="Ada", reviewed_at="2026-07-22T10:00:00",
+        reviewer=reviewer, reviewed_at=reviewed_at,
+        workflow_version=workflow_version,
     )
 
 
 def _load_entry(input_fingerprint: str) -> StageCacheEntry | None:
     return StageCacheEntry.read_only().get("proj", "review", "sf1", input_fingerprint)
+
+
+def _find_decisions(input_fingerprint: str) -> list[ReviewDecision]:
+    return ReviewDecision.find(
+        project="proj", stage_id="review", stage_fingerprint="sf1",
+        input_fingerprint=input_fingerprint,
+    )
 
 
 # ── The output row a verdict produces ───────────────────────────────────────
@@ -163,3 +176,88 @@ def test_rejects_notes_when_no_notes_column_is_declared():
     with pytest.raises(ReviewValidationError, match="review_notes_column"):
         _record("if9", stage=_stage(queue), review_notes="a note with nowhere to go")
     assert _load_entry("if9") is None
+
+
+# ── The ledger: append-only, independent of the cache ───────────────────────
+
+
+def test_a_decision_appends_one_ledger_row_carrying_everything_recorded():
+    _record(
+        "if10", verdict=ReviewVerdict.modify, reviewed_values={"human_score": 7},
+        review_notes="looked low", reviewer="Grace", reviewed_at="2026-08-01T09:00:00",
+        workflow_version="v3",
+    )
+
+    (decision,) = _find_decisions("if10")
+    assert decision.project == "proj"
+    assert decision.stage_id == "review"
+    assert decision.stage_fingerprint == "sf1"
+    assert decision.input_fingerprint == "if10"
+    assert decision.frozen_input == FROZEN_ROW
+    assert decision.verdict == ReviewVerdict.modify
+    assert decision.reviewed_values == {"human_score": 7}
+    assert decision.review_notes == "looked low"
+    assert decision.reviewer == "Grace"
+    assert decision.reviewed_at == "2026-08-01T09:00:00"
+    assert decision.workflow_version == "v3"
+
+
+def test_re_deciding_the_same_row_appends_a_second_row_and_leaves_the_first_alone():
+    """Today's `StageCacheEntry.record` overwrites in place — the ledger must not."""
+    _record("if11", verdict=ReviewVerdict.approve, reviewed_values={"human_score": 1})
+    _record("if11", verdict=ReviewVerdict.modify, reviewed_values={"human_score": 9})
+
+    decisions = _find_decisions("if11")
+    assert len(decisions) == 2
+    verdicts_by_id = {decision.id: decision.verdict for decision in decisions}
+    values_by_id = {decision.id: decision.reviewed_values for decision in decisions}
+    assert sorted(verdicts_by_id.values()) == sorted(
+        [ReviewVerdict.approve, ReviewVerdict.modify]
+    )
+    assert sorted(values_by_id.values(), key=str) == sorted(
+        [{"human_score": 1}, {"human_score": 9}], key=str
+    )
+    # StageCacheEntry.record still overwrites: the cache holds only the latest row.
+    entry = _load_entry("if11")
+    assert entry is not None
+    assert entry.output_row is not None
+    assert entry.output_row["human_score"] == 9
+
+
+def test_latest_wins_by_created_at_even_when_reviewed_at_disagrees():
+    """`reviewed_at` is caller-supplied; a later append with an EARLIER `reviewed_at` must still win."""
+    _record(
+        "if12", verdict=ReviewVerdict.approve, reviewed_values={"human_score": 1},
+        reviewed_at="2026-09-01T00:00:00",
+    )
+    _record(
+        "if12", verdict=ReviewVerdict.modify, reviewed_values={"human_score": 2},
+        reviewed_at="2020-01-01T00:00:00",
+    )
+
+    latest = review.find_latest_decision(
+        project_id="proj", stage_id="review", stage_fingerprint="sf1", input_fingerprint="if12",
+    )
+    assert latest is not None
+    assert latest.verdict == ReviewVerdict.modify
+    assert latest.reviewed_values == {"human_score": 2}
+
+
+def test_a_value_read_straight_off_a_frame_reaches_both_stores():
+    """A pandas cell is `numpy.int64`; unnormalised it serialized into the cache and not the ledger."""
+    scored = pd.DataFrame({"id": ["a"], "score": [4]})
+
+    _record("if13", reviewed_values={"human_score": scored["score"].iloc[0]})
+
+    decisions = _find_decisions("if13")
+    assert len(decisions) == 1
+    assert decisions[0].reviewed_values == {"human_score": 4}
+    entry = _load_entry("if13")
+    assert entry is not None and entry.output_row is not None
+    assert entry.output_row["human_score"] == 4
+
+
+def test_find_latest_decision_returns_none_for_an_undecided_row():
+    assert review.find_latest_decision(
+        project_id="proj", stage_id="review", stage_fingerprint="sf1", input_fingerprint="never-decided",
+    ) is None
