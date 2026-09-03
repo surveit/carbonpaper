@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app.web.figure_text import render_figure
 from app.core.errors import StageNotInRun
-from app.models.branch_analysis import BranchId, BranchRole
+from app.models.branch_analysis import BranchId
 from app.models.claims import StageOutputCellCitation
 from app.models.schema import StageId
 from app.models.workflow import Workflow
@@ -80,14 +80,6 @@ def say_what_no_row_fed(scope: ScopeMap) -> str | None:
                 f"{scope.covers.at_stage}.")
     return (f"The run recorded nothing behind {render_figure(unfed)} of the {render_figure(named)} rows this "
             f"figure names at {scope.covers.at_stage}.")
-
-
-def say_why_rows_left(cut: CutRows, role: BranchRole) -> str:
-    if role is BranchRole.removes:
-        return (f"{render_figure(cut.total)} row{'' if cut.total == 1 else 's'} the run took out "
-                f"here. What they did differently is upstream of this stage.")
-    return (f"{render_figure(cut.total)} row{'' if cut.total == 1 else 's'} still in the frame, "
-            f"merged into a row this figure did not come through.")
 
 
 def read_run_branches(project_id: str, run_id: str) -> WorkflowRunBranches:
