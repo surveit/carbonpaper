@@ -109,6 +109,17 @@ def test_queued_columns_carry_the_declared_description():
     assert described.schema_note is None
 
 
+def test_a_queue_that_narrows_its_reads_carries_no_false_schema_note():
+    """Reading fewer columns than the input declares is the recommended shape."""
+    stage = _queue_stage(_LABEL_COLUMNS, reads=["id", "label"])
+    snapshot = pd.DataFrame({"id": ["a"], "label": ["high"]})
+
+    described = queue_view.describe_queued_columns(stage, snapshot)
+
+    assert described.schema_note is None
+    assert [c.name for c in described.columns] == ["id", "label"]
+
+
 def test_a_schema_and_snapshot_that_disagree_are_reported_not_papered_over():
     stage = _queue_stage(_LABEL_COLUMNS)
     snapshot = pd.DataFrame({"id": ["a"], "label": ["high"], "extra": [1]})

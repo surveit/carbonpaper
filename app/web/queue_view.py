@@ -16,7 +16,9 @@ from app.core.stage_cache import StageCacheEntry
 from app.models import Column, WorkflowStage
 from app.models.run_manifest import StageRecord
 from app.models.schema import STR_COLUMN_TYPE
-from app.models.stages.human_review_queue import QueueConfig, ReviewVerdict
+from app.models.stages.human_review_queue import (
+    HumanReviewQueueStage, QueueConfig, ReviewVerdict,
+)
 from app.runtime.citations import build_row_trace_url
 from app.web.loading import QueueFingerprints, display_cell
 
@@ -242,8 +244,7 @@ def describe_queued_columns(
     stage_def: WorkflowStage, snapshot: pd.DataFrame | None
 ) -> DescribedColumns:
     names = [str(c) for c in snapshot.columns] if snapshot is not None else []
-    schema = stage_def.inputs[0].table_schema
-    declared = {column.name: column for column in schema.columns}
+    declared = {column.name: column for column in _declared_read_columns(stage_def)}
     return DescribedColumns(
         columns=[
             QueuedColumn(
@@ -254,6 +255,12 @@ def describe_queued_columns(
         ],
         schema_note=_find_schema_discrepancy(sorted(declared), names),
     )
+
+
+def _declared_read_columns(stage_def: WorkflowStage) -> list[Column]:
+    """What the card is entitled to hold, not the anchor input's whole schema."""
+    assert isinstance(stage_def.stage, HumanReviewQueueStage)
+    return [column for entry in stage_def.stage.signature.reads for column in entry.columns]
 
 
 def resolve_lineage(
