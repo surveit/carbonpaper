@@ -65,7 +65,7 @@ class RowsRectangle(BaseModel):
     def count_rows(self) -> int:
         return self.row_end - self.row_start
 
-    def covers_whole_output(self, columns: list[str], row_count: int) -> bool:
+    def is_whole_output(self, columns: list[str], row_count: int) -> bool:
         # By set: a reordering cuts no cell, and the question here is what was cut.
         return (
             self.row_start == 0

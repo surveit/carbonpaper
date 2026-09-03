@@ -308,7 +308,7 @@ def load_output_rectangle(
         "rows_total": len(df),
         "capped": found.count_rows() > len(rows),
         "rectangle": found,
-        "rectangle_is_whole_output": found.covers_whole_output(list(df.columns), len(df)),
+        "rectangle_is_whole_output": found.is_whole_output(list(df.columns), len(df)),
     }
 
 
