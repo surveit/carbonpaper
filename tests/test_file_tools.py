@@ -14,8 +14,10 @@ from app.services import workspace
 from app.core import files as file_store
 from app.core.errors import FileNotStoredError, StoreOverQuota
 from app.core.files import files_root, save_upload
+from app.services.project import save_working_copy_as_version
 from app.services.uploads import resolve_files_binding
 from app.tools import shared
+from stage_seed import add_stage
 
 client = TestClient(app)
 
@@ -107,6 +109,33 @@ def test_a_record_whose_bytes_are_gone_fails_before_the_run_starts(project):
     # file the caller was just told the project had.
     with pytest.raises(FileNotStoredError, match="bytes are not on disk"):
         resolve_files_binding("demo", [record.id])
+
+
+def test_run_workflow_binds_several_files_to_one_input_as_one_table(project, monkeypatch):
+    """`files` widened to take a list: several stored files read by one input stage."""
+    import app.services.run as run_service
+
+    monkeypatch.setattr(run_service, "_run_in_background", lambda target, *args: target(*args))
+    first = store("q1.csv", b"name,val\nx,1\n")
+    second = store("q2.csv", b"name,val\ny,2\n")
+    add_stage(project, {
+        "id": "load", "description": "Load rows", "type": "input_data",
+        "connector": {"kind": "file", "params": {"format": "csv"}},
+        "signature": {
+            "form": "replaces",
+            "produces": [
+                {"name": "name", "type": "str", "nullable": True},
+                {"name": "val", "type": "int", "nullable": True},
+            ],
+        },
+    })
+    save_working_copy_as_version("demo", message="seed")
+
+    result = shared.run_workflow("demo", files={"load": [first.id, second.id]})
+
+    status = run_service.read_run_status("demo", result["run_id"])
+    assert status["status"] == "ok"
+    assert status["stage_records"][0]["output_row_count"] == 2
 
 
 def test_an_unknown_project_is_loud(project):

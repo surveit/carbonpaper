@@ -254,15 +254,16 @@ def run_workflow(
     project_id: str,
     version_id: str | None = None,
     limits: dict[str, int] | None = None,
-    files: dict[str, str] | None = None,
+    files: dict[str, str | list[str]] | None = None,
     bust_cache: bool = False,
 ) -> dict[str, Any]:
     validate_project_exists(project_id)
-    # A stage id -> file id map, resolved here to the path-and-format params a run
-    # binds. Resolving it before start_run means an unknown file id fails naming
-    # itself, rather than as a missing-input refusal from preflight.
-    bindings = {stage_id: uploads.resolve_files_binding(project_id, [file_id])
-                for stage_id, file_id in (files or {}).items()}
+    # Resolved before start_run so an unknown file id fails naming itself.
+    bindings = {
+        stage_id: uploads.resolve_files_binding(
+            project_id, file_ids if isinstance(file_ids, list) else [file_ids])
+        for stage_id, file_ids in (files or {}).items()
+    }
     run_id = run_service.start_run(
         project_id, version_id=version_id or None, limits=limits,
         bindings=bindings or None, bust_cache=bust_cache,
