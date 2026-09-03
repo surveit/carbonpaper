@@ -19,7 +19,7 @@ from app.tools.tutorial import TUTORIAL_CACHE_BUNDLE
 
 client = TestClient(app)
 
-_BUNDLE = "tutorial_lobbying_triage"
+_BUNDLE = "ai_lobbying_spend_2026"
 
 
 @pytest.fixture(autouse=True)
@@ -73,9 +73,11 @@ def test_download_returns_the_workflow_file_as_an_attachment(workspace_root):
     wf = WorkflowFile.model_validate_json(r.content)
     assert wf.name == _BUNDLE
     assert [stage.id for stage in wf.stages] == [
-        "lobbying_filings", "public_commitments", "clean_filings",
-        "filings_with_commitments", "judge_alignment", "review_contradictions",
-        "publish_report",
+        "input_filings", "find_ai_mentions", "keep_ai_candidates", "judge_ai_substance",
+        "keep_ai_lobbying", "read_reported_money", "flag_in_house_filings", "ai_filings",
+        "select_external_filings", "review_ai_spend", "confirm_ai_spend",
+        "ai_spend_by_client", "ai_spend_totals", "in_house_ai_filings",
+        "in_house_ai_totals", "corpus_totals",
     ]
 
 

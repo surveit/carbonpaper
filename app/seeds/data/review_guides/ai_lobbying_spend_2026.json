@@ -1,0 +1,112 @@
+{
+  "steps": [
+    {
+      "title": "Load both quarters' filings",
+      "prose": "Every Senate LDA filing from the two exports, as filed. Each filing appears once per issue area it names, so a filing naming several issue areas states the same money that many times.",
+      "stage_ids": [
+        "input_filings"
+      ],
+      "data_description": "Every filing, exactly as the export recorded it."
+    },
+    {
+      "title": "Find the rows that mention AI",
+      "prose": "A search for six terms in each filing's own words \u2014 artificial intelligence, AI, machine learning, large language model, deepfake, algorithmic. A net, not a judgment: it also catches algorithmic trading and airline codes on purpose.",
+      "stage_ids": [
+        "find_ai_mentions",
+        "keep_ai_candidates"
+      ],
+      "data_description": "Every filing whose own words used one of the six terms; the rest carry no figure forward."
+    },
+    {
+      "title": "Judge whether the filing is really about AI",
+      "prose": "A model reads each filing's own words and decides whether the lobbying was about AI itself, or the term is incidental. Trust this step least: read the words yourself before taking its answer.",
+      "stage_ids": [
+        "judge_ai_substance"
+      ],
+      "data_description": "The same filings, plus the model's answer and the sentence it based that answer on."
+    },
+    {
+      "title": "Keep only what the model read as being about AI",
+      "prose": "A filing the model called incidental is dropped here, and a filing it left no answer for is dropped too \u2014 no answer is not a yes.",
+      "stage_ids": [
+        "keep_ai_lobbying"
+      ],
+      "data_description": "The filings the model read as really about AI."
+    },
+    {
+      "title": "Read the reported money",
+      "prose": "The two money fields as plain dollar numbers. Blank means the filing is reporting it received or spent nothing. Anything else that is not a plain number stops the run rather than being guessed at.",
+      "stage_ids": [
+        "read_reported_money"
+      ],
+      "data_description": "The same filings, with their reported money read as numbers."
+    },
+    {
+      "title": "Tell paid lobbying from in-house",
+      "prose": "A filing whose registrant and client are the same name, exactly as filed, is lobbying an organisation did with its own staff. Everything else is one organisation paying another.",
+      "stage_ids": [
+        "flag_in_house_filings"
+      ],
+      "data_description": "The same filings, each marked paid-to-a-firm, in-house, or a new registration."
+    },
+    {
+      "title": "Collapse each filing back to one entry",
+      "prose": "A filing that named several issue areas is several rows until here; this puts it back to one. Where its rows disagree on a field, the run stops rather than picking one.",
+      "stage_ids": [
+        "ai_filings"
+      ],
+      "data_description": "One entry per filing that survived every prior step."
+    },
+    {
+      "title": "Set the paid filings apart",
+      "prose": "The filings where a client paid an outside firm \u2014 the ones behind the headline figure.",
+      "stage_ids": [
+        "select_external_filings"
+      ],
+      "data_description": "The paid AI filings, before anyone has confirmed them."
+    },
+    {
+      "title": "Put every paid filing in front of a person",
+      "prose": "The model's reading is only a proposal: every filing behind the headline figure waits here for a person to confirm or overturn it, under their own name, largest reported spend first.",
+      "stage_ids": [
+        "review_ai_spend"
+      ],
+      "data_description": "The same paid filings, plus the answer a person left on each."
+    },
+    {
+      "title": "Drop what a person did not confirm",
+      "prose": "A filing the reviewer overturned leaves here; its money enters no published figure.",
+      "stage_ids": [
+        "confirm_ai_spend"
+      ],
+      "data_description": "The paid AI filings a person confirmed."
+    },
+    {
+      "title": "Publish the headline figures",
+      "prose": "What clients paid outside firms to lobby on AI: the total, the filings behind it, and the paying clients \u2014 plus the same total split by client. Open it under Published.",
+      "stage_ids": [
+        "ai_spend_by_client",
+        "ai_spend_totals"
+      ],
+      "data_description": "The confirmed paid filings, summed as the published totals."
+    },
+    {
+      "title": "Total what organisations reported for their own AI lobbying",
+      "prose": "Reported separately and never added to the paid total \u2014 an organisation's own account of what it spent lobbying with its own staff, on the model's reading alone. Nobody reviews this branch, and the report says so.",
+      "stage_ids": [
+        "in_house_ai_filings",
+        "in_house_ai_totals"
+      ],
+      "data_description": "The in-house AI filings and their reported total, unreviewed."
+    },
+    {
+      "title": "Size the corpus this question was asked of",
+      "prose": "How many filings the two exports carried in total, before any prior step narrowed them \u2014 the base rate the AI figures should be read against.",
+      "stage_ids": [
+        "corpus_totals"
+      ],
+      "data_description": "How many filings the two exports carried, in total."
+    }
+  ],
+  "unnarrated": []
+}

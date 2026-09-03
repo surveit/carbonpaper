@@ -85,8 +85,9 @@ def test_the_prompt_names_no_tool_the_tour_does_not_hold() -> None:
     assert {"create_tutorial_project", "run_workflow", "get_run_status"} <= named
 
 
-def test_the_prompt_says_the_sample_data_is_invented() -> None:
-    assert "invented" in TUTORIAL_SYSTEM_PROMPT.lower()
+def test_the_prompt_says_the_data_is_real_public_record() -> None:
+    assert "public" in TUTORIAL_SYSTEM_PROMPT.lower()
+    assert "real" in TUTORIAL_SYSTEM_PROMPT.lower()
 
 
 def test_the_prompt_covers_the_five_requested_beats() -> None:

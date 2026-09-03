@@ -12,7 +12,7 @@ from app.services.project_record import read_project_name
 from app.services.stage_edit import find_description_issues, find_unnamed_model_issues
 import sqlite3
 
-_TUTORIAL = "tutorial_lobbying_triage"
+_TUTORIAL = "ai_lobbying_spend_2026"
 # Every committed bundle, in the order discover_workflow_files sorts them.
 _ALL_BUNDLES = [_TUTORIAL]
 _REPO_ROOT = Path(__file__).resolve().parents[1]

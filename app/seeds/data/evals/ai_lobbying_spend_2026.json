@@ -1,0 +1,107 @@
+{
+  "eval_id": "ai_substance_hard_cases",
+  "name": "Hard AI-substance judgments",
+  "description": "9 real Q1/Q2 2026 LDA filings the keyword net caught, most deliberately ambiguous. Each expected label was read independently against Step 3's definition, so a disagreement here is a finding, not a mislabel.",
+  "override_stage": "keep_ai_candidates",
+  "target_stage": "judge_ai_substance",
+  "expected_outputs": [
+    {
+      "output_column": "is_about_ai",
+      "metric": "exact"
+    }
+  ],
+  "table": {
+    "path": "app/seeds/data/evals/ai_substance_hard.csv",
+    "format": "csv",
+    "table_schema": {
+      "columns": [
+        {
+          "name": "year",
+          "type": "str",
+          "nullable": false
+        },
+        {
+          "name": "type",
+          "type": "str",
+          "nullable": false
+        },
+        {
+          "name": "date_posted",
+          "type": "str",
+          "nullable": false
+        },
+        {
+          "name": "client",
+          "type": "str",
+          "nullable": false
+        },
+        {
+          "name": "client_state",
+          "type": "str",
+          "nullable": true
+        },
+        {
+          "name": "client_country",
+          "type": "str",
+          "nullable": false
+        },
+        {
+          "name": "registrant",
+          "type": "str",
+          "nullable": false
+        },
+        {
+          "name": "income",
+          "type": "str",
+          "nullable": true
+        },
+        {
+          "name": "expenses",
+          "type": "str",
+          "nullable": true
+        },
+        {
+          "name": "issue_codes",
+          "type": "str",
+          "nullable": true
+        },
+        {
+          "name": "specific_issues",
+          "type": "str",
+          "nullable": true
+        },
+        {
+          "name": "lobbyists",
+          "type": "str",
+          "nullable": true
+        },
+        {
+          "name": "filing_uuid",
+          "type": "str",
+          "nullable": false
+        },
+        {
+          "name": "export_row",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "mentions_ai",
+          "type": "bool",
+          "nullable": false
+        },
+        {
+          "name": "ai_terms_found",
+          "type": "str",
+          "nullable": false
+        },
+        {
+          "name": "is_about_ai",
+          "type": "bool",
+          "nullable": false,
+          "description": "Whether this filing's own words say the lobbying was really about AI, read independently against Step 3's definition before the workflow ran."
+        }
+      ]
+    }
+  }
+}
