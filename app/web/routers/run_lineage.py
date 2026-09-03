@@ -42,7 +42,7 @@ router = APIRouter()
     "/project/{project_id}/runs/{run_id}/stage/{stage_id}/lineage_panel",
     response_class=HTMLResponse,
 )
-async def run_stage_lineage_panel(
+def run_stage_lineage_panel(
     request: Request, project_id: str, run_id: str, stage_id: str, row: int
 ):
     manifest = load_manifest(project_id, run_id)
@@ -105,8 +105,8 @@ def _read_choices(via: list[str] | None) -> list[RowSampleChoice]:
 
 
 @router.get("/project/{project_id}/runs/{run_id}/stage/{stage_id}/row/{row}/trace")
-async def run_stage_row_trace(project_id: str, run_id: str, stage_id: str, row: int,
-                              via: list[str] | None = _VIA):
+def run_stage_row_trace(project_id: str, run_id: str, stage_id: str, row: int,
+                        via: list[str] | None = _VIA):
     load_manifest(project_id, run_id)  # 404s if the run doesn't exist
     return JSONResponse(
         trace_to_dict(_walk_row(project_id, run_id, stage_id, row, via)))
@@ -116,7 +116,7 @@ async def run_stage_row_trace(project_id: str, run_id: str, stage_id: str, row: 
     "/project/{project_id}/runs/{run_id}/stage/{stage_id}/row/{row}/trace/view",
     response_class=HTMLResponse,
 )
-async def run_stage_row_trace_view(
+def run_stage_row_trace_view(
     request: Request, project_id: str, run_id: str, stage_id: str, row: int,
     column: str | None = None, via: list[str] | None = _VIA,
 ):
@@ -157,7 +157,7 @@ async def run_stage_row_trace_view(
     "/project/{project_id}/runs/{run_id}/stage/{stage_id}/row/{row}/paths/panel",
     response_class=HTMLResponse,
 )
-async def run_stage_row_paths_panel(
+def run_stage_row_paths_panel(
     request: Request, project_id: str, run_id: str, stage_id: str, row: int,
     via: list[str] | None = _VIA,
 ):

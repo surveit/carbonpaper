@@ -122,9 +122,9 @@ def _read_bust_cache(form: FormData) -> bool:
 
 
 @router.get("/project/{project_id}/runs", response_class=HTMLResponse)
-async def runs_index(request: Request, project_id: str,
-                     view: str = RUN_VIEW_PRODUCTION, inputs: str = "", file: str = "",
-                     status: str = ""):
+def runs_index(request: Request, project_id: str,
+               view: str = RUN_VIEW_PRODUCTION, inputs: str = "", file: str = "",
+               status: str = ""):
     validate_project_or_404(project_id)
     if view not in RUN_VIEWS:
         raise HTTPException(status_code=400, detail=f"unknown runs view '{view}'")
@@ -151,7 +151,7 @@ async def runs_index(request: Request, project_id: str,
 
 
 @router.get("/project/{project_id}/runs/{run_id}/status")
-async def run_status(project_id: str, run_id: str):
+def run_status(project_id: str, run_id: str):
     manifest = load_manifest(project_id, run_id)
     mstages = manifest.get("stage_records", [])
     status_by_id = {s["stage_id"]: s.get("status", "") for s in mstages}
@@ -214,7 +214,7 @@ def build_run_graph(
 
 
 @router.get("/project/{project_id}/runs/{run_id}/events")
-async def stream_run_events(
+def stream_run_events(
     project_id: str,
     run_id: str,
     request: Request,
@@ -236,7 +236,7 @@ async def stream_run_events(
 
 
 @router.get("/project/{project_id}/runs/{run_id}/events/page")
-async def run_events_page(
+def run_events_page(
     project_id: str,
     run_id: str,
     before_seq: int,
@@ -249,7 +249,7 @@ async def run_events_page(
 
 
 @router.get("/project/{project_id}/runs/{run_id}", response_class=HTMLResponse)
-async def run_detail(request: Request, project_id: str, run_id: str):
+def run_detail(request: Request, project_id: str, run_id: str):
     run_dir = resolve_run_dir(project_id, run_id)
     manifest = load_manifest(project_id, run_id)
     status_by_id = {s["stage_id"]: s.get("status", "") for s in manifest.get("stage_records", [])}
@@ -292,7 +292,7 @@ async def run_detail(request: Request, project_id: str, run_id: str):
 
 
 @router.get("/project/{project_id}/runs/{run_id}/artifact/{filename:path}")
-async def run_artifact(project_id: str, run_id: str, filename: str):
+def run_artifact(project_id: str, run_id: str, filename: str):
     run_dir = resolve_run_dir(project_id, run_id)
     candidate = (run_dir / "artifacts" / filename).resolve()
     if not candidate.exists() or not str(candidate).startswith(str(run_dir.resolve())):
@@ -305,7 +305,7 @@ async def run_artifact(project_id: str, run_id: str, filename: str):
 
 
 @router.post("/project/{project_id}/runs/{run_id}/resume")
-async def resume_run_route(project_id: str, run_id: str):
+def resume_run_route(project_id: str, run_id: str):
     validate_project_or_404(project_id)
     load_manifest(project_id, run_id)  # 404s if the run doesn't exist
     # Resume executes the version the run PINNED, so that snapshot is what has to
@@ -327,7 +327,7 @@ async def resume_run_route(project_id: str, run_id: str):
 
 
 @router.post("/project/{project_id}/runs/{run_id}/cancel")
-async def cancel_run_route(project_id: str, run_id: str):
+def cancel_run_route(project_id: str, run_id: str):
     manifest = load_manifest(project_id, run_id)  # 404s if the run doesn't exist
     if manifest.get("status") == RunStatus.RUNNING:
         request_cancel(project_id, run_id)
