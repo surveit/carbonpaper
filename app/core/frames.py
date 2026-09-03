@@ -47,10 +47,11 @@ PARQUET_SUFFIX = ".parquet"
 # returns it as float64 and loses which it was. The runtime reads and writes
 # through these; the pandas pair exists for presentation, which formats cells as
 # text and cannot use a table.
-def read_frame_table(path: Path) -> pa.Table:
+def read_frame_table(path: Path, columns: Sequence[str] | None = None) -> pa.Table:
     if path.suffix == PARQUET_SUFFIX:
-        return pq.read_table(path, use_pandas_metadata=True)
-    return csv.read_csv(path)
+        return pq.read_table(path, columns=columns, use_pandas_metadata=True)
+    table = csv.read_csv(path)
+    return table.select(list(columns)) if columns is not None else table
 
 
 def write_frame_table(table: pa.Table, path: Path) -> None:

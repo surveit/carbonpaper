@@ -108,11 +108,14 @@ class RowLineage:
         return cls(_SidecarParents(table))
 
 
+LINEAGE_KEYS = (TRACE_SOURCE_STAGE_KEY, TRACE_SOURCE_ROW_KEY, TRACE_EDGE_KIND_KEY,
+                TRACE_SOURCE_COLUMNS_KEY, TRACE_SOURCE_FILE_KEY, TRACE_SOURCE_SHA_KEY)
+
+
 class _SidecarParents(Sequence[list[RowParent]]):
     """A trace reads one row per stage; branch analysis reads every row of one."""
 
-    _KEYS = (TRACE_SOURCE_STAGE_KEY, TRACE_SOURCE_ROW_KEY, TRACE_EDGE_KIND_KEY,
-             TRACE_SOURCE_COLUMNS_KEY, TRACE_SOURCE_FILE_KEY, TRACE_SOURCE_SHA_KEY)
+    _KEYS = LINEAGE_KEYS
 
     def __init__(self, table: pa.Table) -> None:
         self._table = table

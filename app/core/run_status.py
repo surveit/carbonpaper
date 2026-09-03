@@ -26,3 +26,8 @@ class RunStatus(enum.StrEnum):
     ERRORS = "errors"
     AWAITING_REVIEW = "awaiting_review"
     CANCELLED = "cancelled"
+
+
+def is_run_still_going(status: str) -> bool:
+    """A run that may still record more stages; nothing worked out over it can be kept."""
+    return status in (RunStatus.RUNNING, RunStatus.AWAITING_REVIEW)
