@@ -18,5 +18,8 @@
 </head>
 <body class="{% block body_class %}{% endblock %}">
 {% block body %}{% endblock %}
-</body>
+{# The packet extends this shell, not base.html, so it passes base.html's scripts
+   here rather than losing whatever moved into one. #}
+{% for src in ambient_scripts | default([]) %}<script src="{{ src }}"></script>
+{% endfor %}</body>
 </html>

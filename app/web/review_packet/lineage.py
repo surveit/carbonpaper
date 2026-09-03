@@ -26,7 +26,12 @@ from app.web.panel_links import (
     packet_contributors_href,
     packet_lineage_href,
 )
-from app.web.review_packet.pages import ASSETS_DIR, FAVICON, STYLESHEETS
+from app.web.review_packet.pages import (
+    ASSETS_DIR,
+    FAVICON,
+    STYLESHEETS,
+    ambient_script_hrefs,
+)
 from app.core.errors import RowOutOfRange, StageNotInRun
 from app.runtime.branch_analysis import WorkflowRunBranches, reconstruct_run_branches
 from app.runtime.errors import MissingLineage
@@ -163,6 +168,7 @@ def _write_page(
         mermaid="",
         offline=True,
         static_root="../../assets/",
+        ambient_scripts=ambient_script_hrefs("../../"),
         assets=[f"../../assets/{name}" for name in STYLESHEETS],
     )
     path = root / relative
@@ -188,6 +194,7 @@ def _write_directory(
         assets=[f"../{ASSETS_DIR}/{name}" for name in STYLESHEETS],
         icon=f"../{ASSETS_DIR}/{FAVICON}",
         static_root=f"../{ASSETS_DIR}/",
+        ambient_scripts=ambient_script_hrefs("../"),
         index_href="../index.html",
     )
     path = root / relative
@@ -242,6 +249,7 @@ def _write_one_cohort(
             owner_href=f"{row}.html",
             assets=[f"../../{ASSETS_DIR}/{name}" for name in STYLESHEETS],
             icon=f"../../{ASSETS_DIR}/{FAVICON}",
+            ambient_scripts=ambient_script_hrefs("../../"),
             static_root=f"../../{ASSETS_DIR}/",
             index_href="../../index.html",
         ),

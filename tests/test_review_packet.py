@@ -17,7 +17,12 @@ from app.models.review_guide import ReviewGuideStep
 from app.services import versioning, workspace
 from app.models.records.review_guide import ReviewGuide
 from app.web.review_packet import export_review_packet
-from app.web.review_packet.pages import PACKET_MAX_TABLE_ROWS
+from app.web.review_packet.pages import (
+    PACKET_MAX_TABLE_ROWS,
+    PACKET_SKIPS_SCRIPT,
+    _read_shell_scripts,
+    read_ambient_scripts,
+)
 from app.web.routers.review_packet import _write_zip
 from app.web.loading import MAX_TABLE_ROWS
 from app.services.review_packet.checksums import compute_sha256
@@ -642,7 +647,7 @@ def test_a_report_stage_that_wrote_nothing_is_reported_not_skipped(project_dir, 
     assert "wrote no file" in (packet.root / "index.html").read_text(encoding="utf-8")
 
 
-# A packet page gets none of base.html's scripts, so each hook it draws names its own.
+# The behaviour check under the vendoring: a hook drawn, and the script that binds it.
 _HOOK_NEEDS_SCRIPT = {
     "stage-tabs": "tabs.js",
     "<time datetime": "friendly-time.js",
@@ -662,3 +667,29 @@ def test_every_hook_a_packet_page_draws_has_the_script_that_binds_it(exported):
             assert any(src.endswith(script) for src in loaded), (
                 f"{page.name} draws {hook!r} but loads no {script}"
             )
+
+
+def test_the_packet_carries_every_script_base_html_loads_bar_the_named_skips(exported):
+    base = _read_shell_scripts("base.html")
+    assert base, "base.html is where the packet reads its script set"
+    for name in base:
+        vendored = (exported.root / "assets" / name).is_file()
+        skipped = name in PACKET_SKIPS_SCRIPT
+        assert vendored != skipped, (
+            f"{name}: base.html loads it, so the packet vendors it or PACKET_SKIPS_SCRIPT "
+            f"says why not (vendored={vendored}, skipped={skipped})"
+        )
+
+
+def test_every_named_skip_is_a_script_base_html_still_loads(exported):
+    stale = sorted(set(PACKET_SKIPS_SCRIPT) - set(_read_shell_scripts("base.html")))
+    assert not stale, f"PACKET_SKIPS_SCRIPT excuses scripts base.html no longer loads: {stale}"
+    for name, reason in PACKET_SKIPS_SCRIPT.items():
+        assert reason.strip(), f"{name} is skipped with no reason"
+
+
+def test_a_vendored_script_is_loaded_by_the_pages_not_only_written(exported):
+    """A file in assets/ that no page names is a script the packet does not run."""
+    stage = next(exported.root.glob("stages/*.html")).read_text(encoding="utf-8")
+    loaded = {src.rsplit("/", 1)[-1] for src in re.findall(r'<script[^>]*\bsrc="([^"]+)"', stage)}
+    assert set(read_ambient_scripts()) <= loaded, set(read_ambient_scripts()) - loaded

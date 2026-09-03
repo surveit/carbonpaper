@@ -133,13 +133,17 @@ def test_no_lineage_page_links_a_lineage_page_that_was_not_written(tmp_path):
 
 def test_a_lineage_page_reaches_the_rest_of_the_packet_by_relative_path(tmp_path):
     """It is written two levels down, so every shared asset is reached with ../../."""
+    from app.web.review_packet.pages import (
+        STYLESHEETS, _read_shell_scripts, read_ambient_scripts,
+    )
+
     page = (_export_demo_packet(tmp_path) / "lineage/totals/0.html").read_text(encoding="utf-8")
     outward = {h for h in _relative_links(page) if "lineage/" not in h}
-    assert outward == {
-        "../../assets/diagram_nodes.js", "../../assets/tooltip.js",
-        "../../assets/cell-lineage.js", "../../assets/figure_text.js",
-        "../../assets/palette.css",
-        "../../assets/style.css", "../../assets/packet.css", "../../assets/favicon.svg",
+    assets = [
+        *STYLESHEETS, "favicon.svg",
+        *_read_shell_scripts("standalone_base.html"), *read_ambient_scripts(),
+    ]
+    assert outward == {f"../../assets/{name}" for name in assets} | {
         "../../index.html",
         # The Inputs pane names the input stage, and the packet writes that page.
         "../../stages/source.html",
