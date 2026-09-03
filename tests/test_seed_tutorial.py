@@ -133,6 +133,20 @@ def test_committed_fixture_imports_and_validates_cleanly(tmp_path):
     assert _XLSX_Q1.is_file() and _XLSX_Q2.is_file()
 
 
+def test_the_row_functions_are_sandboxed_starlark_not_raw_python():
+    wf = _load_fixture()
+    for sid in ("find_ai_mentions", "read_reported_money"):
+        assert _stage(wf, sid).type == "starlark_row_function"
+
+
+def test_the_headline_figure_is_the_dollar_total_alone():
+    """The filing count moved to secondary — one number, not two, leads the page."""
+    outputs = _stage(_load_fixture(), "ai_spend_totals").workflow_outputs
+    by_slug = {o.slug: o for o in outputs}
+    assert by_slug["ai-spend"].primary is True
+    assert by_slug["ai-filings"].primary is False
+
+
 def test_the_input_stage_carries_no_baked_in_path():
     stage = _stage(_load_fixture(), "input_filings")
     assert stage.connector.params.paths == []

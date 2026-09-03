@@ -43,6 +43,15 @@ def test_a_multi_line_refusal_reason_survives_intact():
     assert str(err.value) == "line one\nline two"
 
 
+def test_a_refusal_ten_or_more_lines_in_strips_its_span_decoration():
+    """A wider line-number gutter shifts "-->" by a space; a fixed marker misses it."""
+    padding = "\n" * 10
+    handle = _compiled(padding + "def transform(row):\n    refuse('late in the file')\n")
+    with pytest.raises(StepRefused) as err:
+        handle({"n": 1})
+    assert str(err.value) == "late in the file"
+
+
 @pytest.mark.parametrize("body", [
     "return row['absent']",          # missing key
     "return 1 + 'x'",                # type error
