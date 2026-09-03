@@ -123,7 +123,7 @@
     },
     {
       "id": "find_ai_mentions",
-      "type": "python_row_function",
+      "type": "starlark_row_function",
       "description": "Marks the rows whose own issue text uses an AI term.",
       "inputs": [
         {
@@ -169,8 +169,7 @@
         ],
         "rewrites": []
       },
-      "function": {
-        "kind": "inline",
+      "starlark": {
         "summary": "Searches the row's `specific_issues` and `issue_codes` for six AI terms, on word boundaries, ignoring case. It decides nothing: `algorithmic` also catches algorithmic trading, and the next steps separate that from AI lobbying.",
         "corner_cases": [
           {
@@ -190,8 +189,7 @@
             "expected": "matched, and left for the judgement step to reject"
           }
         ],
-        "code": "import re\n\nTERMS = (\n    (\"artificial intelligence\", r\"artificial intelligence\"),\n    (\"AI\", r\"(?<![A-Za-z])AI(?![A-Za-z])\"),\n    (\"machine learning\", r\"machine learning\"),\n    (\"large language model\", r\"(?<![A-Za-z])(?:LLM|large language model)s?(?![A-Za-z])\"),\n    (\"deepfake\", r\"deep ?fakes?\"),\n    (\"algorithmic\", r\"algorithmic\"),\n)\n\n\ndef transform(row):\n    text = \" || \".join(\n        part for part in (row[\"specific_issues\"], row[\"issue_codes\"]) if part\n    )\n    found = [name for name, pattern in TERMS if re.search(pattern, text, re.IGNORECASE)]\n    return {\n        **row,\n        \"mentions_ai\": bool(found),\n        \"ai_terms_found\": \"; \".join(found),\n    }\n",
-        "requirements": []
+        "code": "def _ascii_letter(c):\n    return (\"A\" <= c and c <= \"Z\") or (\"a\" <= c and c <= \"z\")\n\n\ndef _word_bounded(haystack, needle):\n    start = 0\n    n = len(needle)\n    for _ in range(len(haystack) + 1):\n        idx = haystack.find(needle, start)\n        if idx == -1:\n            return False\n        before_ok = idx == 0 or not _ascii_letter(haystack[idx - 1])\n        after_idx = idx + n\n        after_ok = after_idx == len(haystack) or not _ascii_letter(haystack[after_idx])\n        if before_ok and after_ok:\n            return True\n        start = idx + 1\n    return False\n\n\ndef transform(row):\n    parts = []\n    if row[\"specific_issues\"]:\n        parts.append(row[\"specific_issues\"])\n    if row[\"issue_codes\"]:\n        parts.append(row[\"issue_codes\"])\n    text = \" || \".join(parts).lower()\n\n    found = []\n    if \"artificial intelligence\" in text:\n        found.append(\"artificial intelligence\")\n    if _word_bounded(text, \"ai\"):\n        found.append(\"AI\")\n    if \"machine learning\" in text:\n        found.append(\"machine learning\")\n    if (_word_bounded(text, \"llm\") or _word_bounded(text, \"llms\")\n            or _word_bounded(text, \"large language model\")\n            or _word_bounded(text, \"large language models\")):\n        found.append(\"large language model\")\n    if (\"deepfake\" in text or \"deepfakes\" in text\n            or \"deep fake\" in text or \"deep fakes\" in text):\n        found.append(\"deepfake\")\n    if \"algorithmic\" in text:\n        found.append(\"algorithmic\")\n\n    return dict(row, mentions_ai=bool(found), ai_terms_found=\"; \".join(found))\n"
       }
     },
     {
@@ -353,7 +351,7 @@
     },
     {
       "id": "read_reported_money",
-      "type": "python_row_function",
+      "type": "starlark_row_function",
       "description": "Reads the two reported money fields as dollars, or stops the run.",
       "inputs": [
         {
@@ -404,8 +402,7 @@
         ],
         "rewrites": []
       },
-      "function": {
-        "kind": "inline",
+      "starlark": {
         "summary": "Reads `income` and `expenses` as plain dollar numbers. Blank, or the word None, counts as zero \u2014 the filing is reporting it received or spent nothing. Anything else that is not a plain number, or a negative amount, stops the run.",
         "corner_cases": [
           {
@@ -433,8 +430,7 @@
             "expected": "kept exactly, not rounded"
           }
         ],
-        "code": "def transform(row):\n    return {\n        **row,\n        \"income_usd\": _read_money(row[\"income\"], \"income\", row[\"filing_uuid\"]),\n        \"expenses_usd\": _read_money(row[\"expenses\"], \"expenses\", row[\"filing_uuid\"]),\n    }\n\n\ndef _read_money(value, field, filing_uuid):\n    if value is None or value != value:\n        return 0.0\n    text = str(value).strip()\n    if text == \"\" or text == \"None\":\n        return 0.0\n    try:\n        amount = float(text)\n    except ValueError:\n        raise StepRefused(\n            f\"filing {filing_uuid}: {field} reads {text!r}, which is not a number. \"\n            \"Reading it as zero would enter the published totals as if the filing had \"\n            \"reported nothing, so this is a question for a person.\"\n        )\n    if amount < 0:\n        raise StepRefused(\n            f\"filing {filing_uuid}: {field} reports {text!r}, a negative amount. Nothing in \"\n            \"the filing says whether it is a refund, a correction or an error, and counting \"\n            \"it, dropping it and subtracting it are three different published totals.\"\n        )\n    return amount\n",
-        "requirements": []
+        "code": "def _is_plain_number(text):\n    if text == \"\":\n        return False\n    i = 0\n    if text[0] == \"-\" or text[0] == \"+\":\n        i = 1\n    if i == len(text):\n        return False\n    seen_digit = False\n    seen_dot = False\n    for j in range(i, len(text)):\n        c = text[j]\n        if \"0\" <= c and c <= \"9\":\n            seen_digit = True\n        elif c == \".\" and not seen_dot:\n            seen_dot = True\n        else:\n            return False\n    return seen_digit\n\n\ndef _read_money(value, field, filing_uuid):\n    if value == None:\n        return 0.0\n    text = str(value).strip()\n    if text == \"\" or text == \"None\":\n        return 0.0\n    if not _is_plain_number(text):\n        refuse(\n            \"filing \" + filing_uuid + \": \" + field + \" reads \" + repr(text) +\n            \", which is not a number. Reading it as zero would enter the \" +\n            \"published totals as if the filing had reported nothing, so \" +\n            \"this is a question for a person.\"\n        )\n    amount = float(text)\n    if amount < 0:\n        refuse(\n            \"filing \" + filing_uuid + \": \" + field + \" reports \" + repr(text) +\n            \", a negative amount. Nothing in the filing says whether it is a \" +\n            \"refund, a correction or an error, and counting it, dropping it \" +\n            \"and subtracting it are three different published totals.\"\n        )\n    return amount\n\n\ndef transform(row):\n    return dict(\n        row,\n        income_usd=_read_money(row[\"income\"], \"income\", row[\"filing_uuid\"]),\n        expenses_usd=_read_money(row[\"expenses\"], \"expenses\", row[\"filing_uuid\"]),\n    )\n"
       }
     },
     {
@@ -1218,7 +1214,7 @@
         {
           "slug": "ai-filings",
           "label": "Paid filings behind that total",
-          "primary": true,
+          "primary": false,
           "kind": "figure",
           "column": "filings"
         },
