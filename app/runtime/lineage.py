@@ -13,6 +13,8 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 
+from app.core.frames import read_native_cell, read_native_column
+
 if TYPE_CHECKING:
     from app.models.workflow_stage import WorkflowStage
 
@@ -156,7 +158,7 @@ class _SidecarParents(Sequence[list[RowParent]]):
     __hash__ = None  # type: ignore[assignment]
 
     def _cells_of_row(self, index: int) -> list[Any]:
-        return [self._table.column(key)[index].as_py()
+        return [read_native_cell(self._table, key, index)
                 if key in self._table.column_names else None
                 for key in self._KEYS]
 
@@ -193,7 +195,7 @@ def _column_cells(table: pa.Table, name: str) -> list[Any]:
     """[] for every row when the column is absent, so a pre-multi-parent sidecar still reads."""
     if name not in table.column_names:
         return [[]] * table.num_rows
-    return table.column(name).to_pylist()
+    return read_native_column(table, name)
 
 
 def _columns_or_none(cell: Any) -> tuple[str, ...] | None:

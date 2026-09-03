@@ -10,7 +10,7 @@ from typing import Any, Sequence
 import pyarrow as pa
 
 from app.core.errors import ContributorNotInFanIn, RowOutOfRange, StageNotInRun
-from app.core.frames import convert_row_to_json_cells, read_frame_table
+from app.core.frames import convert_row_to_json_cells, read_frame_table, read_native_row
 from app.models.stage import StageType, is_grain_and_order_preserving
 from app.runtime.lineage import EdgeKind, RowLineage, RowParent
 from app.runtime.lineage_sidecar import read_lineage_sidecar
@@ -130,7 +130,7 @@ def _scalar(value: Any) -> Any:
 
 
 def _row_dict(table: pa.Table, r: int) -> dict[str, Any]:
-    return {name: _scalar(table.column(name)[r].as_py()) for name in table.column_names}
+    return {name: _scalar(value) for name, value in read_native_row(table, r).items()}
 
 
 def _split_spine(hops: list[RowParent]) -> tuple[RowParent | None, list[RowParent]]:

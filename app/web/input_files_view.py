@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from app.web.figure_text import render_figure
 from app.core.file_shape import VALUES_KEPT, measure_column_shape
-from app.core.frames import convert_cell_to_json_value, read_frame_table
+from app.core.frames import convert_cell_to_json_value, read_frame_table, read_native_cell
 from app.core.json_types import JsonScalar
 from app.models.branch_analysis import RowOrdinal
 from app.models.claims import StageOutputCellCitation
@@ -169,9 +169,9 @@ def _build_preview(frame: pa.Table, ordinals: Sequence[RowOrdinal]) -> list[Prev
 
 def _build_preview_row(frame: pa.Table, ordinal: RowOrdinal,
                        relevant: bool) -> PreviewRow:
-    cells = [convert_cell_to_json_value(frame.column(name)[ordinal].as_py())
+    cells = [convert_cell_to_json_value(read_native_cell(frame, name, ordinal))
              for name in frame.column_names]
-    stamped = (convert_cell_to_json_value(frame.column(SOURCE_ROW_COLUMN)[ordinal].as_py())
+    stamped = (convert_cell_to_json_value(read_native_cell(frame, SOURCE_ROW_COLUMN, ordinal))
                if SOURCE_ROW_COLUMN in frame.column_names else None)
     return PreviewRow(label=f"{render_figure(stamped if stamped is not None else ordinal + 1)}",
                       relevant=relevant, cells=cells)
@@ -212,4 +212,5 @@ def _read_the_count_the_note_states(note: str) -> int | None:
 def _read_the_cited_cell(outputs: Path,
                          citation: StageOutputCellCitation) -> JsonScalar:
     frame = read_frame_table(outputs / f"{citation.stage_id}.parquet")
-    return convert_cell_to_json_value(frame.column(citation.column)[citation.row_ordinal].as_py())
+    return convert_cell_to_json_value(
+        read_native_cell(frame, citation.column, citation.row_ordinal))

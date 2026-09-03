@@ -278,6 +278,23 @@ def _select_column(table: pa.Table, column: str) -> pa.ChunkedArray:
     return table.column(column)
 
 
+def read_native_cell(table: pa.Table, column: str, row_ordinal: int) -> Any:
+    return read_native_scalar(table.column(column)[row_ordinal])
+
+
+def read_native_scalar(scalar: pa.Scalar) -> Any:
+    """Arrow's own Python type for one scalar, not JsonScalar — see convert_cell_to_json_value."""
+    return scalar.as_py()
+
+
+def read_native_row(table: pa.Table, row_ordinal: int) -> dict[str, Any]:
+    return {name: read_native_cell(table, name, row_ordinal) for name in table.column_names}
+
+
+def read_native_column(table: pa.Table, column: str) -> list[Any]:
+    return table.column(column).to_pylist()
+
+
 def _as_json_scalar(column: str, arrow_type: pa.DataType, cell: Any) -> JsonScalar:
     if cell is None:
         return None

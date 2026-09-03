@@ -9,7 +9,7 @@ import pandas as pd
 import pyarrow as pa
 
 from app.core.errors import CitationMismatch, RowOutOfRange, StageNotInRun
-from app.core.frames import convert_cell_to_json_value
+from app.core.frames import convert_cell_to_json_value, read_native_cell
 from app.models.citations import CitedValue
 from app.models.claims import StageOutputRowCitation
 from app.models.records.citations import StageCitations
@@ -72,7 +72,7 @@ class CitationProvider:
             raise ValueError(
                 f"'{stage_id}' has no column '{column}' — it has {table.column_names}"
             )
-        return table.column(column)[row_ordinal].as_py()
+        return read_native_cell(table, column, row_ordinal)
 
     def _require_row(self, stage_id: str, row_ordinal: int) -> pa.Table:
         table = self.tables.get(stage_id)
