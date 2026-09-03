@@ -303,6 +303,19 @@ def test_the_committed_eval_names_no_project_of_its_own():
     assert "project" not in json.loads(_EVAL_PATH.read_text(encoding="utf-8"))
 
 
+def test_the_committed_eval_dataset_reads_its_numeric_looking_columns_as_text(tmp_path):
+    """A numeric-looking str column must survive read_csv without becoming a float."""
+    from app.evals.dataset import read_table_ref
+
+    name, _version_id = _import_and_pin(tmp_path, "ai_lobbying_smoke_eval_dtype")
+    config = read_seed_eval_config(name)
+    df = read_table_ref(config.table)
+
+    assert df["income"].map(lambda v: pd.isna(v) or isinstance(v, str)).all()
+    assert df["expenses"].map(lambda v: pd.isna(v) or isinstance(v, str)).all()
+    assert df["year"].map(lambda v: isinstance(v, str)).all()
+
+
 def test_the_tour_seeds_the_eval_beside_the_review_guide(projects_root):
     seeded = seed_tutorial_project(TutorialContext(base_url=_BASE_URL))
 
