@@ -160,8 +160,8 @@ def _find_stages_with_a_file(directory: Path, ordered_stage_ids: Sequence[StageI
 # ─── the files ───────────────────────────────────────────────────────────────
 
 def _write_paths(directory: Path, stage_id: StageId, paths: Sequence[BranchPath]) -> None:
-    write_frame_table(pa.table({_PATH_KEY: [list(path) for path in paths]},
-                               schema=_PATHS_SCHEMA),
+    # Arrow reads the tuples as they are; rebuilding them as lists costs 6x the table.
+    write_frame_table(pa.table({_PATH_KEY: list(paths)}, schema=_PATHS_SCHEMA),
                       _resolve_paths_file(directory, stage_id))
 
 
@@ -175,7 +175,7 @@ def _write_merges(directory: Path, stage_id: StageId,
     ordinals = sorted(per_row)
     write_frame_table(
         pa.table({_ROW_KEY: ordinals,
-                  _BRANCHES_KEY: [list(per_row[ordinal]) for ordinal in ordinals]},
+                  _BRANCHES_KEY: [per_row[ordinal] for ordinal in ordinals]},
                  schema=_MERGES_SCHEMA),
         _resolve_merges_file(directory, stage_id))
 
