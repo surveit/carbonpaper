@@ -11,6 +11,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.services.loader import resolve_function_code
 from app.services import run as run_service
@@ -49,7 +50,7 @@ router = APIRouter()
     "/project/{project_id}/runs/{run_id}/stage/{stage_id}/partial",
     response_class=HTMLResponse,
 )
-async def run_stage_partial(
+def run_stage_partial(
     request: Request, project_id: str, run_id: str, stage_id: str
 ):
     run_dir = resolve_run_dir(project_id, run_id)
@@ -132,7 +133,7 @@ async def run_stage_partial(
     "/project/{project_id}/runs/{run_id}/stage/{stage_id}/rows",
     response_class=HTMLResponse,
 )
-async def run_stage_rows(
+def run_stage_rows(
     request: Request, project_id: str, run_id: str, stage_id: str, raw: bool = False,
     ordinals: str | None = None, rows: str | None = None,
     columns: list[str] | None = Query(default=None),
@@ -227,7 +228,7 @@ def _build_full_rows_diff(
 
 
 @router.get("/project/{project_id}/runs/{run_id}/stage/{stage_id}/rows.csv")
-async def run_stage_rows_csv(
+def run_stage_rows_csv(
     project_id: str, run_id: str, stage_id: str, rows: str | None = None,
     columns: list[str] | None = Query(default=None),
 ):
@@ -251,7 +252,7 @@ async def run_stage_rows_csv(
     "/project/{project_id}/runs/{run_id}/stage/{stage_id}/simulate",
     response_class=HTMLResponse,
 )
-async def run_stage_simulate(
+def run_stage_simulate(
     request: Request, project_id: str, run_id: str, stage_id: str
 ):
     run_dir = resolve_run_dir(project_id, run_id)
@@ -337,7 +338,8 @@ async def run_stage_scratch_preview(
     }
 
     try:
-        result = run_stage_preview(
+        result = await run_in_threadpool(
+            run_stage_preview,
             workflow_stage=workflow_stage,
             run_dir=run_dir,
             output_by_id=output_by_id,

@@ -53,7 +53,7 @@ DATASET_PREVIEW_ROWS = 50
 # ─── The evals list (a project-shell section) ────────────────────────────────
 
 @router.get("/project/{project_id}/evals", response_class=HTMLResponse)
-async def evals_index(request: Request, project_id: str):
+def evals_index(request: Request, project_id: str):
     validate_project_or_404(project_id)
     listing = load_stages_or_empty(project_id)
     return templates.TemplateResponse(
@@ -88,7 +88,7 @@ def _build_eval_index_rows(
 # ─── One config's detail ─────────────────────────────────────────────────────
 
 @router.get("/project/{project_id}/evals/{eval_id}", response_class=HTMLResponse)
-async def eval_detail(request: Request, project_id: str, eval_id: str):
+def eval_detail(request: Request, project_id: str, eval_id: str):
     validate_project_or_404(project_id)
     config = _load_config_or_404(project_id, eval_id)
     return _render_eval_detail(request, project_id, config)
@@ -153,7 +153,7 @@ def _read_eval_dataset_preview(config: EvalConfig) -> dict[str, Any]:
     "/project/{project_id}/evals/{eval_id}/runs/{run_id}",
     response_class=HTMLResponse,
 )
-async def eval_run_detail(request: Request, project_id: str, eval_id: str, run_id: str):
+def eval_run_detail(request: Request, project_id: str, eval_id: str, run_id: str):
     validate_project_or_404(project_id)
     config = _load_config_or_404(project_id, eval_id)
     run = _load_run_or_404(project_id, run_id)
@@ -192,7 +192,7 @@ async def eval_run_detail(request: Request, project_id: str, eval_id: str, run_i
 
 
 @router.get("/project/{project_id}/evals/{eval_id}/runs/{run_id}/status")
-async def eval_run_status(project_id: str, eval_id: str, run_id: str):
+def eval_run_status(project_id: str, eval_id: str, run_id: str):
     """What moves while an eval run is in flight; the run page polls it and stops at `terminal`."""
     validate_project_or_404(project_id)
     run = _load_run_or_404(project_id, run_id)
@@ -206,7 +206,7 @@ async def eval_run_status(project_id: str, eval_id: str, run_id: str):
 # ─── That run's log, served to the same panel the run page uses ──────────────
 
 @router.get("/project/{project_id}/evals/{eval_id}/runs/{run_id}/events")
-async def stream_eval_run_events(
+def stream_eval_run_events(
     project_id: str,
     eval_id: str,
     run_id: str,
@@ -226,7 +226,7 @@ async def stream_eval_run_events(
 
 
 @router.get("/project/{project_id}/evals/{eval_id}/runs/{run_id}/events/page")
-async def eval_run_events_page(
+def eval_run_events_page(
     project_id: str,
     eval_id: str,
     run_id: str,
