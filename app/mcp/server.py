@@ -135,13 +135,13 @@ def read_stage(project_id: str, stage_id: str) -> str:
 @mcp.tool(description=read_tool_description("edit_stages"))
 def edit_stages(project_id: str, edits: list[StageEdit]) -> shared.EditedStages:
     return working_copy.catch_stage_edit_refusals(
-        lambda: edit_stages_reporting_drops(project_id, edits)
+        lambda: edit_stages_reporting_drops(working_copy.open_to_write(project_id), edits)
     )
 
 
 @mcp.tool(description=read_tool_description("add_stage"))
 def add_stage(project_id: str, stages: list[SubmittedStage]) -> dict[str, Any]:
-    return add_stages_reporting_drops(project_id, stages)
+    return add_stages_reporting_drops(working_copy.open_to_write(project_id), stages)
 
 
 @mcp.tool(description=read_tool_description("delete_stage"))

@@ -13,6 +13,7 @@ from app.core import files as file_store
 from app.core.persistence import configure_store
 from app.core.sqlite_store import SqliteKvStore
 from app.models.stage import StageDraft
+from app.services import stage_edit
 from app.services import project as project_service
 from app.models.records.working_copy import WorkingCopy
 from app.models.records.methodology import Methodology
@@ -63,7 +64,7 @@ def _seed_store_through_the_app() -> str:
     project_id = project_service.create_project(
         "replay", "Review every row that scored.", source="migration replay test").id
     upload = file_store.save_upload("rows.csv", io.BytesIO(_CSV), project_id=project_id)
-    outcome = project_service.add_stages(project_id, _stage_drafts(upload))
+    outcome = project_service.add_stages(stage_edit.open_working_copy(project_id), _stage_drafts(upload))
     assert not outcome.failed and not outcome.batch_issues and not outcome.skipped, outcome
     project_service.save_working_copy_as_version(
         project_id, message="first version")

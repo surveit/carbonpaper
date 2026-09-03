@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from app.core.agent.bound_tool import BoundToolSpec, bind_by_signature
 from app.tools.types import ToolParameterProse
+from app.services import drafts, project as project_service, stage_edit
 from app.tools import shared, working_copy
 from app.tools.submitted_stage import (
     SubmittedStage,
@@ -38,6 +39,13 @@ class EditingContext(BaseModel):
     session_id: str | None = None
 
 
+def _open_stages(project_id: str, ctx: EditingContext) -> stage_edit.StageSpecStore:
+    """A session edits its own draft; without one there is only the working copy."""
+    if ctx.session_id is None:
+        return project_service.open_working_copy_to_write(project_id)
+    return drafts.open_session_stages(project_id, ctx.session_id)
+
+
 def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
     base = ctx.base_url.rstrip("/")
 
@@ -48,10 +56,14 @@ def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         return shared.create_project(name, document, source="editing agent")
 
     def edit_stages(project_id: str, edits: list[StageEdit]) -> shared.EditedStages:
-        return edit_stages_reporting_drops(project_id, edits)
+        return edit_stages_reporting_drops(_open_stages(project_id, ctx), edits)
 
     def add_stage(project_id: str, stages: list[SubmittedStage]) -> dict[str, Any]:
-        return add_stages_reporting_drops(project_id, stages)
+        return add_stages_reporting_drops(_open_stages(project_id, ctx), stages)
+
+    def delete_stage(project_id: str, stage_id: str) -> dict[str, Any]:
+        result = project_service.delete_stage(_open_stages(project_id, ctx), stage_id)
+        return {"ok": result.ok, "issues": result.issues}
 
     def save_version(
         project_id: str, message: str, parent_version: str | None = None
@@ -76,6 +88,7 @@ def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         create_project,
         edit_stages,
         add_stage,
+        delete_stage,
         save_version,
         list_files,
         read_stage_output_rows,
@@ -90,7 +103,7 @@ def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         )
         for fn in tools
     ] + bind(
-        "list_projects", "read_workflow_summary", "read_stage", "delete_stage",
+        "list_projects", "read_workflow_summary", "read_stage",
         "read_terms", "write_terms",
         "read_review_guide", "write_review_guide",
         "get_project_status", "generate_stage_tests",
@@ -127,6 +140,10 @@ TOOL_SCHEMAS: dict[str, ToolParameterProse] = {
             "the columns go in `signature.reads`, keyed by the same id. Every id in "
             "inputs must already be a stage in this workflow or in this same call.",
     },
+    "delete_stage": {
+        "project_id": PROJECT_ID,
+        "stage_id": "The id of the stage to remove.",
+    },
     "save_version": {
         "project_id": PROJECT_ID,
         "message": "What identifies this version to a reader in 150 characters or fewer.",
@@ -148,6 +165,7 @@ TOOL_LABELS: dict[str, str] = {
     "create_project": "Creating the project",
     "edit_stages": "Editing the workflow's stages",
     "add_stage": "Adding a stage",
+    "delete_stage": "Removing a stage",
     "save_version": "Saving the workflow as a version",
     "list_files": "Listing the project's files",
     "read_stage_output_rows": "Reading the stage's rows",
