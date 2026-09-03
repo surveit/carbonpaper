@@ -2,61 +2,9 @@
 
 from __future__ import annotations
 
-from enum import Enum
-
 from pydantic import BaseModel
 
 from app.models.schema import StageId
-from app.web.stage_diff import RowAlignedDiff, opens_on_the_first
-
-
-class NewSheet(str, Enum):
-    """A `replaces` stage hands back a new frame, and this is what it did to get one."""
-
-    per_group = "per_group"
-    one_row = "one_row"
-    rebuilt = "rebuilt"
-
-
-class SheetColumn(BaseModel):
-    name: str
-    cited: bool
-    # The nearest stage upstream that wrote it; the header links there.
-    writer: StageId | None
-
-
-class ValuesStep(BaseModel):
-    """One stage of the replay: its sheet, cut to the columns the walk passed through."""
-
-    stage_id: StageId
-    glyph: str
-    label: str
-    rows_total: int
-    new_sheet: NewSheet | None
-    columns: list[SheetColumn]
-    # None where the diff refuses the type; `rows` below is then what is drawn.
-    diff: RowAlignedDiff | None
-    # Positional against `columns`, as text. Read only where `diff` is None.
-    rows: list[list[str]]
-    # Positional against `rows`: where each one sits in the stage's own frame.
-    row_ordinals: list[int]
-    # Which rows of this stage the figure came through, before the sheet's cap.
-    reached_rows: list[int]
-    columns_total: int
-    unreadable: str | None
-
-    @property
-    def opens_on_the_first(self) -> bool:
-        return opens_on_the_first(self.row_ordinals)
-
-    @property
-    def column_writers(self) -> dict[str, StageId]:
-        """What the diff header links: column name -> the stage that wrote it."""
-        return {
-            column.name: column.writer
-            for column in self.columns
-            if column.writer is not None
-        }
 
 
 class MinimapNode(BaseModel):
@@ -79,7 +27,8 @@ class ValuesUsed(BaseModel):
     cited_stage: StageId
     column: str
     row: int
-    steps: list[ValuesStep]
+    # The stages the value came through, upstream first; each panel is fetched.
+    steps: list[StageId]
     # Left to right, each entry one column of the minimap.
     minimap: list[list[MinimapNode]]
     edges: list[MinimapEdge]

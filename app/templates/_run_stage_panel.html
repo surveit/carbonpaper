@@ -24,7 +24,11 @@
     {% if stage_def %}<p class="stage-blurb">{{ stage_def.description }}</p>{% endif %}
     <p class="stage-facts">
         <span class="run-status status-{{ stage.status }}">{{ stage.status }}</span>
-        <span>{{ stage.elapsed_ms | friendly_duration }} · {{ stage.output_row_count or 0 | figure }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}
+        {# Under a scope the panel draws the rows behind ONE figure, so the count
+           says which of the frame's rows those are rather than the frame's own. #}
+        <span>{{ stage.elapsed_ms | friendly_duration }} ·
+        {%- if scoped %} {{ reached_rows | length | figure }} of {{ stage.output_row_count or 0 | figure }} rows behind this figure
+        {%- else %} {{ stage.output_row_count or 0 | figure }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}{% endif %}
         {%- if stage.llm_usage and stage.llm_usage.calls %} · {{ stage.llm_usage.calls | figure }} model call{% if stage.llm_usage.calls != 1 %}s{% endif %}, {{ stage.llm_usage.cost_usd | usd }}{% endif %}
         {%- if stage.finished_at %} · finished {{ stage.finished_at | friendly_time }}{% endif %}</span>
     </p>
@@ -136,6 +140,11 @@
         <div><dt>cost</dt><dd>none</dd></div>
         {% endif %}
     </dl>
+    {%- if scoped %}
+    {# Cost and calls are the STAGE's, not these rows': the manifest records spend
+       per stage, and no part of it is attributable to a row. #}
+    <p class="muted stage-whole">for the whole stage, not only the rows behind this figure</p>
+    {%- endif %}
     {% if stage.cached_rows and stage.status in ("ok", "validation_warnings") %}
     {# A positive replay count is this run's evidence that cache rows supplied
        the output; an absent count means no replay conclusion is available. #}
@@ -224,7 +233,9 @@
       need it, and the whole-run feed at the foot of the page is the same log
       unscoped. `links.run_log` is None in the review packet, which is a folder
       with no server to tail. ── #}
-{% set log_scope = links.run_log(stage.stage_id) %}
+{# Suppressed under a scope: the feed is the stage's whole run, and nothing in it
+   is per-row, so offering it beside filtered rows would invite reading it as theirs. #}
+{% set log_scope = none if scoped else links.run_log(stage.stage_id) %}
 {% if log_scope %}
 <div class="stage-run-log" data-tail="{{ event_tail }}">
   {{ run_log_panel("Run log · this stage's events", event_tail) }}

@@ -2,7 +2,10 @@
    time. Injected into the row lineage page, which drives it with values-used.js.
    `reason` instead of `values` where no walk can be made.
 
-   Context: project, run_id, stage_id, column, links, and either values
+   Each stage's panel is the RUN PAGE'S OWN (_run_stage_panel.html), fetched scoped
+   to the rows behind this figure — this page adds the walk, not a second run view.
+
+   Context: project, run_id, stage_id, column, and either values
    (app.web.values_view) with nav (what the script steers by) or reason. #}
 {% if reason %}
 <p class="banner banner-warn">No column lineage for <code>{{ column }}</code> at
@@ -17,7 +20,8 @@
 <p class="vu-say"><b>Walk this value back to your input data.</b> Step
   <b>◀ back</b> or use the arrow keys <kbd class="vu-key">&larr;</kbd>
   <kbd class="vu-key">&rarr;</kbd> to see the sheet one stage earlier, and what that stage
-  did to the value. Only the stages that could change <code>{{ column }}</code> are here.</p>
+  did to the value. Each stage opens the run page's own panel for it, cut to the rows
+  behind this figure. Only the stages that could change <code>{{ column }}</code> are here.</p>
 <div class="vu-maprow">
   <button class="vu-arrow" data-go="back" title="back one stage (left arrow)">◀</button>
   <div class="vu-map"><svg class="vu-wires"></svg>
@@ -32,82 +36,9 @@
   <button class="vu-arrow" data-go="fwd" title="forward one stage (right arrow)">▶</button>
 </div>
 <div class="vu-scroll">
-{% for step in values.steps %}
-  <section class="vu-step" data-step="{{ step.stage_id }}">
-    <div class="vu-stephead"><code class="vu-sid">{{ step.stage_id }}</code>
-      <span class="vu-kind">{{ step.glyph }} {{ step.label }}</span>
-      <span class="vu-rows">{{ step.rows_total | figure }} row{% if step.rows_total != 1 %}s{% endif %}</span>
-    </div>
-    {# The same two tabs the Paths pane hangs off a step: the rows, and the code
-       that made them. #}
-    <div class="lin-tabs vu-steptabs"><button data-tab="data" class="on">Data</button><button
-      data-tab="transform">Transform</button></div>
-    <div class="vu-pane" data-tab="data">
-    {%- if step.new_sheet %}
-    <p class="vu-newsheet">New sheet:
-      {%- if step.new_sheet == 'per_group' %} one row per group.
-      {%- elif step.new_sheet == 'one_row' %} every row collapses into one.
-      {%- else %} this stage rebuilt the frame.{% endif %}</p>
-    {%- endif %}
-    {% if step.unreadable %}
-    <p class="vu-nosheet">No sheet for this stage — {{ step.unreadable }}.</p>
-    {% elif not step.reached_rows %}
-    <p class="vu-nosheet">No row of <code>{{ step.stage_id }}</code> fed this figure. It writes
-      a column the value came through, but this run recorded none of its
-      {{ step.rows_total | figure }} rows behind this one.</p>
-    {% else %}
-    <p class="legend"><span><i class="diff-col-new"></i>a column this stage wrote</span>
-      <span><i class="diff-cell-changed"></i>a cell this stage rewrote</span>
-      <span><i class="diff-col-cited"></i>the value traced here</span></p>
-    {# The same split the outputs pane draws — input frames, what the stage did to
-       them, output frame — cut to the columns this value came through. #}
-    {% if step.diff %}
-    {% with diff = step.diff, stage = step, full_rows = false,
-            cited_column = values.column if step.stage_id == values.cited_stage else none,
-            reached_rows = step.reached_rows, column_writers = step.column_writers %}
-    {% include "_stage_diff.html" %}
-    {% endwith %}
-    {% else %}
-    {# An input originates its rows and an aggregate rebuilds the frame, so
-       neither has an input frame to paint over: the output table stands alone. #}
-    <div class="preview-block stage-diff">
-      <div class="preview-head">output data <span class="muted">·
-        {% if step.rows_total > step.rows | length %}{% if step.opens_on_the_first %}first {% endif %}{{ step.rows | length }} of {% endif %}
-        {{- step.rows_total | figure }} row{% if step.rows_total != 1 %}s{% endif %}</span>
-        <span class="preview-actions"><a href="{{ links.stage_rows(step.stage_id) }}">view all rows</a>
-        · <a href="{{ links.stage_csv(step.stage_id) }}">⬇ CSV</a></span></div>
-      <div class="table-scroll"><table class="data-preview">
-        <thead><tr><th class="row-num">#</th>
-          {%- for column_state in step.columns %}
-          {%- set klasses = 'diff-col-jump' if column_state.writer else '' %}
-          <th{% if klasses %} class="{{ klasses }}"{% endif %} data-column="{{ column_state.name }}"
-            {%- if column_state.writer %} data-jump="{{ column_state.writer }}"
-            title="written by {{ column_state.writer }} — go there"{% endif %}>
-            {%- if column_state.cited %}<i class="diff-col-mine">the value</i>{% endif -%}
-            <span class="diff-col-name">{{ column_state.name }}</span></th>
-          {%- endfor %}
-        </tr></thead>
-        <tbody>
-        {%- for row in step.rows %}
-          {%- set ordinal = step.row_ordinals[loop.index0] %}
-          {%- set traced = ordinal in step.reached_rows %}
-          <tr{% if traced %} class="diff-row-mine"{% endif %} data-href="{{ links.row_trace(step.stage_id, ordinal) }}">
-            <td class="row-num {{ 'diff-row-num-mine' if traced else 'muted' }}">{{ ordinal | row_number }}</td>
-          {%- for cell in row %}
-          <td{% if step.columns[loop.index0].cited and traced %} class="diff-col-cited"{% endif %}>{{ cell | truncate(240) }}</td>
-          {%- endfor %}
-          </tr>
-        {%- endfor %}
-        </tbody>
-      </table></div>
-    </div>
-    {% endif %}
-    <p class="vu-sheetfoot">{{ step.columns | length }} of {{ step.columns_total }} columns,
-      the ones this value came through</p>
-    {% endif %}
-    </div>
-    <div class="vu-pane vu-off" data-tab="transform">
-      <div class="vu-transform" data-transform="{{ step.stage_id }}"></div></div>
+{% for stage_id in values.steps %}
+  <section class="vu-step" data-step="{{ stage_id }}">
+    <div class="vu-panel" data-panel="{{ stage_id }}"></div>
   </section>
 {% endfor %}
 </div>

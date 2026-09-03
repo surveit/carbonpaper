@@ -35,19 +35,7 @@
 .vu-scroll { flex: 1; min-height: 0; overflow: auto; padding-bottom: 60px; }
 .vu-step { display: none; }
 .vu-step.vu-on { display: block; }
-.vu-stephead { display: flex; align-items: baseline; gap: 11px; flex-wrap: wrap; margin-bottom: 9px; }
-.vu-sid { font-size: 14px; font-weight: 600; }
-.vu-kind { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-.vu-rows { margin-left: auto; font-size: 11.5px; color: var(--muted); }
-.vu-steptabs { margin: 0 0 9px; }
-.vu-pane.vu-off { display: none; }
-.vu-newsheet { font-size: 12px; color: var(--warn-ink); background: var(--warn-bg); border: 1px solid var(--warn-bd); border-radius: 7px; padding: 5px 10px; margin: 0 0 8px; display: inline-block; }
 .vu-nosheet { color: var(--muted); font-size: 12.5px; padding: 12px; border: 1px dashed var(--border-strong); border-radius: 9px; }
-.vu-sheetfoot { font-size: 11px; color: var(--muted); margin: 5px 2px 0; }
-
-.vu-what { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 11px; }
-/* base.css already makes an h3 the small caps label; only the spacing is ours. */
-.vu-what h3 { margin: 0 0 5px; }
 
 /* ── the fork: a review decision, so it takes the screen ───────────────────── */
 .vu-modal { position: fixed; inset: 0; background: var(--scrim); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 34px; }
