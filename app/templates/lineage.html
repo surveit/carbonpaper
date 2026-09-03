@@ -12,6 +12,7 @@
 {% if not offline %}<script src="{{ static_root }}picker.js" defer></script>
 <script src="{{ static_root }}breadcrumbs.js" defer></script>
 {# The packet's Relevant columns pane is an empty state, so its script is dead there. #}
+<script src="{{ static_root }}diagram_viewport.js"></script>
 <script src="{{ static_root }}values-used.js"></script>
 {# Each stage opens the run page's own panel: its tab strip is tabs.js's. #}
 <script src="{{ static_root }}tabs.js"></script>
@@ -705,11 +706,17 @@ if(!hasGraph){
   if(!mermaidOK) ng.textContent = "The graph library couldn't load (CDN blocked). The story and panel still work.";
   ng.classList.remove('hidden');
 }
-if(mermaidOK){ mermaid.initialize({ startOnLoad:false, theme:"default", flowchart:{curve:"basis", padding:20, useMaxWidth:true}, securityLevel:"loose" }); }
+// Re-asserted here rather than once at load: the Relevant columns pane renders its
+// own graph through diagram_viewport.js, which configures mermaid globally, and this
+// graph may be opened after that.
+function initPathsMermaid(){
+  mermaid.initialize({ startOnLoad:false, theme:"default", flowchart:{curve:"basis", padding:20, useMaxWidth:true}, securityLevel:"loose" });
+}
 let graphRendered = false;
 document.querySelector('.lin-graph').addEventListener('toggle', async e => {
   if(!e.target.open || graphRendered || !hasGraph) return;
   graphRendered = true;
+  initPathsMermaid();
   try { await mermaid.run({ nodes:[mmd] }); } catch(err){ graphRendered = false; }
 });
 

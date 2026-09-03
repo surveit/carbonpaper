@@ -10,6 +10,12 @@ import re
 from pathlib import Path
 
 from app.web.diagrams import _NODE_SURFACE, _STATUS_STROKE, build_schema_table_graph
+from app.web.walk_diagram import (
+    WALK_ASIDE_FILL,
+    WALK_ASIDE_INK,
+    WALK_LIT_STROKE,
+    WALK_QUIET_STROKE,
+)
 
 _PALETTE = Path(__file__).resolve().parents[2] / "app" / "static" / "palette.css"
 _DECLARATION = re.compile(r"--([a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{3,8}|var\(--[a-z0-9-]+\))\s*;")
@@ -209,4 +215,25 @@ def test_every_token_a_var_points_at_is_declared() -> None:
         f"{dangling} are referenced by a var() in palette.css but declared nowhere in "
         "it, so every property spending them falls back to currentColor and silently "
         "paints the wrong thing."
+    )
+
+
+def test_every_walk_state_colour_is_the_palette_property_it_copies() -> None:
+    declared = read_declared_colours()
+    expected = {
+        "WALK_LIT_STROKE": declared["accent"],
+        "WALK_QUIET_STROKE": declared["border-strong"],
+        "WALK_ASIDE_FILL": declared["sunk-deep"],
+        "WALK_ASIDE_INK": declared["muted-dim"],
+    }
+    written = {
+        "WALK_LIT_STROKE": WALK_LIT_STROKE.lower(),
+        "WALK_QUIET_STROKE": WALK_QUIET_STROKE.lower(),
+        "WALK_ASIDE_FILL": WALK_ASIDE_FILL.lower(),
+        "WALK_ASIDE_INK": WALK_ASIDE_INK.lower(),
+    }
+    assert written == expected, (
+        f"app/web/walk_diagram.py writes {written}, palette.css says {expected}. The "
+        "column walk's three node states spend the sheet's own greys and its accent — "
+        "borrowing a --state-* hue would say a stage off the walk had been cancelled."
     )

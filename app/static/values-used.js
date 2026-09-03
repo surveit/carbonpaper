@@ -10,39 +10,37 @@ window.ValuesUsed = window.ValuesUsed || (function(){
     const nav = JSON.parse(root.querySelector('.vu-nav').textContent);
     const view = {
       pane, nav, trail: [nav.cited_stage],
-      map: pane.querySelector('.vu-map'),
+      viewport: pane.querySelector('.diagram-viewport'),
       scroll: pane.querySelector('.vu-scroll'),
-      modal: pane.querySelector('.vu-modal'),
       loaded: {},
     };
     wire(view);
+    drawGraph(view);
     show(view);
-    window.addEventListener('resize', () => drawWires(view));
     return view;
   }
 
   const at = view => view.trail[view.trail.length - 1];
 
   function show(view){
-    const here = at(view), seen = new Set(view.trail);
-    const next = new Set((view.nav.sources[here] || []).map(s => s.stage_id));
+    const here = at(view);
     view.pane.querySelectorAll('.vu-step').forEach(
       step => step.classList.toggle('vu-on', step.dataset.step === here));
-    view.pane.querySelectorAll('.vu-node').forEach(node => {
-      const id = node.dataset.node;
-      node.classList.toggle('vu-on', id === here);
-      node.classList.toggle('vu-seen', id !== here && seen.has(id));
-      node.classList.toggle('vu-next', next.has(id));
-    });
     // The pane owns its scroll, so the document never moves when a step changes;
     // the reader still wants the new sheet from the top.
     view.scroll.scrollTop = 0;
     // An arrow that would do nothing says so, rather than swallowing the click.
     view.pane.querySelector('.vu-arrow[data-go="back"]').disabled =
-      !(view.nav.sources[here] || []).length;
+      !carrying(view, here).length;
     view.pane.querySelector('.vu-arrow[data-go="fwd"]').disabled = view.trail.length < 2;
-    drawWires(view);
+    focusNode(view, here);
     loadPanel(view, here);
+  }
+
+  // Back only ever moves along a wire that carried rows: a parent none of this
+  // figure's rows came through is a stage the value did not take.
+  function carrying(view, stageId){
+    return (view.nav.sources[stageId] || []).filter(source => source.rows > 0);
   }
 
   // Along an edge, so the step is already on the route.
@@ -54,7 +52,7 @@ window.ValuesUsed = window.ValuesUsed || (function(){
   function jumpTo(view, stageId){
     const seen = view.trail.indexOf(stageId);
     if(seen >= 0) view.trail = view.trail.slice(0, seen + 1);
-    else if((view.nav.sources[at(view)] || []).some(s => s.stage_id === stageId))
+    else if(carrying(view, at(view)).some(s => s.stage_id === stageId))
       view.trail.push(stageId);
     else view.trail = findRoute(view, stageId);
     show(view);
@@ -73,7 +71,7 @@ window.ValuesUsed = window.ValuesUsed || (function(){
         for(let step = stageId; step !== null; step = cameFrom[step]) route.unshift(step);
         return route;
       }
-      for(const source of view.nav.sources[here] || []){
+      for(const source of carrying(view, here)){
         if(source.stage_id in cameFrom) continue;
         cameFrom[source.stage_id] = here;
         queue.push(source.stage_id);
@@ -82,11 +80,11 @@ window.ValuesUsed = window.ValuesUsed || (function(){
     return [stageId];
   }
 
+  // Two parents both carrying rows is a review decision, so it is left to the
+  // reader: both wires are already drawn hot, and they click the one they want.
   function stepBack(view){
-    const sources = view.nav.sources[at(view)] || [];
-    if(!sources.length) return;
-    if(sources.length === 1) return goTo(view, sources[0].stage_id);
-    openFork(view, at(view), sources);
+    const sources = carrying(view, at(view));
+    if(sources.length === 1) goTo(view, sources[0].stage_id);
   }
 
   function stepForward(view){
@@ -94,20 +92,6 @@ window.ValuesUsed = window.ValuesUsed || (function(){
     view.trail.pop();
     show(view);
   }
-
-  // A fork is a review decision, so it is asked rather than picked.
-  function openFork(view, stageId, sources){
-    view.modal.querySelector('.vu-modal-title').textContent =
-      `${stageId} takes rows from ${sources.length} sources.`;
-    view.modal.querySelector('.vu-forklist').innerHTML = sources.map(source =>
-      `<button class="vu-forkopt" type="button" data-fork="${esc(source.stage_id)}">`
-      + `<b>${esc(source.stage_id)}</b><span>${esc(source.columns.slice(0, 6).join(', '))}`
-      + `${source.columns.length > 6 ? ` +${source.columns.length - 6} more` : ''}`
-      + `</span></button>`).join('');
-    view.modal.hidden = false;
-  }
-
-  function closeFork(view){ view.modal.hidden = true; }
 
   function runBase(view){
     return `/project/${encodeURIComponent(view.pane.dataset.project)}`
@@ -141,29 +125,25 @@ window.ValuesUsed = window.ValuesUsed || (function(){
     }
   }
 
-  // Every edge is measured off the laid-out chips: the columns are a topological
-  // order, so where a chip lands says nothing about which one feeds which.
-  function drawWires(view){
-    const map = view.map, svg = map.querySelector('.vu-wires');
-    const seen = new Set(view.trail), origin = map.getBoundingClientRect();
-    const chip = id => map.querySelector(`.vu-node[data-node="${CSS.escape(id)}"]`);
-    svg.setAttribute('width', map.scrollWidth);
-    svg.setAttribute('height', map.scrollHeight);
-    svg.innerHTML = view.nav.edges.map(edge => {
-      const from = chip(edge.from_stage), to = chip(edge.to_stage);
-      if(!from || !to) return '';
-      const a = from.getBoundingClientRect(), b = to.getBoundingClientRect();
-      const x1 = a.right - origin.left + map.scrollLeft, y1 = a.top - origin.top + a.height / 2;
-      const x2 = b.left - origin.left + map.scrollLeft, y2 = b.top - origin.top + b.height / 2;
-      const mid = (x1 + x2) / 2;
-      const hot = seen.has(edge.from_stage) && seen.has(edge.to_stage) ? ' class="vu-hot"' : '';
-      return `<path${hot} d="M${x1} ${y1} C${mid} ${y1} ${mid} ${y2} ${x2} ${y2}"/>`;
-    }).join('');
+  // The same renderer, band and viewport the run page's minimap uses. This pane
+  // arrives by fetch, after diagram_viewport.js has already booted on nothing.
+  function drawGraph(view){
+    if(!view.viewport || !window.renderDiagramViewports) return;
+    window.renderDiagramViewports(view.pane).then(() => focusNode(view, at(view)));
   }
 
-  const CONTROLS = '.vu-node, .vu-arrow, .vu-forkopt, .vu-modal-close, th.diff-col-jump';
+  function focusNode(view, stageId){
+    if(view.viewport && view.viewport._focusNode) view.viewport._focusNode(stageId);
+  }
+
+  const CONTROLS = '.vu-arrow, th.diff-col-jump';
 
   function wire(view){
+    // A stage node is clicked through the shared dvNode binding, not a handler of
+    // this pane's own — the graph is the workflow graph everywhere it is drawn.
+    if(window.onDiagramNode) window.onDiagramNode(stageId => {
+      if(view.pane.offsetParent !== null) jumpTo(view, stageId);
+    });
     // Focusing a control inside a horizontally scrolling strip makes the browser
     // scroll to reveal it. Taking the default focus away is what stops that.
     view.pane.addEventListener('mousedown', event => {
@@ -174,17 +154,11 @@ window.ValuesUsed = window.ValuesUsed || (function(){
       if(control) control.focus({preventScroll: true});
       const header = event.target.closest('th.diff-col-jump');
       if(header) return jumpTo(view, header.dataset.jump);
-      const node = event.target.closest('.vu-node');
-      if(node) return jumpTo(view, node.dataset.node);
-      const fork = event.target.closest('.vu-forkopt');
-      if(fork){ closeFork(view); return goTo(view, fork.dataset.fork); }
       const arrow = event.target.closest('.vu-arrow');
       if(arrow) return arrow.dataset.go === 'back' ? stepBack(view) : stepForward(view);
-      if(event.target.closest('.vu-modal-close') || event.target === view.modal) closeFork(view);
     });
     document.addEventListener('keydown', event => {
       if(view.pane.offsetParent === null) return;
-      if(event.key === 'Escape') return closeFork(view);
       const focused = document.activeElement;
       if(focused && focused.closest('input, textarea, [contenteditable]')) return;
       if(event.key === 'ArrowLeft') stepBack(view);
