@@ -66,7 +66,7 @@ def create_draft(
         if from_version is not None
         else []
     )
-    draft_id = build_word_triplet_id(_taken(project))
+    draft_id = build_word_triplet_id(_find_draft_ids_in_use(project))
     d = Draft(
         id=_doc_id(project, draft_id),
         draft_id=draft_id,
@@ -166,7 +166,7 @@ def _doc_id(project_id: str, draft_id: str) -> str:
     return f"{project_id}/{draft_id}"
 
 
-def _taken(project_id: str) -> set[str]:
+def _find_draft_ids_in_use(project_id: str) -> set[str]:
     return {d.draft_id for d in Draft.list(f"{project_id}/")}
 
 
