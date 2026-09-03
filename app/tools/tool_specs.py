@@ -307,8 +307,9 @@ has no output schema.""",
             "project_id": PROJECT_ID,
             "version_id": "Omit for the project's newest stored version.",
             "limits": 'Caps how many rows a stage READS: {"<stage id>": N}.',
-            "files": 'The stored file each input stage reads for THIS run: '
-                '{"<stage id>": "<file_id from list_files>"}.',
+            "files": 'The stored file(s) each input stage reads for THIS run: '
+                '{"<stage id>": "<file_id from list_files>"} for one file, or '
+                '{"<stage id>": ["<file_id>", ...]} for several read as one table.',
             "bust_cache": "Recompute every stage instead of replaying what a previous run "
                 "cached. Costs whatever the cached stages cost the first time — on an "
                 "`llm_transform` that is real money. Use it to check a result is "
@@ -329,10 +330,12 @@ its first N rows and leaves every other stage whole. It bounds the WORK, not
 the spend of a stage that already ran — a cap on a stage downstream of a model
 step does not stop that model step reading everything. Omit it for a full run.
 
-`files` binds a stored file to an input step for this run only:
-{"<input stage id>": "<file_id from list_files>"}. A file_id the project does not
-hold is a loud error naming itself, not a silent unbound input. Omit it where
-the workflow already names the file it reads.""",
+`files` binds stored file(s) to an input step for this run only:
+{"<input stage id>": "<file_id from list_files>"}, or a list of file_ids to bind
+several files to one input step — they are read in the order given and become
+one table, so they must share a format. A file_id the project does not hold is
+a loud error naming itself, not a silent unbound input. Omit it where the
+workflow already names the file it reads.""",
     ),
     "run_workflow_test": AgentTool(
         fn=shared.run_workflow_test,

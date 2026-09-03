@@ -187,7 +187,7 @@ def run_workflow(
     project_id: str,
     version_id: str | None = None,
     limits: dict[str, int] | None = None,
-    files: dict[str, str] | None = None,
+    files: dict[str, str | list[str]] | None = None,
     bust_cache: bool = False,
 ) -> dict[str, Any]:
     try:
