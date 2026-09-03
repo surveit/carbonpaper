@@ -187,13 +187,13 @@ class _WorkflowOutputFields(_Base):
     label: str
     # Whether the run leads with this. Mark what the work rests on, not everything.
     primary: bool = False
+    # The project's claim shape this output fills; without one it feeds no claim.
+    shape_id: Optional[ID] = None
 
 
 class WorkflowFigureRule(_WorkflowOutputFields):
     kind: Literal["figure"]
     column: str
-    # The project's claim shape this fills; without one the figure cannot be minted.
-    shape_id: Optional[ID] = None
 
 
 class WorkflowTableRule(_WorkflowOutputFields):

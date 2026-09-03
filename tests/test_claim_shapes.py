@@ -12,7 +12,7 @@ from app.models.claims import (
 )
 from app.models.records.claims import Claim, ClaimShape
 from app.services import claim_shapes
-from app.services.errors import ClaimShapesRefused
+from app.services.errors import ClaimShapeWriteRefused
 
 _PROJECT = "ai_lobbying"
 # The two figures that run really published, with the coverage each one asserts.
@@ -30,7 +30,7 @@ _CORPUS = AuthoredClaimShape(
 
 def _claim(shape_id: str, value: float = 63027729.0) -> Claim:
     return Claim(
-        project_id=_PROJECT, shape_id=shape_id,
+        created_by_project_id=_PROJECT, shape_id=shape_id,
         workflow_version_id="20260901T103742.393151",
         citation=StageOutputCellCitation(
             run_id="20260901T103753.789399", stage_id="ai_spend_totals",
@@ -89,7 +89,7 @@ def test_an_id_edits_the_shape_it_names_rather_than_adding_another():
 
 # ── what is refused ──────────────────────────────────────────────────────────
 def test_two_entries_sharing_a_label_are_refused_whole():
-    with pytest.raises(ClaimShapesRefused, match="Clients that paid a US outside firm"):
+    with pytest.raises(ClaimShapeWriteRefused, match="Clients that paid a US outside firm"):
         claim_shapes.write_claim_shapes(_PROJECT, [_CORPUS, _CORPUS])
 
     assert claim_shapes.load_claim_shapes(_PROJECT) == []
@@ -98,12 +98,12 @@ def test_two_entries_sharing_a_label_are_refused_whole():
 def test_a_label_this_project_already_claims_is_refused_without_its_id():
     claim_shapes.write_claim_shapes(_PROJECT, [_SPEND])
 
-    with pytest.raises(ClaimShapesRefused, match="send that shape's id"):
+    with pytest.raises(ClaimShapeWriteRefused, match="send that shape's id"):
         claim_shapes.write_claim_shapes(_PROJECT, [_SPEND])
 
 
 def test_an_id_this_project_does_not_hold_is_refused():
-    with pytest.raises(ClaimShapesRefused, match="holds no shape"):
+    with pytest.raises(ClaimShapeWriteRefused, match="holds no shape"):
         claim_shapes.write_claim_shapes(_PROJECT, [
             AuthoredClaimShape(
                 id="d0e4d2a0", label="Paying clients", requires=DataUniverseRequirement.open, importance=ClaimImportance.secondary,
@@ -124,7 +124,7 @@ def test_what_a_shape_covers_freezes_once_it_is_claimed():
     [stored] = claim_shapes.write_claim_shapes(_PROJECT, [_SPEND])
     _claim(stored.id).save()
 
-    with pytest.raises(ClaimShapesRefused, match="claimed 1 time"):
+    with pytest.raises(ClaimShapeWriteRefused, match="claimed 1 time"):
         claim_shapes.write_claim_shapes(_PROJECT, [
             AuthoredClaimShape(
                 id=stored.id, label=_SPEND.label, requires=DataUniverseRequirement.open, importance=ClaimImportance.primary,
@@ -164,7 +164,7 @@ def test_a_shape_is_only_a_shape_of_its_own_project():
 
 
 # ── the Glossary page, which is the human's copy of what was agreed ──────────
-def test_the_glossary_page_shows_what_the_project_claims_and_what_it_covers(tmp_path):
+def test_the_documentation_page_shows_what_the_project_claims_and_what_it_covers(tmp_path):
     from fastapi.testclient import TestClient
 
     from app.main import app
@@ -176,7 +176,7 @@ def test_the_glossary_page_shows_what_the_project_claims_and_what_it_covers(tmp_
     write_methodology("vocab", "Follow the filings.")
     claim_shapes.write_claim_shapes("vocab", [_SPEND])
 
-    response = TestClient(app).get("/project/vocab/glossary")
+    response = TestClient(app).get("/project/vocab/methodology?tab=glossary")
 
     assert response.status_code == 200
     assert _SPEND.label in response.text

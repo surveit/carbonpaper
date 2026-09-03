@@ -153,41 +153,32 @@ other way to learn one. An empty result means none have been agreed yet.""",
                 "claims point at these.",
         },
         description="""\
-Store what this project claims. A shape is a figure the project promises to
-report, named before any stage computes it.
+Store what this project claims: a figure the project promises to report,
+named before any stage computes it.
 
-`requires` asks ONE question about the dataset the figure is computed from:
-does it hold every event of this kind?
+`requires` asks ONE question about the dataset the figure comes from — does
+it hold every event of this kind?
 
-  closed  it does, so the figure is the total — it IS that number. A register
-          everyone is required to file into is closed.
-  open    it holds only the events it captured, so the figure is a floor —
-          the real number is AT LEAST that. A scraped corpus, an FOI reply or
-          a hand-assembled list is open.
+  closed  it does, so the figure IS that number (a register everyone must
+          file into)
+  open    it holds only what was captured, so the figure is a floor — AT
+          LEAST that number (a scraped corpus)
 
-There is no default, and it is not a question about the world: a closed
-dataset can still miss events, and that belongs in `qualifiers`. A run that
-read only a window of its rows cannot publish a closed figure, because
-totalling a slice turns "is" into "at least".
-
-`qualifiers` are the lines a reader must read before using the number: what
-it counts that they would not expect, and what it cannot see. Write one for
-every way the figure differs from the thing its label suggests.
+No default. It is not a question about the world: a closed dataset can still
+miss events, and that belongs in `qualifiers` — what a reader must know
+before using the number, and what it cannot see.
 
   {"label": "Reported by outside firms as received for AI lobbying in the "
             "United States, in dollars",
    "requires": "closed", "importance": "primary",
-   "qualifiers": ["Income no firm reported. Filing is required by law, so a "
-                  "firm that did not file is not in this figure."]}
+   "qualifiers": ["Counts only lobbying that was filed. Filing is required "
+                  "by law, so the gap should be small."]}
 
-REFUSED WHOLE, with nothing written, when two entries share a label, when a
-label this project already claims arrives without that shape's id, when an
-id names no shape here, or when `requires` changes on a shape something has
-already been claimed under — what a published claim asserts about its own
-coverage cannot be edited after the fact.
+REFUSED WHOLE on a repeated label, a label already claimed sent without its
+id, an id this project does not hold, or a `requires` change on a shape
+something has been claimed under.
 
-The human reads these on the project's Terms page. Agree them with the user;
-never coin one to fill the list out.""",
+Agree these with the user; never coin one to fill the list out.""",
     ),
     "get_project_status": AgentTool(
         fn=shared.get_project_status,

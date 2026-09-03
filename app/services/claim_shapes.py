@@ -4,7 +4,7 @@ from __future__ import annotations
 from app.core.ids import ID
 from app.models.claims import AuthoredClaimShape
 from app.models.records.claims import Claim, ClaimShape
-from app.services.errors import ClaimShapesRefused
+from app.services.errors import ClaimShapeWriteRefused
 
 _PRIMARY_FIRST = {"primary": 0, "secondary": 1}
 
@@ -24,7 +24,7 @@ def write_claim_shapes(project_id: ID, authored: list[AuthoredClaimShape]) -> li
     stored_by_id = {shape.id: shape for shape in load_claim_shapes(project_id)}
     refusals = find_claim_shape_refusals(project_id, authored, stored_by_id)
     if refusals:
-        raise ClaimShapesRefused(refusals)
+        raise ClaimShapeWriteRefused(refusals)
     for entry in authored:
         _write_one(project_id, entry, stored_by_id)
     return load_claim_shapes(project_id)
@@ -106,4 +106,4 @@ def _find_coverage_changes(
 
 
 def _count_claims(project_id: ID, shape_id: ID) -> int:
-    return len(Claim.find(project_id=project_id, shape_id=shape_id))
+    return len(Claim.find(created_by_project_id=project_id, shape_id=shape_id))

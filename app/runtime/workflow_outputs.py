@@ -97,6 +97,7 @@ def _publish_table(
 ) -> WorkflowOutput:
     return WorkflowOutput(
         slug=declared.slug, label=declared.label, primary=declared.primary,
+        shape_id=declared.shape_id,
         citation=StageOutputTableCitation(
             run_id=identity.run_id, stage_id=stage_id,
             rectangle=RowsRectangle(

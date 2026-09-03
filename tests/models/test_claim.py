@@ -32,7 +32,7 @@ def _shape() -> ClaimShape:
 def _claim(shape: ClaimShape, run_id: str = _RUN) -> Claim:
     table = pa.table({"total_income_usd": [_TOTAL]})
     return Claim(
-        project_id=_PROJECT,
+        created_by_project_id=_PROJECT,
         shape_id=shape.id,
         workflow_version_id=_VERSION,
         citation=StageOutputCellCitation(
@@ -76,7 +76,9 @@ def test_a_claim_can_cite_a_published_table():
     )
     shape.save()
     claim = Claim(
+        created_by_project_id="hate_on_activist_pages",
         shape_id=shape.id,
+        workflow_version_id="20260807T142650.104112",
         citation=StageOutputTableCitation(
             run_id=_RUN, stage_id="publish_evidence_table",
             rectangle=RowsRectangle(row_start=0, row_end=18, columns=["comment_text", "severity_tier"]),

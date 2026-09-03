@@ -6,6 +6,8 @@
   Context:
     state       = project.project_state(mdir); section = "documentation"
     active_tab  = "methodology" | "glossary" — which pane opens (?tab= on the route)
+    shapes      = services.claim_shapes.load_claim_shapes(project_id)
+    coverage    = DATA_UNIVERSE_TOOLTIP
     methodology = the project's stored methodology, read server-side by the route
                   (the template does NOT read the filesystem). None/"" when the
                   project has none on disk.
@@ -55,6 +57,31 @@
 </div>
 
 <div class="pane" data-pane="glossary" {{ '' if on_glossary else 'hidden' }}>
+{% if shapes %}
+<h3 class="dm-group-heading">
+  <span class="type-tag">claims</span>
+  <span class="muted">— {{ shapes|length }} figure{% if shapes|length != 1 %}s{% endif %} this project promises to report</span>
+</h3>
+<div class="dm-cards">
+  {% for shape in shapes %}
+  <article class="dm-card">
+    <div class="dm-card-head">
+      <span class="dm-card-name">{{ shape.label }}</span>
+      <span class="type-tag">{{ shape.importance }}</span>
+    </div>
+    <p class="dm-card-desc">
+      <span class="has-tip" tabindex="0" data-tip="{{ coverage[shape.requires] }}">{{ shape.requires }}</span>
+    </p>
+    {% if shape.qualifiers %}
+    <ul class="dm-card-desc">
+      {% for qualifier in shape.qualifiers %}<li>{{ qualifier }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </article>
+  {% endfor %}
+</div>
+{% endif %}
+
 {% if unreadable %}
 <div class="validation-report error">
   <strong>⚠ The stored terms would not load</strong>
