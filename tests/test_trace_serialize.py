@@ -44,3 +44,19 @@ def test_trace_to_dict_turns_non_finite_floats_into_null(tmp_path):
     assert rows[0]["expenses"] is not None
     payload = json.dumps(rows)
     assert json.loads(payload) == rows
+
+
+def test_trace_to_dict_serializes_a_parsed_date_column(tmp_path):
+    # A date column arrives as datetime, which json.dumps has no encoding for.
+    seeds = pd.DataFrame({
+        "case_id": ["a", "b"],
+        "closed": pd.to_datetime(["2020-10-14", "2021-06-30"]),
+    })
+    enrich = seeds.assign(score=[1, 2])
+    run_dir = write_run(tmp_path, [
+        {"id": "seeds", "type": "input_data", "parents": [], "df": seeds},
+        {"id": "enrich", "type": "python_row_function", "parents": ["seeds"], "df": enrich},
+    ])
+    payload = trace_to_dict(trace_row(run_dir, "enrich", 0))
+    assert json.loads(json.dumps(payload)) == payload
+    assert payload["steps"][0]["row"]["closed"].startswith("2020-10-14")

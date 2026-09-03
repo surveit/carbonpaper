@@ -10,7 +10,7 @@ from typing import Any, Sequence
 import pyarrow as pa
 
 from app.core.errors import ContributorNotInFanIn, RowOutOfRange, StageNotInRun
-from app.core.frames import read_frame_table
+from app.core.frames import convert_row_to_json_cells, read_frame_table
 from app.models.stage import StageType, is_grain_and_order_preserving
 from app.runtime.lineage import EdgeKind, RowLineage, RowParent
 from app.runtime.lineage_sidecar import read_lineage_sidecar
@@ -377,7 +377,7 @@ def trace_to_dict(trace: Trace) -> dict[str, Any]:
                 "stage_id": step.stage_id,
                 "stage_type": step.stage_type,
                 "row_ordinal": step.row_ordinal,
-                "row": step.row,
+                "row": convert_row_to_json_cells(step.row),
                 "columns_new": step.columns_new,
                 "origin": step.origin,
                 "source_file": step.source_file,
