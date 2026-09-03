@@ -41,6 +41,8 @@ class SaveResult(BaseModel):
     ok: bool
     issues: list[str] = Field(default_factory=list)
     version_id: str | None = None
+    # Separates "someone saved first" from "this workflow is invalid": only one is overridable.
+    conflict: bool = False
 
 
 def _build_draft_view(d: Draft) -> DraftView:
@@ -121,13 +123,20 @@ def delete_draft_stage(
 
 
 def save_version(
-    name: str, draft_id: str, *, message: str
+    name: str, draft_id: str, *, message: str, override_conflict: bool = False
 ) -> SaveResult:
     project = workspace.validate_project_id(name)
     d = _load(project, draft_id)
     issues = validate_workflow(d.stages)
     if issues:
         return SaveResult(ok=False, issues=issues)
+    lost = _find_lost_version(project, d)
+    if lost is not None and not override_conflict:
+        return SaveResult(ok=False, conflict=True, issues=[
+            f"this draft was started from {d.parent_version}, and {lost} has been "
+            f"saved since — saving now writes a version carrying none of its changes. "
+            f"Read it, or pass override_conflict to save anyway."
+        ])
     meta = versioning.create_version_from_stages(
         project,
         [stage_to_spec_dict(s) for s in d.stages],
@@ -140,6 +149,14 @@ def save_version(
 
 
 # ─── internals ───────────────────────────────────────────────────────────────
+
+
+def _find_lost_version(project_id: str, d: Draft) -> str | None:
+    """A draft that never claimed a base cannot have lost anything."""
+    if d.parent_version is None:
+        return None
+    newest = versioning.find_latest_version_id(project_id)
+    return newest if newest is not None and newest != d.parent_version else None
 
 # A word triplet names a draft someone started; 32 hex names a session's own.
 _DRAFT_ID = re.compile(r"^([a-z]+-[a-z]+-[a-z]+|[0-9a-f]{32})$")

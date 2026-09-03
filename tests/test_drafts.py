@@ -177,3 +177,57 @@ def test_two_sessions_never_share_stages(examples: Path) -> None:
     drafts.delete_draft_stage("demo", _SESSION_A, "load")
 
     assert [s.id for s in drafts.read_draft("demo", _SESSION_B).stages] == ["load"]
+
+
+def test_saving_a_draft_someone_saved_past_is_refused_as_a_conflict(examples: Path) -> None:
+    pdir = examples / "demo"
+    versioning.create_version_from_stages(pdir.name, [_STAGE], message="v1")
+    behind = drafts.open_session_draft("demo", _SESSION_A)
+    ahead = drafts.open_session_draft("demo", _SESSION_B)
+    drafts.save_version("demo", ahead.id, message="theirs")
+
+    result = drafts.save_version("demo", behind.id, message="mine")
+
+    assert result.ok is False
+    assert result.conflict is True
+    assert result.version_id is None
+    assert len(versioning.list_versions(pdir.name)) == 2
+
+
+def test_override_conflict_saves_anyway_and_carries_none_of_their_changes(examples: Path) -> None:
+    pdir = examples / "demo"
+    versioning.create_version_from_stages(pdir.name, [_STAGE], message="v1")
+    behind = drafts.open_session_draft("demo", _SESSION_A)
+    ahead = drafts.open_session_draft("demo", _SESSION_B)
+    drafts.delete_draft_stage("demo", ahead.id, "load")
+    drafts.save_version("demo", ahead.id, message="theirs")
+
+    result = drafts.save_version("demo", behind.id, message="mine", override_conflict=True)
+
+    assert result.ok is True
+    assert result.conflict is False
+    assert result.version_id is not None
+    [stage] = versioning.load_version_stages(pdir.name, result.version_id)
+    assert stage.id == "load"
+
+
+def test_a_draft_that_claimed_no_base_is_never_a_conflict(examples: Path) -> None:
+    pdir = examples / "demo"
+    versioning.create_version_from_stages(pdir.name, [_STAGE], message="v1")
+    scratch = drafts.create_draft("demo")
+    drafts.set_draft_stage("demo", scratch.id, json.dumps(_STAGE))
+
+    result = drafts.save_version("demo", scratch.id, message="from scratch")
+
+    assert result.ok is True and result.conflict is False
+
+
+def test_saving_the_same_draft_twice_is_not_a_conflict(examples: Path) -> None:
+    pdir = examples / "demo"
+    versioning.create_version_from_stages(pdir.name, [_STAGE], message="v1")
+    mine = drafts.open_session_draft("demo", _SESSION_A)
+
+    assert drafts.save_version("demo", mine.id, message="one").ok is True
+    second = drafts.save_version("demo", mine.id, message="two")
+
+    assert second.ok is True and second.conflict is False
