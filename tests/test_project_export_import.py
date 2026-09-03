@@ -62,15 +62,14 @@ def test_a_bundle_carries_the_latest_versions_stages_not_the_working_copy(tmp_pa
     assert [stage.id for stage in export_project(name).stages] == ["load_entities"]
 
 
-def test_a_project_whose_stages_were_never_versioned_refuses_to_export(tmp_path):
-    """Returning the document alone would drop the stages without saying so."""
+def test_a_project_whose_stages_were_never_versioned_exports_none_of_them(tmp_path):
+    """An unversioned working copy cannot be run here either, so a bundle of it carries no stages."""
     workspace.set_projects_dir(tmp_path)
     name = project.create_project("Unversioned", "Count the filings.", source="test").id
     terms.write_terms(name, Terms(nouns=_TINY_LIBRARY, verbs=[]))
     save_stages(name, [_input_stage("load_entities")])
 
-    with pytest.raises(ValueError, match="no version"):
-        export_project(name)
+    assert export_project(name).stages == []
 
 
 def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_path):
