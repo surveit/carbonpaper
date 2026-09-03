@@ -1,0 +1,135 @@
+{% extends "project_shell.html" %}
+{#
+  PUBLISH — one card per output of this run that names a claim shape.
+
+  An output naming no shape is not here: most are backing for a claim, and the run page
+  already carries their lineage. What IS here is a claim per shape — the sentence someone
+  will publish, the context it sits on, and the decision to stand behind it or not.
+
+  Each card carries its forms empty and reaches them with `form="…"`, so one form does not
+  swallow another's button. A form inside a form is not markup a browser will parse.
+
+  Context the route passes:
+    state   = project_view.shell_state_off_nav(project_id, crumbs); section = "runs"
+    publish = claims_view.build_publish_view(project_id, run)
+#}
+{% block section %}
+{% set base = "/project/" ~ state.id ~ "/runs/" ~ publish.run_id %}
+
+<div class="sec-head">
+  <h1>Publish from this run</h1>
+  <p class="lede">A claim is a sentence someone will publish. Write it, and review decides
+    whether it stands.</p>
+</div>
+
+{% for card in publish.cards %}
+{% set i = loop.index %}
+<form id="submit-{{ i }}" method="post" action="{{ base }}/submit/{{ card.slug }}"></form>
+<form id="skip-{{ i }}" method="post" action="{{ base }}/skip/{{ card.slug }}"></form>
+
+<article class="mint-fig{{ ' is-warn' if card.restates and card.status != 'approved' }}">
+  <div class="mint-top">
+    <div class="mint-kicker">
+      {%- if card.status == 'approved' %}Claimed
+      {%- elif card.status == 'submitted' %}In review
+      {%- elif card.status == 'declined' %}Skipped — write it to claim it after all
+      {%- else %}Write the claim{% endif -%}
+    </div>
+
+    {% if card.status and card.status != 'declined' %}
+    <p class="mint-sentence">{{ card.text }}</p>
+    {% else %}
+    <textarea class="mint-sentence" name="text" form="submit-{{ i }}" rows="2"
+              placeholder="the sentence you would publish"
+              required>{{ card.suggested_text }}</textarea>
+    {% endif %}
+
+    <div class="mint-row">
+      <span class="mint-row-k">metric</span>
+      <span>{{ card.metric }}</span>
+      <a class="mint-value" href="{{ card.href }}"
+         title="Open the row this value was read from">{{ card.value }}</a>
+    </div>
+
+    <div class="mint-row">
+      <span class="mint-row-k">universe</span>
+      <span class="has-tip" tabindex="0" data-tip="{{ card.universe_tooltip }}">{{ card.universe }}</span>
+    </div>
+
+    {% if card.context %}
+    <div class="mint-row">
+      <span class="mint-row-k">context</span>
+      {% for field in card.context %}
+      <label class="mint-dim">{{ field.name }}
+        <input type="{{ field.input_type }}" name="context.{{ field.name }}"
+               value="{{ field.value }}" form="submit-{{ i }}"
+               aria-label="{{ field.name }}" required
+               {% if card.status and card.status != 'declined' %}disabled{% endif %}>
+      </label>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if card.qualifiers %}
+    <div class="mint-quals">
+      <span class="mint-row-k">qualifiers</span>
+      <ul>{% for qualifier in card.qualifiers %}<li>{{ qualifier }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if card.blocked %}
+  <div class="mint-alert">⚠ <span>{{ card.blocked }}</span></div>
+  {% elif card.restates and card.status != 'approved' %}
+  <div class="mint-alert">⚠ <span><b>This replaces a claim of the same context.</b>
+    Writing it supersedes the one below.</span></div>
+  {% endif %}
+
+  {% if card.standing %}
+  <div class="mint-related">
+    <span class="mint-row-k">already claimed for this metric</span>
+    <table class="mint-rel-table">
+      <thead><tr><th>Value</th><th>Differs by</th><th>Said</th><th>From the run</th></tr></thead>
+      <tbody>
+        {% for other in card.standing %}
+        <tr class="{{ 'is-clash' if not other.differs_by }}">
+          <td class="n"><a href="{{ other.href }}">{{ other.value }}</a></td>
+          <td>{% if other.differs_by %}
+            {% for difference in other.differs_by %}
+            <span class="mint-chip">{{ difference }}</span>
+            {% endfor %}
+          {% else %}<span class="mint-same">nothing — the same claim</span>{% endif %}</td>
+          <td class="mint-said">{{ other.text }}</td>
+          <td><a href="{{ other.run_href }}">open</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if card.status == 'submitted' %}
+  <div class="mint-act">
+    <span class="muted">Written, and waiting on review. It stands behind nothing yet.</span>
+  </div>
+  {% elif card.status == 'declined' and not card.blocked %}
+  <div class="mint-act">
+    <span class="muted">Skipped for this run.</span>
+    <button class="btn primary" type="submit" form="submit-{{ i }}">Claim it after all</button>
+  </div>
+  {% elif not card.status and not card.blocked %}
+  <div class="mint-act">
+    <button class="btn primary" type="submit" form="submit-{{ i }}">Submit for review</button>
+    <button class="btn" type="submit" form="skip-{{ i }}">Skip</button>
+  </div>
+  {% endif %}
+</article>
+{% else %}
+<div class="empty-state">
+  <h2>Nothing here claims anything</h2>
+  <p class="muted">An output becomes a claim when its stage rule names one of this project's
+    claim shapes. None of this run's does, so there is nothing to stand behind — the numbers
+    are on the run page, with their lineage.</p>
+</div>
+{% endfor %}
+{% endblock %}

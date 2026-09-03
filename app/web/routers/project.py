@@ -136,7 +136,7 @@ def project_documentation(request: Request, project_name: str, tab: str = "metho
             "methodology": document,
             "terms": stored,
             "shapes": claim_shapes.load_claim_shapes(project_name),
-            "coverage": DATA_UNIVERSE_TOOLTIP,
+            "universe": DATA_UNIVERSE_TOOLTIP,
             "unreadable": "; ".join(unreadable),
             "kind_class": SCHEMA_KIND_CLASS,
             "kind_glyph": SCHEMA_KIND_GLYPH,

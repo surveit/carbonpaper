@@ -11,6 +11,7 @@ from app.core.run_status import RunStatus, StageStatus
 from app.models.records.workflow_version import WorkflowVersion
 from app.services import methodology, run as run_service, versioning
 from app.services.errors import WorkflowLoadError
+from app.web.claims_view import ClaimCounts, build_publish_view
 from app.services.workspace import resolve_run_dir
 from app.web.run_index import RunIndexRow, RunInputCell, StageRowCap, build_run_index_rows
 from app.web.run_published import RunPublished, read_published_outputs
@@ -61,6 +62,8 @@ class Deliverable(BaseModel):
     heading: str
     run_id: str | None = None
     run_href: str = ""
+    publish_href: str = ""
+    counts: ClaimCounts | None = None
     started_at: str = ""
     status: str = ""
     published: RunPublished | None = None
@@ -127,6 +130,8 @@ def build_deliverable(
         heading="Latest run",
         run_id=row.run_id,
         run_href=f"/project/{project_id}/runs/{row.run_id}",
+        publish_href=f"/project/{project_id}/runs/{row.run_id}/publish",
+        counts=build_publish_view(project_id, row).counts,
         started_at=row.started_at or "",
         status=row.status,
         published=published,

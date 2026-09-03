@@ -1,6 +1,8 @@
 """What a project claims, authored before any stage names one."""
 from __future__ import annotations
 
+from string import Template
+
 from app.core.ids import ID
 from app.models.claims import ClaimShapeInput
 from app.models.records.claims import ClaimShape
@@ -29,9 +31,11 @@ def write_claim_shapes(project_id: ID, authored: list[ClaimShapeInput]) -> list[
         ClaimShape(
             project_id=project_id,
             label=entry.label,
-            requires=entry.requires,
+            universe=entry.universe,
             importance=entry.importance,
             qualifiers=entry.qualifiers,
+            context=entry.context,
+            template=entry.template,
         ).save()
     return load_claim_shapes(project_id)
 
@@ -39,7 +43,34 @@ def write_claim_shapes(project_id: ID, authored: list[ClaimShapeInput]) -> list[
 def find_claim_shape_refusals(
     authored: list[ClaimShapeInput], held: list[ClaimShape]
 ) -> list[str]:
-    return [*_find_repeated_labels(authored), *_find_labels_taken(authored, held)]
+    return [
+        *_find_repeated_labels(authored),
+        *_find_labels_taken(authored, held),
+        *_find_unfillable_templates(authored),
+    ]
+
+
+def _find_unfillable_templates(authored: list[ClaimShapeInput]) -> list[str]:
+    """A claim is offered as a sentence, so every placeholder must have something to fill it."""
+    return [
+        f"{entry.label!r}: the template names {sorted(unfillable)}, which no claim of this "
+        f"shape can fill — it has ${{value}} and its context columns"
+        for entry in authored
+        for unfillable in [_find_names_used(entry.template) - _fillable(entry)]
+        if unfillable
+    ]
+
+
+def _find_names_used(template: str) -> set[str]:
+    return {
+        match.group("named") or match.group("braced")
+        for match in Template.pattern.finditer(template)
+        if match.group("named") or match.group("braced")
+    }
+
+
+def _fillable(entry: ClaimShapeInput) -> set[str]:
+    return {"value", *(column.name for column in entry.context)}
 
 
 def _find_repeated_labels(authored: list[ClaimShapeInput]) -> list[str]:

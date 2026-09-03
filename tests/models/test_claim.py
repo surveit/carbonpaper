@@ -23,7 +23,7 @@ def _shape() -> ClaimShape:
     return ClaimShape(
         project_id=_PROJECT,
         label="Total paid to outside lobbying firms to lobby on Venezuela",
-        requires=DataUniverseRequirement.closed,
+        universe=DataUniverseRequirement.closed,
         importance=ClaimImportance.primary,
     )
 
@@ -69,7 +69,7 @@ def test_a_claim_can_cite_a_published_table():
     shape = ClaimShape(
         project_id="hate_on_activist_pages",
         label="Comments meeting the DSA complaint bar",
-        requires=DataUniverseRequirement.open,
+        universe=DataUniverseRequirement.open,
         importance=ClaimImportance.primary,
     )
     shape.save()
