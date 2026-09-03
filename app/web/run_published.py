@@ -51,7 +51,7 @@ class PublishedTable(BaseModel):
     row_count: int
     rows_url: str
     csv_url: str
-    # Absent for a secondary table, and where the frame is no longer on disk.
+    # Absent where the frame is no longer on disk.
     preview: TablePreview | None = None
 
 
@@ -128,11 +128,7 @@ def _build_table(
         row_count=rectangle.count_rows(),
         rows_url=links.stage_rows(citation.stage_id, rectangle=rectangle),
         csv_url=links.stage_csv(citation.stage_id, rectangle=rectangle),
-        preview=(
-            _read_preview(project_id, run_id, citation, run_dir, manifest)
-            if output.primary
-            else None
-        ),
+        preview=_read_preview(project_id, run_id, citation, run_dir, manifest),
     )
 
 

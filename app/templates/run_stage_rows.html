@@ -43,9 +43,15 @@
     <span class="alert">Showing {{ rows | length | figure }} of {{ rows_total | figure }} rows — the ones that fed the row you came from.</span>
     {% endif %}
     {% if rectangle %}
+    {# The offer to leave the rectangle is only an offer where there is something
+       outside it; a published table that IS the whole output says so instead. #}
+    {% if rectangle_is_whole_output %}
+    <span class="alert">Showing all {{ rows_total | figure }} row{% if rows_total != 1 %}s{% endif %} and all {{ rectangle.columns | length }} column{% if rectangle.columns | length != 1 %}s{% endif %} — this run published the whole output.</span>
+    {% else %}
     <span class="alert">Showing rows {{ rectangle.row_start | row_number }}–{{ rectangle.row_end }} and {{ rectangle.columns | length }} column{% if rectangle.columns | length != 1 %}s{% endif %} of {{ rows_total | figure }} rows — the rectangle this run published.
       <a href="{{ rows_url }}">Show the whole output instead</a></span>
-    <a class="btn primary" href="{{ links.stage_csv(stage_id, rectangle) }}">⬇ Download this CSV</a>
+    {% endif %}
+    <a class="btn primary" href="{{ links.stage_csv(stage_id, rectangle) }}">⬇ Download {{ 'full' if rectangle_is_whole_output else 'this' }} CSV</a>
     {% else %}
     <a class="btn primary" href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage_id }}/rows.csv">⬇ Download full CSV</a>
     {% endif %}

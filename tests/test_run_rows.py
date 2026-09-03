@@ -306,6 +306,20 @@ def test_a_rectangle_offers_the_whole_output_beside_it(examples_dir, client):
     assert "Show the whole output instead" not in _rows(client)
 
 
+def test_a_rectangle_holding_every_cell_says_so_and_offers_no_way_out(examples_dir, client):
+    _write_run(examples_dir, _df(3))
+    body = _rows(client, "?rows=0:3")
+    assert "this run published the whole output" in body
+    assert "Show the whole output instead" not in body
+
+
+def test_a_rectangle_over_every_row_but_not_every_column_still_offers_the_rest(
+    examples_dir, client
+):
+    _write_run(examples_dir, _df(3))
+    assert "Show the whole output instead" in _rows(client, "?rows=0:3&columns=name")
+
+
 def test_naming_rows_two_ways_at_once_is_refused(examples_dir, client):
     _write_run(examples_dir, _df(10))
     r = client.get(f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows?ordinals=1,2&rows=0:2")
