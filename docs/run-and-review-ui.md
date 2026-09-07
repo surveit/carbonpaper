@@ -126,7 +126,7 @@ after injection — without that, the panel's JS (the tab strip, the run log) is
 (`_queue_card.html`, the same partial the page loops over) and 404s on a
 fingerprint this queue does not carry.
 
-A `human_review_queue` can follow **any** stage type, so the page assumes
+A `review_queue` can follow **any** stage type, so the page assumes
 nothing about the upstream stage or its column names. The queued row itself is
 the material to review: the columns the queue declares as `reviewed_columns`
 sources each render as their own row in the review section, one field decided
@@ -218,7 +218,7 @@ excluded; the review service refuses it from a reviewer.) A decision records
 that verdict, a value for each reviewed column, and optionally a note — one
 note for the row, from the single box under the fields, never one per field. It
 never overwrites the column it reviewed, because a review stage may only ADD
-columns (`app.models.stages.human_review_queue._find_added_column_collisions`
+columns (`app.models.stages.review_queue._find_added_column_collisions`
 rejects a target that reuses an input column's name). Once a decision is
 recorded the card locks: it offers no per-field controls, and the primary
 **Submit** is replaced by a secondary **Change my review**, which returns

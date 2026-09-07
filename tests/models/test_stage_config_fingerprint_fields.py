@@ -10,7 +10,7 @@ from app.models.stages.stage_base import AbstractStage
 from app.models.stages.aggregate import AggregateConfig
 from app.models.stages.dedupe import DedupeConfig
 from app.models.stages.explode import ExplodeConfig
-from app.models.stages.human_review_queue import QueueConfig
+from app.models.stages.review_queue import QueueConfig
 from app.models.stages.input_data import Connector
 from app.models.stages.join import JoinConfig
 from app.models.stages.llm_transform import LLMConfig

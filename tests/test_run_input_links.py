@@ -33,7 +33,7 @@ def _record_run(project_id, sha256, run_id="20260812T120000", path="/anywhere/po
     RunManifest(
         id=RunManifest.compose_id(project_id, run_id, PRODUCTION_RUNS),
         run_id=run_id, started_at="2026-08-12T12:00:00", project=project_id,
-        workflow_version=None, human_review_queue_stats={},
+        workflow_version=None, review_queue_stats={},
         status=RunStatus.OK, stage_records=[],
         input_bindings={"load": {"files": [
             {"path": path, "sha256": sha256 or "", "bytes": len(CSV), "file_id": file_id}]}},

@@ -253,7 +253,7 @@ def test_a_starlark_row_function_is_admitted_to_the_row_aligned_diff(tmp_path: P
 
 def test_a_review_queue_shows_the_human_answer_beside_what_it_answered(tmp_path: Path) -> None:
     stage = parse_stage({
-        "id": "gate", "description": "Gate", "type": "human_review_queue",
+        "id": "gate", "description": "Gate", "type": "review_queue",
         "inputs": [{"id": LOAD_ID}],
         "queue": {
             "reviewed_columns": {"name": "reviewed_name"},

@@ -156,7 +156,7 @@ def test_every_type_that_ignores_cache_says_why(stage_type):
 
 @pytest.mark.parametrize("stage_type", [
     "llm_transform", "python_row_function",
-    "human_review_queue", "filter_rows", "starlark_row_function", "starlark_filter_rows",
+    "review_queue", "filter_rows", "starlark_row_function", "starlark_filter_rows",
 ])
 def test_the_types_that_spend_per_row_honour_cache(stage_type):
     assert find_cache_ignored_reason(StageType(stage_type)) is None

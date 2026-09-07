@@ -14,7 +14,7 @@
       "source": "workflow"
     }
   },
-  "human_review_queue_stats": {
+  "review_queue_stats": {
     "review": {
       "items_queued_total": 2,
       "items_passed_through": 0,
@@ -52,7 +52,7 @@
     },
     {
       "stage_id": "review",
-      "type": "human_review_queue",
+      "type": "review_queue",
       "started_at": "2026-07-24T16:42:39",
       "status": "awaiting_review",
       "input_validation_report": [

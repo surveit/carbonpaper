@@ -58,8 +58,8 @@ def test_llm_transform_traces_positionally(tmp_path):
     assert trace.end.reached_origin is True
 
 
-def test_human_review_queue_traces_positionally(tmp_path):
-    run_dir = _chain(tmp_path, "human_review_queue")
+def test_review_queue_traces_positionally(tmp_path):
+    run_dir = _chain(tmp_path, "review_queue")
     trace = trace_row(run_dir, "enrich", 1)
     assert [s.stage_id for s in trace.steps] == ["enrich", "seeds"]
     assert [s.row_ordinal for s in trace.steps] == [1, 1]         # same ordinal

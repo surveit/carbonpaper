@@ -525,7 +525,7 @@ def test_raise_if_run_failed_lists_halted_stages_as_readable_text():
     manifest = RunManifest(
         run_id="r", started_at="t", project="p", workflow_version=None,
         input_bindings={},
-        human_review_queue_stats={}, dropped_columns={}, status="awaiting_review",
+        review_queue_stats={}, dropped_columns={}, status="awaiting_review",
         stage_records=[], halted_at=["review_a", "review_b"],
     )
 
@@ -628,7 +628,7 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
 
 
 def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
-    """Hand-builds the post-halt manifest: a real halt through human_review_queue is
+    """Hand-builds the post-halt manifest: a real halt through review_queue is
     disproportionate."""
     tmp_path.mkdir(parents=True, exist_ok=True)
     stage = {"id": "load", "description": "Load items", "type": "input_data",
@@ -652,7 +652,7 @@ def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
             "load": {"path": str(bound_csv), "source": "run",
                      "sha256": "unused-in-this-test", "bytes": bound_csv.stat().st_size},
         },
-        "human_review_queue_stats": {},
+        "review_queue_stats": {},
         "stage_records": [{"stage_id": "load", "type": "input_data", "description": "Load items",
                     "status": "pending", "input_validation_report": [],
                     "output_validation_report": None,
@@ -680,7 +680,7 @@ def test_resume_of_a_test_run_keeps_the_read_only_cache_it_ran_under(tmp_path):
         "run_id": run_id, "started_at": run_id, "project": tmp_path.name,
         "workflow_version": version_id, "status": "cancelled",
         "parameters": {"is_test_run": True, "queue_auto_approve": True},
-        "human_review_queue_stats": {},
+        "review_queue_stats": {},
         "stage_records": [{"stage_id": "load", "type": "input_data",
                            "description": "Load items", "status": "pending",
                            "input_validation_report": [],

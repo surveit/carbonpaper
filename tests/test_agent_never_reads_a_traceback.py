@@ -20,7 +20,7 @@ _MANIFEST = {
     "started_at": "2026-08-18T09:51:16",
     "project": "hate_on_activist_pages",
     "workflow_version": "20260812T074851.540189",
-    "human_review_queue_stats": {},
+    "review_queue_stats": {},
     "status": "errors",
     "stage_records": [
         {

@@ -250,7 +250,7 @@ def review_tail() -> list[dict]:
     """A halting review stage and one aggregate after it, so a run leaves work pending."""
     return [
         {
-            "id": "review_totals", "type": "human_review_queue",
+            "id": "review_totals", "type": "review_queue",
             "description": "A human checks the total before anything downstream reads it.",
             "inputs": [{"id": "grant_totals"}],
             "signature": {"form": "extends", "reads": [

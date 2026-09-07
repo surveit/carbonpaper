@@ -79,7 +79,7 @@ def _stage_drafts(upload: file_store.ProjectFile) -> list[StageDraft]:
             "signature": {"form": "replaces", "produces": _SOURCE_COLUMNS},
         }),
         StageDraft.model_validate({
-            "id": "review", "description": "Review each row", "type": "human_review_queue",
+            "id": "review", "description": "Review each row", "type": "review_queue",
             "inputs": [{"id": "rows"}],
             "queue": {**queue_columns(), "reviewer_instructions": "Confirm each row."},
             "signature": {"form": "extends", "reads": reads_of("rows", _SOURCE_COLUMNS),

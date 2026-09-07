@@ -151,7 +151,7 @@ def test_run_eval_writes_a_per_row_result_table(project):
 # A queue stage as the eval target: grain-and-order preserving, so the pathway
 # through it is row-alignable and no longer vetoed before it runs.
 _QUEUE_REVIEW = {
-    "id": "review", "type": "human_review_queue", "description": "Review scores",
+    "id": "review", "type": "review_queue", "description": "Review scores",
     "inputs": [{"id": "load"}],
     "queue": dict(QUEUE_COLUMNS),
     "signature": {

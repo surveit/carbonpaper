@@ -23,7 +23,7 @@ _MAY_IMPORT_PANDAS: Mapping[str, str] = {
     "app/runtime/stages/python_functions.py": "hands the frame to an authored transform(df)",
     "app/runtime/stages/aggregate.py": "group-by and the aggregate formulas",
     "app/runtime/stages/join.py": "pd.merge, including its m:1 validation",
-    "app/runtime/stages/human_review_queue.py": "queue stats and the pending-review scan",
+    "app/runtime/stages/review_queue.py": "queue stats and the pending-review scan",
     "app/runtime/stages/input_data.py": "reads csv/xlsx/json-lines, which carry no types",
     # ── files that hold characters rather than types ─────────────────────────
     "app/core/source_files.py": "profiles an uploaded csv/xlsx before a schema exists",

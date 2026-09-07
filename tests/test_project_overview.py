@@ -25,7 +25,7 @@ def _record_run(*, status: RunStatus = RunStatus.OK,
         run_id=_RUN, started_at="2026-08-25T13:26:44", project=_PROJECT,
         workflow_version="20260825T132440.925374",
         parameters=parameters or RunParameters(),
-        input_bindings={}, human_review_queue_stats={}, dropped_columns={},
+        input_bindings={}, review_queue_stats={}, dropped_columns={},
         status=status, stage_records=[],
     ).save()
 

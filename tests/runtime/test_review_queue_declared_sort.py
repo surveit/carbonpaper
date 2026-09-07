@@ -16,7 +16,7 @@ from conftest import (
     require_awaiting_review,
 )
 
-PROJECT = "hrq-sort-tests"
+PROJECT = "review-queue-sort-tests"
 
 _COLUMNS = [
     {"name": "id", "type": "str", "nullable": False},
@@ -30,7 +30,7 @@ def _stage(sort: list[dict[str, str]] | None = None, columns=_COLUMNS) -> Stage:
     if sort is not None:
         queue["sort"] = sort
     return parse_stage({
-        "id": "review", "description": "Review", "type": "human_review_queue",
+        "id": "review", "description": "Review", "type": "review_queue",
         "inputs": [{"id": "scored"}],
         "signature": {"form": "extends", "reads": reads_of("scored", columns),
                       "adds": queue_added_columns()},
@@ -44,7 +44,7 @@ def _halt(stage: Stage, frame: pd.DataFrame, tmp_path, run_id: str):
         identity=RunIdentity(project=PROJECT, run_id=run_id),
         stage_cache=StageCache(),
     )
-    output = HANDLERS[StageType.human_review_queue].execute(
+    output = HANDLERS[StageType.review_queue].execute(
         place_stage(stage), as_inputs({"scored": frame}), ctx
     )
     queue_path = require_awaiting_review(output).queue_path
@@ -148,5 +148,5 @@ def test_a_sort_column_missing_from_the_frame_raises_and_names_it(tmp_path):
     with pytest.raises(ValueError) as excinfo:
         _halt(stage, _scored(["a", "b"], [1, 2]), tmp_path, "absent")
     message = str(excinfo.value)
-    assert "human_review_queue 'review'" in message
+    assert "review_queue 'review'" in message
     assert "queue.sort" in message and "filed_on" in message

@@ -31,7 +31,7 @@ bite most often.
   id no stored version carries 404s rather than opening on the latest). Registered
   ahead of `/runs/<id>`, which would otherwise read `new` as a run id. The fold is closed on load and `<details>` submits its content
   either way, so the default run reuses cached rows without the reader deciding.
-- `/project/<m>/runs/<id>/queue/<stage>` — the human-review queue UI (+ `/decide`, `/resume`).
+- `/project/<m>/runs/<id>/queue/<stage>` — the review queue UI (+ `/decide`, `/resume`).
 
 ## Zero states (`.empty-state`, styled in `app/static/split-view.css`)
 A list, panel or section with nothing in it reads as a heading naming what is absent,
@@ -253,7 +253,7 @@ folded transform, the input rows with per-row checkboxes, the controls, then the
 column. Picking and reading the answer used to straddle two tabs of the run panel, which moved
 the reader off the rows they had just picked. The panel now links it from **Transform** and
 holds no picker. Running it posts `…/stage/<sid>/preview` (`runtime/preview.py`), which runs the
-handler **in memory** and persists nothing; refused for `report`/`human_review_queue`/
+handler **in memory** and persists nothing; refused for `report`/`review_queue`/
 `input_data` (side effects), and the page 404s for those types and for an unreadable version.
 
 Every stage definition a run page shows or executes (panel, lineage panel, simulator)

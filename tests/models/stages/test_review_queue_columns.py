@@ -37,7 +37,7 @@ def _stage_spec(*, queue=None, input_columns=None, output_columns=None):
     outputs = output_columns or _OUTPUT_COLUMNS
     flowing = {c["name"] for c in edge}
     return {
-        "id": "wc", "type": "human_review_queue", "description": "wc",
+        "id": "wc", "type": "review_queue", "description": "wc",
         "inputs": [{"id": "src"}],
         "signature": {"form": "extends",
                       "reads": reads_of("src", edge),

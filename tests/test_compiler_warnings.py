@@ -14,7 +14,7 @@ _SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}]}
 # the anchored family extends it.
 _REPLACES_TYPES = {"python_frame_function", "aggregate", "union", "input_data", "report"}
 # The two the model refuses an empty read set on: each is handed only what it reads.
-_READS_THE_ROW_TYPES = {"filter_rows", "human_review_queue"}
+_READS_THE_ROW_TYPES = {"filter_rows", "review_queue"}
 
 
 def _signature_for(type_, schema):
@@ -66,7 +66,7 @@ def _llm_stage(stage_id="ask", **kw):
 
 def _queue_stage(stage_id="rev", **kw):
     return m.parse_stage({
-        "id": stage_id, "description": "A human checks each row", "type": "human_review_queue",
+        "id": stage_id, "description": "A human checks each row", "type": "review_queue",
         "inputs": [{"id": "up"}],
         "signature": {
             "form": "extends",

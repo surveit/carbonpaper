@@ -418,7 +418,7 @@ def test_review_queue_add_outside_the_review_columns_rejected():
     spec = {
         "id": "check",
         "description": "Check",
-        "type": "human_review_queue",
+        "type": "review_queue",
         "inputs": [{"id": "bills"}],
         "queue": {
             "reviewed_columns": {"price": "reviewed_price"},

@@ -28,13 +28,7 @@ from app.web.column_order import (
 from app.web.diff_state import CellDiffState, ColumnDiffState
 from app.web.loading import PREVIEW_ROWS_SHOWN, render_frame_as_text
 
-# The one grain-and-order-preserving type with nothing for a positional diff to
-# say: input_data originates its rows, so there is no input frame to compare
-# against. Every other one has an input and gets diffed — including
-# human_review_queue, whose reviewed value lands in a column the stage ADDS
-# (QueueConfig.reviewed_columns maps source -> added column), leaving the source
-# column carried beside it. That reads as `+4 cols · 0 cells changed`, with the
-# human's answer next to what it was answering.
+# input_data originates its rows, so it has no input frame to diff against.
 _NO_ALIGNED_DIFF: frozenset[StageType] = frozenset({StageType.input_data})
 
 # The 1:1-by-position stage types the aligned diff covers: their runtime contract

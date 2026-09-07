@@ -503,7 +503,7 @@ def test_every_row_mapped_stage_type_runs_under_the_interceptor():
     for stage_type in (
         StageType.python_row_function,
         StageType.llm_transform,
-        StageType.human_review_queue,
+        StageType.review_queue,
     ):
         handler = HANDLERS[stage_type]
         assert isinstance(handler, RowMapTransformHandler)

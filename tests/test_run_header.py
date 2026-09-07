@@ -32,7 +32,7 @@ def _manifest(status: str, stages: list[tuple[str, str]], **extra: object) -> di
     return {
         "run_id": RUN, "started_at": "2026-07-30T12:04:56", "project": PROJECT,
         "workflow_version": None, "status": status,
-        "human_review_queue_stats": {},
+        "review_queue_stats": {},
         "stage_records": [{"stage_id": sid, "status": st} for sid, st in stages],
         **extra,
     }
@@ -60,7 +60,7 @@ def test_a_halted_run_offers_the_review_queue_with_its_pending_count():
         "awaiting_review",
         [("load", "ok"), ("review", "awaiting_review"), ("tail", "pending")],
         halted_at=["review"],
-        human_review_queue_stats={"review": {"items_pending": 40}},
+        review_queue_stats={"review": {"items_pending": 40}},
     )
     cta = _cta(manifest)
 

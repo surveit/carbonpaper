@@ -56,7 +56,7 @@ def _write_run(project_dir: Path) -> None:
     pd.DataFrame({"amount": _AMOUNTS}).to_parquet(outputs / "load.parquet", index=False)
     store_manifest(project_dir, _RUN_ID, {
         "run_id": _RUN_ID, "started_at": _RUN_ID, "project": project_dir.name,
-        "workflow_version": _RUN_ID, "human_review_queue_stats": {}, "status": "ok",
+        "workflow_version": _RUN_ID, "review_queue_stats": {}, "status": "ok",
         "stage_records": [{
             "stage_id": "load", "type": "input_data", "status": "ok",
             "output_row_count": len(_AMOUNTS), "elapsed_ms": 1,

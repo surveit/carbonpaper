@@ -167,7 +167,7 @@ expects), `signature`, and exactly one config block named by its type. An input'
 declared schema must be a subset of what that upstream stage's signature promises.
 
 Results are recorded and replayed across runs only for `llm_transform` and
-`human_review_queue`; set `cache: true` on another stage when its code is expensive
+`review_queue`; set `cache: true` on another stage when its code is expensive
 enough that recomputing every row costs more than storing it."""
 
 _NULLS = """\

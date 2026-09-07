@@ -43,7 +43,7 @@ def _queue_stage(
     workflow = parse_workflow([
         *(source_stage(upstream, input_columns) for upstream in upstream_ids),
         {
-            "id": "review", "description": "Review", "type": "human_review_queue",
+            "id": "review", "description": "Review", "type": "review_queue",
             "inputs": inputs,
             "signature": signature,
             "queue": {
@@ -412,7 +412,7 @@ def test_no_item_is_found_for_a_fingerprint_the_queue_does_not_carry():
 
 
 def test_every_recorded_verdict_has_a_past_tense_label():
-    from app.models.stages.human_review_queue import ReviewVerdict
+    from app.models.stages.review_queue import ReviewVerdict
     from app.web.queue_view import describe_verdict
 
     # A verdict the page cannot name must raise, not render blank.

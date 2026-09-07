@@ -166,7 +166,7 @@ def test_a_stored_queue_stage_written_before_queue_sort_still_loads(tmp_path):
         {"name": "score", "type": "int", "nullable": True},
     ]
     stage = {
-        "id": "review", "description": "Review", "type": "human_review_queue",
+        "id": "review", "description": "Review", "type": "review_queue",
         "inputs": [{"id": "load"}],
         "signature": {"form": "extends", "adds": reviewed,
                       "reads": [{"input": "load", "columns": scored}]},

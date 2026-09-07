@@ -7,14 +7,14 @@ import pytest
 import app.runtime.runner as runner
 from app.models import parse_stage, Stage
 from app.models.stage import StageType
-from app.models.stages.human_review_queue import ReviewVerdict
+from app.models.stages.review_queue import ReviewVerdict
 from app.models.records.queue_fingerprints import QueueFingerprints
 from app.runtime.cancellation import request_cancel
 from app.runtime.context import RunIdentity
 from app.runtime.errors import RunCancelled
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stage_output import StageOutput
-from app.runtime.stages import HANDLERS, human_review_queue
+from app.runtime.stages import HANDLERS, review_queue
 from app.models.records.review_decision import ReviewDecision
 from app.services import review
 from app.core.frames import list_table_rows, read_frame_table
@@ -32,19 +32,19 @@ from conftest import (
 from stage_seed import add_stage
 from run_seed import read_manifest
 
-PROJECT = "hrq-cache-tests"
+PROJECT = "review-queue-cache-tests"
 
 
 def _run_queue_stage(stage: Stage, inputs: dict[str, pd.DataFrame], ctx) -> StageOutput:
     _hand_decisions_over(stage, ctx)
-    out = HANDLERS[StageType.human_review_queue].execute(place_stage(stage), as_inputs(inputs), ctx)
+    out = HANDLERS[StageType.review_queue].execute(place_stage(stage), as_inputs(inputs), ctx)
     assert out is not None  # a row-mapped stage always produces a frame
     return out
 
 
 def _hand_decisions_over(stage: Stage, ctx) -> None:
     """What app.services.run does before a run executes: resolve the store onto the run's disk."""
-    from app.models.stages.human_review_queue import resolve_queue_config
+    from app.models.stages.review_queue import resolve_queue_config
     from app.runtime.review_decisions import write_review_decisions
     from app.services.review import resolve_stage_review_decisions
 
@@ -81,7 +81,7 @@ def _stage(
     if flt is not None:
         queue["filter"] = flt
     return parse_stage({
-        "id": "review", "description": "Review", "type": "human_review_queue",
+        "id": "review", "description": "Review", "type": "review_queue",
         "inputs": [{"id": "scored"}],
         "signature": {"form": "extends", "reads": reads_of("scored", input_columns),
                       "adds": _REVIEW_COLUMNS},
@@ -305,7 +305,7 @@ def test_bust_cache_leaves_passed_through_rows_alone(tmp_path):
 
     output = _run_queue_stage(stage, {"scored": src.copy()}, _bust_ctx(tmp_path, run_id="run2"))
     assert output.awaiting_review is None
-    assert output.contribution.human_review_queue_stats == {
+    assert output.contribution.review_queue_stats == {
         "items_queued_total": 2, "items_passed_through": 2,
         "items_pending": 0, "items_decided": 2,
     }
@@ -349,7 +349,7 @@ def test_legacy_decisions_parquet_never_read(tmp_path):
 # ── 7. A subset/preview context (no project scope) fails loudly ─────────────
 
 
-def test_hrq_requires_project_grant(tmp_path):
+def test_review_queue_requires_project_grant(tmp_path):
     stage = _stage()
     ctx = make_run_context(run_dir=tmp_path)  # identity=None, stage_cache=None
     with pytest.raises(ValueError, match="project-scoped"):
@@ -442,7 +442,7 @@ def test_every_output_row_carries_a_verdict_covering_every_outcome(tmp_path):
 
 def test_every_decided_row_is_emitted_with_only_the_declared_columns(tmp_path):
     stage = parse_stage({
-        "id": "review", "description": "Review", "type": "human_review_queue",
+        "id": "review", "description": "Review", "type": "review_queue",
         "inputs": [{"id": "scored"}],
         "signature": {"form": "extends", "reads": reads_of("scored", _SCORED_COLUMNS),
                       "adds": _REVIEW_COLUMNS},
@@ -485,7 +485,7 @@ def test_queue_stats_count_every_row_the_reviewer_answered(tmp_path):
     # On the halting path the stage's contribution rides out on the halt itself
     # — the raise is that path's only return into the manifest.
     output = _run_queue_stage(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
-    assert output.contribution.human_review_queue_stats == {
+    assert output.contribution.review_queue_stats == {
         "items_queued_total": 2, "items_passed_through": 2,
         "items_pending": 2, "items_decided": 0,
     }
@@ -501,7 +501,7 @@ def test_queue_stats_count_every_row_the_reviewer_answered(tmp_path):
 
     out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
     assert list(rows_of(out)["id"]) == ["r0", "r1", "r2", "r3"]
-    assert contribution_of(out).human_review_queue_stats == {
+    assert contribution_of(out).review_queue_stats == {
         "items_queued_total": 2, "items_passed_through": 2,
         "items_pending": 0, "items_decided": 2,
     }
@@ -517,7 +517,7 @@ def test_the_stage_fetches_no_decision_mid_run(tmp_path, monkeypatch):
     monkeypatch.setattr(ReviewDecision, "find",
                         classmethod(lambda cls, **k: reached.append("review_decision") or []))
 
-    out = HANDLERS[StageType.human_review_queue].execute(
+    out = HANDLERS[StageType.review_queue].execute(
         place_stage(stage), as_inputs({"scored": _src(3)}), ctx)
 
     require_awaiting_review(out)
@@ -534,17 +534,17 @@ def test_no_row_re_defers_when_every_row_is_already_decided(tmp_path, monkeypatc
     _approve_every_row(snapshot, fingerprints)
 
     deferred: list[int] = []
-    defer_row = human_review_queue._defer_row
+    defer_row = review_queue._defer_row
 
     def counting_defer(row, index):
         deferred.append(index)
         return defer_row(row, index)
 
-    monkeypatch.setattr(human_review_queue, "_defer_row", counting_defer)
+    monkeypatch.setattr(review_queue, "_defer_row", counting_defer)
     out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
 
     assert deferred == []
-    assert contribution_of(out).human_review_queue_stats == {
+    assert contribution_of(out).review_queue_stats == {
         "items_queued_total": 2, "items_passed_through": 2,
         "items_pending": 0, "items_decided": 2,
     }
@@ -564,7 +564,7 @@ def test_a_passed_through_row_round_trips_through_the_cache(tmp_path):
     # the cache payload is JSON, so pandas' NA comes back as None.
     for column in ("reviewer_id", "reviewed_at", "review_notes"):
         assert rows_of(first)[column].isna().all() and rows_of(second)[column].isna().all()
-    assert contribution_of(second).human_review_queue_stats == {
+    assert contribution_of(second).review_queue_stats == {
         "items_queued_total": 0, "items_passed_through": 4,
         "items_pending": 0, "items_decided": 0,
     }
@@ -626,7 +626,7 @@ def test_cancelled_execution_reports_no_queue_counts(tmp_path, monkeypatch):
     """A manifest reading 0 queued for a stage that queued 2 is a wrong number, not a missing one."""
     reported: list[object] = []
     monkeypatch.setattr(
-        human_review_queue._QueueRowMapper,
+        review_queue._QueueRowMapper,
         "finish_mapped_rows",
         lambda self, stage, df, ctx, contribution: reported.append(contribution),
     )
@@ -659,7 +659,7 @@ def _load_stage(root):
 
 
 def _review_stage_full():
-    return {"id": "review", "description": "Review", "type": "human_review_queue",
+    return {"id": "review", "description": "Review", "type": "review_queue",
             "inputs": [{"id": "load"}],
             "signature": {"form": "extends",
                           "reads": reads_of("load", [

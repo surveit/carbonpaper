@@ -18,7 +18,7 @@ def test_bad_filter_raises_instead_of_skipping_review(tmp_path):
         {"name": "nonexistent", "type": "bool", "nullable": True},
     ]
     stage = parse_stage({
-        "id": "q", "type": "human_review_queue", "description": "q",
+        "id": "q", "type": "review_queue", "description": "q",
         # The edge DECLARES `nonexistent` — otherwise the filter's column
         # reference would be rejected when the stage is built, and this test is
         # about the frame that actually arrives not having the column.
@@ -37,7 +37,7 @@ def test_bad_filter_raises_instead_of_skipping_review(tmp_path):
         stage_cache=StageCacheEntry.read_write(),
     )
     with pytest.raises(ValueError, match="filter could not be evaluated"):
-        HANDLERS[StageType.human_review_queue].execute(place_stage(stage), as_inputs(inputs), ctx)
+        HANDLERS[StageType.review_queue].execute(place_stage(stage), as_inputs(inputs), ctx)
 
 
 def test_a_cell_the_filter_cannot_answer_names_the_stage_and_the_filter(tmp_path):
@@ -46,7 +46,7 @@ def test_a_cell_the_filter_cannot_answer_names_the_stage_and_the_filter(tmp_path
         {"name": "score", "type": "int", "nullable": True},
     ]
     stage = parse_stage({
-        "id": "q", "type": "human_review_queue", "description": "q",
+        "id": "q", "type": "review_queue", "description": "q",
         "inputs": [{"id": "a"}],
         "signature": {"form": "extends", "adds": queue_added_columns(),
                       "reads": reads_of("a", columns)},
@@ -61,7 +61,7 @@ def test_a_cell_the_filter_cannot_answer_names_the_stage_and_the_filter(tmp_path
         stage_cache=StageCacheEntry.read_write(),
     )
     with pytest.raises(ValueError) as excinfo:
-        HANDLERS[StageType.human_review_queue].execute(place_stage(stage), as_inputs(inputs), ctx)
+        HANDLERS[StageType.review_queue].execute(place_stage(stage), as_inputs(inputs), ctx)
     message = str(excinfo.value)
-    assert "human_review_queue 'q'" in message
+    assert "review_queue 'q'" in message
     assert "score > 1" in message

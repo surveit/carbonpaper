@@ -14,7 +14,7 @@
       "source": "workflow"
     }
   },
-  "human_review_queue_stats": {},
+  "review_queue_stats": {},
   "dropped_columns": {},
   "status": "ok",
   "stage_records": [

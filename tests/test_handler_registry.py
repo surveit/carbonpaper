@@ -15,9 +15,9 @@ from app.models.stage import (
 from app.runtime.stages import HANDLERS, RowMapTransformHandler, validate_registry_matches_model
 
 
-def test_human_review_queue_maps_one_row_at_a_time_so_its_shared_counters_stay_correct():
+def test_review_queue_maps_one_row_at_a_time_so_its_shared_counters_stay_correct():
     """Its mapper's `+=` on one shared QueueStats dict is non-atomic: >1 silently under-counts."""
-    handler = HANDLERS[StageType.human_review_queue]
+    handler = HANDLERS[StageType.review_queue]
     assert isinstance(handler, RowMapTransformHandler)
     assert handler.parallelism == 1
 

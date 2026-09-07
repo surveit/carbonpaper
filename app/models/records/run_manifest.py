@@ -56,7 +56,7 @@ class RunManifest(PersistedModel):
     # A RESULT, not a parameter: what the run found at prepare time.
     input_bindings: dict[str, dict[str, Any]] = {}
     # Required, no default: it would let a pre-rename manifest parse silently, hiding queued items.
-    human_review_queue_stats: dict[str, QueueStats]
+    review_queue_stats: dict[str, QueueStats]
     dropped_columns: dict[str, list[str]] = {}
     status: RunStatus
     stage_records: list[StageRecord]
@@ -98,8 +98,8 @@ class RunManifest(PersistedModel):
         # Marked set so `exclude_unset` still emits it on a legacy manifest that lacked the key.
         self.__pydantic_fields_set__.add("dropped_columns")
 
-    def record_human_review_queue_stats(self, stage_id: str, stats: QueueStats) -> None:
-        self.human_review_queue_stats[stage_id] = stats
+    def record_review_queue_stats(self, stage_id: str, stats: QueueStats) -> None:
+        self.review_queue_stats[stage_id] = stats
 
     def clear_halt(self) -> None:
         self.halted_at = None

@@ -390,7 +390,7 @@ from run_workflow on exactly five axes:
    non-input stage runs.
 3. EXECUTION: synchronous — this returns when the run is done (run_workflow
    returns a run_id immediately and executes on a background thread).
-4. REVIEW QUEUE: a human_review_queue stage auto-approves every row in
+4. REVIEW QUEUE: a review_queue stage auto-approves every row in
    memory (run_workflow halts there and waits for a human).
 5. STAGE CACHE: read-only — it may replay a workflow run's cached results
    but records none of its own, so it cannot affect a later run.

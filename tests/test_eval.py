@@ -76,9 +76,9 @@ def test_input_data_is_grain_and_order_preserving(tmp_path):
     assert m.parse_stage(_file_input("load", tmp_path)).is_grain_and_order_preserving is True
 
 
-def test_human_review_queue_is_grain_and_order_preserving():
+def test_review_queue_is_grain_and_order_preserving():
     # The queue emits every row whatever the verdict, so it never drops the rejected ones.
-    s = m.parse_stage(S(id="rev", type="human_review_queue",
+    s = m.parse_stage(S(id="rev", type="review_queue",
                         inputs=[{"id": "a"}],
                         queue=queue_columns(), signature={
                             "form": "extends",

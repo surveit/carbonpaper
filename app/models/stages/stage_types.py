@@ -10,7 +10,7 @@ from app.models.stages.code import STAGE_TYPE_SPECS as _CODE
 from app.models.stages.dedupe import STAGE_TYPE_SPECS as _DEDUPE
 from app.models.stages.explode import STAGE_TYPE_SPECS as _EXPLODE
 from app.models.stages.filter_rows import STAGE_TYPE_SPECS as _FILTER_ROWS
-from app.models.stages.human_review_queue import STAGE_TYPE_SPECS as _HUMAN_REVIEW_QUEUE
+from app.models.stages.review_queue import STAGE_TYPE_SPECS as _REVIEW_QUEUE
 from app.models.stages.input_data import STAGE_TYPE_SPECS as _INPUT_DATA
 from app.models.stages.join import STAGE_TYPE_SPECS as _JOIN
 from app.models.stages.llm_transform import STAGE_TYPE_SPECS as _LLM_TRANSFORM
@@ -29,7 +29,7 @@ STAGE_TYPES: dict[str, StageTypeSpec] = {
     **_CODE,
     **_JOIN,
     **_AGGREGATE,
-    **_HUMAN_REVIEW_QUEUE,
+    **_REVIEW_QUEUE,
     **_REPORT,
     **_UNION,
     **_FILTER_ROWS,

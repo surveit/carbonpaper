@@ -95,7 +95,7 @@ def test_minted_manifest_omits_the_run_level_optionals():
     for absent in ("finished_at", "halted_at", "cancelled_at", "resumed_at", "updated_at"):
         assert absent not in dumped
     # The always-present core fields ARE emitted even when empty.
-    for present in ("human_review_queue_stats", "dropped_columns", "parameters"):
+    for present in ("review_queue_stats", "dropped_columns", "parameters"):
         assert present in dumped
 
 
@@ -119,7 +119,7 @@ def test_recorded_tallies_survive_serialization_on_a_partial_manifest():
     """`exclude_unset` drops an in-place mutation; `record_dropped_columns` marks the field set."""
     manifest = RunManifest(
         run_id="r", started_at="t", project="p", workflow_version="v",
-        status=RunStatus.RUNNING, human_review_queue_stats={}, stage_records=[])
+        status=RunStatus.RUNNING, review_queue_stats={}, stage_records=[])
     # dropped_columns defaulted, NOT in the set-fields yet.
     assert "dropped_columns" not in manifest.to_dict()
     manifest.record_dropped_columns("classify", ["scratch"])
@@ -128,7 +128,7 @@ def test_recorded_tallies_survive_serialization_on_a_partial_manifest():
 
 def test_a_pre_rename_manifest_fails_loudly_instead_of_reporting_zero():
     legacy = json.loads(_golden("halted_run"))
-    legacy["queue_stats"] = legacy.pop("human_review_queue_stats")
+    legacy["queue_stats"] = legacy.pop("review_queue_stats")
     legacy["stages"] = [
         {("rows" if k == "output_row_count" else
           "input_validation" if k == "input_validation_report" else
@@ -142,5 +142,5 @@ def test_a_pre_rename_manifest_fails_loudly_instead_of_reporting_zero():
 
 def test_empty_contribution_is_the_default():
     empty = StageContribution()
-    assert empty.llm_usage is None and empty.human_review_queue_stats is None
+    assert empty.llm_usage is None and empty.review_queue_stats is None
     assert empty.row_errors == [] and empty.dropped_columns == []

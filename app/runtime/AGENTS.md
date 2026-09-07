@@ -12,7 +12,7 @@ a production run. An import-linter contract forbids `app/runtime/runner.py` from
 stage: validate declared inputs (`validation.py`), dispatch to the type's handler, validate
 the output, write `outputs/<stage>.parquet`, append to the run record.
 - **Duplicate input rows are allowed.** A stage decides nothing per row-instance: the
-  stage cache and a `human_review_queue` decision are both keyed on row CONTENT, so two
+  stage cache and a `review_queue` decision are both keyed on row CONTENT, so two
   identical rows share one cached result and one recorded decision — approving the content
   approves both. A reviewer is shown one card per row and cannot give the two different
   verdicts; the second posted verdict replaces the first.
@@ -33,9 +33,9 @@ the output, write `outputs/<stage>.parquet`, append to the run record.
 - **Recompute everything:** `--bust-cache` (a run-form checkbox too) sets
   `RunContext.bust_cache`: the run skips every stage-cache READ while still recording
   what it computes, so the cache ends re-pinned, not stale. Recorded in the manifest
-  and replayed on resume. A `human_review_queue` under it replays no decision — every
+  and replayed on resume. A `review_queue` under it replays no decision — every
   queueable row halts again.
-- **Halt + resume:** `human_review_queue` returns an `AwaitingReview` on its `StageOutput`;
+- **Halt + resume:** `review_queue` returns an `AwaitingReview` on its `StageOutput`;
   the run marks `awaiting_review` and persists the pending queue. `resume_run(...)` reloads completed
   outputs and continues once cached decisions exist for the pending rows.
 
@@ -49,7 +49,7 @@ is driven and a `refuse(...)` call is translated to `StepRefused`); `enrich`/`ex
 (left join of inputs[1] into inputs[0]; `enrich` verifies m:1 and fails the run on a
 non-unique reference, `expand` allows m:n fan-out); `aggregate`;
 `llm_transform` (row-mapped, bounded parallelism);
-`human_review_queue` (row fingerprint → cached decision or halt);
+`review_queue` (row fingerprint → cached decision or halt);
 `report` (a `function` module that writes artifacts).
 
 **A row-mapped stage sees only what its signature `reads`.**
@@ -68,9 +68,9 @@ decides only whether caching applies and whether a result may be recorded. A row
 `_error`/`_deferred` is never recorded and no internal column is ever part of a recorded row,
 so a hit reports no spend. `Stage.cache` decides whether a stage caches at all — no read,
 no write when it is false — and is outside the definition fingerprint. It defaults to true
-only on `llm_transform` and `human_review_queue`, the two types whose recompute spends a
+only on `llm_transform` and `review_queue`, the two types whose recompute spends a
 model call or a human's attention; every other type recomputes unless its author turns
-caching on. There is no per-registration row opt-out: `human_review_queue` runs under the same
+caching on. There is no per-registration row opt-out: `review_queue` runs under the same
 interceptor, which replays a human's recorded decision before its mapper is called, so that
 mapper only ever passes a row through or defers it.
 

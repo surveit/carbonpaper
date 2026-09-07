@@ -41,7 +41,7 @@ def _write_run(
         "project": PROJ,
         "workflow_version": RUN,
         "status": "ok",
-        "human_review_queue_stats": {},
+        "review_queue_stats": {},
         "stage_records": [
             {
                 "stage_id": STAGE,

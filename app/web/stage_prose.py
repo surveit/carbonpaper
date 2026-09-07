@@ -39,7 +39,7 @@ def say_what_a_stage_did(stage: AbstractStage) -> str:
             return "Give every value in a list column a row of its own"
         case StageType.sort_rank:
             return "Put the rows in order and number them"
-        case StageType.human_review_queue:
+        case StageType.review_queue:
             return "Hand the rows to a person to decide"
         case StageType.report:
             return "Write the figures out"

@@ -1,9 +1,4 @@
-"""A stage handle is read only by the module that owns it: `stage.function` by
-app/models/stages/code.py, `stage.filter` by filter_rows.py, `stage.queue` by
-human_review_queue.py. Logic about a handle elsewhere drifts from that handle's own
-rules. `_GRANDFATHERED` is what the code reads TODAY, not the target, and may only
-shrink — see find_python_function_warnings for the shape a move takes.
-"""
+"""A stage handle is read only by the module owning it; `_GRANDFATHERED` may only shrink."""
 from __future__ import annotations
 
 import ast
@@ -16,7 +11,7 @@ _APP = Path(__file__).resolve().parents[2] / "app"
 _OWNERS: dict[str, set[str]] = {
     "function": {"app/models/stages/code.py"},
     "filter": {"app/models/stages/filter_rows.py"},
-    "queue": {"app/models/stages/human_review_queue.py"},
+    "queue": {"app/models/stages/review_queue.py"},
     "starlark": {"app/models/stages/starlark.py"},
 }
 

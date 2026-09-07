@@ -19,7 +19,7 @@ def name_transform_block(stage: AbstractStage) -> str:
             return "join"
         case StageType.aggregate:
             return "aggregate"
-        case StageType.human_review_queue:
+        case StageType.review_queue:
             return "queue"
         case StageType.report:
             return "report"

@@ -77,10 +77,7 @@ _SCORED_COLUMNS = [
     {"name": "quote", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True},
     {"name": "benchmark_id", "type": "str", "nullable": True}, {"name": "query_id", "type": "str", "nullable": True},
 ]
-# What `queue_columns()` names for the verdict, reviewer, timestamp and note.
-# Every one must be added by the signature (app/models/stages/
-# human_review_queue.py), so they are appended to whatever a test declares and
-# named in its expected column list.
+# `queue_columns()`'s verdict, reviewer, timestamp and note — each one a signature add.
 _REVIEW_RECORD = ["decision", "reviewer_id", "reviewed_at", "review_notes"]
 _REVIEW_RECORD_COLUMNS = [
     {"name": name, "type": "str", "nullable": name != "decision"} for name in _REVIEW_RECORD
@@ -98,7 +95,7 @@ def _queue_stage(output_schema, flt=None, context_columns=None):
     flowing = {c["name"] for c in _SCORED_COLUMNS}
     outputs = output_schema["columns"] + _REVIEW_RECORD_COLUMNS
     return parse_stage({
-        "id": "review", "description": "Human review", "type": "human_review_queue",
+        "id": "review", "description": "Human review", "type": "review_queue",
         "inputs": [{"id": "scored"}],
         "signature": {"form": "extends",
                       "reads": reads_of("scored", _SCORED_COLUMNS),
@@ -123,7 +120,7 @@ def _queue_test_ctx(tmp_path, project: str) -> RunContext:
     )
 
 
-def test_human_review_queue_carries_every_input_column_through(tmp_path):
+def test_review_queue_carries_every_input_column_through(tmp_path):
     stage = _queue_stage(
         output_schema={"columns": [{"name": "evidence_id", "type": "str", "nullable": True},
                                     {"name": "final_score", "type": "int", "nullable": True}]},
@@ -131,7 +128,7 @@ def test_human_review_queue_carries_every_input_column_through(tmp_path):
         context_columns=["quote"],
     )
     ctx = _queue_test_ctx(tmp_path, "keeps-declared-columns")
-    out = HANDLERS[StageType.human_review_queue].execute(
+    out = HANDLERS[StageType.review_queue].execute(
         _place(stage, "scored", _SCORED_COLUMNS), as_inputs({"scored": _src_scored()}), ctx)
 
     assert list(rows_of(out).columns) == [c["name"] for c in _SCORED_COLUMNS] + [

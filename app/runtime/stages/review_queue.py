@@ -1,4 +1,4 @@
-"""Handler for the human_review_queue stage type. docs/run-manifest.md"""
+"""Handler for the review_queue stage type. docs/run-manifest.md"""
 
 from __future__ import annotations
 
@@ -15,8 +15,8 @@ from app.core.frames import write_frame_file_with_csv_fallback
 from app.core.predicate import parse_predicate
 from app.models import AbstractStage, WorkflowStage
 from app.models.stage_contribution import QueueStats, StageContribution
-from app.models.stages.human_review_queue import (
-    HumanReviewQueueStage,
+from app.models.stages.review_queue import (
+    ReviewQueueStage,
     QueueConfig,
     QueueSortKey,
     ReviewVerdict,
@@ -42,11 +42,11 @@ class PendingReview:
     row_ordinal: int
 
 
-def build_human_review_mapper(
+def build_review_queue_mapper(
     workflow_stage: WorkflowStage, ctx: RunContext, src: pa.Table
 ) -> RowMapper:
     """The callable that decides one row's outcome for one execution of this stage."""
-    queue_stage = narrow_stage(workflow_stage, HumanReviewQueueStage)
+    queue_stage = narrow_stage(workflow_stage, ReviewQueueStage)
     queue = queue_stage.queue
     # The queue's source-column check reads rows, so this handler materializes at
     # its own edge.
@@ -70,7 +70,7 @@ def validate_reviewed_sources_present(
     missing = sorted(set(queue.reviewed_columns) - set(src.columns))
     if missing:
         raise ValueError(
-            f"human_review_queue '{sid}': queue.reviewed_columns names source column(s) "
+            f"review_queue '{sid}': queue.reviewed_columns names source column(s) "
             f"{missing}, which this stage's actual input frame does not carry "
             f"(it has {sorted(src.columns)}). The frame does not match the schema the "
             "stage declares — no value may stand in for a missing column."
@@ -79,7 +79,7 @@ def validate_reviewed_sources_present(
 
 class _QueueRowMapper:
     def __init__(
-        self, queue_stage: HumanReviewQueueStage, queue: QueueConfig, ctx: RunContext,
+        self, queue_stage: ReviewQueueStage, queue: QueueConfig, ctx: RunContext,
         src: pd.DataFrame,
     ) -> None:
         self._queue = queue
@@ -111,7 +111,7 @@ class _QueueRowMapper:
         # The stats and pending scan are pandas work; materialize at this edge.
         df = pd.DataFrame(list(rows))
         stage = workflow_stage.stage
-        contribution.human_review_queue_stats = _compute_queue_stats(self._queue, df)
+        contribution.review_queue_stats = _compute_queue_stats(self._queue, df)
         pending = _order_pending_reviews(self._queue.sort, _find_pending_reviews(df), stage.id)
         if not pending:
             return None
@@ -132,7 +132,7 @@ def _require_project_scope(ctx: RunContext, sid: str) -> RunIdentity:
     """Its halt writes a run record under the project, which an unscoped run has nowhere to put."""
     if ctx.identity is None:
         raise ValueError(
-            f"human_review_queue '{sid}' requires a project-scoped (production) "
+            f"review_queue '{sid}' requires a project-scoped (production) "
             "run: RunContext.identity must be set, but this run carries none."
         )
     return ctx.identity
@@ -150,7 +150,7 @@ def _compute_queueable_mask(src: pd.DataFrame, flt: str | None, sid: str) -> lis
         mask = pd.Series(src.eval(parsed.pandas_expr), index=src.index, dtype=bool)
     except (SyntaxError, ValueError, TypeError, KeyError, AttributeError, NameError) as exc:
         raise ValueError(
-            f"human_review_queue '{sid}' filter could not be evaluated: `{flt}` "
+            f"review_queue '{sid}' filter could not be evaluated: `{flt}` "
             f"({type(exc).__name__}: {exc}). A filter must reference existing input columns."
         ) from exc
     return [bool(verdict) for verdict in mask]
@@ -239,7 +239,7 @@ def _require_sort_columns_present(
     missing = sorted({key.column for key in sort} - set(frame.columns))
     if missing:
         raise ValueError(
-            f"human_review_queue '{sid}': queue.sort orders by column(s) {missing}, "
+            f"review_queue '{sid}': queue.sort orders by column(s) {missing}, "
             f"which the queued rows do not carry (they have "
             f"{sorted(str(c) for c in frame.columns)}). No substitute order may stand "
             "in for the one the stage declares."

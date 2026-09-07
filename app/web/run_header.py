@@ -322,7 +322,7 @@ def _describe_failed(errors: int) -> str:
 
 
 def _describe_review(manifest: Mapping[str, Any], stage_id: str) -> str:
-    stats = manifest.get("human_review_queue_stats") or {}
+    stats = manifest.get("review_queue_stats") or {}
     pending = (stats.get(stage_id) or {}).get("items_pending")
     if pending is None:
         return f"👤 Review items in {stage_id} →"

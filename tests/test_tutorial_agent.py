@@ -375,6 +375,6 @@ def test_the_seeding_tool_hands_back_the_stages_it_seeded(projects_root: Path) -
         s.id for s in load_workflow(workflow["name"])
     ]
     assert by_type["llm_transform"] == "judge_ai_substance"
-    assert by_type["human_review_queue"] == "review_ai_spend"
-    reviews_it = next(s for s in workflow["stages"] if s["id"] == by_type["human_review_queue"])
+    assert by_type["review_queue"] == "review_ai_spend"
+    reviews_it = next(s for s in workflow["stages"] if s["id"] == by_type["review_queue"])
     assert reviews_it["inputs"] == ["select_external_filings"]

@@ -9,7 +9,7 @@ from app.core.errors import ReviewValidationError
 from app.core.stage_cache import StageCacheEntry
 from app.models import Stage, parse_stage
 from app.models.records.review_decision import ReviewDecision
-from app.models.stages.human_review_queue import ReviewVerdict
+from app.models.stages.review_queue import ReviewVerdict
 from app.services import review
 from conftest import place_stage, queue_columns, reads_of
 
@@ -27,7 +27,7 @@ _SOURCE_TYPES = {column["name"]: column["type"] for column in _INPUT_COLUMNS}
 def _stage(queue: dict[str, object] | None = None) -> Stage:
     block = queue if queue is not None else queue_columns()
     return parse_stage({
-        "id": "review", "description": "Review", "type": "human_review_queue",
+        "id": "review", "description": "Review", "type": "review_queue",
         "inputs": [{"id": "scored"}],
         "signature": {"form": "extends", "reads": reads_of("scored", _INPUT_COLUMNS),
                       "adds": _added_columns(block)},

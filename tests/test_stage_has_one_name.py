@@ -82,7 +82,7 @@ def test_a_manifest_written_before_the_rename_still_loads():
     legacy = """{"run_id": "r1", "started_at": "2026-01-01T00:00:00",
       "project": "demo", "workflow_version": null, "limit_overrides": {},
       "offset_overrides": {}, "run_bindings": {}, "input_bindings": {},
-      "human_review_queue_stats": {}, "dropped_columns": {}, "status": "ok",
+      "review_queue_stats": {}, "dropped_columns": {}, "status": "ok",
       "stage_records": [{"stage_id": "load_roster", "type": "input_data",
         "name": "Roster snapshot", "started_at": "2026-01-01T00:00:00",
         "status": "ok", "input_validation_report": [],

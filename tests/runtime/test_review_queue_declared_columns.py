@@ -13,7 +13,7 @@ from app.runtime.stages import HANDLERS
 from app.core.stage_cache import StageCache
 from conftest import as_inputs, make_run_context, place_stage, queue_columns, reads_of, rows_of
 
-PROJECT = "hrq-declared-columns"
+PROJECT = "review-queue-declared-columns"
 
 
 # The columns `_src()` builds, by declared type.
@@ -36,7 +36,7 @@ def _stage(queue: dict[str, object], flt: str | None = None) -> Stage:
                             "reviewed_at_column", "review_notes_column")
               if queue.get(field) is not None]
     return parse_stage({
-        "id": "review", "description": "Review", "type": "human_review_queue",
+        "id": "review", "description": "Review", "type": "review_queue",
         "inputs": [{"id": "scored"}],
         "signature": {"form": "extends", "reads": reads_of("scored", input_columns),
                       "adds": added},
@@ -59,7 +59,7 @@ def _production_ctx(tmp_path: Path) -> RunContext:
 
 
 def _run(stage: Stage, ctx: RunContext, src: pd.DataFrame | None = None) -> StageOutput:
-    out = HANDLERS[StageType.human_review_queue].execute(
+    out = HANDLERS[StageType.review_queue].execute(
         place_stage(stage), as_inputs({"scored": src if src is not None else _src()}), ctx)
     assert out is not None  # a row-mapped stage always produces a frame
     return out

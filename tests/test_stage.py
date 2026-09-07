@@ -228,10 +228,10 @@ def test_aggregate_rejects_a_second_input():
     assert [(e["loc"], e["type"]) for e in err.value.errors()] == [(("aggregate", "inputs"), "too_long")]
 
 
-def test_human_review_queue_rejects_a_second_input():
+def test_review_queue_rejects_a_second_input():
     with pytest.raises(ValidationError) as err:
         m.parse_stage(S(
-            id="q", type="human_review_queue",
+            id="q", type="review_queue",
             inputs=[{"id": "a"}, {"id": "b"}],
             queue={"reviewed_columns": {"score": "reviewed_score"}, "verdict_column": "v",
                    "reviewer_column": "r", "reviewed_at_column": "at"},
@@ -246,7 +246,7 @@ def test_human_review_queue_rejects_a_second_input():
                 ],
             },
         ))
-    assert (("human_review_queue", "inputs"), "too_long") in [
+    assert (("review_queue", "inputs"), "too_long") in [
         (e["loc"], e["type"]) for e in err.value.errors()]
 
 
@@ -276,7 +276,7 @@ def test_source_parses_as_sourceref(tmp_path):
 def test_queue_needs_no_hash_source_declared():
     # A queue row is matched to a cached decision by fingerprinting the row itself.
     s = m.parse_stage(S(
-        id="rev", type="human_review_queue", inputs=[{"id": "a"}],
+        id="rev", type="review_queue", inputs=[{"id": "a"}],
         signature={
             "form": "extends",
             "reads": reads_of("a", _QUEUE_IN_COLUMNS),
@@ -463,7 +463,7 @@ def test_file_connector_rejects_unknown_format(tmp_path):
 
 def test_unknown_keys_rejected():
     with pytest.raises(ValidationError):
-        m.parse_stage(S(id="rev", type="human_review_queue",
+        m.parse_stage(S(id="rev", type="review_queue",
                                  inputs=[{"id": "a"}],
                                  queue={"hash_colums": ["x"]}))  # typo'd key must fail
 
@@ -673,7 +673,7 @@ _HANDLE_BLOCK = {
     "expand": {"join": {"keys": [{"left": "id", "right": "id"}], "enrich_with": {"amount": "amount"}}},
     "aggregate": {"aggregate": {"group_by": ["name"],
                                 "aggregations": [{"output_column": "n", "formula": "count"}]}},
-    "human_review_queue": {"queue": queue_columns("name", "human_name")},
+    "review_queue": {"queue": queue_columns("name", "human_name")},
     "report": {"report": {"format": "json"}, "function": _INLINE_ROW_FN,
                 "signature": {"form": "replaces"}},
 }
@@ -694,13 +694,13 @@ _SIGNATURE = {
         "produces": [{"name": "name", "type": "str", "nullable": True},
                      {"name": "n", "type": "int", "nullable": True}],
     },
-    "human_review_queue": {"form": "extends",
+    "review_queue": {"form": "extends",
                            "reads": reads_of("facilities", _LEFT_SCHEMA["columns"]),
                            "adds": queue_added_columns("human_name", "str")},
     "python_frame_function": {"form": "replaces", "produces": _LEFT_SCHEMA["columns"]},
 }
 NON_EXEMPT_TYPES = ["python_row_function", "python_frame_function", "enrich", "expand",
-                    "aggregate", "human_review_queue"]
+                    "aggregate", "review_queue"]
 
 
 def _schema_spec(stage_type, *, declare_output=True):

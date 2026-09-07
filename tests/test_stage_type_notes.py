@@ -13,9 +13,9 @@ from app.models.stages.stage_types import (
 )
 
 
-def test_human_review_queue_note_states_the_fingerprint_matching():
-    note = STAGE_TYPES["human_review_queue"].notes
-    assert note, "human_review_queue must carry a `notes` explanation"
+def test_review_queue_note_states_the_fingerprint_matching():
+    note = STAGE_TYPES["review_queue"].notes
+    assert note, "review_queue must carry a `notes` explanation"
     # the authoring agent needs to know editing filter/reviewer_instructions
     # invalidates every decision cached for this stage
     assert "fingerprint" in note
@@ -25,20 +25,20 @@ def test_human_review_queue_note_states_the_fingerprint_matching():
 def test_note_reaches_the_editing_agent_prompt():
     from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
 
-    note = STAGE_TYPES["human_review_queue"].notes
+    note = STAGE_TYPES["review_queue"].notes
     assert note in EDITING_SYSTEM_PROMPT
 
 
-def test_hrq_note_names_the_decision_values_the_runtime_actually_emits():
-    from app.models.stages.human_review_queue import ReviewVerdict
+def test_review_queue_note_names_the_decision_values_the_runtime_actually_emits():
+    from app.models.stages.review_queue import ReviewVerdict
 
-    quoted = set(re.findall(r'"([a-z_]+)"', STAGE_TYPES["human_review_queue"].notes))
+    quoted = set(re.findall(r'"([a-z_]+)"', STAGE_TYPES["review_queue"].notes))
     assert quoted == {verdict.value for verdict in ReviewVerdict}
 
 
-def test_hrq_note_names_every_queue_field_that_adds_a_column():
+def test_review_queue_note_names_every_queue_field_that_adds_a_column():
     # Read off `find_added_columns`, so a column-adding field breaking the `*_column` name counts.
-    from app.models.stages.human_review_queue import QueueConfig, find_added_columns
+    from app.models.stages.review_queue import QueueConfig, find_added_columns
 
     queue = QueueConfig(
         reviewed_columns={"src": "reviewed_src"}, verdict_column="v",
@@ -48,7 +48,7 @@ def test_hrq_note_names_every_queue_field_that_adds_a_column():
     # the field itself is the part before the subscript.
     adding_fields = {field.split("[")[0] for field, _ in find_added_columns(queue)}
     mentioned = {f"queue.{name}" for name in re.findall(
-        r"queue\.(\w+)", STAGE_TYPES["human_review_queue"].notes)}
+        r"queue\.(\w+)", STAGE_TYPES["review_queue"].notes)}
 
     assert adding_fields <= mentioned, adding_fields - mentioned
     assert mentioned <= {f"queue.{name}" for name in QueueConfig.model_fields}, mentioned

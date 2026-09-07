@@ -14,7 +14,7 @@ _SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}]}
 # the anchored family extends it.
 _REPLACES_TYPES = {"python_frame_function", "aggregate", "union", "input_data", "report"}
 # The two the model refuses an empty read set on: each is handed only what it reads.
-_READS_THE_ROW_TYPES = {"filter_rows", "human_review_queue"}
+_READS_THE_ROW_TYPES = {"filter_rows", "review_queue"}
 
 
 def _signature_for(type_, schema):

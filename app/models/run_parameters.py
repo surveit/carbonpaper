@@ -19,7 +19,7 @@ class RunParameters(BaseModel):
     # Skip every stage-cache READ; a write-capable accessor still records what it
     # computes, so the cache ends the run re-pinned rather than stale.
     bust_cache: bool = False
-    # A human_review_queue stage approves every row in memory instead of halting.
+    # A review_queue stage approves every row in memory instead of halting.
     queue_auto_approve: bool = False
     # Not a production run: excluded from a project's run counts and its latest run.
     is_test_run: bool = False

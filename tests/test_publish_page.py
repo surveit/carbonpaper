@@ -48,7 +48,7 @@ def _a_run(tmp_path, parameters: RunParameters | None = None) -> TestClient:
         id=RunManifest.compose_id(_PROJECT, _RUN), run_id=_RUN,
         started_at="2026-09-01T10:37:53", project=_PROJECT,
         workflow_version="20260901T103742.393151", parameters=parameters or RunParameters(),
-        input_bindings={}, human_review_queue_stats={}, dropped_columns={},
+        input_bindings={}, review_queue_stats={}, dropped_columns={},
         status=RunStatus.OK, stage_records=[],
     ).save()
     [shape] = claim_shapes.write_claim_shapes(_PROJECT, [_SPEND])
@@ -99,7 +99,7 @@ def test_the_context_pre_fills_from_the_newest_standing_claim(tmp_path):
         id=RunManifest.compose_id(_PROJECT, "20260902T090000.000000"),
         run_id="20260902T090000.000000", started_at="2026-09-02T09:00:00", project=_PROJECT,
         workflow_version="20260901T103742.393151", parameters=RunParameters(),
-        input_bindings={}, human_review_queue_stats={}, dropped_columns={},
+        input_bindings={}, review_queue_stats={}, dropped_columns={},
         status=RunStatus.OK, stage_records=[],
     ).save()
 

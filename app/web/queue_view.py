@@ -16,8 +16,8 @@ from app.core.stage_cache import StageCacheEntry
 from app.models import Column, WorkflowStage
 from app.models.run_manifest import StageRecord
 from app.models.schema import STR_COLUMN_TYPE
-from app.models.stages.human_review_queue import (
-    HumanReviewQueueStage, QueueConfig, ReviewVerdict,
+from app.models.stages.review_queue import (
+    ReviewQueueStage, QueueConfig, ReviewVerdict,
 )
 from app.runtime.citations import build_row_trace_url
 from app.web.loading import QueueFingerprints, display_cell
@@ -259,7 +259,7 @@ def describe_queued_columns(
 
 def _declared_read_columns(stage_def: WorkflowStage) -> list[Column]:
     """What the card is entitled to hold, not the anchor input's whole schema."""
-    assert isinstance(stage_def.stage, HumanReviewQueueStage)
+    assert isinstance(stage_def.stage, ReviewQueueStage)
     return [column for entry in stage_def.stage.signature.reads for column in entry.columns]
 
 

@@ -5,7 +5,7 @@ from typing import ClassVar
 from app.core.ids import ID
 from app.core.json_types import JsonDict
 from app.core.record import PersistedModel, PersistenceScope
-from app.models.stages.human_review_queue import ReviewVerdict
+from app.models.stages.review_queue import ReviewVerdict
 
 
 class ReviewDecision(PersistedModel):

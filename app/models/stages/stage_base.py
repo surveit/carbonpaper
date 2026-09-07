@@ -77,7 +77,7 @@ class StageType(str, Enum):
     enrich = "enrich"
     expand = "expand"
     aggregate = "aggregate"
-    human_review_queue = "human_review_queue"
+    review_queue = "review_queue"
     report = "report"
     # Both preserve exact per-row PROVENANCE (each output row traces to one
     # specific input row) but neither is grain-and-order preserving BY
@@ -107,7 +107,7 @@ _GRAIN_AND_ORDER_PRESERVING_TYPES: frozenset[StageType] = frozenset({
     StageType.input_data,
     StageType.python_row_function,
     StageType.llm_transform,
-    StageType.human_review_queue,
+    StageType.review_queue,
     StageType.starlark_row_function,
 })
 
@@ -217,14 +217,7 @@ class AuthoredStageFields(_Base):
     )
     inputs: list[StageInput] = Field(default_factory=list)
 
-    # Whether the runtime records this stage's results and replays them on a
-    # later run. Off by default: recomputing costs less than fingerprinting the
-    # input for every type but llm_transform and human_review_queue, which
-    # redeclare it True because their recompute spends a model call or a human's
-    # attention. An author turns it on where the code is expensive enough to be
-    # worth the storage. Deliberately absent from compute_definition_fingerprint:
-    # it governs WHETHER the cache is consulted, not WHAT the stage computes, so
-    # flipping it must never invalidate an entry already recorded.
+    # Records results for replay, and is not fingerprinted. app/runtime/AGENTS.md
     cache: bool = False
     # Why this type ignores `cache`; the refusal quotes it. None means it honours one.
     CACHE_IGNORED_BECAUSE: ClassVar[Optional[str]] = None

@@ -13,7 +13,7 @@ from app.evals.store import load_eval_config
 from app.core.files import list_project_files, save_upload
 from app.models import Stage, Workflow
 from app.models.review_guide import ReviewGuideDraft
-from app.models.stages.human_review_queue import HumanReviewQueueStage
+from app.models.stages.review_queue import ReviewQueueStage
 from app.services import project, run as run_service, uploads, versioning
 from app.services.loader import load_workflow
 from app.services.project import WorkflowFile, import_project
@@ -81,9 +81,9 @@ def _stage(wf: WorkflowFile, stage_id: str) -> Stage:
     return next(stage for stage in wf.stages if stage.id == stage_id)
 
 
-def _review_stage() -> HumanReviewQueueStage:
+def _review_stage() -> ReviewQueueStage:
     stage = _stage(_load_fixture(), _REVIEW_STAGE)
-    assert isinstance(stage, HumanReviewQueueStage)
+    assert isinstance(stage, ReviewQueueStage)
     return stage
 
 

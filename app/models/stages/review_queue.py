@@ -1,6 +1,4 @@
-"""human_review_queue stage: the config block naming the columns the stage ADDS,
-the reviewer's verdict vocabulary, and the checks that every named column
-resolves — sources against what the input supplies, added names against the signature."""
+"""The `review_queue` stage: its `queue` block, its verdicts, and its column checks."""
 from __future__ import annotations
 
 from enum import Enum
@@ -120,8 +118,8 @@ class QueueConfig(StageConfig):
         return v
 
 
-class HumanReviewQueueStage(AbstractStage):
-    type: Literal[StageType.human_review_queue]
+class ReviewQueueStage(AbstractStage):
+    type: Literal[StageType.review_queue]
     queue: QueueConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
     signature: ExtendsSignature
@@ -176,7 +174,7 @@ class HumanReviewQueueStage(AbstractStage):
         ]
         if self.signature.rewrites:
             issues.append(
-                f"stage '{self.id}': human_review_queue never revises an input "
+                f"stage '{self.id}': review_queue never revises an input "
                 f"column; rewrites are not supported"
             )
         adds_by_name = _index_adds_by_name(self.signature)
@@ -188,7 +186,7 @@ class HumanReviewQueueStage(AbstractStage):
         )
 
 
-def find_queue_warnings(stage: "HumanReviewQueueStage") -> list[CompilerWarning]:
+def find_queue_warnings(stage: "ReviewQueueStage") -> list[CompilerWarning]:
     if stage.cache:
         return []
     return [warn(stage, "nondeterministic",
@@ -203,11 +201,11 @@ def _index_adds_by_name(signature: ExtendsSignature) -> dict[str, Column]:
 
 def resolve_queue_config(stage: AbstractStage) -> Optional[QueueConfig]:
     """The only sanctioned access to `.queue` (tests/arch/test_handle_access_is_owned.py)."""
-    return stage.queue if isinstance(stage, HumanReviewQueueStage) else None
+    return stage.queue if isinstance(stage, ReviewQueueStage) else None
 
 
 def find_queue_column_issues(
-    stage: HumanReviewQueueStage, inputs: Sequence["WorkflowStageInput"]
+    stage: ReviewQueueStage, inputs: Sequence["WorkflowStageInput"]
 ) -> list[str]:
     return (
         stage.find_config_column_issues(inputs)
@@ -435,7 +433,7 @@ def _find_review_record_target_issues(
 
 # Authoring copy for this module's stage type(s); assembled into STAGE_TYPES.
 STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
-    "human_review_queue": StageTypeSpec(
+    "review_queue": StageTypeSpec(
         summary="Pulls flagged rows for human decision; halts the run.",
         signature_form="extends",
         blocks=["queue"],

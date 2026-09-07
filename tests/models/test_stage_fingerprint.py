@@ -31,7 +31,7 @@ def _queue_stage(**queue_overrides):
     queue.update(queue_overrides)
     return parse_stage({
         "id": "review",
-        "type": "human_review_queue",
+        "type": "review_queue",
         "description": "review",
         "inputs": [{"id": "src"}],
         # Every column the queue adds, since the signature must declare them all,

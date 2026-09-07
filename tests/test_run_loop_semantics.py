@@ -96,7 +96,7 @@ def _score_stage(stage_id, input_id, name="Score"):
 
 
 def _queue_stage(stage_id, input_id, name="Review"):
-    return {"id": stage_id, "description": name, "type": "human_review_queue",
+    return {"id": stage_id, "description": name, "type": "review_queue",
             "inputs": [{"id": input_id}],
             "signature": {"form": "extends",
                           "reads": [{"input": input_id, "columns": _ID_VAL_SCHEMA["columns"]}],
@@ -115,7 +115,7 @@ def _five_item_load_stage(root):
 
 
 def _filtered_queue_stage(stage_id, input_id, flt, name="Review"):
-    return {"id": stage_id, "description": name, "type": "human_review_queue",
+    return {"id": stage_id, "description": name, "type": "review_queue",
             "inputs": [{"id": input_id}],
             "signature": {"form": "extends",
                           "reads": [{"input": input_id, "columns": _ID_VAL_SCHEMA["columns"]}],
@@ -222,7 +222,7 @@ def test_halted_queue_stages_item_counts_reach_the_run_manifest(tmp_path):
 
     assert manifest["status"] == "awaiting_review"
     assert _stage_status(manifest, "review") == "awaiting_review"
-    assert manifest["human_review_queue_stats"] == {
+    assert manifest["review_queue_stats"] == {
         "review": {
             "items_queued_total": 2, "items_passed_through": 3,
             "items_pending": 2, "items_decided": 0,
@@ -232,7 +232,7 @@ def test_halted_queue_stages_item_counts_reach_the_run_manifest(tmp_path):
     # The same counts survive the round trip to disk — the run page reads them
     # back from the stored manifest, not from the in-memory object.
     on_disk = read_manifest(tmp_path, manifest["run_id"])
-    assert on_disk["human_review_queue_stats"] == manifest["human_review_queue_stats"]
+    assert on_disk["review_queue_stats"] == manifest["review_queue_stats"]
 
 
 def test_multi_halt_run_renders_the_full_halted_at_list_through_the_web_layer(

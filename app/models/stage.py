@@ -33,7 +33,7 @@ from app.models.stages.code import (
 from app.models.stages.dedupe import DedupeConfig, DedupeStage
 from app.models.stages.explode import ExplodeConfig, ExplodeStage
 from app.models.stages.filter_rows import FilterConfig, FilterRowsStage
-from app.models.stages.human_review_queue import HumanReviewQueueStage, QueueConfig
+from app.models.stages.review_queue import ReviewQueueStage, QueueConfig
 from app.models.stages.input_data import Connector, InputDataStage
 from app.models.stages.join import EnrichStage, ExpandStage, JoinConfig
 from app.models.stages.llm_transform import LLMConfig, LLMTransformStage
@@ -65,7 +65,7 @@ Stage = Annotated[
         EnrichStage,
         ExpandStage,
         AggregateStage,
-        HumanReviewQueueStage,
+        ReviewQueueStage,
         ReportStage,
         UnionStage,
         FilterRowsStage,
@@ -114,7 +114,7 @@ def validate_stage(spec: Any) -> list[str]:
 
 
 # docs/models-and-storage.md
-STAGE_SPEC_SCHEMA_VERSION = 8
+STAGE_SPEC_SCHEMA_VERSION = 9
 
 
 def stage_to_spec_dict(stage: Stage) -> dict[str, Any]:

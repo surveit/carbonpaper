@@ -426,9 +426,9 @@ def _merge_stage_contribution(
         record.cached_rows = contribution.cached_rows
     if contribution.dropped_columns:
         manifest.record_dropped_columns(sid, contribution.dropped_columns)
-    if contribution.human_review_queue_stats is not None:
-        manifest.record_human_review_queue_stats(
-            sid, contribution.human_review_queue_stats)
+    if contribution.review_queue_stats is not None:
+        manifest.record_review_queue_stats(
+            sid, contribution.review_queue_stats)
     return contribution.row_errors
 
 

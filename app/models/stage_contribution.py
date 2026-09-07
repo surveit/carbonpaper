@@ -31,7 +31,7 @@ class StageContribution(BaseModel):
     cached_rows: int | None = None
     row_errors: list[RowError] = []
     dropped_columns: list[str] = []
-    human_review_queue_stats: QueueStats | None = None
+    review_queue_stats: QueueStats | None = None
     # Non-fatal facts about how the stage ran, appended to the record's `notes`.
     # Never stage data.
     notes: list[str] = []

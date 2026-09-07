@@ -333,7 +333,7 @@ def _registry(llm_shape):
         StageType.enrich: frame,
         StageType.expand: frame,
         StageType.aggregate: frame,
-        StageType.human_review_queue: RowMapTransformHandler(make_mapper=lambda s, c, src: lambda r, i: r),
+        StageType.review_queue: RowMapTransformHandler(make_mapper=lambda s, c, src: lambda r, i: r),
         StageType.report: frame,
     }
 

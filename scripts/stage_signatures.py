@@ -16,12 +16,15 @@ from pydantic import ValidationError as PydanticValidationError
 from app.core.errors import PredicateError
 from app.core.predicate import parse_predicate
 from app.core.prompt_template import find_template_fields
-from app.models.stages.human_review_queue import QueueConfig, find_added_columns
+from app.models.stages.review_queue import QueueConfig, find_added_columns
 from app.models.stages.stage_base import StageType
+
+# 0006 reads what the store held, and 0021 renamed human_review_queue to review_queue.
+_QUEUE_SPELLINGS = frozenset({"human_review_queue", StageType.review_queue})
 
 _EXTENDS_TYPES = frozenset({
     "llm_transform", "python_row_function", "starlark_row_function",
-    "filter_rows", "human_review_queue", "enrich", "expand",
+    "filter_rows", "enrich", "expand", *_QUEUE_SPELLINGS,
 })
 _REPLACES_TYPES = frozenset({
     "python_frame_function", "aggregate", "union", "input_data",
@@ -29,8 +32,8 @@ _REPLACES_TYPES = frozenset({
     "publish", "report",
 })
 # The two types whose model REFUSES an empty read set, so a spec carrying one
-# does not load at all (app.models.stages.{filter_rows,human_review_queue}).
-_READS_THE_WHOLE_ANCHOR = frozenset({"filter_rows", "human_review_queue"})
+# does not load at all (app.models.stages.{filter_rows,review_queue}).
+_READS_THE_WHOLE_ANCHOR = frozenset({"filter_rows", *_QUEUE_SPELLINGS})
 
 
 class SignatureUndeterminable(ValueError):
@@ -123,7 +126,7 @@ def _synthesize_extends(
     if stage_type == StageType.filter_rows:
         # No adds: it keeps every kept row's columns unchanged.
         return {"form": "extends", "reads": _reads(anchor_id, anchor_columns)}
-    if stage_type == StageType.human_review_queue:
+    if stage_type in _QUEUE_SPELLINGS:
         return {"form": "extends", "reads": _reads(anchor_id, anchor_columns),
                 "adds": _queue_adds(spec)}
     if stage_type == StageType.llm_transform:
@@ -177,7 +180,7 @@ def _queue_adds(spec: dict[str, Any]) -> list[dict[str, Any]]:
         queue = QueueConfig.model_validate(spec.get("queue") or {})
     except PydanticValidationError as err:
         raise SignatureUndeterminable(
-            f"stage {spec.get('id')!r} (human_review_queue): its queue block does "
+            f"stage {spec.get('id')!r} (review queue): its queue block does "
             f"not read, so what the stage adds is unknown: {err}"
         ) from err
     outer_by_name = {c.get("name"): c for c in _columns(spec.get("output_schema"))}

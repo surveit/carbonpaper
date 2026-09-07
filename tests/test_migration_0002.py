@@ -21,10 +21,11 @@ from scripts.stage_signatures import add_signature
 
 _ALEMBIC_DIRECTORY = Path(__file__).resolve().parents[1] / "alembic"
 _REVISION = _ALEMBIC_DIRECTORY / "versions/0002_name_queue_and_join_columns.py"
+_QUEUE_RENAMED = _ALEMBIC_DIRECTORY / "versions/0021_review_queue_is_the_type_name.py"
 
 
-def _load_revision() -> Any:
-    spec = importlib.util.spec_from_file_location("_rev_0002", _REVISION)
+def _load_revision(path: Path = _REVISION) -> Any:
+    spec = importlib.util.spec_from_file_location(f"_rev_{path.stem}", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -148,6 +149,8 @@ def test_a_v1_document_validates_under_todays_model_after_upgrading():
     # of the way, as a store crossing both revisions would be.
     for stage in document["stages"]:
         add_signature(stage)
+    renamed = _load_revision(_QUEUE_RENAMED)
+    renamed._rename_stage_specs(document, renamed.WAS, renamed.NOW)
     parse_workflow([drop_input_schemas(s) for s in document["stages"]])
 
     queue = document["stages"][3]["queue"]

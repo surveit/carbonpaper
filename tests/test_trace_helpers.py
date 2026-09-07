@@ -40,7 +40,7 @@ def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1",
         })
     store_manifest(run_dir.parent.parent, run_dir.name, {"run_id": run_id, "started_at": run_id, "project": tmp_path.parent.name,
                     "workflow_version": run_id, "status": "ok",
-                    "human_review_queue_stats": {}, "stage_records": records,
+                    "review_queue_stats": {}, "stage_records": records,
                     "input_bindings": input_bindings or {}})
     return run_dir
 
@@ -48,7 +48,7 @@ def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1",
 def test_is_row_preserving_matches_the_model_classification():
     # enrich is absent though its output is in subject order: crossing it takes a recorded sidecar.
     for stage_type in ("input_data", "python_row_function", "llm_transform",
-                       "human_review_queue"):
+                       "review_queue"):
         assert _is_row_preserving(stage_type) is True
     for stage_type in ("python_frame_function", "enrich", "expand", "aggregate",
                        "report", "filter_rows", "union"):

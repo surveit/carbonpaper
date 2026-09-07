@@ -11,7 +11,7 @@
       path, its Browse… button, and the row cap beside them
     · an Advanced fold holding the row-level cache checkbox (bust_cache): submitted
       only when checked, so its presence is the value. The run skips every stage-cache
-      read and records what it computes, so a human review queue re-asks the humans
+      read and records what it computes, so a review queue re-asks the humans
       (see prepare_run's `bust_cache` in app/runtime/runner.py). Folded because the
       default — reuse what has already been computed and already been approved — is
       what nearly every run wants, and the alternative spends LLM calls and a

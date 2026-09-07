@@ -12,7 +12,7 @@ from app.core.errors import ReviewValidationError
 from app.core.stage_cache import compute_row_fingerprint
 from app.models import TableSchema, Workflow, WorkflowNotFormed, WorkflowStage
 from app.models.records.run_manifest import RunManifest
-from app.models.stages.human_review_queue import QueueConfig, resolve_queue_config
+from app.models.stages.review_queue import QueueConfig, resolve_queue_config
 from app.services import review
 from app.web.breadcrumbs import build_run_child_crumbs
 from app.web.config import templates
@@ -164,14 +164,14 @@ def _require_queue_stage(
     workflow: Workflow | WorkflowNotFormed, stage_id: str
 ) -> WorkflowStage:
     workflow_stage = find_workflow_stage(workflow, stage_id)
-    if workflow_stage is None or workflow_stage.stage.type != "human_review_queue":
+    if workflow_stage is None or workflow_stage.stage.type != "review_queue":
         raise HTTPException(status_code=404, detail=f"No queue stage '{stage_id}'")
     return workflow_stage
 
 
 def _require_queue_config(stage_def: WorkflowStage) -> QueueConfig:
     queue = resolve_queue_config(stage_def.stage)
-    assert queue is not None  # _require_queue_stage admits only human_review_queue
+    assert queue is not None  # _require_queue_stage admits only review_queue
     return queue
 
 

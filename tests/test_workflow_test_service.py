@@ -66,12 +66,12 @@ _PUBLISH = {
     "signature": {"form": "replaces"},
 }
 
-# A human_review_queue whose hash resolves off the upstream row content.
+# A review_queue whose hash resolves off the upstream row content.
 _LOAD_PK_COLUMNS = [{"name": "doc_id", "type": "str", "nullable": True},
                     {"name": "score", "type": "int", "nullable": True}]
 _LOAD_PK_SCHEMA = {"columns": _LOAD_PK_COLUMNS}
 _QUEUE = {
-    "id": "review", "type": "human_review_queue", "description": "Review rows",
+    "id": "review", "type": "review_queue", "description": "Review rows",
     "inputs": [{"id": "load"}],
     "signature": {
         "form": "extends",

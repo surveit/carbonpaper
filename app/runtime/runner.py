@@ -205,9 +205,7 @@ def resume_run(
                      else RunContext.for_workflow_run)
     # Auto-approve is legal only against the read-only cache a test run ran under.
     ctx = build_context(run_dir, project_id, run_id, manifest.parameters)
-    # The run's telemetry (human_review_queue_stats/dropped_columns) already lives on the
-    # loaded manifest, not the context; a resumed run keeps accumulating onto
-    # that same manifest via the executor's per-stage merge.
+    # A resumed run accumulates its per-stage telemetry onto the loaded manifest.
 
     manifest.resumed_at = datetime.now().isoformat(timespec="seconds")
     # Drop the halt marker the halted run left behind: the run is no longer

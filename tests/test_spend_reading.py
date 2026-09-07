@@ -40,7 +40,7 @@ def _store_run(project: str, run_id: str, records: list[StageRecord], area: str 
     RunManifest(
         id=RunManifest.compose_id(project, run_id, area),
         run_id=run_id, started_at="2026-08-16T09:00:00", project=project,
-        workflow_version=None, human_review_queue_stats={},
+        workflow_version=None, review_queue_stats={},
         status=RunStatus.OK, stage_records=records,
     ).save()
 
@@ -144,7 +144,7 @@ def test_a_run_whose_project_record_never_existed_is_still_counted():
     RunManifest(
         id=RunManifest.compose_id("no_record_at_all", "20260816T090000", "runs"),
         run_id="20260816T090000", started_at="2026-08-16T09:00:00",
-        project="no_record_at_all", workflow_version=None, human_review_queue_stats={},
+        project="no_record_at_all", workflow_version=None, review_queue_stats={},
         status=RunStatus.OK,
         stage_records=[_stage_record("score", LlmUsage(cost_usd=2.0, calls=1),
                                      "2026-08-16T09:00:00")],

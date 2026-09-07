@@ -23,7 +23,7 @@ from .execution import (
     validate_registry_matches_model,
 )
 from .filter_rows import build_filter_mapper
-from .human_review_queue import build_human_review_mapper
+from .review_queue import build_review_queue_mapper
 from .input_data import preflight_input_data, read_input_data
 from .join import handle_enrich, handle_expand
 from .llm_transform import LLMTransformHandler
@@ -50,8 +50,8 @@ HANDLERS: dict[StageType, StageHandler] = {
     StageType.expand: FrameTransformHandler(handle_expand),
     StageType.aggregate: FrameTransformHandler(handle_aggregate),
     StageType.llm_transform: LLMTransformHandler(parallelism=DEFAULT_PARALLEL),
-    StageType.human_review_queue: RowMapTransformHandler(
-        build_human_review_mapper,
+    StageType.review_queue: RowMapTransformHandler(
+        build_review_queue_mapper,
         trims_output_to_declared=True,
     ),
     StageType.report: FrameTransformHandler(handle_report),

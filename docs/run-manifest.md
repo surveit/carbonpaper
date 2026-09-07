@@ -43,7 +43,7 @@ none of them, so they are not part of what readers above this module consume.
 
 - **`project`** is required. A subset run once defaulted it to `None`; a run that
   cannot name its project has no id to be stored under, and every caller names one.
-- **`human_review_queue_stats`** is required with no default. A default would let a
+- **`review_queue_stats`** is required with no default. A default would let a
   pre-rename manifest parse silently, hiding queued items from the reader.
 
 ## Parameters were flat before they were nested
@@ -66,7 +66,7 @@ for, which is why it sits beside `parameters` rather than inside it.
 ## The queue halt's sidecar
 
 `QueueFingerprints` (`app/models/records/queue_fingerprints.py`) is the other record a
-run writes about itself: what a `human_review_queue` stage halted on, stored at
+run writes about itself: what a `review_queue` stage halted on, stored at
 `queue_fingerprints/<project>/<run_id>/<stage_id>`.
 
 It never snapshots **columns**. `stage_fingerprint` is one string shared by every pending

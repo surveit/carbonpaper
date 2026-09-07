@@ -9,7 +9,7 @@ from app.core.json_types import JsonDict
 from app.core.stage_cache import StageCacheEntry, to_json_safe_row
 from app.models import Workflow, WorkflowStage
 from app.models.records.review_decision import ReviewDecision
-from app.models.stages.human_review_queue import (
+from app.models.stages.review_queue import (
     QueueConfig,
     ReviewVerdict,
     resolve_queue_config,
@@ -149,7 +149,7 @@ def _require_queue_config(workflow_stage: WorkflowStage) -> QueueConfig:
     if queue is None:
         raise ReviewValidationError(
             f"stage '{stage.id}' declares no queue config: it is a {stage.type} stage, "
-            "not a human_review_queue"
+            "not a review_queue"
         )
     return queue
 

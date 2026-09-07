@@ -26,7 +26,7 @@ from app.core.frames import write_frame_table
 from app.core.stage_cache import StageCache, StageCacheEntry, compute_row_fingerprint
 from app.services.project import save_working_copy_as_version
 from app.models import WorkflowStage, parse_stage
-from app.models.stages.human_review_queue import ReviewVerdict
+from app.models.stages.review_queue import ReviewVerdict
 from conftest import (
     resume_like_the_app,
     run_like_the_app,
@@ -105,7 +105,7 @@ def _score_stage():
 
 
 def _review_stage():
-    return {"id": "review", "description": "Review scores", "type": "human_review_queue",
+    return {"id": "review", "description": "Review scores", "type": "review_queue",
             "inputs": [{"id": "score"}],
             "signature": {
                 "form": "extends",
@@ -239,7 +239,7 @@ def test_the_stage_panel_says_what_the_pause_is_for_not_what_is_blocked(tmp_path
 # ── 2. Route-level refusals: 404 on the stage, 400 on the payload ───────────
 
 
-def test_404_when_the_stage_id_is_not_a_human_review_queue_stage(tmp_path, monkeypatch):
+def test_404_when_the_stage_id_is_not_a_review_queue_stage(tmp_path, monkeypatch):
     _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
 
     client = TestClient(app)
@@ -400,7 +400,7 @@ def _e2e_load_stage(root):
 
 
 def _e2e_review_stage():
-    return {"id": "review", "description": "Review items", "type": "human_review_queue",
+    return {"id": "review", "description": "Review items", "type": "review_queue",
             "inputs": [{"id": "load"}],
             "signature": {
                 "form": "extends",
@@ -497,7 +497,7 @@ def test_decide_accepts_an_untouched_notes_box_as_no_note(tmp_path, monkeypatch)
 def _no_notes_review_stage():
     queue = {k: v for k, v in QUEUE_COLUMNS.items() if k != "review_notes_column"}
     return _with_queue_signature({
-            "id": "review", "description": "Review items", "type": "human_review_queue",
+            "id": "review", "description": "Review items", "type": "review_queue",
             "inputs": [{"id": "load"}],
             "queue": queue}, [
         {"name": "id", "type": "str", "nullable": True},
@@ -612,7 +612,7 @@ def test_queue_page_prefills_a_decided_row_from_the_recorded_value(tmp_path, mon
 
 def _bool_review_stage(nullable):
     return _with_queue_signature({
-        "id": "review", "description": "Review flags", "type": "human_review_queue",
+        "id": "review", "description": "Review flags", "type": "review_queue",
         "inputs": [{"id": "load"}],
         "queue": {**queue_columns(source="flag", target="human_flag")}}, [
         {"name": "id", "type": "str", "nullable": True},
@@ -722,7 +722,7 @@ def test_a_non_nullable_bool_renders_radios_and_opens_on_the_ai_value(tmp_path, 
 
 def _temporal_review_stage(column_type):
     return _with_queue_signature({
-        "id": "review", "description": "Review times", "type": "human_review_queue",
+        "id": "review", "description": "Review times", "type": "review_queue",
         "inputs": [{"id": "load"}],
         "queue": {**queue_columns(source="seen_at", target="human_seen_at")}}, [
         {"name": "id", "type": "str", "nullable": True},
@@ -828,7 +828,7 @@ def test_a_date_field_approved_as_it_arrived_strikes_no_received_value(tmp_path,
 
 
 def _declared_range_review_stage():
-    return {"id": "review", "description": "Review items", "type": "human_review_queue",
+    return {"id": "review", "description": "Review items", "type": "review_queue",
             "inputs": [{"id": "load"}],
             "signature": {
                 "form": "extends",
@@ -895,9 +895,8 @@ def test_decide_coerces_against_the_signature_column_when_declared(tmp_path, mon
 
 
 # ── 9. The queued rows are described from the DECLARED input schema ─────────
-#
-# `human_review_queue` runs for any workflow, so nothing here may depend on the
-# upstream stage's type or on any particular column name.
+
+# A queue runs for any workflow, so nothing here depends on the upstream type.
 
 
 def _build_and_halt_queue_over(tmp_path, monkeypatch, project, stages):
@@ -967,7 +966,7 @@ def _labelled_row_function_stage():
 
 def _review_labels_stage():
     return _with_queue_signature({
-        "id": "review", "description": "Review labels", "type": "human_review_queue",
+        "id": "review", "description": "Review labels", "type": "review_queue",
         "inputs": [{"id": "label"}],
         "queue": {**queue_columns(source="label", target="human_label")}}, [
         {"name": "id", "type": "str", "nullable": True},
@@ -999,7 +998,7 @@ def test_a_queue_whose_upstream_is_not_an_llm_transform_renders_and_links(tmp_pa
 
 
 def _described_review_stage(context_columns=None):
-    return {"id": "review", "description": "Review labels", "type": "human_review_queue",
+    return {"id": "review", "description": "Review labels", "type": "review_queue",
             "inputs": [{"id": "label"}],
             "signature": {
                 "form": "extends",
@@ -1202,7 +1201,7 @@ def _long_note_load_stage(project_dir):
 
 def _long_note_review_stage():
     return _with_queue_signature({
-        "id": "review", "description": "Review notes", "type": "human_review_queue",
+        "id": "review", "description": "Review notes", "type": "review_queue",
         "inputs": [{"id": "load"}],
         "queue": {**queue_columns(source="note", target="human_note")}}, [
         {"name": "id", "type": "str", "nullable": True},
@@ -1328,7 +1327,7 @@ def _empty_string_row_function_stage():
 
 def _empty_string_review_stage():
     return _with_queue_signature({
-        "id": "review", "description": "Review notes", "type": "human_review_queue",
+        "id": "review", "description": "Review notes", "type": "review_queue",
         "inputs": [{"id": "note"}],
         "queue": {**queue_columns(source="flag", target="human_flag")}}, [
         {"name": "id", "type": "str", "nullable": True},
@@ -1396,7 +1395,7 @@ def test_a_cell_holding_an_address_is_rendered_as_a_link(tmp_path, monkeypatch):
 
 def _every_column_reviewed_stage():
     return _with_queue_signature({
-        "id": "review", "description": "Review scores", "type": "human_review_queue",
+        "id": "review", "description": "Review scores", "type": "review_queue",
         "inputs": [{"id": "load"}],
         "queue": dict(QUEUE_COLUMNS)}, [
         {"name": "score", "type": "int", "nullable": True}])

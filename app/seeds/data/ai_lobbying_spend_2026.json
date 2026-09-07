@@ -920,7 +920,7 @@
     },
     {
       "id": "review_ai_spend",
-      "type": "human_review_queue",
+      "type": "review_queue",
       "description": "Put Every Published Filing in Front of a Person",
       "inputs": [
         {

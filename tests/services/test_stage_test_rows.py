@@ -61,7 +61,7 @@ def _write_run(
     rows.to_parquet(run / "outputs" / f"{stage_id}.parquet", index=False)
     store_manifest(project_dir, run_id, {
         "run_id": run_id, "started_at": run_id, "project": project_dir.name,
-        "workflow_version": run_id, "human_review_queue_stats": {}, "status": "ok",
+        "workflow_version": run_id, "review_queue_stats": {}, "status": "ok",
         "stage_records": [{
             "stage_id": stage_id, "type": "input_data", "status": status,
             "output_row_count": len(rows), "elapsed_ms": 1,

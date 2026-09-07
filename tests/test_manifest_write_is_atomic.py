@@ -27,7 +27,7 @@ def _manifest(run_id: str, stages: int) -> RunManifest:
         workflow_version="v1",
         parameters=RunParameters(),
         input_bindings={},
-        human_review_queue_stats={},
+        review_queue_stats={},
         dropped_columns={},
         status=RunStatus.RUNNING,
         # Growing the record list changes the payload's length between flushes, so a

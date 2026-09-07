@@ -60,7 +60,7 @@ def create_run_manifest(
         workflow_version=workflow_version,
         parameters=ctx.params,
         input_bindings=input_bindings,
-        human_review_queue_stats={},
+        review_queue_stats={},
         dropped_columns={},
         status=RunStatus.RUNNING,
         stage_records=[
