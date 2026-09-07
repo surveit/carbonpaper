@@ -74,7 +74,8 @@ Each tool's own description says how it behaves; this says WHEN. Start by callin
 create_project(name, document) — the methodology prose becomes the project's source of
 record, and it returns the project record, whose `id` every other tool takes.
 
-  RESEARCH   read_stage, get_project_status, list_runs
+  RESEARCH   list_versions, read_version_stage, read_draft_stage,
+             get_project_status, list_runs
              for what this project has already run,
              run_workflow_test over a few rows, then
              profile_stage_output_data_range, to see what the data really holds,

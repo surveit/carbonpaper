@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from app.tools.editing import EditingContext, build_editing_tools
 from app.core.agent.registry import as_tool_content, build_mcp_server
 from app.core.agent.bound_tool import bind_by_signature
-from app.tools import shared
+from app.tools import draft_editing
 from app.tools.tool_specs import bind
 from app.services import workspace
 from stage_seed import SEED_DRAFT, add_stage
@@ -66,7 +66,7 @@ def test_allowed_names_cover_every_tool(examples_root: Path) -> None:
 def test_read_stage_handler_returns_text_content(examples_root: Path) -> None:
     pdir = _seed(examples_root, "congresswatch")
     _server, _allowed, tools = _build("congresswatch")
-    tool = next(t for t in tools if t.name == "read_stage")  # SdkMcpTool
+    tool = next(t for t in tools if t.name == "read_draft_stage")  # SdkMcpTool
 
     from app.services.workspace import project_workflow_summary
 
@@ -79,7 +79,7 @@ def test_read_stage_handler_returns_text_content(examples_root: Path) -> None:
 def test_handler_surfaces_tool_error_not_fabricated_value(examples_root: Path) -> None:
     _seed(examples_root, "congresswatch")
     _server, _allowed, tools = _build("congresswatch")
-    tool = next(t for t in tools if t.name == "read_stage")
+    tool = next(t for t in tools if t.name == "read_draft_stage")
     out = _call(tool, {"project_id": "congresswatch", "stage_id": "no_such_stage"})
     assert out.get("is_error") is True
     assert "no_such_stage" in out["content"][0]["text"]
@@ -110,7 +110,7 @@ def test_add_stage_then_save_creates_an_unpublished_version(examples_root: Path)
     assert json.loads(out["content"][0]["text"])["added"] == ["score"], out["content"][0]["text"]
 
     read_back = json.loads(_call(
-        by_name["read_stage"],
+        by_name["read_draft_stage"],
         {"project_id": "congresswatch", "stage_id": "score"})["content"][0]["text"])
     assert read_back["id"] == stage["id"]
     assert read_back["type"] == stage["type"]
@@ -215,7 +215,7 @@ def test_a_parameter_the_function_does_not_take_is_refused() -> None:
     """The prose table is the only place a name can disagree with the function."""
     with pytest.raises(ValueError, match=r"does not take \['nonesuch'\]"):
         bind_by_signature(
-            name="read_stage", description="d", fn=shared.read_stage, label="l",
+            name="read_draft_stage", description="d", fn=draft_editing.read_draft_stage, label="l",
             parameters={"nonesuch": "not a parameter of read_stage"},
         )
 
@@ -227,7 +227,7 @@ def test_a_parameter_no_prose_describes_is_refused() -> None:
 
     with pytest.raises(ValueError, match=r"advertises \['include_tests'\]"):
         bind_by_signature(
-            name="read_stage", description="d", fn=read_stage, label="l",
+            name="read_draft_stage", description="d", fn=read_stage, label="l",
             parameters={
                 "project_id": "The project's name.",
                 "stage_id": "The stage's id, as start_editing lists them.",
