@@ -26,6 +26,7 @@ from app.services import (
     claim_shapes, code_approval, generation, methodology, project, terms, versioning,
 )
 from app.services.loader import list_parsed_stages, resolve_function_code
+from app.services.project import ProjectEdit
 from app.services.workspace import LOADER_BOOKKEEPING_KEYS
 from app.web.project_overview import build_project_overview
 from app.web.breadcrumbs import build_version_crumbs, build_workflow_crumbs
@@ -59,6 +60,12 @@ def index(request: Request):
         "index.html",
         {"projects": list_projects()},
     )
+
+
+@router.post("/project/{project_name}")
+def edit_project(project_name: str, edit: ProjectEdit) -> JSONResponse:
+    meta = project.edit_project(validate_project_or_404(project_name), edit)
+    return JSONResponse(meta.model_dump(mode="json"))
 
 
 @router.post("/project/{project_name}/code-execution/withdraw")

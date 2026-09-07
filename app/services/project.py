@@ -14,7 +14,7 @@ import zipfile
 from datetime import datetime
 from typing import Any, Sequence
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.core.timestamp_ids import mint_timestamp_id
 from app.models import (
@@ -93,6 +93,13 @@ class ProjectListing(BaseModel):
 
     id: str
     name: str
+
+
+class ProjectEdit(BaseModel):
+    # A key nothing here can write is a 422 rather than a silently dropped field.
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
 
 
 class ProjectMeta(BaseModel):
@@ -279,6 +286,14 @@ def set_project_private(project_id: str, private: bool) -> None:
     record = Project.load(project_id)
     record.private = private
     record.save()
+
+
+def edit_project(project_id: str, edit: ProjectEdit) -> ProjectMeta:
+    """A blank title stores None, which is what sends `display_name` back to the slug."""
+    record = Project.load(project_id)
+    record.title = edit.title.strip() or None
+    record.save()
+    return project_meta(project_id)
 
 
 def read_workflow_summary(name: str) -> workspace.WorkflowSummary:
