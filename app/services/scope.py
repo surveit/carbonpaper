@@ -181,10 +181,10 @@ def _read_the_only_upstream_row(run_branches: WorkflowRunBranches, row: RowRef,
 
 def _fed_by_no_rows(run_branches: WorkflowRunBranches, stage_id: StageId,
                     ordinal: RowOrdinal) -> bool:
-    """The row is in the frame and the lineage names nothing that produced it."""
+    """The row is in the frame and the lineage names neither a parent nor a file behind it."""
     lineage = run_branches.lineages.get(stage_id)
     return (lineage is not None and ordinal < len(lineage.parents)
-            and not lineage.parents[ordinal])
+            and not lineage.parents[ordinal] and lineage.source(ordinal) is None)
 
 
 def _merged_from(run_branches: WorkflowRunBranches, stage_id: StageId,
@@ -255,9 +255,7 @@ def _one_hop_up(run_branches: WorkflowRunBranches, sid: StageId, row: RowOrdinal
                 ) -> list[tuple[StageId, RowOrdinal]]:
     lineage = run_branches.lineages.get(sid)
     if lineage is not None and row < len(lineage.parents):
-        # A load's self-edge holds the file, counting the row within it, not in the frame.
-        return [(p.stage_id, p.row_ordinal) for p in lineage.parents[row]
-                if p.stage_id != sid]
+        return [(p.stage_id, p.row_ordinal) for p in lineage.parents[row]]
     # No lineage: the stage type's contract says output row i IS input row i.
     stage = run_branches.stages.get(sid)
     inputs = [ref.id for ref in stage.inputs] if stage else []

@@ -11,8 +11,11 @@ from app.services.project import save_working_copy_as_version
 from app.services.scope import find_rows_reached_per_stage
 from app.services.workspace import resolve_run_dir
 from app.web.scope_view import read_run_branches
+from app.core.frames import write_frame_table
+from app.runtime.lineage_sidecar import resolve_lineage_sidecar_path
 from scope_fixture import column, write_inputs
 from stage_seed import set_stages
+from test_a_load_records_a_file_not_a_parent import encode_a_pre_split_sidecar
 
 PROJECT = "two_file_load_fixture"
 
@@ -32,6 +35,24 @@ def test_a_load_of_two_files_reaches_only_the_rows_that_reached_the_total(run_id
     loaded = _read_column(run_id, "both_files", "grant_id")
     behind = [loaded[ordinal] for ordinal in sorted(reached["both_files"])]
     assert behind == _read_column(run_id, "big_grants", "grant_id")
+
+
+def test_a_pre_split_sidecar_reaches_the_same_rows_as_one_written_since(run_id):
+    """A stored run keeps its answer: nothing rewrites the sidecars it already holds."""
+    branches = read_run_branches(PROJECT, run_id)
+    lineage = branches.lineages["both_files"]
+    assert lineage is not None
+    expected = find_rows_reached_per_stage(branches, [("big_total", 0)])
+
+    path = resolve_lineage_sidecar_path(resolve_run_dir(PROJECT, run_id), "both_files")
+    write_frame_table(encode_a_pre_split_sidecar("both_files", lineage), path)
+    reached = find_rows_reached_per_stage(read_run_branches(PROJECT, run_id),
+                                          [("big_total", 0)])
+
+    assert reached == expected
+    loaded = _read_column(run_id, "both_files", "grant_id")
+    assert [loaded[ordinal] for ordinal in sorted(reached["both_files"])] == (
+        _read_column(run_id, "big_grants", "grant_id"))
 
 
 def _read_column(run_id: str, stage_id: str, name: str) -> list[str]:

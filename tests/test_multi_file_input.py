@@ -99,11 +99,13 @@ def test_each_row_records_the_file_it_was_read_from(tmp_path):
         place_stage(_stage({"paths": _three_months(tmp_path), "format": "csv"})),
         ctx=make_run_context())
     assert output.lineage is not None
-    origins = [entry[0] for entry in output.lineage.parents]
-    assert [PurePath(p.source_file or "").name for p in origins] == [
+    read_from = list(output.lineage.sources)
+    assert [PurePath(one.file).name for one in read_from if one] == [
         "jun.csv", "jul.csv", "aug.csv"]
     # Within its own file, so it is the row a reader would find by opening that file.
-    assert [p.row_ordinal for p in origins] == [0, 0, 0]
+    assert [one.row_ordinal for one in read_from if one] == [0, 0, 0]
+    # A file is not a step upstream, so it is not among the row's parents.
+    assert list(output.lineage.parents) == [[], [], []]
 
 
 def test_one_bound_file_records_its_name_too_rather_than_being_a_special_case(tmp_path):
@@ -111,8 +113,8 @@ def test_one_bound_file_records_its_name_too_rather_than_being_a_special_case(tm
     output = read_input_data(place_stage(_stage({"path": one, "format": "csv"})),
                              ctx=make_run_context())
     assert output.lineage is not None
-    origin = output.lineage.parents[0][0]
-    assert PurePath(origin.source_file or "").name == "jun.csv"
+    origin = output.lineage.source(0)
+    assert origin is not None and PurePath(origin.file).name == "jun.csv"
     assert origin.row_ordinal == 0
 
 
@@ -132,6 +134,8 @@ def test_the_trace_names_the_file_the_origin_row_was_read_from(tmp_path):
     assert PurePath(step.source_file or "").name == "jul.csv"
     # Row 1 of the concatenation is row 0 of the file it came from.
     assert step.source_row == 0
+    # A load has no parent to diff against, so every column first appears here.
+    assert step.columns_new == ["month", "reach"]
 
 
 def test_the_lineage_page_states_the_file_on_the_origin_row(tmp_path):
@@ -168,7 +172,7 @@ def test_each_row_carries_the_sha_of_the_file_it_came_from(tmp_path):
         place_stage(_stage({"paths": _three_months(tmp_path), "format": "csv"})),
         ctx=make_run_context())
     assert output.lineage is not None
-    shas = [entry[0].source_file_sha for entry in output.lineage.parents]
+    shas = [one.file_sha for one in output.lineage.sources if one]
     assert all(sha and len(sha) == 64 for sha in shas)
     assert len(set(shas)) == 3
 
@@ -186,6 +190,6 @@ def test_a_row_cap_on_a_source_stage_cuts_its_lineage_rather_than_moving_it(tmp_
 
     assert windowed is not None and len(windowed) == 1
     # The second of the three files, at ITS row 0 — not row 0 shifted to row 1.
-    origin = windowed.parents[0][0]
-    assert PurePath(origin.source_file or "").name == "jul.csv"
+    origin = windowed.source(0)
+    assert origin is not None and PurePath(origin.file).name == "jul.csv"
     assert origin.row_ordinal == 0

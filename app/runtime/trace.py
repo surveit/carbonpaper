@@ -12,7 +12,7 @@ import pyarrow as pa
 from app.core.errors import ContributorNotInFanIn, RowOutOfRange, StageNotInRun
 from app.core.frames import convert_row_to_json_cells, read_frame_table, read_native_row
 from app.models.stage import StageType, is_grain_and_order_preserving
-from app.runtime.lineage import EdgeKind, RowLineage, RowParent
+from app.runtime.lineage import EdgeKind, RowLineage, RowParent, RowSource
 from app.runtime.lineage_sidecar import read_lineage_sidecar
 from app.models.run_manifest import read_input_bindings
 from app.runtime.manifest import read_run_manifest, resolve_output_path
@@ -283,6 +283,10 @@ class RunFrames:
             return None
         return list(lineage.parents[row_ordinal])
 
+    def read_row_source(self, stage_id: str, row_ordinal: int) -> RowSource | None:
+        lineage = self._sidecar(stage_id)
+        return None if lineage is None else lineage.source(row_ordinal)
+
     def _sidecar(self, stage_id: str) -> RowLineage | None:
         if stage_id not in self._sidecars:
             # Parsing a 45k-row sidecar to read one row is the whole cost of a
@@ -325,6 +329,7 @@ def trace_row_from(frames: RunFrames, stage_id: str, row_ordinal: int,
             )
 
         parents = _parents(record)
+        read_from = frames.read_row_source(sid, r)
         hops = frames.lineage_hops(sid, r)
         spine, branches = _split_spine(hops or [])
         fan_in = _find_fan_in(stage_type, spine, hops)
@@ -343,8 +348,8 @@ def trace_row_from(frames: RunFrames, stage_id: str, row_ordinal: int,
             columns_new=_new_columns(table, parent_table),
             origin=_origin(stage_type),
             branches=branches,
-            source_file=spine.source_file if spine else None,
-            source_row=spine.row_ordinal if spine and spine.source_file else None,
+            source_file=read_from.file if read_from else None,
+            source_row=read_from.row_ordinal if read_from else None,
             source_file_count=files_read.get(sid),
             sampled=_read_row_sample(fan_in, followed),
         ))

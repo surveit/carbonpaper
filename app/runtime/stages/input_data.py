@@ -26,7 +26,7 @@ from app.models.run_manifest import ReadFile, StageInputRecord
 from app.models.stages.input_data import FileConnectorParams, InputDataStage
 
 from ..context import RunContext
-from ..lineage import RowLineage, RowParent
+from ..lineage import read_files_lineage
 from ..stage_output import StageOutput
 from .execution import narrow_stage
 
@@ -75,12 +75,11 @@ def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> StageOutp
         )
     frames = [_read_one_file(Path(path), workflow_stage, params) for path in paths]
     _refuse_files_that_disagree(paths, [list(frame.columns) for frame in frames])
+    weighed = [_weigh_file(Path(path)) for path in paths]
     # pd.concat pads a missing column with nulls; concat_tables refuses and names it.
     return StageOutput(
         concat_tables([frame_to_table(frame) for frame in frames]),
-        lineage=_which_file_each_row_came_from(
-            input_stage.id, [_weigh_file(Path(path)) for path in paths],
-            [len(frame) for frame in frames]),
+        lineage=read_files_lineage(weighed, [len(frame) for frame in frames]),
     )
 
 
@@ -97,18 +96,6 @@ def _refuse_files_that_disagree(
                 f"only in '{PurePath(paths[0]).name}' {sorted(first - set(columns))}, "
                 f"only in '{PurePath(path).name}' {sorted(set(columns) - first)}"
             )
-
-
-def _which_file_each_row_came_from(
-    stage_id: str, read: list[ReadFile], rows_per_file: list[int]
-) -> RowLineage:
-    """`row_ordinal` counts within the file, so it is the row a reader would find there."""
-    return RowLineage([
-        # No parent stage: what a reader asks here is which FILE, not which step.
-        [RowParent(stage_id, row, source_file=one.path, source_file_sha=one.sha256)]
-        for one, rows in zip(read, rows_per_file)
-        for row in range(rows)
-    ])
 
 
 def _read_one_file(

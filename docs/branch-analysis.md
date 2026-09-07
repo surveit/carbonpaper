@@ -73,6 +73,19 @@ produced its shape:
 | `predicate` | one input every row reaches, and that input holds rows nothing reaches | `_read_removals` |
 | `merge` | several input rows carry merge edges into one output row | `enumerate_merges` |
 
+A load is the one stage whose rows come off disk rather than out of another stage, so its
+sidecar records **no parents at all**. What it records instead is a `RowSource` per row: the
+file, that file's sha, and the row's index *within that file*. That index is not a frame
+ordinal — read two files into one stage and the second file's row 0 is frame row 24,797. The
+two live in separate sequences (`RowLineage.parents` and `RowLineage.sources` in
+`app/runtime/lineage.py`), which is what stops a walk upstream from reading one as the other.
+
+On disk the two share one set of list columns, one entry per parent and then the source. An
+entry carrying a file IS the source: the stage and kind cells beside it are written empty and
+ignored on the way back in. That is why a sidecar written before the split — where a load
+recorded its source as an edge pointing at the load itself — decodes into the same `RowSource`,
+with no rewrite of the runs already stored.
+
 Two consequences worth holding on to.
 
 **These five cost no extra recording and no re-run.** Any run that wrote lineage can be read this
