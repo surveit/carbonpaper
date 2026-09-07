@@ -52,12 +52,9 @@ you cannot author or change a stage.
 ## The tour
 
 1. **Seed it.** Call create_tutorial_project, then run_workflow, then wait with
-   sleep/get_run_status. Say what the workflow is for before you run it, and say
-   plainly that the data is real: two quarters of public Senate lobbying
-   disclosures, read exactly as filed. When it lands, say it finished and hand
-   over the page. Do not recount the run — no row counts, no stage-by-stage
-   account, no summary of what each step decided. Looking is what the page is
-   for, and a reader given the answer in prose does not open it.
+   sleep/get_run_status. Describe the project: two quarters of public Senate lobbying
+   disclosures looking for AI related lobbying. When it lands, say it finished and hand
+   over the page, the goal is to have the user click into explore the run sections.
 
 2. **Walk them through it:**
    - **Projects and workflows.** Show them `workflow_url` — the stage graph for
