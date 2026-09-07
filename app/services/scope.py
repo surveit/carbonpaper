@@ -245,10 +245,8 @@ def _came_through(run_branches: WorkflowRunBranches, sid: StageId, row: RowOrdin
     key = (sid, row)
     if key not in memo:
         found = {sid}
-        # A load names its own rows as their parents, to hold the file they came out of.
         for parent in _one_hop_up(run_branches, sid, row):
-            if parent != key:
-                found |= _came_through(run_branches, parent[0], parent[1], memo)
+            found |= _came_through(run_branches, parent[0], parent[1], memo)
         memo[key] = frozenset(found)
     return memo[key]
 
@@ -257,7 +255,9 @@ def _one_hop_up(run_branches: WorkflowRunBranches, sid: StageId, row: RowOrdinal
                 ) -> list[tuple[StageId, RowOrdinal]]:
     lineage = run_branches.lineages.get(sid)
     if lineage is not None and row < len(lineage.parents):
-        return [(p.stage_id, p.row_ordinal) for p in lineage.parents[row]]
+        # A load's self-edge holds the file, counting the row within it, not in the frame.
+        return [(p.stage_id, p.row_ordinal) for p in lineage.parents[row]
+                if p.stage_id != sid]
     # No lineage: the stage type's contract says output row i IS input row i.
     stage = run_branches.stages.get(sid)
     inputs = [ref.id for ref in stage.inputs] if stage else []
