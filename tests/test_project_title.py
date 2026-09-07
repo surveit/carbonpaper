@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.models.records.project import Project
-from app.models.project_edit import ProjectEdit
+from app.services.project import ProjectEdit
 from app.services import project as project_service
 from app.services import workspace
 

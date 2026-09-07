@@ -14,7 +14,7 @@ import zipfile
 from datetime import datetime
 from typing import Any, Sequence
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.core.timestamp_ids import mint_timestamp_id
 from app.models import (
@@ -28,7 +28,6 @@ from app.models import (
     stage_to_spec_dict,
     validate_one_meaning_per_word,
 )
-from app.models.project_edit import ProjectEdit
 from app.models.records.eval_config import EvalConfig
 from app.models.review_guide import ReviewGuideDraft
 from app.models.run_manifest import (
@@ -94,6 +93,13 @@ class ProjectListing(BaseModel):
 
     id: str
     name: str
+
+
+class ProjectEdit(BaseModel):
+    # A key nothing here can write is a 422 rather than a silently dropped field.
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
 
 
 class ProjectMeta(BaseModel):

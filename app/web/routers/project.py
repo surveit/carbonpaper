@@ -22,11 +22,11 @@ from app.models import (
     validate_named_schema,
 )
 from app.models.claims import DATA_UNIVERSE_TOOLTIP
-from app.models.project_edit import ProjectEdit
 from app.services import (
     claim_shapes, code_approval, generation, methodology, project, terms, versioning,
 )
 from app.services.loader import list_parsed_stages, resolve_function_code
+from app.services.project import ProjectEdit
 from app.services.workspace import LOADER_BOOKKEEPING_KEYS
 from app.web.project_overview import build_project_overview
 from app.web.breadcrumbs import build_version_crumbs, build_workflow_crumbs
