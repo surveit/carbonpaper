@@ -60,7 +60,7 @@ def test_allowed_names_cover_every_tool(examples_root: Path) -> None:
     _server, allowed, _tools = _build("congresswatch")
     specs = build_editing_tools(EditingContext(project_id="congresswatch", base_url="http://reader.test/", session_id=SEED_DRAFT))
     assert set(allowed) == {f"mcp__tools__{spec.name}" for spec in specs}
-    assert len(allowed) == 28
+    assert len(allowed) == 29
 
 
 def test_read_stage_handler_returns_text_content(examples_root: Path) -> None:
@@ -189,8 +189,8 @@ def test_write_review_guide_stores_a_guide_sent_as_an_object(examples_root: Path
     by_name = {t.name: t for t in tools}
 
     saved = json.loads(_call(by_name["save_version"], {
-        "project_id": "congresswatch", "message": "the loader alone",
-        "parent_version": None})["content"][0]["text"])
+        "project_id": "congresswatch",
+        "message": "the loader alone"})["content"][0]["text"])
     assert saved["ok"] is True, saved
 
     out = _call(by_name["write_review_guide"], {

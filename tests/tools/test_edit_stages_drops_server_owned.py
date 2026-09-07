@@ -11,7 +11,8 @@ import pytest
 
 from stage_seed import SEED_DRAFT
 
-from app.services.loader import load_workflow
+from app.models import parse_stage
+from app.services import drafts
 from app.services.project import WorkflowFile, import_project
 from app.models.stage import StageEdit
 from app.tools.submitted_stage import edit_stages_reporting_drops
@@ -33,10 +34,8 @@ def tour_project(projects_root):
 
 
 def _stage(project_id: str, stage_id: str):
-    return next(
-        s for s in load_workflow(project_id)
-        if s.id == stage_id
-    )
+    """A patch lands in the draft, so that is where its result is read back."""
+    return parse_stage(drafts.read_draft_specs(project_id, SEED_DRAFT)[stage_id])
 
 
 def test_a_patch_carrying_tests_leaves_the_stored_ones_untouched(tour_project):

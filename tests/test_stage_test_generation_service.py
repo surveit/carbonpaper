@@ -107,6 +107,7 @@ def _saved_stage(project_dir: Path, stage_id: str) -> dict[str, Any]:
     from app.models.stage import stage_to_spec_dict
 
     newest = versioning.find_latest_version_id(project_dir.name)
+    assert newest is not None
     for stage in versioning.load_version_stages(project_dir.name, newest):
         if stage.id == stage_id:
             return stage_to_spec_dict(stage)

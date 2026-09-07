@@ -23,7 +23,7 @@ from app.services import workspace
 from app.services.methodology import write_methodology
 from app.services.stage_test_rows import load_stage_row_sources
 from run_seed import store_manifest
-from stage_seed import add_stage, read_stage, read_stages, seed_version
+from stage_seed import add_stage, read_stages, seed_version, set_stages
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [
@@ -59,8 +59,23 @@ def _seed_project(root: Path) -> Path:
         "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [], "code": "def transform(df, output_dir):\n    return df\n"},
         "report": {}, "signature": {"form": "replaces"},
     })
+    seed_version(pdir, read_stages(pdir))
     _write_run(project_dir)
     return project_dir
+
+
+
+def _saved_stage(project_dir, stage_id: str):
+    """Generation saves a version, so what it wrote is read back from the newest one."""
+    from app.models.stage import stage_to_spec_dict
+    from app.services import versioning
+
+    newest = versioning.find_latest_version_id(project_dir.name)
+    assert newest is not None
+    for stage in versioning.load_version_stages(project_dir.name, newest):
+        if stage.id == stage_id:
+            return stage_to_spec_dict(stage)
+    raise KeyError(stage_id)
 
 
 _RUN_ID = "20260101T000000"
@@ -181,7 +196,7 @@ def test_generate_tests_generates_and_patches_the_stage(client: TestClient, tmp_
     status = _poll_until_inactive(client, "alpha", sid)
     assert status["error"] is None
 
-    stage = read_stage(project_dir, "double")
+    stage = _saved_stage(project_dir, "double")
     assert stage["tests"][0]["name"] == "doubles_two"
 
 
@@ -210,7 +225,7 @@ def test_status_reports_error_after_failed_generation(client: TestClient, tmp_pa
 
     assert status["error"] is not None
     assert status["error"].startswith(GENERATION_FAILURE_PREFIX)
-    stage = read_stage(project_dir, "double")
+    stage = _saved_stage(project_dir, "double")
     assert "tests" not in stage  # nothing written on a failed generation
 
 
@@ -235,7 +250,7 @@ def test_generate_tests_maps_workflow_load_error_to_400(client: TestClient, tmp_
     _seed_project(tmp_path)
     stages = read_stages(tmp_path / "alpha")
     stages[0] = {"id": "load", "type": "not_a_real_type"}
-    seed_version(tmp_path / "alpha", stages)
+    set_stages(tmp_path / "alpha", stages)
 
     response = client.post("/project/alpha/node/double/generate-tests")
 
