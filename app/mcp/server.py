@@ -13,7 +13,7 @@ from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.types import Receive, Scope, Send
 
 from app.mcp.instructions import INSTRUCTIONS
-from app.tools import shared, working_copy
+from app.tools import draft_editing, shared, working_copy
 from app.models.stage import StageEdit
 from app.tools.submitted_stage import (
     SubmittedStage,
@@ -132,28 +132,37 @@ def read_stage(project_id: str, stage_id: str) -> str:
     return shared.read_stage(project_id, stage_id)
 
 
+@mcp.tool(description=read_tool_description("start_editing"))
+def start_editing(project_id: str) -> draft_editing.DraftHandle:
+    return draft_editing.start_editing(project_id)
+
+
 @mcp.tool(description=read_tool_description("edit_stages"))
-def edit_stages(project_id: str, edits: list[StageEdit]) -> shared.EditedStages:
+def edit_stages(
+    project_id: str, draft_id: str, edits: list[StageEdit]
+) -> shared.EditedStages:
     return working_copy.catch_stage_edit_refusals(
-        lambda: edit_stages_reporting_drops(working_copy.open_to_write(project_id), edits)
+        lambda: edit_stages_reporting_drops(project_id, draft_id, edits)
     )
 
 
 @mcp.tool(description=read_tool_description("add_stage"))
-def add_stage(project_id: str, stages: list[SubmittedStage]) -> dict[str, Any]:
-    return add_stages_reporting_drops(working_copy.open_to_write(project_id), stages)
+def add_stage(
+    project_id: str, draft_id: str, stages: list[SubmittedStage]
+) -> dict[str, Any]:
+    return add_stages_reporting_drops(project_id, draft_id, stages)
 
 
 @mcp.tool(description=read_tool_description("delete_stage"))
-def delete_stage(project_id: str, stage_id: str) -> dict[str, Any]:
-    return shared.delete_stage(project_id, stage_id)
+def delete_stage(project_id: str, draft_id: str, stage_id: str) -> dict[str, Any]:
+    return draft_editing.delete_stage(project_id, draft_id, stage_id)
 
 
 @mcp.tool(description=read_tool_description("save_version"))
 def save_version(
-    project_id: str, message: str, parent_version: str | None = None
+    project_id: str, draft_id: str, message: str, override_conflict: bool = False
 ) -> dict[str, Any]:
-    return working_copy.save_working_copy_as_version(project_id, message, parent_version)
+    return draft_editing.save_version(project_id, draft_id, message, override_conflict)
 
 
 @mcp.tool(description=read_tool_description("read_review_guide"))

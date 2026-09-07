@@ -293,8 +293,8 @@ def read_stage(name: str, stage_id: str) -> str:
     return stage_to_json(stage)
 
 
-def edit_stages(store: stage_edit.StageSpecStore, edits: Sequence[StageEdit]) -> EditStageResult:
-    return stage_edit.patch_stage_specs(store, edits)
+def edit_stages(name: str, draft_id: str, edits: Sequence[StageEdit]) -> EditStageResult:
+    return stage_edit.patch_stage_specs(_project_to_write(name), draft_id, edits)
 
 
 def save_working_copy_as_version(
@@ -318,10 +318,10 @@ def save_working_copy_as_version(
 
 
 def add_stages_reporting_outcome(
-    store: stage_edit.StageSpecStore, stages: Sequence[StageDraft]
+    name: str, draft_id: str, stages: Sequence[StageDraft]
 ) -> dict[str, Any]:
     try:
-        outcome = add_stages(store, stages)
+        outcome = add_stages(name, draft_id, stages)
     except (WorkflowLoadError, FileNotFoundError) as exc:
         outcome = AddStagesResult(batch_issues=[str(exc)])
     return {
@@ -334,22 +334,13 @@ def add_stages_reporting_outcome(
 
 
 def add_stages(
-    store: stage_edit.StageSpecStore, stages: Sequence[StageDraft]
+    name: str, draft_id: str, stages: Sequence[StageDraft]
 ) -> AddStagesResult:
-    return stage_edit.add_stage_specs(store, stages)
+    return stage_edit.add_stage_specs(_project_to_write(name), draft_id, stages)
 
 
-def open_working_copy_to_write(name: str) -> stage_edit.StageSpecStore:
-    """The guard a tool needs: writing a stage never brings a project into being."""
-    return stage_edit.open_working_copy(_project_to_write(name))
-
-
-def delete_stage_from_working_copy(name: str, stage_id: str) -> EditStageResult:
-    return delete_stage(stage_edit.open_working_copy(_project_to_write(name)), stage_id)
-
-
-def delete_stage(store: stage_edit.StageSpecStore, stage_id: str) -> EditStageResult:
-    return stage_edit.delete_stage_spec(store, stage_id)
+def delete_stage(name: str, draft_id: str, stage_id: str) -> EditStageResult:
+    return stage_edit.delete_stage_spec(_project_to_write(name), draft_id, stage_id)
 
 
 def read_review_guide(name: str, version_id: str) -> ReviewGuide | None:

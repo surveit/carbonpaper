@@ -16,7 +16,7 @@ from app.models import (
 from app.models.records.draft import Draft
 from app.core.json_types import JsonDict
 from app.core.utils import format_errors, build_word_triplet_id
-from app.services import stage_edit, versioning, workspace
+from app.services import versioning, workspace
 
 
 class DraftView(BaseModel):
@@ -78,17 +78,17 @@ def create_draft(
     return _build_draft_view(d)
 
 
-def open_session_draft(name: str, session_id: str) -> DraftView:
-    """Idempotent: a session's first edit seeds its draft from the newest version."""
+def open_draft(name: str, draft_id: str) -> DraftView:
+    """Idempotent: the first edit under an id seeds that draft from the newest version."""
     project = workspace.validate_project_id(name)
     try:
-        return _build_draft_view(_load(project, session_id))
+        return _build_draft_view(_load(project, draft_id))
     except DraftNotFoundError:
         pass
     parent = versioning.find_latest_version_id(project)
     d = Draft(
-        id=_doc_id(project, session_id),
-        draft_id=session_id,
+        id=_doc_id(project, draft_id),
+        draft_id=draft_id,
         parent_version=parent,
         stages=versioning.load_version_stages(project, parent) if parent else [],
     )
@@ -149,20 +149,23 @@ def save_version(
     return SaveResult(ok=True, version_id=meta.version_id)
 
 
-def open_session_stages(name: str, session_id: str) -> stage_edit.StageSpecStore:
-    """The store an edit made in this session reads and writes, seeding the draft if new."""
+def start_draft_from_newest(name: str) -> str:
+    """A one-shot edit gets a draft of its own rather than sharing anyone else's."""
     project = workspace.validate_project_id(name)
-    open_session_draft(project, session_id)
+    return create_draft(project, from_version=versioning.find_latest_version_id(project)).id
 
-    def read() -> dict[str, JsonDict]:
-        return {s.id: stage_to_spec_dict(s) for s in _load(project, session_id).stages}
 
-    def write(specs: list[JsonDict]) -> None:
-        d = _load(project, session_id)
-        d.stages = [parse_stage(spec) for spec in specs]
-        d.save()
+def read_draft_specs(name: str, draft_id: str) -> dict[str, JsonDict]:
+    """Seeds the draft from the newest version when this is its first edit."""
+    project = workspace.validate_project_id(name)
+    open_draft(project, draft_id)
+    return {s.id: stage_to_spec_dict(s) for s in _load(project, draft_id).stages}
 
-    return stage_edit.StageSpecStore(project_id=project, read=read, write=write)
+
+def write_draft_specs(name: str, draft_id: str, specs: list[JsonDict]) -> None:
+    d = _load(workspace.validate_project_id(name), draft_id)
+    d.stages = [parse_stage(spec) for spec in specs]
+    d.save()
 
 
 # ─── internals ───────────────────────────────────────────────────────────────

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.core.agent.store import MessageRole, PartType, open_session_store
-from app.services import generation, stage_edit, versioning
+from app.services import drafts, generation, stage_edit, versioning
 from app.services import project as project_service
 from app.services.errors import WorkflowLoadError
 from app.services.loader import find_parsed_stage, list_parsed_stages, resolve_function_code
@@ -70,14 +70,19 @@ async def node_edit(
 
     # `stage_edit.edit_stage_spec` parses, validates and writes; this route maps it onto HTTP.
     try:
-        result = stage_edit.edit_stage_spec(stage_edit.open_working_copy(project_id), stage_id, spec_text)
+        draft_id = drafts.start_draft_from_newest(project_id)
+        result = stage_edit.edit_stage_spec(project_id, draft_id, stage_id, spec_text)
     except FileNotFoundError as exc:
         # The project, or the stage's compiled file, is absent.
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if not result.ok:
         # Nothing was written — fail loudly with the issue list, never a partial write.
         return JSONResponse({"ok": False, "issues": result.issues}, status_code=400)
-    return JSONResponse({"ok": True})
+    # A hand edit is a version: nothing in the app reads a draft but the chat that owns it.
+    saved = drafts.save_version(project_id, draft_id, message=f"Edited {stage_id}")
+    if not saved.ok:
+        return JSONResponse({"ok": False, "issues": saved.issues}, status_code=400)
+    return JSONResponse({"ok": True, "version_id": saved.version_id})
 
 
 @router.post("/project/{project_id}/node/{stage_id}/generate-tests")

@@ -115,14 +115,6 @@ def read_stage(project_id: str, stage_id: str) -> str:
     return project_service.read_stage(project_id, stage_id)
 
 
-def delete_stage(project_id: str, stage_id: str) -> dict[str, Any]:
-    try:
-        result = project_service.delete_stage_from_working_copy(project_id, stage_id)
-    except STAGE_TOOL_ERRORS as exc:
-        return {"ok": False, "issues": [str(exc)]}
-    return {"ok": result.ok, "issues": result.issues}
-
-
 def read_review_guide(project_id: str, version_id: str) -> ReviewGuide | None:
     validate_project_exists(project_id)
     return project_service.read_review_guide(project_id, version_id)

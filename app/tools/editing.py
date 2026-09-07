@@ -8,8 +8,8 @@ from pydantic import BaseModel
 
 from app.core.agent.bound_tool import BoundToolSpec, bind_by_signature
 from app.tools.types import ToolParameterProse
-from app.services import drafts, project as project_service, stage_edit
-from app.tools import shared, working_copy
+from app.services import project as project_service
+from app.tools import draft_editing, shared
 from app.tools.submitted_stage import (
     SubmittedStage,
     add_stages_reporting_drops,
@@ -39,11 +39,11 @@ class EditingContext(BaseModel):
     session_id: str | None = None
 
 
-def _open_stages(project_id: str, ctx: EditingContext) -> stage_edit.StageSpecStore:
-    """A session edits its own draft; without one there is only the working copy."""
+def _draft_of(ctx: EditingContext) -> str:
+    """A chat always has a session, and its id names the draft every edit lands in."""
     if ctx.session_id is None:
-        return project_service.open_working_copy_to_write(project_id)
-    return drafts.open_session_stages(project_id, ctx.session_id)
+        raise ValueError("this chat has no session, so it has no draft to edit")
+    return ctx.session_id
 
 
 def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
@@ -56,19 +56,19 @@ def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         return shared.create_project(name, document, source="editing agent")
 
     def edit_stages(project_id: str, edits: list[StageEdit]) -> shared.EditedStages:
-        return edit_stages_reporting_drops(_open_stages(project_id, ctx), edits)
+        return edit_stages_reporting_drops(project_id, _draft_of(ctx), edits)
 
     def add_stage(project_id: str, stages: list[SubmittedStage]) -> dict[str, Any]:
-        return add_stages_reporting_drops(_open_stages(project_id, ctx), stages)
+        return add_stages_reporting_drops(project_id, _draft_of(ctx), stages)
 
     def delete_stage(project_id: str, stage_id: str) -> dict[str, Any]:
-        result = project_service.delete_stage(_open_stages(project_id, ctx), stage_id)
+        result = project_service.delete_stage(project_id, _draft_of(ctx), stage_id)
         return {"ok": result.ok, "issues": result.issues}
 
     def save_version(
-        project_id: str, message: str, parent_version: str | None = None
+        project_id: str, message: str, override_conflict: bool = False
     ) -> dict[str, Any]:
-        return working_copy.save_working_copy_as_version(project_id, message, parent_version)
+        return draft_editing.save_version(project_id, _draft_of(ctx), message, override_conflict)
 
     def list_files(project_id: str | None = None) -> shared.ProjectFilesView:
         where = "/files" if project_id is None else f"/project/{project_id}/files"

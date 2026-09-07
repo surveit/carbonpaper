@@ -5,11 +5,16 @@ together, so binding it is a single lookup and no half of it can go missing.
 from __future__ import annotations
 
 from app.core.agent.bound_tool import BoundToolSpec, bind_by_signature
-from app.tools import shared
+from app.tools import draft_editing, shared
 from app.tools.shared import MAX_OUTPUT_ROWS, MAX_RUNS_LISTED, MAX_SLEEP_SECONDS
 from app.tools.types import AgentTool, ToolParameterProse
 
 # An id is a stamp, not a label: the prose has to send the model to look one up.
+DRAFT_ID = (
+    "The draft this edit lands in, from start_editing — hold it for the whole of your "
+    "work, because another client editing this project holds a different one."
+)
+
 PROJECT_ID = (
     "The project's id, from list_projects or the address get_current_url returns — an "
     "opaque stamp like "
@@ -155,6 +160,18 @@ just-created project appears here only once its first stage has been added, so
 a project missing from this list is one with no stages yet, not one that does
 not exist.""",
     ),
+    "start_editing": AgentTool(
+        fn=draft_editing.start_editing,
+        label="Opening a draft",
+        parameters={"project_id": PROJECT_ID},
+        description="""\
+Open a DRAFT of this project's workflow and return its id, seeded from the newest
+version. Every edit you make lands there and is invisible to anyone else until
+save_version freezes it.
+
+Hold the id for the rest of your work: another client editing this project holds a
+different one, and neither sees the other's stages.""",
+    ),
     "read_stage": AgentTool(
         fn=shared.read_stage,
         label="Reading a stage",
@@ -166,10 +183,11 @@ not exist.""",
 Return the JSON of one stage from the workflow. Read before editing.""",
     ),
     "delete_stage": AgentTool(
-        fn=shared.delete_stage,
+        fn=draft_editing.delete_stage,
         label="Removing a stage",
         parameters={
             "project_id": PROJECT_ID,
+            "draft_id": DRAFT_ID,
             "stage_id": "The stage to delete. Refused if another stage still lists it in its inputs.",
         },
         description="""\

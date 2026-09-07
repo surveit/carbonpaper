@@ -26,11 +26,10 @@ from app.models.stage import StageEdit, stage_to_spec_dict
 from app.models.stages.signature import transform_input_schemas
 from app.models.stages.stage_base import find_stage_test_class
 from app.models.stages.stage_tests import StageTest
-from app.services import terms, versioning
+from app.services import drafts, terms, versioning
 from app.services.loader import load_workflow
 from app.services.methodology import read_methodology
 from app.services.stage_edit import (
-    open_working_copy,
     find_description_issues,
     find_unnamed_model_issues,
     patch_stage_specs,
@@ -157,11 +156,20 @@ def _finish_stage_tests(
             f"stage-test generation for '{stage_id}' in {project_id} "
             "submitted an empty test suite"
         )
+    draft_id = drafts.start_draft_from_newest(project_id)
     result = patch_stage_specs(
-        open_working_copy(project_id), [StageEdit(stage_id=stage_id, changes_json=json.dumps({"tests": tests}))]
+        project_id, draft_id, [StageEdit(stage_id=stage_id, changes_json=json.dumps({"tests": tests}))]
     )
     if not result.ok:
         raise GenerationError(
             f"stage-test generation for '{stage_id}' in {project_id} "
             "failed to patch: " + "; ".join(result.issues)
+        )
+    saved = drafts.save_version(
+        project_id, draft_id, message=f"Generated tests for {stage_id}"
+    )
+    if not saved.ok:
+        raise GenerationError(
+            f"generated tests for '{stage_id}' in {project_id} would not save: "
+            + "; ".join(saved.issues)
         )
