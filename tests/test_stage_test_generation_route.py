@@ -23,7 +23,7 @@ from app.services import workspace
 from app.services.methodology import write_methodology
 from app.services.stage_test_rows import load_stage_row_sources
 from run_seed import store_manifest
-from stage_seed import add_stage, read_stage, read_stages, set_stages
+from stage_seed import add_stage, read_stage, read_stages, seed_version
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [
@@ -235,7 +235,7 @@ def test_generate_tests_maps_workflow_load_error_to_400(client: TestClient, tmp_
     _seed_project(tmp_path)
     stages = read_stages(tmp_path / "alpha")
     stages[0] = {"id": "load", "type": "not_a_real_type"}
-    set_stages(tmp_path / "alpha", stages)
+    seed_version(tmp_path / "alpha", stages)
 
     response = client.post("/project/alpha/node/double/generate-tests")
 
