@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 
-from typing import Callable, Sequence
+from typing import Sequence
 
 from app.core.json_types import JsonDict
 
@@ -26,29 +26,12 @@ from app.models.workflow import (
     validate_unique_ids,
     validate_workflow_draft,
 )
+from app.services import drafts
 from app.services.loader import (
     exists as has_working_copy,
     read_stage_specs,
-    save_stage_specs,
     index_stage_specs_by_id,
 )
-
-
-@dataclass(frozen=True)
-class StageSpecStore:
-    """Where an edit reads its stages and writes them back: a draft, or the working copy."""
-
-    project_id: str
-    read: Callable[[], dict[str, JsonDict]]
-    write: Callable[[list[JsonDict]], None]
-
-
-def open_working_copy(project_id: str) -> StageSpecStore:
-    return StageSpecStore(
-        project_id=project_id,
-        read=lambda: _read_working_copy_specs(project_id),
-        write=lambda specs: save_stage_specs(project_id, specs),
-    )
 
 
 @dataclass
@@ -227,7 +210,7 @@ def find_unnamed_model_issues(candidate: dict) -> list[str]:
     ]
 
 
-def _apply(store: StageSpecStore, specs: dict[str, JsonDict], candidates: dict[str, JsonDict]) -> EditStageResult:
+def _apply(project_id: str, draft_id: str, specs: dict[str, JsonDict], candidates: dict[str, JsonDict]) -> EditStageResult:
     misnamed = [
         f"the stage id must equal '{stage_id}' (got '{candidate.get('id')}')"
         for stage_id, candidate in candidates.items()
@@ -241,37 +224,37 @@ def _apply(store: StageSpecStore, specs: dict[str, JsonDict], candidates: dict[s
     for candidate in candidates.values():
         issues += find_description_issues(candidate)
         issues += find_unnamed_model_issues(candidate)
-        issues += find_unapproved_code_issues(store.project_id, candidate, specs)
+        issues += find_unapproved_code_issues(project_id, candidate, specs)
         issues += find_aggregation_issues(candidate)
     if issues:
         return EditStageResult(ok=False, issues=issues)
 
     # An existing stage keeps its position; a new one lands at the end. Stored
     # order is presentation only — the workflow order is the input_ids DAG.
-    store.write(list(resulting.values()))
+    drafts.write_draft_specs(project_id, draft_id, list(resulting.values()))
     return EditStageResult(ok=True)
 
 
-def edit_stage_spec(store: StageSpecStore, stage_id: str, spec_text: str) -> EditStageResult:
+def edit_stage_spec(project_id: str, draft_id: str, stage_id: str, spec_text: str) -> EditStageResult:
     try:
         spec = json.loads(spec_text)
     except json.JSONDecodeError as exc:
         return EditStageResult(ok=False, issues=[f"JSON parse error: {exc}"])
     if not isinstance(spec, dict):
         return EditStageResult(ok=False, issues=["edited spec must be a JSON object (a single stage)"])
-    specs = store.read()
+    specs = drafts.read_draft_specs(project_id, draft_id)
     if stage_id not in specs:
-        raise FileNotFoundError(f"no stage '{stage_id}' in project '{store.project_id}'")
-    return _apply(store, specs, {stage_id: spec})
+        raise FileNotFoundError(f"no stage '{stage_id}' in project '{project_id}'")
+    return _apply(project_id, draft_id, specs, {stage_id: spec})
 
 
-def patch_stage_specs(store: StageSpecStore, edits: Sequence[StageEdit]) -> EditStageResult:
+def patch_stage_specs(project_id: str, draft_id: str, edits: Sequence[StageEdit]) -> EditStageResult:
     """Every edit lands or none does: the merged workflow is validated once, then written once."""
-    specs = store.read()
+    specs = drafts.read_draft_specs(project_id, draft_id)
     merged: dict[str, dict] = {}
     for edit in edits:
         if edit.stage_id not in specs:
-            raise FileNotFoundError(f"no stage '{edit.stage_id}' in project '{store.project_id}'")
+            raise FileNotFoundError(f"no stage '{edit.stage_id}' in project '{project_id}'")
         try:
             patch = json.loads(edit.changes_json)
         except json.JSONDecodeError as exc:
@@ -283,23 +266,23 @@ def patch_stage_specs(store: StageSpecStore, edits: Sequence[StageEdit]) -> Edit
         patched = _merge_patch(merged.get(edit.stage_id, specs[edit.stage_id]), patch)
         assert isinstance(patched, dict)  # both inputs are dicts, so the merge is too
         merged[edit.stage_id] = patched
-    return _apply(store, specs, merged)
+    return _apply(project_id, draft_id, specs, merged)
 
 
-def add_stage_specs(store: StageSpecStore, stages: Sequence[StageDraft]) -> AddStagesResult:
+def add_stage_specs(project_id: str, draft_id: str, stages: Sequence[StageDraft]) -> AddStagesResult:
     batch_issues = validate_unique_ids(stages) + detect_cycle(stages)
     if batch_issues:
         return AddStagesResult(batch_issues=batch_issues)
 
     result = AddStagesResult()
-    specs = store.read()
+    specs = drafts.read_draft_specs(project_id, draft_id)
     for stage in sort_stages_by_dependency(stages):
         blocker = _find_blocking_input(stage, result)
         if blocker is not None:
             result.skipped.append(SkippedStage(stage.id, f"inputs from {blocker}"))
             continue
         spec = stage.to_stage_spec()
-        outcome = _add_new_stage(store, specs, spec)
+        outcome = _add_new_stage(project_id, draft_id, specs, spec)
         if not outcome.ok:
             result.failed.append(StageFailure(stage.id, outcome.issues))
             continue
@@ -313,17 +296,17 @@ def _find_blocking_input(stage: StageDraft, result: AddStagesResult) -> str | No
     return next((i for i in stage.input_ids if i in unavailable), None)
 
 
-def add_stage_spec(store: StageSpecStore, spec_text: str) -> EditStageResult:
+def add_stage_spec(project_id: str, draft_id: str, spec_text: str) -> EditStageResult:
     try:
         spec = json.loads(spec_text)
     except json.JSONDecodeError as exc:
         return EditStageResult(ok=False, issues=[f"JSON parse error: {exc}"])
     if not isinstance(spec, dict):
         return EditStageResult(ok=False, issues=["new stage must be a JSON object (a single stage)"])
-    return _add_new_stage(store, store.read(), spec)
+    return _add_new_stage(project_id, draft_id, drafts.read_draft_specs(project_id, draft_id), spec)
 
 
-def _add_new_stage(store: StageSpecStore, specs: dict[str, JsonDict], spec: JsonDict) -> EditStageResult:
+def _add_new_stage(project_id: str, draft_id: str, specs: dict[str, JsonDict], spec: JsonDict) -> EditStageResult:
     stage_id = spec.get("id")
     if not isinstance(stage_id, str) or not stage_id:
         return EditStageResult(ok=False, issues=["new stage must have a non-empty string 'id'"])
@@ -332,18 +315,18 @@ def _add_new_stage(store: StageSpecStore, specs: dict[str, JsonDict], spec: Json
             ok=False,
             issues=[f"stage '{stage_id}' already exists — use edit_stages to change it"],
         )
-    return _apply(store, specs, {stage_id: spec})
+    return _apply(project_id, draft_id, specs, {stage_id: spec})
 
 
-def delete_stage_spec(store: StageSpecStore, stage_id: str) -> EditStageResult:
-    specs = store.read()
+def delete_stage_spec(project_id: str, draft_id: str, stage_id: str) -> EditStageResult:
+    specs = drafts.read_draft_specs(project_id, draft_id)
     if stage_id not in specs:
-        raise FileNotFoundError(f"no stage '{stage_id}' in project '{store.project_id}'")
+        raise FileNotFoundError(f"no stage '{stage_id}' in project '{project_id}'")
 
     resulting = {k: v for k, v in specs.items() if k != stage_id}
     issues = validate_workflow_draft(list(resulting.values()))
     if issues:
         return EditStageResult(ok=False, issues=issues)
 
-    store.write(list(resulting.values()))
+    drafts.write_draft_specs(project_id, draft_id, list(resulting.values()))
     return EditStageResult(ok=True)
