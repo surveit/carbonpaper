@@ -5,7 +5,7 @@ together, so binding it is a single lookup and no half of it can go missing.
 from __future__ import annotations
 
 from app.core.agent.bound_tool import BoundToolSpec, bind_by_signature
-from app.tools import claim_shapes as claim_shape_tools, draft_editing, shared
+from app.tools import claim_shapes as claim_shape_tools, draft_editing, shared, versions
 from app.tools.shared import MAX_OUTPUT_ROWS, MAX_RUNS_LISTED, MAX_SLEEP_SECONDS
 from app.tools.types import AgentTool, ToolParameterProse
 
@@ -239,15 +239,37 @@ save_version freezes it.
 Hold the id for the rest of your work: another client editing this project holds a
 different one, and neither sees the other's stages.""",
     ),
-    "read_stage": AgentTool(
-        fn=shared.read_stage,
-        label="Reading a stage",
+    "read_draft_stage": AgentTool(
+        fn=draft_editing.read_draft_stage,
+        label="Reading a stage you are editing",
         parameters={
             "project_id": PROJECT_ID,
+            "draft_id": DRAFT_ID,
             "stage_id": "The stage's id, as start_editing lists them.",
         },
         description="""\
-Return the JSON of one stage from the workflow. Read before editing.""",
+Return the JSON of one stage AS YOUR DRAFT HAS IT, including edits you have made
+and not saved. Read before editing.""",
+    ),
+    "list_versions": AgentTool(
+        fn=versions.list_versions,
+        label="Listing the saved versions",
+        parameters={"project_id": PROJECT_ID},
+        description="""\
+Every saved version of this project's workflow, newest first, with what each one
+is called and which stages it holds. This is what everyone but you can see.""",
+    ),
+    "read_version_stage": AgentTool(
+        fn=versions.read_version_stage,
+        label="Reading a saved stage",
+        parameters={
+            "project_id": PROJECT_ID,
+            "version_id": "The version to read from, from list_versions.",
+            "stage_id": "The stage's id, as list_versions shows them.",
+        },
+        description="""\
+Return the JSON of one stage as a SAVED version holds it. Use this to say what a
+version does or how two of them differ; your own draft is read_draft_stage.""",
     ),
     "delete_stage": AgentTool(
         fn=draft_editing.delete_stage,
@@ -637,7 +659,7 @@ Re-send only the failed and skipped stages. A batch that cannot be ordered at
 all — duplicate ids, or a cycle among the submitted stages — is refused whole,
 with NOTHING written and the cycle named in `issues`.
 
-Copying a stage from read_stage is fine: the server-owned fields it carries
+Copying a stage from read_draft_stage is fine: the server-owned fields it carries
 (tests, eval, review, source) are dropped rather than refused, and a
 `warnings` entry names the stage and the fields dropped from it. Any OTHER
 unknown field is still an error — a typo'd field name never passes silently.

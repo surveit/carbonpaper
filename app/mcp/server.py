@@ -15,7 +15,13 @@ from starlette.types import Receive, Scope, Send
 from app.mcp.instructions import INSTRUCTIONS
 from app.models.claims import ClaimShapeInput
 from app.models.records.claims import ClaimShape
-from app.tools import claim_shapes as claim_shape_tools, draft_editing, shared, working_copy
+from app.tools import (
+    claim_shapes as claim_shape_tools,
+    draft_editing,
+    shared,
+    versions,
+    working_copy,
+)
 from app.models.stage import StageEdit
 from app.tools.submitted_stage import (
     SubmittedStage,
@@ -136,9 +142,19 @@ def write_claim_shapes(
     return claim_shape_tools.write_claim_shapes(project_id, shapes)
 
 
-@mcp.tool(description=read_tool_description("read_stage"))
-def read_stage(project_id: str, stage_id: str) -> str:
-    return shared.read_stage(project_id, stage_id)
+@mcp.tool(description=read_tool_description("read_draft_stage"))
+def read_draft_stage(project_id: str, draft_id: str, stage_id: str) -> str:
+    return draft_editing.read_draft_stage(project_id, draft_id, stage_id)
+
+
+@mcp.tool(description=read_tool_description("list_versions"))
+def list_versions(project_id: str) -> list[versions.VersionListing]:
+    return versions.list_versions(project_id)
+
+
+@mcp.tool(description=read_tool_description("read_version_stage"))
+def read_version_stage(project_id: str, version_id: str, stage_id: str) -> str:
+    return versions.read_version_stage(project_id, version_id, stage_id)
 
 
 @mcp.tool(description=read_tool_description("start_editing"))

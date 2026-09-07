@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from pydantic import BaseModel
@@ -25,6 +26,13 @@ def start_editing(project_id: str) -> DraftHandle:
         parent_version=view.parent_version,
         stages=[stage.id for stage in view.stages],
     )
+
+
+def read_draft_stage(project_id: str, draft_id: str, stage_id: str) -> str:
+    specs = drafts.read_draft_specs(project_id, draft_id)
+    if stage_id not in specs:
+        raise ValueError(f"no stage '{stage_id}' in draft '{draft_id}'")
+    return json.dumps(specs[stage_id], indent=2)
 
 
 def delete_stage(project_id: str, draft_id: str, stage_id: str) -> dict[str, Any]:

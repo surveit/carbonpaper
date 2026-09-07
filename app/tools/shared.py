@@ -103,16 +103,12 @@ async def generate_stage_tests(project_id: str, stage_id: str) -> dict[str, Any]
         "status": "started",
         "watch": f"/chat/{session_id}",
         "poll": "get_project_status",
-        "note": "read_stage to see the generated tests once done",
+        "note": "read_draft_stage to see the generated tests once done",
     }
 
 
 def list_projects() -> list[ProjectListing]:
     return project_service.list_project_listings()
-
-
-def read_stage(project_id: str, stage_id: str) -> str:
-    return project_service.read_stage(project_id, stage_id)
 
 
 def read_review_guide(project_id: str, version_id: str) -> ReviewGuide | None:

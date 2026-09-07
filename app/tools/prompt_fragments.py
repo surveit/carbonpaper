@@ -47,7 +47,7 @@ CONCEPTS_NOTE = """\
 
 HOW_YOU_WORK_NOTE = """\
 # How you work
-Read before you edit: start_editing lists the stage ids, read_stage gives one in full.
+Read before you edit: start_editing lists the stage ids, read_draft_stage gives one in full.
 Prefer small, targeted changes.
 Every edit may have complex validations, so large expensive edits that result in errors
 are token inefficient.
