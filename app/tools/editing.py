@@ -103,7 +103,7 @@ def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         )
         for fn in tools
     ] + bind(
-        "list_projects", "read_workflow_summary", "read_stage",
+        "list_projects", "read_stage",
         "read_terms", "write_terms",
         "read_claim_shapes", "write_claim_shapes",
         "read_review_guide", "write_review_guide",

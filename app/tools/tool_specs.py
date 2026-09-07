@@ -244,7 +244,7 @@ different one, and neither sees the other's stages.""",
         label="Reading a stage",
         parameters={
             "project_id": PROJECT_ID,
-            "stage_id": "The stage's id, as read_workflow_summary shows it.",
+            "stage_id": "The stage's id, as start_editing lists them.",
         },
         description="""\
 Return the JSON of one stage from the workflow. Read before editing.""",
@@ -462,15 +462,6 @@ reading the same status over and over as fast as you can call it. Sleeps are
 deliberately short: a reader watching this conversation sees each call, so a
 short one reads as work in progress where a long one reads as a hang. Returns
 the seconds it slept, which is your ask clamped to the ceiling.""",
-    ),
-    "read_workflow_summary": AgentTool(
-        fn=shared.read_workflow_summary,
-        label="Reading the workflow",
-        parameters={"project_id": PROJECT_ID},
-        description="""\
-Summarize a project's workflow: each stage's id, type, description, upstream
-input ids, and review state. Read this before editing so you know the current
-shape. Does not return full stage specs — use read_stage for one.""",
     ),
     "read_stage_output_rows": AgentTool(
         fn=shared.read_stage_output_rows,

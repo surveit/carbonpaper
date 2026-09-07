@@ -230,7 +230,7 @@ def test_a_parameter_no_prose_describes_is_refused() -> None:
             name="read_stage", description="d", fn=read_stage, label="l",
             parameters={
                 "project_id": "The project's name.",
-                "stage_id": "The stage's id, as read_workflow_summary shows it.",
+                "stage_id": "The stage's id, as start_editing lists them.",
             },
         )
 

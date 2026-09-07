@@ -136,11 +136,6 @@ def write_claim_shapes(
     return claim_shape_tools.write_claim_shapes(project_id, shapes)
 
 
-@mcp.tool(description=read_tool_description("read_workflow_summary"))
-def read_workflow_summary(project_id: str) -> shared.workspace.WorkflowSummary:
-    return shared.read_workflow_summary(project_id)
-
-
 @mcp.tool(description=read_tool_description("read_stage"))
 def read_stage(project_id: str, stage_id: str) -> str:
     return shared.read_stage(project_id, stage_id)
