@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.models.records.project import Project
+from app.models.project_edit import ProjectEdit
 from app.services import project as project_service
 from app.services import workspace
 
@@ -30,7 +31,7 @@ def _make_project(workspace_dir: Path, project_id: str) -> Project:
 def test_a_project_shows_its_title_and_keeps_its_slug(workspace_dir: Path) -> None:
     _make_project(workspace_dir, "doccs_restrained")
 
-    project_service.set_project_title("doccs_restrained", "NY Inmate Abuse")
+    project_service.edit_project("doccs_restrained", ProjectEdit(title="NY Inmate Abuse"))
 
     meta = project_service.project_meta("doccs_restrained")
     assert meta.display_name == "NY Inmate Abuse"
@@ -39,9 +40,9 @@ def test_a_project_shows_its_title_and_keeps_its_slug(workspace_dir: Path) -> No
 
 def test_a_blank_title_sends_the_display_name_back_to_the_slug(workspace_dir: Path) -> None:
     _make_project(workspace_dir, "doccs_restrained")
-    project_service.set_project_title("doccs_restrained", "NY Inmate Abuse")
+    project_service.edit_project("doccs_restrained", ProjectEdit(title="NY Inmate Abuse"))
 
-    project_service.set_project_title("doccs_restrained", "   ")
+    project_service.edit_project("doccs_restrained", ProjectEdit(title="   "))
 
     assert Project.load("doccs_restrained").title is None
     assert project_service.project_meta("doccs_restrained").display_name == "doccs_restrained"

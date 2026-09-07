@@ -28,6 +28,7 @@ from app.models import (
     stage_to_spec_dict,
     validate_one_meaning_per_word,
 )
+from app.models.project_edit import ProjectEdit
 from app.models.records.eval_config import EvalConfig
 from app.models.review_guide import ReviewGuideDraft
 from app.models.run_manifest import (
@@ -281,11 +282,12 @@ def set_project_private(project_id: str, private: bool) -> None:
     record.save()
 
 
-def set_project_title(project_id: str, title: str) -> None:
-    """Blank stores None, which is what sends `display_name` back to the slug."""
+def edit_project(project_id: str, edit: ProjectEdit) -> ProjectMeta:
+    """A blank title stores None, which is what sends `display_name` back to the slug."""
     record = Project.load(project_id)
-    record.title = title.strip() or None
+    record.title = edit.title.strip() or None
     record.save()
+    return project_meta(project_id)
 
 
 def read_workflow_summary(name: str) -> workspace.WorkflowSummary:

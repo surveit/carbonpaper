@@ -4,7 +4,7 @@ import json
 from typing import Any
 
 from fastapi import APIRouter, Form, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import ValidationError
 from fastapi.responses import (
     HTMLResponse,
     JSONResponse,
@@ -22,6 +22,7 @@ from app.models import (
     validate_named_schema,
 )
 from app.models.claims import DATA_UNIVERSE_TOOLTIP
+from app.models.project_edit import ProjectEdit
 from app.services import (
     claim_shapes, code_approval, generation, methodology, project, terms, versioning,
 )
@@ -61,17 +62,10 @@ def index(request: Request):
     )
 
 
-class ProjectEdit(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    title: str
-
-
 @router.post("/project/{project_name}")
 def edit_project(project_name: str, edit: ProjectEdit) -> JSONResponse:
-    project_id = validate_project_or_404(project_name)
-    project.set_project_title(project_id, edit.title)
-    return JSONResponse(project.project_meta(project_id).model_dump(mode="json"))
+    meta = project.edit_project(validate_project_or_404(project_name), edit)
+    return JSONResponse(meta.model_dump(mode="json"))
 
 
 @router.post("/project/{project_name}/code-execution/withdraw")
