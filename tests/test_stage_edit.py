@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from app.models.stage import StageEdit
-from app.services import stage_edit
+from app.services import drafts, stage_edit
 from app.services.errors import WorkflowLoadError
 from app.core.persistence import get_store
 from app.models.records.working_copy import WorkingCopy
@@ -215,7 +215,7 @@ def test_remove_stage_rejected_when_a_downstream_depends_on_it(tmp_path: Path) -
     result = stage_edit.delete_stage_spec(pdir, SEED_DRAFT, "load")
     assert result.ok is False
     assert any("load" in issue for issue in result.issues)
-    assert "load" in pdir, SEED_DRAFT.read()
+    assert "load" in drafts.read_draft_specs(pdir, SEED_DRAFT)
 
 
 def test_remove_stage_deletes_the_stage_and_its_file(tmp_path: Path) -> None:
@@ -232,7 +232,7 @@ def test_remove_stage_deletes_the_stage_and_its_file(tmp_path: Path) -> None:
 
     result = stage_edit.delete_stage_spec(pdir, SEED_DRAFT, "score")
     assert result.ok is True and not result.issues
-    assert "score" not in pdir, SEED_DRAFT.read()
+    assert "score" not in drafts.read_draft_specs(pdir, SEED_DRAFT)
     assert [s["id"] for s in read_stages(pdir)] == ["load"]
 
 
@@ -258,7 +258,7 @@ def test_add_stage_creates_the_first_stage_of_an_empty_workflow(tmp_path: Path) 
     pdir = _seed_empty(tmp_path)
     result = stage_edit.add_stage_spec(pdir, SEED_DRAFT, json.dumps(_FIRST_STAGE))
     assert result.ok is True and not result.issues
-    assert set(pdir, SEED_DRAFT.read()) == {"load"}
+    assert set(drafts.read_draft_specs(pdir, SEED_DRAFT)) == {"load"}
 
 
 def test_add_stage_creates_the_first_stage_when_no_working_copy_is_stored() -> None:

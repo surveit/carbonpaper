@@ -21,14 +21,14 @@ def add_stage(project: str | Path, spec: dict[str, Any]) -> None:
         specs.append(spec)
     else:
         specs[index] = spec
-    set_stages(project, specs)
+    _store_stages(project, specs)
 
 
 # A triplet, because app.services.drafts refuses any other shape as a draft id.
 SEED_DRAFT = "seed-draft-fixture"
 
 
-def set_stages(project: str | Path, specs: list[dict[str, Any]]) -> None:
+def _store_stages(project: str | Path, specs: list[dict[str, Any]]) -> None:
     """Replace SEED_DRAFT's stages with `specs`; [] stores an empty workflow."""
     name = _name(project)
     get_store().write(Draft.collection, f"{name}/{SEED_DRAFT}", {
@@ -57,3 +57,17 @@ def read_stages(project: str | Path) -> list[dict[str, Any]]:
 
 def _name(project: str | Path) -> str:
     return Path(project).name
+
+
+def set_stages(project: str | Path, specs: list[dict[str, Any]]) -> None:
+    """Seed the draft a test edits. Use seed_version where the code under test reads one."""
+    _store_stages(project, specs)
+
+
+def seed_version(project: str | Path, specs: list[dict[str, Any]]) -> str:
+    from app.services import versioning
+
+    _store_stages(project, specs)
+    return versioning.create_version_from_stages(
+        _name(project), list(specs), message="seeded"
+    ).version_id
