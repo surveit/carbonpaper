@@ -20,6 +20,7 @@ from app.core.store_config import configure_default_stores, refuse_renamed_env_v
 from app.web.config import (
     INTRO_DIR, STATIC_DIR, RevalidatedStaticFiles, configure_projects_dir_from_env,
 )
+from app.web.access_gate import install_access_gate
 from app.web.errors import install_error_pages
 from app.web.routers import include_routers
 from app.mcp.server import handle_streamable_http, run_session_manager
@@ -70,6 +71,9 @@ app.router.routes.append(Route("/intro", endpoint=serve_intro, methods=["GET"]))
 # Registered on the Starlette exception so it also catches the 404 routing raises for
 # an address no router claims — the dead link in a deck never reaches a handler of ours.
 install_error_pages(app)
+
+# Outermost when configured, so it also guards /static and the error pages.
+install_access_gate(app)
 
 include_routers(app)
 
