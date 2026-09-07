@@ -4,6 +4,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
+from stage_seed import SEED_DRAFT
 from fastapi.testclient import TestClient
 
 from app.agents.compiler.config import CONFIG as EDITING_CONFIG
@@ -86,7 +88,7 @@ def test_nothing_the_reader_did_not_type_reaches_the_conversation(tmp_path) -> N
     """The page arrives as a tool result, so no turn holds words the reader never wrote."""
     project_id = _make_project(tmp_path)
     context = EditingContext(
-        project_id=project_id, base_url=_BASE_URL, page="/project/p1/runs/r1/lineage")
+        project_id=project_id, base_url=_BASE_URL, page="/project/p1/runs/r1/lineage", session_id=SEED_DRAFT)
 
     prompt = render_system_prompt(EDITING_CONFIG, context)
 
@@ -98,7 +100,7 @@ def test_nothing_the_reader_did_not_type_reaches_the_conversation(tmp_path) -> N
 
 def test_the_prompt_names_the_tool_that_reads_it(tmp_path) -> None:
     # A tool the model is never told to reach for is one it answers "this" without.
-    context = EditingContext(base_url=_BASE_URL)
+    context = EditingContext(base_url=_BASE_URL, session_id=SEED_DRAFT)
 
     assert "get_current_url" in render_system_prompt(EDITING_CONFIG, context)
 
@@ -108,14 +110,14 @@ def test_the_binding_is_prompt_prose_because_it_never_moves(tmp_path) -> None:
     project_id = _make_project(tmp_path)
 
     prompt = render_system_prompt(
-        EDITING_CONFIG, EditingContext(project_id=project_id, base_url=_BASE_URL))
+        EDITING_CONFIG, EditingContext(project_id=project_id, base_url=_BASE_URL, session_id=SEED_DRAFT))
 
     assert project_id in prompt
     assert "get_current_project" not in prompt
 
 
 def test_a_chat_bound_to_nothing_is_told_the_two_ways_on(tmp_path) -> None:
-    prompt = render_system_prompt(EDITING_CONFIG, EditingContext(base_url=_BASE_URL))
+    prompt = render_system_prompt(EDITING_CONFIG, EditingContext(base_url=_BASE_URL, session_id=SEED_DRAFT))
 
     # Never a guess: the reader picks an existing project, or names a new one.
     assert "opened in no project" in prompt
@@ -142,7 +144,7 @@ def test_both_hosts_report_the_page_through_the_one_reader() -> None:
 
 
 def _ask_current_url(page: str | None) -> str | None:
-    specs = build_editing_tools(EditingContext(base_url=_BASE_URL, page=page))
+    specs = build_editing_tools(EditingContext(base_url=_BASE_URL, page=page, session_id=SEED_DRAFT))
     spec = next(s for s in specs if s.name == "get_current_url")
     return spec.fn()
 

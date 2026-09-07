@@ -8,9 +8,10 @@ import json
 
 import pytest
 
+from stage_seed import SEED_DRAFT
+
 from app.services.loader import load_workflow
 from app.models.stage import StageEdit
-from app.services import stage_edit
 from app.tools.submitted_stage import edit_stages_reporting_drops
 from stage_seed import add_stage
 
@@ -60,7 +61,7 @@ def test_a_patch_carrying_tests_leaves_the_stored_ones_untouched(tour_project):
         "expected": None,
     }]
 
-    reply = edit_stages_reporting_drops(stage_edit.open_working_copy(tour_project), [
+    reply = edit_stages_reporting_drops(tour_project, SEED_DRAFT, [
         StageEdit(stage_id=_TESTED_STAGE, changes_json=json.dumps({"tests": forged}))])
 
     assert reply.ok is True
@@ -72,7 +73,7 @@ def test_a_patch_that_does_not_mention_tests_keeps_them(tour_project):
     """The strip runs on the PATCH: over the merged spec it would delete them on any edit."""
     seeded = _stage(tour_project, _TESTED_STAGE).tests
 
-    reply = edit_stages_reporting_drops(stage_edit.open_working_copy(tour_project), [
+    reply = edit_stages_reporting_drops(tour_project, SEED_DRAFT, [
         StageEdit(stage_id=_TESTED_STAGE,
                   changes_json=json.dumps({"description": "Double the amount"}))])
 
@@ -83,7 +84,7 @@ def test_a_patch_that_does_not_mention_tests_keeps_them(tour_project):
 
 
 def test_unparseable_changes_still_reach_the_service_for_its_own_error(tour_project):
-    reply = edit_stages_reporting_drops(stage_edit.open_working_copy(tour_project), [StageEdit(stage_id=_TESTED_STAGE, changes_json="{not json")])
+    reply = edit_stages_reporting_drops(tour_project, SEED_DRAFT, [StageEdit(stage_id=_TESTED_STAGE, changes_json="{not json")])
 
     assert reply.ok is False
     assert any("JSON parse error" in issue for issue in reply.issues)

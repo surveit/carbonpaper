@@ -163,7 +163,9 @@ def read_draft_specs(name: str, draft_id: str) -> dict[str, JsonDict]:
 
 
 def write_draft_specs(name: str, draft_id: str, specs: list[JsonDict]) -> None:
-    d = _load(workspace.validate_project_id(name), draft_id)
+    project = workspace.validate_project_id(name)
+    open_draft(project, draft_id)
+    d = _load(project, draft_id)
     d.stages = [parse_stage(spec) for spec in specs]
     d.save()
 

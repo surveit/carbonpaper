@@ -10,6 +10,7 @@ import re
 
 from app.tools.editing import EditingContext, build_editing_tools
 from app.tools.tool_specs import find_tool_names
+from stage_seed import SEED_DRAFT
 
 # Tool names are lowercase identifiers, and so are the parameter/field names the prose
 # also mentions — intersecting with the known tool names is what tells them apart.
@@ -23,7 +24,7 @@ def find_mcp_descriptions() -> dict[str, str]:
 
 
 def find_editing_descriptions() -> dict[str, str]:
-    bound = build_editing_tools(EditingContext(project_id="any", base_url="http://reader.test/"))
+    bound = build_editing_tools(EditingContext(project_id="any", base_url="http://reader.test/", session_id=SEED_DRAFT))
     return {spec.name: spec.description for spec in bound}
 
 

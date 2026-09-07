@@ -18,7 +18,7 @@ from app.core.agent.bound_tool import bind_by_signature
 from app.tools import shared
 from app.tools.tool_specs import bind
 from app.services import workspace
-from stage_seed import add_stage
+from stage_seed import SEED_DRAFT, add_stage
 
 
 @pytest.fixture(autouse=True)
@@ -28,7 +28,7 @@ def examples_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _build(name: str) -> tuple[Any, list[str], list[SdkMcpTool[Any]]]:
-    return build_mcp_server(build_editing_tools(EditingContext(project_id=name, base_url="http://reader.test/")))
+    return build_mcp_server(build_editing_tools(EditingContext(project_id=name, base_url="http://reader.test/", session_id=SEED_DRAFT)))
 
 
 def _call(tool: SdkMcpTool[Any], args: dict[str, Any]) -> dict[str, Any]:
@@ -58,7 +58,7 @@ def _seed(examples: Path, name: str) -> Path:
 def test_allowed_names_cover_every_tool(examples_root: Path) -> None:
     _seed(examples_root, "congresswatch")
     _server, allowed, _tools = _build("congresswatch")
-    specs = build_editing_tools(EditingContext(project_id="congresswatch", base_url="http://reader.test/"))
+    specs = build_editing_tools(EditingContext(project_id="congresswatch", base_url="http://reader.test/", session_id=SEED_DRAFT))
     assert set(allowed) == {f"mcp__tools__{spec.name}" for spec in specs}
     assert len(allowed) == 30
 
@@ -138,7 +138,7 @@ def test_a_tool_taking_a_model_is_handed_json_and_gets_the_model(examples_root: 
     """add_stage and write_review_guide declare pydantic models; the SDK sends dicts."""
     _seed(examples_root, "congresswatch")
     _server, _allowed, tools = _build("congresswatch")
-    spec = next(s for s in build_editing_tools(EditingContext(project_id="congresswatch", base_url="http://reader.test/"))
+    spec = next(s for s in build_editing_tools(EditingContext(project_id="congresswatch", base_url="http://reader.test/", session_id=SEED_DRAFT))
                 if s.name == "add_stage")
 
     parsed = spec.parse_arguments({
@@ -170,7 +170,7 @@ def test_a_model_parameter_is_advertised_with_its_own_shape(examples_root: Path)
     """The SDK maps a type it does not know to a bare string, and a string has no fields."""
     _seed(examples_root, "congresswatch")
     by_name = {s.name: s for s in build_editing_tools(
-        EditingContext(project_id="congresswatch", base_url="http://reader.test/"))}
+        EditingContext(project_id="congresswatch", base_url="http://reader.test/", session_id=SEED_DRAFT))}
 
     schema = by_name["write_review_guide"].json_schema
     guide = schema["properties"]["guide"]

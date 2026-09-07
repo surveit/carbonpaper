@@ -148,8 +148,8 @@ TOOL_SCHEMAS: dict[str, ToolParameterProse] = {
     "save_version": {
         "project_id": PROJECT_ID,
         "message": "What identifies this version to a reader in 150 characters or fewer.",
-        "parent_version": "The version you started this edit FROM, if you loaded one. Omit otherwise: "
-            "nothing is inferred from what else the project has stored.",
+        "override_conflict": "Save even though someone has saved since this draft started. "
+            "Their changes are not carried over — read theirs first unless you mean to.",
     },
     "list_files": {
         "project_id": f"{PROJECT_ID} Omit it for the files that are in no project yet.",

@@ -86,7 +86,8 @@ record, and it returns the project record, whose `id` every other tool takes.
              for. A shape is a figure this project promises to report, so the
              shapes ARE the expected outcome — everything you build after this
              exists to fulfil them, and a workflow that cannot is not done.
-  BUILD      add_stage, edit_stages, delete_stage, then generate_stage_tests and
+  BUILD      start_editing once for a draft id, then add_stage, edit_stages,
+             delete_stage against it, then generate_stage_tests and
              loop edit_stages -> run_stage_tests until they pass. Still BUILD.
              If a write is refused because the step needs unsandboxed Python,
              that refusal names what to try instead. Only if nothing fits, put
