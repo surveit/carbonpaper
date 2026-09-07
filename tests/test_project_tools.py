@@ -14,7 +14,7 @@ from app.models.review_guide import ReviewGuideDraft, ReviewGuideStep
 from app.models.records.review_guide import ReviewGuide
 from app.services import workspace
 from app.models.records.project import Project
-from stage_seed import add_stage, read_stage
+from stage_seed import SEED_DRAFT, add_stage, read_stage
 
 # Minimal valid config block per stage type (app/models/stage.py:
 # each type's stage model declares the ones it requires). Mirrors
@@ -55,7 +55,7 @@ def examples_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _tools(name: str) -> list[BoundToolSpec]:
-    return build_editing_tools(EditingContext(project_id=name, base_url="http://reader.test/"))
+    return build_editing_tools(EditingContext(project_id=name, base_url="http://reader.test/", session_id=SEED_DRAFT))
 
 
 def _stage(sid: str, name: str, stype: str, inputs: list[str] | None = None) -> dict:

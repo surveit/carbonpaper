@@ -17,7 +17,7 @@ from app.tools.submitted_stage import SubmittedStage
 from app.models.stage import StageEdit
 from app.services import workspace
 from app.services.project import ProjectListing
-from stage_seed import read_stages, set_stages
+from stage_seed import SEED_DRAFT, read_stages, set_stages
 
 HEADERS = {
     "Accept": "application/json, text/event-stream",
@@ -282,12 +282,12 @@ def test_mcp_remove_stage_returns_ok_and_issues(tmp_path, monkeypatch):
     pdir = tmp_path / project_id
     _store_workflow(pdir)
 
-    removed = server.delete_stage(project_id=project_id, stage_id="untested")
+    removed = server.delete_stage(project_id=project_id, draft_id=SEED_DRAFT, stage_id="untested")
     assert removed == {"ok": True, "issues": []}
     assert "untested" not in {s["id"] for s in read_stages(pdir)}
 
     # `double` still inputs from `load`, so removing `load` is refused with issues.
-    refused = server.delete_stage(project_id=project_id, stage_id="load")
+    refused = server.delete_stage(project_id=project_id, draft_id=SEED_DRAFT, stage_id="load")
     assert refused["ok"] is False and refused["issues"]
     assert "load" in {s["id"] for s in read_stages(pdir)}
 
@@ -299,11 +299,11 @@ def test_mcp_stage_tools_report_an_unknown_stage_id_as_issues(tmp_path, monkeypa
     project_id = "trail"
     _store_workflow(tmp_path / project_id)
 
-    removed = server.delete_stage(project_id=project_id, stage_id="ghost")
+    removed = server.delete_stage(project_id=project_id, draft_id=SEED_DRAFT, stage_id="ghost")
     assert removed["ok"] is False and any("ghost" in i for i in removed["issues"])
 
     edited = server.edit_stages(
-        project_id=project_id,
+        project_id=project_id, draft_id=SEED_DRAFT,
         edits=[StageEdit(stage_id="ghost", changes_json='{"cache": false}')],
     )
     assert edited.ok is False and any("ghost" in i for i in edited.issues)
@@ -319,7 +319,7 @@ def test_mcp_add_stage_reports_an_unloadable_workflow_as_issues(tmp_path, monkey
     set_stages(pdir, [{"id": "broken", "type": "not_a_real_type"}])
 
     added = server.add_stage(
-        project_id=project_id,
+        project_id=project_id, draft_id=SEED_DRAFT,
         stages=[_LOAD_STAGE],
     )
     assert added["ok"] is False and added["issues"]
@@ -346,7 +346,7 @@ def test_mcp_add_stage_creates_the_first_stage_of_a_new_project(tmp_path, monkey
         name="trail", document="Follow the filings.").id
 
     added = server.add_stage(
-        project_id=project_id,
+        project_id=project_id, draft_id=SEED_DRAFT,
         stages=[_LOAD_STAGE],
     )
     assert added == {
@@ -372,7 +372,7 @@ def test_mcp_add_stage_drops_server_owned_fields_and_names_them(tmp_path, monkey
     }
 
     _content, added = asyncio.run(
-        server.mcp.call_tool("add_stage", {"project_id": project_id, "stages": [echoed]})
+        server.mcp.call_tool("add_stage", {"project_id": project_id, "draft_id": SEED_DRAFT, "stages": [echoed]})
     )
 
     assert added["ok"] is True and added["added"] == ["load"]
@@ -397,7 +397,7 @@ def test_mcp_add_stage_still_refuses_an_unknown_field(tmp_path, monkeypatch):
     }
 
     with pytest.raises(Exception, match="nonsense"):
-        asyncio.run(server.mcp.call_tool("add_stage", {"project_id": project_id, "stages": [typo]}))
+        asyncio.run(server.mcp.call_tool("add_stage", {"project_id": project_id, "draft_id": SEED_DRAFT, "stages": [typo]}))
 
 
 _UNADDITIVE_LLM_STAGE = {
@@ -423,7 +423,7 @@ def test_mcp_add_stage_refuses_an_invalid_stage_on_the_issues_channel(tmp_path, 
     _store_workflow(tmp_path / project_id)
 
     _content, refused = asyncio.run(
-        server.mcp.call_tool("add_stage", {"project_id": project_id, "stages": [_UNADDITIVE_LLM_STAGE]})
+        server.mcp.call_tool("add_stage", {"project_id": project_id, "draft_id": SEED_DRAFT, "stages": [_UNADDITIVE_LLM_STAGE]})
     )
 
     assert refused["ok"] is False
@@ -449,7 +449,7 @@ def test_mcp_save_version_snapshots_the_working_copy(tmp_path, monkeypatch):
     pdir = tmp_path / project_id
     _store_workflow(pdir)
 
-    saved = server.save_version(project_id=project_id, message="first cut")
+    saved = server.save_version(project_id=project_id, draft_id=SEED_DRAFT, message="first cut")
     assert saved["ok"] is True and saved["issues"] == []
 
     [version] = versioning.list_versions(pdir.name)
@@ -467,8 +467,8 @@ def test_mcp_save_version_omitting_the_parent_records_none(tmp_path, monkeypatch
     pdir = tmp_path / project_id
     _store_workflow(pdir)
 
-    server.save_version(project_id=project_id, message="first cut")
-    second = server.save_version(project_id=project_id, message="second cut")
+    server.save_version(project_id=project_id, draft_id=SEED_DRAFT, message="first cut")
+    second = server.save_version(project_id=project_id, draft_id=SEED_DRAFT, message="second cut")
 
     assert second["ok"] is True
     assert versioning.load_version(pdir.name, second["version_id"]).parent_version is None
@@ -483,9 +483,9 @@ def test_mcp_save_version_records_the_caller_supplied_parent(tmp_path, monkeypat
     pdir = tmp_path / project_id
     _store_workflow(pdir)
 
-    first = server.save_version(project_id=project_id, message="first cut")
+    first = server.save_version(project_id=project_id, draft_id=SEED_DRAFT, message="first cut")
     second = server.save_version(
-        project_id=project_id, message="second cut", parent_version=first["version_id"])
+        project_id=project_id, draft_id=SEED_DRAFT, message="second cut", parent_version=first["version_id"])
 
     assert second["version_id"] != first["version_id"]
     saved = versioning.load_version(pdir.name, second["version_id"])
@@ -501,11 +501,11 @@ def test_mcp_save_version_refuses_a_parent_that_does_not_exist(tmp_path, monkeyp
     pdir = tmp_path / project_id
     _store_workflow(pdir)
 
-    server.save_version(project_id=project_id, message="first cut")
+    server.save_version(project_id=project_id, draft_id=SEED_DRAFT, message="first cut")
     before = [v.version_id for v in versioning.list_versions(pdir.name)]
 
     refused = server.save_version(
-        project_id=project_id, message="second cut", parent_version="20200101T000000")
+        project_id=project_id, draft_id=SEED_DRAFT, message="second cut", parent_version="20200101T000000")
 
     assert refused["ok"] is False
     assert "20200101T000000" in " ".join(refused["issues"])
@@ -523,7 +523,7 @@ def test_mcp_save_version_refuses_an_unloadable_working_copy(tmp_path, monkeypat
     pdir.mkdir(parents=True, exist_ok=True)
     set_stages(pdir, [{"id": "broken", "type": "not_a_real_type"}])
 
-    refused = server.save_version(project_id=project_id, message="doomed")
+    refused = server.save_version(project_id=project_id, draft_id=SEED_DRAFT, message="doomed")
     assert refused["ok"] is False and refused["issues"]
     assert "version_id" not in refused
     assert versioning.list_versions(pdir.name) == []
@@ -546,7 +546,7 @@ def _saved_version(tmp_path, monkeypatch) -> tuple[str, str]:
     project_id = server.create_project(
         name="trail", document="Follow the filings.").id
     _store_workflow(tmp_path / project_id)
-    saved = server.save_version(project_id=project_id, message="first cut")
+    saved = server.save_version(project_id=project_id, draft_id=SEED_DRAFT, message="first cut")
     return project_id, saved["version_id"]
 
 

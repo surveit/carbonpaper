@@ -11,6 +11,8 @@ from typing import Iterator
 
 import pytest
 
+from stage_seed import SEED_DRAFT
+
 from app.core.paths import repo_root
 from scripts.dump_prompts import render_prompt_dump
 
@@ -40,7 +42,7 @@ def test_dump_contains_every_shipped_prompt(dump: str) -> None:
 def test_dump_offers_the_editing_agent_every_tool_it_binds(dump: str) -> None:
     from app.tools.editing import EditingContext, build_editing_tools
 
-    bound = build_editing_tools(EditingContext(project_id="p", base_url="http://reader.test/"))
+    bound = build_editing_tools(EditingContext(project_id="p", base_url="http://reader.test/", session_id=SEED_DRAFT))
     missing = [spec.name for spec in bound if f"#### `{spec.name}`" not in dump]
     assert not missing, f"editing tools absent from the dump: {missing}"
 

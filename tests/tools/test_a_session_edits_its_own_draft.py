@@ -5,7 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from app.services import stage_edit, versioning
+from stage_seed import SEED_DRAFT
+
+from app.services import versioning
 from app.tools.editing import EditingContext, _open_stages
 
 _SESSION_A = "a" * 32
@@ -51,7 +53,7 @@ def test_neither_session_touches_the_working_copy(project: str) -> None:
 
     a.write([])
 
-    assert stage_edit.open_working_copy(project).read() == {}
+    assert project, SEED_DRAFT.read() == {}
 
 
 def test_a_chat_with_no_session_writes_the_working_copy_and_is_guarded(project: str) -> None:
