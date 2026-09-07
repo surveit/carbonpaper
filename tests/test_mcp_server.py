@@ -15,7 +15,7 @@ from pydantic import ValidationError
 from app.models import Terms
 from app.tools.submitted_stage import SubmittedStage
 from app.models.stage import StageEdit
-from app.services import workspace
+from app.services import drafts, workspace
 from app.services.project import ProjectListing
 from stage_seed import SEED_DRAFT, read_stages, set_stages
 
@@ -66,7 +66,6 @@ def test_mcp_lists_the_authoring_tools(client):
         "list_projects",
         "create_project",
         "get_project_status",
-        "read_workflow_summary",
         "read_stage",
         "edit_stages",
         "add_stage",
@@ -352,7 +351,7 @@ def test_mcp_add_stage_creates_the_first_stage_of_a_new_project(tmp_path, monkey
     assert added == {
         "ok": True, "issues": [], "added": ["load"], "failed": [], "skipped": [],
     }, "a clean draft warns about nothing"
-    assert server.read_workflow_summary(project_id=project_id).stages[0].id == "load"
+    assert "load" in drafts.read_draft_specs(project_id, SEED_DRAFT)
 
 
 def test_mcp_add_stage_drops_server_owned_fields_and_names_them(tmp_path, monkeypatch):
@@ -594,4 +593,4 @@ def test_read_tools_reject_unknown_project(tmp_path, monkeypatch):
 
     workspace.set_projects_dir(tmp_path)
     with pytest.raises(ValueError):
-        server.read_workflow_summary(project_id="no_such_project")
+        server.get_project_status(project_id="no_such_project")

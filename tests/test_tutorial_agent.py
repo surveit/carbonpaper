@@ -41,7 +41,6 @@ _EXPECTED_TOOLS = {
     "run_workflow",
     "get_run_status",
     "sleep",
-    "read_workflow_summary",
 }
 
 
@@ -82,7 +81,7 @@ def test_the_tutorial_agent_gets_none_of_the_editing_tools() -> None:
 
     assert "add_stage" in editing and "save_version" in editing  # the list is real
     # The overlap is the shared read-and-run tools; nothing that edits a workflow.
-    assert bare & editing == {"read_workflow_summary", "read_stage_output_rows",
+    assert bare & editing == {"read_stage_output_rows",
                               "run_workflow", "get_run_status", "sleep"}
     for editing_only in ("add_stage", "edit_stages", "delete_stage", "save_version",
                          "create_draft", "set_draft_stage", "write_review_guide"):

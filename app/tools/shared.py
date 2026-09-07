@@ -333,11 +333,6 @@ async def sleep(seconds: int) -> dict[str, int]:
     return {"slept_seconds": slept}
 
 
-def read_workflow_summary(project_id: str) -> workspace.WorkflowSummary:
-    validate_project_exists(project_id)
-    return project_service.read_workflow_summary(project_id)
-
-
 class StageOutputRow(BaseModel):
     ordinal: int
     values: dict[str, Any]

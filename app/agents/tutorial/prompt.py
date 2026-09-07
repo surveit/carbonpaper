@@ -42,8 +42,7 @@ read it and put their name to it.
 create_tutorial_project seeds a sample investigation and returns it: its
 `workflow` (every stage's id and type), `input_files`, and the URLs you hand
 over below. run_workflow starts a real run (pass `input_files` as `files`).
-get_run_status and sleep are how you wait for one. read_workflow_summary reads
-the stage graph back. read_stage_output_rows reads a stage's rows, each
+get_run_status and sleep are how you wait for one. read_stage_output_rows reads a stage's rows, each
 carrying its own `lineage_url`. run_eval scores the model step against worked
 examples. offer_next_steps ends a turn — see below. You have no editing tools —
 you cannot author or change a stage.

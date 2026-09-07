@@ -47,7 +47,8 @@ CONCEPTS_NOTE = """\
 
 HOW_YOU_WORK_NOTE = """\
 # How you work
-Read before you edit (read_workflow_summary, read_stage). Prefer small, targeted changes.
+Read before you edit: start_editing lists the stage ids, read_stage gives one in full.
+Prefer small, targeted changes.
 Every edit may have complex validations, so large expensive edits that result in errors
 are token inefficient.
 
@@ -109,7 +110,7 @@ def render_link_map(base_url: str) -> str:
         *(f"  {label:<20}{base}{path}" for label, path in _PAGES),
         "",
         "Every <id> above is one a tool handed you — run_workflow for a run id, "
-        "save_version for a version id, and the stage ids read_workflow_summary lists. "
+        "save_version for a version id, and the stage ids start_editing lists. "
         "An id you did not read out of a tool's own output has no link.",
     ])
 
