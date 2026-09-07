@@ -26,6 +26,7 @@ from pydantic import (
     model_validator,
 )
 
+from app.models.retired_names import find_live_type_name, find_stored_type_name
 from app.models.schema import (
     SourceRef,
     StageConfig,
@@ -94,6 +95,12 @@ class StageType(str, Enum):
     explode = "explode"
     dedupe = "dedupe"
     sort_rank = "sort_rank"
+
+    @classmethod
+    def _missing_(cls, value: object) -> "StageType | None":
+        """A stored spec keeps the name it was written under. docs/models-and-storage.md"""
+        live = find_live_type_name(value) if isinstance(value, str) else None
+        return None if live is None else cls(live)
 
 
 
@@ -333,7 +340,7 @@ class AbstractStage(AuthoredStageFields):
     def compute_definition_fingerprint(self) -> str:
         """Excludes `cache`: it decides whether the cache is consulted, not what the stage computes."""
         fields: dict[str, Any] = {
-            "type": self.type,
+            "type": find_stored_type_name(self.type),
             "signature": self.signature.model_dump(mode="json", exclude_none=True),
             **{
                 name: _trim_block_to_fingerprint_fields(block)

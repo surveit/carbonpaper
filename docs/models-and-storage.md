@@ -178,3 +178,30 @@ the replay never happens. Alembic already writes `alembic_version` after its own
 upgrade, so the stamp was only ever missing for a store born outside alembic — and
 guessing which stores those are has a false positive that skips real migrations and
 strands data, where a replay only costs a wasted scan.
+
+## A rename the store is not made to follow
+
+`0017` renamed the `publish` type by rewriting every stored payload. `review_queue`,
+which used to carry a `human_` prefix, took the other route: the code was renamed
+and the store was left alone.
+
+`app/models/retired_names.py` is the one place either spelling is written down. Three
+seams read it:
+
+| Seam | Why it needs one |
+| --- | --- |
+| `BeforeValidator` on the `Stage` union (`app/models/stage.py`) | the discriminator matches a tag string before any field validator runs |
+| `StageType._missing_` | a run's `stage_records[].type` is a bare enum field, under no union |
+| `RunManifest.review_queue_stats`'s `alias` | the field is required with no default, so a stored manifest missing it fails to load |
+
+`compute_definition_fingerprint` hashes the STORED name, not the live one. That is the
+load-bearing part: the fingerprint is what `stage_cache`, `review_decision` and
+`queue_fingerprints` key a row by, so hashing the new name would orphan every cached row
+and every decision a person recorded. Measured on a live store before the change: 1,649
+cache rows stay reachable, 0 orphaned.
+
+The price is that the retired name outlives the rename, in that module and inside a hash
+nobody reads. The price of the other route is a rewrite of the whole store, and a
+decision is the one thing in it no rerun can produce again.
+
+`tests/test_retired_names.py` holds all four claims.

@@ -9,12 +9,14 @@ from __future__ import annotations
 from typing import Annotated, Any, Optional, Union, get_args
 
 from pydantic import (
+    BeforeValidator,
     ConfigDict,
     Field,
     TypeAdapter,
     ValidationError,
 )
 
+from app.models.retired_names import rename_retired_type
 from app.models.stages.stage_base import (  # noqa: F401  (re-exported: the stage vocabulary lives here)
     ReviewConfig,
     AbstractStage,
@@ -76,6 +78,7 @@ Stage = Annotated[
         SortRankStage,
     ],
     Field(discriminator="type"),
+    BeforeValidator(rename_retired_type),
 ]
 
 _STAGE_ADAPTER: TypeAdapter[Stage] = TypeAdapter(Stage)
@@ -114,7 +117,7 @@ def validate_stage(spec: Any) -> list[str]:
 
 
 # docs/models-and-storage.md
-STAGE_SPEC_SCHEMA_VERSION = 9
+STAGE_SPEC_SCHEMA_VERSION = 8
 
 
 def stage_to_spec_dict(stage: Stage) -> dict[str, Any]:

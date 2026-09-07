@@ -7,6 +7,7 @@ from pydantic import ConfigDict, field_validator, model_validator
 from app.core.json_types import JsonDict
 from app.core.record import PersistedModel, PersistenceScope
 from app.core.run_status import RunStatus
+from app.models.retired_names import RETIRED_QUEUE_STATS_KEY
 from app.models.run_manifest import StageRecord
 from app.models.stage_contribution import QueueStats
 from app.models.run_parameters import RunParameters
@@ -55,7 +56,7 @@ class RunManifest(PersistedModel):
     parameters: RunParameters = RunParameters()
     # A RESULT, not a parameter: what the run found at prepare time.
     input_bindings: dict[str, dict[str, Any]] = {}
-    # Required, no default: it would let a pre-rename manifest parse silently, hiding queued items.
+    # No default: a manifest missing it would parse and report no queued items.
     review_queue_stats: dict[str, QueueStats]
     dropped_columns: dict[str, list[str]] = {}
     status: RunStatus
@@ -76,6 +77,15 @@ class RunManifest(PersistedModel):
             return lifted
         legacy = {new: data[old] for new, old in _LEGACY_PARAMETER_KEYS.items() if old in data}
         return {**lifted, "parameters": legacy} if legacy else lifted
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_the_retired_queue_stats_key(cls, data: Any) -> Any:
+        """A manifest written before the rename holds it. docs/models-and-storage.md"""
+        if not isinstance(data, dict) or RETIRED_QUEUE_STATS_KEY not in data:
+            return data
+        stats = {k: v for k, v in data.items() if k != RETIRED_QUEUE_STATS_KEY}
+        return {**stats, "review_queue_stats": data[RETIRED_QUEUE_STATS_KEY]}
 
     @model_validator(mode="after")
     def _always_write_the_store_bookkeeping(self) -> RunManifest:

@@ -26,12 +26,14 @@ BANNED_WORDS = {
     "human review queue", "human_review_queue",
 }
 
-# 0021 renamed the type; these name the store as it was actually written.
+# Where a retired name is the subject: the store holds it. docs/models-and-storage.md
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _WROTE_THE_OLD_NAME = (
+    _REPO_ROOT / "app" / "models" / "retired_names.py",
     _REPO_ROOT / "alembic" / "versions",
     _REPO_ROOT / "scripts" / "stage_signatures.py",
-    *(_REPO_ROOT / "tests" / f"test_migration_{rev}.py" for rev in ("0002", "0007", "0010", "0021")),
+    _REPO_ROOT / "tests" / "test_retired_names.py",
+    *(_REPO_ROOT / "tests" / f"test_migration_{rev}.py" for rev in ("0002", "0007", "0010")),
 )
 
 _SCANNED_SUFFIXES = (".py", ".md", ".html", ".js", ".css")
