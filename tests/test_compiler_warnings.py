@@ -162,11 +162,6 @@ def test_an_llm_stage_with_cache_off_is_a_note_not_a_blocker():
     assert all(w.severity == "warning" for w in warnings)
 
 
-def test_a_review_stage_never_warns_about_caching():
-    """`cache` is fixed False here: the ledger, not this flag, is what replays a decision."""
-    assert _kinds(_queue_stage(cache=False)) == []
-
-
 def test_the_two_caching_types_warn_about_nothing_when_left_alone():
     assert _kinds(_llm_stage()) == []
     assert _kinds(_queue_stage()) == []

@@ -39,21 +39,20 @@ def pinned_stages(project_dir: Path, version_id: str | None = None) -> tuple[Wor
 def run_like_the_app(project_dir: Path, workflow: Workflow, version: str) -> dict:
     """prepare + hand the decisions over + execute, in the order app.services.run does it."""
     from app.runtime.runner import prepare_run, run_prepared
-    from app.services.run import hand_decisions_to_run
+    from app.services.run import write_run_review_decisions
 
     prepared = prepare_run(project_dir / "runs", project_dir.name, workflow, version)
-    hand_decisions_to_run(
+    write_run_review_decisions(
         project_dir.name, project_dir / "runs" / str(prepared["run_id"]), workflow)
     return run_prepared(prepared)
 
 
 def resume_like_the_app(project_dir: Path, run_id: str) -> tuple[Workflow, str]:
     """Hands the run its decisions the way app.services.run does, then returns what resume takes."""
-    from app.services.run import hand_decisions_to_run
+    from app.services.run import write_run_review_decisions
 
     workflow, version = resumed_stages(project_dir, run_id)
-    if not read_run_manifest(project_dir.name, run_id).parameters.bust_cache:
-        hand_decisions_to_run(project_dir.name, project_dir / "runs" / run_id, workflow)
+    write_run_review_decisions(project_dir.name, project_dir / "runs" / run_id, workflow)
     return workflow, version
 
 

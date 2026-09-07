@@ -24,7 +24,6 @@ class ReviewDecision(PersistedModel):
     review_notes: str | None
     reviewer: str
     reviewed_at: str
-    # Absent for a caller with no run context; present whenever a run pinned one.
-    workflow_version: str | None = None
-    # Where the judgement was made, never where it is replayed.
-    decided_in_run: str | None = None
+    # Both absent for a caller with no run context; present whenever a run pinned one.
+    workflow_version_id: ID | None = None
+    workflow_run_id: ID | None = None

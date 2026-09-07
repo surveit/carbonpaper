@@ -5,8 +5,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from app.core.errors import ReviewValidationError
+from app.core.json_types import JsonDict
 from app.core.stage_cache import StageCacheEntry, to_json_safe_row
-from app.models import WorkflowStage
+from app.models import Workflow, WorkflowStage
 from app.models.records.review_decision import ReviewDecision
 from app.models.stages.human_review_queue import (
     QueueConfig,
@@ -37,7 +38,7 @@ def record_decision(
     verdict: ReviewVerdict, reviewed_values: Mapping[str, object],
     review_notes: str | None,
     reviewer: str, reviewed_at: str,
-    workflow_version: str | None, decided_in_run: str | None,
+    workflow_version_id: str | None, workflow_run_id: str | None,
 ) -> None:
     """`reviewed_values` is keyed by TARGET column name, already coerced by the caller."""
     queue = _require_queue_config(stage)
@@ -52,8 +53,8 @@ def record_decision(
         verdict=verdict, reviewed_values=to_json_safe_row(reviewed_values),
         review_notes=review_notes,
         reviewer=reviewer, reviewed_at=reviewed_at,
-        workflow_version=workflow_version,
-        decided_in_run=decided_in_run,
+        workflow_version_id=workflow_version_id,
+        workflow_run_id=workflow_run_id,
     ).save()
     StageCacheEntry.read_write().record(
         project_id=project_id, stage_id=stage.id,
@@ -66,6 +67,50 @@ def record_decision(
         # A human decided this row; no code ran, so there is no branch to replay.
         branches=None,
     )
+
+
+def resolve_review_decisions(
+    project_id: str, workflow: Workflow
+) -> list[tuple[str, dict[str, JsonDict]]]:
+    """(stage id, its decided rows) for every queue stage, for a run to be handed before it starts."""
+    resolved = []
+    for workflow_stage in workflow.list_workflow_stages():
+        queue = resolve_queue_config(workflow_stage.stage)
+        if queue is None:
+            continue
+        resolved.append((
+            workflow_stage.stage.id,
+            resolve_stage_review_decisions(project_id, workflow_stage, queue),
+        ))
+    return resolved
+
+
+def resolve_stage_review_decisions(
+    project_id: str, workflow_stage: WorkflowStage, queue: QueueConfig
+) -> dict[str, JsonDict]:
+    """The ledger alone: a cache entry with no decision behind it replays through the row cache."""
+    return {
+        fingerprint: build_decided_row(
+            queue, decision.frozen_input, verdict=decision.verdict,
+            reviewed_values=decision.reviewed_values, reviewer=decision.reviewer,
+            reviewed_at=decision.reviewed_at, review_notes=decision.review_notes,
+        )
+        for fingerprint, decision in _find_latest_decisions(
+            project_id, workflow_stage.stage.id,
+            workflow_stage.stage.compute_definition_fingerprint()).items()
+    }
+
+
+def _find_latest_decisions(
+    project_id: str, stage_id: str, stage_fingerprint: str
+) -> dict[str, ReviewDecision]:
+    latest: dict[str, ReviewDecision] = {}
+    for decision in ReviewDecision.find(
+            project=project_id, stage_id=stage_id, stage_fingerprint=stage_fingerprint):
+        held = latest.get(decision.input_fingerprint)
+        if held is None or decision.created_at > held.created_at:
+            latest[decision.input_fingerprint] = decision
+    return latest
 
 
 def build_decided_row(

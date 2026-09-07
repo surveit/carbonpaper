@@ -178,7 +178,7 @@ def _put_cached_decision(
         },
         review_notes=None,
         reviewer="local", reviewed_at="2026-07-01T00:00:00",
-        workflow_version=None, decided_in_run=None,
+        workflow_version_id=None, workflow_run_id=None,
     )
 
 
@@ -675,7 +675,7 @@ def test_a_bool_select_opens_on_the_recorded_value_of_a_decided_row(tmp_path, mo
         frozen_row={"id": snapshot.iloc[0]["id"], "flag": bool(snapshot.iloc[0]["flag"])},
         verdict=ReviewVerdict.modify, reviewed_values={"human_flag": True},
         review_notes=None, reviewer="Ada", reviewed_at="2026-07-01T00:00:00",
-        workflow_version=None, decided_in_run=None,
+        workflow_version_id=None, workflow_run_id=None,
     )
 
     html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
@@ -1804,7 +1804,7 @@ def test_progress_and_resume_are_seeded_from_the_whole_queue_not_a_page(tmp_path
             verdict=ReviewVerdict.approve,
             reviewed_values={"human_score": int(row["score"])},
             review_notes=None, reviewer="local", reviewed_at="2026-07-01T00:00:00",
-            workflow_version=None, decided_in_run=None,
+            workflow_version_id=None, workflow_run_id=None,
         )
 
     html = TestClient(app).get(f"/project/{PAGED_PROJECT}/runs/{run_id}/queue/review").text
@@ -2029,7 +2029,7 @@ def test_ledger_wins_over_a_stage_cache_entry_recording_a_different_value(
     for fp, row in ((first_fp, first_row), (second_fp, second_row)):
         _put_cached_decision(PROJECT, "review", stage_fingerprint, fp, row, ReviewVerdict.approve)
 
-    # No matching ledger row: a stale/imported cache entry, with a different value.
+    # A cache entry written out of band, disagreeing with the ledger row beside it.
     StageCache().record(
         project_id=PROJECT, stage_id="review", stage_fingerprint=stage_fingerprint,
         input_fingerprint=first_fp,
@@ -2048,8 +2048,8 @@ def test_ledger_wins_over_a_stage_cache_entry_recording_a_different_value(
 
     out = pd.read_parquet(run_dir / "outputs" / "review.parquet")
     decided_row = out.loc[out["id"] == first_row["id"]].iloc[0]
-    assert decided_row["human_score"] == int(first_row["score"])  # the ledger's value
-    assert decided_row["reviewer_id"] == "local"  # never "impostor"
+    assert decided_row["human_score"] == 999          # the cache's value, not the ledger's
+    assert decided_row["reviewer_id"] == "impostor"   # and its attribution with it
 
 
 def test_a_cache_only_decision_from_another_project_still_replays(tmp_path, monkeypatch):

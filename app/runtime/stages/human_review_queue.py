@@ -26,7 +26,7 @@ from app.core.stage_cache import compute_row_fingerprint
 from app.models.records.queue_fingerprints import QueueFingerprints
 
 from ..context import RunContext, RunIdentity
-from ..run_decisions import read_run_decisions
+from ..review_decisions import read_review_decisions
 from ..stage_output import AwaitingReview
 from .execution import ROW_DEFERRED_KEY, Row, RowMapper, narrow_stage
 
@@ -86,19 +86,20 @@ class _QueueRowMapper:
         _require_project_scope(ctx, queue_stage.id)
         self._queueable = _compute_queueable_mask(src, queue.filter, queue_stage.id)
         # Handed in before this run started, so nothing here reads a project's store.
-        self._decided = read_run_decisions(ctx.require_run_dir(), queue_stage.id)
+        self._saved_review_decisions = read_review_decisions(
+            ctx.require_run_dir(), queue_stage.id)
 
     def __call__(self, row: Row, index: int) -> Row:
         if not self._queueable[index]:
             return _skip_row(self._queue, row)
-        decided = self._resolve_decided_row(row)
+        decided = self._load_existing_row_decision_if_exists(row)
         if decided is not None:
             return decided
         return _defer_row(row, index)
 
-    def _resolve_decided_row(self, row: Row) -> Row | None:
-        decided = self._decided.get(compute_row_fingerprint(row))
-        return None if decided is None else dict(decided)
+    def _load_existing_row_decision_if_exists(self, row: Row) -> Row | None:
+        saved = self._saved_review_decisions.get(compute_row_fingerprint(row))
+        return None if saved is None else dict(saved)
 
     def finish_mapped_rows(
         self,

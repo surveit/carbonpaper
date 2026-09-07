@@ -19,7 +19,7 @@ from app.models.records.review_decision import ReviewDecision
 from app.services import review
 from app.core.frames import list_table_rows, read_frame_table
 from app.core.stage_cache import (
-    ReadOnlyStageCache, StageCache, compute_row_fingerprint,
+    StageCache, compute_row_fingerprint,
 )
 from app.services.project import save_working_copy_as_version
 from conftest import (
@@ -44,17 +44,19 @@ def _run_queue_stage(stage: Stage, inputs: dict[str, pd.DataFrame], ctx) -> Stag
 
 def _hand_decisions_over(stage: Stage, ctx) -> None:
     """What app.services.run does before a run executes: resolve the store onto the run's disk."""
-    from app.runtime.run_decisions import write_run_decisions
-    from app.services.review_handoff import resolve_decided_rows
+    from app.models.stages.human_review_queue import resolve_queue_config
+    from app.runtime.review_decisions import write_review_decisions
+    from app.services.review import resolve_stage_review_decisions
 
-    if ctx.params.bust_cache or ctx.identity is None:
-        return  # bust hands nothing over, which is what re-asks a human
+    if ctx.identity is None:
+        return
 
     placed = place_stage(stage)
-    fingerprint = stage.compute_definition_fingerprint()
-    write_run_decisions(
+    queue = resolve_queue_config(placed.stage)
+    assert queue is not None
+    write_review_decisions(
         ctx.run_dir, stage.id,
-        resolve_decided_rows(ctx.identity.project, placed, fingerprint))
+        resolve_stage_review_decisions(ctx.identity.project, placed, queue))
 
 
 # The upstream columns `_src()` builds — the default input edge below.
@@ -136,7 +138,7 @@ def _put_approval(
         },
         review_notes=None,
         reviewer="local", reviewed_at="2026-07-01T00:00:00",
-        workflow_version=None, decided_in_run=None,
+        workflow_version_id=None, workflow_run_id=None,
     )
 
 
@@ -280,7 +282,8 @@ def test_snapshot_columns_match_original_upstream_columns_exactly(tmp_path):
 # ── 5b. bust_cache: the run re-asks the humans ──────────────────────────────
 
 
-def test_bust_cache_defers_every_queueable_row_despite_cached_decisions(tmp_path):
+def test_bust_cache_keeps_every_row_a_human_already_decided(tmp_path):
+    """Bust says recompute. A judgement is not computed, so it is handed over regardless."""
     stage = _stage()
     src = _src(2)
 
@@ -288,11 +291,7 @@ def test_bust_cache_defers_every_queueable_row_despite_cached_decisions(tmp_path
         stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
     _approve_every_row(snapshot, fingerprints)
 
-    busted, _fingerprints = _halt_and_read_snapshot(
-        stage, {"scored": src.copy()}, _bust_ctx(tmp_path, run_id="run2"))
-    assert list(busted["id"]) == ["r0", "r1"]
-
-    out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run3"))
+    out = _run_queue_stage(stage, {"scored": src.copy()}, _bust_ctx(tmp_path, run_id="run2"))
     assert (rows_of(out)["decision"] == "approve").all()
 
 
@@ -305,10 +304,10 @@ def test_bust_cache_leaves_passed_through_rows_alone(tmp_path):
     _approve_every_row(snapshot, fingerprints)
 
     output = _run_queue_stage(stage, {"scored": src.copy()}, _bust_ctx(tmp_path, run_id="run2"))
-    assert require_awaiting_review(output) is not None
+    assert output.awaiting_review is None
     assert output.contribution.human_review_queue_stats == {
         "items_queued_total": 2, "items_passed_through": 2,
-        "items_pending": 2, "items_decided": 0,
+        "items_pending": 0, "items_decided": 2,
     }
 
 
@@ -508,17 +507,13 @@ def test_queue_stats_count_every_row_the_reviewer_answered(tmp_path):
     }
 
 
-def test_the_stage_reads_no_project_store_at_all(tmp_path, monkeypatch):
-    """A run is self-describing: its decisions are handed to it, never fetched mid-run."""
+def test_the_stage_fetches_no_decision_mid_run(tmp_path, monkeypatch):
+    """A run is handed its decisions. The row cache is untouched by this and still its own seam."""
     stage = _stage()
     ctx = _ctx(tmp_path, run_id="count")
     _hand_decisions_over(stage, ctx)
 
     reached: list[str] = []
-    monkeypatch.setattr(ReadOnlyStageCache, "find_entries",
-                        lambda *a, **k: reached.append("stage_cache") or [])
-    monkeypatch.setattr(ReadOnlyStageCache, "find_recorded_entries",
-                        lambda *a, **k: reached.append("stage_cache") or {})
     monkeypatch.setattr(ReviewDecision, "find",
                         classmethod(lambda cls, **k: reached.append("review_decision") or []))
 
@@ -699,7 +694,8 @@ def test_resume_reattaches_cached_decisions_written_via_the_seam(tmp_path):
     assert sorted(out["human_score"].tolist()) == [1, 2]
 
 
-def test_resume_replays_the_runs_bust_cache(tmp_path):
+def test_bust_cache_does_not_re_ask_a_human_who_already_decided(tmp_path):
+    """Busting a cache says "recompute", never "ask that person again" — the ledger still holds."""
     project_dir = tmp_path / "resume_bust_project"
     _write_stage(project_dir, "01_load.json", _load_stage(project_dir))
     _write_stage(project_dir, "02_review.json", _review_stage_full())
@@ -719,4 +715,4 @@ def test_resume_replays_the_runs_bust_cache(tmp_path):
 
     resumed = runner.resume_run(project_dir / "runs" / run_id, project_dir.name, run_id,
                             *resume_like_the_app(project_dir, run_id))
-    assert resumed["status"] == "awaiting_review"
+    assert resumed["status"] == "ok"

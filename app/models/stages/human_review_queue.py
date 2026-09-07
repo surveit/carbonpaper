@@ -22,6 +22,7 @@ from app.models.stages.stage_base import AbstractStage, StageInput, StageType
 from app.models.stages.shared import find_predicate_column_issues
 from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ExtendsSignature
+from app.models.stages.warnings import CompilerWarning, warn
 
 if TYPE_CHECKING:
     from app.models.workflow_stage import WorkflowStageInput
@@ -124,17 +125,15 @@ class HumanReviewQueueStage(AbstractStage):
     queue: QueueConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
     signature: ExtendsSignature
-    # The ledger replays a decision now, so the row cache must not race it for a row.
-    cache: bool = False
-
-    @field_validator("cache")
-    @classmethod
-    def _cache_never_arms_this_stage(cls, v: bool) -> bool:
-        """Stored specs predate the ledger and still say true; refusing them would strand a version."""
-        return False
+    # On, against the default: the recorded decision IS the cache entry, so a run
+    # that consults none halts on every queueable row a human has already judged.
+    cache: bool = True
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"queue": self.queue}
+
+    def find_handle_compiler_warnings(self) -> list[CompilerWarning]:
+        return find_queue_warnings(self)
 
     def find_config_column_issues(
         self, inputs: Sequence["WorkflowStageInput"]
@@ -187,6 +186,14 @@ class HumanReviewQueueStage(AbstractStage):
                 self.id, self.queue, inputs[0].table_schema, adds_by_name)
             + _find_review_record_target_issues(self.id, self.queue, adds_by_name)
         )
+
+
+def find_queue_warnings(stage: "HumanReviewQueueStage") -> list[CompilerWarning]:
+    if stage.cache:
+        return []
+    return [warn(stage, "nondeterministic",
+                 "caching is off, so no recorded decision is replayed and every run "
+                 "puts rows a human already judged back in front of one")]
 
 
 def _index_adds_by_name(signature: ExtendsSignature) -> dict[str, Column]:
