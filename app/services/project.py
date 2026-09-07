@@ -281,6 +281,13 @@ def set_project_private(project_id: str, private: bool) -> None:
     record.save()
 
 
+def set_project_title(project_id: str, title: str) -> None:
+    """Blank stores None, which is what sends `display_name` back to the slug."""
+    record = Project.load(project_id)
+    record.title = title.strip() or None
+    record.save()
+
+
 def read_workflow_summary(name: str) -> workspace.WorkflowSummary:
     return workspace.project_workflow_summary(workspace.validate_project_id(name))
 

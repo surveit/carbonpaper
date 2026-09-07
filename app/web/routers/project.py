@@ -61,6 +61,13 @@ def index(request: Request):
     )
 
 
+@router.post("/project/{project_name}")
+def edit_project(project_name: str, title: str = Form(...)):
+    project_id = validate_project_or_404(project_name)
+    project.set_project_title(project_id, title)
+    return RedirectResponse(f"/project/{project_id}", status_code=303)
+
+
 @router.post("/project/{project_name}/code-execution/withdraw")
 def withdraw_code_execution(project_name: str):
     """Only stops NEW python stages being written; ones already stored keep running."""
