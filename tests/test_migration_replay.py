@@ -15,10 +15,11 @@ from app.core.persistence import configure_store
 from app.core.sqlite_store import SqliteKvStore
 from app.models.stage import StageDraft
 from app.services import project as project_service
-from app.models.records.working_copy import WorkingCopy
+from app.models.records.draft import Draft
 from app.models.records.methodology import Methodology
 from app.models.records.workflow_version import WorkflowVersion
 from conftest import queue_added_columns, queue_columns, reads_of
+from app.services import drafts
 
 _ALEMBIC_DIRECTORY = Path(__file__).resolve().parents[1] / "alembic"
 
@@ -31,7 +32,7 @@ _SOURCE_COLUMNS = [
 _SEEDED_COLLECTIONS = sorted({
     project_service.Project.collection,
     Methodology.collection,
-    WorkingCopy.collection,
+    Draft.collection,
     WorkflowVersion.collection,
     file_store.ProjectFile.collection,
 })
@@ -66,8 +67,8 @@ def _seed_store_through_the_app() -> str:
     upload = file_store.save_upload("rows.csv", io.BytesIO(_CSV), project_id=project_id)
     outcome = project_service.add_stages(project_id, SEED_DRAFT, _stage_drafts(upload))
     assert not outcome.failed and not outcome.batch_issues and not outcome.skipped, outcome
-    project_service.save_working_copy_as_version(
-        project_id, message="first version")
+    saved = drafts.save_version(project_id, SEED_DRAFT, message="first version")
+    assert saved.ok, saved.issues
     return project_id
 
 

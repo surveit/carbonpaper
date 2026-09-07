@@ -2,12 +2,12 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from app.models.stage import StageEdit
 from app.services import drafts, stage_edit
-from app.services.errors import WorkflowLoadError
 from app.core.persistence import get_store
-from app.models.records.working_copy import WorkingCopy
+from app.models.records.draft import Draft
 from stage_seed import SEED_DRAFT, read_stage, read_stages, set_stages
 
 # A strictly-1:1 llm_transform (app/models/stage.py): its input and output
@@ -267,20 +267,19 @@ def test_add_stage_creates_the_first_stage_when_no_working_copy_is_stored() -> N
     assert [s["id"] for s in read_stages("delta")] == ["load"]
 
 
-def test_add_stage_still_refuses_when_the_existing_workflow_is_unloadable() -> None:
-    # A stored stage that does not parse is a BROKEN workflow, not an empty one.
+def test_add_stage_refuses_when_the_draft_holds_a_stage_that_does_not_parse() -> None:
+    """A draft's stages are typed, so a broken one is a load failure, never an empty draft."""
     set_stages("epsilon", [{"id": "broken", "description": "Broken", "type": "not_a_real_type"}])
-    with pytest.raises(WorkflowLoadError):
+    with pytest.raises(ValidationError):
         stage_edit.add_stage_spec("epsilon", SEED_DRAFT, json.dumps(_FIRST_STAGE))
-    assert [s["id"] for s in read_stages("epsilon")] == ["broken"]
 
 
 def test_add_stage_still_refuses_when_the_stored_document_is_unparseable() -> None:
-    """A corrupt payload raises rather than reading as an empty workflow."""
-    get_store().write(WorkingCopy.collection, "zeta", {})
+    """A corrupt payload raises rather than reading as an empty draft."""
+    get_store().write(Draft.collection, f"zeta/{SEED_DRAFT}", {})
     get_store()._conn.execute(  # type: ignore[attr-defined]
         "UPDATE documents SET data='{not json' WHERE collection=? AND id=?",
-        (WorkingCopy.collection, "zeta"),
+        (Draft.collection, f"zeta/{SEED_DRAFT}"),
     )
     with pytest.raises(json.JSONDecodeError):
         stage_edit.add_stage_spec("zeta", SEED_DRAFT, json.dumps(_FIRST_STAGE))

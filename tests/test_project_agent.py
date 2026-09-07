@@ -18,7 +18,9 @@ _EXPECTED_TOOL_NAMES = {
     "get_current_url",
     "create_project",
     "read_stage_output_rows",
-    "read_stage",
+    "read_draft_stage",
+    "list_versions",
+    "read_version_stage",
     "edit_stages",
     "add_stage",
     "delete_stage",
@@ -71,7 +73,7 @@ def test_a_session_bound_to_no_project_can_build_one_from_nothing(tmp_path) -> N
     added = call["add_stage"](project_id=project_id, stages=[_LOAD_STAGE])
 
     assert added["added"] == ["load"]
-    assert call["read_workflow_summary"](project_id=project_id).stages[0].id == "load"
+    assert "load" in call["read_draft_stage"](project_id=project_id, stage_id="load")
 
 
 def test_creating_a_project_does_not_rebind_the_session(tmp_path) -> None:

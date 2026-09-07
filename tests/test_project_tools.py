@@ -90,14 +90,14 @@ def test_read_tools_report_workspace(examples_root: Path) -> None:
     tools = _tools("alpha")
     assert [(p.id, p.name) for p in _tool(tools, "list_projects")()] == [("alpha", "alpha")]
 
-    assert '"id": "load"' in _tool(tools, "read_stage")("alpha", "load")
+    assert '"id": "load"' in _tool(tools, "read_draft_stage")("alpha", "load")
 
 
 def test_read_stage_missing_fails_loud(examples_root: Path) -> None:
     _seed(examples_root, "alpha")
     tools = _tools("alpha")
     with pytest.raises(ValueError, match="no stage 'nope'"):
-        _tool(tools, "read_stage")("alpha", "nope")
+        _tool(tools, "read_draft_stage")("alpha", "nope")
 
 
 def test_edit_stage_tool_writes_and_reports_ok(examples_root: Path) -> None:
@@ -129,7 +129,7 @@ def test_project_id_cannot_escape_the_workspace(examples_root: Path) -> None:
     _seed(examples_root, "alpha")
     tools = _tools("alpha")
     with pytest.raises(ValueError, match="invalid project id"):
-        _tool(tools, "read_stage")("../outside", "load")
+        _tool(tools, "read_draft_stage")("../outside", "load")
 
 
 # ── the review-guide tools ───────────────────────────────────────────────────

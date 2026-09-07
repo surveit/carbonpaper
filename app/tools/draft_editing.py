@@ -8,7 +8,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from app.services import drafts, project as project_service, versioning
-from app.tools.shared import STAGE_TOOL_ERRORS
+from app.tools.shared import STAGE_TOOL_ERRORS, validate_project_exists
 
 
 class DraftHandle(BaseModel):
@@ -18,6 +18,7 @@ class DraftHandle(BaseModel):
 
 
 def start_editing(project_id: str) -> DraftHandle:
+    validate_project_exists(project_id)
     view = drafts.create_draft(
         project_id, from_version=versioning.find_latest_version_id(project_id)
     )
@@ -29,6 +30,7 @@ def start_editing(project_id: str) -> DraftHandle:
 
 
 def read_draft_stage(project_id: str, draft_id: str, stage_id: str) -> str:
+    validate_project_exists(project_id)
     specs = drafts.read_draft_specs(project_id, draft_id)
     if stage_id not in specs:
         raise ValueError(f"no stage '{stage_id}' in draft '{draft_id}'")
@@ -36,6 +38,7 @@ def read_draft_stage(project_id: str, draft_id: str, stage_id: str) -> str:
 
 
 def delete_stage(project_id: str, draft_id: str, stage_id: str) -> dict[str, Any]:
+    validate_project_exists(project_id)
     try:
         result = project_service.delete_stage(project_id, draft_id, stage_id)
     except STAGE_TOOL_ERRORS as exc:
@@ -46,6 +49,7 @@ def delete_stage(project_id: str, draft_id: str, stage_id: str) -> dict[str, Any
 def save_version(
     project_id: str, draft_id: str, message: str, override_conflict: bool = False
 ) -> dict[str, Any]:
+    validate_project_exists(project_id)
     result = drafts.save_version(
         project_id, draft_id, message=message, override_conflict=override_conflict
     )

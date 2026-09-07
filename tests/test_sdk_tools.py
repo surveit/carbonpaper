@@ -189,8 +189,8 @@ def test_write_review_guide_stores_a_guide_sent_as_an_object(examples_root: Path
     by_name = {t.name: t for t in tools}
 
     saved = json.loads(_call(by_name["save_version"], {
-        "project_id": "congresswatch", "message": "the loader alone",
-        "parent_version": None})["content"][0]["text"])
+        "project_id": "congresswatch",
+        "message": "the loader alone"})["content"][0]["text"])
     assert saved["ok"] is True, saved
 
     out = _call(by_name["write_review_guide"], {

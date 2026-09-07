@@ -1,11 +1,9 @@
-"""drop the `draft` collection: its service had no caller and its rows held no unsaved work
+"""kept as a no-op: the draft collection it dropped is in use again
 
 Revision ID: 0019
 Revises: 0018
 """
 from __future__ import annotations
-
-from alembic import op
 
 revision = "0019"
 down_revision = "0018"
@@ -14,9 +12,10 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.get_bind().exec_driver_sql("DELETE FROM documents WHERE collection='draft'")
+    # This deleted every `draft` row when the record was retired. The record came
+    # back, so replaying the delete would destroy drafts people are editing.
+    pass
 
 
 def downgrade() -> None:
-    # The rows are gone; a downgrade restores the empty collection, not its contents.
     pass
