@@ -47,19 +47,29 @@ def test_a_blank_title_sends_the_display_name_back_to_the_slug(workspace_dir: Pa
     assert project_service.project_meta("doccs_restrained").display_name == "doccs_restrained"
 
 
-def test_posting_to_the_project_sets_its_title(workspace_dir: Path) -> None:
+def test_posting_a_title_sets_it_and_returns_the_project(workspace_dir: Path) -> None:
     _make_project(workspace_dir, "doccs_restrained")
 
-    reply = client.post(
-        "/project/doccs_restrained", data={"title": "NY Inmate Abuse"}, follow_redirects=False
-    )
+    reply = client.post("/project/doccs_restrained", json={"title": "NY Inmate Abuse"})
 
-    assert reply.status_code == 303
-    assert reply.headers["location"] == "/project/doccs_restrained"
+    assert reply.status_code == 200
+    assert reply.json()["display_name"] == "NY Inmate Abuse"
+    assert reply.json()["name"] == "doccs_restrained"
     assert Project.load("doccs_restrained").title == "NY Inmate Abuse"
 
 
+def test_a_field_with_no_writer_is_refused_rather_than_ignored(workspace_dir: Path) -> None:
+    _make_project(workspace_dir, "doccs_restrained")
+
+    reply = client.post(
+        "/project/doccs_restrained", json={"title": "NY Inmate Abuse", "private": True}
+    )
+
+    assert reply.status_code == 422
+    assert Project.load("doccs_restrained").title is None
+
+
 def test_posting_a_title_to_an_unknown_project_is_a_404(workspace_dir: Path) -> None:
-    reply = client.post("/project/nope", data={"title": "NY Inmate Abuse"})
+    reply = client.post("/project/nope", json={"title": "NY Inmate Abuse"})
 
     assert reply.status_code == 404
