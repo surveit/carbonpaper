@@ -110,7 +110,7 @@ def _raise_if_run_failed(manifest: RunManifest) -> None:
         return
     if status == RunStatus.AWAITING_REVIEW:
         halted_at = ", ".join(manifest.halted_at or [])
-        raise SubsetRunError(f"run halted for human review at {halted_at}")
+        raise SubsetRunError(f"run halted at the review queue in {halted_at}")
     for stage in manifest.stage_records:
         if stage.status == StageStatus.ERROR:
             message = stage.error.message if stage.error is not None else "unknown error"
