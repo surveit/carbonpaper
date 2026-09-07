@@ -70,13 +70,15 @@ carrying `_error`/`_deferred` is never recorded and no internal column is ever p
 recorded row, so a hit reports no spend. `Stage.cache` decides whether a stage caches at all —
 no read, no write when it is false — and is outside the definition fingerprint. It defaults to
 true only on `llm_transform`, the one type whose recompute spends a model call; every other
-type recomputes unless its author turns caching on. `human_review_queue.cache` is fixed
-`False` (`Literal[False]`, no author may turn it on): the generic interceptor never touches
-this type, because a human decision is never merely "recomputable work to skip" — it is the
-one thing a deleted cache row must never be allowed to lose. Its own mapper
-(`_QueueRowMapper`, `app/runtime/stages/human_review_queue.py`) resolves a queueable row
-itself, `RunContext.decisions` (a `ReviewLedger`, `app/models/review_ledger.py`) first and
-`RunContext.stage_cache` on a miss — see `docs/run-manifest.md`.
+type recomputes unless its author turns caching on. `human_review_queue.cache` is normalised to
+`False` (a stored `true` predates the ledger and is not refused, which would strand the
+runs pinning it): the generic interceptor never touches this type, because a human
+decision is never merely "recomputable work to skip" — it is the one thing a deleted
+cache row must never be allowed to lose. Its decisions are resolved by
+`app.services.run` before the run starts and written to
+`runs/<run_id>/review_decisions/<stage_id>.parquet`; `_QueueRowMapper`
+(`app/runtime/stages/human_review_queue.py`) reads that frame and reaches no store — see
+`docs/run-manifest.md`.
 
 ## `run_log.py` — the per-run event log
 `_execute_stages` opens a `RunLog` on the run's `run_events` chunks for every entry path and

@@ -121,6 +121,7 @@ def queue_decide(
             reviewer=attributed_to,
             reviewed_at=datetime.now().isoformat(timespec="seconds"),
             workflow_version=run_record.workflow_version,
+            decided_in_run=run_id,
         )
     except ReviewValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -7,7 +7,6 @@ from pydantic import ValidationError
 
 from app.runtime.context import RunContext, RunIdentity
 from app.models.run_parameters import RunParameters
-from app.models.review_ledger import ReviewLedger
 from app.core.stage_cache import StageCacheEntry
 
 
@@ -35,19 +34,18 @@ def test_run_context_accepts_identity_with_cache() -> None:
     identity = RunIdentity(project="p", run_id="r1")
     ctx = _make(
         identity=identity, stage_cache=StageCacheEntry.read_write(),
-        decisions=ReviewLedger("p"),
     )
     assert ctx.identity == identity
     assert ctx.stage_cache is not None
 
 
 def test_run_context_rejects_identity_without_cache() -> None:
-    with pytest.raises(ValidationError, match="all be set or all be None"):
+    with pytest.raises(ValidationError, match="both be set or both be None"):
         _make(identity=RunIdentity(project="p", run_id="r1"), stage_cache=None)
 
 
 def test_run_context_rejects_cache_without_identity() -> None:
-    with pytest.raises(ValidationError, match="all be set or all be None"):
+    with pytest.raises(ValidationError, match="both be set or both be None"):
         _make(identity=None, stage_cache=StageCacheEntry.read_write())
 
 
@@ -71,7 +69,6 @@ def test_a_read_only_cache_allows_queue_auto_approve(tmp_path: Path) -> None:
         run_dir=tmp_path / "run",
         identity=RunIdentity(project="p", run_id="r1"),
         stage_cache=StageCacheEntry.read_only(),
-        decisions=ReviewLedger("p"),
         params=_bypassing(),
     )
     assert ctx.params.queue_auto_approve is True

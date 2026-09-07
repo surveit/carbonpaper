@@ -92,16 +92,38 @@ two things when a reviewer submits a queue card:
   `ReviewDecision` — a correction is a new row, keyed the same way, so every past
   judgment stays on record even after a later one supersedes it.
 
-A resumed run reads the ledger first. `HumanReviewQueueStage.cache` is fixed `False` —
-the generic row-driver cache (`app.runtime.stages.execution`) never touches this stage
-type, so it cannot race the ledger for the same row. Instead `_QueueRowMapper` resolves
-each queueable row itself: `RunContext.decisions` (a `ReviewLedger`,
-`app/models/review_ledger.py`) first, `RunContext.stage_cache` on a miss. The ledger wins
-on disagreement — a cache entry imported from another project may hold a value this
-project's own reviewer later overrode — and the cache stays the sole replay path for a
-decision that predates the ledger, or one transported with no ledger row behind it.
-`ReviewLedger` is the only way `app.runtime` ever sees a decision: no module under it
-imports `ReviewDecision` or calls `.save()`/`.delete()` on one.
+## A run is handed its decisions; it never fetches them
+
+A run's output has to be explicable from the run itself. A stage that reaches into a
+project-scoped store mid-run breaks that: the output then depends on state that is
+neither in the run's inputs nor in its record. The stage cache is not this problem — a
+cache hit and a recompute agree, so a run means the same with it or without it. A
+decision is an input, not an optimisation.
+
+So `app.services.run` resolves them BEFORE the run executes, at prepare and again at
+resume, and writes them into the run's own directory:
+
+    runs/<run_id>/review_decisions/<stage_id>.parquet
+
+One row per decided row, carrying the decided output row plus an `__input_fingerprint`
+column to match on. `HumanReviewQueueStage.cache` is fixed `False`, so the generic
+row-driver cache never touches this stage type either — `_QueueRowMapper` reads that
+frame and nothing else, and no module under `app.runtime` imports `ReviewDecision` or
+reaches a store for a decision.
+
+The resolution itself (`app.services.review_handoff.resolve_decided_rows`) reads the
+ledger AND the cache and lets the ledger win: a cache entry imported from another
+project may hold a value this project's own reviewer later overrode. The cache stays the
+sole replay path for a decision transported with no ledger row behind it. Because both
+are read in one place, precedence is settled where both are visible.
+
+`bust_cache` hands nothing over, which is what re-asks a human — and it is re-read from
+the run's recorded parameters on resume, so a run started to re-ask does not regain its
+decisions halfway through.
+
+The directory is `review_decisions/`, matching the record it holds. A run directory
+predating the ledger may still hold a legacy `decisions/<stage>.parquet` in a vocabulary
+nothing reads (`tests/runtime/test_hrq_cache.py::test_legacy_decisions_parquet_never_read`).
 
 `app.services.review.find_latest_decision` reads the newest row for a match key,
 ordered by the record's own `created_at` — never by `reviewed_at`, which a reviewer's

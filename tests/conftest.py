@@ -16,7 +16,6 @@ import pytest
 from app.core.errors import LLMError
 from app.core.stage_cache import ReadOnlyStageCache
 from app.models import Stage, TableSchema, Workflow, WorkflowStage, WorkflowStageInput
-from app.models.review_ledger import ReviewLedger
 from app.models.stages.signature import promised_output_schema, transform_input_schemas
 from app.models.stage_contribution import StageContribution
 from app.runtime.manifest import read_run_manifest
@@ -35,6 +34,27 @@ _REVISION_0017 = "alembic/versions/0017_publish_stage_becomes_report.py"
 def pinned_stages(project_dir: Path, version_id: str | None = None) -> tuple[Workflow, str]:
     workflow_version = resolve_version_id(project_dir.name, version_id)
     return _load_version_workflow(project_dir, workflow_version), workflow_version
+
+
+def run_like_the_app(project_dir: Path, workflow: Workflow, version: str) -> dict:
+    """prepare + hand the decisions over + execute, in the order app.services.run does it."""
+    from app.runtime.runner import prepare_run, run_prepared
+    from app.services.run import hand_decisions_to_run
+
+    prepared = prepare_run(project_dir / "runs", project_dir.name, workflow, version)
+    hand_decisions_to_run(
+        project_dir.name, project_dir / "runs" / str(prepared["run_id"]), workflow)
+    return run_prepared(prepared)
+
+
+def resume_like_the_app(project_dir: Path, run_id: str) -> tuple[Workflow, str]:
+    """Hands the run its decisions the way app.services.run does, then returns what resume takes."""
+    from app.services.run import hand_decisions_to_run
+
+    workflow, version = resumed_stages(project_dir, run_id)
+    if not read_run_manifest(project_dir.name, run_id).parameters.bust_cache:
+        hand_decisions_to_run(project_dir.name, project_dir / "runs" / run_id, workflow)
+    return workflow, version
 
 
 def resumed_stages(project_dir: Path, run_id: str) -> tuple[Workflow, str]:
@@ -179,18 +199,14 @@ def make_run_context(
     run_dir: Path = Path("."),
     identity: RunIdentity | None = None,
     stage_cache: ReadOnlyStageCache | None = None,
-    decisions: ReviewLedger | None = None,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
     bust_cache: bool = False,
     queue_auto_approve: bool = False,
 ) -> RunContext:
-    # Built here so a caller naming `identity` need not also pass a matching ledger.
-    if decisions is None and identity is not None:
-        decisions = ReviewLedger(identity.project)
     return RunContext(
         run_dir=run_dir,
-        identity=identity, stage_cache=stage_cache, decisions=decisions,
+        identity=identity, stage_cache=stage_cache,
         params=RunParameters(
             limits=dict(limits or {}), offsets=dict(offsets or {}),
             bust_cache=bust_cache, queue_auto_approve=queue_auto_approve,

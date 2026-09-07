@@ -28,8 +28,10 @@ from app.services.project import save_working_copy_as_version
 from app.models import WorkflowStage, parse_stage
 from app.models.stages.human_review_queue import ReviewVerdict
 from conftest import (
+    resume_like_the_app,
+    run_like_the_app,
     QUEUE_COLUMNS, pinned_stages, place_stage, queue_added_columns, queue_columns,
-    reads_of, resumed_stages,
+    reads_of,
 )
 from stage_seed import add_stage
 
@@ -151,7 +153,7 @@ def _build_and_halt(tmp_path, monkeypatch, project: str = PROJECT):
     _write_stage(project_dir, "03_review.json", _review_stage())
     _seed_version(project_dir)
 
-    manifest = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))
+    manifest = run_like_the_app(project_dir, *pinned_stages(project_dir))
     assert manifest["status"] == "awaiting_review"
     assert manifest["halted_at"] == ["review"]
 
@@ -176,7 +178,7 @@ def _put_cached_decision(
         },
         review_notes=None,
         reviewer="local", reviewed_at="2026-07-01T00:00:00",
-        workflow_version=None,
+        workflow_version=None, decided_in_run=None,
     )
 
 
@@ -418,7 +420,7 @@ def test_e2e_decide_every_verdict_then_resume_completes(tmp_path, monkeypatch):
     _write_stage(project_dir, "02_review.json", _e2e_review_stage())
     _seed_version(project_dir)
 
-    manifest = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))
+    manifest = run_like_the_app(project_dir, *pinned_stages(project_dir))
     assert manifest["status"] == "awaiting_review"
     run_id = manifest["run_id"]
 
@@ -457,7 +459,7 @@ def test_e2e_decide_every_verdict_then_resume_completes(tmp_path, monkeypatch):
         assert set(entry.frozen_input) == {"id", "score"}
 
     resumed = runner.resume_run(project_dir / "runs" / run_id, project_dir.name, run_id,
-                                  *resumed_stages(project_dir, run_id))
+                                  *resume_like_the_app(project_dir, run_id))
     assert resumed["status"] == "ok"
 
     out = pd.read_parquet(run_dir / "outputs" / "review.parquet").set_index("id")
@@ -510,7 +512,7 @@ def test_decide_400_on_notes_when_the_stage_declares_no_notes_column(tmp_path, m
     _write_stage(project_dir, "02_review.json", _no_notes_review_stage())
     _seed_version(project_dir)
 
-    manifest = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))
+    manifest = run_like_the_app(project_dir, *pinned_stages(project_dir))
     run_id = manifest["run_id"]
     fingerprints = _read_fingerprints(project, run_id)
 
@@ -631,7 +633,7 @@ def _build_and_halt_bool_queue(tmp_path, monkeypatch, project, *, ai_value, null
             {"name": "flag", "type": "bool", "nullable": nullable}]}})
     _write_stage(project_dir, "02_review.json", _bool_review_stage(nullable))
     _seed_version(project_dir)
-    run_id = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))["run_id"]
+    run_id = run_like_the_app(project_dir, *pinned_stages(project_dir))["run_id"]
     run_dir = project_dir / "runs" / run_id
     return run_id, _read_fingerprints(project, run_dir.name), pd.read_parquet(run_dir / "queue" / "review.parquet")
 
@@ -673,7 +675,7 @@ def test_a_bool_select_opens_on_the_recorded_value_of_a_decided_row(tmp_path, mo
         frozen_row={"id": snapshot.iloc[0]["id"], "flag": bool(snapshot.iloc[0]["flag"])},
         verdict=ReviewVerdict.modify, reviewed_values={"human_flag": True},
         review_notes=None, reviewer="Ada", reviewed_at="2026-07-01T00:00:00",
-        workflow_version=None,
+        workflow_version=None, decided_in_run=None,
     )
 
     html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
@@ -861,7 +863,7 @@ def _build_and_halt_declared_range_queue(tmp_path, monkeypatch, project):
     _write_stage(project_dir, "01_load.json", load)
     _write_stage(project_dir, "02_review.json", _declared_range_review_stage())
     _seed_version(project_dir)
-    run_id = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))["run_id"]
+    run_id = run_like_the_app(project_dir, *pinned_stages(project_dir))["run_id"]
     return run_id, _read_fingerprints(project, run_id)
 
 
@@ -904,7 +906,7 @@ def _build_and_halt_queue_over(tmp_path, monkeypatch, project, stages):
     for index, stage in enumerate(stages, start=1):
         _write_stage(project_dir, f"{index:02d}_{stage['id']}.json", stage)
     _seed_version(project_dir)
-    manifest = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))
+    manifest = run_like_the_app(project_dir, *pinned_stages(project_dir))
     assert manifest["status"] == "awaiting_review", manifest
     run_id = manifest["run_id"]
     return run_id, _read_fingerprints(project, run_id)
@@ -1802,7 +1804,7 @@ def test_progress_and_resume_are_seeded_from_the_whole_queue_not_a_page(tmp_path
             verdict=ReviewVerdict.approve,
             reviewed_values={"human_score": int(row["score"])},
             review_notes=None, reviewer="local", reviewed_at="2026-07-01T00:00:00",
-            workflow_version=None,
+            workflow_version=None, decided_in_run=None,
         )
 
     html = TestClient(app).get(f"/project/{PAGED_PROJECT}/runs/{run_id}/queue/review").text
@@ -1851,8 +1853,7 @@ def test_two_identical_rows_share_one_decision_and_both_carry_it(tmp_path, monke
     _write_stage(project_dir, "03_review.json", _review_stage())
     _seed_version(project_dir)
 
-    manifest = run_prepared(
-        prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))
+    manifest = run_like_the_app(project_dir, *pinned_stages(project_dir))
     assert manifest["status"] == "awaiting_review"
     run_id = manifest["run_id"]
     run_dir = project_dir / "runs" / run_id
@@ -1876,7 +1877,7 @@ def test_two_identical_rows_share_one_decision_and_both_carry_it(tmp_path, monke
     assert '<strong id="reviewed-count">2</strong> of <strong>2</strong> reviewed' in html
 
     resumed = runner.resume_run(project_dir / "runs" / run_id, project_dir.name, run_id,
-                                *resumed_stages(project_dir, run_id))
+                                *resume_like_the_app(project_dir, run_id))
     assert resumed["status"] == "ok"
     out = pd.read_parquet(run_dir / "outputs" / "review.parquet")
     assert len(out) == 2
@@ -1899,7 +1900,7 @@ def _decide_and_resume(tmp_path, monkeypatch):
         )
         assert r.status_code == 200, r.text
     resumed = runner.resume_run(project_dir / "runs" / run_id, project_dir.name, run_id,
-                                *resumed_stages(project_dir, run_id))
+                                *resume_like_the_app(project_dir, run_id))
     assert resumed["status"] == "ok"
     return project_dir, run_id, run_dir, snapshot, fingerprints
 
@@ -2007,7 +2008,7 @@ def test_deleting_the_stage_cache_after_every_row_is_decided_still_completes_the
     assert StageCacheEntry.read_only().find_project_entries(PROJECT) == []
 
     resumed = runner.resume_run(project_dir / "runs" / run_id, project_dir.name, run_id,
-                                *resumed_stages(project_dir, run_id))
+                                *resume_like_the_app(project_dir, run_id))
     assert resumed["status"] == "ok"
 
     out = pd.read_parquet(project_dir / "runs" / run_id / "outputs" / "review.parquet")
@@ -2042,7 +2043,7 @@ def test_ledger_wins_over_a_stage_cache_entry_recording_a_different_value(
         branches=None,
     )
 
-    resumed = runner.resume_run(run_dir, PROJECT, run_id, *resumed_stages(project_dir, run_id))
+    resumed = runner.resume_run(run_dir, PROJECT, run_id, *resume_like_the_app(project_dir, run_id))
     assert resumed["status"] == "ok"
 
     out = pd.read_parquet(run_dir / "outputs" / "review.parquet")
@@ -2084,7 +2085,7 @@ def test_a_cache_only_decision_from_another_project_still_replays(tmp_path, monk
 
     resumed = runner.resume_run(
         dest_project_dir / "runs" / dest_run_id, dest_project, dest_run_id,
-        *resumed_stages(dest_project_dir, dest_run_id))
+        *resume_like_the_app(dest_project_dir, dest_run_id))
     assert resumed["status"] == "ok"
 
     out = pd.read_parquet(dest_run_dir / "outputs" / "review.parquet")

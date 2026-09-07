@@ -29,6 +29,8 @@ from app.runtime.manifest import (
     resolve_output_path,
 )
 from app.runtime.runner import prepare_run, resume_run, run_prepared
+from app.runtime.run_decisions import write_run_decisions
+from app.services.review_handoff import resolve_run_decisions
 from app.runtime.citations import build_row_trace_url as build_row_trace_url
 from app.services.errors import WorkflowLoadError
 from app.services.run_manifest_metadata import name_run
@@ -91,27 +93,43 @@ def _prepare(
     bust_cache: bool,
 ) -> dict[str, Any]:
     workflow_version = resolve_version_id(project_id, version_id)
-    return prepare_run(
+    workflow = Workflow(stages=load_version_stages(project_id, workflow_version))
+    prepared = prepare_run(
         resolve_runs_dir(project_id),
         project_id,
-        Workflow(stages=load_version_stages(project_id, workflow_version)),
+        workflow,
         workflow_version,
         limits=limits,
         offsets=offsets,
         bindings=bindings,
         bust_cache=bust_cache,
     )
+    # bust_cache hands nothing in, which is what re-asks a human for every row.
+    if not bust_cache:
+        hand_decisions_to_run(
+            project_id, resolve_run_dir(project_id, str(prepared["run_id"])), workflow)
+    return prepared
+
+
+def hand_decisions_to_run(project_id: str, run_dir: Path, workflow: Workflow) -> None:
+    """A run reads its decisions off its own disk, so the store is read here and never in a stage."""
+    for stage_id, _fingerprint, rows in resolve_run_decisions(project_id, workflow):
+        write_run_decisions(run_dir, stage_id, rows)
 
 
 def resume(project_id: str, run_id: str) -> None:
     workflow_version = read_pinned_version(project_id, run_id)
     discard_cancel(project_id, run_id)
+    workflow = Workflow(stages=load_version_stages(project_id, workflow_version))
+    # Re-resolved, so a resume carries what was decided since the halt.
+    if not read_run_manifest(project_id, run_id).parameters.bust_cache:
+        hand_decisions_to_run(project_id, resolve_run_dir(project_id, run_id), workflow)
     _run_in_background(
         resume_run,
         resolve_run_dir(project_id, run_id),
         project_id,
         run_id,
-        Workflow(stages=load_version_stages(project_id, workflow_version)),
+        workflow,
         workflow_version,
     )
 

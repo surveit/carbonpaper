@@ -37,7 +37,7 @@ def record_decision(
     verdict: ReviewVerdict, reviewed_values: Mapping[str, object],
     review_notes: str | None,
     reviewer: str, reviewed_at: str,
-    workflow_version: str | None,
+    workflow_version: str | None, decided_in_run: str | None,
 ) -> None:
     """`reviewed_values` is keyed by TARGET column name, already coerced by the caller."""
     queue = _require_queue_config(stage)
@@ -53,18 +53,36 @@ def record_decision(
         review_notes=review_notes,
         reviewer=reviewer, reviewed_at=reviewed_at,
         workflow_version=workflow_version,
+        decided_in_run=decided_in_run,
     ).save()
     StageCacheEntry.read_write().record(
         project_id=project_id, stage_id=stage.id,
         stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
         input_row=frozen_row,
-        output_row=queue.build_reviewed_row(
-            frozen_row, verdict=verdict.value, reviewed_values=reviewed_values,
+        output_row=build_decided_row(
+            queue, frozen_row, verdict=verdict.value, reviewed_values=reviewed_values,
             reviewer=reviewer, reviewed_at=reviewed_at, review_notes=review_notes,
         ),
         # A human decided this row; no code ran, so there is no branch to replay.
         branches=None,
     )
+
+
+def build_decided_row(
+    queue: QueueConfig, row: Mapping[str, object], *, verdict: str,
+    reviewed_values: Mapping[str, object], reviewer: str, reviewed_at: str,
+    review_notes: str | None,
+) -> dict[str, object]:
+    """The output row a person's decision produces, in the columns the queue declares."""
+    decided: dict[str, object] = {
+        **row, **reviewed_values,
+        queue.verdict_column: verdict,
+        queue.reviewer_column: reviewer,
+        queue.reviewed_at_column: reviewed_at,
+    }
+    if queue.review_notes_column is not None:
+        decided[queue.review_notes_column] = review_notes
+    return decided
 
 
 def find_latest_decision(

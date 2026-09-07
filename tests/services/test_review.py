@@ -61,6 +61,7 @@ def _record(
     reviewer: str = "Ada",
     reviewed_at: str = "2026-07-22T10:00:00",
     workflow_version: str | None = None,
+    decided_in_run: str | None = None,
 ) -> None:
     review.record_decision(
         project_id="proj", stage=place_stage(stage if stage is not None else _stage()),
@@ -69,7 +70,7 @@ def _record(
         reviewed_values={"human_score": 1} if reviewed_values is None else reviewed_values,
         review_notes=review_notes,
         reviewer=reviewer, reviewed_at=reviewed_at,
-        workflow_version=workflow_version,
+        workflow_version=workflow_version, decided_in_run=decided_in_run,
     )
 
 

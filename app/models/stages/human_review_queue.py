@@ -118,28 +118,6 @@ class QueueConfig(StageConfig):
             )
         return v
 
-    def build_reviewed_row(
-        self,
-        row: Mapping[str, object],
-        *,
-        verdict: str,
-        reviewed_values: Mapping[str, object],
-        reviewer: object,
-        reviewed_at: object,
-        review_notes: object,
-    ) -> dict[str, object]:
-        """The row a decision produces, human or the runtime's own skip/approve."""
-        output_row: dict[str, object] = {
-            **row,
-            **reviewed_values,
-            self.verdict_column: verdict,
-            self.reviewer_column: reviewer,
-            self.reviewed_at_column: reviewed_at,
-        }
-        if self.review_notes_column is not None:
-            output_row[self.review_notes_column] = review_notes
-        return output_row
-
 
 class HumanReviewQueueStage(AbstractStage):
     type: Literal[StageType.human_review_queue]
