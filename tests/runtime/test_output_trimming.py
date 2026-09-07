@@ -3,9 +3,10 @@ from __future__ import annotations
 import pyarrow as pa
 import pytest
 
-from app.models import parse_stage, Stage
+from app.models import parse_stage, Stage, TableSchema
 from app.models.stage_contribution import StageContribution
 from app.runtime.stages.execution import _trim_to_declared_columns
+from app.runtime.stages.input_data import _split_off_columns_the_schema_omits
 from conftest import place_stage
 
 
@@ -50,3 +51,27 @@ def test_projection_keeps_declared_order_and_reports_what_it_dropped():
 
     assert list(projected.column_names) == ["id", "score", "verdict"]
     assert contribution.dropped_columns == ["leftover"]
+
+
+def test_a_source_read_keeps_declared_order_and_hands_back_what_it_omitted():
+    read = pa.table({"PAGE": [7], "id": ["r1"], "SSNUMBER": [3]})
+    schema = TableSchema.model_validate(
+        {"columns": [{"name": "id", "type": "str", "nullable": True}]})
+
+    kept, undeclared = _split_off_columns_the_schema_omits(read, schema)
+
+    assert list(kept.column_names) == ["id"]
+    assert undeclared == ["PAGE", "SSNUMBER"]
+
+
+def test_a_declared_column_the_file_lacks_is_left_to_the_validator():
+    read = pa.table({"id": ["r1"]})
+    schema = TableSchema.model_validate({"columns": [
+        {"name": "id", "type": "str", "nullable": True},
+        {"name": "ghost", "type": "str", "nullable": True},
+    ]})
+
+    kept, undeclared = _split_off_columns_the_schema_omits(read, schema)
+
+    assert list(kept.column_names) == ["id"]
+    assert undeclared == []

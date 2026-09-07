@@ -12,6 +12,7 @@ from pathlib import Path, PurePath
 from typing import Any
 
 import pandas as pd
+import pyarrow as pa
 
 from app.core.errors import FrameConcatMismatchError
 from app.core.files import find_stored_file_id
@@ -23,6 +24,7 @@ from app.models import (
     WorkflowStage,
 )
 from app.models.run_manifest import ReadFile, StageInputRecord
+from app.models.stage_contribution import StageContribution
 from app.models.stages.input_data import FileConnectorParams, InputDataStage
 
 from ..context import RunContext
@@ -76,11 +78,36 @@ def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> StageOutp
     frames = [_read_one_file(Path(path), workflow_stage, params) for path in paths]
     _refuse_files_that_disagree(paths, [list(frame.columns) for frame in frames])
     # pd.concat pads a missing column with nulls; concat_tables refuses and names it.
+    read = concat_tables([frame_to_table(frame) for frame in frames])
+    kept, undeclared = _split_off_columns_the_schema_omits(
+        read, _require_produces(input_stage.id, workflow_stage.output_schema))
     return StageOutput(
-        concat_tables([frame_to_table(frame) for frame in frames]),
+        kept,
+        contribution=StageContribution(dropped_columns=undeclared),
         lineage=_which_file_each_row_came_from(
             input_stage.id, [_weigh_file(Path(path)) for path in paths],
             [len(frame) for frame in frames]),
+    )
+
+
+def _require_produces(stage_id: str, schema: TableSchema | None) -> TableSchema:
+    if schema is None:
+        raise ValueError(
+            f"input stage '{stage_id}' resolves no output schema; an input_data "
+            "signature is the degenerate replaces form, whose `produces` is "
+            "non-empty by validation"
+        )
+    return schema
+
+
+def _split_off_columns_the_schema_omits(
+    read: pa.Table, schema: TableSchema
+) -> tuple[pa.Table, list[str]]:
+    """A column carried but never declared reaches publish unvalidated, citable by name."""
+    declared = [column.name for column in schema.columns]
+    return (
+        read.select([name for name in declared if name in read.column_names]),
+        [name for name in read.column_names if name not in declared],
     )
 
 

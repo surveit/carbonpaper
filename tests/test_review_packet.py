@@ -530,8 +530,8 @@ def test_the_index_names_what_the_run_flagged_and_the_stage_page_does_not(
     project_dir, tmp_path
 ):
     _make_project(project_dir)
-    # An undeclared column the load stage's schema does not name: the run finishes
-    # and its record carries a warning, which is what the index is here to show.
+    # A column the load stage's schema does not name: the read drops it, and the
+    # record carries the warning the index is here to show.
     pd.DataFrame({"name": ["a"], "val": [1], "extra": ["x"]}).to_csv(
         project_dir / "data" / "items.csv", index=False
     )
@@ -542,12 +542,12 @@ def test_the_index_names_what_the_run_flagged_and_the_stage_page_does_not(
 
     index = (packet.root / "index.html").read_text(encoding="utf-8")
     assert 'class="issue-table"' in index
-    assert "undeclared column" in index
+    assert "were dropped" in index
     assert 'href="stages/load.html"' in index
 
     page = (packet.root / "stages" / "load.html").read_text(encoding="utf-8")
     assert 'class="validation-block"' not in page
-    assert "undeclared column" not in page
+    assert "were dropped" not in page
 
     # The clean-run packet never renders this index, so its link check never sees
     # these rows — they resolve from index.html, one directory above the pages.

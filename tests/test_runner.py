@@ -228,6 +228,23 @@ def test_duplicate_input_rows_reach_the_stage_and_are_all_emitted(tmp_path):
     assert manifest["status"] == "ok"
 
 
+def test_a_column_the_source_schema_omits_is_dropped_and_flagged_only_there(tmp_path):
+    _two_stage_project(tmp_path, [{"name": "a", "val": 1, "PAGE": 7, "SSNUMBER": 3}])
+    _seed_version(tmp_path)
+    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
+
+    records = {r["stage_id"]: r for r in manifest["stage_records"]}
+    assert manifest["dropped_columns"] == {"load": ["PAGE", "SSNUMBER"]}
+    assert [i["message"] for i in records["load"]["output_validation_report"]["issues"]] == [
+        "2 column(s) the schema does not name were dropped: ['PAGE', 'SSNUMBER']"
+    ]
+    # The columns never reach the next stage, so nothing downstream repeats the fact.
+    assert records["consume"]["output_validation_report"]["issues"] == []
+    assert records["consume"]["input_validation_report"][0]["issues"] == []
+    assert records["load"]["status"] == "ok"       # a warning never errors a stage
+    assert records["consume"]["status"] == "ok"
+
+
 def _output_schema_violation_project(root, transform_code: str):
     root.mkdir(parents=True, exist_ok=True)
     (root / "data").mkdir(parents=True, exist_ok=True)
