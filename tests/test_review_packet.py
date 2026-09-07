@@ -530,8 +530,7 @@ def test_the_index_names_what_the_run_flagged_and_the_stage_page_does_not(
     project_dir, tmp_path
 ):
     _make_project(project_dir)
-    # A column the load stage's schema does not name: the read drops it, and the
-    # record carries the warning the index is here to show.
+    # `extra` is what the read drops and the index is here to show.
     pd.DataFrame({"name": ["a"], "val": [1], "extra": ["x"]}).to_csv(
         project_dir / "data" / "items.csv", index=False
     )
