@@ -32,7 +32,9 @@ def test_run_context_accepts_no_identity_and_no_cache() -> None:
 
 def test_run_context_accepts_identity_with_cache() -> None:
     identity = RunIdentity(project="p", run_id="r1")
-    ctx = _make(identity=identity, stage_cache=StageCacheEntry.read_write())
+    ctx = _make(
+        identity=identity, stage_cache=StageCacheEntry.read_write(),
+    )
     assert ctx.identity == identity
     assert ctx.stage_cache is not None
 

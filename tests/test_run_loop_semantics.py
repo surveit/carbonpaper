@@ -17,7 +17,10 @@ from app.services.errors import WorkflowLoadError
 from app.services.loader import load_workflow
 from app.services.project import save_working_copy_as_version
 from app.services import workspace
-from conftest import pinned_stages, queue_added_columns, queue_columns, resumed_stages
+from conftest import (
+    pinned_stages, queue_added_columns, queue_columns, resumed_stages,
+    run_like_the_app,
+)
 from stage_seed import add_stage
 from run_seed import read_manifest, store_manifest
 
@@ -135,7 +138,7 @@ def test_error_blocks_transitive_downstream_in_a_chain(tmp_path):
     _write_stage(tmp_path, "03_tail.json", _passthrough_stage("tail", "boom"))
     _seed_version(tmp_path)
 
-    manifest = run_prepared(prepare_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)))
+    manifest = run_like_the_app(tmp_path, *pinned_stages(tmp_path))
 
     assert manifest["status"] == "errors"
     assert _stage_status(manifest, "load") == "ok"
@@ -155,7 +158,7 @@ def test_error_in_one_fork_lets_the_independent_fork_finish(tmp_path):
     _write_stage(tmp_path, "04_good.json", _passthrough_stage("good_tail", "load"))
     _seed_version(tmp_path)
 
-    manifest = run_prepared(prepare_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)))
+    manifest = run_like_the_app(tmp_path, *pinned_stages(tmp_path))
 
     assert manifest["status"] == "errors"
     assert _stage_status(manifest, "load") == "ok"
@@ -177,7 +180,7 @@ def test_halt_in_one_fork_lets_the_independent_fork_finish(tmp_path):
     _write_stage(tmp_path, "04_good.json", _passthrough_stage("good_tail", "load"))
     _seed_version(tmp_path)
 
-    manifest = run_prepared(prepare_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)))
+    manifest = run_like_the_app(tmp_path, *pinned_stages(tmp_path))
 
     assert manifest["status"] == "awaiting_review"
     assert manifest["halted_at"] == ["review"]
@@ -198,7 +201,7 @@ def test_two_parallel_halts_each_block_only_their_own_downstream(tmp_path):
     _write_stage(tmp_path, "05_tail_b.json", _passthrough_stage("tail_b", "review_b"))
     _seed_version(tmp_path)
 
-    manifest = run_prepared(prepare_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)))
+    manifest = run_like_the_app(tmp_path, *pinned_stages(tmp_path))
 
     assert manifest["status"] == "awaiting_review"
     assert set(manifest["halted_at"]) == {"review_a", "review_b"}
@@ -215,7 +218,7 @@ def test_halted_queue_stages_item_counts_reach_the_run_manifest(tmp_path):
                  _filtered_queue_stage("review", "load", "val > 3"))
     _seed_version(tmp_path)
 
-    manifest = run_prepared(prepare_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)))
+    manifest = run_like_the_app(tmp_path, *pinned_stages(tmp_path))
 
     assert manifest["status"] == "awaiting_review"
     assert _stage_status(manifest, "review") == "awaiting_review"
@@ -242,7 +245,7 @@ def test_multi_halt_run_renders_the_full_halted_at_list_through_the_web_layer(
     _write_stage(project_dir, "03_review_b.json", _queue_stage("review_b", "load"))
     _seed_version(project_dir)
 
-    manifest = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))
+    manifest = run_like_the_app(project_dir, *pinned_stages(project_dir))
     run_id = manifest["run_id"]
 
     client = TestClient(app)
@@ -266,7 +269,7 @@ def test_legacy_scalar_halted_at_manifest_renders_one_queue_link(tmp_path, monke
     _write_stage(project_dir, "02_review.json", _queue_stage("review", "load"))
     _seed_version(project_dir)
 
-    halted = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))
+    halted = run_like_the_app(project_dir, *pinned_stages(project_dir))
     run_id = halted["run_id"]
 
     # Rewrite the on-disk manifest to the legacy scalar shape.
@@ -297,7 +300,7 @@ def test_manifest_paths_are_posix_on_every_platform(tmp_path, monkeypatch):
     _write_stage(project_dir, "02_review.json", _queue_stage("review", "load"))
     _seed_version(project_dir)
 
-    halted = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))
+    halted = run_like_the_app(project_dir, *pinned_stages(project_dir))
 
     manifest_project = project_dir
 
@@ -323,7 +326,7 @@ def test_resume_pops_stale_halted_at_before_re_executing(tmp_path, monkeypatch):
     _write_stage(tmp_path, "02_review.json", _queue_stage("review", "load"))
     _seed_version(tmp_path)
 
-    halted = run_prepared(prepare_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)))
+    halted = run_like_the_app(tmp_path, *pinned_stages(tmp_path))
     assert halted["halted_at"] == ["review"]  # the halted run recorded the marker
 
     captured: dict[str, bool] = {}
@@ -348,7 +351,7 @@ def test_error_and_halt_together_report_errors_but_keep_stage_awaiting_review(tm
     _write_stage(tmp_path, "03_review.json", _queue_stage("review", "load"))
     _seed_version(tmp_path)
 
-    manifest = run_prepared(prepare_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)))
+    manifest = run_like_the_app(tmp_path, *pinned_stages(tmp_path))
 
     assert manifest["status"] == "errors"
     assert _stage_status(manifest, "boom") == "error"
@@ -372,7 +375,7 @@ def test_cancel_after_a_halt_clears_halted_at_and_reports_cancelled(tmp_path, mo
 
     monkeypatch.setattr(executor, "consume_cancel", fake_consume_cancel)
 
-    manifest = run_prepared(prepare_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)))
+    manifest = run_like_the_app(tmp_path, *pinned_stages(tmp_path))
 
     assert manifest["status"] == "cancelled"
     assert manifest["cancelled_at"] == "good_tail"
@@ -406,7 +409,7 @@ def test_row_error_stage_blocks_downstream_and_resume_is_not_stale(tmp_path, mon
                  _passthrough_stage("good_tail", "load", schema=_ID_TEXT_SCHEMA))
     _seed_version(tmp_path)
 
-    first = run_prepared(prepare_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path)))
+    first = run_like_the_app(tmp_path, *pinned_stages(tmp_path))
 
     assert first["status"] == "errors"
     assert _stage_status(first, "score") == "error"
@@ -478,7 +481,7 @@ def test_resume_refuses_stages_belonging_to_another_version(tmp_path):
     _write_stage(project_dir, "02_review.json", _queue_stage("review", "load"))
     _seed_version(project_dir)
 
-    halted = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))
+    halted = run_like_the_app(project_dir, *pinned_stages(project_dir))
     stages, _ = resumed_stages(project_dir, halted["run_id"])
 
     with pytest.raises(ValueError, match="pinned to workflow version"):
@@ -493,7 +496,7 @@ def test_resume_reads_the_pinned_version_not_the_working_copy(tmp_path):
     _write_stage(project_dir, "02_review.json", _queue_stage("review", "load"))
     _seed_version(project_dir)
 
-    halted = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))
+    halted = run_like_the_app(project_dir, *pinned_stages(project_dir))
     assert halted["status"] == "awaiting_review"
 
     # Break the working copy AFTER the run pinned its version. The pinned
@@ -518,7 +521,7 @@ def test_resume_of_a_run_with_no_pinned_version_fails_loudly(tmp_path):
     _write_stage(project_dir, "02_review.json", _queue_stage("review", "load"))
     _seed_version(project_dir)
 
-    halted = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))
+    halted = run_like_the_app(project_dir, *pinned_stages(project_dir))
     manifest_project = project_dir
 
     manifest_run = halted["run_id"]

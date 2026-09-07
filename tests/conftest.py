@@ -36,6 +36,26 @@ def pinned_stages(project_dir: Path, version_id: str | None = None) -> tuple[Wor
     return _load_version_workflow(project_dir, workflow_version), workflow_version
 
 
+def run_like_the_app(project_dir: Path, workflow: Workflow, version: str) -> dict:
+    """prepare + hand the decisions over + execute, in the order app.services.run does it."""
+    from app.runtime.runner import prepare_run, run_prepared
+    from app.services.run import write_run_review_decisions
+
+    prepared = prepare_run(project_dir / "runs", project_dir.name, workflow, version)
+    write_run_review_decisions(
+        project_dir.name, project_dir / "runs" / str(prepared["run_id"]), workflow)
+    return run_prepared(prepared)
+
+
+def resume_like_the_app(project_dir: Path, run_id: str) -> tuple[Workflow, str]:
+    """Hands the run its decisions the way app.services.run does, then returns what resume takes."""
+    from app.services.run import write_run_review_decisions
+
+    workflow, version = resumed_stages(project_dir, run_id)
+    write_run_review_decisions(project_dir.name, project_dir / "runs" / run_id, workflow)
+    return workflow, version
+
+
 def resumed_stages(project_dir: Path, run_id: str) -> tuple[Workflow, str]:
     workflow_version = read_run_manifest(project_dir.name, run_id).workflow_version
     assert workflow_version, f"run {run_id} records no workflow_version"

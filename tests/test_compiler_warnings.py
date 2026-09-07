@@ -49,8 +49,7 @@ def _stage(stage_id="s", type_="python_row_function", handle="function", **kw):
     return m.parse_stage(spec)
 
 
-# The two types that cache by default, and so are the only two whose author can
-# turn caching OFF.
+# llm_transform caches by default; its author may turn caching off.
 def _llm_stage(stage_id="ask", **kw):
     return m.parse_stage({
         "id": stage_id, "description": "Ask the model", "type": "llm_transform",
@@ -159,12 +158,6 @@ def test_a_filter_with_no_examples_is_unexemplified():
 
 def test_an_llm_stage_with_cache_off_is_a_note_not_a_blocker():
     warnings = find_stage_compiler_warnings(_llm_stage(cache=False))
-    assert [w.kind for w in warnings] == ["nondeterministic"]
-    assert all(w.severity == "warning" for w in warnings)
-
-
-def test_a_review_stage_with_cache_off_is_a_note_not_a_blocker():
-    warnings = find_stage_compiler_warnings(_queue_stage(cache=False))
     assert [w.kind for w in warnings] == ["nondeterministic"]
     assert all(w.severity == "warning" for w in warnings)
 

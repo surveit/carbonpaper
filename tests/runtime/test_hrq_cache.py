@@ -15,14 +15,18 @@ from app.runtime.errors import RunCancelled
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stage_output import StageOutput
 from app.runtime.stages import HANDLERS, human_review_queue
+from app.models.records.review_decision import ReviewDecision
 from app.services import review
 from app.core.frames import list_table_rows, read_frame_table
-from app.core.stage_cache import StageCache, compute_row_fingerprint
+from app.core.stage_cache import (
+    StageCache, compute_row_fingerprint,
+)
 from app.services.project import save_working_copy_as_version
 from conftest import (
+    resume_like_the_app,
+    run_like_the_app,
     QUEUE_COLUMNS, as_inputs, contribution_of, make_run_context, pinned_stages,
-    place_stage, queue_added_columns, reads_of, require_awaiting_review, resumed_stages,
-    rows_of,
+    place_stage, queue_added_columns, reads_of, require_awaiting_review, rows_of,
 )
 
 from stage_seed import add_stage
@@ -32,9 +36,27 @@ PROJECT = "hrq-cache-tests"
 
 
 def _run_queue_stage(stage: Stage, inputs: dict[str, pd.DataFrame], ctx) -> StageOutput:
+    _hand_decisions_over(stage, ctx)
     out = HANDLERS[StageType.human_review_queue].execute(place_stage(stage), as_inputs(inputs), ctx)
     assert out is not None  # a row-mapped stage always produces a frame
     return out
+
+
+def _hand_decisions_over(stage: Stage, ctx) -> None:
+    """What app.services.run does before a run executes: resolve the store onto the run's disk."""
+    from app.models.stages.human_review_queue import resolve_queue_config
+    from app.runtime.review_decisions import write_review_decisions
+    from app.services.review import resolve_stage_review_decisions
+
+    if ctx.identity is None:
+        return
+
+    placed = place_stage(stage)
+    queue = resolve_queue_config(placed.stage)
+    assert queue is not None
+    write_review_decisions(
+        ctx.run_dir, stage.id,
+        resolve_stage_review_decisions(ctx.identity.project, placed, queue))
 
 
 # The upstream columns `_src()` builds — the default input edge below.
@@ -116,6 +138,7 @@ def _put_approval(
         },
         review_notes=None,
         reviewer="local", reviewed_at="2026-07-01T00:00:00",
+        workflow_version_id=None, workflow_run_id=None,
     )
 
 
@@ -259,7 +282,8 @@ def test_snapshot_columns_match_original_upstream_columns_exactly(tmp_path):
 # ── 5b. bust_cache: the run re-asks the humans ──────────────────────────────
 
 
-def test_bust_cache_defers_every_queueable_row_despite_cached_decisions(tmp_path):
+def test_bust_cache_keeps_every_row_a_human_already_decided(tmp_path):
+    """Bust says recompute. A judgement is not computed, so it is handed over regardless."""
     stage = _stage()
     src = _src(2)
 
@@ -267,11 +291,7 @@ def test_bust_cache_defers_every_queueable_row_despite_cached_decisions(tmp_path
         stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
     _approve_every_row(snapshot, fingerprints)
 
-    busted, _fingerprints = _halt_and_read_snapshot(
-        stage, {"scored": src.copy()}, _bust_ctx(tmp_path, run_id="run2"))
-    assert list(busted["id"]) == ["r0", "r1"]
-
-    out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run3"))
+    out = _run_queue_stage(stage, {"scored": src.copy()}, _bust_ctx(tmp_path, run_id="run2"))
     assert (rows_of(out)["decision"] == "approve").all()
 
 
@@ -284,10 +304,10 @@ def test_bust_cache_leaves_passed_through_rows_alone(tmp_path):
     _approve_every_row(snapshot, fingerprints)
 
     output = _run_queue_stage(stage, {"scored": src.copy()}, _bust_ctx(tmp_path, run_id="run2"))
-    assert require_awaiting_review(output) is not None
+    assert output.awaiting_review is None
     assert output.contribution.human_review_queue_stats == {
         "items_queued_total": 2, "items_passed_through": 2,
-        "items_pending": 2, "items_decided": 0,
+        "items_pending": 0, "items_decided": 2,
     }
 
 
@@ -487,26 +507,25 @@ def test_queue_stats_count_every_row_the_reviewer_answered(tmp_path):
     }
 
 
-def test_cache_is_read_once_per_stage_execution(tmp_path, monkeypatch):
-    cache = StageCache()
-    calls: list[tuple[str, str, str]] = []
-    find_entries = cache.find_entries
+def test_the_stage_fetches_no_decision_mid_run(tmp_path, monkeypatch):
+    """A run is handed its decisions. The row cache is untouched by this and still its own seam."""
+    stage = _stage()
+    ctx = _ctx(tmp_path, run_id="count")
+    _hand_decisions_over(stage, ctx)
 
-    def counting_find_entries(project: str, stage_id: str, stage_fingerprint: str):
-        calls.append((project, stage_id, stage_fingerprint))
-        return find_entries(project, stage_id, stage_fingerprint)
+    reached: list[str] = []
+    monkeypatch.setattr(ReviewDecision, "find",
+                        classmethod(lambda cls, **k: reached.append("review_decision") or []))
 
-    monkeypatch.setattr(cache, "find_entries", counting_find_entries)
-    ctx = make_run_context(
-        run_dir=tmp_path,
-        identity=RunIdentity(project=PROJECT, run_id="count"),
-        stage_cache=cache,
-    )
-    require_awaiting_review(_run_queue_stage(_stage(), {"scored": _src(3)}, ctx))
-    assert len(calls) == 1
+    out = HANDLERS[StageType.human_review_queue].execute(
+        place_stage(stage), as_inputs({"scored": _src(3)}), ctx)
+
+    require_awaiting_review(out)
+    assert reached == []
 
 
-def test_queue_stats_hold_when_every_row_is_served_from_the_cache(tmp_path, monkeypatch):
+def test_no_row_re_defers_when_every_row_is_already_decided(tmp_path, monkeypatch):
+    """Resolution now lives INSIDE the mapper, so every row reaches __call__ — none may re-defer."""
     stage = _stage(flt="flag == 'review'", input_columns=_FLAGGED_COLUMNS)
     src = _alternating_src()
 
@@ -514,17 +533,17 @@ def test_queue_stats_hold_when_every_row_is_served_from_the_cache(tmp_path, monk
         stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
     _approve_every_row(snapshot, fingerprints)
 
-    mapped: list[int] = []
-    call = human_review_queue._QueueRowMapper.__call__
+    deferred: list[int] = []
+    defer_row = human_review_queue._defer_row
 
-    def counting_call(self, row, index):
-        mapped.append(index)
-        return call(self, row, index)
+    def counting_defer(row, index):
+        deferred.append(index)
+        return defer_row(row, index)
 
-    monkeypatch.setattr(human_review_queue._QueueRowMapper, "__call__", counting_call)
+    monkeypatch.setattr(human_review_queue, "_defer_row", counting_defer)
     out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
 
-    assert mapped == []
+    assert deferred == []
     assert contribution_of(out).human_review_queue_stats == {
         "items_queued_total": 2, "items_passed_through": 2,
         "items_pending": 0, "items_decided": 2,
@@ -657,7 +676,7 @@ def test_resume_reattaches_cached_decisions_written_via_the_seam(tmp_path):
     _write_stage(project_dir, "02_review.json", _review_stage_full())
     _seed_version(project_dir)
 
-    halted = run_prepared(prepare_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir)))
+    halted = run_like_the_app(project_dir, *pinned_stages(project_dir))
     assert halted["status"] == "awaiting_review"
     run_id = halted["run_id"]
 
@@ -669,13 +688,14 @@ def test_resume_reattaches_cached_decisions_written_via_the_seam(tmp_path):
     _approve_every_row(snapshot, fingerprints, project=project_dir.name)
 
     resumed = runner.resume_run(project_dir / "runs" / run_id, project_dir.name, run_id,
-                            *resumed_stages(project_dir, run_id))
+                            *resume_like_the_app(project_dir, run_id))
     assert resumed["status"] == "ok"
     out = pd.read_parquet(run_dir / "outputs" / "review.parquet")
     assert sorted(out["human_score"].tolist()) == [1, 2]
 
 
-def test_resume_replays_the_runs_bust_cache(tmp_path):
+def test_bust_cache_does_not_re_ask_a_human_who_already_decided(tmp_path):
+    """Busting a cache says "recompute", never "ask that person again" — the ledger still holds."""
     project_dir = tmp_path / "resume_bust_project"
     _write_stage(project_dir, "01_load.json", _load_stage(project_dir))
     _write_stage(project_dir, "02_review.json", _review_stage_full())
@@ -694,5 +714,5 @@ def test_resume_replays_the_runs_bust_cache(tmp_path):
     _approve_every_row(snapshot, fingerprints, project=project_dir.name)
 
     resumed = runner.resume_run(project_dir / "runs" / run_id, project_dir.name, run_id,
-                            *resumed_stages(project_dir, run_id))
-    assert resumed["status"] == "awaiting_review"
+                            *resume_like_the_app(project_dir, run_id))
+    assert resumed["status"] == "ok"

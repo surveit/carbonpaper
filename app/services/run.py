@@ -29,6 +29,8 @@ from app.runtime.manifest import (
     resolve_output_path,
 )
 from app.runtime.runner import prepare_run, resume_run, run_prepared
+from app.runtime.review_decisions import write_review_decisions
+from app.services.review import resolve_review_decisions
 from app.runtime.citations import build_row_trace_url as build_row_trace_url
 from app.services.errors import WorkflowLoadError
 from app.services.run_manifest_metadata import name_run
@@ -91,27 +93,40 @@ def _prepare(
     bust_cache: bool,
 ) -> dict[str, Any]:
     workflow_version = resolve_version_id(project_id, version_id)
-    return prepare_run(
+    workflow = Workflow(stages=load_version_stages(project_id, workflow_version))
+    prepared = prepare_run(
         resolve_runs_dir(project_id),
         project_id,
-        Workflow(stages=load_version_stages(project_id, workflow_version)),
+        workflow,
         workflow_version,
         limits=limits,
         offsets=offsets,
         bindings=bindings,
         bust_cache=bust_cache,
     )
+    write_run_review_decisions(
+        project_id, resolve_run_dir(project_id, str(prepared["run_id"])), workflow)
+    return prepared
+
+
+def write_run_review_decisions(project_id: str, run_dir: Path, workflow: Workflow) -> None:
+    """Copies the store's decisions onto the run's disk, so no stage reaches a store for one."""
+    for stage_id, rows in resolve_review_decisions(project_id, workflow):
+        write_review_decisions(run_dir, stage_id, rows)
 
 
 def resume(project_id: str, run_id: str) -> None:
     workflow_version = read_pinned_version(project_id, run_id)
     discard_cancel(project_id, run_id)
+    workflow = Workflow(stages=load_version_stages(project_id, workflow_version))
+    # Re-resolved, so a resume carries what was decided since the halt.
+    write_run_review_decisions(project_id, resolve_run_dir(project_id, run_id), workflow)
     _run_in_background(
         resume_run,
         resolve_run_dir(project_id, run_id),
         project_id,
         run_id,
-        Workflow(stages=load_version_stages(project_id, workflow_version)),
+        workflow,
         workflow_version,
     )
 

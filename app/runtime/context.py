@@ -41,9 +41,6 @@ class RunContext(BaseModel):
     # write via the writable `StageCache` subclass). None alongside
     # `identity is None` — enforced by the validator.
     stage_cache: ReadOnlyStageCache | None = None
-    # What the caller asked of this run (row windows, cache busting, queue bypass,
-    # bindings) — the same object the manifest records, so the settings executed
-    # under and the settings written down cannot drift.
     params: RunParameters = RunParameters()
     # This run's event log, attached by the executor for
     # the duration of the run — see `attach_run_log`. Write-only from here: a
@@ -76,7 +73,8 @@ class RunContext(BaseModel):
 
     @model_validator(mode="after")
     def _identity_and_cache_covary(self) -> RunContext:
-        if (self.identity is None) != (self.stage_cache is None):
+        project_scoped = {self.identity is None, self.stage_cache is None}
+        if len(project_scoped) != 1:
             raise ValueError(
                 "RunContext.identity and RunContext.stage_cache must both be "
                 "set or both be None — a run either has project scope (both) "

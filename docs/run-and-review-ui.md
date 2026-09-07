@@ -226,9 +226,11 @@ every field to `start` — so each must be decided again before Submit
 re-enables — and records nothing itself. The submit that follows settles its
 verdict against the SAME prefill the page carried, which on a decided row is
 the previously recorded value: re-approving every field records `approve`
-again, and changing any one of them records `modify`. Decisions
-are keyed by a hash of the row (`app.core.stage_cache`)
-so they survive re-runs and LLM non-determinism. Recording a decision fetches
+again, and changing any one of them records `modify`. `queue_decide` records each
+decision twice: once into the stage cache, keyed by a hash of the row
+(`app.core.stage_cache`) so re-runs and LLM non-determinism replay it, and once as an
+append-only `ReviewDecision` row (`app.models.records.review_decision`, docs/run-manifest.md)
+that no cache eviction can erase. Recording a decision fetches
 that row's card partial and swaps it in place. The recorded block a decided card
 gains is rendered BELOW `.decision-controls`, so everything the swap adds falls
 under the button just pressed and nothing above it moves — which is what lets

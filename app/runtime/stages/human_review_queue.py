@@ -1,8 +1,4 @@
-"""Handler for the human_review_queue stage type.
-
-Every input row yields exactly one output row in its own input position; a row with
-no cached decision is marked deferred, never defaulted. On any deferral the mapper
-writes a fingerprints sidecar POSITIONALLY aligned to the snapshot's rows, and halts."""
+"""Handler for the human_review_queue stage type. docs/run-manifest.md"""
 
 from __future__ import annotations
 
@@ -30,6 +26,7 @@ from app.core.stage_cache import compute_row_fingerprint
 from app.models.records.queue_fingerprints import QueueFingerprints
 
 from ..context import RunContext, RunIdentity
+from ..review_decisions import read_review_decisions
 from ..stage_output import AwaitingReview
 from .execution import ROW_DEFERRED_KEY, Row, RowMapper, narrow_stage
 
@@ -88,11 +85,21 @@ class _QueueRowMapper:
         self._queue = queue
         _require_project_scope(ctx, queue_stage.id)
         self._queueable = _compute_queueable_mask(src, queue.filter, queue_stage.id)
+        # Handed in before this run started, so nothing here reads a project's store.
+        self._saved_review_decisions = read_review_decisions(
+            ctx.require_run_dir(), queue_stage.id)
 
     def __call__(self, row: Row, index: int) -> Row:
         if not self._queueable[index]:
             return _skip_row(self._queue, row)
+        decided = self._load_existing_row_decision_if_exists(row)
+        if decided is not None:
+            return decided
         return _defer_row(row, index)
+
+    def _load_existing_row_decision_if_exists(self, row: Row) -> Row | None:
+        saved = self._saved_review_decisions.get(compute_row_fingerprint(row))
+        return None if saved is None else dict(saved)
 
     def finish_mapped_rows(
         self,
@@ -121,13 +128,14 @@ class _QueueRowMapper:
 # --- _QueueRowMapper.__init__: once per stage execution ------------------------
 
 
-def _require_project_scope(ctx: RunContext, sid: str) -> None:
-    if ctx.identity is None or ctx.stage_cache is None:
+def _require_project_scope(ctx: RunContext, sid: str) -> RunIdentity:
+    """Its halt writes a run record under the project, which an unscoped run has nowhere to put."""
+    if ctx.identity is None:
         raise ValueError(
             f"human_review_queue '{sid}' requires a project-scoped (production) "
-            "run: RunContext.identity and RunContext.stage_cache must both be "
-            "set, but this run carries neither."
+            "run: RunContext.identity must be set, but this run carries none."
         )
+    return ctx.identity
 
 
 def _compute_queueable_mask(src: pd.DataFrame, flt: str | None, sid: str) -> list[bool]:
@@ -171,9 +179,7 @@ def _approve_row(queue: QueueConfig, row: Row, index: int) -> Row:
 
 
 def _add_review_columns(queue: QueueConfig, row: Row, verdict: ReviewVerdict) -> Row:
-    added: Row = {
-        target: row[source] for source, target in queue.reviewed_columns.items()
-    }
+    added: Row = {target: row[source] for source, target in queue.reviewed_columns.items()}
     added[queue.verdict_column] = verdict.value
     added[queue.reviewer_column] = pd.NA
     added[queue.reviewed_at_column] = pd.NA
