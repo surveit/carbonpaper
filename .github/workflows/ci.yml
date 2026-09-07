@@ -81,26 +81,9 @@ jobs:
       - id: types
         if: always() && steps.ruff.conclusion != 'skipped'
         run: uv run --frozen mypy
-      # Tally which contracts broke. Same-repository refs only: a fork's
-      # GITHUB_TOKEN is read-only, so the append would fail the job over a
-      # metric, and a fork's code must not reach a write-scoped token at all.
-      - name: Record contract outcomes
-        if: >
-          always() && steps.imports.conclusion != 'skipped'
-          && (github.event_name != 'pull_request'
-              || github.event.pull_request.head.repo.full_name == github.repository)
-        continue-on-error: true
-        uses: ./.github/actions/record-gates
-        with:
-          imports: lint-imports.txt
-          may-create-issue: "true"
-          token: ${{ github.token }}
 
   test:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      issues: write
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v9.0.0
@@ -116,38 +99,19 @@ jobs:
       # (test_roldugin.py etc.) that hit real APIs. tests/ and app/ are named
       # explicitly (not bare `pytest`) so the root probes stay uncollected while
       # the colocated app/**/_arch_tests/ architecture checks DO run in CI.
-      # --junitxml records which tests failed in a form the recording step below
-      # can read; the log itself is not a stable machine-readable record.
       # -n auto takes the runner's 4 vCPUs (public repo). Workers claim tests in no
       # fixed order, so a test that needed to follow another fails here rather than
       # on the machine that later reorders it.
       - run: |
           if [ -d tests ]; then
-            uv run --frozen python -m pytest tests/ app/ -n auto --junitxml=junit.xml
+            uv run --frozen python -m pytest tests/ app/ -n auto
           else
             echo "::warning::No tests/ directory on this ref — pytest was NOT run."
           fi
-      - name: Record test outcomes
-        if: >
-          always() && hashFiles('junit.xml') != ''
-          && (github.event_name != 'pull_request'
-              || github.event.pull_request.head.repo.full_name == github.repository)
-        continue-on-error: true
-        uses: ./.github/actions/record-gates
-        with:
-          junit: junit.xml
-          token: ${{ github.token }}
 
-  # The three reports share one job because Actions bills every job a whole minute:
-  # each is seconds of work, so as separate jobs they cost three billed minutes and
-  # three checkout-plus-`uv sync` pairs. `if: always()` on each later report keeps
-  # what separate jobs gave — a broken lexicon script still lets vocabulary compute
-  # and post — while a report's own failure still stops that report's upload and
-  # comment, and reddens the job.
-  #
-  # Informational only, each upserted as one marker-tagged PR comment edited in place
-  # on later pushes rather than posting a new comment each time. Never a required
-  # check: a failure here must not be able to block a merge, so it is not added to any
+  # Informational only, upserted as one marker-tagged PR comment edited in place on
+  # later pushes rather than posting a new comment each time. Never a required check:
+  # a failure here must not be able to block a merge, so it is not added to any
   # branch-protection required-status-checks list.
   reports:
     if: github.event_name == 'pull_request'
@@ -178,107 +142,9 @@ jobs:
           python-version: "3.12"
       - run: uv sync --frozen
 
-      # `--root base` points each report at the other checkout's `app` package for its
-      # analysis, reusing this (head) checkout's own copy of the script and of
-      # tests/arch/ — the base checkout only needs its `app/` source, never its own
-      # copy of either.
-      - id: import-graph
-        run: |
-          uv run --frozen python scripts/import_graph_report.py > head-metrics.json
-          uv run --frozen python scripts/import_graph_report.py --root base > base-metrics.json
-          uv run --frozen python scripts/import_graph_report.py --markdown head-metrics.json base-metrics.json > comment-body.md
-      # Raw data lives alongside the cooked report: the comment shows the
-      # rendered table, but the JSON these two invocations produced is kept
-      # too so it can be re-sliced without recomputing. Short retention —
-      # this is a debugging aid for the PR under review, not a permanent record.
-      - name: Upload raw metrics JSON
-        if: always() && steps.import-graph.conclusion == 'success'
-        uses: actions/upload-artifact@v4
-        with:
-          name: import-graph-metrics
-          path: |
-            head-metrics.json
-            base-metrics.json
-          retention-days: 14
-      - name: Upsert import-graph comment
-        if: always() && steps.import-graph.conclusion == 'success'
-        uses: ./.github/actions/upsert-pr-comment
-        with:
-          marker: "<!-- import-graph-report -->"
-          body-file: comment-body.md
-
-      # --repo/--sha turn each sighting into a blob link. The PR HEAD sha, not
-      # github.sha: that is the merge commit, whose blob URLs 404 once the merge
-      # ref is gone. Both flags or neither — half of them raises rather than
-      # building a URL that points somewhere wrong.
-      #
-      # Report-only for now — nothing here blocks, so two weeks of real firings can
-      # price the noise before anyone decides whether it should.
-      - id: lexicon
-        if: always() && steps.import-graph.conclusion != 'skipped'
-        run: |
-          uv run --frozen python -m scripts.lexicon > head-lexicon.json
-          uv run --frozen python -m scripts.lexicon --root base > base-lexicon.json
-          uv run --frozen python -m scripts.lexicon --markdown head-lexicon.json base-lexicon.json \
-            --repo ${{ github.repository }} --sha ${{ github.event.pull_request.head.sha }} > lexicon-body.md
-      - name: Upload raw lexicon JSON
-        if: always() && steps.lexicon.conclusion == 'success'
-        uses: actions/upload-artifact@v4
-        with:
-          name: lexicon-snapshots
-          path: |
-            head-lexicon.json
-            base-lexicon.json
-          retention-days: 14
-      - name: Upsert lexicon comment
-        if: always() && steps.lexicon.conclusion == 'success'
-        uses: ./.github/actions/upsert-pr-comment
-        with:
-          marker: "<!-- lexicon-report -->"
-          body-file: lexicon-body.md
-
-      # Wider than the noun-led ratchet in tests/test_lexicon.py: that one only guards the
-      # two words a human has hand-marked `noun_led`, so it needs someone to notice a new
-      # noun-only word before it can be protected. This checks every word BASE already
-      # established as non-verb, so it catches the case the ratchet structurally can't — a
-      # first bad verb use of a word nobody has flagged yet. Diffed against BASE, not
-      # `lexicon.json`: the registry lags `app/`, so comparing to it would flag every PR for
-      # pre-existing drift instead of only what that PR introduces. `reports` carries no
-      # required-status-check, so a red step here surfaces the finding without blocking.
-      - name: New verb usage of an established word (non-blocking)
-        if: always() && steps.lexicon.conclusion == 'success'
-        run: uv run --frozen python -m scripts.lexicon --check-new-verbs head-lexicon.json base-lexicon.json --annotate
-
-      # Wider and noisier than the lexicon report by design: comment prose is ~2,900 of
-      # the ~3,400 words here, and a new word in a sentence is usually just a sentence.
-      # A distinct report, and a distinct comment, precisely so the two firing rates can
-      # be compared before either is trusted enough to block.
-      - id: vocabulary
-        if: always() && steps.import-graph.conclusion != 'skipped'
-        run: |
-          uv run --frozen python -m scripts.vocabulary > head-vocabulary.json
-          uv run --frozen python -m scripts.vocabulary --root base > base-vocabulary.json
-          uv run --frozen python -m scripts.vocabulary --markdown head-vocabulary.json base-vocabulary.json > vocabulary-body.md
-      - name: Upload raw vocabulary JSON
-        if: always() && steps.vocabulary.conclusion == 'success'
-        uses: actions/upload-artifact@v4
-        with:
-          name: vocabulary-snapshots
-          path: |
-            head-vocabulary.json
-            base-vocabulary.json
-          retention-days: 14
-      - name: Upsert vocabulary comment
-        if: always() && steps.vocabulary.conclusion == 'success'
-        uses: ./.github/actions/upsert-pr-comment
-        with:
-          marker: "<!-- vocabulary-report -->"
-          body-file: vocabulary-body.md
-
-      # Not a taste call like the reports above it: an element wearing a class no
-      # stylesheet declares renders with no rules, and the suite cannot see it.
+      # An element wearing a class no stylesheet declares renders with no rules: the
+      # template is valid, the page returns 200, and the suite cannot see it.
       - id: unstyled
-        if: always() && steps.import-graph.conclusion != 'skipped'
         run: |
           uv run --frozen python -m scripts.unstyled_classes > head-unstyled.json
           uv run --frozen python -m scripts.unstyled_classes --root base > base-unstyled.json
@@ -299,53 +165,3 @@ jobs:
         with:
           marker: "<!-- unstyled-classes -->"
           body-file: unstyled-body.md
-
-
-  # Its own job, not a step in `reports`, because it RUNS the suite and `reports`
-  # holds two checkouts: the base copy at base/ doubles the tree, and the arch
-  # tests walk the repo root rather than pytest's collection, so they scanned
-  # base/app and base/tests and failed on the second copy. One checkout only.
-  #
-  # Coverage must be measured on head.sha, not the merge ref `test` uses: the
-  # diff's line numbers come from head, and mapping coverage taken on a
-  # different tree onto them would silently misreport which lines ran.
-  #
-  # A line executed only at IMPORT counts as run — module-level constants, class
-  # bodies and signature defaults never execute inside a test, and counting them
-  # unrun made two thirds of a real diff read as uncovered.
-  #
-  # Report-only for now, like the three in `reports` — two weeks of real firings
-  # decide whether an added line no test reaches should ever block.
-  added-coverage:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      # fetch-depth: 0 so the `base...head` merge-base diff resolves.
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-      - uses: astral-sh/setup-uv@v9.0.0
-        with:
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: uv sync --frozen
-      - id: added-coverage
-        run: |
-          uv run --frozen python -m pytest tests/ app/ -n auto -q --cov=app --cov-report=
-          uv run --frozen python -m scripts.added_coverage --markdown \
-            --base ${{ github.event.pull_request.base.sha }} --head HEAD \
-            --repo ${{ github.repository }} --sha ${{ github.event.pull_request.head.sha }} \
-            > added-coverage-body.md
-      - name: Upsert added-coverage comment
-        if: always() && steps.added-coverage.conclusion == 'success'
-        uses: ./.github/actions/upsert-pr-comment
-        with:
-          marker: "<!-- added-coverage-report -->"
-          body-file: added-coverage-body.md
