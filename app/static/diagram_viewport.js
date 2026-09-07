@@ -272,6 +272,15 @@
     });
   }
 
+  // The stylesheet hides the source while a render is pending; a viewport holding no
+  // svg is that render never happening, and the text is then all the reader has.
+  function showSourceWhereNothingDrew(vp) {
+    if (vp.querySelector("svg")) return;
+    vp.querySelectorAll(".mermaid").forEach(function (pre) {
+      pre.classList.add("diagram-undrawn");
+    });
+  }
+
   // Render and wire every viewport under `root`, which a page whose graph arrives
   // by fetch calls itself: boot() below ran while that pane was not yet in the DOM.
   async function renderDiagramViewports(root) {
@@ -285,6 +294,7 @@
       try { if (pres.length) await mermaid.run({ nodes: pres }); }
       catch (e) { console.error("mermaid render failed", e); }
     }
+    vps.forEach(showSourceWhereNothingDrew);
     vps.forEach(initDiagramViewport);
     return vps;
   }

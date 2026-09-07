@@ -52,28 +52,26 @@ _APP_STATIC = Path(__file__).resolve().parents[2] / "static"
 _APP_TEMPLATES = Path(__file__).resolve().parents[2] / "templates"
 _PACKET_STATIC = Path(__file__).parent / "static"
 _STATIC_HREF = re.compile(r'rel="stylesheet" href="/static/([^"]+)"')
+_SHELL_SCRIPT = re.compile(r'<script src="\{\{ static_root \}\}([^"]+)"')
 
-# The node-click dispatcher, vendored so the packet's graph nodes are live, and the
-# zoom/pan/fullscreen viewport, so a graph too wide for the page can be read rather
-# than only squinted at. VIEWPORT_SCRIPT renders the diagram itself, which is why the
-# index initializes mermaid with startOnLoad false.
-NODE_SCRIPT = "diagram_nodes.js"
+# No shell loads this one, and it renders the diagram itself — hence startOnLoad false.
 VIEWPORT_SCRIPT = "diagram_viewport.js"
-# The shared tooltip, vendored so a packet page's `data-tip` opens offline like the app's.
-TOOLTIP_SCRIPT = "tooltip.js"
-DIAGRAM_SCRIPTS = (NODE_SCRIPT, VIEWPORT_SCRIPT, TOOLTIP_SCRIPT)
-# Vendored, or a packet's tables would open nothing: the link column is gone.
-CELL_LINEAGE_SCRIPT = "cell-lineage.js"
-FIGURE_SCRIPT = "figure_text.js"
 
-# The tokenizer and its caller, vendored so a stage page colours its code offline.
-# The theme rides in the concatenated stylesheet, which already follows the app's
-# cascade order, so it needs no entry here.
-# NOT shipped: highlight.js is 124 KB of third-party code whose only job is
-# colouring tokens, and the packet is an artifact a reader opens from a stranger.
-# The code blocks keep their ground and padding from stage-detail.css, so they
-# read the same — unhighlighted, not unstyled. HLJS_STYLESHEET goes with it: with
-# nothing adding the classes, its rules can never match.
+# base.html's scripts all reach a packet page except these, each with its reason.
+PACKET_SKIPS_SCRIPT = {
+    "highlight.min.js": (
+        "124 KB of third-party code to colour tokens, in an artifact a reader opens "
+        "from a stranger; the code blocks keep their ground and padding either way"
+    ),
+    "code-highlight.js": "it only calls the tokenizer above, which the packet does not ship",
+    "breadcrumbs.js": "the trail is the app's own navigation, and a folder has none",
+    "demo-notice.js": "the open-demo banner is a fact about the server, not the run",
+    "picker.js": "its pickers move to another run or row, which are routes",
+    "chat-panel.js": "the chat asks a server",
+    "chat-rail.js": "the chat asks a server",
+    "cmdk-palette.js": "every command it offers is a route",
+}
+# Goes with highlight.min.js: nothing adds the classes, so its rules can never match.
 HLJS_STYLESHEET = "hljs-github-dark.css"
 
 # The diagram renderer is the packet's ONE external request; the index says so.
@@ -96,7 +94,7 @@ def write_packet_pages(
     workflow_stages_by_id: dict[str, WorkflowStage],
 ) -> list[str]:
     written = _write_stylesheets(root)
-    written.extend(_write_diagram_scripts(root))
+    written.extend(_write_vendored_scripts(root))
     written.append(_write_asset(root, FAVICON))
     written.append(_write_diagram_source(root, diagram))
     written.append(_write_index(root, view, data, lineage, guide, diagram, issues))
@@ -107,6 +105,28 @@ def write_packet_pages(
                 workflow_stages_by_id.get(stage.stage_id), frozenset(lineage.traced))
         )
     return written
+
+
+def read_ambient_scripts() -> list[str]:
+    """What base.html gives a served page and a packet page has to carry itself."""
+    return [
+        name for name in _read_shell_scripts("base.html")
+        if name not in PACKET_SKIPS_SCRIPT
+    ]
+
+
+def ambient_script_hrefs(to_root: str) -> list[str]:
+    return [f"{to_root}{ASSETS_DIR}/{name}" for name in read_ambient_scripts()]
+
+
+def _read_shell_scripts(template: str) -> list[str]:
+    found = _SHELL_SCRIPT.findall((_APP_TEMPLATES / template).read_text(encoding="utf-8"))
+    if not found:
+        raise ValueError(
+            f"{template} loads no script through static_root — the packet reads its "
+            "own script set from that list, so an empty one silently ships nothing"
+        )
+    return found
 
 
 def read_app_cascade_order() -> list[str]:
@@ -140,6 +160,7 @@ def _write_index(
         assets=[f"{ASSETS_DIR}/{name}" for name in STYLESHEETS],
         icon=f"{ASSETS_DIR}/{FAVICON}",
         static_root=f"{ASSETS_DIR}/",
+        ambient_scripts=ambient_script_hrefs(""),
         stages_dir=STAGES_DIR,
         checksums_href=CHECKSUMS_FILE,
         project=view.project,
@@ -160,9 +181,11 @@ def _write_diagram_source(root: Path, diagram: str) -> str:
     return _write_text(root / WORKFLOW_DIAGRAM_FILE, diagram, WORKFLOW_DIAGRAM_FILE)
 
 
-def _write_diagram_scripts(root: Path) -> list[str]:
-    return [_write_asset(root, name)
-            for name in (*DIAGRAM_SCRIPTS, CELL_LINEAGE_SCRIPT, FIGURE_SCRIPT)]
+def _write_vendored_scripts(root: Path) -> list[str]:
+    # standalone_base loads its own two; the rest arrive through ambient_scripts.
+    names = [*_read_shell_scripts("standalone_base.html"), *read_ambient_scripts(),
+             VIEWPORT_SCRIPT]
+    return [_write_asset(root, name) for name in names]
 
 
 def _write_asset(root: Path, name: str) -> str:
@@ -184,7 +207,7 @@ def _write_stage_page(
         assets=[f"../{ASSETS_DIR}/{name}" for name in STYLESHEETS],
         icon=f"../{ASSETS_DIR}/{FAVICON}",
         static_root=f"../{ASSETS_DIR}/",
-        cell_script=f"../{ASSETS_DIR}/{CELL_LINEAGE_SCRIPT}",
+        ambient_scripts=ambient_script_hrefs("../"),
         index_href="../index.html",
         **_build_panel_context(run_dir, view, stage, workflow_stage, traced),
     )

@@ -133,13 +133,17 @@ def test_no_lineage_page_links_a_lineage_page_that_was_not_written(tmp_path):
 
 def test_a_lineage_page_reaches_the_rest_of_the_packet_by_relative_path(tmp_path):
     """It is written two levels down, so every shared asset is reached with ../../."""
+    from app.web.review_packet.pages import (
+        STYLESHEETS, _read_shell_scripts, read_ambient_scripts,
+    )
+
     page = (_export_demo_packet(tmp_path) / "lineage/totals/0.html").read_text(encoding="utf-8")
     outward = {h for h in _relative_links(page) if "lineage/" not in h}
-    assert outward == {
-        "../../assets/diagram_nodes.js", "../../assets/tooltip.js",
-        "../../assets/cell-lineage.js", "../../assets/figure_text.js",
-        "../../assets/palette.css",
-        "../../assets/style.css", "../../assets/packet.css", "../../assets/favicon.svg",
+    assets = [
+        *STYLESHEETS, "favicon.svg",
+        *_read_shell_scripts("standalone_base.html"), *read_ambient_scripts(),
+    ]
+    assert outward == {f"../../assets/{name}" for name in assets} | {
         "../../index.html",
         # The Inputs pane names the input stage, and the packet writes that page.
         "../../stages/source.html",
@@ -188,6 +192,11 @@ def _demo_run(tmp_path):
 
 
 def _export_demo_packet(tmp_path):
+    _export_demo_lineage(tmp_path)
+    return tmp_path / "packet"
+
+
+def _export_demo_lineage(tmp_path):
     from app.runtime.citations import CitationProvider, save_citations
     from app.web.review_packet.lineage import write_packet_lineage
 
@@ -199,8 +208,7 @@ def _export_demo_packet(tmp_path):
 
     root = tmp_path / "packet"
     root.mkdir()
-    write_packet_lineage(root, run_dir, _run_view(2), {}, _DEMO_MANIFEST)
-    return root
+    return write_packet_lineage(root, run_dir, _run_view(2), {}, _DEMO_MANIFEST)
 
 
 # What the run recorded of the one file it read — the Inputs pane's whole source.
@@ -333,3 +341,25 @@ def test_the_packet_ships_no_syntax_highlighter():
         "the app still links it; this test guards the packet's exclusion, "
         "and would otherwise pass by the sheet simply having been deleted"
     )
+
+
+def test_a_walk_wider_than_the_budget_writes_its_nearest_rows_and_says_it_stopped(
+    tmp_path, monkeypatch
+):
+    """One corpus-wide total reaches every input row, which used to write no page."""
+    from app.web.review_packet import lineage as packet_lineage
+
+    monkeypatch.setattr(packet_lineage, "PACKET_MAX_LINEAGE_PAGES", 2)
+    report = _export_demo_lineage(tmp_path)
+    root = tmp_path / "packet"
+
+    assert report.stops_short
+    assert len(report.traced) == 2
+    pages = sorted(p.name for p in root.glob("lineage/*/*.html") if ".from-" not in p.name)
+    assert pages == ["0.html", "1.html"], "the two rows the report stage linked"
+    assert "The walk back stops here" in (
+        root / "lineage" / "index.html").read_text(encoding="utf-8")
+
+
+def test_a_walk_inside_the_budget_claims_no_rows_are_missing(tmp_path):
+    assert not _export_demo_lineage(tmp_path).stops_short

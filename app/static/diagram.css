@@ -30,6 +30,12 @@
    and silently discarded every write (zoom-to-node scrolled nowhere).
    max-content lets a wide graph overflow the viewport so it can scroll; min-width
    keeps a narrow one filling the box, still centred by .mermaid's text-align. */
+/* Until mermaid rewrites it the <pre> holds the graph's SOURCE, and a page that
+   paints that first flashes a screenful of code where the picture goes. Shown again
+   only when nothing drew it — diagram_viewport.js sets .diagram-undrawn, so a blocked
+   CDN still leaves the reader the text. The height is a placeholder for the svg. */
+.diagram-viewport .mermaid:not([data-processed]):not(.diagram-undrawn) {
+    visibility: hidden; height: 180px; }
 /* The padding is SLACK: it is what a reader drags into when they pan the graph past
    its own top-left corner, which a scroll container cannot go beyond on its own.
    fit() in diagram_viewport.js measures it, so a fitted graph still fits. */
