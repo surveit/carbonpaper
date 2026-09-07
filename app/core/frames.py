@@ -278,6 +278,23 @@ def _select_column(table: pa.Table, column: str) -> pa.ChunkedArray:
     return table.column(column)
 
 
+def read_native_cell(table: pa.Table, column: str, row_ordinal: int) -> Any:
+    return read_native_scalar(table.column(column)[row_ordinal])
+
+
+def read_native_scalar(scalar: pa.Scalar) -> Any:
+    """Arrow's own Python type for one scalar, not JsonScalar — see convert_cell_to_json_value."""
+    return scalar.as_py()
+
+
+def read_native_row(table: pa.Table, row_ordinal: int) -> dict[str, Any]:
+    return {name: read_native_cell(table, name, row_ordinal) for name in table.column_names}
+
+
+def read_native_column(table: pa.Table, column: str) -> list[Any]:
+    return table.column(column).to_pylist()
+
+
 def _as_json_scalar(column: str, arrow_type: pa.DataType, cell: Any) -> JsonScalar:
     if cell is None:
         return None
@@ -475,11 +492,22 @@ def convert_row_to_json_cells(row: dict[str, Any]) -> dict[str, JsonScalar]:
 def convert_cell_to_json_value(value: object) -> JsonScalar:
     """A null stays null: a blank cell a reader reads as blank must not arrive as "None"."""
     cell = collapse_null_forms(value)
+    # JSON has no Infinity either; collapse_null_forms stays NaN-only for write-time callers.
+    if isinstance(cell, float) and not math.isfinite(cell):
+        return None
     if cell is None or isinstance(cell, (bool, int, float, str)):
         return cell
     if isinstance(cell, _dt.datetime):
         return _render_moment(cell)
     return convert_cell_to_json_native(cell)
+
+
+def read_native_cell_as_json(table: pa.Table, column: str, row_ordinal: int) -> JsonScalar:
+    return convert_cell_to_json_value(read_native_cell(table, column, row_ordinal))
+
+
+def read_native_scalar_as_json(scalar: pa.Scalar) -> JsonScalar:
+    return convert_cell_to_json_value(read_native_scalar(scalar))
 
 
 def _render_moment(moment: _dt.datetime) -> str:

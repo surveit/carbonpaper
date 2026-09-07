@@ -10,7 +10,7 @@ from typing import TypeVar
 import pyarrow as pa
 from pydantic import BaseModel
 
-from app.core.frames import read_frame_table, write_frame_table
+from app.core.frames import read_frame_table, read_native_cell, write_frame_table
 from app.models.branch_analysis import BranchId, BranchOption, BranchPath, RowOrdinal
 from app.models.schema import StageId
 from app.models.workflow_stage import WorkflowStage
@@ -236,10 +236,10 @@ def _read_stamp(path: Path) -> BranchCacheStamp | None:
     except (pa.ArrowInvalid, OSError):
         return None
     return BranchCacheStamp(
-        pinned_version_id=table.column(_VERSION_KEY)[0].as_py(),
+        pinned_version_id=read_native_cell(table, _VERSION_KEY, 0),
         frame_sizes=[StageFrameSize(stage_id=stage_id, row_count=row_count)
-                     for stage_id, row_count in zip(table.column(_STAGE_KEY)[0].as_py(),
-                                                    table.column(_COUNT_KEY)[0].as_py())])
+                     for stage_id, row_count in zip(read_native_cell(table, _STAGE_KEY, 0),
+                                                    read_native_cell(table, _COUNT_KEY, 0))])
 
 
 def _resolve_cache_dir(run_dir: Path) -> Path:
