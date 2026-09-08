@@ -99,7 +99,7 @@ def build_tutorial_tools(context: BaseModel) -> list[BoundToolSpec]:
             label="Offering what to do next",
             parameters=OFFER_NEXT_STEPS.parameters,
         ),
-        *bind("run_workflow", "get_run_status", "sleep", "read_workflow_summary"),
+        *bind("run_workflow", "get_run_status", "sleep"),
     ]
 
 

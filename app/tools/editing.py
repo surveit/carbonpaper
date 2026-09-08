@@ -8,13 +8,14 @@ from pydantic import BaseModel
 
 from app.core.agent.bound_tool import BoundToolSpec, bind_by_signature
 from app.tools.types import ToolParameterProse
-from app.tools import shared, working_copy
+from app.tools import shared
 from app.tools.submitted_stage import (
     SubmittedStage,
     add_stages_reporting_drops,
     edit_stages_reporting_drops,
 )
 from app.tools.tool_specs import (
+    DRAFT_ID,
     PROJECT_ID,
     bind,
     read_parameter_prose,
@@ -34,8 +35,6 @@ class EditingContext(BaseModel):
     page: str | None = None
     # The page the chat was started from, which is what binds it to a project.
     opened_on: str | None = None
-    # Names this session's draft. Two sessions editing one project never share stages.
-    session_id: str | None = None
 
 
 def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
@@ -47,16 +46,15 @@ def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
     def create_project(name: str, document: str) -> Project:
         return shared.create_project(name, document, source="editing agent")
 
-    def edit_stages(project_id: str, edits: list[StageEdit]) -> shared.EditedStages:
-        return edit_stages_reporting_drops(project_id, edits)
+    def edit_stages(
+        project_id: str, draft_id: str, edits: list[StageEdit]
+    ) -> shared.EditedStages:
+        return edit_stages_reporting_drops(project_id, draft_id, edits)
 
-    def add_stage(project_id: str, stages: list[SubmittedStage]) -> dict[str, Any]:
-        return add_stages_reporting_drops(project_id, stages)
-
-    def save_version(
-        project_id: str, message: str, parent_version: str | None = None
+    def add_stage(
+        project_id: str, draft_id: str, stages: list[SubmittedStage]
     ) -> dict[str, Any]:
-        return working_copy.save_working_copy_as_version(project_id, message, parent_version)
+        return add_stages_reporting_drops(project_id, draft_id, stages)
 
     def list_files(project_id: str | None = None) -> shared.ProjectFilesView:
         where = "/files" if project_id is None else f"/project/{project_id}/files"
@@ -76,7 +74,6 @@ def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         create_project,
         edit_stages,
         add_stage,
-        save_version,
         list_files,
         read_stage_output_rows,
     ]
@@ -90,7 +87,9 @@ def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         )
         for fn in tools
     ] + bind(
-        "list_projects", "read_workflow_summary", "read_stage", "delete_stage",
+        "start_editing", "read_workflow_draft", "read_draft_stage",
+        "delete_stage", "save_version",
+        "list_projects", "list_versions", "read_version_stage",
         "read_terms", "write_terms",
         "read_claim_shapes", "write_claim_shapes",
         "read_review_guide", "write_review_guide",
@@ -114,11 +113,13 @@ TOOL_SCHEMAS: dict[str, ToolParameterProse] = {
     },
     "edit_stages": {
         "project_id": PROJECT_ID,
+        "draft_id": DRAFT_ID,
         "edits": "One entry per stage you are changing; entries sent together are validated "
             "and written as one workflow.",
     },
     "add_stage": {
         "project_id": PROJECT_ID,
+        "draft_id": DRAFT_ID,
         "stages": "The complete NEW stages: each with id (new and unique — the stage's only "
             "name), description, type, the "
             "config block(s) its type requires (connector / llm / function / ...; "
@@ -127,12 +128,6 @@ TOOL_SCHEMAS: dict[str, ToolParameterProse] = {
             "for. An entry in `inputs` carries the upstream stage id and nothing else; "
             "the columns go in `signature.reads`, keyed by the same id. Every id in "
             "inputs must already be a stage in this workflow or in this same call.",
-    },
-    "save_version": {
-        "project_id": PROJECT_ID,
-        "message": "What identifies this version to a reader in 150 characters or fewer.",
-        "parent_version": "The version you started this edit FROM, if you loaded one. Omit otherwise: "
-            "nothing is inferred from what else the project has stored.",
     },
     "list_files": {
         "project_id": f"{PROJECT_ID} Omit it for the files that are in no project yet.",
@@ -149,7 +144,6 @@ TOOL_LABELS: dict[str, str] = {
     "create_project": "Creating the project",
     "edit_stages": "Editing the workflow's stages",
     "add_stage": "Adding a stage",
-    "save_version": "Saving the workflow as a version",
     "list_files": "Listing the project's files",
     "read_stage_output_rows": "Reading the stage's rows",
 }

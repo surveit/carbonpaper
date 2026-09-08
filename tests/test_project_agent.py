@@ -16,9 +16,12 @@ _EXPECTED_TOOL_NAMES = {
     "list_projects",
     "get_current_url",
     "create_project",
-    "read_workflow_summary",
     "read_stage_output_rows",
-    "read_stage",
+    "start_editing",
+    "read_workflow_draft",
+    "read_draft_stage",
+    "list_versions",
+    "read_version_stage",
     "edit_stages",
     "add_stage",
     "delete_stage",
@@ -68,10 +71,14 @@ def test_a_session_bound_to_no_project_can_build_one_from_nothing(tmp_path) -> N
 
     project_id = created.id
     call["write_terms"](project_id=project_id, terms=Terms(nouns=SchemaLibrary(schemas=[]), verbs=[]))
-    added = call["add_stage"](project_id=project_id, stages=[_LOAD_STAGE])
+    draft_id = call["start_editing"](project_id=project_id)
+    added = call["add_stage"](project_id=project_id, draft_id=draft_id, stages=[_LOAD_STAGE])
 
     assert added["added"] == ["load"]
-    assert call["read_workflow_summary"](project_id=project_id).stages[0].id == "load"
+    assert "load" in call["read_draft_stage"](
+        project_id=project_id, draft_id=draft_id, stage_id="load")
+    assert [s.id for s in call["read_workflow_draft"](
+        project_id=project_id, draft_id=draft_id).stages] == ["load"]
 
 
 def test_creating_a_project_does_not_rebind_the_session(tmp_path) -> None:

@@ -15,7 +15,13 @@ from starlette.types import Receive, Scope, Send
 from app.mcp.instructions import INSTRUCTIONS
 from app.models.claims import ClaimShapeInput
 from app.models.records.claims import ClaimShape
-from app.tools import claim_shapes as claim_shape_tools, shared, working_copy
+from app.tools import (
+    claim_shapes as claim_shape_tools,
+    draft_editing,
+    shared,
+    versions,
+    working_copy,
+)
 from app.models.stage import StageEdit
 from app.tools.submitted_stage import (
     SubmittedStage,
@@ -136,38 +142,57 @@ def write_claim_shapes(
     return claim_shape_tools.write_claim_shapes(project_id, shapes)
 
 
-@mcp.tool(description=read_tool_description("read_workflow_summary"))
-def read_workflow_summary(project_id: str) -> shared.workspace.WorkflowSummary:
-    return shared.read_workflow_summary(project_id)
+@mcp.tool(description=read_tool_description("read_draft_stage"))
+def read_draft_stage(project_id: str, draft_id: str, stage_id: str) -> str:
+    return draft_editing.read_draft_stage(project_id, draft_id, stage_id)
 
 
-@mcp.tool(description=read_tool_description("read_stage"))
-def read_stage(project_id: str, stage_id: str) -> str:
-    return shared.read_stage(project_id, stage_id)
+@mcp.tool(description=read_tool_description("list_versions"))
+def list_versions(project_id: str) -> list[versions.VersionListing]:
+    return versions.list_versions(project_id)
+
+
+@mcp.tool(description=read_tool_description("read_version_stage"))
+def read_version_stage(project_id: str, version_id: str, stage_id: str) -> str:
+    return versions.read_version_stage(project_id, version_id, stage_id)
+
+
+@mcp.tool(description=read_tool_description("start_editing"))
+def start_editing(project_id: str) -> str:
+    return draft_editing.start_editing(project_id)
+
+
+@mcp.tool(description=read_tool_description("read_workflow_draft"))
+def read_workflow_draft(project_id: str, draft_id: str) -> draft_editing.WorkflowDraft:
+    return draft_editing.read_workflow_draft(project_id, draft_id)
 
 
 @mcp.tool(description=read_tool_description("edit_stages"))
-def edit_stages(project_id: str, edits: list[StageEdit]) -> shared.EditedStages:
+def edit_stages(
+    project_id: str, draft_id: str, edits: list[StageEdit]
+) -> shared.EditedStages:
     return working_copy.catch_stage_edit_refusals(
-        lambda: edit_stages_reporting_drops(project_id, edits)
+        lambda: edit_stages_reporting_drops(project_id, draft_id, edits)
     )
 
 
 @mcp.tool(description=read_tool_description("add_stage"))
-def add_stage(project_id: str, stages: list[SubmittedStage]) -> dict[str, Any]:
-    return add_stages_reporting_drops(project_id, stages)
+def add_stage(
+    project_id: str, draft_id: str, stages: list[SubmittedStage]
+) -> dict[str, Any]:
+    return add_stages_reporting_drops(project_id, draft_id, stages)
 
 
 @mcp.tool(description=read_tool_description("delete_stage"))
-def delete_stage(project_id: str, stage_id: str) -> dict[str, Any]:
-    return shared.delete_stage(project_id, stage_id)
+def delete_stage(project_id: str, draft_id: str, stage_id: str) -> draft_editing.EditStageResult:
+    return draft_editing.delete_stage(project_id, draft_id, stage_id)
 
 
 @mcp.tool(description=read_tool_description("save_version"))
 def save_version(
-    project_id: str, message: str, parent_version: str | None = None
-) -> dict[str, Any]:
-    return working_copy.save_working_copy_as_version(project_id, message, parent_version)
+    project_id: str, draft_id: str, message: str, override_conflict: bool = False
+) -> draft_editing.SaveResult:
+    return draft_editing.save_version(project_id, draft_id, message, override_conflict)
 
 
 @mcp.tool(description=read_tool_description("read_review_guide"))

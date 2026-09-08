@@ -22,7 +22,7 @@ from app.services.methodology import write_methodology
 from app.services.stage_test_rows import load_stage_row_sources
 from app.services.workspace import resolve_project_dir
 from run_seed import store_manifest
-from stage_seed import add_stage, read_stage
+from stage_seed import add_stage, read_stage, read_stages, seed_version
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [
@@ -96,8 +96,22 @@ def _seed_project(project_dir: Path, *, existing_tests: list[dict] | None = None
     if existing_tests is not None:
         double_spec["tests"] = existing_tests
     add_stage(pdir, double_spec)
+    seed_version(pdir, read_stages(pdir))
     _write_run(project_dir)
 
+
+
+def _saved_stage(project_dir: Path, stage_id: str) -> dict[str, Any]:
+    """Generation saves a version, so what it wrote is read back from the newest one."""
+    from app.services import versioning
+    from app.models.stage import stage_to_spec_dict
+
+    newest = versioning.find_latest_version_id(project_dir.name)
+    assert newest is not None
+    for stage in versioning.load_version_stages(project_dir.name, newest):
+        if stage.id == stage_id:
+            return stage_to_spec_dict(stage)
+    raise KeyError(stage_id)
 
 def _valid_suite(project_dir: Path) -> Any:
     return _suite_model(project_dir).model_validate({
@@ -118,7 +132,7 @@ def test_finish_stage_tests_patches_the_stage(tmp_path: Path):
 
     _finish(project_dir, _valid_suite(project_dir))
 
-    stage = read_stage(project_dir, "double")
+    stage = _saved_stage(project_dir, "double")
     assert len(stage["tests"]) == 1
     assert stage["tests"][0]["name"] == "doubles_two"
 
@@ -133,7 +147,7 @@ def test_finish_stage_tests_replaces_existing_tests(tmp_path: Path):
 
     _finish(project_dir, _valid_suite(project_dir))
 
-    stage = read_stage(project_dir, "double")
+    stage = _saved_stage(project_dir, "double")
     names = [t["name"] for t in stage["tests"]]
     assert names == ["doubles_two"]  # the old case is gone, wholesale replace
 
@@ -145,7 +159,7 @@ def test_finish_with_no_answer_raises(tmp_path: Path):
     with pytest.raises(GenerationError):
         _finish(project_dir, None)
 
-    stage = read_stage(project_dir, "double")
+    stage = _saved_stage(project_dir, "double")
     assert "tests" not in stage  # nothing written on a failed generation
 
 
@@ -161,7 +175,7 @@ def test_finish_with_empty_suite_raises(tmp_path: Path):
     with pytest.raises(GenerationError, match="empty test suite"):
         _finish(project_dir, empty_suite)
 
-    stage = read_stage(project_dir, "double")
+    stage = _saved_stage(project_dir, "double")
     names = [t["name"] for t in stage["tests"]]
     assert names == ["old_case"]  # existing tests survive — nothing written on rejection
 
@@ -190,6 +204,7 @@ def test_finish_stage_tests_preserves_null_cells(tmp_path: Path):
         "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                      "code": "def transform(row):\n    return {**row, 'flag': None}\n"},
     })
+    seed_version(pdir, read_stages(pdir))
 
     _write_run(project_dir)
     suite = _suite_model(project_dir, out_schema).model_validate({
@@ -203,7 +218,7 @@ def test_finish_stage_tests_preserves_null_cells(tmp_path: Path):
 
     _finish(project_dir, suite)
 
-    stage = read_stage(project_dir, "double")
+    stage = _saved_stage(project_dir, "double")
     assert stage["tests"][0]["expected"][0] == {"amount": 2.0, "flag": None}
 
 
@@ -292,7 +307,7 @@ def test_start_creates_hidden_viewonly_session(tmp_path: Path, monkeypatch: Any)
     assert session["agent_id"] is None  # view-only
     assert session["messages"]  # TurnManager persisted the conversation
 
-    stage = read_stage(project_dir, "double")
+    stage = _saved_stage(project_dir, "double")
     assert stage["tests"][0]["name"] == "doubles_two"  # completion hook patched the stage
 
 
@@ -345,5 +360,5 @@ def test_failed_generation_is_persisted_into_the_session(tmp_path: Path, monkeyp
     ]
     assert any(GENERATION_FAILURE_PREFIX in text for text in failure_texts)
 
-    stage = read_stage(project_dir, "double")
+    stage = _saved_stage(project_dir, "double")
     assert "tests" not in stage  # nothing written on a failed generation

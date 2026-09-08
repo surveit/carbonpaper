@@ -28,9 +28,6 @@ def examples(tmp_path: Path) -> Path:
     return tmp_path
 
 
-_SESSION_A = "a" * 32
-_SESSION_B = "b" * 32
-
 def test_create_empty_draft_returns_triplet_id(examples: Path) -> None:
     draft = drafts.create_draft("demo")
     assert len(draft.id.split("-")) == 3
@@ -41,7 +38,7 @@ def test_create_empty_draft_returns_triplet_id(examples: Path) -> None:
 def test_create_draft_seeded_from_version(examples: Path) -> None:
     pdir = examples / "demo"
     meta = versioning.create_version_from_stages(pdir.name, [_STAGE], message="v1")
-    draft = drafts.create_draft("demo", from_version=meta.version_id)
+    draft = drafts.create_draft("demo", from_version_id=meta.version_id)
     assert [s.id for s in draft.stages] == ["load"]
     assert draft.parent_version == meta.version_id
 
@@ -146,47 +143,35 @@ def test_save_version_refuses_a_dangling_input_that_per_stage_validation_accepts
     assert versioning.list_versions(pdir.name) == []
 
 
-def test_open_session_draft_seeds_from_the_newest_version(examples: Path) -> None:
+def test_a_draft_started_from_the_newest_version_carries_its_stages(examples: Path) -> None:
     pdir = examples / "demo"
     meta = versioning.create_version_from_stages(pdir.name, [_STAGE], message="v1")
 
-    opened = drafts.open_session_draft("demo", _SESSION_A)
+    opened = drafts.read_draft("demo", drafts.start_draft_from_newest_version("demo"))
 
-    assert opened.id == _SESSION_A
     assert opened.parent_version == meta.version_id
     assert [s.id for s in opened.stages] == ["load"]
 
 
-def test_open_session_draft_is_idempotent(examples: Path) -> None:
+def test_two_drafts_never_share_stages(examples: Path) -> None:
     pdir = examples / "demo"
     versioning.create_version_from_stages(pdir.name, [_STAGE], message="v1")
 
-    first = drafts.open_session_draft("demo", _SESSION_A)
-    drafts.delete_draft_stage("demo", first.id, "load")
-    again = drafts.open_session_draft("demo", _SESSION_A)
+    mine = drafts.start_draft_from_newest_version("demo")
+    theirs = drafts.start_draft_from_newest_version("demo")
+    drafts.delete_draft_stage("demo", mine, "load")
 
-    assert again.stages == []
-
-
-def test_two_sessions_never_share_stages(examples: Path) -> None:
-    pdir = examples / "demo"
-    versioning.create_version_from_stages(pdir.name, [_STAGE], message="v1")
-
-    drafts.open_session_draft("demo", _SESSION_A)
-    drafts.open_session_draft("demo", _SESSION_B)
-    drafts.delete_draft_stage("demo", _SESSION_A, "load")
-
-    assert [s.id for s in drafts.read_draft("demo", _SESSION_B).stages] == ["load"]
+    assert [s.id for s in drafts.read_draft("demo", theirs).stages] == ["load"]
 
 
 def test_saving_a_draft_someone_saved_past_is_refused_as_a_conflict(examples: Path) -> None:
     pdir = examples / "demo"
     versioning.create_version_from_stages(pdir.name, [_STAGE], message="v1")
-    behind = drafts.open_session_draft("demo", _SESSION_A)
-    ahead = drafts.open_session_draft("demo", _SESSION_B)
-    drafts.save_version("demo", ahead.id, message="theirs")
+    behind = drafts.start_draft_from_newest_version("demo")
+    ahead = drafts.start_draft_from_newest_version("demo")
+    drafts.save_version("demo", ahead, message="theirs")
 
-    result = drafts.save_version("demo", behind.id, message="mine")
+    result = drafts.save_version("demo", behind, message="mine")
 
     assert result.ok is False
     assert result.conflict is True
@@ -197,12 +182,12 @@ def test_saving_a_draft_someone_saved_past_is_refused_as_a_conflict(examples: Pa
 def test_override_conflict_saves_anyway_and_carries_none_of_their_changes(examples: Path) -> None:
     pdir = examples / "demo"
     versioning.create_version_from_stages(pdir.name, [_STAGE], message="v1")
-    behind = drafts.open_session_draft("demo", _SESSION_A)
-    ahead = drafts.open_session_draft("demo", _SESSION_B)
-    drafts.delete_draft_stage("demo", ahead.id, "load")
-    drafts.save_version("demo", ahead.id, message="theirs")
+    behind = drafts.start_draft_from_newest_version("demo")
+    ahead = drafts.start_draft_from_newest_version("demo")
+    drafts.delete_draft_stage("demo", ahead, "load")
+    drafts.save_version("demo", ahead, message="theirs")
 
-    result = drafts.save_version("demo", behind.id, message="mine", override_conflict=True)
+    result = drafts.save_version("demo", behind, message="mine", override_conflict=True)
 
     assert result.ok is True
     assert result.conflict is False
@@ -225,9 +210,9 @@ def test_a_draft_that_claimed_no_base_is_never_a_conflict(examples: Path) -> Non
 def test_saving_the_same_draft_twice_is_not_a_conflict(examples: Path) -> None:
     pdir = examples / "demo"
     versioning.create_version_from_stages(pdir.name, [_STAGE], message="v1")
-    mine = drafts.open_session_draft("demo", _SESSION_A)
+    mine = drafts.start_draft_from_newest_version("demo")
 
-    assert drafts.save_version("demo", mine.id, message="one").ok is True
-    second = drafts.save_version("demo", mine.id, message="two")
+    assert drafts.save_version("demo", mine, message="one").ok is True
+    second = drafts.save_version("demo", mine, message="two")
 
     assert second.ok is True and second.conflict is False

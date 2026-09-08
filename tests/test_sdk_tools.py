@@ -15,10 +15,10 @@ from pydantic import BaseModel
 from app.tools.editing import EditingContext, build_editing_tools
 from app.core.agent.registry import as_tool_content, build_mcp_server
 from app.core.agent.bound_tool import bind_by_signature
-from app.tools import shared
+from app.tools import draft_editing
 from app.tools.tool_specs import bind
 from app.services import workspace
-from stage_seed import add_stage
+from stage_seed import SEED_DRAFT, add_stage
 
 
 @pytest.fixture(autouse=True)
@@ -60,18 +60,19 @@ def test_allowed_names_cover_every_tool(examples_root: Path) -> None:
     _server, allowed, _tools = _build("congresswatch")
     specs = build_editing_tools(EditingContext(project_id="congresswatch", base_url="http://reader.test/"))
     assert set(allowed) == {f"mcp__tools__{spec.name}" for spec in specs}
-    assert len(allowed) == 30
+    assert len(allowed) == 33
 
 
 def test_read_stage_handler_returns_text_content(examples_root: Path) -> None:
     pdir = _seed(examples_root, "congresswatch")
     _server, _allowed, tools = _build("congresswatch")
-    tool = next(t for t in tools if t.name == "read_stage")  # SdkMcpTool
+    tool = next(t for t in tools if t.name == "read_draft_stage")  # SdkMcpTool
 
     from app.services.workspace import project_workflow_summary
 
     stage_id = project_workflow_summary(pdir.name).stages[0].id
-    out = _call(tool, {"project_id": "congresswatch", "stage_id": stage_id})
+    out = _call(tool, {"project_id": "congresswatch", "draft_id": SEED_DRAFT,
+                       "stage_id": stage_id})
     assert out["content"][0]["type"] == "text"
     assert stage_id in out["content"][0]["text"]
 
@@ -79,8 +80,9 @@ def test_read_stage_handler_returns_text_content(examples_root: Path) -> None:
 def test_handler_surfaces_tool_error_not_fabricated_value(examples_root: Path) -> None:
     _seed(examples_root, "congresswatch")
     _server, _allowed, tools = _build("congresswatch")
-    tool = next(t for t in tools if t.name == "read_stage")
-    out = _call(tool, {"project_id": "congresswatch", "stage_id": "no_such_stage"})
+    tool = next(t for t in tools if t.name == "read_draft_stage")
+    out = _call(tool, {"project_id": "congresswatch", "draft_id": SEED_DRAFT,
+                       "stage_id": "no_such_stage"})
     assert out.get("is_error") is True
     assert "no_such_stage" in out["content"][0]["text"]
 
@@ -105,18 +107,20 @@ def test_add_stage_then_save_creates_an_unpublished_version(examples_root: Path)
         },
     }
 
-    out = _call(by_name["add_stage"], {"project_id": "congresswatch", "stages": [stage]})
+    out = _call(by_name["add_stage"], {"project_id": "congresswatch",
+                                       "draft_id": SEED_DRAFT, "stages": [stage]})
     assert not out.get("is_error"), out["content"][0]["text"]
     assert json.loads(out["content"][0]["text"])["added"] == ["score"], out["content"][0]["text"]
 
     read_back = json.loads(_call(
-        by_name["read_stage"],
-        {"project_id": "congresswatch", "stage_id": "score"})["content"][0]["text"])
+        by_name["read_draft_stage"],
+        {"project_id": "congresswatch", "draft_id": SEED_DRAFT,
+         "stage_id": "score"})["content"][0]["text"])
     assert read_back["id"] == stage["id"]
     assert read_back["type"] == stage["type"]
 
     saved = json.loads(_call(by_name["save_version"], {
-        "project_id": "congresswatch",
+        "project_id": "congresswatch", "draft_id": SEED_DRAFT,
         "message": "add the score stage"})["content"][0]["text"])
     assert saved["ok"] is True
     assert saved["version_id"] is not None
@@ -143,6 +147,7 @@ def test_a_tool_taking_a_model_is_handed_json_and_gets_the_model(examples_root: 
 
     parsed = spec.parse_arguments({
         "project_id": "congresswatch",
+        "draft_id": SEED_DRAFT,
         "stages": [{
             "id": "load", "description": "Load rows", "type": "input_data",
             "connector": {"kind": "file"},
@@ -160,7 +165,8 @@ def test_an_argument_the_model_shapes_wrongly_comes_back_as_a_tool_error(
     _seed(examples_root, "congresswatch")
     _server, _allowed, tools = _build("congresswatch")
     out = _call(next(t for t in tools if t.name == "add_stage"),
-                {"project_id": "congresswatch", "stages": [{"id": "load"}]})
+                {"project_id": "congresswatch", "draft_id": SEED_DRAFT,
+                 "stages": [{"id": "load"}]})
     assert out["is_error"] is True
     # The field, not a stack trace: what comes back is what the model reads to retry.
     assert "type" in out["content"][0]["text"]
@@ -189,8 +195,8 @@ def test_write_review_guide_stores_a_guide_sent_as_an_object(examples_root: Path
     by_name = {t.name: t for t in tools}
 
     saved = json.loads(_call(by_name["save_version"], {
-        "project_id": "congresswatch", "message": "the loader alone",
-        "parent_version": None})["content"][0]["text"])
+        "project_id": "congresswatch", "draft_id": SEED_DRAFT,
+        "message": "the loader alone"})["content"][0]["text"])
     assert saved["ok"] is True, saved
 
     out = _call(by_name["write_review_guide"], {
@@ -215,7 +221,7 @@ def test_a_parameter_the_function_does_not_take_is_refused() -> None:
     """The prose table is the only place a name can disagree with the function."""
     with pytest.raises(ValueError, match=r"does not take \['nonesuch'\]"):
         bind_by_signature(
-            name="read_stage", description="d", fn=shared.read_stage, label="l",
+            name="read_draft_stage", description="d", fn=draft_editing.read_draft_stage, label="l",
             parameters={"nonesuch": "not a parameter of read_stage"},
         )
 
@@ -227,10 +233,10 @@ def test_a_parameter_no_prose_describes_is_refused() -> None:
 
     with pytest.raises(ValueError, match=r"advertises \['include_tests'\]"):
         bind_by_signature(
-            name="read_stage", description="d", fn=read_stage, label="l",
+            name="read_draft_stage", description="d", fn=read_stage, label="l",
             parameters={
                 "project_id": "The project's name.",
-                "stage_id": "The stage's id, as read_workflow_summary shows it.",
+                "stage_id": "The stage's id, as read_workflow_draft lists them.",
             },
         )
 

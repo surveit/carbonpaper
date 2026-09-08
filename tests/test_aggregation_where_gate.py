@@ -11,6 +11,7 @@ from app.models.stages.stage_types import STAGE_TYPES
 from app.runtime.stages.aggregate import handle_aggregate
 from app.services import stage_edit
 from app.tools.prompt_fragments import render_type_catalog
+from stage_seed import SEED_DRAFT, start_draft
 
 from conftest import as_inputs, place_stage, rows_of, source_stage
 
@@ -105,15 +106,17 @@ def test_a_stage_of_another_type_is_never_looked_at():
 
 
 def test_the_writer_refuses_it_so_no_working_copy_can_acquire_one():
-    assert stage_edit.add_stage_spec("p1", json.dumps(source_stage("filings", _READ))).ok
-    result = stage_edit.add_stage_spec("p1", json.dumps(_WHERE_STAGE))
+    start_draft("p1")
+    assert stage_edit.add_stage_spec("p1", SEED_DRAFT, json.dumps(source_stage("filings", _READ))).ok
+    result = stage_edit.add_stage_spec("p1", SEED_DRAFT, json.dumps(_WHERE_STAGE))
     assert result.ok is False
     assert any("retired" in issue for issue in result.issues)
 
 
 def test_the_grouping_that_replaces_it_goes_in_through_the_same_writer():
-    assert stage_edit.add_stage_spec("p1", json.dumps(source_stage("filings", _READ))).ok
-    assert stage_edit.add_stage_spec("p1", json.dumps(_GROUPED_STAGE)).ok
+    start_draft("p1")
+    assert stage_edit.add_stage_spec("p1", SEED_DRAFT, json.dumps(source_stage("filings", _READ))).ok
+    assert stage_edit.add_stage_spec("p1", SEED_DRAFT, json.dumps(_GROUPED_STAGE)).ok
 
 
 # ── still parsed and still executed, so a stored version runs unchanged ───────

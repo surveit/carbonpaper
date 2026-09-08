@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import pytest
+
 from pydantic import BaseModel, ValidationError
 
 from app.agents.compiler.config import CONFIG as EDITING_CONFIG, _render_project_binding

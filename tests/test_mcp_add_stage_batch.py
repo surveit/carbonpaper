@@ -7,7 +7,7 @@ import asyncio
 
 import pytest
 from app.services import workspace
-from stage_seed import read_stages
+from stage_seed import SEED_DRAFT, read_stages, start_draft
 
 _CLAIM = {"columns": [
     {"name": "claim_id", "type": "str", "nullable": False},
@@ -81,7 +81,7 @@ def _call_add_stage(project_id, stages):
     from app.mcp import server
 
     _content, result = asyncio.run(
-        server.mcp.call_tool("add_stage", {"project_id": project_id, "stages": stages})
+        server.mcp.call_tool("add_stage", {"project_id": project_id, "draft_id": SEED_DRAFT, "stages": stages})
     )
     return result
 
@@ -96,6 +96,7 @@ def project(tmp_path, monkeypatch):
 
     workspace.set_projects_dir(tmp_path)
     created = server.create_project(name="trail", document="Follow the filings.")
+    start_draft(created.id)
     return created.id
 
 

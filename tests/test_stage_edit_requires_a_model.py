@@ -12,7 +12,7 @@ import pytest
 
 from app.services.loader import load_workflow_object
 from app.services.stage_edit import add_stage_spec, edit_stage_spec
-from stage_seed import add_stage
+from stage_seed import SEED_DRAFT, add_stage, start_draft
 
 _COLUMNS = [{"name": "text", "type": "str", "nullable": True}]
 
@@ -41,24 +41,24 @@ def _source_spec():
 @pytest.fixture
 def project(tmp_path):
     name = tmp_path.name
-    assert add_stage_spec(name, json.dumps(_source_spec())).ok
+    start_draft(name)
+    assert add_stage_spec(name, SEED_DRAFT, json.dumps(_source_spec())).ok
     return name
 
 
 def test_adding_an_llm_stage_without_a_model_is_refused(project):
-    result = add_stage_spec(project, json.dumps(_judge_spec()))
+    result = add_stage_spec(project, SEED_DRAFT, json.dumps(_judge_spec()))
     assert not result.ok
     assert any("`llm.model` is required" in issue for issue in result.issues)
 
 
 def test_the_refusal_lists_the_models_this_deployment_offers(project):
-    result = add_stage_spec(project, json.dumps(_judge_spec()))
+    result = add_stage_spec(project, SEED_DRAFT, json.dumps(_judge_spec()))
     assert any("claude-haiku-4-5" in issue for issue in result.issues)
 
 
 def test_adding_an_llm_stage_that_names_a_model_is_accepted(project):
-    result = add_stage_spec(
-        project, json.dumps(_judge_spec(model="claude-haiku-4-5")))
+    result = add_stage_spec(project, SEED_DRAFT, json.dumps(_judge_spec(model="claude-haiku-4-5")))
     assert result.ok, result.issues
 
 
@@ -71,10 +71,8 @@ def test_a_stage_stored_without_a_model_still_loads(project):
 
 def test_editing_a_stored_model_less_stage_is_refused_until_it_names_one(project):
     add_stage(project, _judge_spec())
-    refused = edit_stage_spec(
-        project, "judge", json.dumps(_judge_spec(temperature=0.5)))
+    refused = edit_stage_spec(project, SEED_DRAFT, "judge", json.dumps(_judge_spec(temperature=0.5)))
     assert not refused.ok
-    accepted = edit_stage_spec(
-        project, "judge",
+    accepted = edit_stage_spec(project, SEED_DRAFT, "judge",
         json.dumps(_judge_spec(temperature=0.5, model="claude-haiku-4-5")))
     assert accepted.ok, accepted.issues

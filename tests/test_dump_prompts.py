@@ -11,6 +11,7 @@ from typing import Iterator
 
 import pytest
 
+
 from app.core.paths import repo_root
 from scripts.dump_prompts import render_prompt_dump
 

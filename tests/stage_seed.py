@@ -1,15 +1,11 @@
-"""Seed a project's stored working copy directly, for tests.
-
-Production writes go through the validated writer (`app.services.stage_edit`);
-these do not, so a test can store the exact spec it means to — including one
-that no longer parses, which is the case the tolerant loader exists for.
-"""
+"""Seed the stages a test edits — a draft — without the validated writer."""
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
 from app.core.persistence import get_store
+from app.models.records.draft import Draft
 from app.models.records.working_copy import WorkingCopy
 
 _STAMP = "2026-01-01T00:00:00"
@@ -25,19 +21,28 @@ def add_stage(project: str | Path, spec: dict[str, Any]) -> None:
         specs.append(spec)
     else:
         specs[index] = spec
-    set_stages(project, specs)
+    _store_stages(project, specs)
 
 
-def set_stages(project: str | Path, specs: list[dict[str, Any]]) -> None:
-    """Replace the working copy with `specs`; [] stores an empty workflow."""
+# A triplet, because app.services.drafts refuses any other shape as a draft id.
+SEED_DRAFT = "seed-draft-fixture"
+
+
+def _store_stages(project: str | Path, specs: list[dict[str, Any]]) -> None:
+    """Replace SEED_DRAFT's stages with `specs`; [] stores an empty workflow."""
     name = _name(project)
+    get_store().write(Draft.collection, f"{name}/{SEED_DRAFT}", {
+        "id": f"{name}/{SEED_DRAFT}", "draft_id": SEED_DRAFT, "parent_version": None,
+        "created_at": _STAMP, "updated_at": _STAMP, "stages": list(specs),
+    })
+    # Readers that have not moved to drafts yet still load the working copy.
     get_store().write(WorkingCopy.collection, name, {
         "id": name, "created_at": _STAMP, "updated_at": _STAMP, "stages": list(specs),
     })
 
 
 def read_stage(project: str | Path, stage_id: str) -> dict[str, Any]:
-    """One stored stage spec by id; KeyError if the working copy has no such stage."""
+    """One stored stage spec by id; KeyError if the draft has no such stage."""
     for spec in read_stages(project):
         if spec.get("id") == stage_id:
             return spec
@@ -45,9 +50,30 @@ def read_stage(project: str | Path, stage_id: str) -> dict[str, Any]:
 
 
 def read_stages(project: str | Path) -> list[dict[str, Any]]:
-    document = get_store().read_tolerant(WorkingCopy.collection, _name(project))
+    key = f"{_name(project)}/{SEED_DRAFT}"
+    document = get_store().read_tolerant(Draft.collection, key)
     return list(document["stages"]) if document else []
 
 
 def _name(project: str | Path) -> str:
     return Path(project).name
+
+
+def set_stages(project: str | Path, specs: list[dict[str, Any]]) -> None:
+    """Seed the draft a test edits. Use seed_version where the code under test reads one."""
+    _store_stages(project, specs)
+
+
+def seed_version(project: str | Path, specs: list[dict[str, Any]]) -> str:
+    from app.services import versioning
+
+    _store_stages(project, specs)
+    return versioning.create_version_from_stages(
+        _name(project), list(specs), message="seeded"
+    ).version_id
+
+
+def start_draft(project: str | Path) -> str:
+    """An empty SEED_DRAFT, for a test whose first stage write goes through a tool."""
+    _store_stages(project, [])
+    return SEED_DRAFT
