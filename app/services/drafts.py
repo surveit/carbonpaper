@@ -46,75 +46,63 @@ class SaveResult(BaseModel):
     conflict: bool = False
 
 
-def _build_draft_view(d: Draft) -> DraftView:
-    return DraftView(
-        id=d.draft_id,
-        parent_version=d.parent_version,
-        stages=d.stages,
-        created_at=d.created_at,
-        updated_at=d.updated_at,
-    )
-
-
 def create_draft(
-    name: str,
+    project_id: str,
     *,
-    from_version: str | None = None,
+    from_version_id: str | None = None,
 ) -> DraftView:
-    project = workspace.validate_project_id(name)
+    project = workspace.validate_project_id(project_id)
     stages = (
-        versioning.load_version_stages(project, from_version)
-        if from_version is not None
+        versioning.load_version_stages(project, from_version_id)
+        if from_version_id is not None
         else []
     )
     draft_id = build_word_triplet_id(_find_draft_ids_in_use(project))
     d = Draft(
         id=_doc_id(project, draft_id),
         draft_id=draft_id,
-        parent_version=from_version,
+        parent_version=from_version_id,
         stages=stages,
     )
     d.save()
     return _build_draft_view(d)
 
 
-def open_draft(name: str, draft_id: str) -> DraftView:
-    """Idempotent: the first edit under an id seeds that draft from the newest version."""
-    project = workspace.validate_project_id(name)
-    try:
-        return _build_draft_view(_load(project, draft_id))
-    except DraftNotFoundError:
-        pass
-    parent = versioning.find_latest_version_id(project)
-    d = Draft(
-        id=_doc_id(project, draft_id),
-        draft_id=draft_id,
-        parent_version=parent,
-        stages=versioning.load_version_stages(project, parent) if parent else [],
-    )
-    d.save()
-    return _build_draft_view(d)
+def start_draft_from_newest_version(project_id: str) -> str:
+    """A one-shot edit gets a draft of its own rather than sharing anyone else's."""
+    project = workspace.validate_project_id(project_id)
+    newest = versioning.find_latest_version_id(project)
+    return create_draft(project, from_version_id=newest).id
 
 
-def read_draft(
-    name: str, draft_id: str) -> DraftDetail:
-    d = _load(workspace.validate_project_id(name), draft_id)
+def read_draft(project_id: str, draft_id: str) -> DraftDetail:
+    d = _load(workspace.validate_project_id(project_id), draft_id)
     return DraftDetail(**_build_draft_view(d).model_dump(), issues=validate_workflow(d.stages))
 
 
-def set_draft_stage(
-    name: str, draft_id: str, stage_json: str) -> DraftEdit:
+def read_draft_stages(project_id: str, draft_id: str) -> dict[str, JsonDict]:
+    project = workspace.validate_project_id(project_id)
+    return {s.id: stage_to_spec_dict(s) for s in _load(project, draft_id).stages}
+
+
+def write_draft_stages(project_id: str, draft_id: str, stages: list[JsonDict]) -> None:
+    project = workspace.validate_project_id(project_id)
+    d = _load(project, draft_id)
+    d.stages = [parse_stage(spec) for spec in stages]
+    d.save()
+
+
+def set_draft_stage(project_id: str, draft_id: str, stage_json: str) -> DraftEdit:
     stage = _parse_stage(stage_json)
-    d = _load(workspace.validate_project_id(name), draft_id)
+    d = _load(workspace.validate_project_id(project_id), draft_id)
     kept = [s for s in d.stages if s.id != stage.id]
     d.stages = kept + [stage]
     d.save()
     return _describe(d)
 
 
-def delete_draft_stage(
-    name: str, draft_id: str, stage_id: str) -> DraftEdit:
-    d = _load(workspace.validate_project_id(name), draft_id)
+def delete_draft_stage(project_id: str, draft_id: str, stage_id: str) -> DraftEdit:
+    d = _load(workspace.validate_project_id(project_id), draft_id)
     kept = [s for s in d.stages if s.id != stage_id]
     if len(kept) == len(d.stages):
         raise ValueError(f"No stage '{stage_id}' in draft '{draft_id}'")
@@ -124,9 +112,9 @@ def delete_draft_stage(
 
 
 def save_version(
-    name: str, draft_id: str, *, message: str, override_conflict: bool = False
+    project_id: str, draft_id: str, *, message: str, override_conflict: bool = False
 ) -> SaveResult:
-    project = workspace.validate_project_id(name)
+    project = workspace.validate_project_id(project_id)
     d = _load(project, draft_id)
     issues = validate_workflow(d.stages)
     if issues:
@@ -149,28 +137,17 @@ def save_version(
     return SaveResult(ok=True, version_id=meta.version_id)
 
 
-def start_draft_from_newest(name: str) -> str:
-    """A one-shot edit gets a draft of its own rather than sharing anyone else's."""
-    project = workspace.validate_project_id(name)
-    return create_draft(project, from_version=versioning.find_latest_version_id(project)).id
-
-
-def read_draft_specs(name: str, draft_id: str) -> dict[str, JsonDict]:
-    """Seeds the draft from the newest version when this is its first edit."""
-    project = workspace.validate_project_id(name)
-    open_draft(project, draft_id)
-    return {s.id: stage_to_spec_dict(s) for s in _load(project, draft_id).stages}
-
-
-def write_draft_specs(name: str, draft_id: str, specs: list[JsonDict]) -> None:
-    project = workspace.validate_project_id(name)
-    open_draft(project, draft_id)
-    d = _load(project, draft_id)
-    d.stages = [parse_stage(spec) for spec in specs]
-    d.save()
-
-
 # ─── internals ───────────────────────────────────────────────────────────────
+
+
+def _build_draft_view(d: Draft) -> DraftView:
+    return DraftView(
+        id=d.draft_id,
+        parent_version=d.parent_version,
+        stages=d.stages,
+        created_at=d.created_at,
+        updated_at=d.updated_at,
+    )
 
 
 def _find_lost_version(project_id: str, d: Draft) -> str | None:
@@ -180,8 +157,8 @@ def _find_lost_version(project_id: str, d: Draft) -> str | None:
     newest = versioning.find_latest_version_id(project_id)
     return newest if newest is not None and newest != d.parent_version else None
 
-# A word triplet names a draft someone started; 32 hex names a session's own.
-_DRAFT_ID = re.compile(r"^([a-z]+-[a-z]+-[a-z]+|[0-9a-f]{32})$")
+
+_DRAFT_ID = re.compile(r"^[a-z]+-[a-z]+-[a-z]+$")
 
 
 def _doc_id(project_id: str, draft_id: str) -> str:

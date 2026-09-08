@@ -12,7 +12,6 @@ from typing import Any
 
 import pytest
 
-from stage_seed import SEED_DRAFT
 from claude_agent_sdk import SdkMcpTool
 from fastapi.testclient import TestClient
 
@@ -73,7 +72,7 @@ def test_build_engine_resolves_tutorial_with_only_the_tour_tools() -> None:
 
 def test_the_tutorial_agent_gets_none_of_the_editing_tools() -> None:
     editing = {
-        spec.name for spec in build_editing_tools(EditingContext(project_id="anything", base_url="http://reader.test/", session_id=SEED_DRAFT))
+        spec.name for spec in build_editing_tools(EditingContext(project_id="anything", base_url="http://reader.test/"))
     }
     engine = build_engine("tutorial", {"base_url": _BASE_URL})
     bare = {name.rsplit("__", 1)[-1] for name in engine._allowed_tools}

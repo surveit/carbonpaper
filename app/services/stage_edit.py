@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 
+from pydantic import BaseModel, Field
+
 from typing import Sequence
 
 from app.core.json_types import JsonDict
@@ -34,10 +36,9 @@ from app.services.loader import (
 )
 
 
-@dataclass
-class EditStageResult:
+class EditStageResult(BaseModel):
     ok: bool
-    issues: list[str] = field(default_factory=list)
+    issues: list[str] = Field(default_factory=list)
 
 
 @dataclass
@@ -231,7 +232,7 @@ def _apply(project_id: str, draft_id: str, specs: dict[str, JsonDict], candidate
 
     # An existing stage keeps its position; a new one lands at the end. Stored
     # order is presentation only — the workflow order is the input_ids DAG.
-    drafts.write_draft_specs(project_id, draft_id, list(resulting.values()))
+    drafts.write_draft_stages(project_id, draft_id, list(resulting.values()))
     return EditStageResult(ok=True)
 
 
@@ -242,7 +243,7 @@ def edit_stage_spec(project_id: str, draft_id: str, stage_id: str, spec_text: st
         return EditStageResult(ok=False, issues=[f"JSON parse error: {exc}"])
     if not isinstance(spec, dict):
         return EditStageResult(ok=False, issues=["edited spec must be a JSON object (a single stage)"])
-    specs = drafts.read_draft_specs(project_id, draft_id)
+    specs = drafts.read_draft_stages(project_id, draft_id)
     if stage_id not in specs:
         raise FileNotFoundError(f"no stage '{stage_id}' in project '{project_id}'")
     return _apply(project_id, draft_id, specs, {stage_id: spec})
@@ -250,7 +251,7 @@ def edit_stage_spec(project_id: str, draft_id: str, stage_id: str, spec_text: st
 
 def patch_stage_specs(project_id: str, draft_id: str, edits: Sequence[StageEdit]) -> EditStageResult:
     """Every edit lands or none does: the merged workflow is validated once, then written once."""
-    specs = drafts.read_draft_specs(project_id, draft_id)
+    specs = drafts.read_draft_stages(project_id, draft_id)
     merged: dict[str, dict] = {}
     for edit in edits:
         if edit.stage_id not in specs:
@@ -275,7 +276,7 @@ def add_stage_specs(project_id: str, draft_id: str, stages: Sequence[StageDraft]
         return AddStagesResult(batch_issues=batch_issues)
 
     result = AddStagesResult()
-    specs = drafts.read_draft_specs(project_id, draft_id)
+    specs = drafts.read_draft_stages(project_id, draft_id)
     for stage in sort_stages_by_dependency(stages):
         blocker = _find_blocking_input(stage, result)
         if blocker is not None:
@@ -303,7 +304,7 @@ def add_stage_spec(project_id: str, draft_id: str, spec_text: str) -> EditStageR
         return EditStageResult(ok=False, issues=[f"JSON parse error: {exc}"])
     if not isinstance(spec, dict):
         return EditStageResult(ok=False, issues=["new stage must be a JSON object (a single stage)"])
-    return _add_new_stage(project_id, draft_id, drafts.read_draft_specs(project_id, draft_id), spec)
+    return _add_new_stage(project_id, draft_id, drafts.read_draft_stages(project_id, draft_id), spec)
 
 
 def _add_new_stage(project_id: str, draft_id: str, specs: dict[str, JsonDict], spec: JsonDict) -> EditStageResult:
@@ -319,7 +320,7 @@ def _add_new_stage(project_id: str, draft_id: str, specs: dict[str, JsonDict], s
 
 
 def delete_stage_spec(project_id: str, draft_id: str, stage_id: str) -> EditStageResult:
-    specs = drafts.read_draft_specs(project_id, draft_id)
+    specs = drafts.read_draft_stages(project_id, draft_id)
     if stage_id not in specs:
         raise FileNotFoundError(f"no stage '{stage_id}' in project '{project_id}'")
 
@@ -328,5 +329,5 @@ def delete_stage_spec(project_id: str, draft_id: str, stage_id: str) -> EditStag
     if issues:
         return EditStageResult(ok=False, issues=issues)
 
-    drafts.write_draft_specs(project_id, draft_id, list(resulting.values()))
+    drafts.write_draft_stages(project_id, draft_id, list(resulting.values()))
     return EditStageResult(ok=True)

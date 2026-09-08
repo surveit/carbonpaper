@@ -55,7 +55,7 @@ def examples_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _tools(name: str) -> list[BoundToolSpec]:
-    return build_editing_tools(EditingContext(project_id=name, base_url="http://reader.test/", session_id=SEED_DRAFT))
+    return build_editing_tools(EditingContext(project_id=name, base_url="http://reader.test/"))
 
 
 def _stage(sid: str, name: str, stype: str, inputs: list[str] | None = None) -> dict:
@@ -90,21 +90,21 @@ def test_read_tools_report_workspace(examples_root: Path) -> None:
     tools = _tools("alpha")
     assert [(p.id, p.name) for p in _tool(tools, "list_projects")()] == [("alpha", "alpha")]
 
-    assert '"id": "load"' in _tool(tools, "read_draft_stage")("alpha", "load")
+    assert '"id": "load"' in _tool(tools, "read_draft_stage")("alpha", SEED_DRAFT, "load")
 
 
 def test_read_stage_missing_fails_loud(examples_root: Path) -> None:
     _seed(examples_root, "alpha")
     tools = _tools("alpha")
     with pytest.raises(ValueError, match="no stage 'nope'"):
-        _tool(tools, "read_draft_stage")("alpha", "nope")
+        _tool(tools, "read_draft_stage")("alpha", SEED_DRAFT, "nope")
 
 
 def test_edit_stage_tool_writes_and_reports_ok(examples_root: Path) -> None:
     pdir = _seed(examples_root, "alpha")
     tools = _tools("alpha")
     out = _tool(tools, "edit_stages")(
-        "alpha", [StageEdit(stage_id="load",
+        "alpha", SEED_DRAFT, [StageEdit(stage_id="load",
                             changes_json=json.dumps(_stage("load", "Load rows v2", "input_data")))]
     )
     # The review colour is the review layer's, never the writer's.
@@ -117,7 +117,7 @@ def test_edit_stage_tool_invalid_writes_nothing_and_reports_issues(examples_root
     before = read_stage(pdir, "load")
     tools = _tools("alpha")
     out = _tool(tools, "edit_stages")(
-        "alpha", [StageEdit(stage_id="load",
+        "alpha", SEED_DRAFT, [StageEdit(stage_id="load",
                             changes_json=json.dumps({"id": "load", "description": "x",
                                                      "type": "not_a_real_type"}))]
     )
@@ -129,7 +129,7 @@ def test_project_id_cannot_escape_the_workspace(examples_root: Path) -> None:
     _seed(examples_root, "alpha")
     tools = _tools("alpha")
     with pytest.raises(ValueError, match="invalid project id"):
-        _tool(tools, "read_draft_stage")("../outside", "load")
+        _tool(tools, "read_draft_stage")("../outside", SEED_DRAFT, "load")
 
 
 # ── the review-guide tools ───────────────────────────────────────────────────
@@ -139,9 +139,9 @@ def _versioned(examples: Path, name: str) -> tuple[list[BoundToolSpec], str]:
     tools = _tools(name)
     # _seed already wrote `load`; the guide these tests write needs a stage above it.
     add_stage(examples / name, _stage("score", "Score rows", "llm_transform", inputs=["load"]))
-    saved = _tool(tools, "save_version")(name, "first proposal")
-    assert saved["version_id"] is not None
-    return tools, saved["version_id"]
+    saved = _tool(tools, "save_version")(name, SEED_DRAFT, "first proposal")
+    assert saved.version_id is not None
+    return tools, saved.version_id
 
 
 def _guide(step_ids: list[str], unnarrated: list[str]) -> ReviewGuideDraft:

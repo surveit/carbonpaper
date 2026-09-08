@@ -5,7 +5,6 @@ import io
 import sqlite3
 from pathlib import Path
 
-from stage_seed import SEED_DRAFT
 from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
@@ -65,9 +64,10 @@ def _seed_store_through_the_app() -> str:
     project_id = project_service.create_project(
         "replay", "Review every row that scored.", source="migration replay test").id
     upload = file_store.save_upload("rows.csv", io.BytesIO(_CSV), project_id=project_id)
-    outcome = project_service.add_stages(project_id, SEED_DRAFT, _stage_drafts(upload))
+    draft_id = drafts.create_draft(project_id).id
+    outcome = project_service.add_stages(project_id, draft_id, _stage_drafts(upload))
     assert not outcome.failed and not outcome.batch_issues and not outcome.skipped, outcome
-    saved = drafts.save_version(project_id, SEED_DRAFT, message="first version")
+    saved = drafts.save_version(project_id, draft_id, message="first version")
     assert saved.ok, saved.issues
     return project_id
 

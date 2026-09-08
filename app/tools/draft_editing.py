@@ -3,54 +3,67 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 
 from pydantic import BaseModel
 
 from app.services import drafts, project as project_service, versioning
+from app.services.drafts import SaveResult as SaveResult
+from app.services.stage_edit import EditStageResult as EditStageResult
+from app.services.workspace import StageSummary
 from app.tools.shared import STAGE_TOOL_ERRORS, validate_project_exists
 
 
-class DraftHandle(BaseModel):
+class WorkflowDraft(BaseModel):
     draft_id: str
-    parent_version: str | None
-    stages: list[str]
+    stages: list[StageSummary]
+    # What save_version would refuse this draft for, empty while it would be accepted.
+    issues: list[str]
 
 
-def start_editing(project_id: str) -> DraftHandle:
+def start_editing(project_id: str) -> str:
     validate_project_exists(project_id)
-    view = drafts.create_draft(
-        project_id, from_version=versioning.find_latest_version_id(project_id)
-    )
-    return DraftHandle(
-        draft_id=view.id,
-        parent_version=view.parent_version,
-        stages=[stage.id for stage in view.stages],
+    newest = versioning.find_latest_version_id(project_id)
+    return drafts.create_draft(project_id, from_version_id=newest).id
+
+
+def read_workflow_draft(project_id: str, draft_id: str) -> WorkflowDraft:
+    validate_project_exists(project_id)
+    detail = drafts.read_draft(project_id, draft_id)
+    return WorkflowDraft(
+        draft_id=detail.id,
+        stages=[
+            StageSummary(
+                id=stage.id,
+                type=stage.type,
+                description=stage.description,
+                inputs=[ref.id for ref in stage.inputs],
+            )
+            for stage in detail.stages
+        ],
+        issues=detail.issues,
     )
 
 
 def read_draft_stage(project_id: str, draft_id: str, stage_id: str) -> str:
     validate_project_exists(project_id)
-    specs = drafts.read_draft_specs(project_id, draft_id)
-    if stage_id not in specs:
+    stages = drafts.read_draft_stages(project_id, draft_id)
+    if stage_id not in stages:
         raise ValueError(f"no stage '{stage_id}' in draft '{draft_id}'")
-    return json.dumps(specs[stage_id], indent=2)
+    return json.dumps(stages[stage_id], indent=2)
 
 
-def delete_stage(project_id: str, draft_id: str, stage_id: str) -> dict[str, Any]:
+def delete_stage(project_id: str, draft_id: str, stage_id: str) -> EditStageResult:
     validate_project_exists(project_id)
     try:
-        result = project_service.delete_stage(project_id, draft_id, stage_id)
+        return project_service.delete_stage(project_id, draft_id, stage_id)
     except STAGE_TOOL_ERRORS as exc:
-        return {"ok": False, "issues": [str(exc)]}
-    return {"ok": result.ok, "issues": result.issues}
+        return EditStageResult(ok=False, issues=[str(exc)])
 
 
 def save_version(
     project_id: str, draft_id: str, message: str, override_conflict: bool = False
-) -> dict[str, Any]:
+) -> SaveResult:
     validate_project_exists(project_id)
-    result = drafts.save_version(
+    return drafts.save_version(
         project_id, draft_id, message=message, override_conflict=override_conflict
     )
-    return result.model_dump(mode="json")

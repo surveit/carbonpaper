@@ -10,7 +10,7 @@ import json
 
 import pytest
 
-from stage_seed import SEED_DRAFT
+from stage_seed import SEED_DRAFT, start_draft
 
 from app.models.stages.code import SUMMARY_DESCRIPTION, SUMMARY_MAX_CHARS
 from app.services.code_approval import approve_code_execution
@@ -44,6 +44,7 @@ def project(tmp_path):
     # These stages are python_row_function on purpose — the rule under test binds
     # code-carrying types, and an unapproved project is refused before reaching it.
     approve_code_execution(name, "fixture: the rule under test is about code stages")
+    start_draft(name)
     assert add_stage_spec(name, SEED_DRAFT, json.dumps(_source_spec())).ok
     return name
 

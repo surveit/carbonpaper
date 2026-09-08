@@ -71,3 +71,9 @@ def seed_version(project: str | Path, specs: list[dict[str, Any]]) -> str:
     return versioning.create_version_from_stages(
         _name(project), list(specs), message="seeded"
     ).version_id
+
+
+def start_draft(project: str | Path) -> str:
+    """An empty SEED_DRAFT, for a test whose first stage write goes through a tool."""
+    _store_stages(project, [])
+    return SEED_DRAFT

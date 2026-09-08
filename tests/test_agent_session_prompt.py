@@ -7,7 +7,6 @@ from collections.abc import Iterator
 
 import pytest
 
-from stage_seed import SEED_DRAFT
 from pydantic import BaseModel, ValidationError
 
 from app.agents.compiler.config import CONFIG as EDITING_CONFIG, _render_project_binding
@@ -115,7 +114,7 @@ def test_the_editing_agent_is_handed_its_projects_words(tmp_path) -> None:
 
 def test_a_project_that_has_agreed_no_words_appends_no_words(tmp_path) -> None:
     project_id = _project_with(tmp_path, None)
-    context = EditingContext(project_id=project_id, **_READER, session_id=SEED_DRAFT)
+    context = EditingContext(project_id=project_id, **_READER)
 
     prompt = build_engine("editing", {"project_id": project_id} | _READER)._system_prompt
 
@@ -161,7 +160,7 @@ def test_a_session_bound_to_no_project_is_still_told_where_its_reader_is(tmp_pat
 
     assert prompt == "\n\n".join([
         EDITING_SYSTEM_PROMPT,
-        _render_project_binding(EditingContext(**_READER, session_id=SEED_DRAFT)),
+        _render_project_binding(EditingContext(**_READER)),
         render_link_map(_READER["base_url"]),
     ])
 

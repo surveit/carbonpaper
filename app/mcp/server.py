@@ -158,8 +158,13 @@ def read_version_stage(project_id: str, version_id: str, stage_id: str) -> str:
 
 
 @mcp.tool(description=read_tool_description("start_editing"))
-def start_editing(project_id: str) -> draft_editing.DraftHandle:
+def start_editing(project_id: str) -> str:
     return draft_editing.start_editing(project_id)
+
+
+@mcp.tool(description=read_tool_description("read_workflow_draft"))
+def read_workflow_draft(project_id: str, draft_id: str) -> draft_editing.WorkflowDraft:
+    return draft_editing.read_workflow_draft(project_id, draft_id)
 
 
 @mcp.tool(description=read_tool_description("edit_stages"))
@@ -179,14 +184,14 @@ def add_stage(
 
 
 @mcp.tool(description=read_tool_description("delete_stage"))
-def delete_stage(project_id: str, draft_id: str, stage_id: str) -> dict[str, Any]:
+def delete_stage(project_id: str, draft_id: str, stage_id: str) -> draft_editing.EditStageResult:
     return draft_editing.delete_stage(project_id, draft_id, stage_id)
 
 
 @mcp.tool(description=read_tool_description("save_version"))
 def save_version(
     project_id: str, draft_id: str, message: str, override_conflict: bool = False
-) -> dict[str, Any]:
+) -> draft_editing.SaveResult:
     return draft_editing.save_version(project_id, draft_id, message, override_conflict)
 
 

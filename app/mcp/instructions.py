@@ -74,7 +74,7 @@ Each tool's own description says how it behaves; this says WHEN. Start by callin
 create_project(name, document) — the methodology prose becomes the project's source of
 record, and it returns the project record, whose `id` every other tool takes.
 
-  RESEARCH   list_versions, read_version_stage, read_draft_stage,
+  RESEARCH   list_versions, read_version_stage, read_workflow_draft,
              get_project_status, list_runs
              for what this project has already run,
              run_workflow_test over a few rows, then
@@ -88,7 +88,8 @@ record, and it returns the project record, whose `id` every other tool takes.
              shapes ARE the expected outcome — everything you build after this
              exists to fulfil them, and a workflow that cannot is not done.
   BUILD      start_editing once for a draft id, then add_stage, edit_stages,
-             delete_stage against it, then generate_stage_tests and
+             delete_stage against it, read_workflow_draft to see where you
+             have got to, then generate_stage_tests and
              loop edit_stages -> run_stage_tests until they pass. Still BUILD.
              If a write is refused because the step needs unsandboxed Python,
              that refusal names what to try instead. Only if nothing fits, put

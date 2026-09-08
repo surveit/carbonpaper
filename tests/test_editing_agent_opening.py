@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import pytest
 
-from stage_seed import SEED_DRAFT
 
 from app.agents.compiler.config import CONFIG as EDITING_CONFIG
 from app.agents.compiler.opening import PAGE_OPENINGS, choose_opening_turn
@@ -73,7 +72,7 @@ def test_every_offer_rests_on_tools_this_agent_binds(offer: str) -> None:
 
 def test_the_page_the_lineage_offer_asks_about_is_described_in_the_prompt() -> None:
     # The one offer resting on no tool. Without the note it has nothing to answer from.
-    prompt = render_system_prompt(EDITING_CONFIG, EditingContext(base_url=_BASE_URL, session_id=SEED_DRAFT))
+    prompt = render_system_prompt(EDITING_CONFIG, EditingContext(base_url=_BASE_URL))
 
     assert not _OFFERS_REST_ON["Explain how to use this page"]
     assert ROW_LINEAGE_PAGE_NOTE in prompt
@@ -165,4 +164,4 @@ def _make_project(tmp_path) -> str:
 
 def _bound_tool_names() -> set[str]:
     return {spec.name for spec in build_editing_tools(
-        EditingContext(project_id="anything", base_url=_BASE_URL, session_id=SEED_DRAFT))}
+        EditingContext(project_id="anything", base_url=_BASE_URL))}

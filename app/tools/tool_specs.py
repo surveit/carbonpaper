@@ -11,8 +11,8 @@ from app.tools.types import AgentTool, ToolParameterProse
 
 # An id is a stamp, not a label: the prose has to send the model to look one up.
 DRAFT_ID = (
-    "The draft this edit lands in, from start_editing — hold it for the whole of your "
-    "work, because another client editing this project holds a different one."
+    "The draft this edit lands in, from start_editing — hold it from the first edit "
+    "through save_version, which is the only thing that makes your edits real."
 )
 
 PROJECT_ID = (
@@ -232,12 +232,22 @@ not exist.""",
         label="Opening a draft",
         parameters={"project_id": PROJECT_ID},
         description="""\
-Open a DRAFT of this project's workflow and return its id, seeded from the newest
-version. Every edit you make lands there and is invisible to anyone else until
-save_version freezes it.
+Open a DRAFT of this project's workflow, seeded from the newest version, and
+return its id. Every edit you make lands there and is real to nobody until
+save_version freezes it into a version.
 
-Hold the id for the rest of your work: another client editing this project holds a
-different one, and neither sees the other's stages.""",
+Hold that id: every edit tool takes it, and save_version is what it is for. A
+draft nobody saves is thrown away.""",
+    ),
+    "read_workflow_draft": AgentTool(
+        fn=draft_editing.read_workflow_draft,
+        label="Reading the workflow you are editing",
+        parameters={"project_id": PROJECT_ID, "draft_id": DRAFT_ID},
+        description="""\
+What your draft holds right now: every stage with its id, its type, what it says
+it does, and the stage ids it reads — so you can see the shape you have built
+and which stage sits where. `issues` is what save_version would refuse it for,
+empty while it would be accepted. Read one stage in full with read_draft_stage.""",
     ),
     "read_draft_stage": AgentTool(
         fn=draft_editing.read_draft_stage,
@@ -245,7 +255,7 @@ different one, and neither sees the other's stages.""",
         parameters={
             "project_id": PROJECT_ID,
             "draft_id": DRAFT_ID,
-            "stage_id": "The stage's id, as start_editing lists them.",
+            "stage_id": "The stage's id, as read_workflow_draft lists them.",
         },
         description="""\
 Return the JSON of one stage AS YOUR DRAFT HAS IT, including edits you have made
@@ -257,7 +267,7 @@ and not saved. Read before editing.""",
         parameters={"project_id": PROJECT_ID},
         description="""\
 Every saved version of this project's workflow, newest first, with what each one
-is called and which stages it holds. This is what everyone but you can see.""",
+is called and which stages it holds.""",
     ),
     "read_version_stage": AgentTool(
         fn=versions.read_version_stage,
@@ -285,6 +295,28 @@ workflow WITHOUT the stage is validated first: if another stage still lists it
 in `inputs`, the removal is refused, nothing is deleted, and the issues are
 returned (remove or repoint the downstream stage first). Removing the last
 remaining stage is allowed.""",
+    ),
+    "save_version": AgentTool(
+        fn=draft_editing.save_version,
+        label="Saving the workflow as a version",
+        parameters={
+            "project_id": PROJECT_ID,
+            "draft_id": DRAFT_ID,
+            "message": "What identifies this version to a reader in 150 characters or "
+                "fewer. Longer is refused rather than trimmed.",
+            "override_conflict": "Save even though someone has saved since this draft "
+                "started. Their changes are not carried over — read theirs first unless "
+                "you mean to.",
+        },
+        description="""\
+Freeze your draft into an immutable version — the snapshot a run or a workflow
+test executes, and the only way anything you edited leaves the draft.
+
+The draft is validated first, so an invalid workflow comes back as
+{ok: False, issues} and no version is written. A version saved by someone else
+since your draft started comes back as {ok: False, conflict: true}: saving over
+it would write a version carrying none of their changes, so read theirs with
+read_version_stage, or pass override_conflict once you mean to.""",
     ),
     "read_review_guide": AgentTool(
         fn=shared.read_review_guide,
@@ -693,18 +725,6 @@ written as one workflow, which is what edits that only make sense together need.
 The page the reader has open right now, which moves as they browse. Call it when
 they say "this" or "here", and read the ids out of the address instead of asking
 for one. Nothing if the chat surface did not report a page.""",
-    "save_version": """\
-Freeze the project's CURRENT workflow into an immutable version — the snapshot
-a run or a workflow test executes. A `message` over 150 characters is refused
-rather than trimmed.
-
-`parent_version` is the version YOU started this edit from. Supply it only when you
-actually loaded that version; it is recorded verbatim as this snapshot's ancestor,
-and an id naming no version of this project is refused. Omitting it is normal and
-records no ancestor — nothing is inferred from what else the project has stored.
-
-The working copy is strict-loaded first, so an invalid workflow comes back as
-{ok: False, issues} and no version is written.""",
     "list_files": """\
 The files a project holds, each with the `file_id` run_workflow's `files` binds.
 `project_id` null lists the files that are in no project yet.

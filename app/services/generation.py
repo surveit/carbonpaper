@@ -156,7 +156,7 @@ def _finish_stage_tests(
             f"stage-test generation for '{stage_id}' in {project_id} "
             "submitted an empty test suite"
         )
-    draft_id = drafts.start_draft_from_newest(project_id)
+    draft_id = drafts.start_draft_from_newest_version(project_id)
     result = patch_stage_specs(
         project_id, draft_id, [StageEdit(stage_id=stage_id, changes_json=json.dumps({"tests": tests}))]
     )

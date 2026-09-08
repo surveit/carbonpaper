@@ -70,7 +70,7 @@ def node_edit(
 
     # `stage_edit.edit_stage_spec` parses, validates and writes; this route maps it onto HTTP.
     try:
-        draft_id = drafts.start_draft_from_newest(project_id)
+        draft_id = drafts.start_draft_from_newest_version(project_id)
         result = stage_edit.edit_stage_spec(project_id, draft_id, stage_id, spec_text)
     except FileNotFoundError as exc:
         # The project, or the stage's compiled file, is absent.

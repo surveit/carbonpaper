@@ -12,7 +12,7 @@ import pytest
 
 from app.services.loader import load_workflow_object
 from app.services.stage_edit import add_stage_spec, edit_stage_spec
-from stage_seed import SEED_DRAFT, add_stage
+from stage_seed import SEED_DRAFT, add_stage, start_draft
 
 _COLUMNS = [{"name": "text", "type": "str", "nullable": True}]
 
@@ -41,6 +41,7 @@ def _source_spec():
 @pytest.fixture
 def project(tmp_path):
     name = tmp_path.name
+    start_draft(name)
     assert add_stage_spec(name, SEED_DRAFT, json.dumps(_source_spec())).ok
     return name
 

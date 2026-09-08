@@ -8,14 +8,14 @@ from pydantic import BaseModel
 
 from app.core.agent.bound_tool import BoundToolSpec, bind_by_signature
 from app.tools.types import ToolParameterProse
-from app.services import project as project_service
-from app.tools import draft_editing, shared
+from app.tools import shared
 from app.tools.submitted_stage import (
     SubmittedStage,
     add_stages_reporting_drops,
     edit_stages_reporting_drops,
 )
 from app.tools.tool_specs import (
+    DRAFT_ID,
     PROJECT_ID,
     bind,
     read_parameter_prose,
@@ -35,15 +35,6 @@ class EditingContext(BaseModel):
     page: str | None = None
     # The page the chat was started from, which is what binds it to a project.
     opened_on: str | None = None
-    # Names this session's draft. Two sessions editing one project never share stages.
-    session_id: str | None = None
-
-
-def _draft_of(ctx: EditingContext) -> str:
-    """A chat always has a session, and its id names the draft every edit lands in."""
-    if ctx.session_id is None:
-        raise ValueError("this chat has no session, so it has no draft to edit")
-    return ctx.session_id
 
 
 def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
@@ -55,27 +46,19 @@ def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
     def create_project(name: str, document: str) -> Project:
         return shared.create_project(name, document, source="editing agent")
 
-    def edit_stages(project_id: str, edits: list[StageEdit]) -> shared.EditedStages:
-        return edit_stages_reporting_drops(project_id, _draft_of(ctx), edits)
+    def edit_stages(
+        project_id: str, draft_id: str, edits: list[StageEdit]
+    ) -> shared.EditedStages:
+        return edit_stages_reporting_drops(project_id, draft_id, edits)
 
-    def add_stage(project_id: str, stages: list[SubmittedStage]) -> dict[str, Any]:
-        return add_stages_reporting_drops(project_id, _draft_of(ctx), stages)
-
-    def delete_stage(project_id: str, stage_id: str) -> dict[str, Any]:
-        result = project_service.delete_stage(project_id, _draft_of(ctx), stage_id)
-        return {"ok": result.ok, "issues": result.issues}
-
-    def save_version(
-        project_id: str, message: str, override_conflict: bool = False
+    def add_stage(
+        project_id: str, draft_id: str, stages: list[SubmittedStage]
     ) -> dict[str, Any]:
-        return draft_editing.save_version(project_id, _draft_of(ctx), message, override_conflict)
+        return add_stages_reporting_drops(project_id, draft_id, stages)
 
     def list_files(project_id: str | None = None) -> shared.ProjectFilesView:
         where = "/files" if project_id is None else f"/project/{project_id}/files"
         return shared.list_files(project_id, base + where)
-
-    def read_draft_stage(project_id: str, stage_id: str) -> str:
-        return draft_editing.read_draft_stage(project_id, _draft_of(ctx), stage_id)
 
     def read_stage_output_rows(
         project_id: str, run_id: str, stage_id: str, limit: int | None = None, offset: int = 0
@@ -91,11 +74,8 @@ def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         create_project,
         edit_stages,
         add_stage,
-        delete_stage,
-        save_version,
         list_files,
         read_stage_output_rows,
-        read_draft_stage,
     ]
     return [
         bind_by_signature(
@@ -107,6 +87,8 @@ def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         )
         for fn in tools
     ] + bind(
+        "start_editing", "read_workflow_draft", "read_draft_stage",
+        "delete_stage", "save_version",
         "list_projects", "list_versions", "read_version_stage",
         "read_terms", "write_terms",
         "read_claim_shapes", "write_claim_shapes",
@@ -131,11 +113,13 @@ TOOL_SCHEMAS: dict[str, ToolParameterProse] = {
     },
     "edit_stages": {
         "project_id": PROJECT_ID,
+        "draft_id": DRAFT_ID,
         "edits": "One entry per stage you are changing; entries sent together are validated "
             "and written as one workflow.",
     },
     "add_stage": {
         "project_id": PROJECT_ID,
+        "draft_id": DRAFT_ID,
         "stages": "The complete NEW stages: each with id (new and unique — the stage's only "
             "name), description, type, the "
             "config block(s) its type requires (connector / llm / function / ...; "
@@ -145,22 +129,8 @@ TOOL_SCHEMAS: dict[str, ToolParameterProse] = {
             "the columns go in `signature.reads`, keyed by the same id. Every id in "
             "inputs must already be a stage in this workflow or in this same call.",
     },
-    "delete_stage": {
-        "project_id": PROJECT_ID,
-        "stage_id": "The id of the stage to remove.",
-    },
-    "save_version": {
-        "project_id": PROJECT_ID,
-        "message": "What identifies this version to a reader in 150 characters or fewer.",
-        "override_conflict": "Save even though someone has saved since this draft started. "
-            "Their changes are not carried over — read theirs first unless you mean to.",
-    },
     "list_files": {
         "project_id": f"{PROJECT_ID} Omit it for the files that are in no project yet.",
-    },
-    "read_draft_stage": {
-        "project_id": PROJECT_ID,
-        "stage_id": "The stage's id, as start_editing lists them.",
     },
     "read_stage_output_rows": read_parameter_prose("read_stage_output_rows"),
 }
@@ -174,9 +144,6 @@ TOOL_LABELS: dict[str, str] = {
     "create_project": "Creating the project",
     "edit_stages": "Editing the workflow's stages",
     "add_stage": "Adding a stage",
-    "delete_stage": "Removing a stage",
-    "read_draft_stage": "Reading a stage you are editing",
-    "save_version": "Saving the workflow as a version",
     "list_files": "Listing the project's files",
     "read_stage_output_rows": "Reading the stage's rows",
 }

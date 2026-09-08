@@ -11,13 +11,14 @@ from app.models import SchemaLibrary, Terms
 from app.services import workspace
 from app.tools.editing import EditingContext, build_editing_tools
 from app.tools.submitted_stage import SubmittedStage
-from stage_seed import SEED_DRAFT
 
 _EXPECTED_TOOL_NAMES = {
     "list_projects",
     "get_current_url",
     "create_project",
     "read_stage_output_rows",
+    "start_editing",
+    "read_workflow_draft",
     "read_draft_stage",
     "list_versions",
     "read_version_stage",
@@ -49,7 +50,7 @@ _EXPECTED_TOOL_NAMES = {
 
 
 def test_editing_tools_factory_yields_expected_tool_names() -> None:
-    tools = build_editing_tools(EditingContext(project_id="alpha", base_url="http://reader.test/", session_id=SEED_DRAFT))
+    tools = build_editing_tools(EditingContext(project_id="alpha", base_url="http://reader.test/"))
     assert {spec.name for spec in tools} == _EXPECTED_TOOL_NAMES
 
 
@@ -64,22 +65,26 @@ _LOAD_STAGE = SubmittedStage.model_validate({
 
 def test_a_session_bound_to_no_project_can_build_one_from_nothing(tmp_path) -> None:
     workspace.set_projects_dir(tmp_path)
-    call = _tools_of(EditingContext(project_id=None, base_url="http://reader.test/", session_id=SEED_DRAFT))
+    call = _tools_of(EditingContext(project_id=None, base_url="http://reader.test/"))
 
     created = call["create_project"](name="GLP-1 lobbying", document="Follow the filings.")
 
     project_id = created.id
     call["write_terms"](project_id=project_id, terms=Terms(nouns=SchemaLibrary(schemas=[]), verbs=[]))
-    added = call["add_stage"](project_id=project_id, stages=[_LOAD_STAGE])
+    draft_id = call["start_editing"](project_id=project_id)
+    added = call["add_stage"](project_id=project_id, draft_id=draft_id, stages=[_LOAD_STAGE])
 
     assert added["added"] == ["load"]
-    assert "load" in call["read_draft_stage"](project_id=project_id, stage_id="load")
+    assert "load" in call["read_draft_stage"](
+        project_id=project_id, draft_id=draft_id, stage_id="load")
+    assert [s.id for s in call["read_workflow_draft"](
+        project_id=project_id, draft_id=draft_id).stages] == ["load"]
 
 
 def test_creating_a_project_does_not_rebind_the_session(tmp_path) -> None:
     """The session note promises this — a binding is what the chat was OPENED with."""
     workspace.set_projects_dir(tmp_path)
-    context = EditingContext(project_id=None, base_url="http://reader.test/", session_id=SEED_DRAFT)
+    context = EditingContext(project_id=None, base_url="http://reader.test/")
 
     _tools_of(context)["create_project"](name="second", document="Follow the filings.")
 

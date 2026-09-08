@@ -48,7 +48,7 @@ def tour_project(projects_root):
 
 def _stage(project_id: str, stage_id: str):
     """A patch lands in the draft, so that is where its result is read back."""
-    return parse_stage(drafts.read_draft_specs(project_id, SEED_DRAFT)[stage_id])
+    return parse_stage(drafts.read_draft_stages(project_id, SEED_DRAFT)[stage_id])
 
 
 def test_a_patch_carrying_tests_leaves_the_stored_ones_untouched(tour_project):

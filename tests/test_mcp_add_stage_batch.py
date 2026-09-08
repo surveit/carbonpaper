@@ -7,7 +7,7 @@ import asyncio
 
 import pytest
 from app.services import workspace
-from stage_seed import SEED_DRAFT, read_stages
+from stage_seed import SEED_DRAFT, read_stages, start_draft
 
 _CLAIM = {"columns": [
     {"name": "claim_id", "type": "str", "nullable": False},
@@ -96,6 +96,7 @@ def project(tmp_path, monkeypatch):
 
     workspace.set_projects_dir(tmp_path)
     created = server.create_project(name="trail", document="Follow the filings.")
+    start_draft(created.id)
     return created.id
 
 
