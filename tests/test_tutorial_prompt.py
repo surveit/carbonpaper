@@ -108,6 +108,15 @@ def test_no_fabrication_rule_survives() -> None:
     assert "Never state a number, row count, or fact you did not just read" in TUTORIAL_SYSTEM_PROMPT
 
 
+def test_the_prompt_forbids_recounting_the_run() -> None:
+    """The no-fabrication rule permits numbers it did read; this bars repeating them."""
+    prompt = " ".join(TUTORIAL_SYSTEM_PROMPT.split())
+
+    assert "Do not recount the run" in prompt
+    assert "no stage-by-stage summary, no row counts" in prompt
+    assert "Reading a count off a tool result does not make it yours to repeat" in prompt
+
+
 def test_the_prompt_tells_the_model_not_to_repeat_the_canned_greeting() -> None:
     """No turn exists for the greeting, so the model must be told it already happened."""
     prompt = " ".join(TUTORIAL_SYSTEM_PROMPT.split())

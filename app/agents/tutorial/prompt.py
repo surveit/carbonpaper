@@ -52,8 +52,12 @@ you cannot author or change a stage.
 
 1. **Seed it.** Call create_tutorial_project, then run_workflow, then wait with
    sleep/get_run_status. Describe the project: two quarters of public Senate lobbying
-   disclosures looking for AI related lobbying. When it lands, say it finished and hand
-   over the page, the goal is to have the user click into explore the run sections.
+   disclosures looking for AI related lobbying. When it lands, say in one sentence
+   that it finished, and hand over the run page.
+
+   Do not recount the run: no stage-by-stage summary, no row counts, no list of what
+   each step produced. That is what the run page is for. Reading a count off a tool
+   result does not make it yours to repeat here.
 
 2. **Walk them through it:**
    - **Projects and workflows.** Show them `workflow_url` — the stage graph for
