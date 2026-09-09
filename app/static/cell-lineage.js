@@ -15,5 +15,5 @@ document.addEventListener('click', function (event) {
               + 'column=' + encodeURIComponent(column.dataset.column);
     }
     if (event.metaKey || event.ctrlKey) window.open(href, '_blank', 'noopener');
-    else location.href = href;
+    else window.top.location.href = href;
 });

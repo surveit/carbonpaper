@@ -41,17 +41,20 @@
     aria-label="Which rows reached this figure, and where the rest left"></svg></div>
   <p class="muted scope-legend" id="scope-legend"></p>
 
-  <div class="scope-bar" id="scope-bar"></div>
-  {# Shown once a bar is picked: the rows it holds, and what the stage did to them.
-     The app's tab strip, so it reads as the run page's stage panel does. #}
-  <div class="stage-tabs" id="scope-tabs" hidden>
-    <div class="tabs">
-      <button data-tab="rows" class="active">Rows</button>
-      <button data-tab="transform">Transform</button>
-    </div>
+  <div class="scope-bar" id="scope-bar">
+    <span id="scope-count"></span>
+    <span class="scope-walk">
+      <button type="button" class="scope-walk-btn" data-go="back"
+        title="one stage earlier (left arrow)">◀ back</button>
+      <button type="button" class="scope-walk-btn" data-go="fwd"
+        title="one stage later (right arrow)">fwd ▶</button>
+    </span>
   </div>
-  <div class="pane scope-table" data-pane="rows" id="scope-table"></div>
-  <div class="pane" data-pane="transform" id="scope-transform" hidden></div>
+  {# The run page's own panel for the stage shown, cut to the rows behind this
+     figure: the sheet, the schema and the transform in one strip. #}
+  <div class="scope-panel" id="scope-panel"></div>
+  {# A cut's rows are not the figure's, so no scoped panel can draw them. #}
+  <div class="scope-table" id="scope-table" hidden></div>
 </section>
 
 <script id="scope-payload" type="application/json">{{ payload | tojson }}</script>

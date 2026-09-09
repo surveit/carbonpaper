@@ -75,8 +75,19 @@
 .scope-table tbody tr:hover { background: var(--hover); }
 .scope-table tbody tr.is-on { background: var(--info-bg); }
 
-/* .stage-tabs sets display, which would otherwise beat the hidden attribute. */
-#scope-tabs[hidden] { display: none; }
+/* The stage the panel below shows, wherever it is drawn. */
+#scope-svg .scope-bar-mark.is-here { stroke: var(--fg); stroke-width: 2px; }
+
+.scope-walk { margin-left: auto; display: flex; gap: 0.4rem; }
+.scope-walk-btn { border: 1px solid var(--border-strong); background: var(--raised);
+  border-radius: 9px; font: inherit; font-size: 12px; color: var(--muted);
+  padding: 2px 10px; cursor: pointer; }
+.scope-walk-btn:hover:not(:disabled) { background: var(--hover); }
+.scope-walk-btn:disabled { opacity: 0.35; cursor: default; }
+.scope-walk-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--focus-halo); }
+
+/* .run-stage-panel's own sheets style the panel; hidden has to beat them. */
+.scope-panel[hidden], .scope-table[hidden] { display: none; }
 
 /* The stage panel's own code block (stage-detail.css), with a gutter beside it. Both
    columns are pre-formatted text at one line-height, which is what aligns them: a

@@ -18,7 +18,8 @@
   var pickedNode = null;
   var pickedRow = null;
   var showAll = false;
-  var openTab = "rows";
+  // The stage whose panel is open when no node is picked: the walk moves it.
+  var walkedStage = null;
   var panels = {};
   var rowTables = {};
 
@@ -28,9 +29,6 @@
   // Gutter mark against a branch the drawn rows are here by. A glyph, not a tint:
   // highlight.js owns the code element's markup and rewrites it wholesale.
   var MARK = "\u25B8";
-  var tableOf = function (stageId) {
-    return '<table class="data-preview" data-stage="' + esc(stageId) + '">';
-  };
   var COLUMN = 300, BAR = 11, HEAD = 52, GAP = 16, CUT_LINE = 11;
   // Clear of the head: flush against it, the ribbons read as hanging off the text.
   var BAND_GAP = 14;
@@ -155,12 +153,13 @@
 
   function drawBar(g, b) {
     var dim = pickedNode && b.key !== pickedNode;
+    var here = b.key.split(SEP)[0] === stageShown();
     var edge = b.x + g.bar_width;
     var leader = b.leader_at == null ? ""
       : '<path class="scope-leader" d="M' + edge + "," + b.leader_at + "H" +
         (edge + 6) + "V" + b.label_y + "H" + (edge + 10) + '"/>';
     return '<rect class="scope-bar-mark' + (b.implied ? " is-implied" : "") +
-      (dim ? " is-dim" : "") + '" data-node="' + esc(b.key) + '" data-tip="' +
+      (dim ? " is-dim" : "") + (here ? " is-here" : "") + '" data-node="' + esc(b.key) + '" data-tip="' +
       esc(b.tip) + '" x="' + b.x + '" y="' + b.y + '" width="' + g.bar_width +
       '" height="' + b.height + '"/>' + leader +
       '<text class="scope-node" data-node="' + esc(b.key) + '" data-tip="' +
@@ -212,13 +211,50 @@
   function pick(key) {
     pickedNode = pickedNode === key ? null : key;
     pickedRow = null;
+    walkedStage = pickedNode ? null : key.split(SEP)[0];
     render();
   }
 
   function clearPick() {
     pickedNode = null;
     pickedRow = null;
+    walkedStage = null;
     render();
+  }
+
+  // ── the walk ──────────────────────────────────────────────────────────
+  //
+  // The stage the panel below shows: the picked node's, else the one walked to,
+  // else the figure's own — the walk starts at the figure and steps back.
+
+  function pickedStage() {
+    return pickedNode ? pickedNode.split(SEP)[0] : null;
+  }
+
+  function stageShown() {
+    return pickedStage() || walkedStage || D.citation.stage_id;
+  }
+
+  function drawnStages() {
+    return drawing().columns.map(function (c) { return c.stage.id; });
+  }
+
+  // A column of one bar is picked as that node, so its arm lights in the code;
+  // a column of several is shown whole, for the reader to pick one.
+  function showStage(stageId) {
+    var column = drawing().columns.find(function (c) { return c.stage.id === stageId; });
+    pickedNode = column && column.bars.length === 1 ? column.bars[0].key : null;
+    pickedRow = null;
+    walkedStage = stageId;
+    render();
+  }
+
+  function walk(step) {
+    var stages = drawnStages();
+    var at = stages.indexOf(stageShown());
+    var next = stages[at + step];
+    if (at < 0 || !next) return;
+    showStage(next);
   }
   window.scopeClearPick = clearPick;
 
@@ -281,8 +317,7 @@
     draw();
     renderHere();
     renderBar();
-    renderTable();
-    renderTabs();
+    renderBelow();
     var cut = drawing().columns.some(function (c) { return c.removals.length; });
     byId("scope-legend").textContent =
       (cut ? "An underlined count is rows that stage took out of the workflow — click " +
@@ -317,7 +352,11 @@
   }
 
   function renderBar() {
-    var bar = byId("scope-bar");
+    var bar = byId("scope-count");
+    var stages = drawnStages(), at = stages.indexOf(stageShown());
+    byId("scope-bar").querySelector('[data-go="back"]').disabled = at <= 0;
+    byId("scope-bar").querySelector('[data-go="fwd"]').disabled =
+      at < 0 || at === stages.length - 1;
     if (pickedFigure()) {
       bar.innerHTML = "<span><b>1</b> row of <code>" + esc(D.citation.stage_id) +
         "</code> — row " + D.cited_row.number + ", merged from " +
@@ -331,54 +370,49 @@
           ? ' <span class="muted">click the chart background to clear</span>' : "") +
         (D.covers.sampled_from && !pickedNode && pickedRow == null
           ? ' <span class="muted">the table below lists ' + num(D.rows.length) +
-            " of them</span>" : "");
+            " of them</span>" : "") +
+        (at < 0 ? ' <span class="muted">· <code>' + esc(stageShown()) +
+            "</code> is on the lookup side, which the drawing leaves out</span>" : "");
     }
     bar.querySelectorAll("[data-clear]").forEach(function (el) {
       el.onclick = clearPick;
     });
   }
 
-  // ── the transform behind the picked rows ─────────────────────────────────
+  // ── the stage below the drawing ───────────────────────────────────────
   //
-  // The rows and the step that made them are the same question asked twice, so they
-  // are two tabs over one pick. The transform is the run page's own panel, fetched
-  // per stage, with the arm these rows took lit inside its code block.
+  // The run page's own panel for the stage shown, cut to the rows behind this
+  // figure — the sheet, the schema and the transform, with the arm these rows took
+  // lit inside its code block. A cut's rows are not the figure's, so there the
+  // plain rows table stands in.
 
-  function renderTabs() {
-    var stage = pickedStage();
-    if (!stage) openTab = "rows";
-    byId("scope-tabs").hidden = !stage;
-    byId("scope-table").hidden = openTab !== "rows";
-    byId("scope-transform").hidden = openTab !== "transform";
-    document.querySelectorAll("#scope-tabs [data-tab]").forEach(function (button) {
-      button.classList.toggle("active", button.dataset.tab === openTab);
-    });
-    if (stage && openTab === "transform") showTransform(stage);
+  function renderBelow() {
+    byId("scope-panel").hidden = Boolean(D.drilled);
+    byId("scope-table").hidden = !D.drilled;
+    if (D.drilled) renderTable(); else renderPanel();
   }
 
-  function pickedStage() {
-    return pickedNode ? pickedNode.split(SEP)[0] : null;
-  }
-
-  function showTransform(stageId) {
-    var host = byId("scope-transform");
-    if (host.dataset.node === pickedNode) return;
-    host.dataset.node = pickedNode;
-    var wanted = pickedNode;
-    host.textContent = "reading " + stageId + "…";
-    loadPanel(stageId).then(function (html) {
-      if (host.dataset.node !== wanted) return;
+  function renderPanel() {
+    var stage = stageShown();
+    var host = byId("scope-panel");
+    if (host.dataset.stage === stage) { lightTheArm(host, stage); return; }
+    host.dataset.stage = stage;
+    host.innerHTML = '<p class="muted">reading ' + esc(stage) + "\u2026</p>";
+    loadTraced(stage).then(function (html) {
+      if (host.dataset.stage !== stage) return;
       host.innerHTML = html;
-      lightTheArm(host, stageId);
-    }, function () {
-      if (host.dataset.node !== wanted) return;
-      host.textContent = "This run kept no transform for " + stageId + ".";
+      runScripts(host);
+      lightTheArm(host, stage);
+    }, function (failure) {
+      if (host.dataset.stage !== stage) return;
+      host.innerHTML = '<p class="muted">could not read ' + esc(stage) +
+        " (" + esc(failure.message) + ")</p>";
     });
   }
 
-  function loadPanel(stageId) {
+  function loadTraced(stageId) {
     if (!panels[stageId]) {
-      panels[stageId] = fetch(panelAddress(stageId)).then(function (reply) {
+      panels[stageId] = fetch(tracedAddress(stageId)).then(function (reply) {
         if (!reply.ok) throw new Error(String(reply.status));
         return reply.text();
       });
@@ -386,12 +420,22 @@
     return panels[stageId];
   }
 
-  function panelAddress(stageId) {
-    // lineage_panel takes a row; nothing in the transform it renders varies by one.
-    var row = D.rows.length ? D.rows[0].ordinal : 0;
+  function tracedAddress(stageId) {
+    var query = new URLSearchParams({
+      stage: D.citation.stage_id, row: String(D.citation.row_ordinal),
+      column: D.citation.column });
     return "/project/" + encodeURIComponent(D.project_id) + "/runs/" +
       encodeURIComponent(D.run_id) + "/stage/" + encodeURIComponent(stageId) +
-      "/lineage_panel?row=" + row;
+      "/traced?" + query.toString();
+  }
+
+  // The panel ships its own wiring, which innerHTML does not run.
+  function runScripts(host) {
+    host.querySelectorAll("script").forEach(function (source) {
+      var run = document.createElement("script");
+      run.textContent = source.textContent;
+      source.replaceWith(run);
+    });
   }
 
   // Which arm ran is what this page knows and the panel does not, so the panel's own
@@ -399,18 +443,24 @@
   // arms' line numbers are counted against that, and a panel that resolved a module
   // reference to find its source need not be showing it.
   function lightTheArm(host, stageId) {
+    var block = host.querySelector(".code-block pre.code");
+    if (!block || block.dataset.node === (pickedNode || "")) return;
     var lit = new Set(armsTaken().reduce(function (all, fact) {
       return all.concat(lineRange(fact));
     }, []).filter(Boolean));
-    var block = host.querySelector(".code-block pre.code");
     var stage = D.stages.find(function (s) { return s.id === stageId; });
-    if (!block || !lit.size || !stage || !stage.code) return;
+    if (!stage || !stage.code) return;
+    var old = host.querySelector(".scope-lit-legend");
+    if (old) old.remove();
     var lines = stage.code.split("\n");
     block.outerHTML =
-      '<pre class="code scope-lit"><span class="scope-gutter" aria-hidden="true">' +
-      lines.map(function (_, i) { return lit.has(i + 1) ? MARK : " "; }).join("\n") +
-      '</span><code class="language-python">' + esc(stage.code) + "</code></pre>" +
-      '<p class="muted scope-lit-legend">' + MARK + " a branch on these rows' path.</p>";
+      '<pre class="code scope-lit" data-node="' + esc(pickedNode || "") + '">' +
+      (lit.size ? '<span class="scope-gutter" aria-hidden="true">' +
+        lines.map(function (_, i) { return lit.has(i + 1) ? MARK : " "; }).join("\n") +
+        "</span>" : "") +
+      '<code class="language-python">' + esc(stage.code) + "</code></pre>" +
+      (lit.size ? '<p class="muted scope-lit-legend">' + MARK +
+        " a branch on these rows' path.</p>" : "");
   }
 
   function armsTaken() {
@@ -424,7 +474,6 @@
   // The rows are the run page's own table for the picked stage, fetched whole. The
   // colours, the marks and the +/- are that table's; nothing here re-decides them.
   function renderTable() {
-    if (pickedFigure()) { renderCitedRow(); return; }
     var stage = pickedStage() || D.covers.at_stage;
     var host = byId("scope-table");
     if (host.dataset.stage === stage) return;
@@ -466,26 +515,6 @@
     });
   }
 
-  function headOf(columns) {
-    return '<tr><th class="scope-num">row</th>' +
-      columns.map(function (c) { return "<th>" + esc(c) + "</th>"; }).join("") + "</tr>";
-  }
-
-  // Cells are positional against the map's `columns`, the way every table here is.
-  function rowOf(r, columns) {
-    return '<td class="scope-num">' + r.number + "</td>" +
-      r.cells.map(function (value, i) { return cell(value, columns[i]); }).join("") +
-      "</tr>";
-  }
-
-  function renderCitedRow() {
-    var row = D.cited_row;
-    byId("scope-table").dataset.stage = "";
-    byId("scope-table").innerHTML = tableOf(D.citation.stage_id) + "<thead>" +
-      headOf(row.columns) + '</thead><tbody><tr data-row="' + row.ordinal + '">' +
-      rowOf(row, row.columns) + "</tbody></table>";
-  }
-
   // A cell is one figure's coordinate — stage, row, column — so it opens that
   // figure's lineage. Drawn inside the lineage page's frame, the page that moves
   // is the one holding the frame; opened on its own, that is this page.
@@ -502,12 +531,21 @@
       "/trace/view?column=" + encodeURIComponent(td.dataset.col);
   });
 
-  byId("scope-tabs").onclick = function (event) {
-    var button = event.target.closest("[data-tab]");
-    if (!button) return;
-    openTab = button.dataset.tab;
-    renderTabs();
+  byId("scope-bar").onclick = function (event) {
+    var button = event.target.closest("[data-go]");
+    if (button) walk(button.dataset.go === "back" ? -1 : 1);
   };
+  // A column header that names the stage which wrote it goes there.
+  byId("scope-panel").addEventListener("click", function (event) {
+    var header = event.target.closest("th.diff-col-jump");
+    if (header) showStage(header.dataset.jump);
+  });
+  document.addEventListener("keydown", function (event) {
+    var focused = document.activeElement;
+    if (focused && focused.closest("input, textarea, [contenteditable]")) return;
+    if (event.key === "ArrowLeft") walk(-1);
+    if (event.key === "ArrowRight") walk(1);
+  });
 
   var every = byId("scope-every-stage");
   if (every) {
