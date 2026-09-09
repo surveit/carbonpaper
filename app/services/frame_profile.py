@@ -2,6 +2,7 @@
 schema comes from the data rather than from the methodology's prose."""
 from __future__ import annotations
 
+from collections.abc import Collection, Sequence
 from typing import NamedTuple
 
 import pandas as pd
@@ -111,6 +112,23 @@ def measure_file_shape(project_id: str, file_id: str, *, max_values: int) -> Fil
             str(name), [str(value) for value in present],
             null_count=len(frame) - len(present), max_values=max_values))
     return FileShape(row_count=len(frame), columns=columns)
+
+
+def measure_stage_rows_shape(
+    project_id: str, run_id: str, stage_id: str, *, ordinals: Sequence[int],
+    max_values: int, never_numbers: Collection[str] = (),
+) -> FileShape:
+    """`never_numbers` are the columns a pinned schema declares `str`. Named rows only."""
+    frame = read_stage_output(project_id, run_id, stage_id)
+    behind = frame.iloc[[o for o in ordinals if 0 <= o < len(frame)]]
+    columns = []
+    for name in behind.columns:
+        present = behind[name].dropna()
+        columns.append(measure_column_shape(
+            str(name), [str(value) for value in present],
+            null_count=len(behind) - len(present), max_values=max_values,
+            may_read_as_number=str(name) not in never_numbers))
+    return FileShape(row_count=len(behind), columns=columns)
 
 
 def profile_table(

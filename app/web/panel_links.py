@@ -75,6 +75,9 @@ class AppPanelLinks:
     def stage_simulate(self, stage_id: str) -> str:
         return f"{self._base}/stage/{_segment(stage_id)}/simulate"
 
+    def read_stage_shapes(self, stage_id: str) -> str:
+        return f"{self._base}/stage/{_segment(stage_id)}/shapes"
+
     def run_log(self, stage_id: str) -> str:
         return f"{self._base}/events?stage={_segment(stage_id)}"
 
@@ -169,6 +172,10 @@ class PacketPanelLinks:
         return None
 
     def stage_simulate(self, stage_id: str) -> None:
+        return None
+
+    def read_stage_shapes(self, stage_id: str) -> None:
+        """Measured by a route; a folder has no server to ask for one."""
         return None
 
     def run_log(self, stage_id: str) -> None:

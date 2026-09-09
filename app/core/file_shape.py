@@ -80,6 +80,7 @@ class StoredFileShape(PersistedModel):
 
 def measure_column_shape(
     column: str, values: Sequence[str], *, null_count: int, max_values: int,
+    may_read_as_number: bool = True,
 ) -> ColumnShape:
     """`values` is every non-null cell as text, in row order; `null_count` is the rest."""
     if max_values < 1:
@@ -87,7 +88,7 @@ def measure_column_shape(
     filled = Counter(value for value in values if value.strip())
     blank_count = len(values) - sum(filled.values())
     rows = len(values) + null_count
-    kind = classify_column(filled, rows)
+    kind = classify_column(filled, rows, may_read_as_number=may_read_as_number)
     return ColumnShape(
         column=column, kind=kind, null_count=null_count, blank_count=blank_count,
         filled_count=sum(filled.values()), distinct_count=len(filled),
@@ -105,13 +106,16 @@ def _rank_values(filled: Counter[str], max_values: int) -> list[ValueCount]:
     return [ValueCount(value=value, count=count) for value, count in ranked[:max_values]]
 
 
-def classify_column(filled: Counter[str], rows: int) -> ColumnKind:
+def classify_column(
+    filled: Counter[str], rows: int, *, may_read_as_number: bool = True
+) -> ColumnKind:
     """What a reader should be told first about this column."""
     if not filled:
         return ColumnKind.EMPTY
     if len(filled) == 1 and sum(filled.values()) == rows:
         return ColumnKind.CONSTANT
-    if all(_reads_as_number(value) for value in filled):
+    # False where a schema declares `str`: "001902" reads as 1902, a range it has not.
+    if may_read_as_number and all(_reads_as_number(value) for value in filled):
         return ColumnKind.NUMBER
     if all(_DATE.match(value) for value in filled):
         return ColumnKind.DATE

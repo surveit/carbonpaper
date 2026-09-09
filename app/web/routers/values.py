@@ -10,7 +10,7 @@ from app.core.errors import (
     RunVersionUnresolvableError,
     StageNotInRun,
 )
-from app.web import values_view
+from app.web import column_shapes_view, values_view
 from app.web.config import templates
 from app.web.loading import load_manifest
 from app.web.run_stage_view import build_run_stage_panel
@@ -71,3 +71,25 @@ async def values_stage_panel(request: Request, project_id: str, run_id: str,
 def _say_why_no_panel(request: Request, stage_id: str, reason: str) -> HTMLResponse:
     return templates.TemplateResponse(
         request, "_no_stage_panel.html", {"stage_id": stage_id, "reason": reason})
+
+
+@router.get(
+    "/project/{project_id}/runs/{run_id}/stage/{stage_id}/shapes",
+    response_class=HTMLResponse,
+)
+async def column_shapes_panel(request: Request, project_id: str, run_id: str,
+                              stage_id: str, stage: str | None = None,
+                              row: int | None = None, column: str | None = None):
+    """Unscoped from the run page; `stage`/`row`/`column` name a figure to scope to."""
+    try:
+        shapes = column_shapes_view.load_column_shapes(
+            project_id, run_id, stage_id,
+            cited_stage=stage, cited_column=column, cited_row=row)
+    except NO_WALK as no_shape:
+        return templates.TemplateResponse(
+            request, "_column_shapes_panel.html",
+            {"stage_id": stage_id, "column": column, "reason": str(no_shape)})
+    return templates.TemplateResponse(
+        request, "_column_shapes_panel.html",
+        {"stage_id": stage_id, "column": column, "shapes": shapes},
+    )

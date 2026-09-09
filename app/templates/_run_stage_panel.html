@@ -68,12 +68,22 @@
 <div class="stage-tabs">
     <div class="tabs">
         <button data-tab="data" class="active">Data</button>
+        {# Measured off the frame, so it is fetched when first opened rather than
+           with the panel — the same lazy shape the run log below uses. #}
+        {% if shapes_href %}<button data-tab="shapes">Column shapes</button>{% endif %}
         <button data-tab="schema">Schema</button>
         <button data-tab="transform">Transform</button>
     </div>
 </div>
 
 <div class="panes">
+
+  {# ─────────── COLUMN SHAPES (what each column holds) ─────────── #}
+  {% if shapes_href %}
+  <div class="pane" data-pane="shapes" hidden>
+    <div class="stage-shapes" data-shapes-href="{{ shapes_href }}"></div>
+  </div>
+  {% endif %}
 
   {# ─────────── SCHEMA (input schemas, then the output schema) ─────────── #}
   <div class="pane" data-pane="schema" hidden>
@@ -250,6 +260,33 @@
   root._wired = true;
 
   const meth = root.dataset.project, run = root.dataset.run, stage = root.dataset.stage;
+
+  // ── the Column shapes pane, measured on first open ──
+  const shapes = root.querySelector('.stage-shapes[data-shapes-href]');
+  if (shapes) {
+    root.querySelector('[data-tab="shapes"]').addEventListener('click', function fill() {
+      this.removeEventListener('click', fill);
+      shapes.innerHTML = '<p class="muted">measuring…</p>';
+      fetch(shapes.dataset.shapesHref)
+        .then(answer => answer.ok ? answer.text()
+          : `<p class="muted">could not measure (${answer.status})</p>`)
+        .then(html => { shapes.innerHTML = html; })
+        .catch(failure => { shapes.innerHTML = `<p class="muted">error: ${failure}</p>`; });
+    });
+  }
+
+  // Both bases are already in the pane; the toggle picks which one is on screen.
+  root.addEventListener('click', function (event) {
+    const pick = event.target.closest('.cs-tg button');
+    if (!pick) return;
+    const shape = pick.closest('.cs');
+    shape.querySelectorAll('.cs-tg button').forEach(function (button) {
+      button.classList.toggle('on', button.dataset.basis === pick.dataset.basis);
+    });
+    shape.querySelectorAll('.cs-body, .cs-count span').forEach(function (part) {
+      part.hidden = part.dataset.basis !== pick.dataset.basis;
+    });
+  });
 
   // ── this stage's run log ──
   // Connected on first open, not on panel load: clicking through the graph would

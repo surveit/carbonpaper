@@ -1,0 +1,79 @@
+{# The stage panel's Column shapes tab: what each column of the selected stage holds,
+   under the heading naming what the stage DID to it (app.web.column_order.ColumnGroup).
+
+   Both bases are rendered and the toggle picks one, the same shape as the Input files
+   tab — a figure on screen always says which rows it is over.
+
+   `column` is set where a figure narrows the rows; the run page opens it with none,
+   and both bases are then the whole frame.
+
+   Context: stage_id, column, and either shapes (app.web.column_shapes_view) or reason. #}
+{% if reason %}
+<p class="banner banner-warn">No column shapes for <code>{{ column }}</code> at
+  <code>{{ stage_id }}</code> — {{ reason }}.</p>
+{% else %}
+{% macro shape_group(group, rows, folded) %}
+  {%- if group.group.value == 'dropped' %}
+  <div class="cs-group">
+    <h3>dropped</h3>
+    <p class="cs-note">{{ group.dropped_names | join(", ") }} —
+      {{ group.dropped_names | length }} column{% if group.dropped_names | length != 1 %}s{% endif %}
+      the input carried and this stage's output does not. No frame here holds them, so
+      there is nothing to measure.</p>
+  </div>
+  {%- elif folded %}
+  <details class="cs-group cs-fold">
+    <summary>{{ group.group.value }} — {{ group.columns | length }} columns this stage
+      neither read nor wrote</summary>
+    {{ shape_list(group, rows) }}
+  </details>
+  {%- else %}
+  <div class="cs-group">
+    <h3>{{ group.group.value }}</h3>
+    {{ shape_list(group, rows) }}
+  </div>
+  {%- endif %}
+{% endmacro %}
+{% macro shape_list(group, rows) %}
+  <div class="shape-list">
+    <div class="shape-head"><span></span><span>column</span><span>filled</span>
+      <span>distinct</span><span>values</span></div>
+    {%- for column_row in group.columns %}
+    {% with column = column_row, rows = rows %}{% include "_file_column.html" %}{% endwith %}
+    {%- endfor %}
+  </div>
+{% endmacro %}
+<div class="cs">
+<div class="cs-head">
+  {# The same two words the Input files tab picks between, for the same choice. #}
+  <span class="if-tg cs-tg">
+    <button type="button" class="on" data-basis="relevant">Relevant rows</button
+    ><button type="button" data-basis="all">All rows</button></span>
+  <span class="cs-count">
+    <span data-basis="relevant">
+      {%- if column %}{{ shapes.rows_relevant | figure }} of the
+      {{ shapes.rows_in_frame | figure }} rows in this frame — the ones
+      <code>{{ column }}</code> came through
+      {%- else %}all {{ shapes.rows_in_frame | figure }} rows in this frame{% endif %}</span>
+    <span data-basis="all" hidden>all {{ shapes.rows_in_frame | figure }} rows in this
+      frame{% if column %}, including the ones this figure never came through{% endif %}</span>
+  </span>
+</div>
+{% if column and not shapes.rows_relevant %}
+<p class="vu-nosheet">No row of <code>{{ shapes.stage_id }}</code> fed this figure. Switch
+  to <b>All rows</b> to read the frame it did write.</p>
+{% endif %}
+<div class="cs-body" data-basis="relevant">
+  {%- for group in shapes.over_relevant_rows %}
+  {{ shape_group(group, shapes.rows_relevant,
+                 group.group.value == 'untouched' and shapes.untouched_is_long) }}
+  {%- endfor %}
+</div>
+<div class="cs-body" data-basis="all" hidden>
+  {%- for group in shapes.over_every_row %}
+  {{ shape_group(group, shapes.rows_in_frame,
+                 group.group.value == 'untouched' and shapes.untouched_is_long) }}
+  {%- endfor %}
+</div>
+</div>
+{% endif %}
