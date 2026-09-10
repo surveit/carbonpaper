@@ -28,6 +28,7 @@ from app.models.claim_review import (
     RaisedChallenge,
     Rewrite,
 )
+from app.core.agent.store import AgentSession
 from app.models.claims import RowsRectangle, StageOutputTableCitation
 from app.models.records.claims import Claim
 from app.models.records.workflow_output import WorkflowOutput
@@ -181,11 +182,13 @@ def test_a_claim_that_already_holds_a_review_is_refused(claim, client, monkeypat
     install_fakes(monkeypatch)
     first = start_the_attack(client, claim.id)
     read_status_when_still(client, first.json()["session"])
+    opened = len(AgentSession.list())
 
     response = start_the_attack(client, claim.id)
 
     assert response.status_code == 400
     assert "already has a review" in response.text
+    assert len(AgentSession.list()) == opened
 
 
 def test_a_claim_that_no_longer_stands_is_refused(claim, client, monkeypatch):
@@ -232,6 +235,25 @@ def test_a_table_claim_stands_submitted_though_it_is_not_attacked(
     assert claim.status == "submitted"
     assert claim_review.load_claim_review(PROJECT, claim.id) is None
     assert "not attacked" in caplog.text
+
+
+def test_a_claim_stands_when_its_attack_cannot_start(projects_root, client, monkeypatch, caplog):
+    run_id = run_the_fixture(projects_root)
+    publish_the_outputs(run_id)
+    monkeypatch.setattr(claim_review, "start_claim_attack", _raise_a_missing_version)
+
+    with caplog.at_level(logging.WARNING):
+        response = client.post(f"/project/{PROJECT}/runs/{run_id}/submit/grant-total",
+                               data={"text": TOTAL_TEXT})
+
+    assert response.status_code == 303
+    [claim] = Claim.find(created_by_project_id=PROJECT)
+    assert claim.status == "submitted"
+    assert "not attacked" in caplog.text
+
+
+def _raise_a_missing_version(project_id: str, claim_id: str, *, model: str) -> str:
+    raise FileNotFoundError("no stages were stored for the version this run pinned")
 
 
 def _publish_a_table(run_id: str, shape_id: str) -> None:

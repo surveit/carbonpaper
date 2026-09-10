@@ -7,6 +7,7 @@ from typing import Callable, TypeVar
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
+from app.core.errors import ClaimAttackRefused
 from app.services import claim_review
 from app.services import claims as claims_service
 from app.services import project as project_service
@@ -62,7 +63,7 @@ async def attack_claim(project_id: str, claim_id: str):
     # async: start_claim_attack calls asyncio.create_task, needing a running loop.
     validate_project_or_404(project_id)
     session_id = _refusing_400(lambda: claim_review.start_claim_attack(
-        project_id, claim_id, model=_model_of(project_id)))
+        project_id, claim_id, model=_read_model(project_id)))
     return JSONResponse({"ok": True, "session": session_id})
 
 
@@ -74,14 +75,14 @@ async def skip_output(project_id: str, run_id: str, slug: str):
 
 
 def _attack_what_the_journalist_wrote(project_id: str, claim_id: str) -> None:
-    """A claim there is nothing to attack still stands; its page says it was not attacked."""
+    """A claim whose attack could not start still stands; its page will say it was not attacked."""
     try:
-        claim_review.start_claim_attack(project_id, claim_id, model=_model_of(project_id))
-    except ClaimReviewRefused as exc:
+        claim_review.start_claim_attack(project_id, claim_id, model=_read_model(project_id))
+    except (ClaimAttackRefused, OSError) as exc:
         _LOG.warning("claim %s stands submitted but was not attacked: %s", claim_id, exc)
 
 
-def _model_of(project_id: str) -> str:
+def _read_model(project_id: str) -> str:
     return project_service.project_meta(project_id).model or "sonnet"
 
 
