@@ -52,17 +52,17 @@ _THE_PHRASES = (
 _THE_RULE_OF_EVIDENCE = (
     "THE RULE OF EVIDENCE. Every figure you write is COPIED off a line of the pool, "
     "character for character as that line spells it. You have no calculator and no second "
-    "pass: you cannot split the rows, sum a column, take a percentage, or work a total out "
-    "in your head. If the figure you want is not printed on a line above, you do not have "
-    "it — and saying that plainly is itself a finding, while supplying it from memory or "
-    "from arithmetic is the one failure this whole review exists to catch. The single "
-    "exception is a printed share taken away from the whole: a bound like `at most 94%` "
-    "off a printed `5.8%` is a step the reader checks in a second, and both halves of it "
-    "are on the page.\n"
-    "A figure you did not copy is refused. The orchestrator lifts a phrase out of what you "
-    "write and checks it appears word for word in the pool; a number you restated, "
-    "rounded, or computed appears nowhere, and a refusal throws away the whole review — "
-    "every other finding with it. So when you write a figure, copy it.\n"
+    "pass: you cannot split the rows, sum a column, take a percentage, take a printed "
+    "share away from the whole, or work a total out in your head. A figure the pool does "
+    "not print does not exist for you, and you do not write it. Write instead, in words, "
+    "what would settle it — the rerun, the second column, the person who would have to "
+    "read the cases. Saying that plainly is itself a finding; supplying the figure from "
+    "memory or from arithmetic is the one failure this whole review exists to catch.\n"
+    "A figure you did not copy is refused. The orchestrator goes back to the line of the "
+    "pool your evidence names and copies its backing off that line, not off your sentence; "
+    "a number you restated, rounded or worked out is on no line, and a refusal throws away "
+    "the whole review — every other finding with it. So name the block, and name the line, "
+    "for every figure you write.\n"
     "The sentence is not evidence for itself. A number that appears only in the "
     "journalist's claim backs nothing — it is the thing under attack.\n"
     "A ref names one piece of the run, so the reader can open it. Each is one of:\n"
@@ -77,13 +77,13 @@ _THE_RULE_OF_EVIDENCE = (
 
 _PRICING_A_CHALLENGE = (
     "PRICING A CHALLENGE. A challenge is worth raising when it names rows, cells, counts "
-    "or numbers FROM THE POOL — the orchestrator draws its `backing` out of your own "
-    "`evidence`, so the copied figures have to be IN that field. A challenge whose price "
-    "this run does not print still goes in, and it is not the weaker finding: say in "
-    "`text` what would settle it — a rerun on one column, a person reading the queued "
-    "cases, a source this run does not hold — set `moves` to `unpriced`, and set `cost` to "
-    "what settling it would take. Working the number out yourself instead is the one thing "
-    "you must never do.\n\n"
+    "or numbers FROM THE POOL, each one copied off the line you name, so the orchestrator "
+    "can find that line and copy its `backing` off it. A challenge whose price this run "
+    "does not print still goes in, and it is not the weaker finding: say in `text` what "
+    "would settle it — a rerun on one column, a person reading the queued cases, a source "
+    "this run does not hold — set `moves` to `unpriced`, and set `cost` to what settling "
+    "it would take. Working the number out yourself instead is the one thing you must "
+    "never do.\n\n"
 )
 
 _THE_CHALLENGE_FIELDS = (
@@ -98,8 +98,9 @@ _THE_CHALLENGE_FIELDS = (
     "  `text` — the challenge in ONE sentence, addressed to the journalist. Say the "
     "trouble, not your feelings about it.\n"
     "  `evidence` — what in the run makes it stick, in one sentence, carrying the copied "
-    "figures and naming the block each was copied from. This is the text the orchestrator "
-    "draws its backing out of, so the number has to be IN it.\n"
+    "figures and naming the block and the line each one was copied off. The orchestrator "
+    "reads this to find the line, then copies its backing off the line itself, so a figure "
+    "here that is on no line takes the whole review down with it.\n"
     "  `evidence_refs` — the pool items above.\n"
     "  `moves` — what answering it would move. `moves` when the cited figure itself would "
     "change; `meaning` when the figure stands but the sentence reads differently; "
@@ -137,37 +138,48 @@ _GROUNDING_JOB = (
     "refused whole.\n"
     "  `evidence` — the one thing in the run the phrase rests on, as a single ref of the "
     "shapes above, or `null` when it rests on nothing this run holds.\n"
-    "  `how` — one line: how the phrase rests on that piece of the run, or what is "
-    "missing when it rests on nothing.\n"
+    "  `how` — one line: which line of which block you read, and how the phrase rests on "
+    "it, or what is missing when it rests on nothing.\n"
     "Skip the connective words. A phrase that names a population, a quantity, an action "
     "or an outcome asserts something; \" of \" does not.\n\n"
 )
+
+GROUNDING_EXAMPLE_POOL_LINES = """----- OUTPUTS -----
+job_status_breakdown · Job status after an inmate-abuse case · lost_job 5.8% · unknown 28% · kept_job the rest · ia_job_status · CITED
+pct_inmate_abuse · Share of investigations that are inmate abuse · 7.6% · cases_flagged
+----- STAGES -----
+Stage `penalty_lookup` (input_data, feeds the cited stage: true): PENALTYDIS text to dismissal or ambiguous
+  reads: cases
+----- INPUT COLUMNS -----
+cases.s_GUID · empty · rows 9806 · 0 filled/9806 null/0 blank · distinct 0 · top: none"""
 
 GROUNDING_EXAMPLE_JSON = """{
   "phrases": [
     {"start": 0, "end": 15,
      "evidence": {"kind": "output", "slug": "job_status_breakdown"},
-     "how": "the OUTPUTS line reads lost_job 5.8% · unknown 28% · kept_job the rest"},
+     "how": "the OUTPUTS line job_status_breakdown reads lost_job 5.8% · unknown 28% · kept_job the rest"},
     {"start": 19, "end": 25,
      "evidence": {"kind": "input_column", "stage_id": "cases", "column": "s_GUID"},
-     "how": "a row is a case; this column would key a person and reads 0 filled/9806 null"},
+     "how": "cases.s_GUID would key a person and reads 0 filled/9806 null/0 blank, so a row is a case"},
     {"start": 26, "end": 49,
      "evidence": {"kind": "output", "slug": "pct_inmate_abuse"},
-     "how": "inmate abuse means any misconduct code is IA"},
+     "how": "the OUTPUTS line pct_inmate_abuse reads 7.6%: inmate abuse is any misconduct code IA"},
     {"start": 55, "end": 71,
      "evidence": {"kind": "stage", "stage_id": "penalty_lookup"},
-     "how": "not a dismissal, read from the post-disposition penalty"}
+     "how": "the STAGES line for penalty_lookup reads PENALTYDIS text to dismissal or ambiguous"}
   ]
 }"""
 
 _GROUNDING_EXAMPLE = (
     "WORKED EXAMPLE. The claim is «A vast majority of guards accused of inmate abuse were "
     "never terminated.», citing the cell `figure5_counts` holds for the dismissal share. "
+    "These are the lines it read, printed the way the pool prints them:\n"
+    + GROUNDING_EXAMPLE_POOL_LINES + "\n"
     "Four phrases assert something: the quantifier, the population, the accusation, and "
-    "the outcome. Each `how` says which line of which block it read, and nothing in it is "
-    "worked out. Note that `evidence` may be `null`: on a sentence about apples over a "
-    "lobbying run, every phrase would come back null with `how` saying what the run is "
-    "about instead.\n"
+    "the outcome. Every `how` names the line it read and copies the figure off it; nothing "
+    "in it is worked out. Note that `evidence` may be `null`: on a sentence about apples "
+    "over a lobbying run, every phrase would come back null with `how` saying what the run "
+    "is about instead.\n"
     + GROUNDING_EXAMPLE_JSON + "\n\n"
 )
 
@@ -188,13 +200,28 @@ _DATA_DEFECTS_JOB = (
     "untouched is still yours to raise — say so in `moves`, and say what it does touch.\n\n"
 )
 
+DATA_DEFECTS_EXAMPLE_POOL_LINES = """----- OUTPUTS -----
+in_house_ai_totals · Reported by in-house lobbyists on AI, in dollars · $344,314,714.91 · ai_spend_totals
+----- STAGES -----
+Stage `paid_or_in_house` (python_row_function, feeds the cited stage: true): registrant == client is in-house, anything else is paid
+  reads: lda_q1, lda_q2
+  ```
+  in_house = row["registrant"] == row["client"]
+  ```
+----- BRANCHES -----
+paid_or_in_house|classify/0:elif0 · paid_or_in_house · code/keeps · rows 547 · elif row["registrant"] == row["client"]
+paid_or_in_house|classify/0:else · paid_or_in_house · code/keeps · rows 1297 · else
+----- INPUT COLUMNS -----
+lda_q1.registrant · text · rows 2065 · 2065 filled/0 null/0 blank · distinct 1841 · top: TENABLE INC (12), AKIN GUMP STRAUSS HAUER & FELD LLP (9)
+lda_q1.client · text · rows 2065 · 2065 filled/0 null/0 blank · distinct 1902 · top: TENABLE, INC. (7), MICROSOFT CORPORATION (6)"""
+
 DATA_DEFECTS_EXAMPLE_JSON = """{
   "challenges": [
     {
       "kind": "data",
       "grounding_index": 0,
-      "text": "registrant == client is exact string equality and the export spells one organisation two ways; a rerun that strips punctuation before the test counts what it misses.",
-      "evidence": "The STAGES block gives paid_or_in_house as registrant == client, and the INPUT COLUMNS lines lda_q1.registrant and lda_q1.client carry both spellings, TENABLE INC and TENABLE, INC. Nothing here counts the filings the test misclassifies: BRANCHES holds only rows 1297 down the paid arm and rows 547 down the in-house arm, split by neither spelling. The figure that would move is in_house_ai_totals, $344,314,714.91.",
+      "text": "The test that splits paid from in-house is exact string equality and the export spells one organisation two ways; a rerun that strips punctuation before the test counts what it misses.",
+      "evidence": "The STAGES block prints paid_or_in_house's code as row[\\"registrant\\"] == row[\\"client\\"], exact string equality, and the two INPUT COLUMNS lines carry one organisation twice: lda_q1.registrant top: TENABLE INC (12), and lda_q1.client top: TENABLE, INC. (7). How many filings that misclassifies is on no line of the pool: BRANCHES prints rows 547 down the in-house arm and rows 1297 down the paid arm, split by neither spelling. The figure it would move is the OUTPUTS line in_house_ai_totals, $344,314,714.91.",
       "evidence_refs": [
         {"kind": "stage", "stage_id": "paid_or_in_house"},
         {"kind": "input_column", "stage_id": "lda_q1", "column": "registrant"},
@@ -209,14 +236,16 @@ DATA_DEFECTS_EXAMPLE_JSON = """{
 
 _DATA_DEFECTS_EXAMPLE = (
     "WORKED EXAMPLE. The claim cites a total paid to outside lobbying firms. A row "
-    "function splits paid from in-house by testing `registrant == client`, which the "
-    "STAGES block shows is exact string equality, and the two INPUT COLUMNS lines for "
-    "those columns carry one organisation under two spellings. Every figure below is off a "
-    "line: the two spellings off the columns' top values, `rows 1297` and `rows 547` off "
-    "the BRANCHES block, `$344,314,714.91` off the OUTPUTS line for `in_house_ai_totals`. "
-    "How many filings the test misclassifies is not on any line — it would mean counting "
-    "the rows where the two columns nearly agree, which you cannot do — so `moves` is "
-    "`unpriced` and `text` names the rerun that would count them.\n"
+    "function splits paid from in-house by testing one column against another, and the "
+    "two column profiles carry one organisation under two spellings. These are the lines "
+    "it read:\n"
+    + DATA_DEFECTS_EXAMPLE_POOL_LINES + "\n"
+    "Every figure in the answer is lifted off one of those lines: the two spellings and "
+    "their counts off the two INPUT COLUMNS lines, `rows 547` and `rows 1297` off the "
+    "BRANCHES lines, `$344,314,714.91` off the OUTPUTS line. How many filings the test "
+    "misclassifies is on none of them — it would mean counting the rows where the two "
+    "columns nearly agree, which you cannot do — so `moves` is `unpriced` and `text` "
+    "names the rerun that would count them.\n"
     + DATA_DEFECTS_EXAMPLE_JSON + "\n\n"
 )
 
@@ -236,13 +265,24 @@ _CHOICES_JOB = (
     "show the fork and let the reader decide.\n\n"
 )
 
+CHOICES_EXAMPLE_POOL_LINES = """----- OUTPUTS -----
+figure5_counts · Inmate-abuse cases that ended in dismissal · 5.8% · figure5_counts · CITED
+----- STAGES -----
+Stage `penalty_lookup` (input_data, feeds the cited stage: true): PENALTYDIS text to dismissal or ambiguous
+  reads: cases
+----- INPUT COLUMNS -----
+cases.PENALTY · category · rows 9806 · 9806 filled/0 null/0 blank · distinct 41 · top: SUSPENSION (2211), DISMISSAL & ACCRUALS (1937), REPRIMAND (1502)
+cases.DISPO · category · rows 9806 · 9806 filled/0 null/0 blank · distinct 9 · top: SETTLED (4522), AWARD (835), RESIGNED (590), WITHDRAWN (356)
+----- TERMS -----
+dismissal: the department ended the guard's employment over the case."""
+
 CHOICES_EXAMPLE_JSON = """{
   "challenges": [
     {
       "kind": "choice",
       "grounding_index": 3,
       "text": "Read PENALTY instead of PENALTYDIS: PENALTY is the penalty the department sought, and a rerun of ia_job_status against it is what would price the fork.",
-      "evidence": "penalty_lookup on the STAGES block reads PENALTYDIS, and cases.PENALTY sits beside it on INPUT COLUMNS, read by no stage. cases.DISPO says why the two differ, top: SETTLED (4522), AWARD (835), RESIGNED (590), WITHDRAWN (356). What figure5_counts reads on PENALTY is not a figure of this run: it was counted once, from PENALTYDIS.",
+      "evidence": "The STAGES line for penalty_lookup reads PENALTYDIS text to dismissal or ambiguous, and cases.PENALTY sits beside it on INPUT COLUMNS, read by no stage. cases.DISPO says why the two differ: top: SETTLED (4522), AWARD (835), RESIGNED (590), WITHDRAWN (356). What the share reads on PENALTY is on no line of the pool: the OUTPUTS block prints figure5_counts once, at 5.8%, counted from PENALTYDIS.",
       "evidence_refs": [
         {"kind": "stage", "stage_id": "penalty_lookup"},
         {"kind": "input_column", "stage_id": "cases", "column": "PENALTY"},
@@ -260,10 +300,11 @@ _CHOICES_EXAMPLE = (
     "WORKED EXAMPLE. The claim cites the share of inmate-abuse cases ending in dismissal, "
     "read from the post-disposition penalty column. The file carries a second penalty "
     "column, the penalty the department sought, and no stage reads it: that is the largest "
-    "fork behind the figure. The figures come off two INPUT COLUMNS lines — the unread "
-    "`cases.PENALTY`, and `cases.DISPO` with its top values and counts, which is why the "
-    "two columns disagree. What the share READS on the other column is nowhere in the "
-    "pool: there is one OUTPUTS line for this figure, counted once. So `moves` is "
+    "fork behind the figure. These are the lines it read:\n"
+    + CHOICES_EXAMPLE_POOL_LINES + "\n"
+    "The counts in the answer are the `top:` values off the `cases.DISPO` line, spelled "
+    "the way that line spells them. What the share READS on the other column is on no line "
+    "at all: the OUTPUTS block prints this figure once, counted once. So `moves` is "
     "`unpriced` even though the fork is real and large. `cost` is a different question and "
     "the methodology answers it: the published sentence is only true of the "
     "post-disposition reading, so `cost` is `settled` and the orchestrator will fold it. "
@@ -285,16 +326,25 @@ _OMISSIONS_JOB = (
     "that would price it. That is a finding, not a shrug.\n\n"
 )
 
+OMISSIONS_EXAMPLE_POOL_LINES = """----- OUTPUTS -----
+ai_spend_totals · Paid to outside firms to lobby on AI, in dollars · $63,027,729 · ai_spend_totals · CITED
+----- BRANCHES -----
+paid_or_in_house|classify/0:if · paid_or_in_house · code/keeps · rows 221 · if not row["income"]
+paid_or_in_house|classify/0:elif0 · paid_or_in_house · code/keeps · rows 547 · elif row["registrant"] == row["client"]
+paid_or_in_house|classify/0:else · paid_or_in_house · code/keeps · rows 1297 · else
+----- INPUT COLUMNS -----
+lda_q1.client_country · category · rows 2065 · 2065 filled/0 null/0 blank · distinct 11 · top: USA (2040), CANADA (9), IRELAND (4)"""
+
 OMISSIONS_EXAMPLE_JSON = """{
   "challenges": [
     {
       "kind": "omission",
       "grounding_index": 0,
       "text": "No branch reads client_country, so clients of every country are in the total by default; a rerun on US rows alone is what prices the decision nobody made.",
-      "evidence": "lda_q1.client_country is on the INPUT COLUMNS block, distinct 11, and no line of the BRANCHES block names it: paid_or_in_house went rows 1297 one way, rows 547 another and rows 221 the third. What US clients alone paid is not a figure of this run. ai_spend_totals is $63,027,729, over clients of all 11.",
+      "evidence": "lda_q1.client_country is on INPUT COLUMNS at distinct 11, top: USA (2040), and no line of the BRANCHES block names it: paid_or_in_house took rows 221 one way, rows 547 another and rows 1297 the third, split by income and by registrant against client. What US clients alone paid is on no line of the pool. The CITED OUTPUTS line reads ai_spend_totals · Paid to outside firms to lobby on AI, in dollars · $63,027,729, over clients of all 11.",
       "evidence_refs": [
         {"kind": "input_column", "stage_id": "lda_q1", "column": "client_country"},
-        {"kind": "branch", "branch_id": "paid_or_in_house:else"},
+        {"kind": "branch", "branch_id": "paid_or_in_house|classify/0:else"},
         {"kind": "output", "slug": "ai_spend_totals"}
       ],
       "moves": "unpriced",
@@ -306,15 +356,18 @@ OMISSIONS_EXAMPLE_JSON = """{
 
 _OMISSIONS_EXAMPLE = (
     "WORKED EXAMPLE. The claim cites a total paid to outside firms to lobby on AI. The "
-    "export carries a client-country column: the INPUT COLUMNS line for it reads `distinct "
-    "11`, so it splits the rows eleven ways, and no line of the BRANCHES block names it, "
-    "so clients of every country are in the total by default. Every figure is off a line — "
-    "`distinct 11` off the column profile, the three `rows` counts off the branch arms, "
-    "`$63,027,729` off the CITED OUTPUTS line. What US clients ALONE paid is not one of "
-    "them: it would mean keeping the rows where that column reads USA and summing their "
-    "income, and you have neither the rows nor a sum. Writing that total anyway would put "
-    "a figure the run never produced in front of a journalist about to publish. So the "
-    "finding goes in `unpriced`, with the rerun that would price it named in `text`.\n"
+    "export carries a client-country column that splits the rows eleven ways, and no arm "
+    "of the code reads it, so clients of every country are in the total by default. These "
+    "are the lines it read:\n"
+    + OMISSIONS_EXAMPLE_POOL_LINES + "\n"
+    "Every figure is off one of those lines — `distinct 11` and `USA (2040)` off the "
+    "column profile, the three `rows` counts off the branch arms, `$63,027,729` off the "
+    "CITED OUTPUTS line. Note the `branch_id` in the ref: it is the id that line prints, "
+    "copied whole. What US clients ALONE paid is on none of them: it would mean keeping "
+    "the rows where that column reads USA and summing their income, and you have neither "
+    "the rows nor a sum. Writing that total anyway would put a figure the run never "
+    "produced in front of a journalist about to publish. So the finding goes in "
+    "`unpriced`, with the rerun that would price it named in `text`.\n"
     + OMISSIONS_EXAMPLE_JSON + "\n\n"
 )
 
@@ -327,16 +380,24 @@ _COVERAGE_JOB = (
     "challenge you raise has `kind` `coverage`.\n"
     "WHAT YOU ARE NOT TOLD. You are not told who the journalist meant to count. The "
     "`universe` and `qualifiers` on the CLAIM line are the claim's own answer to that, "
-    "and your finding is the distance between them and the rows the run actually kept.\n\n"
+    "and your finding is the distance between them and the rows the run actually kept. "
+    "And the bound itself is not yours to compute: the counts are printed, the share among "
+    "the known is not, so give the printed counts and say in words what the unprinted "
+    "share would take.\n\n"
 )
+
+COVERAGE_EXAMPLE_POOL_LINES = """----- OUTPUTS -----
+job_status_breakdown · Job status after an inmate-abuse case · lost_job 5.8% · unknown 28% · kept_job the rest · ia_job_status · CITED
+----- INPUT COLUMNS -----
+cases.PENALTYDIS · category · rows 9806 · 7061 filled/0 null/2745 blank · distinct 12 · top: SUSPENSION (2394), REPRIMAND (1802), DISMISSAL & ACCRUALS (571)"""
 
 COVERAGE_EXAMPLE_JSON = """{
   "challenges": [
     {
       "kind": "coverage",
       "grounding_index": 0,
-      "text": "PENALTYDIS is blank on 28% of records. A blank is an unknown outcome, not a kept job.",
-      "evidence": "'Never terminated' is at most 94%, and 5.8% is the share of all cases, including the ones whose outcome the file does not hold.",
+      "text": "PENALTYDIS is blank on 2745 of the 9806 records, and a blank is an unknown outcome rather than a kept job.",
+      "evidence": "cases.PENALTYDIS on INPUT COLUMNS reads rows 9806 · 7061 filled/0 null/2745 blank, and every one of those blank rows sits in the denominator of the CITED OUTPUTS line job_status_breakdown, which reads lost_job 5.8% · unknown 28% · kept_job the rest. The share among the cases whose outcome the file does hold is on no line of the pool.",
       "evidence_refs": [
         {"kind": "input_column", "stage_id": "cases", "column": "PENALTYDIS"},
         {"kind": "output", "slug": "job_status_breakdown"}
@@ -350,15 +411,16 @@ COVERAGE_EXAMPLE_JSON = """{
 
 _COVERAGE_EXAMPLE = (
     "WORKED EXAMPLE. The claim reads the share of inmate-abuse cases that ended in "
-    "dismissal off a job-status table. Both figures in the evidence come off one OUTPUTS "
-    "line, `job_status_breakdown`, which reads `lost_job 5.8% · unknown 28% · kept_job the "
-    "rest`: the outcome column is blank on more than a quarter of the records, and those "
-    "rows are counted in the denominator and cannot be counted in the numerator. The one "
-    "step taken here is the bound — the whole less the printed 5.8% — which is the "
-    "exception the rule of evidence allows, because both halves of it are on the page. "
-    "This one is priced, so `moves` is `moves` rather than `unpriced`. The share among "
-    "cases whose outcome the file actually holds is a different figure and is not on any "
-    "line, so it is described, not given.\n"
+    "dismissal off a job-status table. The outcome column is blank on better than a "
+    "quarter of the records, and those rows are counted in the denominator and cannot be "
+    "counted in the numerator. These are the lines it read:\n"
+    + COVERAGE_EXAMPLE_POOL_LINES + "\n"
+    "Every digit in the evidence is off one of those two lines: `9806`, `7061 filled`, "
+    "`2745 blank` off the column profile, `5.8%` and `28%` off the OUTPUTS line. The bound "
+    "the reader might want — what the share is among cases whose outcome the file holds — "
+    "is on neither line, so it is described in words and never written as a number. This "
+    "one is still priced, because the pool prints the rows that move: `moves` is `moves` "
+    "rather than `unpriced`.\n"
     + COVERAGE_EXAMPLE_JSON + "\n\n"
 )
 
@@ -378,8 +440,13 @@ _MEANING_JOB = (
     "run also supports: `text` is the whole sentence, written out, that the run can "
     "carry; `why` is one line saying what this wording fixes. A rewrite is never a "
     "correction the journalist is obliged to take — taking one submits a new claim, which "
-    "is attacked on its own, from the start.\n\n"
+    "is attacked on its own, from the start. A rewrite carries no figure the pool does not "
+    "print either.\n\n"
 )
+
+MEANING_EXAMPLE_POOL_LINES = """----- INPUT COLUMNS -----
+cases.s_GUID · empty · rows 9806 · 0 filled/9806 null/0 blank · distinct 0 · top: none
+cases.SSNUMBER · empty · rows 9806 · 0 filled/9806 null/0 blank · distinct 0 · top: none"""
 
 MEANING_EXAMPLE_JSON = """{
   "challenges": [
@@ -406,13 +473,14 @@ MEANING_EXAMPLE_JSON = """{
 }"""
 
 _MEANING_EXAMPLE = (
-    "WORKED EXAMPLE. The claim says guards. The run counts cases: the two INPUT COLUMNS "
-    "lines for the columns that would key a person read `0 filled/9806 null/0 blank`, and "
-    "that split, copied off those lines, is the whole of the evidence. Nothing in the pool "
-    "prices how many guards that many rows are, so `cost` is `outside`; the challenge is "
-    "still `meaning` rather than `unpriced`, because the figure stands as printed and it "
-    "is the word over it that fails. The rewrite says the same count of the thing the file "
-    "can actually count.\n"
+    "WORKED EXAMPLE. The claim says guards. The run counts cases: the two columns that "
+    "would key a person are empty on every row. These are the lines it read:\n"
+    + MEANING_EXAMPLE_POOL_LINES + "\n"
+    "The whole of the evidence is that split, copied off those two lines. Nothing in the "
+    "pool prices how many guards that many rows are, so `cost` is `outside`; the challenge "
+    "is still `meaning` rather than `unpriced`, because the figure stands as printed and "
+    "it is the word over it that fails. The rewrite says the same count of the thing the "
+    "file can actually count, and adds no figure of its own.\n"
     + MEANING_EXAMPLE_JSON + "\n\n"
 )
 

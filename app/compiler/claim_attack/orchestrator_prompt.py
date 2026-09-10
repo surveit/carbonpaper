@@ -38,8 +38,9 @@ _THE_WORK = (
     "when they touch the same phrase.\n"
     "2. ATTRIBUTE. `attacker` is which of the six raised it: `grounding`, `data_defects`, "
     "`choices`, `omissions`, `coverage`, or `meaning`. On a merge, name the one whose "
-    "answer carries the backing you copied. Use `orchestrator` only for a challenge that "
-    "is visible in no single answer and appears only when two are put side by side.\n"
+    "evidence pointed you at the line you copied the backing off. Use `orchestrator` only "
+    "for a challenge that is visible in no single answer and appears only when two are put "
+    "side by side.\n"
     "3. KEEP THE KIND. `kind` is what sort of trouble it is, and it comes from the "
     "attacker that raised it: `data`, `choice`, `omission`, `coverage`, `semantic`. The "
     "sixth kind, `gap`, is yours to make: every phrase the grounding attacker landed on "
@@ -57,17 +58,22 @@ _THE_WORK = (
 )
 
 _BACKING = (
-    "THE BACKING RULE. `backing` is a figure or phrase copied verbatim out of the "
-    "evidence pool or out of that attacker's own `evidence` text — every character, in "
-    "the same order, with the same spelling and punctuation. It is checked as a "
-    "literal string: if the copy is not there character for character, the challenge is "
-    "refused and the WHOLE review is thrown away — every other challenge with it. So:\n"
+    "THE BACKING RULE. `backing` is a figure or phrase copied verbatim off a LINE OF THE "
+    "EVIDENCE POOL — every character, in the same order, with the same spelling and "
+    "punctuation. It is checked against the pool as a literal string: if the copy is not "
+    "there character for character, the challenge is refused and the WHOLE review is "
+    "thrown away — every other challenge with it. So:\n"
     "  Copy, never restate. `$61.4m` is not a copy of `$61,447,729`. `28 percent` is not "
     "a copy of `28%`. Rounding, reformatting, translating a figure into a sentence of "
     "your own — all refused.\n"
-    "  A figure that appears ONLY in the journalist's sentence is not backing. The claim "
-    "is the thing under attack; it cannot be its own footing. Copy from the pool or from "
-    "an attacker's `evidence`.\n"
+    "  The pool is the only source. Not the journalist's sentence: the claim is the thing "
+    "under attack and cannot be its own footing. And not the attacker's `evidence` either: "
+    "an attacker has no tools and cannot count anything, so a figure in its `evidence` is "
+    "either a copy off a pool line or an invention. Read its `evidence` as a POINTER — it "
+    "names the block and the line — then go to that line in the pool and copy the backing "
+    "off the line itself. A figure you find only in an attacker's sentence and nowhere in "
+    "the pool is not backing; drop the figure, back the challenge with the copied phrase "
+    "that names what is missing, and say the rest in words.\n"
     "  Copy whole words and whole numbers. A comma or a full stop sitting right after the "
     "words you copied is fine, and so is one inside them; what is refused is a copy that "
     "cuts a number in half, so `200` lifted out of `2,200` backs nothing.\n"
@@ -109,15 +115,20 @@ _SUMMARY = (
     "not as a count of findings. No number in it that is not in the pool.\n\n"
 )
 
+ORCHESTRATOR_EXAMPLE_POOL_LINES = """----- OUTPUTS -----
+job_status_breakdown · Job status after an inmate-abuse case · lost_job 5.8% · unknown 28% · kept_job the rest · ia_job_status · CITED
+----- INPUT COLUMNS -----
+cases.PENALTYDIS · category · rows 9806 · 7061 filled/0 null/2745 blank · distinct 12 · top: SUSPENSION (2394), REPRIMAND (1802), DISMISSAL & ACCRUALS (571)"""
+
 ORCHESTRATOR_EXAMPLE_JSON = """{
   "challenges": [
     {
       "attacker": "coverage",
       "kind": "coverage",
       "grounding_index": 0,
-      "text": "PENALTYDIS is blank on 28% of records. A blank is an unknown outcome, not a kept job.",
-      "evidence": "'Never terminated' is at most 94%, and 5.8% is the share of all cases, including the ones whose outcome the file does not hold.",
-      "backing": "at most 94%",
+      "text": "PENALTYDIS is blank on 2745 of the 9806 records, and a blank is an unknown outcome rather than a kept job.",
+      "evidence": "cases.PENALTYDIS on INPUT COLUMNS reads rows 9806 · 7061 filled/0 null/2745 blank, and every one of those blank rows sits in the denominator of the CITED OUTPUTS line job_status_breakdown, which reads lost_job 5.8% · unknown 28% · kept_job the rest. The share among the cases whose outcome the file does hold is on no line of the pool.",
+      "backing": "2745 blank",
       "evidence_refs": [
         {"kind": "input_column", "stage_id": "cases", "column": "PENALTYDIS"},
         {"kind": "output", "slug": "job_status_breakdown"}
@@ -134,23 +145,19 @@ ORCHESTRATOR_EXAMPLE_JSON = """{
 _EXAMPLE = (
     "WORKED EXAMPLE. The claim is «A vast majority of guards accused of inmate abuse were "
     "never terminated.», citing the dismissal share in `figure5_counts`. The coverage "
-    "attacker returned this:\n"
-    '  kind: "coverage", grounding_index: 0,\n'
-    '  text: "PENALTYDIS is blank on 28% of records. A blank is an unknown outcome, not a '
-    'kept job.",\n'
-    "  evidence: \"'Never terminated' is at most 94%, and 5.8% is the share of all cases, "
-    'including the ones whose outcome the file does not hold.",\n'
-    '  moves: "moves", cost: "free"\n'
+    "attacker's `evidence` named two lines of the pool, and these are those lines:\n"
+    + ORCHESTRATOR_EXAMPLE_POOL_LINES + "\n"
     "You weigh it 3, not 2. It does turn the figure into a bound, which is weight 2 on "
     "its own — but the sentence asserts an outcome for every case, and the file holds one "
     "for fewer than three quarters of them, so the footing the sentence needs is missing "
-    "rather than merely moved. The backing is four words lifted out of the attacker's own "
-    "evidence, and the comma the source puts after them is no obstacle:\n"
+    "rather than merely moved. The backing is two words copied off the INPUT COLUMNS line, "
+    "not out of the attacker's sentence, and the ` · ` the line puts after them is no "
+    "obstacle:\n"
     + ORCHESTRATOR_EXAMPLE_JSON + "\n"
-    "Note what the summary does: the biggest number in the whole attack is the one the "
-    "other penalty column reads, and the first sentence takes it off the table, because "
-    "the methodology settles it and the run obeys. That challenge still appears in the "
-    "list, at weight 0, folded.\n\n"
+    "Note what the summary does: the loudest challenge in the whole attack is the fork to "
+    "the other penalty column, and the first sentence takes it off the table, because the "
+    "methodology settles it and the run obeys. That challenge still appears in the list, "
+    "at weight 0, folded.\n\n"
 )
 
 _SUBMIT = (

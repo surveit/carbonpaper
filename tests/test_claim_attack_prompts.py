@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from arch.test_no_banned_words import BANNED_WORDS
 from pydantic import BaseModel
@@ -17,7 +18,11 @@ from app.models.claim_review import (
     MeaningAnswer,
     Moves,
 )
-from app.services.claim_review import find_grounding_issues, find_unbacked_challenges
+from app.services.claim_review import (
+    _read_whether_the_corpus_spells,
+    find_grounding_issues,
+    find_unbacked_challenges,
+)
 
 _ORCHESTRATOR = orchestrator_prompt.ORCHESTRATOR_SYSTEM_PROMPT
 
@@ -49,6 +54,36 @@ _EXAMPLE_JSON: dict[str, tuple[str, type[BaseModel]]] = {
 # The attacker cannot split rows or sum a column, so its example must not model one.
 _CANNOT_COMPUTE_ITS_FIGURE = ["data_defects", "choices", "omissions"]
 
+_EXAMPLE_POOL_LINES = {
+    "grounding": attackers_prompt.GROUNDING_EXAMPLE_POOL_LINES,
+    "data_defects": attackers_prompt.DATA_DEFECTS_EXAMPLE_POOL_LINES,
+    "choices": attackers_prompt.CHOICES_EXAMPLE_POOL_LINES,
+    "omissions": attackers_prompt.OMISSIONS_EXAMPLE_POOL_LINES,
+    "coverage": attackers_prompt.COVERAGE_EXAMPLE_POOL_LINES,
+    "meaning": attackers_prompt.MEANING_EXAMPLE_POOL_LINES,
+    "orchestrator": orchestrator_prompt.ORCHESTRATOR_EXAMPLE_POOL_LINES,
+}
+
+# `text`, `why` and `summary` are prose; a figure only earns its place in these.
+_FIELDS_CARRYING_A_COPIED_FIGURE = ("evidence", "backing", "how")
+
+
+def _find_digit_runs(text: str) -> list[str]:
+    # A digit inside an identifier (`lda_q1`, `figure5_counts`) is not a figure.
+    return [run.strip(".,") for run in re.findall(r"(?<![A-Za-z0-9_])\d[\d,.]*", text)]
+
+
+def _find_copied_figures(node: object) -> list[str]:
+    if isinstance(node, dict):
+        return [figure for key, value in node.items()
+                for figure in (_find_digit_runs(value)
+                               if isinstance(value, str) and key
+                               in _FIELDS_CARRYING_A_COPIED_FIGURE
+                               else _find_copied_figures(value))]
+    if isinstance(node, list):
+        return [figure for item in node for figure in _find_copied_figures(item)]
+    return []
+
 
 def test_each_attacker_is_told_who_reads_it_and_that_it_changes_nothing() -> None:
     for prompt in _ATTACKERS:
@@ -59,6 +94,11 @@ def test_each_attacker_is_told_who_reads_it_and_that_it_changes_nothing() -> Non
 def test_the_orchestrator_is_told_to_copy_backings_verbatim() -> None:
     assert "verbatim" in _ORCHESTRATOR
     assert "published precision" in _ORCHESTRATOR
+
+
+def test_the_orchestrator_is_told_the_pool_is_the_only_source_of_a_backing() -> None:
+    assert "The pool is the only source" in _ORCHESTRATOR
+    assert "not the attacker's `evidence` either" in _ORCHESTRATOR
 
 
 def test_every_prompt_is_written_and_uses_no_banned_word() -> None:
@@ -110,11 +150,26 @@ def test_the_grounding_example_spans_the_sentence_it_is_written_against() -> Non
         "A vast majority", "guards", "accused of inmate abuse", "never terminated"]
 
 
-def test_the_orchestrator_example_backing_is_in_the_coverage_attacker_evidence() -> None:
+def test_the_orchestrator_example_backing_is_copied_off_a_pool_line() -> None:
     draft = ClaimReviewDraft.model_validate(
         json.loads(_EXAMPLE_JSON["orchestrator"][0]))
-    coverage = ChallengesAnswer.model_validate(json.loads(_EXAMPLE_JSON["coverage"][0]))
-    assert find_unbacked_challenges(draft.challenges, coverage.challenges[0].evidence) == []
+    assert find_unbacked_challenges(
+        draft.challenges, _EXAMPLE_POOL_LINES["orchestrator"]) == []
+
+
+def test_every_figure_an_example_writes_is_printed_on_the_pool_line_it_quotes() -> None:
+    for name, (text, _) in _EXAMPLE_JSON.items():
+        pool = _EXAMPLE_POOL_LINES[name]
+        for figure in _find_copied_figures(json.loads(text)):
+            assert _read_whether_the_corpus_spells(pool, figure), (
+                f"{name} writes {figure!r}, which its pool lines do not print")
+
+
+def test_every_example_shows_the_pool_lines_it_was_checked_against() -> None:
+    for name, pool in _EXAMPLE_POOL_LINES.items():
+        prompt = (_ORCHESTRATOR if name == "orchestrator"
+                  else getattr(attackers_prompt, f"{name.upper()}_SYSTEM_PROMPT"))
+        assert pool in prompt, f"{name}'s pool lines are not in its prompt"
 
 
 def test_an_example_that_cannot_price_its_figure_takes_the_unpriced_route() -> None:
