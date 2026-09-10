@@ -19,7 +19,7 @@ from app.web.claim_review_view import build_claim_review_page
 from app.web.claims_view import build_publish_view
 from app.web.config import templates
 from app.web.project_view import shell_state_off_nav, validate_project_or_404
-from app.web.run_index import RunIndexRow, build_run_index_rows
+from app.web.run_index import RunIndexRow, find_run_row
 
 router = APIRouter()
 
@@ -145,10 +145,10 @@ def _read_model(project_id: str) -> str:
 
 
 def _read_run(project_id: str, run_id: str) -> RunIndexRow:
-    for row in build_run_index_rows(project_id):
-        if row.run_id == run_id:
-            return row
-    raise HTTPException(status_code=404, detail=f"no run '{run_id}' in this project")
+    row = find_run_row(project_id, run_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"no run '{run_id}' in this project")
+    return row
 
 
 def _refusing_400(write: Callable[[], _Written]) -> _Written:

@@ -257,6 +257,9 @@ class OutputEvidenceItem(_Base):
     stage_id: StageId
     value: str
     cited: bool
+    # Both None on a table output: it cites a rectangle of rows, not one cell.
+    row_ordinal: int | None
+    column: str | None
 
 
 class StageEvidenceItem(_Base):

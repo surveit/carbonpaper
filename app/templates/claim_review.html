@@ -221,11 +221,11 @@
   <form method="post" action="{{ base }}/decline">
     <button class="btn" type="submit">Decline</button>
   </form>
-  <span class="cite">approving cites <a href="{{ page.value_href }}">{{ page.value }}</a>
+  <span class="cite">approving cites <a class="lineage-value" href="{{ page.value_href }}">{{ page.value }}</a>
     of run {{ page.run_id }}</span>
   {% elif page.status == 'approved' %}
   <b>Approved.</b>
-  <span class="cite">cites <a href="{{ page.value_href }}">{{ page.value }}</a> of run {{ page.run_id }}</span>
+  <span class="cite">cites <a class="lineage-value" href="{{ page.value_href }}">{{ page.value }}</a> of run {{ page.run_id }}</span>
   {% elif page.status == 'declined' %}
   <b>Declined.</b>
   <span class="muted">The run keeps the number; nothing stands behind this sentence.</span>
