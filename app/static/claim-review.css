@@ -205,3 +205,32 @@ table.pool-t { width: 100%; border-collapse: collapse; font-size: 13px; }
 }
 .status-chip.submitted { border-color: var(--warn-bd); background: var(--warn-bg); color: var(--warn-ink); }
 .status-chip.approved { border-color: var(--good-bd); background: var(--good-bg); color: var(--good-ink); }
+
+/* ── the claims list ── */
+table.claims {
+    width: 100%; border-collapse: collapse; font-size: 13.5px; background: var(--raised);
+    border: 1px solid var(--border); border-radius: 8px;
+}
+.claims th {
+    text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .1em;
+    color: var(--muted); padding: 8px 14px; border-bottom: 1px solid var(--border-strong);
+}
+.claims td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.claims tr:last-child td { border-bottom: 0; }
+.claims .sent { font-family: var(--prose); font-size: 16px; line-height: 1.4; }
+.claims .sent a { color: var(--fg); text-decoration: none; }
+.claims .sent a:hover { color: var(--accent); }
+.claims .n { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.claims .meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.claims .meta a { color: var(--muted); }
+/* The row waiting on a person carries the one mark on the list, at its leading edge. */
+.claims tr.todo td:first-child { border-left: 3px solid var(--warn-bd); }
+/* The chip sits alone in its cell here, not after a heading, so it opens no gap. */
+.claims .status-chip { margin-left: 0; }
+
+.claims-tally {
+    display: flex; gap: 18px; font-size: 13px; color: var(--muted); margin: 0 0 14px;
+}
+.claims-tally b {
+    font-family: var(--mono); color: var(--fg); font-size: 16px; margin-right: 4px;
+}

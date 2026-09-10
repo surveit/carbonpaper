@@ -1,0 +1,64 @@
+{% extends "project_shell.html" %}
+{#
+  THE CLAIMS LIST — every sentence this project has proposed to publish.
+
+  What is waiting on a person sorts to the top; under that, newest first. The tally
+  states its counts in words, and writes none of them that is zero — a claim shape
+  nobody has skipped is not a "0 declined".
+
+  Context the route passes:
+    state = project_view.shell_state(project_id, "claims"); section = "claims"
+    page  = claim_review_view.build_claims_list_page(project_id)
+#}
+{% block title %}Claims · {{ state.meta.display_name }}{% endblock %}
+
+{% block section %}
+<div class="sec-head">
+  <h1>Claims</h1>
+  <p class="lede">Every sentence this project has proposed to publish, with the run and the
+    cell it was read from. A claim in the review queue has been attacked and is waiting on
+    you.</p>
+</div>
+
+{% if page.rows %}
+<div class="claims-tally">
+  {% if page.to_review %}<span><b>{{ page.to_review }}</b> to review</span>{% endif %}
+  {% if page.made %}<span><b>{{ page.made }}</b> made</span>{% endif %}
+  {% if page.declined %}<span><b>{{ page.declined }}</b> declined</span>{% endif %}
+  {% if page.superseded %}<span><b>{{ page.superseded }}</b> superseded</span>{% endif %}
+</div>
+
+<table class="claims">
+  <thead>
+    <tr><th>the claim</th><th>value</th><th>read from</th><th>status</th></tr>
+  </thead>
+  <tbody>
+    {% for row in page.rows %}
+    {# A skip's row text IS its metric label, so the line under it does not say it twice. #}
+    {% set said = row.shape_label if row.shape_label != row.text else '' %}
+    {% set meta = [said, row.context_words] | select | join(' · ') %}
+    <tr{% if row.status == 'submitted' %} class="todo"{% endif %}>
+      <td class="sent">
+        <a href="{{ row.href }}">{{ row.text }}</a>
+        {% if meta %}<div class="meta">{{ meta }}</div>{% endif %}
+      </td>
+      <td class="n">{{ row.value }}</td>
+      <td class="n">{{ row.stage_id }}
+        <div class="meta"><a href="{{ row.run_href }}">run {{ row.run_id }}</a></div>
+      </td>
+      <td><span class="status-chip {{ row.status }}">{{ row.status_words }}</span></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <h2>Nothing claimed yet</h2>
+  <p class="muted">A claim is the sentence someone will publish, written on a figure a run
+    produced — so a run has to have published one first.</p>
+  {% if page.publish_href %}
+  <a class="btn primary" href="{{ page.publish_href }}">Publish from the latest run</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

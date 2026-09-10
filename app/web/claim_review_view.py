@@ -1,4 +1,4 @@
-"""What the claim page draws, and the state of the attack behind it."""
+"""What the claims list and the claim page draw, and the state of the attack behind it."""
 from __future__ import annotations
 
 from collections import Counter
@@ -22,20 +22,20 @@ from app.models.claim_review import (
     StageEvidence,
     TermEvidence,
 )
-from app.models.claims import PublishedCitation, StageOutputCellCitation
+from app.models.claims import ClaimStatus, PublishedCitation, StageOutputCellCitation
 from app.models.records.claim_review import ClaimReview
 from app.models.records.claims import Claim, ClaimShape
 from app.runtime.citations import build_row_trace_url
 from app.services import claim_evidence
 from app.services import claims as claims_service
 from app.services.claim_review import find_attack_sessions, load_claim_review
-from app.services.claim_shapes import load_claim_shape
+from app.services.claim_shapes import load_claim_shape, load_claim_shapes
 from app.services.errors import ClaimRefused
 from app.services.generation import GENERATION_FAILURE_PREFIX
 from app.services.run import read_run_manifest
 from app.web.claims_view import describe_what_blocks_the_run
 from app.web.panel_links import AppPanelLinks
-from app.web.run_index import RunIndexRow, find_run_row
+from app.web.run_index import RunIndexRow, build_run_index_rows, find_run_row
 
 
 class SentenceToken(BaseModel):
@@ -118,6 +118,30 @@ class ClaimReviewPage(BaseModel):
     session_ids: list[ID]
 
 
+class ClaimRow(BaseModel):
+    claim_id: ID
+    text: str
+    value: str
+    shape_label: str
+    context_words: str
+    stage_id: str
+    run_id: ID
+    status: str
+    status_words: str
+    href: str
+    run_href: str
+
+
+class ClaimsListPage(BaseModel):
+    rows: list[ClaimRow]
+    to_review: int
+    made: int
+    declined: int
+    superseded: int
+    # Empty where the project holds no run — there is then nothing to write a claim on.
+    publish_href: str
+
+
 ATTACK_NONE = "none"
 ATTACK_RUNNING = "running"
 ATTACK_FAILED = "failed"
@@ -190,6 +214,21 @@ def build_claim_review_page(project_id: ID, claim_id: ID) -> ClaimReviewPage:
     run = _read_run_row(project_id, claim.citation.run_id)
     shape = _read_shape(project_id, claim)
     return _build_page(project_id, claim, shape, run, review)
+
+
+def build_claims_list_page(project_id: ID) -> ClaimsListPage:
+    shapes_by_id = {shape.id: shape for shape in load_claim_shapes(project_id)}
+    held = _order_the_claims(Claim.find(created_by_project_id=project_id))
+    standing = Counter(claim.status for claim in held)
+    return ClaimsListPage(
+        rows=[_build_claim_row(project_id, claim, _read_shape_of(shapes_by_id, claim))
+              for claim in held],
+        to_review=standing[ClaimStatus.submitted],
+        made=standing[ClaimStatus.approved],
+        declined=standing[ClaimStatus.declined],
+        superseded=standing[ClaimStatus.superseded],
+        publish_href=_find_publish_href(project_id),
+    )
 
 
 # ── the page ─────
@@ -458,3 +497,53 @@ def _build_rewrites(review: ClaimReview | None) -> list[RewriteCard]:
     if review is None:
         return []
     return [RewriteCard(text=one.text, why=one.why) for one in review.proposed_rewrites]
+
+
+# ── the claims list ─────
+
+
+def _order_the_claims(held: list[Claim]) -> list[Claim]:
+    """Newest first — the clock ties, so the id settles it — then what waits is lifted."""
+    newest = sorted(held, key=lambda claim: (claim.created_at, claim.id), reverse=True)
+    return sorted(newest, key=lambda claim: claim.status != ClaimStatus.submitted)
+
+
+def _build_claim_row(project_id: ID, claim: Claim, shape: ClaimShape) -> ClaimRow:
+    citation = claim.citation
+    return ClaimRow(
+        claim_id=claim.id,
+        # A skip was refused without a sentence, so its metric label is what the row reads.
+        text=claim.text or shape.label,
+        value=claim_evidence.read_output_value(citation),
+        shape_label=shape.label,
+        context_words=_describe_context(claim),
+        stage_id=citation.stage_id,
+        run_id=citation.run_id,
+        status=claim.status,
+        status_words=_describe_status(claim.status),
+        href=f"/project/{project_id}/claims/{claim.id}",
+        run_href=f"/project/{project_id}/runs/{citation.run_id}",
+    )
+
+
+def _describe_context(claim: Claim) -> str:
+    return " · ".join(f"{name} {value}" for name, value in claim.context.items())
+
+
+def _describe_status(status: ClaimStatus) -> str:
+    """'submitted' says who wrote it; the row says what it is waiting on."""
+    return "needs review" if status == ClaimStatus.submitted else status
+
+
+def _read_shape_of(shapes_by_id: dict[ID, ClaimShape], claim: Claim) -> ClaimShape:
+    shape = shapes_by_id.get(claim.shape_id)
+    if shape is None:
+        raise ClaimRefused([f"this project holds no claim shape '{claim.shape_id}'"])
+    return shape
+
+
+def _find_publish_href(project_id: ID) -> str:
+    rows = build_run_index_rows(project_id)
+    if not rows:
+        return ""
+    return f"/project/{project_id}/runs/{rows[0].run_id}/publish"
