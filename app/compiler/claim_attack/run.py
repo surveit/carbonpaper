@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Callable, NamedTuple
+from typing import Any, Callable, NamedTuple
 
 from claude_agent_sdk import ClaudeSDKError
 
@@ -41,6 +41,9 @@ _Answering = (
 # A refusal is a ValueError: a grounding no attacker can be handed, or a refused review.
 _ATTACK_FAILURES = (GenerationError, ClaudeSDKError, OSError, ValueError)
 
+# The loop holds a running task weakly; dropped mid-flight, its teardown never runs.
+_ATTACKS: set[asyncio.Task[None]] = set()
+
 
 class _Landed(NamedTuple):
     answer: _Answer
@@ -62,7 +65,9 @@ def start_claim_attack_agents(
     )
     store.set_pending_user(parent_id, ATTACK_REQUEST)
     store.set_active_turn(parent_id, _ATTACK_TURN)
-    asyncio.create_task(_attack(store, parent_id, bundle, model, on_answer))
+    task = asyncio.create_task(_attack(store, parent_id, bundle, model, on_answer))
+    _ATTACKS.add(task)
+    task.add_done_callback(_ATTACKS.discard)
     return parent_id
 
 
@@ -73,13 +78,21 @@ async def _attack(
     model: str,
     on_answer: Callable[[ClaimAttackResult], None],
 ) -> None:
+    delivered = False
     try:
         on_answer(await _run_the_seven_turns(store, bundle, model))
+        store.set_pending_user(parent_id, None)
+        delivered = True
     except _ATTACK_FAILURES as exc:
         # Detached: nothing awaits this task, so the failure reaches the reader here.
         _LOG.warning("attacking claim %s failed: %s", bundle.claim_id, exc)
         persist_generation_failure(store, parent_id, exc)
+        delivered = True
     finally:
+        if not delivered:
+            # A bug, not a handled failure: the parent must not read "finished, no error".
+            persist_generation_failure(
+                store, parent_id, RuntimeError("the attack did not finish"))
         store.set_active_turn(parent_id, None)
 
 
@@ -107,15 +120,33 @@ async def _raise_the_challenges(
     store: SessionStore, bundle: EvidenceBundle, model: str,
     context: dict[str, object], grounding: GroundingAnswer,
 ) -> dict[Attacker, _Landed]:
-    later = [attacker for attacker in ATTACKERS if attacker is not Attacker.grounding]
+    later: list[Attacker] = [
+        attacker for attacker in ATTACKERS if attacker is not Attacker.grounding]
     # Built before any turn starts: a refused grounding strands no running turn.
     built = [build_attacker(attacker, bundle, grounding=grounding, model=model)
              for attacker in later]
-    landed = await asyncio.gather(*[
+    landed: list[_Landed | BaseException] = await asyncio.gather(*[
         _run_in_a_session(store, agent, title=_title(attacker.value, bundle), context=context)
         for attacker, agent in zip(later, built)
-    ])
-    return dict(zip(later, landed))
+    ], return_exceptions=True)
+    return _read_what_landed(later, landed)
+
+
+def _read_what_landed(
+    later: list[Attacker], landed: list[_Landed | BaseException]
+) -> dict[Attacker, _Landed]:
+    """Every failure is logged; the first is raised, a bug among them as itself."""
+    read: dict[Attacker, _Landed] = {}
+    failed: list[BaseException] = []
+    for attacker, one in zip(later, landed):
+        if isinstance(one, BaseException):
+            _LOG.warning("the `%s` attacker failed: %s", attacker.value, one)
+            failed.append(one)
+        else:
+            read[attacker] = one
+    if failed:
+        raise failed[0]
+    return read
 
 
 async def _run_in_a_session(
@@ -124,15 +155,26 @@ async def _run_in_a_session(
     session_id = store.create(title=title, agent_id=None, context=context)
     store.set_pending_user(session_id, agent.task)
     engine = agent.build_engine()
-    messages, _resume = await engine.stream_turn(
-        agent.task, message_history=None, emit=lambda event: None, resume=None)
-    store.append_messages(session_id, messages)
-    usage = getattr(engine, "last_usage", None)  # a custom engine need not track usage
-    if usage is not None:
-        store.record_turn_spend(session_id, usage)
+    messages: list[dict[str, Any]] = []
+    try:
+        messages, _resume = await engine.stream_turn(
+            agent.task, message_history=None, emit=lambda event: None, resume=None)
+    finally:
+        _book_the_turn(store, session_id, engine, messages)
     if agent.answer is None:
         raise GenerationError(f"{title} submitted nothing")
     return _Landed(agent.answer, session_id)
+
+
+def _book_the_turn(
+    store: SessionStore, session_id: ID, engine: object, messages: list[dict[str, Any]]
+) -> None:
+    """Called in teardown, so a turn that errored still books what it spent getting there."""
+    if messages:
+        store.append_messages(session_id, messages)
+    usage = getattr(engine, "last_usage", None)  # a custom engine need not track usage
+    if usage is not None:
+        store.record_turn_spend(session_id, usage)
 
 
 def _read_the_phrases(answer: _Answer) -> GroundingAnswer:
