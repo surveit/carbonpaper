@@ -1,10 +1,14 @@
 """The claim page: the sentence with its ground, and what state its attack is in."""
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
+from fastapi.testclient import TestClient
 
 from app.compiler.claim_attack.run import PARENT_ROLE
 from app.core.agent.store import SessionStore
+from app.main import app
 from app.models.claim_review import (
     SEVERITY_WORDS,
     Attacker,
@@ -25,6 +29,7 @@ from app.models.claims import RowsRectangle, StageOutputTableCitation
 from app.models.records.claim_review import ClaimReview
 from app.models.records.claims import Claim
 from app.models.records.workflow_output import WorkflowOutput
+from app.services import claim_review as claim_review_service
 from app.services import claims as claims_service
 from app.services.claim_review import store_claim_review
 from app.services.generation import GENERATION_FAILURE_PREFIX
@@ -315,3 +320,110 @@ def _publish_a_table(run_id: str, shape_id: str) -> None:
             run_id=run_id, stage_id="grant_totals",
             rectangle=RowsRectangle(row_start=0, row_end=5, columns=["amount"])),
     ).save()
+
+
+# ── the page itself, and the four writes on it ─────
+
+
+@pytest.fixture
+def client() -> Any:
+    with TestClient(app, follow_redirects=False) as running:
+        yield running
+
+
+def read_the_page(client: TestClient, claim_id: str) -> Any:
+    return client.get(f"/project/{PROJECT}/claims/{claim_id}")
+
+
+def test_a_claim_nobody_has_read_offers_the_attack(claim, client):
+    response = read_the_page(client, claim.id)
+
+    assert response.status_code == 200
+    assert "Attack this claim" in response.text
+    assert TOTAL_TEXT in response.text
+
+
+def test_an_unknown_claim_is_not_a_page(client, projects_root):
+    response = read_the_page(client, "no-such-claim")
+
+    assert response.status_code == 404
+
+
+def test_a_stored_review_draws_the_sentence_its_ground_and_what_was_raised(claim, client):
+    store_a_review(claim.id)
+
+    body = read_the_page(client, claim.id).text
+
+    assert 'class="ph s3"' in body
+    assert _SUMMARY in body
+    assert "The total counts rows, not grants." in body
+    assert "1 checked, and none moves this figure at published precision" in body
+    assert "the figure is read straight off the cited output" in body
+
+
+def test_approving_makes_the_claim_stand(claim, client):
+    response = client.post(f"/project/{PROJECT}/claims/{claim.id}/approve")
+
+    assert response.status_code == 303
+    assert Claim.load(claim.id).status == "approved"
+    assert "Approved." in read_the_page(client, claim.id).text
+
+
+def test_declining_says_the_claim_stands_behind_nothing(claim, client):
+    response = client.post(f"/project/{PROJECT}/claims/{claim.id}/decline")
+
+    assert response.status_code == 303
+    assert Claim.load(claim.id).status == "declined"
+    assert "Declined." in read_the_page(client, claim.id).text
+
+
+def test_a_rewrite_opens_a_new_claim_and_sends_it_back_to_the_attackers(
+    claim, client, monkeypatch
+):
+    attacked: list[str] = []
+    monkeypatch.setattr(claim_review_service, "start_claim_attack",
+                        lambda project_id, claim_id, *, model: attacked.append(claim_id))
+
+    response = client.post(f"/project/{PROJECT}/claims/{claim.id}/rewrite",
+                           data={"text": "Five grants were recorded."})
+
+    assert response.status_code == 303
+    written = response.headers["location"].rsplit("/", 1)[-1]
+    assert written != claim.id
+    assert Claim.load(written).text == "Five grants were recorded."
+    assert Claim.load(claim.id).status == "superseded"
+    assert attacked == [written]
+
+
+def test_a_table_claim_says_why_it_was_never_attacked(projects_root, client):
+    run_id = run_the_fixture(projects_root)
+    shape = publish_the_outputs(run_id)
+    _publish_a_table(run_id, shape.id)
+    written = claims_service.submit_claim(
+        PROJECT, run_id, "grant-rows", {}, "The grants are these five.")
+
+    body = read_the_page(client, written.id).text
+
+    assert "table claim" in body
+    assert "Attack this claim" not in body and "Attack again" not in body
+
+
+def test_a_running_attack_says_so_and_watches_for_its_end(claim, client):
+    store, session_id = open_a_parent_session(claim.id)
+    store.set_active_turn(session_id, "attack")
+
+    body = read_the_page(client, claim.id).text
+
+    assert "Attacking this sentence" in body
+    assert f"/project/{PROJECT}/generation-session/{session_id}/status" in body
+    assert "setInterval" in body
+
+
+def test_a_failed_attack_prints_what_it_said_and_offers_another_go(claim, client):
+    store, session_id = open_a_parent_session(claim.id)
+    fail_the_turn(store, session_id, "the model returned no answer")
+
+    body = read_the_page(client, claim.id).text
+
+    assert "the model returned no answer" in body
+    assert "Attack again" in body
