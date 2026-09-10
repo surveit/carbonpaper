@@ -1,1 +1,1 @@
-"""Attacking a claim: six attackers, one orchestrator, and the evidence they read."""
+"""Attacking a claim: the evidence pool an attacker is handed and reads its backing out of."""

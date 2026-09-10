@@ -57,6 +57,14 @@ SEVERITY_WORDS: dict[int, str] = {
     3: "could not stand as written",
 }
 
+_SEVERITY_DESCRIPTION = "How far it moves the claim. " + ". ".join(
+    f"{level} {word}" for level, word in SEVERITY_WORDS.items()
+)
+
+_EVIDENCE_REFS_DESCRIPTION = (
+    "The pieces of the run your evidence reads, so a reader can open them."
+)
+
 
 # ── Evidence refs ──
 class OutputEvidence(_Base):
@@ -111,9 +119,11 @@ class Challenge(_Base):
     text: str = Field(description="The challenge in one sentence, addressed to the journalist.")
     evidence: str = Field(description="What in the run makes it stick, in one sentence.")
     backing: str = Field(description="A figure or phrase copied word for word from the run.")
+    evidence_refs: list[EvidenceRef] = Field(
+        default_factory=list, description=_EVIDENCE_REFS_DESCRIPTION
+    )
     severity: int = Field(
-        ge=SEVERITY_FLOOR, le=SEVERITY_CEILING,
-        description="0 checked, quiet. 1 worth a footnote. 2 moves the figure, or bounds it. 3 could not stand.",
+        ge=SEVERITY_FLOOR, le=SEVERITY_CEILING, description=_SEVERITY_DESCRIPTION,
     )
     moves: Moves = Field(description="What answering it would move: the figure, its meaning, nothing priced, or nothing.")
     cost: Cost = Field(description="What answering it would take: nothing, a person, an outside source, an editorial call, or it is settled.")
@@ -141,7 +151,7 @@ class RaisedChallenge(_Base):
     text: str = Field(description="The challenge in one sentence, addressed to the journalist.")
     evidence: str = Field(description="What in the run makes it stick, in one sentence.")
     evidence_refs: list[EvidenceRef] = Field(
-        default=[], description="The pieces of the run your evidence reads, so a reader can open them."
+        default_factory=list, description=_EVIDENCE_REFS_DESCRIPTION
     )
     moves: Moves = Field(description="What answering it would move: the figure, its meaning, nothing priced, or nothing.")
     cost: Cost = Field(description="What answering it would take: nothing, a person, an outside source, an editorial call, or it is settled.")
@@ -202,7 +212,8 @@ class BranchEvidenceItem(_Base):
     role: str
     label: str
     source_code: str
-    rows_count: int
+    # None where the run recorded no count for this arm — never a stand-in zero.
+    rows_count: int | None
 
 
 class InputColumnEvidenceItem(_Base):

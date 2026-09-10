@@ -109,10 +109,6 @@ def describe_what_blocks_the_run(run: RunIndexRow) -> str:
     return ""
 
 
-def read_whether_the_run_read_everything(run: RunIndexRow) -> bool:
-    return not describe_what_blocks_the_run(run)
-
-
 def _build_card(
     project_id: ID,
     output: WorkflowOutput,

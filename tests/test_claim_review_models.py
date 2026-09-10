@@ -37,8 +37,9 @@ def test_an_evidence_ref_is_told_apart_by_its_kind():
     parsed = Grounding.model_validate(
         {"start": 0, "end": 3, "how": "x", "evidence": {"kind": "term", "name": "filing"}})
     assert parsed.evidence is not None and parsed.evidence.kind == "term"
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError) as exc:
         Grounding.model_validate({"start": 0, "end": 3, "how": "x", "evidence": {"kind": "rumour"}})
+    assert exc.value.errors()[0]["type"] == "union_tag_invalid"
 
 
 def test_severity_runs_from_zero_to_three_and_each_has_a_word():
@@ -46,12 +47,17 @@ def test_severity_runs_from_zero_to_three_and_each_has_a_word():
     assert set(SEVERITY_WORDS) == {0, 1, 2, 3}
     with pytest.raises(ValidationError):
         _challenge(severity=4)
+    with pytest.raises(ValidationError):
+        _challenge(severity=-1)
+    spelled = Challenge.model_fields["severity"].description or ""
+    assert all(f"{level} {word}" in spelled for level, word in SEVERITY_WORDS.items())
 
 
 def test_a_raised_challenge_carries_no_severity_and_no_backing():
     raised = RaisedChallenge(kind=ChallengeKind.data, text="t", evidence="e",
                              moves=Moves.none, cost=Cost.free)
     assert not hasattr(raised, "severity") and not hasattr(raised, "backing")
+    assert raised.evidence_refs == [] and _challenge().evidence_refs == []
 
 
 def test_the_meaning_attacker_may_propose_at_most_two_rewrites():

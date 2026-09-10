@@ -7,6 +7,7 @@ from app.compiler.claim_attack.evidence import render_evidence_bundle, render_ev
 from app.models.claim_review import (
     Attacker, Challenge, ChallengeKind, Cost, Grounding, Moves, OutputEvidence,
 )
+from app.models.claims import StageOutputCellCitation
 from app.services import claim_review
 from app.services.errors import ClaimReviewRefused
 from claim_review_fixture import PROJECT, TOTAL_TEXT, claim_the_total, run_the_fixture
@@ -35,6 +36,30 @@ def test_every_stage_of_the_version_is_there_flagged_by_whether_it_feeds_the_fig
     assert feeds["grants_only"] and feeds["funded"] and feeds["load_east"]
     assert not feeds["by_portfolio"] and not feeds["grant_totals"]
     assert 'row["kind"] == "grant"' in next(s.code for s in bundle.stages if s.stage_id == "grants_only")
+
+
+def test_a_sandboxed_filters_predicate_reaches_the_attacker_too(claim):
+    bundle = claim_review.build_evidence_bundle(PROJECT, claim.id)
+
+    sandboxed = next(s for s in bundle.stages if s.stage_id == "sandboxed_positive")
+    assert 'row["amount"] > 0' in sandboxed.code
+    assert 'row["amount"] > 0' in render_evidence_pool(bundle)
+
+
+def test_an_arm_the_run_recorded_no_count_for_reads_as_no_count(claim):
+    bundle = claim_review.build_evidence_bundle(PROJECT, claim.id)
+
+    kept = next(b for b in bundle.branches
+                if b.stage_id == "over_a_million" and b.role == "keeps")
+    assert kept.rows_count is None
+    assert "rows not recorded" in render_evidence_pool(bundle)
+
+
+def test_a_figure_of_five_digits_is_pooled_with_its_separators():
+    cell = StageOutputCellCitation(run_id="r", stage_id="s", row_ordinal=0,
+                                   column="ai_spend", value=63027729)
+
+    assert claim_review._read_output_value(cell) == "63,027,729"
 
 
 def test_the_arms_the_run_recorded_come_with_their_row_counts(claim):
