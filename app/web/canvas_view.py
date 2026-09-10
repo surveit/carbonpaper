@@ -6,12 +6,12 @@ from app.core.errors import ColumnNotInFrame, StageNotInRun
 from app.models.claims import StageOutputCellCitation
 from app.models.schema import StageId
 from app.services import run as run_service
-from app.services.scope import find_rows_reached_per_stage
+from app.services.scope import find_rows_reached_per_stage, read_run_branches
 from app.web.diagrams import TYPE_GLYPH
 from app.web.loading import load_run_record
 from app.web.run_stage_view import TraceScope
 from app.web.scope_drawing import draw_the_scope
-from app.web.scope_view import load_scope_map, read_run_branches
+from app.web.scope_view import load_scope_map
 from app.web.sheet_preview import build_canvas_sheets
 from app.web.canvas_payload import CanvasCut, CanvasEdge, CanvasNode, CanvasView
 from app.web.column_walk import (

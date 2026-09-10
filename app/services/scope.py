@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Sequence
 
+from app.core.run_status import is_run_still_going
 from app.models.branch_analysis import (
     BranchReason,
     FrameScale,
@@ -13,6 +14,8 @@ from app.models.branch_analysis import (
 )
 from app.models.claims import StageOutputCellCitation
 from app.models.schema import StageId
+from app.models.workflow import Workflow
+from app.runtime.branch_analysis import load_run_branches, reconstruct_run_branches
 from app.runtime.branch_analysis.run_branches import (
     MERGE_EDGE,
     WorkflowRunBranches,
@@ -20,6 +23,28 @@ from app.runtime.branch_analysis.run_branches import (
     find_subject_inputs,
 )
 from app.runtime.lineage import RowParent
+from app.services import run as run_service
+from app.services.versioning import load_version_stages
+from app.services.workspace import resolve_run_dir
+
+
+def read_run_branches(project_id: str, run_id: str) -> WorkflowRunBranches:
+    manifest = run_service.read_run_status(project_id, run_id)
+    # An interrupted run leaves records for stages it never reached: no frame, none owed.
+    records_with_a_frame = [record for record in manifest["stage_records"]
+                            if record.get("output_path")]
+    order = [record["stage_id"] for record in records_with_a_frame]
+    rows = {record["stage_id"]: record["output_row_count"]
+            for record in records_with_a_frame}
+    pinned_version_id = run_service.read_pinned_version(project_id, run_id)
+    stages = load_version_stages(project_id, pinned_version_id)
+    workflow = Workflow(stages=stages)
+    placed = {stage.id: workflow.find_workflow_stage(stage.id)
+              for stage in stages if stage.id in rows}
+    run_dir = resolve_run_dir(project_id, run_id)
+    if is_run_still_going(manifest["status"]):
+        return reconstruct_run_branches(run_dir, placed, order, rows)
+    return load_run_branches(run_dir, placed, order, rows, pinned_version_id)
 
 
 def find_contributing_rows(run_branches: WorkflowRunBranches,
