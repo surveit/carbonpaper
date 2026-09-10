@@ -18,6 +18,8 @@ import mcp.types as types
 from claude_agent_sdk import McpSdkServerConfig
 
 from app.agents.compiler.config import CONFIG as EDITING_CONFIG
+from app.compiler.claim_attack.attackers import ATTACKERS, build_attacker
+from app.compiler.claim_attack.orchestrator import build_orchestrator
 from app.compiler.data_model import build_data_model_agent
 from app.agents.tutorial.config import CONFIG as TUTORIAL_CONFIG
 from app.compiler.data_model_prompt import DATA_MODEL_SYSTEM_PROMPT
@@ -29,6 +31,17 @@ from app.core.agent.bound_tool import BoundToolSpec
 from app.core.agent.registry import build_mcp_server
 from app.core.agent.sdk_engine import MCP_SERVER_NAME
 from app.models import SchemaLibrary, Terms
+from app.models.claim_review import (
+    Attacker,
+    AttackerAnswers,
+    ChallengesAnswer,
+    CitedShape,
+    EvidenceBundle,
+    Grounding,
+    GroundingAnswer,
+    MeaningAnswer,
+)
+from app.models.claims import StageOutputCellCitation
 from app.runtime.llm import SYSTEM_PROMPT as RUNTIME_SYSTEM_PROMPT
 from app.tools.editing import EditingContext, build_editing_tools
 from app.tools.prompt_fragments import render_link_map
@@ -42,6 +55,27 @@ _UNUSED_DOCUMENT = "(placeholder — the task is per-run and not dumped)"
 _UNUSED_TERMS = Terms(nouns=SchemaLibrary(schemas=[]), verbs=[])
 # No reader has an address here, so the dump says so in the link map's own shape.
 _PLACEHOLDER_HOST = "http://<host>/"
+
+# One claim's evidence, empty: an attacker's prompt and answer schema are the same
+# whatever the run holds, and what the run holds is the per-claim task.
+_UNUSED_BUNDLE = EvidenceBundle(
+    project_id="<project_id>", run_id="<run_id>", claim_id="<claim_id>",
+    claim_text=_UNUSED_DOCUMENT, claim_context={},
+    cited=StageOutputCellCitation(
+        run_id="<run_id>", stage_id="<stage_id>", row_ordinal=0, column="<column>", value=0),
+    shape=CitedShape(label="<shape>", universe="closed", importance="primary",
+                     qualifiers=[], context_columns=[]),
+    run_read_everything=True, outputs=[], stages=[], branches=[], input_columns=[],
+    terms="", methodology=None,
+)
+_UNUSED_GROUNDING = GroundingAnswer(phrases=[Grounding(
+    start=0, end=len(_UNUSED_DOCUMENT), evidence=None, how="<how the phrase rests>")])
+_NO_CHALLENGES = ChallengesAnswer(challenges=[])
+_UNUSED_ANSWERS = AttackerAnswers(
+    grounding=_UNUSED_GROUNDING, data_defects=_NO_CHALLENGES, choices=_NO_CHALLENGES,
+    omissions=_NO_CHALLENGES, coverage=_NO_CHALLENGES,
+    meaning=MeaningAnswer(challenges=[]),
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -64,6 +98,7 @@ def render_prompt_dump() -> str:
         render_data_model_agent(),
         render_review_guide_agent(),
         render_stage_tests_agent(),
+        render_claim_attackers(),
         render_llm_transform_stage(),
     ]
     return "\n".join([_preamble(), *surfaces])
@@ -164,6 +199,41 @@ def render_stage_tests_agent() -> str:
     )
 
 
+def render_claim_attackers() -> str:
+    """The six turns that attack one claim, and the seventh that merges what they found."""
+    surfaces = [_render_attacker(attacker) for attacker in ATTACKERS]
+    return "\n".join([*surfaces, _render_claim_orchestrator()])
+
+
+def _render_attacker(attacker: Attacker) -> str:
+    grounding = None if attacker is Attacker.grounding else _UNUSED_GROUNDING
+    agent = build_attacker(attacker, _UNUSED_BUNDLE, grounding=grounding)
+    return render_surface(
+        title=f"Claim attacker · {attacker.value}",
+        source="app/compiler/claim_attack/attackers_prompt.py",
+        model=_GENERATION_MODEL,
+        note=_ATTACKER_NOTE,
+        system_prompt=agent._system_prompt,
+        tools=read_agent_tools(agent),
+    )
+
+
+def _render_claim_orchestrator() -> str:
+    agent = build_orchestrator(_UNUSED_BUNDLE, _UNUSED_ANSWERS)
+    return render_surface(
+        title="Claim attack · orchestrator",
+        source="app/compiler/claim_attack/orchestrator_prompt.py",
+        model=_GENERATION_MODEL,
+        note=(
+            f"{_STRUCTURED_OUTPUT_NOTE} The seventh turn, and the only one that reads all "
+            "six answers: what it keeps becomes the stored review, and every backing it "
+            "writes is checked against the evidence pool before anything is stored."
+        ),
+        system_prompt=agent._system_prompt,
+        tools=read_agent_tools(agent),
+    )
+
+
 def render_llm_transform_stage() -> str:
     # The runtime, not the compiler: this is what an llm_transform row's model reads.
     return render_surface(
@@ -188,6 +258,11 @@ def render_llm_transform_stage() -> str:
 _GENERATION_MODEL = "caller-supplied (sonnet at every call site today)"
 _STRUCTURED_OUTPUT_NOTE = (
     "Structured output: the answer IS the submit_answer call's arguments."
+)
+_ATTACKER_NOTE = (
+    f"{_STRUCTURED_OUTPUT_NOTE} One of six turns over a single claim. The task carries "
+    "the claim and the evidence pool, and every attacker but the grounding one also "
+    "reads the phrases the grounding turn landed."
 )
 
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import re
 
+from app.compiler.claim_attack.evidence import render_evidence_pool
+from app.compiler.claim_attack.run import start_claim_attack_agents
 from app.core.figure_text import render_figure
 from app.core.file_shape import VALUES_KEPT, measure_column_shape
 from app.core.ids import ID
@@ -11,6 +13,7 @@ from app.models.claim_review import (
     BranchEvidenceItem,
     Challenge,
     CitedShape,
+    ClaimAttackResult,
     EvidenceBundle,
     Grounding,
     InputColumnEvidenceItem,
@@ -19,7 +22,7 @@ from app.models.claim_review import (
     StageEvidenceItem,
     find_grounding_issues,
 )
-from app.models.claims import PublishedCitation, StageOutputCellCitation
+from app.models.claims import ClaimStatus, PublishedCitation, StageOutputCellCitation
 from app.models.records.claim_review import ClaimReview
 from app.models.stage import StageType
 from app.models.terms import render_terms
@@ -33,6 +36,20 @@ from app.services import terms as terms_service
 from app.services.errors import ClaimReviewRefused
 from app.services.methodology import read_methodology
 from app.services.versioning import load_version_stages
+
+
+def start_claim_attack(project_id: ID, claim_id: ID, *, model: str) -> str:
+    """Must be called from the server event loop — the seven turns run as a task there."""
+    claim = claims_service.load_claim(project_id, claim_id)
+    _refuse_a_claim_already_reviewed(project_id, claim_id)
+    if claim.status != ClaimStatus.submitted:
+        raise ClaimReviewRefused(
+            [f"claim {claim_id} is {claim.status}; only a submitted claim is attacked"])
+    bundle = build_evidence_bundle(project_id, claim_id)
+    return start_claim_attack_agents(
+        bundle=bundle, model=model,
+        on_answer=lambda result: _finish_claim_attack(project_id, claim_id, bundle, result),
+    )
 
 
 def build_evidence_bundle(project_id: ID, claim_id: ID) -> EvidenceBundle:
@@ -70,9 +87,7 @@ def store_claim_review(project_id: ID, claim_id: ID, *, grounding: list[Groundin
                        session_ids: list[ID], corpus: str) -> ClaimReview:
     claim = claims_service.load_claim(project_id, claim_id)
     _require_cell_citation(claim.citation)
-    if load_claim_review(project_id, claim_id) is not None:
-        raise ClaimReviewRefused(
-            [f"claim {claim_id} already has a review; a re-attack is a new claim"])
+    _refuse_a_claim_already_reviewed(project_id, claim_id)
     issues = (find_grounding_issues(grounding, claim.text)
               + find_unbacked_challenges(challenges, corpus)
               + find_challenge_issues(challenges, len(grounding)))
@@ -88,8 +103,8 @@ def store_claim_review(project_id: ID, claim_id: ID, *, grounding: list[Groundin
 
 def find_unbacked_challenges(challenges: list[Challenge], corpus: str) -> list[str]:
     return [
-        f"challenge {index} ({challenge.kind}): backing {challenge.backing!r} is in "
-        "neither the pool nor an attacker's evidence"
+        f"challenge {index} ({challenge.kind}): backing {challenge.backing!r} "
+        "is on no line of the pool"
         for index, challenge in enumerate(challenges)
         if not _read_whether_the_corpus_spells(corpus, challenge.backing)
     ]
@@ -104,6 +119,26 @@ def find_challenge_issues(challenges: list[Challenge], grounding_count: int) -> 
         if challenge.grounding_index is not None
         and challenge.grounding_index >= grounding_count
     ]
+
+
+def _finish_claim_attack(project_id: ID, claim_id: ID, bundle: EvidenceBundle,
+                         result: ClaimAttackResult) -> None:
+    """The pool alone is the corpus: neither the claim nor an attacker backs a challenge."""
+    store_claim_review(
+        project_id, claim_id,
+        grounding=result.answers.grounding.phrases,
+        challenges=result.draft.challenges,
+        rewrites=result.answers.meaning.rewrites,
+        summary=result.draft.summary,
+        session_ids=result.session_ids,
+        corpus=render_evidence_pool(bundle),
+    )
+
+
+def _refuse_a_claim_already_reviewed(project_id: ID, claim_id: ID) -> None:
+    if load_claim_review(project_id, claim_id) is not None:
+        raise ClaimReviewRefused(
+            [f"claim {claim_id} already has a review; a re-attack is a new claim"])
 
 
 # ── what the run holds ──
