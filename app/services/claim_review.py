@@ -1,6 +1,8 @@
 """Everything one run holds about a cited cell, and the single review its attack leaves."""
 from __future__ import annotations
 
+import re
+
 from app.core.figure_text import render_figure
 from app.core.file_shape import VALUES_KEPT, measure_column_shape
 from app.core.ids import ID
@@ -67,11 +69,13 @@ def store_claim_review(project_id: ID, claim_id: ID, *, grounding: list[Groundin
                        challenges: list[Challenge], rewrites: list[Rewrite], summary: str,
                        session_ids: list[ID], corpus: str) -> ClaimReview:
     claim = claims_service.load_claim(project_id, claim_id)
+    _require_cell_citation(claim.citation)
     if load_claim_review(project_id, claim_id) is not None:
         raise ClaimReviewRefused(
             [f"claim {claim_id} already has a review; a re-attack is a new claim"])
     issues = (find_grounding_issues(grounding, claim.text)
-              + find_unbacked_challenges(challenges, corpus))
+              + find_unbacked_challenges(challenges, corpus)
+              + find_challenge_issues(challenges, len(grounding)))
     if issues:
         raise ClaimReviewRefused(issues)
     review = ClaimReview(
@@ -87,7 +91,18 @@ def find_unbacked_challenges(challenges: list[Challenge], corpus: str) -> list[s
         f"challenge {index} ({challenge.kind}): backing {challenge.backing!r} is in "
         "neither the pool nor an attacker's evidence"
         for index, challenge in enumerate(challenges)
-        if not challenge.backing or challenge.backing not in corpus
+        if not _read_whether_the_corpus_spells(corpus, challenge.backing)
+    ]
+
+
+def find_challenge_issues(challenges: list[Challenge], grounding_count: int) -> list[str]:
+    return [
+        f"challenge {index} ({challenge.kind}): grounding_index "
+        f"{challenge.grounding_index} names no phrase; the review grounds "
+        f"{grounding_count}"
+        for index, challenge in enumerate(challenges)
+        if challenge.grounding_index is not None
+        and challenge.grounding_index >= grounding_count
     ]
 
 
@@ -199,6 +214,13 @@ def _read_stage_code(placed: WorkflowStage) -> str:
         if block is not None and getattr(block, "code", None):
             return str(block.code)
     return ""
+
+
+def _read_whether_the_corpus_spells(corpus: str, backing: str) -> bool:
+    """At token boundaries: `220` inside `2200` backs nothing."""
+    if not backing:
+        return False
+    return re.search(rf"(?<![\w,.]){re.escape(backing)}(?![\w,.])", corpus) is not None
 
 
 def _require_cell_citation(citation: PublishedCitation) -> StageOutputCellCitation:
