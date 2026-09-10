@@ -8,7 +8,7 @@ from app.models.claim_review import (
     Attacker, Challenge, ChallengeKind, Cost, Grounding, Moves, OutputEvidence,
 )
 from app.models.claims import StageOutputCellCitation
-from app.services import claim_review
+from app.services import claim_evidence, claim_review
 from app.services.errors import ClaimReviewRefused
 from claim_review_fixture import PROJECT, TOTAL_TEXT, claim_the_total, run_the_fixture
 
@@ -59,7 +59,7 @@ def test_a_figure_of_five_digits_is_pooled_with_its_separators():
     cell = StageOutputCellCitation(run_id="r", stage_id="s", row_ordinal=0,
                                    column="ai_spend", value=63027729)
 
-    assert claim_review._read_output_value(cell) == "63,027,729"
+    assert claim_evidence.read_output_value(cell) == "63,027,729"
 
 
 def test_the_arms_the_run_recorded_come_with_their_row_counts(claim):
