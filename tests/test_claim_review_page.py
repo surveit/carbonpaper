@@ -121,6 +121,7 @@ def test_a_claim_with_no_review_reads_as_one_plain_sentence(claim):
     assert page.ground == []
     assert page.open_challenges == [] and page.quiet_challenges == []
     assert page.summary == "" and page.session_ids == []
+    assert page.attackers == []
 
 
 def test_the_page_carries_what_the_run_read_and_what_blocks_it(claim):
@@ -343,6 +344,13 @@ def test_a_claim_nobody_has_read_offers_the_attack(claim, client):
     assert TOTAL_TEXT in response.text
 
 
+def test_a_claim_nobody_has_read_names_no_attackers(claim, client):
+    body = read_the_page(client, claim.id).text
+
+    assert "How this was attacked" not in body
+    assert "Data defects" not in body
+
+
 def test_an_unknown_claim_is_not_a_page(client, projects_root):
     response = read_the_page(client, "no-such-claim")
 
@@ -354,11 +362,25 @@ def test_a_stored_review_draws_the_sentence_its_ground_and_what_was_raised(claim
 
     body = read_the_page(client, claim.id).text
 
-    assert 'class="ph s3"' in body
+    assert f'<span class="ph s3" data-ph="0">{_FIGURE}</span>' in body
     assert _SUMMARY in body
     assert "The total counts rows, not grants." in body
     assert "1 checked, and none moves this figure at published precision" in body
     assert "the figure is read straight off the cited output" in body
+    assert "How this was attacked" in body
+    assert "Nothing open on this reading." not in body
+
+
+def test_a_reading_that_opened_nothing_says_so_where_the_cards_would_be(claim, client):
+    store_claim_review(
+        PROJECT, claim.id, grounding=[_ground_the(_FIGURE)],
+        challenges=[_raise_on(0, severity=0, backing="2200")],
+        rewrites=[], summary=_SUMMARY, session_ids=[], corpus=_CORPUS)
+
+    body = read_the_page(client, claim.id).text
+
+    assert "Nothing open on this reading." in body
+    assert "1 checked, and none moves this figure at published precision" in body
 
 
 def test_approving_makes_the_claim_stand(claim, client):
@@ -395,6 +417,14 @@ def test_a_rewrite_opens_a_new_claim_and_sends_it_back_to_the_attackers(
     assert attacked == [written]
 
 
+def test_a_rewrite_with_no_sentence_leaves_the_claim_it_would_replace(claim, client):
+    response = client.post(f"/project/{PROJECT}/claims/{claim.id}/rewrite",
+                           data={"text": "   "})
+
+    assert response.status_code == 400
+    assert Claim.load(claim.id).status == "submitted"
+
+
 def test_a_table_claim_says_why_it_was_never_attacked(projects_root, client):
     run_id = run_the_fixture(projects_root)
     shape = publish_the_outputs(run_id)
@@ -416,7 +446,7 @@ def test_a_running_attack_says_so_and_watches_for_its_end(claim, client):
 
     assert "Attacking this sentence" in body
     assert f"/project/{PROJECT}/generation-session/{session_id}/status" in body
-    assert "setInterval" in body
+    assert "setInterval(poll, 2000); poll();" in body   # and once on load, not in 2s
 
 
 def test_a_failed_attack_prints_what_it_said_and_offers_another_go(claim, client):

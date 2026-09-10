@@ -15,7 +15,6 @@
 .ph.s2 { border-bottom: 2.5px solid var(--warn-bd); }
 .ph.s1 { border-bottom: 1.5px solid var(--muted-dim); }
 .ph.s0 { border-bottom: 1px dotted var(--border-strong); }
-.ph.new { border-bottom: 1px dashed var(--info-bd); }
 
 .legend {
     display: flex; gap: 18px; align-items: center; font-size: 12.5px;
@@ -92,6 +91,9 @@ table.ground {
 .mv.none { color: var(--muted-dim); }
 .cost { font-size: 12px; color: var(--muted); }
 .cost b { color: var(--fg); font-weight: 600; }
+
+/* Said in words where the cards would be: a review that raised nothing is a reading. */
+.empty-line { color: var(--muted); font-size: 14px; padding: 10px 0; }
 
 /* ── the ones that were checked and are quiet ── */
 details.fold { margin-top: 10px; }
