@@ -96,13 +96,13 @@
   timer = setInterval(poll, 2000); poll();
 })();
 </script>
-{% elif page.attack == 'failed' %}
+{% elif page.attack == 'failed' and page.status == 'submitted' %}
 <div class="mint-alert">⚠ <span>{{ page.attack_error }}</span></div>
 <form class="word-bar" id="attack-form" method="post" action="{{ base }}/attack">
   <button class="btn primary" type="submit">{{ sparkle() }} Attack again</button>
   <span class="muted">Nothing was stored, so the sentence stands unread.</span>
 </form>
-{% elif page.attack == 'none' %}
+{% elif page.attack == 'none' and page.status == 'submitted' %}
 <form class="word-bar" id="attack-form" method="post" action="{{ base }}/attack">
   <button class="btn primary" type="submit">{{ sparkle() }} Attack this claim</button>
   <span class="muted">Six attackers read the sentence against what the run holds,
@@ -185,7 +185,7 @@
 {% endif %}
 
 {# ── another wording, which is another claim ── #}
-{% for rewrite in page.rewrites %}
+{% for rewrite in page.proposed_rewrites %}
 <div class="rw">
   <p class="diff">{{ rewrite.text }}</p>
   <p class="why">{{ rewrite.why }}</p>
@@ -250,7 +250,7 @@
         <div class="att-n">{{ attacker.count if attacker.count else "none" }}</div>
         <div>
           <div class="att-name">{{ attacker.name }}</div>
-          <div class="att-reads">reads {{ attacker.reads }}</div>
+          <div class="att-reads">reads {{ attacker.reads_what }}</div>
           <div class="att-does">{{ attacker.does }}</div>
         </div>
       </div>
@@ -268,15 +268,26 @@
 <script>
 (function () {
   // The attack route answers JSON to whoever started the turn, so this form is sent by
-  // fetch and the page reloads onto whichever state the turn left it in.
+  // fetch: a started turn reloads the page, a refusal is drawn above the form unreloaded.
   const form = document.getElementById('attack-form');
   if (!form) return;
+  const button = form.querySelector('button[type=submit]');
+  function drawRefusal(text) {
+    const note = document.createElement('div');
+    note.className = 'mint-alert';
+    note.textContent = '⚠ ' + text;
+    form.parentNode.insertBefore(note, form);
+    if (button) button.disabled = false;
+  }
   form.addEventListener('submit', async function (event) {
     event.preventDefault();
-    const button = form.querySelector('button[type=submit]');
     if (button) button.disabled = true;
-    try { await fetch(form.action, { method: 'POST' }); } catch (e) {}
-    location.reload();
+    let answer;
+    try { answer = await fetch(form.action, { method: 'POST' }); }
+    catch (e) { drawRefusal('the attack could not be sent to the server'); return; }
+    if (answer.ok) { location.reload(); return; }
+    const refused = await answer.json().catch(function () { return {}; });
+    drawRefusal(refused.detail || ('the server answered ' + answer.status));
   });
 })();
 </script>
