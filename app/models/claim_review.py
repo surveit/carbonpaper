@@ -171,6 +171,19 @@ class MeaningAnswer(ChallengesAnswer):
     )
 
 
+class AttackerAnswers(_Base):
+    grounding: GroundingAnswer
+    data_defects: ChallengesAnswer
+    choices: ChallengesAnswer
+    omissions: ChallengesAnswer
+    coverage: ChallengesAnswer
+    meaning: MeaningAnswer
+
+    def list_evidence(self) -> list[str]:
+        raised = [self.data_defects, self.choices, self.omissions, self.coverage, self.meaning]
+        return [challenge.evidence for answer in raised for challenge in answer.challenges]
+
+
 class ClaimReviewDraft(_Base):
     challenges: list[Challenge] = Field(
         description="The challenges you kept, each with its attacker, severity and backing filled in."
