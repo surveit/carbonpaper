@@ -217,6 +217,12 @@ class ClaimReviewDraft(_Base):
     summary: str = Field(description="What the claim can stand as, in one paragraph the journalist reads first.")
 
 
+class ClaimAttackResult(_Base):
+    answers: AttackerAnswers
+    draft: ClaimReviewDraft
+    session_ids: list[ID] = Field(description="The seven turns, grounding first and orchestrator last.")
+
+
 # ── The evidence bundle ──
 class CitedShape(_Base):
     label: str
