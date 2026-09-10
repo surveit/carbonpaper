@@ -189,7 +189,7 @@ table.data-preview.scratch th { background: var(--hover); }
     font-size: 15px;
 }
 
-/* The row a Relevant columns sheet was opened on: banded, ruled down its left edge,
+/* The row a Rows & columns sheet was opened on: banded, ruled down its left edge,
    its number out of muted. One class and one element, so it loses the tie to
    every column tint below and their cells survive the band. --info-bg, not
    --hover: the gray family below means "the stage didn't touch this" (see
@@ -254,7 +254,7 @@ table.data-preview tr[data-href] td:not(.cell-url) {
     text-underline-offset: 3px;
 }
 
-/* The Relevant columns tab's two additions to the same table: the ONE cell the page
+/* The Rows & columns tab's two additions to the same table: the ONE cell the page
    is tracing, and a header that opens the stage that wrote its column. Both are
    inert on the outputs pane, which passes neither. The column keeps whatever
    tint its own state earned; the cell takes the loudest ink on the page. */
