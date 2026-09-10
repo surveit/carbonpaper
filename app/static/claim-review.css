@@ -175,15 +175,20 @@ table.pool-t { width: 100%; border-collapse: collapse; font-size: 13px; }
 /* ── who attacked it ── */
 .attackers {
     background: var(--raised); border: 1px solid var(--border); border-radius: 8px;
-    margin: 0 0 22px;
+    margin: 0 0 22px; overflow: hidden;
 }
-.att-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* Six tiles, or seven when the orchestrator raised something of its own, so the closing
+   edges are drawn from position rather than from a fixed count: the last row's bottom
+   border is pulled under the box's own, and a lone last tile takes the full width. */
+.att-row {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: -1px;
+}
 .att {
     display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; padding: 10px 16px;
     border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
 }
-.att:nth-child(3n) { border-right: 0; }
-.att:nth-child(n+4) { border-bottom: 0; }
+.att:nth-child(3n), .att:last-child { border-right: 0; }
+.att:last-child:nth-child(3n+1) { grid-column: 1 / -1; }
 .att-n { font-family: var(--mono); font-size: 22px; line-height: 1.1; font-variant-numeric: tabular-nums; }
 /* An attacker that raised nothing says so in words rather than in a 0 — a count of zero
    is not written, and "none" is the finding rather than the absence of one. */
