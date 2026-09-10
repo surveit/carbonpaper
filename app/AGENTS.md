@@ -10,8 +10,8 @@ warning, and the arch test holding each. `app/templates/AGENTS.md` names the thr
 bite most often.
 
 ## Pages / routes
-- `/` project list · `/project/<m>` the project shell (Overview, Workflow, Runs, Evals,
-  Files, and Documentation — one page, `/project/<m>/methodology`, holding the
+- `/` project list · `/project/<m>` the project shell (Overview, Workflow, Runs, Claims,
+  Evals, Files, and Documentation — one page, `/project/<m>/methodology`, holding the
   Methodology and Glossary tabs; `?tab=glossary` opens on the Glossary tab, and
   `/project/<m>/glossary` redirects there). `/project/<m>/workflow` carries the mermaid
   graph + inline node review (`/project/<m>/node/<id>/review-partial`); it has no nav
@@ -32,6 +32,11 @@ bite most often.
   ahead of `/runs/<id>`, which would otherwise read `new` as a run id. The fold is closed on load and `<details>` submits its content
   either way, so the default run reuses cached rows without the reader deciding.
 - `/project/<m>/runs/<id>/queue/<stage>` — the human-review queue UI (+ `/decide`, `/resume`).
+- `/project/<m>/claims` (`claims.html` ← `app.web.claim_review_view`) — every claim the
+  project has made, what is waiting on review first and newest first under that, with a
+  tally that writes no count of zero. `/project/<m>/claims/<id>` is one claim: the sentence,
+  where each phrase lands in the run, and what the attackers raised. It has no nav row and
+  is reached from the list or from a run's publish page.
 
 ## Zero states (`.empty-state`, styled in `app/static/split-view.css`)
 A list, panel or section with nothing in it reads as a heading naming what is absent,
