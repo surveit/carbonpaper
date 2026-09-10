@@ -14,6 +14,7 @@ from app.web import values_view
 from app.web.config import templates
 from app.web.loading import load_run_record
 from app.web.scope_view import read_run_branches
+from app.web.stage_diff import FILTER_ROWS_KIND, build_stage_diff
 
 router = APIRouter()
 
@@ -49,6 +50,8 @@ def canvas_mock(request: Request, project_id: str, run_id: str,
             "inputs": list(authored.input_ids), "total": total,
             "rel": len(reached.get(sid, ())), "columns": columns,
             "rel_rows": rel_rows, "rows": rows,
+            "filter_rows": _read_filter_window(project_id, run_id, workflow[sid],
+                                               outputs, reached.get(sid, ())),
         }
     cell = StageOutputCellCitation(run_id=run_id, stage_id=stage, row_ordinal=row,
                                    column=column, value=None)
@@ -63,6 +66,17 @@ def canvas_mock(request: Request, project_id: str, run_id: str,
                   "value": _read_cell(outputs, cell)},
     }
     return templates.TemplateResponse(request, "canvas_mock.html", {"payload": payload})
+
+
+def _read_filter_window(project_id, run_id, workflow_stage, outputs, mine):
+    """A filter's first input rows, kept and dropped in place, as its Data tab draws them."""
+    output_by_id = {sid: str(outputs / f"{sid}.parquet") for sid in workflow_stage.stage.input_ids}
+    diff = build_stage_diff(workflow_stage, outputs.parent, str(outputs / f"{workflow_stage.stage.id}.parquet"),
+                            output_by_id, rows_shown=PREVIEW_ROWS)
+    if diff is None or diff.kind != FILTER_ROWS_KIND:
+        return None
+    return [{"dropped": row.dropped, "mine": row.output_ordinal in set(mine),
+             "cells": [str(c)[:60] for c in row.cells]} for row in diff.rows]
 
 
 def _read_cell(outputs, cell: StageOutputCellCitation) -> str:
