@@ -1,0 +1,56 @@
+/* The row lineage page's Rows & columns tab: the run as a canvas of stages and the
+   sheets they wrote (static/canvas.js). Class names are its own, so where this
+   sheet sits in the cascade is free. */
+
+/* The tab fills its pane and owns the pointer, so panning never moves the document. */
+#values-root { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 12px 18px 0; }
+.canvas { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.canvas-say { font-size: 13px; color: var(--muted); margin: 0 0 8px; line-height: 1.5; max-width: 78ch; }
+.canvas-say code { background: var(--sunk-deep); border-radius: 4px; padding: 1px 5px; color: var(--fg); }
+.canvas-hint { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+.canvas-view { flex: 1; min-height: 0; position: relative; overflow: hidden; cursor: grab;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 9px; }
+.canvas-view:active { cursor: grabbing; }
+.canvas-svg { width: 100%; height: 100%; display: block; }
+
+/* ── a stage: its box, and the sheet on a stem under it ─────────────────── */
+.canvas-box rect.box { fill: var(--raised); stroke: var(--border-strong); stroke-width: 1; }
+.canvas-box.on rect.box { stroke: var(--accent); stroke-width: 1.5; }
+.canvas-box.aside rect.box { fill: var(--sunk); stroke: var(--border); }
+.canvas-box.picked rect.box { stroke: var(--fg); stroke-width: 2; }
+.canvas-box text.title { font-size: 11px; font-weight: 700; fill: var(--fg); }
+.canvas-box text.type { font-size: 9.5px; fill: var(--muted); }
+.canvas-box.aside text { fill: var(--muted); }
+.canvas-sheet line.stem { stroke: var(--border-strong); stroke-width: 1.5; }
+.canvas-sheet rect.paper { fill: var(--raised); stroke: var(--border); stroke-width: 1; }
+.canvas-sheet.picked rect.paper { stroke: var(--fg); stroke-width: 2; }
+.canvas-sheet text.n { font-size: 9px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.canvas-box rect.hit, .canvas-sheet rect.hit { fill: transparent; cursor: pointer; }
+
+/* The bar: the rows that came in, the figure's in accent, the dropped in failed. */
+.canvas-bar rect.track { fill: var(--sunk-deep); }
+.canvas-bar rect.thumb { fill: var(--accent); }
+.canvas-bar rect.cut { fill: var(--state-failed); }
+
+/* The sheet's rows are the app's own table, drawn small and clipped to the paper;
+   the scale itself is set inline by the script, which sizes the paper. */
+.canvas-mini { transform-origin: 0 0; overflow: hidden; pointer-events: none; }
+.canvas-mini table.data-preview { margin: 0; font-size: 11px; }
+.canvas-mini table.data-preview th, .canvas-mini table.data-preview td { padding: 2px 6px; max-width: 120px; }
+.canvas-mini tr.canvas-dim td { color: var(--muted-dim); }
+
+/* ── wires: every row down the wire in grey, the figure's rows as a blue core ── */
+.canvas-wire path.total { fill: none; stroke: var(--border-strong); opacity: 0.55; }
+.canvas-wire path.core { fill: none; stroke: var(--accent); opacity: 0.9; }
+
+/* ── the drawer: the run page's own stage panel, over the canvas's right half ── */
+.canvas-drawer { position: absolute; top: 0; right: 0; bottom: 0; width: 52%; min-width: 420px;
+  max-width: 100%; background: var(--raised); border-left: 1px solid var(--border-strong);
+  box-shadow: -8px 0 28px var(--shadow); overflow: auto; padding: 10px 20px 40px; cursor: auto; }
+.canvas-drawer[hidden] { display: none; }
+.canvas-close { position: absolute; right: 12px; top: 8px; border: 0; background: none;
+  font-size: 18px; cursor: pointer; color: var(--muted); }
+.canvas-close:hover { color: var(--fg); }
+.canvas-close:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--focus-halo); }
+.canvas-kicker { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--muted); margin: 4px 0 6px; }

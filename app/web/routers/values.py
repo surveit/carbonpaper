@@ -39,10 +39,10 @@ def values_panel(request: Request, project_id: str, run_id: str,
         request, "_values_panel.html",
         {"project": project_id, "run_id": run_id, "stage_id": stage,
          "column": column, "values": payload,
-         # What values-used.js steers by; each stage's panel is fetched.
+         # What canvas.js draws from; each stage's panel is fetched.
          "nav": payload.model_dump(
-             mode="json", include={"cited_stage", "column", "sources", "arms",
-                                   "branches", "code", "sheets", "cuts"})},
+             mode="json", include={"cited_stage", "column", "steps", "sources", "arms",
+                                   "branches", "code", "nodes", "edges", "sheets", "cuts"})},
     )
 
 

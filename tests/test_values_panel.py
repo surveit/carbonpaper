@@ -1,12 +1,15 @@
 """The walk and the map. What a stage SHOWS is the run page's own panel."""
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
 import app.services.run as run_service
 from app.main import app
 from app.services.project import save_working_copy_as_version
+from app.web.config import label_stage_type
 from app.web.values_view import build_trace_scope, load_values_used
 from app.web.walk_diagram import WALK_ASIDE_FILL
 from scope_fixture import stage_specs, write_inputs
@@ -122,16 +125,33 @@ def test_the_scope_says_where_each_column_was_written(run_id):
     assert scope.column_writers["portfolio"] == "tag_portfolio"
 
 
-def test_the_pane_is_the_map_and_one_empty_slot_per_stage(run_id):
+def test_the_pane_is_the_canvas_and_the_sheets_it_draws_from(run_id):
     page = TestClient(app).get(
         f"/project/{PROJECT}/runs/{run_id}/values/panel"
         "?stage=by_portfolio&row=0&column=total_amount")
     assert page.status_code == 200
-    assert page.text.count('class="vu-step"') == 8
-    assert 'data-panel="load_east"' in page.text
-    # No sheet of its own: every stage opens the run page's panel, fetched.
+    nav = json.loads(_read_json_block(page.text, "canvas-nav"))
+    assert [sheet["stage_id"] for sheet in nav["sheets"]][:3] == [
+        "load_east", "load_west", "load_agencies"]
+    assert {node["stage_id"] for node in nav["nodes"]} >= {"by_portfolio", "mean_by_portfolio"}
+    assert 'class="canvas-drawer"' in page.text
+    # Every sheet is drawn client-side, and every panel is the run page's, fetched.
     assert 'class="data-preview"' not in page.text
-    assert "flowchart LR" in page.text
+    assert "vu-" not in page.text
+
+
+def _read_json_block(html, klass):
+    opened = html.index(f'class="{klass}">') + len(f'class="{klass}">')
+    return html[opened:html.index("</script>", opened)]
+
+
+def test_the_type_under_each_box_is_worded_rather_than_a_slug(run_id):
+    page = TestClient(app).get(
+        f"/project/{PROJECT}/runs/{run_id}/values/panel"
+        "?stage=by_portfolio&row=0&column=total_amount")
+    labels = json.loads(_read_json_block(page.text, "canvas-type-labels"))
+    assert labels["by_portfolio"] == label_stage_type("aggregate")
+    assert "_" not in labels["funded"]
 
 
 def test_a_column_the_stage_does_not_write_is_refused_in_the_pane(run_id):
@@ -147,8 +167,8 @@ def test_the_tab_says_what_to_do_with_it(run_id):
     page = TestClient(app).get(
         f"/project/{PROJECT}/runs/{run_id}/values/panel"
         "?stage=by_portfolio&row=1&column=total_amount")
-    assert "Walk this value back to your input data" in page.text
-    assert "use the arrow keys" in page.text
+    assert "click a stage for its transform" in page.text
+    assert "drag to pan" in page.text
 
 
 def test_a_traced_panel_is_the_run_page_panel_cut_to_the_figures_rows(run_id):

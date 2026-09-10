@@ -14,8 +14,7 @@
 <script src="{{ static_root }}picker.js" defer></script>
 <script src="{{ static_root }}breadcrumbs.js" defer></script>
 {# The packet's Rows & columns pane is an empty state, so its script is dead there. #}
-<script src="{{ static_root }}diagram_viewport.js"></script>
-<script src="{{ static_root }}values-used.js"></script>
+<script src="{{ static_root }}canvas.js"></script>
 {# Each stage opens the run page's own panel: its tab strip is tabs.js's. #}
 <script src="{{ static_root }}tabs.js"></script>
 {# The Input files pane's own script; the packet's pane is the run list alone. #}
@@ -689,9 +688,7 @@ if(!hasGraph){
   if(!mermaidOK) ng.textContent = "The graph library couldn't load (CDN blocked). The story and panel still work.";
   ng.classList.remove('hidden');
 }
-// Re-asserted here rather than once at load: the Relevant columns pane renders its
-// own graph through diagram_viewport.js, which configures mermaid globally, and this
-// graph may be opened after that.
+// Configured when the fold first opens, which is the only time this graph is drawn.
 function initPathsMermaid(){
   mermaid.initialize({ startOnLoad:false, theme:"default", flowchart:{curve:"basis", padding:20, useMaxWidth:true}, securityLevel:"loose" });
 }
@@ -755,7 +752,7 @@ async function walkValuesFor(column){
     valuesRoot.innerHTML = answer.ok
       ? await answer.text()
       : `<p class="muted">could not walk ${esc(column)} (${answer.status})</p>`;
-    ValuesUsed.mount(valuesRoot);
+    Canvas.mount(valuesRoot);
   } catch(failure){
     valuesRoot.innerHTML = `<p class="muted">error: ${esc(failure)}</p>`;
   }
