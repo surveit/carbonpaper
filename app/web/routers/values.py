@@ -41,8 +41,8 @@ def values_panel(request: Request, project_id: str, run_id: str,
          "column": column, "values": payload,
          # What canvas.js draws from; each stage's panel is fetched.
          "nav": payload.model_dump(
-             mode="json", include={"cited_stage", "column", "steps", "sources", "arms",
-                                   "branches", "code", "nodes", "edges", "sheets", "cuts"})},
+             mode="json",
+             include={"cited_stage", "column", "steps", "nodes", "edges", "sheets"})},
     )
 
 

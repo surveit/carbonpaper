@@ -260,6 +260,39 @@ moved on. The snapshot, not the stage type, is what the link is keyed on: a
 queue stage whose filter excluded every row wrote none, and offering a page that
 reads "no items to review" is a dead link.
 
+## The row lineage page (`lineage.html` ← `app/web/routers/run_lineage.py`)
+
+`…/stage/{sid}/row/{row}/trace/view`: where ONE value in one row came from. The
+header names the stage, the row and the column; three tabs under it:
+
+- **Paths** (`_row_paths.html` ← `app.web.row_paths`) — every distinct route the
+  rows behind this figure took, told apart by the branches they took.
+  `docs/branch-analysis.md` says which branches it leaves out.
+- **Rows & columns** (`_values_panel.html` ← `app/web/routers/values.py`,
+  `app.web.values_view`, drawn by `static/canvas.js`) — the run as a canvas: one
+  box per stage, wired in the workflow's own graph, and under each stage that
+  wrote a frame a **sheet** of its rows (`app.web.sheet_preview`), the figure's
+  own rows first and tinted, the rest dimmed, a filter's dropped rows in place.
+  A stage the value never came through is drawn aside. A **bar** under each
+  sheet is the rows that came in at full width — the figure's from the left in
+  blue, the dropped in red from the right — and its line says it in words:
+  `2 relevant rows of 10. 1 row dropped.` A **wire** is as wide as the rows
+  down it on a square-root scale, its blue core the rows behind the figure.
+  Clicking a box opens the run page's own stage panel
+  (`…/stage/{sid}/traced`, `_run_stage_panel.html` with a `TraceScope`) in a
+  drawer on **Transform**; clicking a sheet opens the same panel on **Data**,
+  cut to the figure's rows. Drag pans, the wheel zooms, Escape closes. The
+  payload is `app.web.values_payload.ValuesUsed`, and the script reads
+  `cited_stage`, `column`, `steps`, `nodes`, `edges` and `sheets`.
+- **Input files** (`_input_files_panel.html` ← `app/web/routers/input_files.py`)
+  — each source file the figure read, sliced to the rows and columns it used.
+
+The Rows & columns tab fetches its walk when first opened, for the header's
+column. In a review packet the page is a file in a zip with no server to ask,
+so that tab is an empty state and the other two are written in place.
+The standalone scope page (`app/web/routers/scope.py`, `_scope_map.html`,
+`static/scope_map.js`) is what a cut opens, and stays its own page.
+
 ## One file (`file_detail.html`, `_file_column.html`)
 
 `/project/<id>/files/<file_id>`, which the Files table's rows open. Four sections under

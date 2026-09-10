@@ -11,7 +11,6 @@ from app.main import app
 from app.services.project import save_working_copy_as_version
 from app.web.config import label_stage_type
 from app.web.values_view import build_trace_scope, load_values_used
-from app.web.walk_diagram import WALK_ASIDE_FILL
 from scope_fixture import stage_specs, write_inputs
 from stage_seed import set_stages
 
@@ -38,13 +37,15 @@ def test_every_stage_the_value_came_through_is_a_step(run_id):
         "funded", "one_row_per_grant", "by_portfolio"]
 
 
+def _wires_into(values, stage_id):
+    return [edge.from_stage for edge in values.edges if edge.to_stage == stage_id]
+
+
 def test_a_union_is_a_node_of_its_own_rather_than_two_extra_sources(run_id):
     # Contracted out, `by_portfolio` read as taking rows from load_east and load_west.
     values = _walk(run_id, "by_portfolio", "total_amount")
-    assert [source.stage_id for source in values.sources["by_portfolio"]] == [
-        "one_row_per_grant"]
-    assert [source.stage_id for source in values.sources["both_regions"]] == [
-        "load_east", "load_west"]
+    assert _wires_into(values, "by_portfolio") == ["one_row_per_grant"]
+    assert _wires_into(values, "both_regions") == ["load_east", "load_west"]
 
 
 def _minimap_node(values, stage_id):
@@ -78,33 +79,6 @@ def test_a_wire_carries_the_rows_it_brought_and_says_nothing_off_the_walk(run_id
     assert _edge(values, "load_west", "both_regions").rows == 3
     # load_agencies writes only `portfolio`, which this figure never came through.
     assert _edge(values, "load_agencies", "tag_portfolio").rows is None
-
-
-def _graph_lines(values):
-    return [line.strip() for line in values.mermaid.splitlines()]
-
-
-def test_the_map_is_the_workflow_graph_every_other_page_draws(run_id):
-    lines = _graph_lines(_walk(run_id, "by_portfolio", "portfolio"))
-    assert lines[0] == "flowchart LR"
-    # Off input_ids, so a union is a node with two wires rather than a contraction.
-    assert "load_east -->|2| both_regions" in lines
-    assert "load_west -->|3| both_regions" in lines
-
-
-def test_a_stage_off_the_walk_is_greyed_and_cannot_be_opened(run_id):
-    lines = _graph_lines(_walk(run_id, "by_portfolio", "total_amount"))
-    assert [line for line in lines if line.startswith('click both_regions call dvNode')]
-    assert not [line for line in lines if line.startswith("click mean_by_portfolio")]
-    assert f"style mean_by_portfolio fill:{WALK_ASIDE_FILL}" in " ".join(lines)
-
-
-def test_a_node_says_the_rows_it_holds_behind_the_figure(run_id):
-    lines = _graph_lines(_walk(run_id, "by_portfolio", "total_amount", row=0))
-    assert [line for line in lines if line.startswith("both_regions[")
-            and "union · 5 rows behind" in line]
-    assert [line for line in lines if line.startswith("mean_by_portfolio[")
-            and "not on the walk" in line]
 
 
 def test_a_count_reads_no_column_so_the_tab_says_so(run_id):

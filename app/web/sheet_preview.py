@@ -77,7 +77,6 @@ def _build_sheet(run_branches: WorkflowRunBranches, stage_id: StageId, run_dir: 
         rows = _fill_from_the_frame(figure_rows, frame, set(mine))
     return CanvasSheet(
         stage_id=stage_id, type=StageType(authored.type).value,
-        description=authored.description, inputs=list(authored.input_ids),
         rows_in=frame.num_rows + rows_dropped, rows_out=frame.num_rows,
         rows_dropped=rows_dropped, rows_behind=len(mine),
         columns=list(frame.column_names), rows=rows)

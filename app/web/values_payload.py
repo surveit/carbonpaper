@@ -1,10 +1,10 @@
-"""What the Relevant columns tab is handed: the run's graph, read as one walk."""
+"""What the Rows & columns tab is handed: the run's graph, read as one walk."""
 
 from __future__ import annotations
 
 from pydantic import BaseModel
 
-from app.models.branch_analysis import BranchId, BranchOption, RowOrdinal
+from app.models.branch_analysis import BranchId, RowOrdinal
 from app.models.schema import StageId
 
 
@@ -24,12 +24,10 @@ class MinimapEdge(BaseModel):
 
 
 class MinimapCut(BaseModel):
-    """Rows a stage took out of the workflow, offered as a page of their own."""
+    """Rows a stage took out of the workflow, on the figure's route."""
 
     stage_id: StageId
     branch: BranchId
-    label: str
-    tip: str
     # The branch's recorded count over the whole run.
     rows: int
 
@@ -49,8 +47,6 @@ class CanvasSheet(BaseModel):
 
     stage_id: StageId
     type: str
-    description: str
-    inputs: list[StageId]
     rows_in: int
     rows_out: int
     rows_dropped: int
@@ -59,38 +55,16 @@ class CanvasSheet(BaseModel):
     rows: list[SheetRow]
 
 
-class MinimapArm(BaseModel):
-    """One way a stage told this figure's rows apart: a set of branches and their count."""
-
-    stage_id: StageId
-    branches: list[BranchId]
-    label: str
-    tip: str
-    rows: int
-
-
-class StepSource(BaseModel):
-    stage_id: StageId
-    rows: int
-
-
 class ValuesUsed(BaseModel):
     cited_stage: StageId
     column: str
     row: int
     # The stages the value came through, upstream first; each panel is fetched.
     steps: list[StageId]
-    # The run's own workflow graph, drawn by the same builder every other page uses.
-    mermaid: str
     nodes: list[MinimapNode]
     edges: list[MinimapEdge]
-    sources: dict[StageId, list[StepSource]]
+    # What the sheets' dropped counts were read off; the canvas draws the counts.
     cuts: list[MinimapCut]
-    # Only stages that split this figure's rows more than one way are listed.
-    arms: dict[StageId, list[MinimapArm]]
-    # What an arm's chip lights in the code: the branch's lines, and the code itself.
-    branches: dict[BranchId, BranchOption]
-    code: dict[StageId, str]
     # Set where the cited column is a `count`, which reads no column.
     counts_rows: bool
     # In the run's stage order, one per stage that wrote a frame.

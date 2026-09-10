@@ -45,13 +45,6 @@ def test_one_sheet_per_frame_writing_stage_in_run_order(run_id, values):
     record = load_run_record(PROJECT, run_id)
     assert [sheet.stage_id for sheet in values.sheets] == [
         entry.stage_id for entry in record.stage_records if entry.output_path]
-    for sheet in values.sheets:
-        assert sheet.inputs == _read_record_inputs(record, sheet.stage_id)
-
-
-def _read_record_inputs(record, stage_id):
-    workflow = run_service.load_run_workflow(PROJECT, record.to_dict())
-    return list(workflow.index_workflow_stages_by_id()[stage_id].stage.input_ids)
 
 
 def test_a_filter_counts_what_went_in_what_came_out_and_what_it_dropped(values):
@@ -137,11 +130,12 @@ def test_every_cell_on_every_sheet_is_within_the_constant(values):
             assert all(len(cell) <= CELL_CHARS for cell in row.cells)
 
 
-def test_the_pane_hands_its_script_the_sheets_and_the_cuts(run_id):
+def test_the_pane_hands_its_script_the_sheets_and_not_the_cuts_behind_them(run_id):
     page = TestClient(app).get(
         f"/project/{PROJECT}/runs/{run_id}/values/panel"
         "?stage=grant_totals&row=0&column=total_amount")
     assert page.status_code == 200
     assert '"sheets"' in page.text
     assert '"rows_dropped"' in page.text
-    assert '"cuts"' in page.text
+    # The cuts are what the dropped counts were read off; the script draws the counts.
+    assert '"cuts"' not in page.text
