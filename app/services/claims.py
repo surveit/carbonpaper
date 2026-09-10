@@ -100,10 +100,14 @@ def read_every_run_output(run_id: ID) -> list[WorkflowOutput]:
 
 def find_output_of_claim(claim: Claim) -> WorkflowOutput:
     run_id = claim.citation.run_id
-    for output in read_every_run_output(run_id):
-        if output.citation == claim.citation:
-            return output
-    raise ClaimRefused([f"no output of run '{run_id}' carries this claim's citation"])
+    matches = [output for output in read_every_run_output(run_id)
+               if output.citation == claim.citation]
+    if not matches:
+        raise ClaimRefused([f"no output of run '{run_id}' carries this claim's citation"])
+    if len(matches) > 1:
+        raise ClaimRefused([f"{len(matches)} outputs of run '{run_id}' carry this claim's "
+                            "citation; the claim cannot say which it is"])
+    return matches[0]
 
 
 def read_workflow_run_outputs(run_id: ID) -> list[WorkflowOutput]:
