@@ -23,11 +23,11 @@ from app.models.claim_review import (
     MeaningAnswer,
     Moves,
     StageEvidenceItem,
+    find_grounding_issues,
 )
 from app.models.claims import StageOutputCellCitation
 from app.services.claim_review import (
     _read_whether_the_corpus_spells,
-    find_grounding_issues,
     find_unbacked_challenges,
 )
 

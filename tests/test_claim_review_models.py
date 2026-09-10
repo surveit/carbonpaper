@@ -33,6 +33,13 @@ def test_a_grounding_lands_on_one_piece_of_the_run_or_on_nothing():
     assert nowhere.evidence is None
 
 
+def test_a_phrase_cannot_end_before_it_starts():
+    with pytest.raises(ValidationError):
+        Grounding(start=5, end=3, evidence=None, how="backwards")
+    with pytest.raises(ValidationError):
+        Grounding(start=3, end=3, evidence=None, how="no words at all")
+
+
 def test_an_evidence_ref_is_told_apart_by_its_kind():
     parsed = Grounding.model_validate(
         {"start": 0, "end": 3, "how": "x", "evidence": {"kind": "term", "name": "filing"}})
