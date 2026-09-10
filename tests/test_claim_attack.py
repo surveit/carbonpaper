@@ -1,8 +1,13 @@
-"""Six attackers built over one bundle, and an orchestrator built over their six answers."""
+"""Six attackers over one bundle, an orchestrator over their answers, and the driver."""
 from __future__ import annotations
+
+import asyncio
+import time
+from typing import Any
 
 import pytest
 
+import app.compiler.claim_attack.run as claim_attack_run
 from app.compiler.claim_attack.attackers import (
     ATTACK_REQUEST,
     ATTACKERS,
@@ -13,11 +18,16 @@ from app.compiler.claim_attack.orchestrator import (
     build_orchestrator,
     render_orchestrator_task,
 )
+from app.compiler.claim_attack.run import start_claim_attack_agents
+from app.core.agent.store import SessionStore
 from app.models.claim_review import (
     Attacker,
     AttackerAnswers,
+    Challenge,
     ChallengeKind,
     ChallengesAnswer,
+    ClaimAttackResult,
+    ClaimReviewDraft,
     Cost,
     Grounding,
     GroundingAnswer,
@@ -29,6 +39,7 @@ from app.models.claim_review import (
     Rewrite,
 )
 from app.services import claim_review
+from app.services.errors import ClaimReviewRefused
 from claim_review_fixture import PROJECT, TOTAL_TEXT, claim_the_total, run_the_fixture
 
 _SUBMIT_ONLY = ["mcp__tools__submit_answer"]
@@ -203,3 +214,300 @@ def test_list_evidence_reads_the_five_challenge_answers_in_attacker_order() -> N
         "the amount column is blank", "the filter drops the zeroes", "the west file is unread",
         "one arm took no rows", "total reads as money, not a count",
     ]
+
+
+# ── the driver: seven turns on the server loop ─────
+
+
+def make_draft() -> ClaimReviewDraft:
+    return ClaimReviewDraft(
+        challenges=[Challenge(
+            attacker=Attacker.data_defects, kind=ChallengeKind.data, grounding_index=0,
+            text="The figure counts rows, not grants.", evidence="the amount column is blank",
+            backing="2,200", severity=2, moves=Moves.moves, cost=Cost.free,
+        )],
+        summary="It stands as a row count, not as money.",
+    )
+
+
+class _FakeAgent:
+    """Records when its turn starts and ends, holds if asked, then submits `submitted`."""
+
+    def __init__(self, submitted: Any, *, task: str, name: str,
+                 log: list[tuple[str, str]], hold: asyncio.Event | None) -> None:
+        self.task = task
+        self._submitted = submitted
+        self._answer: Any = None
+        self._name = name
+        self._log = log
+        self._hold = hold
+
+    @property
+    def answer(self) -> Any:
+        return self._answer
+
+    def build_engine(self) -> Any:
+        agent = self
+
+        class _Engine:
+            async def stream_turn(self, prompt: str, *, message_history: Any,
+                                  emit: Any, resume: Any):
+                agent._log.append(("start", agent._name))
+                if agent._hold is not None:
+                    await agent._hold.wait()
+                agent._answer = agent._submitted
+                agent._log.append(("done", agent._name))
+                return [{"role": "assistant",
+                         "parts": [{"type": "text", "text": "attacked"}]}], None
+
+        return _Engine()
+
+
+def _answer_for(attacker: Attacker, answers: AttackerAnswers) -> Any:
+    return {
+        Attacker.grounding: answers.grounding, Attacker.data_defects: answers.data_defects,
+        Attacker.choices: answers.choices, Attacker.omissions: answers.omissions,
+        Attacker.coverage: answers.coverage, Attacker.meaning: answers.meaning,
+    }[attacker]
+
+
+class _Fakes:
+    """Stands in for the six attackers and the orchestrator, keeping what each was handed."""
+
+    def __init__(self, *, answers: AttackerAnswers, draft: ClaimReviewDraft | None,
+                 silent: Attacker | None = None, hold: asyncio.Event | None = None) -> None:
+        self.answers, self.draft, self.silent, self.hold = answers, draft, silent, hold
+        self.log: list[tuple[str, str]] = []
+        self.tasks: dict[str, str] = {}
+        self.merged: AttackerAnswers | None = None
+
+    def install(self, monkeypatch: Any) -> "_Fakes":
+        monkeypatch.setattr(claim_attack_run, "build_attacker", self.build_attacker)
+        monkeypatch.setattr(claim_attack_run, "build_orchestrator", self.build_orchestrator)
+        return self
+
+    def build_attacker(self, attacker, bundle, *, grounding=None, model="sonnet"):
+        task = render_attack_task(attacker, bundle, grounding)
+        self.tasks[attacker.value] = task
+        return _FakeAgent(
+            None if attacker == self.silent else _answer_for(attacker, self.answers),
+            task=task, name=attacker.value, log=self.log,
+            hold=None if attacker is Attacker.grounding else self.hold,
+        )
+
+    def build_orchestrator(self, bundle, answers, *, model="sonnet"):
+        self.merged = answers
+        task = render_orchestrator_task(bundle, answers)
+        self.tasks["orchestrator"] = task
+        return _FakeAgent(self.draft, task=task, name="orchestrator", log=self.log, hold=None)
+
+    def started(self) -> list[str]:
+        return [name for kind, name in self.log if kind == "start"]
+
+    def finished(self) -> list[str]:
+        return [name for kind, name in self.log if kind == "done"]
+
+
+async def _wait_until(is_ready, *, whats_missing: str, timeout: float = 10.0) -> None:
+    deadline = time.monotonic() + timeout
+    while not is_ready():
+        assert time.monotonic() < deadline, whats_missing
+        await asyncio.sleep(0.005)
+
+
+async def _wait_until_idle(store: SessionStore, session_id: str) -> None:
+    await _wait_until(lambda: store.load(session_id)["active_turn"] is None,
+                      whats_missing="the attack never cleared the parent's active turn")
+
+
+def _store_of(monkeypatch: Any) -> SessionStore:
+    store = SessionStore()
+    monkeypatch.setattr(claim_attack_run, "open_session_store", lambda: store)
+    return store
+
+
+def _run_the_attack(store: SessionStore, bundle, on_answer) -> str:
+    seen: dict[str, str] = {}
+
+    async def _drive() -> None:
+        seen["parent"] = start_claim_attack_agents(
+            bundle=bundle, model="sonnet", on_answer=on_answer)
+        await _wait_until_idle(store, seen["parent"])
+
+    asyncio.run(_drive())
+    return seen["parent"]
+
+
+def _failure_on(store: SessionStore, session_id: str) -> str | None:
+    for message in store.load(session_id)["messages"]:
+        for part in message["parts"]:
+            if part.get("text", "").startswith("generation failed: "):
+                return part["text"]
+    return None
+
+
+def test_seven_turns_run_and_the_result_carries_their_sessions(bundle, monkeypatch) -> None:
+    answers, draft = make_answers(), make_draft()
+    fakes = _Fakes(answers=answers, draft=draft).install(monkeypatch)
+    store = _store_of(monkeypatch)
+    landed: list[ClaimAttackResult] = []
+
+    parent = _run_the_attack(store, bundle, landed.append)
+
+    assert sorted(fakes.finished()) == sorted(
+        [attacker.value for attacker in ATTACKERS] + ["orchestrator"])
+    [result] = landed
+    assert result.draft == draft
+    assert result.answers == answers
+    assert len(result.session_ids) == 7
+    assert parent not in result.session_ids
+    for session_id in result.session_ids:
+        assert store.exists(session_id)
+
+
+def test_the_grounding_session_is_first_and_the_orchestrator_last(
+    bundle, monkeypatch
+) -> None:
+    _Fakes(answers=make_answers(), draft=make_draft()).install(monkeypatch)
+    store = _store_of(monkeypatch)
+    landed: list[ClaimAttackResult] = []
+
+    _run_the_attack(store, bundle, landed.append)
+
+    titles = [store.load(session_id)["title"] for session_id in landed[0].session_ids]
+    assert "grounding" in titles[0]
+    assert "orchestrator" in titles[-1]
+
+
+def test_the_grounding_lands_before_the_five_start_and_they_run_together(
+    bundle, monkeypatch
+) -> None:
+    counted: dict[str, int] = {}
+
+    async def _drive() -> None:
+        hold = asyncio.Event()
+        fakes = _Fakes(answers=make_answers(), draft=make_draft(),
+                       hold=hold).install(monkeypatch)
+        store = _store_of(monkeypatch)
+        parent = start_claim_attack_agents(
+            bundle=bundle, model="sonnet", on_answer=lambda result: None)
+        await _wait_until(lambda: len(fakes.started()) == 6,
+                          whats_missing="the five attackers did not all start")
+        counted["overlapping"] = len(fakes.started()) - 1
+        counted["finished_before_the_release"] = len(fakes.finished())
+        assert fakes.started()[0] == Attacker.grounding.value
+        assert fakes.finished() == [Attacker.grounding.value]
+        hold.set()
+        await _wait_until_idle(store, parent)
+
+    asyncio.run(_drive())
+
+    assert counted["overlapping"] == 5
+    assert counted["finished_before_the_release"] == 1
+
+
+def test_each_of_the_five_reads_the_phrases_the_grounding_landed(
+    bundle, monkeypatch
+) -> None:
+    fakes = _Fakes(answers=make_answers(), draft=make_draft()).install(monkeypatch)
+    store = _store_of(monkeypatch)
+
+    _run_the_attack(store, bundle, lambda result: None)
+
+    assert "----- PHRASES -----" not in fakes.tasks[Attacker.grounding.value]
+    for attacker in _LATER:
+        assert "----- PHRASES -----" in fakes.tasks[attacker.value], attacker
+        assert "[0] " in fakes.tasks[attacker.value]
+
+
+def test_the_orchestrator_merges_the_six_answers_the_turns_submitted(
+    bundle, monkeypatch
+) -> None:
+    answers = make_answers()
+    fakes = _Fakes(answers=answers, draft=make_draft()).install(monkeypatch)
+    store = _store_of(monkeypatch)
+
+    _run_the_attack(store, bundle, lambda result: None)
+
+    assert fakes.merged == answers
+
+
+def test_an_attacker_that_submits_nothing_leaves_the_failure_on_the_parent(
+    bundle, monkeypatch
+) -> None:
+    _Fakes(answers=make_answers(), draft=make_draft(),
+           silent=Attacker.coverage).install(monkeypatch)
+    store = _store_of(monkeypatch)
+    landed: list[ClaimAttackResult] = []
+
+    parent = _run_the_attack(store, bundle, landed.append)
+
+    assert landed == []
+    failure = _failure_on(store, parent)
+    assert failure is not None and "coverage" in failure
+    assert store.load(parent)["active_turn"] is None
+
+
+def test_an_orchestrator_that_submits_nothing_leaves_the_failure_on_the_parent(
+    bundle, monkeypatch
+) -> None:
+    _Fakes(answers=make_answers(), draft=None).install(monkeypatch)
+    store = _store_of(monkeypatch)
+    landed: list[ClaimAttackResult] = []
+
+    parent = _run_the_attack(store, bundle, landed.append)
+
+    assert landed == []
+    failure = _failure_on(store, parent)
+    assert failure is not None and "orchestrator" in failure
+
+
+def test_a_grounding_that_lands_no_phrase_is_a_failure(bundle, monkeypatch) -> None:
+    empty = AttackerAnswers(**{**make_answers().model_dump(),
+                               "grounding": GroundingAnswer(phrases=[])})
+    _Fakes(answers=empty, draft=make_draft()).install(monkeypatch)
+    store = _store_of(monkeypatch)
+    landed: list[ClaimAttackResult] = []
+
+    parent = _run_the_attack(store, bundle, landed.append)
+
+    assert landed == []
+    failure = _failure_on(store, parent)
+    assert failure is not None and "no phrase" in failure
+
+
+def test_a_refused_review_leaves_the_failure_on_the_parent(bundle, monkeypatch) -> None:
+    _Fakes(answers=make_answers(), draft=make_draft()).install(monkeypatch)
+    store = _store_of(monkeypatch)
+
+    def _refuse(result: ClaimAttackResult) -> None:
+        raise ClaimReviewRefused(["a backing is in no evidence"])
+
+    parent = _run_the_attack(store, bundle, _refuse)
+
+    failure = _failure_on(store, parent)
+    assert failure is not None and "a backing is in no evidence" in failure
+    assert store.load(parent)["active_turn"] is None
+
+
+def test_the_parent_session_carries_the_request_and_an_active_turn(
+    bundle, monkeypatch
+) -> None:
+    hold = asyncio.Event()
+    seen: dict[str, Any] = {}
+
+    async def _drive() -> None:
+        _Fakes(answers=make_answers(), draft=make_draft(), hold=hold).install(monkeypatch)
+        store = _store_of(monkeypatch)
+        parent = start_claim_attack_agents(
+            bundle=bundle, model="sonnet", on_answer=lambda result: None)
+        seen["session"] = store.load(parent)
+        hold.set()
+        await _wait_until_idle(store, parent)
+
+    asyncio.run(_drive())
+
+    assert seen["session"]["pending_user"] == ATTACK_REQUEST
+    assert seen["session"]["active_turn"] is not None
+    assert seen["session"]["context"]["claim_id"]
+    assert seen["session"]["context"]["hidden"] is True
