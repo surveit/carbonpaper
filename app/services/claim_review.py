@@ -4,8 +4,7 @@ from __future__ import annotations
 import re
 
 from app.compiler.claim_attack.evidence import render_evidence_pool
-from app.compiler.claim_attack.run import PARENT_ROLE as PARENT_ROLE
-from app.compiler.claim_attack.run import start_claim_attack_agents
+from app.compiler.claim_attack.run import PARENT_ROLE, start_claim_attack_agents
 from app.core.agent.store import AgentSession
 from app.core.ids import ID
 from app.models.claim_review import (
@@ -79,6 +78,14 @@ def load_claim_review(project_id: ID, claim_id: ID) -> ClaimReview | None:
     return held[0] if held else None
 
 
+def find_attack_sessions(claim_id: ID) -> list[AgentSession]:
+    """The attacks on this claim, newest first; a running one still holds an active turn."""
+    held = [session for session in AgentSession.list()
+            if session.context.get("role") == PARENT_ROLE
+            and session.context.get("claim_id") == claim_id]
+    return sorted(held, key=lambda session: (session.created_at, session.id), reverse=True)
+
+
 def store_claim_review(project_id: ID, claim_id: ID, *, grounding: list[Grounding],
                        challenges: list[Challenge], rewrites: list[Rewrite], summary: str,
                        session_ids: list[ID], corpus: str) -> ClaimReview:
@@ -141,16 +148,11 @@ def _finish_claim_attack(project_id: ID, claim_id: ID, bundle: EvidenceBundle,
 
 def _refuse_a_claim_already_under_attack(claim_id: ID) -> None:
     """Two attacks would write two reviews of one claim, and the second is refused storage."""
-    if _find_running_attacks(claim_id):
+    running = [session for session in find_attack_sessions(claim_id)
+               if session.active_turn is not None]
+    if running:
         raise ClaimReviewRefused(
             [f"an attack on claim {claim_id} is already running; it is attacked once at a time"])
-
-
-def _find_running_attacks(claim_id: ID) -> list[AgentSession]:
-    return [session for session in AgentSession.list()
-            if session.context.get("role") == PARENT_ROLE
-            and session.context.get("claim_id") == claim_id
-            and session.active_turn is not None]
 
 
 def _refuse_a_claim_already_reviewed(project_id: ID, claim_id: ID) -> None:

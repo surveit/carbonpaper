@@ -1,28 +1,32 @@
 """The claim page: the sentence with its ground, and what state its attack is in."""
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
+from app.compiler.claim_attack.run import PARENT_ROLE
 from app.core.agent.store import SessionStore
 from app.models.claim_review import (
     SEVERITY_WORDS,
     Attacker,
+    BranchEvidence,
     Challenge,
     ChallengeKind,
     Cost,
+    EvidenceRef,
     Grounding,
+    InputColumnEvidence,
     Moves,
     OutputEvidence,
     Rewrite,
+    StageEvidence,
+    TermEvidence,
 )
 from app.models.claims import RowsRectangle, StageOutputTableCitation
 from app.models.records.claim_review import ClaimReview
 from app.models.records.claims import Claim
 from app.models.records.workflow_output import WorkflowOutput
 from app.services import claims as claims_service
-from app.services.claim_review import PARENT_ROLE, store_claim_review
+from app.services.claim_review import store_claim_review
 from app.services.generation import GENERATION_FAILURE_PREFIX
 from app.web.claim_review_view import build_claim_review_page
 from claim_review_fixture import (
@@ -183,6 +187,46 @@ def test_open_challenges_run_worst_first_then_in_reading_order(claim):
     assert [token.severity for token in page.tokens] == [None, 2, None, 3, None]
 
 
+def test_a_review_listing_its_phrases_out_of_order_still_reads_left_to_right(claim):
+    store_claim_review(
+        PROJECT, claim.id,
+        grounding=[_ground_the(_WHOLE), _ground_the(_FIGURE)],
+        challenges=[
+            _raise_on(0, severity=2, backing="5 grants"),
+            _raise_on(1, severity=2, backing="2200"),
+        ],
+        rewrites=[], summary=_SUMMARY, session_ids=[], corpus=_CORPUS)
+
+    page = build_claim_review_page(PROJECT, claim.id)
+
+    assert [token.text for token in page.tokens] == [
+        "Grants came to ", _FIGURE, " ", _WHOLE, "."]
+    assert [row.phrase for row in page.ground] == [_FIGURE, _WHOLE]
+    assert [one.phrase for one in page.open_challenges] == [_FIGURE, _WHOLE]
+
+
+@pytest.mark.parametrize("evidence, lands_on", [
+    (OutputEvidence(slug="grant-total"), "output grant-total"),
+    (InputColumnEvidence(stage_id="load_east", column="amount"), "column load_east.amount"),
+    (StageEvidence(stage_id="grant_totals"), "stage grant_totals"),
+    (BranchEvidence(branch_id="east-only"), "branch east-only"),
+    (TermEvidence(name="filing"), "term filing"),
+])
+def test_the_ground_spells_out_every_place_a_phrase_can_land(claim, evidence, lands_on):
+    store_claim_review(
+        PROJECT, claim.id, grounding=[_ground_the_figure_on(evidence)], challenges=[],
+        rewrites=[], summary=_SUMMARY, session_ids=[], corpus=_CORPUS)
+
+    page = build_claim_review_page(PROJECT, claim.id)
+
+    assert [row.lands_on for row in page.ground] == [lands_on]
+
+
+def _ground_the_figure_on(evidence: EvidenceRef) -> Grounding:
+    return Grounding(start=_AT, end=_AT + len(_FIGURE), evidence=evidence,
+                     how="the figure rests on this piece of the run")
+
+
 def test_a_stored_review_carries_its_ground_rewrites_and_summary(claim):
     store_a_review(claim.id)
 
@@ -264,7 +308,7 @@ def test_a_table_claim_is_refused_rather_than_attacked(projects_root):
     assert page.ground == []
 
 
-def _publish_a_table(run_id: str, shape_id: str) -> Any:
+def _publish_a_table(run_id: str, shape_id: str) -> None:
     WorkflowOutput(
         slug="grant-rows", label="The grants themselves", primary=False, shape_id=shape_id,
         citation=StageOutputTableCitation(
