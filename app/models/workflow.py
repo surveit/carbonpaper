@@ -140,8 +140,6 @@ def find_stages_upstream_of(stages: Sequence[Stage], stage_id: str) -> set[str]:
     pending = [(stage_id, read) for read in by_id[stage_id].input_ids]
     while pending:
         reader, current = pending.pop()
-        # Raised, not skipped: treating an unresolved id as a dead end would
-        # UNDER-report what feeds the stage — the unsafe direction here.
         if current not in by_id:
             raise ValueError(
                 f"stage '{reader}' reads from '{current}', which is not in this workflow"
