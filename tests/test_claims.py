@@ -250,3 +250,12 @@ def test_a_claim_finds_the_output_it_cites():
     claim = claims.submit_claim(_PROJECT, _RUN, "ai-spend", _H1, _TEXT)
     assert claims.find_output_of_claim(claim).slug == "ai-spend"
     assert ids[_SPEND.label] == claim.shape_id
+
+
+def test_a_citation_two_outputs_carry_names_neither_of_them():
+    ids = _a_run_of_two_shapes()
+    claim = claims.submit_claim(_PROJECT, _RUN, "ai-spend", _H1, _TEXT)
+    _publish("ai-spend-again", 63027729.0, ids[_SPEND.label])
+
+    with pytest.raises(ClaimRefused, match="cannot say which it is"):
+        claims.find_output_of_claim(claim)
