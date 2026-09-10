@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from app.compiler.claim_attack.evidence import render_evidence_bundle, render_evidence_pool
 from app.models.claim_review import (
@@ -157,10 +158,14 @@ def test_a_backing_sitting_inside_a_longer_number_is_not_in_the_pool(claim):
         _store(claim, "220", "the pool says 2200 in total")
 
 
-def test_a_standalone_token_however_short_is_backed(claim):
-    stored = _store(claim, "5", "grant-count · How many grants · 5 · grant_totals")
+def test_a_lone_digit_is_backed_by_the_phrase_around_it_and_never_on_its_own(claim):
+    line = "grant-count · How many grants · 5 · grant_totals"
+    with pytest.raises(ValidationError):
+        _challenge("5")
 
-    assert stored.challenges[0].backing == "5"
+    stored = _store(claim, "grants · 5", line)
+
+    assert stored.challenges[0].backing == "grants · 5"
 
 
 def test_a_backing_ending_at_a_full_stop_in_the_pool_is_backed(claim):
@@ -169,9 +174,9 @@ def test_a_backing_ending_at_a_full_stop_in_the_pool_is_backed(claim):
     assert stored.challenges[0].backing == "28% of records"
 
 
-def test_a_digit_cut_out_of_a_thousands_separated_number_is_not_in_the_pool(claim):
-    with pytest.raises(ClaimReviewRefused, match="backing '2' is"):
-        _store(claim, "2", "the pool says 2,200 in total")
+def test_a_run_cut_out_of_a_thousands_separated_number_is_not_in_the_pool(claim):
+    with pytest.raises(ClaimReviewRefused, match="backing '200' is"):
+        _store(claim, "200", "the pool says 12,200 in total")
 
 
 def test_a_challenge_landing_on_a_phrase_the_review_never_grounded_is_refused(claim):

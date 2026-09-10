@@ -29,6 +29,7 @@ from app.models.claims import StageOutputCellCitation
 from app.services.claim_review import (
     _read_whether_the_corpus_spells,
     find_unbacked_challenges,
+    read_whether_the_pool_prints,
 )
 
 _ORCHESTRATOR = orchestrator_prompt.ORCHESTRATOR_SYSTEM_PROMPT
@@ -78,6 +79,14 @@ _A_PHRASES_LINE = re.compile(r'\[(\d+)\] "([^"]+)" → (.+)')
 
 _NUMBERLESS_BACKINGS = ["reads: none", "rows 0", "distinct 0",
                         "feeds the cited stage: false"]
+
+# Weights 2 and 0 ask for a figure the pool may not print, so both say where it must be.
+_WHAT_EACH_WEIGHT_NEEDS = [
+    "Needs: a number showing the reversal or the missing footing.",
+    "Needs: the moved value, or the bound, printed on a line.",
+    "Needs: what would settle it.",
+    "Needs: the number that shows it does not move, printed on a line.",
+]
 
 # Priced off the moved VALUE. The rule is the printed population, so these must stay gone.
 _THE_VALUE_BASED_RULE = [
@@ -165,7 +174,20 @@ def test_the_orchestrator_carries_the_four_severity_rows_and_keeps_the_quiet_one
     for row in ["could not stand as written", "turns it into a bound",
                 "worth a footnote", "does not move it"]:
         assert row in _ORCHESTRATOR
+    for needs in _WHAT_EACH_WEIGHT_NEEDS:
+        assert needs in _ORCHESTRATOR, f"{needs!r} is not what the rubric asks for"
+    assert "A weight-0 challenge stays in the list." in _ORCHESTRATOR
+    assert "that count is the reader's evidence that the check was made" in _ORCHESTRATOR
+    assert "Deleting one turns a check into a silence." in _ORCHESTRATOR
     assert "submit_answer" in _ORCHESTRATOR
+
+
+def test_the_unpriced_example_says_the_population_is_unprinted_too() -> None:
+    [challenge] = ChallengesAnswer.model_validate(
+        json.loads(attackers_prompt.CHOICES_EXAMPLE_JSON)).challenges
+    assert challenge.moves == Moves.unpriced
+    assert ("no BRANCHES line counts the rows on which the two columns disagree"
+            in challenge.evidence)
 
 
 def test_every_worked_example_validates_against_the_schema_it_is_written_for() -> None:
@@ -199,7 +221,8 @@ def test_every_figure_an_example_writes_is_printed_on_the_pool_line_it_quotes() 
     for name, (text, _) in _EXAMPLE_JSON.items():
         pool = _EXAMPLE_POOL_LINES[name]
         for figure in _find_copied_figures(json.loads(text)):
-            assert _read_whether_the_corpus_spells(pool, figure), (
+            # A figure is checked as printed, not as a backing: `28` is too short for one.
+            assert read_whether_the_pool_prints(pool, figure), (
                 f"{name} writes {figure!r}, which its pool lines do not print")
 
 

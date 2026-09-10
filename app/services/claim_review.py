@@ -14,6 +14,7 @@ from app.models.claim_review import (
     Grounding,
     Rewrite,
     find_grounding_issues,
+    read_whether_a_backing_is_a_phrase,
 )
 from app.models.claims import ClaimStatus, PublishedCitation, StageOutputCellCitation
 from app.models.records.claim_review import ClaimReview
@@ -114,6 +115,12 @@ def find_challenge_issues(challenges: list[Challenge], grounding_count: int) -> 
     ]
 
 
+def read_whether_the_pool_prints(pool: str, text: str) -> bool:
+    """At token boundaries: `220` inside `2200` is not printed."""
+    pattern = rf"(?<!\w)(?<!\d[,.]){re.escape(text)}(?![,.]\d)(?!\w)"
+    return re.search(pattern, pool) is not None
+
+
 def _finish_claim_attack(project_id: ID, claim_id: ID, bundle: EvidenceBundle,
                          result: ClaimAttackResult) -> None:
     """The pool alone is the corpus: neither the claim nor an attacker backs a challenge."""
@@ -155,11 +162,9 @@ def _read_shape(project_id: ID, shape_id: ID | None) -> CitedShape:
 
 
 def _read_whether_the_corpus_spells(corpus: str, backing: str) -> bool:
-    """At token boundaries: `220` inside `2200` backs nothing."""
-    if not backing:
-        return False
-    pattern = rf"(?<!\w)(?<!\d[,.]){re.escape(backing)}(?![,.]\d)(?!\w)"
-    return re.search(pattern, corpus) is not None
+    """A backing is a printed PHRASE: a lone digit the pool prints everywhere backs nothing."""
+    return (read_whether_a_backing_is_a_phrase(backing)
+            and read_whether_the_pool_prints(corpus, backing))
 
 
 def _require_cell_citation(citation: PublishedCitation) -> StageOutputCellCitation:

@@ -19,6 +19,10 @@ from app.models.claim_review import (
 )
 
 
+# A code indent, a count, a separator: every pool holds these, so none of them backs anything.
+_DEGENERATE_BACKINGS = [" ", "  ", "0", "·"]
+
+
 def _challenge(**overrides) -> Challenge:
     fields = dict(attacker=Attacker.coverage, kind=ChallengeKind.coverage, grounding_index=0,
                   text="Blank outcomes count as unknown.", evidence="28% of records are blank.",
@@ -65,6 +69,14 @@ def test_a_raised_challenge_carries_no_severity_and_no_backing():
                              moves=Moves.none, cost=Cost.free)
     assert not hasattr(raised, "severity") and not hasattr(raised, "backing")
     assert raised.evidence_refs == [] and _challenge().evidence_refs == []
+
+
+def test_a_backing_the_pool_spells_everywhere_is_no_backing():
+    for degenerate in _DEGENERATE_BACKINGS:
+        with pytest.raises(ValidationError):
+            _challenge(backing=degenerate)
+    assert _challenge(backing="rows 0").backing == "rows 0"
+    assert _challenge(backing=" 2745 blank ").backing == " 2745 blank "
 
 
 def test_the_meaning_attacker_may_propose_at_most_two_rewrites():
