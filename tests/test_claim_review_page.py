@@ -134,7 +134,6 @@ def test_the_page_carries_what_the_run_read_and_what_blocks_it(claim):
     page = build_claim_review_page(PROJECT, claim.id)
 
     assert page.run_id == claim.citation.run_id
-    assert page.run_href == f"/project/{PROJECT}/runs/{claim.citation.run_id}"
     assert page.blocked == ""
     assert page.run_read_everything is True
     assert page.value == "2200"
@@ -143,6 +142,14 @@ def test_the_page_carries_what_the_run_read_and_what_blocks_it(claim):
     assert page.universe == "closed"
     assert [output.slug for output in page.outputs] == ["grant-count", "grant-total"]
     assert [output.cited for output in page.outputs] == [False, True]
+
+
+def test_the_cited_figure_is_linked_the_same_way_wherever_the_page_draws_it(claim):
+    page = build_claim_review_page(PROJECT, claim.id)
+
+    [cited] = [output for output in page.outputs if output.cited]
+    assert cited.href == page.value_href
+    assert page.value_href.endswith("/row/0/trace/view?column=total_amount")
 
 
 # ── a claim the attackers have read ─────
@@ -344,6 +351,7 @@ def test_a_table_claim_is_refused_rather_than_attacked(projects_root):
 
     assert page.attack == "refused"
     assert page.value == "5 rows"
+    assert page.value_href.endswith("/stage/grant_totals/rows")
     assert [token.text for token in page.tokens] == ["The grants are these five."]
     assert page.ground == []
 

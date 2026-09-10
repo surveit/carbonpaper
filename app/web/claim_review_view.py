@@ -34,7 +34,8 @@ from app.services.errors import ClaimRefused
 from app.services.generation import GENERATION_FAILURE_PREFIX
 from app.services.run import read_run_manifest
 from app.web.claims_view import describe_what_blocks_the_run
-from app.web.run_index import RunIndexRow, build_run_index_rows
+from app.web.panel_links import AppPanelLinks
+from app.web.run_index import RunIndexRow, find_run_row
 
 
 class SentenceToken(BaseModel):
@@ -95,15 +96,12 @@ class OutputRow(BaseModel):
 class ClaimReviewPage(BaseModel):
     claim_id: ID
     run_id: ID
-    run_href: str
     status: str
     text: str
     value: str
     value_href: str
     shape_label: str
     universe: str
-    qualifiers: list[str]
-    context: list[str]
     run_read_everything: bool
     blocked: str
     outputs: list[OutputRow]
@@ -198,15 +196,12 @@ def _build_page(project_id: ID, claim: Claim, shape: ClaimShape, run: RunIndexRo
     return ClaimReviewPage(
         claim_id=claim.id,
         run_id=claim.citation.run_id,
-        run_href=f"/project/{project_id}/runs/{claim.citation.run_id}",
         status=claim.status,
         text=claim.text,
         value=claim_evidence.read_output_value(claim.citation),
         value_href=_build_citation_href(project_id, claim.citation),
         shape_label=shape.label,
         universe=shape.universe,
-        qualifiers=list(shape.qualifiers),
-        context=[f"{name} {value}" for name, value in claim.context.items()],
         run_read_everything=_read_whether_the_run_read_everything(project_id, claim),
         blocked=describe_what_blocks_the_run(run),
         outputs=_build_outputs(project_id, claim),
@@ -235,17 +230,26 @@ def _build_outputs(project_id: ID, claim: Claim) -> list[OutputRow]:
     return [
         OutputRow(
             slug=output.slug, label=output.label, value=output.value, cited=output.cited,
-            href=build_row_trace_url(project_id, run_id, output.stage_id, 0))
+            href=_build_figure_href(project_id, run_id, output.stage_id,
+                                    output.row_ordinal, output.column))
         for output in claim_evidence.read_outputs(run_id, cited.slug)
     ]
 
 
 def _build_citation_href(project_id: ID, citation: PublishedCitation) -> str:
-    if isinstance(citation, StageOutputCellCitation):
-        return build_row_trace_url(project_id, citation.run_id, citation.stage_id,
-                                   citation.row_ordinal, column=citation.column)
-    return build_row_trace_url(project_id, citation.run_id, citation.stage_id,
-                               citation.rectangle.row_start)
+    cell = citation if isinstance(citation, StageOutputCellCitation) else None
+    return _build_figure_href(
+        project_id, citation.run_id, citation.stage_id,
+        cell.row_ordinal if cell is not None else None,
+        cell.column if cell is not None else None)
+
+
+def _build_figure_href(project_id: ID, run_id: ID, stage_id: str,
+                       row_ordinal: int | None, column: str | None) -> str:
+    """A table output names no row, so its rows page is where its rectangle is read."""
+    if row_ordinal is None:
+        return AppPanelLinks(project_id, run_id).stage_rows(stage_id)
+    return build_row_trace_url(project_id, run_id, stage_id, row_ordinal, column=column)
 
 
 # ── the sentence and its ground ─────
@@ -419,10 +423,10 @@ def _find_generation_failure(session_id: ID) -> str | None:
 
 
 def _read_run_row(project_id: ID, run_id: ID) -> RunIndexRow:
-    for row in build_run_index_rows(project_id):
-        if row.run_id == run_id:
-            return row
-    raise ClaimRefused([f"this project holds no run '{run_id}'"])
+    row = find_run_row(project_id, run_id)
+    if row is None:
+        raise ClaimRefused([f"this project holds no run '{run_id}'"])
+    return row
 
 
 def _read_shape(project_id: ID, claim: Claim) -> ClaimShape:
