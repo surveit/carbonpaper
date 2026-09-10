@@ -41,8 +41,6 @@ class SentenceToken(BaseModel):
     text: str
     grounding_index: int | None = None
     severity: int | None = None
-    # A span the review grounds nothing on; a stored review has none.
-    unread: bool = False
 
 
 class GroundRow(BaseModel):
@@ -365,6 +363,9 @@ def _read_phrase(text: str, grounding: list[Grounding], index: int | None) -> st
 
 
 def _count_attackers(review: ClaimReview | None) -> list[AttackerCount]:
+    """No review, no attackers: a roster of zeros would report an attack that never ran."""
+    if review is None:
+        return []
     raised = Counter(Attacker(one.attacker) for one in _read_challenges(review))
     return [
         AttackerCount(name=words.name, reads=words.reads, does=words.does,

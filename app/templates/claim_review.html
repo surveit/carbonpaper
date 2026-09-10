@@ -56,8 +56,8 @@
   {%- for token in page.tokens -%}
     {%- if token.grounding_index is none -%}{{ token.text }}
     {%- else -%}
-    <span class="ph {{ 'new' if token.unread else 's' ~ (token.severity if token.severity is not none else 0) }}"
-          data-ph="{{ token.grounding_index }}">{{ token.text }}</span>
+    {%- set weight = 's' ~ (token.severity if token.severity is not none else 0) -%}
+<span class="ph {{ weight }}" data-ph="{{ token.grounding_index }}">{{ token.text }}</span>
     {%- endif -%}
   {%- endfor -%}
 </p>
@@ -93,7 +93,7 @@
     } catch (e) { return; }
     if (!state.active) { if (timer) clearInterval(timer); location.reload(); }
   }
-  timer = setInterval(poll, 2000);
+  timer = setInterval(poll, 2000); poll();
 })();
 </script>
 {% elif page.attack == 'failed' %}
@@ -165,6 +165,10 @@
 </div>
 {% endfor %}
 
+{% if page.attack == 'done' and not page.open_challenges %}
+<div class="empty-line">Nothing open on this reading.</div>
+{% endif %}
+
 {% if page.quiet_challenges %}
 <details class="fold">
   <summary>{{ page.quiet_challenges | length }} checked, and none moves this figure at published precision</summary>
@@ -231,6 +235,7 @@
   {% endif %}
 </div>
 
+{% if page.attack == 'done' %}
 <details class="fold">
   <summary>How this was attacked</summary>
   <div class="attackers">
@@ -258,6 +263,7 @@
   </p>
   {% endif %}
 </details>
+{% endif %}
 
 <script>
 (function () {
