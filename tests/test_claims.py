@@ -238,3 +238,15 @@ def test_a_better_sentence_can_be_learned_by_the_shape():
     )
 
     assert shape.template == "Outside firms reported ${value} for AI lobbying."
+
+
+def test_every_output_of_the_run_is_listed_shape_or_not():
+    _a_run_of_two_shapes()
+    assert [o.slug for o in claims.read_every_run_output(_RUN)] == ["ai-clients", "ai-spend", "corpus-rows"]
+
+
+def test_a_claim_finds_the_output_it_cites():
+    ids = _a_run_of_two_shapes()
+    claim = claims.submit_claim(_PROJECT, _RUN, "ai-spend", _H1, _TEXT)
+    assert claims.find_output_of_claim(claim).slug == "ai-spend"
+    assert ids[_SPEND.label] == claim.shape_id
