@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.compiler.claim_attack.evidence import render_evidence_bundle
+from app.compiler.claim_attack.evidence import render_evidence_bundle, render_evidence_pool
 from app.models.claim_review import (
     Attacker, Challenge, ChallengeKind, Cost, Grounding, Moves, OutputEvidence,
 )
@@ -63,6 +63,8 @@ def test_the_rendering_carries_every_figure_the_guard_will_check_against(claim):
     assert TOTAL_TEXT in text and "grant-total" in text and "2200" in text
     assert "----- BRANCHES -----" in text and "----- INPUT COLUMNS -----" in text
     assert "feeds the cited stage: true" in text
+    pool = render_evidence_pool(bundle)
+    assert TOTAL_TEXT not in pool and "CLAIM:" not in pool and "2200" in pool
 
 
 def test_a_sentence_carrying_both_quote_marks_stays_verbatim_in_the_pool(projects_root):
@@ -91,10 +93,58 @@ def test_a_table_the_run_published_is_pooled_by_its_row_count(claim):
     assert "3 rows" in render_evidence_bundle(bundle)
 
 
-def _challenge(backing: str) -> Challenge:
-    return Challenge(attacker=Attacker.coverage, kind=ChallengeKind.coverage, grounding_index=0,
+def _challenge(backing: str, grounding_index: int | None = 0) -> Challenge:
+    return Challenge(attacker=Attacker.coverage, kind=ChallengeKind.coverage,
+                     grounding_index=grounding_index,
                      text="t", evidence="e", backing=backing, severity=2,
                      moves=Moves.moves, cost=Cost.free)
+
+
+def _grounding() -> list[Grounding]:
+    return [Grounding(start=0, end=6, evidence=OutputEvidence(slug="grant-total"),
+                      how="the figure")]
+
+
+def _store(claim, backing: str, corpus: str):
+    return claim_review.store_claim_review(
+        PROJECT, claim.id, grounding=_grounding(), challenges=[_challenge(backing)],
+        rewrites=[], summary="s", session_ids=[], corpus=corpus)
+
+
+def _pool_of(claim) -> str:
+    return render_evidence_pool(claim_review.build_evidence_bundle(PROJECT, claim.id))
+
+
+def test_the_journalists_own_sentence_cannot_back_a_challenge_against_it(claim):
+    with pytest.raises(ClaimReviewRefused, match="2,200"):
+        _store(claim, "2,200", _pool_of(claim))
+    assert claim_review.load_claim_review(PROJECT, claim.id) is None
+
+
+def test_the_run_spelling_of_the_same_figure_does_back_it(claim):
+    stored = _store(claim, "2200", _pool_of(claim))
+
+    assert claim_review.load_claim_review(PROJECT, claim.id).id == stored.id
+
+
+def test_a_backing_sitting_inside_a_longer_number_is_not_in_the_pool(claim):
+    with pytest.raises(ClaimReviewRefused, match="'220'"):
+        _store(claim, "220", "the pool says 2200 in total")
+
+
+def test_a_standalone_token_however_short_is_backed(claim):
+    stored = _store(claim, "5", "grant-count · How many grants · 5 · grant_totals")
+
+    assert stored.challenges[0].backing == "5"
+
+
+def test_a_challenge_landing_on_a_phrase_the_review_never_grounded_is_refused(claim):
+    with pytest.raises(ClaimReviewRefused, match="names no phrase"):
+        claim_review.store_claim_review(
+            PROJECT, claim.id, grounding=_grounding(),
+            challenges=[_challenge("2200", grounding_index=3)],
+            rewrites=[], summary="s", session_ids=[], corpus=_pool_of(claim))
+    assert claim_review.load_claim_review(PROJECT, claim.id) is None
 
 
 def test_a_backing_in_neither_the_pool_nor_an_attackers_evidence_is_refused(claim):
@@ -147,3 +197,6 @@ def test_a_table_claim_is_refused_with_the_reason(projects_root):
 
     with pytest.raises(ClaimReviewRefused, match="table claim"):
         claim_review.build_evidence_bundle(PROJECT, table_claim.id)
+    with pytest.raises(ClaimReviewRefused, match="table claim"):
+        claim_review.store_claim_review(PROJECT, table_claim.id, grounding=[], challenges=[],
+                                        rewrites=[], summary="s", session_ids=[], corpus="")

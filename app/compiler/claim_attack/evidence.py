@@ -14,16 +14,20 @@ _NOTHING = "none"
 
 
 def render_evidence_bundle(bundle: EvidenceBundle) -> str:
-    blocks = [
-        _render_the_claim(bundle),
+    """The claim and the pool: what an attacker reads. The claim is NOT its own backing."""
+    return _render_the_claim(bundle) + "\n\n" + render_evidence_pool(bundle)
+
+
+def render_evidence_pool(bundle: EvidenceBundle) -> str:
+    """Only what the run itself holds — the corpus a challenge's backing is checked against."""
+    return "\n\n".join([
         _render_outputs(bundle.outputs),
         _render_stages(bundle.stages),
         _render_branches(bundle.branches),
         _render_input_columns(bundle.input_columns),
         _render_heading("TERMS") + "\n" + (bundle.terms or _NOTHING),
         _render_heading("METHODOLOGY") + "\n" + (bundle.methodology or _NOTHING),
-    ]
-    return "\n\n".join(blocks)
+    ])
 
 
 def _render_the_claim(bundle: EvidenceBundle) -> str:
