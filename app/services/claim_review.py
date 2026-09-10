@@ -4,7 +4,8 @@ from __future__ import annotations
 import re
 
 from app.compiler.claim_attack.evidence import render_evidence_pool
-from app.compiler.claim_attack.run import PARENT_ROLE, start_claim_attack_agents
+from app.compiler.claim_attack.run import PARENT_ROLE as PARENT_ROLE
+from app.compiler.claim_attack.run import start_claim_attack_agents
 from app.core.agent.store import AgentSession
 from app.core.ids import ID
 from app.models.claim_review import (
