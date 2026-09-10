@@ -14,8 +14,8 @@ from app.services import claims as claims_service
 from app.services import project as project_service
 from app.services import run as run_service
 from app.services.errors import ClaimRefused, ClaimReviewRefused
-from app.web.breadcrumbs import Crumb, build_run_child_crumbs, build_section_crumbs
-from app.web.claim_review_view import build_claim_review_page
+from app.web.breadcrumbs import Crumb, build_claims_child_crumbs, build_section_crumbs
+from app.web.claim_review_view import ClaimReviewPage, build_claim_review_page
 from app.web.claims_list_view import build_claims_list_page
 from app.web.claims_view import build_publish_view
 from app.web.config import templates
@@ -84,8 +84,8 @@ async def read_claim_review_page(request: Request, project_id: str, claim_id: st
         request,
         "claim_review.html",
         {
-            "state": shell_state_off_nav(project_id, _build_claim_crumbs(project_id, page.run_id)),
-            "section": "runs",
+            "state": shell_state_off_nav(project_id, _build_claim_crumbs(project_id, page)),
+            "section": "claims",
             "page": page,
         },
     )
@@ -198,5 +198,6 @@ def _crumbs(project_id: str) -> list[Crumb]:
     )
 
 
-def _build_claim_crumbs(project_id: str, run_id: str) -> list[Crumb]:
-    return build_run_child_crumbs(project_id, run_id, label="Claim")
+def _build_claim_crumbs(project_id: str, page: ClaimReviewPage) -> list[Crumb]:
+    """A declined skip has no sentence of its own, so its rung reads as its metric."""
+    return build_claims_child_crumbs(project_id, label=page.text or page.shape_label)

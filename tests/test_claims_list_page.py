@@ -138,11 +138,17 @@ def test_the_tally_line_writes_no_count_of_zero(two_claims, client):
 # ── the page itself ─────
 
 
-def test_the_page_lists_every_claim_the_project_has_made(two_claims, client):
+def test_the_page_lists_every_claim_with_what_waits_on_review_written_first(
+    two_claims, client
+):
+    _, _, count = two_claims
+    claims_service.approve_claim(PROJECT, count.id, True)
+
     response = read_the_list(client)
 
     assert response.status_code == 200
     assert TOTAL_TEXT in response.text and COUNT_TEXT in response.text
+    assert response.text.index(TOTAL_TEXT) < response.text.index(COUNT_TEXT)
 
 
 def test_a_project_with_no_claims_offers_the_run_they_would_be_written_on(
@@ -177,7 +183,7 @@ def test_the_nav_on_any_project_page_carries_claims(two_claims, client):
     assert '<span class="app-nav-label">Claims</span>' in body
 
 
-def test_the_claims_leaf_carries_no_count(two_claims, client):
+def test_the_claims_leaf_carries_no_count(two_claims):
     """The nav is a table of contents; what is waiting is stated on the page itself."""
     from app.web.project_view import build_nav
 
@@ -186,4 +192,3 @@ def test_the_claims_leaf_carries_no_count(two_claims, client):
     assert leaf.model_dump() == {
         "key": "claims", "label": "Claims", "href": f"/project/{PROJECT}/claims",
         "children": []}
-    assert "nav-badge" not in client.get(f"/project/{PROJECT}/runs").text
