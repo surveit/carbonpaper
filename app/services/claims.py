@@ -90,6 +90,22 @@ def load_run_claims(project_id: ID, run_id: ID) -> dict[str, Claim]:
     return held
 
 
+def read_every_run_output(run_id: ID) -> list[WorkflowOutput]:
+    """Everything the run published, shape or none, for evidence rather than for claiming."""
+    return sorted(
+        (output for output in WorkflowOutput.list() if output.citation.run_id == run_id),
+        key=lambda output: output.slug,
+    )
+
+
+def find_output_of_claim(claim: Claim) -> WorkflowOutput:
+    run_id = claim.citation.run_id
+    for output in read_every_run_output(run_id):
+        if output.citation == claim.citation:
+            return output
+    raise ClaimRefused([f"no output of run '{run_id}' carries this claim's citation"])
+
+
 def read_workflow_run_outputs(run_id: ID) -> list[WorkflowOutput]:
     """The run's outputs that name a shape. Naming none is ordinary, and claims nothing."""
     return [

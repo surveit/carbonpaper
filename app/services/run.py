@@ -142,6 +142,10 @@ def read_pinned_version(project_id: str, run_id: str) -> str:
     return workflow_version
 
 
+def read_run_record(project_id: str, run_id: str) -> RunManifest:
+    return read_run_manifest(project_id, run_id)
+
+
 def read_stage_output(project_id: str, run_id: str, stage_id: str) -> pd.DataFrame:
     run_dir = resolve_run_dir(project_id, run_id)
     _validate_run_exists(project_id, run_id)
