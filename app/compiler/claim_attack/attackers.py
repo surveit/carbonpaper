@@ -13,6 +13,7 @@ from app.compiler.claim_attack.attackers_prompt import (
 )
 from app.compiler.claim_attack.evidence import render_evidence_bundle
 from app.core.agent.agent import Agent
+from app.core.errors import ClaimAttackRefused
 from app.models.claim_review import (
     Attacker,
     ChallengesAnswer,
@@ -86,18 +87,19 @@ def render_attack_task(
 def _refuse_a_phrase_outside_the_sentence(grounding: GroundingAnswer, claim_text: str) -> None:
     issues = find_grounding_issues(grounding.phrases, claim_text)
     if issues:
-        raise ValueError("; ".join(issues))
+        raise ClaimAttackRefused("; ".join(issues))
 
 
 def _refuse_a_mismatched_grounding(
     attacker: Attacker, grounding: GroundingAnswer | None
 ) -> None:
     if attacker not in _SYSTEM_PROMPTS:
-        raise ValueError(f"`{attacker.value}` is not one of the six attackers")
+        raise ClaimAttackRefused(f"`{attacker.value}` is not one of the six attackers")
     if attacker is Attacker.grounding and grounding is not None:
-        raise ValueError("the grounding attacker reads the claim first and alone")
+        raise ClaimAttackRefused("the grounding attacker reads the claim first and alone")
     if attacker is not Attacker.grounding and grounding is None:
-        raise ValueError(f"the `{attacker.value}` attacker needs the grounding attacker's phrases")
+        raise ClaimAttackRefused(
+            f"the `{attacker.value}` attacker needs the grounding attacker's phrases")
 
 
 def _render_phrases(claim_text: str, grounding: GroundingAnswer) -> str:

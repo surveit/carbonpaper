@@ -12,7 +12,7 @@ from app.compiler.claim_attack.orchestrator import build_orchestrator
 from app.compiler.turn_failure import persist_generation_failure
 from app.core.agent.agent import Agent
 from app.core.agent.store import SessionStore, open_session_store
-from app.core.errors import GenerationError
+from app.core.errors import ClaimAttackRefused, GenerationError
 from app.core.ids import ID
 from app.models.authoring_lifecycle_note import CompilerPhase
 from app.models.claim_review import (
@@ -38,8 +38,7 @@ _Answering = (
     | Agent[MeaningAnswer] | Agent[ClaimReviewDraft]
 )
 
-# A refusal is a ValueError: a grounding no attacker can be handed, or a refused review.
-_ATTACK_FAILURES = (GenerationError, ClaudeSDKError, OSError, ValueError)
+_ATTACK_FAILURES = (GenerationError, ClaudeSDKError, OSError, ClaimAttackRefused)
 
 # The loop holds a running task weakly; dropped mid-flight, its teardown never runs.
 _ATTACKS: set[asyncio.Task[None]] = set()
