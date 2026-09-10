@@ -79,6 +79,13 @@ _A_PHRASES_LINE = re.compile(r'\[(\d+)\] "([^"]+)" → (.+)')
 _NUMBERLESS_BACKINGS = ["reads: none", "rows 0", "distinct 0",
                         "feeds the cited stage: false"]
 
+# Priced off the moved VALUE. The rule is the printed population, so these must stay gone.
+_THE_VALUE_BASED_RULE = [
+    "you cannot compute it: then `moves` is `unpriced`",
+    "What the share READS on the other column is on no line at all",
+    "Price it only where the pool already prints both sides",
+]
+
 # One of everything, all of it empty: the lines a challenge with no number is backed on.
 _AN_EMPTY_POOL = EvidenceBundle(
     project_id="p", run_id="r", claim_id="c", claim_text=_DOCCS_SENTENCE,
@@ -242,6 +249,20 @@ def test_the_pricing_rule_draws_the_line_between_moves_and_unpriced() -> None:
         assert "The line between `moves` and `unpriced` is drawn once, here." in prompt
         assert "population that moves" in prompt
         assert "prints neither the population nor the value" in prompt
+
+
+def test_no_prompt_teaches_the_value_based_rule_the_population_rule_replaced() -> None:
+    for prompt in [*_ATTACKERS, _ORCHESTRATOR]:
+        for sentence in _THE_VALUE_BASED_RULE:
+            assert sentence not in prompt, f"{sentence!r} is back"
+
+
+def test_the_cap_turns_on_the_printed_value_and_not_on_moves_against_unpriced() -> None:
+    cap = _ORCHESTRATOR[_ORCHESTRATOR.index("THE CAP ON WHAT IT MOVES"):]
+    cap = cap[:cap.index("\n")]
+    assert "`moves` reads `moves` or `unpriced`" in cap
+    assert "never the weight" in cap
+    assert "A `gap` is the exception and is never capped" in cap
 
 
 def test_a_gap_is_not_capped_by_the_rule_that_caps_an_unpriced_finding() -> None:
