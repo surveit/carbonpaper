@@ -21,6 +21,7 @@ from app.models.claim_review import (
     Cost,
     Grounding,
     GroundingAnswer,
+    InputColumnEvidence,
     MeaningAnswer,
     Moves,
     OutputEvidence,
@@ -98,6 +99,39 @@ def test_a_later_attacker_reads_the_phrases_the_grounding_attacker_landed(bundle
     assert "----- PHRASES -----" in task
     assert '[0] "Grants" → {"kind": "output", "slug": "grant-total"}' in task
     assert '[1] "in total" → nothing in the run' in task
+
+
+def test_a_ref_spells_a_column_the_way_the_pool_spells_it(bundle) -> None:
+    accented = GroundingAnswer(phrases=[
+        Grounding(start=0, end=len("Grants"),
+                  evidence=InputColumnEvidence(stage_id="cases", column="café"),
+                  how="the column the figure counts"),
+    ])
+
+    task = render_attack_task(Attacker.data_defects, bundle, accented)
+
+    assert '[0] "Grants" → {"kind": "input_column", "stage_id": "cases", "column": "café"}' in task
+    assert r"caf\u00e9" not in task
+
+
+def test_a_phrase_reaching_past_the_sentence_is_refused(bundle) -> None:
+    past = GroundingAnswer(phrases=[
+        Grounding(start=0, end=len(bundle.claim_text) + 5, evidence=None,
+                  how="more of the sentence than was written"),
+    ])
+
+    with pytest.raises(ValueError, match="past the end"):
+        render_attack_task(Attacker.data_defects, bundle, past)
+
+
+def test_two_phrases_landing_on_the_same_words_are_refused(bundle) -> None:
+    crossing = GroundingAnswer(phrases=[
+        Grounding(start=0, end=10, evidence=None, how="the first"),
+        Grounding(start=5, end=12, evidence=None, how="the second, over the first"),
+    ])
+
+    with pytest.raises(ValueError, match="overlaps"):
+        render_attack_task(Attacker.data_defects, bundle, crossing)
 
 
 def test_the_grounding_attacker_reads_the_claim_before_any_phrase_exists(bundle) -> None:

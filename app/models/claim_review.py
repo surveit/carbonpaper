@@ -4,7 +4,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Annotated, Literal, Union
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.core.column_profile import ValueCount
 from app.core.ids import ID
@@ -107,6 +107,32 @@ class Grounding(_Base):
         description="The one thing in the run the phrase rests on, or null if it rests on nothing."
     )
     how: str = Field(description="One line: how the phrase rests on that piece of the run.")
+
+    @model_validator(mode="after")
+    def _end_comes_after_start(self) -> "Grounding":
+        if self.end <= self.start:
+            raise ValueError(
+                f"a phrase starting at {self.start} cannot end at {self.end}")
+        return self
+
+
+def find_grounding_issues(grounding: list[Grounding], text: str) -> list[str]:
+    return [
+        *(f"grounding {index} ends at {phrase.end}, past the end of a claim {len(text)} "
+          "characters long" for index, phrase in enumerate(grounding)
+          if phrase.end > len(text)),
+        *_find_overlapping_spans(grounding),
+    ]
+
+
+def _find_overlapping_spans(grounding: list[Grounding]) -> list[str]:
+    issues, reached = [], 0
+    for phrase in sorted(grounding, key=lambda phrase: phrase.start):
+        if phrase.start < reached:
+            issues.append(f"the phrase at {phrase.start}-{phrase.end} overlaps the one "
+                          "that ends after it starts")
+        reached = max(reached, phrase.end)
+    return issues
 
 
 class Challenge(_Base):

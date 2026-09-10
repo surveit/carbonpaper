@@ -21,6 +21,7 @@ from app.models.claim_review import (
     Grounding,
     GroundingAnswer,
     MeaningAnswer,
+    find_grounding_issues,
 )
 
 # What the journalist's click asks for; the claim and what the run holds follow it.
@@ -77,8 +78,15 @@ def render_attack_task(
         render_evidence_bundle(bundle),
     ]
     if grounding is not None:
+        _refuse_a_phrase_outside_the_sentence(grounding, bundle.claim_text)
         blocks.append(_render_phrases(bundle.claim_text, grounding))
     return "\n\n".join(blocks)
+
+
+def _refuse_a_phrase_outside_the_sentence(grounding: GroundingAnswer, claim_text: str) -> None:
+    issues = find_grounding_issues(grounding.phrases, claim_text)
+    if issues:
+        raise ValueError("; ".join(issues))
 
 
 def _refuse_a_mismatched_grounding(
@@ -106,5 +114,5 @@ def _render_phrase(index: int, claim_text: str, phrase: Grounding) -> str:
 def _render_evidence_ref(evidence: EvidenceRef | None) -> str:
     if evidence is None:
         return _NOTHING_IN_THE_RUN
-    # json.dumps, not model_dump_json: the prompt's own example of a phrase line is spaced.
-    return json.dumps(evidence.model_dump(mode="json"))
+    # Spaced separators, and no \u escape: the prompt's own example phrase line reads that way.
+    return json.dumps(evidence.model_dump(mode="json"), ensure_ascii=False)

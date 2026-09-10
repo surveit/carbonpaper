@@ -17,6 +17,7 @@ from app.models.claim_review import (
     OutputEvidenceItem,
     Rewrite,
     StageEvidenceItem,
+    find_grounding_issues,
 )
 from app.models.claims import PublishedCitation, StageOutputCellCitation
 from app.models.records.claim_review import ClaimReview
@@ -102,18 +103,6 @@ def find_challenge_issues(challenges: list[Challenge], grounding_count: int) -> 
         for index, challenge in enumerate(challenges)
         if challenge.grounding_index is not None
         and challenge.grounding_index >= grounding_count
-    ]
-
-
-def find_grounding_issues(grounding: list[Grounding], text: str) -> list[str]:
-    return [
-        *(f"grounding {index} ends at {phrase.end}, past the end of a claim {len(text)} "
-          "characters long" for index, phrase in enumerate(grounding)
-          if phrase.end > len(text)),
-        *(f"grounding {index} starts at {phrase.start}, which is not before its end "
-          f"{phrase.end}" for index, phrase in enumerate(grounding)
-          if phrase.start >= phrase.end),
-        *_find_overlapping_spans(grounding),
     ]
 
 
@@ -223,12 +212,3 @@ def _require_cell_citation(citation: PublishedCitation) -> StageOutputCellCitati
             ["a table claim has no sentence to attack; only a cell claim is attacked"])
     return citation
 
-
-def _find_overlapping_spans(grounding: list[Grounding]) -> list[str]:
-    issues, reached = [], 0
-    for phrase in sorted(grounding, key=lambda phrase: phrase.start):
-        if phrase.start < reached:
-            issues.append(f"the phrase at {phrase.start}-{phrase.end} overlaps the one "
-                          "that ends after it starts")
-        reached = max(reached, phrase.end)
-    return issues
