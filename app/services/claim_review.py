@@ -38,16 +38,15 @@ def build_evidence_bundle(project_id: ID, claim_id: ID) -> EvidenceBundle:
     claim = claims_service.load_claim(project_id, claim_id)
     cited = _require_cell_citation(claim.citation)
     run_id = cited.run_id
-    manifest = run_service.read_run_record(project_id, run_id)
+    manifest = run_service.read_run_manifest(project_id, run_id)
     stages = _read_workflow_stages(project_id, run_id)
     written = {record.stage_id for record in manifest.stage_records if record.output_path}
     return EvidenceBundle(
         project_id=project_id, run_id=run_id, claim_id=claim.id, claim_text=claim.text,
         claim_context=claim.context, cited=cited,
         shape=_read_shape(project_id, claim.shape_id),
-        run_read_everything=not manifest.parameters.is_test_run
-        and not manifest.parameters.limits,
-        outputs=_read_outputs(run_id, cited),
+        run_read_everything=claims_service.read_whether_the_run_read_everything(manifest),
+        outputs=_read_outputs(run_id, claims_service.find_output_of_claim(claim).slug),
         stages=_read_stages(stages, cited.stage_id),
         branches=_read_branches(project_id, run_id),
         input_columns=_read_input_columns(project_id, run_id, stages, written),
@@ -138,12 +137,12 @@ def _read_shape(project_id: ID, shape_id: ID | None) -> CitedShape:
         context_columns=[column.name for column in shape.context])
 
 
-def _read_outputs(run_id: ID, cited: StageOutputCellCitation) -> list[OutputEvidenceItem]:
+def _read_outputs(run_id: ID, cited_slug: str) -> list[OutputEvidenceItem]:
     return [
         OutputEvidenceItem(
             slug=output.slug, label=output.label, primary=output.primary,
             stage_id=output.citation.stage_id, value=_read_output_value(output.citation),
-            cited=output.citation == cited)
+            cited=output.slug == cited_slug)
         for output in claims_service.read_every_run_output(run_id)
     ]
 
@@ -173,7 +172,7 @@ def _read_branches(project_id: ID, run_id: ID) -> list[BranchEvidenceItem]:
         BranchEvidenceItem(
             branch_id=option.id, stage_id=option.stage_id, reason=option.reason.value,
             role=option.role.value, label=option.label, source_code=option.source_code,
-            rows_count=run_branches.row_count_per_branch_id[option.id])
+            rows_count=run_branches.row_count_per_branch_id.get(option.id))
         for option in run_branches.branch_options.values()
         if option.reason is not BranchReason.merge
     ]
@@ -205,15 +204,9 @@ def _measure_stage_columns(project_id: ID, run_id: ID,
     return measured
 
 
-_CODE_HOLDERS = ("starlark", "function", "filter")
-
-
 def _read_stage_code(placed: WorkflowStage) -> str:
-    for holder in _CODE_HOLDERS:
-        block = getattr(placed.stage, holder, None)
-        if block is not None and getattr(block, "code", None):
-            return str(block.code)
-    return ""
+    block = placed.stage.find_authored_code_block()
+    return str(block.code) if block is not None else ""
 
 
 def _read_whether_the_corpus_spells(corpus: str, backing: str) -> bool:
