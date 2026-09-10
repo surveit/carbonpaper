@@ -58,7 +58,7 @@ SEVERITY_WORDS: dict[int, str] = {
 }
 
 
-# ── Evidence refs ────────────────────────────────────────────────────────────
+# ── Evidence refs ──
 class OutputEvidence(_Base):
     kind: Literal["output"] = "output"
     slug: str = Field(description="The slug of the output figure, as the bundle lists it.")
@@ -91,7 +91,7 @@ EvidenceRef = Annotated[
 ]
 
 
-# ── What the review holds ────────────────────────────────────────────────────
+# ── What the review holds ──
 class Grounding(_Base):
     start: int = Field(ge=0, description="Where the phrase starts in the claim, counting characters from 0.")
     end: int = Field(gt=0, description="Where the phrase ends: the character after its last one.")
@@ -125,7 +125,7 @@ class Rewrite(_Base):
     why: str = Field(description="One line: what this wording fixes.")
 
 
-# ── What each attacker submits ───────────────────────────────────────────────
+# ── What each attacker submits ──
 class GroundingAnswer(_Base):
     phrases: list[Grounding] = Field(
         description="Every phrase of the claim that asserts something, in the order it is read."
@@ -168,7 +168,7 @@ class ClaimReviewDraft(_Base):
     summary: str = Field(description="What the claim can stand as, in one paragraph the journalist reads first.")
 
 
-# ── The evidence bundle ──────────────────────────────────────────────────────
+# ── The evidence bundle ──
 class CitedShape(_Base):
     label: str
     universe: str
