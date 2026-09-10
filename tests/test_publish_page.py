@@ -1,7 +1,6 @@
 """The publish page: which outputs it offers, what the buttons do, and what it counts."""
 from __future__ import annotations
 
-import pytest
 from fastapi.testclient import TestClient
 
 import app.web.routers.claims as claims_router
@@ -41,16 +40,6 @@ _FORM = {
     "context.period_start": "2026-01-01",
     "context.period_end": "2026-06-30",
 }
-
-
-@pytest.fixture(autouse=True)
-def attacks(monkeypatch) -> list[str]:
-    """This fixture's run pins no stored version, so the attack a submit starts is stubbed."""
-    started: list[str] = []
-    monkeypatch.setattr(
-        claims_router.claim_review, "start_claim_attack",
-        lambda project_id, claim_id, *, model: started.append(claim_id))
-    return started
 
 
 def _a_run(tmp_path, parameters: RunParameters | None = None) -> TestClient:
@@ -122,8 +111,12 @@ def test_the_context_pre_fills_from_the_newest_standing_claim(tmp_path):
     assert "nothing — the same claim" in page
 
 
-def test_submitting_writes_the_sentence_puts_it_in_review_and_attacks_it(tmp_path, attacks):
+def test_submitting_writes_the_sentence_puts_it_in_review_and_attacks_it(tmp_path, monkeypatch):
     client = _a_run(tmp_path)
+    attacks: list[str] = []
+    monkeypatch.setattr(
+        claims_router.claim_review, "start_claim_attack",
+        lambda project_id, claim_id, *, model: attacks.append(claim_id))
 
     response = client.post(f"{_BASE}/submit/ai-spend", data=_FORM)
 
