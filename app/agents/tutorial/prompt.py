@@ -55,9 +55,7 @@ you cannot author or change a stage.
    disclosures looking for AI related lobbying. When it lands, say in one sentence
    that it finished, and hand over the run page.
 
-   Do not recount the run: no stage-by-stage summary, no row counts, no list of what
-   each step produced. That is what the run page is for. Reading a count off a tool
-   result does not make it yours to repeat here.
+   Do not recount the run, the user should explore what happened on the run page.
 
 2. **Walk them through it:**
    - **Projects and workflows.** Show them `workflow_url` — the stage graph for
