@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from typing import Any
 
@@ -20,6 +21,8 @@ from app.compiler.claim_attack.orchestrator import (
 )
 from app.compiler.claim_attack.run import start_claim_attack_agents
 from app.core.agent.store import SessionStore
+from app.core.agent.usage import LlmUsage
+from app.core.errors import GenerationError
 from app.models.claim_review import (
     Attacker,
     AttackerAnswers,
@@ -234,13 +237,17 @@ class _FakeAgent:
     """Records when its turn starts and ends, holds if asked, then submits `submitted`."""
 
     def __init__(self, submitted: Any, *, task: str, name: str,
-                 log: list[tuple[str, str]], hold: asyncio.Event | None) -> None:
+                 log: list[tuple[str, str]], hold: asyncio.Event | None,
+                 raises: BaseException | None = None,
+                 usage: LlmUsage | None = None) -> None:
         self.task = task
         self._submitted = submitted
         self._answer: Any = None
         self._name = name
         self._log = log
         self._hold = hold
+        self._raises = raises
+        self._usage = usage
 
     @property
     def answer(self) -> Any:
@@ -255,6 +262,10 @@ class _FakeAgent:
                 agent._log.append(("start", agent._name))
                 if agent._hold is not None:
                     await agent._hold.wait()
+                if agent._usage is not None:
+                    self.last_usage = agent._usage
+                if agent._raises is not None:
+                    raise agent._raises
                 agent._answer = agent._submitted
                 agent._log.append(("done", agent._name))
                 return [{"role": "assistant",
@@ -275,8 +286,12 @@ class _Fakes:
     """Stands in for the six attackers and the orchestrator, keeping what each was handed."""
 
     def __init__(self, *, answers: AttackerAnswers, draft: ClaimReviewDraft | None,
-                 silent: Attacker | None = None, hold: asyncio.Event | None = None) -> None:
+                 silent: Attacker | None = None, hold: asyncio.Event | None = None,
+                 raises: dict[Attacker, BaseException] | None = None,
+                 usage: dict[Attacker, LlmUsage] | None = None) -> None:
         self.answers, self.draft, self.silent, self.hold = answers, draft, silent, hold
+        self.raises = raises or {}
+        self.usage = usage or {}
         self.log: list[tuple[str, str]] = []
         self.tasks: dict[str, str] = {}
         self.merged: AttackerAnswers | None = None
@@ -289,17 +304,21 @@ class _Fakes:
     def build_attacker(self, attacker, bundle, *, grounding=None, model="sonnet"):
         task = render_attack_task(attacker, bundle, grounding)
         self.tasks[attacker.value] = task
+        failing = self.raises.get(attacker)
         return _FakeAgent(
             None if attacker == self.silent else _answer_for(attacker, self.answers),
             task=task, name=attacker.value, log=self.log,
-            hold=None if attacker is Attacker.grounding else self.hold,
+            # A turn that is going to fail is never held: it falls over while the rest run.
+            hold=None if attacker is Attacker.grounding or failing else self.hold,
+            raises=failing, usage=self.usage.get(attacker),
         )
 
     def build_orchestrator(self, bundle, answers, *, model="sonnet"):
         self.merged = answers
         task = render_orchestrator_task(bundle, answers)
         self.tasks["orchestrator"] = task
-        return _FakeAgent(self.draft, task=task, name="orchestrator", log=self.log, hold=None)
+        return _FakeAgent(self.draft, task=task, name="orchestrator", log=self.log, hold=None,
+                          raises=self.raises.get(Attacker.orchestrator))
 
     def started(self) -> list[str]:
         return [name for kind, name in self.log if kind == "start"]
@@ -511,3 +530,107 @@ def test_the_parent_session_carries_the_request_and_an_active_turn(
     assert seen["session"]["active_turn"] is not None
     assert seen["session"]["context"]["claim_id"]
     assert seen["session"]["context"]["hidden"] is True
+
+
+def test_a_failing_attacker_leaves_none_of_the_other_four_running(
+    bundle, monkeypatch, caplog
+) -> None:
+    landed: list[ClaimAttackResult] = []
+    seen: dict[str, Any] = {}
+
+    async def _drive() -> None:
+        hold = asyncio.Event()
+        fakes = _Fakes(answers=make_answers(), draft=make_draft(), hold=hold, raises={
+            Attacker.data_defects: GenerationError("the data attacker fell over"),
+            Attacker.omissions: OSError("the omissions socket went"),
+        }).install(monkeypatch)
+        store = _store_of(monkeypatch)
+        parent = start_claim_attack_agents(
+            bundle=bundle, model="sonnet", on_answer=landed.append)
+        await _wait_until(lambda: len(fakes.started()) == 6,
+                          whats_missing="the five attackers did not all start")
+        hold.set()
+        await _wait_until_idle(store, parent)
+        seen["finished"] = fakes.finished()
+        seen["session"] = store.load(parent)
+        seen["failure"] = _failure_on(store, parent)
+        seen["titles"] = [one["title"] for one in store.list_sessions()]
+
+    with caplog.at_level(logging.WARNING):
+        asyncio.run(_drive())
+
+    assert landed == []
+    # The first failure is the one the reader is given; the second is not discarded unlogged.
+    assert seen["failure"] is not None and "the data attacker fell over" in seen["failure"]
+    assert "the omissions socket went" in caplog.text
+    assert seen["session"]["active_turn"] is None
+    assert sorted(seen["finished"]) == sorted(
+        [Attacker.grounding.value, Attacker.choices.value,
+         Attacker.coverage.value, Attacker.meaning.value])
+    for attacker in _LATER:
+        assert any(attacker.value in title for title in seen["titles"]), attacker
+
+
+def test_a_turn_that_fell_over_still_books_what_it_spent(bundle, monkeypatch) -> None:
+    spent = LlmUsage(input_tokens=11, output_tokens=3, cost_usd=0.02, calls=1)
+    _Fakes(answers=make_answers(), draft=make_draft(),
+           raises={Attacker.data_defects: OSError("the socket went")},
+           usage={Attacker.data_defects: spent}).install(monkeypatch)
+    store = _store_of(monkeypatch)
+
+    _run_the_attack(store, bundle, lambda result: None)
+
+    [failed] = [one for one in store.list_sessions()
+                if Attacker.data_defects.value in one["title"]]
+    assert store.load(failed["session_id"])["turn_spend"]
+
+
+def test_the_running_attack_is_held_until_it_finishes(bundle, monkeypatch) -> None:
+    seen: dict[str, Any] = {}
+
+    async def _drive() -> None:
+        _Fakes(answers=make_answers(), draft=make_draft()).install(monkeypatch)
+        _store_of(monkeypatch)
+        start_claim_attack_agents(bundle=bundle, model="sonnet", on_answer=lambda r: None)
+        seen["held"] = len(claim_attack_run._ATTACKS)
+        await next(iter(claim_attack_run._ATTACKS))
+        await asyncio.sleep(0)
+        seen["after"] = len(claim_attack_run._ATTACKS)
+
+    asyncio.run(_drive())
+
+    assert seen["held"] == 1
+    assert seen["after"] == 0
+
+
+def test_a_bug_no_named_failure_covers_still_leaves_the_parent_a_failure(
+    bundle, monkeypatch
+) -> None:
+    seen: dict[str, Any] = {}
+
+    async def _drive() -> None:
+        _Fakes(answers=make_answers(), draft=make_draft(),
+               raises={Attacker.orchestrator: KeyError("no such key")}).install(monkeypatch)
+        store = _store_of(monkeypatch)
+        parent = start_claim_attack_agents(
+            bundle=bundle, model="sonnet", on_answer=lambda r: None)
+        with pytest.raises(KeyError):
+            await next(iter(claim_attack_run._ATTACKS))
+        seen["failure"] = _failure_on(store, parent)
+        seen["active_turn"] = store.load(parent)["active_turn"]
+
+    asyncio.run(_drive())
+
+    assert seen["failure"] == "generation failed: the attack did not finish"
+    assert seen["active_turn"] is None
+
+
+def test_the_request_is_cleared_off_the_parent_when_the_attack_lands(
+    bundle, monkeypatch
+) -> None:
+    _Fakes(answers=make_answers(), draft=make_draft()).install(monkeypatch)
+    store = _store_of(monkeypatch)
+
+    parent = _run_the_attack(store, bundle, lambda result: None)
+
+    assert store.load(parent)["pending_user"] is None
