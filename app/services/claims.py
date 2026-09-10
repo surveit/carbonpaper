@@ -11,7 +11,7 @@ from app.models.records.claims import Claim, ClaimShape
 from app.models.records.run_manifest import RunManifest
 from app.models.records.workflow_output import WorkflowOutput
 from app.models.schema import TableSchema
-from app.services.claim_shapes import load_claim_shape
+from app.services.claim_shapes import read_claim_shape
 from app.services.errors import ClaimRefused
 
 _STILL_STANDS = (ClaimStatus.submitted, ClaimStatus.approved)
@@ -24,7 +24,7 @@ def submit_claim(
     written = _require_text(text)
     # The text is read first so a refusal supersedes nothing and leaves no claim orphaned.
     output = read_workflow_run_output_by_slug(run_id, slug)
-    shape = _require_shape(project_id, output.shape_id)
+    shape = read_claim_shape(project_id, output.shape_id)
     held = read_context(shape, context)
     for standing in find_equivalent_claims(project_id, shape.id, held):
         _set_status(standing, ClaimStatus.superseded)
@@ -39,7 +39,7 @@ def submit_claim(
 def approve_claim(project_id: ID, claim_id: ID, run_read_everything: bool) -> Claim:
     """Re-checked before it stands: what was in the way can move while it waits."""
     claim = load_claim(project_id, claim_id)
-    shape = _require_shape(project_id, claim.shape_id)
+    shape = read_claim_shape(project_id, claim.shape_id)
     validate_run_covers_the_shape(shape, run_read_everything)
     validate_nothing_equivalent_stands(project_id, shape, claim.context, besides_claim_id=claim.id)
     return _set_status(claim, ClaimStatus.approved)
@@ -53,7 +53,7 @@ def decline_claim(project_id: ID, claim_id: ID) -> Claim:
 def decline_output(project_id: ID, run_id: ID, slug: str) -> Claim:
     """A skip: proposed and refused in one act, so the run's counts still add up."""
     output = read_workflow_run_output_by_slug(run_id, slug)
-    shape = _require_shape(project_id, output.shape_id)
+    shape = read_claim_shape(project_id, output.shape_id)
     claim = Claim(
         created_by_project_id=project_id, shape_id=shape.id,
         citation=output.citation, status=ClaimStatus.declined,
@@ -183,16 +183,9 @@ def validate_nothing_equivalent_stands(
 
 def learn_the_template(project_id: ID, shape_id: ID, template: str) -> ClaimShape:
     """The template asserts nothing, so a claim that read better can rewrite it."""
-    shape = _require_shape(project_id, shape_id)
+    shape = read_claim_shape(project_id, shape_id)
     shape.template = template.strip()
     shape.save()
-    return shape
-
-
-def _require_shape(project_id: ID, shape_id: ID | None) -> ClaimShape:
-    shape = load_claim_shape(project_id, shape_id) if shape_id else None
-    if shape is None:
-        raise ClaimRefused([f"this project holds no claim shape '{shape_id}'"])
     return shape
 
 

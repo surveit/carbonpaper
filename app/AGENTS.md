@@ -32,7 +32,7 @@ bite most often.
   ahead of `/runs/<id>`, which would otherwise read `new` as a run id. The fold is closed on load and `<details>` submits its content
   either way, so the default run reuses cached rows without the reader deciding.
 - `/project/<m>/runs/<id>/queue/<stage>` — the human-review queue UI (+ `/decide`, `/resume`).
-- `/project/<m>/claims` (`claims.html` ← `app.web.claim_review_view`) — every claim the
+- `/project/<m>/claims` (`claims.html` ← `app.web.claims_list_view`) — every claim the
   project has made, what is waiting on review first and newest first under that, with a
   tally that writes no count of zero. `/project/<m>/claims/<id>` is one claim: the sentence,
   where each phrase lands in the run, and what the attackers raised. It has no nav row and
