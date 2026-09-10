@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from app.models.branch_analysis import BranchId, BranchOption
+from app.models.branch_analysis import BranchId, BranchOption, RowOrdinal
 from app.models.schema import StageId
 
 
@@ -30,6 +30,33 @@ class MinimapCut(BaseModel):
     branch: BranchId
     label: str
     tip: str
+    # The branch's recorded count over the whole run.
+    rows: int
+
+
+class SheetRow(BaseModel):
+    # None for a dropped row, which has no ordinal in the stage's output frame.
+    ordinal: RowOrdinal | None
+    # Positional against the sheet's `columns`.
+    cells: list[str]
+    # Behind the cited figure.
+    mine: bool
+    dropped: bool
+
+
+class CanvasSheet(BaseModel):
+    """One stage's box on the canvas, and the few rows drawn under it."""
+
+    stage_id: StageId
+    type: str
+    description: str
+    inputs: list[StageId]
+    rows_in: int
+    rows_out: int
+    rows_dropped: int
+    rows_behind: int
+    columns: list[str]
+    rows: list[SheetRow]
 
 
 class MinimapArm(BaseModel):
@@ -66,3 +93,5 @@ class ValuesUsed(BaseModel):
     code: dict[StageId, str]
     # Set where the cited column is a `count`, which reads no column.
     counts_rows: bool
+    # In the run's stage order, one per stage that wrote a frame.
+    sheets: list[CanvasSheet]

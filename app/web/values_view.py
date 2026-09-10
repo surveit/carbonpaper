@@ -14,6 +14,7 @@ from app.web.loading import load_run_record
 from app.web.run_stage_view import TraceScope
 from app.web.scope_drawing import DrawnColumn, draw_the_scope
 from app.web.scope_view import load_scope_map, read_run_branches
+from app.web.sheet_preview import build_canvas_sheets
 from app.web.values_payload import (
     MinimapArm,
     MinimapCut,
@@ -41,7 +42,9 @@ def load_values_used(
     walk = walk_column_back(stages, ColumnAt(stage_id, column))
     parents = _index_parents(stages)
     level = _rank_stages_by_graph_level(parents)
-    behind = _count_rows_behind(project_id, run_id, stage_id, row, stages)
+    run_branches = read_run_branches(project_id, run_id)
+    reached = find_rows_reached_per_stage(run_branches, [(stage_id, row)])
+    behind = {sid: len(reached.get(sid, ())) for sid in stages}
     counts_rows = walk.find_stop_at(ColumnAt(stage_id, column)) is WalkStop.counts_rows
     # A count reads no column, so its walk is every stage its rows came through.
     on_walk = ({sid for sid, rows in behind.items() if rows} if counts_rows
@@ -63,6 +66,8 @@ def load_values_used(
         branches=told_apart.branches,
         code={column.stage.id: column.stage.code for column in told_apart.columns},
         counts_rows=counts_rows,
+        sheets=build_canvas_sheets(project_id, run_id, run_branches, reached,
+                                   record.stage_records, cuts),
     )
 
 
@@ -86,7 +91,7 @@ def _read_what_told_the_rows_apart(
 def _list_cuts(told_apart: _ToldApart) -> list[MinimapCut]:
     return [
         MinimapCut(stage_id=column.stage.id, branch=removal.branch,
-                   label=removal.label, tip=removal.tip)
+                   label=removal.label, tip=removal.tip, rows=removal.rows)
         for column in told_apart.columns
         for removal in column.removals
     ]
@@ -147,15 +152,6 @@ def _read_run_stages(
     if schema is None or schema.column_for_name(column) is None:
         raise ColumnNotInFrame(f"stage '{stage_id}' writes no column '{column}'")
     return stages
-
-
-def _count_rows_behind(
-    project_id: str, run_id: str, stage_id: StageId, row: int,
-    stages: WorkflowStagesById,
-) -> dict[StageId, int]:
-    reached = find_rows_reached_per_stage(
-        read_run_branches(project_id, run_id), [(stage_id, row)])
-    return {sid: len(reached.get(sid, ())) for sid in stages}
 
 
 def _list_stages_on_the_walk(walk: ColumnWalk) -> set[StageId]:

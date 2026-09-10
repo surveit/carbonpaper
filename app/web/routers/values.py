@@ -42,7 +42,7 @@ def values_panel(request: Request, project_id: str, run_id: str,
          # What values-used.js steers by; each stage's panel is fetched.
          "nav": payload.model_dump(
              mode="json", include={"cited_stage", "column", "sources", "arms",
-                                   "branches", "code"})},
+                                   "branches", "code", "sheets", "cuts"})},
     )
 
 
