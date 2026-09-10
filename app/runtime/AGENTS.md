@@ -131,6 +131,14 @@ exceed. Inside an `llm_transform` the bound reaches the model as a `minimum`/`ma
 submit tool, so a true value outside it cannot be reported: that pressure is the price of the
 guarantee, and the reason a bound belongs only where it really holds.
 
+A column the schema does not name never travels. `input_data` keeps only what its
+`produces` declares and hands the rest back as `dropped_columns`, which the executor
+reports as one warning on the stage that dropped them; `llm_transform` and
+`human_review_queue` trim the same way. So the only undeclared column the output report
+can still see is one the stage itself wrote, and that is what
+`find_columns_the_stage_did_not_declare` reports. Nothing checks an input frame for extra
+columns: an input's schema IS the upstream's output schema, already checked there.
+
 `find_row_issues` runs the schema's own `to_pydantic_model` over each mapped row as its
 mapper returns it, so a row off its signature fails AS that row. `range` reaches that model as
 `ge`/`le`, nested `fields` included; key uniqueness still needs `validate_table`.

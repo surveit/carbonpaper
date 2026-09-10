@@ -277,15 +277,14 @@ def test_a_declared_column_absent_from_the_file_is_not_an_error(tmp_path):
     assert list(df["id"]) == ["002"]
 
 
-def test_missing_output_schema_falls_back_to_plain_inference(tmp_path):
+def test_a_missing_output_schema_refuses_the_read(tmp_path):
     # Validation forbids an empty `produces`, so this shape can only arrive off-model.
     path = _csv(tmp_path, "id\n002\n")
     stage = _stage(path, [{"name": "id", "type": "str", "nullable": True}])
     stage = stage.model_copy(
         update={"signature": stage.signature.model_copy(update={"produces": []})})
-    df = read_input_data(place_stage(stage), ctx=make_run_context())
-    df = table_to_frame(df.table)
-    assert list(df["id"]) == [2]
+    with pytest.raises(ValueError, match="resolves no output schema"):
+        read_input_data(place_stage(stage), ctx=make_run_context())
 
 
 # ── Formats other than csv ───────────────────────────────────────────────────

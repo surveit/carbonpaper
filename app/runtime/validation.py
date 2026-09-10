@@ -116,10 +116,38 @@ def validate_table(
         report.issues.extend(_find_enum_issues(values, col))
         report.issues.extend(_find_json_shape_issues(values, col))
 
-    report.issues.extend(
-        _find_undeclared_columns(table.column_names, [c.name for c in columns])
-    )
     return report
+
+
+def find_columns_the_stage_did_not_declare(
+    table: pa.Table, schema: TableSchema, arriving_column_names: set[str]
+) -> list[Issue]:
+    declared = {column.name for column in schema.columns}
+    introduced = [
+        name for name in table.column_names
+        if name not in declared and name not in arriving_column_names
+    ]
+    if not introduced:
+        return []
+    return [
+        Issue(
+            "warning", None,
+            f"{len(introduced)} column(s) this stage wrote without declaring: "
+            f"{introduced[:8]}",
+        )
+    ]
+
+
+def find_dropped_column_issues(dropped: list[str]) -> list[Issue]:
+    if not dropped:
+        return []
+    return [
+        Issue(
+            "warning", None,
+            f"{len(dropped)} column(s) the schema does not name were dropped: "
+            f"{dropped[:8]}",
+        )
+    ]
 
 
 def find_row_issues(row: Mapping[str, Any], model: type[BaseModel]) -> list[str]:
@@ -261,18 +289,6 @@ def _find_enum_issues(values: pa.ChunkedArray, col: Column) -> list[Issue]:
             f"(e.g. {_describe_sample(distinct)})",
         )
     ]
-
-
-def _find_undeclared_columns(present: list[str], declared_names: list[str]) -> list[Issue]:
-    extras = [c for c in present if c not in declared_names]
-    if extras:
-        return [
-            Issue(
-                "warning", None,
-                f"{len(extras)} undeclared column(s) present (will be passed through): {extras[:8]}",
-            )
-        ]
-    return []
 
 
 # A `json`/`list[json]` column MUST declare its shape (`fields` or `value_type`,

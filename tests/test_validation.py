@@ -11,7 +11,11 @@ import pytest
 
 from app.core.frames import frame_to_table
 from app.models import TableSchema
-from app.runtime.validation import validate_table
+from app.runtime.validation import (
+    find_dropped_column_issues,
+    find_columns_the_stage_did_not_declare,
+    validate_table,
+)
 
 
 # The fixtures below are pandas because a literal frame reads better than a
@@ -199,14 +203,35 @@ def test_non_nullable_column_with_nulls_errors():
     assert not report.ok
 
 
-def test_undeclared_extra_columns_warns():
+def test_a_column_the_schema_omits_is_not_the_validator_business():
     schema = _schema(columns=[{"name": "id", "type": "str", "nullable": True}])
     df = pd.DataFrame({"id": ["a"], "extra": [1]})
     report = validate_dataframe(df, schema, stage_id="s", phase="output")
-    issue = next(i for i in report.issues if i.column is None and "undeclared" in i.message)
-    assert issue.severity == "warning"
-    assert issue.message == "1 undeclared column(s) present (will be passed through): ['extra']"
+    assert report.issues == []
     assert report.ok
+
+
+def test_a_column_the_stage_wrote_without_declaring_warns():
+    schema = _schema(columns=[{"name": "id", "type": "str", "nullable": True}])
+    table = frame_to_table(pd.DataFrame({"id": ["a"], "extra": [1]}))
+    issues = find_columns_the_stage_did_not_declare(table, schema, set())
+    assert [(i.severity, i.column) for i in issues] == [("warning", None)]
+    assert issues[0].message == "1 column(s) this stage wrote without declaring: ['extra']"
+
+
+def test_a_column_that_arrived_on_an_input_is_not_this_stage_doing():
+    schema = _schema(columns=[{"name": "id", "type": "str", "nullable": True}])
+    table = frame_to_table(pd.DataFrame({"id": ["a"], "extra": [1]}))
+    assert find_columns_the_stage_did_not_declare(table, schema, {"extra"}) == []
+
+
+def test_dropped_columns_are_reported_once_by_the_stage_that_dropped_them():
+    assert find_dropped_column_issues([]) == []
+    issues = find_dropped_column_issues(["PAGE", "SSNUMBER"])
+    assert issues[0].severity == "warning"
+    assert issues[0].message == (
+        "2 column(s) the schema does not name were dropped: ['PAGE', 'SSNUMBER']"
+    )
 
 
 # ── Declared-type checks (_find_type_issues) ─────────────────────────────────

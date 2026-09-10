@@ -37,7 +37,13 @@ from .lineage import RowLineage, concatenated_inputs_lineage, kept_rows_lineage
 from .lineage_sidecar import write_lineage_sidecar
 from app.models.severity import UserFacingErrorSeverity
 from .key_coverage import find_key_coverage_issues
-from .validation import Issue, ValidationReport, validate_table
+from .validation import (
+    Issue,
+    ValidationReport,
+    find_dropped_column_issues,
+    find_columns_the_stage_did_not_declare,
+    validate_table,
+)
 
 
 def topological_sort(stages: list[WorkflowStage]) -> list[WorkflowStage]:
@@ -252,6 +258,19 @@ def _gather_stage_inputs(
     return inputs_for_stage, window
 
 
+def _find_undeclared_column_issues(
+    workflow_stage: WorkflowStage, table: pa.Table,
+    inputs_for_stage: dict[str, pa.Table],
+) -> list[Issue]:
+    schema = workflow_stage.output_schema
+    if schema is None:
+        return []
+    return find_columns_the_stage_did_not_declare(
+        table, schema,
+        {name for arriving in inputs_for_stage.values() for name in arriving.column_names},
+    )
+
+
 def _resolve_handler(stage_type: StageType) -> StageHandler:
     handler = HANDLERS.get(stage_type)
     if handler is None:
@@ -374,6 +393,9 @@ def _finalize_stage_output(
         table, workflow_stage.output_schema, stage_id=sid, phase="output")
     out_rep.issues.extend(find_key_coverage_issues(workflow_stage, inputs_for_stage))
     out_rep.issues.extend(find_workflow_output_issues(workflow_stage, table))
+    out_rep.issues.extend(
+        _find_undeclared_column_issues(workflow_stage, table, inputs_for_stage))
+    out_rep.issues.extend(find_dropped_column_issues(output.contribution.dropped_columns))
     if row_errors:
         out_rep.issues[0:0] = [
             Issue("error", None,
