@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from app.web.admin import include_admin_routers
 from app.web.chat_router import router as chat_router
 from app.web.routers import (
-    claims, cmdk_palette, evals, files, guide, input_files, node, pickers, project, review,
+    canvas_mock, claims, cmdk_palette, evals, files, guide, input_files, node, pickers, project, review,
     review_packet, run_form, run_lineage, run_metadata, run_stage, runs, scope, values,
 )
 
@@ -27,6 +27,7 @@ def include_routers(app: FastAPI) -> None:
     app.include_router(run_lineage.router)
     app.include_router(scope.router)
     app.include_router(values.router)
+    app.include_router(canvas_mock.router)
     app.include_router(input_files.router)
     app.include_router(review_packet.router)
     app.include_router(evals.router)
