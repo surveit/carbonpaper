@@ -38,3 +38,10 @@ def test_the_walk_climbs_every_input_and_stops_at_the_loads():
 def test_an_unknown_stage_is_refused_by_name():
     with pytest.raises(ValueError, match="nowhere"):
         find_stages_upstream_of([parse_stage(_load("east"))], "nowhere")
+
+
+def test_an_input_no_stage_resolves_stops_the_walk():
+    stages = [parse_stage(s) for s in (_load("east"), _passthrough("orphan", "vanished"))]
+
+    with pytest.raises(ValueError, match="vanished"):
+        find_stages_upstream_of(stages, "orphan")
