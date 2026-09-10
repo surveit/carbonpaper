@@ -46,13 +46,13 @@ def test_a_sandboxed_filters_predicate_reaches_the_attacker_too(claim):
     assert 'row["amount"] > 0' in render_evidence_pool(bundle)
 
 
-def test_an_arm_the_run_recorded_no_count_for_reads_as_no_count(claim):
+def test_an_arm_no_row_took_reads_zero(claim):
     bundle = claim_review.build_evidence_bundle(PROJECT, claim.id)
 
     kept = next(b for b in bundle.branches
                 if b.stage_id == "over_a_million" and b.role == "keeps")
-    assert kept.rows_count is None
-    assert "rows not recorded" in render_evidence_pool(bundle)
+    assert kept.rows_count == 0
+    assert "rows 0" in render_evidence_pool(bundle)
 
 
 def test_a_figure_of_five_digits_is_pooled_with_its_separators():
