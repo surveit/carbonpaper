@@ -81,19 +81,21 @@ async def _attack(
     delivered = False
     try:
         on_answer(await _run_the_seven_turns(store, bundle, model))
-        store.set_pending_user(parent_id, None)
         delivered = True
+        store.set_pending_user(parent_id, None)
     except _ATTACK_FAILURES as exc:
         # Detached: nothing awaits this task, so the failure reaches the reader here.
         _LOG.warning("attacking claim %s failed: %s", bundle.claim_id, exc)
         persist_generation_failure(store, parent_id, exc)
         delivered = True
     finally:
-        if not delivered:
-            # A bug, not a handled failure: the parent must not read "finished, no error".
-            persist_generation_failure(
-                store, parent_id, RuntimeError("the attack did not finish"))
-        store.set_active_turn(parent_id, None)
+        try:
+            if not delivered:
+                # A bug, not a handled failure: the parent must not read "finished, no error".
+                persist_generation_failure(
+                    store, parent_id, RuntimeError("the attack did not finish"))
+        finally:
+            store.set_active_turn(parent_id, None)
 
 
 async def _run_the_seven_turns(
