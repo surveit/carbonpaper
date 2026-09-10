@@ -213,7 +213,8 @@ def _read_whether_the_corpus_spells(corpus: str, backing: str) -> bool:
     """At token boundaries: `220` inside `2200` backs nothing."""
     if not backing:
         return False
-    return re.search(rf"(?<![\w,.]){re.escape(backing)}(?![\w,.])", corpus) is not None
+    pattern = rf"(?<!\w)(?<!\d[,.]){re.escape(backing)}(?![,.]\d)(?!\w)"
+    return re.search(pattern, corpus) is not None
 
 
 def _require_cell_citation(citation: PublishedCitation) -> StageOutputCellCitation:

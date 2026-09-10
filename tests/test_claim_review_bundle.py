@@ -163,6 +163,17 @@ def test_a_standalone_token_however_short_is_backed(claim):
     assert stored.challenges[0].backing == "5"
 
 
+def test_a_backing_ending_at_a_full_stop_in_the_pool_is_backed(claim):
+    stored = _store(claim, "28% of records", "the pool says 28% of records. And more.")
+
+    assert stored.challenges[0].backing == "28% of records"
+
+
+def test_a_digit_cut_out_of_a_thousands_separated_number_is_not_in_the_pool(claim):
+    with pytest.raises(ClaimReviewRefused, match="backing '2' is"):
+        _store(claim, "2", "the pool says 2,200 in total")
+
+
 def test_a_challenge_landing_on_a_phrase_the_review_never_grounded_is_refused(claim):
     with pytest.raises(ClaimReviewRefused, match="names no phrase"):
         claim_review.store_claim_review(
