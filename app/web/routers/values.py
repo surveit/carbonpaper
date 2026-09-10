@@ -10,6 +10,7 @@ from app.core.errors import (
     RunVersionUnresolvableError,
     StageNotInRun,
 )
+from app.runtime.errors import MissingLineage
 from app.web import values_view
 from app.web.config import templates
 from app.web.loading import load_manifest
@@ -18,7 +19,7 @@ from app.web.run_stage_view import build_run_stage_panel
 router = APIRouter()
 
 # A pane that 404s shows a browser error page inside a tab; these answer 200.
-NO_WALK = (ColumnNotInFrame, StageNotInRun, RunVersionUnresolvableError)
+NO_WALK = (ColumnNotInFrame, MissingLineage, StageNotInRun, RunVersionUnresolvableError)
 
 
 @router.get(
