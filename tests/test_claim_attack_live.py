@@ -1,10 +1,4 @@
-"""One real attack on the fixture claim: seven turns, real models, real spend.
-
-Deselected by default (pytest.ini adds -m "not live_llm"); opt in with
-`pytest tests/test_claim_attack_live.py -m live_llm -s`. It asserts only that the
-attack FINISHED — what the models said is printed, not judged. With no backend it
-FAILS rather than skips.
-"""
+"""One real attack on the fixture claim; deselected by default, opt in with -m live_llm."""
 from __future__ import annotations
 
 import asyncio
