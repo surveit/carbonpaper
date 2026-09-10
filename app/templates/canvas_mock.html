@@ -30,7 +30,7 @@ html,body{height:100%;margin:0;overflow:hidden}
 .sheet text.n{font-size:9px;fill:var(--muted);font-variant-numeric:tabular-nums}
 .stem{stroke:var(--border-strong);stroke-width:1.5}
 .hit{fill:transparent;cursor:pointer}
-.wire-total{fill:none;stroke:var(--sunk-deep)}.wire-rel{fill:none;stroke:var(--accent);opacity:.8}
+.wire-total{fill:none;stroke:var(--border-strong);opacity:.55}.wire-rel{fill:none;stroke:var(--accent);opacity:.9}
 .legend-box{fill:var(--raised);stroke:var(--border)}.legend,.legend-say{font-size:9.5px;fill:var(--muted)}
 /* the sheet's rows: the app's own table, drawn small and clipped to the sheet */
 .mini{transform:scale(.62);transform-origin:0 0;width:161.3%;overflow:hidden;pointer-events:none}
@@ -47,6 +47,10 @@ html,body{height:100%;margin:0;overflow:hidden}
 <div class="cv-top">
   <div class="fig"><b>{{ payload.cited.value }}</b><code>{{ payload.cited.column }}</code></div>
   <div class="at">at <code>{{ payload.cited.stage }}</code> row {{ payload.cited.row + 1 }}</div>
+  <label class="at">wires <select id="wires">
+    <option value="sqrt">square root</option>
+    <option value="linear">linear</option>
+    <option value="log">log</option></select></label>
   <label class="at">scale as <select id="scale">
     <option value="stack">a stack of pages</option>
     <option value="scroll">a scrollbar thumb</option>
@@ -62,8 +66,11 @@ const D = JSON.parse(document.getElementById('payload').textContent);
 const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const fmt = n => Number(n).toLocaleString('en-US');
 let view = {x: 30, y: 20, k: 0.85}, picked = null;
-const BOX_W = 210, BOX_H = 34, STEM = 6, LEVEL_DX = 300, LANE_DY = 44, SHEET_H = 96, STACK = 14;
-let scale = 'stack';
+const BOX_W = 210, BOX_H = 34, STEM = 6, LEVEL_DX = 300, LANE_DY = 64, SHEET_H = 96, STACK = 14;
+let scale = 'stack', wireScale = 'sqrt';
+const MAXROWS = () => Math.max(...D.order.map(id => D.stages[id].total));
+const WIRE_MAX = 44, WIRE_MIN = 2;
+function wireW(n){ if(!n) return 0; const m = MAXROWS(); const f = wireScale === 'linear' ? n / m : wireScale === 'sqrt' ? Math.sqrt(n / m) : lg(n); return WIRE_MIN + (WIRE_MAX - WIRE_MIN) * f; }
 D.lost = {}; D.cuts.forEach(c => D.lost[c.stage_id] = (D.lost[c.stage_id] || 0) + parseInt(c.label));
 D.order.forEach(id => D.stages[id].id = id);
 const inRows = s => s.total + (D.lost[s.id] || 0);
@@ -149,7 +156,7 @@ function sheet(s){
 function wire(e){
   const a = D.stages[e.from_stage], b = D.stages[e.to_stage];
   const rows = a.total, rel = e.rows || 0;
-  const wt = Math.max(1, 10 * lg(rows)), wr = rel ? Math.max(1.5, 10 * lg(rel)) : 0;
+  const wt = wireW(rows), wr = rel ? Math.max(2.5, wireW(rel)) : 0;
   const y0 = a.y + BOX_H + STEM + sheetH(a) / 2, y1 = b.y + BOX_H / 2;
   const x0 = a.x + BOX_W, x1 = b.x, m = (x0 + x1) / 2;
   const d = `M${x0},${y0}C${m},${y0} ${m},${y1} ${x1},${y1}`;
@@ -199,6 +206,7 @@ window.addEventListener('mouseup', ev => {
 svg.addEventListener('wheel', ev => { ev.preventDefault(); const k = Math.min(3, Math.max(.3, view.k * (ev.deltaY < 0 ? 1.1 : .9))); const r = svg.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top; view.x = mx - (mx - view.x) * k / view.k; view.y = my - (my - view.y) * k / view.k; view.k = k; draw(); }, {passive: false});
 window.addEventListener('keydown', ev => { if(ev.key === 'Escape'){ closeDrawer(); draw(); } });
 document.getElementById('scale').onchange = ev => { scale = ev.target.value; draw(); };
+document.getElementById('wires').onchange = ev => { wireScale = ev.target.value; draw(); };
 layout(); draw();
 </script>
 {% endblock %}
