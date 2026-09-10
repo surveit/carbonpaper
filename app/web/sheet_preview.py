@@ -82,8 +82,7 @@ def _build_sheet(run_branches: WorkflowRunBranches, stage_id: StageId, run_dir: 
         columns=list(frame.column_names), rows=rows)
 
 
-# A filter off the figure's route has no cut on record, so the diff's count is the
-# one that holds everywhere; on the route the two are the same fact and must agree.
+# Off the figure's route no cut is recorded, so the diff's count is the one that holds.
 def _read_dropped_off_the_diff(stage_id: StageId, diff: FilterRowsDiff,
                                from_cuts: int) -> int:
     if from_cuts and from_cuts != diff.dropped_total:
