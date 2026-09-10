@@ -72,6 +72,14 @@ def build_runs_child_crumbs(project_id: str, *, label: str) -> list[Crumb]:
     return [*_runs_trail(project_id), _here(label)]
 
 
+def build_claims_child_crumbs(project_id: str, *, label: str) -> list[Crumb]:
+    return [
+        *_project_trail(project_id),
+        _link("Claims", _claims_href(project_id)),
+        _here(_shorten(label)),
+    ]
+
+
 def build_run_child_crumbs(project_id: str, run_id: str, *, label: str) -> list[Crumb]:
     return [
         *build_run_crumbs(project_id, run_id)[:-1],
@@ -149,6 +157,16 @@ def _here(label: str, *, is_code: bool = False) -> Crumb:
     return Crumb(label=label, is_code=is_code)
 
 
+# A rung never wraps, so a whole sentence would widen the header past the window.
+_SENTENCE_RUNG_LIMIT = 60
+
+
+def _shorten(label: str) -> str:
+    if len(label) <= _SENTENCE_RUNG_LIMIT:
+        return label
+    return label[: _SENTENCE_RUNG_LIMIT - 1].rstrip() + "…"
+
+
 def _switcher(label: str, picker: str, *, is_code: bool = False,
               picker_current: str | None = None) -> Crumb:
     return Crumb(label=label, picker=picker, is_code=is_code, picker_current=picker_current)
@@ -168,6 +186,10 @@ def _versions_href(project_id: str) -> str:
 
 def _versions_picker_href(project_id: str) -> str:
     return f"{_PICKERS}/project/{project_id}/versions"
+
+
+def _claims_href(project_id: str) -> str:
+    return f"{_project_href(project_id)}/claims"
 
 
 def _runs_href(project_id: str) -> str:

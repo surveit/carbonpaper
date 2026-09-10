@@ -33,7 +33,7 @@ class ClaimsListPage(BaseModel):
     made: int
     declined: int
     superseded: int
-    # Empty where the project holds no run — there is then nothing to write a claim on.
+    # The zero state's button. Empty unless nothing is listed and a run exists to claim on.
     publish_href: str
 
 
@@ -46,12 +46,11 @@ def build_claims_list_page(project_id: ID) -> ClaimsListPage:
         made=standing[ClaimStatus.approved],
         declined=standing[ClaimStatus.declined],
         superseded=standing[ClaimStatus.superseded],
-        publish_href=_find_publish_href(project_id),
+        publish_href="" if held else _find_publish_href(project_id),
     )
 
 
 def _order_the_claims(held: list[Claim]) -> list[Claim]:
-    """Newest first — the clock ties, so the id settles it — then what waits is lifted."""
     newest = sorted(held, key=lambda claim: (claim.created_at, claim.id), reverse=True)
     return sorted(newest, key=lambda claim: claim.status != ClaimStatus.submitted)
 

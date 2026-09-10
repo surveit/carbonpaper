@@ -35,8 +35,8 @@ bite most often.
 - `/project/<m>/claims` (`claims.html` ← `app.web.claims_list_view`) — every claim the
   project has made, what is waiting on review first and newest first under that, with a
   tally that writes no count of zero. `/project/<m>/claims/<id>` is one claim: the sentence,
-  where each phrase lands in the run, and what the attackers raised. It has no nav row and
-  is reached from the list or from a run's publish page.
+  where each phrase lands in the run, and what the attackers raised. It sits under the
+  Claims leaf — reached from the list, or from a run's publish page, which leaves Runs.
 
 ## Zero states (`.empty-state`, styled in `app/static/split-view.css`)
 A list, panel or section with nothing in it reads as a heading naming what is absent,
