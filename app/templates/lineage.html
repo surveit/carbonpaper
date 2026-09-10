@@ -13,7 +13,7 @@
 {# The header's three pickers; a folder has no other row to move to. #}
 <script src="{{ static_root }}picker.js" defer></script>
 <script src="{{ static_root }}breadcrumbs.js" defer></script>
-{# The packet's Relevant columns pane is an empty state, so its script is dead there. #}
+{# The packet's Rows & columns pane is an empty state, so its script is dead there. #}
 <script src="{{ static_root }}diagram_viewport.js"></script>
 <script src="{{ static_root }}values-used.js"></script>
 {# Each stage opens the run page's own panel: its tab strip is tabs.js's. #}
@@ -62,8 +62,6 @@ body{display:flex;flex-direction:column;overflow:hidden}
 .lin-pane{flex:1;min-height:0;display:flex;flex-direction:column}
 .lin-pane.hidden{display:none}
 /* The frame scrolls the map; the pane itself does not, so the chips stay put. */
-.lin-scopeframe{flex:1;width:100%;border:0;min-height:0}
-@media (max-width:900px){.lin-scopeframe{height:80vh}}
 .lin-source{color:var(--info-ink);font-size:12.5px;font-weight:600}
 .lin-source code{background:var(--info-bg);padding:1px 5px;border-radius:4px}
 .lin-became{color:var(--muted);font-size:12.5px}
@@ -302,8 +300,7 @@ tr.lin-opens:hover td{background:var(--hover)}
 </div>
 <div class="lin-pagetabs" id="pagetabs">
   <button class="lin-pagetab on" data-pane="paths">Paths</button>
-  <button class="lin-pagetab" data-pane="rows">Relevant rows</button>
-  <button class="lin-pagetab" data-pane="values">Relevant columns</button>
+  <button class="lin-pagetab" data-pane="values">Rows &amp; columns</button>
   <button class="lin-pagetab" data-pane="inputs">Input files</button>
 </div>
 <div class="lin-pane" data-pane="paths">
@@ -345,22 +342,6 @@ tr.lin-opens:hover td{background:var(--hover)}
     <p>The walk stopped at <code>{{ view.upstream.at_stage }}</code> before it read a single
       step &mdash; {{ view.upstream.message }}. The run wrote no row here to follow.</p>
   </div>
-{% endif %}
-</div>
-<div class="lin-pane hidden" data-pane="rows">
-{% if offline or not view.nodes %}
-  <div class="empty-state">
-    <h2>The other rows are not counted here</h2>
-    {% if offline %}
-    <p>The scope of a figure &mdash; which rows produced it, and what cut the rest &mdash;
-      is drawn by the running app. A folder has no server to ask.</p>
-    {% else %}
-    <p>The run wrote no row here, so there is nothing whose scope could be drawn.</p>
-    {% endif %}
-  </div>
-{% else %}
-  {# One figure is one cell, so the map is drawn for the column the header names. #}
-  <iframe class="lin-scopeframe" id="scope-frame" title="The scope of this figure"></iframe>
 {% endif %}
 </div>
 <div class="lin-pane hidden" data-pane="inputs">
@@ -676,7 +657,7 @@ document.getElementById('steps').addEventListener('click', e => {
   const toRows = e.target.closest('.to-rows');
   if(toRows){
     e.preventDefault();
-    document.querySelector('.lin-pagetab[data-pane="rows"]').click();
+    document.querySelector('.lin-pagetab[data-pane="values"]').click();
     return;
   }
   const step = e.target.closest('.step'); if(step) select(+step.dataset.i);
@@ -722,13 +703,11 @@ document.querySelector('.lin-graph').addEventListener('toggle', async e => {
   try { await mermaid.run({ nodes:[mmd] }); } catch(err){ graphRendered = false; }
 });
 
-// ---- The column being read: the figure itself, and the scope map's subject --
+// ---- The column being read: the figure itself, and what the walk follows -----
 // A figure is a cell, and the picker wears it: the trigger is painted from the option
 // the reader chose, so switching one costs no trip to the server.
 const columnPick = document.getElementById('lin-column');
 const columnWhy = document.getElementById('lin-why');
-const scopeFrame = document.getElementById('scope-frame');
-let scopeColumn = null;
 
 function showColumn(column){
   COORD.column = column || null;
@@ -739,7 +718,6 @@ function showColumn(column){
   // Replaced, not pushed: the reader is reading one row, and the back button is
   // still the way out of it. The address stays the one a figure links with.
   history.replaceState(null, '', lineageHref(COORD.stage_id, COORD.row, COORD.column));
-  if(scopeColumn !== null && COORD.column) drawScopeFor(COORD.column);
   if(valuesColumn !== null && COORD.column) walkValuesFor(COORD.column);
   if(inputFilesColumn !== null && COORD.column) readInputFilesFor(COORD.column);
 }
@@ -758,30 +736,8 @@ if(columnPick){
   markLongValue(COORD.cells.find(c => c.column === COORD.column));
 }
 
-function scopeUrlFor(column){
-  const q = new URLSearchParams({stage: V.start_stage, row: V.start_row, column});
-  return `${RUN_BASE}/scope/panel?${q}`;
-}
-function drawScopeFor(column){
-  scopeColumn = column;
-  scopeFrame.src = scopeUrlFor(column);
-}
-// The frame is a page load, so it waits until the reader opens the tab. The map is
-// drawn for one column: with none picked the tab picks the first, in the header,
-// where the reader can see which figure they are being shown the scope of.
-document.getElementById('pagetabs').addEventListener('click', e => {
-  const picked = e.target.closest('.lin-pagetab');
-  if(!picked || picked.dataset.pane !== 'rows' || !scopeFrame) return;
-  if(!COORD || !COORD.cells.length) return;
-  const column = COORD.column || COORD.cells[0].column;
-  if(scopeColumn === column) return;
-  if(columnPick.value !== column) chooseColumn(column);
-  drawScopeFor(column);
-});
-
-// ---- Relevant columns: where one column came from, over what each stage read.
-// The column is the header's, as it is for Relevant rows: this tab holds it and
-// lets go of the row.
+// ---- Rows & columns: where one column came from, over what each stage read.
+// The column is the header's: this tab holds it and lets go of the row.
 const valuesRoot = document.getElementById('values-root');
 let valuesColumn = null;
 
@@ -873,13 +829,6 @@ async function readPaths(){
   }
 }
 if(pathsNav) readPaths();
-
-// A count reads no column, so its panel sends the reader to the rows instead.
-if(valuesRoot) valuesRoot.addEventListener('click', e => {
-  if(e.target.closest('.vu-to-rows')){
-    document.querySelector('.lin-pagetab[data-pane="rows"]').click();
-  }
-});
 
 render();
 

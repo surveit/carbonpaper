@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from app.models.branch_analysis import BranchId, BranchOption
 from app.models.schema import StageId
 
 
@@ -22,6 +23,25 @@ class MinimapEdge(BaseModel):
     rows: int | None
 
 
+class MinimapCut(BaseModel):
+    """Rows a stage took out of the workflow, offered as a page of their own."""
+
+    stage_id: StageId
+    branch: BranchId
+    label: str
+    tip: str
+
+
+class MinimapArm(BaseModel):
+    """One way a stage told this figure's rows apart: a set of branches and their count."""
+
+    stage_id: StageId
+    branches: list[BranchId]
+    label: str
+    tip: str
+    rows: int
+
+
 class StepSource(BaseModel):
     stage_id: StageId
     rows: int
@@ -38,5 +58,11 @@ class ValuesUsed(BaseModel):
     nodes: list[MinimapNode]
     edges: list[MinimapEdge]
     sources: dict[StageId, list[StepSource]]
+    cuts: list[MinimapCut]
+    # Only stages that split this figure's rows more than one way are listed.
+    arms: dict[StageId, list[MinimapArm]]
+    # What an arm's chip lights in the code: the branch's lines, and the code itself.
+    branches: dict[BranchId, BranchOption]
+    code: dict[StageId, str]
     # Set where the cited column is a `count`, which reads no column.
     counts_rows: bool

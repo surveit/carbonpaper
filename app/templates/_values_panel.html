@@ -1,4 +1,4 @@
-{# The Relevant columns tab: where the cited column came from, replayed one stage at a
+{# The Rows & columns tab: where the cited column came from, replayed one stage at a
    time. Injected into the row lineage page, which drives it with values-used.js.
    `reason` instead of `values` where no walk can be made.
 
@@ -10,18 +10,19 @@
 {% if reason %}
 <p class="banner banner-warn">No column lineage for <code>{{ column }}</code> at
   <code>{{ stage_id }}</code> — {{ reason }}.</p>
-{% elif values.counts_rows %}
-<p class="vu-say"><code>{{ column }}</code> counts rows at <code>{{ stage_id }}</code>.
-  It reads no column, so no earlier column feeds it — which rows were counted is the
-  <button class="vu-to-rows" type="button">Relevant rows</button> tab.</p>
 {% else %}
 <div class="vu" data-project="{{ project }}" data-run="{{ run_id }}" data-row="{{ values.row }}">
 <script type="application/json" class="vu-nav">{{ nav | tojson }}</script>
+{% if values.counts_rows %}
+<p class="vu-say"><code>{{ column }}</code> counts rows at <code>{{ stage_id }}</code>. It
+  reads no column, so the walk follows the rows it counted.</p>
+{% endif %}
 <p class="vu-say"><b>Walk this value back to your input data.</b> Step
   <b>◀ back</b> or use the arrow keys <kbd class="vu-key">&larr;</kbd>
   <kbd class="vu-key">&rarr;</kbd> to see the sheet one stage earlier, and what that stage
   did to the value. Each stage opens the run page's own panel for it, cut to the rows
-  behind this figure. The map is the whole run: a stage greyed out is one
+  behind this figure. The map is the whole run: each wire carries how many of those rows
+  came down it, a stage that took rows out says so, and a stage greyed out is one
   <code>{{ column }}</code> never came through.</p>
 <div class="vu-maprow">
   <button class="vu-arrow" data-go="back" title="back one stage (left arrow)">◀</button>
@@ -44,9 +45,21 @@
   </div>
   <button class="vu-arrow" data-go="fwd" title="forward one stage (right arrow)">▶</button>
 </div>
+{% if values.cuts %}
+{# The rows that left are not behind this figure, so each is a page of its own. #}
+<p class="vu-cuts">
+  {%- for cut in values.cuts %}<span class="vu-cut"><code>{{ cut.stage_id }}</code> took out
+    <a href="/project/{{ project }}/runs/{{ run_id }}/scope?stage={{ stage_id | urlencode }}&row={{ values.row }}&column={{ column | urlencode }}&cut={{ cut.branch | urlencode }}"
+       target="_blank" rel="noopener" title="{{ cut.tip }}">{{ cut.label }} ↗</a></span>
+  {%- endfor %}
+</p>
+{% endif %}
 <div class="vu-scroll">
 {% for stage_id in values.steps %}
   <section class="vu-step" data-step="{{ stage_id }}">
+    {# Filled by values-used.js where this stage split the figure's rows more than
+       one way: a chip per arm, which lights that arm in the code below. #}
+    <div class="vu-arms" data-arms="{{ stage_id }}" hidden></div>
     <div class="vu-panel" data-panel="{{ stage_id }}"></div>
   </section>
 {% endfor %}

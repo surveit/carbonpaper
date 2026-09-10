@@ -16,8 +16,61 @@ window.ValuesUsed = window.ValuesUsed || (function(){
     };
     wire(view);
     drawGraph(view);
+    drawArms(view);
     show(view);
     return view;
+  }
+
+  // ── within-stage branching: an arm per chip, lit in the code ────────
+  // A stage that told this figure's rows apart says how, above its sheet. The
+  // drawing does not carry this — a wire is one count — so the sheet does.
+  const MARK = '\u25B8';
+
+  function drawArms(view){
+    for(const [stageId, arms] of Object.entries(view.nav.arms || {})){
+      const slot = view.pane.querySelector(`.vu-arms[data-arms="${CSS.escape(stageId)}"]`);
+      if(!slot) continue;
+      slot.hidden = false;
+      slot.innerHTML = '<span class="vu-arms-say">these rows split here:</span>' +
+        arms.map((arm, i) => `<button type="button" class="vu-arm" data-arm="${i}"
+          title="${esc(arm.tip)}">${esc(arm.label)} <b>${arm.rows}</b></button>`).join('');
+    }
+  }
+
+  function pickArm(view, stageId, index){
+    const slot = view.pane.querySelector(`.vu-arms[data-arms="${CSS.escape(stageId)}"]`);
+    const chips = slot.querySelectorAll('.vu-arm');
+    const already = chips[index].classList.contains('on');
+    chips.forEach((chip, i) => chip.classList.toggle('on', i === index && !already));
+    lightTheArm(view, stageId, already ? [] : view.nav.arms[stageId][index].branches);
+    const transform = view.pane.querySelector(
+      `.vu-panel[data-panel="${CSS.escape(stageId)}"] .stage-tabs [data-tab="transform"]`);
+    if(transform && !already) transform.click();
+  }
+
+  function lineRange(fact){
+    const lines = [fact.test_line_number];
+    for(let n = fact.first_body_line_number; n && fact.last_body_line_number
+        && n <= fact.last_body_line_number; n++) lines.push(n);
+    return lines;
+  }
+
+  // The panel's own code block gives way to the same source, marked: the arms'
+  // line numbers are counted against `code`, which is what the stage ran.
+  function lightTheArm(view, stageId, branches){
+    const panel = view.pane.querySelector(`.vu-panel[data-panel="${CSS.escape(stageId)}"]`);
+    const block = panel && panel.querySelector('.code-block pre.code');
+    const code = view.nav.code[stageId];
+    if(!block || !code) return;
+    const lit = new Set(branches.map(b => view.nav.branches[b])
+      .filter(fact => fact && fact.reason === 'code')
+      .flatMap(lineRange).filter(Boolean));
+    const old = panel.querySelector('.vu-lit-legend'); if(old) old.remove();
+    const gutter = lit.size ? `<span class="vu-gutter" aria-hidden="true">${
+      code.split('\n').map((_, i) => lit.has(i + 1) ? MARK : ' ').join('\n')}</span>` : '';
+    block.outerHTML = `<pre class="code vu-lit">${gutter}<code class="language-python">${
+      esc(code)}</code></pre>` + (lit.size
+      ? `<p class="muted vu-lit-legend">${MARK} a branch on these rows' path.</p>` : '');
   }
 
   const at = view => view.trail[view.trail.length - 1];
@@ -154,6 +207,8 @@ window.ValuesUsed = window.ValuesUsed || (function(){
       if(control) control.focus({preventScroll: true});
       const header = event.target.closest('th.diff-col-jump');
       if(header) return jumpTo(view, header.dataset.jump);
+      const arm = event.target.closest('.vu-arm');
+      if(arm) return pickArm(view, arm.closest('.vu-arms').dataset.arms, +arm.dataset.arm);
       const arrow = event.target.closest('.vu-arrow');
       if(arrow) return arrow.dataset.go === 'back' ? stepBack(view) : stepForward(view);
     });

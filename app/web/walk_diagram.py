@@ -40,9 +40,11 @@ def build_walk_overlay(
     states: dict[StageId, WalkState],
     rows_behind: dict[StageId, int],
     edges: dict[tuple[StageId, StageId], int | None],
+    taken_out: dict[StageId, str] | None = None,
 ) -> DiagramOverlay:
     return DiagramOverlay(
-        notes={sid: _say_rows(state, rows_behind[sid]) for sid, state in states.items()},
+        notes={sid: _say_rows(state, rows_behind[sid], (taken_out or {}).get(sid))
+               for sid, state in states.items()},
         styles={sid: _WALK_STYLE[state] for sid, state in states.items()},
         unclickable={sid for sid, state in states.items() if state is WalkState.aside},
         edge_labels={pair: _say_edge_rows(rows)
@@ -50,10 +52,12 @@ def build_walk_overlay(
     )
 
 
-def _say_rows(state: WalkState, rows_behind: int) -> str:
+def _say_rows(state: WalkState, rows_behind: int, taken_out: str | None) -> str:
     if state is WalkState.aside:
         return "not on the walk"
-    return f"{rows_behind:,} row{'' if rows_behind == 1 else 's'} behind"
+    rows = f"{rows_behind:,} row{'' if rows_behind == 1 else 's'} behind"
+    # The node label is HTML, so a second line is a break, not a second note.
+    return rows if taken_out is None else f"{rows}<br/>\u2212 {taken_out}"
 
 
 def _say_edge_rows(rows: int) -> str:
