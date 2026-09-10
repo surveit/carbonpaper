@@ -43,10 +43,11 @@ _THE_PHRASES = (
     "landed each asserting phrase on one thing the run holds, or on nothing. One line per "
     "phrase, in reading order, numbered from 0:\n"
     '    [0] "A vast majority" → {"kind": "output", "slug": "job_status_breakdown"}\n'
-    '    [1] "guards" → nothing in the run\n'
-    "A phrase landing on nothing is already that attacker's finding and becomes a `gap` "
-    "challenge in its name; it is not yours to raise again. What this block is for is "
-    "`grounding_index`: the `[i]` on the line, and nowhere else.\n\n"
+    '    [1] "guards" → {"kind": "input_column", "stage_id": "cases", "column": "s_GUID"}\n'
+    "A phrase that landed on nothing reads `nothing in the run` after the arrow. That is "
+    "already the grounding attacker's finding and becomes a `gap` challenge in its name; "
+    "it is not yours to raise again. What this block is for is `grounding_index`: the "
+    "`[i]` on the line, and nowhere else.\n\n"
 )
 
 _THE_RULE_OF_EVIDENCE = (
@@ -78,12 +79,16 @@ _THE_RULE_OF_EVIDENCE = (
 _PRICING_A_CHALLENGE = (
     "PRICING A CHALLENGE. A challenge is worth raising when it names rows, cells, counts "
     "or numbers FROM THE POOL, each one copied off the line you name, so the orchestrator "
-    "can find that line and copy its `backing` off it. A challenge whose price this run "
-    "does not print still goes in, and it is not the weaker finding: say in `text` what "
-    "would settle it — a rerun on one column, a person reading the queued cases, a source "
-    "this run does not hold — set `moves` to `unpriced`, and set `cost` to what settling "
-    "it would take. Working the number out yourself instead is the one thing you must "
-    "never do.\n\n"
+    "can find that line and copy its `backing` off it.\n"
+    "The line between `moves` and `unpriced` is drawn once, here. The pool prints the "
+    "population that moves — the rows, the blanks, the arm's row count — and `moves` is "
+    "`moves`, even where the moved value itself is on no line. The pool prints neither "
+    "the population nor the value, and `moves` is `unpriced`.\n"
+    "An `unpriced` challenge still goes in, and it is not the weaker finding: say in "
+    "`text` what would settle it — a rerun on one column, a person reading the queued "
+    "cases, a source this run does not hold — and set `cost` to what settling it would "
+    "take. Working the number out yourself instead is the one thing you must never "
+    "do.\n\n"
 )
 
 _THE_CHALLENGE_FIELDS = (
@@ -103,9 +108,10 @@ _THE_CHALLENGE_FIELDS = (
     "here that is on no line takes the whole review down with it.\n"
     "  `evidence_refs` — the pool items above.\n"
     "  `moves` — what answering it would move. `moves` when the cited figure itself would "
-    "change; `meaning` when the figure stands but the sentence reads differently; "
-    "`unpriced` when this run cannot say how far it moves; `none` when you checked and it "
-    "does not move the figure at the precision it was printed at.\n"
+    "change and the pool prints the population that moves it; `meaning` when the figure "
+    "stands but the sentence reads differently; `unpriced` when the pool prints neither "
+    "that population nor the moved value; `none` when you checked and it does not move "
+    "the figure at the precision it was printed at.\n"
     "  `cost` — what answering it would take. `free` when a rerun of this workflow settles "
     "it; `person` when someone has to read cases and decide; `outside` when it needs a "
     "source this run does not hold; `editorial` when it is a judgement about what to say, "
@@ -418,9 +424,9 @@ _COVERAGE_EXAMPLE = (
     "Every digit in the evidence is off one of those two lines: `9806`, `7061 filled`, "
     "`2745 blank` off the column profile, `5.8%` and `28%` off the OUTPUTS line. The bound "
     "the reader might want — what the share is among cases whose outcome the file holds — "
-    "is on neither line, so it is described in words and never written as a number. This "
-    "one is still priced, because the pool prints the rows that move: `moves` is `moves` "
-    "rather than `unpriced`.\n"
+    "is on neither line, so it is described in words and never written as a number. The "
+    "rule above still prices this one: `rows 9806` and `2745 blank` are printed, so "
+    "`moves` is `moves` and only the share is missing.\n"
     + COVERAGE_EXAMPLE_JSON + "\n\n"
 )
 

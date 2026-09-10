@@ -8,16 +8,23 @@ from arch.test_no_banned_words import BANNED_WORDS
 from pydantic import BaseModel
 
 from app.compiler.claim_attack import attackers_prompt, orchestrator_prompt
+from app.compiler.claim_attack.evidence import render_evidence_pool
 from app.models.claim_review import (
     Attacker,
+    BranchEvidenceItem,
     ChallengeKind,
     ChallengesAnswer,
     ClaimReviewDraft,
+    CitedShape,
     Cost,
+    EvidenceBundle,
     GroundingAnswer,
+    InputColumnEvidenceItem,
     MeaningAnswer,
     Moves,
+    StageEvidenceItem,
 )
+from app.models.claims import StageOutputCellCitation
 from app.services.claim_review import (
     _read_whether_the_corpus_spells,
     find_grounding_issues,
@@ -66,6 +73,30 @@ _EXAMPLE_POOL_LINES = {
 
 # `text`, `why` and `summary` are prose; a figure only earns its place in these.
 _FIELDS_CARRYING_A_COPIED_FIGURE = ("evidence", "backing", "how")
+
+_A_PHRASES_LINE = re.compile(r'\[(\d+)\] "([^"]+)" → (.+)')
+
+_NUMBERLESS_BACKINGS = ["reads: none", "rows 0", "distinct 0",
+                        "feeds the cited stage: false"]
+
+# One of everything, all of it empty: the lines a challenge with no number is backed on.
+_AN_EMPTY_POOL = EvidenceBundle(
+    project_id="p", run_id="r", claim_id="c", claim_text=_DOCCS_SENTENCE,
+    claim_context={}, run_read_everything=False,
+    cited=StageOutputCellCitation(run_id="r", stage_id="ia_job_status", row_ordinal=0,
+                                  column="share", value=0),
+    shape=CitedShape(label="", universe="", importance="", qualifiers=[],
+                     context_columns=[]),
+    outputs=[],
+    stages=[StageEvidenceItem(stage_id="cases", type="input_data", description="",
+                              input_ids=[], code="", feeds_the_cited_stage=False)],
+    branches=[BranchEvidenceItem(branch_id="cases|classify/0:if", stage_id="cases",
+                                 reason="code", role="keeps", label="", source_code="",
+                                 rows_count=0)],
+    input_columns=[InputColumnEvidenceItem(stage_id="cases", column="s_GUID", kind="empty",
+                                           row_count=0, filled_count=0, null_count=0,
+                                           blank_count=0, distinct_count=0, top=[])],
+    terms="", methodology=None)
 
 
 def _find_digit_runs(text: str) -> list[str]:
@@ -183,6 +214,34 @@ def test_only_the_five_that_raise_challenges_are_shown_the_phrases_block() -> No
         assert "----- PHRASES -----" in prompt
         assert "do not count" in prompt
     assert "----- PHRASES -----" not in attackers_prompt.GROUNDING_SYSTEM_PROMPT
+
+
+def test_the_phrases_block_lands_its_lines_where_the_grounding_example_lands_them() -> None:
+    answer = GroundingAnswer.model_validate(
+        json.loads(attackers_prompt.GROUNDING_EXAMPLE_JSON))
+    for prompt, _ in _KIND_RAISED:
+        shown = _A_PHRASES_LINE.findall(prompt)
+        assert shown, "the phrases block illustrates no line"
+        for index, phrase, ref in shown:
+            landed = answer.phrases[int(index)]
+            assert _DOCCS_SENTENCE[landed.start:landed.end] == phrase
+            assert landed.evidence is not None, f"[{index}] lands on nothing"
+            assert json.loads(ref) == landed.evidence.model_dump()
+
+
+def test_a_challenge_with_no_number_is_backed_on_a_line_the_pool_can_print() -> None:
+    pool = render_evidence_pool(_AN_EMPTY_POOL)
+    for backing in _NUMBERLESS_BACKINGS:
+        assert f"`{backing}`" in _ORCHESTRATOR, f"{backing} is not offered as a backing"
+        assert _read_whether_the_corpus_spells(pool, backing), (
+            f"the renderer prints no line spelling {backing!r}")
+
+
+def test_the_pricing_rule_draws_the_line_between_moves_and_unpriced() -> None:
+    for prompt, _ in _KIND_RAISED:
+        assert "The line between `moves` and `unpriced` is drawn once, here." in prompt
+        assert "population that moves" in prompt
+        assert "prints neither the population nor the value" in prompt
 
 
 def test_a_gap_is_not_capped_by_the_rule_that_caps_an_unpriced_finding() -> None:
