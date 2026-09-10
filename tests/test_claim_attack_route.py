@@ -45,6 +45,8 @@ from claim_review_fixture import (
 # The output value as the pool spells it, so a challenge backed by it is backed by the run.
 _ON_THE_POOL = "2200"
 _OFF_THE_POOL = "9,999 grants"
+# A gap has no figure to copy: it is backed on a line that prints what is missing.
+_A_GAP_BACKING = "reads: none"
 
 
 @pytest.fixture
@@ -103,17 +105,46 @@ def make_draft(backing: str) -> ClaimReviewDraft:
         summary="It stands as a row count, not as money.")
 
 
-def install_fakes(monkeypatch, backing: str = _ON_THE_POOL) -> None:
-    answers = make_answers()
+def make_groundless_answers() -> AttackerAnswers:
+    """Every phrase lands on nothing: the apples case, where the run grounds no part of it."""
+    in_total = TOTAL_TEXT.index("in total")
+    silent = ChallengesAnswer(challenges=[])
+    return AttackerAnswers(
+        grounding=GroundingAnswer(phrases=[
+            Grounding(start=0, end=len("Grants"), evidence=None,
+                      how="nothing in the run says the rows are grants"),
+            Grounding(start=in_total, end=in_total + len("in total"), evidence=None,
+                      how="nothing in the run says the file is the whole of it")]),
+        data_defects=silent, choices=silent, omissions=silent, coverage=silent,
+        meaning=MeaningAnswer(challenges=[], rewrites=[]))
+
+
+def make_gap_draft() -> ClaimReviewDraft:
+    return ClaimReviewDraft(
+        challenges=[Challenge(
+            attacker=Attacker.grounding, kind=ChallengeKind.gap, grounding_index=index,
+            text=text, evidence="the phrase rests on nothing the run holds",
+            backing=_A_GAP_BACKING, severity=3, moves=Moves.moves, cost=Cost.outside)
+            for index, text in enumerate([
+                "Nothing in the run says the rows it counts are grants.",
+                "Nothing in the run says the file is the whole of the grants."])],
+        summary="Neither phrase of the sentence lands on anything the run holds.")
+
+
+def install_fakes(monkeypatch, backing: str = _ON_THE_POOL, *,
+                  answers: AttackerAnswers | None = None,
+                  draft: ClaimReviewDraft | None = None) -> None:
+    submitted = answers or make_answers()
+    merged = draft or make_draft(backing)
 
     def _attacker(attacker, bundle, *, grounding=None, model="sonnet"):
-        return _FakeAgent(_answer_of(attacker, answers),
+        return _FakeAgent(_answer_of(attacker, submitted),
                           render_attack_task(attacker, bundle, grounding))
 
     monkeypatch.setattr(claim_attack_run, "build_attacker", _attacker)
     monkeypatch.setattr(
         claim_attack_run, "build_orchestrator",
-        lambda bundle, submitted, *, model="sonnet": _FakeAgent(make_draft(backing), "merge"))
+        lambda bundle, submitted, *, model="sonnet": _FakeAgent(merged, "merge"))
 
 
 def _answer_of(attacker: Attacker, answers: AttackerAnswers) -> Any:
@@ -152,6 +183,21 @@ def test_the_button_attacks_the_claim_and_the_review_lands(claim, client, monkey
     assert review is not None
     assert len(review.session_ids) == 7
     assert [one.backing for one in review.challenges] == [_ON_THE_POOL]
+
+
+def test_a_claim_the_run_grounds_nowhere_is_stored_as_gaps(claim, client, monkeypatch):
+    pool = render_evidence_pool(claim_review.build_evidence_bundle(PROJECT, claim.id))
+    assert _A_GAP_BACKING in pool
+    install_fakes(monkeypatch, answers=make_groundless_answers(), draft=make_gap_draft())
+
+    response = start_the_attack(client, claim.id)
+
+    assert read_status_when_still(client, response.json()["session"])["error"] is None
+    review = claim_review.load_claim_review(PROJECT, claim.id)
+    assert review is not None
+    assert [one.kind for one in review.challenges] == [ChallengeKind.gap] * 2
+    assert [one.severity for one in review.challenges] == [3, 3]
+    assert [phrase.evidence for phrase in review.grounding] == [None, None]
 
 
 def test_a_backing_on_no_line_of_the_pool_stores_nothing(claim, client, monkeypatch):

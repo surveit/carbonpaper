@@ -217,6 +217,18 @@ def test_the_orchestrator_example_backing_is_copied_off_a_pool_line() -> None:
         draft.challenges, _EXAMPLE_POOL_LINES["orchestrator"]) == []
 
 
+def test_the_worked_example_shows_a_gap_weighed_beside_a_priced_challenge() -> None:
+    draft = ClaimReviewDraft.model_validate(
+        json.loads(_EXAMPLE_JSON["orchestrator"][0]))
+
+    [gap] = [one for one in draft.challenges if one.kind == ChallengeKind.gap]
+
+    assert gap.attacker == Attacker.grounding and gap.severity == 3
+    assert gap.grounding_index is not None, "a gap lands on the phrase it is a gap under"
+    assert gap.backing in _NUMBERLESS_BACKINGS
+    assert [one.kind for one in draft.challenges] != [ChallengeKind.gap]
+
+
 def test_every_figure_an_example_writes_is_printed_on_the_pool_line_it_quotes() -> None:
     for name, (text, _) in _EXAMPLE_JSON.items():
         pool = _EXAMPLE_POOL_LINES[name]
