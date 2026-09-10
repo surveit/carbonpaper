@@ -163,6 +163,15 @@ def test_a_traced_panel_is_the_run_page_panel_cut_to_the_figures_rows(run_id):
     assert "2 of 6 rows behind this figure" in " ".join(page.text.split())
 
 
+def test_a_traced_panel_keeps_the_run_page_tints_over_the_figures_rows(run_id):
+    page = TestClient(app).get(
+        f"/project/{PROJECT}/runs/{run_id}/stage/size_band/traced"
+        "?stage=by_portfolio&row=1&column=total_amount").text
+    # The stage's added columns stay blue, and the figure's rows are banded over that.
+    assert "diff-col-new" in page
+    assert 'class="diff-row-mine"' in page
+
+
 def test_a_scoped_panel_drops_the_run_log(run_id):
     # Nothing in the feed is per-row, so it is not offered beside filtered rows.
     page = TestClient(app).get(
