@@ -265,6 +265,13 @@ def test_the_cap_turns_on_the_printed_value_and_not_on_moves_against_unpriced() 
     assert "A `gap` is the exception and is never capped" in cap
 
 
+def test_the_worked_example_weighs_the_bound_the_way_the_cap_does() -> None:
+    assert "which is weight 2 on its own" not in _ORCHESTRATOR
+    example = _ORCHESTRATOR[_ORCHESTRATOR.index("WORKED EXAMPLE."):]
+    assert "the cap holds that route to 1" in example
+    assert "What carries it to 3 is the footing" in example
+
+
 def test_a_gap_is_not_capped_by_the_rule_that_caps_an_unpriced_finding() -> None:
     assert "A `gap` is the exception and is never capped" in _ORCHESTRATOR
     assert "comma or a full stop sitting right after" in _ORCHESTRATOR
