@@ -1,0 +1,162 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>What this run says · Claims review</title>
+<link rel="stylesheet" href="static/palette.css"><link rel="stylesheet" href="static/base.css"><link rel="stylesheet" href="static/project-shell.css"><link rel="stylesheet" href="static/minting.css"><link rel="stylesheet" href="static/mock.css?v=4">
+</head><body>
+<script src="data.js?v=4"></script><script src="sentence-data.js?v=4"></script><script src="shell.js?v=4"></script>
+<script>if (typeof EVID === "undefined" || typeof ATTACKERS === "undefined" || typeof CR === "undefined") { document.body.innerHTML = "<p style=\"font:15px sans-serif;padding:24px\">A script this page needs did not load (a cached copy, most likely). Hard-reload: Shift + reload.</p>"; throw new Error("stale dependency"); }</script>
+<script>
+const claim = CR.claim, esc = CR.esc, nums = CR.nums;
+const POOL = EVID[claim.id], GR = GROUND[claim.id];
+// Which reading the page is on, and which readings the author has claimed. Accept/dismiss stay in shell.js.
+const WKEY = "sentence-v3:" + claim.id;
+let W = { round: "original", custom: "", editing: false, claimed: [], status: (window.DEFAULT_STATUS || {})[claim.id] || "submitted" };
+try { W = Object.assign(W, JSON.parse(localStorage.getItem(WKEY) || "{}")); } catch (e) {}
+function saveW() { try { localStorage.setItem(WKEY, JSON.stringify(W)); } catch (e) {} }
+let filter = null;
+const READINGS = Object.keys(ROUNDS).filter(id => ROUNDS[id].only ? ROUNDS[id].only === claim.id : claim.challenges.some(c => c.id === id));
+
+function decorate(c, o) { const s = SEV[c.id] || [c.sev, c.backing]; return Object.assign({}, c, { sev: s[0], backing: s[1] }, o || {}); }
+function round() {
+  const base = claim.challenges.filter(c => !CR.S.is("dismissed", c.id));
+  if (W.round === "original") return { id: "original", tokens: claim.sentence, phrases: claim.phrases, value: claim.value, label: claim.label, lede: claim.lede,
+    challenges: base.map(c => decorate(c)), retired: [], pending: false, ground: GR.original, stage: claim.stage, table: claim.table };
+  if (W.round === "custom") {
+    const tokens = [], phrases = [], keep = {}, ground = {};
+    const found = claim.phrases.map(i => ({ i, t: claim.sentence[i], at: W.custom.indexOf(claim.sentence[i]) })).filter(p => p.at >= 0).sort((a, b) => a.at - b.at);
+    let cursor = 0;
+    found.forEach(p => { if (p.at < cursor) return; tokens.push(W.custom.slice(cursor, p.at)); keep[p.i] = tokens.length; ground[tokens.length] = GR.original[p.i]; phrases.push(tokens.length); tokens.push(p.t); cursor = p.at + p.t.length; });
+    tokens.push(W.custom.slice(cursor));
+    Object.keys(GR.original).filter(k => isNaN(+k)).forEach(k => { ground[k] = GR.original[k]; });
+    return { id: "custom", tokens, phrases, value: "not yet read", label: "Your wording", lede: "",
+      challenges: base.filter(c => c.phrase in keep).map(c => decorate(c, { phrase: keep[c.phrase] })), retired: base.filter(c => !(c.phrase in keep)), pending: true, ground, stage: claim.stage, table: claim.table };
+  }
+  const R = ROUNDS[W.round];
+  const carried = base.filter(c => c.id in R.carry).map(c => decorate(c, Object.assign({ phrase: R.carry[c.id] }, R.overrides[c.id] || {})));
+  const added = R.added.filter(c => !CR.S.is("dismissed", c.id)).map(c => decorate(c));
+  return { id: W.round, tokens: R.sentence, phrases: R.phrases, value: R.value, label: R.label, lede: R.lede || claim.lede,
+    challenges: carried.concat(added), retired: base.filter(c => R.retired.includes(c.id)), pending: false, ground: GR[W.round] || {}, stage: claim.stage, table: R.table || claim.table };
+}
+function units(r) {
+  const u = r.phrases.map(i => ({ key: i, label: r.tokens[i], kind: "caption" }));
+  if (r.table) {
+    r.table.columns.forEach(c => u.push({ key: "col:" + c.id, label: c.label, kind: "column" }));
+    r.table.rows.forEach(x => u.push({ key: "row:" + x.id, label: x.label, kind: "row" }));
+    r.table.frame.forEach(f => u.push({ key: "frame:" + f.id, label: f.label, kind: "frame" }));
+  }
+  return u;
+}
+function unitLabel(r, key) { const u = units(r).find(x => String(x.key) === String(key)); return u ? u.label : String(key); }
+function unitClass(r, key) {
+  const cs = r.challenges.filter(c => String(c.phrase) === String(key) && !c.settled), w = worst(cs);
+  const unread = !(key in r.ground);
+  return ["ph", unread ? "new" : w === null ? "s0" : "s" + w, filter === String(key) ? "on" : ""].join(" ");
+}
+function tableHTML(r) {
+  const T = r.table;
+  return `<table class="claim-table"><thead><tr><th></th>${T.columns.map(c => `<th><span class="${unitClass(r, "col:" + c.id)}" data-ph="col:${c.id}">${esc(c.label)}</span>${c.note ? `<small>${esc(c.note)}</small>` : ""}</th>`).join("")}</tr></thead>
+<tbody>${T.rows.map(x => `<tr><th><span class="${unitClass(r, "row:" + x.id)}" data-ph="row:${x.id}">${esc(x.label)}</span></th>${T.columns.map(c => `<td class="n">${esc(x.cells[c.id] ?? "")}</td>`).join("")}</tr>`).join("")}</tbody></table>
+<div class="frame">${T.frame.map(f => `<span class="${unitClass(r, "frame:" + f.id)}" data-ph="frame:${f.id}">${esc(f.label)}</span>`).join('<span class="sep">·</span>')}</div>`;
+}
+function worst(cs) { return cs.length ? Math.max(...cs.map(c => c.sev)) : null; }
+function evChip(id) { const e = POOL.find(x => x.id === id); return e ? `<span class="ev" title="${esc(e.name)} · ${esc(e.value)}">${esc(e.id)}</span>` : `<span class="ev none">nothing in the run</span>`; }
+function citation(evId) { const e = POOL.find(x => x.id === evId); if (claim.table) { const T = round().table; return `run ${claim.run} · ${claim.stage} · rows [0, ${T.rows.length}) × ${T.columns.map(c => c.id).join(", ")}`; } return `run ${claim.run} · ${e && (e.kind === "figure" || e.kind === "table") ? e.id : claim.stage}`; }
+
+function sentence(r) {
+  return r.tokens.map((tok, i) => {
+    if (!r.phrases.includes(i)) return esc(tok);
+    const cs = r.challenges.filter(c => c.phrase === i && !c.settled), w = worst(cs);
+    const unread = !(i in r.ground);
+    return `<span class="${unitClass(r, i)}" data-ph="${i}">${esc(tok)}</span>`;
+  }).join("");
+}
+function groundTable(r) {
+  return `<table class="ground"><thead><tr><th>${r.table ? "the unit" : "the phrase"}</th><th>lands on</th><th>how</th></tr></thead><tbody>${units(r).map(u => {
+    const g = r.ground[u.key], w = `<td class="w">“${esc(u.label)}”${r.table ? `<small class="uk">${u.kind}</small>` : ""}</td>`;
+    if (g === undefined) return `<tr>${w}<td class="unread">not yet read</td><td class="unread">re-attack sends this wording to the AI</td></tr>`;
+    if (g === null) return `<tr>${w}<td>${evChip(null)}</td><td class="none">no figure, column, term or stage of this run</td></tr>`;
+    return `<tr>${w}<td>${evChip(g[0])}</td><td>${esc(g[1])}</td></tr>`;
+  }).join("")}</tbody></table>`;
+}
+function card(c, r) {
+  const g = r.ground[c.phrase];
+  const rests = c.back ? "" : g === undefined ? "" : g === null ? evChip(null) : evChip(g[0]);
+  const back = c.back ? `<button class="btn primary" onclick="setRound('original')">Submit the first wording as a new claim</button> ` : "";
+  const take = c.alt && ROUNDS[c.id] ? `<button class="btn primary" onclick="setRound('${c.id}')">${r.table ? "Add the column" : "Submit this wording as a new claim"}</button> <span class="muted">superseding this one; attacked again</span> ` : "";
+  return `<div class="ch">
+  <div class="ch-top b2">
+    <div class="ch-word">“${esc(unitLabel(r, c.phrase))}”<small>raised by <b>${attackerFor(c.cls).name}</b></small><small><span class="sev-tag s${c.sev}"><i></i>${SEV_WORD[c.sev]}</span></small>${rests ? `<small>rests on ${rests}</small>` : ""}</div>
+    <div><div class="ch-text">${esc(c.text)}</div><div class="ch-ev">${nums(c.evidence)}</div>${c.raised ? `<div class="ch-raised">raised by ${esc(c.raised)}</div>` : ""}</div>
+    <div class="ch-side"><span class="backing">${esc(c.backing)}</span>${CR.moveChip(c)}<span class="cost">to settle: <b>${CR.COST[c.cost]}</b></span></div>
+  </div>
+  ${back || take ? `<div class="ch-act">${back}${take}</div>` : ""}
+</div>`;
+}
+function setRound(id) { W.round = id; W.editing = false; filter = null; saveW(); render(); }
+function startEdit() { W.editing = true; W.custom = W.custom || round().tokens.join(""); saveW(); render(); }
+function reattack() { W.custom = document.getElementById("wording").value.trim(); W.round = "custom"; W.editing = false; filter = null; saveW(); render(); }
+function claimIt(id, on) { W.claimed = W.claimed.filter(x => x !== id); if (on) W.claimed.push(id); saveW(); render(); }
+function readingLabel(id) { return id === "original" ? "Your sentence" : id === "custom" ? "Your rewrite" : ROUNDS[id].label; }
+function readingsStrip(r) {
+  const ids = ["original"].concat(READINGS.filter(id => !ROUNDS[id].only)).concat(W.custom ? ["custom"] : []).concat(READINGS.filter(id => ROUNDS[id].only));
+  return `<div class="readings"><span class="k">readings</span>${ids.map(id => `<a href="#" class="${id === W.round ? "on" : ""} ${W.claimed.includes(id) ? "claimed" : ""}" onclick="setRound('${id}');return false">${esc(id === "apples" ? "a sentence the run cannot back" : readingLabel(id))}</a>`).join("")}<a href="#" class="write" onclick="startEdit();return false">+ write one</a></div>`;
+}
+function pool(r) {
+  const lit = new Set(r.phrases.map(i => r.ground[i] && r.ground[i][0]).filter(Boolean));
+  return `<div class="pool"><div class="pool-h"><span class="k">What the run holds</span><span class="run">The AI reads only this. run <code>${esc(claim.run)}</code> · ${POOL.length} items · the ones this reading lands on are shaded</span></div>
+<table class="pool-t"><tbody>${POOL.map(e => `<tr class="${lit.has(e.id) ? "lit" : ""}"><td class="kind">${e.kind}</td><td><span class="ev">${esc(e.id)}</span> ${esc(e.name)}</td><td class="v">${esc(e.value)}</td><td class="note">${esc(e.note)}</td><td class="cite">${e.kind === "figure" || e.kind === "table" ? `stage ${esc(e.id === "ppv" || e.id === "base" ? "fpr_by_race" : e.id === "job_status_breakdown" ? "figure5_counts" : e.id)}` : ""}</td></tr>`).join("")}</tbody></table></div>`;
+}
+function outputs(r) {
+  const lit = new Set(units(r).map(u => r.ground[u.key] && r.ground[u.key][0]).filter(Boolean));
+  const rows = POOL.filter(e => e.kind === "figure" || e.kind === "table");
+  return `<div class="pool"><div class="pool-h"><span class="k">This run's outputs</span><span class="run">run <code>${esc(claim.run)}</code> · the ones this sentence is read from are shaded</span></div>
+<table class="pool-t"><tbody>${rows.map(e => `<tr class="${lit.has(e.id) ? "lit" : ""}"><td class="kind">${e.kind}</td><td><span class="ev">${esc(e.id)}</span> ${esc(e.name)}</td><td class="v">${esc(e.value)}</td><td class="note">${esc(e.note)}</td></tr>`).join("")}</tbody></table></div>`;
+}
+function attackersStrip(r) {
+  const all = r.challenges.concat(r.retired.map(c => Object.assign({}, c, { retired: true })));
+  return `<div class="attackers"><div class="pool-h"><span class="k">Who attacked this reading</span><span class="run">one orchestrator reads the sentence, sends it to six attackers, merges what comes back, weighs it, and writes the summary</span></div>
+<div class="att-row">${ATTACKERS.map(a => { const n = r.challenges.filter(c => a.cls.includes(c.cls)).length; return `<div class="att ${n ? "" : "zero"}"><div class="att-n">${n}</div><div><div class="att-name">${esc(a.name)}</div><div class="att-reads">reads ${esc(a.reads)}</div><div class="att-does">${esc(a.does)}</div></div></div>`; }).join("")}</div></div>`;
+}
+function setStatus(s) { W.status = s; saveW(); render(); }
+function standRow(r) {
+  if (r.pending) return `<div class="stand"><span class="muted">Re-attack first. A reading the AI has not read cannot be claimed.</span></div>`;
+  const backs = units(r).map(u => r.ground[u.key]).filter(Boolean);
+  if (!backs.length) return `<div class="stand"><span class="muted">Nothing to cite: no phrase lands on the run. This cannot be claimed.</span></div>`;
+  const cite = citation(backs[0][0]);
+  if (W.status === "approved") return `<div class="stand is-claimed"><b>Approved.</b> <span class="cite">${esc(cite)}</span> <button class="btn quiet" onclick="setStatus('submitted')">reopen</button></div>`;
+  if (W.status === "declined") return `<div class="stand"><b>Declined.</b> <span class="muted" style="font-size:13px">The run keeps the number; nothing stands behind this sentence.</span> <button class="btn quiet" onclick="setStatus('submitted')">reopen</button></div>`;
+  return `<div class="stand"><button class="btn primary" onclick="setStatus('approved')">Approve</button><button class="btn" onclick="setStatus('declined')">Decline</button><span class="cite">approving cites ${esc(cite)}</span><span class="muted" style="font-size:13px">The review changes nothing on the claim. Approving does not need the list closed; it means you read it and stand behind the sentence anyway.</span></div>`;
+}
+
+function render() {
+  const r = round();
+  let body;
+  {
+    const open = r.challenges.filter(c => !c.settled && c.sev > 0).sort((a, b) => b.sev - a.sev || a.phrase - b.phrase).filter(c => filter === null || String(c.phrase) === filter);
+    const quiet = r.challenges.filter(c => c.settled || c.sev === 0).filter(c => filter === null || String(c.phrase) === filter);
+    const roundNote = W.round === "original" ? "" : r.pending
+      ? `<div class="round-note pending"><b>New wording, not yet attacked.</b> Phrases the AI had already read keep their challenges; ${r.retired.length} retired with the words that went. Re-attack sends this wording to the AI; the mock stops here.</div>`
+      : `<div class="round-note"><b>${W.round === "apples" ? "A sentence with no footing in the run." : "A reading the AI proposed, attacked already."}</b> ${r.retired.length} challenge${r.retired.length === 1 ? "" : "s"} from the first reading retired with the words that went${Object.keys(ROUNDS[W.round].overrides).length ? `; ${Object.keys(ROUNDS[W.round].overrides).length} changed weight` : ""}.</div>`;
+    const editor = W.editing
+      ? `<div class="word-bar"><textarea id="wording">${esc(W.custom)}</textarea></div><div class="word-bar"><button class="btn primary" onclick="reattack()">Re-attack this wording</button><button class="btn quiet" onclick="W.editing=false;saveW();render()">Cancel</button></div>`
+      : `<div class="word-bar"><button class="btn" onclick="startEdit()">${r.table ? "Rewrite the caption" : "Rewrite the sentence"}</button><span class="ph-help" style="margin:0">Any text. The AI reads it against what the run holds, not against a claim.</span></div>`;
+    body = `<div class="sec-head"><h1>What this run says <span class="status-chip ${W.status}">${W.status === "submitted" ? "needs review" : W.status}</span></h1><p class="lede">The run's figures, and the sentence proposed on them. Every load-bearing phrase is landed on a piece of the run or on nothing, and the weight of its underline is how badly the sentence would be hurt if the challenge stood. The review changes nothing; it is read, then the claim is approved or declined.</p></div>
+${outputs(r)}
+${readingsStrip(r)}
+${roundNote}
+<p class="sentence ${r.table ? "caption" : ""}">${sentence(r)}</p>
+${r.table ? tableHTML(r) : ""}
+<div class="legend"><span class="l3"><i></i>could not stand as written</span><span class="l2"><i></i>moves the figure, or bounds it</span><span class="l1"><i></i>worth a footnote</span><span class="l0"><i></i>checked, quiet</span><span class="lx"><i></i>not yet read</span></div>
+${editor}
+${groundTable(r)}
+${r.lede ? `<div class="lede-ai"><span class="mark" title="Written by the AI">AI</span><p style="margin:0">${esc(r.lede)}</p></div>` : ""}
+${filter !== null ? `<p class="ph-help">Showing “${esc(unitLabel(r, filter))}” only. <a href="#" onclick="filter=null;render();return false">Show all</a></p>` : ""}
+${open.map(c => card(c, r)).join("") || '<div class="empty-line">Nothing open on this reading.</div>'}
+${quiet.length ? `<details class="fold"><summary><b>${quiet.length}</b> checked, and none moves this figure at published precision</summary><div class="quiet-box">${quiet.map(c => `<div class="quiet-row"><div class="ch-word">“${esc(unitLabel(r, c.phrase))}”<small>${CR.CLS[c.cls][0]}</small></div><div>${esc(c.text)} <span style="color:var(--muted-dim)">${nums(c.evidence)}</span></div><div><span class="backing">${esc(c.backing)}</span> ${c.settled ? `<div class="mv none" style="margin-top:4px">settled: ${esc(c.settled_by)}</div>` : ""}</div></div>`).join("")}</div></details>` : ""}
+${r.retired.length ? `<details class="fold"><summary><b>${r.retired.length}</b> from the first reading, retired by the rewrite</summary><div class="quiet-box">${r.retired.map(c => `<div class="quiet-row"><div class="ch-word">“${esc(unitLabel({ tokens: claim.sentence, phrases: claim.phrases, table: claim.table }, c.phrase))}”<small>gone from the sentence</small></div><div>${esc(c.text)}</div><div></div></div>`).join("")}</div></details>` : ""}
+${standRow(r)}
+<details class="fold"><summary>How this was attacked</summary>${attackersStrip(r)}</details>`;
+  }
+  CR.shell("sentence", body);
+  document.querySelectorAll(".ph[data-ph]").forEach(el => el.addEventListener("click", () => { const k = el.dataset.ph; filter = filter === k ? null : k; render(); }));
+}
+CR.setRender(render);
+</script></body></html>
