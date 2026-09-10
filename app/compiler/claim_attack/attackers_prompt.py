@@ -293,7 +293,7 @@ CHOICES_EXAMPLE_JSON = """{
       "kind": "choice",
       "grounding_index": 3,
       "text": "Read PENALTY instead of PENALTYDIS: PENALTY is the penalty the department sought, and a rerun of ia_job_status against it is what would price the fork.",
-      "evidence": "The STAGES line for penalty_lookup reads PENALTYDIS text to dismissal or ambiguous, and cases.PENALTY sits beside it on INPUT COLUMNS, read by no stage. cases.DISPO says why the two differ: top: SETTLED (4522), AWARD (835), RESIGNED (590), WITHDRAWN (356). What the share reads on PENALTY is on no line of the pool: the OUTPUTS block prints figure5_counts once, at 5.8%, counted from PENALTYDIS.",
+      "evidence": "The STAGES line for penalty_lookup reads PENALTYDIS text to dismissal or ambiguous, and cases.PENALTY sits beside it on INPUT COLUMNS, read by no stage. cases.DISPO says why the two differ: top: SETTLED (4522), AWARD (835), RESIGNED (590), WITHDRAWN (356). What the share reads on PENALTY is on no line of the pool: the OUTPUTS block prints figure5_counts once, at 5.8%, counted from PENALTYDIS. Nor is the population: no BRANCHES line counts the rows on which the two columns disagree.",
       "evidence_refs": [
         {"kind": "stage", "stage_id": "penalty_lookup"},
         {"kind": "input_column", "stage_id": "cases", "column": "PENALTY"},

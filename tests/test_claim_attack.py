@@ -15,6 +15,7 @@ from app.compiler.claim_attack.attackers import (
     build_attacker,
     render_attack_task,
 )
+from app.compiler.claim_attack.evidence import render_evidence_pool
 from app.compiler.claim_attack.orchestrator import (
     build_orchestrator,
     render_orchestrator_task,
@@ -42,11 +43,15 @@ from app.models.claim_review import (
     Rewrite,
 )
 from app.services import claim_review
+from app.services.claim_review import _read_whether_the_corpus_spells
 from app.services.errors import ClaimReviewRefused
 from claim_review_fixture import PROJECT, TOTAL_TEXT, claim_the_total, run_the_fixture
 
 _SUBMIT_ONLY = ["mcp__tools__submit_answer"]
 _LATER = [attacker for attacker in ATTACKERS if attacker is not Attacker.grounding]
+
+# A code indent, a count, a separator: every pool holds these, so none of them backs anything.
+_DEGENERATE_BACKINGS = [" ", "  ", "0", "·"]
 
 
 @pytest.fixture
@@ -210,6 +215,15 @@ def test_the_orchestrator_reads_the_answers_under_their_attackers_grounding_firs
     assert headings == [f"## {attacker.value}" for attacker in ATTACKERS]
     # The grounding answer arrives as its own JSON here, never as the attackers' phrase block.
     assert '"rewrites"' in task and "----- PHRASES -----" not in task
+
+
+def test_a_backing_the_pool_spells_everywhere_backs_nothing(bundle) -> None:
+    pool = render_evidence_pool(bundle)
+
+    for degenerate in _DEGENERATE_BACKINGS:
+        assert degenerate in pool, f"the pool does not hold {degenerate!r} at all"
+        assert not _read_whether_the_corpus_spells(pool, degenerate)
+    assert _read_whether_the_corpus_spells(pool, "reads: none")
 
 
 def test_list_evidence_reads_the_five_challenge_answers_in_attacker_order() -> None:
