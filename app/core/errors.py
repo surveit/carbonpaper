@@ -152,3 +152,7 @@ class StoreOverQuota(Exception):
     def __init__(self, *, used: int, quota: int, sent: int, root: Path) -> None:
         self.used, self.quota, self.sent, self.root = used, quota, sent, root
         super().__init__(f"store would reach {used} bytes, over the {quota}-byte limit")
+
+
+class EventLoopCannotSpawnSubprocesses(RuntimeError):
+    pass

@@ -33,8 +33,12 @@ main() {
   offer_claude_cli
   report_credential
 
+  # --loop pins our own factory: chat turns spawn the claude CLI on the serving loop,
+  # and the loop uvicorn picks for --reload on Windows cannot spawn a child process.
+  # See app/core/event_loop.py.
   announce "serving http://$HOST:$PORT"
-  exec uv run --frozen python -m uvicorn app.main:app --host "$HOST" --port "$PORT" $RELOAD
+  exec uv run --frozen python -m uvicorn app.main:app --host "$HOST" --port "$PORT" \
+    --loop app.core.event_loop:create_event_loop $RELOAD
 }
 
 ensure_uv() {

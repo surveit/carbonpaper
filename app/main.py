@@ -15,6 +15,7 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, Response
 from starlette.routing import Route
 
+from app.core.event_loop import validate_running_loop_can_spawn_subprocesses
 from app.core.logging_config import configure_app_logging
 from app.core.store_config import configure_default_stores, refuse_renamed_env_vars
 from app.web.config import (
@@ -36,6 +37,7 @@ from app.agents.tutorial import config as _tutorial_agent_config  # noqa: F401
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    validate_running_loop_can_spawn_subprocesses()
     refuse_renamed_env_vars()
     # uvicorn's dictConfig leaves the root logger at WARNING unhandled, so app INFO goes nowhere.
     configure_app_logging()
