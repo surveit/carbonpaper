@@ -8,9 +8,8 @@ import pytest
 import app.services.run as run_service
 from app.core.frames import read_frame_table
 from app.services.project import save_working_copy_as_version
-from app.services.scope import find_rows_reached_per_stage
+from app.services.scope import find_rows_reached_per_stage, read_run_branches
 from app.services.workspace import resolve_run_dir
-from app.web.scope_view import read_run_branches
 from scope_fixture import column, write_inputs
 from stage_seed import set_stages
 

@@ -21,12 +21,11 @@ from app.models.records.run_manifest import RunManifest
 from app.models.workflow import Workflow
 from app.runtime.manifest import read_run_manifest
 from app.services import run as run_service
-from app.services.scope import find_rows_reached_per_stage
+from app.services.scope import find_rows_reached_per_stage, read_run_branches
 from app.services.versioning import load_version_stages
 from app.services.workspace import resolve_run_dir
 from app.web.file_detail_view import ColumnRow, build_column_row
 from app.web.file_sizes import describe_bytes
-from app.web.scope_view import read_run_branches
 from app.web.column_walk import ColumnAt, find_columns_behind
 
 # Rows shown beside the relevant ones when a reader widens the preview to the frame.
