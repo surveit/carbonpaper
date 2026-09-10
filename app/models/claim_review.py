@@ -112,7 +112,7 @@ class Grounding(_Base):
     how: str = Field(description="One line: how the phrase rests on that piece of the run.")
 
     @model_validator(mode="after")
-    def _end_comes_after_start(self) -> "Grounding":
+    def _validate_end_after_start(self) -> "Grounding":
         if self.end <= self.start:
             raise ValueError(
                 f"a phrase starting at {self.start} cannot end at {self.end}")

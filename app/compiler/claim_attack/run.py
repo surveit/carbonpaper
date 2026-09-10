@@ -63,7 +63,7 @@ def start_claim_attack_agents(
     parent_id = store.create(
         title=f"Attack · claim {bundle.claim_id}",
         agent_id=None,  # view-only: seven turns run under it, none of them continuable
-        context={**_session_context(bundle), "role": PARENT_ROLE},
+        context={**_build_session_context(bundle), "role": PARENT_ROLE},
     )
     store.set_pending_user(parent_id, ATTACK_REQUEST)
     store.set_active_turn(parent_id, _ATTACK_TURN)
@@ -103,16 +103,16 @@ async def _attack(
 async def _run_the_seven_turns(
     store: SessionStore, bundle: EvidenceBundle, model: str
 ) -> ClaimAttackResult:
-    context = _session_context(bundle)
+    context = _build_session_context(bundle)
     first = await _run_in_a_session(
         store, build_attacker(Attacker.grounding, bundle, model=model),
-        title=_title(Attacker.grounding.value, bundle), context=context)
+        title=_name_the_session(Attacker.grounding.value, bundle), context=context)
     grounding = _read_the_phrases(first.answer)
     five = await _raise_the_challenges(store, bundle, model, context, grounding)
     answers = _collect(grounding, five)
     last = await _run_in_a_session(
         store, build_orchestrator(bundle, answers, model=model),
-        title=_title(_ORCHESTRATOR, bundle), context=context)
+        title=_name_the_session(_ORCHESTRATOR, bundle), context=context)
     return ClaimAttackResult(
         answers=answers, draft=_read_the_draft(last.answer),
         session_ids=[first.session_id, *(one.session_id for one in five.values()),
@@ -130,7 +130,7 @@ async def _raise_the_challenges(
     built = [build_attacker(attacker, bundle, grounding=grounding, model=model)
              for attacker in later]
     landed: list[_Landed | BaseException] = await asyncio.gather(*[
-        _run_in_a_session(store, agent, title=_title(attacker.value, bundle), context=context)
+        _run_in_a_session(store, agent, title=_name_the_session(attacker.value, bundle), context=context)
         for attacker, agent in zip(later, built)
     ], return_exceptions=True)
     return _read_what_landed(later, landed)
@@ -225,7 +225,7 @@ def _read_meaning(landed: dict[Attacker, _Landed]) -> MeaningAnswer:
     return answer
 
 
-def _session_context(bundle: EvidenceBundle) -> dict[str, object]:
+def _build_session_context(bundle: EvidenceBundle) -> dict[str, object]:
     return {
         "project_id": bundle.project_id,
         "phase": CompilerPhase.TEST_RUN_REVIEW,
@@ -234,5 +234,5 @@ def _session_context(bundle: EvidenceBundle) -> dict[str, object]:
     }
 
 
-def _title(who: str, bundle: EvidenceBundle) -> str:
+def _name_the_session(who: str, bundle: EvidenceBundle) -> str:
     return f"Attack · {who} · claim {bundle.claim_id}"
