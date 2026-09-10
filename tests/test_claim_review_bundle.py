@@ -178,6 +178,9 @@ def test_a_run_cut_out_of_a_thousands_separated_number_is_not_in_the_pool(claim)
     with pytest.raises(ClaimReviewRefused, match="backing '200' is"):
         _store(claim, "200", "the pool says 12,200 in total")
 
+    with pytest.raises(ClaimReviewRefused, match="backing '123' is"):
+        _store(claim, "123", "the pool says 123,200 in total")
+
 
 def test_a_challenge_landing_on_a_phrase_the_review_never_grounded_is_refused(claim):
     with pytest.raises(ClaimReviewRefused, match="names no phrase"):
