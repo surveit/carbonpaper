@@ -24,7 +24,7 @@ from app.runtime.trace import RowSampleChoice, Trace, trace_row, trace_to_dict
 from app.models.workflow_stage import WorkflowStage
 from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.panel_links import AppPanelLinks, read_row_ref
-from app.web import scope_view
+from app.services.scope import read_run_branches
 from app.web.lineage_coordinate import build_lineage_coordinate
 from app.web.row_paths import CitedFigure, NoPathsToShow, PathsPane, find_paths_behind_figure
 from app.web.trace_inputs import build_input_catalog, read_run_inputs
@@ -198,7 +198,7 @@ def _read_paths_pane(project_id: str, run_id: str, stage_id: str, row: int,
     """The page is the figure; its own walk says which of the paths below it took."""
     try:
         return find_paths_behind_figure(
-            scope_view.read_run_branches(project_id, run_id),
+            read_run_branches(project_id, run_id),
             CitedFigure(stage_id=stage_id, row_ordinal=row), read_walked_rows(view),
         )
     # A run whose version no longer resolves has no branch options to read paths from.
