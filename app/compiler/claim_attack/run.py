@@ -31,6 +31,9 @@ _LOG = logging.getLogger(__name__)
 _ATTACK_TURN = "attack"
 _ORCHESTRATOR = "orchestrator"
 
+# What marks the one session an attack runs under, apart from the seven turns it holds.
+PARENT_ROLE = "parent"
+
 # What one of the seven submits; which shape belongs to which turn is the attacker's.
 _Answer = GroundingAnswer | ChallengesAnswer | MeaningAnswer | ClaimReviewDraft
 _Answering = (
@@ -60,7 +63,7 @@ def start_claim_attack_agents(
     parent_id = store.create(
         title=f"Attack · claim {bundle.claim_id}",
         agent_id=None,  # view-only: seven turns run under it, none of them continuable
-        context=_session_context(bundle),
+        context={**_session_context(bundle), "role": PARENT_ROLE},
     )
     store.set_pending_user(parent_id, ATTACK_REQUEST)
     store.set_active_turn(parent_id, _ATTACK_TURN)

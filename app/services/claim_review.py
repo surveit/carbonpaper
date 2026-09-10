@@ -4,7 +4,8 @@ from __future__ import annotations
 import re
 
 from app.compiler.claim_attack.evidence import render_evidence_pool
-from app.compiler.claim_attack.run import start_claim_attack_agents
+from app.compiler.claim_attack.run import PARENT_ROLE, start_claim_attack_agents
+from app.core.agent.store import AgentSession
 from app.core.ids import ID
 from app.models.claim_review import (
     Challenge,
@@ -35,6 +36,7 @@ def start_claim_attack(project_id: ID, claim_id: ID, *, model: str) -> str:
     """Must be called from the server event loop — the seven turns run as a task there."""
     claim = claims_service.load_claim(project_id, claim_id)
     _refuse_a_claim_already_reviewed(project_id, claim_id)
+    _refuse_a_claim_already_under_attack(claim_id)
     if claim.status != ClaimStatus.submitted:
         raise ClaimReviewRefused(
             [f"claim {claim_id} is {claim.status}; only a submitted claim is attacked"])
@@ -133,6 +135,20 @@ def _finish_claim_attack(project_id: ID, claim_id: ID, bundle: EvidenceBundle,
         session_ids=result.session_ids,
         corpus=render_evidence_pool(bundle),
     )
+
+
+def _refuse_a_claim_already_under_attack(claim_id: ID) -> None:
+    """Two attacks would write two reviews of one claim, and the second is refused storage."""
+    if _find_running_attacks(claim_id):
+        raise ClaimReviewRefused(
+            [f"an attack on claim {claim_id} is already running; it is attacked once at a time"])
+
+
+def _find_running_attacks(claim_id: ID) -> list[AgentSession]:
+    return [session for session in AgentSession.list()
+            if session.context.get("role") == PARENT_ROLE
+            and session.context.get("claim_id") == claim_id
+            and session.active_turn is not None]
 
 
 def _refuse_a_claim_already_reviewed(project_id: ID, claim_id: ID) -> None:

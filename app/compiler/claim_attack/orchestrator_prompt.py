@@ -127,6 +127,9 @@ _SUMMARY = (
 
 ORCHESTRATOR_EXAMPLE_POOL_LINES = """----- OUTPUTS -----
 job_status_breakdown · Job status after an inmate-abuse case · lost_job 5.8% · unknown 28% · kept_job the rest · ia_job_status · CITED
+----- STAGES -----
+Stage `cases` (input_data, feeds the cited stage: true): The case file as published, one row per case.
+  reads: none
 ----- INPUT COLUMNS -----
 cases.PENALTYDIS · category · rows 9806 · 7061 filled/0 null/2745 blank · distinct 12 · top: SUSPENSION (2394), REPRIMAND (1802), DISMISSAL & ACCRUALS (571)"""
 
@@ -147,6 +150,21 @@ ORCHESTRATOR_EXAMPLE_JSON = """{
       "moves": "moves",
       "cost": "free",
       "raised_by": ""
+    },
+    {
+      "attacker": "grounding",
+      "kind": "gap",
+      "grounding_index": 1,
+      "text": "The file holds cases, not guards, so a guard with several cases is counted several times and the share is of cases either way.",
+      "evidence": "The grounding attacker landed this phrase on nothing. The run starts at the `cases` stage, whose STAGES line reads reads: none, and no stage, column or term under it names a guard, so the run cannot count guards at all.",
+      "backing": "reads: none",
+      "evidence_refs": [
+        {"kind": "stage", "stage_id": "cases"}
+      ],
+      "severity": 3,
+      "moves": "moves",
+      "cost": "outside",
+      "raised_by": ""
     }
   ],
   "summary": "The reading of the penalty field is settled by the sentence itself and is not the weak point. Two things are: the outcome is missing on 28% of records, and the claim says guards where the file can only count cases."
@@ -165,7 +183,12 @@ _EXAMPLE = (
     "rather than merely moved. The backing is two words copied "
     "off the INPUT COLUMNS line, "
     "not out of the attacker's sentence, and the ` · ` the line puts after them is no "
-    "obstacle:\n"
+    "obstacle.\n"
+    "The second entry is the `gap`, and no attacker raised it: the grounding attacker "
+    "landed the phrase `guards` on nothing, and a phrase the sentence needs landing on "
+    "nothing is weighed 3 with no value to price. It is backed the way a challenge with "
+    "no number is backed — on the printed phrase that shows where the run starts, "
+    "`reads: none` on the STAGES line for the case file.\n"
     + ORCHESTRATOR_EXAMPLE_JSON + "\n"
     "Note what the summary does: the loudest challenge in the whole attack is the fork to "
     "the other penalty column, and the first sentence takes it off the table, because the "

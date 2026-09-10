@@ -21,7 +21,7 @@ from app.compiler.claim_attack.orchestrator import (
     render_orchestrator_task,
 )
 from app.compiler.claim_attack.run import start_claim_attack_agents
-from app.core.agent.store import SessionStore
+from app.core.agent.store import AgentSession, SessionStore
 from app.core.agent.usage import LlmUsage
 from app.core.errors import GenerationError
 from app.models.claim_review import (
@@ -544,6 +544,44 @@ def test_the_parent_session_carries_the_request_and_an_active_turn(
     assert seen["session"]["active_turn"] is not None
     assert seen["session"]["context"]["claim_id"]
     assert seen["session"]["context"]["hidden"] is True
+
+
+def test_the_parent_is_the_one_session_its_context_marks_a_parent(
+    bundle, monkeypatch
+) -> None:
+    _Fakes(answers=make_answers(), draft=make_draft()).install(monkeypatch)
+    store = _store_of(monkeypatch)
+
+    parent = _run_the_attack(store, bundle, lambda result: None)
+
+    marked = [session.id for session in AgentSession.list()
+              if session.context.get("role") == "parent"]
+    assert marked == [parent]
+    assert len(AgentSession.list()) == 8  # the parent, and the seven turns under it
+
+
+def test_a_second_attack_on_a_claim_already_under_one_is_refused(
+    bundle, monkeypatch
+) -> None:
+    refused: list[str] = []
+
+    async def _drive() -> None:
+        hold = asyncio.Event()
+        _Fakes(answers=make_answers(), draft=make_draft(), hold=hold).install(monkeypatch)
+        store = _store_of(monkeypatch)
+        parent = claim_review.start_claim_attack(PROJECT, bundle.claim_id, model="sonnet")
+        opened = len(AgentSession.list())
+        # No await yet, so the running attack has opened nothing since it was counted.
+        with pytest.raises(ClaimReviewRefused) as caught:
+            claim_review.start_claim_attack(PROJECT, bundle.claim_id, model="sonnet")
+        refused.append(str(caught.value))
+        assert len(AgentSession.list()) == opened
+        hold.set()
+        await _wait_until_idle(store, parent)
+
+    asyncio.run(_drive())
+
+    assert "already running" in refused[0]
 
 
 def test_a_failing_attacker_leaves_none_of_the_other_four_running(
