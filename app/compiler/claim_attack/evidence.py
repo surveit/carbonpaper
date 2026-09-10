@@ -70,7 +70,7 @@ def _render_branches(branches: list[BranchEvidenceItem]) -> str:
     for branch in branches:
         lines.append(_FIELD.join([
             branch.branch_id, branch.stage_id, f"{branch.reason}/{branch.role}",
-            f"rows {branch.rows_count}", branch.label or _NOTHING]))
+            _render_rows(branch.rows_count), branch.label or _NOTHING]))
         if branch.source_code:
             lines.extend(["  source:", *_indent(branch.source_code)])
     return _render_block("BRANCHES", lines)
@@ -86,6 +86,10 @@ def _render_input_columns(columns: list[InputColumnEvidenceItem]) -> str:
         for column in columns
     ]
     return _render_block("INPUT COLUMNS", lines)
+
+
+def _render_rows(rows_count: int | None) -> str:
+    return "rows not recorded" if rows_count is None else f"rows {rows_count}"
 
 
 def _render_top(column: InputColumnEvidenceItem) -> str:

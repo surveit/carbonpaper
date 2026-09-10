@@ -13,8 +13,11 @@ from app.models.claims import (
     DataUniverseRequirement,
     StageOutputCellCitation,
 )
+from app.core.run_status import RunStatus
 from app.models.records.claims import Claim
+from app.models.records.run_manifest import RunManifest
 from app.models.records.workflow_output import WorkflowOutput
+from app.models.run_parameters import RunParameters
 from app.models.schema import Column
 from app.services import claim_shapes, claims
 from app.services.errors import ClaimRefused
@@ -259,3 +262,22 @@ def test_a_citation_two_outputs_carry_names_neither_of_them():
 
     with pytest.raises(ClaimRefused, match="cannot say which it is"):
         claims.find_output_of_claim(claim)
+
+
+def _manifest(status: RunStatus = RunStatus.OK, **parameters) -> RunManifest:
+    return RunManifest(
+        run_id=_RUN, started_at="2026-09-01T10:37:53", project=_PROJECT,
+        workflow_version="v1", human_review_queue_stats={}, status=status,
+        stage_records=[], parameters=RunParameters(**parameters))
+
+
+def test_a_run_read_everything_only_where_it_finished_and_nothing_narrowed_it():
+    assert claims.read_whether_the_run_read_everything(_manifest()) is True
+    assert claims.read_whether_the_run_read_everything(
+        _manifest(status=RunStatus.ERRORS)) is False
+    assert claims.read_whether_the_run_read_everything(
+        _manifest(offsets={"load_east": 2})) is False
+    assert claims.read_whether_the_run_read_everything(
+        _manifest(limits={"load_east": 2})) is False
+    assert claims.read_whether_the_run_read_everything(
+        _manifest(is_test_run=True)) is False

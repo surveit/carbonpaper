@@ -24,7 +24,7 @@ from app.runtime.manifest import (
     RunEntry as RunEntry,
     list_run_entries as list_run_entries,
     read_run_entry,
-    read_run_manifest,
+    read_run_manifest as read_run_manifest,
     read_stage_output_frame,
     resolve_output_path,
 )
@@ -140,10 +140,6 @@ def read_pinned_version(project_id: str, run_id: str) -> str:
             f"cannot be resumed."
         )
     return workflow_version
-
-
-def read_run_record(project_id: str, run_id: str) -> RunManifest:
-    return read_run_manifest(project_id, run_id)
 
 
 def read_stage_output(project_id: str, run_id: str, stage_id: str) -> pd.DataFrame:
