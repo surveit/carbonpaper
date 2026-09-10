@@ -274,7 +274,7 @@ def test_the_page_counts_every_attacker_including_the_silent_ones(claim):
         "filters' dropped rows and the shape's open/closed word"]
 
 
-def test_a_challenge_from_an_attacker_the_roster_cannot_name_stops_the_page(claim):
+def test_a_challenge_only_the_orchestrator_saw_is_drawn_and_takes_a_seventh_row(claim):
     store_claim_review(
         PROJECT, claim.id, grounding=[_ground_the(_FIGURE)],
         challenges=[Challenge(
@@ -283,8 +283,23 @@ def test_a_challenge_from_an_attacker_the_roster_cannot_name_stops_the_page(clai
             backing="2200", severity=2, moves=Moves.moves, cost=Cost.free)],
         rewrites=[], summary=_SUMMARY, session_ids=[], corpus=_CORPUS)
 
-    with pytest.raises(ValueError, match="orchestrator"):
-        build_claim_review_page(PROJECT, claim.id)
+    page = build_claim_review_page(PROJECT, claim.id)
+
+    [opened] = page.open_challenges
+    assert opened.attacker == "orchestrator"
+    assert opened.text == "The orchestrator raised it itself."
+    assert [(one.name, one.count) for one in page.attackers][-1] == ("Orchestrator", 1)
+    assert len(page.attackers) == 7
+
+
+def test_a_review_the_orchestrator_added_nothing_to_names_only_the_six(claim):
+    store_a_review(claim.id)
+
+    page = build_claim_review_page(PROJECT, claim.id)
+
+    assert [one.name for one in page.attackers] == [
+        "Grounding", "Data defects", "Choices made", "Decisions never made",
+        "Coverage", "Meaning"]
 
 
 @pytest.mark.parametrize("table, members", [
@@ -297,9 +312,8 @@ def test_every_member_of_the_enum_has_words_on_the_page(table, members):
         members, key=lambda one: one.value)
 
 
-def test_every_attacker_but_the_orchestrator_has_a_card_in_the_roster():
-    assert [words.attacker for words in ATTACKER_WORDS] == [
-        one for one in Attacker if one is not Attacker.orchestrator]
+def test_every_attacker_has_a_card_in_the_roster():
+    assert [words.attacker for words in ATTACKER_WORDS] == list(Attacker)
 
 
 # ── an attack that is still running, or that failed ─────

@@ -176,6 +176,11 @@ ATTACKER_WORDS: list[AttackerWords] = [
         reads_what="the sentence, the stage descriptions and the terms",
         does="the same number read as a different sentence, and the rewrites the run "
              "also supports"),
+    AttackerWords(
+        attacker=Attacker.orchestrator, name="Orchestrator",
+        reads_what="the six answers, and the pool",
+        does="dedupes, weighs, and writes the summary; raises what no single answer "
+             "showed"),
 ]
 
 
@@ -378,8 +383,13 @@ def _count_attackers(review: ClaimReview | None) -> list[AttackerCount]:
     return [
         AttackerCount(name=words.name, reads_what=words.reads_what, does=words.does,
                       count=raised[words.attacker])
-        for words in ATTACKER_WORDS
+        for words in ATTACKER_WORDS if _is_on_the_roster(words.attacker, raised)
     ]
+
+
+def _is_on_the_roster(attacker: Attacker, raised: Counter[Attacker]) -> bool:
+    """The six always; the orchestrator only when it raised something of its own."""
+    return attacker is not Attacker.orchestrator or bool(raised[attacker])
 
 
 # ── the state of the attack ─────
