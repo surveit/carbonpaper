@@ -15,7 +15,8 @@ from app.services import project as project_service
 from app.services import run as run_service
 from app.services.errors import ClaimRefused, ClaimReviewRefused
 from app.web.breadcrumbs import Crumb, build_run_child_crumbs, build_section_crumbs
-from app.web.claim_review_view import build_claim_review_page, build_claims_list_page
+from app.web.claim_review_view import build_claim_review_page
+from app.web.claims_list_view import build_claims_list_page
 from app.web.claims_view import build_publish_view
 from app.web.config import templates
 from app.web.project_view import shell_state, shell_state_off_nav, validate_project_or_404

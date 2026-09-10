@@ -13,7 +13,7 @@ from app.models.records.workflow_output import WorkflowOutput
 from app.models.schema import Column
 from app.services import claim_shapes
 from app.services import claims as claims_service
-from app.web.claim_review_view import build_claims_list_page
+from app.web.claims_list_view import build_claims_list_page
 from claim_review_fixture import PROJECT, TOTAL_TEXT, claim_the_total, run_the_fixture
 
 COUNT_TEXT = "Five grants were recorded."
