@@ -29,7 +29,8 @@ def render_evidence_bundle(bundle: EvidenceBundle) -> str:
 def _render_the_claim(bundle: EvidenceBundle) -> str:
     shape = bundle.shape
     return "\n".join([
-        f"CLAIM: {bundle.claim_text!r}",
+        # The sentence stays a substring of the corpus: literal marks, not repr escapes.
+        f"CLAIM: «{bundle.claim_text}»",
         f"context: {_render_context(bundle)}",
         f"cited: stage `{bundle.cited.stage_id}`, row {bundle.cited.row_ordinal}, "
         f"column `{bundle.cited.column}`",

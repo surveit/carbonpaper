@@ -65,6 +65,32 @@ def test_the_rendering_carries_every_figure_the_guard_will_check_against(claim):
     assert "feeds the cited stage: true" in text
 
 
+def test_a_sentence_carrying_both_quote_marks_stays_verbatim_in_the_pool(projects_root):
+    quoted = 'The firm\'s "AI lobbying" income came to 2,200.'
+    claim = claim_the_total(run_the_fixture(projects_root), quoted)
+
+    text = render_evidence_bundle(claim_review.build_evidence_bundle(PROJECT, claim.id))
+
+    assert quoted in text
+
+
+def test_a_table_the_run_published_is_pooled_by_its_row_count(claim):
+    from app.models.claims import RowsRectangle, StageOutputTableCitation
+    from app.models.records.workflow_output import WorkflowOutput
+    WorkflowOutput(
+        slug="by-portfolio", label="By portfolio", shape_id=None,
+        citation=StageOutputTableCitation(
+            run_id=claim.citation.run_id, stage_id="by_portfolio",
+            rectangle=RowsRectangle(row_start=0, row_end=3,
+                                    columns=["portfolio", "total_amount"]))).save()
+
+    bundle = claim_review.build_evidence_bundle(PROJECT, claim.id)
+
+    table = next(o for o in bundle.outputs if o.slug == "by-portfolio")
+    assert table.value == "3 rows" and table.stage_id == "by_portfolio" and not table.cited
+    assert "3 rows" in render_evidence_bundle(bundle)
+
+
 def _challenge(backing: str) -> Challenge:
     return Challenge(attacker=Attacker.coverage, kind=ChallengeKind.coverage, grounding_index=0,
                      text="t", evidence="e", backing=backing, severity=2,

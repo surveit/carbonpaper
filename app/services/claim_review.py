@@ -124,16 +124,20 @@ def _read_shape(project_id: ID, shape_id: ID | None) -> CitedShape:
 
 
 def _read_outputs(run_id: ID, cited: StageOutputCellCitation) -> list[OutputEvidenceItem]:
-    """A table citation names no cell, so it carries no figure and is not listed here."""
     return [
         OutputEvidenceItem(
             slug=output.slug, label=output.label, primary=output.primary,
-            stage_id=citation.stage_id, value=render_figure(citation.value),
-            cited=citation == cited)
+            stage_id=output.citation.stage_id, value=_read_output_value(output.citation),
+            cited=output.citation == cited)
         for output in claims_service.read_every_run_output(run_id)
-        for citation in [output.citation]
-        if isinstance(citation, StageOutputCellCitation)
     ]
+
+
+def _read_output_value(citation: PublishedCitation) -> str:
+    """A table names rows, not one cell; its row count is the fact it carries."""
+    if isinstance(citation, StageOutputCellCitation):
+        return render_figure(citation.value)
+    return f"{citation.rectangle.count_rows():,} rows"
 
 
 def _read_stages(stages: list[WorkflowStage], cited_stage_id: ID) -> list[StageEvidenceItem]:
