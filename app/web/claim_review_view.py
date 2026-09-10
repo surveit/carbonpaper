@@ -20,6 +20,7 @@ from app.models.claim_review import (
     Moves,
     OutputEvidence,
     StageEvidence,
+    TermEvidence,
 )
 from app.models.claims import PublishedCitation, StageOutputCellCitation
 from app.models.records.claim_review import ClaimReview
@@ -27,7 +28,7 @@ from app.models.records.claims import Claim, ClaimShape
 from app.runtime.citations import build_row_trace_url
 from app.services import claim_evidence
 from app.services import claims as claims_service
-from app.services.claim_review import PARENT_ROLE, load_claim_review
+from app.services.claim_review import find_attack_sessions, load_claim_review
 from app.services.claim_shapes import load_claim_shape
 from app.services.errors import ClaimRefused
 from app.services.generation import GENERATION_FAILURE_PREFIX
@@ -290,7 +291,9 @@ def _describe_evidence_ref(evidence: EvidenceRef | None) -> str | None:
         return f"stage {evidence.stage_id}"
     if isinstance(evidence, BranchEvidence):
         return f"branch {evidence.branch_id}"
-    return f"term {evidence.name}"
+    if isinstance(evidence, TermEvidence):
+        return f"term {evidence.name}"
+    raise ValueError(f"no words for evidence kind {evidence.kind!r}")
 
 
 def _append_plain(tokens: list[SentenceToken], text: str) -> None:
@@ -384,26 +387,19 @@ def _read_attack(claim: Claim, review: ClaimReview | None) -> _Attack:
         return _Attack(attack=ATTACK_DONE)
     if not isinstance(claim.citation, StageOutputCellCitation):
         return _Attack(attack=ATTACK_REFUSED)
-    session = _find_newest_attack_session(claim.id)
-    if session is None:
+    attacked = find_attack_sessions(claim.id)
+    if not attacked:
         return _Attack(attack=ATTACK_NONE)
+    return _read_session_attack(attacked[0])
+
+
+def _read_session_attack(session: AgentSession) -> _Attack:
     if session.active_turn is not None:
         return _Attack(attack=ATTACK_RUNNING, session_id=session.id)
     failure = _find_generation_failure(session.id)
     if failure is None:
         return _Attack(attack=ATTACK_NONE, session_id=session.id)
     return _Attack(attack=ATTACK_FAILED, error=failure, session_id=session.id)
-
-
-def _find_newest_attack_session(claim_id: ID) -> AgentSession | None:
-    held = [
-        session for session in AgentSession.list()
-        if session.context.get("role") == PARENT_ROLE
-        and session.context.get("claim_id") == claim_id
-    ]
-    newest_first = sorted(held, key=lambda session: (session.created_at, session.id),
-                          reverse=True)
-    return newest_first[0] if newest_first else None
 
 
 def _find_generation_failure(session_id: ID) -> str | None:
