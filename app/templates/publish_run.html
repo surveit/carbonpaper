@@ -30,7 +30,7 @@
 <article class="mint-fig{{ ' is-warn' if card.restates and card.status != 'approved' }}">
   <div class="mint-top">
     <div class="mint-kicker">
-      {%- if card.status == 'approved' %}Claimed
+      {%- if card.status == 'approved' %}<a href="/project/{{ state.id }}/claims/{{ card.claim_id }}">Claimed</a>
       {%- elif card.status == 'submitted' %}In review
       {%- elif card.status == 'declined' %}Skipped — write it to claim it after all
       {%- else %}Write the claim{% endif -%}
@@ -110,7 +110,9 @@
 
   {% if card.status == 'submitted' %}
   <div class="mint-act">
-    <span class="muted">Written, and waiting on review. It stands behind nothing yet.</span>
+    <span class="muted">Written, and waiting on review — <a
+      href="/project/{{ state.id }}/claims/{{ card.claim_id }}">read the attack</a>. It
+      stands behind nothing yet.</span>
   </div>
   {% elif card.status == 'declined' and not card.blocked %}
   <div class="mint-act">
