@@ -73,13 +73,13 @@ class RewriteCard(BaseModel):
 class AttackerWords(BaseModel):
     attacker: Attacker
     name: str
-    reads: str
+    reads_what: str
     does: str
 
 
 class AttackerCount(BaseModel):
     name: str
-    reads: str
+    reads_what: str
     does: str
     count: int
 
@@ -114,7 +114,7 @@ class ClaimReviewPage(BaseModel):
     ground: list[GroundRow]
     open_challenges: list[ChallengeCard]
     quiet_challenges: list[ChallengeCard]
-    rewrites: list[RewriteCard]
+    proposed_rewrites: list[RewriteCard]
     summary: str
     attackers: list[AttackerCount]
     session_ids: list[ID]
@@ -153,29 +153,29 @@ COST_WORDS: dict[Cost, str] = {
 ATTACKER_WORDS: list[AttackerWords] = [
     AttackerWords(
         attacker=Attacker.grounding, name="Grounding",
-        reads="the sentence against the pool",
+        reads_what="the sentence against the pool",
         does="lands every load-bearing phrase on a figure, column, term or stage, "
              "or on nothing"),
     AttackerWords(
         attacker=Attacker.data_defects, name="Data defects",
-        reads="the input files and how each stage reads them",
+        reads_what="the input files and how each stage reads them",
         does="malformed cells, two spellings of one thing, a reading that disagrees "
              "with its source"),
     AttackerWords(
         attacker=Attacker.choices, name="Choices made",
-        reads="stage code and the recorded arms",
+        reads_what="stage code and the recorded arms",
         does="every threshold, field and cut, swept to its alternatives"),
     AttackerWords(
         attacker=Attacker.omissions, name="Decisions never made",
-        reads="input columns against the recorded arms",
+        reads_what="input columns against the recorded arms",
         does="a column that partitions the rows and that no branch reads"),
     AttackerWords(
         attacker=Attacker.coverage, name="Coverage",
-        reads="filters' dropped rows and the shape's open/closed word",
+        reads_what="filters' dropped rows and the shape's open/closed word",
         does="who is in the count, who is not, and what the file does not hold"),
     AttackerWords(
         attacker=Attacker.meaning, name="Meaning",
-        reads="the sentence, the stage descriptions and the terms",
+        reads_what="the sentence, the stage descriptions and the terms",
         does="the same number read as a different sentence, and the rewrites the run "
              "also supports"),
 ]
@@ -217,7 +217,7 @@ def _build_page(project_id: ID, claim: Claim, shape: ClaimShape, run: RunIndexRo
         ground=_build_ground(claim.text, review),
         open_challenges=_build_open_challenges(claim.text, review),
         quiet_challenges=_build_quiet_challenges(claim.text, review),
-        rewrites=_build_rewrites(review),
+        proposed_rewrites=_build_rewrites(review),
         summary=review.summary if review is not None else "",
         attackers=_count_attackers(review),
         session_ids=list(review.session_ids) if review is not None else [],
@@ -367,8 +367,12 @@ def _count_attackers(review: ClaimReview | None) -> list[AttackerCount]:
     if review is None:
         return []
     raised = Counter(Attacker(one.attacker) for one in _read_challenges(review))
+    named = {words.attacker for words in ATTACKER_WORDS}
+    for attacker in raised:
+        if attacker not in named:
+            raise ValueError(f"no words for attacker {attacker!r}")
     return [
-        AttackerCount(name=words.name, reads=words.reads, does=words.does,
+        AttackerCount(name=words.name, reads_what=words.reads_what, does=words.does,
                       count=raised[words.attacker])
         for words in ATTACKER_WORDS
     ]

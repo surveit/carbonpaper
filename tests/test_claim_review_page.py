@@ -33,7 +33,13 @@ from app.services import claim_review as claim_review_service
 from app.services import claims as claims_service
 from app.services.claim_review import store_claim_review
 from app.services.generation import GENERATION_FAILURE_PREFIX
-from app.web.claim_review_view import build_claim_review_page
+from app.web.claim_review_view import (
+    ATTACKER_WORDS,
+    COST_WORDS,
+    KIND_WORDS,
+    MOVES_WORDS,
+    build_claim_review_page,
+)
 from claim_review_fixture import (
     PROJECT,
     TOTAL_TEXT,
@@ -242,7 +248,7 @@ def test_a_stored_review_carries_its_ground_rewrites_and_summary(claim):
     assert ground.phrase == _FIGURE
     assert ground.lands_on == "output grant-total"
     assert ground.how == "the figure is read straight off the cited output"
-    [rewrite] = page.rewrites
+    [rewrite] = page.proposed_rewrites
     assert rewrite.text == "Five grants were recorded."
     assert rewrite.why == "counts what was counted"
     assert page.summary == _SUMMARY
@@ -257,8 +263,36 @@ def test_the_page_counts_every_attacker_including_the_silent_ones(claim):
     counted = {one.name: one.count for one in page.attackers}
     assert counted == {"Grounding": 0, "Data defects": 1, "Choices made": 0,
                        "Decisions never made": 0, "Coverage": 1, "Meaning": 0}
-    assert [one.reads for one in page.attackers if one.name == "Coverage"] == [
+    assert [one.reads_what for one in page.attackers if one.name == "Coverage"] == [
         "filters' dropped rows and the shape's open/closed word"]
+
+
+def test_a_challenge_from_an_attacker_the_roster_cannot_name_stops_the_page(claim):
+    store_claim_review(
+        PROJECT, claim.id, grounding=[_ground_the(_FIGURE)],
+        challenges=[Challenge(
+            attacker=Attacker.orchestrator, kind=ChallengeKind.data, grounding_index=0,
+            text="The orchestrator raised it itself.", evidence="it weighed the answers",
+            backing="2200", severity=2, moves=Moves.moves, cost=Cost.free)],
+        rewrites=[], summary=_SUMMARY, session_ids=[], corpus=_CORPUS)
+
+    with pytest.raises(ValueError, match="orchestrator"):
+        build_claim_review_page(PROJECT, claim.id)
+
+
+@pytest.mark.parametrize("table, members", [
+    (KIND_WORDS, list(ChallengeKind)),
+    (MOVES_WORDS, list(Moves)),
+    (COST_WORDS, list(Cost)),
+])
+def test_every_member_of_the_enum_has_words_on_the_page(table, members):
+    assert sorted(table, key=lambda one: one.value) == sorted(
+        members, key=lambda one: one.value)
+
+
+def test_every_attacker_but_the_orchestrator_has_a_card_in_the_roster():
+    assert [words.attacker for words in ATTACKER_WORDS] == [
+        one for one in Attacker if one is not Attacker.orchestrator]
 
 
 # ── an attack that is still running, or that failed ─────
@@ -349,6 +383,15 @@ def test_a_claim_nobody_has_read_names_no_attackers(claim, client):
 
     assert "How this was attacked" not in body
     assert "Data defects" not in body
+
+
+def test_a_declined_claim_offers_no_attack_it_would_be_refused(claim, client):
+    client.post(f"/project/{PROJECT}/claims/{claim.id}/decline")
+
+    body = read_the_page(client, claim.id).text
+
+    assert "Attack this claim" not in body and "Attack again" not in body
+    assert "Declined." in body
 
 
 def test_an_unknown_claim_is_not_a_page(client, projects_root):
