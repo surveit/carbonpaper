@@ -212,8 +212,8 @@ class BranchEvidenceItem(_Base):
     role: str
     label: str
     source_code: str
-    # None where the run recorded no count for this arm — never a stand-in zero.
-    rows_count: int | None
+    # 0 is a count: the arm no row took. Every option here comes from an enumerated stage.
+    rows_count: int
 
 
 class InputColumnEvidenceItem(_Base):
