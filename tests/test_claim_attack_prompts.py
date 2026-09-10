@@ -1,10 +1,23 @@
 """Every attacker is told its place, and the orchestrator is told the guard is verbatim."""
 from __future__ import annotations
 
+import json
+
 from arch.test_no_banned_words import BANNED_WORDS
+from pydantic import BaseModel
 
 from app.compiler.claim_attack import attackers_prompt, orchestrator_prompt
-from app.models.claim_review import Attacker, ChallengeKind, Cost, Moves
+from app.models.claim_review import (
+    Attacker,
+    ChallengeKind,
+    ChallengesAnswer,
+    ClaimReviewDraft,
+    Cost,
+    GroundingAnswer,
+    MeaningAnswer,
+    Moves,
+)
+from app.services.claim_review import find_grounding_issues, find_unbacked_challenges
 
 _ORCHESTRATOR = orchestrator_prompt.ORCHESTRATOR_SYSTEM_PROMPT
 
@@ -20,6 +33,21 @@ _KIND_RAISED = [
     (attackers_prompt.COVERAGE_SYSTEM_PROMPT, ChallengeKind.coverage),
     (attackers_prompt.MEANING_SYSTEM_PROMPT, ChallengeKind.semantic),
 ]
+
+_DOCCS_SENTENCE = "A vast majority of guards accused of inmate abuse were never terminated."
+
+_EXAMPLE_JSON: dict[str, tuple[str, type[BaseModel]]] = {
+    "grounding": (attackers_prompt.GROUNDING_EXAMPLE_JSON, GroundingAnswer),
+    "data_defects": (attackers_prompt.DATA_DEFECTS_EXAMPLE_JSON, ChallengesAnswer),
+    "choices": (attackers_prompt.CHOICES_EXAMPLE_JSON, ChallengesAnswer),
+    "omissions": (attackers_prompt.OMISSIONS_EXAMPLE_JSON, ChallengesAnswer),
+    "coverage": (attackers_prompt.COVERAGE_EXAMPLE_JSON, ChallengesAnswer),
+    "meaning": (attackers_prompt.MEANING_EXAMPLE_JSON, MeaningAnswer),
+    "orchestrator": (orchestrator_prompt.ORCHESTRATOR_EXAMPLE_JSON, ClaimReviewDraft),
+}
+
+# The attacker cannot split rows or sum a column, so its example must not model one.
+_CANNOT_COMPUTE_ITS_FIGURE = ["data_defects", "choices", "omissions"]
 
 
 def test_each_attacker_is_told_who_reads_it_and_that_it_changes_nothing() -> None:
@@ -60,3 +88,48 @@ def test_the_orchestrator_carries_the_four_severity_rows_and_keeps_the_quiet_one
                 "worth a footnote", "does not move it"]:
         assert row in _ORCHESTRATOR
     assert "submit_answer" in _ORCHESTRATOR
+
+
+def test_every_worked_example_validates_against_the_schema_it_is_written_for() -> None:
+    for text, schema in _EXAMPLE_JSON.values():
+        schema.model_validate(json.loads(text))
+
+
+def test_every_worked_example_is_the_one_the_prompt_shows() -> None:
+    for name, (text, _) in _EXAMPLE_JSON.items():
+        prompt = (_ORCHESTRATOR if name == "orchestrator"
+                  else getattr(attackers_prompt, f"{name.upper()}_SYSTEM_PROMPT"))
+        assert text in prompt, f"{name}'s example is not in its prompt"
+
+
+def test_the_grounding_example_spans_the_sentence_it_is_written_against() -> None:
+    text, _ = _EXAMPLE_JSON["grounding"]
+    answer = GroundingAnswer.model_validate(json.loads(text))
+    assert find_grounding_issues(answer.phrases, _DOCCS_SENTENCE) == []
+    assert [_DOCCS_SENTENCE[phrase.start:phrase.end] for phrase in answer.phrases] == [
+        "A vast majority", "guards", "accused of inmate abuse", "never terminated"]
+
+
+def test_the_orchestrator_example_backing_is_in_the_coverage_attacker_evidence() -> None:
+    draft = ClaimReviewDraft.model_validate(
+        json.loads(_EXAMPLE_JSON["orchestrator"][0]))
+    coverage = ChallengesAnswer.model_validate(json.loads(_EXAMPLE_JSON["coverage"][0]))
+    assert find_unbacked_challenges(draft.challenges, coverage.challenges[0].evidence) == []
+
+
+def test_an_example_that_cannot_price_its_figure_takes_the_unpriced_route() -> None:
+    for name in _CANNOT_COMPUTE_ITS_FIGURE:
+        answer = ChallengesAnswer.model_validate(json.loads(_EXAMPLE_JSON[name][0]))
+        assert [challenge.moves for challenge in answer.challenges] == [Moves.unpriced], name
+
+
+def test_only_the_five_that_raise_challenges_are_shown_the_phrases_block() -> None:
+    for prompt, _ in _KIND_RAISED:
+        assert "----- PHRASES -----" in prompt
+        assert "do not count" in prompt
+    assert "----- PHRASES -----" not in attackers_prompt.GROUNDING_SYSTEM_PROMPT
+
+
+def test_a_gap_is_not_capped_by_the_rule_that_caps_an_unpriced_finding() -> None:
+    assert "A `gap` is the exception and is never capped" in _ORCHESTRATOR
+    assert "comma or a full stop sitting right after" in _ORCHESTRATOR

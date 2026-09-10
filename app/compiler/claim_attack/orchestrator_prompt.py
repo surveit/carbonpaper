@@ -47,8 +47,8 @@ _THE_WORK = (
     "run holds instead of the thing that phrase asserts.\n"
     "4. CARRY THE FIELDS. `grounding_index`, `text`, `evidence`, `evidence_refs`, `moves` "
     "and `cost` come across from the attacker's entry. Fix a `grounding_index` that names "
-    "no phrase — you can see the grounding answer and the attacker could not — by "
-    "counting the phrases from 0 or setting it to `null`. Leave `moves` (`moves`, "
+    "no phrase: set it to the index of the phrase the challenge lands on, or to `null` "
+    "when it lands on the whole sentence. Leave `moves` (`moves`, "
     "`meaning`, `unpriced`, `none`) and `cost` (`free`, `person`, `outside`, `editorial`, "
     "`settled`) as the attacker set them unless the pool plainly contradicts them. Carry "
     "`raised_by` word for word; it is the attacker's own account of who prompted it.\n"
@@ -68,15 +68,17 @@ _BACKING = (
     "  A figure that appears ONLY in the journalist's sentence is not backing. The claim "
     "is the thing under attack; it cannot be its own footing. Copy from the pool or from "
     "an attacker's `evidence`.\n"
-    "  The check reads token boundaries, so `220` lifted out of `2,200` backs nothing. "
-    "Copy a whole run of words, starting and ending where the source has a space or a "
-    "line end. A copy that stops immediately before a comma or a full stop reads as a "
-    "truncated number and is refused — take the punctuation with it or stop a word "
-    "earlier.\n"
+    "  Copy whole words and whole numbers. A comma or a full stop sitting right after the "
+    "words you copied is fine, and so is one inside them; what is refused is a copy that "
+    "cuts a number in half, so `200` lifted out of `2,200` backs nothing.\n"
     "  A challenge with no number anywhere in the pool still goes in. Back it with the "
-    "copied phrase that names what is missing — `not read`, `0 of 18`, `no arm reads` — "
-    "and weigh it 1 or below, because a finding you cannot price cannot be shown as one "
-    "that moves the figure.\n\n"
+    "copied phrase that names what is missing — `not read`, `0 of 18`, `no arm reads`. One "
+    "of the five priced kinds (`data`, `choice`, `omission`, `coverage`, `semantic`) that "
+    "comes back `unpriced` is weighed 1 or below: the trouble is real and this run cannot "
+    "show its size. A `gap` is the exception and is never capped. A phrase landing on "
+    "nothing is not a small finding waiting for a number — the sentence has no footing "
+    "there at all — so a `gap` is weighed 3 whenever the phrase it lands on is one the "
+    "sentence needs, and three such phrases are three challenges at 3.\n\n"
 )
 
 _SEVERITY = (
@@ -107,49 +109,45 @@ _SUMMARY = (
     "not as a count of findings. No number in it that is not in the pool.\n\n"
 )
 
+ORCHESTRATOR_EXAMPLE_JSON = """{
+  "challenges": [
+    {
+      "attacker": "coverage",
+      "kind": "coverage",
+      "grounding_index": 0,
+      "text": "PENALTYDIS is blank on 28% of records. A blank is an unknown outcome, not a kept job.",
+      "evidence": "'Never terminated' is at most 94%, and 5.8% is the share of all cases, including the ones whose outcome the file does not hold.",
+      "backing": "at most 94%",
+      "evidence_refs": [
+        {"kind": "input_column", "stage_id": "cases", "column": "PENALTYDIS"},
+        {"kind": "output", "slug": "job_status_breakdown"}
+      ],
+      "severity": 3,
+      "moves": "moves",
+      "cost": "free",
+      "raised_by": ""
+    }
+  ],
+  "summary": "The reading of the penalty field is settled by the sentence itself and is not the weak point. Two things are: the outcome is missing on 28% of records, and the claim says guards where the file can only count cases."
+}"""
+
 _EXAMPLE = (
     "WORKED EXAMPLE. The claim is «A vast majority of guards accused of inmate abuse were "
-    "never terminated.», citing the 5.8% dismissal share in `figure5_counts`. The "
-    "coverage attacker returned this:\n"
+    "never terminated.», citing the dismissal share in `figure5_counts`. The coverage "
+    "attacker returned this:\n"
     '  kind: "coverage", grounding_index: 0,\n'
     '  text: "PENALTYDIS is blank on 28% of records. A blank is an unknown outcome, not a '
     'kept job.",\n'
-    "  evidence: \"A blank outcome is not a kept job, so 'never terminated' tops out at "
-    '94% and 5.8% is the share of all cases including the ones whose outcome the file '
-    'does not hold.",\n'
+    "  evidence: \"'Never terminated' is at most 94%, and 5.8% is the share of all cases, "
+    'including the ones whose outcome the file does not hold.",\n'
     '  moves: "moves", cost: "free"\n'
     "You weigh it 3, not 2. It does turn the figure into a bound, which is weight 2 on "
     "its own — but the sentence asserts an outcome for every case, and the file holds one "
     "for fewer than three quarters of them, so the footing the sentence needs is missing "
-    "rather than merely moved. The backing is a run of words lifted straight out of the "
-    "attacker's own evidence, ending on a space:\n"
-    "{\n"
-    '  "challenges": [\n'
-    "    {\n"
-    '      "attacker": "coverage",\n'
-    '      "kind": "coverage",\n'
-    '      "grounding_index": 0,\n'
-    '      "text": "PENALTYDIS is blank on 28% of records. A blank is an unknown outcome, '
-    'not a kept job.",\n'
-    "      \"evidence\": \"A blank outcome is not a kept job, so 'never terminated' tops "
-    'out at 94% and 5.8% is the share of all cases including the ones whose outcome the '
-    'file does not hold.",\n'
-    '      "backing": "tops out at 94%",\n'
-    '      "evidence_refs": [\n'
-    '        {"kind": "input_column", "stage_id": "cases", "column": "PENALTYDIS"},\n'
-    '        {"kind": "output", "slug": "job_status_breakdown"}\n'
-    "      ],\n"
-    '      "severity": 3,\n'
-    '      "moves": "moves",\n'
-    '      "cost": "free",\n'
-    '      "raised_by": ""\n'
-    "    }\n"
-    "  ],\n"
-    '  "summary": "The reading of the penalty field is settled by the sentence itself and '
-    'is not the weak point. Two things are: the outcome is missing on 28% of records, and '
-    'the claim says guards where the file can only count cases."\n'
-    "}\n"
-    "Note what the summary does: the biggest number in the whole attack is the 59.5% the "
+    "rather than merely moved. The backing is four words lifted out of the attacker's own "
+    "evidence, and the comma the source puts after them is no obstacle:\n"
+    + ORCHESTRATOR_EXAMPLE_JSON + "\n"
+    "Note what the summary does: the biggest number in the whole attack is the one the "
     "other penalty column reads, and the first sentence takes it off the table, because "
     "the methodology settles it and the run obeys. That challenge still appears in the "
     "list, at weight 0, folded.\n\n"
