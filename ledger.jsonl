@@ -2906,3 +2906,4 @@
 {"run_id":"34578934482","run_url":"https://github.com/surveit/carbonpaper/actions/runs/34578934482","created":"2026-09-11T08:26:18Z","branch":"claim-review/attackers","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"34578964860","run_url":"https://github.com/surveit/carbonpaper/actions/runs/34578964860","created":"2026-09-11T08:26:42Z","branch":"claim-review/sentence-page","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"34579688398","run_url":"https://github.com/surveit/carbonpaper/actions/runs/34579688398","created":"2026-09-11T08:33:03Z","branch":"claim-review/sentence-page","event":"pull_request","contracts_kept":16,"findings":[]}
+{"run_id":"34579833849","run_url":"https://github.com/surveit/carbonpaper/actions/runs/34579833849","created":"2026-09-11T08:34:51Z","branch":"claim-review/list-and-nav","event":"pull_request","contracts_kept":16,"findings":[]}
