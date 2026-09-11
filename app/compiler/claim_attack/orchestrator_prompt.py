@@ -59,10 +59,10 @@ _THE_WORK = (
 
 _BACKING = (
     "THE BACKING RULE. `backing` is a figure or phrase copied verbatim off a LINE OF THE "
-    "EVIDENCE POOL — every character, in the same order, with the same spelling and "
-    "punctuation. It is checked against the pool as a literal string: if the copy is not "
-    "there character for character, the challenge is refused and the WHOLE review is "
-    "thrown away — every other challenge with it. So:\n"
+    "EVIDENCE POOL — every word and figure in order, spelled as the line spells it. A line "
+    "break inside the phrase is fine: the check ignores how the pool wraps. A figure you "
+    "re-typed, rounded or abbreviated is not, and a refusal throws the WHOLE review away — "
+    "every other challenge with it. So:\n"
     "  Copy, never restate. `$61.4m` is not a copy of `$61,447,729`. `28 percent` is not "
     "a copy of `28%`. Rounding, reformatting, translating a figure into a sentence of "
     "your own — all refused.\n"
