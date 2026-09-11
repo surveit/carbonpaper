@@ -118,9 +118,10 @@ def find_challenge_issues(challenges: list[Challenge], grounding_count: int) -> 
 
 
 def read_whether_the_pool_prints(pool: str, text: str) -> bool:
-    """At token boundaries: `220` inside `2200` is not printed."""
-    pattern = rf"(?<!\w)(?<!\d[,.]){re.escape(text)}(?![,.]\d)(?!\w)"
-    return re.search(pattern, pool) is not None
+    """At token boundaries: `220` inside `2200` is not printed. A wrap is not a new phrase."""
+    printed, phrase = re.sub(r"\s+", " ", pool), re.sub(r"\s+", " ", text)
+    pattern = rf"(?<!\w)(?<!\d[,.]){re.escape(phrase)}(?![,.]\d)(?!\w)"
+    return re.search(pattern, printed) is not None
 
 
 def _finish_claim_attack(project_id: ID, claim_id: ID, bundle: EvidenceBundle,
