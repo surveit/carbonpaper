@@ -1,4 +1,4 @@
-"""What the claim page draws, and the state of the attack behind it."""
+"""What the claim page draws: the sentence, its ground, and the state of the attack."""
 from __future__ import annotations
 
 from collections import Counter
@@ -29,7 +29,7 @@ from app.runtime.citations import build_row_trace_url
 from app.services import claim_evidence
 from app.services import claims as claims_service
 from app.services.claim_review import find_attack_sessions, load_claim_review
-from app.services.claim_shapes import load_claim_shape
+from app.services.claim_shapes import read_claim_shape
 from app.services.errors import ClaimRefused
 from app.services.generation import GENERATION_FAILURE_PREFIX
 from app.services.run import read_run_manifest
@@ -188,7 +188,7 @@ def build_claim_review_page(project_id: ID, claim_id: ID) -> ClaimReviewPage:
     claim = claims_service.load_claim(project_id, claim_id)
     review = load_claim_review(project_id, claim_id)
     run = _read_run_row(project_id, claim.citation.run_id)
-    shape = _read_shape(project_id, claim)
+    shape = read_claim_shape(project_id, claim.shape_id)
     return _build_page(project_id, claim, shape, run, review)
 
 
@@ -437,13 +437,6 @@ def _read_run_row(project_id: ID, run_id: ID) -> RunIndexRow:
     if row is None:
         raise ClaimRefused([f"this project holds no run '{run_id}'"])
     return row
-
-
-def _read_shape(project_id: ID, claim: Claim) -> ClaimShape:
-    shape = load_claim_shape(project_id, claim.shape_id)
-    if shape is None:
-        raise ClaimRefused([f"this project holds no claim shape '{claim.shape_id}'"])
-    return shape
 
 
 def _read_grounding(review: ClaimReview | None) -> list[Grounding]:
