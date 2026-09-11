@@ -143,6 +143,14 @@ def test_the_orchestrator_is_told_to_copy_backings_verbatim() -> None:
     assert "published precision" in _ORCHESTRATOR
 
 
+def test_the_orchestrator_is_told_a_line_break_inside_a_backing_is_acceptable() -> None:
+    """The guard collapses whitespace, so the prompt must not warn off quoting across a wrap."""
+    wrapped = "the filing is\nreporting it received nothing"
+    assert read_whether_the_pool_prints(wrapped, wrapped.replace("\n", " "))
+    assert "line break" in _ORCHESTRATOR
+    assert "literal string" not in _ORCHESTRATOR
+
+
 def test_the_orchestrator_is_told_the_pool_is_the_only_source_of_a_backing() -> None:
     assert "The pool is the only source" in _ORCHESTRATOR
     assert "not the attacker's `evidence` either" in _ORCHESTRATOR
