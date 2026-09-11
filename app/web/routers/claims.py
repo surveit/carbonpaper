@@ -62,14 +62,14 @@ async def submit_claim(request: Request, project_id: str, run_id: str, slug: str
 
 
 @router.get("/project/{project_id}/claims/{claim_id}", response_class=HTMLResponse)
-async def claim_page(request: Request, project_id: str, claim_id: str):
+async def read_claim_review_page(request: Request, project_id: str, claim_id: str):
     validate_project_or_404(project_id)
     page = _refusing_404(lambda: build_claim_review_page(project_id, claim_id))
     return templates.TemplateResponse(
         request,
         "claim_review.html",
         {
-            "state": shell_state_off_nav(project_id, _claim_crumbs(project_id, page.run_id)),
+            "state": shell_state_off_nav(project_id, _build_claim_crumbs(project_id, page.run_id)),
             "section": "runs",
             "page": page,
         },
@@ -183,5 +183,5 @@ def _crumbs(project_id: str) -> list[Crumb]:
     )
 
 
-def _claim_crumbs(project_id: str, run_id: str) -> list[Crumb]:
+def _build_claim_crumbs(project_id: str, run_id: str) -> list[Crumb]:
     return build_run_child_crumbs(project_id, run_id, label="Claim")
