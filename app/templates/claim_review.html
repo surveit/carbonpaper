@@ -1,0 +1,294 @@
+{% extends "project_shell.html" %}
+{% from "_sparkle.html" import sparkle %}
+{#
+  THE CLAIM PAGE — one sentence, where each of its phrases lands in the run, and every
+  challenge the attackers raised against it.
+
+  The underline under a phrase is its worst open challenge: the legend under the sentence
+  names every weight in words, so the marking is never colour alone. A phrase the review
+  grounds on nothing still carries its row in the ground table, saying so.
+
+  The attack itself is a background turn, so this page has four states of its own —
+  never attacked, running, failed, refused — and the block after the legend is whichever
+  one it is in. Running polls the session's status endpoint and reloads when it goes
+  still; nothing here computes a result client-side.
+
+  Context the route passes:
+    state = project_view.shell_state_off_nav(project_id, crumbs); section = "runs"
+    page  = claim_review_view.build_claim_review_page(project_id, claim_id)
+#}
+{% block title %}Claim · {{ state.meta.display_name }}{% endblock %}
+
+{% block section %}
+{% set base = "/project/" ~ state.id ~ "/claims/" ~ page.claim_id %}
+{% set would_be_refused = page.universe == 'closed' and not page.run_read_everything %}
+
+<div class="sec-head">
+  <h1>What this run says
+    <span class="status-chip {{ page.status }}">{{ "needs review" if page.status == 'submitted' else page.status }}</span>
+  </h1>
+  <p class="lede">The run's figures, and the sentence proposed on them. Every load-bearing
+    phrase is landed on a piece of the run or on nothing, and the weight of its underline is
+    how badly the sentence would be hurt if the challenge stood. The review changes nothing
+    on the run; it is read, then the claim is approved or declined.</p>
+</div>
+
+<div class="pool">
+  <div class="pool-h">
+    <span class="k">This run's outputs</span>
+    <span class="run">run <code>{{ page.run_id }}</code> · the one this sentence is read from is shaded</span>
+  </div>
+  <table class="pool-t">
+    <tbody>
+      {% for output in page.outputs %}
+      <tr class="{{ 'lit' if output.cited }}">
+        <td class="kind">output</td>
+        <td><span class="ev">{{ output.slug }}</span> {{ output.label }}</td>
+        <td class="v"><a class="lineage-value" href="{{ output.href }}">{{ output.value }}</a></td>
+        <td class="note">{{ page.shape_label if output.cited }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<p class="sentence">
+  {%- for token in page.tokens -%}
+    {%- if token.grounding_index is none -%}{{ token.text }}
+    {%- else -%}
+    {%- set weight = 's' ~ (token.severity if token.severity is not none else 0) -%}
+<span class="ph {{ weight }}" data-ph="{{ token.grounding_index }}">{{ token.text }}</span>
+    {%- endif -%}
+  {%- endfor -%}
+</p>
+
+{% if page.ground %}
+<div class="legend">
+  <span class="l3"><i></i>could not stand as written</span>
+  <span class="l2"><i></i>moves the figure, or bounds it</span>
+  <span class="l1"><i></i>worth a footnote</span>
+  <span class="l0"><i></i>checked, quiet</span>
+</div>
+{% endif %}
+
+{# ── what the attack is doing, if it is not done ── #}
+{% if page.attack == 'running' %}
+<div class="round-note pending">
+  {{ sparkle() }}<b>Attacking this sentence…</b>
+  <span>Six attackers are reading it against what the run holds. This page reloads
+    when they are done.</span>
+</div>
+<script>
+(function () {
+  // The attack runs in a background turn, so the page watches the session rather than
+  // the review: the status endpoint is what knows the turn is still in flight.
+  const url = {{ ("/project/" ~ state.id ~ "/generation-session/" ~ page.attack_session_id ~ "/status") | tojson }};
+  let timer = null;
+  async function poll() {
+    let state;
+    try {
+      const answer = await fetch(url, { cache: 'no-store' });
+      if (!answer.ok) return;
+      state = await answer.json();
+    } catch (e) { return; }
+    if (!state.active) { if (timer) clearInterval(timer); location.reload(); }
+  }
+  timer = setInterval(poll, 2000); poll();
+})();
+</script>
+{% elif page.attack == 'failed' and page.status == 'submitted' %}
+<div class="mint-alert">⚠ <span>{{ page.attack_error }}</span></div>
+<form class="word-bar" id="attack-form" method="post" action="{{ base }}/attack">
+  <button class="btn primary" type="submit">{{ sparkle() }} Attack again</button>
+  <span class="muted">Nothing was stored, so the sentence stands unread.</span>
+</form>
+{% elif page.attack == 'none' and page.status == 'submitted' %}
+<form class="word-bar" id="attack-form" method="post" action="{{ base }}/attack">
+  <button class="btn primary" type="submit">{{ sparkle() }} Attack this claim</button>
+  <span class="muted">Six attackers read the sentence against what the run holds,
+    and land every load-bearing phrase on a piece of it or on nothing.</span>
+</form>
+{% elif page.attack == 'refused' %}
+<div class="round-note">
+  <b>Not attacked.</b>
+  <span>This is a table claim: it cites a rectangle of rows rather than one figure, and
+    the attackers read a sentence written on a single value.</span>
+</div>
+{% endif %}
+
+{% if page.summary %}
+<div class="round-note">{{ sparkle() }}<b>Written by the AI.</b> <span>{{ page.summary }}</span></div>
+{% endif %}
+
+{% if page.ground %}
+<table class="ground">
+  <thead><tr><th>the phrase</th><th>lands on</th><th>how</th></tr></thead>
+  <tbody>
+    {% for row in page.ground %}
+    <tr>
+      <td class="w">“{{ row.phrase }}”</td>
+      {% if row.lands_on %}
+      <td><span class="ev">{{ row.lands_on }}</span></td>
+      <td>{{ row.how }}</td>
+      {% else %}
+      <td><span class="ev none">nothing in the run</span></td>
+      <td class="none">{{ row.how }}</td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{# ── what was raised ── #}
+{% macro challenge_word(one) %}
+<div class="ch-word">“{{ one.phrase }}”
+  <small>{{ one.kind_words }}</small>
+  <small><span class="sev-tag s{{ one.severity }}"><i></i>{{ one.severity_words }}</span></small>
+</div>
+{% endmacro %}
+
+{% for one in page.open_challenges %}
+<div class="ch">
+  <div class="ch-top b2">
+    {{ challenge_word(one) }}
+    <div>
+      <div class="ch-text">{{ one.text }}</div>
+      <div class="ch-ev">{{ one.evidence }}{% if one.raised_by %} · raised by {{ one.raised_by }}{% endif %}</div>
+    </div>
+    <div class="ch-side">
+      <span class="backing">{{ one.backing }}</span>
+      <span class="mv {{ one.moves }}">{{ one.moves_words }}</span>
+      <span class="cost">to settle: <b>{{ one.cost_words }}</b></span>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+{% if page.attack == 'done' and not page.open_challenges %}
+<div class="empty-line">Nothing open on this reading.</div>
+{% endif %}
+
+{% if page.quiet_challenges %}
+<details class="fold">
+  <summary>{{ page.quiet_challenges | length }} checked, and none moves this figure at published precision</summary>
+  <div class="quiet-box">
+    {% for one in page.quiet_challenges %}
+    <div class="quiet-row">
+      {{ challenge_word(one) }}
+      <div>{{ one.text }} — {{ one.evidence }}</div>
+      <div><span class="backing">{{ one.backing }}</span></div>
+    </div>
+    {% endfor %}
+  </div>
+</details>
+{% endif %}
+
+{# ── another wording, which is another claim ── #}
+{% for rewrite in page.proposed_rewrites %}
+<div class="rw">
+  <p class="diff">{{ rewrite.text }}</p>
+  <p class="why">{{ rewrite.why }}</p>
+  <form class="acts" method="post" action="{{ base }}/rewrite">
+    <input type="hidden" name="text" value="{{ rewrite.text }}">
+    <button class="btn primary" type="submit">Submit this wording as a new claim</button>
+    <span class="muted">superseding this one, and attacked again</span>
+  </form>
+</div>
+{% endfor %}
+
+{% if page.attack != 'refused' %}
+<form class="word-bar" method="post" action="{{ base }}/rewrite">
+  <textarea name="text" rows="2" aria-label="another wording of this claim"
+            required>{{ page.text }}</textarea>
+  <button class="btn" type="submit">{{ sparkle() }} Re-attack this wording</button>
+  <span class="muted">Any text. It becomes a claim of its own, superseding this one, and
+    the AI reads it against what the run holds rather than against this sentence.</span>
+</form>
+{% endif %}
+
+{# ── standing behind it, or not ── #}
+{% if would_be_refused and page.blocked %}
+<div class="mint-alert">⚠ <span>{{ page.blocked }} This claim's shape needs the whole
+  input, so it cannot be approved from this run.</span></div>
+{% endif %}
+
+<div class="stand{{ ' is-claimed' if page.status == 'approved' }}">
+  {% if page.status == 'submitted' %}
+  <form method="post" action="{{ base }}/approve">
+    <button class="btn primary" type="submit" {% if would_be_refused %}disabled{% endif %}>Approve</button>
+  </form>
+  <form method="post" action="{{ base }}/decline">
+    <button class="btn" type="submit">Decline</button>
+  </form>
+  <span class="cite">approving cites <a class="lineage-value" href="{{ page.value_href }}">{{ page.value }}</a>
+    of run {{ page.run_id }}</span>
+  {% elif page.status == 'approved' %}
+  <b>Approved.</b>
+  <span class="cite">cites <a class="lineage-value" href="{{ page.value_href }}">{{ page.value }}</a> of run {{ page.run_id }}</span>
+  {% elif page.status == 'declined' %}
+  <b>Declined.</b>
+  <span class="muted">The run keeps the number; nothing stands behind this sentence.</span>
+  {% else %}
+  <b>Superseded.</b>
+  <span class="muted">Another wording of this claim replaced it.</span>
+  {% endif %}
+</div>
+
+{% if page.attack == 'done' %}
+<details class="fold">
+  <summary>How this was attacked</summary>
+  <div class="attackers">
+    <div class="pool-h">
+      <span class="k">Who attacked this sentence</span>
+      <span class="run">one orchestrator reads the sentence, sends it to six attackers,
+        merges what comes back, weighs it, and writes the summary</span>
+    </div>
+    <div class="att-row">
+      {% for attacker in page.attackers %}
+      <div class="att{{ ' zero' if not attacker.count }}">
+        <div class="att-n">{{ attacker.count if attacker.count else "none" }}</div>
+        <div>
+          <div class="att-name">{{ attacker.name }}</div>
+          <div class="att-reads">reads {{ attacker.reads_what }}</div>
+          <div class="att-does">{{ attacker.does }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% if page.session_ids %}
+  <p class="muted">Every turn it took is kept:
+    {% for session_id in page.session_ids %}<a href="/chat/{{ session_id }}">turn {{ loop.index }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
+  </p>
+  {% endif %}
+</details>
+{% endif %}
+
+<script>
+(function () {
+  // The attack route answers JSON to whoever started the turn, so this form is sent by
+  // fetch: a started turn reloads the page, a refusal is drawn above the form unreloaded.
+  const form = document.getElementById('attack-form');
+  if (!form) return;
+  const button = form.querySelector('button[type=submit]');
+  function drawRefusal(text) {
+    const note = document.createElement('div');
+    note.className = 'mint-alert';
+    note.textContent = '⚠ ' + text;
+    form.parentNode.insertBefore(note, form);
+    if (button) button.disabled = false;
+  }
+  form.addEventListener('submit', async function (event) {
+    event.preventDefault();
+    if (button) button.disabled = true;
+    let answer;
+    try { answer = await fetch(form.action, { method: 'POST' }); }
+    catch (e) { drawRefusal('the attack could not be sent to the server'); return; }
+    if (answer.ok) { location.reload(); return; }
+    const refused = await answer.json().catch(function () { return {}; });
+    drawRefusal(refused.detail || ('the server answered ' + answer.status));
+  });
+})();
+</script>
+{% endblock %}

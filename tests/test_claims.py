@@ -224,6 +224,18 @@ def test_a_claim_without_a_sentence_is_refused():
         claims.submit_claim(_PROJECT, _RUN, "ai-spend", _H1, "   ")
 
 
+def test_a_refused_sentence_leaves_the_standing_claim_standing():
+    """The refusal comes before the supersede loop, so nothing is orphaned by it."""
+    _a_run_of_two_shapes()
+    standing = claims.submit_claim(_PROJECT, _RUN, "ai-spend", _H1, _TEXT)
+
+    with pytest.raises(ClaimRefused, match="write it"):
+        claims.submit_claim(_PROJECT, _RUN, "ai-spend", _H1, "   ")
+
+    assert Claim.load(standing.id).status == ClaimStatus.submitted
+    assert [claim.id for claim in Claim.find(created_by_project_id=_PROJECT)] == [standing.id]
+
+
 def test_the_words_cannot_move_at_all_because_review_attacks_them():
     _a_run_of_two_shapes()
     claim = claims.submit_claim(_PROJECT, _RUN, "ai-spend", _H1, _TEXT)

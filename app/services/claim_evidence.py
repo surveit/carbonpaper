@@ -12,6 +12,7 @@ from app.models.claim_review import (
     StageEvidenceItem,
 )
 from app.models.claims import PublishedCitation, StageOutputCellCitation
+from app.models.records.workflow_output import WorkflowOutput
 from app.models.stage import StageType
 from app.models.workflow import find_stages_upstream_of
 from app.models.workflow_stage import WorkflowStage
@@ -21,13 +22,19 @@ from app.services import scope as scope_service
 
 
 def read_outputs(run_id: ID, cited_slug: str) -> list[OutputEvidenceItem]:
-    return [
-        OutputEvidenceItem(
-            slug=output.slug, label=output.label, primary=output.primary,
-            stage_id=output.citation.stage_id, value=read_output_value(output.citation),
-            cited=output.slug == cited_slug)
-        for output in claims_service.read_every_run_output(run_id)
-    ]
+    return [_read_output(output, cited_slug)
+            for output in claims_service.read_every_run_output(run_id)]
+
+
+def _read_output(output: WorkflowOutput, cited_slug: str) -> OutputEvidenceItem:
+    citation = output.citation
+    cell = citation if isinstance(citation, StageOutputCellCitation) else None
+    return OutputEvidenceItem(
+        slug=output.slug, label=output.label, primary=output.primary,
+        stage_id=citation.stage_id, value=read_output_value(citation),
+        cited=output.slug == cited_slug,
+        row_ordinal=cell.row_ordinal if cell is not None else None,
+        column=cell.column if cell is not None else None)
 
 
 def read_output_value(citation: PublishedCitation) -> str:
