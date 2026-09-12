@@ -2927,3 +2927,4 @@
 {"run_id":"34684599920","run_url":"https://github.com/surveit/carbonpaper/actions/runs/34684599920","created":"2026-09-12T09:00:40Z","branch":"try/dag-is-the-navigator","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"34694845176","run_url":"https://github.com/surveit/carbonpaper/actions/runs/34694845176","created":"2026-09-12T12:52:29Z","branch":"stack/1-no-lineage-banner","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"34694867559","run_url":"https://github.com/surveit/carbonpaper/actions/runs/34694867559","created":"2026-09-12T12:53:09Z","branch":"stack/2-traced-panel-tints","event":"pull_request","contracts_kept":16,"findings":[]}
+{"run_id":"34694882464","run_url":"https://github.com/surveit/carbonpaper/actions/runs/34694882464","created":"2026-09-12T12:53:28Z","branch":"stack/3-drawer-window","event":"pull_request","contracts_kept":16,"findings":[]}
