@@ -77,12 +77,11 @@ class RunStagePanel:
         return {**named, **self._scope_context()}
 
     def _scope_context(self) -> dict[str, Any]:
-        """What the trace page adds: which rows are the figure's, and no tint on them."""
+        """What the trace page adds: which rows are the figure's, and the cited column."""
         if self.scope is None:
             return {}
         return {
             "scoped": True,
-            "plain": True,
             "cited_column": self.scope.cited_column,
             "column_writers": self.scope.column_writers,
             "reached_rows": self.scope.read_rows_at(str(self.stage["stage_id"])),

@@ -58,15 +58,17 @@ def test_the_panel_links_every_drawn_row_to_itself(run_id):
     assert "/stage/double/row/0/trace/view" not in page
     assert f"/stage/double/row/{CITED_ROW}/trace/view" in page
     # One stage's panel is one request now, so the traced row is numbered once.
-    assert page.count(f'<td class="row-num muted">{CITED_ROW + 1}</td>') == 1
+    assert page.count(f'<td class="row-num diff-row-num-mine">{CITED_ROW + 1}</td>') == 1
 
 
-def test_no_tint_reaches_this_pane_through_the_shared_diff(run_id):
-    # `plain` is passed to _stage_diff.html here; the run page's diff keeps its own.
+def test_the_pane_keeps_the_run_page_tints_and_adds_its_own(run_id):
+    # The shared diff paints here as it does on the run page; the figure's marks come on top.
     page = _panel(run_id)
-    for tint in ("diff-row-mine", "diff-row-num-mine", "diff-col-cited",
-                 "diff-cell-changed", "diff-col-new", "diff-col-quiet"):
-        assert tint not in page
+    for tint in ("diff-col-new", "diff-row-mine", "diff-row-num-mine", "diff-col-cited"):
+        assert tint in page
+    # The cited cell: row 55's doubled amount, in the column the stage added.
+    assert f'<td class="diff-col-new diff-col-cited">{CITED_ROW * 20}</td>' in page
+    assert page.count("diff-col-cited") == 1
 
 
 def _panel(run_id):

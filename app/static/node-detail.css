@@ -189,14 +189,13 @@ table.data-preview.scratch th { background: var(--hover); }
     font-size: 15px;
 }
 
-/* The row a Relevant columns sheet was opened on: banded, ruled down its left edge,
-   its number out of muted. One class and one element, so it loses the tie to
-   every column tint below and their cells survive the band. --info-bg, not
-   --hover: the gray family below means "the stage didn't touch this" (see
-   diff-col-quiet), so the traced row needs its own tint or it reads as unused
-   instead of the one row that mattered. */
-.stage-diff .diff-row-mine td { background: var(--info-bg); }
-.stage-diff .diff-row-mine td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+/* The row a Rows & columns sheet was opened on, marked by position and weight:
+   a rule down its left edge and its number out of muted. Colour on this table
+   answers what the stage did to a COLUMN and nothing else, so the row takes no
+   fill of its own and its cells keep whatever tint their column earned. The
+   rule is neutral ink for the same reason, and 4px so it still reads at the
+   62% scale of a canvas sheet. */
+.stage-diff .diff-row-mine td:first-child { box-shadow: inset 4px 0 0 var(--fg); }
 .stage-diff td.diff-row-num-mine { color: var(--fg); font-weight: 700; }
 
 /* Outputs-pane stage diff (app/templates/_stage_diff.html). A column the stage
@@ -254,7 +253,7 @@ table.data-preview tr[data-href] td:not(.cell-url) {
     text-underline-offset: 3px;
 }
 
-/* The Relevant columns tab's two additions to the same table: the ONE cell the page
+/* The Rows & columns tab's two additions to the same table: the ONE cell the page
    is tracing, and a header that opens the stage that wrote its column. Both are
    inert on the outputs pane, which passes neither. The column keeps whatever
    tint its own state earned; the cell takes the loudest ink on the page. */
