@@ -7,12 +7,18 @@ from fastapi.testclient import TestClient
 import app.services.run as run_service
 from app.main import app
 from app.services.project import save_working_copy_as_version
+from app.services.workspace import resolve_run_dir
+from app.web.loading import load_run_record
+from app.web.scope_view import read_run_branches
+from app.web.stage_diff import build_stage_diff
 from app.web.values_view import build_trace_scope, load_values_used
 from app.web.walk_diagram import WALK_ASIDE_FILL
 from scope_fixture import stage_specs, write_inputs
 from stage_seed import set_stages
 
 PROJECT = "values_fixture"
+# The grand total, which five grants feed; `funded` dropped the zero-amount one.
+TOTAL = ("grant_totals", "total_amount", 0)
 
 
 @pytest.fixture
@@ -169,7 +175,7 @@ def test_a_traced_panel_keeps_the_run_page_tints_over_the_figures_rows(run_id):
         "?stage=by_portfolio&row=1&column=total_amount").text
     # The stage's added columns stay blue, and the figure's rows are banded over that.
     assert "diff-col-new" in page
-    assert 'class="diff-row-mine"' in page
+    assert "diff-cell-same" in page
 
 
 def test_a_scoped_panel_drops_the_run_log(run_id):
@@ -187,6 +193,63 @@ def test_the_run_pages_own_panel_keeps_its_log_and_its_frame_count(run_id):
     # No figure narrows it, so nothing on it is qualified as one figure's.
     assert "behind this figure" not in page.text
     assert "for the whole stage" not in page.text
+
+
+def _build_filter_diff(run_id, stage_id, at_rows, rows_shown):
+    record = load_run_record(PROJECT, run_id)
+    output_by_id = {entry.stage_id: entry.output_path for entry in record.stage_records}
+    return build_stage_diff(
+        read_run_branches(PROJECT, run_id).stages[stage_id],
+        resolve_run_dir(PROJECT, run_id), output_by_id[stage_id], output_by_id,
+        rows_shown=rows_shown, at_rows=at_rows)
+
+
+def _read_cell(diff, row, column):
+    return row.cells[diff.columns.index(column)]
+
+
+def test_a_scoped_filters_window_holds_the_figures_rows_and_the_rows_it_dropped(run_id):
+    # size_band feeds funded in east-then-west order, so the 0-amount G-007 is input 4.
+    behind = build_trace_scope(PROJECT, run_id, *TOTAL).read_rows_at("funded")
+    diff = _build_filter_diff(run_id, "funded", at_rows=behind, rows_shown=6)
+    assert [row.output_ordinal for row in diff.rows if not row.dropped] == behind
+    assert [row.input_ordinal for row in diff.rows] == [0, 1, 3, 4, 5, 8]
+    assert [_read_cell(diff, row, "grant_id") for row in diff.rows] == [
+        "G-001", "G-002", "G-004", "G-007", "G-009", "G-006"]
+    assert [row.dropped for row in diff.rows] == [False] * 3 + [True] + [False] * 2
+    assert _read_cell(diff, diff.rows[3], "amount") == "0"
+    assert diff.dropped_beyond_window == 0
+    assert (diff.input_total, diff.kept_total, diff.dropped_total) == (10, 9, 1)
+
+
+def test_an_unscoped_filter_still_opens_on_the_first_input_rows(run_id):
+    diff = _build_filter_diff(run_id, "funded", at_rows=None, rows_shown=6)
+    assert [row.input_ordinal for row in diff.rows] == [0, 1, 2, 3, 4, 5]
+    assert [row.dropped for row in diff.rows] == [False] * 4 + [True, False]
+
+
+def _read_traced_panel(run_id, stage_id, cited):
+    stage, column, row = cited
+    return " ".join(TestClient(app).get(
+        f"/project/{PROJECT}/runs/{run_id}/stage/{stage_id}/traced"
+        f"?stage={stage}&row={row}&column={column}").text.split())
+
+
+def test_the_traced_panel_of_a_filter_counts_the_figures_rows_apart_from_the_rest(run_id):
+    page = _read_traced_panel(run_id, "funded", TOTAL)
+    assert "showing 5 relevant input rows of 10, and 1 more drawn around them" in page
+    assert "the first" not in page
+    # The dropped row is drawn among them, which is what the window is widened for.
+    assert "Dropped row" in page
+
+
+def test_a_traced_stage_no_row_reached_says_so_rather_than_counting_to_zero(run_id):
+    # Nothing behind the grand total went down to over_a_million: it dropped every row.
+    page = _read_traced_panel(run_id, "over_a_million", TOTAL)
+    assert "No row of this stage's output is behind this figure." in page
+    assert "the first 0" not in page
+    assert "relevant" not in page
+    assert ">view all rows</a>" in page
 
 
 def test_a_step_leads_with_the_stage_description_and_says_the_mechanism(run_id):
