@@ -60,6 +60,8 @@ class RunStagePanel:
     stage_def_error: str | None
     preview: dict[str, Any] | None
     diff: StageDiff | None
+    # Set where the reader asked for the frame rather than the figure's own rows.
+    whole_frame: bool
     input_previews: list[dict[str, Any]]
     function_code: str | None
     llm_example: dict[str, Any] | None
@@ -85,6 +87,7 @@ class RunStagePanel:
             return {}
         return {
             "scoped": True,
+            "shows_the_figures_rows": not self.whole_frame,
             "cited_column": self.scope.cited_column,
             "column_writers": self.scope.column_writers,
             "reached_rows": self.scope.read_rows_at(str(self.stage["stage_id"])),
@@ -94,6 +97,7 @@ class RunStagePanel:
 def build_run_stage_panel(
     project_id: str, run_id: str, stage_id: StageId, manifest: dict[str, Any],
     stage_record: JsonDict, scope: TraceScope | None = None,
+    whole_frame: bool = False,
 ) -> RunStagePanel:
     run_dir = resolve_run_dir(project_id, run_id)
     pinned = run_service.load_pinned_stage_def(project_id, manifest, stage_id)
@@ -102,7 +106,7 @@ def build_run_stage_panel(
         entry.get("stage_id"): entry.get("output_path")
         for entry in manifest.get("stage_records", [])
     }
-    at_rows = None if scope is None else _widen_to_neighbours(
+    at_rows = None if scope is None or whole_frame else _widen_to_neighbours(
         scope.read_rows_at(stage_id))
     # Its inputs are drawn as the upstream stage wrote them, unordered by this one.
     preview = order_preview_columns(
@@ -116,6 +120,7 @@ def build_run_stage_panel(
         preview=preview,
         diff=_build_diff(pinned, run_dir, stage_record, output_by_id, at_rows),
         input_previews=input_previews,
+        whole_frame=whole_frame,
         function_code=resolve_function_code(stage_def),
         llm_example=build_llm_example(pinned.workflow_stage, input_previews),
         test_views=(views := shape_test_views(pinned.workflow_stage)),

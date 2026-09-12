@@ -1,9 +1,10 @@
-"""What the Relevant columns tab is handed: the run's graph, read as one walk."""
+"""What the Rows & columns tab is handed: the run's graph, read as one walk."""
 
 from __future__ import annotations
 
 from pydantic import BaseModel
 
+from app.models.branch_analysis import BranchId, RowOrdinal
 from app.models.schema import StageId
 
 
@@ -22,9 +23,38 @@ class MinimapEdge(BaseModel):
     rows: int | None
 
 
-class StepSource(BaseModel):
+class MinimapCut(BaseModel):
+    """Rows a stage took out of the workflow, on the figure's route."""
+
     stage_id: StageId
+    branch: BranchId
+    # The branch's recorded count over the whole run.
     rows: int
+
+
+class SheetRow(BaseModel):
+    # None for a dropped row, which has no ordinal in the stage's output frame.
+    ordinal: RowOrdinal | None
+    # Positional against the sheet's `columns`.
+    cells: list[str]
+    # Behind the cited figure.
+    mine: bool
+    dropped: bool
+
+
+class CanvasSheet(BaseModel):
+    """One stage's box on the canvas, and the few rows drawn under it."""
+
+    stage_id: StageId
+    type: str
+    rows_in: int
+    rows_out: int
+    rows_dropped: int
+    rows_behind: int
+    columns: list[str]
+    # Those of `columns`, in its order, the cited value came through here.
+    columns_behind: list[str]
+    rows: list[SheetRow]
 
 
 class ValuesUsed(BaseModel):
@@ -33,10 +63,11 @@ class ValuesUsed(BaseModel):
     row: int
     # The stages the value came through, upstream first; each panel is fetched.
     steps: list[StageId]
-    # The run's own workflow graph, drawn by the same builder every other page uses.
-    mermaid: str
     nodes: list[MinimapNode]
     edges: list[MinimapEdge]
-    sources: dict[StageId, list[StepSource]]
+    # What the sheets' dropped counts were read off; the canvas draws the counts.
+    cuts: list[MinimapCut]
     # Set where the cited column is a `count`, which reads no column.
     counts_rows: bool
+    # In the run's stage order, one per stage that wrote a frame.
+    sheets: list[CanvasSheet]

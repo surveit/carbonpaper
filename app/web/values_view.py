@@ -3,20 +3,17 @@
 from __future__ import annotations
 
 from app.core.errors import ColumnNotInFrame, StageNotInRun
+from app.models.claims import StageOutputCellCitation
 from app.models.schema import StageId
 from app.services import run as run_service
 from app.services.scope import find_rows_reached_per_stage
-from app.web.diagrams import TYPE_GLYPH, build_mermaid_graph
-from app.web.walk_diagram import build_walk_overlay, read_walk_state
+from app.web.diagrams import TYPE_GLYPH
 from app.web.loading import load_run_record
 from app.web.run_stage_view import TraceScope
-from app.web.scope_view import read_run_branches
-from app.web.values_payload import (
-    MinimapEdge,
-    MinimapNode,
-    StepSource,
-    ValuesUsed,
-)
+from app.web.scope_drawing import draw_the_scope
+from app.web.scope_view import load_scope_map, read_run_branches
+from app.web.sheet_preview import build_canvas_sheets
+from app.web.values_payload import MinimapCut, MinimapEdge, MinimapNode, ValuesUsed
 from app.web.column_walk import (
     ColumnAt,
     ColumnWalk,
@@ -36,20 +33,48 @@ def load_values_used(
     walk = walk_column_back(stages, ColumnAt(stage_id, column))
     parents = _index_parents(stages)
     level = _rank_stages_by_graph_level(parents)
-    on_walk = _list_stages_on_the_walk(walk)
-    behind = _count_rows_behind(project_id, run_id, stage_id, row, stages)
+    run_branches = read_run_branches(project_id, run_id)
+    reached = find_rows_reached_per_stage(run_branches, [(stage_id, row)])
+    behind = {sid: len(reached.get(sid, ())) for sid in stages}
+    counts_rows = walk.find_stop_at(ColumnAt(stage_id, column)) is WalkStop.counts_rows
+    # A count reads no column, so its walk is every stage its rows came through.
+    on_walk = ({sid for sid, rows in behind.items() if rows} if counts_rows
+               else _list_stages_on_the_walk(walk))
     edges = _list_edges(parents, on_walk, behind)
+    cuts = _list_cuts(project_id, run_id, stage_id, column, row)
     return ValuesUsed(
         cited_stage=stage_id,
         column=column,
         row=row,
         steps=sorted(on_walk, key=lambda sid: (level[sid], sid)),
-        mermaid=_draw_walk_graph(stages, on_walk, behind, edges),
         nodes=_list_nodes(stages, on_walk, behind),
         edges=edges,
-        sources=_index_sources(parents, behind),
-        counts_rows=walk.find_stop_at(ColumnAt(stage_id, column)) is WalkStop.counts_rows,
+        cuts=cuts,
+        counts_rows=counts_rows,
+        sheets=build_canvas_sheets(project_id, run_id, run_branches, reached,
+                                   record.stage_records, cuts,
+                                   _index_columns_behind(walk, stages)),
     )
+
+
+def _index_columns_behind(
+    walk: ColumnWalk, stages: WorkflowStagesById
+) -> dict[StageId, set[str]]:
+    return {stage_id: set(walk.list_columns_at(stage_id)) for stage_id in stages}
+
+
+def _list_cuts(
+    project_id: str, run_id: str, stage_id: StageId, column: str, row: int
+) -> list[MinimapCut]:
+    """What the scope map read as taken out on the figure's route, per stage."""
+    citation = StageOutputCellCitation(
+        run_id=run_id, stage_id=stage_id, row_ordinal=row, column=column, value=None)
+    scope, _ = load_scope_map(project_id, run_id, citation)
+    return [
+        MinimapCut(stage_id=drawn.stage.id, branch=removal.branch, rows=removal.rows)
+        for drawn in draw_the_scope(scope, every_stage=True).columns
+        for removal in drawn.removals
+    ]
 
 
 def build_trace_scope(
@@ -86,15 +111,6 @@ def _read_run_stages(
     if schema is None or schema.column_for_name(column) is None:
         raise ColumnNotInFrame(f"stage '{stage_id}' writes no column '{column}'")
     return stages
-
-
-def _count_rows_behind(
-    project_id: str, run_id: str, stage_id: StageId, row: int,
-    stages: WorkflowStagesById,
-) -> dict[StageId, int]:
-    reached = find_rows_reached_per_stage(
-        read_run_branches(project_id, run_id), [(stage_id, row)])
-    return {sid: len(reached.get(sid, ())) for sid in stages}
 
 
 def _list_stages_on_the_walk(walk: ColumnWalk) -> set[StageId]:
@@ -136,20 +152,6 @@ def _list_nodes(
     ]
 
 
-def _draw_walk_graph(
-    stages: WorkflowStagesById,
-    on_walk: set[StageId],
-    behind: dict[StageId, int],
-    edges: list[MinimapEdge],
-) -> str:
-    states = {sid: read_walk_state(sid in on_walk, behind[sid]) for sid in stages}
-    overlay = build_walk_overlay(
-        states, behind,
-        {(edge.from_stage, edge.to_stage): edge.rows for edge in edges})
-    return build_mermaid_graph(
-        [stages[sid].stage for sid in stages], project_id="", overlay=overlay)
-
-
 def _list_edges(
     parents: dict[StageId, list[StageId]],
     on_walk: set[StageId],
@@ -159,23 +161,11 @@ def _list_edges(
         MinimapEdge(
             from_stage=parent,
             to_stage=child,
-            rows=behind[parent] if parent in on_walk else None,
+            # Both ends, so a wire off the walk at either end states no count.
+            rows=(behind[parent] if {parent, child} <= on_walk else None),
         )
         for child in sorted(parents)
         for parent in parents[child]
         if parent in parents
     ]
 
-
-def _index_sources(
-    parents: dict[StageId, list[StageId]], behind: dict[StageId, int]
-) -> dict[StageId, list[StepSource]]:
-    return {
-        child: [
-            StepSource(stage_id=parent, rows=behind[parent])
-            for parent in parents[child]
-            if parent in parents
-        ]
-        for child in sorted(parents)
-        if parents[child]
-    }

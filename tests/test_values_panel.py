@@ -1,6 +1,8 @@
 """The walk and the map. What a stage SHOWS is the run page's own panel."""
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -8,11 +10,11 @@ import app.services.run as run_service
 from app.main import app
 from app.services.project import save_working_copy_as_version
 from app.services.workspace import resolve_run_dir
+from app.web.config import label_stage_type
 from app.web.loading import load_run_record
 from app.web.scope_view import read_run_branches
 from app.web.stage_diff import build_stage_diff
 from app.web.values_view import build_trace_scope, load_values_used
-from app.web.walk_diagram import WALK_ASIDE_FILL
 from scope_fixture import stage_specs, write_inputs
 from stage_seed import set_stages
 
@@ -41,13 +43,15 @@ def test_every_stage_the_value_came_through_is_a_step(run_id):
         "funded", "one_row_per_grant", "by_portfolio"]
 
 
+def _wires_into(values, stage_id):
+    return [edge.from_stage for edge in values.edges if edge.to_stage == stage_id]
+
+
 def test_a_union_is_a_node_of_its_own_rather_than_two_extra_sources(run_id):
     # Contracted out, `by_portfolio` read as taking rows from load_east and load_west.
     values = _walk(run_id, "by_portfolio", "total_amount")
-    assert [source.stage_id for source in values.sources["by_portfolio"]] == [
-        "one_row_per_grant"]
-    assert [source.stage_id for source in values.sources["both_regions"]] == [
-        "load_east", "load_west"]
+    assert _wires_into(values, "by_portfolio") == ["one_row_per_grant"]
+    assert _wires_into(values, "both_regions") == ["load_east", "load_west"]
 
 
 def _minimap_node(values, stage_id):
@@ -81,33 +85,9 @@ def test_a_wire_carries_the_rows_it_brought_and_says_nothing_off_the_walk(run_id
     assert _edge(values, "load_west", "both_regions").rows == 3
     # load_agencies writes only `portfolio`, which this figure never came through.
     assert _edge(values, "load_agencies", "tag_portfolio").rows is None
-
-
-def _graph_lines(values):
-    return [line.strip() for line in values.mermaid.splitlines()]
-
-
-def test_the_map_is_the_workflow_graph_every_other_page_draws(run_id):
-    lines = _graph_lines(_walk(run_id, "by_portfolio", "portfolio"))
-    assert lines[0] == "flowchart LR"
-    # Off input_ids, so a union is a node with two wires rather than a contraction.
-    assert "load_east -->|2| both_regions" in lines
-    assert "load_west -->|3| both_regions" in lines
-
-
-def test_a_stage_off_the_walk_is_greyed_and_cannot_be_opened(run_id):
-    lines = _graph_lines(_walk(run_id, "by_portfolio", "total_amount"))
-    assert [line for line in lines if line.startswith('click both_regions call dvNode')]
-    assert not [line for line in lines if line.startswith("click mean_by_portfolio")]
-    assert f"style mean_by_portfolio fill:{WALK_ASIDE_FILL}" in " ".join(lines)
-
-
-def test_a_node_says_the_rows_it_holds_behind_the_figure(run_id):
-    lines = _graph_lines(_walk(run_id, "by_portfolio", "total_amount", row=0))
-    assert [line for line in lines if line.startswith("both_regions[")
-            and "union · 5 rows behind" in line]
-    assert [line for line in lines if line.startswith("mean_by_portfolio[")
-            and "not on the walk" in line]
+    # Off the walk at the far end: nothing behind this figure went down to mean_by_portfolio.
+    assert _edge(values, "one_row_per_grant", "mean_by_portfolio").rows is None
+    assert _edge(values, "one_row_per_grant", "by_portfolio").rows == 5
 
 
 def test_a_count_reads_no_column_so_the_tab_says_so(run_id):
@@ -128,16 +108,33 @@ def test_the_scope_says_where_each_column_was_written(run_id):
     assert scope.column_writers["portfolio"] == "tag_portfolio"
 
 
-def test_the_pane_is_the_map_and_one_empty_slot_per_stage(run_id):
+def test_the_pane_is_the_canvas_and_the_sheets_it_draws_from(run_id):
     page = TestClient(app).get(
         f"/project/{PROJECT}/runs/{run_id}/values/panel"
         "?stage=by_portfolio&row=0&column=total_amount")
     assert page.status_code == 200
-    assert page.text.count('class="vu-step"') == 8
-    assert 'data-panel="load_east"' in page.text
-    # No sheet of its own: every stage opens the run page's panel, fetched.
+    nav = json.loads(_read_json_block(page.text, "canvas-nav"))
+    assert [sheet["stage_id"] for sheet in nav["sheets"]][:3] == [
+        "load_east", "load_west", "load_agencies"]
+    assert {node["stage_id"] for node in nav["nodes"]} >= {"by_portfolio", "mean_by_portfolio"}
+    assert 'class="canvas-drawer"' in page.text
+    # Every sheet is drawn client-side, and every panel is the run page's, fetched.
     assert 'class="data-preview"' not in page.text
-    assert "flowchart LR" in page.text
+    assert "vu-" not in page.text
+
+
+def _read_json_block(html, klass):
+    opened = html.index(f'class="{klass}">') + len(f'class="{klass}">')
+    return html[opened:html.index("</script>", opened)]
+
+
+def test_the_type_under_each_box_is_worded_rather_than_a_slug(run_id):
+    page = TestClient(app).get(
+        f"/project/{PROJECT}/runs/{run_id}/values/panel"
+        "?stage=by_portfolio&row=0&column=total_amount")
+    labels = json.loads(_read_json_block(page.text, "canvas-type-labels"))
+    assert labels["by_portfolio"] == label_stage_type("aggregate")
+    assert "_" not in labels["funded"]
 
 
 def test_a_column_the_stage_does_not_write_is_refused_in_the_pane(run_id):
@@ -149,12 +146,17 @@ def test_a_column_the_stage_does_not_write_is_refused_in_the_pane(run_id):
     assert "writes no column" in page.text
 
 
-def test_the_tab_says_what_to_do_with_it(run_id):
+def test_the_drawer_offers_the_frame_beside_the_figures_own_rows(run_id):
     page = TestClient(app).get(
-        f"/project/{PROJECT}/runs/{run_id}/values/panel"
-        "?stage=by_portfolio&row=1&column=total_amount")
-    assert "Walk this value back to your input data" in page.text
-    assert "use the arrow keys" in page.text
+        f"/project/{PROJECT}/runs/{run_id}/stage/size_band/traced"
+        "?stage=by_portfolio&row=1&column=total_amount").text
+    assert '<button type="button" class="on" data-rows="figure">' in page
+    assert 'data-rows="frame"' in page
+    whole = TestClient(app).get(
+        f"/project/{PROJECT}/runs/{run_id}/stage/size_band/traced"
+        "?stage=by_portfolio&row=1&column=total_amount&rows=frame").text
+    assert '<button type="button" class="on" data-rows="frame">' in whole
+    assert "relevant row" not in whole
 
 
 def test_a_traced_panel_is_the_run_page_panel_cut_to_the_figures_rows(run_id):

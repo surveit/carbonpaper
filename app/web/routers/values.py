@@ -40,9 +40,10 @@ def values_panel(request: Request, project_id: str, run_id: str,
         request, "_values_panel.html",
         {"project": project_id, "run_id": run_id, "stage_id": stage,
          "column": column, "values": payload,
-         # What values-used.js steers by; each stage's panel is fetched.
+         # What canvas.js draws from; each stage's panel is fetched.
          "nav": payload.model_dump(
-             mode="json", include={"cited_stage", "column", "sources"})},
+             mode="json",
+             include={"cited_stage", "column", "steps", "nodes", "edges", "sheets"})},
     )
 
 
@@ -51,7 +52,8 @@ def values_panel(request: Request, project_id: str, run_id: str,
     response_class=HTMLResponse,
 )
 async def values_stage_panel(request: Request, project_id: str, run_id: str,
-                             stage_id: str, stage: str, row: int, column: str):
+                             stage_id: str, stage: str, row: int, column: str,
+                             rows: str = "figure"):
     """The run page's own stage panel, cut to the rows behind one figure."""
     manifest = load_manifest(project_id, run_id)
     record = next((entry for entry in manifest.get("stage_records", [])
@@ -64,7 +66,8 @@ async def values_stage_panel(request: Request, project_id: str, run_id: str,
         return _say_why_no_panel(request, stage_id,
                                  "this run has no record of the stage")
     panel = build_run_stage_panel(
-        project_id, run_id, stage_id, manifest, record, scope=scope)
+        project_id, run_id, stage_id, manifest, record, scope=scope,
+        whole_frame=rows == "frame")
     return templates.TemplateResponse(
         request, "_run_stage_panel.html", panel.as_context())
 
