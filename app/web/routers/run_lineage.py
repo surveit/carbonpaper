@@ -29,7 +29,7 @@ from app.web.lineage_coordinate import build_lineage_coordinate
 from app.web.row_paths import CitedFigure, NoPathsToShow, PathsPane, find_paths_behind_figure
 from app.web.trace_inputs import build_input_catalog, read_run_inputs
 from app.web.trace_view import build_trace_view, read_walked_rows
-from app.web.breadcrumbs import build_run_child_crumbs
+from app.web.breadcrumbs import build_run_crumbs
 from app.web.config import render_row_number, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.services.workspace import resolve_run_dir
@@ -147,7 +147,9 @@ def run_stage_row_trace_view(
             "figure": CitedFigure(stage_id=stage_id, row_ordinal=row),
             "links": links,
             "project": project_id,
-            "crumbs": build_run_child_crumbs(project_id, run_id, label="Row lineage"),
+            # The address continues past the run, in rungs of this same trail.
+            "crumbs": build_run_crumbs(project_id, run_id),
+            "crumb_tail": "_row_address.html",
             "mermaid": mermaid,
         },
     )

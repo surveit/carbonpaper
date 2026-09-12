@@ -6,24 +6,44 @@
    is the page you are on. A switcher rung names something the reader might have
    meant a different one of; a section rung never does.
 
-   The FIRST rung is home, and it renders the wordmark in place of its label. #}
+   The FIRST rung is home, and it renders the wordmark in place of its label.
+
+   A page whose address continues past its crumbs passes `crumb_tail`, the template
+   holding those further rungs. They render inside this nav, so they fold and
+   truncate with the rest; _row_address.html is the one that does.
+
+   The trail is one line. When it runs out of room static/breadcrumbs.js folds rungs
+   from the left into the .crumb-fold rung below, so the end of the address — the
+   part the reader is in — is the last thing to go. #}
+
+{% set tail = crumb_tail is defined and crumb_tail %}
 
 {% macro crumb_text(crumb) %}{% if crumb.is_code %}<code>{{ crumb.label }}</code>{% else %}{{ crumb.label }}{% endif %}{% endmacro %}
+
+{# Home never folds, and neither does the rung naming the page itself. #}
+{% macro foldable(loop) %}{% if not loop.first and (tail or not loop.last) %} data-foldable=""{% endif %}{% endmacro %}
 
 <nav class="crumbs" aria-label="Breadcrumb">
   {%- for crumb in crumbs %}
   {%- if not loop.first %}<span class="crumb-sep" aria-hidden="true">/</span>{% endif %}
   {%- if crumb.picker %}
-  <span class="crumb-anchor">
-    <button type="button" class="crumb-switch{% if loop.last %} here{% endif %}"
+  <span class="crumb-anchor"{{ foldable(loop) }}>
+    <button type="button" class="crumb-switch{% if loop.last and not tail %} here{% endif %}"
             data-crumb-picker="{{ crumb.picker }}" data-crumb-current="{{ crumb.picker_current or crumb.label }}"
             aria-expanded="false" aria-haspopup="true">{{ crumb_text(crumb) }}<span
             class="crumb-caret" aria-hidden="true">▾</span></button>
   </span>
   {%- elif crumb.href %}
-  <a href="{{ crumb.href }}" class="crumb-link">{% if loop.first %}{% include "_wordmark.html" %}{% else %}{{ crumb_text(crumb) }}{% endif %}</a>
+  <a href="{{ crumb.href }}" class="crumb-link"{{ foldable(loop) }}>{% if loop.first %}{% include "_wordmark.html" %}{% else %}{{ crumb_text(crumb) }}{% endif %}</a>
   {%- else %}
   <span class="crumb-here" aria-current="page">{{ crumb_text(crumb) }}</span>
   {%- endif %}
+  {%- if loop.first %}
+  <span class="crumb-anchor">
+    <button type="button" class="crumb-fold" aria-haspopup="true" aria-expanded="false"
+            aria-label="Rungs that did not fit" hidden>…</button>
+  </span>
+  {%- endif %}
   {%- endfor %}
+  {%- if tail %}{% include crumb_tail %}{% endif %}
 </nav>

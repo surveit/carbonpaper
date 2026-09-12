@@ -1,4 +1,3 @@
-{% from "_picker.html" import picker %}
 {# The row lineage page. Served it is part of the app; written into a review packet
    it is a file in a zip with no server to ask, which is what `offline` says. #}
 {% extends "standalone_base.html" %}
@@ -30,22 +29,23 @@
    the screen, which is a second scrollbar for nothing. */
 html,body{height:100%}
 body{display:flex;flex-direction:column;overflow:hidden}
-/* The figure is the picker (see .picker.figure in static/picker.css); the line under
-   it is the coordinate, and every part of that is the control that moves to another. */
-.lin-head{flex:none;padding:10px 22px 9px;background:var(--raised);
-  display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
-.lin-head h1{font-size:17px;margin:0;font-weight:600;
-  display:flex;align-items:baseline;gap:11px;flex-wrap:wrap}
-.lin-head h1 code{background:var(--sunk-deep);padding:1px 5px;border-radius:4px}
-/* Top-aligned: what the mark explains is the column, which is the line above. */
-.lin-figure{display:flex;align-items:flex-start;gap:6px}
+/* The whole address is the header trail (_row_address.html), so this page adds only
+   what the trail has no rung shape for: the mark beside the figure, and the stepper
+   the row rung opens. */
 .lin-why{border:1px solid var(--border);border-radius:50%;color:var(--muted);cursor:help;
-  font-size:10px;line-height:14px;width:15px;height:15px;text-align:center;margin-top:5px}
+  flex:none;font-size:10px;line-height:14px;width:15px;height:15px;text-align:center}
 .lin-why[hidden]{display:none}
-.lin-coord{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.lin-word{color:var(--muted);font-size:12.5px}
-.lin-rowbox{width:5em;font:inherit;font-size:12.5px;padding:5px 8px;color:var(--fg);
-  border:1px solid var(--border);border-radius:8px;background:var(--raised)}
+.rowrung-at{color:var(--fg);font-weight:600}
+.rowrung-pop{width:max-content;min-width:0}
+.rowrung-step{display:flex;align-items:center;gap:7px;padding:2px 8px 6px}
+.rowrung-box{width:5em;font:inherit;font-size:13px;padding:5px 8px;color:var(--fg);
+  border:1px solid var(--border);border-radius:7px;background:var(--raised)}
+.rowrung-nudge{border:1px solid var(--border);background:var(--raised);border-radius:7px;
+  font:inherit;font-size:13px;color:var(--fg);padding:4px 10px;cursor:pointer}
+.rowrung-nudge:hover{background:var(--hover)}
+.rowrung-nudge:focus-visible,.rowrung-box:focus-visible{outline:none;
+  box-shadow:0 0 0 2px var(--focus-halo)}
+.rowrung-of{color:var(--muted);font-size:12.5px}
 .lin-sub{color:var(--muted);font-size:12.5px}
 /* One question per tab: hold the row, hold the column, or hold both. */
 .lin-pagetabs{flex:none;display:flex;gap:2px;padding:0 18px;background:var(--raised);
@@ -251,52 +251,6 @@ tr.lin-opens:hover td{background:var(--hover)}
    inherited — a page with no trail is a page with no way back. #}
 <header>{% include "_breadcrumbs.html" %}
   {% if not offline %}<a href="/admin" class="back-link header-right">Admin</a>{% endif %}</header>
-<div class="lin-head">
-{% if offline %}
-  {# A folder has no server to trace a different row from, so the coordinate is stated. #}
-  <h1><code>{{ view.start_stage }}</code> row {{ view.start_row | row_number }}</h1>
-{% else %}
-{% if not coordinate.cells %}
-  {# The walk read no row here, so there is no cell to read and none to offer. #}
-  <h1><code>{{ view.start_stage }}</code> row {{ view.start_row | row_number }}</h1>
-{% else %}
-  {# The figure and the column it sits in are one control: the picker wears them, and
-     its list is this row, so every other cell is one click from the one being read. #}
-  <div class="lin-figure">
-    {% call picker("Select from " ~ coordinate.cells | length ~ " columns",
-                  search_label=("a column" if coordinate.cells | length > 8 else ""),
-                  size="figure") %}
-    <select id="lin-column" class="picker-native">
-      <option value="" data-name="the whole row" data-meta="{{ coordinate.cells | length }} columns"{% if not coordinate.cell %} selected{% endif %}>the whole row</option>
-      {% for cell in coordinate.cells %}
-      <option value="{{ cell.column }}" data-name="{{ cell.value | truncate(160, true) or "(empty)" }}" data-meta="{{ cell.column }}"{% if cell.column == coordinate.column %} selected{% endif %}>{{ cell.column }}</option>
-      {% endfor %}
-    </select>
-    {% endcall %}
-    {# What the version declares about this column, where the column is named. #}
-    <span class="lin-why has-tip" id="lin-why" tabindex="0"
-          data-tip="{{ coordinate.cell.tip if coordinate.cell }}"{% if not coordinate.cell %} hidden{% endif %}>?</span>
-  </div>
-{% endif %}
-  <div class="lin-coord">
-    <label class="lin-word" for="lin-stage">on</label>
-    {% call picker("Stages of this run", hint="the ones this run wrote rows for",
-                  search_label="a stage", size="sm") %}
-    <select id="lin-stage" class="picker-native">
-      {% for pick in coordinate.stages %}
-      <option value="{{ pick.stage_id }}" data-side="{{ pick.rows | figure }} rows" data-meta="{{ pick.type_label }}"{% if pick.stage_id == coordinate.stage_id %} selected{% endif %}>{{ pick.stage_id }}</option>
-      {% endfor %}
-    </select>
-    {% endcall %}
-    <label class="lin-word" for="lin-row">row</label>
-    <input id="lin-row" class="lin-rowbox" type="number" inputmode="numeric"
-           value="{{ coordinate.row_number }}" min="1"
-           {% if coordinate.rows %}max="{{ coordinate.rows }}"{% endif %}>
-    {# Stated only where the run counted them: a stage with no frame has no last row. #}
-    {% if coordinate.rows %}<span class="lin-word">of {{ coordinate.rows | figure }}</span>{% endif %}
-  </div>
-{% endif %}
-</div>
 <div class="lin-pagetabs" id="pagetabs">
   <button class="lin-pagetab on" data-pane="paths">Paths</button>
   <button class="lin-pagetab" data-pane="values">Rows &amp; columns</button>
@@ -405,6 +359,14 @@ if(stagePick) stagePick.addEventListener('change', () => {
 });
 
 const rowBox = document.getElementById('lin-row');
+// The rung's popover holds the box between two nudges, so the next row is one click
+// rather than a number to type. Both ends fire the box's own change handler below.
+document.querySelectorAll('[data-row-step]').forEach(nudge => {
+  nudge.addEventListener('click', () => {
+    rowBox.value = Number(rowBox.value) + Number(nudge.dataset.rowStep);
+    rowBox.dispatchEvent(new Event('change', {bubbles: true}));
+  });
+});
 // The box holds the number the reader counts by; the address holds the ordinal.
 if(rowBox) rowBox.addEventListener('change', () => {
   const asked = Number(rowBox.value);
@@ -711,27 +673,17 @@ function showColumn(column){
   const cell = COORD.cells.find(c => c.column === COORD.column);
   columnWhy.hidden = !cell;
   if(cell) columnWhy.dataset.tip = cell.tip;
-  markLongValue(cell);
   // Replaced, not pushed: the reader is reading one row, and the back button is
   // still the way out of it. The address stays the one a figure links with.
   history.replaceState(null, '', lineageHref(COORD.stage_id, COORD.row, COORD.column));
   if(valuesColumn !== null && COORD.column) walkValuesFor(COORD.column);
   if(inputFilesColumn !== null && COORD.column) readInputFilesFor(COORD.column);
 }
-// A sentence-long cell at heading size is four words and an ellipsis, so a long one
-// is stepped down to a size that shows more of it.
-function markLongValue(cell){
-  columnPick.closest('.picker').classList.toggle(
-    'is-long', Boolean(cell) && cell.value.length > 48);
-}
 function chooseColumn(column){
   columnPick.value = column;
   columnPick.dispatchEvent(new Event('change', {bubbles: true}));
 }
-if(columnPick){
-  columnPick.addEventListener('change', () => showColumn(columnPick.value));
-  markLongValue(COORD.cells.find(c => c.column === COORD.column));
-}
+if(columnPick) columnPick.addEventListener('change', () => showColumn(columnPick.value));
 
 // ---- Rows & columns: where one column came from, over what each stage read.
 // The column is the header's: this tab holds it and lets go of the row.
