@@ -155,8 +155,7 @@ def test_the_packet_page_carries_the_three_tabs_with_no_column_bound(tmp_path):
     page = (_export_demo_packet(tmp_path) / "lineage/totals/0.html").read_text(encoding="utf-8")
     assert "<code>totals</code>" in page
     assert "row 1" in page  # ordinal 0, as a reader counts it
-    # The rungs that pick another stage, row or column need a server to answer them.
-    assert 'id="lin-column"' not in page
+    assert 'id="lin-column"' not in page  # picking another column needs a server
     for pane, label in [("paths", "Paths"), ("values", "Rows &amp; columns"),
                         ("inputs", "Input files")]:
         assert f'data-pane="{pane}">{label}' in page
