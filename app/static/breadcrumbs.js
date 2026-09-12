@@ -35,8 +35,16 @@
   if (document.fonts) document.fonts.ready.then(scheduleRefit);
   // Straight away rather than on a frame: this file is loaded from <head>, and a
   // trail that folds only once a frame has been painted folds in front of the reader.
-  if (document.readyState === 'loading') addEventListener('DOMContentLoaded', refitEveryTrail);
-  else refitEveryTrail();
+  if (document.readyState === 'loading') addEventListener('DOMContentLoaded', whenReady);
+  else whenReady();
+
+  // Twice, because a rung can be built by a sibling script on this same event:
+  // static/picker.js swaps its <select> for a trigger of a different width, and this
+  // file is loaded first, so the first pass measures the select.
+  function whenReady() {
+    refitEveryTrail();
+    setTimeout(refitEveryTrail, 0);
+  }
 
   // ── what a rung opens ──────────────────────────────────────────────────────
 

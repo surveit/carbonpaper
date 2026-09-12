@@ -673,27 +673,17 @@ function showColumn(column){
   const cell = COORD.cells.find(c => c.column === COORD.column);
   columnWhy.hidden = !cell;
   if(cell) columnWhy.dataset.tip = cell.tip;
-  markLongValue(cell);
   // Replaced, not pushed: the reader is reading one row, and the back button is
   // still the way out of it. The address stays the one a figure links with.
   history.replaceState(null, '', lineageHref(COORD.stage_id, COORD.row, COORD.column));
   if(valuesColumn !== null && COORD.column) walkValuesFor(COORD.column);
   if(inputFilesColumn !== null && COORD.column) readInputFilesFor(COORD.column);
 }
-// A sentence-long cell at heading size is four words and an ellipsis, so a long one
-// is stepped down to a size that shows more of it.
-function markLongValue(cell){
-  columnPick.closest('.picker').classList.toggle(
-    'is-long', Boolean(cell) && cell.value.length > 48);
-}
 function chooseColumn(column){
   columnPick.value = column;
   columnPick.dispatchEvent(new Event('change', {bubbles: true}));
 }
-if(columnPick){
-  columnPick.addEventListener('change', () => showColumn(columnPick.value));
-  markLongValue(COORD.cells.find(c => c.column === COORD.column));
-}
+if(columnPick) columnPick.addEventListener('change', () => showColumn(columnPick.value));
 
 // ---- Rows & columns: where one column came from, over what each stage read.
 // The column is the header's: this tab holds it and lets go of the row.

@@ -244,6 +244,12 @@
     .picker.sm .picker-popover { min-width: 200px; }
 }
 
+/* While the trail is working out what fits (.crumbs.measuring in base.css) a rung has
+   to report the width it wants, which it cannot do while already giving way. */
+.crumbs.measuring .picker { flex: 0 0 auto; min-width: auto; max-width: none; }
+.crumbs.measuring .picker-name,
+.crumbs.measuring .picker-meta { min-width: auto; }
+
 /* The rung size: this control is one rung of the header trail, so it wears what the
    trail's own switcher rungs wear (.crumb-switch in base.css) and differs only in what
    opens underneath. Quiet until pointed at — a bordered field in the trail reads as a
@@ -307,17 +313,16 @@
     font-family: var(--mono);
     font-size: 12.5px;
 }
+/* The trail's own size, and the weight is what makes it the figure: an unbold
+   column labelling a bold cell. A cell a step larger read as a heading. */
 .picker.figure .picker-name {
     order: 2;
     flex: 0 1 auto;
     min-width: 2.5em;
     color: var(--fg);
-    font-size: 15px;
+    font-size: 13px;
     font-weight: 650;
-    line-height: 1.2;
 }
-/* A sentence-long cell at the figure size is four words and an ellipsis. */
-.picker.figure.is-long .picker-name { font-size: 13px; font-weight: 600; }
 .picker.figure .picker-chevron { font-size: 11px; }
 .picker.figure .picker-popover { width: min(94vw, 640px); }
 .picker.figure .picker-list { max-height: 340px; }
