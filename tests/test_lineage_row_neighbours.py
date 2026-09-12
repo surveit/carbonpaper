@@ -46,7 +46,8 @@ def run_id(projects_root):
 def test_a_sheet_of_one_reached_row_draws_the_rows_around_it(run_id):
     # 55 - 25 // 2 = 43, and the sheet runs out of frame before its 25th row.
     page = _panel(run_id)
-    assert "showing 17 of 60 rows" in page
+    # 16 of the 17 are neighbours, so the line counts them apart from the figure's own.
+    assert "showing 1 relevant row of 60, and 16 more drawn around them" in page
     assert f'<td class="row-num muted">{43 + 1}</td>' in page
     assert f'<td class="row-num muted">{ROWS}</td>' in page
 

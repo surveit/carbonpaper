@@ -52,8 +52,15 @@ def load_values_used(
         cuts=cuts,
         counts_rows=counts_rows,
         sheets=build_canvas_sheets(project_id, run_id, run_branches, reached,
-                                   record.stage_records, cuts),
+                                   record.stage_records, cuts,
+                                   _index_columns_behind(walk, stages)),
     )
+
+
+def _index_columns_behind(
+    walk: ColumnWalk, stages: WorkflowStagesById
+) -> dict[StageId, set[str]]:
+    return {stage_id: set(walk.list_columns_at(stage_id)) for stage_id in stages}
 
 
 def _list_cuts(

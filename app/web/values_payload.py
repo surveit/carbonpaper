@@ -52,6 +52,8 @@ class CanvasSheet(BaseModel):
     rows_dropped: int
     rows_behind: int
     columns: list[str]
+    # Those of `columns`, in its order, the cited value came through here.
+    columns_behind: list[str]
     rows: list[SheetRow]
 
 

@@ -25,12 +25,14 @@ CELL_CHARS = 60
 FILTER_WINDOW = PREVIEW_ROWS * 4
 
 OutputPathByStage = dict[StageId, str | None]
+ColumnsBehindByStage = dict[StageId, set[str]]
 
 
 def build_canvas_sheets(project_id: str, run_id: str, run_branches: WorkflowRunBranches,
                         reached: dict[StageId, set[RowOrdinal]],
                         stage_records: list[StageRecord],
-                        cuts: list[MinimapCut]) -> list[CanvasSheet]:
+                        cuts: list[MinimapCut],
+                        columns_behind: ColumnsBehindByStage) -> list[CanvasSheet]:
     run_dir = resolve_run_dir(project_id, run_id)
     output_by_id: OutputPathByStage = {
         record.stage_id: record.output_path for record in stage_records}
@@ -42,7 +44,8 @@ def build_canvas_sheets(project_id: str, run_id: str, run_branches: WorkflowRunB
             continue
         sheets.append(_build_sheet(
             run_branches, stage_id, run_dir, frame_path, output_by_id,
-            mine=sorted(reached.get(stage_id, ())), rows_dropped=dropped[stage_id]))
+            mine=sorted(reached.get(stage_id, ())), rows_dropped=dropped[stage_id],
+            behind=columns_behind[stage_id]))
     return sheets
 
 
@@ -60,7 +63,8 @@ def _count_dropped_per_stage(cuts: list[MinimapCut]) -> Counter[StageId]:
 
 def _build_sheet(run_branches: WorkflowRunBranches, stage_id: StageId, run_dir: Path,
                  frame_path: Path, output_by_id: OutputPathByStage,
-                 mine: list[RowOrdinal], rows_dropped: int) -> CanvasSheet:
+                 mine: list[RowOrdinal], rows_dropped: int,
+                 behind: set[str]) -> CanvasSheet:
     workflow_stage = run_branches.stages[stage_id]
     authored = workflow_stage.stage
     frame = read_frame_table(frame_path)
@@ -79,7 +83,8 @@ def _build_sheet(run_branches: WorkflowRunBranches, stage_id: StageId, run_dir: 
         stage_id=stage_id, type=StageType(authored.type).value,
         rows_in=frame.num_rows + rows_dropped, rows_out=frame.num_rows,
         rows_dropped=rows_dropped, rows_behind=len(mine),
-        columns=list(frame.column_names), rows=rows)
+        columns=list(frame.column_names), rows=rows,
+        columns_behind=[name for name in frame.column_names if name in behind])
 
 
 # Off the figure's route no cut is recorded, so the diff's count is the one that holds.

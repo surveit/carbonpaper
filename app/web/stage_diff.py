@@ -207,11 +207,11 @@ def build_stage_diff(
     if input_df is None or output_df is None:
         return None
     inputs = _shape_input_frames(run_dir, input_ids, output_by_id, len(input_df))
-    drawn = _choose_rows(len(output_df), rows_shown, at_rows)
     if stage_def.type in FILTER_TYPES:
         return _build_filter_rows_diff(
-            stage_def.id, inputs, run_dir, input_df, output_df, rows_shown
+            stage_def.id, inputs, run_dir, input_df, output_df, rows_shown, at_rows
         )
+    drawn = _choose_rows(len(output_df), rows_shown, at_rows)
     return _build_row_aligned_diff(workflow_stage, inputs, input_df, output_df, drawn)
 
 
@@ -368,6 +368,7 @@ def _shape_aligned_cell(
 def _build_filter_rows_diff(
     stage_id: str, inputs: list[DiffFrame], run_dir: Path,
     input_df: pd.DataFrame, output_df: pd.DataFrame, rows_shown: int,
+    at_rows: Optional[Sequence[int]],
 ) -> Optional[FilterRowsDiff]:
     kept = _read_kept_ordinals(
         run_dir, stage_id, inputs[0].stage_id, rows_out=len(output_df), rows_in=len(input_df)
@@ -380,7 +381,7 @@ def _build_filter_rows_diff(
         # A filter passes columns through unchanged; frames that disagree mean
         # the alignment story doesn't hold, so no merged table.
         return None
-    rows = _shape_filter_rows(in_text, out_text, kept, rows_shown)
+    rows = _shape_filter_rows(in_text, out_text, kept, rows_shown, at_rows)
     dropped_total = len(input_df) - len(output_df)
     dropped_in_window = sum(1 for row in rows if row.dropped)
     return FilterRowsDiff(
@@ -395,29 +396,45 @@ def _build_filter_rows_diff(
 
 
 def _shape_filter_rows(
-    in_text: pd.DataFrame, out_text: pd.DataFrame, kept: list[int], rows_shown: int
+    in_text: pd.DataFrame, out_text: pd.DataFrame, kept: list[int], rows_shown: int,
+    at_rows: Optional[Sequence[int]],
 ) -> list[FilterRow]:
     output_ordinal_by_input = {
         input_ordinal: output_ordinal for output_ordinal, input_ordinal in enumerate(kept)
     }
-    window = min(len(in_text), rows_shown)
-    in_values = _take_column_lists(in_text, list(range(window)))
+    window = _choose_filter_window(len(in_text), kept, rows_shown, at_rows)
+    in_values = _take_column_lists(in_text, window)
     # The whole output, not the window: a kept row's ordinal indexes the output
     # frame, and the last row of an input window can sit anywhere in it.
     out_values = _take_column_lists(out_text, list(range(len(out_text))))
     names = list(in_text.columns)
     rows: list[FilterRow] = []
-    for i in range(window):
-        output_ordinal = output_ordinal_by_input.get(i)
+    for position, input_ordinal in enumerate(window):
+        output_ordinal = output_ordinal_by_input.get(input_ordinal)
         # A kept row's cells come from the persisted OUTPUT row — the thing this
         # pane shows — not from the input copy the pass-through contract implies.
-        source, at = (in_values, i) if output_ordinal is None else (out_values, output_ordinal)
+        source, at = ((in_values, position) if output_ordinal is None
+                      else (out_values, output_ordinal))
         rows.append(FilterRow(
-            input_ordinal=i,
+            input_ordinal=input_ordinal,
             output_ordinal=output_ordinal,
             cells=[source[name][at] for name in names],
         ))
     return rows
+
+
+def _choose_filter_window(
+    rows_in: int, kept: list[int], rows_shown: int, at_rows: Optional[Sequence[int]]
+) -> list[int]:
+    """`at_rows` are OUTPUT ordinals; `kept[output] == input` puts them in input order."""
+    if at_rows is None:
+        return list(range(min(rows_in, rows_shown)))
+    mine = {kept[row] for row in at_rows if 0 <= row < len(kept)}
+    # The figure's own rows first against the cap, THEN what the stage took out:
+    # sorting the two together let early dropped rows crowd the figure's out.
+    dropped = sorted(set(range(rows_in)) - set(kept) - mine)
+    room = max(0, rows_shown - len(mine))
+    return sorted(list(mine)[:rows_shown] + dropped[:room])
 
 
 def _read_kept_ordinals(

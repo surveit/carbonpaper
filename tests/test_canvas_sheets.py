@@ -115,6 +115,28 @@ def test_a_cut_carries_the_branchs_recorded_count_not_its_label(run_id, values):
     assert (deduped.rows_in, deduped.rows_out, deduped.rows_dropped) == (9, 8, 1)
 
 
+def test_a_sheet_names_the_columns_the_value_came_through(run_id, values):
+    # The total sums `amount`, so `amount` alone carried it down the grants' frames.
+    assert _sheet(values, "size_band").columns_behind == ["amount"]
+    assert _sheet(values, "grant_totals").columns_behind == ["total_amount"]
+    # `portfolio` is what tag_portfolio wrote; this figure never came through it.
+    assert _sheet(values, "load_agencies").columns_behind == []
+
+
+def test_the_columns_behind_hold_the_sheets_own_order(values):
+    for sheet in values.sheets:
+        assert sheet.columns_behind == [
+            name for name in sheet.columns if name in sheet.columns_behind]
+
+
+def test_a_count_reads_no_column_so_no_upstream_sheet_names_one(run_id):
+    # `grants` counts rows: the walk stops at it, naming nothing upstream to hold.
+    counted = load_values_used(PROJECT, run_id, "grant_totals", "grants", 0)
+    assert counted.counts_rows is True
+    assert {sheet.stage_id: sheet.columns_behind for sheet in counted.sheets
+            if sheet.columns_behind} == {"grant_totals": ["grants"]}
+
+
 def test_a_cell_is_clipped_to_the_constant():
     assert render_sheet_cell("x" * 200) == "x" * (CELL_CHARS - 1) + "…"
     assert len(render_sheet_cell("x" * 200)) == CELL_CHARS

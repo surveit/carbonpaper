@@ -8,10 +8,12 @@
                     stage DROPPED struck through, carrying the input value that
                     was lost. Each header carries a + or − mark, so both read
                     without colour.
-     filter_rows  — ONE table over the first input rows in input order: kept
-                    rows drawn exactly as the plain output preview would draw
-                    them (lineage links included), dropped rows in place,
-                    tinted and labelled as dropped.
+     filter_rows  — ONE table over a window of the input rows, in input order:
+                    kept rows drawn exactly as the plain output preview would
+                    draw them (lineage links included), dropped rows in place,
+                    tinted and labelled as dropped. The window is the first
+                    input rows, or — under a scope — the figure's own rows plus
+                    every row this stage dropped.
    The header is ONE horizontal axis, identical for either shape: the input
    frames stacked vertically, a bracket gathering them where there is more than
    one, a rail carrying the count labels of what the stage did to the frame, then the
@@ -59,34 +61,73 @@
     <span class="diff-outputs">{{ frame_unit('output', output_id, output_rows, 'diff-frame-out') }}</span>
 </span></div>
 {%- endmacro %}
+{# `scoped` says the caller cut the table to one figure's rows, which are not "the
+   first" anything. `mine` is how many of the drawn rows are the figure's; the rest
+   are the neighbours and dropped rows drawn beside them, and are counted apart so
+   neither number speaks for the other. Where the cap cut some of the figure's own
+   rows away, the line counts against those rather than against the frame. #}
+{% macro scoped_rows_line(drawn, mine, mine_total, total, noun) -%}
+{%- if mine < mine_total -%}
+showing {{ mine | figure }} of this figure's {{ mine_total | figure }} {{ noun }}s
+{%- else -%}
+showing {{ mine | figure }} relevant {{ noun }}{% if mine != 1 %}s{% endif %} of {{ total | figure }}
+{%- endif -%}
+{%- if drawn > mine %}, and {{ (drawn - mine) | figure }} more drawn around them{% endif %}
+{%- endmacro %}
+{# The windowed diff is a window; the same diff over the whole frame is a page of
+   its own. Not offered on that page, which is already it. #}
+{% macro whole_diff(rows_href) -%}
+{% if rows_href and not full_rows %} · <a href="{{ rows_href }}">see the whole diff</a>{% endif %}
+{%- endmacro %}
+{% macro no_rows_line(rows_href) -%}
+<p class="muted">No row of this stage's output is behind this figure.{% if rows_href %} <a href="{{ rows_href }}">view all rows</a>{% endif %}</p>
+{%- endmacro %}
+{% macro dropped_beyond(count) %}{% if count %} — {{ count | figure }} dropped row{% if count != 1 %}s{% endif %} fall{% if count == 1 %}s{% endif %} beyond them{% endif %}{% endmacro %}
 {% from "_data_cell.html" import data_cell %}
 <div class="preview-block stage-diff">
   {{ diff_head(diff.inputs, stage.stage_id, diff.output_rows, diff.count_labels) }}
 {% if diff.kind == 'filter_rows' %}
-  {% if diff.input_total > diff.rows | length %}
-  <p class="muted">showing the first {{ diff.rows | length }} of {{ diff.input_total | figure }} input rows{% if diff.dropped_beyond_window %} — {{ diff.dropped_beyond_window | figure }} dropped row{% if diff.dropped_beyond_window != 1 %}s{% endif %} fall{% if diff.dropped_beyond_window == 1 %}s{% endif %} beyond them{% endif %}</p>
+  {% if scoped %}
+  {%- set mine_shown = diff.rows | map(attribute='output_ordinal')
+                       | select('in', reached_rows | default([], true)) | list | length %}
+  {% if mine_shown %}
+  <p class="muted">{{ scoped_rows_line(diff.rows | length, mine_shown, reached_rows | length, diff.input_total, 'input row') }}{{ dropped_beyond(diff.dropped_beyond_window) }}{{ whole_diff(links.stage_rows(stage.stage_id)) }}</p>
+  {% else %}{{ no_rows_line(links.stage_rows(stage.stage_id)) }}{% endif %}
+  {% elif diff.input_total > diff.rows | length %}
+  <p class="muted">showing the first {{ diff.rows | length }} of {{ diff.input_total | figure }} input rows{{ dropped_beyond(diff.dropped_beyond_window) }}{{ whole_diff(links.stage_rows(stage.stage_id)) }}</p>
   {% endif %}
   <div class="table-scroll{% if full_rows %} rows-full{% endif %}"><table class="data-preview">
     {# The label column is not the lineage column it replaced: a dropped row has no
        output row to trace, and its tint alone would be colour carrying meaning. #}
-    <thead><tr>{% if full_rows %}<th class="row-num">#</th>{% endif %}<th class="diff-kept-col"></th>
+    {# The rows the figure came through, marked here as the aligned table marks
+       them, and numbered so a reader can tell one from its neighbours. #}
+    {%- set mine = reached_rows | default([], true) %}
+    {%- set numbered = full_rows or mine %}
+    <thead><tr>{% if numbered %}<th class="row-num">#</th>{% endif %}<th class="diff-kept-col"></th>
       {%- for name in diff.columns %}<th{% if links.opens_a_cell() %} data-column="{{ name }}"{% endif %}>{{ name }}</th>{% endfor %}</tr></thead>
     <tbody>
     {% for row in diff.rows %}
-    {% set row_num %}{% if full_rows %}<td class="row-num muted">{{ row.input_ordinal | row_number }}</td>{% endif %}{% endset %}
+    {%- set traced = row.output_ordinal is not none and row.output_ordinal in mine %}
+    {% set row_num %}{% if numbered %}<td class="row-num {{ 'diff-row-num-mine' if traced else 'muted' }}">{{ row.input_ordinal | row_number }}</td>{% endif %}{% endset %}
     {% if row.dropped %}
     <tr class="diff-row-dropped">{{ row_num }}<td class="diff-kept-col">Dropped row</td>
       {%- for value in row.cells %}{{ data_cell(value, '', '', full_rows) }}{% endfor %}</tr>
     {% else %}
-    <tr{% set trace_href = links.row_trace(stage.stage_id, row.output_ordinal) %}{% if trace_href %} data-href="{{ trace_href }}"{% endif %}>{{ row_num }}<td class="diff-kept-col"></td>
+    <tr{% if traced %} class="diff-row-mine"{% endif %}{% set trace_href = links.row_trace(stage.stage_id, row.output_ordinal) %}{% if trace_href %} data-href="{{ trace_href }}"{% endif %}>{{ row_num }}<td class="diff-kept-col"></td>
       {%- for value in row.cells %}{% if value[:4] == 'http' %}<td class="cell-url"><a href="{{ value }}" target="_blank" rel="noopener">{{ value }}</a></td>{% else %}{{ data_cell(value, '', '', full_rows) }}{% endif %}{% endfor %}</tr>
     {% endif %}
     {% endfor %}
     </tbody>
   </table></div>
 {% else %}
-  {% if diff.rows_total > diff.rows | length %}
-  <p class="muted">showing {% if diff.opens_on_the_first %}the first {% endif %}{{ diff.rows | length }} of {{ diff.rows_total | figure }} rows</p>
+  {% if scoped %}
+  {%- set mine_shown = diff.row_ordinals | select('in', reached_rows | default([], true))
+                       | list | length %}
+  {% if mine_shown %}
+  <p class="muted">{{ scoped_rows_line(diff.rows | length, mine_shown, reached_rows | length, diff.rows_total, 'row') }}{{ whole_diff(links.stage_rows(stage.stage_id)) }}</p>
+  {% else %}{{ no_rows_line(links.stage_rows(stage.stage_id)) }}{% endif %}
+  {% elif diff.rows_total > diff.rows | length %}
+  <p class="muted">showing {% if diff.opens_on_the_first %}the first {% endif %}{{ diff.rows | length }} of {{ diff.rows_total | figure }} rows{{ whole_diff(links.stage_rows(stage.stage_id)) }}</p>
   {% endif %}
   <div class="table-scroll{% if full_rows %} rows-full{% endif %}"><table class="data-preview">
     {# The class each state paints with — app/static/node-detail.css owns what they

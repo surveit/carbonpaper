@@ -6,7 +6,7 @@ window.Canvas = window.Canvas || (function(){
     c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
   const fmt = n => window.Figures.text(n);
 
-  const BOX_W = 210, BOX_H = 34, STEM = 6, SHEET_H = 96, FOOT = 30;
+  const BOX_W = 210, BOX_H = 34, STEM = 6, SHEET_H = 96, FOOT = 30, LINE_H = 11;
   const LEVEL_DX = 300, LANE_DY = 40, LANE_TOP = 60, LEVEL_LEFT = 40;
   // The table under a box is the app's own, drawn at this fraction of its size.
   const MINI = 0.62;
@@ -101,7 +101,8 @@ window.Canvas = window.Canvas || (function(){
     return level;
   }
 
-  const stackH = stage => BOX_H + (stage.sheet ? STEM + SHEET_H + FOOT : 0);
+  const stackH = stage => BOX_H + (stage.sheet
+    ? STEM + SHEET_H + FOOT + LINE_H * (sayShape(stage.sheet).length - 1) : 0);
 
   // ── drawing ─────────────────────────────────────────────────────────────
   function draw(view){
@@ -138,7 +139,7 @@ window.Canvas = window.Canvas || (function(){
              style="transform:scale(${MINI});width:${100 / MINI}%;height:${(SHEET_H - 2) / MINI}px">${drawMini(view, sheet)}</div>
       </foreignObject>
       ${drawBar(sheet, stage.x, top + SHEET_H + 5)}
-      <text class="n" x="${stage.x}" y="${top + SHEET_H + 23}">${sayRows(sheet)}</text>
+      ${drawCaption(sheet, stage.x, top + SHEET_H + 23)}
       <rect class="hit" x="${stage.x}" y="${top}" width="${BOX_W}" height="${SHEET_H}"/></g>`;
   }
 
@@ -174,10 +175,24 @@ window.Canvas = window.Canvas || (function(){
   }
 
   const plural = (n, word) => `${fmt(n)} ${word}${n === 1 ? '' : 's'}`;
+  const sayFrame = (rows, columns) => `${plural(rows, 'row')} × ${plural(columns, 'column')}`;
 
-  function sayRows(sheet){
-    const said = `${plural(sheet.rows_behind, 'relevant row')} of ${fmt(sheet.rows_in)}.`;
-    return sheet.rows_dropped ? `${said} ${plural(sheet.rows_dropped, 'row')} dropped.` : said;
+  // A statement per line: the whole caption is wider than the sheet it sits under.
+  function drawCaption(sheet, x, top){
+    return sayShape(sheet).map((line, i) =>
+      `<text class="n" x="${x}" y="${top + i * LINE_H}">${line}</text>`).join('');
+  }
+
+  // The frame the stage wrote, then the figure's part of it, then what it dropped.
+  // A count of zero is left out rather than written: a cited column that counts
+  // rows came through no column of this stage, and an aside stage no row of it.
+  function sayShape(sheet){
+    const columns = (sheet.columns_behind || []).length;
+    const said = [sayFrame(sheet.rows_out, sheet.columns.length)];
+    if(sheet.rows_behind) said.push((columns ? sayFrame(sheet.rows_behind, columns)
+      : plural(sheet.rows_behind, 'row')) + ' behind this figure');
+    if(sheet.rows_dropped) said.push(`${plural(sheet.rows_dropped, 'row')} dropped`);
+    return said;
   }
 
   // Width on a square-root scale of the rows down the wire, over the widest
@@ -213,8 +228,6 @@ window.Canvas = window.Canvas || (function(){
     view.picked = {kind, id};
     markPicked(view);
     view.drawer.hidden = false;
-    view.pane.querySelector('.canvas-kicker').textContent = kind === 'stage'
-      ? `stage · what ${id} does` : `data · what ${id} wrote, the figure's rows first`;
     const body = view.pane.querySelector('.canvas-drawer-body');
     body.innerHTML = '<p class="muted">loading…</p>';
     const html = await fetchPanel(view, id);
