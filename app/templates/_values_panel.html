@@ -1,55 +1,29 @@
-{# The Relevant columns tab: where the cited column came from, replayed one stage at a
-   time. Injected into the row lineage page, which drives it with values-used.js.
-   `reason` instead of `values` where no walk can be made.
+{# The Rows & columns tab: the run as a canvas of stages and the sheets they wrote,
+   drawn by static/canvas.js off the nav JSON below. Injected into the row lineage
+   page. `reason` instead of `values` where no walk can be made.
 
-   Each stage's panel is the RUN PAGE'S OWN (_run_stage_panel.html), fetched scoped
-   to the rows behind this figure — this page adds the walk, not a second run view.
+   Each panel the drawer opens is the RUN PAGE'S OWN (_run_stage_panel.html),
+   fetched scoped to the rows behind this figure — this page adds the canvas, not
+   a second run view.
 
    Context: project, run_id, stage_id, column, and either values
-   (app.web.values_view) with nav (what the script steers by) or reason. #}
+   (app.web.values_view) with nav (what the script draws from) or reason. #}
 {% if reason %}
 <p class="banner banner-warn">No column lineage for <code>{{ column }}</code> at
   <code>{{ stage_id }}</code> — {{ reason }}.</p>
-{% elif values.counts_rows %}
-<p class="vu-say"><code>{{ column }}</code> counts rows at <code>{{ stage_id }}</code>.
-  It reads no column, so no earlier column feeds it — which rows were counted is the
-  <button class="vu-to-rows" type="button">Relevant rows</button> tab.</p>
 {% else %}
-<div class="vu" data-project="{{ project }}" data-run="{{ run_id }}" data-row="{{ values.row }}">
-<script type="application/json" class="vu-nav">{{ nav | tojson }}</script>
-<p class="vu-say"><b>Walk this value back to your input data.</b> Step
-  <b>◀ back</b> or use the arrow keys <kbd class="vu-key">&larr;</kbd>
-  <kbd class="vu-key">&rarr;</kbd> to see the sheet one stage earlier, and what that stage
-  did to the value. Each stage opens the run page's own panel for it, cut to the rows
-  behind this figure. The map is the whole run: a stage greyed out is one
-  <code>{{ column }}</code> never came through.</p>
-<div class="vu-maprow">
-  <button class="vu-arrow" data-go="back" title="back one stage (left arrow)">◀</button>
-  {# The run's own workflow graph, through the same builder, band and viewport the run
-     page's minimap uses — so a stage sits where the reader already saw it sit. #}
-  <div class="workflow-full diagram-block diagram-minimap vu-graph">
-    <div class="diagram-tools">
-      <button type="button" data-zoom="in" title="Zoom in" aria-label="Zoom in">+</button>
-      <button type="button" data-zoom="out" title="Zoom out" aria-label="Zoom out">−</button>
-      <button type="button" data-zoom="reset" title="Back to the minimap's own zoom"
-              aria-label="Back to the minimap's own zoom">↔</button>
-      <button type="button" class="diagram-fs" title="Fullscreen"
-              aria-label="Show the whole workflow fullscreen">⛶</button>
-    </div>
-    <div class="diagram-viewport" data-zoom-floor="0.5">
-      <pre class="mermaid">
-{{ values.mermaid }}
-      </pre>
-    </div>
+<div class="canvas" data-project="{{ project }}" data-run="{{ run_id }}" data-row="{{ values.row }}">
+<script type="application/json" class="canvas-nav">{{ nav | tojson }}</script>
+{# The type under each box, worded here so the script never prints a slug. #}
+<script type="application/json" class="canvas-type-labels">{
+  {%- for sheet in values.sheets %}{{ sheet.stage_id | tojson }}: {{ sheet.type | label_stage_type | tojson }}{% if not loop.last %}, {% endif %}{% endfor -%}
+}</script>
+<div class="canvas-view">
+  <svg class="canvas-svg"><g class="canvas-world"></g></svg>
+  <div class="canvas-drawer" hidden>
+    <button type="button" class="canvas-close" title="close" aria-label="close">×</button>
+    <div class="canvas-drawer-body"></div>
   </div>
-  <button class="vu-arrow" data-go="fwd" title="forward one stage (right arrow)">▶</button>
-</div>
-<div class="vu-scroll">
-{% for stage_id in values.steps %}
-  <section class="vu-step" data-step="{{ stage_id }}">
-    <div class="vu-panel" data-panel="{{ stage_id }}"></div>
-  </section>
-{% endfor %}
 </div>
 </div>
 {% endif %}

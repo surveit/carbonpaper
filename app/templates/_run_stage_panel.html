@@ -22,15 +22,18 @@
     {# The description comes from the pinned definition, so a run whose version
        no longer resolves shows no line rather than a guessed one. #}
     {% if stage_def %}<p class="stage-blurb">{{ stage_def.description }}</p>{% endif %}
-    <p class="stage-facts">
-        <span class="run-status status-{{ stage.status }}">{{ stage.status }}</span>
-        {# Under a scope the panel draws the rows behind ONE figure, so the count
-           says which of the frame's rows those are rather than the frame's own. #}
-        <span>{{ stage.elapsed_ms | friendly_duration }} ·
+    {# What the run did here, on the chip that says how it went: a reader who wants
+       the timing hovers for it, and it costs the panel no line of its own. Under a
+       scope the count says which of the frame's rows are the figure's. #}
+    {%- set facts %}{{ stage.elapsed_ms | friendly_duration }} ·
         {%- if scoped %} {{ reached_rows | length | figure }} of {{ stage.output_row_count or 0 | figure }} rows behind this figure
         {%- else %} {{ stage.output_row_count or 0 | figure }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}{% endif %}
         {%- if stage.llm_usage and stage.llm_usage.calls %} · {{ stage.llm_usage.calls | figure }} model call{% if stage.llm_usage.calls != 1 %}s{% endif %}, {{ stage.llm_usage.cost_usd | usd }}{% endif %}
-        {%- if stage.finished_at %} · finished {{ stage.finished_at | friendly_time }}{% endif %}</span>
+        {%- if stage.finished_at %} · finished {{ stage.finished_at | friendly_time }}{% endif %}
+    {%- endset %}
+    <p class="stage-facts">
+        <span class="run-status status-{{ stage.status }} has-tip" tabindex="0"
+              data-tip="{{ facts | striptags | trim }}">{{ stage.status }}</span>
     </p>
 </div>
 

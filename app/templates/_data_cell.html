@@ -1,6 +1,6 @@
-{# One data cell of a rendered frame, shared by the stage diff and the values-used
-   sheet. Its own file so either can `{% from %}` it: importing a macro executes the
-   template it sits in, and _stage_diff.html's body needs a `diff` to render. #}
+{# One data cell of a rendered frame. Its own file so a template can `{% from %}`
+   it: importing a macro executes the template it sits in, and _stage_diff.html's
+   body needs a `diff` to render. #}
 {% macro data_cell(text, klass, was, full) -%}
 {%- set klasses = (('cell-clip ' if full else '') ~ klass) | trim -%}
 {#- The title is the hover: it is what a reader gets instead of expanding a cell,
