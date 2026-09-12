@@ -13,8 +13,11 @@ from app.models.claims import (
     DataUniverseRequirement,
     StageOutputCellCitation,
 )
+from app.core.run_status import RunStatus
 from app.models.records.claims import Claim
+from app.models.records.run_manifest import RunManifest
 from app.models.records.workflow_output import WorkflowOutput
+from app.models.run_parameters import RunParameters
 from app.models.schema import Column
 from app.services import claim_shapes, claims
 from app.services.errors import ClaimRefused
@@ -238,3 +241,43 @@ def test_a_better_sentence_can_be_learned_by_the_shape():
     )
 
     assert shape.template == "Outside firms reported ${value} for AI lobbying."
+
+
+def test_every_output_of_the_run_is_listed_shape_or_not():
+    _a_run_of_two_shapes()
+    assert [o.slug for o in claims.read_every_run_output(_RUN)] == ["ai-clients", "ai-spend", "corpus-rows"]
+
+
+def test_a_claim_finds_the_output_it_cites():
+    ids = _a_run_of_two_shapes()
+    claim = claims.submit_claim(_PROJECT, _RUN, "ai-spend", _H1, _TEXT)
+    assert claims.find_output_of_claim(claim).slug == "ai-spend"
+    assert ids[_SPEND.label] == claim.shape_id
+
+
+def test_a_citation_two_outputs_carry_names_neither_of_them():
+    ids = _a_run_of_two_shapes()
+    claim = claims.submit_claim(_PROJECT, _RUN, "ai-spend", _H1, _TEXT)
+    _publish("ai-spend-again", 63027729.0, ids[_SPEND.label])
+
+    with pytest.raises(ClaimRefused, match="cannot say which it is"):
+        claims.find_output_of_claim(claim)
+
+
+def _manifest(status: RunStatus = RunStatus.OK, **parameters) -> RunManifest:
+    return RunManifest(
+        run_id=_RUN, started_at="2026-09-01T10:37:53", project=_PROJECT,
+        workflow_version="v1", human_review_queue_stats={}, status=status,
+        stage_records=[], parameters=RunParameters(**parameters))
+
+
+def test_a_run_read_everything_only_where_it_finished_and_nothing_narrowed_it():
+    assert claims.read_whether_the_run_read_everything(_manifest()) is True
+    assert claims.read_whether_the_run_read_everything(
+        _manifest(status=RunStatus.ERRORS)) is False
+    assert claims.read_whether_the_run_read_everything(
+        _manifest(offsets={"load_east": 2})) is False
+    assert claims.read_whether_the_run_read_everything(
+        _manifest(limits={"load_east": 2})) is False
+    assert claims.read_whether_the_run_read_everything(
+        _manifest(is_test_run=True)) is False

@@ -24,7 +24,7 @@ from app.runtime.manifest import (
     RunEntry as RunEntry,
     list_run_entries as list_run_entries,
     read_run_entry,
-    read_run_manifest,
+    read_run_manifest as read_run_manifest,
     read_stage_output_frame,
     resolve_output_path,
 )

@@ -18,9 +18,9 @@ from app.runtime.manifest import read_run_manifest
 from app.services.project import save_working_copy_as_version
 from app.services.run import read_pinned_version
 from app.services.versioning import load_version_stages
+from app.services.scope import read_run_branches
 from app.services.workspace import resolve_run_dir
 from app.web.row_paths import CitedFigure, find_paths_behind_figure
-from app.web.scope_view import read_run_branches
 from scope_fixture import stage_specs, write_inputs
 from stage_seed import set_stages
 

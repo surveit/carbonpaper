@@ -1,4 +1,4 @@
-"""app/web/figure_text.py and its mirror in app/static/figure_text.js."""
+"""app/core/figure_text.py and its mirror in app/static/figure_text.js."""
 from __future__ import annotations
 
 import json
@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from app.web.figure_text import render_figure
+from app.core.figure_text import render_figure
 
 _CLIENT = Path(__file__).resolve().parents[1] / "app" / "static" / "figure_text.js"
 

@@ -5,8 +5,10 @@ from pydantic import ValidationError
 
 from app.core.ids import ID
 from app.core.json_types import JsonDict
+from app.core.run_status import RunStatus
 from app.models.claims import ClaimStatus, DataUniverseRequirement
 from app.models.records.claims import Claim, ClaimShape
+from app.models.records.run_manifest import RunManifest
 from app.models.records.workflow_output import WorkflowOutput
 from app.models.schema import TableSchema
 from app.services.claim_shapes import load_claim_shape
@@ -90,6 +92,26 @@ def load_run_claims(project_id: ID, run_id: ID) -> dict[str, Claim]:
     return held
 
 
+def read_every_run_output(run_id: ID) -> list[WorkflowOutput]:
+    """Everything the run published, shape or none, for evidence rather than for claiming."""
+    return sorted(
+        (output for output in WorkflowOutput.list() if output.citation.run_id == run_id),
+        key=lambda output: output.slug,
+    )
+
+
+def find_output_of_claim(claim: Claim) -> WorkflowOutput:
+    run_id = claim.citation.run_id
+    matches = [output for output in read_every_run_output(run_id)
+               if output.citation == claim.citation]
+    if not matches:
+        raise ClaimRefused([f"no output of run '{run_id}' carries this claim's citation"])
+    if len(matches) > 1:
+        raise ClaimRefused([f"{len(matches)} outputs of run '{run_id}' carry this claim's "
+                            "citation; the claim cannot say which it is"])
+    return matches[0]
+
+
 def read_workflow_run_outputs(run_id: ID) -> list[WorkflowOutput]:
     """The run's outputs that name a shape. Naming none is ordinary, and claims nothing."""
     return [
@@ -129,6 +151,13 @@ def read_context(shape: ClaimShape, context: JsonDict) -> JsonDict:
     except ValidationError as exc:
         raise ClaimRefused([f"{err['loc']}: {err['msg']}" for err in exc.errors()]) from exc
     return held.model_dump(mode="json")
+
+
+def read_whether_the_run_read_everything(manifest: RunManifest) -> bool:
+    """It finished, and nothing narrowed what it read: no test window, no limit, no offset."""
+    parameters = manifest.parameters
+    return (manifest.status == RunStatus.OK and not parameters.is_test_run
+            and not parameters.limits and not parameters.offsets)
 
 
 def validate_run_covers_the_shape(shape: ClaimShape, run_read_everything: bool) -> None:

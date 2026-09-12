@@ -40,6 +40,7 @@ from app.models.workflow import (
     build_workflow as build_workflow,
     detect_cycle as detect_cycle,
     find_stages_reaching_report as find_stages_reaching_report,
+    find_stages_upstream_of as find_stages_upstream_of,
     parse_workflow as parse_workflow,
     resolve_workflow_stages as resolve_workflow_stages,
     validate_inputs_resolve as validate_inputs_resolve,

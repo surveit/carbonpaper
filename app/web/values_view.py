@@ -5,12 +5,11 @@ from __future__ import annotations
 from app.core.errors import ColumnNotInFrame, StageNotInRun
 from app.models.schema import StageId
 from app.services import run as run_service
-from app.services.scope import find_rows_reached_per_stage
+from app.services.scope import find_rows_reached_per_stage, read_run_branches
 from app.web.diagrams import TYPE_GLYPH, build_mermaid_graph
 from app.web.walk_diagram import build_walk_overlay, read_walk_state
 from app.web.loading import load_run_record
 from app.web.run_stage_view import TraceScope
-from app.web.scope_view import read_run_branches
 from app.web.values_payload import (
     MinimapEdge,
     MinimapNode,
