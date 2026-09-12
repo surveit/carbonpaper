@@ -78,6 +78,13 @@ showing {{ mine | figure }} relevant {{ noun }}{% if mine != 1 %}s{% endif %} of
 {% macro whole_diff(rows_href) -%}
 {% if rows_href and not full_rows %} · <a href="{{ rows_href }}">see the whole diff</a>{% endif %}
 {%- endmacro %}
+{# Which rows the table holds is the reader's to pick; static/canvas.js fetches
+   the panel again for the other one. Only the drawer draws a scoped panel. #}
+{% macro rows_toggle(on_the_figures) -%}
+<p class="rows-pick">
+<button type="button" class="{{ 'on' if on_the_figures }}" data-rows="figure">rows behind this figure</button>
+<button type="button" class="{{ '' if on_the_figures else 'on' }}" data-rows="frame">all rows</button></p>
+{%- endmacro %}
 {% macro no_rows_line(rows_href) -%}
 <p class="muted">No row of this stage's output is behind this figure.{% if rows_href %} <a href="{{ rows_href }}">view all rows</a>{% endif %}</p>
 {%- endmacro %}
@@ -86,12 +93,16 @@ showing {{ mine | figure }} relevant {{ noun }}{% if mine != 1 %}s{% endif %} of
 <div class="preview-block stage-diff">
   {{ diff_head(diff.inputs, stage.stage_id, diff.output_rows, diff.count_labels) }}
 {% if diff.kind == 'filter_rows' %}
-  {% if scoped %}
+  {% if scoped and shows_the_figures_rows %}
   {%- set mine_shown = diff.rows | map(attribute='output_ordinal')
                        | select('in', reached_rows | default([], true)) | list | length %}
   {% if mine_shown %}
-  <p class="muted">{{ scoped_rows_line(diff.rows | length, mine_shown, reached_rows | length, diff.input_total, 'input row') }}{{ dropped_beyond(diff.dropped_beyond_window) }}{{ whole_diff(links.stage_rows(stage.stage_id)) }}</p>
-  {% else %}{{ no_rows_line(links.stage_rows(stage.stage_id)) }}{% endif %}
+  <div class="rows-line"><p class="muted">{{ scoped_rows_line(diff.rows | length, mine_shown, reached_rows | length, diff.input_total, 'input row') }}{{ dropped_beyond(diff.dropped_beyond_window) }}{{ whole_diff(links.stage_rows(stage.stage_id)) }}</p>
+  {% else %}<div class="rows-line">{{ no_rows_line(links.stage_rows(stage.stage_id)) }}{% endif %}
+  {{ rows_toggle(true) }}</div>
+  {% elif scoped %}
+  <div class="rows-line"><p class="muted">showing the first {{ diff.rows | length }} of {{ diff.input_total | figure }} input rows{{ dropped_beyond(diff.dropped_beyond_window) }}{{ whole_diff(links.stage_rows(stage.stage_id)) }}</p>
+  {{ rows_toggle(false) }}</div>
   {% elif diff.input_total > diff.rows | length %}
   <p class="muted">showing the first {{ diff.rows | length }} of {{ diff.input_total | figure }} input rows{{ dropped_beyond(diff.dropped_beyond_window) }}{{ whole_diff(links.stage_rows(stage.stage_id)) }}</p>
   {% endif %}
@@ -119,12 +130,16 @@ showing {{ mine | figure }} relevant {{ noun }}{% if mine != 1 %}s{% endif %} of
     </tbody>
   </table></div>
 {% else %}
-  {% if scoped %}
+  {% if scoped and shows_the_figures_rows %}
   {%- set mine_shown = diff.row_ordinals | select('in', reached_rows | default([], true))
                        | list | length %}
   {% if mine_shown %}
-  <p class="muted">{{ scoped_rows_line(diff.rows | length, mine_shown, reached_rows | length, diff.rows_total, 'row') }}{{ whole_diff(links.stage_rows(stage.stage_id)) }}</p>
-  {% else %}{{ no_rows_line(links.stage_rows(stage.stage_id)) }}{% endif %}
+  <div class="rows-line"><p class="muted">{{ scoped_rows_line(diff.rows | length, mine_shown, reached_rows | length, diff.rows_total, 'row') }}{{ whole_diff(links.stage_rows(stage.stage_id)) }}</p>
+  {% else %}<div class="rows-line">{{ no_rows_line(links.stage_rows(stage.stage_id)) }}{% endif %}
+  {{ rows_toggle(true) }}</div>
+  {% elif scoped %}
+  <div class="rows-line"><p class="muted">showing the first {{ diff.rows | length }} of {{ diff.rows_total | figure }} rows{{ whole_diff(links.stage_rows(stage.stage_id)) }}</p>
+  {{ rows_toggle(false) }}</div>
   {% elif diff.rows_total > diff.rows | length %}
   <p class="muted">showing {% if diff.opens_on_the_first %}the first {% endif %}{{ diff.rows | length }} of {{ diff.rows_total | figure }} rows{{ whole_diff(links.stage_rows(stage.stage_id)) }}</p>
   {% endif %}

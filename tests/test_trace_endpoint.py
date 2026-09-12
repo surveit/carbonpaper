@@ -175,11 +175,9 @@ def test_trace_view_carries_the_three_tabs_with_the_story_open(tmp_path, monkeyp
     client = _project_run(tmp_path, monkeypatch)
     body = client.get("/project/proj/runs/R1/stage/enrich/row/0/trace/view").text
     assert '<button class="lin-pagetab on" data-pane="paths">Paths' in body
-    for pane, label in [("rows", "Relevant rows"), ("values", "Relevant columns"), ("inputs", "Input files")]:
+    for pane, label in [("values", "Rows &amp; columns"), ("inputs", "Input files")]:
         assert f'data-pane="{pane}">{label}' in body
-    # Relevant rows holds the scope map, in a frame the tab loads when it is opened.
-    assert 'id="scope-frame"' in body
-    # Relevant columns holds the column walk, fetched here on the same signal.
+    # Rows & columns holds the walk, fetched when the tab is opened.
     assert 'id="values-root"' in body
 
 

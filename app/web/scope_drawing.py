@@ -73,6 +73,8 @@ class DrawnRemoval(BaseModel):
     label: str
     tip: str
     line: int
+    # The branch's recorded count, so no reader has to parse it back out of `label`.
+    rows: int
 
 
 class DrawnColumn(BaseModel):
@@ -195,7 +197,7 @@ def _say_what_the_bar_holds(node: Node, label: str) -> str:
 def _render_removal(branch: BranchId, rows: int, line: int,
                     room: float) -> DrawnRemoval:
     return DrawnRemoval(
-        branch=branch, line=line,
+        branch=branch, line=line, rows=rows,
         label=_clip(f"{render_figure(rows)} row{'' if rows == 1 else 's'} filtered here", room - 2),
         tip=f"{render_figure(rows)} row{' was' if rows == 1 else 's were'} dropped from the "
             f"workflow at this stage. Click to draw them in a new tab: they are a "

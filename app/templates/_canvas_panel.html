@@ -1,0 +1,29 @@
+{# The Rows & columns tab: the run as a canvas of stages and the sheets they wrote,
+   drawn by static/canvas.js off the nav JSON below. Injected into the row lineage
+   page. `reason` instead of `values` where no walk can be made.
+
+   Each panel the drawer opens is the RUN PAGE'S OWN (_run_stage_panel.html),
+   fetched scoped to the rows behind this figure — this page adds the canvas, not
+   a second run view.
+
+   Context: project, run_id, stage_id, column, and either values
+   (app.web.canvas_view) with nav (what the script draws from) or reason. #}
+{% if reason %}
+<p class="banner banner-warn">No column lineage for <code>{{ column }}</code> at
+  <code>{{ stage_id }}</code> — {{ reason }}.</p>
+{% else %}
+<div class="canvas" data-project="{{ project }}" data-run="{{ run_id }}" data-row="{{ values.row }}">
+<script type="application/json" class="canvas-nav">{{ nav | tojson }}</script>
+{# The type under each box, worded here so the script never prints a slug. #}
+<script type="application/json" class="canvas-type-labels">{
+  {%- for sheet in values.sheets %}{{ sheet.stage_id | tojson }}: {{ sheet.type | label_stage_type | tojson }}{% if not loop.last %}, {% endif %}{% endfor -%}
+}</script>
+<div class="canvas-view">
+  <svg class="canvas-svg"><g class="canvas-world"></g></svg>
+  <div class="canvas-drawer" hidden>
+    <button type="button" class="canvas-close" title="close" aria-label="close">×</button>
+    <div class="canvas-drawer-body"></div>
+  </div>
+</div>
+</div>
+{% endif %}

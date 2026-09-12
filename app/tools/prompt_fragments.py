@@ -82,12 +82,12 @@ Two different things you can ask a human for, with different bars:
 
 ROW_LINEAGE_PAGE_NOTE = """\
 # The row lineage page
-Where ONE value in one row came from, in four tabs the reader is looking at:
+Where ONE value in one row came from, in three tabs the reader is looking at:
 - Paths — the distinct routes rows took to reach this row, told apart by the BRANCHES
   they took. A branch is one decision the run made that came out differently for
   different rows, read back off what the run wrote, never predicted from the code.
-- Relevant rows — the rows behind the figure, grouped by the branches they took.
-- Relevant columns — where the cited column came from, replayed one stage at a time.
+- Rows & columns — the run drawn as its stages and the rows each wrote, the rows behind
+  the figure first; a stage opens what it does, a sheet opens the rows it wrote.
 - Input files — each source file the figure read, sliced to the rows and columns it used.
 
 Asked how the page works, explain it to someone who has never seen it: no stage ids, no
