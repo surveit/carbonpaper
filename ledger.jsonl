@@ -2929,3 +2929,4 @@
 {"run_id":"34694867559","run_url":"https://github.com/surveit/carbonpaper/actions/runs/34694867559","created":"2026-09-12T12:53:09Z","branch":"stack/2-traced-panel-tints","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"34694882464","run_url":"https://github.com/surveit/carbonpaper/actions/runs/34694882464","created":"2026-09-12T12:53:28Z","branch":"stack/3-drawer-window","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"34694900188","run_url":"https://github.com/surveit/carbonpaper/actions/runs/34694900188","created":"2026-09-12T12:53:54Z","branch":"stack/4-rows-and-columns-canvas","event":"pull_request","contracts_kept":16,"findings":[]}
+{"run_id":"34694845176","run_url":"https://github.com/surveit/carbonpaper/actions/runs/34694845176","created":"2026-09-12T12:54:35Z","branch":"stack/1-no-lineage-banner","event":"pull_request","contracts_kept":null,"findings":[]}
