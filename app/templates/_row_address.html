@@ -1,0 +1,63 @@
+{# The rest of the row-lineage address, as rungs of the header trail: which stage,
+   which row of it, and which column of that row. Rendered inside the trail's own nav
+   (_breadcrumbs.html picks it up from `crumb_tail`), so these wear what the project
+   and run rungs wear and differ only in what opens underneath.
+
+   Context: coordinate (app.web.lineage_coordinate.LineageCoordinate). The ids here
+   are the ones lineage.html's script moves the page by: lin-stage, lin-row, lin-column
+   and lin-why. #}
+{% from "_picker.html" import picker %}
+
+<span class="crumb-sep" aria-hidden="true">/</span>
+<span class="crumb-anchor crumb-truncates">
+  {% call picker("Stages of this run", hint="the ones this run wrote rows for",
+                search_label="a stage", size="rung") %}
+  <select id="lin-stage" class="picker-native">
+    {% for pick in coordinate.stages %}
+    <option value="{{ pick.stage_id }}" data-side="{{ pick.rows | figure }} rows" data-meta="{{ pick.type_label }}"{% if pick.stage_id == coordinate.stage_id %} selected{% endif %}>{{ pick.stage_id }}</option>
+    {% endfor %}
+  </select>
+  {% endcall %}
+</span>
+
+<span class="crumb-sep" aria-hidden="true">/</span>
+{# The one rung with no list to offer: a stage can hold millions of rows, so this
+   takes a number. Its popover is written here rather than fetched. #}
+<span class="crumb-anchor">
+  <button type="button" class="crumb-switch" data-crumb-pop
+          aria-haspopup="true" aria-expanded="false">row <span class="rowrung-at"
+          id="lin-row-at">{{ coordinate.row_number }}</span>{% if coordinate.rows %} of {{ coordinate.rows | figure }}{% endif %}<span
+          class="crumb-caret" aria-hidden="true">▾</span></button>
+  <div class="crumb-pop rowrung-pop" hidden data-loaded="1">
+    <p class="crumb-pop-head">Row of this stage</p>
+    <div class="rowrung-step">
+      <button type="button" class="rowrung-nudge" data-row-step="-1" aria-label="The row before this one">‹</button>
+      <input id="lin-row" class="rowrung-box" type="number" inputmode="numeric"
+             aria-label="Row number" value="{{ coordinate.row_number }}" min="1"
+             {% if coordinate.rows %}max="{{ coordinate.rows }}"{% endif %}>
+      <button type="button" class="rowrung-nudge" data-row-step="1" aria-label="The row after this one">›</button>
+      {% if coordinate.rows %}<span class="rowrung-of">of {{ coordinate.rows | figure }}</span>{% endif %}
+    </div>
+  </div>
+</span>
+
+{% if coordinate.cells %}
+<span class="crumb-sep" aria-hidden="true">/</span>
+{# The last rung is the figure, and the list it opens is this row: one option per
+   column, so picking a figure is reading the row. #}
+<span class="crumb-anchor crumb-truncates">
+  {% call picker("Select from " ~ coordinate.cells | length ~ " columns",
+                search_label=("a column" if coordinate.cells | length > 8 else ""),
+                size="figure") %}
+  <select id="lin-column" class="picker-native">
+    <option value="" data-name="the whole row" data-meta="{{ coordinate.cells | length }} columns"{% if not coordinate.cell %} selected{% endif %}>the whole row</option>
+    {% for cell in coordinate.cells %}
+    <option value="{{ cell.column }}" data-name="{{ cell.value | truncate(160, true) or "(empty)" }}" data-meta="{{ cell.column }}"{% if cell.column == coordinate.column %} selected{% endif %}>{{ cell.column }}</option>
+    {% endfor %}
+  </select>
+  {% endcall %}
+  {# What the version declares about this column, where the column is named. #}
+  <span class="lin-why has-tip" id="lin-why" tabindex="0"
+        data-tip="{{ coordinate.cell.tip if coordinate.cell }}"{% if not coordinate.cell %} hidden{% endif %}>?</span>
+</span>
+{% endif %}

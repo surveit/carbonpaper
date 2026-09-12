@@ -263,7 +263,13 @@ reads "no items to review" is a dead link.
 ## The row lineage page (`lineage.html` ← `app/web/routers/run_lineage.py`)
 
 `…/stage/{sid}/row/{row}/trace/view`: where ONE value in one row came from. The
-header names the stage, the row and the column; three tabs under it:
+address is the header trail: the project and the run as usual, then the stage, the
+row and the column as three further rungs (`_row_address.html`, passed to
+`_breadcrumbs.html` as `crumb_tail`). The stage and the column rungs are pickers
+(`.picker.rung` and `.picker.figure`); the row rung opens a stepper, because a stage
+holds more rows than a list can offer. `static/breadcrumbs.js` keeps the trail on one
+line: when it runs out of room it folds rungs from the left into a `…` rung whose
+popover lists them and opens each one's own list in place. Three tabs under it:
 
 - **Paths** (`_row_paths.html` ← `app.web.row_paths`) — every distinct route the
   rows behind this figure took, told apart by the branches they took.

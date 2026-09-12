@@ -163,7 +163,8 @@ def _write_page(
         project=view.project,
         crumbs=[
             Crumb(label=view.project or "run", href="../../index.html"),
-            Crumb(label=f"{stage_id} row {render_row_number(row)}", is_code=True),
+            Crumb(label=stage_id, is_code=True),
+            Crumb(label=f"row {render_row_number(row)}"),
         ],
         mermaid="",
         offline=True,

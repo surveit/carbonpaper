@@ -70,15 +70,31 @@ body > header {
    the reader might have meant a different one of (the project, the version or run
    being read) is a .crumb-switch and opens .crumb-pop; a rung naming a section is a
    plain link. */
-.crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 13px;
+.crumbs { display: flex; align-items: center; flex-wrap: nowrap; gap: 6px; font-size: 13px;
     min-width: 0; }
+/* Clipped only while static/breadcrumbs.js works out what fits, and measured with
+   shrinking off so the question is whether a rung fits at its own width. A trail that
+   clipped all the time would also clip the popovers its own rungs open. */
+.crumbs.measuring { overflow: hidden; }
+.crumbs.measuring > * { flex: 0 0 auto; min-width: auto; }
+.crumbs > [data-folded] { display: none; }
 .crumb-link { color: var(--muted); text-decoration: none; white-space: nowrap; }
 .crumb-link:hover { color: var(--accent); text-decoration: underline; }
-.crumb-sep { color: var(--border-strong); user-select: none; }
+/* Never shrinks: squeezed to nothing, the rungs either side read as one rung. */
+.crumb-sep { flex: 0 0 auto; color: var(--border-strong); user-select: none; }
 .crumb-here { color: var(--fg); font-weight: 600; white-space: nowrap; }
 .crumb-here code, .crumb-link code, .crumb-switch code { font-size: 12.5px; }
 
-.crumb-anchor { position: relative; display: inline-block; }
+/* A rung and the mark explaining it are one item of the trail, so the mark cannot
+   wrap below the rung it belongs to. */
+.crumb-anchor { position: relative; display: inline-flex; align-items: center; gap: 6px;
+    white-space: nowrap; }
+/* A rung holds its own width and folds whole; squeezed, it would paint over the
+   separator beside it. The exception says so, and says what gives way instead. */
+.crumbs > * { flex: 0 0 auto; }
+/* Under a rung that cannot fold — the end of the address — an ellipsis is all that
+   is left. Its own contents carry the ellipsis (see .picker.figure in picker.css). */
+.crumbs > .crumb-truncates { flex: 0 1 auto; min-width: 0; }
 .crumb-switch { font: inherit; font-size: 13px; color: var(--muted); background: none;
     border: 1px solid transparent; border-radius: 4px; padding: 2px 6px; cursor: pointer;
     display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
@@ -88,6 +104,21 @@ body > header {
     border-color: var(--border-strong); color: var(--fg); }
 .crumb-switch:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--focus-halo); }
 .crumb-caret { font-size: 11px; line-height: 1; color: var(--muted); }
+
+/* The rungs that did not fit, folded into one. Reads as a rung, opens the list of
+   what it swallowed, and each of those opens that rung's own list in place. */
+.crumb-fold { font: inherit; font-size: 13px; color: var(--muted); background: none;
+    border: 1px solid transparent; border-radius: 4px; padding: 2px 8px; cursor: pointer;
+    letter-spacing: .08em; line-height: 1; }
+.crumb-fold:hover, .crumb-fold[aria-expanded="true"] { color: var(--fg);
+    background: var(--hover); border-color: var(--border); }
+.crumb-fold:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--focus-halo); }
+.crumb-fold[hidden] { display: none; }
+.crumb-pop-back { display: block; width: 100%; font: inherit; font-size: 12px;
+    color: var(--muted); background: none; border: 0;
+    border-bottom: 1px solid var(--border); padding: 4px 8px 8px; margin-bottom: 6px;
+    cursor: pointer; text-align: left; }
+.crumb-pop-back:hover { color: var(--fg); }
 
 .crumb-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 60; width: 400px;
     max-width: calc(100vw - 48px); background: var(--raised);
