@@ -79,6 +79,9 @@ def test_a_wire_carries_the_rows_it_brought_and_says_nothing_off_the_walk(run_id
     assert _edge(values, "load_west", "both_regions").rows == 3
     # load_agencies writes only `portfolio`, which this figure never came through.
     assert _edge(values, "load_agencies", "tag_portfolio").rows is None
+    # Off the walk at the far end: nothing behind this figure went down to mean_by_portfolio.
+    assert _edge(values, "one_row_per_grant", "mean_by_portfolio").rows is None
+    assert _edge(values, "one_row_per_grant", "by_portfolio").rows == 5
 
 
 def test_a_count_reads_no_column_so_the_tab_says_so(run_id):

@@ -154,7 +154,9 @@ def _list_edges(
         MinimapEdge(
             from_stage=parent,
             to_stage=child,
-            rows=behind[parent] if parent in on_walk else None,
+            # Both ends: a wire off the walk at either end carried none of these rows,
+            # so it has no count to state — a stage past the figure has nothing behind it.
+            rows=(behind[parent] if {parent, child} <= on_walk else None),
         )
         for child in sorted(parents)
         for parent in parents[child]
