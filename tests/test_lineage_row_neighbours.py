@@ -46,7 +46,8 @@ def run_id(projects_root):
 def test_a_sheet_of_one_reached_row_draws_the_rows_around_it(run_id):
     # 55 - 25 // 2 = 43, and the sheet runs out of frame before its 25th row.
     page = _panel(run_id)
-    assert "showing 17 of 60 rows" in page
+    # 16 of the 17 are neighbours, so the line counts them apart from the figure's own.
+    assert "showing 1 relevant row of 60, and 16 more drawn around them" in page
     assert f'<td class="row-num muted">{43 + 1}</td>' in page
     assert f'<td class="row-num muted">{ROWS}</td>' in page
 
@@ -58,13 +59,13 @@ def test_the_panel_links_every_drawn_row_to_itself(run_id):
     assert "/stage/double/row/0/trace/view" not in page
     assert f"/stage/double/row/{CITED_ROW}/trace/view" in page
     # One stage's panel is one request now, so the traced row is numbered once.
-    assert page.count(f'<td class="row-num diff-row-num-mine">{CITED_ROW + 1}</td>') == 1
+    assert page.count(f'<td class="row-num muted">{CITED_ROW + 1}</td>') == 1
 
 
 def test_the_pane_keeps_the_run_page_tints_and_adds_its_own(run_id):
     # The shared diff paints here as it does on the run page; the figure's marks come on top.
     page = _panel(run_id)
-    for tint in ("diff-col-new", "diff-row-mine", "diff-row-num-mine", "diff-col-cited"):
+    for tint in ("diff-col-new", "diff-col-cited"):
         assert tint in page
     # The cited cell: row 55's doubled amount, in the column the stage added.
     assert f'<td class="diff-col-new diff-col-cited">{CITED_ROW * 20}</td>' in page

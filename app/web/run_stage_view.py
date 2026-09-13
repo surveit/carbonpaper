@@ -17,7 +17,8 @@ from app.web.column_order import order_preview_columns
 from app.web.config import EVENT_TAIL
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH
 from app.web.eval_coverage import EvalCoverage, find_eval_coverages
-from app.web.loading import build_llm_example, load_output_preview, load_output_rows_at
+from app.web.loading import (
+    PREVIEW_ROWS_SHOWN, build_llm_example, load_output_preview, load_output_rows_at)
 from app.web.panel_links import AppPanelLinks
 from app.web.run_stage_panel import find_queue_link, resolve_panel_links
 from app.web.stage_diff import StageDiff, build_stage_diff
@@ -29,6 +30,8 @@ from app.web.stage_test_views import (
 
 # What a scoped panel draws of each frame, output and input alike.
 SCOPED_ROWS_SHOWN = 25
+# What a drawer holds: past this nobody reads on, and the whole diff is a click away.
+SCOPED_DIFF_ROWS = 500
 
 
 @dataclass(frozen=True)
@@ -111,10 +114,7 @@ def build_run_stage_panel(
         project=project_id, run_id=run_id, stage=stage_record, stage_def=stage_def,
         workflow_stage=pinned.workflow_stage, stage_def_error=pinned.error,
         preview=preview,
-        # None outside the diff's scope, or where alignment can't be verified.
-        diff=build_stage_diff(pinned.workflow_stage, run_dir,
-                              stage_record.get("output_path"), output_by_id,
-                              at_rows=at_rows),
+        diff=_build_diff(pinned, run_dir, stage_record, output_by_id, at_rows),
         input_previews=input_previews,
         function_code=resolve_function_code(stage_def),
         llm_example=build_llm_example(pinned.workflow_stage, input_previews),
@@ -128,6 +128,16 @@ def build_run_stage_panel(
         queue_link=find_queue_link(links, project_id, run_id, stage_id),
         scope=scope,
     )
+
+
+def _build_diff(pinned: run_service.RunStageDef, run_dir: Path,
+                stage_record: JsonDict, output_by_id: dict[Any, Any],
+                at_rows: list[int] | None) -> StageDiff | None:
+    """None outside the diff's scope, or where alignment can't be verified."""
+    return build_stage_diff(
+        pinned.workflow_stage, run_dir, stage_record.get("output_path"), output_by_id,
+        rows_shown=PREVIEW_ROWS_SHOWN if at_rows is None else SCOPED_DIFF_ROWS,
+        at_rows=at_rows)
 
 
 def _widen_to_neighbours(reached: list[int]) -> list[int]:
