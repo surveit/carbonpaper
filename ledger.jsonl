@@ -2963,3 +2963,4 @@
 {"run_id":"34703099024","run_url":"https://github.com/surveit/carbonpaper/actions/runs/34703099024","created":"2026-09-12T15:46:40Z","branch":"feat/trail-carries-the-address","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"34703350010","run_url":"https://github.com/surveit/carbonpaper/actions/runs/34703350010","created":"2026-09-12T15:49:22Z","branch":"stack/4-rows-and-columns-canvas","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"34703350010","run_url":"https://github.com/surveit/carbonpaper/actions/runs/34703350010","created":"2026-09-12T15:50:52Z","branch":"stack/4-rows-and-columns-canvas","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"34754770251","run_url":"https://github.com/surveit/carbonpaper/actions/runs/34754770251","created":"2026-09-13T11:34:55Z","branch":"claim-review/record-and-bundle","event":"pull_request","contracts_kept":16,"findings":[]}
