@@ -84,8 +84,8 @@ def test_every_page_loads_the_scripts_defining_what_it_reads() -> None:
 
 def test_the_scan_reaches_the_pages_and_the_globals() -> None:
     pages = find_scripts_each_page_loads()
-    assert "base.html" in pages and "_scope_panel.html" in pages, sorted(pages)
-    assert "scope_map.js" in pages["_scope_panel.html"]
+    assert "base.html" in pages and "scope_map.html" in pages, sorted(pages)
+    assert "scope_map.js" in pages["scope_map.html"]
     definers = read_who_defines_each_global()
     assert definers.get("Figures") == {"figure_text.js"}
     assert "Figures" in read_what_each_script_needs(definers)["scope_map.js"]
