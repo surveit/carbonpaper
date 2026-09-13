@@ -12,6 +12,7 @@ from typing import Iterator
 import pytest
 
 
+from app.compiler.claim_attack.attackers import ATTACKERS
 from app.core.paths import repo_root
 from scripts.dump_prompts import render_prompt_dump
 
@@ -44,6 +45,25 @@ def test_dump_offers_the_editing_agent_every_tool_it_binds(dump: str) -> None:
     bound = build_editing_tools(EditingContext(project_id="p", base_url="http://reader.test/"))
     missing = [spec.name for spec in bound if f"#### `{spec.name}`" not in dump]
     assert not missing, f"editing tools absent from the dump: {missing}"
+
+
+def test_dump_carries_every_claim_attacker_and_the_turn_that_merges_them(dump: str) -> None:
+    for attacker in ATTACKERS:
+        assert f"## Claim attacker · {attacker.value}" in dump
+    assert "## Claim attack · orchestrator" in dump
+
+
+def test_each_claim_attacker_answers_in_its_own_schema(dump: str) -> None:
+    grounding = read_section(dump, "Claim attacker · grounding")
+    meaning = read_section(dump, "Claim attacker · meaning")
+
+    assert '"phrases"' in grounding and '"rewrites"' not in grounding
+    assert '"rewrites"' in meaning and '"phrases"' not in meaning
+
+
+def read_section(dump: str, title: str) -> str:
+    heading = "\n## "
+    return dump.split(f"{heading}{title}\n")[1].split(heading)[0]
 
 
 def test_dump_states_what_it_leaves_out(dump: str) -> None:
@@ -85,4 +105,6 @@ def test_the_constant_scan_finds_the_known_surfaces() -> None:
     names = {name for _path, name, _text in find_prompt_constants()}
     assert {"EDITING_SYSTEM_PROMPT", "INSTRUCTIONS", "DATA_MODEL_SYSTEM_PROMPT",
             "REVIEW_GUIDE_SYSTEM_PROMPT", "STAGE_TESTS_SYSTEM_PROMPT",
-            "SYSTEM_PROMPT"} <= names
+            "SYSTEM_PROMPT", "GROUNDING_SYSTEM_PROMPT", "DATA_DEFECTS_SYSTEM_PROMPT",
+            "CHOICES_SYSTEM_PROMPT", "OMISSIONS_SYSTEM_PROMPT", "COVERAGE_SYSTEM_PROMPT",
+            "MEANING_SYSTEM_PROMPT", "ORCHESTRATOR_SYSTEM_PROMPT"} <= names

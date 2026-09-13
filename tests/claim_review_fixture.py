@@ -4,7 +4,7 @@ from __future__ import annotations
 from app.models.claims import (
     ClaimImportance, ClaimShapeInput, DataUniverseRequirement, StageOutputCellCitation,
 )
-from app.models.records.claims import Claim
+from app.models.records.claims import Claim, ClaimShape
 from app.models.records.workflow_output import WorkflowOutput
 from app.services import claim_shapes, claims
 from app.services import run as run_service
@@ -31,6 +31,11 @@ def run_the_fixture(projects_root) -> str:
 
 
 def claim_the_total(run_id: str, text: str = TOTAL_TEXT) -> Claim:
+    publish_the_outputs(run_id)
+    return claims.submit_claim(PROJECT, run_id, "grant-total", {}, text)
+
+
+def publish_the_outputs(run_id: str) -> ClaimShape:
     [shape] = claim_shapes.write_claim_shapes(PROJECT, [TOTAL_SHAPE])
     WorkflowOutput(
         slug="grant-total", label="What the grants came to", primary=True, shape_id=shape.id,
@@ -43,7 +48,7 @@ def claim_the_total(run_id: str, text: str = TOTAL_TEXT) -> Claim:
         citation=StageOutputCellCitation(
             run_id=run_id, stage_id="grant_totals", row_ordinal=0, column="grants", value=5),
     ).save()
-    return claims.submit_claim(PROJECT, run_id, "grant-total", {}, text)
+    return shape
 
 
 def add_a_sandboxed_filter(specs: list[dict]) -> list[dict]:

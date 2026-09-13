@@ -13,6 +13,12 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
+from app.models.claim_review import (
+    ChallengesAnswer,
+    ClaimReviewDraft,
+    GroundingAnswer,
+    MeaningAnswer,
+)
 from app.models.named_schemas import SchemaLibrary
 from app.models.review_guide import ReviewGuideDraft
 from app.compiler.stage_tests_submission import SubmittedCase
@@ -22,17 +28,19 @@ from app.tools.submitted_stage import SubmittedStage
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _APP_ROOT = _REPO_ROOT / "app"
 
-# Every class an agent is handed a JSON schema of: the `add_stage` tools bind their
-# argument to SubmittedStage (whose fields are StageDraft's, inherited), and the three
-# agents in app/compiler submit through a target_schema. Each root pulls in its whole
-# nested model graph. Hand-written, and
-# `test_every_schema_root_declared_in_source_is_listed` is what keeps it honest.
+# Every class an agent is handed a JSON schema of, with its whole nested model graph.
+
+# Hand-written; test_every_schema_root_declared_in_source_is_listed keeps it honest.
 _SCHEMA_ROOTS: tuple[type[BaseModel], ...] = (
     SubmittedStage,
     SchemaLibrary,
     ReviewGuideDraft,
     StageTest,
     SubmittedCase,
+    GroundingAnswer,
+    ChallengesAnswer,
+    MeaningAnswer,
+    ClaimReviewDraft,
 )
 
 # A target_schema the source computes rather than names, each mapped to the listed root

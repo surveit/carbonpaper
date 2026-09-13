@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from app.compiler.claim_attack.evidence import render_evidence_bundle, render_evidence_pool
 from app.models.claim_review import (
     Attacker, Challenge, ChallengeKind, Cost, Grounding, Moves, OutputEvidence,
 )
 from app.models.claims import StageOutputCellCitation
-from app.services import claim_review
+from app.services import claim_evidence, claim_review
 from app.services.errors import ClaimReviewRefused
 from claim_review_fixture import PROJECT, TOTAL_TEXT, claim_the_total, run_the_fixture
 
@@ -59,7 +60,7 @@ def test_a_figure_of_five_digits_is_pooled_with_its_separators():
     cell = StageOutputCellCitation(run_id="r", stage_id="s", row_ordinal=0,
                                    column="ai_spend", value=63027729)
 
-    assert claim_review._read_output_value(cell) == "63,027,729"
+    assert claim_evidence.read_output_value(cell) == "63,027,729"
 
 
 def test_the_arms_the_run_recorded_come_with_their_row_counts(claim):
@@ -157,10 +158,14 @@ def test_a_backing_sitting_inside_a_longer_number_is_not_in_the_pool(claim):
         _store(claim, "220", "the pool says 2200 in total")
 
 
-def test_a_standalone_token_however_short_is_backed(claim):
-    stored = _store(claim, "5", "grant-count · How many grants · 5 · grant_totals")
+def test_a_lone_digit_is_backed_by_the_phrase_around_it_and_never_on_its_own(claim):
+    line = "grant-count · How many grants · 5 · grant_totals"
+    with pytest.raises(ValidationError):
+        _challenge("5")
 
-    assert stored.challenges[0].backing == "5"
+    stored = _store(claim, "grants · 5", line)
+
+    assert stored.challenges[0].backing == "grants · 5"
 
 
 def test_a_backing_ending_at_a_full_stop_in_the_pool_is_backed(claim):
@@ -169,9 +174,41 @@ def test_a_backing_ending_at_a_full_stop_in_the_pool_is_backed(claim):
     assert stored.challenges[0].backing == "28% of records"
 
 
-def test_a_digit_cut_out_of_a_thousands_separated_number_is_not_in_the_pool(claim):
-    with pytest.raises(ClaimReviewRefused, match="backing '2' is"):
-        _store(claim, "2", "the pool says 2,200 in total")
+def test_a_run_cut_out_of_a_thousands_separated_number_is_not_in_the_pool(claim):
+    with pytest.raises(ClaimReviewRefused, match="backing '200' is"):
+        _store(claim, "200", "the pool says 12,200 in total")
+
+    with pytest.raises(ClaimReviewRefused, match="backing '123' is"):
+        _store(claim, "123", "the pool says 123,200 in total")
+
+
+def test_a_backing_the_pool_wrapped_mid_sentence_is_still_printed(claim):
+    wrapped = ("Read `income` and `expenses` as plain dollar numbers. Blank counts as zero: "
+               "the filing is\nreporting it received or spent nothing. Anything else that is "
+               "not a plain number")
+
+    stored = _store(
+        claim,
+        "Blank counts as zero: the filing is reporting it received or spent nothing.",
+        wrapped)
+
+    assert stored.challenges[0].backing.startswith("Blank counts as zero")
+
+
+def test_a_backing_carrying_a_line_break_is_printed_by_a_pool_holding_it_on_one_line(claim):
+    backing = ("Names are compared exactly as filed; nothing here merges two\nspellings of "
+               "one organisation.")
+
+    stored = _store(claim, backing, "Names are compared exactly as filed; nothing here "
+                                    "merges two spellings of one organisation.")
+
+    assert stored.challenges[0].backing == backing
+
+
+def test_closing_a_line_break_never_blurs_the_edge_of_a_number():
+    assert not claim_review.read_whether_the_pool_prints("the pool says 2200 in total", "220")
+    assert not claim_review.read_whether_the_pool_prints("the pool says 2,200 in total", "2")
+    assert not claim_review.read_whether_the_pool_prints("the pool says 123,200 in total", "123")
 
 
 def test_a_challenge_landing_on_a_phrase_the_review_never_grounded_is_refused(claim):

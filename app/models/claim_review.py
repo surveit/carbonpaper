@@ -1,10 +1,11 @@
 """A claim under attack: what every attacker is handed, what each returns, and what is stored."""
 from __future__ import annotations
 
+import re
 from enum import Enum
 from typing import Annotated, Literal, Union
 
-from pydantic import Field
+from pydantic import Field, field_validator, model_validator
 
 from app.core.column_profile import ValueCount
 from app.core.ids import ID
@@ -49,6 +50,8 @@ class Cost(str, Enum):
 
 SEVERITY_FLOOR = 0
 SEVERITY_CEILING = 3
+
+BACKING_MIN_CHARS = 3
 
 SEVERITY_WORDS: dict[int, str] = {
     0: "checked, quiet",
@@ -108,6 +111,38 @@ class Grounding(_Base):
     )
     how: str = Field(description="One line: how the phrase rests on that piece of the run.")
 
+    @model_validator(mode="after")
+    def _validate_end_after_start(self) -> "Grounding":
+        if self.end <= self.start:
+            raise ValueError(
+                f"a phrase starting at {self.start} cannot end at {self.end}")
+        return self
+
+
+def find_grounding_issues(grounding: list[Grounding], text: str) -> list[str]:
+    return [
+        *(f"grounding {index} ends at {phrase.end}, past the end of a claim {len(text)} "
+          "characters long" for index, phrase in enumerate(grounding)
+          if phrase.end > len(text)),
+        *_find_overlapping_spans(grounding),
+    ]
+
+
+def _find_overlapping_spans(grounding: list[Grounding]) -> list[str]:
+    issues, reached = [], 0
+    for phrase in sorted(grounding, key=lambda phrase: phrase.start):
+        if phrase.start < reached:
+            issues.append(f"the phrase at {phrase.start}-{phrase.end} overlaps the one "
+                          "that ends after it starts")
+        reached = max(reached, phrase.end)
+    return issues
+
+
+def read_whether_a_backing_is_a_phrase(backing: str) -> bool:
+    """A pool line holds ` `, `0` and `·` too: those back nothing, so a copy of one is refused."""
+    stripped = backing.strip()
+    return len(stripped) >= BACKING_MIN_CHARS and re.search(r"\w", stripped) is not None
+
 
 class Challenge(_Base):
     attacker: Attacker = Field(description="Which attacker raised it.")
@@ -128,6 +163,15 @@ class Challenge(_Base):
     moves: Moves = Field(description="What answering it would move: the figure, its meaning, nothing priced, or nothing.")
     cost: Cost = Field(description="What answering it would take: nothing, a person, an outside source, an editorial call, or it is settled.")
     raised_by: str = Field(default="", description="The attacker's own words for who or what prompted it; empty if nothing did.")
+
+    @field_validator("backing")
+    @classmethod
+    def _refuse_a_degenerate_backing(cls, backing: str) -> str:
+        if not read_whether_a_backing_is_a_phrase(backing):
+            raise ValueError(
+                f"backing {backing!r} is a phrase of no pool line: a backing takes at "
+                f"least {BACKING_MIN_CHARS} characters, one of them a word character")
+        return backing
 
 
 class Rewrite(_Base):
@@ -171,11 +215,30 @@ class MeaningAnswer(ChallengesAnswer):
     )
 
 
+class AttackerAnswers(_Base):
+    grounding: GroundingAnswer
+    data_defects: ChallengesAnswer
+    choices: ChallengesAnswer
+    omissions: ChallengesAnswer
+    coverage: ChallengesAnswer
+    meaning: MeaningAnswer
+
+    def list_evidence(self) -> list[str]:
+        raised = [self.data_defects, self.choices, self.omissions, self.coverage, self.meaning]
+        return [challenge.evidence for answer in raised for challenge in answer.challenges]
+
+
 class ClaimReviewDraft(_Base):
     challenges: list[Challenge] = Field(
         description="The challenges you kept, each with its attacker, severity and backing filled in."
     )
     summary: str = Field(description="What the claim can stand as, in one paragraph the journalist reads first.")
+
+
+class ClaimAttackResult(_Base):
+    answers: AttackerAnswers
+    draft: ClaimReviewDraft
+    session_ids: list[ID] = Field(description="The seven turns, grounding first and orchestrator last.")
 
 
 # ── The evidence bundle ──

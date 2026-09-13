@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.core.errors import ClaimAttackRefused
+
 
 class WorkflowLoadError(Exception):
     def __init__(self, source: Path | str, issues: list[str]):
@@ -41,7 +43,7 @@ class ClaimRefused(ValueError):
         self.refusals = refusals
 
 
-class ClaimReviewRefused(ValueError):
+class ClaimReviewRefused(ClaimAttackRefused):
     """Nothing is stored unless every backing is in the evidence."""
 
     def __init__(self, refusals: list[str]) -> None:

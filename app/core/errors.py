@@ -29,6 +29,10 @@ class ClaimShapeIsImmutable(ValueError):
     """A shape is written once: every claim under it asserts what it said."""
 
 
+class ClaimAttackRefused(ValueError):
+    """What an attack refuses: a grounding no attacker can be handed, or a refused review."""
+
+
 class ClaimReviewIsImmutable(ValueError):
     """A review is written once: a re-attack is a new claim and a new review."""
 
