@@ -53,6 +53,8 @@ body{display:flex;flex-direction:column;overflow:hidden}
 .lin-pagetab{border:0;background:none;font:inherit;font-size:13px;color:var(--muted);
   padding:9px 16px 8px;cursor:pointer;border-bottom:2px solid transparent}
 .lin-pagetab.on{color:var(--fg);border-bottom-color:var(--accent);font-weight:600}
+.lin-scopeframe{flex:1;width:100%;border:0;min-height:0}
+@media (max-width:900px){.lin-scopeframe{height:80vh}}
 .lin-pagetab:hover{background:var(--hover)}
 /* The house focus ring. Without one these fall back to the browser's own blue,
    which is a colour this palette spends on something else. */
@@ -300,6 +302,7 @@ tr.lin-opens:hover td{background:var(--hover)}
 <div class="lin-pagetabs" id="pagetabs">
   <button class="lin-pagetab on" data-pane="paths">Paths</button>
   <button class="lin-pagetab" data-pane="values">Rows &amp; columns</button>
+  <button class="lin-pagetab" data-pane="scope">Paths explorer</button>
   <button class="lin-pagetab" data-pane="inputs">Input files</button>
 </div>
 <div class="lin-pane" data-pane="paths">
@@ -341,6 +344,22 @@ tr.lin-opens:hover td{background:var(--hover)}
     <p>The walk stopped at <code>{{ view.upstream.at_stage }}</code> before it read a single
       step &mdash; {{ view.upstream.message }}. The run wrote no row here to follow.</p>
   </div>
+{% endif %}
+</div>
+<div class="lin-pane hidden" data-pane="scope">
+{% if offline or not view.nodes %}
+  <div class="empty-state">
+    <h2>The paths behind this figure are not drawn here</h2>
+    {% if offline %}
+    <p>Which rows produced a figure, and what told them apart from the rest, is drawn
+      by the running app. A folder has no server to ask.</p>
+    {% else %}
+    <p>The run wrote no row here, so there is nothing whose paths could be drawn.</p>
+    {% endif %}
+  </div>
+{% else %}
+  {# One figure is one cell, so the map is drawn for the column the header names. #}
+  <iframe class="lin-scopeframe" id="scope-frame" title="The paths behind this figure"></iframe>
 {% endif %}
 </div>
 <div class="lin-pane hidden" data-pane="inputs">
@@ -716,6 +735,7 @@ function showColumn(column){
   // still the way out of it. The address stays the one a figure links with.
   history.replaceState(null, '', lineageHref(COORD.stage_id, COORD.row, COORD.column));
   if(valuesColumn !== null && COORD.column) walkValuesFor(COORD.column);
+  if(scopeColumn !== null && COORD.column) drawScopeFor(COORD.column);
   if(inputFilesColumn !== null && COORD.column) readInputFilesFor(COORD.column);
 }
 // A sentence-long cell at heading size is four words and an ellipsis, so a long one
@@ -767,6 +787,25 @@ document.getElementById('pagetabs').addEventListener('click', e => {
   if(valuesColumn === column) return;
   if(columnPick.value !== column) chooseColumn(column);
   walkValuesFor(column);
+});
+// ---- Paths explorer: which rows made this figure, and what cut the rest ------
+const scopeFrame = document.getElementById('scope-frame');
+let scopeColumn = null;
+
+function drawScopeFor(column){
+  scopeColumn = column;
+  const q = new URLSearchParams({stage: V.start_stage, row: V.start_row, column});
+  scopeFrame.src = `${RUN_BASE}/scope/panel?${q}`;
+}
+// The frame is a page load, so it waits until the reader opens the tab.
+document.getElementById('pagetabs').addEventListener('click', e => {
+  const picked = e.target.closest('.lin-pagetab');
+  if(!picked || picked.dataset.pane !== 'scope' || !scopeFrame) return;
+  if(!COORD || !COORD.cells.length) return;
+  const column = COORD.column || COORD.cells[0].column;
+  if(scopeColumn === column) return;
+  if(columnPick.value !== column) chooseColumn(column);
+  drawScopeFor(column);
 });
 // ---- Input files: what this figure needed of each file the run read ---------
 const inputFilesRoot = document.getElementById('input-files-root');
