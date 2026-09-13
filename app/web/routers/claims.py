@@ -1,4 +1,4 @@
-"""Publishing a run: the page that offers its claims, and the four writes behind it."""
+"""The claims a project has made: the list, the page for one, and the writes behind them."""
 from __future__ import annotations
 
 import logging
@@ -14,11 +14,12 @@ from app.services import claims as claims_service
 from app.services import project as project_service
 from app.services import run as run_service
 from app.services.errors import ClaimRefused, ClaimReviewRefused
-from app.web.breadcrumbs import Crumb, build_run_child_crumbs, build_section_crumbs
-from app.web.claim_review_view import build_claim_review_page
+from app.web.breadcrumbs import Crumb, build_claims_child_crumbs, build_section_crumbs
+from app.web.claim_review_view import ClaimReviewPage, build_claim_review_page
+from app.web.claims_list_view import build_claims_list_page
 from app.web.claims_view import build_publish_view
 from app.web.config import templates
-from app.web.project_view import shell_state_off_nav, validate_project_or_404
+from app.web.project_view import shell_state, shell_state_off_nav, validate_project_or_404
 from app.web.run_index import RunIndexRow, find_run_row
 
 router = APIRouter()
@@ -61,6 +62,20 @@ async def submit_claim(request: Request, project_id: str, run_id: str, slug: str
     return _back_to_the_page(project_id, run_id)
 
 
+@router.get("/project/{project_id}/claims", response_class=HTMLResponse)
+async def claims_page(request: Request, project_id: str):
+    validate_project_or_404(project_id)
+    return templates.TemplateResponse(
+        request,
+        "claims.html",
+        {
+            "state": shell_state(project_id, "claims"),
+            "section": "claims",
+            "page": _refusing_404(lambda: build_claims_list_page(project_id)),
+        },
+    )
+
+
 @router.get("/project/{project_id}/claims/{claim_id}", response_class=HTMLResponse)
 async def read_claim_review_page(request: Request, project_id: str, claim_id: str):
     validate_project_or_404(project_id)
@@ -69,8 +84,8 @@ async def read_claim_review_page(request: Request, project_id: str, claim_id: st
         request,
         "claim_review.html",
         {
-            "state": shell_state_off_nav(project_id, _build_claim_crumbs(project_id, page.run_id)),
-            "section": "runs",
+            "state": shell_state_off_nav(project_id, _build_claim_crumbs(project_id, page)),
+            "section": "claims",
             "page": page,
         },
     )
@@ -183,5 +198,6 @@ def _crumbs(project_id: str) -> list[Crumb]:
     )
 
 
-def _build_claim_crumbs(project_id: str, run_id: str) -> list[Crumb]:
-    return build_run_child_crumbs(project_id, run_id, label="Claim")
+def _build_claim_crumbs(project_id: str, page: ClaimReviewPage) -> list[Crumb]:
+    """A declined skip has no sentence of its own, so its rung reads as its metric."""
+    return build_claims_child_crumbs(project_id, label=page.text or page.shape_label)

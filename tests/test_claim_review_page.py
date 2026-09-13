@@ -416,6 +416,15 @@ def test_a_declined_claim_offers_no_attack_it_would_be_refused(claim, client):
     assert "Declined." in body
 
 
+def test_the_claim_page_sits_under_claims_and_trails_back_to_the_list(claim, client):
+    body = read_the_page(client, claim.id).text
+    marked = " ".join(body.split())
+
+    assert f'href="/project/{PROJECT}/claims" aria-current="page"' in marked
+    assert f'<a href="/project/{PROJECT}/claims" class="crumb-link">Claims</a>' in body
+    assert f'<span class="crumb-here" aria-current="page">{TOTAL_TEXT}</span>' in body
+
+
 def test_an_unknown_claim_is_not_a_page(client, projects_root):
     response = read_the_page(client, "no-such-claim")
 

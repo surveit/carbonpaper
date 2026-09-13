@@ -6,7 +6,7 @@ from string import Template
 from app.core.ids import ID
 from app.models.claims import ClaimShapeInput
 from app.models.records.claims import ClaimShape
-from app.services.errors import ClaimShapeWriteRefused
+from app.services.errors import ClaimRefused, ClaimShapeWriteRefused
 
 _PRIMARY_FIRST = {"primary": 0, "secondary": 1}
 
@@ -19,6 +19,13 @@ def load_claim_shapes(project_id: ID) -> list[ClaimShape]:
 def load_claim_shape(project_id: ID, shape_id: ID) -> ClaimShape | None:
     stored = ClaimShape.load_or_none(shape_id)
     return stored if stored is not None and stored.project_id == project_id else None
+
+
+def read_claim_shape(project_id: ID, shape_id: ID | None) -> ClaimShape:
+    shape = load_claim_shape(project_id, shape_id) if shape_id else None
+    if shape is None:
+        raise ClaimRefused([f"this project holds no claim shape '{shape_id}'"])
+    return shape
 
 
 def write_claim_shapes(project_id: ID, authored: list[ClaimShapeInput]) -> list[ClaimShape]:
