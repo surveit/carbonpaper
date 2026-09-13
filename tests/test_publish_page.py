@@ -125,6 +125,8 @@ def test_submitting_writes_the_sentence_puts_it_in_review_and_attacks_it(tmp_pat
     assert (claim.text, claim.status) == (_SENTENCE, "submitted")
     assert claim.context["period_start"] == "2026-01-01"
     assert attacks == [claim.id]
+    assert (f'href="/project/{_PROJECT}/claims/{claim.id}">read the attack</a>'
+            in client.get(f"{_BASE}/publish").text)
 
 
 def test_a_claim_with_no_sentence_is_refused(tmp_path):

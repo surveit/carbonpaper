@@ -106,6 +106,13 @@ def build_run_index_rows(
     return rows
 
 
+def find_run_row(project_id: str, run_id: str) -> RunIndexRow | None:
+    """None where this project lists no such run; the caller says how it refuses."""
+    return next(
+        (row for row in build_run_index_rows(project_id) if row.run_id == run_id), None
+    )
+
+
 def count_archived_runs(project_id: str) -> int:
     return len(read_archived_run_ids(project_id))
 

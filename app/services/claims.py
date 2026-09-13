@@ -21,6 +21,8 @@ def submit_claim(
     project_id: ID, run_id: ID, slug: str, context: JsonDict, text: str
 ) -> Claim:
     """Proposed, not made: it stands behind nothing until review approves it."""
+    written = _require_text(text)
+    # The text is read first so a refusal supersedes nothing and leaves no claim orphaned.
     output = read_workflow_run_output_by_slug(run_id, slug)
     shape = _require_shape(project_id, output.shape_id)
     held = read_context(shape, context)
@@ -28,7 +30,7 @@ def submit_claim(
         _set_status(standing, ClaimStatus.superseded)
     claim = Claim(
         created_by_project_id=project_id, shape_id=shape.id,
-        context=held, citation=output.citation, text=_require_text(text),
+        context=held, citation=output.citation, text=written,
     )
     claim.save()
     return claim
