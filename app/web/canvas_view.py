@@ -90,6 +90,7 @@ def build_trace_scope(
     return TraceScope(
         cited_column=column,
         rows_by_stage={sid: sorted(rows) for sid, rows in reached.items()},
+        columns_by_stage=_index_columns_behind(walk, stages),
         column_writers={
             name: writer
             for name in {at.column for at in walk.nodes}

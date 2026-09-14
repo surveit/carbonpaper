@@ -35,7 +35,7 @@
    `reached_rows` (the Rows & columns tab's) names the rows the figure came
    through: the cited column is painted on those rows alone, and the # column
    comes on so the rest can be read against them. #}
-{% macro frame_unit(role, frame_id, rows_total, klass) -%}
+{% macro frame_unit(role, frame_id, rows_total, klass, links_schema=false) -%}
 <span class="diff-frame {{ klass }}"><span class="diff-frame-head"><span class="diff-frame-role">{{ role }}</span>
     <code class="diff-frame-id">{{ frame_id }}</code></span>
     <span class="diff-frame-meta">
@@ -43,12 +43,14 @@
     {%- set raw_href = links.stage_rows_raw(frame_id) %}
     {%- if raw_href %}<a href="{{ raw_href }}" title="every row of this frame, raw">all rows</a>
     · {% endif -%}
-    <a href="{{ links.stage_csv(frame_id) }}">⬇ CSV</a></span></span>
+    <a href="{{ links.stage_csv(frame_id) }}">⬇ CSV</a>
+    {%- if links_schema %} · <button type="button" class="face-link" data-face-to="schema">schema</button>{% endif -%}
+    </span></span>
 {%- endmacro %}
 {# The axis: the input stack → the rail → the output. `count_labels` is the list
    of things the stage did that its own shape measured, in one vocabulary — the
    template renders it the same way whichever shape produced it. #}
-{% macro diff_head(inputs, output_id, output_rows, count_labels) -%}
+{% macro diff_head(inputs, output_id, output_rows, count_labels, schema_face=false) -%}
 <div class="preview-head diff-head"><span class="diff-flow">
     <span class="diff-inputs">
     {%- for frame in inputs %}{{ frame_unit(frame.role, frame.stage_id, frame.rows_total,
@@ -57,22 +59,10 @@
     {%- if inputs | length > 1 %}<span class="diff-brace" aria-hidden="true"></span>{% endif %}
     <span class="diff-rail"><span class="diff-count-labels">{{ count_labels | join(' · ') }}</span>
     <span class="diff-arrow" aria-hidden="true">→</span></span>
-    <span class="diff-outputs">{{ frame_unit('output', output_id, output_rows, 'diff-frame-out') }}</span>
+    <span class="diff-outputs">{{ frame_unit('output', output_id, output_rows, 'diff-frame-out', schema_face) }}</span>
 </span></div>
 {%- endmacro %}
-{# `scoped` says the caller cut the table to one figure's rows, which are not "the
-   first" anything. `mine` is how many of the drawn rows are the figure's; the rest
-   are the neighbours and dropped rows drawn beside them, and are counted apart so
-   neither number speaks for the other. Where the cap cut some of the figure's own
-   rows away, the line counts against those rather than against the frame. #}
-{% macro scoped_rows_line(drawn, mine, mine_total, total, noun) -%}
-{%- if mine < mine_total -%}
-showing {{ mine | figure }} of this figure's {{ mine_total | figure }} {{ noun }}s
-{%- else -%}
-showing {{ mine | figure }} relevant {{ noun }}{% if mine != 1 %}s{% endif %} of {{ total | figure }}
-{%- endif -%}
-{%- if drawn > mine %}, and {{ (drawn - mine) | figure }} more drawn around them{% endif %}
-{%- endmacro %}
+{% from "_rows_line.html" import scoped_rows_line %}
 {# The windowed diff is a window; the same diff over the whole frame is a page of
    its own. Not offered on that page, which is already it. #}
 {% macro whole_diff(rows_href) -%}
@@ -91,7 +81,8 @@ showing {{ mine | figure }} relevant {{ noun }}{% if mine != 1 %}s{% endif %} of
 {% macro dropped_beyond(count) %}{% if count %} — {{ count | figure }} dropped row{% if count != 1 %}s{% endif %} fall{% if count == 1 %}s{% endif %} beyond them{% endif %}{% endmacro %}
 {% from "_data_cell.html" import data_cell %}
 <div class="preview-block stage-diff">
-  {{ diff_head(diff.inputs, stage.stage_id, diff.output_rows, diff.count_labels) }}
+  {{ diff_head(diff.inputs, stage.stage_id, diff.output_rows, diff.count_labels,
+               shows_schema_face | default(false, true)) }}
 {% if diff.kind == 'filter_rows' %}
   {% if scoped and shows_the_figures_rows %}
   {%- set mine_shown = diff.rows | map(attribute='output_ordinal')

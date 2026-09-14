@@ -43,9 +43,14 @@ class TraceScope:
     rows_by_stage: dict[StageId, list[int]]
     # Column name -> the nearest stage upstream that wrote it; the header links there.
     column_writers: dict[str, StageId] = field(default_factory=dict)
+    # Stage id -> the columns of THAT stage this figure came through.
+    columns_by_stage: dict[StageId, set[str]] = field(default_factory=dict)
 
     def read_rows_at(self, stage_id: StageId) -> list[int]:
         return self.rows_by_stage.get(stage_id, [])
+
+    def read_columns_at(self, stage_id: StageId) -> set[str]:
+        return self.columns_by_stage.get(stage_id, set())
 
 
 @dataclass(frozen=True)
@@ -72,6 +77,8 @@ class RunStagePanel:
     links: AppPanelLinks
     queue_link: str | None
     scope: TraceScope | None
+    # The one pane the panel opens, where the caller named one; "" draws the strip.
+    only_pane: str = ""
     event_tail: int = EVENT_TAIL
     type_glyph: dict[str, str] = field(default_factory=lambda: TYPE_GLYPH)
     type_class: dict[str, str] = field(default_factory=lambda: TYPE_CLASS)
@@ -91,13 +98,14 @@ class RunStagePanel:
             "cited_column": self.scope.cited_column,
             "column_writers": self.scope.column_writers,
             "reached_rows": self.scope.read_rows_at(str(self.stage["stage_id"])),
+            "columns_behind": self.scope.read_columns_at(str(self.stage["stage_id"])),
         }
 
 
 def build_run_stage_panel(
     project_id: str, run_id: str, stage_id: StageId, manifest: dict[str, Any],
     stage_record: JsonDict, scope: TraceScope | None = None,
-    whole_frame: bool = False,
+    whole_frame: bool = False, only_pane: str = "",
 ) -> RunStagePanel:
     run_dir = resolve_run_dir(project_id, run_id)
     pinned = run_service.load_pinned_stage_def(project_id, manifest, stage_id)
@@ -112,7 +120,9 @@ def build_run_stage_panel(
     preview = order_preview_columns(
         _read_frame(run_dir, stage_record.get("output_path"), at_rows),
         pinned.workflow_stage)
-    input_previews = _preview_the_inputs(run_dir, stage_def, output_by_id, scope)
+    # Asking for the frame asks it of the inputs too: one control, one meaning.
+    input_previews = _preview_the_inputs(
+        run_dir, stage_def, output_by_id, None if whole_frame else scope)
     links = resolve_panel_links(project_id, run_id)
     return RunStagePanel(
         project=project_id, run_id=run_id, stage=stage_record, stage_def=stage_def,
@@ -132,6 +142,7 @@ def build_run_stage_panel(
         links=links,
         queue_link=find_queue_link(links, project_id, run_id, stage_id),
         scope=scope,
+        only_pane=only_pane,
     )
 
 
@@ -146,11 +157,15 @@ def _build_diff(pinned: run_service.RunStageDef, run_dir: Path,
 
 
 def _widen_to_neighbours(reached: list[int]) -> list[int]:
-    """One row alone says nothing about whether the stage treated it like the rest."""
-    if len(reached) != 1:
+    """The frame rows around the figure's, so the reader can read one against the other."""
+    room = SCOPED_ROWS_SHOWN - len(reached)
+    if not reached or room <= 0:
         return reached
-    first = max(0, reached[0] - SCOPED_ROWS_SHOWN // 2)
-    return list(range(first, first + SCOPED_ROWS_SHOWN))
+    mine = set(reached)
+    first = max(0, reached[0] - room // 2)
+    around = [row for row in range(first, first + SCOPED_ROWS_SHOWN + len(reached))
+              if row not in mine][:room]
+    return sorted(mine | set(around))
 
 
 def _read_frame(run_dir: Path, rel_path: str | None,
@@ -168,6 +183,7 @@ def _preview_the_inputs(
         return []
     return [
         {"id": input_id,
+         "reached": [] if scope is None else scope.read_rows_at(input_id),
          "preview": _read_frame(run_dir, output_by_id.get(input_id),
                                 None if scope is None
                                 else _widen_to_neighbours(scope.read_rows_at(input_id)))}

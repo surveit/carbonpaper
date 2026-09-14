@@ -217,6 +217,11 @@ table.data-preview.scratch th { background: var(--hover); }
    from its header to its last row: the header already sits on --sunk-deep, so
    tinting only the text under it changed almost nothing on the screen. After
    .diff-cell-same, which it has to beat on the same specificity. */
+/* A plain preview under a scope: the rows and columns the figure did not come
+   through go dim, the word the canvas box uses for a stage off its route. */
+.data-preview.behind-figure tr.aside td { color: var(--muted-dim); }
+.data-preview.behind-figure th.aside,
+.data-preview.behind-figure td.aside { background: var(--sunk-deep); color: var(--muted-dim); }
 .stage-diff th.diff-col-quiet { font-weight: 400; }
 .stage-diff th.diff-col-quiet,
 .stage-diff td.diff-col-quiet { background: var(--sunk-deep); color: var(--muted-dim); }

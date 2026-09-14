@@ -224,13 +224,17 @@ window.Canvas = window.Canvas || (function(){
   }
 
   // ── the drawer: the run page's own stage panel, cut to the figure's rows ──
-  async function openPanel(view, kind, id, tab, rows){
+  // What was clicked picks the pane, so the panel arrives with no strip to switch:
+  // a box is the stage, the sheet under it is what the stage wrote.
+  const paneOf = kind => kind === 'sheet' ? 'data' : 'transform';
+
+  async function openPanel(view, kind, id, rows){
     view.picked = {kind, id, rows: rows || 'figure'};
     markPicked(view);
     view.drawer.hidden = false;
     const body = view.pane.querySelector('.canvas-drawer-body');
     body.innerHTML = '<p class="muted">loading…</p>';
-    const html = await fetchPanel(view, id, view.picked.rows);
+    const html = await fetchPanel(view, id, view.picked.rows, paneOf(kind));
     if(!view.picked || view.picked.id !== id) return;
     body.innerHTML = html;
     // The panel ships its own wiring, which innerHTML does not run.
@@ -239,23 +243,15 @@ window.Canvas = window.Canvas || (function(){
       run.textContent = source.textContent;
       source.replaceWith(run);
     });
-    const bar = body.querySelector('.stage-tabs');
-    if(bar) selectTab(bar, tab);
     view.drawer.scrollTop = 0;
   }
 
-  // Which tab the reader had open, so asking for other rows does not move them.
-  function openTabOf(view){
-    const on = view.drawer.querySelector('.stage-tabs [data-tab].active');
-    return on ? on.dataset.tab : 'data';
-  }
-
-  function fetchPanel(view, id, rows){
-    const held = `${id}|${rows}`;
+  function fetchPanel(view, id, rows, pane){
+    const held = `${id}|${rows}|${pane}`;
     if(!view.panels[held]){
       const query = new URLSearchParams({
         stage: view.nav.cited_stage, row: view.pane.dataset.row,
-        column: view.nav.column, rows});
+        column: view.nav.column, rows, pane});
       view.panels[held] = fetch(`${runBase(view)}/stage/${encodeURIComponent(id)}/traced?${query}`)
         .then(answer => answer.ok ? answer.text()
           : `<p class="muted">could not load ${esc(id)} (${answer.status})</p>`)
@@ -285,7 +281,7 @@ window.Canvas = window.Canvas || (function(){
     view.drawer.addEventListener('click', event => {
       const pick = event.target.closest('[data-rows]');
       if(pick && view.picked) openPanel(view, view.picked.kind, view.picked.id,
-                                        openTabOf(view), pick.dataset.rows);
+                                        pick.dataset.rows);
     }, {signal});
     let drag = null;
     view.svg.addEventListener('mousedown', event => {
@@ -307,8 +303,8 @@ window.Canvas = window.Canvas || (function(){
       if(moved) return;
       const box = event.target.closest('[data-stage]');
       const sheet = event.target.closest('[data-sheet]');
-      if(box) openPanel(view, 'stage', box.dataset.stage, 'transform');
-      else if(sheet) openPanel(view, 'sheet', sheet.dataset.sheet, 'data');
+      if(box) openPanel(view, 'stage', box.dataset.stage);
+      else if(sheet) openPanel(view, 'sheet', sheet.dataset.sheet);
       else closeDrawer(view);
     }, {signal});
     view.svg.addEventListener('wheel', event => {
