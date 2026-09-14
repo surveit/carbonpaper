@@ -1,0 +1,765 @@
+{
+  "id": "20260814T145235.421446/terms",
+  "created_at": "2026-08-14T16:21:39.047446",
+  "updated_at": "2026-08-14T16:21:39.047482",
+  "nouns": {
+    "schemas": [
+      {
+        "columns": [],
+        "estimated_rows": null,
+        "notes": null,
+        "name": "mill",
+        "also_written": [],
+        "kind": null,
+        "title": "Mill",
+        "primary_key": null,
+        "description": "One physical palm oil mill, the thing this register holds one record of.",
+        "source": null
+      },
+      {
+        "columns": [
+          {
+            "name": "uml_id",
+            "type": "str",
+            "nullable": false,
+            "description": "The Universal Mill List identifier — the one name a mill is addressed by.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "mill_name",
+            "type": "str",
+            "nullable": false,
+            "description": "The mill's name as the mill register spells it.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "parent_group",
+            "type": "str",
+            "nullable": true,
+            "description": "The group above the company that owns the mill.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "mill_company",
+            "type": "str",
+            "nullable": true,
+            "description": "The company that owns the mill.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "capacity_tonnes_ffb_hour",
+            "type": "float",
+            "nullable": true,
+            "description": "Tonnes of fresh fruit bunches the mill can process an hour.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "rspo_certified",
+            "type": "bool",
+            "nullable": false,
+            "description": "Whether the mill register records the mill as RSPO certified.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "rspo_supply_chain_model",
+            "type": "str",
+            "nullable": true,
+            "description": "How the certified oil is kept apart downstream: identity preserved, segregated or mass balance.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "rspo_certificate_id",
+            "type": "str",
+            "nullable": true,
+            "description": "The certificate the mill is certified under.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "mill_ghg_intensity_tco2e_per_t_cpo",
+            "type": "float",
+            "nullable": true,
+            "description": "PalmGHG: tonnes of CO2 equivalent per tonne of crude palm oil, for this mill.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "country",
+            "type": "str",
+            "nullable": true,
+            "description": null,
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "province",
+            "type": "str",
+            "nullable": true,
+            "description": null,
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "district",
+            "type": "str",
+            "nullable": true,
+            "description": null,
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "latitude",
+            "type": "float",
+            "nullable": false,
+            "description": "Decimal degrees north.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "longitude",
+            "type": "float",
+            "nullable": false,
+            "description": "Decimal degrees east.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "sourcing_radius_km",
+            "type": "float",
+            "nullable": false,
+            "description": "The circle the forest figures are measured over. A convention, not a measurement.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "forest_loss_ha_since_2001",
+            "type": "float",
+            "nullable": false,
+            "description": "Hectares of tree cover lost inside that circle since 2001.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "forest_loss_ha_since_2015",
+            "type": "float",
+            "nullable": false,
+            "description": "The same since 2015, the year the no-deforestation commitments date from.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "gross_emissions_mg_co2e_since_2001",
+            "type": "float",
+            "nullable": false,
+            "description": "Tonnes of CO2 equivalent released by that loss since 2001.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "gross_emissions_mg_co2e_since_2015",
+            "type": "float",
+            "nullable": false,
+            "description": "The same since 2015.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "worst_loss_year",
+            "type": "int",
+            "nullable": true,
+            "description": "The year inside the circle that lost the most.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "unresolved_fields",
+            "type": "list[str]",
+            "nullable": false,
+            "description": "The fields this method went looking for and could not establish.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "conflict_note",
+            "type": "str",
+            "nullable": true,
+            "description": "What disagreed, where a field was left blank because its sources did.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          }
+        ],
+        "estimated_rows": null,
+        "notes": null,
+        "name": "record",
+        "also_written": [],
+        "kind": null,
+        "title": "Record",
+        "primary_key": null,
+        "description": "One mill's settled values, each carrying the register or document that supplied it.",
+        "source": null
+      },
+      {
+        "columns": [],
+        "estimated_rows": null,
+        "notes": null,
+        "name": "register",
+        "also_written": [],
+        "kind": null,
+        "title": "Register",
+        "primary_key": null,
+        "description": "A dataset pulled whole and dated. Three supply values here, and a fourth is what this method publishes.",
+        "source": null
+      },
+      {
+        "columns": [
+          {
+            "name": "register:universal_mill_list",
+            "type": "str",
+            "nullable": true,
+            "description": "The Universal Mill List pull: identity, ownership, location, certification.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "register:trase_indonesia_mills",
+            "type": "str",
+            "nullable": true,
+            "description": "The Trase Indonesia pull: capacity.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "register:gfw_umd_tree_cover_loss",
+            "type": "str",
+            "nullable": true,
+            "description": "Global Forest Watch: the forest and carbon figures, at the version named.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "document:<id>@<hash>",
+            "type": "str",
+            "nullable": true,
+            "description": "A kept document, named and pinned to the hash of the bytes that were read.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          }
+        ],
+        "estimated_rows": null,
+        "notes": null,
+        "name": "source",
+        "also_written": [],
+        "kind": null,
+        "title": "Source",
+        "primary_key": null,
+        "description": "What supplied one value. Every published field names one, in one of these forms.",
+        "source": null
+      },
+      {
+        "columns": [],
+        "estimated_rows": null,
+        "notes": null,
+        "name": "catalogue",
+        "also_written": [],
+        "kind": null,
+        "title": "Catalogue",
+        "primary_key": null,
+        "description": "The written list of documents this method pulls, and which fields each carries. Amending it is a change to the method.",
+        "source": null
+      },
+      {
+        "columns": [
+          {
+            "name": "document_id",
+            "type": "str",
+            "nullable": false,
+            "description": "The name this method files the document under.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "url",
+            "type": "str",
+            "nullable": false,
+            "description": "Where it was fetched from. The kept copy, not this address, is what a claim rests on.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "publisher",
+            "type": "str",
+            "nullable": true,
+            "description": "Who published it.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "published_date",
+            "type": "str",
+            "nullable": true,
+            "description": "The date it states for itself.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "sha256",
+            "type": "str",
+            "nullable": true,
+            "description": "The hash of the kept bytes. Blank where the address answered with nothing.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "found_by",
+            "type": "str",
+            "nullable": false,
+            "description": "catalogue, where the method already listed it; search, where a run went looking.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "already_held",
+            "type": "bool",
+            "nullable": false,
+            "description": "Whether the store already had it, so the run paid nothing to get it.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "column_note",
+            "type": "str",
+            "nullable": true,
+            "description": "How that publisher lays a row out, written down when the document was catalogued.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          }
+        ],
+        "estimated_rows": null,
+        "notes": null,
+        "name": "document",
+        "also_written": [],
+        "kind": null,
+        "title": "Document",
+        "primary_key": null,
+        "description": "A published source, fetched once and kept under the hash of its bytes.",
+        "source": null
+      },
+      {
+        "columns": [
+          {
+            "name": "uml_id",
+            "type": "str",
+            "nullable": false,
+            "description": "Which mill the passage was cut for.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "matched_on",
+            "type": "str",
+            "nullable": false,
+            "description": "Whether the mill was found by its identifier or by its name.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "matched_line_count",
+            "type": "int",
+            "nullable": false,
+            "description": "How many lines named the mill; at most five are kept.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "passage",
+            "type": "str",
+            "nullable": false,
+            "description": "The kept lines, each with its line number in the stored words.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          }
+        ],
+        "estimated_rows": null,
+        "notes": null,
+        "name": "passage",
+        "also_written": [],
+        "kind": null,
+        "title": "Passage",
+        "primary_key": null,
+        "description": "The lines of one document that name one mill. What a reading is done over, and what a person checks against.",
+        "source": null
+      },
+      {
+        "columns": [
+          {
+            "name": "claimed_parent_group",
+            "type": "str",
+            "nullable": true,
+            "description": "The group the passage names, or blank.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "claimed_mill_company",
+            "type": "str",
+            "nullable": true,
+            "description": "The company the passage names, or blank.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "claimed_capacity_tonnes_ffb_hour",
+            "type": "float",
+            "nullable": true,
+            "description": "The capacity the passage states, or blank.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "claimed_rspo_certificate_id",
+            "type": "str",
+            "nullable": true,
+            "description": "The certificate the passage states, or blank.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "claimed_ghg_intensity_tco2e_per_t_cpo",
+            "type": "float",
+            "nullable": true,
+            "description": "The PalmGHG figure the passage states, or blank.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "claim_quote",
+            "type": "str",
+            "nullable": true,
+            "description": "The exact text the answers rest on.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          },
+          {
+            "name": "claim_note",
+            "type": "str",
+            "nullable": true,
+            "description": "What a reader of this claim needs told about the passage.",
+            "range": null,
+            "source": null,
+            "enum": null,
+            "fields": null,
+            "value_type": null,
+            "references": null
+          }
+        ],
+        "estimated_rows": null,
+        "notes": null,
+        "name": "claim",
+        "also_written": [],
+        "kind": null,
+        "title": "Claim",
+        "primary_key": null,
+        "description": "What one passage states about one mill. Not yet a published value: a person confirms it first.",
+        "source": null
+      },
+      {
+        "columns": [],
+        "estimated_rows": null,
+        "notes": null,
+        "name": "change_account",
+        "also_written": [
+          "change account"
+        ],
+        "kind": null,
+        "title": "Change account",
+        "primary_key": null,
+        "description": "What appeared, vanished and moved since the previously published register.",
+        "source": null
+      },
+      {
+        "columns": [],
+        "estimated_rows": null,
+        "notes": null,
+        "name": "parent_group",
+        "also_written": [
+          "parent group"
+        ],
+        "kind": null,
+        "title": "Parent group",
+        "primary_key": null,
+        "description": "The group above the company that owns the mill. The level accountability is usually argued at.",
+        "source": null
+      },
+      {
+        "columns": [],
+        "estimated_rows": null,
+        "notes": null,
+        "name": "capacity",
+        "also_written": [],
+        "kind": null,
+        "title": "Capacity",
+        "primary_key": null,
+        "description": "How much fruit a mill can process, in tonnes of fresh fruit bunches an hour.",
+        "source": null
+      },
+      {
+        "columns": [],
+        "estimated_rows": null,
+        "notes": null,
+        "name": "sourcing_radius",
+        "also_written": [
+          "sourcing radius"
+        ],
+        "kind": null,
+        "title": "Sourcing radius",
+        "primary_key": null,
+        "description": "The circle around a mill its fruit is assumed to come from. A convention: loss inside it is loss NEAR the mill, never a claim about what the mill cleared.",
+        "source": null
+      },
+      {
+        "columns": [],
+        "estimated_rows": null,
+        "notes": null,
+        "name": "palmghg",
+        "also_written": [
+          "PalmGHG"
+        ],
+        "kind": null,
+        "title": "PalmGHG",
+        "primary_key": null,
+        "description": "RSPO's mill-level greenhouse-gas figure, in tonnes of CO2 equivalent per tonne of crude palm oil. Stated per mill inside an audit report; a group-level figure is not one.",
+        "source": null
+      }
+    ]
+  },
+  "verbs": [
+    {
+      "name": "enumerate",
+      "definition": "Take the population of mills from the registers. Only a register enumerates; a document never adds a mill.",
+      "also_written": []
+    },
+    {
+      "name": "plan",
+      "definition": "Decide, from a mill's blanks, which documents are worth pulling.",
+      "also_written": []
+    },
+    {
+      "name": "search",
+      "definition": "Look for further addresses within the sources this method trusts. Returns addresses, never values.",
+      "also_written": []
+    },
+    {
+      "name": "fetch",
+      "definition": "Retrieve a document and keep it under the hash of its bytes; one already held is not fetched again.",
+      "also_written": []
+    },
+    {
+      "name": "read",
+      "definition": "Take from a passage what it states about a mill, and nothing it does not state.",
+      "also_written": []
+    },
+    {
+      "name": "measure",
+      "definition": "Ask Global Forest Watch what was lost and released inside a mill's sourcing radius.",
+      "also_written": []
+    },
+    {
+      "name": "resolve",
+      "definition": "Settle one value per field, with the source that supplied it.",
+      "also_written": []
+    },
+    {
+      "name": "confirm",
+      "definition": "A person checks a value a document supplied against the passage behind it.",
+      "also_written": []
+    },
+    {
+      "name": "compare",
+      "definition": "Set the register just published against the previous one.",
+      "also_written": []
+    }
+  ]
+}

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from app.models import SchemaLibrary, Terms
+from app.models import Terms
 from app.services import workspace
 from app.tools.editing import EditingContext, build_editing_tools
 from app.tools.submitted_stage import SubmittedStage
@@ -70,7 +70,7 @@ def test_a_session_bound_to_no_project_can_build_one_from_nothing(tmp_path) -> N
     created = call["create_project"](name="GLP-1 lobbying", document="Follow the filings.")
 
     project_id = created.id
-    call["write_terms"](project_id=project_id, terms=Terms(nouns=SchemaLibrary(schemas=[]), verbs=[]))
+    call["write_terms"](project_id=project_id, terms=Terms())
     draft_id = call["start_editing"](project_id=project_id)
     added = call["add_stage"](project_id=project_id, draft_id=draft_id, stages=[_LOAD_STAGE])
 

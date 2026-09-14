@@ -60,6 +60,13 @@ def test_the_words_are_agreed_before_the_plan_is_written() -> None:
     assert "not in the document" in AUTHORING_LIFECYCLE_GUIDANCE
 
 
+def test_the_words_to_collect_are_row_types_and_verbs() -> None:
+    # A table is named after a row type and is not itself a word, so it is not collected.
+    assert "row types" in AUTHORING_LIFECYCLE_GUIDANCE
+    assert "what ONE ROW of its data is" in AUTHORING_LIFECYCLE_GUIDANCE
+    assert "noun" not in AUTHORING_LIFECYCLE_GUIDANCE
+
+
 def test_a_verb_may_not_restate_a_word_the_app_already_spends() -> None:
     # The examples are the app's real stage types, so a renamed type fails here.
     for stage_type in ("aggregate", "starlark_filter_rows", "enrich"):

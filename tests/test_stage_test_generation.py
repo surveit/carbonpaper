@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from app.compiler.stage_tests import build_stage_test_generator, render_generation_task
 from app.compiler.stage_tests_search import FIND_ROWS_TOOL, build_find_rows_tool
 from app.compiler.stage_tests_submission import read_selected_rows
-from app.models import NamedSchema, SchemaLibrary, Terms, Verb, parse_stage, Stage
+from app.models import RowType, Terms, Verb, parse_stage, Stage
 from app.models.stages.stage_base import find_stage_test_class
 from app.core.frames import frame_to_table
 from app.services.frame_profile import profile_table
@@ -15,11 +15,11 @@ from app.core.row_search import InputRows
 
 _CODE = "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"
 _SUMMARY = "Doubles the reported `amount` into `doubled`."
-_NO_TERMS = Terms(nouns=SchemaLibrary(schemas=[]), verbs=[])
+_NO_TERMS = Terms()
 _TERMS = Terms(
-    nouns=SchemaLibrary(schemas=[NamedSchema(
-        name="filing", title="Filing", description="One disclosure a firm sent in.",
-        also_written=["disclosure"])]),
+    row_types=[RowType(
+        id="filing", title="Filing", definition="One disclosure a firm sent in.",
+        also_written=["disclosure"])],
     verbs=[Verb(name="flag", definition="Mark a row for a human to decide on.")],
 )
 _RUN_ID = "20260807T142707"

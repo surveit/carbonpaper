@@ -10,17 +10,20 @@ from app.core.agent.store import SessionStore
 from app.core.agent.turns import TurnManager
 from app.models.named_schemas import SchemaLibrary
 from app.models.records.terms import StoredTerms
+from app.models.terms import RowTypesAndSchemas
+
+_NOTHING_AUTHORED = RowTypesAndSchemas(row_types=[], schemas=SchemaLibrary(schemas=[]))
 
 
-# ── the completion hook (_finish_data_model): store the nouns, nothing more ──────
+# ── the completion hook (_finish_data_model): store the data model, nothing more ──
 
-def test_finish_persists_schemas_on_success(tmp_path: Path):
+def test_finish_persists_the_data_model_on_success(tmp_path: Path):
     project_dir = tmp_path / "demo"
     project_dir.mkdir()
 
-    generation._finish_data_model(project_dir.name, SchemaLibrary(schemas=[]))
+    generation._finish_data_model(project_dir.name, _NOTHING_AUTHORED)
 
-    assert StoredTerms.exists("demo/terms")  # nouns stored; the workflow is NOT auto-built
+    assert StoredTerms.exists("demo/terms")  # stored; the workflow is NOT auto-built
 
 
 def test_finish_does_nothing_when_no_answer_was_submitted(tmp_path: Path):
@@ -51,7 +54,7 @@ class _FakeAgent:
         class _Engine:
             async def stream_turn(self, prompt: str, *, message_history: Any, emit: Any, resume: Any):
                 emit({"kind": "text", "text": "authored"})
-                agent._answer = SchemaLibrary(schemas=[])  # the submit_answer tool would set this
+                agent._answer = _NOTHING_AUTHORED  # the submit_answer tool would set this
                 return [{"role": "assistant", "parts": [{"type": "text", "text": "authored"}]}], None
 
         return _Engine()
@@ -82,4 +85,4 @@ def test_start_generation_creates_a_session_and_runs_a_live_turn(tmp_path: Path,
 
     assert store.exists(sid)
     assert store.load(sid)["messages"]          # TurnManager persisted the conversation
-    assert StoredTerms.exists("demo/terms")     # completion hook stored the nouns
+    assert StoredTerms.exists("demo/terms")     # completion hook stored the answer

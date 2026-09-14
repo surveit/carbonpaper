@@ -1,0 +1,113 @@
+"""a stored noun splits into the row type its rows ARE and the table that HOLDS them
+
+Revision ID: 0021
+Revises: 0020
+"""
+from __future__ import annotations
+
+import json
+from typing import Any, Callable
+
+from alembic import op
+
+from app.services.terms import split_pre_row_type_nouns
+
+revision = "0021"
+down_revision = "0020"
+branch_labels = None
+depends_on = None
+
+_COLLECTION = "terms"
+# StoredTerms.SCHEMA_VERSION, which a live save stamps on the same document.
+_SPLIT = 2
+_FUSED = 1
+
+
+def upgrade() -> None:
+    _rewrite(split_stored_nouns, _SPLIT)
+
+
+def downgrade() -> None:
+    _rewrite(fuse_row_types_back_into_nouns, _FUSED)
+
+
+def split_stored_nouns(document: dict[str, Any]) -> bool:
+    nouns = document.get("nouns")
+    if nouns is None:
+        return False
+    words = split_pre_row_type_nouns(nouns["schemas"])
+    document["row_types"] = words.row_types
+    document["schemas"] = {"schemas": [t for t in words.schemas if _holds_rows(t)]}
+    del document["nouns"]
+    return True
+
+
+_WHAT_A_WORD_ALONE_SAID = ("name", "title", "description", "row_type_id")
+
+
+def _holds_rows(table: dict[str, Any]) -> bool:
+    return any(value for key, value in table.items() if key not in _WHAT_A_WORD_ALONE_SAID)
+
+
+def fuse_row_types_back_into_nouns(document: dict[str, Any]) -> bool:
+    row_types = document.get("row_types")
+    if row_types is None:
+        return False
+    tables = document["schemas"]["schemas"]
+    held_by = _index_tables_by_the_row_type_they_hold(tables)
+    nouns = [_fuse_one(row_type, held_by.get(row_type["id"])) for row_type in row_types]
+    nouns += [table for table in tables if not table.get("row_type_id")]
+    document["nouns"] = {"schemas": nouns}
+    del document["row_types"], document["schemas"]
+    return True
+
+
+def _index_tables_by_the_row_type_they_hold(
+    tables: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    held_by: dict[str, dict[str, Any]] = {}
+    for table in tables:
+        row_type_id = table.get("row_type_id")
+        if row_type_id is None:
+            continue
+        if row_type_id in held_by:
+            raise ValueError(
+                f"`{held_by[row_type_id]['name']}` and `{table['name']}` both hold "
+                f"`{row_type_id}` rows, which one noun cannot say"
+            )
+        held_by[row_type_id] = table
+    return held_by
+
+
+def _fuse_one(row_type: dict[str, Any], table: dict[str, Any] | None) -> dict[str, Any]:
+    also_written = row_type.get("also_written", [])
+    if table is not None:
+        return {**{k: v for k, v in table.items() if k != "row_type_id"},
+                "also_written": also_written}
+    return {
+        "name": row_type["id"],
+        "title": row_type["title"],
+        # The split glossed a description-less noun with its title; that is no description.
+        "description": _description_behind(row_type),
+        "also_written": also_written,
+    }
+
+
+def _description_behind(row_type: dict[str, Any]) -> str | None:
+    definition = row_type["definition"]
+    return None if definition == row_type["title"] else definition
+
+
+def _rewrite(rewrite: Callable[[dict[str, Any]], bool], schema_version: int) -> None:
+    connection = op.get_bind()
+    rows = connection.exec_driver_sql(
+        "SELECT id, data FROM documents WHERE collection=?", (_COLLECTION,)
+    ).fetchall()
+    for doc_id, data in rows:
+        document = json.loads(data)
+        if not rewrite(document):
+            continue
+        connection.exec_driver_sql(
+            "UPDATE documents SET data=?, schema_version=? WHERE collection=? AND id=?",
+            (json.dumps(document), schema_version, _COLLECTION, str(doc_id)),
+        )

@@ -9,8 +9,9 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.agent.agent import advertise_more_than_one_argument
-from app.models.named_schemas import NamedColumn, SchemaLibrary
+from app.models.named_schemas import NamedColumn
 from app.models.schema import Column, TableSchema
+from app.models.terms import RowTypesAndSchemas
 
 _OWED = {"type", "nullable"}
 
@@ -44,15 +45,15 @@ def test_named_column_json_schema_requires_both():
     assert _OWED <= set(NamedColumn.model_json_schema()["required"])
 
 
-def test_the_requirement_reaches_the_schema_library_the_data_model_agent_submits():
-    defs = _defs(SchemaLibrary)
+def test_the_requirement_reaches_the_data_model_the_generating_agent_submits():
+    defs = _defs(RowTypesAndSchemas)
     assert _OWED <= set(defs["NamedColumn"]["required"])
     assert _OWED <= set(defs["Column"]["required"])  # nested `fields` sub-columns
 
 
 def test_the_requirement_reaches_the_submit_answer_tool_input_schema():
     # This expression is verbatim what `Agent.build_engine` hands the tool as `input_schema`.
-    input_schema = advertise_more_than_one_argument(SchemaLibrary.model_json_schema())
+    input_schema = advertise_more_than_one_argument(RowTypesAndSchemas.model_json_schema())
     assert _OWED <= set(input_schema["$defs"]["NamedColumn"]["required"])
 
 

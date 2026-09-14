@@ -99,7 +99,9 @@ def test_create_project_tool_and_status(tmp_path, monkeypatch):
 
 # ── the two terms tools ──────────────────────────────────────────────────────
 
-_FILING = {"name": "filing", "title": "Filing", "also_written": ["disclosure"]}
+_FILING = {"id": "filing", "title": "Filing", "definition": "One disclosure a firm sent in.",
+           "also_written": ["disclosure"]}
+_FILINGS = {"name": "filings", "title": "Filings", "row_type_id": "filing"}
 _FLAG = {"name": "flag", "definition": "Mark a row for a human to decide on."}
 
 
@@ -110,7 +112,8 @@ def test_a_project_that_has_agreed_no_words_reads_back_empty(tmp_path):
     project_id = server.create_project(name="wordless", document="doc").id
 
     stored = server.read_terms(project_id=project_id)
-    assert stored.nouns.schemas == []
+    assert stored.row_types == []
+    assert stored.schemas.schemas == []
     assert stored.verbs == []
 
 
@@ -122,11 +125,13 @@ def test_written_terms_read_back_whole(tmp_path):
 
     written = server.write_terms(
         project_id=project_id,
-        terms=Terms.model_validate({"nouns": {"schemas": [_FILING]}, "verbs": [_FLAG]}),
+        terms=Terms.model_validate({
+            "row_types": [_FILING], "schemas": {"schemas": [_FILINGS]}, "verbs": [_FLAG]}),
     )
 
-    assert [n.name for n in written.nouns.schemas] == ["filing"]
-    assert written.nouns.schemas[0].also_written == ["disclosure"]
+    assert [r.id for r in written.row_types] == ["filing"]
+    assert written.row_types[0].also_written == ["disclosure"]
+    assert [s.row_type_id for s in written.schemas.schemas] == ["filing"]
     assert [v.name for v in written.verbs] == ["flag"]
     # Read back off disk, not echoed: what the project now says.
     assert server.read_terms(project_id=project_id) == written
@@ -139,16 +144,16 @@ def test_writing_terms_replaces_rather_than_merges_into_what_is_stored(tmp_path)
     project_id = server.create_project(name="replaced", document="doc").id
     server.write_terms(
         project_id=project_id,
-        terms=Terms.model_validate({"nouns": {"schemas": [_FILING]}, "verbs": [_FLAG]}),
+        terms=Terms.model_validate({"row_types": [_FILING], "verbs": [_FLAG]}),
     )
 
     later = server.write_terms(
         project_id=project_id,
-        terms=Terms.model_validate({"nouns": {"schemas": [
-            {"name": "registrant", "title": "Registrant"}]}, "verbs": []}),
+        terms=Terms.model_validate({"row_types": [
+            {"id": "registrant", "title": "Registrant", "definition": "A firm that filed."}]}),
     )
 
-    assert [n.name for n in later.nouns.schemas] == ["registrant"]
+    assert [r.id for r in later.row_types] == ["registrant"]
     assert later.verbs == []
 
 
@@ -159,20 +164,20 @@ def test_a_word_carrying_two_meanings_is_refused_before_anything_is_written(tmp_
     project_id = server.create_project(name="clash", document="doc").id
     server.write_terms(
         project_id=project_id,
-        terms=Terms.model_validate({"nouns": {"schemas": [_FILING]}, "verbs": []}),
+        terms=Terms.model_validate({"row_types": [_FILING], "verbs": []}),
     )
 
     with pytest.raises(ValidationError, match="flag"):
         server.write_terms(
             project_id=project_id,
             terms=Terms.model_validate({
-                "nouns": {"schemas": [{"name": "flag", "title": "Flag"}]},
+                "row_types": [{"id": "flag", "title": "Flag", "definition": "A marked row."}],
                 "verbs": [_FLAG],
             }),
         )
 
     # Refused at the door, so the project still says what it said before.
-    assert [n.name for n in server.read_terms(project_id=project_id).nouns.schemas] == ["filing"]
+    assert [r.id for r in server.read_terms(project_id=project_id).row_types] == ["filing"]
 
 
 def test_the_terms_tools_refuse_a_project_that_is_not_in_the_workspace(tmp_path):

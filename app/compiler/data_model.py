@@ -1,9 +1,4 @@
-"""Compile a methodology document into a DATA MODEL (a SchemaLibrary).
-
-The agent SUBMITS the data model through the submit_answer tool (validated against
-`SchemaLibrary`) rather than emitting free-text JSON. The result is handed back through
-a callback; persisting it is the caller's job.
-"""
+"""Compile a methodology document into a DATA MODEL: row types and the tables holding them."""
 from __future__ import annotations
 
 from typing import Callable
@@ -12,7 +7,7 @@ from app.compiler.data_model_prompt import DATA_MODEL_SYSTEM_PROMPT
 from app.core.agent.agent import Agent
 from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager
-from app.models.named_schemas import SchemaLibrary
+from app.models.terms import RowTypesAndSchemas
 
 
 def start_data_model_generation_agent(
@@ -20,7 +15,7 @@ def start_data_model_generation_agent(
     document: str,
     project_name: str,
     model: str,
-    on_answer: Callable[[SchemaLibrary | None], None],
+    on_answer: Callable[[RowTypesAndSchemas | None], None],
 ) -> str:
     """Must be called from the server event loop — it starts a turn there."""
     store = open_session_store()
@@ -46,10 +41,12 @@ def start_data_model_generation_agent(
     return session_id
 
 
-def build_data_model_agent(document: str, *, model: str = "sonnet") -> Agent[SchemaLibrary]:
+def build_data_model_agent(
+    document: str, *, model: str = "sonnet"
+) -> Agent[RowTypesAndSchemas]:
     return Agent(
         system_prompt=DATA_MODEL_SYSTEM_PROMPT,
-        target_schema=SchemaLibrary,
+        target_schema=RowTypesAndSchemas,
         task=_frame(document),
         model=model,
     )
@@ -58,8 +55,9 @@ def build_data_model_agent(document: str, *, model: str = "sonnet") -> Agent[Sch
 def _frame(document: str) -> str:
     """Delimited so the agent treats the document as source, not as instructions."""
     return (
-        "Here is the methodology document. Author its data model — the named schemas — "
-        "and submit it with submit_answer.\n\n"
+        "Here is the methodology document. Author its data model — the row types its "
+        "rows are, and the named schemas holding them — and submit it with "
+        "submit_answer.\n\n"
         "----- DOCUMENT -----\n"
         f"{document}\n"
         "----- END DOCUMENT -----"

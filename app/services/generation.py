@@ -20,12 +20,12 @@ from app.compiler.turn_failure import GENERATION_FAILURE_PREFIX as GENERATION_FA
 from app.core.errors import GenerationError
 from app.core.row_search import InputRows
 from app.models.review_guide import ReviewGuideDraft
-from app.models.named_schemas import SchemaLibrary
 from app.models.schema import StageId
 from app.models.stage import StageEdit, stage_to_spec_dict
 from app.models.stages.signature import transform_input_schemas
 from app.models.stages.stage_base import find_stage_test_class
 from app.models.stages.stage_tests import StageTest
+from app.models.terms import RowTypesAndSchemas
 from app.services import drafts, terms, versioning
 from app.services.loader import load_workflow
 from app.services.methodology import read_methodology
@@ -109,10 +109,10 @@ def start_review_guide_generation(
     )
 
 
-def _finish_data_model(project_id: str, answer: SchemaLibrary | None) -> None:
+def _finish_data_model(project_id: str, answer: RowTypesAndSchemas | None) -> None:
     if answer is None:
         return
-    terms.write_nouns(project_id, answer)
+    terms.write_data_model(project_id, answer)
 
 
 def _finish_review_guide(

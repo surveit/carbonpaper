@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.core.timestamp_ids import mint_timestamp_id
 from app.models import (
+    RowType,
     SchemaLibrary,
     Stage,
     StageDraft,
@@ -27,6 +28,7 @@ from app.models import (
     stage_to_json,
     stage_to_spec_dict,
     validate_one_meaning_per_word,
+    validate_row_type_ids_resolve,
 )
 from app.models.records.eval_config import EvalConfig
 from app.models.review_guide import ReviewGuideDraft
@@ -120,6 +122,7 @@ class ProjectState(BaseModel):
     id: str
     meta: ProjectMeta
     has_document: bool
+    has_terms: bool
     data_model: DataModelStatus
     workflow: WorkflowStatus
     versions: int
@@ -192,9 +195,9 @@ def project_state(project_id: str) -> ProjectState:
 
     # ── Document ──
 
-    # ── Data model (the noun half of the project's terms) ──
-    n_nouns = terms.count_nouns(project_id)
-    data_model = DataModelStatus(present=bool(n_nouns), n_schemas=n_nouns)
+    # ── Data model (the tables of the project's terms) ──
+    n_schemas = terms.count_schemas(project_id)
+    data_model = DataModelStatus(present=bool(n_schemas), n_schemas=n_schemas)
 
     # ── Workflow (compiled stages) ──
     stages = load_stage_specs(project_id)
@@ -208,6 +211,7 @@ def project_state(project_id: str) -> ProjectState:
         id=project_id,
         meta=meta,
         has_document=has_document(project_id),
+        has_terms=terms.has_terms(project_id),
         # Absolute path string (or None) — a link target, never fabricated.
         data_model=data_model,
         workflow=workflow,
@@ -406,14 +410,15 @@ class WorkflowFile(BaseModel):
     model: str
     source: str
     data_model: SchemaLibrary
-    # The two halves ride as separate fields, not as one `Terms`: a bundle written
-    # before verbs existed carries no key for them, and defaulting is what lets it in.
+    # Separate fields, not one Terms: a bundle written before one existed carries no key.
+    row_types: list[RowType] = Field(default_factory=list)
     verbs: list[Verb] = Field(default_factory=list)
     stages: list[Stage]
 
     @model_validator(mode="after")
     def _one_meaning_per_word(self) -> "WorkflowFile":
-        validate_one_meaning_per_word(self.data_model, self.verbs)
+        validate_one_meaning_per_word(self.row_types, self.verbs)
+        validate_row_type_ids_resolve(self.row_types, self.data_model)
         return self
 
     @field_validator("stages", mode="before")
@@ -451,7 +456,8 @@ def export_project(project_id: str) -> WorkflowFile:
         document=document,
         model=meta.model,
         source=meta.source,
-        data_model=project_terms.nouns,
+        data_model=project_terms.schemas,
+        row_types=project_terms.row_types,
         verbs=project_terms.verbs,
         stages=versioning.load_version_stages(project_id, latest) if latest else [],
     )
@@ -463,7 +469,8 @@ def import_project(
     """Returns the project ID. Importing the same bundle twice makes two projects, not a clash."""
     label = sanitize_project_name(name or wf.name)
     project_id = create_project(label, wf.document, model=wf.model, source=wf.source).id
-    terms.write_terms(project_id, Terms(nouns=wf.data_model, verbs=wf.verbs))
+    terms.write_terms(project_id, Terms(
+        row_types=wf.row_types, schemas=wf.data_model, verbs=wf.verbs))
     if wf.stages:
         loader.save_stages(project_id, list(wf.stages))
         save_working_copy_as_version(project_id, message=f"Imported '{label}'")

@@ -17,11 +17,12 @@ from app.models.schema import (
     _Base,
     _SNAKE_RE,
 )
+from app.core.ids import ID
 from app.core.utils import format_errors
 from app.models.tool_schema_prompts import (
     NAMED_COLUMN_DESCRIPTION,
-    NAMED_SCHEMA_ALSO_WRITTEN_DESCRIPTION,
     NAMED_SCHEMA_DESCRIPTION,
+    NAMED_SCHEMA_ROW_TYPE_ID_DESCRIPTION,
     SCHEMA_LIBRARY_DESCRIPTION,
 )
 
@@ -50,11 +51,9 @@ class NamedSchema(TableSchema):
     model_config = ConfigDict(json_schema_extra={"description": NAMED_SCHEMA_DESCRIPTION})
 
     name: str
-    also_written: list[str] = Field(
-        default_factory=list, description=NAMED_SCHEMA_ALSO_WRITTEN_DESCRIPTION
+    row_type_id: Optional[ID] = Field(
+        default=None, description=NAMED_SCHEMA_ROW_TYPE_ID_DESCRIPTION
     )
-    # Absent where the name is vocabulary and nothing more: a kind claims where the
-    # rows come from, and a word with no table behind it makes no such claim.
     kind: Optional[SchemaKind] = None
     title: str
     columns: list[NamedColumn] = Field(default_factory=list)

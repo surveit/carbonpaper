@@ -13,8 +13,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.named_schemas import SchemaLibrary
 from app.models.review_guide import ReviewGuideDraft
+from app.models.terms import RowTypesAndSchemas
 from app.compiler.stage_tests_submission import SubmittedCase
 from app.models.stages.stage_base import StageTest
 from app.tools.submitted_stage import SubmittedStage
@@ -29,7 +29,7 @@ _APP_ROOT = _REPO_ROOT / "app"
 # `test_every_schema_root_declared_in_source_is_listed` is what keeps it honest.
 _SCHEMA_ROOTS: tuple[type[BaseModel], ...] = (
     SubmittedStage,
-    SchemaLibrary,
+    RowTypesAndSchemas,
     ReviewGuideDraft,
     StageTest,
     SubmittedCase,
@@ -123,7 +123,7 @@ def test_the_rule_governs_a_non_empty_set_of_classes() -> None:
 
 def test_the_static_root_scan_finds_the_roots_it_should() -> None:
     named, computed = find_schema_roots_named_in_source(_APP_ROOT)
-    assert {"SubmittedStage", "SchemaLibrary", "ReviewGuideDraft"} <= named, (
+    assert {"SubmittedStage", "RowTypesAndSchemas", "ReviewGuideDraft"} <= named, (
         f"the source scan stopped seeing declared roots — it found {sorted(named)}"
     )
     assert computed, "the scan should still be flagging the two computed target_schemas"

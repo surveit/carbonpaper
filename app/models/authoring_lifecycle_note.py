@@ -35,10 +35,10 @@ TEST_RUN_REVIEW.
    a prototype pipeline over limited rows IS research — to learn
    how the data shapes out through the stages. The gates govern committal, not exploration:
    a prototype is scaffolding, never the deliverable.
-2. TERMS — AGREE THE WORDS BEFORE THE PLAN. Collect the nouns the methodology already
-   uses for the things in its data, and the verbs for the decisions it makes.
-   Ask, never invent: a word that is not in the document is a word to ask about.
-   A noun or verb earns a place only where this app has no word for it already —
+2. TERMS — AGREE THE WORDS BEFORE THE PLAN. Collect the row types the methodology
+   already uses for what ONE ROW of its data is, and the verbs for the decisions it
+   makes. Ask, never invent: a word that is not in the document is a word to ask about.
+   A row type or verb earns a place only where this app has no word for it already —
    aggregate, starlark_filter_rows, enrich, etc. mean the same in every project, so leave them out.
    The plan and everything after it is written in these words. Prefer more specific
    words, e.g. "resolve entities" or "dedupe" instead of "merge".
