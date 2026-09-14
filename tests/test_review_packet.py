@@ -359,7 +359,8 @@ def test_a_capped_stage_page_names_the_true_total_and_points_at_the_csv(
     packet = export_review_packet(_PROJECT, run_id, tmp_path / "packets")
 
     page = (packet.root / "stages" / "double.html").read_text(encoding="utf-8")
-    assert f"first {PACKET_MAX_TABLE_ROWS} of {render_figure(rows)} rows" in page
+    assert f"{render_figure(rows)} rows ×" in page
+    assert f"{render_figure(PACKET_MAX_TABLE_ROWS)} drawn" in page
     assert 'href="../data/double.csv"' in page
     assert f"n{rows - 1}" not in page, "the cap did not actually truncate"
 

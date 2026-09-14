@@ -184,6 +184,7 @@ def _preview_the_inputs(
     return [
         {"id": input_id,
          "reached": [] if scope is None else scope.read_rows_at(input_id),
+         "columns_behind": set() if scope is None else scope.read_columns_at(input_id),
          "preview": _read_frame(run_dir, output_by_id.get(input_id),
                                 None if scope is None
                                 else _widen_to_neighbours(scope.read_rows_at(input_id)))}

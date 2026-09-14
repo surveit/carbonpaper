@@ -11,7 +11,7 @@
   <tbody>{% for row in preview.preview %}
   {%- set ordinal = row_ordinals[loop.index0] if row_ordinals else loop.index0 %}
   {%- set trace_href = links.row_trace(stage.stage_id, ordinal) %}
-  <tr{% if mine and ordinal not in mine %} class="aside"{% endif %}{% if trace_href %} data-href="{{ trace_href }}"{% endif %}>
+  <tr{% if mine %} class="{{ 'mine' if ordinal in mine else 'aside' }}"{% endif %}{% if trace_href %} data-href="{{ trace_href }}"{% endif %}>
     {%- for c in preview.columns %}{% set v = row[c] | string %}{% set off = ' aside' if behind and c not in behind else '' %}
     {%- if v[:4] == 'http' %}<td class="cell-url{{ off }}"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>
     {%- else %}<td{% if off %} class="{{ off | trim }}"{% endif %}>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}</tr>

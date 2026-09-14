@@ -7,7 +7,8 @@
 {% from "_schema_table.html" import schema_table %}
 {% from "_stage_code.html" import stage_code %}
 {% from "_run_log_panel.html" import run_log_panel %}
-{% from "_rows_line.html" import scoped_rows_line %}
+{% from "_rows_line.html" import counts_line with context %}
+{% from "_rows_line.html" import frame_counts %}
 
 <div class="run-stage-panel"
      data-project="{{ project }}" data-run="{{ run_id }}" data-stage="{{ stage.stage_id }}">
@@ -157,12 +158,12 @@
     {% if diff %}{% include "_stage_diff.html" %}
     {% elif preview and preview.preview %}
     <div class="preview-block">
-      <div class="preview-head">output data {% set shown = preview.preview | length %}
-        {%- set mine_shown = preview.ordinals | default([], true) | select('in', reached_rows | default([], true)) | list | length %}
-        {%- if scoped and reached_rows %}<span class="muted">· {{ scoped_rows_line(shown, mine_shown, reached_rows | length, preview.rows_total, 'row') }}</span>
-        {%- else %}<span class="muted">· {% if preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ preview.rows_total | figure }} row{% if preview.rows_total != 1 %}s{% endif %}</span>{% endif %}
+      <div class="preview-head">output data
         <span class="preview-actions">{% set rows_href = links.stage_rows(stage.stage_id) %}{% if rows_href %}· <a href="{{ rows_href }}">view all rows</a>{% endif %}
-        · <a href="{{ links.stage_csv(stage.stage_id) }}">⬇ CSV</a>{% if shows_schema_face %} · <button type="button" class="face-link" data-face-to="schema">schema</button>{% endif %}</span></div>
+        · <a href="{{ links.stage_csv(stage.stage_id) }}">⬇ CSV</a></span></div>
+      {%- set mine_shown = preview.ordinals | default([], true) | select('in', reached_rows | default([], true)) | list | length %}
+      {{ counts_line(preview.rows_total, preview.columns | length, 'row',
+                     preview.preview | length, mine_shown, shows_schema_face, '') }}
       {% include "_output_table.html" %}
     </div>
     {% elif preview and preview.error %}<p class="muted"><em>output preview unavailable: {{ preview.error }}</em></p>
@@ -199,29 +200,26 @@
         <div class="preview-head">
           <a href="{{ links.stage_anchor(ip.id) }}"><code>{{ ip.id }}</code></a>
           {% if ip.preview and ip.preview.preview %}{% set shown = ip.preview.preview | length %}
-          {%- set ip_mine_shown = ip.preview.ordinals | default([], true) | select('in', ip.reached | default([], true)) | list | length %}
-          {%- if scoped and ip.reached %}<span class="muted">· {{ scoped_rows_line(shown, ip_mine_shown, ip.reached | length, ip.preview.rows_total, 'row') }}</span>
-          {%- else %}<span class="muted">· {% if ip.preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ ip.preview.rows_total | figure }} row{% if ip.preview.rows_total != 1 %}s{% endif %}</span>{% endif %}
+          <span class="muted">· {{ frame_counts(ip.preview.rows_total, ip.preview.columns | length, 'row',
+              ip.reached | length if ip.reached else none, ip.columns_behind | length, shown) }}</span>
           {# Omitted in the packet: the id beside it already opens that stage's own
              full table, so this would be the same destination twice. #}
           <span class="preview-actions">{% set rows_href = links.stage_rows(ip.id) %}{% if rows_href %}· <a href="{{ rows_href }}">view all rows</a>{% endif %}
           · <a href="{{ links.stage_csv(ip.id) }}">⬇ CSV</a>{% if shows_schema_face %} · <button type="button" class="face-link" data-face-to="schema">schema</button>{% endif %}</span>{% endif %}
         </div>
         {% if ip.preview and ip.preview.preview %}
-        {# Rows this stage was GIVEN: the figure's keep their ink and the frame rows
-           drawn around them go dim. No column is marked — which of them the figure
-           came through is a fact about the stage that WROTE this frame, not this one. #}
         {%- set ip_mine = ip.reached | default([], true) %}
+        {%- set ip_behind = ip.columns_behind | default([], true) %}
         {%- set ip_ordinals = ip.preview.ordinals | default([], true) %}
         <div class="table-scroll"><table class="data-preview{% if ip_mine %} behind-figure{% endif %}">
           <thead><tr>
-            {% for c in ip.preview.columns %}<th>{{ c }}</th>{% endfor %}
+            {% for c in ip.preview.columns %}<th{% if ip_behind and c not in ip_behind %} class="aside"{% endif %}>{{ c }}</th>{% endfor %}
           </tr></thead>
           <tbody>
           {% for row in ip.preview.preview %}
           {%- set ip_ordinal = ip_ordinals[loop.index0] if ip_ordinals else loop.index0 %}
-          <tr{% if ip_mine and ip_ordinal not in ip_mine %} class="aside"{% endif %}>
-            {% for c in ip.preview.columns %}{% set v = row[c] | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}
+          <tr class="{{ 'mine' if ip_mine and ip_ordinal in ip_mine else ('aside' if ip_mine else '') }}">
+            {% for c in ip.preview.columns %}{% set v = row[c] | string %}{% set off = 'aside' if ip_behind and c not in ip_behind else '' %}{% if v[:4] == 'http' %}<td class="cell-url {{ off }}"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td{% if off %} class="{{ off }}"{% endif %}>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}
           </tr>{% endfor %}
           </tbody>
         </table></div>

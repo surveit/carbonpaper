@@ -161,6 +161,12 @@
        Not for the nav's current section (a filled accent pill) or a tab strip
        (an underline): those say WHERE YOU ARE, not which one you chose.
        Sunk one step past --hover so a picked row survives being hovered. */
+    /* ── Behind this figure: what a traced value came through ─────────────
+       One wash of --accent, which is already the figure's colour on the canvas
+       (a bar's thumb, a wire's core). Not a state and not a verdict — it says
+       where a value came FROM, and the count line beside it says so in words. */
+    --behind-bg: color-mix(in srgb, var(--accent) 8%, var(--raised));
+
     --picked-bg: var(--sunk-deep);
     --picked-edge: var(--border-strong);
     --picked-ink: var(--fg);
