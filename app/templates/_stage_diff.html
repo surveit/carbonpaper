@@ -78,6 +78,7 @@
                  schema_face, dropped_beyond(diff.dropped_beyond_window)
                  ~ whole_diff(links.stage_rows(stage.stage_id))) }}
   {%- set behind = columns_behind | default([], true) %}
+  {%- set cut = behind and shows_the_figures_rows | default(false, true) %}
   <div class="table-scroll{% if full_rows %} rows-full{% endif %}"><table class="data-preview{% if reached_rows %} behind-figure{% endif %}">
     {# The label column is not the lineage column it replaced: a dropped row has no
        output row to trace, and its tint alone would be colour carrying meaning. #}
@@ -86,21 +87,22 @@
     {%- set mine = reached_rows | default([], true) %}
     {%- set numbered = full_rows or mine %}
     <thead><tr>{% if numbered %}<th class="row-num">#</th>{% endif %}<th class="diff-kept-col"></th>
-      {%- for name in diff.columns %}<th{% if behind and name not in behind %} class="aside"{% endif %}
-        {%- if links.opens_a_cell() %} data-column="{{ name }}"{% endif %}>{{ name }}</th>{% endfor %}</tr></thead>
+      {%- for name in diff.columns %}{% if not cut or name in behind %}<th{% if behind and name not in behind %} class="aside"{% endif %}
+        {%- if links.opens_a_cell() %} data-column="{{ name }}"{% endif %}>{{ name }}</th>{% endif %}{% endfor %}</tr></thead>
     <tbody>
     {% for row in diff.rows %}
     {%- set traced = row.output_ordinal is not none and row.output_ordinal in mine %}
     {% set row_num %}{% if numbered %}<td class="row-num muted">{{ row.input_ordinal | row_number }}</td>{% endif %}{% endset %}
     {% if row.dropped %}
     <tr class="diff-row-dropped">{{ row_num }}<td class="diff-kept-col">Dropped row</td>
-      {%- for value in row.cells %}{{ data_cell(value, 'aside' if behind and diff.columns[loop.index0] not in behind else '', '', full_rows) }}{% endfor %}</tr>
+      {%- for value in row.cells %}{% if not cut or diff.columns[loop.index0] in behind %}{{ data_cell(value, 'aside' if behind and diff.columns[loop.index0] not in behind else '', '', full_rows) }}{% endif %}{% endfor %}</tr>
     {% else %}
     <tr class="{{ 'mine' if traced else ('aside' if reached_rows else '') }}"
       {%- set trace_href = links.row_trace(stage.stage_id, row.output_ordinal) %}{% if trace_href %} data-href="{{ trace_href }}"{% endif %}>{{ row_num }}<td class="diff-kept-col"></td>
-      {%- for value in row.cells %}{% set off = 'aside' if behind and diff.columns[loop.index0] not in behind else '' %}
+      {%- for value in row.cells %}{% if not cut or diff.columns[loop.index0] in behind %}
+      {%- set off = 'aside' if behind and diff.columns[loop.index0] not in behind else '' %}
       {%- if value[:4] == 'http' %}<td class="cell-url {{ off }}"><a href="{{ value }}" target="_blank" rel="noopener">{{ value }}</a></td>
-      {%- else %}{{ data_cell(value, off, '', full_rows) }}{% endif %}{% endfor %}</tr>
+      {%- else %}{{ data_cell(value, off, '', full_rows) }}{% endif %}{% endif %}{% endfor %}</tr>
     {% endif %}
     {% endfor %}
     </tbody>
@@ -111,6 +113,7 @@
   {{ counts_line(diff.rows_total, diff.columns | length, 'row', diff.rows | length, mine_shown,
                  schema_face, whole_diff(links.stage_rows(stage.stage_id))) }}
   {%- set behind = columns_behind | default([], true) %}
+  {%- set cut = behind and shows_the_figures_rows | default(false, true) %}
   <div class="table-scroll{% if full_rows %} rows-full{% endif %}"><table class="data-preview{% if reached_rows %} behind-figure{% endif %}">
     {# The class each state paints with — app/static/node-detail.css owns what they
        look like — and the mark that says the same thing without colour. The
@@ -134,7 +137,7 @@
     {%- set mine = reached_rows | default([], true) %}
     {%- set numbered = full_rows or mine %}
     <thead><tr>{% if numbered %}<th class="row-num">#</th>{% endif %}
-      {%- for column in diff.columns %}
+      {%- for column in diff.columns %}{% if not cut or column.name in behind %}
       {%- set jump = writers.get(column.name) %}
       {%- set klasses = [cell_class[column.state] if column.state != 'carried' else '',
                          'diff-col-quiet' if column.name in quiet else '',
@@ -146,7 +149,7 @@
         {%- elif column.state != 'carried' %} title="{{ column_title[column.state] }}"{% endif %}>
         {%- if column.name == cited_column %}<span class="diff-col-mine">the value</span>{% endif -%}
         {%- if column.state != 'carried' %}<span class="diff-mark">{{ column_mark[column.state] }}</span>{% endif -%}
-        <span class="diff-col-name">{{ column.name }}</span></th>
+        <span class="diff-col-name">{{ column.name }}</span></th>{% endif %}
       {%- endfor %}
     </tr></thead>
     <tbody>
@@ -157,7 +160,7 @@
     <tr class="{{ 'mine' if traced else ('aside' if reached_rows else '') }}"
       {%- if trace_href %} data-href="{{ trace_href }}"{% endif %}>{% if numbered %}<td class="row-num muted">{{ ordinal | row_number }}</td>{% endif %}
       {%- for cell in row %}
-      {%- set column = diff.columns[loop.index0] %}
+      {%- set column = diff.columns[loop.index0] %}{% if not cut or column.name in behind %}
       {# An unchanged cell of a column the stage READ keeps full ink: it is what
          the stage worked from. Only a passenger's cells go muted. #}
       {%- set state_class = '' if cell.state == 'carried' and column.read else cell_class[cell.state] %}
@@ -167,7 +170,7 @@
                        'diff-col-cited' if column.name == cited_column and traced else ''] | select | join(' ') %}
       {%- if cell.text[:4] == 'http' and cell.state != 'changed' %}<td class="cell-url {{ klass }}"><a href="{{ cell.text }}" target="_blank" rel="noopener">{{ cell.text }}</a></td>
       {%- else %}{{ data_cell(cell.text, klass, cell.was, full_rows) }}
-      {%- endif %}
+      {%- endif %}{% endif %}
       {%- endfor %}
     </tr>
     {% endfor %}

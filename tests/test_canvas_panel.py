@@ -199,9 +199,10 @@ def test_a_frames_schema_is_reached_from_the_table_and_swapped_back(run_id):
 
 
 def test_a_traced_panel_keeps_the_run_page_tints_over_the_figures_rows(run_id):
+    # The relevant pick holds the figure's columns alone, and the added one is not.
     page = TestClient(app).get(
         f"/project/{PROJECT}/runs/{run_id}/stage/size_band/traced"
-        "?stage=by_portfolio&row=1&column=total_amount").text
+        "?stage=by_portfolio&row=1&column=total_amount&rows=frame").text
     # The stage's added columns stay blue, and the figure's rows are banded over that.
     assert "diff-col-new" in page
     assert "diff-cell-same" in page

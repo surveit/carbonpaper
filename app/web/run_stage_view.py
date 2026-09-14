@@ -28,10 +28,9 @@ from app.web.stage_test_views import (
     shape_test_views,
 )
 
-# What a scoped panel draws of each frame, output and input alike.
+# What a scoped panel draws of each frame, output and input alike — and of either
+# side of the pick, so the table does not change size when the reader flips it.
 SCOPED_ROWS_SHOWN = 25
-# What a drawer holds: past this nobody reads on, and the whole diff is a click away.
-SCOPED_DIFF_ROWS = 500
 
 
 @dataclass(frozen=True)
@@ -114,21 +113,21 @@ def build_run_stage_panel(
         entry.get("stage_id"): entry.get("output_path")
         for entry in manifest.get("stage_records", [])
     }
-    at_rows = None if scope is None or whole_frame else _widen_to_neighbours(
-        scope.read_rows_at(stage_id))
+    rows_shown = PREVIEW_ROWS_SHOWN if scope is None else SCOPED_ROWS_SHOWN
+    at_rows = _pick_rows(scope, stage_id, whole_frame, rows_shown)
     # Its inputs are drawn as the upstream stage wrote them, unordered by this one.
     preview = order_preview_columns(
-        _read_frame(run_dir, stage_record.get("output_path"), at_rows),
+        _read_frame(run_dir, stage_record.get("output_path"), at_rows, rows_shown),
         pinned.workflow_stage)
     # Asking for the frame asks it of the inputs too: one control, one meaning.
     input_previews = _preview_the_inputs(
-        run_dir, stage_def, output_by_id, None if whole_frame else scope)
+        run_dir, stage_def, output_by_id, scope, whole_frame, rows_shown)
     links = resolve_panel_links(project_id, run_id)
     return RunStagePanel(
         project=project_id, run_id=run_id, stage=stage_record, stage_def=stage_def,
         workflow_stage=pinned.workflow_stage, stage_def_error=pinned.error,
         preview=preview,
-        diff=_build_diff(pinned, run_dir, stage_record, output_by_id, at_rows),
+        diff=_build_diff(pinned, run_dir, stage_record, output_by_id, at_rows, rows_shown),
         input_previews=input_previews,
         whole_frame=whole_frame,
         function_code=resolve_function_code(stage_def),
@@ -148,36 +147,37 @@ def build_run_stage_panel(
 
 def _build_diff(pinned: run_service.RunStageDef, run_dir: Path,
                 stage_record: JsonDict, output_by_id: dict[Any, Any],
-                at_rows: list[int] | None) -> StageDiff | None:
+                at_rows: list[int] | None, rows_shown: int) -> StageDiff | None:
     """None outside the diff's scope, or where alignment can't be verified."""
     return build_stage_diff(
         pinned.workflow_stage, run_dir, stage_record.get("output_path"), output_by_id,
-        rows_shown=PREVIEW_ROWS_SHOWN if at_rows is None else SCOPED_DIFF_ROWS,
-        at_rows=at_rows)
+        rows_shown=rows_shown, at_rows=at_rows)
 
 
-def _widen_to_neighbours(reached: list[int]) -> list[int]:
-    """The frame rows around the figure's, so the reader can read one against the other."""
-    room = SCOPED_ROWS_SHOWN - len(reached)
-    if not reached or room <= 0:
+def _pick_rows(scope: TraceScope | None, stage_id: StageId, whole_frame: bool,
+               rows_shown: int) -> list[int] | None:
+    """The figure's own rows, or — asked for the frame — a window of it holding them."""
+    if scope is None:
+        return None
+    reached = scope.read_rows_at(stage_id)
+    if not whole_frame:
         return reached
-    mine = set(reached)
-    first = max(0, reached[0] - room // 2)
-    around = [row for row in range(first, first + SCOPED_ROWS_SHOWN + len(reached))
-              if row not in mine][:room]
-    return sorted(mine | set(around))
+    if not reached:
+        return None
+    first = max(0, reached[0] - rows_shown // 2)
+    return list(range(first, first + rows_shown))
 
 
-def _read_frame(run_dir: Path, rel_path: str | None,
-                at_rows: list[int] | None) -> dict[str, Any] | None:
+def _read_frame(run_dir: Path, rel_path: str | None, at_rows: list[int] | None,
+                rows_shown: int) -> dict[str, Any] | None:
     if at_rows is None:
-        return load_output_preview(run_dir, rel_path)
-    return load_output_rows_at(run_dir, rel_path, at_rows, SCOPED_ROWS_SHOWN)
+        return load_output_preview(run_dir, rel_path, rows_shown)
+    return load_output_rows_at(run_dir, rel_path, at_rows, rows_shown)
 
 
 def _preview_the_inputs(
-    run_dir: Path, stage_def: AbstractStage | None,
-    output_by_id: dict[Any, Any], scope: TraceScope | None,
+    run_dir: Path, stage_def: AbstractStage | None, output_by_id: dict[Any, Any],
+    scope: TraceScope | None, whole_frame: bool, rows_shown: int,
 ) -> list[dict[str, Any]]:
     if stage_def is None:
         return []
@@ -185,8 +185,8 @@ def _preview_the_inputs(
         {"id": input_id,
          "reached": [] if scope is None else scope.read_rows_at(input_id),
          "columns_behind": set() if scope is None else scope.read_columns_at(input_id),
-         "preview": _read_frame(run_dir, output_by_id.get(input_id),
-                                None if scope is None
-                                else _widen_to_neighbours(scope.read_rows_at(input_id)))}
+         "preview": _read_frame(
+             run_dir, output_by_id.get(input_id),
+             _pick_rows(scope, input_id, whole_frame, rows_shown), rows_shown)}
         for input_id in stage_def.input_ids
     ]

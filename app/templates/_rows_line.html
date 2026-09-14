@@ -1,14 +1,14 @@
 {# The one line under a table, whichever shape it is. `tail` is what only the
    caller knows — a diff's dropped-rows note and its whole-diff link. #}
 {% macro counts_line(rows_total, columns_total, noun, drawn, mine_shown, schema_face, tail) -%}
-<p class="rows-line muted">
+<p class="rows-line muted"><span class="rows-said">
 {%- if scoped and shows_the_figures_rows and not mine_shown %}{{ no_rows_line(links.stage_rows(stage.stage_id)) }}
 {%- else %}{{ frame_counts(rows_total, columns_total, noun,
       reached_rows | length if scoped else none,
       columns_behind | default([], true) | length, drawn) }}{{ tail }}
 {%- endif %}
-{%- if scoped %} {{ rows_toggle(shows_the_figures_rows) }}{% endif %}
-{%- if schema_face %} · <button type="button" class="face-link" data-face-to="schema">schema</button>{% endif %}</p>
+{%- if schema_face %} · <button type="button" class="face-link" data-face-to="schema">schema</button>{% endif %}</span>
+{%- if scoped %}{{ rows_toggle(shows_the_figures_rows) }}{% endif %}</p>
 {%- endmacro %}
 {# What the frame holds, then the figure's part of it, then how much is drawn.
    `behind_rows` is none off the Rows & columns tab. #}

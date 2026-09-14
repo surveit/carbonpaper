@@ -1,19 +1,21 @@
 {# A stage's output rows, with nothing drawn over them: the shape for a stage that
    has no diff. `ordinals` names each row where the rows are a subset of the frame;
    the bundle carries its own, and without either they are the frame's first.
-   Under a scope the rows and columns the figure did NOT come through go dim, so its
-   part of the frame reads in place rather than on its own. #}
+   Asked for the figure's rows, the table holds its columns and nothing else; asked
+   for the frame, what the figure did not come through goes dim. #}
 {%- set row_ordinals = ordinals | default(preview.ordinals, true) | default([], true) %}
 {%- set mine = reached_rows | default([], true) %}
 {%- set behind = columns_behind | default([], true) %}
+{%- set cut = behind and shows_the_figures_rows | default(false, true) %}
+{%- set columns = preview.columns | select('in', behind) | list if cut else preview.columns %}
 <div class="table-scroll"><table class="data-preview{% if mine %} behind-figure{% endif %}">
-  <thead><tr>{% for c in preview.columns %}<th{% if behind and c not in behind %} class="aside"{% endif %}{% if links.opens_a_cell() %} data-column="{{ c }}"{% endif %}>{{ c }}</th>{% endfor %}</tr></thead>
+  <thead><tr>{% for c in columns %}<th{% if behind and c not in behind %} class="aside"{% endif %}{% if links.opens_a_cell() %} data-column="{{ c }}"{% endif %}>{{ c }}</th>{% endfor %}</tr></thead>
   <tbody>{% for row in preview.preview %}
   {%- set ordinal = row_ordinals[loop.index0] if row_ordinals else loop.index0 %}
   {%- set trace_href = links.row_trace(stage.stage_id, ordinal) %}
   <tr{% if mine %} class="{{ 'mine' if ordinal in mine else 'aside' }}"{% endif %}{% if trace_href %} data-href="{{ trace_href }}"{% endif %}>
-    {%- for c in preview.columns %}{% set v = row[c] | string %}{% set off = ' aside' if behind and c not in behind else '' %}
-    {%- if v[:4] == 'http' %}<td class="cell-url{{ off }}"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>
-    {%- else %}<td{% if off %} class="{{ off | trim }}"{% endif %}>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}</tr>
+    {%- for c in columns %}{% set v = row[c] | string %}{% set off = 'aside' if behind and c not in behind else '' %}
+    {%- if v[:4] == 'http' %}<td class="cell-url {{ off }}"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>
+    {%- else %}<td{% if off %} class="{{ off }}"{% endif %}>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}</tr>
   {%- endfor %}</tbody>
 </table></div>
