@@ -266,8 +266,7 @@ def _read_traced_panel(run_id, stage_id, cited):
 
 def test_the_traced_panel_of_a_filter_counts_the_figures_rows_apart_from_the_rest(run_id):
     page = _read_traced_panel(run_id, "funded", TOTAL)
-    # The frame holds ten input rows and the window reaches all of them, so the five
-    # that are not the figure's are drawn beside its five rather than left out.
+    # The window reaches all ten input rows, so the five that are not the figure's show.
     assert "showing 5 relevant input rows of 10, and 5 more drawn around them" in page
     assert "the first" not in page
     # The dropped row is drawn among them, which is what the window is widened for.
@@ -279,8 +278,7 @@ def test_a_traced_stage_no_row_reached_says_so_rather_than_counting_to_zero(run_
     page = _read_traced_panel(run_id, "over_a_million", TOTAL)
     assert "No row of this stage's output is behind this figure." in page
     assert "the first 0" not in page
-    # Only of its OWN output: the rows it was GIVEN are five the figure did come
-    # through, and the input preview counts those honestly.
+    # Of its OWN output only: the five rows it was given are all the figure's.
     assert "relevant" not in page.split('class="data-inputs"')[0]
     assert ">view all rows</a>" in page
 
