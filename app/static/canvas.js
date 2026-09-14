@@ -79,26 +79,36 @@ window.Canvas = window.Canvas || (function(){
     });
   }
 
-  // Longest path from the sources; a source with no inputs slides right to one
-  // column before its first consumer.
+  // One column left of its nearest consumer, so a stage sits where it joins in;
+  // a stage nothing reads takes its longest path from the sources.
   function measureLevels(stages, order){
+    const consumers = {};
+    order.forEach(id => stages[id].inputs.forEach(
+      input => (consumers[input] ||= []).push(id)));
+    const far = measureLongestPaths(stages, order);
     const level = {};
     const measure = id => {
       if(!(id in level)){
-        level[id] = -1;
-        level[id] = Math.max(-1, ...stages[id].inputs.map(measure)) + 1;
+        level[id] = far[id];
+        if(consumers[id]) level[id] = Math.min(...consumers[id].map(measure)) - 1;
       }
       return level[id];
     };
     order.forEach(measure);
-    const consumers = {};
-    order.forEach(id => stages[id].inputs.forEach(
-      input => (consumers[input] ||= []).push(id)));
-    order.forEach(id => {
-      if(!stages[id].inputs.length && consumers[id])
-        level[id] = Math.min(...consumers[id].map(consumer => level[consumer])) - 1;
-    });
     return level;
+  }
+
+  function measureLongestPaths(stages, order){
+    const far = {};
+    const measure = id => {
+      if(!(id in far)){
+        far[id] = -1;
+        far[id] = Math.max(-1, ...stages[id].inputs.map(measure)) + 1;
+      }
+      return far[id];
+    };
+    order.forEach(measure);
+    return far;
   }
 
   const stackH = stage => BOX_H + (stage.sheet
