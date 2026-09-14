@@ -33,8 +33,8 @@ def create_version_from_stages(
     workflow = parse_workflow(stages)
 
     version_id = mint_timestamp_id()
-    schemas = [noun.model_dump(mode="json", exclude_none=True)
-               for noun in load_terms(project_id).nouns.schemas]
+    schemas = [schema.model_dump(mode="json", exclude_none=True)
+               for schema in load_terms(project_id).schemas.schemas]
     doc_id = f"{project_id}/{version_id}"
 
     v = WorkflowVersion(

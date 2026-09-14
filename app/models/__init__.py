@@ -60,11 +60,14 @@ from app.models.named_schemas import (
     validate_schema_library as validate_schema_library,
     validate_unique_schema_names as validate_unique_schema_names,
 )
+from app.models.row_types import RowType as RowType
 from app.models.terms import (
+    RowTypesAndSchemas as RowTypesAndSchemas,
     Terms as Terms,
     Verb as Verb,
     render_terms as render_terms,
     validate_one_meaning_per_word as validate_one_meaning_per_word,
+    validate_row_type_ids_resolve as validate_row_type_ids_resolve,
 )
 from app.models.workflow_stage import (
     WorkflowStage as WorkflowStage,

@@ -28,7 +28,7 @@ from app.core.agent.agent import Agent
 from app.core.agent.bound_tool import BoundToolSpec
 from app.core.agent.registry import build_mcp_server
 from app.core.agent.sdk_engine import MCP_SERVER_NAME
-from app.models import SchemaLibrary, Terms
+from app.models import Terms
 from app.runtime.llm import SYSTEM_PROMPT as RUNTIME_SYSTEM_PROMPT
 from app.tools.editing import EditingContext, build_editing_tools
 from app.tools.prompt_fragments import render_link_map
@@ -39,7 +39,7 @@ from app.tools.tutorial import TutorialContext
 # prompt, so any value builds the same prompt and the same submit_answer schema. The
 # task itself is per-run and is not dumped.
 _UNUSED_DOCUMENT = "(placeholder — the task is per-run and not dumped)"
-_UNUSED_TERMS = Terms(nouns=SchemaLibrary(schemas=[]), verbs=[])
+_UNUSED_TERMS = Terms()
 # No reader has an address here, so the dump says so in the link map's own shape.
 _PLACEHOLDER_HOST = "http://<host>/"
 

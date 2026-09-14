@@ -41,7 +41,7 @@ from app.services.errors import WorkflowLoadError
 from app.services.versioning import list_versions, load_version_stages
 from app.services.project import has_document, list_project_listings
 from app.services.project_record import read_project_edited_at, read_project_name
-from app.services.terms import count_nouns
+from app.services.terms import count_schemas
 from app.services.workspace import resolve_run_dir
 from app.web.panel_links import RectangleRequest
 from app.web.project_cards import (
@@ -71,7 +71,7 @@ def _rank_by_recency(card: ProjectCard) -> tuple[bool, datetime]:
 def _build_project_card(project_id: str) -> ProjectCard | None:
     n_stages = len(read_stage_specs(project_id))
     has_workflow = n_stages > 0
-    n_schemas = count_nouns(project_id)
+    n_schemas = count_schemas(project_id)
     has_schemas = n_schemas > 0
     runs = read_run_summary(project_id)
     carries_document = has_document(project_id)

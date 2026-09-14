@@ -13,17 +13,17 @@ from app.agents.compiler.config import CONFIG as EDITING_CONFIG, _render_project
 from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
 from app.core.agent import registry
 from app.core.agent.registry import AgentConfig, build_engine, register, render_system_prompt
-from app.models import NamedSchema, SchemaLibrary, Terms, Verb
+from app.models import RowType, Terms, Verb
 from app.services import terms as terms_service
 from app.services import project as project_service
 from app.services import workspace
 from app.tools.editing import EditingContext
 from app.tools.prompt_fragments import render_link_map
 
-_FILING = NamedSchema(
-    name="filing",
+_FILING = RowType(
+    id="filing",
     title="Filing",
-    description="One disclosure a firm sent in.",
+    definition="One disclosure a firm sent in.",
     also_written=["disclosure"],
 )
 _FLAG = Verb(name="flag", definition="Mark a row for a human to decide on.")
@@ -102,7 +102,7 @@ _READER = {"base_url": "https://carbon.example/"}
 
 def test_the_editing_agent_is_handed_its_projects_words(tmp_path) -> None:
     project_id = _project_with(
-        tmp_path, Terms(nouns=SchemaLibrary(schemas=[_FILING]), verbs=[_FLAG])
+        tmp_path, Terms(row_types=[_FILING], verbs=[_FLAG])
     )
 
     prompt = build_engine("editing", {"project_id": project_id} | _READER)._system_prompt
@@ -144,7 +144,7 @@ def test_a_session_with_no_address_is_refused(tmp_path) -> None:
 
 def test_the_words_and_the_links_both_reach_one_session(tmp_path) -> None:
     project_id = _project_with(
-        tmp_path, Terms(nouns=SchemaLibrary(schemas=[_FILING]), verbs=[_FLAG])
+        tmp_path, Terms(row_types=[_FILING], verbs=[_FLAG])
     )
 
     prompt = build_engine("editing", {"project_id": project_id} | _READER)._system_prompt

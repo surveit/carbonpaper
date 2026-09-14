@@ -323,18 +323,18 @@ def edit_schema(project_name: str, schema_name: str, json_text: str = Form(...))
         # Refused — the write never happens, the file is unchanged.
         return JSONResponse({"ok": False, "issues": issues}, status_code=400)
 
-    # Guard: the noun must ALREADY be one of the project's (edit revises; it does not
-    # create — that's the compiler's job).
+    # Edit revises a table the project already has; creating one is the compiler's job.
     stored = terms.load_terms(project_name)
-    if schema_name not in {noun.name for noun in stored.nouns.schemas}:
+    if schema_name not in {table.name for table in stored.schemas.schemas}:
         raise HTTPException(
             status_code=404,
             detail=f"'{project_name}' has no schema named '{schema_name}'",
         )
     terms.write_terms(project_name, Terms(
-        nouns=SchemaLibrary(schemas=[
-            NamedSchema.model_validate(schema) if noun.name == schema_name else noun
-            for noun in stored.nouns.schemas
+        row_types=stored.row_types,
+        schemas=SchemaLibrary(schemas=[
+            NamedSchema.model_validate(schema) if table.name == schema_name else table
+            for table in stored.schemas.schemas
         ]),
         verbs=stored.verbs,
     ))
