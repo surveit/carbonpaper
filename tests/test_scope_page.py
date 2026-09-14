@@ -254,3 +254,29 @@ def test_every_stage_behind_a_lookup_is_left_out_of_the_drawing(tiered_run_id):
     assert payload["lookup_tables"] == ["load_agencies", "tier_agencies"]
     assert not set(payload["lookup_tables"]) & set(drawn)
     assert "both_regions" in drawn
+
+def panel_url(project: str, run_id: str, stage: str, column: str, row: int = 0) -> str:
+    return (f"/project/{project}/runs/{run_id}/scope/panel"
+            f"?stage={stage}&row={row}&column={column}")
+
+
+def test_the_panel_draws_the_same_map_without_the_project_shell(run_id):
+    panel = TestClient(app).get(panel_url(PROJECT, run_id, "grant_totals", "total_amount"))
+    assert panel.status_code == 200
+    assert 'id="scope-payload"' in panel.text
+    # The frame sits inside a page that already has a sidebar and a trail.
+    assert "app-side-nav" not in panel.text
+
+
+def test_the_panel_states_why_no_map_rather_than_erroring_inside_the_frame(run_id):
+    panel = TestClient(app).get(panel_url(PROJECT, run_id, "no_such_stage", "x"))
+    assert panel.status_code == 200
+    assert "No scope map for" in panel.text
+
+
+def test_the_row_lineage_page_opens_the_paths_explorer_on_the_panel(run_id):
+    page = TestClient(app).get(
+        f"/project/{PROJECT}/runs/{run_id}/stage/grant_totals/row/0/trace/view")
+    assert page.status_code == 200
+    assert 'data-pane="scope">Paths explorer' in page.text
+    assert "/scope/panel?" in page.text
