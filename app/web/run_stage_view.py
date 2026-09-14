@@ -28,8 +28,7 @@ from app.web.stage_test_views import (
     shape_test_views,
 )
 
-# What a scoped panel draws of each frame, output and input alike — and of either
-# side of the pick, so the table does not change size when the reader flips it.
+# What a scoped panel draws of each frame, and of either side of the pick.
 SCOPED_ROWS_SHOWN = 25
 
 
