@@ -16,6 +16,7 @@ from typing import Any, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.core.ids import ID
 from app.core.timestamp_ids import mint_timestamp_id
 from app.models import (
     RowType,
@@ -29,6 +30,7 @@ from app.models import (
     stage_to_spec_dict,
     validate_no_word_is_written_twice,
 )
+from app.models.claims import ClaimShapeInput
 from app.models.records.eval_config import EvalConfig
 from app.models.review_guide import ReviewGuideDraft
 from app.models.run_manifest import (
@@ -41,6 +43,7 @@ from app.services import stage_edit, terms, versioning, workspace
 from app.services import loader
 from app.services import methodology
 from app.services import run as run_service
+from app.services.claim_shapes import load_claim_shapes, write_claim_shapes
 from app.services.errors import (
     CacheArchiveRejected, ProjectArchiveRejected, WorkflowLoadError,
 )
@@ -403,6 +406,11 @@ def _project_to_write(name: str) -> str:
 
 # ─── Portable WorkflowFile: project export / import ──────────────────────────
 
+class BundledClaimShape(ClaimShapeInput):
+    # What the bundle's stages name; import writes the shape under a new id and repoints them.
+    id: ID
+
+
 class WorkflowFile(BaseModel):
     name: str
     document: str
@@ -412,11 +420,27 @@ class WorkflowFile(BaseModel):
     # Separate fields, not one Terms: a bundle written before one existed carries no key.
     row_types: list[RowType] = Field(default_factory=list)
     verbs: list[Verb] = Field(default_factory=list)
+    # Defaulted like `verbs`: a bundle written before claim shapes carries no key for them.
+    claim_shapes: list[BundledClaimShape] = Field(default_factory=list)
     stages: list[Stage]
 
     @model_validator(mode="after")
     def _one_meaning_per_word(self) -> "WorkflowFile":
         validate_no_word_is_written_twice(self.row_types, self.verbs)
+        return self
+
+    @model_validator(mode="after")
+    def _validate_every_named_shape_is_carried(self) -> "WorkflowFile":
+        carried = {shape.id for shape in self.claim_shapes}
+        dangling = [
+            f"stage '{stage.id}' output '{rule.slug}' names claim shape '{rule.shape_id}', "
+            "which this bundle does not carry"
+            for stage in self.stages
+            for rule in stage.workflow_outputs or []
+            if rule.shape_id is not None and rule.shape_id not in carried
+        ]
+        if dangling:
+            raise ValueError("; ".join(dangling))
         return self
 
     @field_validator("stages", mode="before")
@@ -457,6 +481,7 @@ def export_project(project_id: str) -> WorkflowFile:
         data_model=project_terms.schemas,
         row_types=project_terms.row_types,
         verbs=project_terms.verbs,
+        claim_shapes=_read_bundled_claim_shapes(project_id),
         stages=versioning.load_version_stages(project_id, latest) if latest else [],
     )
 
@@ -469,10 +494,40 @@ def import_project(
     project_id = create_project(label, wf.document, model=wf.model, source=wf.source).id
     terms.write_terms(project_id, Terms(
         row_types=wf.row_types, schemas=wf.data_model, verbs=wf.verbs))
+    new_id_by_bundled_id = _write_shapes_under_new_ids(project_id, wf.claim_shapes)
     if wf.stages:
-        loader.save_stages(project_id, list(wf.stages))
+        stages = [_repoint_stage(stage, new_id_by_bundled_id) for stage in wf.stages]
+        loader.save_stages(project_id, stages)
         save_working_copy_as_version(project_id, message=f"Imported '{label}'")
     return project_id
+
+
+def _read_bundled_claim_shapes(project_id: str) -> list[BundledClaimShape]:
+    carried = set(BundledClaimShape.model_fields)
+    return [
+        BundledClaimShape.model_validate(shape.model_dump(include=carried))
+        for shape in load_claim_shapes(project_id)
+    ]
+
+
+def _write_shapes_under_new_ids(
+    project_id: str, bundled: list[BundledClaimShape]
+) -> dict[ID, ID]:
+    authored = [ClaimShapeInput.model_validate(shape.model_dump(exclude={"id"})) for shape in bundled]
+    # Paired by label: the write returns shapes sorted, and refuses a repeated label.
+    new_id_by_label = {shape.label: shape.id for shape in write_claim_shapes(project_id, authored)}
+    return {shape.id: new_id_by_label[shape.label] for shape in bundled}
+
+
+def _repoint_stage(stage: Stage, new_id_by_bundled_id: dict[ID, ID]) -> Stage:
+    if stage.workflow_outputs is None:
+        return stage
+    rules = [
+        rule if rule.shape_id is None
+        else rule.model_copy(update={"shape_id": new_id_by_bundled_id[rule.shape_id]})
+        for rule in stage.workflow_outputs
+    ]
+    return stage.model_copy(update={"workflow_outputs": rules})
 
 
 # ─── The bundle and the stage cache in one archive ───────────────────────────
