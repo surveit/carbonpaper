@@ -18,8 +18,7 @@ _SUMMARY = "Doubles the reported `amount` into `doubled`."
 _NO_TERMS = Terms()
 _TERMS = Terms(
     row_types=[RowType(
-        id="filing", title="Filing", definition="One disclosure a firm sent in.",
-        also_written=["disclosure"])],
+        id="filing", title="Filing", definition="One disclosure a firm sent in.")],
     verbs=[Verb(name="flag", definition="Mark a row for a human to decide on.")],
 )
 _RUN_ID = "20260807T142707"
@@ -103,7 +102,7 @@ def test_task_never_contains_the_methodology_document():
 
 def test_the_task_is_written_in_the_projects_own_words():
     task = _task(terms=_TERMS)
-    assert "- filing — One disclosure a firm sent in. Also written: disclosure." in task
+    assert "- filing — One disclosure a firm sent in." in task
     assert "- flag — Mark a row for a human to decide on." in task
 
 

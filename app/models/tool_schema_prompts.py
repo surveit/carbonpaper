@@ -59,19 +59,9 @@ REVIEW_GUIDE_STEP_DESCRIPTION = (
     "One step — a Workflow section in the UI. `prose` may carry `backticked` columns."
 )
 
-ROW_TYPE_ALSO_WRITTEN_DESCRIPTION = (
-    "The other spellings this methodology uses for this same thing."
-)
-
 ROW_TYPE_DESCRIPTION = (
     "The methodology's word for what ONE ROW is. Many tables and many stages name the\n"
     "same one — a row type outlives the stages that filter, sort or enrich its rows."
-)
-
-ROW_TYPES_AND_SCHEMAS_DESCRIPTION = (
-    "A data model, whole: the row types, and the tables holding rows of each. Every\n"
-    "`row_type_id` a table names must be declared here beside it, so the two are\n"
-    "answered together and neither is checkable without the other."
 )
 
 SCHEMA_LIBRARY_DESCRIPTION = (
@@ -101,10 +91,6 @@ TERMS_DESCRIPTION = (
     "A methodology's words — its row types and its verbs — plus the tables of its data\n"
     "model, each naming the row type its rows are. One word carries one meaning: no\n"
     "word is both a row type and a verb, or two row types, or two verbs."
-)
-
-VERB_ALSO_WRITTEN_DESCRIPTION = (
-    "The other spellings this methodology uses for this same act."
 )
 
 VERB_DESCRIPTION = (

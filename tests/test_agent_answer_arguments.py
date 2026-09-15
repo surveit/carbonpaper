@@ -59,8 +59,7 @@ def test_a_genuinely_invalid_answer_is_still_rejected():
 
 
 def test_every_agent_tool_advertises_more_than_one_argument():
-    from app.compiler.data_model import RowTypesAndSchemas
     from app.models.review_guide import ReviewGuideDraft as ReviewGuide
 
-    for model in (RowTypesAndSchemas, ReviewGuide, OneField, TwoFields):
+    for model in (ReviewGuide, OneField, TwoFields):
         assert len(_advertised(model)["properties"]) > 1, model.__name__

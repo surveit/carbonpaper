@@ -24,7 +24,6 @@ _FILING = RowType(
     id="filing",
     title="Filing",
     definition="One disclosure a firm sent in.",
-    also_written=["disclosure"],
 )
 _FLAG = Verb(name="flag", definition="Mark a row for a human to decide on.")
 
@@ -108,7 +107,7 @@ def test_the_editing_agent_is_handed_its_projects_words(tmp_path) -> None:
     prompt = build_engine("editing", {"project_id": project_id} | _READER)._system_prompt
 
     assert prompt.startswith(EDITING_SYSTEM_PROMPT)
-    assert "- filing — One disclosure a firm sent in. Also written: disclosure." in prompt
+    assert "- filing — One disclosure a firm sent in." in prompt
     assert "- flag — Mark a row for a human to decide on." in prompt
 
 

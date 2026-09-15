@@ -6,7 +6,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from app.models import NamedSchema, RowType, RowTypesAndSchemas, SchemaLibrary, Terms, Verb
+from app.models import NamedSchema, RowType, SchemaLibrary, Terms, Verb
 from app.models.terms import render_terms
 from app.services import terms
 from app.models.records.terms import StoredTerms
@@ -14,11 +14,7 @@ from app.web.config import templates
 from app.web.diagrams import SCHEMA_KIND_CLASS, SCHEMA_KIND_GLYPH
 from app.services.methodology import write_methodology
 
-_FLAG = Verb(
-    name="flag",
-    definition="Mark a row for a human to decide on.",
-    also_written=["flagged", "flagging"],
-)
+_FLAG = Verb(name="flag", definition="Mark a row for a human to decide on.")
 _ISSUE = RowType(id="issue", title="Issue", definition="One thing a reader should look at.")
 _ISSUE_TEXT = NamedSchema(name="issue_text", title="Issue text", row_type_id="issue")
 _UNTYPED_TABLE = NamedSchema(name="issue_text", title="Issue text")
@@ -58,17 +54,6 @@ def test_that_refusal_names_the_schema_that_pointed_at_it():
         Terms(row_types=[], schemas=SchemaLibrary(schemas=[ghost_table]), verbs=[])
 
 
-def test_the_generators_answer_carries_both_halves_so_each_checks_the_other():
-    ghost_table = NamedSchema(name="issue_text", title="Issue text", row_type_id="ghost")
-    with pytest.raises(ValidationError, match="ghost"):
-        RowTypesAndSchemas(row_types=[_ISSUE], schemas=SchemaLibrary(schemas=[ghost_table]))
-
-
-def test_the_generators_answer_states_both_halves_rather_than_defaulting_either():
-    owed = set(RowTypesAndSchemas.model_json_schema()["required"])
-    assert owed == {"row_types", "schemas"}
-
-
 def test_a_row_types_id_is_snake_case_like_a_schema_name():
     with pytest.raises(ValidationError):
         RowType(id="BadName", title="Bad", definition="A row.")
@@ -91,27 +76,17 @@ def test_a_word_that_is_both_a_row_type_and_a_verb_is_refused():
         Terms(row_types=[flag], schemas=_NO_SCHEMAS, verbs=[_FLAG])
 
 
-def test_a_verb_spelling_that_repeats_another_verbs_name_is_refused():
-    flagged = Verb(name="flagged", definition="Already marked.")
-    with pytest.raises(ValidationError, match="flagged"):
-        Terms(row_types=[], schemas=_NO_SCHEMAS, verbs=[_FLAG, flagged])
-
-
-def test_a_row_type_spelling_that_repeats_a_verb_is_refused():
-    # The pair the artifact exists for: the document says one word, the stages another.
-    registrant = RowType(
-        id="registrant", title="Registrant", definition="A firm that filed.",
-        also_written=["flag"],
-    )
+def test_two_verbs_of_one_name_are_refused():
+    twin = Verb(name="flag", definition="Already marked.")
     with pytest.raises(ValidationError, match="flag"):
-        Terms(row_types=[registrant], schemas=_NO_SCHEMAS, verbs=[_FLAG])
+        Terms(row_types=[], schemas=_NO_SCHEMAS, verbs=[_FLAG, twin])
 
 
-def test_two_row_types_written_the_same_second_way_are_refused():
-    firm = RowType(id="firm", title="Firm", definition="A company.", also_written=["registrant"])
-    filer = RowType(id="filer", title="Filer", definition="A filer.", also_written=["registrant"])
-    with pytest.raises(ValidationError, match="registrant"):
-        Terms(row_types=[firm, filer], schemas=_NO_SCHEMAS, verbs=[])
+def test_two_row_types_of_one_id_are_refused():
+    firm = RowType(id="firm", title="Firm", definition="A company.")
+    twin = RowType(id="firm", title="Filer", definition="A filer.")
+    with pytest.raises(ValidationError, match="firm"):
+        Terms(row_types=[firm, twin], schemas=_NO_SCHEMAS, verbs=[])
 
 
 def test_a_schema_named_after_a_verb_is_kept():
@@ -121,17 +96,7 @@ def test_a_schema_named_after_a_verb_is_kept():
     assert [schema.name for schema in both.schemas.schemas] == ["flag"]
 
 
-def test_a_row_types_other_spellings_read_back_from_the_store():
-    firm = RowType(
-        id="firm", title="Firm", definition="A company.",
-        also_written=["registrant", "filer"],
-    )
-    terms.write_terms(_PROJECT, Terms(row_types=[firm], schemas=_NO_SCHEMAS, verbs=[]))
-
-    assert terms.load_terms(_PROJECT).row_types[0].also_written == ["registrant", "filer"]
-
-
-def test_two_verbs_sharing_neither_a_name_nor_a_spelling_are_kept():
+def test_two_verbs_of_different_names_are_kept():
     resolve = Verb(name="resolve", definition="Settle a flagged row.")
     both = Terms(row_types=[_ISSUE], schemas=_NO_SCHEMAS, verbs=[_FLAG, resolve])
     assert [verb.name for verb in both.verbs] == ["flag", "resolve"]
@@ -161,18 +126,7 @@ def test_writing_no_verbs_retires_the_ones_already_stored():
     assert terms.load_terms(_PROJECT).verbs == []
 
 
-def test_a_generated_data_model_keeps_the_verbs_the_project_already_agreed():
-    terms.write_terms(_PROJECT, Terms(row_types=[], schemas=_NO_SCHEMAS, verbs=[_FLAG]))
-    terms.write_data_model(_PROJECT, RowTypesAndSchemas(
-        row_types=[_ISSUE], schemas=SchemaLibrary(schemas=[_ISSUE_TEXT])))
-
-    stored = terms.load_terms(_PROJECT)
-    assert [schema.name for schema in stored.schemas.schemas] == ["issue_text"]
-    assert [row_type.id for row_type in stored.row_types] == ["issue"]
-    assert stored.verbs == [_FLAG]
-
-
-def test_a_stored_document_whose_words_share_a_spelling_is_refused():
+def test_a_stored_document_whose_words_repeat_is_refused():
     # Written past write_terms, which only ever takes an already-composed Terms.
     StoredTerms(
         id=f"{_PROJECT}/terms",
@@ -257,17 +211,12 @@ def test_a_project_whose_only_entries_are_tables_renders_nothing_at_all():
         Terms(row_types=[], schemas=SchemaLibrary(schemas=[_UNTYPED_TABLE]), verbs=[])) == ""
 
 
-def test_the_block_carries_every_word_its_meaning_and_its_other_spellings():
-    firm = RowType(
-        id="firm",
-        title="Firm",
-        definition="A company that filed.",
-        also_written=["registrant"],
-    )
+def test_the_block_carries_every_word_and_its_meaning():
+    firm = RowType(id="firm", title="Firm", definition="A company that filed.")
     block = render_terms(Terms(row_types=[firm], schemas=_NO_SCHEMAS, verbs=[_FLAG]))
 
-    assert "- firm — A company that filed. Also written: registrant." in block
-    assert "- flag — Mark a row for a human to decide on. Also written: flagged, flagging." in block
+    assert "- firm — A company that filed." in block
+    assert "- flag — Mark a row for a human to decide on." in block
     assert "synonym" in block  # the framing: do not introduce one
 
 
@@ -296,11 +245,8 @@ def test_the_section_shows_a_schema_with_no_columns_without_marking_it_short_of_
     assert "Columns" not in html         # nor a reference section over nothing
 
 
-def test_the_section_shows_the_spellings_of_a_row_type_and_of_a_verb():
-    firm_word = RowType(
-        id="firm", title="Firm", definition="A company that filed.",
-        also_written=["registrant"],
-    )
+def test_the_section_shows_a_row_type_its_table_and_a_verb():
+    firm_word = RowType(id="firm", title="Firm", definition="A company that filed.")
     firm_table = NamedSchema(
         name="firm_filings",
         title="Firm filings",
@@ -314,8 +260,7 @@ def test_the_section_shows_the_spellings_of_a_row_type_and_of_a_verb():
     assert "1 column" in html
     assert "firm_id" in html                      # the column table, not just the count
     assert "input" in html                        # the kind it declared
-    assert html.count("also written: registrant") == 1
-    assert html.count("also written: flagged") == 1
+    assert "A company that filed." in html        # the row type's definition
     assert "Mark a row for a human to decide on." in html
 
 

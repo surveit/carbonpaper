@@ -23,7 +23,7 @@ from app.models import (
 )
 from app.models.claims import DATA_UNIVERSE_TOOLTIP
 from app.services import (
-    claim_shapes, code_approval, generation, methodology, project, terms, versioning,
+    claim_shapes, code_approval, methodology, project, terms, versioning,
 )
 from app.services.loader import list_parsed_stages, resolve_function_code
 from app.services.project import ProjectEdit
@@ -87,20 +87,6 @@ def set_project_private(project_name: str, private: str = Form("")):
 def delete_project(project_name: str):
     project.delete_project(validate_project_or_404(project_name))
     return RedirectResponse("/", status_code=303)
-
-
-@router.post("/project/{project_name}/generate")
-def generate_project(project_name: str):
-    validate_project_or_404(project_name)
-    document = methodology.read_methodology(project_name)
-    if document is None:
-        raise HTTPException(
-            status_code=400,
-            detail=f"project '{project_name}' has no methodology to generate from.",
-        )
-    model = project.project_meta(project_name).model or "sonnet"
-    session_id = generation.start_generation(project_name, document=document, model=model)
-    return RedirectResponse(url=f"/chat/{session_id}", status_code=303)
 
 
 # ─── Unified PROJECT sections ────────────────────────────────────────────────

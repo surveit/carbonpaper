@@ -62,11 +62,10 @@ from app.models.named_schemas import (
 )
 from app.models.row_types import RowType as RowType
 from app.models.terms import (
-    RowTypesAndSchemas as RowTypesAndSchemas,
     Terms as Terms,
     Verb as Verb,
     render_terms as render_terms,
-    validate_one_meaning_per_word as validate_one_meaning_per_word,
+    validate_no_word_is_written_twice as validate_no_word_is_written_twice,
     validate_row_type_ids_resolve as validate_row_type_ids_resolve,
 )
 from app.models.workflow_stage import (

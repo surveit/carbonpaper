@@ -83,6 +83,6 @@ def _one_line(text: str) -> str:
 def test_the_constant_scan_finds_the_known_surfaces() -> None:
     # Without this, a scan matching nothing would pass the test above vacuously.
     names = {name for _path, name, _text in find_prompt_constants()}
-    assert {"EDITING_SYSTEM_PROMPT", "INSTRUCTIONS", "DATA_MODEL_SYSTEM_PROMPT",
+    assert {"EDITING_SYSTEM_PROMPT", "INSTRUCTIONS",
             "REVIEW_GUIDE_SYSTEM_PROMPT", "STAGE_TESTS_SYSTEM_PROMPT",
             "SYSTEM_PROMPT"} <= names

@@ -1,7 +1,4 @@
-"""Every prompt that can invent schema or artifacts carries the gated authoring
-lifecycle (app/models/authoring_lifecycle_note.py) — one step per CompilerPhase,
-each with its gate. The workflow-authoring surfaces get the full lifecycle; the
-data-model prompt gets the intermediate-concepts slice."""
+"""Every prompt that can invent schema or artifacts carries the authoring lifecycle."""
 from __future__ import annotations
 
 from app.models.authoring_lifecycle_note import (
@@ -22,12 +19,6 @@ def test_mcp_instructions_carry_the_full_lifecycle() -> None:
     from app.mcp.server import INSTRUCTIONS
 
     assert AUTHORING_LIFECYCLE_GUIDANCE in INSTRUCTIONS
-
-
-def test_data_model_prompt_carries_the_intermediate_concepts_slice() -> None:
-    from app.compiler.data_model_prompt import DATA_MODEL_SYSTEM_PROMPT
-
-    assert INTERMEDIATE_CONCEPTS_NOTE in DATA_MODEL_SYSTEM_PROMPT
 
 
 def test_lifecycle_embeds_the_slice_verbatim() -> None:

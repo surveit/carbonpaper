@@ -18,9 +18,7 @@ import mcp.types as types
 from claude_agent_sdk import McpSdkServerConfig
 
 from app.agents.compiler.config import CONFIG as EDITING_CONFIG
-from app.compiler.data_model import build_data_model_agent
 from app.agents.tutorial.config import CONFIG as TUTORIAL_CONFIG
-from app.compiler.data_model_prompt import DATA_MODEL_SYSTEM_PROMPT
 from app.compiler.review_guide import build_review_guide_author
 from app.compiler.review_guide_prompt import REVIEW_GUIDE_SYSTEM_PROMPT
 from app.compiler.stage_tests_prompt import STAGE_TESTS_SYSTEM_PROMPT
@@ -61,7 +59,6 @@ def render_prompt_dump() -> str:
         render_editing_agent(),
         render_tutorial_agent(),
         render_carbonpaper_server(),
-        render_data_model_agent(),
         render_review_guide_agent(),
         render_stage_tests_agent(),
         render_llm_transform_stage(),
@@ -120,17 +117,6 @@ def render_carbonpaper_server() -> str:
         ),
         system_prompt=INSTRUCTIONS,
         tools=asyncio.run(mcp.list_tools()),
-    )
-
-
-def render_data_model_agent() -> str:
-    return render_surface(
-        title="Data-model generation agent",
-        source="app/compiler/data_model_prompt.py",
-        model=_GENERATION_MODEL,
-        note=_STRUCTURED_OUTPUT_NOTE,
-        system_prompt=DATA_MODEL_SYSTEM_PROMPT,
-        tools=read_agent_tools(build_data_model_agent(_UNUSED_DOCUMENT)),
     )
 
 

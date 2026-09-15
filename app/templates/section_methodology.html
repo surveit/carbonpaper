@@ -111,11 +111,6 @@
     </div>
     {% if row_type.title and row_type.title != row_type.id %}<p class="dm-card-title">{{ row_type.title }}</p>{% endif %}
     <p class="dm-card-desc">{{ row_type.definition }}</p>
-    {% if row_type.also_written %}
-    <div class="dm-facts">
-      {% for spelling in row_type.also_written %}<span class="fact-chip">also written: {{ spelling }}</span>{% endfor %}
-    </div>
-    {% endif %}
   </article>
   {% endfor %}
 </div>
@@ -135,11 +130,6 @@
       <code class="dm-card-name">{{ verb.name }}</code>
     </div>
     <p class="dm-card-desc">{{ verb.definition }}</p>
-    {% if verb.also_written %}
-    <div class="dm-facts">
-      {% for spelling in verb.also_written %}<span class="fact-chip">also written: {{ spelling }}</span>{% endfor %}
-    </div>
-    {% endif %}
   </article>
   {% endfor %}
 </div>
