@@ -2,22 +2,42 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from app.core.errors import ClaimReviewIsImmutable
-from app.models.claim_review import Grounding
-from app.models.records.claim_review import ClaimReview
+from app.models.records.claim_review import AttackType, ClaimPart, ClaimReview
+
+_FIELDS = dict(
+    claim_id="c1", claim_parts=[ClaimPart(phrase="Grants")], challenges=[],
+    summary="Nothing in the run backs it.", claim_parts_session_id="session-parts",
+    attack_session_ids={AttackType.data: "session-data", AttackType.gap: "session-orchestrator"},
+)
 
 
 def _a_review() -> ClaimReview:
-    return ClaimReview(project_id="p", claim_id="c1", run_id="r1",
-                       grounding=[Grounding(start=0, end=5, evidence=None, how="nothing")],
-                       challenges=[], summary="Nothing in the run backs it.")
+    return ClaimReview.model_validate(_FIELDS)
 
 
 def test_a_review_is_stored_and_read_back_by_claim():
     review = _a_review()
     review.save()
-    assert ClaimReview.find(claim_id="c1")[0].summary == review.summary
+
+    [held] = ClaimReview.find(claim_id="c1")
+    assert held.summary == review.summary and held.claim_parts == review.claim_parts
+    assert held.claim_parts_session_id == "session-parts"
+    assert held.attack_session_ids == {
+        AttackType.data: "session-data", AttackType.gap: "session-orchestrator"}
+
+
+def test_a_review_names_no_project_and_no_run_of_its_own():
+    assert not {"project_id", "run_id", "grounding", "proposed_rewrites", "session_ids"} & set(
+        ClaimReview.model_fields)
+
+
+@pytest.mark.parametrize("left_out", [name for name in _FIELDS])
+def test_every_field_is_required(left_out):
+    with pytest.raises(ValidationError):
+        ClaimReview.model_validate({k: v for k, v in _FIELDS.items() if k != left_out})
 
 
 def test_saving_a_review_again_is_refused():

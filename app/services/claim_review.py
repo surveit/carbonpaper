@@ -2,24 +2,32 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
+from itertools import combinations
 
 from app.core.figure_text import render_figure
 from app.core.file_shape import VALUES_KEPT, measure_column_shape
+from app.core.frames import convert_cell_to_json_value
 from app.core.ids import ID
+from app.core.json_types import JsonScalar
 from app.models.branch_analysis import BranchReason
+from app.models.citations import (
+    ChallengeCitation,
+    PublishedCitation,
+    StageCitation,
+    StageOutputCellCitation,
+    StageOutputColumnCitation,
+)
 from app.models.claim_review import (
     BranchEvidenceItem,
-    Challenge,
     CitedShape,
     EvidenceBundle,
-    Grounding,
     InputColumnEvidenceItem,
     OutputEvidenceItem,
-    Rewrite,
     StageEvidenceItem,
+    find_claim_part_spans,
 )
-from app.models.citations import PublishedCitation, StageOutputCellCitation
-from app.models.records.claim_review import ClaimReview
+from app.models.records.claim_review import AttackType, Challenge, ClaimPart, ClaimReview
 from app.models.stage import StageType
 from app.models.terms import render_terms
 from app.models.workflow import Workflow, find_stages_upstream_of, sort_stages_by_dependency
@@ -55,65 +63,73 @@ def build_evidence_bundle(project_id: ID, claim_id: ID) -> EvidenceBundle:
     )
 
 
-def load_claim_review(project_id: ID, claim_id: ID) -> ClaimReview | None:
-    held = [review for review in ClaimReview.find(claim_id=claim_id)
-            if review.project_id == project_id]
+def load_claim_review(claim_id: ID) -> ClaimReview | None:
+    held = ClaimReview.find(claim_id=claim_id)
     if len(held) > 1:
         raise ClaimReviewRefused(
             [f"claim {claim_id} holds {len(held)} reviews; a review is written once"])
     return held[0] if held else None
 
 
-def store_claim_review(project_id: ID, claim_id: ID, *, grounding: list[Grounding],
-                       challenges: list[Challenge], rewrites: list[Rewrite], summary: str,
-                       session_ids: list[ID], corpus: str) -> ClaimReview:
+def store_claim_review(project_id: ID, claim_id: ID, *, claim_parts: list[ClaimPart],
+                       challenges: list[Challenge], summary: str, claim_parts_session_id: ID,
+                       attack_session_ids: dict[AttackType, ID], corpus: str) -> ClaimReview:
     claim = claims_service.load_claim(project_id, claim_id)
-    _require_cell_citation(claim.citation)
-    if load_claim_review(project_id, claim_id) is not None:
+    cited = _require_cell_citation(claim.citation)
+    if load_claim_review(claim_id) is not None:
         raise ClaimReviewRefused(
             [f"claim {claim_id} already has a review; a re-attack is a new claim"])
-    issues = (find_grounding_issues(grounding, claim.text)
-              + find_unbacked_challenges(challenges, corpus)
-              + find_challenge_issues(challenges, len(grounding)))
+    issues = [*find_claim_part_issues(claim_parts, claim.text),
+              *find_unprinted_evidence(challenges, corpus),
+              *find_challenge_issues(challenges, len(claim_parts), attack_session_ids),
+              *find_citation_issues(project_id, cited.run_id, challenges)]
     if issues:
         raise ClaimReviewRefused(issues)
     review = ClaimReview(
-        project_id=project_id, claim_id=claim_id, run_id=claim.citation.run_id,
-        grounding=grounding, challenges=challenges, proposed_rewrites=rewrites,
-        summary=summary, session_ids=session_ids)
+        claim_id=claim_id, claim_parts=claim_parts, challenges=challenges, summary=summary,
+        claim_parts_session_id=claim_parts_session_id, attack_session_ids=attack_session_ids)
     review.save()
     return review
 
 
-def find_unbacked_challenges(challenges: list[Challenge], corpus: str) -> list[str]:
+def find_claim_part_issues(claim_parts: list[ClaimPart], text: str) -> list[str]:
+    spans = find_claim_part_spans(text, claim_parts)
+    missing = [
+        f"claim part {index} {part.phrase!r}: the claim holds it fewer than "
+        f"{part.occurrence} times"
+        for index, (part, span) in enumerate(zip(claim_parts, spans)) if span is None
+    ]
+    return missing + _find_overlapping_claim_parts(spans)
+
+
+def find_unprinted_evidence(challenges: list[Challenge], corpus: str) -> list[str]:
     return [
-        f"challenge {index} ({challenge.kind}): backing {challenge.backing!r} is in "
-        "neither the pool nor an attacker's evidence"
+        f"{_name_challenge(index, challenge)}: evidence {challenge.evidence!r} is on no line "
+        "of the pool"
         for index, challenge in enumerate(challenges)
-        if not _read_whether_the_corpus_spells(corpus, challenge.backing)
+        if not _read_whether_the_corpus_spells(corpus, challenge.evidence)
     ]
 
 
-def find_challenge_issues(challenges: list[Challenge], grounding_count: int) -> list[str]:
+def find_challenge_issues(challenges: list[Challenge], claim_part_count: int,
+                          attack_session_ids: dict[AttackType, ID]) -> list[str]:
+    raised = {AttackType(attack_type) for attack_type in attack_session_ids}
     return [
-        f"challenge {index} ({challenge.kind}): grounding_index "
-        f"{challenge.grounding_index} names no phrase; the review grounds "
-        f"{grounding_count}"
-        for index, challenge in enumerate(challenges)
-        if challenge.grounding_index is not None
-        and challenge.grounding_index >= grounding_count
+        issue for index, challenge in enumerate(challenges)
+        for issue in _find_one_challenge_issues(index, challenge, claim_part_count, raised)
     ]
 
 
-def find_grounding_issues(grounding: list[Grounding], text: str) -> list[str]:
+def find_citation_issues(project_id: ID, run_id: ID, challenges: list[Challenge]) -> list[str]:
+    cited = [(index, challenge, citation) for index, challenge in enumerate(challenges)
+             for citation in challenge.citations]
+    if not cited:
+        return []
+    held = _read_run_holdings(project_id, run_id, [citation for _, _, citation in cited])
     return [
-        *(f"grounding {index} ends at {phrase.end}, past the end of a claim {len(text)} "
-          "characters long" for index, phrase in enumerate(grounding)
-          if phrase.end > len(text)),
-        *(f"grounding {index} starts at {phrase.start}, which is not before its end "
-          f"{phrase.end}" for index, phrase in enumerate(grounding)
-          if phrase.start >= phrase.end),
-        *_find_overlapping_spans(grounding),
+        f"{_name_challenge(index, challenge)}: {citation.kind} citation {problem}"
+        for index, challenge, citation in cited
+        if (problem := _find_citation_problem(held, citation)) is not None
     ]
 
 
@@ -209,11 +225,11 @@ def _read_stage_code(placed: WorkflowStage) -> str:
     return str(block.code) if block is not None else ""
 
 
-def _read_whether_the_corpus_spells(corpus: str, backing: str) -> bool:
-    """At token boundaries: `220` inside `2200` backs nothing."""
-    if not backing:
+def _read_whether_the_corpus_spells(corpus: str, evidence: str) -> bool:
+    """At token boundaries: `220` inside `2200` is not printed."""
+    if not evidence:
         return False
-    pattern = rf"(?<!\w)(?<!\d[,.]){re.escape(backing)}(?![,.]\d)(?!\w)"
+    pattern = rf"(?<!\w)(?<!\d[,.]){re.escape(evidence)}(?![,.]\d)(?!\w)"
     return re.search(pattern, corpus) is not None
 
 
@@ -224,11 +240,127 @@ def _require_cell_citation(citation: PublishedCitation) -> StageOutputCellCitati
     return citation
 
 
-def _find_overlapping_spans(grounding: list[Grounding]) -> list[str]:
-    issues, reached = [], 0
-    for phrase in sorted(grounding, key=lambda phrase: phrase.start):
-        if phrase.start < reached:
-            issues.append(f"the phrase at {phrase.start}-{phrase.end} overlaps the one "
-                          "that ends after it starts")
-        reached = max(reached, phrase.end)
+# ── what a challenge names ──
+
+
+@dataclass(frozen=True)
+class _StageOutput:
+    row_count: int
+    columns: frozenset[str]
+    # Only the cited columns, each cell as JSON reads it.
+    cells_by_column: dict[str, list[JsonScalar]]
+
+
+@dataclass(frozen=True)
+class _RunHoldings:
+    run_id: ID
+    # Only the cited stages that wrote an output in the run.
+    outputs_by_stage_id: dict[str, _StageOutput]
+    stage_ids: set[str]
+    term_names: set[str]
+
+
+def _name_challenge(index: int, challenge: Challenge) -> str:
+    return f"challenge {index} ({AttackType(challenge.attack_type).value})"
+
+
+def _find_one_challenge_issues(index: int, challenge: Challenge, claim_part_count: int,
+                               raised: set[AttackType]) -> list[str]:
+    named = _name_challenge(index, challenge)
+    issues = []
+    part_index = challenge.claim_part_index
+    if part_index is not None and part_index >= claim_part_count:
+        issues.append(f"{named}: claim_part_index {part_index} names no claim part; "
+                      f"the claim has {claim_part_count}")
+    if AttackType(challenge.attack_type) not in raised:
+        issues.append(f"{named}: no session raised this attack type, so its transcript "
+                      "cannot be opened")
     return issues
+
+
+def _find_overlapping_claim_parts(spans: list[tuple[int, int] | None]) -> list[str]:
+    resolved = [(index, span) for index, span in enumerate(spans) if span is not None]
+    return [
+        f"claim parts {first} and {second} overlap"
+        for (first, (first_start, first_end)), (second, (second_start, second_end))
+        in combinations(resolved, 2)
+        if first_start < second_end and second_start < first_end
+    ]
+
+
+def _read_run_holdings(project_id: ID, run_id: ID,
+                       citations: list[ChallengeCitation]) -> _RunHoldings:
+    manifest = run_service.read_run_manifest(project_id, run_id)
+    written = {record.stage_id for record in manifest.stage_records if record.output_path}
+    wanted = _find_cited_columns_by_stage_id(run_id, citations)
+    terms = terms_service.load_terms(project_id)
+    return _RunHoldings(
+        run_id=run_id,
+        outputs_by_stage_id={
+            stage_id: _read_stage_output_cells(project_id, run_id, stage_id, columns)
+            for stage_id, columns in wanted.items() if stage_id in written},
+        stage_ids={placed.id for placed in _read_workflow_stages(project_id, run_id)},
+        term_names={noun.name for noun in terms.nouns.schemas}
+        | {verb.name for verb in terms.verbs},
+    )
+
+
+def _find_cited_columns_by_stage_id(run_id: ID,
+                                    citations: list[ChallengeCitation]) -> dict[str, set[str]]:
+    wanted: dict[str, set[str]] = {}
+    for citation in citations:
+        in_this_run = not isinstance(citation, StageOutputCellCitation) or citation.run_id == run_id
+        if isinstance(citation, (StageOutputCellCitation, StageOutputColumnCitation)) and in_this_run:
+            wanted.setdefault(citation.stage_id, set()).add(citation.column)
+    return wanted
+
+
+def _read_stage_output_cells(project_id: ID, run_id: ID, stage_id: str,
+                             columns: set[str]) -> _StageOutput:
+    frame = run_service.read_stage_output(project_id, run_id, stage_id)
+    held = {str(name) for name in frame.columns}
+    return _StageOutput(
+        row_count=len(frame), columns=frozenset(held),
+        cells_by_column={
+            name: [convert_cell_to_json_value(cell) for cell in frame[name].tolist()]
+            for name in columns & held})
+
+
+def _find_citation_problem(held: _RunHoldings, citation: ChallengeCitation) -> str | None:
+    if isinstance(citation, StageOutputCellCitation):
+        return _find_cell_problem(held, citation)
+    if isinstance(citation, StageOutputColumnCitation):
+        return _find_column_problem(held, citation.stage_id, citation.column)
+    if isinstance(citation, StageCitation):
+        if citation.stage_id in held.stage_ids:
+            return None
+        return f"names stage {citation.stage_id!r}, which the run's workflow does not hold"
+    if citation.name in held.term_names:
+        return None
+    return f"names {citation.name!r}, which is no noun or verb in the project's terms"
+
+
+def _find_cell_problem(held: _RunHoldings, citation: StageOutputCellCitation) -> str | None:
+    if citation.run_id != held.run_id:
+        return f"names run {citation.run_id!r}, not the claim's run {held.run_id!r}"
+    column_problem = _find_column_problem(held, citation.stage_id, citation.column)
+    if column_problem is not None:
+        return column_problem
+    output = held.outputs_by_stage_id[citation.stage_id]
+    if not 0 <= citation.row_ordinal < output.row_count:
+        return (f"names row {citation.row_ordinal}, which the output of "
+                f"{citation.stage_id!r} does not hold ({output.row_count} rows)")
+    # Rendered, both sides: 2200 and "2200" are one figure; 2200 and "2,200" are not.
+    cell = render_figure(output.cells_by_column[citation.column][citation.row_ordinal])
+    if cell != render_figure(citation.value):
+        return f"gives value {citation.value!r}, but that cell holds {cell!r}"
+    return None
+
+
+def _find_column_problem(held: _RunHoldings, stage_id: str, column: str) -> str | None:
+    output = held.outputs_by_stage_id.get(stage_id)
+    if output is None:
+        return f"names stage {stage_id!r}, which wrote no output in run {held.run_id!r}"
+    if column not in output.columns:
+        return f"names column {column!r}, which the output of {stage_id!r} does not hold"
+    return None

@@ -1,14 +1,20 @@
-"""What every attacker is handed: the run's outputs, its arms, its columns — and nothing else."""
+"""What every attacker is handed, and what a review must hold before it is stored."""
 from __future__ import annotations
 
 import pytest
 
 from app.compiler.claim_attack.evidence import render_evidence_bundle, render_evidence_pool
-from app.models.claim_review import (
-    Attacker, Challenge, ChallengeKind, Cost, Grounding, Moves, OutputEvidence,
+from app.models.citations import (
+    StageCitation,
+    StageOutputCellCitation,
+    StageOutputColumnCitation,
+    TermCitation,
 )
-from app.models.citations import StageOutputCellCitation
+from app.models.named_schemas import NamedSchema, SchemaLibrary
+from app.models.records.claim_review import AttackType, Challenge, ClaimPart
+from app.models.terms import Terms, Verb
 from app.services import claim_review
+from app.services import terms as terms_service
 from app.services.errors import ClaimReviewRefused
 from claim_review_fixture import PROJECT, TOTAL_TEXT, claim_the_total, run_the_fixture
 
@@ -118,104 +124,224 @@ def test_a_table_the_run_published_is_pooled_by_its_row_count(claim):
     assert "3 rows" in render_evidence_bundle(bundle)
 
 
-def _challenge(backing: str, grounding_index: int | None = 0) -> Challenge:
-    return Challenge(attacker=Attacker.coverage, kind=ChallengeKind.coverage,
-                     grounding_index=grounding_index,
-                     text="t", evidence="e", backing=backing, severity=2,
-                     moves=Moves.moves, cost=Cost.free)
+def _challenge(evidence: str, **overrides: object) -> Challenge:
+    fields = dict(attack_type=AttackType.coverage, claim_part_index=0, text="t",
+                  justification="j", evidence=evidence, severity=2)
+    return Challenge.model_validate({**fields, **overrides})
 
 
-def _grounding() -> list[Grounding]:
-    return [Grounding(start=0, end=6, evidence=OutputEvidence(slug="grant-total"),
-                      how="the figure")]
+_PARTS = [ClaimPart(phrase="Grants"), ClaimPart(phrase="2,200")]
+_SESSIONS = {attack_type: f"session-{attack_type.value}" for attack_type in AttackType}
+_NO_CHALLENGES: list[Challenge] = []
 
 
-def _store(claim, backing: str, corpus: str):
+def _store(claim, *, claim_parts: list[ClaimPart] = _PARTS,
+           challenges: list[Challenge] = _NO_CHALLENGES, summary: str = "s",
+           attack_session_ids: dict[AttackType, str] = _SESSIONS, corpus: str = ""):
     return claim_review.store_claim_review(
-        PROJECT, claim.id, grounding=_grounding(), challenges=[_challenge(backing)],
-        rewrites=[], summary="s", session_ids=[], corpus=corpus)
+        PROJECT, claim.id, claim_parts=claim_parts, challenges=challenges, summary=summary,
+        claim_parts_session_id="session-parts", attack_session_ids=attack_session_ids,
+        corpus=corpus)
+
+
+def _store_evidence(claim, evidence: str, corpus: str):
+    return _store(claim, challenges=[_challenge(evidence)], corpus=corpus)
 
 
 def _pool_of(claim) -> str:
     return render_evidence_pool(claim_review.build_evidence_bundle(PROJECT, claim.id))
 
 
-def test_the_journalists_own_sentence_cannot_back_a_challenge_against_it(claim):
-    with pytest.raises(ClaimReviewRefused, match="2,200"):
-        _store(claim, "2,200", _pool_of(claim))
-    assert claim_review.load_claim_review(PROJECT, claim.id) is None
+def _refusals_of(claim, *, claim_parts: list[ClaimPart] = _PARTS,
+                 challenges: list[Challenge] = _NO_CHALLENGES,
+                 attack_session_ids: dict[AttackType, str] = _SESSIONS,
+                 corpus: str = "") -> list[str]:
+    with pytest.raises(ClaimReviewRefused) as refused:
+        _store(claim, claim_parts=claim_parts, challenges=challenges,
+               attack_session_ids=attack_session_ids, corpus=corpus)
+    assert claim_review.load_claim_review(claim.id) is None
+    return refused.value.refusals
 
 
-def test_the_run_spelling_of_the_same_figure_does_back_it(claim):
-    stored = _store(claim, "2200", _pool_of(claim))
-
-    assert claim_review.load_claim_review(PROJECT, claim.id).id == stored.id
+# ── evidence the pool prints ──
 
 
-def test_a_backing_sitting_inside_a_longer_number_is_not_in_the_pool(claim):
+def test_the_claim_owners_own_sentence_cannot_be_evidence_against_it(claim):
+    with pytest.raises(ClaimReviewRefused, match="evidence '2,200' is on no line of the pool"):
+        _store_evidence(claim, "2,200", _pool_of(claim))
+    assert claim_review.load_claim_review(claim.id) is None
+
+
+def test_the_run_spelling_of_the_same_figure_is_evidence(claim):
+    stored = _store_evidence(claim, "2200", _pool_of(claim))
+
+    assert claim_review.load_claim_review(claim.id).id == stored.id
+
+
+def test_evidence_sitting_inside_a_longer_number_is_not_in_the_pool(claim):
     with pytest.raises(ClaimReviewRefused, match="'220'"):
-        _store(claim, "220", "the pool says 2200 in total")
+        _store_evidence(claim, "220", "the pool says 2200 in total")
 
 
-def test_a_standalone_token_however_short_is_backed(claim):
-    stored = _store(claim, "5", "grant-count · How many grants · 5 · grant_totals")
+def test_a_standalone_token_however_short_is_evidence(claim):
+    stored = _store_evidence(claim, "5", "grant-count · How many grants · 5 · grant_totals")
 
-    assert stored.challenges[0].backing == "5"
+    assert stored.challenges[0].evidence == "5"
 
 
-def test_a_backing_ending_at_a_full_stop_in_the_pool_is_backed(claim):
-    stored = _store(claim, "28% of records", "the pool says 28% of records. And more.")
+def test_evidence_ending_at_a_full_stop_in_the_pool_is_printed(claim):
+    stored = _store_evidence(claim, "28% of records", "the pool says 28% of records. And more.")
 
-    assert stored.challenges[0].backing == "28% of records"
+    assert stored.challenges[0].evidence == "28% of records"
 
 
 def test_a_digit_cut_out_of_a_thousands_separated_number_is_not_in_the_pool(claim):
-    with pytest.raises(ClaimReviewRefused, match="backing '2' is"):
-        _store(claim, "2", "the pool says 2,200 in total")
+    with pytest.raises(ClaimReviewRefused, match="evidence '2' is"):
+        _store_evidence(claim, "2", "the pool says 2,200 in total")
 
 
-def test_a_challenge_landing_on_a_phrase_the_review_never_grounded_is_refused(claim):
-    with pytest.raises(ClaimReviewRefused, match="names no phrase"):
-        claim_review.store_claim_review(
-            PROJECT, claim.id, grounding=_grounding(),
-            challenges=[_challenge("2200", grounding_index=3)],
-            rewrites=[], summary="s", session_ids=[], corpus=_pool_of(claim))
-    assert claim_review.load_claim_review(PROJECT, claim.id) is None
+def test_empty_evidence_is_refused(claim):
+    # A colon then a space is a token boundary, where an empty pattern would match.
+    assert _refusals_of(claim, challenges=[_challenge("")], corpus="the pool says: 2200") == [
+        "challenge 0 (coverage): evidence '' is on no line of the pool"]
 
 
-def test_a_backing_in_neither_the_pool_nor_an_attackers_evidence_is_refused(claim):
-    grounding = [Grounding(start=0, end=6, evidence=OutputEvidence(slug="grant-total"), how="the figure")]
+def test_evidence_copied_from_an_attackers_text_is_accepted_and_the_review_round_trips(claim):
+    stored = _store(claim, challenges=[_challenge("1 of 10 rows")], summary="One row was dropped.",
+                    corpus="pool text\nattacker evidence: 1 of 10 rows were zero")
 
-    with pytest.raises(ClaimReviewRefused, match="9,999"):
-        claim_review.store_claim_review(
-            PROJECT, claim.id, grounding=grounding, challenges=[_challenge("9,999 rows")],
-            rewrites=[], summary="s", session_ids=[], corpus="the pool says 2,200")
-    assert claim_review.load_claim_review(PROJECT, claim.id) is None
-
-
-def test_a_backing_copied_from_an_attackers_evidence_is_accepted_and_the_review_round_trips(claim):
-    grounding = [Grounding(start=0, end=6, evidence=OutputEvidence(slug="grant-total"), how="the figure")]
-
-    stored = claim_review.store_claim_review(
-        PROJECT, claim.id, grounding=grounding, challenges=[_challenge("1 of 10 rows")],
-        rewrites=[], summary="One row was dropped.", session_ids=["s1"],
-        corpus="pool text\nattacker evidence: 1 of 10 rows were zero")
-
-    held = claim_review.load_claim_review(PROJECT, claim.id)
+    held = claim_review.load_claim_review(claim.id)
     assert held is not None and held.id == stored.id
-    assert held.challenges[0].backing == "1 of 10 rows" and held.session_ids == ["s1"]
+    assert held.challenges[0].evidence == "1 of 10 rows" and held.claim_parts == _PARTS
+    assert held.claim_parts_session_id == "session-parts"
+    assert held.attack_session_ids == _SESSIONS
 
 
-def test_a_span_past_the_sentence_or_overlapping_another_is_refused(claim):
-    too_far = [Grounding(start=0, end=len(TOTAL_TEXT) + 5, evidence=None, how="x")]
-    with pytest.raises(ClaimReviewRefused, match="past the end"):
-        claim_review.store_claim_review(PROJECT, claim.id, grounding=too_far, challenges=[],
-                                        rewrites=[], summary="s", session_ids=[], corpus="")
-    crossing = [Grounding(start=0, end=10, evidence=None, how="x"),
-                Grounding(start=5, end=12, evidence=None, how="y")]
-    with pytest.raises(ClaimReviewRefused, match="overlap"):
-        claim_review.store_claim_review(PROJECT, claim.id, grounding=crossing, challenges=[],
-                                        rewrites=[], summary="s", session_ids=[], corpus="")
+# ── claim parts ──
+
+
+def test_a_phrase_the_claim_holds_once_asked_for_a_second_time_is_refused(claim):
+    assert _refusals_of(claim, claim_parts=[ClaimPart(phrase="Grants", occurrence=2)]) == [
+        "claim part 0 'Grants': the claim holds it fewer than 2 times"]
+
+
+def test_a_phrase_the_claim_never_holds_is_refused(claim):
+    assert _refusals_of(claim, claim_parts=[ClaimPart(phrase="grants")]) == [
+        "claim part 0 'grants': the claim holds it fewer than 1 times"]
+
+
+def test_claim_parts_that_overlap_are_refused_naming_both(claim):
+    overlapping = [ClaimPart(phrase="Grants came"), ClaimPart(phrase="2,200"),
+                   ClaimPart(phrase="came to")]
+
+    assert _refusals_of(claim, claim_parts=overlapping) == ["claim parts 0 and 2 overlap"]
+
+
+def test_claim_parts_that_only_touch_are_accepted(claim):
+    stored = _store(claim, claim_parts=[ClaimPart(phrase="Grants"), ClaimPart(phrase=" came to")])
+
+    assert [part.phrase for part in stored.claim_parts] == ["Grants", " came to"]
+
+
+# ── challenges ──
+
+
+def test_a_challenge_landing_on_a_claim_part_the_review_does_not_hold_is_refused(claim):
+    challenges = [_challenge("2200", claim_part_index=2)]
+
+    assert _refusals_of(claim, challenges=challenges, corpus=_pool_of(claim)) == [
+        "challenge 0 (coverage): claim_part_index 2 names no claim part; the claim has 2"]
+
+
+def test_a_challenge_on_the_last_claim_part_or_the_whole_sentence_is_accepted(claim):
+    challenges = [_challenge("2200", claim_part_index=1), _challenge("2200", claim_part_index=None)]
+
+    assert len(_store(claim, challenges=challenges, corpus=_pool_of(claim)).challenges) == 2
+
+
+def test_a_challenge_whose_attack_type_no_session_raised_is_refused(claim):
+    refusals = _refusals_of(claim, challenges=[_challenge("2200")], corpus=_pool_of(claim),
+                            attack_session_ids={AttackType.data: "session-data"})
+
+    assert refusals == ["challenge 0 (coverage): no session raised this attack type, "
+                        "so its transcript cannot be opened"]
+
+
+# ── citations ──
+
+
+def _cell(claim, **overrides: object) -> StageOutputCellCitation:
+    fields = dict(run_id=claim.citation.run_id, stage_id="grant_totals", row_ordinal=0,
+                  column="total_amount", value=2200)
+    return StageOutputCellCitation.model_validate({**fields, **overrides})
+
+
+def _store_citing(claim, citations: list):
+    return _store(claim, challenges=[_challenge("2200", citations=citations)],
+                  corpus=_pool_of(claim))
+
+
+def _refuse_citing(claim, citation) -> str:
+    [refusal] = _refusals_of(claim, challenges=[_challenge("2200", citations=[citation])],
+                             corpus=_pool_of(claim))
+    assert refusal.startswith(f"challenge 0 (coverage): {citation.kind} citation ")
+    return refusal
+
+
+def test_a_cell_the_run_holds_is_accepted_as_a_number_or_as_its_text(claim):
+    stored = _store_citing(claim, [_cell(claim), _cell(claim, value="2200"),
+                                   _cell(claim, column="grants", value=5)])
+
+    assert len(stored.challenges[0].citations) == 3
+
+
+@pytest.mark.parametrize("overrides, fragment", [
+    ({"run_id": "another_run"}, "names run 'another_run', not the claim's run"),
+    ({"stage_id": "no_such_stage"}, "names stage 'no_such_stage', which wrote no output"),
+    ({"row_ordinal": 1}, "names row 1, which the output of 'grant_totals' does not hold"),
+    ({"column": "no_such_column"}, "names column 'no_such_column', which the output of"),
+    ({"value": 2201}, "gives value 2201, but that cell holds '2200'"),
+    ({"value": "2,200"}, "gives value '2,200', but that cell holds '2200'"),
+])
+def test_a_fabricated_cell_is_refused(claim, overrides, fragment):
+    assert fragment in _refuse_citing(claim, _cell(claim, **overrides))
+
+
+def test_a_column_the_stage_output_holds_is_accepted(claim):
+    column = StageOutputColumnCitation(stage_id="grant_totals", column="grants")
+
+    assert _store_citing(claim, [column]).challenges[0].citations == [column]
+
+
+@pytest.mark.parametrize("stage_id, column, fragment", [
+    ("grant_totals", "no_such_column", "names column 'no_such_column', which the output of"),
+    ("no_such_stage", "grants", "names stage 'no_such_stage', which wrote no output"),
+])
+def test_a_fabricated_column_is_refused(claim, stage_id, column, fragment):
+    citation = StageOutputColumnCitation(stage_id=stage_id, column=column)
+
+    assert fragment in _refuse_citing(claim, citation)
+
+
+def test_a_stage_of_the_runs_workflow_is_accepted_and_one_it_lacks_is_refused(claim):
+    assert "the run's workflow does not hold" in _refuse_citing(
+        claim, StageCitation(stage_id="no_such_stage"))
+    assert _store_citing(claim, [StageCitation(stage_id="funded")]).challenges[0].citations
+
+
+def _write_a_noun_and_a_verb() -> None:
+    terms_service.write_terms(PROJECT, Terms(
+        nouns=SchemaLibrary(schemas=[NamedSchema(name="grant", title="A grant")]),
+        verbs=[Verb(name="funded", definition="Paid out.")]))
+
+
+def test_a_term_the_project_defines_is_accepted_and_one_it_lacks_is_refused(claim):
+    _write_a_noun_and_a_verb()
+
+    assert "no noun or verb in the project's terms" in _refuse_citing(
+        claim, TermCitation(name="grants"))
+    stored = _store_citing(claim, [TermCitation(name="grant"), TermCitation(name="funded")])
+    assert len(stored.challenges[0].citations) == 2
 
 
 def test_a_table_claim_is_refused_with_the_reason(projects_root):
@@ -234,5 +360,4 @@ def test_a_table_claim_is_refused_with_the_reason(projects_root):
     with pytest.raises(ClaimReviewRefused, match="table claim"):
         claim_review.build_evidence_bundle(PROJECT, table_claim.id)
     with pytest.raises(ClaimReviewRefused, match="table claim"):
-        claim_review.store_claim_review(PROJECT, table_claim.id, grounding=[], challenges=[],
-                                        rewrites=[], summary="s", session_ids=[], corpus="")
+        _store(table_claim, claim_parts=[])

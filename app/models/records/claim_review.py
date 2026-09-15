@@ -1,5 +1,7 @@
+"""A stored claim review: the claim's parts, the challenges kept, and the sessions behind them."""
 from __future__ import annotations
 
+from enum import Enum
 from typing import ClassVar
 
 from pydantic import Field
@@ -7,7 +9,57 @@ from pydantic import Field
 from app.core.errors import ClaimReviewIsImmutable
 from app.core.ids import ID
 from app.core.record import PersistedModel, PersistenceScope
-from app.models.claim_review import Challenge, Grounding, Rewrite
+from app.models.citations import ChallengeCitation
+from app.models.schema import _Base
+
+
+class AttackType(str, Enum):
+    data = "data"
+    choice = "choice"
+    omission = "omission"
+    coverage = "coverage"
+    meaning = "meaning"
+    gap = "gap"
+
+
+SEVERITY_FLOOR = 0
+SEVERITY_CEILING = 3
+
+SEVERITY_WORDS: dict[int, str] = {
+    0: "checked, quiet",
+    1: "worth a footnote",
+    2: "moves the figure, or bounds it",
+    3: "could not stand as written",
+}
+
+_SEVERITY_DESCRIPTION = "How far it moves the claim. " + ". ".join(
+    f"{level} {word}" for level, word in SEVERITY_WORDS.items()
+)
+
+
+class ClaimPart(_Base):
+    phrase: str = Field(min_length=1, description="The phrase, copied word for word from the claim.")
+    occurrence: int = Field(
+        default=1, ge=1, description="Which time the phrase appears in the claim, counting from 1."
+    )
+
+
+class Challenge(_Base):
+    attack_type: AttackType = Field(description="What sort of stretch this is.")
+    claim_part_index: int | None = Field(
+        default=None, ge=0,
+        description="Which claim part it lands on, by position in the claim parts; null for the whole sentence.",
+    )
+    text: str = Field(description="The challenge in one sentence, addressed to the claim owner.")
+    justification: str = Field(description="What in the run makes it stick, in one sentence.")
+    evidence: str = Field(description="A figure or phrase copied word for word from the run.")
+    citations: list[ChallengeCitation] = Field(
+        default_factory=list,
+        description="The pieces of the run the evidence sits in, so a reader can open them.",
+    )
+    severity: int = Field(
+        ge=SEVERITY_FLOOR, le=SEVERITY_CEILING, description=_SEVERITY_DESCRIPTION,
+    )
 
 
 class ClaimReview(PersistedModel):
@@ -16,16 +68,14 @@ class ClaimReview(PersistedModel):
     collection: ClassVar[str] = "claim_review"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
 
-    project_id: ID = Field(frozen=True)
     claim_id: ID = Field(frozen=True)
-    run_id: ID = Field(frozen=True)
-    # Every phrase of the claim, and what in the run it rests on.
-    grounding: list[Grounding] = Field(frozen=True)
+    claim_parts: list[ClaimPart] = Field(frozen=True)
     challenges: list[Challenge] = Field(frozen=True)
-    proposed_rewrites: list[Rewrite] = Field(default=[], frozen=True)
     summary: str = Field(frozen=True)
-    # The attacker sessions, so a reader can open the transcript behind a challenge.
-    session_ids: list[ID] = Field(default=[], frozen=True)
+    claim_parts_session_id: ID = Field(frozen=True)
+    # The session that raised each attack type, so a challenge opens its own transcript;
+    # `gap` is the orchestrator's.
+    attack_session_ids: dict[AttackType, ID] = Field(frozen=True)
 
     def save(self) -> None:
         # Frozen fields stop a mutation; this stops a fresh record with a stored id.

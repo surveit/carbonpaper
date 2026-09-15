@@ -1,45 +1,50 @@
-"""The review's models: spans, severities and evidence refs are shaped before any model runs."""
+"""The review's models: claim parts, severities and citation kinds are shaped before any agent runs."""
 from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
 
-from app.models.claim_review import (
-    SEVERITY_WORDS,
-    Attacker,
-    Challenge,
-    ChallengeKind,
-    Cost,
-    Grounding,
-    MeaningAnswer,
-    Moves,
-    OutputEvidence,
-    RaisedChallenge,
-    Rewrite,
-)
+from app.models.citations import StageOutputCellCitation
+from app.models.claim_review import ChallengesAnswer, OrchestratorAnswer, find_claim_part_spans
+from app.models.records.claim_review import SEVERITY_WORDS, AttackType, Challenge, ClaimPart
 
 
-def _challenge(**overrides) -> Challenge:
-    fields = dict(attacker=Attacker.coverage, kind=ChallengeKind.coverage, grounding_index=0,
-                  text="Blank outcomes count as unknown.", evidence="28% of records are blank.",
-                  backing="28% of records", severity=3, moves=Moves.moves, cost=Cost.free)
-    return Challenge(**{**fields, **overrides})
+def _challenge(**overrides: object) -> Challenge:
+    fields = dict(attack_type=AttackType.coverage, claim_part_index=0,
+                  text="Blank outcomes count as unknown.",
+                  justification="28% of records are blank.", evidence="28% of records",
+                  severity=3)
+    return Challenge.model_validate({**fields, **overrides})
 
 
-def test_a_grounding_lands_on_one_piece_of_the_run_or_on_nothing():
-    landed = Grounding(start=0, end=14, evidence=OutputEvidence(slug="ai-spend"), how="the figure")
-    nowhere = Grounding(start=15, end=20, evidence=None, how="no figure, column, term or stage")
-    assert landed.evidence is not None and landed.evidence.kind == "output"
-    assert nowhere.evidence is None
+def test_a_claim_part_is_found_at_the_occurrence_it_names():
+    text = "grants rose; grants fell"
+    parts = [ClaimPart(phrase="grants"), ClaimPart(phrase="grants", occurrence=2)]
+
+    assert find_claim_part_spans(text, parts) == [(0, 6), (13, 19)]
 
 
-def test_an_evidence_ref_is_told_apart_by_its_kind():
-    parsed = Grounding.model_validate(
-        {"start": 0, "end": 3, "how": "x", "evidence": {"kind": "term", "name": "filing"}})
-    assert parsed.evidence is not None and parsed.evidence.kind == "term"
-    with pytest.raises(ValidationError) as exc:
-        Grounding.model_validate({"start": 0, "end": 3, "how": "x", "evidence": {"kind": "rumour"}})
-    assert exc.value.errors()[0]["type"] == "union_tag_invalid"
+def test_overlapping_repeats_of_a_phrase_each_count_as_an_occurrence():
+    assert find_claim_part_spans("a a a", [ClaimPart(phrase="a a", occurrence=2)]) == [(2, 5)]
+
+
+def test_a_phrase_the_claim_holds_fewer_times_than_asked_has_no_span():
+    parts = [ClaimPart(phrase="grants", occurrence=2), ClaimPart(phrase="fell")]
+
+    assert find_claim_part_spans("grants rose", parts) == [None, None]
+
+
+def test_a_claim_part_needs_a_phrase_and_counts_occurrences_from_one():
+    with pytest.raises(ValidationError):
+        ClaimPart(phrase="")
+    with pytest.raises(ValidationError):
+        ClaimPart(phrase="grants", occurrence=0)
+
+
+def test_a_challenge_carries_exactly_these_fields_in_this_order():
+    assert list(Challenge.model_fields) == [
+        "attack_type", "claim_part_index", "text", "justification", "evidence", "citations",
+        "severity"]
 
 
 def test_severity_runs_from_zero_to_three_and_each_has_a_word():
@@ -53,15 +58,32 @@ def test_severity_runs_from_zero_to_three_and_each_has_a_word():
     assert all(f"{level} {word}" in spelled for level, word in SEVERITY_WORDS.items())
 
 
-def test_a_raised_challenge_carries_no_severity_and_no_backing():
-    raised = RaisedChallenge(kind=ChallengeKind.data, text="t", evidence="e",
-                             moves=Moves.none, cost=Cost.free)
-    assert not hasattr(raised, "severity") and not hasattr(raised, "backing")
-    assert raised.evidence_refs == [] and _challenge().evidence_refs == []
+def test_a_citation_is_told_apart_by_its_kind():
+    parsed = _challenge(citations=[
+        {"kind": "stage_output_cell", "run_id": "r", "stage_id": "s", "row_ordinal": 0,
+         "column": "c", "value": 1},
+        {"kind": "stage_output_column", "stage_id": "s", "column": "c"},
+        {"kind": "stage", "stage_id": "s"},
+        {"kind": "term", "name": "grant"},
+    ])
+
+    assert [citation.kind for citation in parsed.citations] == [
+        "stage_output_cell", "stage_output_column", "stage", "term"]
+    with pytest.raises(ValidationError) as exc:
+        _challenge(citations=[{"kind": "branch", "branch_id": "b"}])
+    assert exc.value.errors()[0]["type"] == "union_tag_invalid"
 
 
-def test_the_meaning_attacker_may_propose_at_most_two_rewrites():
-    three = [Rewrite(text=f"reading {i}", why="w") for i in range(3)]
+def test_every_field_an_agent_fills_on_a_cell_citation_is_described():
+    described = {name: field.description for name, field in
+                 StageOutputCellCitation.model_fields.items() if name != "kind"}
+
+    assert set(described) == {"run_id", "stage_id", "row_ordinal", "column", "value"}
+    assert all(described.values())
+
+
+def test_no_answer_carries_a_suggested_rewrite():
     with pytest.raises(ValidationError):
-        MeaningAnswer(challenges=[], rewrites=three)
-    assert len(MeaningAnswer(challenges=[], rewrites=three[:2]).rewrites) == 2
+        ChallengesAnswer.model_validate({"challenges": [], "rewrites": []})
+    with pytest.raises(ValidationError):
+        OrchestratorAnswer.model_validate({"challenges": [], "summary": "s", "rewrites": []})
