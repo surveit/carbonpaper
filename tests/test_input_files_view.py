@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.models.claims import StageOutputCellCitation
+from app.models.citations import StageOutputCellCitation
 from app.services import run as run_service
 from app.services.project import save_working_copy_as_version
 from app.web.input_files_view import load_input_files

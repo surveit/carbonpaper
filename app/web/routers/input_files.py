@@ -15,7 +15,7 @@ from app.core.errors import (
     StageNotInRun,
 )
 from app.core.frames import read_frame_table, read_native_scalar_as_json
-from app.models.claims import StageOutputCellCitation
+from app.models.citations import StageOutputCellCitation
 from app.models.schema import StageId
 from app.runtime.errors import MissingLineage
 from app.services.workspace import resolve_run_dir

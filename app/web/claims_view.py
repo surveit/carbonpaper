@@ -11,6 +11,8 @@ from app.core.run_status import RunStatus
 from app.models.claims import (
     ClaimStatus,
     DataUniverseRequirement,
+)
+from app.models.citations import (
     PublishedCitation,
     StageOutputCellCitation,
 )

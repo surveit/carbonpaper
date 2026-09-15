@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 import app.services.run as run_service
-from app.models.claims import StageOutputCellCitation
+from app.models.citations import StageOutputCellCitation
 from app.models.branch_analysis import BranchReason, BranchRole
 from app.runtime.manifest import read_run_manifest
 from app.runtime.branch_analysis import (

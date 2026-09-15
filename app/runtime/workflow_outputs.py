@@ -6,7 +6,7 @@ import pyarrow as pa
 from app.core.frames import read_cell
 from app.core.ids import ID
 from app.models import WorkflowStage
-from app.models.claims import (
+from app.models.citations import (
     RowsRectangle,
     StageOutputCellCitation,
     StageOutputTableCitation,

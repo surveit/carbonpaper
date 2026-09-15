@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.models.claims import (
+from app.models.citations import (
     RowsRectangle,
     StageOutputCellCitation,
     StageOutputTableCitation,
