@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 from evals.harness.dataset import Case, Dataset, DatasetInvalid, read_dataset
 from evals.harness.definition import (
     EvalDefinition,
+    EvalDefinitionInvalid,
     ExpectedOutput,
     Judgement,
     LoadContext,
@@ -260,6 +261,25 @@ def test_strict_fields_validate_as_they_would_from_json(tmp_path: Path) -> None:
     )
 
 
+def test_an_eval_is_refused_naming_each_of_its_models_that_accepts_extra_fields() -> None:
+    with pytest.raises(EvalDefinitionInvalid) as refusal:
+        EvalDefinition(
+            name="lenient_eval",
+            input_model=LenientInput,
+            expected_model=ReopenedExpected,
+            output_model=LenientOutput,
+            outcomes=("matched", "differed"),
+            default_repeats=1,
+            load=refuse_to_load,
+            judge=refuse_to_judge,
+        )
+
+    assert str(refusal.value) == (
+        "eval 'lenient_eval': input_model LenientInput, expected_model ReopenedExpected, "
+        "output_model LenientOutput must forbid extra fields (model_config extra='forbid')"
+    )
+
+
 @pytest.mark.parametrize(
     ("model", "fields"),
     [
@@ -311,6 +331,18 @@ class TimedInput(BaseModel):
 
 class ExpectedTime(ExpectedOutput):
     at: datetime = Field(strict=True)
+
+
+class LenientInput(BaseModel):
+    answer: str
+
+
+class ReopenedExpected(ExpectedOutput):
+    model_config = ConfigDict(extra="allow")
+
+
+class LenientOutput(BaseModel):
+    answer: str
 
 
 def refuse_to_load(case_input: BaseModel, context: LoadContext) -> NoReturn:

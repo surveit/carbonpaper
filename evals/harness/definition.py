@@ -30,6 +30,14 @@ class EvalDefinition(Generic[InputT, ExpectedT, OutputT]):
     load: Callable[[InputT, LoadContext], Loaded[OutputT]]
     judge: Callable[[OutputT, list[ExpectedT]], list[Judgement]]
 
+    def __post_init__(self) -> None:
+        lenient_models = _find_models_accepting_extra_fields(self)
+        if lenient_models:
+            raise EvalDefinitionInvalid(
+                f"eval {self.name!r}: {', '.join(lenient_models)} must forbid extra fields "
+                "(model_config extra='forbid')"
+            )
+
 
 class Loaded(BaseModel, Generic[OutputT]):
     model_config = ConfigDict(extra="forbid")
@@ -57,3 +65,22 @@ class CaseRefused(Exception):
     def __init__(self, reason: str) -> None:
         super().__init__(reason)
         self.reason = reason
+
+
+class EvalDefinitionInvalid(Exception):
+    pass
+
+
+def _find_models_accepting_extra_fields(
+    definition: EvalDefinition[InputT, ExpectedT, OutputT],
+) -> list[str]:
+    models: list[tuple[str, type[BaseModel]]] = [
+        ("input_model", definition.input_model),
+        ("expected_model", definition.expected_model),
+        ("output_model", definition.output_model),
+    ]
+    return [
+        f"{role} {model.__name__}"
+        for role, model in models
+        if model.model_config.get("extra") != "forbid"
+    ]
