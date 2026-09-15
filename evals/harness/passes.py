@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+
+from evals.harness.definition import Judgement, OutputT
 
 
 class OutputStored(BaseModel):
@@ -40,8 +43,21 @@ class PassRecord(BaseModel):
     loads: list[LoadRecord]
 
 
+class JudgementRefused(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str
+
+
 class PassFolderExists(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class JudgedAttempt:
+    case_id: str
+    attempt: int
+    judgements: list[Judgement] | JudgementRefused
 
 
 @dataclass(frozen=True)
@@ -67,10 +83,28 @@ class PassFolder:
     def write_record(self, record: PassRecord) -> None:
         self._record_path.write_text(record.model_dump_json(indent=2), encoding="utf-8")
 
+    def read_record(self) -> PassRecord:
+        return PassRecord.model_validate_json(self._record_path.read_text(encoding="utf-8"))
+
     def write_output(self, case_id: str, attempt: int, output: BaseModel) -> None:
         path = self._output_path(case_id, attempt)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(output.model_dump_json(indent=2), encoding="utf-8")
+
+    def read_output(self, case_id: str, attempt: int, output_model: type[OutputT]) -> OutputT:
+        path = self._output_path(case_id, attempt)
+        return output_model.model_validate_json(path.read_text(encoding="utf-8"))
+
+    def replace_judgements(self, judged_attempts: list[JudgedAttempt]) -> None:
+        judgements_dir = self.root / "judgements"
+        if judgements_dir.exists():
+            shutil.rmtree(judgements_dir)
+        judgements_dir.mkdir()
+        for judged in judged_attempts:
+            path = judgements_dir / judged.case_id / f"{judged.attempt}.json"
+            path.parent.mkdir(exist_ok=True)
+            content = _JUDGEMENT_FILE.dump_json(judged.judgements, indent=2).decode("utf-8")
+            path.write_text(content, encoding="utf-8")
 
     @property
     def _record_path(self) -> Path:
@@ -78,3 +112,8 @@ class PassFolder:
 
     def _output_path(self, case_id: str, attempt: int) -> Path:
         return self.root / "outputs" / case_id / f"{attempt}.json"
+
+
+_JUDGEMENT_FILE: TypeAdapter[list[Judgement] | JudgementRefused] = TypeAdapter(
+    list[Judgement] | JudgementRefused
+)

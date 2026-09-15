@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import subprocess
 import time
+from collections import Counter
+from collections.abc import Collection, Iterable
 from datetime import datetime
 from pathlib import Path
 
@@ -11,15 +13,27 @@ from evals.harness.definition import (
     EvalDefinition,
     ExpectedT,
     InputT,
+    Judgement,
     LoadContext,
     OutputT,
 )
-from evals.harness.passes import LoadRefused, OutputStored, PassFolder, PassRecord
+from evals.harness.passes import (
+    JudgedAttempt,
+    JudgementRefused,
+    LoadRefused,
+    OutputStored,
+    PassFolder,
+    PassRecord,
+)
 
 _DATASET_FILE = "dataset.json"
 
 
 class LoadCountNotConfirmed(Exception):
+    pass
+
+
+class JudgementInvalid(Exception):
     pass
 
 
@@ -50,7 +64,23 @@ def run_pass(
         pass_dir=folder.root, workspace_dir=folder.workspace_dir, repo_root=repo_root
     )
     _load_cases(definition, cases, repeats, context, folder, record)
+    judge_pass(definition, folder.root, eval_dir=eval_dir)
     return folder.root
+
+
+def judge_pass(
+    definition: EvalDefinition[InputT, ExpectedT, OutputT], pass_dir: Path, *, eval_dir: Path
+) -> None:
+    dataset_path = eval_dir / _DATASET_FILE
+    cases_by_id = {case.case_id: case for case in read_dataset(dataset_path, definition).cases}
+    folder = PassFolder(pass_dir)
+    stored = [load for load in folder.read_record().loads if isinstance(load, OutputStored)]
+    _validate_stored_cases_are_in_dataset(stored, cases_by_id.keys(), dataset_path)
+    judged_attempts = [
+        _judge_stored_output(definition, folder, cases_by_id[load.case_id], load.attempt)
+        for load in stored
+    ]
+    folder.replace_judgements(judged_attempts)
 
 
 def _select_cases(
@@ -61,8 +91,9 @@ def _select_cases(
     known_ids = {case.case_id for case in cases}
     unknown_ids = [case_id for case_id in case_ids if case_id not in known_ids]
     if unknown_ids:
-        listed_ids = ", ".join(repr(case_id) for case_id in unknown_ids)
-        raise CaseSelectionInvalid(f"{dataset_path}: case_ids not in the dataset: {listed_ids}")
+        raise CaseSelectionInvalid(
+            f"{dataset_path}: case_ids not in the dataset: {_quote_each(unknown_ids)}"
+        )
     return [case for case in cases if case.case_id in case_ids]
 
 
@@ -76,7 +107,7 @@ def _validate_load_count(planned: int, confirmed_loads: int) -> None:
 def _read_code_commit(repo_root: Path) -> str:
     result = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo_root, capture_output=True)
     if result.returncode != 0:
-        stderr = result.stderr.decode("utf-8").strip()
+        stderr = result.stderr.decode("utf-8", errors="replace").strip()
         raise CodeCommitUnreadable(f"git rev-parse HEAD failed in {repo_root}: {stderr}")
     return result.stdout.decode("utf-8").strip()
 
@@ -127,3 +158,74 @@ def _load_attempt(
     return OutputStored(
         case_id=case.case_id, attempt=attempt, seconds=seconds, cost_usd=loaded.cost_usd
     )
+
+
+def _validate_stored_cases_are_in_dataset(
+    stored: list[OutputStored], dataset_case_ids: Collection[str], dataset_path: Path
+) -> None:
+    stored_ids = dict.fromkeys(load.case_id for load in stored)
+    missing_ids = [case_id for case_id in stored_ids if case_id not in dataset_case_ids]
+    if missing_ids:
+        raise JudgementInvalid(
+            f"{dataset_path}: stored outputs name case_ids not in the dataset: "
+            f"{_quote_each(missing_ids)}"
+        )
+
+
+def _judge_stored_output(
+    definition: EvalDefinition[InputT, ExpectedT, OutputT],
+    folder: PassFolder,
+    case: Case[InputT, ExpectedT],
+    attempt: int,
+) -> JudgedAttempt:
+    output = folder.read_output(case.case_id, attempt, definition.output_model)
+    try:
+        judgements = definition.judge(output, case.expected_outputs)
+    except CaseRefused as refusal:
+        return JudgedAttempt(case.case_id, attempt, JudgementRefused(reason=refusal.reason))
+    _validate_judgements(judgements, case, attempt, definition.outcomes)
+    return JudgedAttempt(case.case_id, attempt, judgements)
+
+
+def _validate_judgements(
+    judgements: list[Judgement],
+    case: Case[InputT, ExpectedT],
+    attempt: int,
+    outcomes: tuple[str, ...],
+) -> None:
+    expected_keys = [expected.key for expected in case.expected_outputs]
+    problems = _find_key_problems(judgements, expected_keys)
+    problems += _find_outcome_problems(judgements, outcomes)
+    if problems:
+        raise JudgementInvalid(f"case {case.case_id!r} attempt {attempt}: {'; '.join(problems)}")
+
+
+def _find_key_problems(judgements: list[Judgement], expected_keys: list[str]) -> list[str]:
+    counts = Counter(judgement.key for judgement in judgements)
+    missing = [
+        f"expected key {key!r} has no judgement" for key in expected_keys if key not in counts
+    ]
+    repeated = [
+        f"expected key {key!r} is judged {counts[key]} times"
+        for key in expected_keys
+        if key in counts and counts[key] > 1
+    ]
+    unexpected = [
+        f"key {key!r} is not an expected key of the case"
+        for key in counts
+        if key not in expected_keys
+    ]
+    return missing + repeated + unexpected
+
+
+def _find_outcome_problems(judgements: list[Judgement], outcomes: tuple[str, ...]) -> list[str]:
+    allowed = _quote_each(outcomes)
+    return [
+        f"key {judgement.key!r} has outcome {judgement.outcome!r}, not one of {allowed}"
+        for judgement in judgements
+        if judgement.outcome not in outcomes
+    ]
+
+
+def _quote_each(values: Iterable[str]) -> str:
+    return ", ".join(repr(value) for value in values)
