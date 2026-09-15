@@ -44,7 +44,7 @@ _EXTRA_FIELD_ERRORS: set[tuple[str, tuple[int | str, ...]]] = {
 }
 
 
-def test_a_throwaway_workspace_keeps_every_store_under_its_resolved_root(
+def test_a_throwaway_workspace_points_every_root_inside_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = (tmp_path / "pass").resolve()
@@ -66,8 +66,17 @@ def test_a_throwaway_workspace_creates_its_missing_root_and_parents(tmp_path: Pa
     assert (root / "app.db").is_file()
 
 
+def test_configuring_a_throwaway_workspace_refuses_a_store_left_outside_its_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("evals.runs.workspace.set_projects_dir", lambda path: None)
+    with pytest.raises(WorkspaceOutsidePass) as refused:
+        configure_throwaway_workspace(tmp_path / "pass")
+    assert f"projects dir: {(tmp_path / 'examples').resolve()}" in str(refused.value)
+
+
 @pytest.mark.parametrize("outside", [{"database", "files root"}, {"frame store", "projects dir"}])
-def test_validate_workspace_is_under_names_each_store_outside_the_root_and_no_other(
+def test_a_workspace_whose_file_root_is_elsewhere_is_refused(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, outside: set[str]
 ) -> None:
     root = tmp_path / "pass"
@@ -84,7 +93,7 @@ def test_validate_workspace_is_under_names_each_store_outside_the_root_and_no_ot
     assert named == outside
 
 
-def test_a_recipe_round_trips_as_lf_utf8_json_and_refuses_a_field_no_model_declares(tmp_path: Path) -> None:
+def test_a_recipe_round_trips_through_run_json(tmp_path: Path) -> None:
     recipe = _build_recipe()
     write_recipe(tmp_path, recipe)
     written = (tmp_path / RECIPE_FILE).read_bytes().decode("utf-8")
