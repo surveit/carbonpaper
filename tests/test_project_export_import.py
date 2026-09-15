@@ -32,7 +32,6 @@ from app.models.stages.signature import ReplacesSignature
 from app.services import project, terms, versioning, workspace
 from app.services.claim_shapes import load_claim_shapes, write_claim_shapes
 from app.services.claims import submit_claim
-from app.services.errors import ClaimShapeWriteRefused
 from app.services.loader import load_stage_entries, save_stages
 from app.services.project import WorkflowFile, export_project, import_project
 from app.services.methodology import read_methodology
@@ -309,7 +308,7 @@ def test_a_bundle_carrying_one_shape_id_twice_is_refused_before_anything_is_writ
 
 def test_a_bundle_whose_shapes_a_project_would_refuse_is_refused_before_anything_is_written(tmp_path):
     workspace.set_projects_dir(tmp_path)
-    bundle = WorkflowFile.model_validate_json(json.dumps({
+    refused = json.dumps({
         "name": "refused_shapes", "document": "# doc", "model": "m", "source": "s",
         "data_model": _TINY_LIBRARY.model_dump(mode="json"),
         "claim_shapes": [
@@ -319,13 +318,14 @@ def test_a_bundle_whose_shapes_a_project_would_refuse_is_refused_before_anything
              "template": "The file names ${value} for ${period}."},
         ],
         "stages": [],
-    }))
+    })
 
-    with pytest.raises(ClaimShapeWriteRefused) as caught:
-        import_project(bundle)
+    with pytest.raises(ValidationError) as caught:
+        import_project(WorkflowFile.model_validate_json(refused))
 
-    assert "two shapes were sent with the label 'Rows the uploaded file holds'" in str(caught.value)
-    assert "the template names ['period']" in str(caught.value)
+    [error] = caught.value.errors()
+    assert "two shapes were sent with the label 'Rows the uploaded file holds'" in error["msg"]
+    assert "the template names ['period']" in error["msg"]
     assert Project.list() == []
 
 

@@ -46,7 +46,7 @@ from app.services.claim_shapes import (
     find_claim_shape_refusals, load_claim_shapes, write_claim_shapes,
 )
 from app.services.errors import (
-    CacheArchiveRejected, ClaimShapeWriteRefused, ProjectArchiveRejected, WorkflowLoadError,
+    CacheArchiveRejected, ProjectArchiveRejected, WorkflowLoadError,
 )
 from app.services.project_record import read_project_name as read_project_name
 from app.services.stage_cache_transfer import (
@@ -429,10 +429,13 @@ class WorkflowFile(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _validate_claim_shape_ids(self) -> "WorkflowFile":
+    def _validate_claim_shapes(self) -> "WorkflowFile":
+        # Checked against no held shapes: an import writes them into a project it has just minted.
+        refusals = find_claim_shape_refusals(_drop_bundled_ids(self.claim_shapes), held=[])
         problems = [
             *_find_repeated_shape_ids(self.claim_shapes),
             *_find_shapes_named_but_not_carried(self.stages, self.claim_shapes),
+            *refusals,
         ]
         if problems:
             raise ValueError("; ".join(problems))
@@ -484,7 +487,6 @@ def import_project(
     wf: WorkflowFile, *, name: str | None = None,
 ) -> str:
     """Returns the project ID. Importing the same bundle twice makes two projects, not a clash."""
-    _validate_shapes_can_be_written(wf.claim_shapes)
     label = sanitize_project_name(name or wf.name)
     project_id = create_project(label, wf.document, model=wf.model, source=wf.source).id
     terms.write_terms(project_id, Terms(nouns=wf.data_model, verbs=wf.verbs))
@@ -521,13 +523,6 @@ def _read_bundled_claim_shapes(project_id: str) -> list[BundledClaimShape]:
         BundledClaimShape.model_validate(shape.model_dump(include=carried))
         for shape in load_claim_shapes(project_id)
     ]
-
-
-def _validate_shapes_can_be_written(bundled: list[BundledClaimShape]) -> None:
-    # A project this import mints holds no shapes yet.
-    refusals = find_claim_shape_refusals(_drop_bundled_ids(bundled), held=[])
-    if refusals:
-        raise ClaimShapeWriteRefused(refusals)
 
 
 def _write_shapes_under_new_ids(

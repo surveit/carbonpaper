@@ -156,6 +156,21 @@ def test_a_malformed_upload_400s_and_writes_no_project(payload):
     assert project.list_projects() == []
 
 
+def test_an_upload_whose_claim_shapes_repeat_a_label_400s_and_writes_no_project():
+    shape = {"label": "Filings read", "universe": "closed", "importance": "primary"}
+    payload = json.dumps({
+        "name": "repeated_label", "document": "hi", "model": "sonnet", "source": "test",
+        "data_model": {"schemas": []}, "stages": [],
+        "claim_shapes": [{"id": "first", **shape}, {"id": "second", **shape}],
+    }).encode("utf-8")
+
+    r = _upload(payload)
+
+    assert r.status_code == 400
+    assert "two shapes were sent with the label 'Filings read'" in r.json()["detail"]
+    assert project.list_projects() == []
+
+
 def test_cache_page_lists_projects_with_their_cached_row_count(workspace_root):
     client.post(f"/admin/load/{_BUNDLE}", follow_redirects=False)
     project_id = _loaded_project_id()
