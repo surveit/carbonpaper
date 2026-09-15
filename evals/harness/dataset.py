@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -12,6 +13,12 @@ from pydantic import BaseModel, ConfigDict, JsonValue, ValidationError
 from evals.harness.definition import EvalDefinition, ExpectedT, InputT, OutputT
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
+
+_CASE_ID = re.compile(r"[a-z0-9][a-z0-9_-]*")
+_CASE_ID_RULE = (
+    "a case_id may contain only lowercase letters, digits, hyphens and underscores, "
+    "and must start with a letter or digit"
+)
 
 
 @dataclass(frozen=True)
@@ -83,7 +90,7 @@ def _read_cases(
     path: Path,
 ) -> list[Case[InputT, ExpectedT]]:
     cases: list[Case[InputT, ExpectedT]] = []
-    problems: list[str] = []
+    problems = _find_case_id_problems(case_values)
     for position, case_value in enumerate(case_values):
         case_or_problems = _read_case(position, case_value, input_model, expected_model)
         if isinstance(case_or_problems, Case):
@@ -93,6 +100,19 @@ def _read_cases(
     if problems:
         raise DatasetInvalid(_join_problems(path, problems))
     return cases
+
+
+def _find_case_id_problems(case_values: list[JsonValue]) -> list[str]:
+    readable_ids = [_find_readable_case_id(case_value) for case_value in case_values]
+    refused_ids = [
+        case_id
+        for case_id in readable_ids
+        if case_id is not None and not _CASE_ID.fullmatch(case_id)
+    ]
+    if not refused_ids:
+        return []
+    listed_ids = ", ".join(repr(case_id) for case_id in refused_ids)
+    return [f"refused case_ids {listed_ids} ({_CASE_ID_RULE})"]
 
 
 def _read_case(

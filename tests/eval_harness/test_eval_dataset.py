@@ -198,6 +198,23 @@ def test_a_case_without_a_readable_case_id_is_named_by_its_position(tmp_path: Pa
     assert "cases[2] case_id: Input should be a valid string" in message
 
 
+def test_every_case_id_that_breaks_the_naming_rule_is_refused_in_one_message(
+    tmp_path: Path,
+) -> None:
+    refused_ids = ["Claim1", "", "dotted.", "../escape", "back\\slash", "-leading"]
+    path = write_dataset(
+        tmp_path,
+        FIXED_OUTPUT_EVAL.name,
+        [build_case(case_id, "answer") for case_id in [*refused_ids, "claim1"]],
+    )
+
+    assert read_refusal(path) == (
+        f"{path}: refused case_ids {', '.join(repr(case_id) for case_id in refused_ids)} "
+        "(a case_id may contain only lowercase letters, digits, hyphens and underscores, "
+        "and must start with a letter or digit)"
+    )
+
+
 @pytest.mark.parametrize(
     ("model", "fields"),
     [
