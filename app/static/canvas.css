@@ -39,6 +39,10 @@
 /* ── wires: every row down the wire in grey, the figure's rows as a blue core ── */
 .canvas-wire path.total { fill: none; stroke: var(--border-strong); opacity: 0.55; }
 .canvas-wire path.core { fill: none; stroke: var(--accent); opacity: 0.9; }
+/* Picking a stage fades the wires it is not on. Painting the ones it IS on would
+   lay a second colour over the accent core, and the figure's rows read as neither. */
+.canvas-world.picking .canvas-wire:not(.near) path.total { opacity: 0.1; }
+.canvas-world.picking .canvas-wire:not(.near) path.core { opacity: 0.16; }
 
 /* ── the drawer: the run page's own stage panel, over the canvas's right half ── */
 .canvas-drawer { position: absolute; top: 0; right: 0; bottom: 0; width: 52%; min-width: 420px;

@@ -221,7 +221,8 @@ window.Canvas = window.Canvas || (function(){
     const x0 = from.x + BOX_W, x1 = to.x, mid = (x0 + x1) / 2;
     const d = y0 === y1 ? `M${x0},${y0}H${x1}`
                         : `M${x0},${y0}C${mid},${y0} ${mid},${y1} ${x1},${y1}`;
-    return `<g class="canvas-wire"><path class="total" d="${d}" stroke-width="${total}"/>${
+    return `<g class="canvas-wire" data-from="${esc(edge.from_stage)}" data-to="${esc(edge.to_stage)}"
+      ><path class="total" d="${d}" stroke-width="${total}"/>${
       core ? `<path class="core" d="${d}" stroke-width="${core}"/>` : ''}</g>`;
   }
 
@@ -231,6 +232,13 @@ window.Canvas = window.Canvas || (function(){
       'picked', Boolean(picked) && picked.kind === 'stage' && picked.id === box.dataset.stage));
     view.world.querySelectorAll('[data-sheet]').forEach(sheet => sheet.classList.toggle(
       'picked', Boolean(picked) && picked.kind === 'sheet' && picked.id === sheet.dataset.sheet));
+    markPickedWires(view, picked && picked.id);
+  }
+
+  function markPickedWires(view, id){
+    view.world.classList.toggle('picking', Boolean(id));
+    view.world.querySelectorAll('.canvas-wire').forEach(wire => wire.classList.toggle(
+      'near', wire.dataset.from === id || wire.dataset.to === id));
   }
 
   // ── the drawer: the run page's own stage panel, cut to the figure's rows ──
