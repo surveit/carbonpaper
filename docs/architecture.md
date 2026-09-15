@@ -90,7 +90,8 @@ type's registered shape disagrees with that core fact, and
 
 ## `app/compiler/` — prose → LLM generation engines
 Three generators, each an `app.core.agent` Agent targeting a model schema: `data_model.py`
-(document → `SchemaLibrary`, the nouns the workflow is built on), `stage_tests.py` (one
+(document → `RowTypesAndSchemas`, the words for this project's rows and the tables
+holding them, which the workflow is built on), `stage_tests.py` (one
 python-transform stage + the project's terms → its `StageTest` cases, generated
 code-blind — it is shown neither the code nor the document), and `review_guide.py` (one
 saved version's frozen stages + the document + the terms → its `ReviewGuide`).

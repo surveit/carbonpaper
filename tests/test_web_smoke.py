@@ -56,8 +56,8 @@ def demo_project(tmp_path, monkeypatch):
     demo = tmp_path / "demo"
     demo.mkdir(parents=True, exist_ok=True)
     set_stages("demo", [_load(tmp_path), _EXTRACT])
-    terms.write_terms("demo", Terms(nouns=SchemaLibrary(
-        schemas=[NamedSchema.model_validate(_SCHEMA)]), verbs=[]))
+    terms.write_terms("demo", Terms(
+        schemas=SchemaLibrary(schemas=[NamedSchema.model_validate(_SCHEMA)])))
     workspace.set_projects_dir(tmp_path)
     return tmp_path
 

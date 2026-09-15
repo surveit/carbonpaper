@@ -23,7 +23,7 @@ from app.models import (
 )
 from app.models.claims import DATA_UNIVERSE_TOOLTIP
 from app.services import (
-    claim_shapes, code_approval, generation, methodology, project, terms, versioning,
+    claim_shapes, code_approval, methodology, project, terms, versioning,
 )
 from app.services.loader import list_parsed_stages, resolve_function_code
 from app.services.project import ProjectEdit
@@ -87,20 +87,6 @@ def set_project_private(project_name: str, private: str = Form("")):
 def delete_project(project_name: str):
     project.delete_project(validate_project_or_404(project_name))
     return RedirectResponse("/", status_code=303)
-
-
-@router.post("/project/{project_name}/generate")
-def generate_project(project_name: str):
-    validate_project_or_404(project_name)
-    document = methodology.read_methodology(project_name)
-    if document is None:
-        raise HTTPException(
-            status_code=400,
-            detail=f"project '{project_name}' has no methodology to generate from.",
-        )
-    model = project.project_meta(project_name).model or "sonnet"
-    session_id = generation.start_generation(project_name, document=document, model=model)
-    return RedirectResponse(url=f"/chat/{session_id}", status_code=303)
 
 
 # ─── Unified PROJECT sections ────────────────────────────────────────────────
@@ -323,18 +309,18 @@ def edit_schema(project_name: str, schema_name: str, json_text: str = Form(...))
         # Refused — the write never happens, the file is unchanged.
         return JSONResponse({"ok": False, "issues": issues}, status_code=400)
 
-    # Guard: the noun must ALREADY be one of the project's (edit revises; it does not
-    # create — that's the compiler's job).
+    # Edit revises a table the project already has; creating one is the compiler's job.
     stored = terms.load_terms(project_name)
-    if schema_name not in {noun.name for noun in stored.nouns.schemas}:
+    if schema_name not in {table.name for table in stored.schemas.schemas}:
         raise HTTPException(
             status_code=404,
             detail=f"'{project_name}' has no schema named '{schema_name}'",
         )
     terms.write_terms(project_name, Terms(
-        nouns=SchemaLibrary(schemas=[
-            NamedSchema.model_validate(schema) if noun.name == schema_name else noun
-            for noun in stored.nouns.schemas
+        row_types=stored.row_types,
+        schemas=SchemaLibrary(schemas=[
+            NamedSchema.model_validate(schema) if table.name == schema_name else table
+            for table in stored.schemas.schemas
         ]),
         verbs=stored.verbs,
     ))

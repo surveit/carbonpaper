@@ -9,14 +9,10 @@
       the graph — Inputs / Transform / Outputs / Spec tabs
     · Run + Create-version controls (the version LIST lives on the Versions tab)
 
-  The workflow is GENERATED automatically right after the data model (see
-  app.services.generation) in the background; this page just reads the result from
-  disk — the graph when stages are present, else a 0-state with a Generate button. No
-  live status / spinner yet (issue #95); there is no in-page build chat.
+  Stages are authored by the editing agent; this page reads the result from disk —
+  the graph when stages are present, else an empty state.
 
-  The data model is optional input to the workflow, so this section always renders —
-  there is no locked state. When no stages are on disk yet, it shows an empty state
-  (the workflow may still be building), not a lock.
+  This section always renders: there is no locked state.
 
   Context the route passes:
     state       = project.project_state(mdir); section = "workflow"

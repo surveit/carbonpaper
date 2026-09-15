@@ -86,13 +86,12 @@ def build_nav(project_id: str) -> list[NavBlock]:
 
 def _next_action(state: project.ProjectState) -> NextAction:
     project_id = state.id
-    data_model = state.data_model
     workflow = state.workflow
     runs = state.runs
     base = f"/project/{project_id}"
 
-    # 1. No nouns → the words have not been agreed.
-    if not data_model.present:
+    # 1. Nothing the Glossary would show → the terms have not been agreed.
+    if not state.has_terms:
         return NextAction(
             key="agree_terms",
             label="Agree the project's terms",
