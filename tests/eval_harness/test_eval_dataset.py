@@ -143,27 +143,59 @@ def test_a_dataset_without_cases_is_refused(tmp_path: Path) -> None:
     assert read_refusal(path) == f"{path}: dataset has no cases"
 
 
-def test_fields_a_dataset_does_not_define_are_refused(tmp_path: Path) -> None:
+def test_a_top_level_field_the_dataset_does_not_define_is_refused(tmp_path: Path) -> None:
     path = write_json(
         tmp_path,
-        {
-            "eval": FIXED_OUTPUT_EVAL.name,
-            "version": 2,
-            "cases": [
-                {
-                    "case_id": "noted",
-                    "input": {"answer": "yes"},
-                    "expected_outputs": [{"key": "answer", "equals": "yes"}],
-                    "note": "not a case field",
-                }
-            ],
-        },
+        {"eval": FIXED_OUTPUT_EVAL.name, "version": 2, "cases": [build_case("versioned", "answer")]},
+    )
+
+    assert read_refusal(path) == f"{path}: dataset version: Extra inputs are not permitted"
+
+
+def test_a_malformed_case_does_not_hide_the_problems_of_another_case(tmp_path: Path) -> None:
+    path = write_dataset(
+        tmp_path,
+        FIXED_OUTPUT_EVAL.name,
+        [
+            {
+                "case_id": "a",
+                "input": {"answer": "yes"},
+                "expected_outputs": [{"key": "answer", "equals": "yes"}],
+                "note": "stray",
+            },
+            {
+                "case_id": "b",
+                "input": {"answer": 7},
+                "expected_outputs": [{"key": "answer", "equals": "7"}],
+            },
+        ],
     )
 
     message = read_refusal(path)
 
-    assert "dataset.version" in message
-    assert "dataset.cases[0].note" in message
+    assert "case 'a' note: Extra inputs are not permitted" in message
+    assert "case 'b' input.answer: Input should be a valid string" in message
+
+
+def test_a_case_without_a_readable_case_id_is_named_by_its_position(tmp_path: Path) -> None:
+    path = write_dataset(
+        tmp_path,
+        FIXED_OUTPUT_EVAL.name,
+        [
+            build_case("first", "answer"),
+            {"input": {"answer": "yes"}, "expected_outputs": [{"key": "answer", "equals": "yes"}]},
+            {
+                "case_id": 3,
+                "input": {"answer": "yes"},
+                "expected_outputs": [{"key": "answer", "equals": "yes"}],
+            },
+        ],
+    )
+
+    message = read_refusal(path)
+
+    assert "cases[1] case_id: Field required" in message
+    assert "cases[2] case_id: Input should be a valid string" in message
 
 
 @pytest.mark.parametrize(
