@@ -1,40 +1,40 @@
-{# Per-run stage detail panel. One tab strip: Data | Schema | Transform.
-   Data folds what were separate Inputs/Outputs tabs into one pane — the output
-   reads as a diff AGAINST its input where the stage type permits one, so
-   keeping the two apart made the reader reconcile them mentally. Schema is the
-   static contract: the input schemas, then the output schema. #}
+{# Per-run stage detail panel. One tab strip: Data | Transform — or, where the caller
+   names `only_pane`, that pane alone and no strip. Data folds what were separate
+   Inputs/Outputs tabs into one pane — the output reads as a diff AGAINST its input
+   where the stage type permits one, so keeping the two apart made the reader
+   reconcile them mentally. The static contract — the input schemas, then the output
+   schema — is a second face of Data, reached from a table's own head. #}
 {% from "_schema_table.html" import schema_table %}
 {% from "_stage_code.html" import stage_code %}
 {% from "_run_log_panel.html" import run_log_panel %}
+{% from "_rows_line.html" import counts_line with context %}
+{% from "_rows_line.html" import frame_counts %}
 
 <div class="run-stage-panel"
      data-project="{{ project }}" data-run="{{ run_id }}" data-stage="{{ stage.stage_id }}">
 
 {# The name is the heading of the whole region — the section around this panel
-   carries no title of its own — so it leads, and the type sits out at the right
-   margin. Status belongs with what the run did, not with what the stage is, so it
-   rides the facts line below. #}
+   carries no title of its own — so it leads, and what the stage is and how its run
+   went sit beside it on the one line. #}
+{# What the run did here, on the chip that says how it went: a reader who wants the
+   timing hovers for it. Under a scope the count says which of the frame's rows are
+   the figure's. #}
+{%- set facts %}{{ stage.elapsed_ms | friendly_duration }} ·
+    {%- if scoped %} {{ reached_rows | length | figure }} of {{ stage.output_row_count or 0 | figure }} rows behind this figure
+    {%- else %} {{ stage.output_row_count or 0 | figure }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}{% endif %}
+    {%- if stage.llm_usage and stage.llm_usage.calls %} · {{ stage.llm_usage.calls | figure }} model call{% if stage.llm_usage.calls != 1 %}s{% endif %}, {{ stage.llm_usage.cost_usd | usd }}{% endif %}
+    {%- if stage.finished_at %} · finished {{ stage.finished_at | friendly_time }}{% endif %}
+{%- endset %}
 <div class="stage-panel-head">
     <div class="head-line">
         <h2><code>{{ stage.stage_id }}</code></h2>
         <span class="type-tag {{ type_class.get(stage.type, 'custom') }}" title="{{ stage.type | plain_value }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type | label_stage_type }}</span>
+        <span class="run-status status-{{ stage.status }} has-tip" tabindex="0"
+              data-tip="{{ facts | striptags | trim }}">{{ stage.status }}</span>
     </div>
     {# The description comes from the pinned definition, so a run whose version
        no longer resolves shows no line rather than a guessed one. #}
     {% if stage_def %}<p class="stage-blurb">{{ stage_def.description }}</p>{% endif %}
-    {# What the run did here, on the chip that says how it went: a reader who wants
-       the timing hovers for it, and it costs the panel no line of its own. Under a
-       scope the count says which of the frame's rows are the figure's. #}
-    {%- set facts %}{{ stage.elapsed_ms | friendly_duration }} ·
-        {%- if scoped %} {{ reached_rows | length | figure }} of {{ stage.output_row_count or 0 | figure }} rows behind this figure
-        {%- else %} {{ stage.output_row_count or 0 | figure }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}{% endif %}
-        {%- if stage.llm_usage and stage.llm_usage.calls %} · {{ stage.llm_usage.calls | figure }} model call{% if stage.llm_usage.calls != 1 %}s{% endif %}, {{ stage.llm_usage.cost_usd | usd }}{% endif %}
-        {%- if stage.finished_at %} · finished {{ stage.finished_at | friendly_time }}{% endif %}
-    {%- endset %}
-    <p class="stage-facts">
-        <span class="run-status status-{{ stage.status }} has-tip" tabindex="0"
-              data-tip="{{ facts | striptags | trim }}">{{ stage.status }}</span>
-    </p>
 </div>
 
 {# The stage definition comes from the version this run pinned; with
@@ -67,34 +67,26 @@
 <p><a href="{{ queue_link }}" class="btn">👤 Read the review decisions →</a></p>
 {% endif %}
 
-{# ── Tab bar ── #}
+{# The pane the caller asked to open alone. The canvas drawer names one — a node
+   click opens the transform, a click on the table it wrote opens the data — so
+   there is nothing left for a strip to switch between. #}
+{% set opens = only_pane | default('', true) %}
+{# A table's schema is reached from the table, so the strip carries no third tab. #}
+{% set shows_schema_face = workflow_stage is defined and workflow_stage is not none %}
+{% if not opens %}
 <div class="stage-tabs">
     <div class="tabs">
         <button data-tab="data" class="active">Data</button>
-        <button data-tab="schema">Schema</button>
         <button data-tab="transform">Transform</button>
     </div>
 </div>
+{% endif %}
 
 <div class="panes">
 
-  {# ─────────── SCHEMA (input schemas, then the output schema) ─────────── #}
-  <div class="pane" data-pane="schema" hidden>
-    {% if workflow_stage and workflow_stage.inputs %}
-      {% for inp in workflow_stage.inputs %}
-      <div class="schema-card">
-        <h4>input <a href="{{ links.stage_anchor(inp.id) }}"><code>{{ inp.id }}</code></a> schema</h4>
-        {{ schema_table(inp.table_schema) }}
-      </div>
-      {% endfor %}
-    {% else %}<p class="muted"><em>No declared inputs.</em></p>{% endif %}
-    {% if workflow_stage and workflow_stage.output_schema %}
-    <div class="schema-card"><h4>output schema</h4>{{ schema_table(workflow_stage.output_schema) }}</div>
-    {% else %}<p class="muted"><em>No output schema declared.</em></p>{% endif %}
-  </div>
-
   {# ─────────── TRANSFORM ─────────── #}
-  <div class="pane" data-pane="transform" hidden>
+  {% if opens != 'data' %}
+  <div class="pane" data-pane="transform"{% if not opens %} hidden{% endif %}>
     {% if stage_def %}{% with stage = stage_def %}{% include "_stage_executable.html" %}{% endwith %}
     {% include "_stage_tests.html" %}
     {{ stage_code(stage_def, function_code) }}
@@ -105,9 +97,12 @@
       <span class="muted">in memory, on its own page; nothing is saved</span></p>
     {% endif %}
   </div>
+  {% endif %}
 
   {# ─────────── DATA (diff-aware output, then the input rows) ─────────── #}
+  {% if opens != 'transform' %}
   <div class="pane" data-pane="data">
+  <div class="data-face" data-face="data">
     {# What the model cost to produce the rows below. It sits in Data, not Transform,
        because it comes from this run's manifest — Transform describes what the version
        authored. `calls` and `cost_usd` are the fields that hold up: calls equals
@@ -163,9 +158,12 @@
     {% if diff %}{% include "_stage_diff.html" %}
     {% elif preview and preview.preview %}
     <div class="preview-block">
-      <div class="preview-head">output data {% set shown = preview.preview | length %}<span class="muted">· {% if preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ preview.rows_total | figure }} row{% if preview.rows_total != 1 %}s{% endif %}</span>
+      <div class="preview-head">output data
         <span class="preview-actions">{% set rows_href = links.stage_rows(stage.stage_id) %}{% if rows_href %}· <a href="{{ rows_href }}">view all rows</a>{% endif %}
         · <a href="{{ links.stage_csv(stage.stage_id) }}">⬇ CSV</a></span></div>
+      {%- set mine_shown = preview.ordinals | default([], true) | select('in', reached_rows | default([], true)) | list | length %}
+      {{ counts_line(preview.rows_total, preview.columns | length, 'row',
+                     preview.preview | length, mine_shown, shows_schema_face, '') }}
       {% include "_output_table.html" %}
     </div>
     {% elif preview and preview.error %}<p class="muted"><em>output preview unavailable: {{ preview.error }}</em></p>
@@ -201,21 +199,27 @@
       <div class="preview-block input-preview">
         <div class="preview-head">
           <a href="{{ links.stage_anchor(ip.id) }}"><code>{{ ip.id }}</code></a>
-          {% if ip.preview and ip.preview.preview %}{% set shown = ip.preview.preview | length %}<span class="muted">· {% if ip.preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ ip.preview.rows_total | figure }} row{% if ip.preview.rows_total != 1 %}s{% endif %}</span>
+          {% if ip.preview and ip.preview.preview %}{% set shown = ip.preview.preview | length %}
+          <span class="muted">· {{ frame_counts(ip.preview.rows_total, ip.preview.columns | length, 'row',
+              ip.reached | length if ip.reached else none, ip.columns_behind | length, shown) }}</span>
           {# Omitted in the packet: the id beside it already opens that stage's own
              full table, so this would be the same destination twice. #}
           <span class="preview-actions">{% set rows_href = links.stage_rows(ip.id) %}{% if rows_href %}· <a href="{{ rows_href }}">view all rows</a>{% endif %}
-          · <a href="{{ links.stage_csv(ip.id) }}">⬇ CSV</a></span>{% endif %}
+          · <a href="{{ links.stage_csv(ip.id) }}">⬇ CSV</a>{% if shows_schema_face %} · <button type="button" class="face-link" data-face-to="schema">schema</button>{% endif %}</span>{% endif %}
         </div>
         {% if ip.preview and ip.preview.preview %}
-        <div class="table-scroll"><table class="data-preview">
+        {%- set ip_mine = ip.reached | default([], true) %}
+        {%- set ip_behind = ip.columns_behind | default([], true) %}
+        {%- set ip_ordinals = ip.preview.ordinals | default([], true) %}
+        <div class="table-scroll"><table class="data-preview{% if ip_mine %} behind-figure{% endif %}">
           <thead><tr>
-            {% for c in ip.preview.columns %}<th>{{ c }}</th>{% endfor %}
+            {% for c in ip.preview.columns %}<th{% if ip_behind and c not in ip_behind %} class="aside"{% endif %}>{{ c }}</th>{% endfor %}
           </tr></thead>
           <tbody>
           {% for row in ip.preview.preview %}
-          <tr>
-            {% for c in ip.preview.columns %}{% set v = row[c] | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}
+          {%- set ip_ordinal = ip_ordinals[loop.index0] if ip_ordinals else loop.index0 %}
+          <tr class="{{ 'mine' if ip_mine and ip_ordinal in ip_mine else ('aside' if ip_mine else '') }}">
+            {% for c in ip.preview.columns %}{% set v = row[c] | string %}{% set off = 'aside' if ip_behind and c not in ip_behind else '' %}{% if v[:4] == 'http' %}<td class="cell-url {{ off }}"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td{% if off %} class="{{ off }}"{% endif %}>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}
           </tr>{% endfor %}
           </tbody>
         </table></div>
@@ -226,13 +230,34 @@
     {% else %}<p class="muted"><em>This stage has no inputs.</em></p>{% endif %}
 
     </details>
+  </div>{# /data face #}
+
+  {# The schema of the frames above, reached from the table it describes and swapped
+     back the same way: it is what those columns are, not a third thing to switch to. #}
+  {% if shows_schema_face %}
+  <div class="data-face" data-face="schema" hidden>
+    <p class="face-back"><button type="button" class="face-link" data-face-to="data">← data</button></p>
+    {% if workflow_stage.inputs %}
+      {% for inp in workflow_stage.inputs %}
+      <div class="schema-card">
+        <h4>input <a href="{{ links.stage_anchor(inp.id) }}"><code>{{ inp.id }}</code></a> schema</h4>
+        {{ schema_table(inp.table_schema) }}
+      </div>
+      {% endfor %}
+    {% else %}<p class="muted"><em>No declared inputs.</em></p>{% endif %}
+    {% if workflow_stage.output_schema %}
+    <div class="schema-card"><h4>output schema</h4>{{ schema_table(workflow_stage.output_schema) }}</div>
+    {% else %}<p class="muted"><em>No output schema declared.</em></p>{% endif %}
   </div>
+  {% endif %}
+  </div>{# /data pane #}
+  {% endif %}
 
 </div>{# /panes #}
 
-{# ── This stage's own lifecycle events, under the tabs rather than inside one:
-      the feed covers everything the stage did, not the data, schema or
-      transform separately. Folded and lazily connected — most readers never
+{# ── This stage's own lifecycle events, under the panes rather than inside one:
+      the feed covers everything the stage did, not what it wrote or how
+      separately. Folded and lazily connected — most readers never
       need it, and the whole-run feed at the foot of the page is the same log
       unscoped. `links.run_log` is None in the review packet, which is a folder
       with no server to tail. ── #}
@@ -253,6 +278,16 @@
   root._wired = true;
 
   const meth = root.dataset.project, run = root.dataset.run, stage = root.dataset.stage;
+
+  // A frame's schema swaps in place of the tables rather than opening beside them:
+  // it says what the columns being read are.
+  root.addEventListener('click', event => {
+    const pick = event.target.closest('[data-face-to]');
+    if (!pick) return;
+    root.querySelectorAll('.data-face').forEach(face => {
+      face.hidden = face.dataset.face !== pick.dataset.faceTo;
+    });
+  });
 
   // ── this stage's run log ──
   // Connected on first open, not on panel load: clicking through the graph would

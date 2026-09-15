@@ -53,7 +53,7 @@ def canvas_panel(request: Request, project_id: str, run_id: str,
 )
 async def canvas_stage_panel(request: Request, project_id: str, run_id: str,
                              stage_id: str, stage: str, row: int, column: str,
-                             rows: str = "figure"):
+                             rows: str = "figure", pane: str = ""):
     """The run page's own stage panel, cut to the rows behind one figure."""
     manifest = load_manifest(project_id, run_id)
     record = next((entry for entry in manifest.get("stage_records", [])
@@ -67,7 +67,7 @@ async def canvas_stage_panel(request: Request, project_id: str, run_id: str,
                                  "this run has no record of the stage")
     panel = build_run_stage_panel(
         project_id, run_id, stage_id, manifest, record, scope=scope,
-        whole_frame=rows == "frame")
+        whole_frame=rows == "frame", only_pane=pane)
     return templates.TemplateResponse(
         request, "_run_stage_panel.html", panel.as_context())
 

@@ -16,8 +16,8 @@
    from its manifest record, the column count from the footer of the frame file that
    record names. It is deliberately NOT the output schema the version's signatures
    resolve to: most stage types do not trim their output frame to the schema they
-   declared, so that schema can run narrower than the frame — the Schema tab answers
-   that question and may show a smaller number for the same
+   declared, so that schema can run narrower than the frame — a table's own schema
+   answers that question and may show a smaller number for the same
    stage. Either half can be missing on its own, and a missing half is said in words
    (`45.1k rows`, `15 columns`), never rendered as a 0, which means measured and empty.
    With NEITHER half the link reads `- × -`, and its hover says what happened rather
@@ -73,7 +73,7 @@
 
 {# A transform row's hover text. The columns the stage DECLARES it adds live here
    rather than on the rail: they are the version's declaration, not a measurement,
-   and the rail is a walkthrough — the Schema tab is where a reader goes for them. #}
+   and the rail is a walkthrough — a table's own schema is where a reader goes. #}
 {% macro stage_row_title(s) %}
 {%- if not s.executed %}This run has no record for this stage — {% endif -%}
 {{ s.workflow_stage.stage.type | label_stage_type }}

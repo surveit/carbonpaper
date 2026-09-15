@@ -1,5 +1,7 @@
-"""A lone reached row is drawn among its neighbours, so it can be read against them."""
+"""A scoped panel draws the figure's own rows; the frame around them is the other pick."""
 from __future__ import annotations
+
+import re
 
 
 import pandas as pd
@@ -8,6 +10,7 @@ from fastapi.testclient import TestClient
 
 import app.services.run as run_service
 from app.main import app
+from app.web.run_stage_view import SCOPED_ROWS_SHOWN
 from app.services.project import save_working_copy_as_version
 from scope_fixture import column
 from stage_seed import set_stages
@@ -43,28 +46,35 @@ def run_id(projects_root):
     return str(run_service.execute(PROJECT)["run_id"])
 
 
-def test_a_sheet_of_one_reached_row_draws_the_rows_around_it(run_id):
-    # 55 - 25 // 2 = 43, and the sheet runs out of frame before its 25th row.
+def test_the_figures_own_row_is_all_the_relevant_pick_draws(run_id):
     page = _panel(run_id)
-    # 16 of the 17 are neighbours, so the line counts them apart from the figure's own.
-    assert "showing 1 relevant row of 60, and 16 more drawn around them" in page
-    assert f'<td class="row-num muted">{43 + 1}</td>' in page
-    assert f'<td class="row-num muted">{ROWS}</td>' in page
+    # `doubled` is the figure's, and `amount` is what this stage read to write it.
+    assert "1 × 2 behind this figure" in page
+    assert _row_numbers(page) == [CITED_ROW + 1]
 
 
-def test_the_panel_links_every_drawn_row_to_itself(run_id):
+def test_the_frame_pick_draws_the_frame_around_that_row(run_id):
+    page = _panel(run_id, rows="frame")
+    assert _row_numbers(page) == list(range(1, ROWS + 1))
+    # Same page either way, so the table does not resize under the reader.
+    assert len(_row_numbers(page)) <= SCOPED_ROWS_SHOWN
+
+
+def test_the_panel_links_its_one_drawn_row_to_itself(run_id):
     page = _panel(run_id)
-    # Row 43 is drawn first; a link built off the loop would send the reader to row 0.
-    assert "/stage/double/row/43/trace/view" in page
-    assert "/stage/double/row/0/trace/view" not in page
+    # A link built off the loop would send the reader to row 0 for the only row drawn.
     assert f"/stage/double/row/{CITED_ROW}/trace/view" in page
-    # One stage's panel is one request now, so the traced row is numbered once.
+    assert "/stage/double/row/0/trace/view" not in page
     assert page.count(f'<td class="row-num muted">{CITED_ROW + 1}</td>') == 1
+
+
+def _row_numbers(page):
+    return [int(n) for n in re.findall(r'class="row-num muted">(\d+)<', page)]
 
 
 def test_the_pane_keeps_the_run_page_tints_and_adds_its_own(run_id):
     # The shared diff paints here as it does on the run page; the figure's marks come on top.
-    page = _panel(run_id)
+    page = _panel(run_id, rows="frame")
     for tint in ("diff-col-new", "diff-col-cited"):
         assert tint in page
     # The cited cell: row 55's doubled amount, in the column the stage added.
@@ -72,8 +82,8 @@ def test_the_pane_keeps_the_run_page_tints_and_adds_its_own(run_id):
     assert page.count("diff-col-cited") == 1
 
 
-def _panel(run_id):
+def _panel(run_id, rows="figure"):
     """The run page's own panel for `double`, cut to the rows behind the figure."""
     return TestClient(app).get(
         f"/project/{PROJECT}/runs/{run_id}/stage/double/traced"
-        f"?stage=double&row={CITED_ROW}&column=doubled").text
+        f"?stage=double&row={CITED_ROW}&column=doubled&rows={rows}").text

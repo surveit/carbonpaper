@@ -1,0 +1,29 @@
+{# The one line under a table, whichever shape it is. `tail` is what only the
+   caller knows — a diff's dropped-rows note and its whole-diff link. #}
+{% macro counts_line(rows_total, columns_total, noun, drawn, mine_shown, schema_face, tail) -%}
+<p class="rows-line muted"><span class="rows-said">
+{%- if scoped and shows_the_figures_rows and not mine_shown %}{{ no_rows_line(links.stage_rows(stage.stage_id)) }}
+{%- else %}{{ frame_counts(rows_total, columns_total, noun,
+      reached_rows | length if scoped else none,
+      columns_behind | default([], true) | length, drawn) }}{{ tail }}
+{%- endif %}
+{%- if schema_face %} · <button type="button" class="face-link" data-face-to="schema">schema</button>{% endif %}</span>
+{%- if scoped %}{{ rows_toggle(shows_the_figures_rows) }}{% endif %}</p>
+{%- endmacro %}
+{# What the frame holds, then the figure's part of it, then how much is drawn.
+   `behind_rows` is none off the Rows & columns tab. #}
+{% macro frame_counts(rows_total, columns_total, noun, behind_rows, behind_columns, drawn) -%}
+<span class="frame-total">{{ rows_total | figure }} {{ noun }}{% if rows_total != 1 %}s{% endif %} × {{ columns_total | figure }} column{% if columns_total != 1 %}s{% endif %}</span>
+{%- if behind_rows is not none %} · <span class="behind-key"><i class="behind-swatch"></i>{{ behind_rows | figure }} × {{ behind_columns | figure }} behind this figure</span>{% endif %}
+{%- if drawn is not none and drawn < rows_total %} · {{ drawn | figure }} drawn{% endif %}
+{%- endmacro %}
+{# Which rows the table holds is the reader's to pick; static/canvas.js fetches
+   the panel again for the other one. Only the drawer draws a scoped panel. #}
+{% macro rows_toggle(on_the_figures) -%}
+<span class="rows-pick">
+<button type="button" class="{{ 'on' if on_the_figures }}" data-rows="figure">relevant</button>
+<button type="button" class="{{ '' if on_the_figures else 'on' }}" data-rows="frame">all</button></span>
+{%- endmacro %}
+{% macro no_rows_line(rows_href) -%}
+No row of this stage's output is behind this figure.{% if rows_href %} <a href="{{ rows_href }}">view all rows</a>{% endif %}
+{%- endmacro %}

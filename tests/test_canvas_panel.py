@@ -166,15 +166,43 @@ def test_a_traced_panel_is_the_run_page_panel_cut_to_the_figures_rows(run_id):
     assert page.status_code == 200
     # The run panel's own markup, not a second one.
     assert 'class="run-stage-panel"' in page.text
-    assert '<button data-tab="schema">Schema</button>' in page.text
+    assert '<button data-tab="data" class="active">Data</button>' in page.text
     # Transport's two east rows, out of the six the frame holds.
     assert "2 of 6 rows behind this figure" in " ".join(page.text.split())
 
 
+def test_a_pane_the_drawer_named_arrives_alone(run_id):
+    def panel(pane):
+        return TestClient(app).get(
+            f"/project/{PROJECT}/runs/{run_id}/stage/load_east/traced"
+            f"?stage=by_portfolio&row=1&column=total_amount&pane={pane}").text
+
+    table = panel("data")
+    assert 'class="stage-tabs"' not in table
+    assert 'data-pane="data"' in table
+    assert 'data-pane="transform"' not in table
+
+    node = panel("transform")
+    assert 'class="stage-tabs"' not in node
+    assert 'data-pane="transform"' in node
+    assert 'data-pane="data"' not in node
+
+
+def test_a_frames_schema_is_reached_from_the_table_and_swapped_back(run_id):
+    page = TestClient(app).get(
+        f"/project/{PROJECT}/runs/{run_id}/stage/load_east/traced"
+        "?stage=by_portfolio&row=1&column=total_amount&pane=data").text
+    # No tab of its own: a link on the table's own head, and one back to the data.
+    assert 'data-face-to="schema"' in page
+    assert 'data-face-to="data"' in page
+    assert 'data-face="schema" hidden' in page
+
+
 def test_a_traced_panel_keeps_the_run_page_tints_over_the_figures_rows(run_id):
+    # The relevant pick holds the figure's columns alone, and the added one is not.
     page = TestClient(app).get(
         f"/project/{PROJECT}/runs/{run_id}/stage/size_band/traced"
-        "?stage=by_portfolio&row=1&column=total_amount").text
+        "?stage=by_portfolio&row=1&column=total_amount&rows=frame").text
     # The stage's added columns stay blue, and the figure's rows are banded over that.
     assert "diff-col-new" in page
     assert "diff-cell-same" in page
@@ -239,7 +267,10 @@ def _read_traced_panel(run_id, stage_id, cited):
 
 def test_the_traced_panel_of_a_filter_counts_the_figures_rows_apart_from_the_rest(run_id):
     page = _read_traced_panel(run_id, "funded", TOTAL)
-    assert "showing 5 relevant input rows of 10, and 1 more drawn around them" in page
+    # The frame's own size, then the figure's part of it — the same line a plain
+    # preview draws.
+    assert "10 input rows × 8 columns" in page
+    assert "5 × 1 behind this figure" in page
     assert "the first" not in page
     # The dropped row is drawn among them, which is what the window is widened for.
     assert "Dropped row" in page
@@ -250,7 +281,8 @@ def test_a_traced_stage_no_row_reached_says_so_rather_than_counting_to_zero(run_
     page = _read_traced_panel(run_id, "over_a_million", TOTAL)
     assert "No row of this stage's output is behind this figure." in page
     assert "the first 0" not in page
-    assert "relevant" not in page
+    # No count at all for its own output, rather than a 0 × 0.
+    assert "behind-key" not in page.split('class="data-inputs"')[0]
     assert ">view all rows</a>" in page
 
 

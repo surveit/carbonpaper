@@ -217,6 +217,24 @@ table.data-preview.scratch th { background: var(--hover); }
    from its header to its last row: the header already sits on --sunk-deep, so
    tinting only the text under it changed almost nothing on the screen. After
    .diff-cell-same, which it has to beat on the same specificity. */
+/* One reading of colour in a table showing a whole frame under a figure: what the
+   figure came through stays on the paper, and everything else sinks — a stage's own
+   diff tints included, so the two never compete for the same eye. `aside` is the
+   word the canvas box uses for a stage off the figure's route. */
+.data-preview.behind-figure tr.aside td,
+.data-preview.behind-figure tr.aside td.diff-col-new,
+.data-preview.behind-figure tr.aside td.diff-cell-changed,
+.data-preview.behind-figure th.aside,
+.data-preview.behind-figure td.aside { background: var(--sunk-deep); color: var(--muted-dim); }
+/* A header the row marks cannot reach: its column is the figure's, said in the
+   accent the canvas already spends on the figure's rows. */
+.data-preview.behind-figure th:not(.aside):not(.row-num) { color: var(--accent); }
+/* The swatch in the count line, so the paper is named rather than guessed at. */
+.behind-key { color: var(--fg); }
+.behind-swatch {
+    display: inline-block; width: 9px; height: 9px; margin-right: 5px; border-radius: 2px;
+    background: var(--raised); border: 1px solid var(--accent); vertical-align: baseline;
+}
 .stage-diff th.diff-col-quiet { font-weight: 400; }
 .stage-diff th.diff-col-quiet,
 .stage-diff td.diff-col-quiet { background: var(--sunk-deep); color: var(--muted-dim); }

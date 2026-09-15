@@ -351,7 +351,9 @@ def test_the_tab_strip_replaces_inputs_and_outputs(run_ctx) -> None:
         html = _panel(run_id, stage_id)
         assert 'data-tab="data"' in html and 'data-tab="transform"' in html
         assert 'data-tab="inputs"' not in html and 'data-tab="outputs"' not in html
-        assert 'data-pane="data"' in html and 'data-pane="schema"' in html
+        # Schema is no tab of its own: it hangs off the table whose columns it names.
+        assert 'data-tab="schema"' not in html and 'data-pane="schema"' not in html
+        assert 'data-pane="data"' in html and 'data-face="schema"' in html
         assert "run-inputs" not in html and "run-outputs" not in html
         assert "schema-inputs" not in html and "schema-outputs" not in html
 

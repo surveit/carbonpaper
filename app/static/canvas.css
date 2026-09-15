@@ -54,12 +54,9 @@
 .canvas-close:hover { color: var(--fg); }
 .canvas-close:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--focus-halo); }
 
-/* Which rows the drawer's table holds, picked by the reader (_stage_diff.html):
-   on the line that says what is drawn, at its right, so it costs no height. */
-.rows-line { display: flex; align-items: baseline; justify-content: space-between;
-  gap: 14px; margin: 0 0 8px; }
-.rows-line > p { margin: 0; }
-.rows-pick { display: flex; flex: none; margin: 0; font-size: 12px; }
+/* Which rows the drawer's table holds, picked by the reader: on the line that
+   says what is drawn, so it costs no height. */
+.rows-pick { display: inline-flex; flex: none; margin: 0; font-size: 12px; }
 .rows-pick button { border: 1px solid var(--border-strong); background: var(--raised);
   font: inherit; font-size: 12px; color: var(--muted); padding: 3px 10px; cursor: pointer; }
 .rows-pick button:first-child { border-radius: 7px 0 0 7px; }

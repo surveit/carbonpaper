@@ -122,7 +122,9 @@ An **Error** section sits above the tabs on a stopped stage. It leads with the m
 shows the exception name only for a crash (`crash_type` filter → `read_crash_type`): a schema
 stop and an authored `StepRefused` are already worded for a reader, so their type is noise —
 the same call the issue index makes, off the same `read_stop_kind`.
-**Data │ Schema │ Transform**, one flat strip; it opens on Data:
+**Data │ Transform**, one flat strip; it opens on Data. The canvas drawer passes
+`only_pane` and gets that one without a strip: a node click opens Transform, a click on the
+sheet the node wrote opens Data:
 - **Data** — what this run's stage produced: its output — rendered as a **diff against its
   input** where the stage type permits one (below) — then validation **as part of the
   output** (input + output issues from the manifest), then the upstream input previews,
@@ -131,7 +133,9 @@ the same call the issue index makes, off the same `read_stop_kind`.
   The `stat-strip` (model · calls · cost) stays ABOVE the rows — those are facts about the
   run. A **caveat** on the rows (batched judging; an unreadable pinned definition) is a
   `.stage-caveat` `<details>`, closed, its whole warning in the summary line.
-- **Schema** — the static contract: the input schemas, then the output schema.
+- **Schema** — the static contract: the input schemas, then the output schema. No tab of
+  its own: it is a face of the Data pane, reached from the `schema` link on a table's own
+  head and left by the `← data` link, because it says what the columns being read are.
 - **Transform** — the *raw* transform config block (`_stage_executable.html`): llm prompt+model+tools,
   join keys, aggregate ops, connector/queue/report spec — plus the only link to the
   simulate page below. An authored-code block (`function` / `filter`) reads **description → examples → code**:

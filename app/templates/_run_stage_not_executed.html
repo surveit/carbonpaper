@@ -17,9 +17,9 @@
     <div class="head-line">
         <h2><code>{{ stage.id }}</code></h2>
         <span class="type-tag {{ type_class.get(stage.type, 'custom') }}" title="{{ stage.type | plain_value }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type | label_stage_type }}</span>
+        <span class="run-status status-pending">not run</span>
     </div>
     <p class="stage-blurb">{{ stage.description }}</p>
-    <p class="stage-facts"><span class="run-status status-pending">not run</span></p>
 </div>
 
 <p class="banner" id="stage-not-executed">

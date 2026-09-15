@@ -56,19 +56,22 @@ All routes live under `/project/{project}/…`.
   submits it. Changing the version drops the hidden caps, which name the copied
   version's stages.
 
-### The stage panel (`_run_stage_panel.html`) — one strip of tabs
+### The stage panel (`_run_stage_panel.html`) — one strip of tabs, or one named pane
 
 Loaded into the page via `innerHTML`. **Gotcha that bit us:** `innerHTML` does
 NOT execute injected `<script>` tags, so `loadStage` re-creates script nodes
 after injection — without that, the panel's JS (the tab strip, the run log) is dead.
 
-- **Data** | **Schema** | **Transform**, opening on Data. Output and input sit
-  in one pane, because the output reads as a diff *against* its input.
+- **Data** | **Transform**, opening on Data. Output and input sit
+  in one pane, because the output reads as a diff *against* its input. A caller that
+  names `only_pane` (the canvas drawer does, off what was clicked) gets that pane alone
+  and no strip.
 - **Data**: the stage's output (the stage-aware diff below, or the plain
   preview), validation, then the upstream input previews in an `input rows`
-  disclosure, read-only. **Schema**: what each input supplies, then the stage's
-  output — both resolved for the whole workflow and handed to the page as a
-  `WorkflowStage`.
+  disclosure, read-only. **Schema** is a second face of that pane, not a third tab:
+  what each input supplies, then the stage's output — both resolved for the whole
+  workflow and handed to the page as a `WorkflowStage` — reached from the `schema`
+  link on a table's head and left by `← data`.
 - The **simulator** is its own page, `…/stage/{sid}/simulate`, linked from
   Transform: the folded transform, the input rows with per-row checkboxes, the
   controls, then the result. Running it POSTs `…/stage/{sid}/preview`, which

@@ -14,8 +14,8 @@
 
 /* The run panel's own header — NOT `.stage-header`, which is a page masthead on the
    queue and packet pages and takes a rule under it to earn its space. This one opens
-   a section with no title of its own, so the three lines are stacked tight and
-   nothing separates them from the tab strip a few lines below. */
+   a section with no title of its own, so its two lines are stacked tight and nothing
+   separates them from what follows. */
 .stage-panel-head { margin: 0 0 .2rem; }
 /* The chip sits beside the name, not out at the right margin: pinned right it is
    the width of the reader's window away from the word it qualifies, and a long
@@ -28,15 +28,6 @@
 }
 .stage-panel-head h2 { margin: 0; }
 .stage-panel-head .stage-blurb { margin: .35rem 0 0; color: var(--muted); }
-.stage-panel-head .stage-facts {
-    display: flex;
-    align-items: baseline;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin: .5rem 0 0;
-    color: var(--muted);
-    font-size: .85rem;
-}
 
 /* A row of measured figures at the head of a pane — what a stage's model calls
    cost, what an eval run scored. Whatever it holds is COUNTED, never estimated. */
