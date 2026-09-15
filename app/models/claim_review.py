@@ -9,7 +9,7 @@ from pydantic import Field
 from app.core.column_profile import ValueCount
 from app.core.ids import ID
 from app.core.json_types import JsonDict
-from app.models.claims import StageOutputCellCitation
+from app.models.citations import StageOutputCellCitation
 from app.models.schema import StageId, _Base
 
 

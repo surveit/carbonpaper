@@ -7,7 +7,7 @@ from app.compiler.claim_attack.evidence import render_evidence_bundle, render_ev
 from app.models.claim_review import (
     Attacker, Challenge, ChallengeKind, Cost, Grounding, Moves, OutputEvidence,
 )
-from app.models.claims import StageOutputCellCitation
+from app.models.citations import StageOutputCellCitation
 from app.services import claim_review
 from app.services.errors import ClaimReviewRefused
 from claim_review_fixture import PROJECT, TOTAL_TEXT, claim_the_total, run_the_fixture
@@ -102,7 +102,7 @@ def test_a_sentence_carrying_both_quote_marks_stays_verbatim_in_the_pool(project
 
 
 def test_a_table_the_run_published_is_pooled_by_its_row_count(claim):
-    from app.models.claims import RowsRectangle, StageOutputTableCitation
+    from app.models.citations import RowsRectangle, StageOutputTableCitation
     from app.models.records.workflow_output import WorkflowOutput
     WorkflowOutput(
         slug="by-portfolio", label="By portfolio", shape_id=None,
@@ -219,7 +219,7 @@ def test_a_span_past_the_sentence_or_overlapping_another_is_refused(claim):
 
 
 def test_a_table_claim_is_refused_with_the_reason(projects_root):
-    from app.models.claims import RowsRectangle, StageOutputTableCitation
+    from app.models.citations import RowsRectangle, StageOutputTableCitation
     from app.models.records.workflow_output import WorkflowOutput
     from app.services import claim_shapes, claims
     from claim_review_fixture import TOTAL_SHAPE

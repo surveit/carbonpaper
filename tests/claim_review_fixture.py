@@ -1,9 +1,8 @@
 """One finished scope-fixture run with one claim on its total, for the review tests."""
 from __future__ import annotations
 
-from app.models.claims import (
-    ClaimImportance, ClaimShapeInput, DataUniverseRequirement, StageOutputCellCitation,
-)
+from app.models.citations import StageOutputCellCitation
+from app.models.claims import ClaimImportance, ClaimShapeInput, DataUniverseRequirement
 from app.models.records.claims import Claim
 from app.models.records.workflow_output import WorkflowOutput
 from app.services import claim_shapes, claims

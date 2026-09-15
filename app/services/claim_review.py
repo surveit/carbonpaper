@@ -18,7 +18,7 @@ from app.models.claim_review import (
     Rewrite,
     StageEvidenceItem,
 )
-from app.models.claims import PublishedCitation, StageOutputCellCitation
+from app.models.citations import PublishedCitation, StageOutputCellCitation
 from app.models.records.claim_review import ClaimReview
 from app.models.stage import StageType
 from app.models.terms import render_terms
