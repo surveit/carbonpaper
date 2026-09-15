@@ -54,7 +54,7 @@ def test_a_dataset_parses_each_case_with_the_evals_own_models(tmp_path: Path) ->
     )
 
 
-def test_every_invalid_case_is_reported_at_once(tmp_path: Path) -> None:
+def test_every_invalid_case_is_reported_at_once_and_a_valid_case_is_not(tmp_path: Path) -> None:
     path = write_dataset(
         tmp_path,
         FIXED_OUTPUT_EVAL.name,
@@ -81,7 +81,7 @@ def test_every_invalid_case_is_reported_at_once(tmp_path: Path) -> None:
     assert "'well_formed'" not in message
 
 
-def test_repeated_case_ids_are_refused(tmp_path: Path) -> None:
+def test_only_repeated_case_ids_are_refused_before_any_case_is_read(tmp_path: Path) -> None:
     path = write_dataset(
         tmp_path,
         FIXED_OUTPUT_EVAL.name,
@@ -94,12 +94,14 @@ def test_repeated_case_ids_are_refused(tmp_path: Path) -> None:
 
     message = read_refusal(path)
 
-    assert "'twice'" in message
+    assert "case_id 'twice' is repeated" in message
     assert "'once'" not in message
     assert "input.answer" not in message
 
 
-def test_repeated_expected_keys_in_a_case_are_refused(tmp_path: Path) -> None:
+def test_an_expected_key_repeated_within_a_case_is_refused_but_not_one_shared_across_cases(
+    tmp_path: Path,
+) -> None:
     path = write_dataset(
         tmp_path,
         FIXED_OUTPUT_EVAL.name,
@@ -108,25 +110,21 @@ def test_repeated_expected_keys_in_a_case_are_refused(tmp_path: Path) -> None:
 
     message = read_refusal(path)
 
-    assert "case 'repeats_a_key'" in message
-    assert "'answer'" in message
+    assert "case 'repeats_a_key' lists expected key 'answer' more than once" in message
     assert "'shares_a_key'" not in message
 
 
 def test_a_case_expecting_nothing_is_refused(tmp_path: Path) -> None:
-    path = write_dataset(
-        tmp_path,
-        FIXED_OUTPUT_EVAL.name,
-        [build_case("expects_nothing"), build_case("expects_an_answer", "answer")],
-    )
+    path = write_dataset(tmp_path, FIXED_OUTPUT_EVAL.name, [build_case("expects_nothing")])
 
     message = read_refusal(path)
 
-    assert "case 'expects_nothing'" in message
-    assert "'expects_an_answer'" not in message
+    assert "case 'expects_nothing' has no expected outputs" in message
 
 
-def test_a_dataset_written_for_another_eval_is_refused(tmp_path: Path) -> None:
+def test_a_dataset_written_for_another_eval_is_refused_before_any_case_is_read(
+    tmp_path: Path,
+) -> None:
     path = write_dataset(
         tmp_path,
         "another_eval",
@@ -135,18 +133,14 @@ def test_a_dataset_written_for_another_eval_is_refused(tmp_path: Path) -> None:
 
     message = read_refusal(path)
 
-    assert "'another_eval'" in message
-    assert repr(FIXED_OUTPUT_EVAL.name) in message
+    assert f"dataset is for eval 'another_eval', not {FIXED_OUTPUT_EVAL.name!r}" in message
     assert "'claim_case'" not in message
 
 
 def test_a_dataset_without_cases_is_refused(tmp_path: Path) -> None:
     path = write_dataset(tmp_path, FIXED_OUTPUT_EVAL.name, [])
 
-    message = read_refusal(path)
-
-    assert str(path) in message
-    assert "no cases" in message
+    assert read_refusal(path) == f"{path}: dataset has no cases"
 
 
 def test_fields_a_dataset_does_not_define_are_refused(tmp_path: Path) -> None:
