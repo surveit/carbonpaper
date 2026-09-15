@@ -24,6 +24,8 @@ from evals.harness.passes import (
     OutputStored,
     PassFolder,
     PassRecord,
+    UnaccountedCase,
+    find_unaccounted_cases,
 )
 
 _DATASET_FILE = "dataset.json"
@@ -45,6 +47,14 @@ class CodeCommitUnreadable(Exception):
     pass
 
 
+class RepeatsInvalid(Exception):
+    pass
+
+
+class PassIncomplete(Exception):
+    pass
+
+
 def run_pass(
     definition: EvalDefinition[InputT, ExpectedT, OutputT],
     *,
@@ -56,8 +66,11 @@ def run_pass(
 ) -> Path:
     dataset_path = eval_dir / _DATASET_FILE
     cases = _select_cases(read_dataset(dataset_path, definition).cases, case_ids, dataset_path)
+    _validate_repeats(repeats)
     _validate_load_count(len(cases) * repeats, confirmed_loads)
-    record = _start_pass_record(definition.name, repeats, _read_code_commit(repo_root))
+    code_commit = _read_code_commit(repo_root)
+    selected_ids = [case.case_id for case in cases]
+    record = _start_pass_record(definition.name, repeats, selected_ids, code_commit)
     folder = PassFolder.create(eval_dir, record.pass_id)
     folder.write_record(record)
     context = LoadContext(
@@ -71,10 +84,13 @@ def run_pass(
 def judge_pass(
     definition: EvalDefinition[InputT, ExpectedT, OutputT], pass_dir: Path, *, eval_dir: Path
 ) -> None:
+    folder = PassFolder(pass_dir)
+    record = folder.read_record()
+    _validate_pass_is_for_eval(record, definition.name, pass_dir)
+    _validate_pass_is_complete(record, pass_dir)
     dataset_path = eval_dir / _DATASET_FILE
     cases_by_id = {case.case_id: case for case in read_dataset(dataset_path, definition).cases}
-    folder = PassFolder(pass_dir)
-    stored = [load for load in folder.read_record().loads if isinstance(load, OutputStored)]
+    stored = [load for load in record.loads if isinstance(load, OutputStored)]
     _validate_stored_cases_are_in_dataset(stored, cases_by_id.keys(), dataset_path)
     judged_attempts = [
         _judge_stored_output(definition, folder, cases_by_id[load.case_id], load.attempt)
@@ -97,10 +113,16 @@ def _select_cases(
     return [case for case in cases if case.case_id in case_ids]
 
 
+def _validate_repeats(repeats: int) -> None:
+    if repeats < 1:
+        raise RepeatsInvalid(f"repeats must be at least 1, not {repeats}")
+
+
 def _validate_load_count(planned: int, confirmed_loads: int) -> None:
     if confirmed_loads != planned:
         raise LoadCountNotConfirmed(
-            f"this pass plans {planned} loads; confirm with --loads {planned}"
+            f"this pass plans {planned} {_inflect(planned, 'load')}; "
+            f"confirm with --loads {planned}"
         )
 
 
@@ -112,13 +134,16 @@ def _read_code_commit(repo_root: Path) -> str:
     return result.stdout.decode("utf-8").strip()
 
 
-def _start_pass_record(eval_name: str, repeats: int, code_commit: str) -> PassRecord:
+def _start_pass_record(
+    eval_name: str, repeats: int, case_ids: list[str], code_commit: str
+) -> PassRecord:
     started = datetime.now()
     return PassRecord(
         eval=eval_name,
         pass_id=started.strftime("%Y%m%dT%H%M%S"),
         code_commit=code_commit,
         repeats=repeats,
+        case_ids=case_ids,
         started_at=started.isoformat(timespec="seconds"),
         loads=[],
     )
@@ -152,12 +177,33 @@ def _load_attempt(
     try:
         loaded = definition.load(case.input, context)
     except CaseRefused as refusal:
-        return LoadRefused(case_id=case.case_id, attempt=attempt, reason=refusal.reason)
+        refused_after = time.monotonic() - started
+        return LoadRefused(
+            case_id=case.case_id, attempt=attempt, seconds=refused_after, reason=refusal.reason
+        )
     seconds = time.monotonic() - started
     folder.write_output(case.case_id, attempt, loaded.output)
     return OutputStored(
         case_id=case.case_id, attempt=attempt, seconds=seconds, cost_usd=loaded.cost_usd
     )
+
+
+def _validate_pass_is_for_eval(record: PassRecord, eval_name: str, pass_dir: Path) -> None:
+    if record.eval != eval_name:
+        raise JudgementInvalid(f"{pass_dir}: pass is for eval {record.eval!r}, not {eval_name!r}")
+
+
+def _validate_pass_is_complete(record: PassRecord, pass_dir: Path) -> None:
+    unaccounted = find_unaccounted_cases(record)
+    if unaccounted:
+        listed = "; ".join(_describe_unaccounted_case(case) for case in unaccounted)
+        raise PassIncomplete(f"{pass_dir}: loading stopped before recording {listed}")
+
+
+def _describe_unaccounted_case(case: UnaccountedCase) -> str:
+    attempts = ", ".join(str(attempt) for attempt in case.missing_attempts)
+    noun = _inflect(len(case.missing_attempts), "attempt")
+    return f"case {case.case_id!r} {noun} {attempts}"
 
 
 def _validate_stored_cases_are_in_dataset(
@@ -225,6 +271,10 @@ def _find_outcome_problems(judgements: list[Judgement], outcomes: tuple[str, ...
         for judgement in judgements
         if judgement.outcome not in outcomes
     ]
+
+
+def _inflect(count: int, noun: str) -> str:
+    return noun if count == 1 else f"{noun}s"
 
 
 def _quote_each(values: Iterable[str]) -> str:

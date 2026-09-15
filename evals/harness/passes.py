@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +27,7 @@ class LoadRefused(BaseModel):
     kind: Literal["refused"] = "refused"
     case_id: str
     attempt: int
+    seconds: float
     reason: str
 
 
@@ -39,6 +41,7 @@ class PassRecord(BaseModel):
     pass_id: str
     code_commit: str
     repeats: int
+    case_ids: list[str]
     started_at: str
     loads: list[LoadRecord]
 
@@ -51,6 +54,20 @@ class JudgementRefused(BaseModel):
 
 class PassFolderExists(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class UnaccountedCase:
+    case_id: str
+    missing_attempts: tuple[int, ...]
+
+
+def find_unaccounted_cases(record: PassRecord) -> list[UnaccountedCase]:
+    cases = [
+        UnaccountedCase(case_id=case_id, missing_attempts=_find_missing_attempts(record, case_id))
+        for case_id in record.case_ids
+    ]
+    return [case for case in cases if case.missing_attempts]
 
 
 @dataclass(frozen=True)
@@ -81,7 +98,9 @@ class PassFolder:
         return self.root / "workspace"
 
     def write_record(self, record: PassRecord) -> None:
-        self._record_path.write_text(record.model_dump_json(indent=2), encoding="utf-8")
+        partial_path = self.root / "pass.json.partial"
+        partial_path.write_text(record.model_dump_json(indent=2), encoding="utf-8")
+        os.replace(partial_path, self._record_path)
 
     def read_record(self) -> PassRecord:
         return PassRecord.model_validate_json(self._record_path.read_text(encoding="utf-8"))
@@ -112,6 +131,16 @@ class PassFolder:
 
     def _output_path(self, case_id: str, attempt: int) -> Path:
         return self.root / "outputs" / case_id / f"{attempt}.json"
+
+
+def _find_missing_attempts(record: PassRecord, case_id: str) -> tuple[int, ...]:
+    loads = [load for load in record.loads if load.case_id == case_id]
+    refused_attempts = [load.attempt for load in loads if isinstance(load, LoadRefused)]
+    last_attempt = min(refused_attempts) if refused_attempts else record.repeats
+    recorded_attempts = {load.attempt for load in loads}
+    return tuple(
+        attempt for attempt in range(1, last_attempt + 1) if attempt not in recorded_attempts
+    )
 
 
 _JUDGEMENT_FILE: TypeAdapter[list[Judgement] | JudgementRefused] = TypeAdapter(

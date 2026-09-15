@@ -20,6 +20,8 @@ from evals.harness.orchestration import (
     CodeCommitUnreadable,
     JudgementInvalid,
     LoadCountNotConfirmed,
+    PassIncomplete,
+    RepeatsInvalid,
     judge_pass,
     run_pass,
 )
@@ -29,6 +31,8 @@ from evals.harness.passes import (
     OutputStored,
     PassFolderExists,
     PassRecord,
+    UnaccountedCase,
+    find_unaccounted_cases,
 )
 from fixed_output_eval import (
     FIXED_OUTPUT_EVAL,
@@ -99,7 +103,7 @@ def test_a_pass_is_named_by_its_start_and_records_its_eval_repeats_and_the_commi
     )
 
     assert pass_dir == eval_dir / "passes" / _PASS_ID
-    assert read_pass_record(pass_dir).model_dump(exclude={"loads"}) == {
+    assert read_pass_record(pass_dir).model_dump(exclude={"case_ids", "loads"}) == {
         "eval": "fixed_output",
         "pass_id": _PASS_ID,
         "code_commit": read_head_commit(_REPO_ROOT),
@@ -108,7 +112,7 @@ def test_a_pass_is_named_by_its_start_and_records_its_eval_repeats_and_the_commi
     }
 
 
-def test_a_pass_loads_only_the_selected_cases_in_dataset_order(
+def test_a_pass_loads_and_records_only_the_selected_cases_in_dataset_order(
     tmp_path: Path, clock: FakeClock
 ) -> None:
     eval_dir = tmp_path / "fixed_output"
@@ -130,12 +134,27 @@ def test_a_pass_loads_only_the_selected_cases_in_dataset_order(
         repo_root=_REPO_ROOT,
     )
 
+    record = read_pass_record(pass_dir)
     assert calls == ["yes", "maybe"]
-    assert [load.case_id for load in read_pass_record(pass_dir).loads] == ["first", "third"]
+    assert record.case_ids == ["first", "third"]
+    assert [load.case_id for load in record.loads] == ["first", "third"]
 
 
+@pytest.mark.parametrize(
+    ("case_ids", "repeats", "confirmed_loads", "message"),
+    [
+        (["agrees", "disagrees"], 3, 9, "this pass plans 6 loads; confirm with --loads 6"),
+        (["agrees"], 1, 2, "this pass plans 1 load; confirm with --loads 1"),
+    ],
+    ids=["plural", "singular"],
+)
 def test_a_pass_refuses_to_start_when_the_confirmed_load_count_differs(
-    tmp_path: Path, repo_where_git_fails: Path
+    tmp_path: Path,
+    repo_where_git_fails: Path,
+    case_ids: list[str],
+    repeats: int,
+    confirmed_loads: int,
+    message: str,
 ) -> None:
     eval_dir = tmp_path / "fixed_output"
     write_dataset(
@@ -149,13 +168,34 @@ def test_a_pass_refuses_to_start_when_the_confirmed_load_count_differs(
         run_pass(
             FIXED_OUTPUT_EVAL,
             eval_dir=eval_dir,
-            repeats=3,
-            confirmed_loads=9,
-            case_ids=["agrees", "disagrees"],
+            repeats=repeats,
+            confirmed_loads=confirmed_loads,
+            case_ids=case_ids,
             repo_root=repo_where_git_fails,
         )
 
-    assert str(refusal.value) == "this pass plans 6 loads; confirm with --loads 6"
+    assert str(refusal.value) == message
+    assert list_paths(eval_dir) == ["dataset.json"]
+
+
+@pytest.mark.parametrize("repeats", [0, -1])
+def test_a_pass_of_fewer_than_one_repeat_is_refused_before_anything_is_written(
+    tmp_path: Path, repo_where_git_fails: Path, repeats: int
+) -> None:
+    eval_dir = tmp_path / "fixed_output"
+    write_dataset(eval_dir, build_case("agrees", "yes", answer="yes"))
+
+    with pytest.raises(RepeatsInvalid) as refusal:
+        run_pass(
+            FIXED_OUTPUT_EVAL,
+            eval_dir=eval_dir,
+            repeats=repeats,
+            confirmed_loads=1,
+            case_ids=[],
+            repo_root=repo_where_git_fails,
+        )
+
+    assert str(refusal.value) == f"repeats must be at least 1, not {repeats}"
     assert list_paths(eval_dir) == ["dataset.json"]
 
 
@@ -219,9 +259,10 @@ def test_a_pass_whose_commit_git_cannot_read_is_refused_before_anything_is_writt
             repo_root=repo_where_git_fails,
         )
 
-    assert str(refusal.value).startswith(
-        f"git rev-parse HEAD failed in {repo_where_git_fails}: "
-        "fatal: ambiguous argument 'HEAD'"
+    git_error = read_head_commit_error(repo_where_git_fails)
+    assert git_error
+    assert str(refusal.value) == (
+        f"git rev-parse HEAD failed in {repo_where_git_fails}: {git_error}"
     )
     assert list_paths(eval_dir) == ["dataset.json"]
 
@@ -236,7 +277,9 @@ def test_a_refused_case_is_recorded_and_its_remaining_loads_skipped(
         build_case("agrees", "yes", answer="yes"),
     )
     calls: list[str] = []
-    definition = dataclasses.replace(FIXED_OUTPUT_EVAL, load=build_declining_loader(calls))
+    definition = dataclasses.replace(
+        FIXED_OUTPUT_EVAL, load=build_declining_loader(clock, calls)
+    )
 
     pass_dir = run_pass(
         definition, eval_dir=eval_dir, repeats=3, confirmed_loads=6, case_ids=[], repo_root=_REPO_ROOT
@@ -244,7 +287,9 @@ def test_a_refused_case_is_recorded_and_its_remaining_loads_skipped(
 
     assert calls == ["no comment", "yes", "yes", "yes"]
     assert read_pass_record(pass_dir).loads == [
-        LoadRefused(case_id="declines", attempt=1, reason="the source declined to comment"),
+        LoadRefused(
+            case_id="declines", attempt=1, seconds=2.5, reason="the source declined to comment"
+        ),
         OutputStored(case_id="agrees", attempt=1, seconds=0.0, cost_usd=0.01),
         OutputStored(case_id="agrees", attempt=2, seconds=0.0, cost_usd=0.01),
         OutputStored(case_id="agrees", attempt=3, seconds=0.0, cost_usd=0.01),
@@ -287,6 +332,56 @@ def test_an_unexpected_loading_error_stops_the_pass_and_keeps_what_completed(
         "pass.json",
         "workspace",
     ]
+
+
+def test_a_load_refusal_stays_in_pass_json_when_a_later_loading_error_stops_the_pass(
+    tmp_path: Path, clock: FakeClock
+) -> None:
+    eval_dir = tmp_path / "fixed_output"
+    write_dataset(
+        eval_dir,
+        build_case("declines", "no comment", answer="yes"),
+        build_case("breaks", "boom", answer="yes"),
+    )
+    definition = dataclasses.replace(FIXED_OUTPUT_EVAL, load=load_declining_or_breaking)
+
+    with pytest.raises(KeyError, match="boom"):
+        run_pass(
+            definition,
+            eval_dir=eval_dir,
+            repeats=2,
+            confirmed_loads=4,
+            case_ids=[],
+            repo_root=_REPO_ROOT,
+        )
+
+    assert read_pass_record(eval_dir / "passes" / _PASS_ID).loads == [
+        LoadRefused(
+            case_id="declines", attempt=1, seconds=0.0, reason="the source declined to comment"
+        )
+    ]
+
+
+def test_a_rewrite_of_pass_json_cut_off_midway_leaves_the_earlier_record_readable(
+    tmp_path: Path, clock: FakeClock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    eval_dir = tmp_path / "fixed_output"
+    write_dataset(eval_dir, build_case("declines", "no comment", answer="yes"))
+    definition = dataclasses.replace(
+        FIXED_OUTPUT_EVAL, load=build_write_cutting_loader(monkeypatch)
+    )
+
+    with pytest.raises(WriteCutOff):
+        run_pass(
+            definition,
+            eval_dir=eval_dir,
+            repeats=1,
+            confirmed_loads=1,
+            case_ids=[],
+            repo_root=_REPO_ROOT,
+        )
+
+    assert read_pass_record(eval_dir / "passes" / _PASS_ID).loads == []
 
 
 def test_a_pass_folder_that_already_exists_is_refused(tmp_path: Path, clock: FakeClock) -> None:
@@ -510,6 +605,96 @@ def test_judging_refuses_every_stored_output_whose_case_left_the_dataset_before_
     )
 
 
+def test_judging_refuses_a_pass_recorded_for_another_eval_before_judging_any(
+    tmp_path: Path, clock: FakeClock
+) -> None:
+    eval_dir = tmp_path / "fixed_output"
+    write_dataset(eval_dir, build_case("agrees", "yes", answer="yes"))
+    pass_dir = run_pass(
+        FIXED_OUTPUT_EVAL,
+        eval_dir=eval_dir,
+        repeats=1,
+        confirmed_loads=1,
+        case_ids=[],
+        repo_root=_REPO_ROOT,
+    )
+    other_eval_dir = tmp_path / "another_eval"
+    other_eval_dir.mkdir()
+    other_dataset = {"eval": "another_eval", "cases": [build_case("agrees", "yes", answer="yes")]}
+    (other_eval_dir / "dataset.json").write_text(json.dumps(other_dataset), encoding="utf-8")
+    another_eval = dataclasses.replace(
+        FIXED_OUTPUT_EVAL, name="another_eval", judge=refuse_to_judge
+    )
+
+    with pytest.raises(JudgementInvalid) as refusal:
+        judge_pass(another_eval, pass_dir, eval_dir=other_eval_dir)
+
+    assert str(refusal.value) == f"{pass_dir}: pass is for eval 'fixed_output', not 'another_eval'"
+
+
+@pytest.mark.parametrize(
+    ("repeats", "missing_attempts"),
+    [(1, "attempt 1"), (2, "attempts 1, 2")],
+    ids=["one_repeat", "two_repeats"],
+)
+def test_judging_refuses_a_pass_whose_loading_stopped_before_judging_any(
+    tmp_path: Path, clock: FakeClock, repeats: int, missing_attempts: str
+) -> None:
+    eval_dir = tmp_path / "fixed_output"
+    write_dataset(
+        eval_dir,
+        build_case("agrees", "yes", answer="yes"),
+        build_case("breaks", "boom", answer="yes"),
+        build_case("never_loaded", "yes", answer="yes"),
+    )
+    with pytest.raises(KeyError, match="boom"):
+        run_pass(
+            dataclasses.replace(FIXED_OUTPUT_EVAL, load=load_until_broken),
+            eval_dir=eval_dir,
+            repeats=repeats,
+            confirmed_loads=3 * repeats,
+            case_ids=[],
+            repo_root=_REPO_ROOT,
+        )
+    pass_dir = eval_dir / "passes" / _PASS_ID
+
+    with pytest.raises(PassIncomplete) as refusal:
+        judge_pass(
+            dataclasses.replace(FIXED_OUTPUT_EVAL, judge=refuse_to_judge),
+            pass_dir,
+            eval_dir=eval_dir,
+        )
+
+    assert str(refusal.value) == (
+        f"{pass_dir}: loading stopped before recording "
+        f"case 'breaks' {missing_attempts}; case 'never_loaded' {missing_attempts}"
+    )
+    assert not (pass_dir / "judgements").exists()
+
+
+def test_judging_accepts_a_finished_pass_over_fewer_cases(tmp_path: Path, clock: FakeClock) -> None:
+    eval_dir = tmp_path / "fixed_output"
+    write_dataset(
+        eval_dir,
+        build_case("agrees", "yes", answer="yes"),
+        build_case("breaks", "boom", answer="yes"),
+        build_case("never_loaded", "yes", answer="yes"),
+    )
+    pass_dir = run_pass(
+        FIXED_OUTPUT_EVAL,
+        eval_dir=eval_dir,
+        repeats=2,
+        confirmed_loads=2,
+        case_ids=["agrees"],
+        repo_root=_REPO_ROOT,
+    )
+
+    judge_pass(FIXED_OUTPUT_EVAL, pass_dir, eval_dir=eval_dir)
+
+    agreed = [Judgement(key="answer", outcome="matched", note="answer 'yes' equals 'yes'")]
+    assert read_every_judgement(pass_dir) == {"agrees/1": agreed, "agrees/2": agreed}
+
+
 def test_a_judging_that_stops_leaves_the_earlier_judgements_untouched(
     tmp_path: Path, clock: FakeClock
 ) -> None:
@@ -569,6 +754,36 @@ def test_a_refused_judgement_is_recorded_with_its_reason(tmp_path: Path, clock: 
     }
 
 
+def test_find_unaccounted_cases_counts_a_refusal_after_stored_attempts_as_accounted() -> None:
+    record = build_pass_record(
+        ["declines"],
+        repeats=3,
+        loads=[
+            OutputStored(case_id="declines", attempt=1, seconds=0.0, cost_usd=0.01),
+            LoadRefused(case_id="declines", attempt=2, seconds=0.0, reason="declined"),
+        ],
+    )
+
+    assert find_unaccounted_cases(record) == []
+
+
+def test_find_unaccounted_cases_names_each_attempt_a_stopped_pass_never_recorded() -> None:
+    record = build_pass_record(
+        ["agrees", "breaks", "never_loaded"],
+        repeats=2,
+        loads=[
+            OutputStored(case_id="agrees", attempt=1, seconds=0.0, cost_usd=0.01),
+            OutputStored(case_id="agrees", attempt=2, seconds=0.0, cost_usd=0.01),
+            OutputStored(case_id="breaks", attempt=1, seconds=0.0, cost_usd=0.01),
+        ],
+    )
+
+    assert find_unaccounted_cases(record) == [
+        UnaccountedCase(case_id="breaks", missing_attempts=(2,)),
+        UnaccountedCase(case_id="never_loaded", missing_attempts=(1, 2)),
+    ]
+
+
 class FakeClock:
     def __init__(self) -> None:
         self.elapsed = 0.0
@@ -581,6 +796,10 @@ class FakeClock:
 
     def advance(self, seconds: float) -> None:
         self.elapsed += seconds
+
+
+class WriteCutOff(Exception):
+    pass
 
 
 @dataclass(frozen=True)
@@ -631,6 +850,20 @@ def build_case(case_id: str, answer: str, /, **equals_by_key: str) -> JsonValue:
     }
 
 
+def build_pass_record(
+    case_ids: list[str], *, repeats: int, loads: list[OutputStored | LoadRefused]
+) -> PassRecord:
+    return PassRecord(
+        eval=FIXED_OUTPUT_EVAL.name,
+        pass_id=_PASS_ID,
+        code_commit=read_head_commit(_REPO_ROOT),
+        repeats=repeats,
+        case_ids=case_ids,
+        started_at="2026-09-15T12:00:00",
+        loads=loads,
+    )
+
+
 def build_timed_loader(clock: FakeClock, calls: list[LoadCall]) -> LoadFunction:
     def load(case_input: AnswerInput, context: LoadContext) -> Loaded[AnswerOutput]:
         calls.append(LoadCall(case_input.answer, context))
@@ -649,20 +882,48 @@ def build_recording_loader(calls: list[str]) -> LoadFunction:
     return load
 
 
-def build_declining_loader(calls: list[str]) -> LoadFunction:
+def build_declining_loader(clock: FakeClock, calls: list[str]) -> LoadFunction:
     def load(case_input: AnswerInput, context: LoadContext) -> Loaded[AnswerOutput]:
         calls.append(case_input.answer)
         if case_input.answer == "no comment":
+            clock.advance(2.5)
             raise CaseRefused("the source declined to comment")
         return load_answer(case_input, context)
 
     return load
 
 
+def build_write_cutting_loader(monkeypatch: pytest.MonkeyPatch) -> LoadFunction:
+    def load(case_input: AnswerInput, context: LoadContext) -> Loaded[AnswerOutput]:
+        monkeypatch.setattr(Path, "write_text", cut_off_write)
+        raise CaseRefused("the source declined to comment")
+
+    return load
+
+
+def cut_off_write(
+    path: Path,
+    data: str,
+    encoding: str | None = None,
+    errors: str | None = None,
+    newline: str | None = None,
+) -> NoReturn:
+    path.open("w", encoding=encoding).close()
+    raise WriteCutOff(f"cut off while writing {path}")
+
+
 def load_until_broken(case_input: AnswerInput, context: LoadContext) -> Loaded[AnswerOutput]:
     if case_input.answer == "boom":
         raise KeyError("boom")
     return load_answer(case_input, context)
+
+
+def load_declining_or_breaking(
+    case_input: AnswerInput, context: LoadContext
+) -> Loaded[AnswerOutput]:
+    if case_input.answer == "no comment":
+        raise CaseRefused("the source declined to comment")
+    return load_until_broken(case_input, context)
 
 
 def refuse_to_load(case_input: AnswerInput, context: LoadContext) -> NoReturn:
@@ -712,6 +973,12 @@ def read_head_commit(repo_root: Path) -> str:
         ["git", "rev-parse", "HEAD"], cwd=repo_root, capture_output=True, check=True
     )
     return result.stdout.decode("utf-8").strip()
+
+
+def read_head_commit_error(repo_root: Path) -> str:
+    result = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo_root, capture_output=True)
+    assert result.returncode != 0
+    return result.stderr.decode("utf-8", errors="replace").strip()
 
 
 def read_pass_record(pass_dir: Path) -> PassRecord:
