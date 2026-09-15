@@ -42,14 +42,12 @@ def create_tiny_run(
     return TinyRun(project_id=project_id, run_id=str(manifest["run_id"]))
 
 
-def create_tiny_project(*, authored_rows: Path | None = None) -> str:
-    """Without `authored_rows` the load stage names no file, so a run must bind one."""
-    project_id = project.create_project("Tiny Run", "Count and total the rows.", source="test").id
-    [shape] = write_claim_shapes(project_id, [_ROW_COUNT_SHAPE])
-    stages = [_build_load_stage(authored_rows), _build_totals_stage(shape.id)]
-    save_stages(project_id, [parse_stage(spec) for spec in stages])
-    project.save_working_copy_as_version(project_id, message="Count and total the rows")
-    return project_id
+def create_tiny_project() -> str:
+    return _create_counting_project(load_paths=[])
+
+
+def create_tiny_project_naming_rows_at(rows: Path) -> str:
+    return _create_counting_project(load_paths=[str(rows)])
 
 
 def bind_uploaded_rows(
@@ -59,8 +57,16 @@ def bind_uploaded_rows(
     return {LOAD_STAGE: resolve_files_binding(project_id, [upload.id])}
 
 
-def _build_load_stage(authored_rows: Path | None) -> JsonDict:
-    paths = [] if authored_rows is None else [str(authored_rows)]
+def _create_counting_project(load_paths: list[str]) -> str:
+    project_id = project.create_project("Tiny Run", "Count and total the rows.", source="test").id
+    [shape] = write_claim_shapes(project_id, [_ROW_COUNT_SHAPE])
+    stages = [_build_load_stage(load_paths), _build_totals_stage(shape.id)]
+    save_stages(project_id, [parse_stage(spec) for spec in stages])
+    project.save_working_copy_as_version(project_id, message="Count and total the rows")
+    return project_id
+
+
+def _build_load_stage(paths: list[str]) -> JsonDict:
     return {
         "id": LOAD_STAGE,
         "type": "input_data",

@@ -12,6 +12,7 @@ import pytest
 
 from app.core.files import delete_file, list_project_files
 from app.core.run_status import RunStatus
+from app.models.records.workflow_output import WorkflowOutput
 from app.runtime.cancellation import request_cancel
 from app.services import project
 from app.services.project import export_project_archive
@@ -33,6 +34,7 @@ from tiny_run import (
     TOTALS_STAGE,
     bind_uploaded_rows,
     create_tiny_project,
+    create_tiny_project_naming_rows_at,
     create_tiny_run,
 )
 
@@ -61,6 +63,21 @@ def test_capture_records_inputs_status_limits_and_every_figure(tmp_path: Path) -
         RecipeFigure(slug="amount-total", stage_id=TOTALS_STAGE, value=7, claimable=False),
         RecipeFigure(slug="largest-amount", stage_id=TOTALS_STAGE, value=4, claimable=False),
         RecipeFigure(slug="row-count", stage_id=TOTALS_STAGE, value=2, claimable=True),
+    ]
+
+
+def test_capture_sorts_figures_by_slug_whatever_order_the_store_lists_them_in(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run = create_tiny_run()
+    published = [output for output in WorkflowOutput.list() if output.citation.run_id == run.run_id]
+    in_reverse_slug_order = sorted(published, key=lambda output: output.slug, reverse=True)
+    monkeypatch.setattr(WorkflowOutput, "list", lambda prefix="": in_reverse_slug_order)
+    recipe = read_recipe(_capture(tmp_path, run.project_id, run.run_id))
+    assert [figure.slug for figure in recipe.figures] == [
+        "amount-total",
+        "largest-amount",
+        "row-count",
     ]
 
 
@@ -127,7 +144,7 @@ def test_capture_refuses_a_run_that_ended_in_errors(tmp_path: Path) -> None:
 
 
 def test_capture_refuses_a_test_run(tmp_path: Path) -> None:
-    project_id = create_tiny_project(authored_rows=_write_rows(tmp_path))
+    project_id = create_tiny_project_naming_rows_at(_write_rows(tmp_path))
     run_id = str(run_workflow_test(project_id)["run_id"])
     with pytest.raises(CaptureRefused, match="is a test run"):
         _capture(tmp_path, project_id, run_id)
@@ -147,7 +164,7 @@ def test_capture_refuses_a_run_whose_version_is_not_the_latest(tmp_path: Path) -
 
 def test_capture_refuses_an_input_the_workflow_names_by_path(tmp_path: Path) -> None:
     rows = _write_rows(tmp_path)
-    project_id = create_tiny_project(authored_rows=rows)
+    project_id = create_tiny_project_naming_rows_at(rows)
     run_id = str(execute(project_id)["run_id"])
     with pytest.raises(CaptureRefused, match="a path the workflow names") as refused:
         _capture(tmp_path, project_id, run_id)
@@ -162,7 +179,7 @@ def test_capture_refuses_an_input_bound_to_a_file_the_store_does_not_hold(tmp_pa
     run_id = str(execute(project_id, bindings=bindings)["run_id"])
     with pytest.raises(CaptureRefused, match="not a file uploaded to the project") as refused:
         _capture(tmp_path, project_id, run_id)
-    assert ROWS_FILENAME in str(refused.value)
+    assert f"'{ROWS_FILENAME}'" in str(refused.value)
     assert not (tmp_path / _SAVED).exists()
 
 
@@ -172,7 +189,7 @@ def test_capture_refuses_an_input_whose_file_record_is_gone(tmp_path: Path) -> N
     delete_file(run.project_id, stored.id)
     with pytest.raises(CaptureRefused, match="whose record is gone") as refused:
         _capture(tmp_path, run.project_id, run.run_id)
-    assert ROWS_FILENAME in str(refused.value)
+    assert f"'{ROWS_FILENAME}'" in str(refused.value)
     assert not (tmp_path / _SAVED).exists()
 
 
