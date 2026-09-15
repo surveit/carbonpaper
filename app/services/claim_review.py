@@ -30,6 +30,7 @@ from app.models.stage import StageType
 from app.models.terms import render_terms
 from app.models.workflow import Workflow, find_stages_upstream_of, sort_stages_by_dependency
 from app.models.workflow_stage import WorkflowStage
+from app.reviewer.evidence import render_evidence_pool
 from app.services import claims as claims_service
 from app.services import run as run_service
 from app.services import scope as scope_service
@@ -69,15 +70,16 @@ def load_claim_review(claim_id: ID) -> ClaimReview | None:
 
 
 def store_claim_review(project_id: ID, claim_id: ID, *, claim_parts: list[ClaimPart],
-                       challenges: list[Challenge], summary: str, session_ids: list[ID],
-                       corpus: str) -> ClaimReview:
+                       challenges: list[Challenge], summary: str,
+                       session_ids: list[ID]) -> ClaimReview:
     claim = claims_service.load_claim(project_id, claim_id)
     cited = _require_cell_citation(claim.citation)
     if load_claim_review(claim_id) is not None:
         raise ClaimReviewRefused(
             [f"claim {claim_id} already has a review; a re-review is a new claim"])
+    pool = render_evidence_pool(build_evidence_bundle(project_id, claim_id))
     issues = [*find_claim_part_issues(claim_parts, claim.text),
-              *find_unprinted_evidence(challenges, corpus),
+              *find_unprinted_evidence(challenges, pool),
               *find_challenge_issues(challenges, len(claim_parts)),
               *find_citation_issues(project_id, cited.run_id, challenges)]
     if issues:
