@@ -286,12 +286,29 @@ def test_a_cell_the_run_holds_is_accepted_as_a_number_or_as_its_text(claim):
     ({"run_id": "another_run"}, "names run 'another_run', not the claim's run"),
     ({"stage_id": "no_such_stage"}, "names stage 'no_such_stage', which wrote no output"),
     ({"row_ordinal": 1}, "names row 1, which the output of 'grant_totals' does not hold"),
+    # The output's last row holds 2200, so a negative index would otherwise find it.
+    ({"row_ordinal": -1}, "names row -1, which the output of 'grant_totals' does not hold"),
     ({"column": "no_such_column"}, "names column 'no_such_column', which the output of"),
     ({"value": 2201}, "gives value 2201, but that cell holds '2200'"),
     ({"value": "2,200"}, "gives value '2,200', but that cell holds '2200'"),
 ])
 def test_a_fabricated_cell_is_refused(claim, overrides, fragment):
     assert fragment in _refuse_citing(claim, _cell(claim, **overrides))
+
+
+@pytest.mark.parametrize("value, problem", [
+    ("22,000", None),
+    ("22000", "gives value '22000', but that cell holds '22,000'"),
+])
+def test_a_cell_of_five_digits_is_cited_with_its_separators(value, problem):
+    output = claim_review._StageOutput(
+        row_count=1, columns=frozenset({"total"}), cells_by_column={"total": [22000]})
+    held = claim_review._RunHoldings(
+        run_id="r", outputs_by_stage_id={"s": output}, stage_ids={"s"}, term_names=set())
+    cited = StageOutputCellCitation(run_id="r", stage_id="s", row_ordinal=0,
+                                    column="total", value=value)
+
+    assert claim_review._find_cell_problem(held, cited) == problem
 
 
 def test_a_column_the_stage_output_holds_is_accepted(claim):
