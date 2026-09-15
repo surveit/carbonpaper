@@ -113,7 +113,7 @@ def build_run_stage_panel(
         for entry in manifest.get("stage_records", [])
     }
     rows_shown = PREVIEW_ROWS_SHOWN if scope is None else SCOPED_ROWS_SHOWN
-    at_rows = _pick_rows(scope, stage_id, whole_frame, rows_shown)
+    at_rows = _list_rows_to_draw(scope, stage_id, whole_frame, rows_shown)
     # Its inputs are drawn as the upstream stage wrote them, unordered by this one.
     preview = order_preview_columns(
         _read_frame(run_dir, stage_record.get("output_path"), at_rows, rows_shown),
@@ -153,7 +153,7 @@ def _build_diff(pinned: run_service.RunStageDef, run_dir: Path,
         rows_shown=rows_shown, at_rows=at_rows)
 
 
-def _pick_rows(scope: TraceScope | None, stage_id: StageId, whole_frame: bool,
+def _list_rows_to_draw(scope: TraceScope | None, stage_id: StageId, whole_frame: bool,
                rows_shown: int) -> list[int] | None:
     """The figure's own rows, or — asked for the frame — a window of it holding them."""
     if scope is None:
@@ -186,6 +186,6 @@ def _preview_the_inputs(
          "columns_behind": set() if scope is None else scope.read_columns_at(input_id),
          "preview": _read_frame(
              run_dir, output_by_id.get(input_id),
-             _pick_rows(scope, input_id, whole_frame, rows_shown), rows_shown)}
+             _list_rows_to_draw(scope, input_id, whole_frame, rows_shown), rows_shown)}
         for input_id in stage_def.input_ids
     ]
