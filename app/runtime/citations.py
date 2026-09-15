@@ -11,7 +11,7 @@ import pyarrow as pa
 from app.core.errors import CitationMismatch, RowOutOfRange, StageNotInRun
 from app.core.frames import convert_cell_to_json_value, read_native_cell
 from app.models.citations import CitedValue
-from app.models.claims import StageOutputRowCitation
+from app.models.citations import StageOutputRowCitation
 from app.models.records.citations import StageCitations
 
 

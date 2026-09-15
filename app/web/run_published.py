@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 
 from app.core.json_types import JsonScalar
-from app.models.claims import StageOutputCellCitation, StageOutputTableCitation
+from app.models.citations import StageOutputCellCitation, StageOutputTableCitation
 from app.models.records.workflow_output import WorkflowOutput
 from app.services import run as run_service
 from app.web import loading

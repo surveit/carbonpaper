@@ -9,8 +9,8 @@ from app.models.claims import (
     ClaimImportance,
     ClaimShapeInput,
     DataUniverseRequirement,
-    StageOutputCellCitation,
 )
+from app.models.citations import StageOutputCellCitation
 from app.models.records.claims import Claim
 from app.models.records.run_manifest import RunManifest
 from app.models.records.workflow_output import WorkflowOutput

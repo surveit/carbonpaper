@@ -11,8 +11,8 @@ from app.models.claims import (
     ClaimShapeInput,
     ClaimStatus,
     DataUniverseRequirement,
-    StageOutputCellCitation,
 )
+from app.models.citations import StageOutputCellCitation
 from app.models.records.claims import Claim
 from app.models.records.workflow_output import WorkflowOutput
 from app.models.schema import Column

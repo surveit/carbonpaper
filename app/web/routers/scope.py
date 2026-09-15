@@ -13,7 +13,7 @@ from app.core.errors import (
 from app.runtime.errors import MissingLineage
 from app.core.json_types import JsonDict
 from app.models.branch_analysis import BranchId
-from app.models.claims import StageOutputCellCitation
+from app.models.citations import StageOutputCellCitation
 from app.web import scope_view
 from app.web.scope_drawing import draw_the_scope
 from app.web.scope_payload import CutRows, ScopeMap, build_scope_map_for_cut

@@ -8,6 +8,8 @@ from app.core.frames import read_cell
 from app.models.claims import (
     ClaimImportance,
     DataUniverseRequirement,
+)
+from app.models.citations import (
     RowsRectangle,
     StageOutputCellCitation,
     StageOutputTableCitation,

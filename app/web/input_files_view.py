@@ -14,7 +14,7 @@ from app.core.file_shape import VALUES_KEPT, measure_column_shape
 from app.core.frames import read_frame_table, read_native_cell_as_json
 from app.core.json_types import JsonScalar
 from app.models.branch_analysis import RowOrdinal
-from app.models.claims import StageOutputCellCitation
+from app.models.citations import StageOutputCellCitation
 from app.models.schema import StageId
 from app.models.stages.input_data import InputDataStage
 from app.models.records.run_manifest import RunManifest

@@ -9,7 +9,7 @@ import pytest
 
 import app.services.run as run_service
 from app.models.branch_analysis import BranchRole
-from app.models.claims import StageOutputCellCitation
+from app.models.citations import StageOutputCellCitation
 from app.models.workflow import Workflow
 from app.runtime.branch_analysis import group_rows_by_path, reconstruct_run_branches
 from app.runtime.manifest import read_run_manifest

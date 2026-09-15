@@ -7,7 +7,7 @@ import pytest
 from app.core.errors import CitationMismatch, RowOutOfRange, StageNotInRun
 from app.models import parse_stage, Stage
 from app.models.citations import CitedValue
-from app.models.claims import StageOutputRowCitation
+from app.models.citations import StageOutputRowCitation
 from app.runtime.citations import CitationProvider
 from app.runtime.context import RunContext
 from app.runtime.stages.report import handle_report

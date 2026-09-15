@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.web.scope_drawing import BAND_GAP, HEAD, ScopeDrawing, draw_the_scope
 from app.web.scope_view import load_scope_map
-from app.models.claims import StageOutputCellCitation
+from app.models.citations import StageOutputCellCitation
 from test_scope_page import (  # noqa: F401  (the fixtures come with them)
     PROJECT,
     TIERED_PROJECT,
