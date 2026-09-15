@@ -69,3 +69,25 @@ class StageOutputRowCitation(Citation):
     kind: Literal["stage_output_row"] = "stage_output_row"
     stage_id: ID
     row_ordinal: int
+
+
+class StageOutputColumnCitation(Citation):
+    kind: Literal["stage_output_column"] = "stage_output_column"
+    stage_id: ID = Field(description="The stage, as the evidence pool names it.")
+    column: str = Field(description="The column's name, spelled as the evidence pool spells it.")
+
+
+class StageCitation(Citation):
+    kind: Literal["stage"] = "stage"
+    stage_id: ID = Field(description="The stage, as the evidence pool names it.")
+
+
+class TermCitation(Citation):
+    kind: Literal["term"] = "term"
+    name: str = Field(description="The defined term, exactly as the terms name it.")
+
+
+ChallengeCitation = Annotated[
+    Union[StageOutputCellCitation, StageOutputColumnCitation, StageCitation, TermCitation],
+    Field(discriminator="kind"),
+]
