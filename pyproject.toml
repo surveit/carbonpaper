@@ -26,6 +26,7 @@ dependencies = [
     "alembic>=1.18",           # data migrations for the document store (alembic/versions)
     "pydantic>=2",             # stage/schema contract models (app/models)
     "starlark-pyo3==2026.1",   # sandboxed interpreter for starlark_row_function stages
+    "pyjwt[crypto]>=2.10",     # verifies the Cloudflare Access JWT in app/web/access_gate.py
 ]
 
 # Dev/test-only. `uv sync` installs these by default; the container image passes

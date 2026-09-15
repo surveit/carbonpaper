@@ -32,6 +32,16 @@ RUN curl -fsSL https://claude.ai/install.sh | bash
 ENV PATH="/root/.local/bin:${PATH}"
 RUN claude --version
 
+# cloudflared terminates the tunnel to Cloudflare's edge for a per-tenant deploy,
+# which has no public IP. Pinned, not "latest": this binary carries the auth
+# perimeter's traffic. The entrypoint runs it only when TUNNEL_TOKEN is set, so
+# the single-operator deploy ships it unused.
+ARG CLOUDFLARED_VERSION=2026.8.3
+RUN curl -fsSL -o /usr/local/bin/cloudflared \
+      "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64" \
+    && chmod +x /usr/local/bin/cloudflared \
+    && cloudflared --version
+
 COPY alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app

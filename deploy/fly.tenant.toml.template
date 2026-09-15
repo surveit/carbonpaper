@@ -1,0 +1,46 @@
+# Template for one tenant's machine. scripts/provision_tenant.sh fills the
+# __PLACEHOLDERS__ and writes the result to deploy/tenants/<tenant>.toml.
+#
+# The difference from the repo's own fly.toml is the whole security model: there
+# is no [http_service] block, so Fly allocates no public IP and this machine is
+# reachable only down the cloudflared tunnel the entrypoint dials out. Adding an
+# [http_service] block here puts an unauthenticated carbonpaper on the internet.
+#
+# The cost of that: this machine cannot be woken by traffic. Fly auto-starts a
+# stopped machine when its PROXY takes a request, and no request reaches the
+# proxy — cloudflared dials out from inside, so a stopped machine has no tunnel
+# and nothing can reach it to wake it. A tenant machine therefore runs 24/7 at
+# ~$11.81/mo, with no idle saving. Recovering that means moving cloudflared into
+# one shared always-on app that reaches tenants over .internal, where the proxy
+# can auto-start them. Worth doing above ~3 tenants; not built yet.
+
+app = "__APP_NAME__"
+primary_region = "iad"
+
+[build]
+  dockerfile = "../Dockerfile"
+
+[env]
+  CARBON_PAPER_DB_PATH = "/data/app.db"
+  CARBON_PAPER_PROJECTS_DIR = "/data/projects"
+  CLAUDE_CONFIG_DIR = "/data/claude"
+
+  # Both must be set for app/web/access_gate.py to install itself. The gate is a
+  # tripwire, not the perimeter: the perimeter is having no public IP. It exists
+  # so that if this machine is ever exposed by mistake, requests fail closed.
+  CARBON_PAPER_ACCESS_TEAM = "__ACCESS_TEAM__"
+  CARBON_PAPER_ACCESS_AUD = "__ACCESS_AUD__"
+
+  # Two shared vCPUs starve the Claude CLI's initialize handshake at higher
+  # parallelism — see the repo's fly.toml for the measurements behind these.
+  CARBON_PAPER_LLM_PARALLEL = "2"
+  CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = "300000"
+
+[[mounts]]
+  source = "carbonpaper_data"
+  destination = "/data"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 2
+  memory_mb = 2048
