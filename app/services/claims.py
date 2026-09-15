@@ -70,6 +70,13 @@ def load_claim(project_id: ID, claim_id: ID) -> Claim:
     return held
 
 
+def load_required_claim_shape(project_id: ID, shape_id: ID | None) -> ClaimShape:
+    shape = load_claim_shape(project_id, shape_id) if shape_id else None
+    if shape is None:
+        raise ClaimRefused([f"this project holds no claim shape '{shape_id}'"])
+    return shape
+
+
 def load_claims_of_shape(project_id: ID, shape_id: ID) -> list[Claim]:
     """Standing or awaiting review, oldest first. A claim that was replaced stands no more."""
     claims = Claim.find(created_by_project_id=project_id, shape_id=shape_id)
@@ -184,13 +191,6 @@ def learn_the_template(project_id: ID, shape_id: ID, template: str) -> ClaimShap
     shape = load_required_claim_shape(project_id, shape_id)
     shape.template = template.strip()
     shape.save()
-    return shape
-
-
-def load_required_claim_shape(project_id: ID, shape_id: ID | None) -> ClaimShape:
-    shape = load_claim_shape(project_id, shape_id) if shape_id else None
-    if shape is None:
-        raise ClaimRefused([f"this project holds no claim shape '{shape_id}'"])
     return shape
 
 

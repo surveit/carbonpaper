@@ -1,4 +1,4 @@
-"""The evidence bundle as the text a reviewer reads and copies its backing out of."""
+"""The evidence bundle as the text a reviewer reads and copies its evidence out of."""
 from __future__ import annotations
 
 from app.core.column_profile import ValueCount
@@ -16,12 +16,12 @@ _NOTHING = "none"
 
 
 def render_evidence_bundle(bundle: EvidenceBundle) -> str:
-    """The claim and the pool: what a reviewer reads. The claim is NOT its own backing."""
+    """The claim and the pool: what a reviewer reads. The claim is NOT its own evidence."""
     return _render_the_claim(bundle) + "\n\n" + render_evidence_pool(bundle)
 
 
 def render_evidence_pool(bundle: EvidenceBundle) -> str:
-    """Only what the run itself holds — the corpus a challenge's backing is checked against."""
+    """Only what the run itself holds — the pool a challenge's evidence is checked against."""
     return "\n\n".join([
         f"run: {bundle.cited.run_id}",
         _render_outputs(bundle.outputs, bundle.cited_slug),
