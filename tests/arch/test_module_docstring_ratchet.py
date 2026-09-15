@@ -17,6 +17,7 @@ from arch.test_complexity_ratchet import _SOURCE_EXEMPT_PARTS, find_app_source_f
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _APP_ROOT = _REPO_ROOT / "app"
 _TESTS_ROOT = _REPO_ROOT / "tests"
+_EVALS_ROOT = _REPO_ROOT / "evals"
 _DOCSTRING_LINE_CEILING = 5
 
 # The complexity ratchet's exemptions, minus "tests" — this rule governs the test
@@ -41,8 +42,12 @@ class ModuleDocstring:
     lines: int
 
 
-def find_governed_files(app_root: Path, tests_root: Path) -> list[Path]:
-    return find_app_source_files(app_root) + find_python_files(tests_root)
+def find_governed_files(app_root: Path, tests_root: Path, evals_root: Path) -> list[Path]:
+    return (
+        find_app_source_files(app_root)
+        + find_python_files(tests_root)
+        + find_python_files(evals_root)
+    )
 
 
 def find_python_files(root: Path) -> list[Path]:
@@ -89,11 +94,11 @@ def find_ratchet_violations(
 
 def test_module_docstrings_do_not_exceed_the_ratchet() -> None:
     measurements = measure_module_docstrings(
-        find_governed_files(_APP_ROOT, _TESTS_ROOT), _REPO_ROOT
+        find_governed_files(_APP_ROOT, _TESTS_ROOT, _EVALS_ROOT), _REPO_ROOT
     )
     offenders = find_ratchet_violations(measurements, _JUSTIFIED_EXCEPTIONS)
     assert not offenders, (
-        f"module-docstring ratchet (every module under app/ and tests/): a module "
+        f"module-docstring ratchet (every module under app/, tests/ and evals/): a module "
         f"docstring must be at most {_DOCSTRING_LINE_CEILING} physical lines, with no "
         "baseline. Write one line of what's in the file, plus at most the one or two "
         "lines carrying a real gotcha or non-obvious invariant; architecture narration "
@@ -251,12 +256,19 @@ def test_find_python_files_ignores_a_dot_directory_in_the_scanned_root_prefix(tm
     assert [path.name for path in find_python_files(root)] == ["m.py"]
 
 
-def test_find_governed_files_covers_app_and_the_whole_tests_tree() -> None:
+def test_find_governed_files_raises_when_the_evals_root_has_no_python_files(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="governs no source files"):
+        find_governed_files(_APP_ROOT, _TESTS_ROOT, tmp_path)
+
+
+def test_find_governed_files_covers_app_the_whole_tests_tree_and_evals() -> None:
     governed = {
-        path.relative_to(_REPO_ROOT).as_posix() for path in find_governed_files(_APP_ROOT, _TESTS_ROOT)
+        path.relative_to(_REPO_ROOT).as_posix()
+        for path in find_governed_files(_APP_ROOT, _TESTS_ROOT, _EVALS_ROOT)
     }
     assert "app/main.py" in governed
     assert "tests/conftest.py" in governed
     assert "tests/arch/test_module_docstring_ratchet.py" in governed
     # Every .py under tests/, not just tests/arch/ — the scope this rule governs.
     assert {path for path in governed if path.startswith("tests/") and not path.startswith("tests/arch/")}
+    assert "evals/harness/__init__.py" in governed

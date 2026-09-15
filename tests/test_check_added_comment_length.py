@@ -91,6 +91,17 @@ def test_find_violations_from_diff_flags_a_new_long_comment() -> None:
     assert "app/x.py:2" in violations[0]
 
 
+def test_find_violations_from_diff_flags_a_new_long_comment_under_evals() -> None:
+    long_comment = "x" * 120
+    content = f"x = 1\n# {long_comment}\ny = 2\n"
+    diff_text = _diff("evals/harness/x.py", 2, [f"# {long_comment}"])
+    violations = find_violations_from_diff(
+        diff_text, lambda file: content if file == "evals/harness/x.py" else None
+    )
+    assert len(violations) == 1
+    assert "evals/harness/x.py:2" in violations[0]
+
+
 def test_find_violations_from_diff_ignores_a_short_new_comment() -> None:
     content = "x = 1\n# short note\ny = 2\n"
     diff_text = _diff("app/x.py", 2, ["# short note"])
@@ -113,7 +124,7 @@ def test_find_violations_from_diff_allows_a_long_comment_that_is_only_a_docs_lin
     assert violations == []
 
 
-def test_find_violations_from_diff_ignores_files_outside_app_and_tests() -> None:
+def test_find_violations_from_diff_ignores_files_outside_the_governed_prefixes() -> None:
     long_comment = "x" * 120
     content = f"# {long_comment}\n"
     diff_text = _diff("scripts/x.py", 1, [f"# {long_comment}"])

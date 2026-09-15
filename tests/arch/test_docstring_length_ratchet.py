@@ -20,6 +20,7 @@ from arch.test_module_docstring_ratchet import find_governed_files
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _APP_ROOT = _REPO_ROOT / "app"
 _TESTS_ROOT = _REPO_ROOT / "tests"
+_EVALS_ROOT = _REPO_ROOT / "evals"
 _PROSE_CHAR_CEILING = 100
 
 _DEFINITION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
@@ -122,13 +123,13 @@ def find_ratchet_violations(
 
 def test_entrance_prose_does_not_exceed_the_ratchet() -> None:
     measurements = measure_symbol_entrance_prose(
-        find_governed_files(_APP_ROOT, _TESTS_ROOT), _REPO_ROOT
+        find_governed_files(_APP_ROOT, _TESTS_ROOT, _EVALS_ROOT), _REPO_ROOT
     )
     offenders = find_ratchet_violations(
         measurements, _GRANDFATHERED, _GRANDFATHERED_ENTRANCE_PROSE, _JUSTIFIED_EXCEPTIONS
     )
     assert not offenders, (
-        "entrance-prose ratchet (every function, method, and class under app/ and tests/): "
+        "entrance-prose ratchet (every function, method, and class under app/, tests/ and evals/): "
         "the docstring AND the comment block above the first statement share ONE budget of "
         f"at most {_PROSE_CHAR_CEILING} characters — one short sentence. Moving a docstring "
         "into a comment block at the top of the body does NOT satisfy this rule: the budget "
@@ -491,15 +492,16 @@ def test_the_two_grandfather_lists_do_not_overlap() -> None:
 def test_the_rule_governs_a_non_empty_set_of_files() -> None:
     governed = {
         path.relative_to(_REPO_ROOT).as_posix()
-        for path in find_governed_files(_APP_ROOT, _TESTS_ROOT)
+        for path in find_governed_files(_APP_ROOT, _TESTS_ROOT, _EVALS_ROOT)
     }
     assert "app/main.py" in governed
     assert "tests/arch/test_docstring_length_ratchet.py" in governed
+    assert "evals/harness/__init__.py" in governed
 
 
 def test_find_governed_files_raises_when_a_root_has_no_python_files(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="governs no source files"):
-        find_governed_files(tmp_path, tmp_path)
+        find_governed_files(tmp_path, tmp_path, tmp_path)
 
 
 # --- the entrance comment block counts against the same budget -------------
