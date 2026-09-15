@@ -27,7 +27,7 @@ from app.models.claim_review import (
     StageEvidenceItem,
     find_claim_part_spans,
 )
-from app.models.records.claim_review import AttackType, Challenge, ClaimPart, ClaimReview
+from app.models.records.claim_review import Challenge, ChallengeKind, ClaimPart, ClaimReview
 from app.models.stage import StageType
 from app.models.terms import render_terms
 from app.models.workflow import Workflow, find_stages_upstream_of, sort_stages_by_dependency
@@ -72,8 +72,8 @@ def load_claim_review(claim_id: ID) -> ClaimReview | None:
 
 
 def store_claim_review(project_id: ID, claim_id: ID, *, claim_parts: list[ClaimPart],
-                       challenges: list[Challenge], summary: str, claim_parts_session_id: ID,
-                       attack_session_ids: dict[AttackType, ID], corpus: str) -> ClaimReview:
+                       challenges: list[Challenge], summary: str, session_ids: list[ID],
+                       corpus: str) -> ClaimReview:
     claim = claims_service.load_claim(project_id, claim_id)
     cited = _require_cell_citation(claim.citation)
     if load_claim_review(claim_id) is not None:
@@ -81,13 +81,13 @@ def store_claim_review(project_id: ID, claim_id: ID, *, claim_parts: list[ClaimP
             [f"claim {claim_id} already has a review; a re-attack is a new claim"])
     issues = [*find_claim_part_issues(claim_parts, claim.text),
               *find_unprinted_evidence(challenges, corpus),
-              *find_challenge_issues(challenges, len(claim_parts), attack_session_ids),
+              *find_challenge_issues(challenges, len(claim_parts)),
               *find_citation_issues(project_id, cited.run_id, challenges)]
     if issues:
         raise ClaimReviewRefused(issues)
     review = ClaimReview(
         claim_id=claim_id, claim_parts=claim_parts, challenges=challenges, summary=summary,
-        claim_parts_session_id=claim_parts_session_id, attack_session_ids=attack_session_ids)
+        session_ids=session_ids)
     review.save()
     return review
 
@@ -111,12 +111,13 @@ def find_unprinted_evidence(challenges: list[Challenge], corpus: str) -> list[st
     ]
 
 
-def find_challenge_issues(challenges: list[Challenge], claim_part_count: int,
-                          attack_session_ids: dict[AttackType, ID]) -> list[str]:
-    raised = {AttackType(attack_type) for attack_type in attack_session_ids}
+def find_challenge_issues(challenges: list[Challenge], claim_part_count: int) -> list[str]:
     return [
-        issue for index, challenge in enumerate(challenges)
-        for issue in _find_one_challenge_issues(index, challenge, claim_part_count, raised)
+        f"{_name_challenge(index, challenge)}: claim_part_index {challenge.claim_part_index} "
+        f"names no claim part; the claim has {claim_part_count}"
+        for index, challenge in enumerate(challenges)
+        if challenge.claim_part_index is not None
+        and challenge.claim_part_index >= claim_part_count
     ]
 
 
@@ -261,21 +262,7 @@ class _RunHoldings:
 
 
 def _name_challenge(index: int, challenge: Challenge) -> str:
-    return f"challenge {index} ({AttackType(challenge.attack_type).value})"
-
-
-def _find_one_challenge_issues(index: int, challenge: Challenge, claim_part_count: int,
-                               raised: set[AttackType]) -> list[str]:
-    named = _name_challenge(index, challenge)
-    issues = []
-    part_index = challenge.claim_part_index
-    if part_index is not None and part_index >= claim_part_count:
-        issues.append(f"{named}: claim_part_index {part_index} names no claim part; "
-                      f"the claim has {claim_part_count}")
-    if AttackType(challenge.attack_type) not in raised:
-        issues.append(f"{named}: no session raised this attack type, so its transcript "
-                      "cannot be opened")
-    return issues
+    return f"challenge {index} ({ChallengeKind(challenge.kind).value})"
 
 
 def _find_overlapping_claim_parts(spans: list[tuple[int, int] | None]) -> list[str]:

@@ -13,7 +13,7 @@ from app.models.citations import ChallengeCitation
 from app.models.schema import _Base
 
 
-class AttackType(str, Enum):
+class ChallengeKind(str, Enum):
     data = "data"
     choice = "choice"
     omission = "omission"
@@ -26,10 +26,10 @@ SEVERITY_FLOOR = 0
 SEVERITY_CEILING = 3
 
 SEVERITY_WORDS: dict[int, str] = {
-    0: "checked, quiet",
-    1: "worth a footnote",
-    2: "moves the figure, or bounds it",
-    3: "could not stand as written",
+    0: "checked and does not hurt the claim, but the assumption is worth noting",
+    1: "low-probability or low-magnitude risks to the number or its framing",
+    2: "the claim's structure is right, but its value risks a meaningful deviation",
+    3: "actively misleading: it will lead readers to incorrect conclusions",
 }
 
 _SEVERITY_DESCRIPTION = "How far it moves the claim. " + ". ".join(
@@ -45,7 +45,7 @@ class ClaimPart(_Base):
 
 
 class Challenge(_Base):
-    attack_type: AttackType = Field(description="What sort of stretch this is.")
+    kind: ChallengeKind = Field(description="What sort of stretch this is.")
     claim_part_index: int | None = Field(
         default=None, ge=0,
         description="Which claim part it lands on, by position in the claim parts; null for the whole sentence.",
@@ -72,10 +72,8 @@ class ClaimReview(PersistedModel):
     claim_parts: list[ClaimPart] = Field(frozen=True)
     challenges: list[Challenge] = Field(frozen=True)
     summary: str = Field(frozen=True)
-    claim_parts_session_id: ID = Field(frozen=True)
-    # The session that raised each attack type, so a challenge opens its own transcript;
-    # `gap` is the orchestrator's.
-    attack_session_ids: dict[AttackType, ID] = Field(frozen=True)
+    # Every review session in the order it ran, so a reader can open the transcripts.
+    session_ids: list[ID] = Field(frozen=True)
 
     def save(self) -> None:
         # Frozen fields stop a mutation; this stops a fresh record with a stored id.

@@ -6,11 +6,11 @@ from pydantic import ValidationError
 
 from app.models.citations import StageOutputCellCitation
 from app.models.claim_review import ChallengesAnswer, OrchestratorAnswer, find_claim_part_spans
-from app.models.records.claim_review import SEVERITY_WORDS, AttackType, Challenge, ClaimPart
+from app.models.records.claim_review import SEVERITY_WORDS, Challenge, ChallengeKind, ClaimPart
 
 
 def _challenge(**overrides: object) -> Challenge:
-    fields = dict(attack_type=AttackType.coverage, claim_part_index=0,
+    fields = dict(kind=ChallengeKind.coverage, claim_part_index=0,
                   text="Blank outcomes count as unknown.",
                   justification="28% of records are blank.", evidence="28% of records",
                   severity=3)
@@ -43,7 +43,7 @@ def test_a_claim_part_needs_a_phrase_and_counts_occurrences_from_one():
 
 def test_a_challenge_carries_exactly_these_fields_in_this_order():
     assert list(Challenge.model_fields) == [
-        "attack_type", "claim_part_index", "text", "justification", "evidence", "citations",
+        "kind", "claim_part_index", "text", "justification", "evidence", "citations",
         "severity"]
 
 

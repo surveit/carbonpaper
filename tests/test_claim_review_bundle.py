@@ -11,7 +11,7 @@ from app.models.citations import (
     TermCitation,
 )
 from app.models.named_schemas import NamedSchema, SchemaLibrary
-from app.models.records.claim_review import AttackType, Challenge, ClaimPart
+from app.models.records.claim_review import Challenge, ChallengeKind, ClaimPart
 from app.models.terms import Terms, Verb
 from app.services import claim_review
 from app.services import terms as terms_service
@@ -125,23 +125,21 @@ def test_a_table_the_run_published_is_pooled_by_its_row_count(claim):
 
 
 def _challenge(evidence: str, **overrides: object) -> Challenge:
-    fields = dict(attack_type=AttackType.coverage, claim_part_index=0, text="t",
+    fields = dict(kind=ChallengeKind.coverage, claim_part_index=0, text="t",
                   justification="j", evidence=evidence, severity=2)
     return Challenge.model_validate({**fields, **overrides})
 
 
 _PARTS = [ClaimPart(phrase="Grants"), ClaimPart(phrase="2,200")]
-_SESSIONS = {attack_type: f"session-{attack_type.value}" for attack_type in AttackType}
+_SESSIONS = ["session-parts", "session-data", "session-orchestrator"]
 _NO_CHALLENGES: list[Challenge] = []
 
 
 def _store(claim, *, claim_parts: list[ClaimPart] = _PARTS,
-           challenges: list[Challenge] = _NO_CHALLENGES, summary: str = "s",
-           attack_session_ids: dict[AttackType, str] = _SESSIONS, corpus: str = ""):
+           challenges: list[Challenge] = _NO_CHALLENGES, summary: str = "s", corpus: str = ""):
     return claim_review.store_claim_review(
         PROJECT, claim.id, claim_parts=claim_parts, challenges=challenges, summary=summary,
-        claim_parts_session_id="session-parts", attack_session_ids=attack_session_ids,
-        corpus=corpus)
+        session_ids=_SESSIONS, corpus=corpus)
 
 
 def _store_evidence(claim, evidence: str, corpus: str):
@@ -153,12 +151,9 @@ def _pool_of(claim) -> str:
 
 
 def _refusals_of(claim, *, claim_parts: list[ClaimPart] = _PARTS,
-                 challenges: list[Challenge] = _NO_CHALLENGES,
-                 attack_session_ids: dict[AttackType, str] = _SESSIONS,
-                 corpus: str = "") -> list[str]:
+                 challenges: list[Challenge] = _NO_CHALLENGES, corpus: str = "") -> list[str]:
     with pytest.raises(ClaimReviewRefused) as refused:
-        _store(claim, claim_parts=claim_parts, challenges=challenges,
-               attack_session_ids=attack_session_ids, corpus=corpus)
+        _store(claim, claim_parts=claim_parts, challenges=challenges, corpus=corpus)
     assert claim_review.load_claim_review(claim.id) is None
     return refused.value.refusals
 
@@ -213,8 +208,7 @@ def test_evidence_copied_from_an_attackers_text_is_accepted_and_the_review_round
     held = claim_review.load_claim_review(claim.id)
     assert held is not None and held.id == stored.id
     assert held.challenges[0].evidence == "1 of 10 rows" and held.claim_parts == _PARTS
-    assert held.claim_parts_session_id == "session-parts"
-    assert held.attack_session_ids == _SESSIONS
+    assert held.session_ids == _SESSIONS
 
 
 # ── claim parts ──
@@ -258,13 +252,6 @@ def test_a_challenge_on_the_last_claim_part_or_the_whole_sentence_is_accepted(cl
 
     assert len(_store(claim, challenges=challenges, corpus=_pool_of(claim)).challenges) == 2
 
-
-def test_a_challenge_whose_attack_type_no_session_raised_is_refused(claim):
-    refusals = _refusals_of(claim, challenges=[_challenge("2200")], corpus=_pool_of(claim),
-                            attack_session_ids={AttackType.data: "session-data"})
-
-    assert refusals == ["challenge 0 (coverage): no session raised this attack type, "
-                        "so its transcript cannot be opened"]
 
 
 # ── citations ──

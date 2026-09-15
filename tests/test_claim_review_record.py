@@ -5,12 +5,11 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.errors import ClaimReviewIsImmutable
-from app.models.records.claim_review import AttackType, ClaimPart, ClaimReview
+from app.models.records.claim_review import ClaimPart, ClaimReview
 
 _FIELDS = dict(
     claim_id="c1", claim_parts=[ClaimPart(phrase="Grants")], challenges=[],
-    summary="Nothing in the run backs it.", claim_parts_session_id="session-parts",
-    attack_session_ids={AttackType.data: "session-data", AttackType.gap: "session-orchestrator"},
+    summary="Nothing in the run backs it.", session_ids=["session-parts", "session-data"],
 )
 
 
@@ -24,14 +23,17 @@ def test_a_review_is_stored_and_read_back_by_claim():
 
     [held] = ClaimReview.find(claim_id="c1")
     assert held.summary == review.summary and held.claim_parts == review.claim_parts
-    assert held.claim_parts_session_id == "session-parts"
-    assert held.attack_session_ids == {
-        AttackType.data: "session-data", AttackType.gap: "session-orchestrator"}
+    assert held.session_ids == ["session-parts", "session-data"]
 
 
 def test_a_review_names_no_project_and_no_run_of_its_own():
-    assert not {"project_id", "run_id", "grounding", "proposed_rewrites", "session_ids"} & set(
+    assert not {"project_id", "run_id", "grounding", "proposed_rewrites"} & set(
         ClaimReview.model_fields)
+
+
+def test_the_fields_below_are_every_field_a_review_declares():
+    assert set(_FIELDS) == set(ClaimReview.model_fields) - {"id", "created_at", "updated_at"}
+    assert "session_ids" in _FIELDS
 
 
 @pytest.mark.parametrize("left_out", [name for name in _FIELDS])
