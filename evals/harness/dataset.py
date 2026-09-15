@@ -128,7 +128,7 @@ def _read_case(
         return _describe_errors(subject, (), error)
     expected_outputs, problems = _read_expected_outputs(raw_case, expected_model, subject)
     try:
-        case_input = input_model.model_validate(raw_case.input)
+        case_input = _validate_as_json(input_model, raw_case.input)
     except ValidationError as error:
         return _describe_errors(subject, ("input",), error) + problems
     if problems:
@@ -143,7 +143,7 @@ def _read_expected_outputs(
     problems: list[str] = []
     for position, value in enumerate(raw_case.expected_outputs):
         try:
-            expected_outputs.append(expected_model.model_validate(value))
+            expected_outputs.append(_validate_as_json(expected_model, value))
         except ValidationError as error:
             problems += _describe_errors(subject, ("expected_outputs", position), error)
     if not raw_case.expected_outputs:

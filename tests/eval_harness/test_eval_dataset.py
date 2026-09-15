@@ -1,13 +1,22 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
+from datetime import datetime
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
-from pydantic import BaseModel, JsonValue, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 
 from evals.harness.dataset import Case, Dataset, DatasetInvalid, read_dataset
-from evals.harness.definition import ExpectedOutput, Judgement, Loaded
+from evals.harness.definition import (
+    EvalDefinition,
+    ExpectedOutput,
+    Judgement,
+    LoadContext,
+    Loaded,
+)
 from fixed_output_eval import FIXED_OUTPUT_EVAL, AnswerInput, AnswerOutput, ExpectedAnswer
 
 
@@ -215,6 +224,42 @@ def test_every_case_id_that_breaks_the_naming_rule_is_refused_in_one_message(
     )
 
 
+def test_strict_fields_validate_as_they_would_from_json(tmp_path: Path) -> None:
+    strict_eval = EvalDefinition(
+        name="strict_times",
+        input_model=TimedInput,
+        expected_model=ExpectedTime,
+        output_model=AnswerOutput,
+        outcomes=("matched", "differed"),
+        default_repeats=1,
+        load=refuse_to_load,
+        judge=refuse_to_judge,
+    )
+    path = write_dataset(
+        tmp_path,
+        strict_eval.name,
+        [
+            {
+                "case_id": "noon",
+                "input": {"when": "2026-09-15T12:00:00"},
+                "expected_outputs": [{"key": "time", "at": "2026-09-15T12:00:00"}],
+            }
+        ],
+    )
+
+    noon = datetime(2026, 9, 15, 12, 0)
+    assert read_dataset(path, strict_eval) == Dataset(
+        eval=strict_eval.name,
+        cases=[
+            Case(
+                case_id="noon",
+                input=TimedInput(when=noon),
+                expected_outputs=[ExpectedTime(key="time", at=noon)],
+            )
+        ],
+    )
+
+
 @pytest.mark.parametrize(
     ("model", "fields"),
     [
@@ -256,3 +301,21 @@ def read_refusal(path: Path) -> str:
     with pytest.raises(DatasetInvalid) as refusal:
         read_dataset(path, FIXED_OUTPUT_EVAL)
     return str(refusal.value)
+
+
+class TimedInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    when: datetime = Field(strict=True)
+
+
+class ExpectedTime(ExpectedOutput):
+    at: datetime = Field(strict=True)
+
+
+def refuse_to_load(case_input: BaseModel, context: LoadContext) -> NoReturn:
+    raise AssertionError("reading a dataset never loads")
+
+
+def refuse_to_judge(output: BaseModel, expected_outputs: Sequence[ExpectedOutput]) -> NoReturn:
+    raise AssertionError("reading a dataset never judges")
