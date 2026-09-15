@@ -43,9 +43,11 @@ from app.services import stage_edit, terms, versioning, workspace
 from app.services import loader
 from app.services import methodology
 from app.services import run as run_service
-from app.services.claim_shapes import load_claim_shapes, write_claim_shapes
+from app.services.claim_shapes import (
+    find_claim_shape_refusals, load_claim_shapes, write_claim_shapes,
+)
 from app.services.errors import (
-    CacheArchiveRejected, ProjectArchiveRejected, WorkflowLoadError,
+    CacheArchiveRejected, ClaimShapeWriteRefused, ProjectArchiveRejected, WorkflowLoadError,
 )
 from app.services.project_record import read_project_name as read_project_name
 from app.services.stage_cache_transfer import (
@@ -430,17 +432,13 @@ class WorkflowFile(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _validate_every_named_shape_is_carried(self) -> "WorkflowFile":
-        carried = {shape.id for shape in self.claim_shapes}
-        dangling = [
-            f"stage '{stage.id}' output '{rule.slug}' names claim shape '{rule.shape_id}', "
-            "which this bundle does not carry"
-            for stage in self.stages
-            for rule in stage.workflow_outputs or []
-            if rule.shape_id is not None and rule.shape_id not in carried
+    def _validate_claim_shape_ids(self) -> "WorkflowFile":
+        problems = [
+            *_find_repeated_shape_ids(self.claim_shapes),
+            *_find_shapes_named_but_not_carried(self.stages, self.claim_shapes),
         ]
-        if dangling:
-            raise ValueError("; ".join(dangling))
+        if problems:
+            raise ValueError("; ".join(problems))
         return self
 
     @field_validator("stages", mode="before")
@@ -490,6 +488,7 @@ def import_project(
     wf: WorkflowFile, *, name: str | None = None,
 ) -> str:
     """Returns the project ID. Importing the same bundle twice makes two projects, not a clash."""
+    _validate_shapes_can_be_written(wf.claim_shapes)
     label = sanitize_project_name(name or wf.name)
     project_id = create_project(label, wf.document, model=wf.model, source=wf.source).id
     terms.write_terms(project_id, Terms(
@@ -502,6 +501,25 @@ def import_project(
     return project_id
 
 
+def _find_repeated_shape_ids(shapes: list[BundledClaimShape]) -> list[str]:
+    shape_ids = [shape.id for shape in shapes]
+    repeated = sorted({shape_id for shape_id in shape_ids if shape_ids.count(shape_id) > 1})
+    return [f"claim shape id '{shape_id}' is carried more than once" for shape_id in repeated]
+
+
+def _find_shapes_named_but_not_carried(
+    stages: list[Stage], shapes: list[BundledClaimShape]
+) -> list[str]:
+    carried = {shape.id for shape in shapes}
+    return [
+        f"stage '{stage.id}' output '{rule.slug}' names claim shape '{rule.shape_id}', "
+        "which this bundle does not carry"
+        for stage in stages
+        for rule in stage.workflow_outputs or []
+        if rule.shape_id is not None and rule.shape_id not in carried
+    ]
+
+
 def _read_bundled_claim_shapes(project_id: str) -> list[BundledClaimShape]:
     carried = set(BundledClaimShape.model_fields)
     return [
@@ -510,13 +528,24 @@ def _read_bundled_claim_shapes(project_id: str) -> list[BundledClaimShape]:
     ]
 
 
+def _validate_shapes_can_be_written(bundled: list[BundledClaimShape]) -> None:
+    # A project this import mints holds no shapes yet.
+    refusals = find_claim_shape_refusals(_drop_bundled_ids(bundled), held=[])
+    if refusals:
+        raise ClaimShapeWriteRefused(refusals)
+
+
 def _write_shapes_under_new_ids(
     project_id: str, bundled: list[BundledClaimShape]
 ) -> dict[ID, ID]:
-    authored = [ClaimShapeInput.model_validate(shape.model_dump(exclude={"id"})) for shape in bundled]
+    written = write_claim_shapes(project_id, _drop_bundled_ids(bundled))
     # Paired by label: the write returns shapes sorted, and refuses a repeated label.
-    new_id_by_label = {shape.label: shape.id for shape in write_claim_shapes(project_id, authored)}
+    new_id_by_label = {shape.label: shape.id for shape in written}
     return {shape.id: new_id_by_label[shape.label] for shape in bundled}
+
+
+def _drop_bundled_ids(bundled: list[BundledClaimShape]) -> list[ClaimShapeInput]:
+    return [ClaimShapeInput.model_validate(shape.model_dump(exclude={"id"})) for shape in bundled]
 
 
 def _repoint_stage(stage: Stage, new_id_by_bundled_id: dict[ID, ID]) -> Stage:
