@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import NamedTuple
 
 from app.core.json_types import JsonDict
-from app.models.terms import RowTypesAndSchemas, Terms
+from app.models.terms import Terms
 from app.models.records.terms import StoredTerms
 from app.services import workspace
 
@@ -43,14 +43,6 @@ def write_terms(project_id: str, terms: Terms) -> None:
     ).save()
 
 
-def write_data_model(project_id: str, generated: RowTypesAndSchemas) -> None:
-    """A generator that authors no verb retires none the project already agreed."""
-    agreed = load_terms(project_id)
-    write_terms(project_id, Terms(
-        row_types=generated.row_types, schemas=generated.schemas, verbs=agreed.verbs
-    ))
-
-
 def _document_id(project_id: str) -> str:
     # Composed: the store lists by id PREFIX, so a bare id would match a sibling's.
     return f"{project_id}/terms"
@@ -62,8 +54,7 @@ def _document_id(project_id: str) -> str:
 # the stored ones.
 
 
-# The pair RowTypesAndSchemas validates, before anything has validated it: alembic 0021
-# reads it, so it must not depend on the models' current shape.
+# Unvalidated: alembic 0021 reads this and must not depend on the models' shape.
 class UncheckedRowTypesAndSchemas(NamedTuple):
     row_types: list[JsonDict]
     schemas: list[JsonDict]
@@ -86,7 +77,6 @@ def _mint_row_type(noun: JsonDict) -> JsonDict:
         "title": title,
         # An undefined word is still the word, and its title the only gloss authored.
         "definition": noun.get("description") or title,
-        "also_written": noun.get("also_written") or [],
     }
 
 

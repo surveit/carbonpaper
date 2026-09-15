@@ -68,29 +68,28 @@ def test_the_word_with_no_table_keeps_its_definition_and_the_table_points_at_its
     assert len(record["columns"]) == 22
 
 
-def test_a_table_no_longer_carries_the_spellings_the_row_type_took():
+def test_the_split_keeps_no_second_spelling_of_any_word():
+    # Every spelling the register held was the prose form of its own id, which `title` says.
     revision = _load_revision()
     document = _palm_oil_terms()
 
     revision.split_stored_nouns(document)
 
     assert all("also_written" not in t for t in document["schemas"]["schemas"])
-    assert {row_type["id"]: row_type["also_written"] for row_type in document["row_types"]
-            if row_type["also_written"]} == {
-        "change_account": ["change account"],
-        "parent_group": ["parent group"],
-        "sourcing_radius": ["sourcing radius"],
-        "palmghg": ["PalmGHG"],
-    }
+    assert all("also_written" not in r for r in document["row_types"])
+    assert all("also_written" not in v for v in document["verbs"])
 
 
-def test_the_verbs_are_left_exactly_as_they_were():
+def test_the_verbs_keep_every_value_but_their_spellings():
     revision = _load_revision()
     document = _palm_oil_terms()
 
     revision.split_stored_nouns(document)
 
-    assert document["verbs"] == _palm_oil_terms()["verbs"]
+    assert document["verbs"] == [
+        {key: value for key, value in verb.items() if key != "also_written"}
+        for verb in _palm_oil_terms()["verbs"]
+    ]
 
 
 def test_the_split_document_is_what_the_record_now_loads():
@@ -129,7 +128,9 @@ def test_the_downgrade_returns_every_value_the_mill_register_held():
     assert revision.fuse_row_types_back_into_nouns(document) is True
 
     for fused, held in zip(_nouns(document), _nouns(_palm_oil_terms()), strict=True):
-        # The keys it does not put back are the ones the register held nothing in.
+        # Spellings do not come back — v2 stores none — and neither do the keys the
+        # register held nothing in.
+        held = {key: value for key, value in held.items() if key != "also_written"}
         assert fused == {key: value for key, value in held.items() if value or key in fused}
 
 

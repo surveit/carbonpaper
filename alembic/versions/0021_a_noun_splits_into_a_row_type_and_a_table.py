@@ -38,8 +38,14 @@ def split_stored_nouns(document: dict[str, Any]) -> bool:
     words = split_pre_row_type_nouns(nouns["schemas"])
     document["row_types"] = words.row_types
     document["schemas"] = {"schemas": [t for t in words.schemas if _holds_rows(t)]}
+    document["verbs"] = [_drop_spellings(verb) for verb in document.get("verbs", [])]
     del document["nouns"]
     return True
+
+
+# A v1 word carried its other spellings; one word is now written one way.
+def _drop_spellings(verb: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in verb.items() if key != "also_written"}
 
 
 _WHAT_A_WORD_ALONE_SAID = ("name", "title", "description", "row_type_id")
@@ -58,6 +64,7 @@ def fuse_row_types_back_into_nouns(document: dict[str, Any]) -> bool:
     nouns = [_fuse_one(row_type, held_by.get(row_type["id"])) for row_type in row_types]
     nouns += [table for table in tables if not table.get("row_type_id")]
     document["nouns"] = {"schemas": nouns}
+    document["verbs"] = [{**verb, "also_written": []} for verb in document.get("verbs", [])]
     del document["row_types"], document["schemas"]
     return True
 
@@ -80,16 +87,13 @@ def _index_tables_by_the_row_type_they_hold(
 
 
 def _fuse_one(row_type: dict[str, Any], table: dict[str, Any] | None) -> dict[str, Any]:
-    also_written = row_type.get("also_written", [])
     if table is not None:
-        return {**{k: v for k, v in table.items() if k != "row_type_id"},
-                "also_written": also_written}
+        return {k: v for k, v in table.items() if k != "row_type_id"}
     return {
         "name": row_type["id"],
         "title": row_type["title"],
         # The split glossed a description-less noun with its title; that is no description.
         "description": _description_behind(row_type),
-        "also_written": also_written,
     }
 
 

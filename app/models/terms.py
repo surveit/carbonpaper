@@ -7,9 +7,7 @@ from app.models.named_schemas import SchemaLibrary
 from app.models.row_types import RowType
 from app.models.schema import _Base
 from app.models.tool_schema_prompts import (
-    ROW_TYPES_AND_SCHEMAS_DESCRIPTION,
     TERMS_DESCRIPTION,
-    VERB_ALSO_WRITTEN_DESCRIPTION,
     VERB_DESCRIPTION,
 )
 
@@ -19,9 +17,6 @@ class Verb(_Base):
 
     name: str
     definition: str
-    also_written: list[str] = Field(
-        default_factory=list, description=VERB_ALSO_WRITTEN_DESCRIPTION
-    )
 
 
 class Terms(_Base):
@@ -35,24 +30,10 @@ class Terms(_Base):
 
     @model_validator(mode="after")
     def _validate_terms(self) -> "Terms":
-        validate_one_meaning_per_word(self.row_types, self.verbs)
+        validate_no_word_is_written_twice(self.row_types, self.verbs)
         validate_row_type_ids_resolve(self.row_types, self.schemas)
         return self
 
-
-# Terms minus the verbs: the half a generator authors, where a human agrees the rest.
-class RowTypesAndSchemas(_Base):
-    model_config = ConfigDict(
-        json_schema_extra={"description": ROW_TYPES_AND_SCHEMAS_DESCRIPTION}
-    )
-
-    row_types: list[RowType]
-    schemas: SchemaLibrary
-
-    @model_validator(mode="after")
-    def _validate_row_type_ids(self) -> "RowTypesAndSchemas":
-        validate_row_type_ids_resolve(self.row_types, self.schemas)
-        return self
 
 
 _VERB_LIST: TypeAdapter[list[Verb]] = TypeAdapter(list[Verb])
@@ -62,16 +43,12 @@ def parse_verbs(payload: str) -> list[Verb]:
     return _VERB_LIST.validate_json(payload)
 
 
-def validate_one_meaning_per_word(row_types: list[RowType], verbs: list[Verb]) -> None:
+def validate_no_word_is_written_twice(row_types: list[RowType], verbs: list[Verb]) -> None:
     # A schema name addresses a table rather than saying a word, so it is not in here.
-    words: list[str] = []
-    for row_type in row_types:
-        words += [row_type.id, *row_type.also_written]
-    for verb in verbs:
-        words += [verb.name, *verb.also_written]
+    words = [row_type.id for row_type in row_types] + [verb.name for verb in verbs]
     repeated = sorted({word for word in words if words.count(word) > 1})
     if repeated:
-        raise ValueError(f"word(s) carrying more than one meaning: {repeated}")
+        raise ValueError(f"word(s) written twice: {repeated}")
 
 
 def validate_row_type_ids_resolve(row_types: list[RowType], schemas: SchemaLibrary) -> None:
@@ -110,13 +87,8 @@ def _render_word_list(heading: str, words: list[str]) -> str:
 
 
 def _render_row_type(row_type: RowType) -> str:
-    return _render_word(row_type.id, row_type.definition, row_type.also_written)
+    return f"- {row_type.id} — {row_type.definition}"
 
 
 def _render_verb(verb: Verb) -> str:
-    return _render_word(verb.name, verb.definition, verb.also_written)
-
-
-def _render_word(name: str, definition: str, also_written: list[str]) -> str:
-    spellings = f" Also written: {', '.join(also_written)}." if also_written else ""
-    return f"- {name} — {definition}{spellings}"
+    return f"- {verb.name} — {verb.definition}"

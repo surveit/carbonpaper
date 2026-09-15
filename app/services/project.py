@@ -27,7 +27,7 @@ from app.models import (
     Verb,
     stage_to_json,
     stage_to_spec_dict,
-    validate_one_meaning_per_word,
+    validate_no_word_is_written_twice,
     validate_row_type_ids_resolve,
 )
 from app.models.records.eval_config import EvalConfig
@@ -417,7 +417,7 @@ class WorkflowFile(BaseModel):
 
     @model_validator(mode="after")
     def _one_meaning_per_word(self) -> "WorkflowFile":
-        validate_one_meaning_per_word(self.row_types, self.verbs)
+        validate_no_word_is_written_twice(self.row_types, self.verbs)
         validate_row_type_ids_resolve(self.row_types, self.data_model)
         return self
 

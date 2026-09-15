@@ -97,9 +97,8 @@ that too. Approving twice is not an error and does not extend anything.""",
         parameters={"project_id": PROJECT_ID},
         description="""\
 The project's agreed vocabulary: its ROW TYPES (the word for what ONE ROW
-of its data is) and its VERBS (the acts the methodology performs), plus the
-other spellings its owner writes each one as — and its SCHEMAS, the tables
-of the data model, each naming the row type its rows are. Many tables name
+of its data is), its VERBS (the acts the methodology performs), and its
+SCHEMAS, the tables of the data model, each naming the row type its rows are. Many tables name
 the same row type. These words are handed to every agent that writes prose about this
 project — stage descriptions, generated examples, the review guide — and
 the human reads them on the project's Terms page, so what you read here is
@@ -124,16 +123,15 @@ that back with your additions rather than sending only what is new.
 
 A row type is the methodology's word for what ONE ROW is: an `id` in
 snake_case and what it means. A verb carries its name and what it means.
-Either may list `also_written`: the other spellings the owner uses for that
-same thing. A schema is a TABLE — a `name`, a `title`, the columns if you
+One word is written one way — there is no second spelling of it. A schema is a TABLE — a `name`, a `title`, the columns if you
 know them, and `row_type_id`, the row type one of its rows is. Many tables
 name the same row type, because a row type outlives the stages that filter,
 sort or enrich its rows. A word with no table behind it is a row type and
 nothing else; that is the ordinary case, not a half-finished one.
 
-REFUSED WHOLE, with nothing written, where one word carries two meanings —
-a row type and a verb of the same name, or two words sharing a spelling —
-or where a schema names a row type you did not declare. The refusal names
+REFUSED WHOLE, with nothing written, where one word is written twice — a
+row type and a verb of the same name, or two row types, or two verbs — or
+where a schema names a row type you did not declare. The refusal names
 the repeated word. It is not a formality: a stage
 description written in an ambiguous word leaves the reader unable to tell
 which thing it meant.

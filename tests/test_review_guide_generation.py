@@ -205,14 +205,13 @@ def test_render_guide_task_carries_the_words_the_guide_must_be_written_in(
     version = project_service.save_working_copy_as_version(project_dir.name, message="v1"
     )
     words = Terms(row_types=[RowType(
-        id="filing", title="Filing", definition="One disclosure a firm sent in.",
-        also_written=["disclosure"])])
+        id="filing", title="Filing", definition="One disclosure a firm sent in.")])
 
     task = compiler_review_guide.render_guide_task(
         version.stages, version.version_id, "Double the amount.", words
     )
 
-    assert "- filing — One disclosure a firm sent in. Also written: disclosure." in task
+    assert "- filing — One disclosure a firm sent in." in task
     # Before the document, which is the thing it is telling the author how to read.
     assert task.index("- filing") < task.index("METHODOLOGY DOCUMENT")
 
