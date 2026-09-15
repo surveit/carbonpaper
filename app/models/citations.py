@@ -25,11 +25,11 @@ class Citation(BaseModel):
 
 class StageOutputCellCitation(Citation):
     kind: Literal["stage_output_cell"] = "stage_output_cell"
-    run_id: ID
-    stage_id: ID
-    row_ordinal: int
-    column: str
-    value: JsonScalar
+    run_id: ID = Field(description="The run, as the evidence pool names it.")
+    stage_id: ID = Field(description="The stage, as the evidence pool names it.")
+    row_ordinal: int = Field(description="The row's position in the stage output, counting from 0.")
+    column: str = Field(description="The column's name, spelled as the evidence pool spells it.")
+    value: JsonScalar = Field(description="The cell's value, copied exactly as the evidence pool prints it.")
 
 
 class RowsRectangle(BaseModel):
