@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.compiler.claim_attack.evidence import render_evidence_bundle, render_evidence_pool
+from app.reviewer.evidence import render_evidence_bundle, render_evidence_pool
 from app.models.citations import (
     StageCitation,
     StageOutputCellCitation,
