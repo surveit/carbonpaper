@@ -39,3 +39,11 @@ class ClaimRefused(ValueError):
     def __init__(self, refusals: list[str]) -> None:
         super().__init__("; ".join(refusals))
         self.refusals = refusals
+
+
+class ClaimReviewRefused(ValueError):
+    """Nothing is stored unless every challenge's evidence is on a line of the pool."""
+
+    def __init__(self, refusals: list[str]) -> None:
+        super().__init__("; ".join(refusals))
+        self.refusals = refusals

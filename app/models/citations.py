@@ -5,6 +5,7 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, Field
 
+from app.core.figure_text import render_figure
 from app.core.json_types import JsonScalar
 from app.core.ids import ID
 
@@ -25,11 +26,11 @@ class Citation(BaseModel):
 
 class StageOutputCellCitation(Citation):
     kind: Literal["stage_output_cell"] = "stage_output_cell"
-    run_id: ID
-    stage_id: ID
-    row_ordinal: int
-    column: str
-    value: JsonScalar
+    run_id: ID = Field(description="The run, as the evidence pool names it.")
+    stage_id: ID = Field(description="The stage, as the evidence pool names it.")
+    row_ordinal: int = Field(description="The row's position in the stage output, counting from 0.")
+    column: str = Field(description="The column's name, spelled as the evidence pool spells it.")
+    value: JsonScalar = Field(description="The cell's value, copied exactly as the evidence pool prints it.")
 
 
 class RowsRectangle(BaseModel):
@@ -64,8 +65,37 @@ PublishedCitation = Annotated[
 ]
 
 
+def render_citation_value(citation: PublishedCitation) -> str:
+    # A table names rows, not one cell; its row count is the fact it carries.
+    if isinstance(citation, StageOutputCellCitation):
+        return render_figure(citation.value)
+    return f"{citation.rectangle.count_rows():,} rows"
+
+
 class StageOutputRowCitation(Citation):
     # A row pointed at with no value of its own — the show-the-work link.
     kind: Literal["stage_output_row"] = "stage_output_row"
     stage_id: ID
     row_ordinal: int
+
+
+class StageOutputColumnCitation(Citation):
+    kind: Literal["stage_output_column"] = "stage_output_column"
+    stage_id: ID = Field(description="The stage, as the evidence pool names it.")
+    column: str = Field(description="The column's name, spelled as the evidence pool spells it.")
+
+
+class StageCitation(Citation):
+    kind: Literal["stage"] = "stage"
+    stage_id: ID = Field(description="The stage, as the evidence pool names it.")
+
+
+class TermCitation(Citation):
+    kind: Literal["term"] = "term"
+    name: str = Field(description="The defined term, exactly as the terms name it.")
+
+
+ChallengeCitation = Annotated[
+    Union[StageOutputCellCitation, StageOutputColumnCitation, StageCitation, TermCitation],
+    Field(discriminator="kind"),
+]

@@ -10,6 +10,7 @@ from app.core.record import PersistedModel, PersistenceScope
 from app.core.json_types import JsonDict
 from app.models.claims import (
     ClaimImportance,
+    ClaimShapeInput,
     ClaimStatus,
     DataUniverseRequirement,
 )
@@ -33,6 +34,10 @@ class ClaimShape(PersistedModel):
     context: list[Column] = Field(default=[], frozen=True)
     # A suggestion, not an assertion, so it is the one thing here that may be rewritten.
     template: str = ""
+
+    def read_input(self) -> ClaimShapeInput:
+        return ClaimShapeInput.model_validate(
+            self.model_dump(include=set(ClaimShapeInput.model_fields)))
 
     def save(self) -> None:
         _validate_only_the_template_moved(self)

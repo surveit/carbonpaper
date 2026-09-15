@@ -131,6 +131,26 @@ def find_stages_reaching_report(stages: Sequence[Stage]) -> set[str]:
     return reaching
 
 
+def find_stages_upstream_of(stages: Sequence[Stage], stage_id: str) -> set[str]:
+    by_id = {stage.id: stage for stage in stages}
+    if stage_id not in by_id:
+        raise ValueError(f"no stage '{stage_id}' in this workflow")
+    upstream: set[str] = set()
+    # Seeded from the named stage's INPUTS, so it is never in its own upstream set.
+    pending = [(stage_id, read) for read in by_id[stage_id].input_ids]
+    while pending:
+        reader, current = pending.pop()
+        if current not in by_id:
+            raise ValueError(
+                f"stage '{reader}' reads from '{current}', which is not in this workflow"
+            )
+        if current in upstream:
+            continue
+        upstream.add(current)
+        pending.extend((current, read) for read in by_id[current].input_ids)
+    return upstream
+
+
 def graph_issues(stages: list[Stage]) -> list[str]:
     # Resolution RAISES on anything these report, so it runs only once they come
     # back clean.

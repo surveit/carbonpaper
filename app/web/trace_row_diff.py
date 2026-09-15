@@ -11,7 +11,7 @@ from app.web.column_order import (
     order_columns_by_group,
 )
 from app.web.diff_state import CellDiffState
-from app.web.figure_text import render_figure
+from app.core.figure_text import render_figure
 
 
 @dataclass(frozen=True)

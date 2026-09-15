@@ -131,6 +131,13 @@ allowed_importers = ["app.services"]
 # The reusable agent spine (app.core.agent) must not import it.
 
 [[tool.importlinter.contracts]]
+name = "app.reviewer imported only by services"
+type = "protected"
+protected_modules = ["app.reviewer"]
+allowed_importers = ["app.services"]
+# The claim reviewer renders the evidence bundle that app.services builds.
+
+[[tool.importlinter.contracts]]
 name = "app.runtime imported only by evals, web, and four named service seams"
 type = "protected"
 protected_modules = ["app.runtime"]

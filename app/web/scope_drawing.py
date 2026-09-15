@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from app.web.figure_text import render_figure
+from app.core.figure_text import render_figure
 from app.models.branch_analysis import BranchId, RowOrdinal
 from app.models.schema import StageId
 from app.web.scope_layout import (

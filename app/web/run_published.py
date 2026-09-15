@@ -13,7 +13,7 @@ from app.models.citations import StageOutputCellCitation, StageOutputTableCitati
 from app.models.records.workflow_output import WorkflowOutput
 from app.services import run as run_service
 from app.web import loading
-from app.web.figure_text import render_figure
+from app.core.figure_text import render_figure
 from app.web.panel_links import AppPanelLinks
 
 # Enough to show what the table holds; the full-rows page is where the data lives.
