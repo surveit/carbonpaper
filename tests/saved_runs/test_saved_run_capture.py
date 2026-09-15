@@ -29,13 +29,18 @@ from evals.runs.recipe import (
 )
 from tiny_run import (
     LOAD_STAGE,
+    REVIEW_STAGE,
     ROWS_FILENAME,
     TINY_ROWS,
     TOTALS_STAGE,
     bind_uploaded_rows,
+    create_reviewed_run_past_a_queue_that_caches,
+    create_reviewed_run_past_a_queue_that_does_not_cache,
+    create_run_halted_at_a_queue_that_does_not_cache,
     create_tiny_project,
     create_tiny_project_naming_rows_at,
     create_tiny_run,
+    create_tiny_run_publishing_a_slug_twice,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -191,6 +196,35 @@ def test_capture_refuses_an_input_whose_file_record_is_gone(tmp_path: Path) -> N
         _capture(tmp_path, run.project_id, run.run_id)
     assert f"'{ROWS_FILENAME}'" in str(refused.value)
     assert not (tmp_path / _SAVED).exists()
+
+
+def test_capture_refuses_a_run_that_publishes_one_slug_twice(tmp_path: Path) -> None:
+    run = create_tiny_run_publishing_a_slug_twice()
+    with pytest.raises(CaptureRefused, match="more than one figure") as refused:
+        _capture(tmp_path, run.project_id, run.run_id)
+    assert "'amount-total'" in str(refused.value)
+    assert not (tmp_path / _SAVED).exists()
+
+
+def test_capture_refuses_a_run_past_a_review_queue_that_does_not_cache(tmp_path: Path) -> None:
+    run = create_reviewed_run_past_a_queue_that_does_not_cache()
+    with pytest.raises(CaptureRefused, match="a saved run carries no review decisions") as refused:
+        _capture(tmp_path, run.project_id, run.run_id)
+    assert f"'{REVIEW_STAGE}'" in str(refused.value)
+    assert not (tmp_path / _SAVED).exists()
+
+
+def test_capture_records_a_run_past_a_review_queue_that_caches(tmp_path: Path) -> None:
+    run = create_reviewed_run_past_a_queue_that_caches()
+    assert read_recipe(_capture(tmp_path, run.project_id, run.run_id)).ends == RunStatus.OK
+
+
+def test_capture_records_a_run_halted_at_a_review_queue_that_does_not_cache(
+    tmp_path: Path,
+) -> None:
+    run = create_run_halted_at_a_queue_that_does_not_cache()
+    recipe = read_recipe(_capture(tmp_path, run.project_id, run.run_id))
+    assert recipe.ends == RunStatus.AWAITING_REVIEW
 
 
 def test_capture_refuses_to_overwrite_a_saved_run_unless_replacing(tmp_path: Path) -> None:
