@@ -22,9 +22,11 @@ from app.services import claim_review
 from app.services import terms as terms_service
 from app.services.errors import ClaimReviewRefused
 from claim_review_fixture import (
+    NULLABLE_PROJECT,
     PROJECT,
     TOTAL_SHAPE,
     TOTAL_TEXT,
+    claim_a_nullable_figure,
     claim_the_total,
     run_the_fixture,
 )
@@ -33,6 +35,11 @@ from claim_review_fixture import (
 @pytest.fixture
 def claim(projects_root):
     return claim_the_total(run_the_fixture(projects_root))
+
+
+@pytest.fixture
+def nullable_claim(projects_root):
+    return claim_a_nullable_figure(projects_root)
 
 
 def test_the_bundle_holds_the_sentence_the_outputs_with_their_citations_and_the_shape(claim):
@@ -66,17 +73,29 @@ def test_the_pool_opens_with_the_run_and_says_where_each_cell_output_sits(claim)
     assert "CITED" in lines["grant-total"].string and "CITED" not in lines["grant-count"].string
 
 
-@pytest.mark.parametrize("slug", ["grant-total", "grant-count"])
-def test_a_cell_citation_copied_off_the_pool_is_one_the_store_accepts(claim, slug):
-    pool = _pool_of(claim)
+@pytest.mark.parametrize("claim_fixture, project_id, slug", [
+    ("claim", PROJECT, "grant-total"),
+    ("claim", PROJECT, "grant-count"),
+    # An int column holding a null: 22,000 is grouped in the pool, 2200 is not.
+    ("nullable_claim", NULLABLE_PROJECT, "doubled-large"),
+    ("nullable_claim", NULLABLE_PROJECT, "doubled-small"),
+])
+def test_a_cell_citation_copied_off_the_pool_is_one_the_store_accepts(
+        request, claim_fixture, project_id, slug):
+    held = request.getfixturevalue(claim_fixture)
+    pool = render_evidence_pool(claim_review.build_evidence_bundle(project_id, held.id))
     printed = _find_output_lines(pool)[slug]
     copied = StageOutputCellCitation(
         run_id=pool.splitlines()[0].removeprefix("run: "), stage_id=printed["stage_id"],
         row_ordinal=int(printed["row_ordinal"]), column=printed["column"],
         value=printed["value"])
 
-    challenge = _challenge(printed["value"], citations=[copied])
-    assert claim_review.find_citation_issues(PROJECT, claim.citation.run_id, [challenge]) == []
+    stored = claim_review.store_claim_review(
+        project_id, held.id, claim_parts=[ClaimPart(phrase=held.text.split()[0])],
+        challenges=[_challenge(printed["value"], citations=[copied])], summary="s",
+        session_ids=_SESSIONS)
+
+    assert stored.challenges[0].citations == [copied]
 
 
 def test_a_cell_output_of_five_digits_is_pooled_as_its_figure(claim):
@@ -327,7 +346,6 @@ def test_a_challenge_on_the_last_claim_part_or_the_whole_sentence_is_accepted(cl
     assert len(_store(claim, challenges=challenges).challenges) == 2
 
 
-
 # ── citations ──
 
 
@@ -368,19 +386,18 @@ def test_a_fabricated_cell_is_refused(claim, overrides, fragment):
     assert fragment in _refuse_citing(claim, _cell(claim, **overrides))
 
 
-@pytest.mark.parametrize("value, problem", [
-    ("22,000", None),
-    ("22000", "gives value '22000', but that cell holds '22,000'"),
+@pytest.mark.parametrize("value, problems", [
+    ("22,000", []),
+    ("22000", ["challenge 0 (coverage): stage_output_cell citation gives value '22000', "
+               "but that cell holds '22,000'"]),
 ])
-def test_a_cell_of_five_digits_is_cited_with_its_separators(value, problem):
-    output = claim_review._StageOutput(
-        row_count=1, columns=frozenset({"total"}), cells_by_column={"total": [22000]})
-    held = claim_review._RunHoldings(
-        run_id="r", outputs_by_stage_id={"s": output}, stage_ids={"s"}, term_names=set())
-    cited = StageOutputCellCitation(run_id="r", stage_id="s", row_ordinal=0,
-                                    column="total", value=value)
+def test_a_cell_from_ten_thousand_is_cited_as_the_pool_groups_it(nullable_claim, value, problems):
+    run_id = nullable_claim.citation.run_id
+    cited = StageOutputCellCitation(run_id=run_id, stage_id="doubled", row_ordinal=0,
+                                    column="doubled", value=value)
 
-    assert claim_review._find_cell_problem(held, cited) == problem
+    assert claim_review.find_citation_issues(
+        NULLABLE_PROJECT, run_id, [_challenge("22,000", citations=[cited])]) == problems
 
 
 def test_a_column_the_stage_output_holds_is_accepted(claim):
@@ -424,7 +441,6 @@ def test_a_table_claim_is_refused_with_the_reason(projects_root):
     from app.models.citations import RowsRectangle, StageOutputTableCitation
     from app.models.records.workflow_output import WorkflowOutput
     from app.services import claim_shapes, claims
-    from claim_review_fixture import TOTAL_SHAPE
     run_id = run_the_fixture(projects_root)
     [shape] = claim_shapes.write_claim_shapes(PROJECT, [TOTAL_SHAPE])
     WorkflowOutput(slug="by-portfolio", label="By portfolio", shape_id=shape.id,
@@ -436,4 +452,4 @@ def test_a_table_claim_is_refused_with_the_reason(projects_root):
     with pytest.raises(ClaimReviewRefused, match="table claim"):
         claim_review.build_evidence_bundle(PROJECT, table_claim.id)
     with pytest.raises(ClaimReviewRefused, match="table claim"):
-        _store(table_claim, claim_parts=[])
+        _store(table_claim)

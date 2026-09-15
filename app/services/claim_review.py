@@ -7,7 +7,7 @@ from itertools import combinations
 
 from app.core.figure_text import render_figure
 from app.core.file_shape import VALUES_KEPT, measure_column_shape
-from app.core.frames import convert_cell_to_json_value
+from app.core.frames import read_native_cell_as_json
 from app.core.ids import ID
 from app.core.json_types import JsonScalar
 from app.models.branch_analysis import BranchReason
@@ -273,12 +273,14 @@ def _find_cited_columns_by_stage_id(run_id: ID,
 
 def _read_stage_output_cells(project_id: ID, run_id: ID, stage_id: str,
                              columns: set[str]) -> _StageOutput:
-    frame = run_service.read_stage_output(project_id, run_id, stage_id)
-    held = {str(name) for name in frame.columns}
+    # Arrow-native, as the run wrote it: an int column holding a null stays int.
+    table = run_service.read_stage_output_table(project_id, run_id, stage_id)
+    held = set(table.column_names)
     return _StageOutput(
-        row_count=len(frame), columns=frozenset(held),
+        row_count=table.num_rows, columns=frozenset(held),
         cells_by_column={
-            name: [convert_cell_to_json_value(cell) for cell in frame[name].tolist()]
+            name: [read_native_cell_as_json(table, name, ordinal)
+                   for ordinal in range(table.num_rows)]
             for name in columns & held})
 
 

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 import pandas as pd
+import pyarrow as pa
 from pydantic import ValidationError
 
 from app.core.background import run_in_background
@@ -26,6 +27,7 @@ from app.runtime.manifest import (
     read_run_entry,
     read_run_manifest as read_run_manifest,
     read_stage_output_frame,
+    read_stage_output_frame_table,
     resolve_output_path,
 )
 from app.runtime.runner import prepare_run, resume_run, run_prepared
@@ -146,6 +148,12 @@ def read_stage_output(project_id: str, run_id: str, stage_id: str) -> pd.DataFra
     run_dir = resolve_run_dir(project_id, run_id)
     _validate_run_exists(project_id, run_id)
     return read_stage_output_frame(project_id, run_dir, stage_id)
+
+
+def read_stage_output_table(project_id: str, run_id: str, stage_id: str) -> pa.Table:
+    run_dir = resolve_run_dir(project_id, run_id)
+    _validate_run_exists(project_id, run_id)
+    return read_stage_output_frame_table(project_id, run_dir, stage_id)
 
 
 def read_output_column_counts(project_id: str, manifest: Mapping[str, Any]) -> dict[str, int]:
