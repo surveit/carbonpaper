@@ -306,6 +306,32 @@ def test_import_writes_the_shapes_under_new_ids_and_repoints_the_stages(tmp_path
     ) == [("entities", new_shape_ids[_ENTITIES.label]), ("row-count", new_shape_ids[_ROWS.label])]
 
 
+def test_import_repoints_each_rule_by_label_when_the_bundle_lists_a_secondary_shape_first(tmp_path):
+    workspace.set_projects_dir(tmp_path)
+    secondary_first = json.dumps({
+        "name": "secondary_first", "document": "# doc", "model": "m", "source": "s",
+        "data_model": _TINY_LIBRARY.model_dump(mode="json"),
+        "claim_shapes": [
+            {"id": "bundled_entities", **_ENTITIES.model_dump(mode="json")},
+            {"id": "bundled_rows", **_ROWS.model_dump(mode="json")},
+        ],
+        "stages": [
+            stage_to_spec_dict(_parse_input_stage(_declare_entity_table("bundled_entities"))),
+            stage_to_spec_dict(_parse_count_stage(_declare_row_count_figure("bundled_rows"))),
+        ],
+    })
+
+    imported_id = import_project(WorkflowFile.model_validate_json(secondary_first))
+
+    new_shape_ids = {shape.label: shape.id for shape in load_claim_shapes(imported_id)}
+    # The project lists the primary shape first, the reverse of the bundle's order.
+    assert list(new_shape_ids) == [_ROWS.label, _ENTITIES.label]
+    [version] = versioning.list_versions(imported_id)
+    assert _list_slugs_with_shape_ids(
+        versioning.load_version_stages(imported_id, version.version_id)
+    ) == [("entities", new_shape_ids[_ENTITIES.label]), ("row-count", new_shape_ids[_ROWS.label])]
+
+
 def test_a_bundle_naming_a_shape_it_does_not_carry_is_refused_before_anything_is_written(tmp_path):
     workspace.set_projects_dir(tmp_path)
     dangling = json.dumps({

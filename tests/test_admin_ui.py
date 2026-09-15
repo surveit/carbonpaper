@@ -91,6 +91,37 @@ def test_download_unknown_project_is_a_clean_404():
     assert r.status_code == 404
 
 
+@pytest.mark.parametrize(
+    "route", ["/admin/export", "/admin/export-with-cache"], ids=["bundle", "archive"]
+)
+def test_downloading_a_project_whose_version_names_a_shape_it_does_not_hold_409s(route):
+    project_id = _version_a_project_naming_a_shape_it_does_not_hold()
+
+    r = client.get(f"{route}/{project_id}")
+
+    assert r.status_code == 409
+    assert r.json()["detail"].startswith(f"project '{project_id}' cannot be exported: ")
+    assert "names claim shape 'missing_shape'" in r.json()["detail"]
+
+
+def _version_a_project_naming_a_shape_it_does_not_hold() -> str:
+    """Nothing checks a stage's shape_id when it is saved, so a version like this can exist."""
+    from app.models import parse_stage
+    from app.services.loader import save_stages
+
+    project_id = project.create_project("Dangling", "Count the rows.", source="test").id
+    save_stages(project_id, [parse_stage({
+        "id": "load_entities", "type": "input_data", "description": "Load entities",
+        "connector": {"kind": "file", "params": {"format": "csv"}},
+        "signature": {"form": "replaces", "produces": [
+            {"name": "entity_id", "type": "str", "nullable": False}]},
+        "workflow_outputs": [{"kind": "table", "slug": "entities", "label": "Entities",
+                              "shape_id": "missing_shape"}],
+    })])
+    project.save_working_copy_as_version(project_id, message="Name a shape the project lacks")
+    return project_id
+
+
 # ─── Upload ───────────────────────────────────────────────────────────────────
 
 
