@@ -28,8 +28,8 @@ SEVERITY_CEILING = 3
 SEVERITY_WORDS: dict[int, str] = {
     0: "checked and does not hurt the claim, but the assumption is worth noting",
     1: "low-probability or low-magnitude risks to the number or its framing",
-    2: "the claim's structure is right, but its value risks a meaningful deviation",
-    3: "actively misleading: it will lead readers to incorrect conclusions",
+    2: "the claim's structure is right, but its quantitative value risks a meaningful deviation",
+    3: "actively misleading on a qualitative basis: it will lead readers to incorrect conclusions",
 }
 
 _SEVERITY_DESCRIPTION = "How much it hurts the claim. " + ". ".join(
@@ -52,7 +52,7 @@ class Challenge(_Base):
     )
     text: str = Field(description="The challenge in one sentence, addressed to the claim owner.")
     justification: str = Field(description="What in the run makes it stick, in one sentence.")
-    evidence: str = Field(description="A figure or phrase copied word for word from the run.")
+    evidence: str = Field(description="A figure or phrase copied word for word from the evidence pool.")
     citations: list[ChallengeCitation] = Field(
         default_factory=list,
         description="The pieces of the run the evidence sits in, so a reader can open them.",
@@ -69,7 +69,7 @@ class ClaimReview(PersistedModel):
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
 
     claim_id: ID = Field(frozen=True)
-    claim_parts: list[ClaimPart] = Field(frozen=True)
+    claim_parts: list[ClaimPart] = Field(frozen=True, min_length=1)
     challenges: list[Challenge] = Field(frozen=True)
     summary: str = Field(frozen=True)
     # Every review session in the order it ran, so a reader can open the transcripts.

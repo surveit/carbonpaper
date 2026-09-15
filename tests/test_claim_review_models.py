@@ -5,8 +5,19 @@ import pytest
 from pydantic import ValidationError
 
 from app.models.citations import StageOutputCellCitation
-from app.models.claim_review import ChallengesAnswer, OrchestratorAnswer, find_claim_part_spans
-from app.models.records.claim_review import SEVERITY_WORDS, Challenge, ChallengeKind, ClaimPart
+from app.models.claim_review import (
+    ChallengesAnswer,
+    ClaimPartsAnswer,
+    OrchestratorAnswer,
+    find_claim_part_spans,
+)
+from app.models.records.claim_review import (
+    SEVERITY_WORDS,
+    Challenge,
+    ChallengeKind,
+    ClaimPart,
+    ClaimReview,
+)
 
 
 def _challenge(**overrides: object) -> Challenge:
@@ -57,6 +68,18 @@ def test_severity_runs_from_zero_to_three_and_each_has_a_word():
     spelled = Challenge.model_fields["severity"].description or ""
     assert spelled.startswith("How much it hurts the claim. ")
     assert all(f"{level} {word}" in spelled for level, word in SEVERITY_WORDS.items())
+
+
+def test_the_two_highest_severities_divide_on_quantity_and_quality():
+    assert "its quantitative value risks a meaningful deviation" in SEVERITY_WORDS[2]
+    assert SEVERITY_WORDS[3].startswith("actively misleading on a qualitative basis")
+
+
+def test_a_review_or_an_answer_with_no_claim_parts_is_refused():
+    with pytest.raises(ValidationError, match="at least 1 item"):
+        ClaimPartsAnswer(claim_parts=[])
+    with pytest.raises(ValidationError, match="at least 1 item"):
+        ClaimReview(claim_id="c", claim_parts=[], challenges=[], summary="s", session_ids=[])
 
 
 def test_a_citation_is_told_apart_by_its_kind():

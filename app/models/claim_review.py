@@ -16,7 +16,8 @@ from app.models.schema import StageId, _Base
 # ── What each agent answers ──
 class ClaimPartsAnswer(_Base):
     claim_parts: list[ClaimPart] = Field(
-        description="Every phrase of the claim that asserts something, in the order it is read."
+        min_length=1,
+        description="Every phrase of the claim that asserts something, in the order it is read.",
     )
 
 
