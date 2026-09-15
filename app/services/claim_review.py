@@ -308,8 +308,7 @@ def _find_cell_problem(held: _RunHoldings, citation: StageOutputCellCitation) ->
     if not 0 <= citation.row_ordinal < output.row_count:
         return (f"names row {citation.row_ordinal}, which the output of "
                 f"{citation.stage_id!r} does not hold ({output.row_count} rows)")
-    # The cited value must render as the cell renders; from 10,000 a figure is grouped,
-    # so cell 22000 matches "22,000" and not "22000".
+    # Compared as rendered: cell 22000 matches "22,000", not "22000".
     cell = render_figure(output.cells_by_column[citation.column][citation.row_ordinal])
     if cell != render_figure(citation.value):
         return f"gives value {citation.value!r}, but that cell holds {cell!r}"
