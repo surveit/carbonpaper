@@ -32,7 +32,7 @@ SEVERITY_WORDS: dict[int, str] = {
     3: "actively misleading: it will lead readers to incorrect conclusions",
 }
 
-_SEVERITY_DESCRIPTION = "How far it moves the claim. " + ". ".join(
+_SEVERITY_DESCRIPTION = "How much it hurts the claim. " + ". ".join(
     f"{level} {word}" for level, word in SEVERITY_WORDS.items()
 )
 

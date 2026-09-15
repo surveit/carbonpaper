@@ -55,6 +55,7 @@ def test_severity_runs_from_zero_to_three_and_each_has_a_word():
     with pytest.raises(ValidationError):
         _challenge(severity=-1)
     spelled = Challenge.model_fields["severity"].description or ""
+    assert spelled.startswith("How much it hurts the claim. ")
     assert all(f"{level} {word}" in spelled for level, word in SEVERITY_WORDS.items())
 
 
