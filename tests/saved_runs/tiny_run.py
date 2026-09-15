@@ -25,6 +25,7 @@ ROWS_FILENAME = "rows.csv"
 LOAD_STAGE = "load"
 TOTALS_STAGE = "totals"
 REVIEW_STAGE = "review"
+MODEL_STAGE = "classify"
 
 _ROW_COUNT_SHAPE = ClaimShapeInput(
     label="Rows the uploaded file holds",
@@ -76,6 +77,17 @@ def create_reviewed_run_past_a_queue_that_does_not_cache() -> TinyRun:
 
 def create_run_halted_at_a_queue_that_does_not_cache() -> TinyRun:
     return _create_run_halted_at_review(cache=False)
+
+
+def create_run_with_a_model_stage_that_does_not_cache() -> TinyRun:
+    project_id = _create_project()
+    figures = [_build_figure("amount-total", "Total amount", "amount_total")]
+    _save_version(
+        project_id, [_build_load_stage([]), _build_totals_stage(figures), _build_model_stage()]
+    )
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr("app.runtime.stages.llm_transform.call_llm", _answer_without_a_model)
+        return _run_uploaded_rows(project_id)
 
 
 def bind_uploaded_rows(
@@ -141,6 +153,10 @@ def _approve_every_queued_row(run: TinyRun) -> None:
             reviewer="saved-runs test", reviewed_at="2026-09-15T12:00:00",
             workflow_version_id=version, workflow_run_id=run.run_id,
         )
+
+
+def _answer_without_a_model(*_args: object, **_kwargs: object) -> dict[str, str]:
+    return {"industry": "manufacturing"}
 
 
 def _build_load_stage(paths: list[str]) -> JsonDict:
@@ -211,4 +227,22 @@ def _build_review_stage(cache: bool) -> JsonDict:
             "reviewer_column": "reviewer_id",
             "reviewed_at_column": "reviewed_at",
         },
+    }
+
+
+def _build_model_stage() -> JsonDict:
+    return {
+        "id": MODEL_STAGE,
+        "type": "llm_transform",
+        "description": "Name the industry of each company",
+        "inputs": [{"id": LOAD_STAGE}],
+        "cache": False,
+        "signature": {
+            "form": "extends",
+            "reads": [{"input": LOAD_STAGE, "columns": [
+                {"name": "name", "type": "str", "nullable": False},
+            ]}],
+            "adds": [{"name": "industry", "type": "str", "nullable": True}],
+        },
+        "llm": {"model": "claude-haiku-4-5", "prompt_data_template": "Which industry is {name} in?"},
     }
