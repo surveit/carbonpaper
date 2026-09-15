@@ -86,7 +86,10 @@ def load_bundle(bundle: str):
 @router.get("/admin/export/{project_name}")
 def download_project(project_name: str) -> Response:
     project_id = _known_project(project_name)
-    bundle = export_project(project_id)
+    try:
+        bundle = export_project(project_id)
+    except ValidationError as exc:
+        raise _build_export_refusal(project_name, exc) from exc
     # The bundle's own name, which is the slug — a shown name may carry spaces and dashes.
     return Response(
         content=bundle.to_json(),
@@ -98,11 +101,22 @@ def download_project(project_name: str) -> Response:
 @router.get("/admin/export-with-cache/{project_name}")
 def download_project_with_cache(project_name: str) -> Response:
     project_id = _known_project(project_name)
+    try:
+        archive = export_project_archive(project_id)
+    except ValidationError as exc:
+        raise _build_export_refusal(project_name, exc) from exc
     # Named by id, as the cache export beside it is: the label rides inside the archive.
     return Response(
-        content=export_project_archive(project_id),
+        content=archive,
         media_type="application/zip",
         headers={"content-disposition": f'attachment; filename="{project_id}.zip"'},
+    )
+
+
+def _build_export_refusal(project_name: str, exc: ValidationError) -> HTTPException:
+    # 409: the request is sound; it is the project's own state that cannot be exported.
+    return HTTPException(
+        status_code=409, detail=f"project '{project_name}' cannot be exported: {exc}"
     )
 
 
