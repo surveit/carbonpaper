@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from app.core.errors import ColumnNotInFrame, StageNotInRun
 from app.models.claims import StageOutputCellCitation
+from app.models import WorkflowStage
 from app.models.schema import StageId
 from app.services import run as run_service
 from app.services.scope import find_rows_reached_per_stage
@@ -60,7 +61,20 @@ def load_canvas_view(
 def _index_columns_behind(
     walk: ColumnWalk, stages: WorkflowStagesById
 ) -> dict[StageId, set[str]]:
-    return {stage_id: set(walk.list_columns_at(stage_id)) for stage_id in stages}
+    return {stage_id: set(walk.list_columns_at(stage_id))
+            | _read_columns_this_frame_keeps(walk, stages.get(stage_id), stage_id)
+            for stage_id in stages}
+
+
+def _read_columns_this_frame_keeps(
+    walk: ColumnWalk, placed: WorkflowStage | None, stage_id: StageId
+) -> set[str]:
+    """A column a stage READ is a column of its own frame wherever the frame keeps it."""
+    schema = None if placed is None else placed.output_schema
+    if schema is None:
+        return set()
+    kept = {column.name for column in schema.columns}
+    return {name for name in walk.list_columns_read_at(stage_id) if name in kept}
 
 
 def _list_cuts(

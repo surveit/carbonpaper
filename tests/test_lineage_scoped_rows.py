@@ -48,29 +48,28 @@ def run_id(projects_root):
 
 def test_the_figures_own_row_is_all_the_relevant_pick_draws(run_id):
     page = _panel(run_id)
-    assert "1 × 1 behind this figure" in page
-    # One row of the sixty, and one column of the two: the rest is the other pick.
-    assert re.findall(r'class="row-num muted">(\d+)<', page) == [str(CITED_ROW + 1)]
-    assert page.count('<span class="diff-col-name">') == 1
+    # `doubled` is the figure's, and `amount` is what this stage read to write it.
+    assert "1 × 2 behind this figure" in page
+    assert _row_numbers(page) == [CITED_ROW + 1]
 
 
-def test_the_frame_pick_opens_on_a_window_holding_that_row(run_id):
+def test_the_frame_pick_draws_the_frame_around_that_row(run_id):
     page = _panel(run_id, rows="frame")
-    # 55 - 25 // 2 = 43, so the window runs 43..59 and stops at the frame's end.
-    drawn = [int(n) for n in re.findall(r'class="row-num muted">(\d+)<', page)]
-    assert drawn == list(range(43 + 1, ROWS + 1))
-    # Same page size either way, so the table does not resize under the reader.
-    assert len(drawn) <= SCOPED_ROWS_SHOWN
+    assert _row_numbers(page) == list(range(1, ROWS + 1))
+    # Same page either way, so the table does not resize under the reader.
+    assert len(_row_numbers(page)) <= SCOPED_ROWS_SHOWN
 
 
-def test_the_panel_links_every_drawn_row_to_itself(run_id):
-    page = _panel(run_id, rows="frame")
-    # Row 43 is drawn first; a link built off the loop would send the reader to row 0.
-    assert "/stage/double/row/43/trace/view" in page
-    assert "/stage/double/row/0/trace/view" not in page
+def test_the_panel_links_its_one_drawn_row_to_itself(run_id):
+    page = _panel(run_id)
+    # A link built off the loop would send the reader to row 0 for the only row drawn.
     assert f"/stage/double/row/{CITED_ROW}/trace/view" in page
-    # One stage's panel is one request now, so the traced row is numbered once.
+    assert "/stage/double/row/0/trace/view" not in page
     assert page.count(f'<td class="row-num muted">{CITED_ROW + 1}</td>') == 1
+
+
+def _row_numbers(page):
+    return [int(n) for n in re.findall(r'class="row-num muted">(\d+)<', page)]
 
 
 def test_the_pane_keeps_the_run_page_tints_and_adds_its_own(run_id):

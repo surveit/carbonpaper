@@ -133,6 +133,14 @@ def test_an_aggregation_walks_back_to_its_value_column(stages):
     )
 
 
+def test_a_stage_names_what_it_read_as_well_as_what_it_wrote(stages):
+    # `client` is where client_matched came from, in a frame that carries both.
+    walk = walk_column_back(stages, ColumnAt("spend_by_client", "client_matched"))
+    assert walk.list_columns_at("stand_unmerged_names_alone") == ["client_matched"]
+    assert walk.list_columns_read_at("stand_unmerged_names_alone") == [
+        "client", "client_matched"]
+
+
 def test_a_group_key_walks_back_to_the_same_column(stages):
     walk = walk_column_back(stages, ColumnAt("spend_by_client", "client_matched"))
     assert walk.nodes[ColumnAt("spend_by_client", "client_matched")].parents == (

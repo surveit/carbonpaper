@@ -53,6 +53,12 @@ class ColumnWalk:
     def list_columns_at(self, stage_id: StageId) -> list[str]:
         return sorted(at.column for at in self.nodes if at.stage_id == stage_id)
 
+    def list_columns_read_at(self, stage_id: StageId) -> list[str]:
+        """What a stage read to write its walked columns, named in the parent's frame."""
+        return sorted({parent.column
+                       for at, node in self.nodes.items() if at.stage_id == stage_id
+                       for parent in node.parents})
+
     def find_stop_at(self, at: ColumnAt) -> WalkStop | None:
         node = self.nodes.get(at)
         return None if node is None else node.stop

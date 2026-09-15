@@ -29,7 +29,7 @@ from app.web.stage_test_views import (
 )
 
 # What a scoped panel draws of each frame, and of either side of the pick.
-SCOPED_ROWS_SHOWN = 25
+SCOPED_ROWS_SHOWN = 200
 
 
 @dataclass(frozen=True)
