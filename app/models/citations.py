@@ -5,6 +5,7 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, Field
 
+from app.core.figure_text import render_figure
 from app.core.json_types import JsonScalar
 from app.core.ids import ID
 
@@ -62,6 +63,13 @@ class StageOutputTableCitation(Citation):
 PublishedCitation = Annotated[
     Union[StageOutputCellCitation, StageOutputTableCitation], Field(discriminator="kind")
 ]
+
+
+def render_citation_value(citation: PublishedCitation) -> str:
+    # A table names rows, not one cell; its row count is the fact it carries.
+    if isinstance(citation, StageOutputCellCitation):
+        return render_figure(citation.value)
+    return f"{citation.rectangle.count_rows():,} rows"
 
 
 class StageOutputRowCitation(Citation):

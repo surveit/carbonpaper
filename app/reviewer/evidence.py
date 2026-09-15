@@ -1,13 +1,15 @@
 """The evidence bundle as the text a reviewer reads and copies its backing out of."""
 from __future__ import annotations
 
+from app.core.column_profile import ValueCount
+from app.models.citations import StageOutputCellCitation, render_citation_value
 from app.models.claim_review import (
     BranchEvidenceItem,
     EvidenceBundle,
     InputColumnEvidenceItem,
-    OutputEvidenceItem,
     StageEvidenceItem,
 )
+from app.models.records.workflow_output import WorkflowOutput
 
 _FIELD = " · "
 _NOTHING = "none"
@@ -21,7 +23,8 @@ def render_evidence_bundle(bundle: EvidenceBundle) -> str:
 def render_evidence_pool(bundle: EvidenceBundle) -> str:
     """Only what the run itself holds — the corpus a challenge's backing is checked against."""
     return "\n\n".join([
-        _render_outputs(bundle.outputs),
+        f"run: {bundle.cited.run_id}",
+        _render_outputs(bundle.outputs, bundle.cited_slug),
         _render_stages(bundle.stages),
         _render_branches(bundle.branches),
         _render_input_columns(bundle.input_columns),
@@ -45,13 +48,23 @@ def _render_the_claim(bundle: EvidenceBundle) -> str:
     ])
 
 
-def _render_outputs(outputs: list[OutputEvidenceItem]) -> str:
+def _render_outputs(outputs: list[WorkflowOutput], cited_slug: str) -> str:
     lines = [
-        _FIELD.join([output.slug, output.label, output.value, output.stage_id]
-                    + (["CITED"] if output.cited else []))
+        _FIELD.join([output.slug, output.label, render_citation_value(output.citation),
+                     _render_where(output)]
+                    + (["CITED"] if output.slug == cited_slug else []))
         for output in outputs
     ]
     return _render_block("OUTPUTS", lines)
+
+
+def _render_where(output: WorkflowOutput) -> str:
+    # Spelled so a reviewer can copy a cell citation's stage, row and column off the line.
+    citation = output.citation
+    if isinstance(citation, StageOutputCellCitation):
+        return (f"stage `{citation.stage_id}`, row {citation.row_ordinal}, "
+                f"column `{citation.column}`")
+    return f"stage `{citation.stage_id}`"
 
 
 def _render_stages(stages: list[StageEvidenceItem]) -> str:
@@ -79,17 +92,18 @@ def _render_branches(branches: list[BranchEvidenceItem]) -> str:
 def _render_input_columns(columns: list[InputColumnEvidenceItem]) -> str:
     lines = [
         _FIELD.join([
-            f"{column.stage_id}.{column.column}", column.kind, f"rows {column.row_count}",
-            f"{column.filled_count} filled/{column.null_count} null/"
-            f"{column.blank_count} blank",
-            f"distinct {column.distinct_count}", f"top: {_render_top(column)}"])
+            f"{column.stage_id}.{column.shape.column}", column.shape.kind.value,
+            f"rows {column.row_count}",
+            f"{column.shape.filled_count} filled/{column.shape.null_count} null/"
+            f"{column.shape.blank_count} blank",
+            f"distinct {column.shape.distinct_count}", f"top: {_render_top(column.shape.top)}"])
         for column in columns
     ]
     return _render_block("INPUT COLUMNS", lines)
 
 
-def _render_top(column: InputColumnEvidenceItem) -> str:
-    return ", ".join(f"{seen.value} ({seen.count})" for seen in column.top) or _NOTHING
+def _render_top(top: list[ValueCount]) -> str:
+    return ", ".join(f"{seen.value} ({seen.count})" for seen in top) or _NOTHING
 
 
 def _render_context(bundle: EvidenceBundle) -> str:

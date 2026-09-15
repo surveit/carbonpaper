@@ -8,10 +8,14 @@ from pydantic import TypeAdapter, ValidationError
 
 from app.models.citations import (
     ChallengeCitation,
+    PublishedCitation,
+    RowsRectangle,
     StageCitation,
     StageOutputCellCitation,
     StageOutputColumnCitation,
+    StageOutputTableCitation,
     TermCitation,
+    render_citation_value,
 )
 
 CHALLENGE_CITATION: TypeAdapter[ChallengeCitation] = TypeAdapter(ChallengeCitation)
@@ -84,3 +88,20 @@ def test_each_new_kind_describes_its_fields_for_a_tool_schema(
     description: str,
 ) -> None:
     assert kind_class.model_fields[field_name].description == description
+
+
+def _cell_of(value: int | str) -> StageOutputCellCitation:
+    return StageOutputCellCitation(run_id="r", stage_id="s", row_ordinal=0, column="c", value=value)
+
+
+@pytest.mark.parametrize(("citation", "printed"), [
+    (_cell_of(63027729), "63,027,729"),
+    (_cell_of(2200), "2200"),
+    (_cell_of("Health"), "Health"),
+    (StageOutputTableCitation(run_id="r", stage_id="s", rectangle=RowsRectangle(
+        row_start=0, row_end=12345, columns=["c"])), "12,345 rows"),
+])
+def test_a_cell_prints_as_its_figure_and_a_table_as_its_row_count(
+    citation: PublishedCitation, printed: str,
+) -> None:
+    assert render_citation_value(citation) == printed

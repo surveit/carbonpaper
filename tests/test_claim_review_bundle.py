@@ -1,22 +1,33 @@
 """What every reviewer is handed, and what a review must hold before it is stored."""
 from __future__ import annotations
 
+import re
+
 import pytest
 
+from app.core.file_shape import ColumnShape
 from app.reviewer.evidence import render_evidence_bundle, render_evidence_pool
 from app.models.citations import (
     StageCitation,
     StageOutputCellCitation,
     StageOutputColumnCitation,
     TermCitation,
+    render_citation_value,
 )
+from app.models.claims import ClaimShapeInput
 from app.models.named_schemas import NamedSchema, SchemaLibrary
 from app.models.records.claim_review import Challenge, ChallengeKind, ClaimPart
 from app.models.terms import Terms, Verb
 from app.services import claim_review
 from app.services import terms as terms_service
 from app.services.errors import ClaimReviewRefused
-from claim_review_fixture import PROJECT, TOTAL_TEXT, claim_the_total, run_the_fixture
+from claim_review_fixture import (
+    PROJECT,
+    TOTAL_SHAPE,
+    TOTAL_TEXT,
+    claim_the_total,
+    run_the_fixture,
+)
 
 
 @pytest.fixture
@@ -24,15 +35,61 @@ def claim(projects_root):
     return claim_the_total(run_the_fixture(projects_root))
 
 
-def test_the_bundle_holds_the_sentence_the_figures_and_marks_the_cited_one(claim):
+def test_the_bundle_holds_the_sentence_the_outputs_with_their_citations_and_the_shape(claim):
     bundle = claim_review.build_evidence_bundle(PROJECT, claim.id)
 
     assert bundle.claim_text == TOTAL_TEXT
     assert bundle.run_read_everything is True
     by_slug = {o.slug: o for o in bundle.outputs}
-    assert by_slug["grant-total"].value == "2200" and by_slug["grant-total"].cited   # render_figure groups from 10,000
-    assert by_slug["grant-count"].value == "5" and not by_slug["grant-count"].cited
-    assert bundle.shape.universe == "closed"
+    assert by_slug["grant-total"].citation == claim.citation and bundle.cited_slug == "grant-total"
+    assert render_citation_value(by_slug["grant-count"].citation) == "5"
+    assert type(bundle.shape) is ClaimShapeInput and bundle.shape == TOTAL_SHAPE
+
+
+_OUTPUT_LINE = re.compile(
+    r"^(?P<slug>\S+) · .+ · (?P<value>[^·]+) · stage `(?P<stage_id>[^`]+)`, "
+    r"row (?P<row_ordinal>\d+), column `(?P<column>[^`]+)`")
+
+
+def _find_output_lines(pool: str) -> dict[str, re.Match[str]]:
+    return {match["slug"]: match for line in pool.splitlines()
+            if (match := _OUTPUT_LINE.match(line)) is not None}
+
+
+def test_the_pool_opens_with_the_run_and_says_where_each_cell_output_sits(claim):
+    pool = render_evidence_pool(claim_review.build_evidence_bundle(PROJECT, claim.id))
+
+    assert pool.splitlines()[0] == f"run: {claim.citation.run_id}"
+    lines = _find_output_lines(pool)
+    assert lines["grant-total"].group(0).endswith("column `total_amount`")
+    assert lines["grant-count"].group(0).endswith("column `grants`")
+    assert "CITED" in lines["grant-total"].string and "CITED" not in lines["grant-count"].string
+
+
+@pytest.mark.parametrize("slug", ["grant-total", "grant-count"])
+def test_a_cell_citation_copied_off_the_pool_is_one_the_store_accepts(claim, slug):
+    pool = _pool_of(claim)
+    printed = _find_output_lines(pool)[slug]
+    copied = StageOutputCellCitation(
+        run_id=pool.splitlines()[0].removeprefix("run: "), stage_id=printed["stage_id"],
+        row_ordinal=int(printed["row_ordinal"]), column=printed["column"],
+        value=printed["value"])
+
+    challenge = _challenge(printed["value"], citations=[copied])
+    assert claim_review.find_citation_issues(PROJECT, claim.citation.run_id, [challenge]) == []
+
+
+def test_a_cell_output_of_five_digits_is_pooled_as_its_figure(claim):
+    from app.models.records.workflow_output import WorkflowOutput
+    WorkflowOutput(
+        slug="ai-spend", label="AI spend", shape_id=None,
+        citation=StageOutputCellCitation(run_id=claim.citation.run_id, stage_id="grant_totals",
+                                         row_ordinal=0, column="total_amount",
+                                         value=63027729)).save()
+
+    lines = _find_output_lines(_pool_of(claim))
+
+    assert lines["ai-spend"]["value"] == "63,027,729"
 
 
 def test_every_stage_of_the_version_is_there_flagged_by_whether_it_feeds_the_figure(claim):
@@ -61,13 +118,6 @@ def test_an_arm_no_row_took_reads_zero(claim):
     assert "rows 0" in render_evidence_pool(bundle)
 
 
-def test_a_figure_of_five_digits_is_pooled_with_its_separators():
-    cell = StageOutputCellCitation(run_id="r", stage_id="s", row_ordinal=0,
-                                   column="ai_spend", value=63027729)
-
-    assert claim_review._read_output_value(cell) == "63,027,729"
-
-
 def test_the_arms_the_run_recorded_come_with_their_row_counts(claim):
     bundle = claim_review.build_evidence_bundle(PROJECT, claim.id)
 
@@ -81,9 +131,10 @@ def test_each_input_column_is_profiled_off_what_the_run_read(claim):
     bundle = claim_review.build_evidence_bundle(PROJECT, claim.id)
 
     east_amount = next(c for c in bundle.input_columns
-                       if c.stage_id == "load_east" and c.column == "amount")
-    assert east_amount.row_count == 6 and east_amount.filled_count == 6
-    assert east_amount.kind == "number"
+                       if c.stage_id == "load_east" and c.shape.column == "amount")
+    assert type(east_amount.shape) is ColumnShape
+    assert east_amount.row_count == 6 and east_amount.shape.filled_count == 6
+    assert east_amount.shape.kind == "number"
     assert {c.stage_id for c in bundle.input_columns} == {"load_east", "load_west", "load_agencies"}
 
 
@@ -94,6 +145,7 @@ def test_the_rendering_carries_every_figure_the_guard_will_check_against(claim):
     assert TOTAL_TEXT in text and "grant-total" in text and "2200" in text
     assert "----- BRANCHES -----" in text and "----- INPUT COLUMNS -----" in text
     assert "feeds the cited stage: true" in text
+    assert "universe: closed · importance: primary" in text
     pool = render_evidence_pool(bundle)
     assert TOTAL_TEXT not in pool and "CLAIM:" not in pool and "2200" in pool
 
@@ -120,8 +172,9 @@ def test_a_table_the_run_published_is_pooled_by_its_row_count(claim):
     bundle = claim_review.build_evidence_bundle(PROJECT, claim.id)
 
     table = next(o for o in bundle.outputs if o.slug == "by-portfolio")
-    assert table.value == "3 rows" and table.stage_id == "by_portfolio" and not table.cited
-    assert "3 rows" in render_evidence_bundle(bundle)
+    assert render_citation_value(table.citation) == "3 rows"
+    assert table.citation.stage_id == "by_portfolio" and bundle.cited_slug != "by-portfolio"
+    assert "by-portfolio · By portfolio · 3 rows · stage `by_portfolio`" in render_evidence_pool(bundle)
 
 
 def _challenge(evidence: str, **overrides: object) -> Challenge:

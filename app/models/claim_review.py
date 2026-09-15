@@ -3,11 +3,13 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from app.core.column_profile import ValueCount
+from app.core.file_shape import ColumnShape
 from app.core.ids import ID
 from app.core.json_types import JsonDict
 from app.models.citations import StageOutputCellCitation
+from app.models.claims import ClaimShapeInput
 from app.models.records.claim_review import Challenge, ClaimPart
+from app.models.records.workflow_output import WorkflowOutput
 from app.models.schema import StageId, _Base
 
 
@@ -48,23 +50,6 @@ def _find_claim_part_span(text: str, part: ClaimPart) -> tuple[int, int] | None:
 
 
 # ── The evidence bundle ──
-class CitedShape(_Base):
-    label: str
-    universe: str
-    importance: str
-    qualifiers: list[str]
-    context_columns: list[str]
-
-
-class OutputEvidenceItem(_Base):
-    slug: str
-    label: str
-    primary: bool
-    stage_id: StageId
-    value: str
-    cited: bool
-
-
 class StageEvidenceItem(_Base):
     stage_id: StageId
     type: str
@@ -86,27 +71,21 @@ class BranchEvidenceItem(_Base):
 
 
 class InputColumnEvidenceItem(_Base):
-    stage_id: StageId
-    column: str
-    kind: str
+    stage_id: ID
     row_count: int
-    filled_count: int
-    null_count: int
-    blank_count: int
-    distinct_count: int
-    top: list[ValueCount]
+    shape: ColumnShape
 
 
 class EvidenceBundle(_Base):
-    project_id: ID
-    run_id: ID
     claim_id: ID
     claim_text: str
     claim_context: JsonDict
+    # The run is the cited cell's run.
     cited: StageOutputCellCitation
-    shape: CitedShape
+    shape: ClaimShapeInput
     run_read_everything: bool
-    outputs: list[OutputEvidenceItem]
+    outputs: list[WorkflowOutput]
+    cited_slug: str
     stages: list[StageEvidenceItem]
     branches: list[BranchEvidenceItem]
     input_columns: list[InputColumnEvidenceItem]

@@ -20,10 +20,8 @@ from app.models.citations import (
 )
 from app.models.claim_review import (
     BranchEvidenceItem,
-    CitedShape,
     EvidenceBundle,
     InputColumnEvidenceItem,
-    OutputEvidenceItem,
     StageEvidenceItem,
     find_claim_part_spans,
 )
@@ -32,7 +30,6 @@ from app.models.stage import StageType
 from app.models.terms import render_terms
 from app.models.workflow import Workflow, find_stages_upstream_of, sort_stages_by_dependency
 from app.models.workflow_stage import WorkflowStage
-from app.services import claim_shapes
 from app.services import claims as claims_service
 from app.services import run as run_service
 from app.services import scope as scope_service
@@ -50,11 +47,11 @@ def build_evidence_bundle(project_id: ID, claim_id: ID) -> EvidenceBundle:
     stages = _read_workflow_stages(project_id, run_id)
     written = {record.stage_id for record in manifest.stage_records if record.output_path}
     return EvidenceBundle(
-        project_id=project_id, run_id=run_id, claim_id=claim.id, claim_text=claim.text,
-        claim_context=claim.context, cited=cited,
-        shape=_read_shape(project_id, claim.shape_id),
+        claim_id=claim.id, claim_text=claim.text, claim_context=claim.context, cited=cited,
+        shape=claims_service.load_required_claim_shape(project_id, claim.shape_id).read_input(),
         run_read_everything=claims_service.read_whether_the_run_read_everything(manifest),
-        outputs=_read_outputs(run_id, claims_service.find_output_of_claim(claim).slug),
+        outputs=claims_service.read_every_run_output(run_id),
+        cited_slug=claims_service.find_output_of_claim(claim).slug,
         stages=_read_stages(stages, cited.stage_id),
         branches=_read_branches(project_id, run_id),
         input_columns=_read_input_columns(project_id, run_id, stages, written),
@@ -144,33 +141,6 @@ def _read_workflow_stages(project_id: ID, run_id: ID) -> list[WorkflowStage]:
     return [workflow.find_workflow_stage(stage.id) for stage in ordered]
 
 
-def _read_shape(project_id: ID, shape_id: ID | None) -> CitedShape:
-    shape = claim_shapes.load_claim_shape(project_id, shape_id) if shape_id else None
-    if shape is None:
-        raise ClaimReviewRefused([f"this project holds no claim shape '{shape_id}'"])
-    return CitedShape(
-        label=shape.label, universe=shape.universe, importance=shape.importance,
-        qualifiers=list(shape.qualifiers),
-        context_columns=[column.name for column in shape.context])
-
-
-def _read_outputs(run_id: ID, cited_slug: str) -> list[OutputEvidenceItem]:
-    return [
-        OutputEvidenceItem(
-            slug=output.slug, label=output.label, primary=output.primary,
-            stage_id=output.citation.stage_id, value=_read_output_value(output.citation),
-            cited=output.slug == cited_slug)
-        for output in claims_service.read_every_run_output(run_id)
-    ]
-
-
-def _read_output_value(citation: PublishedCitation) -> str:
-    """A table names rows, not one cell; its row count is the fact it carries."""
-    if isinstance(citation, StageOutputCellCitation):
-        return render_figure(citation.value)
-    return f"{citation.rectangle.count_rows():,} rows"
-
-
 def _read_stages(stages: list[WorkflowStage], cited_stage_id: ID) -> list[StageEvidenceItem]:
     feeding = find_stages_upstream_of([placed.stage for placed in stages], cited_stage_id)
     return [
@@ -213,11 +183,8 @@ def _measure_stage_columns(project_id: ID, run_id: ID,
         present = [str(value) for value in frame[name].dropna().tolist()]
         shape = measure_column_shape(str(name), present, null_count=row_count - len(present),
                                      max_values=VALUES_KEPT)
-        measured.append(InputColumnEvidenceItem(
-            stage_id=stage_id, column=shape.column, kind=shape.kind.value,
-            row_count=row_count, filled_count=shape.filled_count,
-            null_count=shape.null_count, blank_count=shape.blank_count,
-            distinct_count=shape.distinct_count, top=shape.top))
+        measured.append(InputColumnEvidenceItem(stage_id=stage_id, row_count=row_count,
+                                                shape=shape))
     return measured
 
 
