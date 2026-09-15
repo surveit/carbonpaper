@@ -75,8 +75,19 @@ def test_configuring_a_throwaway_workspace_refuses_a_store_left_outside_its_root
     assert f"projects dir: {(tmp_path / 'examples').resolve()}" in str(refused.value)
 
 
-@pytest.mark.parametrize("outside", [{"database", "files root"}, {"frame store", "projects dir"}])
 def test_a_workspace_whose_file_root_is_elsewhere_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "pass"
+    configure_frame_store(FrameStore(root / "frames"))
+    set_projects_dir(root / "examples")
+    monkeypatch.setenv("CARBON_PAPER_FILES_ROOT", str(tmp_path / "elsewhere" / "files"))
+    with pytest.raises(WorkspaceOutsidePass):
+        validate_workspace_is_under(root, root / "app.db")
+
+
+@pytest.mark.parametrize("outside", [{"database", "files root"}, {"frame store", "projects dir"}])
+def test_validation_lists_exactly_the_roots_outside_the_workspace(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, outside: set[str]
 ) -> None:
     root = tmp_path / "pass"
@@ -103,7 +114,9 @@ def test_a_recipe_round_trips_through_run_json(tmp_path: Path) -> None:
     assert reread == recipe
     assert reread.model_dump_json(indent=2) + "\n" == written
 
-    payload = json.loads(written)
+
+def test_every_recipe_model_refuses_an_unknown_field(tmp_path: Path) -> None:
+    payload = _build_recipe().model_dump(mode="json")
     for model_object in [payload, payload["captured"], *payload["inputs"], *payload["figures"]]:
         model_object["unexpected"] = True
     for recipe_input in payload["inputs"]:
