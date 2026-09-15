@@ -1,0 +1,170 @@
+/* The carbon-paper palette: every colour the app spends, declared once.
+ *
+ * A carbon set is a WHITE top sheet and a blue-black transfer ink, and each copy
+ * down the stack comes out fainter. --bg is the sheet, --fg / --muted are the
+ * first and second copy, --accent is the transfer. (The earlier cream sheet was
+ * invented: the carbon tissue is dark, the top ply is white, and the canary and
+ * pink plies below it are tinted to mark them as copies, not originals. Docs:
+ * madehow.com/Volume-1/Carbon-Paper.html.)
+ *
+ * No other file may carry a colour literal — tests/arch/test_palette_owns_colour.py
+ * fails on one. The single exception is app/web/diagrams.py: a mermaid `style`
+ * line takes a literal hex and cannot read a custom property, so it repeats
+ * these values in Python and tests/arch/test_status_colour_contract.py pins
+ * every one of them back to the property below that it copies.
+ */
+
+:root {
+    /* ── The sheet ────────────────────────────────────────────────────────
+       Six surfaces on one axis: --raised sits above the sheet, --hover and the
+       two --sunk levels below it, then the two rule weights. --raised is pure
+       white so a card lifts off the canvas without needing a shadow.
+
+       The ladder runs CIE L* 96.5 / 95.1 / 93.7 / 92.1 / 90.5 / 84.2, at an
+       OKLCH chroma of 0.7 rising to 1.1 (x100) on the canary ply's hue — half
+       the chroma this ladder first shipped with, same lightness: the full-
+       strength tint read as too much paper on every screen it was tried on.
+
+       --border does the most work by far — it is drawn 89 times, more than any
+       other value in the stylesheet, by every card, table, chip, panel and
+       input.
+
+       THE CANVAS IS TINTED AND THE TOP SHEET IS NOT. That is the whole of the
+       figure/ground here: --raised is the white ply a card is printed on, --bg
+       is the canary ply under it. They were 0.67 L* apart — a contrast ratio of
+       1.017, which is a card that cannot be seen against the page it sits on,
+       and it is why lifting only the ink never made this feel less flat. They
+       are 3.5 L* apart now, ratio 1.092, so a card lifts on its own with no
+       shadow to fake it.
+
+       An all-cream LADDER was tried before and clashed under blue-black text;
+       this is not that. Only the canvas and what sits below it carry the tint,
+       and the chroma stays near 1, above the ~0.5 floor where a grey reads as
+       dead flat and well under the ~2 where the paper itself becomes a thing
+       on the page. --border-strong is the second rule weight, for a card
+       holding its edge under the cursor.
+
+       --fg holds 13.74:1 on this canvas and --muted 5.71:1, both well over the
+       4.5:1 floor tests/arch/test_status_colour_contract.py enforces. */
+    --raised: #ffffff;
+    --bg: #f6f5f0;
+    --hover: #ebe8e2;
+    --sunk: #f2f1ec;
+    --sunk-deep: #eeede7;
+    --border: #e6e4dc;
+    --border-strong: #d4d2ca;
+
+    /* ── The ink ──────────────────────────────────────────────────────────
+       --on-dark is ink printed on a filled chip or button — a different job
+       from --raised even though both are white today: one is paper and one is
+       ink, and a theme that tinted the cards must not tint the button labels. */
+    --fg: #24272b;
+    --muted: #5c6169;
+    --on-dark: #ffffff;
+    /* A third copy down, at 3.3:1 — under the 4.5:1 body floor on purpose. It is
+       for a column a diff has already said did not change: legible when the eye
+       goes looking, quiet enough that it never competes with what did. */
+    --muted-dim: #83878d;
+    /* A graph's edges: structure, so quieter than ink and firmer than a rule. */
+    --diagram-edge: var(--muted-dim);
+
+    /* ── Code, printed light-on-dark ──────────────────────────────────────
+       --code-fg is a dimmed white, not --on-dark: a button label is one line
+       and a code block is fifty, and full white glares over that distance. */
+    --code-deep: #1e2125;
+    --code-fg: #e6e8ea;
+    --code-comment: #878c93;
+
+    /* ── The five states ──────────────────────────────────────────────────
+       Colour on every page answers ONE question: what happened, and did a check
+       pass. These five are that answer, and they are the ONLY hues here. A
+       stage's TYPE is not on this axis and takes no colour — its glyph names it.
+       Neither is a page section: the node-review page's "how is this evaluated"
+       and "who reviews this" blocks had a teal and a magenta of their own, and
+       giving them up is what freed a hue for --info, which must not be the CTA
+       blue. Three roles each, not interchangeable:
+         -bd    the stroke, border or fill — the colour you SEE
+         -bg    the tint it sits on — the colour that GROUPS
+         -ink   text on that tint — the colour you READ, >= 6.5:1 on its -bg
+
+       Chroma is set PER HUE, for equal perceived vividness rather than equal
+       measurement: good 44, bad 42, info 40 (gamut-limited to 29), warn 38,
+       accent 46, idle 6. Yellows and oranges reach their perceived ceiling early
+       while blues, teals and violets carry far more before they shout, so one
+       number cannot serve them all — pinning every hue to a flat 36 fixed the
+       loudness and left the page dead. The accent is the most vivid thing here
+       ON PURPOSE: it is the one element asking to be clicked. The tints follow
+       at C* 12-15 rather than 8, because a chip is 90% tint by area and colour
+       that lives only in a 1px border is colour a reader never sees.
+
+       Identity is carried by -bd and -ink; every surface spending a tint also
+       carries a label or a border, so never separate two things by tint alone.
+
+       tests/arch/test_status_colour_contract.py measures every ink against its
+       own tint, so a nudged value fails CI rather than a reader. */
+    --good-bd: #2f6d30;   --good-bg: #dbedd8;   --good-ink: #1c5c20;
+    --warn-bd: #8b602c;   --warn-bg: #fae4cf;   --warn-ink: #6f4714;
+    --bad-bd: #934133;    --bad-bg: #ffe1da;    --bad-ink: #863629;
+    --info-bd: #007a93;   --info-bg: #c9eefb;   --info-ink: #005870;
+    --idle-bd: #787d86;   --idle-bg: #e6e8ec;   --idle-ink: #4c5159;
+
+    /* ── Interaction, not meaning ─────────────────────────────────────────
+       --accent is the transfer ink — the CTA blue, and its OWN value. It is
+       deliberately not --info: "do this next" and "a human is needed here" are
+       different messages and a reader must not have to tell them apart by
+       context. --focus is the only colour here naming no meaning — it marks the
+       node or field you are ON, and has to stay legible painted over a node
+       already stroked in --info-bd, so it cannot be
+       --accent, and it must not be --info either. It carries chroma 52 — the
+       highest here, because it is transient and has to win against whatever it
+       is painted over. Every pair among the five states, the accent and the
+       focus clears 20 deltaE; the tightest is warn/bad at 25.
+       The three color-mix values below keep a shadow tied to the ink that casts
+       it instead of to a black of its own. */
+    --accent: #1d539c;
+    --accent-deep: #00458c;
+    --focus: #8a2f78;
+    --shadow: color-mix(in srgb, var(--fg) 9%, transparent);
+    /* What a modal dims the page behind it with. Tied to --fg for the same reason
+       --shadow is: a black of its own would not follow the theme. */
+    --scrim: color-mix(in srgb, var(--fg) 35%, transparent);
+    --focus-glow: color-mix(in srgb, var(--focus) 55%, transparent);
+    --focus-halo: color-mix(in srgb, var(--focus) 20%, transparent);
+
+    /* ── Run state: what the runner did ───────────────────────────────────
+       Five states every run surface speaks in — the status pill, the alert
+       strip, run badges, per-stage borders, the progress bar, and the per-node
+       stroke in build_mermaid_graph (app/web/diagrams.py _STATUS_STROKE).
+       Seven stage statuses map onto them: running, cancelled and pending all take
+       idle, and the node glyph separates them (⟳ / ✖ / …). Running holds no hue on
+       purpose — it is the one status that is not a verdict, and the strip says it
+       with motion instead (run-page.css `strip-sweep`). */
+    --state-done: var(--good-bd);   --state-done-bg: var(--good-bg);   --state-done-ink: var(--good-ink);
+    --state-warn: var(--warn-bd);   --state-warn-bg: var(--warn-bg);   --state-warn-ink: var(--warn-ink);
+    --state-failed: var(--bad-bd);  --state-failed-bg: var(--bad-bg);  --state-failed-ink: var(--bad-ink);
+    --state-review: var(--info-bd); --state-review-bg: var(--info-bg); --state-review-ink: var(--info-ink);
+    --state-idle: var(--idle-bd);   --state-idle-bg: var(--idle-bg);   --state-idle-ink: var(--idle-ink);
+
+    /* ── Verdict: did a check pass ────────────────────────────────────────
+       A separate axis from run state — a workflow issue, a stage certification,
+       a test result — spending the same hues so that green means good on both. */
+    --verdict-pass-bg: var(--good-bg);    --verdict-pass-bd: var(--good-bd);
+    --verdict-neutral-bg: var(--idle-bg); --verdict-neutral-bd: var(--idle-bd);
+    --verdict-fail-bg: var(--bad-bg);     --verdict-fail-bd: var(--bad-bd);
+    --verdict-warn-bg: var(--warn-bg);    --verdict-warn-bd: var(--warn-bd);
+
+    /* ── Picked: which one of a set you are on ────────────────────────────
+       A picker's rows, a segmented toggle (the rows/columns axis on an input
+       file, a facet's linear/log scale) — anywhere a set offers one at a time.
+       Fill and ink, no left bar: a 3px inset rule drawn inside a corner radius
+       is eaten by the curve, and the sites doing it disagreed about how much.
+       Not for the nav's current section (a filled accent pill) or a tab strip
+       (an underline): those say WHERE YOU ARE, not which one you chose.
+       Sunk one step past --hover so a picked row survives being hovered. */
+    --picked-bg: var(--sunk-deep);
+    --picked-edge: var(--border-strong);
+    --picked-ink: var(--fg);
+    /* One step toward its own edge, so the cursor lifts a picked row rather than
+       draining it to the paper --hover (tests/arch/test_hover_stays_in_its_hue.py). */
+    --picked-hover: color-mix(in srgb, var(--picked-edge) 16%, var(--picked-bg));
+}

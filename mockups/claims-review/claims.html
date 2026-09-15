@@ -1,0 +1,18 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Claims · Claims review</title>
+<link rel="stylesheet" href="static/palette.css"><link rel="stylesheet" href="static/base.css"><link rel="stylesheet" href="static/project-shell.css"><link rel="stylesheet" href="static/minting.css"><link rel="stylesheet" href="static/mock.css?v=4">
+</head><body>
+<script src="data.js?v=4"></script><script src="sentence-data.js?v=4"></script><script src="shell.js?v=4"></script>
+<script>
+// One row per claim the project holds, newest first. Status is the one field that moves.
+function statusOf(c) { try { return JSON.parse(localStorage.getItem("sentence-v3:" + c.id) || "{}").status || DEFAULT_STATUS[c.id]; } catch (e) { return DEFAULT_STATUS[c.id]; } }
+CR.setRender(function () {
+  const rows = CLAIMS.map(c => ({ c, status: statusOf(c) })).sort((a, b) => (a.status === "submitted" ? 0 : 1) - (b.status === "submitted" ? 0 : 1));
+  const review = rows.filter(r => r.status === "submitted").length, made = rows.filter(r => r.status === "approved").length, declined = rows.filter(r => r.status === "declined").length;
+  const body = `<div class="sec-head"><h1>Claims</h1><p class="lede">Every sentence this project has proposed to publish, with the run and the cell it was read from. A claim in review has been attacked and is waiting on you.</p></div>
+<div class="claims-tally"><span><b>${review}</b> to review</span><span><b>${made}</b> made</span><span><b>${declined}</b> declined</span></div>
+<table class="claims"><thead><tr><th>the claim</th><th>value</th><th>read from</th><th>status</th></tr></thead><tbody>
+${rows.map(({ c, status }) => `<tr class="${status === "submitted" ? "todo" : ""}"><td class="sent"><a href="sentence.html?claim=${c.id}">${CR.esc(c.sentence.join(""))}</a><div class="meta">${c.table ? "a table · " : ""}${CR.esc(c.label)} · ${CR.esc(c.context)}</div></td><td class="n">${c.table ? `<span class="ev">table</span> ${CR.esc(c.value)}` : CR.esc(c.value)}</td><td class="n">${CR.esc(c.stage)}<div class="meta">run ${CR.esc(c.run)}</div></td><td><span class="status-chip ${status}" style="margin:0">${status === "submitted" ? "needs review" : status}</span></td></tr>`).join("")}
+</tbody></table>`;
+  CR.shell("claims", body);
+});
+</script></body></html>
