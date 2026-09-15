@@ -1,4 +1,4 @@
-"""A claim under attack: what every attacker is handed, and what each agent answers."""
+"""A claim under review: what every reviewer is handed, and what each agent answers."""
 from __future__ import annotations
 
 from pydantic import Field

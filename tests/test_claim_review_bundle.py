@@ -1,4 +1,4 @@
-"""What every attacker is handed, and what a review must hold before it is stored."""
+"""What every reviewer is handed, and what a review must hold before it is stored."""
 from __future__ import annotations
 
 import pytest
@@ -44,7 +44,7 @@ def test_every_stage_of_the_version_is_there_flagged_by_whether_it_feeds_the_fig
     assert 'row["kind"] == "grant"' in next(s.code for s in bundle.stages if s.stage_id == "grants_only")
 
 
-def test_a_sandboxed_filters_predicate_reaches_the_attacker_too(claim):
+def test_a_sandboxed_filters_predicate_reaches_the_reviewer_too(claim):
     bundle = claim_review.build_evidence_bundle(PROJECT, claim.id)
 
     sandboxed = next(s for s in bundle.stages if s.stage_id == "sandboxed_positive")
@@ -201,9 +201,9 @@ def test_empty_evidence_is_refused(claim):
         "challenge 0 (coverage): evidence '' is on no line of the pool"]
 
 
-def test_evidence_copied_from_an_attackers_text_is_accepted_and_the_review_round_trips(claim):
+def test_evidence_copied_from_a_reviewers_text_is_accepted_and_the_review_round_trips(claim):
     stored = _store(claim, challenges=[_challenge("1 of 10 rows")], summary="One row was dropped.",
-                    corpus="pool text\nattacker evidence: 1 of 10 rows were zero")
+                    corpus="pool text\nreviewer evidence: 1 of 10 rows were zero")
 
     held = claim_review.load_claim_review(claim.id)
     assert held is not None and held.id == stored.id

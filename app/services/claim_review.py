@@ -1,4 +1,4 @@
-"""Everything one run holds about a cited cell, and the single review its attack leaves."""
+"""Everything one run holds about a cited cell, and the single review its reviewers leave."""
 from __future__ import annotations
 
 import re
@@ -78,7 +78,7 @@ def store_claim_review(project_id: ID, claim_id: ID, *, claim_parts: list[ClaimP
     cited = _require_cell_citation(claim.citation)
     if load_claim_review(claim_id) is not None:
         raise ClaimReviewRefused(
-            [f"claim {claim_id} already has a review; a re-attack is a new claim"])
+            [f"claim {claim_id} already has a review; a re-review is a new claim"])
     issues = [*find_claim_part_issues(claim_parts, claim.text),
               *find_unprinted_evidence(challenges, corpus),
               *find_challenge_issues(challenges, len(claim_parts)),
@@ -237,7 +237,7 @@ def _read_whether_the_corpus_spells(corpus: str, evidence: str) -> bool:
 def _require_cell_citation(citation: PublishedCitation) -> StageOutputCellCitation:
     if not isinstance(citation, StageOutputCellCitation):
         raise ClaimReviewRefused(
-            ["a table claim has no sentence to attack; only a cell claim is attacked"])
+            ["a table claim has no sentence to review; only a cell claim is reviewed"])
     return citation
 
 

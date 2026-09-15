@@ -63,7 +63,7 @@ class Challenge(_Base):
 
 
 class ClaimReview(PersistedModel):
-    """A review is written once: a re-attack is a new claim and a new review."""
+    """A review is written once: a re-review is a new claim and a new review."""
 
     collection: ClassVar[str] = "claim_review"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ

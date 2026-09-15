@@ -1,4 +1,4 @@
-"""A review is written once. A re-attack is a new claim and a new review."""
+"""A review is written once. A re-review is a new claim and a new review."""
 from __future__ import annotations
 
 import pytest

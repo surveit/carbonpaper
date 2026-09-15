@@ -1,4 +1,4 @@
-"""The evidence bundle as the text an attacker reads and copies its backing out of."""
+"""The evidence bundle as the text a reviewer reads and copies its backing out of."""
 from __future__ import annotations
 
 from app.models.claim_review import (
@@ -14,7 +14,7 @@ _NOTHING = "none"
 
 
 def render_evidence_bundle(bundle: EvidenceBundle) -> str:
-    """The claim and the pool: what an attacker reads. The claim is NOT its own backing."""
+    """The claim and the pool: what a reviewer reads. The claim is NOT its own backing."""
     return _render_the_claim(bundle) + "\n\n" + render_evidence_pool(bundle)
 
 

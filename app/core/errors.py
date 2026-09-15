@@ -30,7 +30,7 @@ class ClaimShapeIsImmutable(ValueError):
 
 
 class ClaimReviewIsImmutable(ValueError):
-    """A review is written once: a re-attack is a new claim and a new review."""
+    """A review is written once: a re-review is a new claim and a new review."""
 
 
 class CitationMismatch(ValueError):
