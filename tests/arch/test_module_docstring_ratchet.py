@@ -1,9 +1,4 @@
-"""Architecture: every module docstring in ``app/`` and ``tests/`` at or under 5
-physical lines, no baseline; `_JUSTIFIED_EXCEPTIONS` (symbol-keyed, reason-mandatory,
-empty today) is meant to stay very rare — normally cut the docstring or move the
-content to docs/. Blank lines inside the docstring count, so a two-paragraph one
-measures over the ceiling by design: the rule forces one contiguous block.
-"""
+"""Architecture: a module docstring's physical lines are capped, counting blank lines inside it."""
 from __future__ import annotations
 
 import ast

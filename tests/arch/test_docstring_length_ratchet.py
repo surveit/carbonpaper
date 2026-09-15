@@ -1,9 +1,4 @@
-"""Architecture: the prose at a function's, method's, or class's ENTRANCE in ``app/`` and
-``tests/`` — its docstring PLUS the comment block above the first statement — at or under 100
-characters TOGETHER. One budget over both syntaxes, because prose above the first statement
-costs the reader what a docstring costs. `_GRANDFATHERED` / `_GRANDFATHERED_ENTRANCE_PROSE`
-(may only shrink) / `_JUSTIFIED_EXCEPTIONS` (rare); else cut it, or move it to docs/.
-"""
+"""Architecture: one cap covers a def's or class's docstring plus comments above its first statement."""
 from __future__ import annotations
 
 import ast
