@@ -16,6 +16,7 @@ class WorkspaceOutsidePass(Exception):
 
 def configure_throwaway_workspace(root: Path) -> None:
     root = root.resolve()
+    root.mkdir(parents=True, exist_ok=True)
     configure_store(SqliteKvStore(str(root / "app.db")))
     configure_frame_store(FrameStore(root / "frames"))
     os.environ["CARBON_PAPER_FILES_ROOT"] = str((root / "files").resolve())

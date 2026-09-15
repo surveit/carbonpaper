@@ -9,96 +9,152 @@ from arch.scope import find_source_files_under
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _EVALS_ROOT = _REPO_ROOT / "evals"
 _SAVED_RUNS_CLI = "evals/runs/cli.py"
-_REAL_STORE_CONFIGURERS = frozenset({"configure_default_stores", "configure_projects_dir_from_env"})
+# app.seeds.bootstrap re-exports store_config's document-store configurer.
+_CONFIGURER_MODULES = ("app.core.store_config", "app.seeds.bootstrap")
+_COMPOSITION_ROOTS = ("app.main", "app.cli", "app.seeds.__main__")
+# Caught by name: its module, app.services.workspace, is one a throwaway workspace imports.
+_PROJECTS_DIR_CONFIGURER = "configure_projects_dir_from_env"
 
 
 def test_only_the_saved_runs_cli_points_the_app_at_the_real_stores() -> None:
-    offenders = find_real_store_configurer_uses(find_source_files_under(_EVALS_ROOT), _REPO_ROOT)
+    offenders = find_real_store_reaches(find_source_files_under(_EVALS_ROOT), _REPO_ROOT)
     assert not offenders, (
-        f"within evals/, only {_SAVED_RUNS_CLI} may import, call or refer to "
-        "configure_default_stores or configure_projects_dir_from_env — everything else works "
-        "in a throwaway workspace, never the machine's real stores:\n  " + "\n  ".join(offenders)
+        f"within evals/, only {_SAVED_RUNS_CLI} may import {', '.join(_CONFIGURER_MODULES)} or a "
+        f"composition root ({', '.join(_COMPOSITION_ROOTS)}), or use {_PROJECTS_DIR_CONFIGURER} — "
+        "everything else works in a throwaway workspace, never the machine's real stores:\n  "
+        + "\n  ".join(offenders)
     )
 
 
-def find_real_store_configurer_uses(paths: list[Path], repo_root: Path) -> list[str]:
+def find_real_store_reaches(paths: list[Path], repo_root: Path) -> list[str]:
     offenders: list[str] = []
     for path in paths:
         relative = path.relative_to(repo_root).as_posix()
         if relative == _SAVED_RUNS_CLI:
             continue
         offenders += [
-            f"{relative}:{lineno}  {name}" for lineno, name in find_configurer_names(parse_module(path))
+            f"{relative}:{lineno}  {reached}"
+            for lineno, reached in find_real_store_reaches_in(parse_module(path))
         ]
     return offenders
 
 
-def find_configurer_names(tree: ast.Module) -> list[tuple[int, str]]:
+def find_real_store_reaches_in(tree: ast.Module) -> list[tuple[int, str]]:
     return sorted(
-        (lineno, name)
+        reach
         for node in ast.walk(tree)
-        for lineno, name in _find_names_in(node)
-        if name in _REAL_STORE_CONFIGURERS
+        for reach in [*_find_protected_imports(node), *_find_projects_dir_configurer_uses(node)]
     )
 
 
-def _find_names_in(node: ast.AST) -> list[tuple[int, str]]:
+def _find_protected_imports(node: ast.AST) -> list[tuple[int, str]]:
+    if not isinstance(node, (ast.Import, ast.ImportFrom)):
+        return []
+    imported = _find_imported_paths(node)
+    return [
+        (node.lineno, module)
+        for module in (*_CONFIGURER_MODULES, *_COMPOSITION_ROOTS)
+        if any(path == module or path.startswith(f"{module}.") for path in imported)
+    ]
+
+
+def _find_imported_paths(node: ast.Import | ast.ImportFrom) -> list[str]:
+    if isinstance(node, ast.Import):
+        return [alias.name for alias in node.names]
+    if node.level or node.module is None:
+        return []  # relative: resolves inside evals/, never to app/
+    return [node.module, *(f"{node.module}.{alias.name}" for alias in node.names)]
+
+
+def _find_projects_dir_configurer_uses(node: ast.AST) -> list[tuple[int, str]]:
     # Every reference, not only calls: a configurer handed on uncalled still gets called.
     if isinstance(node, ast.ImportFrom):
-        return [(node.lineno, alias.name) for alias in node.names]
-    if isinstance(node, ast.Name):
-        return [(node.lineno, node.id)]
-    if isinstance(node, ast.Attribute):
-        return [(node.lineno, node.attr)]
-    return []
+        names = [alias.name for alias in node.names]
+    elif isinstance(node, ast.Name):
+        names = [node.id]
+    elif isinstance(node, ast.Attribute):
+        names = [node.attr]
+    else:
+        return []
+    return [(node.lineno, name) for name in names if name == _PROJECTS_DIR_CONFIGURER]
 
 
 # --- unit tests for the checker, on inline snippets (red + green) ---------
 
 
-def test_find_configurer_names_flags_an_import_and_a_bare_call() -> None:
+def test_find_real_store_reaches_in_flags_every_import_form_of_a_configurer_module() -> None:
     tree = ast.parse(
-        "from app.core.store_config import configure_default_stores\n"
-        "from app.services.workspace import configure_projects_dir_from_env as configure\n"
-        "configure_default_stores()\n"
+        "import app.core.store_config\n"
+        "import app.core.store_config as config\n"
+        "from app.core.store_config import configure_default_document_store\n"
+        "from app.core import files, store_config\n"
+        "from app.seeds.bootstrap import configure_default_document_store\n"
+        "from app.seeds import bootstrap as seed_bootstrap\n"
     )
-    assert find_configurer_names(tree) == [
-        (1, "configure_default_stores"),
-        (2, "configure_projects_dir_from_env"),
-        (3, "configure_default_stores"),
+    assert find_real_store_reaches_in(tree) == [
+        (1, "app.core.store_config"),
+        (2, "app.core.store_config"),
+        (3, "app.core.store_config"),
+        (4, "app.core.store_config"),
+        (5, "app.seeds.bootstrap"),
+        (6, "app.seeds.bootstrap"),
     ]
 
 
-def test_find_configurer_names_flags_a_call_reached_through_its_module() -> None:
+def test_find_real_store_reaches_in_flags_an_import_of_each_composition_root() -> None:
     tree = ast.parse(
-        "from app.core import store_config\n"
-        "import app.services.workspace\n"
-        "store_config.configure_default_stores()\n"
-        "app.services.workspace.configure_projects_dir_from_env()\n"
+        "import app.main\n"
+        "from app import cli\n"
+        "from app.main import app\n"
+        "from app.seeds.__main__ import main\n"
     )
-    assert find_configurer_names(tree) == [
-        (3, "configure_default_stores"),
+    assert find_real_store_reaches_in(tree) == [
+        (1, "app.main"),
+        (2, "app.cli"),
+        (3, "app.main"),
+        (4, "app.seeds.__main__"),
+    ]
+
+
+def test_find_real_store_reaches_in_flags_any_use_of_the_projects_dir_configurer() -> None:
+    tree = ast.parse(
+        "from app.web.config import configure_projects_dir_from_env\n"
+        "from app.services import workspace\n"
+        "configure_projects_dir_from_env()\n"
+        "hooks = [workspace.configure_projects_dir_from_env]\n"
+    )
+    assert find_real_store_reaches_in(tree) == [
+        (1, "configure_projects_dir_from_env"),
+        (3, "configure_projects_dir_from_env"),
         (4, "configure_projects_dir_from_env"),
     ]
 
 
-def test_find_configurer_names_ignores_the_throwaway_configurers_and_a_mention_in_prose() -> None:
+def test_find_real_store_reaches_in_ignores_throwaway_configurers_look_alikes_and_prose() -> None:
     tree = ast.parse(
-        '"""Never calls configure_default_stores."""\n'
+        '"""Never imports app.core.store_config or calls configure_projects_dir_from_env."""\n'
+        "import app\n"
+        "import app.clinic\n"
+        "from app.core import files\n"
         "from app.core.persistence import configure_store\n"
+        "from app.maintenance import schedule\n"
         "from app.services import workspace\n"
+        "from . import recipe\n"
         "configure_store(store)\n"
         "workspace.set_projects_dir(root)\n"
     )
-    assert find_configurer_names(tree) == []
+    assert find_real_store_reaches_in(tree) == []
 
 
-def test_find_real_store_configurer_uses_exempts_the_saved_runs_cli_by_its_path(tmp_path: Path) -> None:
+def test_find_real_store_reaches_exempts_the_saved_runs_cli_by_its_path(tmp_path: Path) -> None:
     for relative in ("evals/runs/cli.py", "evals/harness/cli.py", "evals/runs/_probe.py"):
         path = tmp_path / relative
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("from app.core import store_config\nstore_config.configure_default_stores()\n", encoding="utf-8")
-    assert find_real_store_configurer_uses(sorted(tmp_path.glob("evals/*/*.py")), tmp_path) == [
-        "evals/harness/cli.py:2  configure_default_stores",
-        "evals/runs/_probe.py:2  configure_default_stores",
+        path.write_text(
+            "from app.core import store_config\nstore_config.configure_default_document_store()\n",
+            encoding="utf-8",
+        )
+    assert find_real_store_reaches(sorted(tmp_path.glob("evals/*/*.py")), tmp_path) == [
+        "evals/harness/cli.py:1  app.core.store_config",
+        "evals/runs/_probe.py:1  app.core.store_config",
     ]

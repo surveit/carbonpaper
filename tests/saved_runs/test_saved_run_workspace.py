@@ -60,6 +60,12 @@ def test_a_throwaway_workspace_keeps_every_store_under_its_resolved_root(
     assert projects_dir() == root / "examples"
 
 
+def test_a_throwaway_workspace_creates_its_missing_root_and_parents(tmp_path: Path) -> None:
+    root = tmp_path / "missing" / "pass"
+    configure_throwaway_workspace(root)
+    assert (root / "app.db").is_file()
+
+
 @pytest.mark.parametrize("outside", [{"database", "files root"}, {"frame store", "projects dir"}])
 def test_validate_workspace_is_under_names_each_store_outside_the_root_and_no_other(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, outside: set[str]
@@ -78,15 +84,15 @@ def test_validate_workspace_is_under_names_each_store_outside_the_root_and_no_ot
     assert named == outside
 
 
-def test_a_recipe_round_trips_as_utf8_json_and_refuses_a_field_no_model_declares(tmp_path: Path) -> None:
+def test_a_recipe_round_trips_as_lf_utf8_json_and_refuses_a_field_no_model_declares(tmp_path: Path) -> None:
     recipe = _build_recipe()
     write_recipe(tmp_path, recipe)
-    written = (tmp_path / RECIPE_FILE).read_text(encoding="utf-8")
-    assert "données.csv".encode("utf-8") in (tmp_path / RECIPE_FILE).read_bytes()
-    assert written == json.dumps(json.loads(written), indent=2, ensure_ascii=False)
+    written = (tmp_path / RECIPE_FILE).read_bytes().decode("utf-8")
+    assert "données.csv" in written
+    assert written == json.dumps(json.loads(written), indent=2, ensure_ascii=False) + "\n"
     reread = read_recipe(tmp_path)
     assert reread == recipe
-    assert reread.model_dump_json(indent=2) == written
+    assert reread.model_dump_json(indent=2) + "\n" == written
 
     payload = json.loads(written)
     for model_object in [payload, payload["captured"], *payload["inputs"], *payload["figures"]]:

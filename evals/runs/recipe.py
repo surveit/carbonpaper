@@ -73,4 +73,5 @@ def read_recipe(run_dir: Path) -> RunRecipe:
 
 
 def write_recipe(run_dir: Path, recipe: RunRecipe) -> None:
-    (run_dir / RECIPE_FILE).write_text(recipe.model_dump_json(indent=2), encoding="utf-8")
+    text = recipe.model_dump_json(indent=2) + "\n"
+    (run_dir / RECIPE_FILE).write_text(text, encoding="utf-8", newline="\n")
