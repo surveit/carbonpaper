@@ -9,7 +9,7 @@ from typing import Any, Sequence
 import pyarrow as pa
 from pydantic import BaseModel
 
-from app.web.figure_text import render_figure
+from app.core.figure_text import render_figure
 from app.core.file_shape import VALUES_KEPT, measure_column_shape
 from app.core.frames import read_frame_table, read_native_cell_as_json
 from app.core.json_types import JsonScalar

@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, model_validator
 
-from app.web.figure_text import render_figure
+from app.core.figure_text import render_figure
 from app.core.run_status import RunStatus, StageStatus
 from app.models.records.workflow_version import WorkflowVersion
 from app.services import methodology, run as run_service, versioning

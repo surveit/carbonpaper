@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.web.figure_text import render_figure
+from app.core.figure_text import render_figure
 from app.core.errors import StageNotInRun
 from app.models.branch_analysis import BranchId, BranchRole
 from app.models.citations import StageOutputCellCitation
