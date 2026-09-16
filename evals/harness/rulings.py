@@ -18,7 +18,7 @@ from evals.harness.validation import (
     describe_errors,
     find_repeated,
     join_problems,
-    validate_as_json,
+    read_as_json,
 )
 
 RULINGS_FILE = "rulings.json"
@@ -98,7 +98,11 @@ def _read_rulings(
 
 def _parse_raw_rulings(path: Path) -> list[JsonValue]:
     try:
-        return _RAW_RULINGS.validate_json(path.read_text(encoding="utf-8"))
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError as error:
+        raise RulingsInvalid(join_problems(path, ["no rulings file"])) from error
+    try:
+        return _RAW_RULINGS.validate_json(text)
     except ValidationError as error:
         raise RulingsInvalid(join_problems(path, describe_errors("rulings", (), error))) from error
 
@@ -116,7 +120,7 @@ def _read_ruling(
 ) -> Ruling[OutputT, ExpectedT] | list[str]:
     subject = _name_ruling(position, value)
     try:
-        raw = validate_as_json(_RawRuling, value)
+        raw = read_as_json(_RawRuling, value)
     except ValidationError as error:
         return describe_errors(subject, (), error)
     expected_outputs, problems = _read_expected_outputs(raw, definition.expected_model, subject)
@@ -124,7 +128,7 @@ def _read_ruling(
     if not problems:
         problems += _find_ruled_key_problems(raw.outcomes, expected_outputs, subject)
     try:
-        output = validate_as_json(definition.output_model, raw.output)
+        output = read_as_json(definition.output_model, raw.output)
     except ValidationError as error:
         return describe_errors(subject, ("output",), error) + problems
     if problems:
@@ -144,7 +148,7 @@ def _read_expected_outputs(
     problems: list[str] = []
     for position, value in enumerate(raw.expected_outputs):
         try:
-            expected_outputs.append(validate_as_json(expected_model, value))
+            expected_outputs.append(read_as_json(expected_model, value))
         except ValidationError as error:
             problems += describe_errors(subject, ("expected_outputs", position), error)
     if not raw.expected_outputs:

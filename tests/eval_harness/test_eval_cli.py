@@ -268,6 +268,80 @@ def test_cli_rulings_refuses_a_rulings_file_the_eval_cannot_read(
     assert capsys.readouterr().err == f"{rulings_path}: no rulings to compare\n"
 
 
+def test_cli_run_refuses_a_dataset_file_that_is_not_there(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    dataset_path = tmp_path / _EVAL_NAME / "dataset.json"
+
+    exit_code = main(
+        ["run", _EVAL_NAME, "--loads", "2"], evals_root=tmp_path, resolve_eval=resolve_fixed_output
+    )
+
+    assert exit_code == 2
+    assert capsys.readouterr().err == f"{dataset_path}: no dataset file\n"
+
+
+def test_cli_run_refuses_a_dataset_file_that_is_not_valid_json(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    eval_dir = tmp_path / _EVAL_NAME
+    eval_dir.mkdir()
+    dataset_path = eval_dir / "dataset.json"
+    dataset_path.write_text("{", encoding="utf-8")
+
+    exit_code = main(
+        ["run", _EVAL_NAME, "--loads", "2"], evals_root=tmp_path, resolve_eval=resolve_fixed_output
+    )
+
+    printed = capsys.readouterr().err
+    assert exit_code == 2
+    assert printed.startswith(f"{dataset_path}: dataset: Invalid JSON")
+    assert printed.count("\n") == 1
+
+
+def test_cli_rulings_refuses_a_rulings_file_that_is_not_there(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rulings_path = tmp_path / _EVAL_NAME / "rulings.json"
+
+    exit_code = main(
+        ["rulings", _EVAL_NAME], evals_root=tmp_path, resolve_eval=resolve_fixed_output
+    )
+
+    assert exit_code == 2
+    assert capsys.readouterr().err == f"{rulings_path}: no rulings file\n"
+
+
+def test_cli_judge_refuses_a_pass_folder_with_no_pass_record(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    pass_dir = tmp_path / _EVAL_NAME / "passes" / _PASS_ID
+
+    exit_code = main(
+        ["judge", str(pass_dir)], evals_root=tmp_path, resolve_eval=resolve_fixed_output
+    )
+
+    assert exit_code == 2
+    assert capsys.readouterr().err == f"{pass_dir / 'pass.json'}: no pass record\n"
+
+
+def test_cli_report_refuses_a_pass_record_that_does_not_validate(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    pass_dir = tmp_path / _EVAL_NAME / "passes" / _PASS_ID
+    pass_dir.mkdir(parents=True)
+    (pass_dir / "pass.json").write_text("{}", encoding="utf-8")
+
+    exit_code = main(
+        ["report", str(pass_dir)], evals_root=tmp_path, resolve_eval=resolve_fixed_output
+    )
+
+    printed = capsys.readouterr().err
+    assert exit_code == 2
+    assert printed.startswith(f"{pass_dir / 'pass.json'}: pass eval: Field required")
+    assert printed.count("\n") == 1
+
+
 @pytest.mark.parametrize(
     "refusal",
     [refusal_type("the harness refused, in one line") for refusal_type in cli.REFUSALS],

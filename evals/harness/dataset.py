@@ -12,7 +12,7 @@ from evals.harness.validation import (
     describe_errors,
     find_repeated,
     join_problems,
-    validate_as_json,
+    read_as_json,
 )
 
 DATASET_FILE = "dataset.json"
@@ -67,7 +67,11 @@ class _RawCase(BaseModel):
 
 def _parse_raw_dataset(path: Path) -> _RawDataset:
     try:
-        return _RawDataset.model_validate_json(path.read_text(encoding="utf-8"))
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError as error:
+        raise DatasetInvalid(join_problems(path, ["no dataset file"])) from error
+    try:
+        return _RawDataset.model_validate_json(text)
     except ValidationError as error:
         problems = describe_errors("dataset", (), error)
         raise DatasetInvalid(join_problems(path, problems)) from error
@@ -126,12 +130,12 @@ def _read_case(
 ) -> Case[InputT, ExpectedT] | list[str]:
     subject = _name_case(position, case_value)
     try:
-        raw_case = validate_as_json(_RawCase, case_value)
+        raw_case = read_as_json(_RawCase, case_value)
     except ValidationError as error:
         return describe_errors(subject, (), error)
     expected_outputs, problems = _read_expected_outputs(raw_case, expected_model, subject)
     try:
-        case_input = validate_as_json(input_model, raw_case.input)
+        case_input = read_as_json(input_model, raw_case.input)
     except ValidationError as error:
         return describe_errors(subject, ("input",), error) + problems
     if problems:
@@ -146,7 +150,7 @@ def _read_expected_outputs(
     problems: list[str] = []
     for position, value in enumerate(raw_case.expected_outputs):
         try:
-            expected_outputs.append(validate_as_json(expected_model, value))
+            expected_outputs.append(read_as_json(expected_model, value))
         except ValidationError as error:
             problems += describe_errors(subject, ("expected_outputs", position), error)
     if not raw_case.expected_outputs:

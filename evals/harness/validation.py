@@ -11,7 +11,7 @@ from pydantic import BaseModel, JsonValue, ValidationError
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
 
-def validate_as_json(model: type[ModelT], value: JsonValue) -> ModelT:
+def read_as_json(model: type[ModelT], value: JsonValue) -> ModelT:
     return model.model_validate_json(json.dumps(value))
 
 

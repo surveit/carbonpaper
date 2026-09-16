@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
 from evals.harness.definition import Judgement, OutputT
-from evals.harness.validation import inflect
+from evals.harness.validation import describe_errors, inflect, join_problems
 
 
 class OutputStored(BaseModel):
@@ -61,6 +61,10 @@ class PassFolderExists(Exception):
 
 
 class PassIncomplete(Exception):
+    pass
+
+
+class PassRecordUnreadable(Exception):
     pass
 
 
@@ -118,7 +122,17 @@ class PassFolder:
         os.replace(partial_path, self._record_path)
 
     def read_record(self) -> PassRecord:
-        return PassRecord.model_validate_json(self._record_path.read_text(encoding="utf-8"))
+        try:
+            text = self._record_path.read_text(encoding="utf-8")
+        except FileNotFoundError as error:
+            raise PassRecordUnreadable(
+                join_problems(self._record_path, ["no pass record"])
+            ) from error
+        try:
+            return PassRecord.model_validate_json(text)
+        except ValidationError as error:
+            problems = describe_errors("pass", (), error)
+            raise PassRecordUnreadable(join_problems(self._record_path, problems)) from error
 
     def write_output(self, case_id: str, attempt: int, output: BaseModel) -> None:
         path = self._output_path(case_id, attempt)

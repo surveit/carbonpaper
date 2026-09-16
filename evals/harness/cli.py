@@ -15,7 +15,12 @@ from evals.harness.orchestration import (
     LoadCountNotConfirmed,
     RepeatsInvalid,
 )
-from evals.harness.passes import PassFolder, PassFolderExists, PassIncomplete
+from evals.harness.passes import (
+    PassFolder,
+    PassFolderExists,
+    PassIncomplete,
+    PassRecordUnreadable,
+)
 from evals.harness.report import (
     CaseNotInDataset,
     EarlierPassInvalid,
@@ -42,6 +47,27 @@ def main(
     except REFUSALS as refusal:
         print(refusal, file=sys.stderr)
         return 2
+
+
+REFUSALS: tuple[type[Exception], ...] = (
+    CaseNotInDataset,
+    CaseSelectionInvalid,
+    CodeCommitUnreadable,
+    DatasetInvalid,
+    EarlierPassInvalid,
+    EvalDefinitionInvalid,
+    EvalNotFound,
+    JudgementInvalid,
+    JudgementMissing,
+    JudgementOutcomeUnknown,
+    LoadCountNotConfirmed,
+    PassFolderExists,
+    PassIncomplete,
+    PassRecordUnreadable,
+    RepeatsInvalid,
+    RulingNotJudged,
+    RulingsInvalid,
+)
 
 
 def _run_a_pass(arguments: argparse.Namespace, evals_root: Path, resolve_eval: ResolveEval) -> int:
@@ -117,25 +143,6 @@ def _describe_disagreement(disagreement: Disagreement) -> str:
         f"judge {disagreement.judge}: {disagreement.note}"
     )
 
-
-REFUSALS: tuple[type[Exception], ...] = (
-    CaseNotInDataset,
-    CaseSelectionInvalid,
-    CodeCommitUnreadable,
-    DatasetInvalid,
-    EarlierPassInvalid,
-    EvalDefinitionInvalid,
-    EvalNotFound,
-    JudgementInvalid,
-    JudgementMissing,
-    JudgementOutcomeUnknown,
-    LoadCountNotConfirmed,
-    PassFolderExists,
-    PassIncomplete,
-    RepeatsInvalid,
-    RulingNotJudged,
-    RulingsInvalid,
-)
 
 _COMMANDS: dict[str, Callable[[argparse.Namespace, Path, ResolveEval], int]] = {
     "run": _run_a_pass,
