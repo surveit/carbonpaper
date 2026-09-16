@@ -104,7 +104,7 @@ validated together.
 ## `app/reviewer/` — a claim's evidence bundle as text
 `evidence.py` renders the `EvidenceBundle` that `app/services/claim_review.py` builds:
 `render_evidence_bundle` (the claim, then the pool) and `render_evidence_pool` (only what the
-run holds, which the review store checks each challenge's evidence against). Only
+run holds, which is what a reviewer reads). Only
 `app.services` imports it — a contract in `pyproject.toml`.
 
 ## `app/web/` — the web layer  → `app/AGENTS.md`

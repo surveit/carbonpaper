@@ -4,7 +4,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import ClassVar
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.core.errors import ClaimReviewIsImmutable
 from app.core.ids import ID
@@ -52,14 +52,20 @@ class Challenge(_Base):
     )
     text: str = Field(description="The challenge in one sentence, addressed to the claim owner.")
     justification: str = Field(description="What in the run makes it stick, in one sentence.")
-    evidence: str = Field(description="A figure or phrase copied word for word from the evidence pool.")
     citations: list[ChallengeCitation] = Field(
         default_factory=list,
-        description="The pieces of the run the evidence sits in, so a reader can open them.",
+        description="The pieces of the run it rests on, so a reader can open every one.",
     )
     severity: int = Field(
         ge=SEVERITY_FLOOR, le=SEVERITY_CEILING, description=_SEVERITY_DESCRIPTION,
     )
+
+    @model_validator(mode="after")
+    def _validate_cited(self) -> Challenge:
+        # A gap IS the absence of footing, so it is the one kind with nothing to point at.
+        if self.kind != ChallengeKind.gap and not self.citations:
+            raise ValueError(f"a {self.kind} challenge cites nothing in the run")
+        return self
 
 
 class ClaimReview(PersistedModel):

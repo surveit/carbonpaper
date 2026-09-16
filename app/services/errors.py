@@ -42,7 +42,7 @@ class ClaimRefused(ValueError):
 
 
 class ClaimReviewRefused(ValueError):
-    """Nothing is stored unless every challenge's evidence is on a line of the pool."""
+    """Nothing is stored unless every challenge cites a piece of the run that holds it."""
 
     def __init__(self, refusals: list[str]) -> None:
         super().__init__("; ".join(refusals))

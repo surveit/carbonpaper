@@ -1,7 +1,6 @@
 """Everything one run holds about a cited cell, and the single review its reviewers leave."""
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from itertools import combinations
 
@@ -30,7 +29,6 @@ from app.models.stage import StageType
 from app.models.terms import render_terms
 from app.models.workflow import Workflow, find_stages_upstream_of, sort_stages_by_dependency
 from app.models.workflow_stage import WorkflowStage
-from app.reviewer.evidence import render_evidence_pool
 from app.services import claims as claims_service
 from app.services import run as run_service
 from app.services import scope as scope_service
@@ -77,9 +75,7 @@ def store_claim_review(project_id: ID, claim_id: ID, *, claim_parts: list[ClaimP
     if load_claim_review(claim_id) is not None:
         raise ClaimReviewRefused(
             [f"claim {claim_id} already has a review; a re-review is a new claim"])
-    pool = render_evidence_pool(build_evidence_bundle(project_id, claim_id))
     issues = [*find_claim_part_issues(claim_parts, claim.text),
-              *find_unprinted_evidence(challenges, pool),
               *find_challenge_issues(challenges, len(claim_parts)),
               *find_citation_issues(project_id, cited.run_id, challenges)]
     if issues:
@@ -99,15 +95,6 @@ def find_claim_part_issues(claim_parts: list[ClaimPart], text: str) -> list[str]
         for index, (part, span) in enumerate(zip(claim_parts, spans)) if span is None
     ]
     return missing + _find_overlapping_claim_parts(spans)
-
-
-def find_unprinted_evidence(challenges: list[Challenge], corpus: str) -> list[str]:
-    return [
-        f"{_name_challenge(index, challenge)}: evidence {challenge.evidence!r} is on no line "
-        "of the pool"
-        for index, challenge in enumerate(challenges)
-        if not _read_whether_the_corpus_spells(corpus, challenge.evidence)
-    ]
 
 
 def find_challenge_issues(challenges: list[Challenge], claim_part_count: int) -> list[str]:
@@ -193,14 +180,6 @@ def _measure_stage_columns(project_id: ID, run_id: ID,
 def _read_stage_code(placed: WorkflowStage) -> str:
     block = placed.stage.find_authored_code_block()
     return str(block.code) if block is not None else ""
-
-
-def _read_whether_the_corpus_spells(corpus: str, evidence: str) -> bool:
-    """At token boundaries: `220` inside `2200` is not printed."""
-    if not evidence:
-        return False
-    pattern = rf"(?<!\w)(?<!\d[,.]){re.escape(evidence)}(?![,.]\d)(?!\w)"
-    return re.search(pattern, corpus) is not None
 
 
 def _require_cell_citation(citation: PublishedCitation) -> StageOutputCellCitation:

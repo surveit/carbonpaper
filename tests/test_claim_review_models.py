@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.models.citations import StageOutputCellCitation
+from app.models.citations import StageCitation, StageOutputCellCitation
 from app.models.claim_review import (
     ChallengesAnswer,
     ClaimPartsAnswer,
@@ -23,8 +23,8 @@ from app.models.records.claim_review import (
 def _challenge(**overrides: object) -> Challenge:
     fields = dict(kind=ChallengeKind.coverage, claim_part_index=0,
                   text="Blank outcomes count as unknown.",
-                  justification="28% of records are blank.", evidence="28% of records",
-                  severity=3)
+                  justification="28% of records are blank.",
+                  citations=[StageCitation(stage_id="outcomes")], severity=3)
     return Challenge.model_validate({**fields, **overrides})
 
 
@@ -54,8 +54,7 @@ def test_a_claim_part_needs_a_phrase_and_counts_occurrences_from_one():
 
 def test_a_challenge_carries_exactly_these_fields_in_this_order():
     assert list(Challenge.model_fields) == [
-        "kind", "claim_part_index", "text", "justification", "evidence", "citations",
-        "severity"]
+        "kind", "claim_part_index", "text", "justification", "citations", "severity"]
 
 
 def test_severity_runs_from_zero_to_three_and_each_has_a_word():
