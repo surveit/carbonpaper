@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from arch._helpers import find_imported_modules, parse_module
+from arch._helpers import find_imported_modules, find_relative_import_targets, parse_module
 from arch.scope import find_source_files_under
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -47,20 +47,6 @@ def is_allowed_harness_import(module: str) -> bool:
         or module == _HARNESS_PACKAGE
         or module.startswith(f"{_HARNESS_PACKAGE}.")
     )
-
-
-def find_relative_import_targets(tree: ast.Module, package: tuple[str, ...]) -> set[str]:
-    targets: set[str] = set()
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.ImportFrom) or node.level == 0:
-            continue
-        names = [node.module] if node.module else [alias.name for alias in node.names]
-        if node.level > len(package):
-            targets |= {"." * node.level + name for name in names}
-            continue
-        base = package[: len(package) - node.level + 1]
-        targets |= {".".join((*base, name)) for name in names}
-    return targets
 
 
 # --- unit tests for the checker, on inline snippets (red + green) ---------

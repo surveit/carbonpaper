@@ -3,12 +3,16 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from arch._helpers import parse_module
+import pytest
+
+from arch._helpers import find_relative_import_targets, parse_module
 from arch.scope import find_source_files_under
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _EVALS_ROOT = _REPO_ROOT / "evals"
 _SAVED_RUNS_CLI = "evals/runs/cli.py"
+_SAVED_RUNS_CLI_MODULE = "evals.runs.cli"
+_SAVED_RUNS_ENTRYPOINT = "evals/runs/__main__.py"
 # app.seeds.bootstrap re-exports store_config's document-store configurer.
 _CONFIGURER_MODULES = ("app.core.store_config", "app.seeds.bootstrap")
 _COMPOSITION_ROOTS = ("app.main", "app.cli", "app.seeds.__main__")
@@ -27,6 +31,15 @@ def test_only_the_saved_runs_cli_points_the_app_at_the_real_stores() -> None:
         f"composition root ({', '.join(_COMPOSITION_ROOTS)}), or name a configurer "
         f"({', '.join(_CONFIGURERS)}) — everything else works in a throwaway workspace, never "
         "the machine's real stores:\n  " + "\n  ".join(offenders)
+    )
+
+
+def test_only_the_saved_runs_entrypoint_imports_the_saved_runs_cli() -> None:
+    offenders = find_saved_runs_cli_imports(find_source_files_under(_EVALS_ROOT), _REPO_ROOT)
+    assert not offenders, (
+        f"{_SAVED_RUNS_CLI} is the one file under evals/ allowed to point the app at the "
+        f"machine's real stores, so only {_SAVED_RUNS_ENTRYPOINT} may import it — every other "
+        "importer would reach those stores through it:\n  " + "\n  ".join(offenders)
     )
 
 
@@ -51,6 +64,33 @@ def find_real_store_reaches_in(tree: ast.Module) -> list[tuple[int, str]]:
     )
 
 
+def find_saved_runs_cli_imports(paths: list[Path], repo_root: Path) -> list[str]:
+    offenders: list[str] = []
+    for path in paths:
+        relative = path.relative_to(repo_root)
+        if relative.as_posix() == _SAVED_RUNS_ENTRYPOINT:
+            continue
+        offenders += [
+            f"{relative.as_posix()}:{lineno}  {imported}"
+            for lineno, imported in find_saved_runs_cli_imports_in(
+                parse_module(path), relative.parent.parts
+            )
+        ]
+    return offenders
+
+
+def find_saved_runs_cli_imports_in(
+    tree: ast.Module, package: tuple[str, ...]
+) -> list[tuple[int, str]]:
+    return sorted({
+        (node.lineno, imported)
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        for imported in _find_imported_paths_inside_evals(node, package)
+        if imported == _SAVED_RUNS_CLI_MODULE
+    })
+
+
 def _find_protected_imports(node: ast.AST) -> list[tuple[int, str]]:
     if not isinstance(node, (ast.Import, ast.ImportFrom)):
         return []
@@ -68,6 +108,15 @@ def _find_imported_paths(node: ast.Import | ast.ImportFrom) -> list[str]:
     if node.level or node.module is None:
         return []  # relative: resolves inside evals/, never to app/
     return [node.module, *(f"{node.module}.{alias.name}" for alias in node.names)]
+
+
+def _find_imported_paths_inside_evals(
+    node: ast.Import | ast.ImportFrom, package: tuple[str, ...]
+) -> list[str]:
+    if not isinstance(node, ast.ImportFrom) or not node.level:
+        return _find_imported_paths(node)
+    resolved = find_relative_import_targets(ast.Module(body=[node], type_ignores=[]), package)
+    return [*resolved, *(f"{target}.{alias.name}" for target in resolved for alias in node.names)]
 
 
 def _find_configurer_names(node: ast.AST) -> list[tuple[int, str]]:
@@ -175,4 +224,58 @@ def test_find_real_store_reaches_exempts_the_saved_runs_cli_by_its_path(tmp_path
         "evals/harness/cli.py:2  configure_default_document_store",
         "evals/runs/_probe.py:1  app.core.store_config",
         "evals/runs/_probe.py:2  configure_default_document_store",
+    ]
+
+
+def test_find_saved_runs_cli_imports_in_flags_every_absolute_import_form() -> None:
+    tree = ast.parse(
+        "import evals.runs.cli\n"
+        "import evals.runs.cli as saved_runs\n"
+        "from evals.runs.cli import main\n"
+        "from evals.runs import cli\n"
+    )
+    assert find_saved_runs_cli_imports_in(tree, ("evals", "runs")) == [
+        (1, "evals.runs.cli"),
+        (2, "evals.runs.cli"),
+        (3, "evals.runs.cli"),
+        (4, "evals.runs.cli"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("source", "package"),
+    [
+        ("from . import cli\nfrom .cli import main\n", ("evals", "runs")),
+        ("from ..runs import cli\nfrom ..runs.cli import main\n", ("evals", "harness")),
+    ],
+    ids=["inside the runs package", "from a sibling package"],
+)
+def test_find_saved_runs_cli_imports_in_resolves_a_relative_import_against_its_package(
+    source: str, package: tuple[str, ...]
+) -> None:
+    assert find_saved_runs_cli_imports_in(ast.parse(source), package) == [
+        (1, "evals.runs.cli"),
+        (2, "evals.runs.cli"),
+    ]
+
+
+def test_find_saved_runs_cli_imports_in_ignores_the_other_modules_of_the_runs_package() -> None:
+    tree = ast.parse(
+        "from evals.runs.capture import capture_run\n"
+        "from evals.runs import rebuild, recipe\n"
+        "from . import workspace\n"
+        "from .rebuild import rebuild_run\n"
+        "import evals.harness\n"
+    )
+    assert find_saved_runs_cli_imports_in(tree, ("evals", "runs")) == []
+
+
+def test_find_saved_runs_cli_imports_exempts_the_entrypoint_by_its_path(tmp_path: Path) -> None:
+    for relative in (_SAVED_RUNS_ENTRYPOINT, "evals/runs/probe.py", "evals/harness/__main__.py"):
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("from evals.runs.cli import main\n", encoding="utf-8")
+    assert find_saved_runs_cli_imports(sorted(tmp_path.glob("evals/*/*.py")), tmp_path) == [
+        "evals/harness/__main__.py:1  evals.runs.cli",
+        "evals/runs/probe.py:1  evals.runs.cli",
     ]

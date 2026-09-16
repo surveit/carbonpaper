@@ -59,6 +59,20 @@ def find_imported_modules(tree: ast.Module) -> set[str]:
     return modules
 
 
+def find_relative_import_targets(tree: ast.Module, package: tuple[str, ...]) -> set[str]:
+    targets: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom) or node.level == 0:
+            continue
+        names = [node.module] if node.module else [alias.name for alias in node.names]
+        if node.level > len(package):
+            targets |= {"." * node.level + name for name in names}
+            continue
+        base = package[: len(package) - node.level + 1]
+        targets |= {".".join((*base, name)) for name in names}
+    return targets
+
+
 def find_dict_key_uses(tree: ast.Module, keys: set[str]) -> list[tuple[int, str]]:
     uses: list[tuple[int, str]] = []
     for node in ast.walk(tree):
