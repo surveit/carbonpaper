@@ -61,6 +61,7 @@ class RunRecipe(BaseModel):
 
     workflow_run_id: str
     captured: CapturedFrom
+    archive_sha256: str
     inputs: list[RecipeInput]
     limits: dict[str, int]
     offsets: dict[str, int]

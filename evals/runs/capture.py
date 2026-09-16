@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import subprocess
 from collections import Counter
 from datetime import datetime
@@ -46,16 +47,18 @@ def capture_run(
     _validate_review_decisions_can_travel(project_id, workflow_version, manifest)
     inputs = [_record_input(binding) for binding in read_input_bindings(manifest.to_dict())]
     figures = _record_figures(run_id)
+    archive = export_project_archive(project_id)
     recipe = RunRecipe(
         workflow_run_id=run_id,
         captured=_record_captured_from(project_id, workflow_version, repo_root),
+        archive_sha256=hashlib.sha256(archive).hexdigest(),
         inputs=inputs,
         limits=dict(manifest.parameters.limits),
         offsets=dict(manifest.parameters.offsets),
         ends=manifest.status,
         figures=figures,
     )
-    _write_saved_run(run_dir, export_project_archive(project_id), recipe)
+    _write_saved_run(run_dir, archive, recipe)
     return run_dir
 
 

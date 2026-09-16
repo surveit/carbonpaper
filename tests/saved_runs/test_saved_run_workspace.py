@@ -136,6 +136,7 @@ def _build_recipe() -> RunRecipe:
             captured_at="2026-09-15T12:00:00+00:00",
             code_commit="abc1234",
         ),
+        archive_sha256="c" * 64,
         inputs=[
             RecipeInput(stage_id="load", filename="données.csv", bytes=12, sha256="a" * 64, at=SuppliedLocation()),
             RecipeInput(

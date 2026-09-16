@@ -16,7 +16,6 @@ from app.models.claims import StageOutputCellCitation
 from app.models.records.run_manifest import RunManifest
 from app.models.records.workflow_output import WorkflowOutput
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
-from app.models.stages.stage_base import StageType
 from app.runtime import options
 from app.services.project import ProjectImportReport, import_project_archive
 from app.services.run import execute, read_run_manifest
@@ -42,6 +41,18 @@ class RebuiltRun(BaseModel):
     run_id: str
 
 
+class RebuiltRunRefused(RunRefused):
+    def __init__(self, rebuilt: RebuiltRun, reasons: list[str]) -> None:
+        super().__init__(reasons)
+        self.rebuilt = rebuilt
+
+    def __str__(self) -> str:
+        return (
+            f"refused rebuilt run '{self.rebuilt.run_id}' of project "
+            f"'{self.rebuilt.project_id}':\n{super().__str__()}"
+        )
+
+
 class _VerifiedInput(NamedTuple):
     recorded: RecipeInput
     content: bytes
@@ -49,34 +60,33 @@ class _VerifiedInput(NamedTuple):
 
 def rebuild_run(run_dir: Path, *, repo_root: Path, inputs_dir: Path | None) -> RebuiltRun:
     recipe = read_recipe(run_dir)
-    inputs = _read_verified_inputs(recipe.inputs, repo_root, inputs_dir)
-    project_id = _import_archive(run_dir / ARCHIVE_FILE)
+    archive = (run_dir / ARCHIVE_FILE).read_bytes()
+    inputs = _verify_before_import(recipe, archive, repo_root, inputs_dir)
+    project_id = _import_archive(archive)
     bindings = _store_and_bind_inputs(project_id, inputs)
     with _switch_off_models():
         returned = execute(
             project_id, bindings=bindings, limits=recipe.limits, offsets=recipe.offsets
         )
-    run_id = str(returned["run_id"])
-    _validate_rebuild_matches_recipe(recipe, read_run_manifest(project_id, run_id))
-    return RebuiltRun(project_id=project_id, run_id=run_id)
+    rebuilt = RebuiltRun(project_id=project_id, run_id=str(returned["run_id"]))
+    _validate_rebuild_matches_recipe(recipe, rebuilt)
+    return rebuilt
 
 
 def find_model_spend(manifest: RunManifest) -> list[str]:
     return [
         record.stage_id
         for record in manifest.stage_records
-        if record.type == StageType.llm_transform
-        and record.llm_usage is not None
-        and record.llm_usage.calls > 0
+        if record.llm_usage is not None and record.llm_usage.calls > 0
     ]
 
 
-def _read_verified_inputs(
-    recorded_inputs: list[RecipeInput], repo_root: Path, inputs_dir: Path | None
+def _verify_before_import(
+    recipe: RunRecipe, archive: bytes, repo_root: Path, inputs_dir: Path | None
 ) -> list[_VerifiedInput]:
+    reasons = _find_archive_mismatch(recipe.archive_sha256, archive)
     verified: list[_VerifiedInput] = []
-    reasons: list[str] = []
-    for recorded in recorded_inputs:
+    for recorded in recipe.inputs:
         try:
             verified.append(_read_verified_input(recorded, repo_root, inputs_dir))
         except RunRefused as refused:
@@ -84,6 +94,13 @@ def _read_verified_inputs(
     if reasons:
         raise RunRefused(reasons)
     return verified
+
+
+def _find_archive_mismatch(recorded: str, archive: bytes) -> list[str]:
+    digest = hashlib.sha256(archive).hexdigest()
+    if digest == recorded:
+        return []
+    return [f"{ARCHIVE_FILE} has sha256 {digest}, but the recipe recorded sha256 {recorded}"]
 
 
 def _read_verified_input(
@@ -101,24 +118,22 @@ def _read_verified_input(
 
 def _locate_input(recorded: RecipeInput, repo_root: Path, inputs_dir: Path | None) -> Path:
     if isinstance(recorded.at, RepoPathLocation):
-        return _locate_under_repo_root(recorded, recorded.at, repo_root)
+        return _locate_under(recorded, recorded.at.path, repo_root, "repo root")
     if inputs_dir is None:
         raise RunRefused([
             f"{_describe_input(recorded)} is supplied at rebuild, but no inputs folder was "
             "given to look for it in"
         ])
-    return inputs_dir / recorded.filename
+    return _locate_under(recorded, recorded.filename, inputs_dir, "inputs folder")
 
 
-def _locate_under_repo_root(
-    recorded: RecipeInput, location: RepoPathLocation, repo_root: Path
-) -> Path:
-    root = repo_root.resolve()
-    path = (root / location.path).resolve()
-    if not path.is_relative_to(root):
+def _locate_under(recorded: RecipeInput, named: str, root: Path, root_label: str) -> Path:
+    resolved_root = root.resolve()
+    path = (resolved_root / named).resolve()
+    if not path.is_relative_to(resolved_root):
         raise RunRefused([
-            f"{_describe_input(recorded)} names repo path '{location.path}', which resolves "
-            f"to {path}, outside the repo root {root}"
+            f"{_describe_input(recorded)} names '{named}', which resolves to {path}, outside "
+            f"the {root_label} {resolved_root}"
         ])
     return path
 
@@ -143,8 +158,8 @@ def _describe_input(recorded: RecipeInput) -> str:
     return f"input '{recorded.filename}' of stage '{recorded.stage_id}'"
 
 
-def _import_archive(archive: Path) -> str:
-    report = import_project_archive(archive.read_bytes())
+def _import_archive(archive: bytes) -> str:
+    report = import_project_archive(archive)
     _validate_cache_fits_workflow(report)
     return report.project_id
 
@@ -185,20 +200,29 @@ def _report_no_agent() -> bool:
     return False
 
 
-def _validate_rebuild_matches_recipe(recipe: RunRecipe, manifest: RunManifest) -> None:
+def _validate_rebuild_matches_recipe(recipe: RunRecipe, rebuilt: RebuiltRun) -> None:
+    manifest = read_run_manifest(rebuilt.project_id, rebuilt.run_id)
     reasons = [
         *_find_status_difference(recipe.ends, manifest),
         *_describe_model_spend(manifest),
-        *_find_figure_differences(recipe.figures, _read_published_figures(manifest.run_id)),
+        *_find_figure_differences(recipe.figures, _read_published_figures(rebuilt.run_id)),
     ]
     if reasons:
-        raise RunRefused(reasons)
+        raise RebuiltRunRefused(rebuilt, reasons)
 
 
 def _find_status_difference(ends: RunStatus, manifest: RunManifest) -> list[str]:
     if manifest.status == ends:
         return []
-    return [f"the rebuilt run ended '{manifest.status}', but the recipe recorded '{ends}'"]
+    failed_stages = "".join(
+        f"; stage '{record.stage_id}' failed with {record.error.type}: {record.error.message}"
+        for record in manifest.stage_records
+        if record.error is not None
+    )
+    return [
+        f"the rebuilt run ended '{manifest.status}', but the recipe recorded '{ends}'"
+        f"{failed_stages}"
+    ]
 
 
 def _describe_model_spend(manifest: RunManifest) -> list[str]:

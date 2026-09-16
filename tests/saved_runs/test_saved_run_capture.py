@@ -119,6 +119,13 @@ def test_capture_writes_the_archive_beside_the_recipe(tmp_path: Path) -> None:
     assert read_recipe(saved).workflow_run_id == run.run_id
 
 
+def test_capture_records_the_sha256_of_the_archive_it_writes(tmp_path: Path) -> None:
+    run = create_tiny_run()
+    saved = _capture(tmp_path, run.project_id, run.run_id)
+    written = hashlib.sha256((saved / ARCHIVE_FILE).read_bytes()).hexdigest()
+    assert read_recipe(saved).archive_sha256 == written
+
+
 def test_capture_refuses_a_run_still_going(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project_id = create_tiny_project()
     monkeypatch.setattr("app.services.run._run_in_background", lambda target, *args: None)

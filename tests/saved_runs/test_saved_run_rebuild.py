@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import zipfile
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
@@ -23,10 +24,16 @@ from app.runtime.options import require_agent_backend
 from app.services import project
 from app.services.loader import save_stages
 from app.services.project import export_project_archive
-from app.services.run import read_run_manifest
+from app.services.run import list_every_run_entry, read_run_manifest
 from app.services.versioning import find_latest_version_id, load_version_stages
 from evals.runs.capture import capture_run
-from evals.runs.rebuild import RebuiltRun, RunRefused, find_model_spend, rebuild_run
+from evals.runs.rebuild import (
+    RebuiltRun,
+    RebuiltRunRefused,
+    RunRefused,
+    find_model_spend,
+    rebuild_run,
+)
 from evals.runs.recipe import (
     ARCHIVE_FILE,
     RecipeFigure,
@@ -59,12 +66,24 @@ _TINY_ROW_COUNT = len(TINY_ROWS.splitlines()) - 1
 
 def test_a_rebuilt_run_reproduces_the_captured_status_and_figures(tmp_path: Path) -> None:
     saved = _capture(tmp_path, create_tiny_run(limits={LOAD_STAGE: 1}, offsets={LOAD_STAGE: 1}))
-    recipe = read_recipe(saved)
     rebuilt = _rebuild(tmp_path, saved, _write_inputs(tmp_path, {ROWS_FILENAME: TINY_ROWS}))
-    assert read_run_manifest(rebuilt.project_id, rebuilt.run_id).status == recipe.ends
-    assert _read_published_values(rebuilt.run_id) == {
-        figure.slug: [figure.value] for figure in recipe.figures
-    }
+    recipe = read_recipe(saved)
+    assert recipe.ends == RunStatus.OK
+    assert read_run_manifest(rebuilt.project_id, rebuilt.run_id).status == RunStatus.OK
+    # The window keeps one row, globex with amount 4: a count of 1, and 4 as sum and maximum.
+    worked_out = [
+        ("amount-total", "amount_total", 4),
+        ("largest-amount", "largest_amount", 4),
+        ("row-count", "row_count", 1),
+    ]
+    assert [(figure.slug, figure.value) for figure in recipe.figures] == [
+        (slug, value) for slug, _column, value in worked_out
+    ]
+    published = [(output.slug, output.citation) for output in WorkflowOutput.list()]
+    assert sorted(published, key=lambda pair: pair[0]) == [
+        (slug, _cite_totals_cell(rebuilt.run_id, column, value))
+        for slug, column, value in worked_out
+    ]
 
 
 def test_a_rebuilt_run_replays_the_review_decisions_its_archive_carries(tmp_path: Path) -> None:
@@ -72,6 +91,19 @@ def test_a_rebuilt_run_replays_the_review_decisions_its_archive_carries(tmp_path
     rebuilt = _rebuild(tmp_path, saved, _write_inputs(tmp_path, {ROWS_FILENAME: TINY_ROWS}))
     review = read_run_manifest(rebuilt.project_id, rebuilt.run_id).find_stage_record(REVIEW_STAGE)
     assert review is not None and review.cached_rows == _TINY_ROW_COUNT
+
+
+def test_rebuild_refuses_an_archive_other_than_the_captured_one_before_importing_it(
+    tmp_path: Path,
+) -> None:
+    saved = _capture(tmp_path, create_tiny_run())
+    with zipfile.ZipFile(saved / ARCHIVE_FILE, "a") as archive:
+        archive.writestr("added_after_capture.txt", b"not part of the capture")
+    found = hashlib.sha256((saved / ARCHIVE_FILE).read_bytes()).hexdigest()
+    inputs_dir = _write_inputs(tmp_path, {ROWS_FILENAME: TINY_ROWS})
+    [reason] = _collect_refusal_reasons(tmp_path, saved, inputs_dir)
+    assert read_recipe(saved).archive_sha256 in reason and found in reason
+    assert project.list_projects() == []
 
 
 @pytest.mark.parametrize(
@@ -101,8 +133,10 @@ def test_rebuild_refuses_a_supplied_input_it_cannot_find_naming_where_it_looked(
 ) -> None:
     saved = _capture(tmp_path, create_tiny_run())
     inputs_dir = _write_inputs(tmp_path, {})
-    [reason] = _collect_refusal_reasons(tmp_path, saved, inputs_dir)
-    assert str(inputs_dir / ROWS_FILENAME) in reason
+    # Named through '..', so only a reason showing the resolved path passes.
+    given = tmp_path / "saved" / ".." / inputs_dir.name
+    [reason] = _collect_refusal_reasons(tmp_path, saved, given)
+    assert f"is not at {(inputs_dir / ROWS_FILENAME).resolve()}," in reason
 
 
 def test_rebuild_refuses_a_supplied_input_when_given_no_inputs_folder(tmp_path: Path) -> None:
@@ -111,12 +145,29 @@ def test_rebuild_refuses_a_supplied_input_when_given_no_inputs_folder(tmp_path: 
     assert f"'{ROWS_FILENAME}'" in reason and "no inputs folder" in reason
 
 
+@pytest.mark.parametrize(
+    "name_the_file_at",
+    [lambda outside: str(outside), lambda outside: f"../{outside.parent.name}/{outside.name}"],
+    ids=["absolute", "through the parent folder"],
+)
+def test_rebuild_refuses_a_supplied_filename_that_leaves_the_inputs_folder(
+    tmp_path: Path, name_the_file_at: Callable[[Path], str]
+) -> None:
+    saved = _capture(tmp_path, create_tiny_run())
+    outside = tmp_path / "elsewhere" / ROWS_FILENAME
+    outside.parent.mkdir()
+    outside.write_bytes(TINY_ROWS)
+    _update_recipe_inputs(saved, {"filename": name_the_file_at(outside)})
+    [reason] = _collect_refusal_reasons(tmp_path, saved, _write_inputs(tmp_path, {}))
+    assert f"resolves to {outside.resolve()}," in reason and "outside the inputs folder" in reason
+
+
 def test_rebuild_refuses_a_repo_path_input_outside_the_repo_root(tmp_path: Path) -> None:
     saved = _capture(tmp_path, create_tiny_run())
     outside = _write_inputs(tmp_path, {ROWS_FILENAME: TINY_ROWS}) / ROWS_FILENAME
     repo_root = tmp_path / "repo"
     repo_root.mkdir()
-    _place_recipe_inputs_at(saved, RepoPathLocation(path=f"../inputs/{ROWS_FILENAME}"))
+    _update_recipe_inputs(saved, {"at": RepoPathLocation(path=f"../inputs/{ROWS_FILENAME}")})
     configure_throwaway_workspace(tmp_path / "ws")
     with pytest.raises(RunRefused) as refused:
         rebuild_run(saved, repo_root=repo_root, inputs_dir=None)
@@ -129,7 +180,7 @@ def test_rebuild_reads_a_repo_path_input_from_under_the_repo_root(tmp_path: Path
     repo_root = tmp_path / "repo"
     (repo_root / "data").mkdir(parents=True)
     (repo_root / "data" / ROWS_FILENAME).write_bytes(TINY_ROWS)
-    _place_recipe_inputs_at(saved, RepoPathLocation(path=f"data/{ROWS_FILENAME}"))
+    _update_recipe_inputs(saved, {"at": RepoPathLocation(path=f"data/{ROWS_FILENAME}")})
     configure_throwaway_workspace(tmp_path / "ws")
     rebuilt = rebuild_run(saved, repo_root=repo_root, inputs_dir=None)
     assert read_run_manifest(rebuilt.project_id, rebuilt.run_id).status == RunStatus.OK
@@ -163,7 +214,7 @@ def test_rebuild_refuses_an_archive_whose_cache_no_longer_fits_its_workflow(tmp_
     run = create_reviewed_run_past_a_queue_that_caches()
     saved = _capture(tmp_path, run)
     _save_a_version_that_instructs_reviewers(run.project_id)
-    (saved / ARCHIVE_FILE).write_bytes(export_project_archive(run.project_id))
+    _replace_archive(saved, export_project_archive(run.project_id))
     inputs_dir = _write_inputs(tmp_path, {ROWS_FILENAME: TINY_ROWS})
     [reason] = _collect_refusal_reasons(tmp_path, saved, inputs_dir)
     assert "no longer fits the workflow" in reason and "capture the run again" in reason
@@ -219,7 +270,7 @@ def test_rebuild_refuses_a_rebuilt_run_that_publishes_one_slug_twice(tmp_path: P
     recorded = RecipeFigure(slug="amount-total", stage_id=TOTALS_STAGE, value=13, claimable=False)
     write_recipe(saved, read_recipe(saved).model_copy(update={"figures": [recorded]}))
     repeated = create_tiny_run_publishing_a_slug_twice()
-    (saved / ARCHIVE_FILE).write_bytes(export_project_archive(repeated.project_id))
+    _replace_archive(saved, export_project_archive(repeated.project_id))
     inputs_dir = _write_inputs(tmp_path, {ROWS_FILENAME: TINY_ROWS})
     [reason] = _collect_refusal_reasons(tmp_path, saved, inputs_dir)
     assert "'amount-total'" in reason and "more than one" in reason
@@ -244,6 +295,20 @@ def test_rebuild_lists_every_failure_in_one_refusal(tmp_path: Path) -> None:
     assert any("'largest-amount'" in reason for reason in reasons), reasons
 
 
+def test_a_refusal_after_the_run_carries_and_names_the_rebuilt_project_and_run(
+    tmp_path: Path,
+) -> None:
+    saved = _capture(tmp_path, create_tiny_run())
+    write_recipe(saved, read_recipe(saved).model_copy(update={"ends": RunStatus.WARNINGS}))
+    inputs_dir = _write_inputs(tmp_path, {ROWS_FILENAME: TINY_ROWS})
+    configure_throwaway_workspace(tmp_path / "ws")
+    with pytest.raises(RebuiltRunRefused) as refused:
+        rebuild_run(saved, repo_root=_REPO_ROOT, inputs_dir=inputs_dir)
+    [entry] = list_every_run_entry()
+    assert refused.value.rebuilt == RebuiltRun(project_id=entry.project, run_id=entry.run_id)
+    assert entry.project in str(refused.value) and entry.run_id in str(refused.value)
+
+
 def test_rebuild_refuses_a_run_whose_model_stage_called_a_model(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -254,16 +319,16 @@ def test_rebuild_refuses_a_run_whose_model_stage_called_a_model(
     assert f"'{MODEL_STAGE}'" in reason and "called a model" in reason
 
 
-def test_find_model_spend_names_each_model_stage_that_called_a_model() -> None:
+def test_find_model_spend_names_each_stage_that_called_a_model() -> None:
     manifest = _build_manifest([
         _build_stage_record("load", StageType.input_data, None),
         _build_stage_record("classify", StageType.llm_transform, LlmUsage(calls=3)),
         _build_stage_record("replayed", StageType.llm_transform, None),
         _build_stage_record("switched_off", StageType.llm_transform, LlmUsage(calls=0)),
-        _build_stage_record("totals", StageType.aggregate, LlmUsage(calls=2)),
+        _build_stage_record("score", StageType.python_row_function, LlmUsage(calls=2)),
         _build_stage_record("summarize", StageType.llm_transform, LlmUsage(calls=1)),
     ])
-    assert find_model_spend(manifest) == ["classify", "summarize"]
+    assert find_model_spend(manifest) == ["classify", "score", "summarize"]
 
 
 def test_a_rebuild_never_reaches_a_model(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -283,6 +348,8 @@ def test_a_rebuild_never_reaches_a_model(tmp_path: Path, monkeypatch: pytest.Mon
     assert model_prompts == []
     [reason] = refused.value.reasons
     assert "ended 'errors'" in reason and "recorded 'ok'" in reason
+    assert f"stage '{MODEL_STAGE}' failed with RowGenerationError" in reason
+    assert "No LLM backend available" in reason
 
 
 @pytest.mark.parametrize(
@@ -327,6 +394,12 @@ def _collect_refusal_reasons(tmp_path: Path, saved: Path, inputs_dir: Path | Non
     return refused.value.reasons
 
 
+def _cite_totals_cell(run_id: str, column: str, value: int) -> StageOutputCellCitation:
+    return StageOutputCellCitation(
+        run_id=run_id, stage_id=TOTALS_STAGE, row_ordinal=0, column=column, value=value
+    )
+
+
 def _record_supplied_input(filename: str, content: bytes) -> RecipeInput:
     return RecipeInput(
         stage_id=LOAD_STAGE,
@@ -337,10 +410,16 @@ def _record_supplied_input(filename: str, content: bytes) -> RecipeInput:
     )
 
 
-def _place_recipe_inputs_at(saved: Path, location: RepoPathLocation) -> None:
+def _update_recipe_inputs(saved: Path, update: dict[str, object]) -> None:
     recipe = read_recipe(saved)
-    moved = [recorded.model_copy(update={"at": location}) for recorded in recipe.inputs]
-    write_recipe(saved, recipe.model_copy(update={"inputs": moved}))
+    updated = [recorded.model_copy(update=update) for recorded in recipe.inputs]
+    write_recipe(saved, recipe.model_copy(update={"inputs": updated}))
+
+
+def _replace_archive(saved: Path, archive: bytes) -> None:
+    (saved / ARCHIVE_FILE).write_bytes(archive)
+    digest = hashlib.sha256(archive).hexdigest()
+    write_recipe(saved, read_recipe(saved).model_copy(update={"archive_sha256": digest}))
 
 
 def _rewrite_recipe_figure(saved: Path, slug: str, value: JsonScalar) -> None:
@@ -356,15 +435,6 @@ def _drop_recipe_figure(saved: Path, slug: str) -> None:
     recipe = read_recipe(saved)
     figures = [figure for figure in recipe.figures if figure.slug != slug]
     write_recipe(saved, recipe.model_copy(update={"figures": figures}))
-
-
-def _read_published_values(run_id: str) -> dict[str, list[JsonScalar]]:
-    published: dict[str, list[JsonScalar]] = {}
-    for output in WorkflowOutput.list():
-        citation = output.citation
-        if isinstance(citation, StageOutputCellCitation) and citation.run_id == run_id:
-            published.setdefault(output.slug, []).append(citation.value)
-    return published
 
 
 def _save_a_version_that_instructs_reviewers(project_id: str) -> None:
