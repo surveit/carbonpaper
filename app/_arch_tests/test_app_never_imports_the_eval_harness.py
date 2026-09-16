@@ -1,9 +1,4 @@
-"""Architecture: no module under app/ imports the eval harness.
-
-evals/ is a top-level tool that runs an eval against the app; the arrow never
-runs back. Enforced as an allowlist (empty), not a forbidden import-linter
-contract, which tests/arch/test_contracts_are_whitelists.py rejects.
-"""
+"""Architecture: no module under app/ imports the eval harness."""
 from __future__ import annotations
 
 from arch import check_no_import, find_governed_files
