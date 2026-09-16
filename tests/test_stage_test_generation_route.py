@@ -12,7 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.compiler.stage_tests as compiler_stage_tests
-from app.compiler.turn_failure import GENERATION_FAILURE_PREFIX
+from app.core.agent.turn_failure import GENERATION_FAILURE_PREFIX
 from app.core.agent.store import SessionStore
 from app.core.agent.turns import TurnManager
 from app.models import TableSchema

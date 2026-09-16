@@ -17,13 +17,17 @@ from app.models.citations import (
     StageOutputCellCitation,
     StageOutputColumnCitation,
 )
+from app.models.claims import ClaimStatus
 from app.models.claim_review import (
+    ClaimReviewResult,
     BranchEvidenceItem,
     EvidenceBundle,
     InputColumnEvidenceItem,
     StageEvidenceItem,
     find_claim_part_spans,
 )
+from app.core.agent.store import AgentSession
+
 from app.models.records.claim_review import (
     Challenge,
     ChallengeKind,
@@ -41,6 +45,7 @@ from app.services import terms as terms_service
 from app.services.errors import ClaimReviewRefused
 from app.services.methodology import read_methodology
 from app.services.versioning import load_version_stages
+from app.reviewer.run import PARENT_ROLE, start_claim_review_agents
 
 
 def build_evidence_bundle(project_id: ID, claim_id: ID) -> EvidenceBundle:
@@ -62,6 +67,46 @@ def build_evidence_bundle(project_id: ID, claim_id: ID) -> EvidenceBundle:
         terms=render_terms(terms_service.load_terms(project_id)),
         methodology=read_methodology(project_id),
     )
+
+
+def start_claim_review(project_id: ID, claim_id: ID, *, model: str) -> str:
+    """Must be called from the server event loop — the turns run as a task there."""
+    claim = claims_service.load_claim(project_id, claim_id)
+    _refuse_a_claim_already_reviewed(claim_id)
+    _refuse_a_claim_already_under_review(claim_id)
+    if claim.status != ClaimStatus.submitted:
+        raise ClaimReviewRefused(
+            [f"claim {claim_id} is {claim.status}; only a submitted claim is reviewed"])
+    return start_claim_review_agents(
+        project_id=project_id, bundle=build_evidence_bundle(project_id, claim_id), model=model,
+        on_answer=lambda result: _finish_claim_review(project_id, claim_id, result),
+    )
+
+
+def _finish_claim_review(project_id: ID, claim_id: ID, result: ClaimReviewResult) -> None:
+    store_claim_review(
+        project_id, claim_id, challenges=result.draft.challenges,
+        summary=result.draft.summary, session_ids=result.session_ids)
+
+
+def _refuse_a_claim_already_reviewed(claim_id: ID) -> None:
+    if load_claim_review(claim_id) is not None:
+        raise ClaimReviewRefused(
+            [f"claim {claim_id} already has a review; a re-review is a new claim"])
+
+
+def _refuse_a_claim_already_under_review(claim_id: ID) -> None:
+    """Two runs would write two reviews of one claim, and the second is refused storage."""
+    if _find_running_reviews(claim_id):
+        raise ClaimReviewRefused(
+            [f"claim {claim_id} is already being reviewed; it is reviewed once at a time"])
+
+
+def _find_running_reviews(claim_id: ID) -> list[AgentSession]:
+    return [session for session in AgentSession.list()
+            if session.context.get("role") == PARENT_ROLE
+            and session.context.get("claim_id") == claim_id
+            and session.active_turn is not None]
 
 
 def load_claim_review(claim_id: ID) -> ClaimReview | None:

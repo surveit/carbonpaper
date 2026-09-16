@@ -15,7 +15,7 @@ from app.compiler.stage_tests import start_stage_test_generation_agent
 from app.compiler.stage_tests_submission import dump_submitted_tests, read_selected_rows
 # Re-exported for the status route: only services may import app.compiler, and the
 # route must match the marker on the same string the turn writes.
-from app.compiler.turn_failure import GENERATION_FAILURE_PREFIX as GENERATION_FAILURE_PREFIX
+from app.core.agent.turn_failure import GENERATION_FAILURE_PREFIX as GENERATION_FAILURE_PREFIX
 from app.core.errors import GenerationError
 from app.core.row_search import InputRows
 from app.models.review_guide import ReviewGuideDraft

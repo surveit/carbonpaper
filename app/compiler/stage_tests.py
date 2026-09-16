@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from app.compiler.stage_tests_prompt import STAGE_TESTS_SYSTEM_PROMPT
 from app.compiler.stage_tests_search import build_find_rows_tool
 from app.compiler.stage_tests_submission import build_selector_submission_model
-from app.compiler.turn_failure import persist_generation_failure
+from app.core.agent.turn_failure import persist_generation_failure
 from app.core.agent.agent import Agent
 from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager
