@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import importlib
+import inspect
+import pkgutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -8,26 +11,11 @@ from pydantic import JsonValue
 
 from evals import harness
 from evals.harness import cli, orchestration
-from evals.harness.binding import EvalNotFound, ResolvedEval, bind_eval
+from evals.harness.binding import ResolvedEval, bind_eval
 from evals.harness.cli import main
-from evals.harness.dataset import DatasetInvalid
-from evals.harness.definition import EvalDefinitionInvalid
-from evals.harness.orchestration import (
-    CaseSelectionInvalid,
-    CodeCommitUnreadable,
-    JudgementInvalid,
-    LoadCountNotConfirmed,
-    RepeatsInvalid,
-)
-from evals.harness.passes import PassFolderExists, PassIncomplete
-from evals.harness.report import (
-    AttemptOutcome,
-    CaseNotInDataset,
-    EarlierPassInvalid,
-    JudgementMissing,
-    PassReport,
-)
-from evals.harness.rulings import Disagreement, RulingNotJudged, RulingsInvalid
+from evals.harness.definition import CaseRefused
+from evals.harness.report import AttemptOutcome, PassReport
+from evals.harness.rulings import Disagreement
 from fixed_output_eval import FIXED_OUTPUT_EVAL
 from test_eval_passes import build_case, read_pass_record, write_dataset
 from test_eval_report import MovableClock
@@ -35,23 +23,6 @@ from test_eval_rulings import build_ruling, write_rulings
 
 _EVAL_NAME = FIXED_OUTPUT_EVAL.name
 _PASS_ID = "20260915T120000"
-_REFUSALS = [
-    CaseNotInDataset("the pass ran case_ids not in the dataset: 'gone'"),
-    CaseSelectionInvalid("case_ids not in the dataset: 'missing'"),
-    CodeCommitUnreadable("git rev-parse HEAD failed in /repo: not a git repository"),
-    DatasetInvalid("dataset has no cases"),
-    EarlierPassInvalid("pass is for eval 'another_eval', not 'fixed_output'"),
-    EvalDefinitionInvalid("eval 'lenient': input_model Lenient must forbid extra fields"),
-    EvalNotFound("no eval named 'missing': no module evals.missing"),
-    JudgementInvalid("case 'agrees' attempt 1: expected key 'echo' has no judgement"),
-    JudgementMissing("no judgement for case 'agrees' attempt 2"),
-    LoadCountNotConfirmed("this pass plans 2 loads; confirm with --loads 2"),
-    PassFolderExists("pass folder /passes/20260915T120000 already exists"),
-    PassIncomplete("loading stopped before recording case 'breaks' attempt 1"),
-    RepeatsInvalid("repeats must be at least 1, not 0"),
-    RulingNotJudged("ruling 'declines': the judge refused: the output declines to answer"),
-    RulingsInvalid("no rulings to compare"),
-]
 
 
 def test_cli_run_resolves_the_eval_and_its_dataset_by_name(
@@ -297,7 +268,11 @@ def test_cli_rulings_refuses_a_rulings_file_the_eval_cannot_read(
     assert capsys.readouterr().err == f"{rulings_path}: no rulings to compare\n"
 
 
-@pytest.mark.parametrize("refusal", _REFUSALS, ids=lambda refusal: type(refusal).__name__)
+@pytest.mark.parametrize(
+    "refusal",
+    [refusal_type("the harness refused, in one line") for refusal_type in cli.REFUSALS],
+    ids=lambda refusal: type(refusal).__name__,
+)
 def test_cli_prints_one_line_and_exits_two_for_a_harness_refusal(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], refusal: Exception
 ) -> None:
@@ -315,8 +290,9 @@ def test_cli_prints_one_line_and_exits_two_for_a_harness_refusal(
     assert printed.out == ""
 
 
-def test_every_refusal_the_cli_catches_is_covered_by_a_test() -> None:
-    assert {type(refusal) for refusal in _REFUSALS} == set(cli.REFUSALS)
+def test_every_exception_the_harness_defines_is_a_cli_refusal_or_is_converted_first() -> None:
+    # CaseRefused is converted where it is caught: into a load record, a judgement file or a refusal.
+    assert find_harness_exceptions() == set(cli.REFUSALS) | {CaseRefused}
 
 
 def test_cli_lets_an_error_no_refusal_names_propagate_with_its_traceback(tmp_path: Path) -> None:
@@ -328,6 +304,19 @@ def test_cli_lets_an_error_no_refusal_names_propagate_with_its_traceback(tmp_pat
             evals_root=tmp_path,
             resolve_eval=lambda name: resolved,
         )
+
+
+def find_harness_exceptions() -> set[type[Exception]]:
+    modules = [
+        importlib.import_module(f"{harness.__name__}.{found.name}")
+        for found in pkgutil.iter_modules(harness.__path__)
+    ]
+    return {
+        member
+        for module in modules
+        for _, member in inspect.getmembers(module, inspect.isclass)
+        if issubclass(member, Exception) and member.__module__ == module.__name__
+    }
 
 
 class RecordingResolver:

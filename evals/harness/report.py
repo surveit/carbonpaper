@@ -83,6 +83,10 @@ class EarlierPassInvalid(Exception):
     pass
 
 
+class JudgementOutcomeUnknown(Exception):
+    pass
+
+
 def build_pass_report(
     definition: EvalDefinition[InputT, ExpectedT, OutputT],
     pass_dir: Path,
@@ -94,6 +98,7 @@ def build_pass_report(
     record = folder.read_record()
     validate_pass_is_complete(record, pass_dir)
     judged_attempts = _read_judged_attempts(folder, record, pass_dir)
+    _validate_judged_outcomes_are_known(judged_attempts, definition.outcomes, pass_dir)
     earlier = None if against is None else _read_earlier_pass(against, record, definition.outcomes)
     stored = [load for load in record.loads if isinstance(load, OutputStored)]
     return PassReport(
@@ -145,6 +150,22 @@ def _validate_every_stored_output_is_judged(
     if unjudged:
         listed = "; ".join(f"case {load.case_id!r} attempt {load.attempt}" for load in unjudged)
         raise JudgementMissing(f"{pass_dir}: no judgement for {listed}")
+
+
+def _validate_judged_outcomes_are_known(
+    judged_attempts: list[JudgedAttempt], outcomes: tuple[str, ...], pass_dir: Path
+) -> None:
+    allowed = ", ".join(repr(outcome) for outcome in outcomes)
+    unknown = [
+        f"case {judged.case_id!r} attempt {judged.attempt} key {judgement.key!r} "
+        f"has outcome {judgement.outcome!r}, not one of {allowed}"
+        for judged in judged_attempts
+        if isinstance(judged.judgements, list)
+        for judgement in judged.judgements
+        if judgement.outcome not in outcomes
+    ]
+    if unknown:
+        raise JudgementOutcomeUnknown(f"{pass_dir}: {'; '.join(unknown)}")
 
 
 def _find_pass_cost(stored: list[OutputStored]) -> float | None:
@@ -280,6 +301,7 @@ def _read_earlier_pass(
     _validate_earlier_pass_is_for_the_same_eval(earlier, record.eval, against)
     validate_pass_is_complete(earlier, against)
     judged_attempts = _read_judged_attempts(folder, earlier, against)
+    _validate_judged_outcomes_are_known(judged_attempts, outcomes, against)
     return _EarlierPass(
         pass_id=earlier.pass_id,
         counts_by_case_and_key=_count_outcomes_by_case_and_key(judged_attempts, outcomes),

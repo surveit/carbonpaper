@@ -16,7 +16,12 @@ from evals.harness.orchestration import (
     RepeatsInvalid,
 )
 from evals.harness.passes import PassFolder, PassFolderExists, PassIncomplete
-from evals.harness.report import CaseNotInDataset, EarlierPassInvalid, JudgementMissing
+from evals.harness.report import (
+    CaseNotInDataset,
+    EarlierPassInvalid,
+    JudgementMissing,
+    JudgementOutcomeUnknown,
+)
 from evals.harness.rulings import RULINGS_FILE, Disagreement, RulingNotJudged, RulingsInvalid
 
 ResolveEval = Callable[[str], ResolvedEval]
@@ -123,6 +128,7 @@ REFUSALS: tuple[type[Exception], ...] = (
     EvalNotFound,
     JudgementInvalid,
     JudgementMissing,
+    JudgementOutcomeUnknown,
     LoadCountNotConfirmed,
     PassFolderExists,
     PassIncomplete,

@@ -29,6 +29,7 @@ from evals.harness.report import (
     EarlierPassInvalid,
     ExpectedRow,
     JudgementMissing,
+    JudgementOutcomeUnknown,
     OutcomeCount,
     PassReport,
     build_pass_report,
@@ -478,6 +479,56 @@ def test_the_report_refuses_an_earlier_pass_whose_loading_stopped(
     )
 
 
+def test_the_report_refuses_a_stored_judgement_whose_outcome_the_eval_no_longer_lists(
+    tmp_path: Path, clock: MovableClock
+) -> None:
+    eval_dir = tmp_path / "fixed_output"
+    write_dataset(eval_dir, build_case("agrees", "yes", answer="yes"))
+    pass_dir = run_pass(
+        FIXED_OUTPUT_EVAL, eval_dir=eval_dir, repeats=2, confirmed_loads=2, case_ids=[],
+        repo_root=_REPO_ROOT,
+    )
+    renamed = dataclasses.replace(FIXED_OUTPUT_EVAL, outcomes=("agreed", "differed"))
+
+    with pytest.raises(JudgementOutcomeUnknown) as refusal:
+        build_pass_report(renamed, pass_dir, eval_dir=eval_dir, against=None)
+
+    assert str(refusal.value) == (
+        f"{pass_dir}: "
+        "case 'agrees' attempt 1 key 'answer' has outcome 'matched', "
+        "not one of 'agreed', 'differed'; "
+        "case 'agrees' attempt 2 key 'answer' has outcome 'matched', "
+        "not one of 'agreed', 'differed'"
+    )
+
+
+def test_the_report_refuses_an_earlier_pass_judged_under_outcomes_the_eval_no_longer_lists(
+    tmp_path: Path, clock: MovableClock
+) -> None:
+    eval_dir = tmp_path / "fixed_output"
+    write_dataset(eval_dir, build_case("agrees", "yes", answer="yes"))
+    earlier_dir = run_pass(
+        FIXED_OUTPUT_EVAL, eval_dir=eval_dir, repeats=1, confirmed_loads=1, case_ids=[],
+        repo_root=_REPO_ROOT,
+    )
+    clock.move_on(60)
+    renamed = dataclasses.replace(
+        FIXED_OUTPUT_EVAL, outcomes=("agreed", "differed"), judge=judge_agreed
+    )
+    pass_dir = run_pass(
+        renamed, eval_dir=eval_dir, repeats=1, confirmed_loads=1, case_ids=[],
+        repo_root=_REPO_ROOT,
+    )
+
+    with pytest.raises(JudgementOutcomeUnknown) as refusal:
+        build_pass_report(renamed, pass_dir, eval_dir=eval_dir, against=earlier_dir)
+
+    assert str(refusal.value) == (
+        f"{earlier_dir}: case 'agrees' attempt 1 key 'answer' has outcome 'matched', "
+        "not one of 'agreed', 'differed'"
+    )
+
+
 def test_running_a_pass_writes_its_report(tmp_path: Path, clock: MovableClock) -> None:
     eval_dir = tmp_path / "fixed_output"
     write_dataset(eval_dir, build_case("agrees", "yes", answer="yes"))
@@ -539,6 +590,7 @@ class MovableClock:
 LoadFunction = Callable[[AnswerInput, LoadContext], Loaded[AnswerOutput]]
 
 _FLIPPED = "flipped"
+_RENAMED_OUTCOMES = {"matched": "agreed", "differed": "differed"}
 
 
 @pytest.fixture
@@ -615,6 +667,13 @@ def refuse_to_judge_the_flipped(
     if output.answer in (_FLIPPED, "no comment"):
         raise CaseRefused("the output was flipped")
     return judge_answer(output, expected_outputs)
+
+
+def judge_agreed(output: AnswerOutput, expected_outputs: list[ExpectedAnswer]) -> list[Judgement]:
+    return [
+        judgement.model_copy(update={"outcome": _RENAMED_OUTCOMES[judgement.outcome]})
+        for judgement in judge_answer(output, expected_outputs)
+    ]
 
 
 def judge_with_marked_up_notes(
