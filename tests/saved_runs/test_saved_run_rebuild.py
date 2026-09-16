@@ -13,7 +13,7 @@ from app.core.errors import LLMError
 from app.core.json_types import JsonScalar
 from app.core.run_status import RunStatus, StageStatus
 from app.models import Stage
-from app.models.claims import StageOutputCellCitation
+from app.models.citations import StageOutputCellCitation
 from app.models.records.run_manifest import RunManifest
 from app.models.records.workflow_output import WorkflowOutput
 from app.models.run_manifest import StageRecord, read_input_bindings

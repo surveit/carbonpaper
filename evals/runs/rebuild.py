@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from app.core.files import save_upload
 from app.core.json_types import JsonScalar
 from app.core.run_status import RunStatus
-from app.models.claims import StageOutputCellCitation
+from app.models.citations import StageOutputCellCitation
 from app.models.records.run_manifest import RunManifest
 from app.models.records.workflow_output import WorkflowOutput
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
