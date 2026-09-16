@@ -12,8 +12,8 @@ from app.models.claims import (
     ClaimImportance,
     ClaimStatus,
     DataUniverseRequirement,
-    PublishedCitation,
 )
+from app.models.citations import PublishedCitation
 from app.models.schema import Column
 
 

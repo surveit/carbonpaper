@@ -5,7 +5,7 @@ from __future__ import annotations
 from app.web.figure_text import render_figure
 from app.core.errors import StageNotInRun
 from app.models.branch_analysis import BranchId, BranchRole
-from app.models.claims import StageOutputCellCitation
+from app.models.citations import StageOutputCellCitation
 from app.models.schema import StageId
 from app.models.workflow import Workflow
 from app.core.run_status import is_run_still_going

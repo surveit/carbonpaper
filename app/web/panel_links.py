@@ -8,7 +8,7 @@ from urllib.parse import quote, urlencode
 from pydantic import BaseModel
 
 from app.models.branch_analysis import RowRef
-from app.models.claims import RowsRectangle
+from app.models.citations import RowsRectangle
 
 
 # aggregate makes its single row out of every input row, so a cohort runs to

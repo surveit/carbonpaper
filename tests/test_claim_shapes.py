@@ -12,8 +12,8 @@ from app.models.claims import (
     ClaimShapeInput,
     ClaimStatus,
     DataUniverseRequirement,
-    StageOutputCellCitation,
 )
+from app.models.citations import StageOutputCellCitation
 from app.models.records.claims import Claim, ClaimShape
 from app.models.schema import Column
 from app.services import claim_shapes

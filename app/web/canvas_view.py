@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from app.core.errors import ColumnNotInFrame, StageNotInRun
-from app.models.claims import StageOutputCellCitation
+from app.models.citations import StageOutputCellCitation
 from app.models import WorkflowStage
 from app.models.schema import StageId
 from app.services import run as run_service

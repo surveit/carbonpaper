@@ -21,7 +21,7 @@ from app.models.branch_analysis import (
     RowOrdinal,
     RowSet,
 )
-from app.models.claims import StageOutputCellCitation
+from app.models.citations import StageOutputCellCitation
 from app.models.schema import StageId
 from app.runtime.branch_analysis import (
     WorkflowRunBranches,

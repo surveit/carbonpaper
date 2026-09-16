@@ -5,7 +5,7 @@ from typing import ClassVar, Optional
 
 from app.core.ids import ID
 from app.core.record import PersistedModel, PersistenceScope
-from app.models.claims import PublishedCitation
+from app.models.citations import PublishedCitation
 
 
 class WorkflowOutput(PersistedModel):

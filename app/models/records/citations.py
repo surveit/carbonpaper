@@ -4,7 +4,7 @@ from typing import ClassVar
 
 from app.core.record import PersistedModel, PersistenceScope
 from app.models.citations import CitedValue
-from app.models.claims import StageOutputRowCitation
+from app.models.citations import StageOutputRowCitation
 
 
 class StageCitations(PersistedModel):
