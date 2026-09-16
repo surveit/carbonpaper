@@ -33,6 +33,7 @@ from tiny_run import (
     ROWS_FILENAME,
     TINY_ROWS,
     TOTALS_STAGE,
+    bind_two_uploads_named_the_same,
     bind_uploaded_rows,
     create_reviewed_run_past_a_queue_that_caches,
     create_reviewed_run_past_a_queue_that_does_not_cache,
@@ -202,6 +203,17 @@ def test_capture_refuses_an_input_whose_file_record_is_gone(tmp_path: Path) -> N
     with pytest.raises(CaptureRefused, match="whose record is gone") as refused:
         _capture(tmp_path, run.project_id, run.run_id)
     assert f"'{ROWS_FILENAME}'" in str(refused.value)
+    assert not (tmp_path / _SAVED).exists()
+
+
+def test_capture_refuses_a_run_whose_inputs_share_a_filename(tmp_path: Path) -> None:
+    project_id = create_tiny_project()
+    bindings = bind_two_uploads_named_the_same(project_id, TINY_ROWS)
+    run_id = str(execute(project_id, bindings=bindings)["run_id"])
+    with pytest.raises(CaptureRefused, match="more than one file named") as refused:
+        _capture(tmp_path, project_id, run_id)
+    assert f"'{ROWS_FILENAME}'" in str(refused.value)
+    assert f"'{LOAD_STAGE}'" in str(refused.value)
     assert not (tmp_path / _SAVED).exists()
 
 

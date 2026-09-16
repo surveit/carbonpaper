@@ -46,6 +46,7 @@ def capture_run(
     workflow_version = _require_latest_version(project_id, manifest)
     _validate_review_decisions_can_travel(project_id, workflow_version, manifest)
     inputs = [_record_input(binding) for binding in read_input_bindings(manifest.to_dict())]
+    _validate_each_filename_names_one_input(run_id, inputs)
     figures = _record_figures(run_id)
     archive = export_project_archive(project_id)
     recipe = RunRecipe(
@@ -146,6 +147,18 @@ def _load_file_record(binding: InputBinding) -> ProjectFile:
             "project still holds"
         )
     return record
+
+
+def _validate_each_filename_names_one_input(run_id: str, inputs: list[RecipeInput]) -> None:
+    counts = Counter(recorded.filename for recorded in inputs)
+    repeated = sorted(filename for filename, count in counts.items() if count > 1)
+    if repeated:
+        stages = sorted({recorded.stage_id for recorded in inputs if recorded.filename in repeated})
+        raise CaptureRefused(
+            f"run '{run_id}' read more than one file named {repeated}, at stage(s) {stages}; a "
+            "rebuild looks for every supplied input by filename in one folder, so each filename "
+            "must name one file"
+        )
 
 
 def _record_captured_from(project_id: str, workflow_version: str, repo_root: Path) -> CapturedFrom:

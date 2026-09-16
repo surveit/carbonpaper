@@ -97,6 +97,17 @@ def bind_uploaded_rows(
     return {LOAD_STAGE: resolve_files_binding(project_id, [upload.id])}
 
 
+def bind_two_uploads_named_the_same(
+    project_id: str, rows: bytes
+) -> dict[StageId, TypeUnsafeUserStageConfigOverride]:
+    header, *lines = rows.splitlines(keepends=True)
+    uploads = [
+        save_upload(ROWS_FILENAME, BytesIO(b"".join([header, *part])), project_id)
+        for part in (lines[:-1], lines[-1:])
+    ]
+    return {LOAD_STAGE: resolve_files_binding(project_id, [upload.id for upload in uploads])}
+
+
 def _create_counting_project(load_paths: list[str]) -> str:
     project_id = _create_project()
     [shape] = write_claim_shapes(project_id, [_ROW_COUNT_SHAPE])
