@@ -52,7 +52,14 @@ class JudgementRefused(BaseModel):
     reason: str
 
 
+JudgementFile = list[Judgement] | JudgementRefused
+
+
 class PassFolderExists(Exception):
+    pass
+
+
+class PassIncomplete(Exception):
     pass
 
 
@@ -70,11 +77,18 @@ def find_unaccounted_cases(record: PassRecord) -> list[UnaccountedCase]:
     return [case for case in cases if case.missing_attempts]
 
 
+def validate_pass_is_complete(record: PassRecord, pass_dir: Path) -> None:
+    unaccounted = find_unaccounted_cases(record)
+    if unaccounted:
+        listed = "; ".join(_describe_unaccounted_case(case) for case in unaccounted)
+        raise PassIncomplete(f"{pass_dir}: loading stopped before recording {listed}")
+
+
 @dataclass(frozen=True)
 class JudgedAttempt:
     case_id: str
     attempt: int
-    judgements: list[Judgement] | JudgementRefused
+    judgements: JudgementFile
 
 
 @dataclass(frozen=True)
@@ -115,22 +129,40 @@ class PassFolder:
         return output_model.model_validate_json(path.read_text(encoding="utf-8"))
 
     def replace_judgements(self, judged_attempts: list[JudgedAttempt]) -> None:
-        judgements_dir = self.root / "judgements"
-        if judgements_dir.exists():
-            shutil.rmtree(judgements_dir)
-        judgements_dir.mkdir()
+        if self._judgements_dir.exists():
+            shutil.rmtree(self._judgements_dir)
+        self._judgements_dir.mkdir()
         for judged in judged_attempts:
-            path = judgements_dir / judged.case_id / f"{judged.attempt}.json"
+            path = self._judgement_path(judged.case_id, judged.attempt)
             path.parent.mkdir(exist_ok=True)
             content = _JUDGEMENT_FILE.dump_json(judged.judgements, indent=2).decode("utf-8")
             path.write_text(content, encoding="utf-8")
+
+    def find_judgement(self, case_id: str, attempt: int) -> JudgementFile | None:
+        path = self._judgement_path(case_id, attempt)
+        if not path.exists():
+            return None
+        return _JUDGEMENT_FILE.validate_json(path.read_text(encoding="utf-8"))
 
     @property
     def _record_path(self) -> Path:
         return self.root / "pass.json"
 
+    @property
+    def _judgements_dir(self) -> Path:
+        return self.root / "judgements"
+
     def _output_path(self, case_id: str, attempt: int) -> Path:
         return self.root / "outputs" / case_id / f"{attempt}.json"
+
+    def _judgement_path(self, case_id: str, attempt: int) -> Path:
+        return self._judgements_dir / case_id / f"{attempt}.json"
+
+
+def _describe_unaccounted_case(case: UnaccountedCase) -> str:
+    attempts = ", ".join(str(attempt) for attempt in case.missing_attempts)
+    noun = "attempt" if len(case.missing_attempts) == 1 else "attempts"
+    return f"case {case.case_id!r} {noun} {attempts}"
 
 
 def _find_missing_attempts(record: PassRecord, case_id: str) -> tuple[int, ...]:
@@ -143,6 +175,4 @@ def _find_missing_attempts(record: PassRecord, case_id: str) -> tuple[int, ...]:
     )
 
 
-_JUDGEMENT_FILE: TypeAdapter[list[Judgement] | JudgementRefused] = TypeAdapter(
-    list[Judgement] | JudgementRefused
-)
+_JUDGEMENT_FILE: TypeAdapter[JudgementFile] = TypeAdapter(JudgementFile)

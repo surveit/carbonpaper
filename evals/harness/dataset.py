@@ -14,6 +14,8 @@ from evals.harness.definition import EvalDefinition, ExpectedT, InputT, OutputT
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
+DATASET_FILE = "dataset.json"
+
 _CASE_ID = re.compile(r"[a-z0-9][a-z0-9_-]*")
 _CASE_ID_RULE = (
     "a case_id may contain only lowercase letters, digits, hyphens and underscores, "
