@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict
 
 from evals.harness.dataset import DATASET_FILE, Case, read_dataset
 from evals.harness.definition import EvalDefinition, ExpectedT, InputT, Judgement, OutputT
+from evals.harness.validation import inflect
 from evals.harness.passes import (
     JudgedAttempt,
     JudgementFile,
@@ -178,6 +179,8 @@ def _validate_judged_outcomes_are_known(
 
 
 def _find_pass_cost(stored: list[OutputStored]) -> float | None:
+    if not stored:
+        return None
     reported = [load.cost_usd for load in stored if load.cost_usd is not None]
     return sum(reported) if len(reported) == len(stored) else None
 
@@ -357,7 +360,7 @@ def _render_header(report: PassReport) -> str:
         f"repeats: {report.repeats}",
         f"loads started: {report.loads_started}",
         f"loads refused: {report.loads_refused}",
-        f"seconds: {report.seconds:.1f}",
+        f"seconds: {report.seconds:.3f}",
         _describe_cost(report),
     ]
     if report.against_pass_id is not None:
@@ -367,8 +370,9 @@ def _render_header(report: PassReport) -> str:
 
 def _describe_cost(report: PassReport) -> str:
     if report.cost_usd is None:
-        return f"cost not reported for {report.loads_without_cost} loads"
-    return f"cost ${report.cost_usd:.4f}"
+        loads = inflect(report.loads_without_cost, "load")
+        return f"cost not reported for {report.loads_without_cost} {loads}"
+    return f"cost ${report.cost_usd:.6f}"
 
 
 def _render_case(case: CaseSection, shows_earlier: bool) -> str:
@@ -416,7 +420,7 @@ def _render_refusals(refusals: list[str]) -> str:
 
 def _render_list(css_class: str, items: list[str]) -> str:
     rendered = "".join(f"<li>{html.escape(item)}</li>\n" for item in items)
-    return f'<ul class="{css_class}">\n{rendered}</ul>'
+    return f'<ul class="{html.escape(css_class)}">\n{rendered}</ul>'
 
 
 _ABSENT = "—"

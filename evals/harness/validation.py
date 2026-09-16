@@ -31,6 +31,10 @@ def find_repeated(values: Iterable[str]) -> list[str]:
     return [value for value, count in Counter(values).items() if count > 1]
 
 
+def inflect(count: int, noun: str) -> str:
+    return noun if count == 1 else f"{noun}s"
+
+
 def _describe_error(subject: str, location: tuple[int | str, ...], message: str) -> str:
     location_text = _format_location(location)
     return f"{subject} {location_text}: {message}" if location_text else f"{subject}: {message}"

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import re
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -149,12 +150,13 @@ def test_the_report_shows_an_earlier_pass_beside_when_asked(
     page = render_page(report, pass_dir)
     assert "<th>earlier counts</th>" in page
     assert f"<li>beside pass: {_FIRST_PASS_ID}</li>" in page
+    assert "<td>—</td>" in page
 
 
 @pytest.mark.parametrize(
     ("cost_by_answer", "cost_usd", "loads_without_cost", "stated"),
     [
-        ({"yes": 0.25, "no": 0.75}, 2.0, 0, "<li>cost $2.0000</li>"),
+        ({"yes": 0.25, "no": 0.75}, 2.0, 0, "<li>cost $2.000000</li>"),
         ({"yes": 0.25, "no": None}, None, 2, "<li>cost not reported for 2 loads</li>"),
     ],
     ids=["every_load_reported_one", "two_loads_reported_none"],
@@ -211,6 +213,45 @@ def test_a_load_refusal_does_not_leave_the_cost_unstated(
     assert report.loads_started == 3
     assert report.cost_usd == 0.5
     assert report.loads_without_cost == 0
+
+
+def test_a_pass_whose_every_case_refused_states_no_cost_rather_than_zero(
+    tmp_path: Path, clock: MovableClock
+) -> None:
+    eval_dir = tmp_path / "fixed_output"
+    write_dataset(eval_dir, build_case("declines", "no comment", answer="yes"))
+    definition = dataclasses.replace(
+        FIXED_OUTPUT_EVAL, load=build_declining_loader(0.25, "the source declined to comment")
+    )
+    pass_dir = run_pass(
+        definition, eval_dir=eval_dir, repeats=2, confirmed_loads=2, case_ids=[],
+        repo_root=_REPO_ROOT,
+    )
+
+    report = build_pass_report(definition, pass_dir, eval_dir=eval_dir, against=None)
+
+    assert report.cost_usd is None
+    assert report.loads_without_cost == 0
+    assert "<li>cost not reported for 0 loads</li>" in render_page(report, pass_dir)
+
+
+def test_the_page_states_a_short_pass_and_a_small_cost_without_rounding_them_to_zero(
+    tmp_path: Path, clock: MovableClock
+) -> None:
+    eval_dir = tmp_path / "fixed_output"
+    write_dataset(eval_dir, build_case("agrees", "yes", answer="yes"))
+    definition = dataclasses.replace(FIXED_OUTPUT_EVAL, load=build_slow_cheap_loader(clock))
+    pass_dir = run_pass(
+        definition, eval_dir=eval_dir, repeats=1, confirmed_loads=1, case_ids=[],
+        repo_root=_REPO_ROOT,
+    )
+
+    report = build_pass_report(definition, pass_dir, eval_dir=eval_dir, against=None)
+
+    page = render_page(report, pass_dir)
+    assert (report.seconds, report.cost_usd) == (0.04, 0.000005)
+    assert "<li>seconds: 0.040</li>" in page
+    assert "<li>cost $0.000005</li>" in page
 
 
 def test_the_report_lists_each_load_and_judgement_refusal_with_its_attempt_and_step(
@@ -285,6 +326,7 @@ def test_an_expected_output_whose_attempts_went_unjudged_shows_no_outcome_and_no
             earlier_counts=None,
         )
     ]
+    assert "<td>—</td>" in render_page(report, pass_dir)
 
 
 def test_report_json_holds_what_the_page_shows(tmp_path: Path, clock: MovableClock) -> None:
@@ -309,8 +351,8 @@ def test_report_json_holds_what_the_page_shows(tmp_path: Path, clock: MovableClo
     assert "<li>repeats: 1</li>" in page
     assert "<li>loads started: 1</li>" in page
     assert "<li>loads refused: 0</li>" in page
-    assert "<li>seconds: 0.0</li>" in page
-    assert "<li>cost $0.0100</li>" in page
+    assert "<li>seconds: 0.000</li>" in page
+    assert "<li>cost $0.010000</li>" in page
     assert "<h2>agrees</h2>" in page
     assert "<th>expected key</th><th>attempt 1</th><th>counts</th><th>latest note</th>" in page
     assert "<td>answer</td><td>matched</td><td>matched 1, differed 0</td>" in page
@@ -346,7 +388,7 @@ def test_report_html_escapes_what_an_eval_wrote(tmp_path: Path, clock: MovableCl
     assert "<i>" not in page
 
 
-def test_the_report_and_the_page_hold_no_total_or_percentage(
+def test_the_report_and_the_pages_chrome_hold_no_total_or_percentage(
     tmp_path: Path, clock: MovableClock
 ) -> None:
     eval_dir = tmp_path / "fixed_output"
@@ -358,11 +400,12 @@ def test_the_report_and_the_page_hold_no_total_or_percentage(
 
     report = build_pass_report(FIXED_OUTPUT_EVAL, pass_dir, eval_dir=eval_dir, against=None)
 
-    page = render_page(report, pass_dir).lower()
+    chrome = read_chrome_text(render_page(report, pass_dir)).lower()
+    assert "loads started" in chrome and "expected key" in chrome
     assert [name for name in find_field_names(PassReport) if "count" in name]
     assert not [name for name in find_field_names(PassReport) if _names_a_score(name)]
-    assert not [word for word in _SCORE_WORDS if word in page]
-    assert "%" not in page
+    assert not [word for word in _SCORE_WORDS if word in chrome]
+    assert "%" not in chrome
 
 
 def test_the_report_refuses_a_pass_whose_loading_stopped(
@@ -544,6 +587,20 @@ def test_running_a_pass_writes_its_report(tmp_path: Path, clock: MovableClock) -
     assert written == build_pass_report(
         FIXED_OUTPUT_EVAL, pass_dir, eval_dir=eval_dir, against=None
     )
+    assert written.cases[0].rows[0] == ExpectedRow(
+        key="answer",
+        outcome_by_attempt=[
+            AttemptOutcome(attempt=1, outcome="matched"),
+            AttemptOutcome(attempt=2, outcome="matched"),
+        ],
+        counts=[
+            OutcomeCount(outcome="matched", count=2),
+            OutcomeCount(outcome="differed", count=0),
+        ],
+        judged=2,
+        latest_note="answer 'yes' equals 'yes'",
+        earlier_counts=None,
+    )
     assert "<h1>fixed_output pass" in (pass_dir / "report.html").read_text(encoding="utf-8")
 
 
@@ -611,6 +668,20 @@ def build_flipping_loader(clock: MovableClock, cost_usd: float | None) -> LoadFu
         return Loaded(output=AnswerOutput(answer=answered), cost_usd=cost_usd)
 
     return load
+
+
+def build_slow_cheap_loader(clock: MovableClock) -> LoadFunction:
+    def load(case_input: AnswerInput, context: LoadContext) -> Loaded[AnswerOutput]:
+        clock.advance(0.04)
+        return Loaded(output=AnswerOutput(answer=case_input.answer), cost_usd=0.000005)
+
+    return load
+
+
+def read_chrome_text(page: str) -> str:
+    facts = re.search(r'<ul class="facts">(.*?)</ul>', page, re.DOTALL)
+    assert facts is not None, "the page has no facts list"
+    return facts.group(1) + " " + " ".join(re.findall(r"<th>(.*?)</th>", page))
 
 
 def build_priced_loader(cost_by_answer: dict[str, float | None]) -> LoadFunction:

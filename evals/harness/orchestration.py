@@ -32,6 +32,7 @@ from evals.harness.report import (
     validate_pass_cases_are_in_dataset,
     write_pass_report,
 )
+from evals.harness.validation import inflect
 
 
 class LoadCountNotConfirmed(Exception):
@@ -123,7 +124,7 @@ def _validate_repeats(repeats: int) -> None:
 def _validate_load_count(planned: int, confirmed_loads: int) -> None:
     if confirmed_loads != planned:
         raise LoadCountNotConfirmed(
-            f"this pass plans {planned} {_inflect(planned, 'load')}; "
+            f"this pass plans {planned} {inflect(planned, 'load')}; "
             f"confirm with --loads {planned}"
         )
 
@@ -248,10 +249,6 @@ def _find_outcome_problems(judgements: list[Judgement], outcomes: tuple[str, ...
         for judgement in judgements
         if judgement.outcome not in outcomes
     ]
-
-
-def _inflect(count: int, noun: str) -> str:
-    return noun if count == 1 else f"{noun}s"
 
 
 def _quote_each(values: Iterable[str]) -> str:

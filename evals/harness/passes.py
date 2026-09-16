@@ -9,6 +9,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from evals.harness.definition import Judgement, OutputT
+from evals.harness.validation import inflect
 
 
 class OutputStored(BaseModel):
@@ -161,7 +162,7 @@ class PassFolder:
 
 def _describe_unaccounted_case(case: UnaccountedCase) -> str:
     attempts = ", ".join(str(attempt) for attempt in case.missing_attempts)
-    noun = "attempt" if len(case.missing_attempts) == 1 else "attempts"
+    noun = inflect(len(case.missing_attempts), "attempt")
     return f"case {case.case_id!r} {noun} {attempts}"
 
 
