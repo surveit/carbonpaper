@@ -18,6 +18,9 @@ _DOCSTRING_LINE_CEILING = 5
 # The complexity ratchet's exemptions, minus "tests" — this rule governs the test
 # tree too, so a directory named `tests` inside it must stay in scope.
 _TESTS_EXEMPT_PARTS = _SOURCE_EXEMPT_PARTS - {"tests"}
+# A pass folder holds generated eval output, committed nowhere, and loading code may
+# write a .py into its workspace — no rule about reviewed prose governs what lands there.
+_EVALS_EXEMPT_PARTS = _TESTS_EXEMPT_PARTS | {"passes"}
 
 # Modules whose docstring is allowed past the ceiling, each mapped to the written
 # reason it earned that. Keyed on the SYMBOL — here the repo-relative posix module
@@ -40,17 +43,17 @@ class ModuleDocstring:
 def find_governed_files(app_root: Path, tests_root: Path, evals_root: Path) -> list[Path]:
     return (
         find_app_source_files(app_root)
-        + find_python_files(tests_root)
-        + find_python_files(evals_root)
+        + find_python_files(tests_root, _TESTS_EXEMPT_PARTS)
+        + find_python_files(evals_root, _EVALS_EXEMPT_PARTS)
     )
 
 
-def find_python_files(root: Path) -> list[Path]:
+def find_python_files(root: Path, exempt: set[str]) -> list[Path]:
     files = [
         path
         for path in sorted(root.rglob("*.py"))
         if not any(
-            part.startswith(".") or part in _TESTS_EXEMPT_PARTS
+            part.startswith(".") or part in exempt
             for part in path.relative_to(root).parts
         )
     ]
@@ -223,14 +226,32 @@ def test_justified_exceptions_ships_empty_and_every_entry_carries_a_reason() -> 
 
 def test_find_python_files_raises_when_root_has_no_python_files(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="governs no source files"):
-        find_python_files(tmp_path)
+        find_python_files(tmp_path, _TESTS_EXEMPT_PARTS)
 
 
 def test_find_python_files_returns_the_python_files_in_the_root(tmp_path: Path) -> None:
     _write_module(tmp_path, "x = 1\n", name="a.py")
     _write_module(tmp_path, "x = 1\n", name="b.py")
     (tmp_path / "notes.txt").write_text("x", encoding="utf-8")
-    assert [path.name for path in find_python_files(tmp_path)] == ["a.py", "b.py"]
+    assert [path.name for path in find_python_files(tmp_path, _TESTS_EXEMPT_PARTS)] == [
+        "a.py",
+        "b.py",
+    ]
+
+
+def test_find_python_files_skips_a_pass_folder_only_under_the_evals_exemption(
+    tmp_path: Path,
+) -> None:
+    pass_dir = tmp_path / "fixed_output" / "passes" / "20260915T120000"
+    pass_dir.mkdir(parents=True)
+    _write_module(pass_dir, "x = 1\n", name="in_a_pass.py")
+    _write_module(tmp_path, "x = 1\n", name="top.py")
+
+    assert [path.name for path in find_python_files(tmp_path, _EVALS_EXEMPT_PARTS)] == ["top.py"]
+    assert [path.name for path in find_python_files(tmp_path, _TESTS_EXEMPT_PARTS)] == [
+        "in_a_pass.py",
+        "top.py",
+    ]
 
 
 def test_find_python_files_recurses_into_a_subpackage_but_skips_exempt_parts(tmp_path: Path) -> None:
@@ -241,14 +262,17 @@ def test_find_python_files_recurses_into_a_subpackage_but_skips_exempt_parts(tmp
     cache.mkdir()
     _write_module(cache, "x = 1\n", name="stale.py")
     _write_module(tmp_path, "x = 1\n", name="top.py")
-    assert [path.name for path in find_python_files(tmp_path)] == ["nested.py", "top.py"]
+    assert [path.name for path in find_python_files(tmp_path, _TESTS_EXEMPT_PARTS)] == [
+        "nested.py",
+        "top.py",
+    ]
 
 
 def test_find_python_files_ignores_a_dot_directory_in_the_scanned_root_prefix(tmp_path: Path) -> None:
     root = tmp_path / ".claude" / "worktrees" / "x" / "arch"
     root.mkdir(parents=True)
     _write_module(root, "x = 1\n")
-    assert [path.name for path in find_python_files(root)] == ["m.py"]
+    assert [path.name for path in find_python_files(root, _TESTS_EXEMPT_PARTS)] == ["m.py"]
 
 
 def test_find_governed_files_raises_when_the_evals_root_has_no_python_files(tmp_path: Path) -> None:
