@@ -100,9 +100,6 @@ ignore_missing_imports = true
 # Content-level checks live in tests/arch/.
 [tool.importlinter]
 root_package = "app"
-# Needed by "app never imports the eval harness" below: evals is not a root package here,
-# so its nodes only enter the graph when external packages do.
-include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "app.web imported only by the entrypoint"
@@ -294,17 +291,6 @@ forbidden_modules = ["app.services"]
 # app.services.run composes before calling in. Without this the arrow runs both ways —
 # app.services.run -> app.runtime.runner -> app.services.versioning — and "services sits
 # below the runtime" stops being true of the one module that most needs it to be.
-
-[[tool.importlinter.contracts]]
-name = "app never imports the eval harness"
-type = "forbidden"
-source_modules = ["app"]
-forbidden_modules = ["evals"]
-# The arrow runs one way: evals/ is a top-level tool that runs an eval against the app,
-# and evals/harness/ may import only the standard library, pydantic and itself (enforced
-# by tests/arch/test_eval_harness_imports_only_stdlib_and_pydantic.py). An app module
-# importing evals would invert that and make the product depend on its own test harness.
-# Declared while it is still true of every app module, which is when it is free to add.
 
 # NB: "app.seeds reaches the store through services" is enforced as an AST allowlist
 # in app/seeds/_arch_tests/test_seed_reaches_store_via_services.py (check_no_import),

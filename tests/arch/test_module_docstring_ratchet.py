@@ -18,8 +18,7 @@ _DOCSTRING_LINE_CEILING = 5
 # The complexity ratchet's exemptions, minus "tests" — this rule governs the test
 # tree too, so a directory named `tests` inside it must stay in scope.
 _TESTS_EXEMPT_PARTS = _SOURCE_EXEMPT_PARTS - {"tests"}
-# A pass folder holds generated eval output, committed nowhere, and loading code may
-# write a .py into its workspace — no rule about reviewed prose governs what lands there.
+# Nothing under an eval's passes/ is committed, and loading code may write a .py there.
 _EVALS_EXEMPT_PARTS = _TESTS_EXEMPT_PARTS | {"passes"}
 
 # Modules whose docstring is allowed past the ceiling, each mapped to the written
