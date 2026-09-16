@@ -121,6 +121,15 @@ def write_pass_report(report: PassReport, pass_dir: Path) -> None:
     (pass_dir / "report.html").write_text(_render_report_page(report), encoding="utf-8")
 
 
+def validate_pass_cases_are_in_dataset(
+    record: PassRecord, dataset_case_ids: Collection[str], dataset_path: Path
+) -> None:
+    missing = [case_id for case_id in record.case_ids if case_id not in dataset_case_ids]
+    if missing:
+        listed = ", ".join(repr(case_id) for case_id in missing)
+        raise CaseNotInDataset(f"{dataset_path}: the pass ran case_ids not in the dataset: {listed}")
+
+
 @dataclass(frozen=True)
 class _EarlierPass:
     pass_id: str
@@ -182,7 +191,7 @@ def _build_case_sections(
 ) -> list[CaseSection]:
     dataset_path = eval_dir / DATASET_FILE
     cases_by_id = {case.case_id: case for case in read_dataset(dataset_path, definition).cases}
-    _validate_pass_cases_are_in_dataset(record, cases_by_id.keys(), dataset_path)
+    validate_pass_cases_are_in_dataset(record, cases_by_id.keys(), dataset_path)
     return [
         _build_case_section(
             cases_by_id[case_id],
@@ -193,15 +202,6 @@ def _build_case_sections(
         )
         for case_id in record.case_ids
     ]
-
-
-def _validate_pass_cases_are_in_dataset(
-    record: PassRecord, dataset_case_ids: Collection[str], dataset_path: Path
-) -> None:
-    missing = [case_id for case_id in record.case_ids if case_id not in dataset_case_ids]
-    if missing:
-        listed = ", ".join(repr(case_id) for case_id in missing)
-        raise CaseNotInDataset(f"{dataset_path}: the pass ran case_ids not in the dataset: {listed}")
 
 
 def _build_case_section(

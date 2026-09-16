@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 import time
 from collections import Counter
-from collections.abc import Collection, Iterable
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 
@@ -27,7 +27,11 @@ from evals.harness.passes import (
     PassRecord,
     validate_pass_is_complete,
 )
-from evals.harness.report import build_pass_report, write_pass_report
+from evals.harness.report import (
+    build_pass_report,
+    validate_pass_cases_are_in_dataset,
+    write_pass_report,
+)
 
 
 class LoadCountNotConfirmed(Exception):
@@ -85,8 +89,8 @@ def judge_pass(
     validate_pass_is_complete(record, pass_dir)
     dataset_path = eval_dir / DATASET_FILE
     cases_by_id = {case.case_id: case for case in read_dataset(dataset_path, definition).cases}
+    validate_pass_cases_are_in_dataset(record, cases_by_id.keys(), dataset_path)
     stored = [load for load in record.loads if isinstance(load, OutputStored)]
-    _validate_stored_cases_are_in_dataset(stored, cases_by_id.keys(), dataset_path)
     judged_attempts = [
         _judge_stored_output(definition, folder, cases_by_id[load.case_id], load.attempt)
         for load in stored
@@ -189,18 +193,6 @@ def _load_attempt(
 def _validate_pass_is_for_eval(record: PassRecord, eval_name: str, pass_dir: Path) -> None:
     if record.eval != eval_name:
         raise JudgementInvalid(f"{pass_dir}: pass is for eval {record.eval!r}, not {eval_name!r}")
-
-
-def _validate_stored_cases_are_in_dataset(
-    stored: list[OutputStored], dataset_case_ids: Collection[str], dataset_path: Path
-) -> None:
-    stored_ids = dict.fromkeys(load.case_id for load in stored)
-    missing_ids = [case_id for case_id in stored_ids if case_id not in dataset_case_ids]
-    if missing_ids:
-        raise JudgementInvalid(
-            f"{dataset_path}: stored outputs name case_ids not in the dataset: "
-            f"{_quote_each(missing_ids)}"
-        )
 
 
 def _judge_stored_output(

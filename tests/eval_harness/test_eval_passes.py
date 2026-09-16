@@ -25,6 +25,7 @@ from evals.harness.orchestration import (
     judge_pass,
     run_pass,
 )
+from evals.harness.report import CaseNotInDataset
 from evals.harness.passes import (
     JudgementRefused,
     LoadRefused,
@@ -573,7 +574,7 @@ def test_a_judgement_for_a_key_the_case_does_not_expect_stops_the_pass(
     )
 
 
-def test_judging_refuses_every_stored_output_whose_case_left_the_dataset_before_judging_any(
+def test_judging_refuses_a_pass_whose_cases_left_the_dataset_before_judging_any(
     tmp_path: Path, clock: FakeClock
 ) -> None:
     eval_dir = tmp_path / "fixed_output"
@@ -593,7 +594,7 @@ def test_judging_refuses_every_stored_output_whose_case_left_the_dataset_before_
     )
     write_dataset(eval_dir, build_case("stays", "yes", answer="yes"))
 
-    with pytest.raises(JudgementInvalid) as refusal:
+    with pytest.raises(CaseNotInDataset) as refusal:
         judge_pass(
             dataclasses.replace(FIXED_OUTPUT_EVAL, judge=refuse_to_judge),
             pass_dir,
@@ -601,8 +602,38 @@ def test_judging_refuses_every_stored_output_whose_case_left_the_dataset_before_
         )
 
     assert str(refusal.value) == (
-        f"{dataset_path}: stored outputs name case_ids not in the dataset: 'gone', 'also_gone'"
+        f"{dataset_path}: the pass ran case_ids not in the dataset: 'gone', 'also_gone'"
     )
+
+
+def test_judging_refuses_a_pass_whose_refused_case_left_the_dataset_before_any_judgement_changes(
+    tmp_path: Path, clock: FakeClock
+) -> None:
+    eval_dir = tmp_path / "fixed_output"
+    dataset_path = write_dataset(
+        eval_dir,
+        build_case("declines", "no comment", answer="yes"),
+        build_case("agrees", "yes", answer="yes"),
+    )
+    definition = dataclasses.replace(FIXED_OUTPUT_EVAL, load=build_declining_loader(clock, []))
+    pass_dir = run_pass(
+        definition,
+        eval_dir=eval_dir,
+        repeats=1,
+        confirmed_loads=2,
+        case_ids=[],
+        repo_root=_REPO_ROOT,
+    )
+    judged = read_judgement_files(pass_dir)
+    write_dataset(eval_dir, build_case("agrees", "yes", answer="no"))
+
+    with pytest.raises(CaseNotInDataset) as refusal:
+        judge_pass(definition, pass_dir, eval_dir=eval_dir)
+
+    assert str(refusal.value) == (
+        f"{dataset_path}: the pass ran case_ids not in the dataset: 'declines'"
+    )
+    assert read_judgement_files(pass_dir) == judged
 
 
 def test_judging_refuses_a_pass_recorded_for_another_eval_before_judging_any(
