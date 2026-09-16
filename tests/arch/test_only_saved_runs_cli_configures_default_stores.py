@@ -34,7 +34,7 @@ def test_only_the_saved_runs_cli_points_the_app_at_the_real_stores() -> None:
     )
 
 
-def test_only_the_saved_runs_entrypoint_imports_the_saved_runs_cli() -> None:
+def test_under_evals_only_the_entrypoint_imports_the_saved_runs_cli() -> None:
     offenders = find_saved_runs_cli_imports(find_source_files_under(_EVALS_ROOT), _REPO_ROOT)
     assert not offenders, (
         f"{_SAVED_RUNS_CLI} is the one file under evals/ allowed to point the app at the "

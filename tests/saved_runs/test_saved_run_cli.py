@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import NamedTuple
@@ -15,8 +16,10 @@ from evals.runs.workspace import configure_throwaway_workspace
 from tiny_run import ROWS_FILENAME, TINY_ROWS, create_tiny_run
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+_ENV_PREFIX = "CARBON_PAPER_"
+_REFUSE_RENAMED_ENV_VARS = "refuse_renamed_env_vars"
 _STORE_CONFIGURERS = (
-    "refuse_renamed_env_vars",
+    _REFUSE_RENAMED_ENV_VARS,
     "configure_projects_dir_from_env",
     "configure_default_stores",
 )
@@ -48,8 +51,11 @@ class _RebuiltFrom(NamedTuple):
 
 
 @pytest.fixture(autouse=True)
-def store_calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    """No test here may point the app at the machine's real stores."""
+def store_calls(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> list[str]:
+    """No test here reads the machine's storage config; the files root stays under tmp_path."""
+    for name in [name for name in os.environ if name.startswith(_ENV_PREFIX)]:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("CARBON_PAPER_FILES_ROOT", str(tmp_path / "files"))
     calls: list[str] = []
     for name in _STORE_CONFIGURERS:
         monkeypatch.setattr(f"evals.runs.cli.{name}", _record_a_call(calls, name))
@@ -61,7 +67,10 @@ def test_capture_command_reads_the_machines_configured_stores(
 ) -> None:
     _record_capture_calls(monkeypatch, store_calls, tmp_path / "saved")
     assert main(["capture", "--project", _PROJECT, "--run", _RUN]) == 0
-    assert store_calls == [*_STORE_CONFIGURERS, _CAPTURE_RUN]
+    *configured, captured = store_calls
+    assert configured[0] == _REFUSE_RENAMED_ENV_VARS
+    assert sorted(configured) == sorted(_STORE_CONFIGURERS)
+    assert captured == _CAPTURE_RUN
 
 
 @pytest.mark.parametrize("replace", [False, True], ids=["without --replace", "with --replace"])
