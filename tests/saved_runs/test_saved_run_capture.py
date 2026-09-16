@@ -25,6 +25,7 @@ from evals.runs.recipe import (
     RecipeFigure,
     RecipeInput,
     SuppliedLocation,
+    read_head_commit,
     read_recipe,
 )
 from tiny_run import (
@@ -102,7 +103,7 @@ def test_capture_records_the_project_version_and_commit_it_came_from_and_when(
     assert (captured.project_id, captured.workflow_version, captured.code_commit) == (
         run.project_id,
         read_run_manifest(run.project_id, run.run_id).workflow_version,
-        _read_head_commit(_REPO_ROOT),
+        read_head_commit(_REPO_ROOT),
     )
     captured_at = datetime.fromisoformat(captured.captured_at)
     assert before <= captured_at <= after
@@ -297,13 +298,6 @@ def _write_rows(tmp_path: Path) -> Path:
     rows = tmp_path / ROWS_FILENAME
     rows.write_bytes(TINY_ROWS)
     return rows
-
-
-def _read_head_commit(repo_root: Path) -> str:
-    completed = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=repo_root, capture_output=True, check=True
-    )
-    return completed.stdout.decode("utf-8").strip()
 
 
 def _read_members(archive: bytes) -> dict[str, bytes]:

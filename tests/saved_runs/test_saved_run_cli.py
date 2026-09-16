@@ -12,6 +12,7 @@ from app.services.run import list_every_run_entry, read_run_manifest
 from evals.runs.capture import CaptureRefused, capture_run
 from evals.runs.cli import main
 from evals.runs.rebuild import RebuiltRun, RebuiltRunRefused, RunRefused
+from evals.runs.recipe import CapturedFrom, RunRecipe, read_head_commit, write_recipe
 from evals.runs.workspace import configure_throwaway_workspace
 from tiny_run import ROWS_FILENAME, TINY_ROWS, create_tiny_run
 
@@ -28,6 +29,7 @@ _PROJECT = "tiny"
 _RUN = "20260915T120000.000000"
 _REBUILT = RebuiltRun(project_id="tiny-rebuilt", run_id="20260916T090000.000000")
 _CAPTURE_REFUSAL = "run 'run-1' has status 'running'"
+_CAPTURED_COMMIT = "abc1234"
 _REAL_STORAGE: dict[str, Callable[[pytest.MonkeyPatch, Path], None]] = {
     "the storage home": lambda patch, root: patch.setattr("evals.runs.cli.CARBON_PAPER_HOME", root),
     "CARBON_PAPER_PROJECTS_DIR": lambda patch, root: patch.setenv(
@@ -108,7 +110,7 @@ def test_capture_command_prints_the_reason_a_capture_was_refused_and_exits_one(
 ) -> None:
     _refuse_every_capture(monkeypatch, CaptureRefused(_CAPTURE_REFUSAL))
     assert main(["capture", "--project", _PROJECT, "--run", _RUN]) == 1
-    assert capsys.readouterr().out == f"{_CAPTURE_REFUSAL}\n"
+    assert capsys.readouterr().err == f"{_CAPTURE_REFUSAL}\n"
 
 
 def test_rebuild_command_configures_only_the_named_workspace(
@@ -125,13 +127,17 @@ def test_rebuild_command_configures_only_the_named_workspace(
     assert read_run_manifest(entry.project, entry.run_id).status == RunStatus.OK
 
 
-def test_rebuild_command_prints_the_project_and_run_it_rebuilt(
+def test_rebuild_command_prints_the_project_the_run_and_both_commits(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    saved = tmp_path / "saved"
+    _write_recipe_captured_at(saved, _CAPTURED_COMMIT)
     _record_rebuild_calls(monkeypatch)
-    assert main(_rebuild_argv(tmp_path / "saved", tmp_path / "ws", None)) == 0
+    assert main(_rebuild_argv(saved, tmp_path / "ws", None)) == 0
     assert capsys.readouterr().out == (
         f"rebuilt run '{_REBUILT.run_id}' of project '{_REBUILT.project_id}'\n"
+        f"captured at commit {_CAPTURED_COMMIT}, "
+        f"rebuilt at commit {read_head_commit(_REPO_ROOT)}\n"
     )
 
 
@@ -142,6 +148,7 @@ def test_rebuild_command_hands_rebuild_the_saved_run_the_repo_and_the_inputs_fol
     recorded = _record_rebuild_calls(monkeypatch)
     inputs_dir = _write_rows(tmp_path) if given else None
     saved = tmp_path / "saved" / _RUN
+    _write_recipe_captured_at(saved, _CAPTURED_COMMIT)
     assert main(_rebuild_argv(saved, tmp_path / "ws", inputs_dir)) == 0
     assert recorded == [
         _RebuiltFrom(run_dir=saved, repo_root=_REPO_ROOT, inputs_dir=inputs_dir)
@@ -154,7 +161,7 @@ def test_rebuild_command_prints_every_reason_a_run_was_refused_and_exits_one(
     reasons = ["the archive is not the captured one", "the rows are not the captured rows"]
     _refuse_every_rebuild(monkeypatch, RunRefused(reasons))
     assert main(_rebuild_argv(tmp_path / "saved", tmp_path / "ws", None)) == 1
-    assert capsys.readouterr().out == "".join(f"{reason}\n" for reason in reasons)
+    assert capsys.readouterr().err == "".join(f"{reason}\n" for reason in reasons)
 
 
 def test_rebuild_command_names_the_run_refused_after_it_was_rebuilt_and_exits_one(
@@ -163,7 +170,7 @@ def test_rebuild_command_names_the_run_refused_after_it_was_rebuilt_and_exits_on
     reason = "figure 'amount-total': the rebuilt run published 12; the recipe recorded 13"
     _refuse_every_rebuild(monkeypatch, RebuiltRunRefused(_REBUILT, [reason]))
     assert main(_rebuild_argv(tmp_path / "saved", tmp_path / "ws", None)) == 1
-    printed = capsys.readouterr().out
+    printed = capsys.readouterr().err
     assert _REBUILT.project_id in printed and _REBUILT.run_id in printed
     assert reason in printed
 
@@ -181,7 +188,7 @@ def test_rebuild_command_refuses_a_workspace_inside_the_machines_real_storage(
     workspace = real_storage / "ws"
     assert main(_rebuild_argv(tmp_path / "saved", workspace, None)) == 1
     assert configured == []
-    printed = capsys.readouterr().out
+    printed = capsys.readouterr().err
     assert f"{label}: {real_storage}" in printed and str(workspace) in printed
 
 
@@ -190,7 +197,25 @@ def test_rebuild_command_prints_a_store_left_outside_the_workspace_and_exits_one
 ) -> None:
     monkeypatch.setattr("evals.runs.workspace.set_projects_dir", lambda path: None)
     assert main(_rebuild_argv(tmp_path / "saved", tmp_path / "ws", None)) == 1
-    assert "every store of a throwaway workspace must sit under" in capsys.readouterr().out
+    assert "every store of a throwaway workspace must sit under" in capsys.readouterr().err
+
+
+def test_a_refused_capture_leaves_stdout_empty(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _refuse_every_capture(monkeypatch, CaptureRefused(_CAPTURE_REFUSAL))
+    assert main(["capture", "--project", _PROJECT, "--run", _RUN]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == "" and captured.err != ""
+
+
+def test_a_refused_rebuild_leaves_stdout_empty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _refuse_every_rebuild(monkeypatch, RunRefused(["the archive is not the captured one"]))
+    assert main(_rebuild_argv(tmp_path / "saved", tmp_path / "ws", None)) == 1
+    captured = capsys.readouterr()
+    assert captured.out == "" and captured.err != ""
 
 
 def test_the_saved_runs_cli_requires_a_command() -> None:
@@ -209,6 +234,25 @@ def _capture_a_tiny_run(tmp_path: Path) -> Path:
     return capture_run(
         run.project_id, run.run_id, tmp_path / "saved", repo_root=_REPO_ROOT, replace=False
     )
+
+
+def _write_recipe_captured_at(saved: Path, commit: str) -> None:
+    saved.mkdir(parents=True, exist_ok=True)
+    write_recipe(saved, RunRecipe(
+        workflow_run_id=_RUN,
+        captured=CapturedFrom(
+            project_id=_PROJECT,
+            workflow_version="version-1",
+            captured_at="2026-09-15T12:00:00",
+            code_commit=commit,
+        ),
+        archive_sha256="a" * 64,
+        inputs=[],
+        limits={},
+        offsets={},
+        ends=RunStatus.OK,
+        figures=[],
+    ))
 
 
 def _write_rows(tmp_path: Path) -> Path:

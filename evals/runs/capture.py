@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import subprocess
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -24,6 +23,7 @@ from evals.runs.recipe import (
     RecipeInput,
     RunRecipe,
     SuppliedLocation,
+    read_head_commit,
     write_recipe,
 )
 
@@ -166,15 +166,8 @@ def _record_captured_from(project_id: str, workflow_version: str, repo_root: Pat
         project_id=project_id,
         workflow_version=workflow_version,
         captured_at=datetime.now().isoformat(timespec="seconds"),
-        code_commit=_read_head_commit(repo_root),
+        code_commit=read_head_commit(repo_root),
     )
-
-
-def _read_head_commit(repo_root: Path) -> str:
-    completed = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=repo_root, capture_output=True, check=True
-    )
-    return completed.stdout.decode("utf-8").strip()
 
 
 def _record_figures(run_id: str) -> list[RecipeFigure]:

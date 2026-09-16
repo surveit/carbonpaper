@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -76,3 +77,10 @@ def read_recipe(run_dir: Path) -> RunRecipe:
 def write_recipe(run_dir: Path, recipe: RunRecipe) -> None:
     text = recipe.model_dump_json(indent=2) + "\n"
     (run_dir / RECIPE_FILE).write_text(text, encoding="utf-8", newline="\n")
+
+
+def read_head_commit(repo_root: Path) -> str:
+    completed = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo_root, capture_output=True, check=True
+    )
+    return completed.stdout.decode("utf-8").strip()

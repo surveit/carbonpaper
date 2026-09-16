@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from pathlib import Path
 
 from app.core.paths import CARBON_PAPER_HOME, repo_root
 from app.core.store_config import configure_default_stores, refuse_renamed_env_vars
 from app.services.workspace import configure_projects_dir_from_env
 from evals.runs.capture import CaptureRefused, capture_run
-from evals.runs.rebuild import RunRefused, rebuild_run
+from evals.runs.rebuild import RebuiltRun, RunRefused, rebuild_run
+from evals.runs.recipe import read_head_commit, read_recipe
 from evals.runs.workspace import WorkspaceOutsidePass, configure_throwaway_workspace
 
 _CAPTURE = "capture"
@@ -42,7 +44,7 @@ def _capture_from_the_machines_stores(project_id: str, run_id: str, *, replace: 
             project_id, run_id, root.joinpath(*_SAVED_RUNS_FOLDER), repo_root=root, replace=replace
         )
     except CaptureRefused as refused:
-        print(refused)
+        _print_refusal(str(refused))
         return 1
     print(f"saved to {saved}")
     return 0
@@ -53,15 +55,15 @@ def _rebuild_in_a_throwaway_workspace(
 ) -> int:
     holding = _find_real_storage_holding(workspace)
     if holding:
-        print(_describe_a_workspace_inside_real_storage(workspace, holding))
+        _print_refusal(_describe_a_workspace_inside_real_storage(workspace, holding))
         return 1
     try:
         configure_throwaway_workspace(workspace)
         rebuilt = rebuild_run(run_dir, repo_root=repo_root(), inputs_dir=inputs_dir)
     except (WorkspaceOutsidePass, RunRefused) as refused:
-        print(refused)
+        _print_refusal(str(refused))
         return 1
-    print(f"rebuilt run '{rebuilt.run_id}' of project '{rebuilt.project_id}'")
+    print(_describe_the_rebuilt_run(run_dir, rebuilt))
     return 0
 
 
@@ -107,3 +109,15 @@ def _describe_a_workspace_inside_real_storage(workspace: Path, holding: list[str
         f"a rebuild needs a throwaway workspace, and {workspace.resolve()} sits inside the "
         "machine's real storage:\n  " + "\n  ".join(holding)
     )
+
+
+def _describe_the_rebuilt_run(run_dir: Path, rebuilt: RebuiltRun) -> str:
+    return (
+        f"rebuilt run '{rebuilt.run_id}' of project '{rebuilt.project_id}'\n"
+        f"captured at commit {read_recipe(run_dir).captured.code_commit}, "
+        f"rebuilt at commit {read_head_commit(repo_root())}"
+    )
+
+
+def _print_refusal(reason: str) -> None:
+    print(reason, file=sys.stderr)
