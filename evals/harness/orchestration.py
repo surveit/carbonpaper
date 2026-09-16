@@ -7,7 +7,7 @@ from collections.abc import Collection, Iterable
 from datetime import datetime
 from pathlib import Path
 
-from evals.harness.dataset import Case, read_dataset
+from evals.harness.dataset import DATASET_FILE, Case, read_dataset
 from evals.harness.definition import (
     CaseRefused,
     EvalDefinition,
@@ -23,12 +23,11 @@ from evals.harness.passes import (
     LoadRefused,
     OutputStored,
     PassFolder,
+    PassIncomplete as PassIncomplete,
     PassRecord,
-    UnaccountedCase,
-    find_unaccounted_cases,
+    validate_pass_is_complete,
 )
-
-_DATASET_FILE = "dataset.json"
+from evals.harness.report import build_pass_report, write_pass_report
 
 
 class LoadCountNotConfirmed(Exception):
@@ -51,10 +50,6 @@ class RepeatsInvalid(Exception):
     pass
 
 
-class PassIncomplete(Exception):
-    pass
-
-
 def run_pass(
     definition: EvalDefinition[InputT, ExpectedT, OutputT],
     *,
@@ -64,7 +59,7 @@ def run_pass(
     case_ids: list[str],
     repo_root: Path,
 ) -> Path:
-    dataset_path = eval_dir / _DATASET_FILE
+    dataset_path = eval_dir / DATASET_FILE
     cases = _select_cases(read_dataset(dataset_path, definition).cases, case_ids, dataset_path)
     _validate_repeats(repeats)
     _validate_load_count(len(cases) * repeats, confirmed_loads)
@@ -87,8 +82,8 @@ def judge_pass(
     folder = PassFolder(pass_dir)
     record = folder.read_record()
     _validate_pass_is_for_eval(record, definition.name, pass_dir)
-    _validate_pass_is_complete(record, pass_dir)
-    dataset_path = eval_dir / _DATASET_FILE
+    validate_pass_is_complete(record, pass_dir)
+    dataset_path = eval_dir / DATASET_FILE
     cases_by_id = {case.case_id: case for case in read_dataset(dataset_path, definition).cases}
     stored = [load for load in record.loads if isinstance(load, OutputStored)]
     _validate_stored_cases_are_in_dataset(stored, cases_by_id.keys(), dataset_path)
@@ -97,6 +92,9 @@ def judge_pass(
         for load in stored
     ]
     folder.replace_judgements(judged_attempts)
+    write_pass_report(
+        build_pass_report(definition, pass_dir, eval_dir=eval_dir, against=None), pass_dir
+    )
 
 
 def _select_cases(
@@ -191,19 +189,6 @@ def _load_attempt(
 def _validate_pass_is_for_eval(record: PassRecord, eval_name: str, pass_dir: Path) -> None:
     if record.eval != eval_name:
         raise JudgementInvalid(f"{pass_dir}: pass is for eval {record.eval!r}, not {eval_name!r}")
-
-
-def _validate_pass_is_complete(record: PassRecord, pass_dir: Path) -> None:
-    unaccounted = find_unaccounted_cases(record)
-    if unaccounted:
-        listed = "; ".join(_describe_unaccounted_case(case) for case in unaccounted)
-        raise PassIncomplete(f"{pass_dir}: loading stopped before recording {listed}")
-
-
-def _describe_unaccounted_case(case: UnaccountedCase) -> str:
-    attempts = ", ".join(str(attempt) for attempt in case.missing_attempts)
-    noun = _inflect(len(case.missing_attempts), "attempt")
-    return f"case {case.case_id!r} {noun} {attempts}"
 
 
 def _validate_stored_cases_are_in_dataset(
