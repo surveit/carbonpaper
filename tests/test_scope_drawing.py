@@ -18,7 +18,7 @@ from test_scope_page import (  # noqa: F401  (the fixtures come with them)
 
 
 def read_map(project: str, run: str, stage: str, column: str):
-    cited = StageOutputCellCitation(project_id=project, stage_id=stage, row_ordinal=0,
+    cited = StageOutputCellCitation(stage_id=stage, row_ordinal=0,
                                     column=column, run_id=run, value=None)
     scope, _cuts = load_scope_map(project, run, cited)
     return scope

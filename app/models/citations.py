@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, TypeAdapter
 
 from app.core.figure_text import render_figure
 from app.core.json_types import JsonScalar
@@ -19,14 +19,13 @@ class CitedValue(BaseModel):
 
 
 class Citation(BaseModel):
-    """Where the evidence sits, addressed so it opens on its own: see render_source_url."""
+    """Where the evidence sits. The kind decides what else a citation carries."""
 
     kind: str
 
 
 class StageOutputCellCitation(Citation):
     kind: Literal["stage_output_cell"] = "stage_output_cell"
-    project_id: ID = Field(description="The project the run belongs to.")
     run_id: ID = Field(description="The run, as the evidence pool names it.")
     stage_id: ID = Field(description="The stage, as the evidence pool names it.")
     row_ordinal: int = Field(description="The row's position in the stage output, counting from 0.")
@@ -82,7 +81,6 @@ class StageOutputRowCitation(Citation):
 
 class StageOutputColumnCitation(Citation):
     kind: Literal["stage_output_column"] = "stage_output_column"
-    project_id: ID = Field(description="The project the run belongs to.")
     run_id: ID = Field(description="The run whose output holds the column.")
     stage_id: ID = Field(description="The stage, as the evidence pool names it.")
     column: str = Field(description="The column's name, spelled as the evidence pool spells it.")
@@ -90,13 +88,11 @@ class StageOutputColumnCitation(Citation):
 
 class StageCitation(Citation):
     kind: Literal["stage"] = "stage"
-    project_id: ID = Field(description="The project whose workflow holds the stage.")
     stage_id: ID = Field(description="The stage, as the evidence pool names it.")
 
 
 class TermCitation(Citation):
     kind: Literal["term"] = "term"
-    project_id: ID = Field(description="The project whose terms define it.")
     name: str = Field(description="The defined term, exactly as the terms name it.")
 
 
@@ -104,3 +100,36 @@ ChallengeCitation = Annotated[
     Union[StageOutputCellCitation, StageOutputColumnCitation, StageCitation, TermCitation],
     Field(discriminator="kind"),
 ]
+
+
+# ── the same four, stamped with the project when a review is stored ──
+# A reviewer cannot read the project off the pool, so it is never asked for one.
+class AddressedStageOutputCellCitation(StageOutputCellCitation):
+    project_id: ID
+
+
+class AddressedStageOutputColumnCitation(StageOutputColumnCitation):
+    project_id: ID
+
+
+class AddressedStageCitation(StageCitation):
+    project_id: ID
+
+
+class AddressedTermCitation(TermCitation):
+    project_id: ID
+
+
+AddressedChallengeCitation = Annotated[
+    Union[AddressedStageOutputCellCitation, AddressedStageOutputColumnCitation,
+          AddressedStageCitation, AddressedTermCitation],
+    Field(discriminator="kind"),
+]
+
+ADDRESSED_CHALLENGE_CITATION: TypeAdapter[AddressedChallengeCitation] = TypeAdapter(
+    AddressedChallengeCitation)
+
+
+def address_citation(project_id: ID, citation: ChallengeCitation) -> AddressedChallengeCitation:
+    stamped = {**citation.model_dump(), "project_id": project_id}
+    return ADDRESSED_CHALLENGE_CITATION.validate_python(stamped)

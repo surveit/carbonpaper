@@ -9,7 +9,7 @@ from pydantic import Field, model_validator
 from app.core.errors import ClaimReviewIsImmutable
 from app.core.ids import ID
 from app.core.record import PersistedModel, PersistenceScope
-from app.models.citations import ChallengeCitation
+from app.models.citations import AddressedChallengeCitation, ChallengeCitation
 from app.models.schema import _Base
 
 
@@ -32,13 +32,13 @@ class Severity(IntEnum):
 
 
 SEVERITY_WORDS: dict[Severity, str] = {
-    Severity.noted: "nothing moves; a choice was made the reader should know about",
-    Severity.minor: "the figure moves, not by enough to change anything",
-    Severity.major: "the claim's shape holds, but the figure moves enough to change what it means",
-    Severity.misleading: "the reader draws a conclusion the run does not support",
+    Severity.noted: "nothing moves; a choice was made a reader should know about",
+    Severity.minor: "the figure moves, but not materially",
+    Severity.major: "the claim's shape holds, but the figure moves materially",
+    Severity.misleading: "a reader draws a conclusion the run does not support",
 }
 
-_SEVERITY_DESCRIPTION = "How wrong the reader is left. " + ". ".join(
+_SEVERITY_DESCRIPTION = "How wrong a reader is left. " + ". ".join(
     f"{level.value} {word}" for level, word in SEVERITY_WORDS.items()
 )
 
@@ -50,7 +50,9 @@ class ClaimPart(_Base):
     )
 
 
-class Challenge(_Base):
+class DraftChallenge(_Base):
+    """What a reviewer answers: no project, which it cannot read off the evidence pool."""
+
     kind: ChallengeKind = Field(description="What sort of stretch this is.")
     claim_part: ClaimPart | None = Field(
         default=None,
@@ -65,11 +67,22 @@ class Challenge(_Base):
     severity: Severity = Field(description=_SEVERITY_DESCRIPTION)
 
     @model_validator(mode="after")
-    def _validate_cited(self) -> Challenge:
+    def _validate_cited(self) -> DraftChallenge:
         # A gap IS the absence of footing, so it is the one kind with nothing to point at.
         if self.kind != ChallengeKind.gap and not self.citations:
             raise ValueError(f"a {self.kind} challenge cites nothing in the run")
         return self
+
+
+class Challenge(_Base):
+    """The stored one: every citation stamped with the project, so it opens on its own."""
+
+    kind: ChallengeKind
+    claim_part: ClaimPart | None = None
+    text: str
+    justification: str
+    citations: list[AddressedChallengeCitation] = Field(default_factory=list)
+    severity: Severity
 
 
 class ClaimReview(PersistedModel):

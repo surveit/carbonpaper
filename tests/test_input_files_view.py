@@ -23,7 +23,7 @@ def run_id(projects_root):
 
 
 def _view(run_id: str, stage="grant_totals", column="total_amount", row=0):
-    return load_input_files(PROJECT, run_id, StageOutputCellCitation(project_id=PROJECT, run_id=run_id, stage_id=stage, row_ordinal=row, column=column, value=None))
+    return load_input_files(PROJECT, run_id, StageOutputCellCitation(run_id=run_id, stage_id=stage, row_ordinal=row, column=column, value=None))
 
 
 def test_it_lists_every_file_the_rows_passed_through(run_id):

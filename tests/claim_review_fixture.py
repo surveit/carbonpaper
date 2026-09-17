@@ -33,12 +33,12 @@ def claim_the_total(run_id: str, text: str = TOTAL_TEXT) -> Claim:
     [shape] = claim_shapes.write_claim_shapes(PROJECT, [TOTAL_SHAPE])
     WorkflowOutput(
         slug="grant-total", label="What the grants came to", primary=True, shape_id=shape.id,
-        citation=StageOutputCellCitation(project_id=PROJECT, run_id=run_id, stage_id="grant_totals", row_ordinal=0,
+        citation=StageOutputCellCitation(run_id=run_id, stage_id="grant_totals", row_ordinal=0,
             column="total_amount", value=2200),
     ).save()
     WorkflowOutput(
         slug="grant-count", label="How many grants", primary=False, shape_id=None,
-        citation=StageOutputCellCitation(project_id=PROJECT, run_id=run_id, stage_id="grant_totals", row_ordinal=0, column="grants", value=5),
+        citation=StageOutputCellCitation(run_id=run_id, stage_id="grant_totals", row_ordinal=0, column="grants", value=5),
     ).save()
     return claims.submit_claim(PROJECT, run_id, "grant-total", {}, text)
 
@@ -67,7 +67,7 @@ def claim_a_nullable_figure(projects_root) -> Claim:
                                                ("doubled-small", 2, 2200, None)]:
         WorkflowOutput(
             slug=slug, label=f"Doubled amount, row {row_ordinal}", shape_id=shape_id,
-            citation=StageOutputCellCitation(project_id=NULLABLE_PROJECT, run_id=run_id,
+            citation=StageOutputCellCitation(run_id=run_id,
                                              stage_id="doubled",
                                              row_ordinal=row_ordinal, column="doubled",
                                              value=value),

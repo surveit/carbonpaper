@@ -200,7 +200,7 @@ def test_the_column_counts_what_its_header_counts(scoped):
     outputs = Path(resolve_run_dir(PROJECT, run_id)) / "outputs"
     drawn = build_scope_map(
         run, PROJECT, run_id, outputs,
-        StageOutputCellCitation(project_id=PROJECT, run_id=run_id, stage_id="grand_total", row_ordinal=0,
+        StageOutputCellCitation(run_id=run_id, stage_id="grand_total", row_ordinal=0,
                                 column="total", value=None))
     banded = next(scale for scale in drawn.scale if scale.stage == "banded")
     assert banded.included_rows_count == len(drawn.branch_path_index) == 9
@@ -214,7 +214,7 @@ def test_a_cut_below_the_drawn_grain_still_reaches_the_map(scoped):
     outputs = Path(resolve_run_dir(PROJECT, run_id)) / "outputs"
     drawn = build_scope_map(
         run, PROJECT, run_id, outputs,
-        StageOutputCellCitation(project_id=PROJECT, run_id=run_id, stage_id="big_total", row_ordinal=0,
+        StageOutputCellCitation(run_id=run_id, stage_id="big_total", row_ordinal=0,
                                 column="total", value=None))
     assert drawn.covers.at_stage == "banded"
     assert not any(branch.startswith("big_regions|")
@@ -232,7 +232,7 @@ def test_a_cut_draws_its_own_groups_and_not_the_figures(scoped):
     outputs = Path(resolve_run_dir(PROJECT, run_id)) / "outputs"
     drawn = build_scope_map(
         run, PROJECT, run_id, outputs,
-        StageOutputCellCitation(project_id=PROJECT, run_id=run_id, stage_id="big_total", row_ordinal=0,
+        StageOutputCellCitation(run_id=run_id, stage_id="big_total", row_ordinal=0,
                                 column="total", value=None))
     assert drawn.nearest_merge == "big_total"
     assert set(drawn.aliased_merges) == {"by_region"}

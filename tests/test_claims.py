@@ -56,7 +56,7 @@ def _a_run_of_two_shapes() -> dict[str, str]:
 def _publish(slug: str, value, shape_id: str | None, run_id: str = _RUN) -> None:
     WorkflowOutput(
         slug=slug, label=slug, primary=True, shape_id=shape_id,
-        citation=StageOutputCellCitation(project_id=_PROJECT, run_id=run_id, stage_id="ai_spend_totals", row_ordinal=0,
+        citation=StageOutputCellCitation(run_id=run_id, stage_id="ai_spend_totals", row_ordinal=0,
             column="ai_spend", value=value,
         ),
     ).save()

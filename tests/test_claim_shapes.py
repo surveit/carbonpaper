@@ -39,7 +39,7 @@ def _claim(shape_id: str, value: float = 63027729.0, claim_id: str = "") -> Clai
     return Claim(
         id=claim_id or uuid4().hex,
         created_by_project_id=_PROJECT, shape_id=shape_id,
-        citation=StageOutputCellCitation(project_id=_PROJECT, run_id="20260901T103753.789399", stage_id="ai_spend_totals",
+        citation=StageOutputCellCitation(run_id="20260901T103753.789399", stage_id="ai_spend_totals",
             row_ordinal=0, column="ai_spend", value=value,
         ),
     )

@@ -10,6 +10,7 @@ from app.core.ids import ID
 from app.core.json_types import JsonScalar
 from app.models.branch_analysis import BranchReason
 from app.models.citations import (
+    address_citation,
     ChallengeCitation,
     PublishedCitation,
     StageCitation,
@@ -23,7 +24,12 @@ from app.models.claim_review import (
     StageEvidenceItem,
     find_claim_part_spans,
 )
-from app.models.records.claim_review import Challenge, ChallengeKind, ClaimReview
+from app.models.records.claim_review import (
+    Challenge,
+    ChallengeKind,
+    ClaimReview,
+    DraftChallenge,
+)
 from app.models.stage import StageType
 from app.models.terms import render_terms
 from app.models.workflow import Workflow, find_stages_upstream_of, sort_stages_by_dependency
@@ -66,21 +72,29 @@ def load_claim_review(claim_id: ID) -> ClaimReview | None:
     return held[0] if held else None
 
 
-def store_claim_review(project_id: ID, claim_id: ID, *, challenges: list[Challenge],
+def store_claim_review(project_id: ID, claim_id: ID, *, challenges: list[DraftChallenge],
                        summary: str, session_ids: list[ID]) -> ClaimReview:
     claim = claims_service.load_claim(project_id, claim_id)
     cited = _require_cell_citation(claim.citation)
     if load_claim_review(claim_id) is not None:
         raise ClaimReviewRefused(
             [f"claim {claim_id} already has a review; a re-review is a new claim"])
-    issues = [*find_challenge_issues(challenges, claim.text),
-              *find_citation_issues(project_id, cited.run_id, challenges)]
+    addressed = [_address_challenge(project_id, one) for one in challenges]
+    issues = [*find_challenge_issues(addressed, claim.text),
+              *find_citation_issues(project_id, cited.run_id, addressed)]
     if issues:
         raise ClaimReviewRefused(issues)
     review = ClaimReview(
-        claim_id=claim_id, challenges=challenges, summary=summary, session_ids=session_ids)
+        claim_id=claim_id, challenges=addressed, summary=summary, session_ids=session_ids)
     review.save()
     return review
+
+
+def _address_challenge(project_id: ID, challenge: DraftChallenge) -> Challenge:
+    return Challenge.model_validate({
+        **challenge.model_dump(exclude={"citations"}),
+        "citations": [address_citation(project_id, one) for one in challenge.citations],
+    })
 
 
 def find_challenge_issues(challenges: list[Challenge], text: str) -> list[str]:
@@ -103,16 +117,8 @@ def find_citation_issues(project_id: ID, run_id: ID, challenges: list[Challenge]
     return [
         f"{_name_challenge(index, challenge)}: {citation.kind} citation {problem}"
         for index, challenge, citation in cited
-        if (problem := _find_address_problem(project_id, citation)
-            or _find_citation_problem(held, citation)) is not None
+        if (problem := _find_citation_problem(held, citation)) is not None
     ]
-
-
-def _find_address_problem(project_id: ID, citation: ChallengeCitation) -> str | None:
-    # The address is what opens the citation on its own, so a wrong one is a dead link.
-    if citation.project_id != project_id:
-        return f"names project {citation.project_id!r}, not the claim's project"
-    return None
 
 
 # ── what the run holds ──

@@ -13,19 +13,19 @@ from app.models.claim_review import (
 from app.models.records.claim_review import (
     Severity,
     SEVERITY_WORDS,
-    Challenge,
+    DraftChallenge,
     ChallengeKind,
     ClaimPart,
     ClaimReview,
 )
 
 
-def _challenge(**overrides: object) -> Challenge:
+def _challenge(**overrides: object) -> DraftChallenge:
     fields = dict(kind=ChallengeKind.coverage, claim_part=ClaimPart(phrase="Blank outcomes"),
                   text="Blank outcomes count as unknown.",
                   justification="28% of records are blank.",
-                  citations=[StageCitation(project_id="p", stage_id="outcomes")], severity=3)
-    return Challenge.model_validate({**fields, **overrides})
+                  citations=[StageCitation(stage_id="outcomes")], severity=3)
+    return DraftChallenge.model_validate({**fields, **overrides})
 
 
 def test_a_claim_part_is_found_at_the_occurrence_it_names():
@@ -53,7 +53,7 @@ def test_a_claim_part_needs_a_phrase_and_counts_occurrences_from_one():
 
 
 def test_a_challenge_carries_exactly_these_fields_in_this_order():
-    assert list(Challenge.model_fields) == [
+    assert list(DraftChallenge.model_fields) == [
         "kind", "claim_part", "text", "justification", "citations", "severity"]
 
 
@@ -64,14 +64,14 @@ def test_severity_runs_from_zero_to_three_and_each_has_a_word():
         _challenge(severity=4)
     with pytest.raises(ValidationError):
         _challenge(severity=-1)
-    spelled = Challenge.model_fields["severity"].description or ""
-    assert spelled.startswith("How wrong the reader is left. ")
+    spelled = DraftChallenge.model_fields["severity"].description or ""
+    assert spelled.startswith("How wrong a reader is left. ")
     assert all(f"{level} {word}" in spelled for level, word in SEVERITY_WORDS.items())
 
 
 def test_the_two_highest_severities_divide_on_quantity_and_quality():
-    assert "the figure moves enough to change what it means" in SEVERITY_WORDS[Severity.major]
-    assert SEVERITY_WORDS[Severity.misleading].startswith("the reader draws a conclusion")
+    assert "the figure moves materially" in SEVERITY_WORDS[Severity.major]
+    assert SEVERITY_WORDS[Severity.misleading].startswith("a reader draws a conclusion")
 
 
 def test_a_review_holds_no_claim_parts_of_its_own():
@@ -80,12 +80,11 @@ def test_a_review_holds_no_claim_parts_of_its_own():
 
 def test_a_citation_is_told_apart_by_its_kind():
     parsed = _challenge(citations=[
-        {"kind": "stage_output_cell", "project_id": "p", "run_id": "r", "stage_id": "s",
+        {"kind": "stage_output_cell", "run_id": "r", "stage_id": "s",
          "row_ordinal": 0, "column": "c", "value": 1},
-        {"kind": "stage_output_column", "project_id": "p", "run_id": "r", "stage_id": "s",
-         "column": "c"},
-        {"kind": "stage", "project_id": "p", "stage_id": "s"},
-        {"kind": "term", "project_id": "p", "name": "grant"},
+        {"kind": "stage_output_column", "run_id": "r", "stage_id": "s", "column": "c"},
+        {"kind": "stage", "stage_id": "s"},
+        {"kind": "term", "name": "grant"},
     ])
 
     assert [citation.kind for citation in parsed.citations] == [
@@ -99,7 +98,7 @@ def test_every_field_an_agent_fills_on_a_cell_citation_is_described():
     described = {name: field.description for name, field in
                  StageOutputCellCitation.model_fields.items() if name != "kind"}
 
-    assert set(described) == {"project_id", "run_id", "stage_id", "row_ordinal", "column", "value"}
+    assert set(described) == {"run_id", "stage_id", "row_ordinal", "column", "value"}
     assert all(described.values())
 
 

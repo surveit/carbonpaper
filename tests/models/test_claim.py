@@ -35,7 +35,7 @@ def _claim(shape: ClaimShape, run_id: str = _RUN) -> Claim:
     return Claim(
         created_by_project_id=_PROJECT,
         shape_id=shape.id,
-        citation=StageOutputCellCitation(project_id=_PROJECT, run_id=run_id, stage_id="paid_totals", row_ordinal=0,
+        citation=StageOutputCellCitation(run_id=run_id, stage_id="paid_totals", row_ordinal=0,
             column="total_income_usd", value=read_cell(table, "total_income_usd", 0),
         ),
     )
