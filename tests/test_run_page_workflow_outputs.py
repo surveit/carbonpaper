@@ -29,8 +29,7 @@ def _publish(slug: str, label: str, value, run_id: str = _RUN,
              column: str = "external_spend", primary: bool = False):
     WorkflowOutput(
         slug=slug, label=label, primary=primary,
-        citation=StageOutputCellCitation(
-            run_id=run_id, stage_id=_STAGE, row_ordinal=0,
+        citation=StageOutputCellCitation(run_id=run_id, stage_id=_STAGE, row_ordinal=0,
             column=column, value=value,
         ),
     ).save()

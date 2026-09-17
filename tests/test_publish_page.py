@@ -57,8 +57,7 @@ def _a_run(tmp_path, parameters: RunParameters | None = None) -> TestClient:
     ):
         WorkflowOutput(
             slug=slug, label=slug, primary=True, shape_id=shape_id,
-            citation=StageOutputCellCitation(
-                run_id=_RUN, stage_id="ai_spend_totals", row_ordinal=0,
+            citation=StageOutputCellCitation(run_id=_RUN, stage_id="ai_spend_totals", row_ordinal=0,
                 column="ai_spend", value=value,
             ),
         ).save()
@@ -90,8 +89,7 @@ def test_the_context_pre_fills_from_the_newest_standing_claim(tmp_path):
     client.post(f"{_BASE}/approve/{claim.id}")
     WorkflowOutput(
         slug="ai-spend", label="ai-spend", primary=True, shape_id=claim.shape_id,
-        citation=StageOutputCellCitation(
-            run_id="20260902T090000.000000", stage_id="ai_spend_totals", row_ordinal=0,
+        citation=StageOutputCellCitation(run_id="20260902T090000.000000", stage_id="ai_spend_totals", row_ordinal=0,
             column="ai_spend", value=71000000.0,
         ),
     ).save()

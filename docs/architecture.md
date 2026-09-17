@@ -101,6 +101,12 @@ that reads a project, so it cannot narrate the working copy the version was cut 
 Workflow stages are authored through `app/services/stage_edit.py`, a batch at a time,
 validated together.
 
+## `app/reviewer/` — a claim's evidence bundle as text
+`evidence.py` renders the `EvidenceBundle` that `app/services/claim_review.py` builds:
+`render_evidence_bundle` (the claim, then the pool) and `render_evidence_pool` (only what the
+run holds, which is what a reviewer reads). Only
+`app.services` imports it — a contract in `pyproject.toml`.
+
 ## `app/web/` — the web layer  → `app/AGENTS.md`
 Thin `app/main.py` (~40 lines); routes under `/project/{project}/…`. Routers: `project.py`
 (index, workflow graph, stage detail, ER, plus the version-first IA — `/workflow/versions`

@@ -12,7 +12,7 @@ import pandas as pd
 import pytest
 
 import app.services.run as run_service
-from app.web.figure_text import render_figure
+from app.core.figure_text import render_figure
 from app.models.review_guide import ReviewGuideStep
 from app.services import versioning, workspace
 from app.models.records.review_guide import ReviewGuide

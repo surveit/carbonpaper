@@ -20,7 +20,7 @@ from starlette.types import Scope
 # never as its return value: binding the path at import time would give every
 # router its own stale copy, which is exactly what set_projects_dir() exists to
 # avoid.
-from app.web.figure_text import render_figure
+from app.core.figure_text import render_figure
 from app.core.paths import repo_root
 from app.core.utils import abbreviate_count
 from app.web.authored_code import describe_code_block, find_authored_code
