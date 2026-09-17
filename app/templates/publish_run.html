@@ -111,7 +111,7 @@
   {% if card.status == 'submitted' %}
   <div class="mint-act">
     <span class="muted">Written, and waiting on review — <a
-      href="/project/{{ state.id }}/claims/{{ card.claim_id }}">read the attack</a>. It
+      href="/project/{{ state.id }}/claims/{{ card.claim_id }}">read the review</a>. It
       stands behind nothing yet.</span>
   </div>
   {% elif card.status == 'declined' and not card.blocked %}

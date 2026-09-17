@@ -123,7 +123,7 @@ def test_submitting_writes_the_sentence_puts_it_in_review_and_reviews_it(tmp_pat
     assert (claim.text, claim.status) == (_SENTENCE, "submitted")
     assert claim.context["period_start"] == "2026-01-01"
     assert reviewed == [claim.id]
-    assert (f'href="/project/{_PROJECT}/claims/{claim.id}">read the attack</a>'
+    assert (f'href="/project/{_PROJECT}/claims/{claim.id}">read the review</a>'
             in client.get(f"{_BASE}/publish").text)
 
 

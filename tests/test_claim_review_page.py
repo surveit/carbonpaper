@@ -165,6 +165,14 @@ def test_every_kind_has_words_on_the_page():
     assert set(KIND_WORDS) == set(ChallengeKind)
 
 
+def test_the_legend_is_the_rubric_itself_worst_first(claim):
+    legend = build_claim_review_page(PROJECT, claim.id).legend
+
+    assert [row.severity for row in legend] == [3, 2, 1, 0]
+    assert [row.words for row in legend] == [
+        SEVERITY_WORDS[Severity(weight)] for weight in (3, 2, 1, 0)]
+
+
 # ── what the claim sits on ─────
 
 

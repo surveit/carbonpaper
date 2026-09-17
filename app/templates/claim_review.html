@@ -63,10 +63,9 @@
 
 {% if page.open_challenges or page.quiet_challenges %}
 <div class="legend">
-  <span class="l3"><i></i>could not stand as written</span>
-  <span class="l2"><i></i>moves the figure, or bounds it</span>
-  <span class="l1"><i></i>worth a footnote</span>
-  <span class="l0"><i></i>checked, quiet</span>
+  {% for row in page.legend %}
+  <span class="l{{ row.severity }}"><i></i>{{ row.words }}</span>
+  {% endfor %}
 </div>
 {% endif %}
 

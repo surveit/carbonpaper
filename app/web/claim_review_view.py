@@ -48,6 +48,11 @@ KIND_WORDS: dict[ChallengeKind, str] = {
 }
 
 
+class LegendRow(BaseModel):
+    severity: int
+    words: str
+
+
 class SentenceToken(BaseModel):
     """One run of the sentence: `severity` is the worst of every challenge covering it."""
 
@@ -97,6 +102,7 @@ class ClaimReviewPage(BaseModel):
     tokens: list[SentenceToken]
     open_challenges: list[ChallengeCard]
     quiet_challenges: list[ChallengeCard]
+    legend: list[LegendRow]
 
 
 def build_claim_review_page(project_id: ID, claim_id: ID) -> ClaimReviewPage:
@@ -132,7 +138,13 @@ def _build_page(project_id: ID, claim: Claim, shape: ClaimShape, run: RunIndexRo
         tokens=_build_tokens(claim.text, challenges),
         open_challenges=_build_cards([one for one in challenges if one.severity > 0]),
         quiet_challenges=_build_cards([one for one in challenges if one.severity == 0]),
+        legend=_build_legend(),
     )
+
+
+def _build_legend() -> list[LegendRow]:
+    return [LegendRow(severity=weight, words=words)
+            for weight, words in sorted(SEVERITY_WORDS.items(), reverse=True)]
 
 
 def _read_whether_the_run_read_everything(project_id: ID, claim: Claim) -> bool:
