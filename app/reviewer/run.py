@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from app.core.agent.turn_failure import persist_generation_failure
 from app.core.agent.agent import Agent
 from app.core.agent.store import SessionStore, open_session_store
+from app.core.agent.turns import record_turn_spend
 from app.core.errors import ClaimReviewFailed, GenerationError
 from app.core.ids import ID
 from app.models.authoring_lifecycle_note import CompilerPhase
@@ -33,7 +34,7 @@ _REVIEWS: set[asyncio.Task[None]] = set()
 Answer = TypeVar("Answer", bound=BaseModel)
 
 
-class _Landed(NamedTuple, Generic[Answer]):
+class _SessionAnswer(NamedTuple, Generic[Answer]):
     answer: Answer
     session_id: ID
 
@@ -102,24 +103,24 @@ async def _run_the_review(
 
 async def _raise_the_challenges(
     store: SessionStore, bundle: EvidenceBundle, model: str, context: dict[str, object]
-) -> list[_Landed[Any]]:
+) -> list[_SessionAnswer[Any]]:
     # Built before any turn starts: a refused reviewer strands no running turn.
     built = [build_reviewer(reviewer, bundle, model=model) for reviewer in REVIEWERS]
-    landed = await asyncio.gather(*[
+    answered = await asyncio.gather(*[
         _run_in_a_session(store, agent, title=_name_the_session(reviewer.value, bundle),
                           context=context)
         for reviewer, agent in zip(REVIEWERS, built)
     ], return_exceptions=True)
-    return _read_what_landed(REVIEWERS, landed)
+    return _read_the_answers(REVIEWERS, answered)
 
 
-def _read_what_landed(
-    reviewers: tuple[Reviewer, ...], landed: list[Any]
-) -> list[_Landed[Any]]:
+def _read_the_answers(
+    reviewers: tuple[Reviewer, ...], answered: list[Any]
+) -> list[_SessionAnswer[Any]]:
     """Every failure is logged; the first is raised, a bug among them as itself."""
-    read: list[_Landed[Any]] = []
+    read: list[_SessionAnswer[Any]] = []
     failed: list[BaseException] = []
-    for reviewer, one in zip(reviewers, landed):
+    for reviewer, one in zip(reviewers, answered):
         if isinstance(one, BaseException):
             _LOG.warning("the `%s` reviewer failed: %s", reviewer.value, one)
             failed.append(one)
@@ -130,13 +131,13 @@ def _read_what_landed(
     return read
 
 
-def _list_the_challenges(raised: list[_Landed[Any]]) -> list[DraftChallenge]:
+def _list_the_challenges(raised: list[_SessionAnswer[Any]]) -> list[DraftChallenge]:
     return [challenge for one in raised for challenge in one.answer.challenges]
 
 
 async def _run_in_a_session(
     store: SessionStore, agent: Agent[Answer], *, title: str, context: dict[str, object]
-) -> _Landed[Answer]:
+) -> _SessionAnswer[Answer]:
     session_id = store.create(title=title, agent_id=None, context=context)
     store.set_pending_user(session_id, agent.task)
     engine = agent.build_engine()
@@ -145,21 +146,13 @@ async def _run_in_a_session(
         messages, _resume = await engine.stream_turn(
             agent.task, message_history=None, emit=lambda event: None, resume=None)
     finally:
-        _record_turn(store, session_id, engine, messages)
+        if messages:
+            store.append_messages(session_id, messages)
+        record_turn_spend(engine, store, session_id)
     if agent.answer is None:
         raise GenerationError(f"{title} submitted nothing")
-    return _Landed(agent.answer, session_id)
+    return _SessionAnswer(agent.answer, session_id)
 
-
-def _record_turn(
-    store: SessionStore, session_id: ID, engine: object, messages: list[dict[str, Any]]
-) -> None:
-    """Called in teardown, so a turn that errored still records what it spent getting there."""
-    if messages:
-        store.append_messages(session_id, messages)
-    usage = getattr(engine, "last_usage", None)  # a custom engine need not track usage
-    if usage is not None:
-        store.record_turn_spend(session_id, usage)
 
 
 def _build_session_context(project_id: ID, bundle: EvidenceBundle) -> dict[str, object]:

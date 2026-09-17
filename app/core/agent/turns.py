@@ -83,7 +83,7 @@ class TurnManager:
             # client is never left hanging.
             turn.emit({"kind": "error", "text": f"{type(exc).__name__}: {exc}"})
         finally:
-            _record_turn_spend(engine, store, session_id)
+            record_turn_spend(engine, store, session_id)
             store.set_active_turn(session_id, None)
             if on_done is not None:
                 # Post-turn completion hook (e.g. generation persisting its schemas +
@@ -114,8 +114,8 @@ class TurnManager:
             await turn.wait()
 
 
-def _record_turn_spend(engine, store, session_id: ID) -> None:
-    """Called in teardown, so a turn that errored still books what it spent getting there."""
+def record_turn_spend(engine, store, session_id: ID) -> None:
+    """Called in teardown, so a turn that errored still records what it spent getting there."""
     usage = getattr(engine, "last_usage", None)  # a custom engine need not track usage
     if usage is not None:
         # None is a turn that reported nothing, which is not a turn that cost nothing.
