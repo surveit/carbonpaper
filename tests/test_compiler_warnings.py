@@ -194,11 +194,6 @@ _ROW_MINTING_SPECS = {
                       "produces": [_K, _TOTAL]},
         "aggregate": {"group_by": ["k"], "aggregations": [_A_SUM]},
     },
-    "dedupe": {
-        "type": "dedupe", "inputs": [{"id": "up"}],
-        "signature": {"form": "extends", "reads": reads_of("up", [_K])},
-        "dedupe": {"keys": ["k"], "keep": "agree"},
-    },
     "explode": {
         "type": "explode", "inputs": [{"id": "up"}],
         "signature": {"form": "extends", "reads": reads_of("up", [_ITEMS]),
@@ -238,9 +233,9 @@ def test_naming_the_row_type_clears_the_warning(type_):
 
 
 def test_the_warning_says_what_the_reader_loses_not_that_a_field_is_empty():
-    [warning] = [w for w in find_stage_compiler_warnings(_row_minting_stage("dedupe"))
+    [warning] = [w for w in find_stage_compiler_warnings(_row_minting_stage("explode"))
                  if w.kind == "unnamed_rows"]
-    assert warning.severity == "warning"
+    assert warning.severity == "error"
     assert warning.detail == (
         "its rows are a new kind of thing and no `row_type_id` says what one of them "
         "is, so nothing written about them — this stage's own description, a review "

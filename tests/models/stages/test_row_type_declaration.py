@@ -18,7 +18,7 @@ _VISIT_COLUMNS = [
 _DECLARES_ITS_OWN_ROW_TYPE = {
     StageType.input_data: True,
     StageType.aggregate: True,
-    StageType.dedupe: True,
+    StageType.dedupe: False,
     StageType.explode: True,
     StageType.expand: True,
     StageType.python_frame_function: True,
@@ -115,7 +115,8 @@ def test_a_stage_type_declares_or_inherits(stage_type, declares):
 
 
 def test_a_declaring_stage_carries_the_word():
-    stage = parse_stage(_dedupe_stage(row_type_id="facility"))
+    stage = parse_stage(
+        _aggregate_stage(group_by=["facility_id"], row_type_id="facility"))
     assert stage.declares_its_own_row_type is True
     assert stage.row_type_id == "facility"
     assert stage.resolve_own_row_type_id() == "facility"
@@ -176,6 +177,11 @@ def test_no_stage_may_be_told_the_reserved_word(spec):
         parse_stage(spec)
 
 
+def test_a_dedupe_names_no_word_because_it_keeps_the_rows_that_arrived():
+    with pytest.raises(ValidationError, match="input's kind"):
+        parse_stage(_dedupe_stage(row_type_id="facility"))
+
+
 def test_a_frame_function_names_a_word_like_any_other_reshaping_type():
     stage = parse_stage(_frame_function_stage(row_type_id="facility"))
     assert stage.resolve_own_row_type_id() == "facility"
@@ -187,7 +193,8 @@ def test_no_row_type_may_be_declared_under_the_reserved_word():
 
 
 def test_a_draft_carries_the_word_through_to_the_stage_spec():
-    draft = StageDraft.model_validate(_dedupe_stage(row_type_id="facility"))
+    draft = StageDraft.model_validate(
+        _aggregate_stage(group_by=["facility_id"], row_type_id="facility"))
     assert draft.row_type_id == "facility"
     assert draft.to_stage_spec()["row_type_id"] == "facility"
 

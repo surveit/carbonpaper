@@ -182,10 +182,11 @@ precise language flows from what the input data IS, along the pipeline, into wha
 claims at the end SAY.
 
 The word comes from the project's Terms, which `read_terms` lists; a coined one is refused.
-A `dedupe` that drops duplicate rows of the same thing names its input's word again; one
-that collapses to one row per something coarser names that coarser thing — taking rows of
-`inspection_visit` down to one row per facility sets `"row_type_id": "facility"`, and the
-`enrich` below it sets nothing, its rows still facilities.
+Worked example — an `aggregate` grouping incidents by guard sets `"row_type_id":
+"guard_incident_report"`, and the `enrich` below it sets nothing, its rows still those
+reports. A stage that selects among rows rather than building new ones — `filter_rows`,
+`dedupe`, `sort_rank` — sets nothing either: the rows that survive are the rows that
+arrived. Where you want one row per something coarser, group by it.
 
 Two stages answer for themselves, and writing the field on either is refused: a `report`,
 which emits files, and an `aggregate` with no `group_by`, whose one row is a figure ABOUT

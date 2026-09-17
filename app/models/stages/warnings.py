@@ -22,15 +22,14 @@ WarningKind = Literal[
     "nondeterministic",
 ]
 
-# The order the list is read in. Every kind is a `warning`: nothing here refuses an
-# action, a version snapshots whatever the author has, and each of these is something
-# an author may knowingly leave standing — a stage described in code alone, one no
-# example checks, a model call that re-rolls every run. `error` is the RUNTIME's
-# word, for a stage that actually stopped (app/web/run_issues.py), and a compiler
-# note borrowing it claimed a severity it could not act on.
+# The order the list is read in, and what each kind costs a reader.
+# A version snapshots whatever the author has, so none of these refuses an action.
+# `warning` is what an author may knowingly leave standing — a stage described in code
+# alone, one no example checks, a model call that re-rolls every run.
+# `error` marks the one the runtime is meant to refuse and does not yet.
 SEVERITY: dict[str, UserFacingErrorSeverity] = {
     "undescribed": UserFacingErrorSeverity.warning,
-    "unnamed_rows": UserFacingErrorSeverity.warning,
+    "unnamed_rows": UserFacingErrorSeverity.error,
     "unexemplified": UserFacingErrorSeverity.warning,
     "examples_failing": UserFacingErrorSeverity.warning,
     "nondeterministic": UserFacingErrorSeverity.warning,

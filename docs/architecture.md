@@ -24,17 +24,18 @@ runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data
   stored stage satisfies whatever its type, plus `RowEffect` — what each type does to its
   input's rows — `is_grain_and_order_preserving` (1:1 row correspondence in order, read off
   that effect; the eval gate depends on it) and `declares_its_own_row_type` (whether this
-  type answers what its output rows are, rather than reading its input's answer down). The
-  seven types that answer — `input_data`, `aggregate`, `dedupe`, `explode`, `expand`,
-  `python_frame_function`, `report` — name the project's word for what ONE of those rows is
-  in `row_type_id`. `resolve_own_row_type_id` reads that answer back, and an answering type
-  whose answer comes back None raises the `unnamed_rows` compiler warning. Two overrides
-  carry the two answers nobody writes: a `report` and an `aggregate` with no `group_by` both
-  answer `no_kind` (`app/models/row_types.py`, a reserved id no `RowType` may take) whatever
-  the field holds, so neither is owed a word. `find_row_type_issues` refuses the
-  contradictions: `no_kind` as an authored value on any type, the field at all on an
-  inheriting type, and a word on a `report` or an ungrouped `aggregate` — the last through
-  `find_declared_row_type_issues`, which each of those two types overrides.
+  type answers what its output rows are, rather than reading its input's answer down; the
+  types whose effect is `creates`, `builds` or `consumes`). The six that answer —
+  `input_data`, `aggregate`, `explode`, `expand`, `python_frame_function`, `report` — name
+  the project's word for what ONE of those rows is in `row_type_id`.
+  `resolve_own_row_type_id` reads that answer back, and an answering type whose answer comes
+  back None raises the `unnamed_rows` compiler warning. Two overrides carry the two answers
+  nobody writes: a `report` and an `aggregate` with no `group_by` both answer `no_kind`
+  (`app/models/row_types.py`, a reserved id no `RowType` may take) whatever the field holds,
+  so neither is owed a word. `find_row_type_issues` refuses the contradictions: `no_kind` as
+  an authored value on any type, the field at all on an inheriting type, and a word on a
+  `report` or an ungrouped `aggregate` — the last through `find_declared_row_type_issues`,
+  which each of those two types overrides.
 - `stages/signature.py` — `TransformSignature`, the contract every stored stage declares
   about what it reads and writes. Form `extends`: output is the first input's rows plus
   `rewrites` (revised in place) and `adds` (new columns), every other anchor column

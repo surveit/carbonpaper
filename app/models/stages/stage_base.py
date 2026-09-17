@@ -145,7 +145,6 @@ def is_grain_and_order_preserving(stage_type: StageType) -> bool:
 _ROW_TYPE_DECLARING_TYPES: frozenset[StageType] = frozenset({
     StageType.input_data,
     StageType.aggregate,
-    StageType.dedupe,
     StageType.explode,
     StageType.expand,
     StageType.python_frame_function,
