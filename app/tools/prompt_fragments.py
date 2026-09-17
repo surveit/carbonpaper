@@ -227,7 +227,7 @@ def _render_row_type_table() -> str:
     declaring = sorted(t for t in _catalog_types() if declares_its_own_row_type(t))
     inheriting = sorted(t for t in _catalog_types() if not declares_its_own_row_type(t))
     return "\n".join([
-        "Which types answer what one of their output rows is. Fixed by type, like grain.",
+        "Which types answer what one of their output rows is. Fixed by type.",
         f"  answers: {_names(declaring)}",
         f"  inherits its input's answer: {_names(inheriting)}",
         "You write that answer in `row_type_id`, except on a `report` and an `aggregate` "
