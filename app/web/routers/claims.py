@@ -58,6 +58,47 @@ async def submit_claim(request: Request, project_id: str, run_id: str, slug: str
     return _back_to_the_page(project_id, run_id)
 
 
+@router.get("/project/{project_id}/claims/{claim_id}", response_class=HTMLResponse)
+async def read_claim_review_page(request: Request, project_id: str, claim_id: str):
+    validate_project_or_404(project_id)
+    page = _refusing_404(lambda: build_claim_review_page(project_id, claim_id))
+    return templates.TemplateResponse(
+        request,
+        "claim_review.html",
+        {
+            "state": shell_state_off_nav(project_id, _build_claim_crumbs(project_id, page.run_id)),
+            "section": "runs",
+            "page": page,
+        },
+    )
+
+
+@router.post("/project/{project_id}/claims/{claim_id}/approve")
+async def approve_claim(project_id: str, claim_id: str):
+    validate_project_or_404(project_id)
+    _refusing_400(lambda: claims_service.approve_claim(
+        project_id, claim_id, _read_whether_the_run_read_everything(project_id, claim_id)))
+    return _back_to_the_claim(project_id, claim_id)
+
+
+@router.post("/project/{project_id}/claims/{claim_id}/decline")
+async def decline_claim(project_id: str, claim_id: str):
+    validate_project_or_404(project_id)
+    _refusing_400(lambda: claims_service.decline_claim(project_id, claim_id))
+    return _back_to_the_claim(project_id, claim_id)
+
+
+@router.post("/project/{project_id}/claims/{claim_id}/rewrite")
+async def rewrite_claim(request: Request, project_id: str, claim_id: str):
+    # async: start_claim_review calls asyncio.create_task, needing a running loop.
+    validate_project_or_404(project_id)
+    form = await request.form()
+    written = _refusing_400(
+        lambda: _write_the_rewrite(project_id, claim_id, str(form.get("text", ""))))
+    _review_what_was_written(project_id, written.id)
+    return _back_to_the_claim(project_id, written.id)
+
+
 @router.post("/project/{project_id}/claims/{claim_id}/review")
 async def review_claim(project_id: str, claim_id: str):
     # async: start_claim_review calls asyncio.create_task, needing a running loop.
@@ -80,6 +121,26 @@ def _review_what_was_written(project_id: str, claim_id: str) -> None:
         claim_review_run.start_claim_review(project_id, claim_id, model=_read_model(project_id))
     except (ClaimReviewFailed, OSError) as exc:
         _LOG.warning("claim %s stands submitted but was not reviewed: %s", claim_id, exc)
+
+
+def _write_the_rewrite(project_id: str, claim_id: str, text: str) -> Claim:
+    """The rewrite is a claim of its own; submit_claim supersedes the one it restates."""
+    standing = claims_service.load_claim(project_id, claim_id)
+    output = claims_service.find_output_of_claim(standing)
+    return claims_service.submit_claim(
+        project_id, standing.citation.run_id, output.slug, standing.context, text)
+
+
+def _read_whether_the_run_read_everything(project_id: str, claim_id: str) -> bool:
+    run_id = claims_service.load_claim(project_id, claim_id).citation.run_id
+    return claims_service.read_whether_the_run_read_everything(
+        run_service.read_run_manifest(project_id, run_id))
+
+
+def _read_whether_the_run_read_everything(project_id: str, claim_id: str) -> bool:
+    run_id = claims_service.load_claim(project_id, claim_id).citation.run_id
+    return claims_service.read_whether_the_run_read_everything(
+        run_service.read_run_manifest(project_id, run_id))
 
 
 def _read_model(project_id: str) -> str:
@@ -110,3 +171,19 @@ def _crumbs(project_id: str) -> list[Crumb]:
     return build_section_crumbs(
         project_id, label="Publish", parent=("Runs", f"/project/{project_id}/runs")
     )
+
+
+def _back_to_the_claim(project_id: str, claim_id: str) -> RedirectResponse:
+    return RedirectResponse(
+        url=f"/project/{project_id}/claims/{claim_id}", status_code=303
+    )
+
+
+def _crumbs(project_id: str) -> list[Crumb]:
+    return build_section_crumbs(
+        project_id, label="Publish", parent=("Runs", f"/project/{project_id}/runs")
+    )
+
+
+def _build_claim_crumbs(project_id: str, run_id: str) -> list[Crumb]:
+    return build_run_child_crumbs(project_id, run_id, label="Claim")
