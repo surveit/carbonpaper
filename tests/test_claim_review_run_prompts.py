@@ -31,9 +31,7 @@ _A_FIGURE = re.compile(r"(?<![A-Za-z0-9_])\d[\d,.]*")
 # `text` is prose. A figure earns its place in the sentence that says what the run holds.
 _FIELD_CARRYING_A_COPIED_FIGURE = "justification"
 
-# The vocabulary the design retired; a prompt that says one of these is describing
-# a field no answer carries.
-_RETIRED = ("`moves`", "`cost`", "unpriced", "grounding_index", "evidence_refs",
+_NAMES_NO_ANSWER_CARRIES = ("`moves`", "`cost`", "unpriced", "grounding_index", "evidence_refs",
             "raised_by", "orchestrator", "attacker", "journalist", "backing")
 
 
@@ -44,7 +42,7 @@ def test_every_reviewer_is_told_who_reads_it_and_that_it_changes_nothing() -> No
 
 
 def test_no_prompt_names_a_field_no_answer_carries() -> None:
-    said = {word for prompt in _EVERY_PROMPT for word in _RETIRED if word in prompt.lower()}
+    said = {word for prompt in _EVERY_PROMPT for word in _NAMES_NO_ANSWER_CARRIES if word in prompt.lower()}
 
     assert said == set()
 
