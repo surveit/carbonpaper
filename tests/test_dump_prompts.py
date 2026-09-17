@@ -12,7 +12,7 @@ from typing import Iterator
 import pytest
 
 
-from app.reviewer.reviewers import ATTACKERS
+from app.reviewer.reviewers import REVIEWERS
 from app.core.paths import repo_root
 from scripts.dump_prompts import render_prompt_dump
 
@@ -47,18 +47,17 @@ def test_dump_offers_the_editing_agent_every_tool_it_binds(dump: str) -> None:
     assert not missing, f"editing tools absent from the dump: {missing}"
 
 
-def test_dump_carries_every_claim_attacker_and_the_turn_that_merges_them(dump: str) -> None:
-    for attacker in ATTACKERS:
-        assert f"## Claim attacker · {attacker.value}" in dump
-    assert "## Claim attack · orchestrator" in dump
+def test_dump_carries_every_claim_reviewer(dump: str) -> None:
+    for reviewer in REVIEWERS:
+        assert f"## Claim reviewer · {reviewer.value}" in dump
 
 
-def test_each_claim_attacker_answers_in_its_own_schema(dump: str) -> None:
-    grounding = read_section(dump, "Claim attacker · grounding")
-    meaning = read_section(dump, "Claim attacker · meaning")
+def test_every_claim_reviewer_answers_in_the_one_challenge_schema(dump: str) -> None:
+    for reviewer in REVIEWERS:
+        section = read_section(dump, f"Claim reviewer · {reviewer.value}")
 
-    assert '"phrases"' in grounding and '"rewrites"' not in grounding
-    assert '"rewrites"' in meaning and '"phrases"' not in meaning
+        assert '"challenges"' in section
+        assert '"rewrites"' not in section and '"phrases"' not in section
 
 
 def read_section(dump: str, title: str) -> str:
@@ -105,6 +104,6 @@ def test_the_constant_scan_finds_the_known_surfaces() -> None:
     names = {name for _path, name, _text in find_prompt_constants()}
     assert {"EDITING_SYSTEM_PROMPT", "INSTRUCTIONS",
             "REVIEW_GUIDE_SYSTEM_PROMPT", "STAGE_TESTS_SYSTEM_PROMPT",
-            "SYSTEM_PROMPT", "GROUNDING_SYSTEM_PROMPT", "DATA_DEFECTS_SYSTEM_PROMPT",
-            "CHOICES_SYSTEM_PROMPT", "OMISSIONS_SYSTEM_PROMPT", "COVERAGE_SYSTEM_PROMPT",
-            "MEANING_SYSTEM_PROMPT", "ORCHESTRATOR_SYSTEM_PROMPT"} <= names
+            "SYSTEM_PROMPT", "DATA_DEFECTS_SYSTEM_PROMPT", "CHOICES_SYSTEM_PROMPT",
+            "OMISSIONS_SYSTEM_PROMPT", "COVERAGE_SYSTEM_PROMPT",
+            "MEANING_SYSTEM_PROMPT"} <= names

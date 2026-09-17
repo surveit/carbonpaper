@@ -53,7 +53,7 @@ class Claim(PersistedModel):
     shape_id: ID = Field(frozen=True)
     # One value per column the shape declares; matching contexts are one fact.
     context: JsonDict = Field(default={}, frozen=True)
-    # What a person will publish. Frozen: review attacks these words, not later ones.
+    # What a person will publish. Frozen: a review reads these words, not later ones.
     text: str = Field(default="", frozen=True)
     # A deliverable is as often a table as a figure.
     citation: PublishedCitation = Field(frozen=True)

@@ -1,57 +1,37 @@
-"""Six reviewers over one bundle, an orchestrator over their answers, and the driver."""
+"""Five reviewers over one claim: what each is handed, and what the run does with the answers."""
 from __future__ import annotations
 
 import asyncio
-import logging
 import time
 from typing import Any
 
 import pytest
 
-import app.reviewer.run as claim_attack_run
+import app.reviewer.run as reviewer_run
+from app.core.agent.store import SessionStore
+from app.core.agent.usage import LlmUsage
+from app.core.errors import GenerationError
+from app.models.citations import StageOutputColumnCitation
+from app.models.claim_review import ChallengesAnswer, ClaimReviewResult
+from app.models.records.claim_review import (
+    ChallengeKind,
+    ClaimPart,
+    DraftChallenge,
+    Severity,
+)
+from app.reviewer.evidence import render_evidence_pool
 from app.reviewer.reviewers import (
     REVIEW_REQUEST,
     REVIEWERS,
-    build_attacker,
-    render_attack_task,
-)
-from app.reviewer.evidence import render_evidence_pool
-from app.reviewer.orchestrator import (
-    build_orchestrator,
-    render_orchestrator_task,
+    build_reviewer,
+    render_review_task,
 )
 from app.reviewer.run import start_claim_review_agents
-from app.core.agent.store import AgentSession, SessionStore
-from app.core.agent.usage import LlmUsage
-from app.core.errors import GenerationError
-from app.models.claim_review import (
-    Reviewer,
-    ReviewerAnswers,
-    Challenge,
-    ChallengeKind,
-    ChallengesAnswer,
-    ClaimReviewResult,
-    OrchestratorAnswer,
-    Cost,
-    Grounding,
-    GroundingAnswer,
-    InputColumnEvidence,
-    MeaningAnswer,
-    Moves,
-    OutputEvidence,
-    RaisedChallenge,
-    Rewrite,
-)
 from app.services import claim_review
-from app.services.claim_review import _read_whether_the_corpus_spells
 from app.services.errors import ClaimReviewRefused
 from claim_review_fixture import PROJECT, TOTAL_TEXT, claim_the_total, run_the_fixture
 
 _SUBMIT_ONLY = ["mcp__tools__submit_answer"]
-_LATER = [reviewer for reviewer in REVIEWERS if reviewer is not Reviewer.grounding]
-
-# A code indent, a count, a separator: every pool holds these, so none of them backs anything.
-_DEGENERATE_BACKINGS = [" ", "  ", "0", "·"]
 
 
 @pytest.fixture
@@ -60,629 +40,262 @@ def bundle(projects_root):
     return claim_review.build_evidence_bundle(PROJECT, claim.id)
 
 
-def make_grounding() -> GroundingAnswer:
-    total = TOTAL_TEXT.index("in total")
-    return GroundingAnswer(phrases=[
-        Grounding(start=0, end=len("Grants"), evidence=OutputEvidence(slug="grant-total"),
-                  how="the cited figure counts the grant rows"),
-        Grounding(start=total, end=total + len("in total"), evidence=None,
-                  how="nothing in the run says the file is the whole of it"),
-    ])
+def make_challenge(text: str = "The figure counts rows, not grants.") -> DraftChallenge:
+    return DraftChallenge(
+        kind=ChallengeKind.data, claim_part=ClaimPart(phrase="Grants"), text=text,
+        justification="the amount column is blank",
+        citations=[StageOutputColumnCitation(
+            run_id="r", stage_id="grant_totals", column="grants")],
+        severity=Severity.major)
 
 
-def make_challenge(evidence: str) -> RaisedChallenge:
-    return RaisedChallenge(
-        kind=ChallengeKind.data, grounding_index=0, text="The figure counts rows, not grants.",
-        evidence=evidence, moves=Moves.moves, cost=Cost.free,
-    )
+# ── what a reviewer is handed ─────
 
 
-def make_answers() -> ReviewerAnswers:
-    return ReviewerAnswers(
-        grounding=make_grounding(),
-        data_defects=ChallengesAnswer(challenges=[make_challenge("the amount column is blank")]),
-        choices=ChallengesAnswer(challenges=[make_challenge("the filter drops the zeroes")]),
-        omissions=ChallengesAnswer(challenges=[make_challenge("the west file is unread")]),
-        coverage=ChallengesAnswer(challenges=[make_challenge("one arm took no rows")]),
-        meaning=MeaningAnswer(
-            challenges=[make_challenge("total reads as money, not a count")],
-            rewrites=[Rewrite(text="Five grants were recorded.", why="counts what was counted")],
-        ),
-    )
-
-
-# ── what an reviewer is handed ─────
-
-
-def test_every_attacker_holds_no_tool_but_submit_answer(bundle) -> None:
+def test_every_reviewer_holds_no_tool_but_submit_answer(bundle) -> None:
     for reviewer in REVIEWERS:
-        given = None if reviewer is Reviewer.grounding else make_grounding()
-
-        engine = build_attacker(reviewer, bundle, grounding=given).build_engine()
+        engine = build_reviewer(reviewer, bundle).build_engine()
 
         assert engine._allowed_tools == _SUBMIT_ONLY, reviewer
         assert engine._builtin_tools == [], reviewer
 
 
 def test_the_task_opens_with_the_request_and_carries_the_sentence_and_the_run(bundle) -> None:
-    task = render_attack_task(Reviewer.grounding, bundle)
+    task = render_review_task(bundle)
 
     assert task.startswith(REVIEW_REQUEST)
     assert TOTAL_TEXT in task
-    assert "----- BRANCHES -----" in task
+    assert render_evidence_pool(bundle) in task
 
 
-def test_a_later_attacker_reads_the_phrases_the_grounding_attacker_landed(bundle) -> None:
-    task = render_attack_task(Reviewer.data_defects, bundle, make_grounding())
+def test_every_reviewer_reads_the_same_task(bundle) -> None:
+    tasks = {build_reviewer(reviewer, bundle).task for reviewer in REVIEWERS}
 
-    assert "----- PHRASES -----" in task
-    assert '[0] "Grants" → {"kind": "output", "slug": "grant-total"}' in task
-    assert '[1] "in total" → nothing in the run' in task
+    assert len(tasks) == 1
 
 
-def test_a_ref_spells_a_column_the_way_the_pool_spells_it(bundle) -> None:
-    accented = GroundingAnswer(phrases=[
-        Grounding(start=0, end=len("Grants"),
-                  evidence=InputColumnEvidence(stage_id="cases", column="café"),
-                  how="the column the figure counts"),
-    ])
-
-    task = render_attack_task(Reviewer.data_defects, bundle, accented)
-
-    assert '[0] "Grants" → {"kind": "input_column", "stage_id": "cases", "column": "café"}' in task
-    assert r"caf\u00e9" not in task
-
-
-def test_a_phrase_reaching_past_the_sentence_is_refused(bundle) -> None:
-    past = GroundingAnswer(phrases=[
-        Grounding(start=0, end=len(bundle.claim_text) + 5, evidence=None,
-                  how="more of the sentence than was written"),
-    ])
-
-    with pytest.raises(ValueError, match="past the end"):
-        render_attack_task(Reviewer.data_defects, bundle, past)
-
-
-def test_two_phrases_landing_on_the_same_words_are_refused(bundle) -> None:
-    crossing = GroundingAnswer(phrases=[
-        Grounding(start=0, end=10, evidence=None, how="the first"),
-        Grounding(start=5, end=12, evidence=None, how="the second, over the first"),
-    ])
-
-    with pytest.raises(ValueError, match="overlaps"):
-        render_attack_task(Reviewer.data_defects, bundle, crossing)
-
-
-def test_the_grounding_attacker_reads_the_claim_before_any_phrase_exists(bundle) -> None:
-    task = render_attack_task(Reviewer.grounding, bundle)
-
-    assert "----- PHRASES -----" not in task
-
-
-def test_a_later_attacker_without_the_phrases_is_refused(bundle) -> None:
-    for reviewer in _LATER:
-        with pytest.raises(ValueError):
-            build_attacker(reviewer, bundle)
-
-
-def test_the_grounding_attacker_handed_phrases_is_refused(bundle) -> None:
-    with pytest.raises(ValueError):
-        build_attacker(Reviewer.grounding, bundle, grounding=make_grounding())
-
-
-def test_the_orchestrator_is_not_one_of_the_six(bundle) -> None:
-    with pytest.raises(ValueError):
-        build_attacker(Reviewer.orchestrator, bundle, grounding=make_grounding())
-
-
-def test_each_attacker_answers_in_its_own_shape(bundle) -> None:
-    phrases = make_grounding()
-
-    assert build_attacker(Reviewer.grounding, bundle)._target_schema is GroundingAnswer
-    assert build_attacker(
-        Reviewer.meaning, bundle, grounding=phrases)._target_schema is MeaningAnswer
-    assert build_attacker(
-        Reviewer.choices, bundle, grounding=phrases)._target_schema is ChallengesAnswer
-
-
-# ── what the orchestrator is handed ─────
-
-
-def test_the_orchestrator_holds_no_tool_but_submit_answer(bundle) -> None:
-    engine = build_orchestrator(bundle, make_answers()).build_engine()
-
-    assert engine._allowed_tools == _SUBMIT_ONLY
-    assert engine._builtin_tools == []
-
-
-def test_the_orchestrator_reads_the_pool_and_every_attackers_evidence(bundle) -> None:
-    answers = make_answers()
-
-    task = render_orchestrator_task(bundle, answers)
-
-    assert TOTAL_TEXT in task and "----- BRANCHES -----" in task
-    assert "----- ANSWERS -----" in task
-    for evidence in answers.list_evidence():
-        assert evidence in task
-
-
-def test_the_orchestrator_reads_the_answers_under_their_attackers_grounding_first(
-    bundle,
-) -> None:
-    task = render_orchestrator_task(bundle, make_answers())
-
-    headings = [line for line in task.splitlines() if line.startswith("## ")]
-    assert headings == [f"## {reviewer.value}" for reviewer in REVIEWERS]
-    # The grounding answer arrives as its own JSON here, never as the reviewers' phrase block.
-    assert '"rewrites"' in task and "----- PHRASES -----" not in task
-
-
-def test_a_backing_the_pool_spells_everywhere_backs_nothing(bundle) -> None:
+def test_a_citation_spells_a_column_the_way_the_pool_spells_it(bundle) -> None:
     pool = render_evidence_pool(bundle)
 
-    for degenerate in _DEGENERATE_BACKINGS:
-        assert degenerate in pool, f"the pool does not hold {degenerate!r} at all"
-        assert not _read_whether_the_corpus_spells(pool, degenerate)
-    assert _read_whether_the_corpus_spells(pool, "reads: none")
+    assert "grant_totals.total_amount" in pool or "total_amount" in pool
 
 
-def test_list_evidence_reads_the_five_challenge_answers_in_attacker_order() -> None:
-    assert make_answers().list_evidence() == [
-        "the amount column is blank", "the filter drops the zeroes", "the west file is unread",
-        "one arm took no rows", "total reads as money, not a count",
-    ]
-
-
-# ── the driver: seven turns on the server loop ─────
-
-
-def make_draft() -> OrchestratorAnswer:
-    return OrchestratorAnswer(
-        challenges=[Challenge(
-            reviewer=Reviewer.data_defects, kind=ChallengeKind.data, grounding_index=0,
-            text="The figure counts rows, not grants.", evidence="the amount column is blank",
-            backing="2,200", severity=2, moves=Moves.moves, cost=Cost.free,
-        )],
-        summary="It stands as a row count, not as money.",
-    )
+# ── the fakes ─────
 
 
 class _FakeAgent:
-    """Records when its turn starts and ends, holds if asked, then submits `submitted`."""
-
-    def __init__(self, submitted: Any, *, task: str, name: str,
-                 log: list[tuple[str, str]], hold: asyncio.Event | None,
-                 raises: BaseException | None = None,
-                 usage: LlmUsage | None = None) -> None:
-        self.task = task
-        self._submitted = submitted
-        self._answer: Any = None
-        self._name = name
-        self._log = log
+    def __init__(self, answer: Any, *, fails: Exception | None = None,
+                 usage: LlmUsage | None = None, started: Any = None,
+                 hold: asyncio.Event | None = None) -> None:
+        self.answer = answer
+        self.last_usage = usage
+        self._fails = fails
+        self._started = started
         self._hold = hold
-        self._raises = raises
-        self._usage = usage
 
-    @property
-    def answer(self) -> Any:
-        return self._answer
-
-    def build_engine(self) -> Any:
-        agent = self
-
-        class _Engine:
-            async def stream_turn(self, prompt: str, *, message_history: Any,
-                                  emit: Any, resume: Any):
-                agent._log.append(("start", agent._name))
-                if agent._hold is not None:
-                    await agent._hold.wait()
-                if agent._usage is not None:
-                    self.last_usage = agent._usage
-                if agent._raises is not None:
-                    raise agent._raises
-                agent._answer = agent._submitted
-                agent._log.append(("done", agent._name))
-                return [{"role": "assistant",
-                         "parts": [{"type": "text", "text": "reviewed"}]}], None
-
-        return _Engine()
+    async def run(self, emit: Any = None) -> Any:
+        if self._started is not None:
+            self._started.append(self)
+        if self._hold is not None:
+            await self._hold.wait()
+        if self._fails is not None:
+            raise self._fails
+        return self.answer
 
 
-def _answer_for(reviewer: Reviewer, answers: ReviewerAnswers) -> Any:
-    return {
-        Reviewer.grounding: answers.grounding, Reviewer.data_defects: answers.data_defects,
-        Reviewer.choices: answers.choices, Reviewer.omissions: answers.omissions,
-        Reviewer.coverage: answers.coverage, Reviewer.meaning: answers.meaning,
-    }[reviewer]
+def _one_challenge_each() -> ChallengesAnswer:
+    return ChallengesAnswer(challenges=[make_challenge()])
 
 
-class _Fakes:
-    """Stands in for the six reviewers and the orchestrator, keeping what each was handed."""
-
-    def __init__(self, *, answers: ReviewerAnswers, draft: OrchestratorAnswer | None,
-                 silent: Reviewer | None = None, hold: asyncio.Event | None = None,
-                 raises: dict[Reviewer, BaseException] | None = None,
-                 usage: dict[Reviewer, LlmUsage] | None = None) -> None:
-        self.answers, self.draft, self.silent, self.hold = answers, draft, silent, hold
-        self.raises = raises or {}
-        self.usage = usage or {}
-        self.log: list[tuple[str, str]] = []
-        self.tasks: dict[str, str] = {}
-        self.merged: ReviewerAnswers | None = None
-
-    def install(self, monkeypatch: Any) -> "_Fakes":
-        monkeypatch.setattr(claim_attack_run, "build_attacker", self.build_attacker)
-        monkeypatch.setattr(claim_attack_run, "build_orchestrator", self.build_orchestrator)
-        return self
-
-    def build_attacker(self, reviewer, bundle, *, grounding=None, model="sonnet"):
-        task = render_attack_task(reviewer, bundle, grounding)
-        self.tasks[reviewer.value] = task
-        failing = self.raises.get(reviewer)
-        return _FakeAgent(
-            None if reviewer == self.silent else _answer_for(reviewer, self.answers),
-            task=task, name=reviewer.value, log=self.log,
-            # A turn that is going to fail is never held: it falls over while the rest run.
-            hold=None if reviewer is Reviewer.grounding or failing else self.hold,
-            raises=failing, usage=self.usage.get(reviewer),
-        )
-
-    def build_orchestrator(self, bundle, answers, *, model="sonnet"):
-        self.merged = answers
-        task = render_orchestrator_task(bundle, answers)
-        self.tasks["orchestrator"] = task
-        return _FakeAgent(self.draft, task=task, name="orchestrator", log=self.log, hold=None,
-                          raises=self.raises.get(Reviewer.orchestrator))
-
-    def started(self) -> list[str]:
-        return [name for kind, name in self.log if kind == "start"]
-
-    def finished(self) -> list[str]:
-        return [name for kind, name in self.log if kind == "done"]
-
-
-async def _wait_until(is_ready, *, whats_missing: str, timeout: float = 10.0) -> None:
-    deadline = time.monotonic() + timeout
-    while not is_ready():
-        assert time.monotonic() < deadline, whats_missing
-        await asyncio.sleep(0.005)
-
-
-async def _wait_until_idle(store: SessionStore, session_id: str) -> None:
-    await _wait_until(lambda: store.load(session_id)["active_turn"] is None,
-                      whats_missing="the attack never cleared the parent's active turn")
+def install(monkeypatch, make_agent) -> None:
+    monkeypatch.setattr(
+        reviewer_run, "build_reviewer",
+        lambda reviewer, bundle, *, model="sonnet": make_agent(reviewer))
 
 
 def _store_of(monkeypatch: Any) -> SessionStore:
     store = SessionStore()
-    monkeypatch.setattr(claim_attack_run, "open_session_store", lambda: store)
+    monkeypatch.setattr(reviewer_run, "open_session_store", lambda: store)
     return store
 
 
-def _run_the_attack(store: SessionStore, bundle, on_answer) -> str:
-    seen: dict[str, str] = {}
+def _run_the_review(bundle, on_answer, *, before_settling=None) -> str:
+    """The review runs detached, so the test drives a loop until it clears its turn."""
+    seen: dict[str, Any] = {}
 
     async def _drive() -> None:
-        seen["parent"] = start_claim_review_agents(
-            bundle=bundle, model="sonnet", on_answer=on_answer)
-        await _wait_until_idle(store, seen["parent"])
+        seen["session"] = start_claim_review_agents(
+            project_id=PROJECT, bundle=bundle, model="sonnet", on_answer=on_answer)
+        if before_settling is not None:
+            await asyncio.sleep(0)
+            before_settling(seen["session"])
+        await _settle(seen["session"])
 
     asyncio.run(_drive())
-    return seen["parent"]
+    return seen["session"]
+
+
+async def _settle(session_id: str) -> None:
+    deadline = time.monotonic() + 20.0
+    while reviewer_run._REVIEWS:
+        assert time.monotonic() < deadline, "the review never finished"
+        await asyncio.gather(*list(reviewer_run._REVIEWS), return_exceptions=True)
 
 
 def _failure_on(store: SessionStore, session_id: str) -> str | None:
     for message in store.load(session_id)["messages"]:
-        for part in message["parts"]:
-            if part.get("text", "").startswith("generation failed: "):
-                return part["text"]
+        for part in message.get("parts", []):
+            text = part.get("text", "")
+            if text.startswith("generation failed: "):
+                return text
     return None
 
 
-def test_seven_turns_run_and_the_result_carries_their_sessions(bundle, monkeypatch) -> None:
-    answers, draft = make_answers(), make_draft()
-    fakes = _Fakes(answers=answers, draft=draft).install(monkeypatch)
-    store = _store_of(monkeypatch)
-    landed: list[ClaimReviewResult] = []
-
-    parent = _run_the_attack(store, bundle, landed.append)
-
-    assert sorted(fakes.finished()) == sorted(
-        [reviewer.value for reviewer in REVIEWERS] + ["orchestrator"])
-    [result] = landed
-    assert result.draft == draft
-    assert result.answers == answers
-    assert len(result.session_ids) == 7
-    assert parent not in result.session_ids
-    for session_id in result.session_ids:
-        assert store.exists(session_id)
+# ── the run ─────
 
 
-def test_the_grounding_session_is_first_and_the_orchestrator_last(
+def test_five_reviewers_run_and_the_result_carries_the_one_session(
     bundle, monkeypatch
 ) -> None:
-    _Fakes(answers=make_answers(), draft=make_draft()).install(monkeypatch)
-    store = _store_of(monkeypatch)
+    install(monkeypatch, lambda reviewer: _FakeAgent(_one_challenge_each()))
     landed: list[ClaimReviewResult] = []
 
-    _run_the_attack(store, bundle, landed.append)
+    session_id = _run_the_review(bundle, landed.append)
 
-    titles = [store.load(session_id)["title"] for session_id in landed[0].session_ids]
-    assert "grounding" in titles[0]
-    assert "orchestrator" in titles[-1]
+    assert len(landed) == 1
+    assert landed[0].session_id == session_id
+    assert len(landed[0].challenges) == len(REVIEWERS)
 
 
-def test_the_grounding_lands_before_the_five_start_and_they_run_together(
+def test_the_five_run_together_rather_than_one_after_another(
     bundle, monkeypatch
 ) -> None:
-    counted: dict[str, int] = {}
+    started: list[Any] = []
+    hold = asyncio.Event()
+    install(monkeypatch, lambda reviewer: _FakeAgent(
+        _one_challenge_each(), started=started, hold=hold))
 
-    async def _drive() -> None:
-        hold = asyncio.Event()
-        fakes = _Fakes(answers=make_answers(), draft=make_draft(),
-                       hold=hold).install(monkeypatch)
-        store = _store_of(monkeypatch)
-        parent = start_claim_review_agents(
-            bundle=bundle, model="sonnet", on_answer=lambda result: None)
-        await _wait_until(lambda: len(fakes.started()) == 6,
-                          whats_missing="the five reviewers did not all start")
-        counted["overlapping"] = len(fakes.started()) - 1
-        counted["finished_before_the_release"] = len(fakes.finished())
-        assert fakes.started()[0] == Reviewer.grounding.value
-        assert fakes.finished() == [Reviewer.grounding.value]
+    def _look(session_id: str) -> None:
         hold.set()
-        await _wait_until_idle(store, parent)
 
-    asyncio.run(_drive())
+    _run_the_review(bundle, lambda result: None, before_settling=_look)
 
-    assert counted["overlapping"] == 5
-    assert counted["finished_before_the_release"] == 1
+    assert len(started) == len(REVIEWERS)
 
 
-def test_each_of_the_five_reads_the_phrases_the_grounding_landed(
+def test_a_reviewer_that_fails_leaves_the_failure_on_the_session(
     bundle, monkeypatch
 ) -> None:
-    fakes = _Fakes(answers=make_answers(), draft=make_draft()).install(monkeypatch)
+    install(monkeypatch, lambda reviewer: _FakeAgent(
+        None, fails=GenerationError("submitted nothing")))
     store = _store_of(monkeypatch)
 
-    _run_the_attack(store, bundle, lambda result: None)
+    session_id = _run_the_review(bundle, lambda result: None)
 
-    assert "----- PHRASES -----" not in fakes.tasks[Reviewer.grounding.value]
-    for reviewer in _LATER:
-        assert "----- PHRASES -----" in fakes.tasks[reviewer.value], reviewer
-        assert "[0] " in fakes.tasks[reviewer.value]
+    assert "submitted nothing" in (_failure_on(store, session_id) or "")
 
 
-def test_the_orchestrator_merges_the_six_answers_the_turns_submitted(
+def test_a_failing_reviewer_leaves_none_of_the_other_four_running(
     bundle, monkeypatch
 ) -> None:
-    answers = make_answers()
-    fakes = _Fakes(answers=answers, draft=make_draft()).install(monkeypatch)
+    def _agent(reviewer):
+        if reviewer is REVIEWERS[0]:
+            return _FakeAgent(None, fails=GenerationError("submitted nothing"))
+        return _FakeAgent(_one_challenge_each())
+
+    install(monkeypatch, _agent)
+
+    left: list[int] = []
+
+    def _look(session_id: str) -> None:
+        left.append(len(reviewer_run._REVIEWS))
+
+    _run_the_review(bundle, lambda result: None, before_settling=_look)
+
+    assert reviewer_run._REVIEWS == set()
+
+
+def test_a_turn_that_fell_over_still_records_what_it_spent(bundle, monkeypatch) -> None:
+    spent = LlmUsage(input_tokens=11, output_tokens=7)
+    install(monkeypatch, lambda reviewer: _FakeAgent(
+        None, fails=GenerationError("submitted nothing"), usage=spent))
     store = _store_of(monkeypatch)
 
-    _run_the_attack(store, bundle, lambda result: None)
+    session_id = _run_the_review(bundle, lambda result: None)
 
-    assert fakes.merged == answers
-
-
-def test_an_attacker_that_submits_nothing_leaves_the_failure_on_the_parent(
-    bundle, monkeypatch
-) -> None:
-    _Fakes(answers=make_answers(), draft=make_draft(),
-           silent=Reviewer.coverage).install(monkeypatch)
-    store = _store_of(monkeypatch)
-    landed: list[ClaimReviewResult] = []
-
-    parent = _run_the_attack(store, bundle, landed.append)
-
-    assert landed == []
-    failure = _failure_on(store, parent)
-    assert failure is not None and "coverage" in failure
-    assert store.load(parent)["active_turn"] is None
+    assert len(store.load(session_id)["turn_spend"]) == len(REVIEWERS)
 
 
-def test_an_orchestrator_that_submits_nothing_leaves_the_failure_on_the_parent(
-    bundle, monkeypatch
-) -> None:
-    _Fakes(answers=make_answers(), draft=None).install(monkeypatch)
-    store = _store_of(monkeypatch)
-    landed: list[ClaimReviewResult] = []
-
-    parent = _run_the_attack(store, bundle, landed.append)
-
-    assert landed == []
-    failure = _failure_on(store, parent)
-    assert failure is not None and "orchestrator" in failure
-
-
-def test_a_grounding_that_lands_no_phrase_is_a_failure(bundle, monkeypatch) -> None:
-    empty = ReviewerAnswers(**{**make_answers().model_dump(),
-                               "grounding": GroundingAnswer(phrases=[])})
-    _Fakes(answers=empty, draft=make_draft()).install(monkeypatch)
-    store = _store_of(monkeypatch)
-    landed: list[ClaimReviewResult] = []
-
-    parent = _run_the_attack(store, bundle, landed.append)
-
-    assert landed == []
-    failure = _failure_on(store, parent)
-    assert failure is not None and "no phrase" in failure
-
-
-def test_a_refused_review_leaves_the_failure_on_the_parent(bundle, monkeypatch) -> None:
-    _Fakes(answers=make_answers(), draft=make_draft()).install(monkeypatch)
+def test_a_refused_review_leaves_the_failure_on_the_session(bundle, monkeypatch) -> None:
+    install(monkeypatch, lambda reviewer: _FakeAgent(_one_challenge_each()))
     store = _store_of(monkeypatch)
 
     def _refuse(result: ClaimReviewResult) -> None:
-        raise ClaimReviewRefused(["a backing is in no evidence"])
+        raise ClaimReviewRefused(["challenge 0 (data): cites nothing the run holds"])
 
-    parent = _run_the_attack(store, bundle, _refuse)
+    session_id = _run_the_review(bundle, _refuse)
 
-    failure = _failure_on(store, parent)
-    assert failure is not None and "a backing is in no evidence" in failure
-    assert store.load(parent)["active_turn"] is None
+    assert "cites nothing the run holds" in (_failure_on(store, session_id) or "")
 
 
-def test_the_parent_session_carries_the_request_and_an_active_turn(
+def test_a_bug_no_named_failure_covers_still_leaves_a_failure(
     bundle, monkeypatch
 ) -> None:
+    install(monkeypatch, lambda reviewer: _FakeAgent(_one_challenge_each()))
+    store = _store_of(monkeypatch)
+
+    def _bug(result: ClaimReviewResult) -> None:
+        raise KeyError("a bug the review does not name")
+
+    session_id = _run_the_review(bundle, _bug)
+
+    assert "did not finish" in (_failure_on(store, session_id) or "")
+
+
+def test_the_session_carries_the_request_and_an_active_turn(bundle, monkeypatch) -> None:
     hold = asyncio.Event()
-    seen: dict[str, Any] = {}
-
-    async def _drive() -> None:
-        _Fakes(answers=make_answers(), draft=make_draft(), hold=hold).install(monkeypatch)
-        store = _store_of(monkeypatch)
-        parent = start_claim_review_agents(
-            bundle=bundle, model="sonnet", on_answer=lambda result: None)
-        seen["session"] = store.load(parent)
-        hold.set()
-        await _wait_until_idle(store, parent)
-
-    asyncio.run(_drive())
-
-    assert seen["session"]["pending_user"] == REVIEW_REQUEST
-    assert seen["session"]["active_turn"] is not None
-    assert seen["session"]["context"]["claim_id"]
-    assert seen["session"]["context"]["hidden"] is True
-
-
-def test_the_parent_is_the_one_session_its_context_marks_a_parent(
-    bundle, monkeypatch
-) -> None:
-    _Fakes(answers=make_answers(), draft=make_draft()).install(monkeypatch)
+    install(monkeypatch, lambda reviewer: _FakeAgent(_one_challenge_each(), hold=hold))
     store = _store_of(monkeypatch)
 
-    parent = _run_the_attack(store, bundle, lambda result: None)
+    seen: list[dict] = []
 
-    marked = [session.id for session in AgentSession.list()
-              if session.context.get("role") == "parent"]
-    assert marked == [parent]
-    assert len(AgentSession.list()) == 8  # the parent, and the seven turns under it
+    def _look(session_id: str) -> None:
+        seen.append(store.load(session_id))
+        hold.set()
+
+    _run_the_review(bundle, lambda result: None, before_settling=_look)
+    [running] = seen
+
+    assert running["pending_user"] == REVIEW_REQUEST
+    assert running["active_turn"] is not None
+    assert running["context"]["role"] == reviewer_run.PARENT_ROLE
+    assert running["context"]["claim_id"] == bundle.claim_id
 
 
-def test_a_second_attack_on_a_claim_already_under_one_is_refused(
+def test_the_request_is_cleared_off_the_session_when_the_review_lands(
     bundle, monkeypatch
 ) -> None:
-    refused: list[str] = []
-
-    async def _drive() -> None:
-        hold = asyncio.Event()
-        _Fakes(answers=make_answers(), draft=make_draft(), hold=hold).install(monkeypatch)
-        store = _store_of(monkeypatch)
-        parent = claim_review.start_claim_review(PROJECT, bundle.claim_id, model="sonnet")
-        opened = len(AgentSession.list())
-        # No await yet, so the running attack has opened nothing since it was counted.
-        with pytest.raises(ClaimReviewRefused) as caught:
-            claim_review.start_claim_review(PROJECT, bundle.claim_id, model="sonnet")
-        refused.append(str(caught.value))
-        assert len(AgentSession.list()) == opened
-        hold.set()
-        await _wait_until_idle(store, parent)
-
-    asyncio.run(_drive())
-
-    assert "already running" in refused[0]
-
-
-def test_a_failing_attacker_leaves_none_of_the_other_four_running(
-    bundle, monkeypatch, caplog
-) -> None:
-    landed: list[ClaimReviewResult] = []
-    seen: dict[str, Any] = {}
-
-    async def _drive() -> None:
-        hold = asyncio.Event()
-        fakes = _Fakes(answers=make_answers(), draft=make_draft(), hold=hold, raises={
-            Reviewer.data_defects: GenerationError("the data reviewer fell over"),
-            Reviewer.omissions: OSError("the omissions socket went"),
-        }).install(monkeypatch)
-        store = _store_of(monkeypatch)
-        parent = start_claim_review_agents(
-            bundle=bundle, model="sonnet", on_answer=landed.append)
-        await _wait_until(lambda: len(fakes.started()) == 6,
-                          whats_missing="the five reviewers did not all start")
-        hold.set()
-        await _wait_until_idle(store, parent)
-        seen["finished"] = fakes.finished()
-        seen["session"] = store.load(parent)
-        seen["failure"] = _failure_on(store, parent)
-        seen["titles"] = [one["title"] for one in store.list_sessions()]
-
-    with caplog.at_level(logging.WARNING):
-        asyncio.run(_drive())
-
-    assert landed == []
-    # The first failure is the one the reader is given; the second is not discarded unlogged.
-    assert seen["failure"] is not None and "the data reviewer fell over" in seen["failure"]
-    assert "the omissions socket went" in caplog.text
-    assert seen["session"]["active_turn"] is None
-    assert sorted(seen["finished"]) == sorted(
-        [Reviewer.grounding.value, Reviewer.choices.value,
-         Reviewer.coverage.value, Reviewer.meaning.value])
-    for reviewer in _LATER:
-        assert any(reviewer.value in title for title in seen["titles"]), reviewer
-
-
-def test_a_turn_that_fell_over_still_books_what_it_spent(bundle, monkeypatch) -> None:
-    spent = LlmUsage(input_tokens=11, output_tokens=3, cost_usd=0.02, calls=1)
-    _Fakes(answers=make_answers(), draft=make_draft(),
-           raises={Reviewer.data_defects: OSError("the socket went")},
-           usage={Reviewer.data_defects: spent}).install(monkeypatch)
+    install(monkeypatch, lambda reviewer: _FakeAgent(_one_challenge_each()))
     store = _store_of(monkeypatch)
 
-    _run_the_attack(store, bundle, lambda result: None)
+    session_id = _run_the_review(bundle, lambda result: None)
 
-    [failed] = [one for one in store.list_sessions()
-                if Reviewer.data_defects.value in one["title"]]
-    assert store.load(failed["session_id"])["turn_spend"]
-
-
-def test_the_running_attack_is_held_until_it_finishes(bundle, monkeypatch) -> None:
-    seen: dict[str, Any] = {}
-
-    async def _drive() -> None:
-        _Fakes(answers=make_answers(), draft=make_draft()).install(monkeypatch)
-        _store_of(monkeypatch)
-        start_claim_review_agents(bundle=bundle, model="sonnet", on_answer=lambda r: None)
-        seen["held"] = len(claim_attack_run._ATTACKS)
-        await next(iter(claim_attack_run._ATTACKS))
-        await asyncio.sleep(0)
-        seen["after"] = len(claim_attack_run._ATTACKS)
-
-    asyncio.run(_drive())
-
-    assert seen["held"] == 1
-    assert seen["after"] == 0
+    settled = store.load(session_id)
+    assert settled["pending_user"] is None and settled["active_turn"] is None
 
 
-def test_a_bug_no_named_failure_covers_still_leaves_the_parent_a_failure(
-    bundle, monkeypatch
-) -> None:
-    seen: dict[str, Any] = {}
+def test_the_running_review_is_held_until_it_finishes(bundle, monkeypatch) -> None:
+    hold = asyncio.Event()
+    install(monkeypatch, lambda reviewer: _FakeAgent(_one_challenge_each(), hold=hold))
 
-    async def _drive() -> None:
-        _Fakes(answers=make_answers(), draft=make_draft(),
-               raises={Reviewer.orchestrator: KeyError("no such key")}).install(monkeypatch)
-        store = _store_of(monkeypatch)
-        parent = start_claim_review_agents(
-            bundle=bundle, model="sonnet", on_answer=lambda r: None)
-        with pytest.raises(KeyError):
-            await next(iter(claim_attack_run._ATTACKS))
-        seen["failure"] = _failure_on(store, parent)
-        seen["active_turn"] = store.load(parent)["active_turn"]
+    seen: list[int] = []
 
-    asyncio.run(_drive())
+    def _look(session_id: str) -> None:
+        seen.append(len(reviewer_run._REVIEWS))
+        hold.set()
 
-    assert seen["failure"] == "generation failed: the attack did not finish"
-    assert seen["active_turn"] is None
+    _run_the_review(bundle, lambda result: None, before_settling=_look)
 
+    assert seen == [1]
+    assert reviewer_run._REVIEWS == set()
 
-def test_the_request_is_cleared_off_the_parent_when_the_attack_lands(
-    bundle, monkeypatch
-) -> None:
-    _Fakes(answers=make_answers(), draft=make_draft()).install(monkeypatch)
-    store = _store_of(monkeypatch)
-
-    parent = _run_the_attack(store, bundle, lambda result: None)
-
-    assert store.load(parent)["pending_user"] is None

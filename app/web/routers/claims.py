@@ -54,12 +54,12 @@ async def submit_claim(request: Request, project_id: str, run_id: str, slug: str
     claim = _refusing_400(lambda: claims_service.submit_claim(
         project_id, run_id, slug, context, str(form.get("text", ""))
     ))
-    _attack_what_the_journalist_wrote(project_id, claim.id)
+    _review_what_was_written(project_id, claim.id)
     return _back_to_the_page(project_id, run_id)
 
 
-@router.post("/project/{project_id}/claims/{claim_id}/attack")
-async def attack_claim(project_id: str, claim_id: str):
+@router.post("/project/{project_id}/claims/{claim_id}/review")
+async def review_claim(project_id: str, claim_id: str):
     # async: start_claim_review calls asyncio.create_task, needing a running loop.
     validate_project_or_404(project_id)
     session_id = _refusing_400(lambda: claim_review_run.start_claim_review(
@@ -74,8 +74,8 @@ async def skip_output(project_id: str, run_id: str, slug: str):
     return _back_to_the_page(project_id, run_id)
 
 
-def _attack_what_the_journalist_wrote(project_id: str, claim_id: str) -> None:
-    """A claim whose attack could not start still stands; its page will say it was not reviewed."""
+def _review_what_was_written(project_id: str, claim_id: str) -> None:
+    """A claim whose review could not start still stands; its page says it was not reviewed."""
     try:
         claim_review_run.start_claim_review(project_id, claim_id, model=_read_model(project_id))
     except (ClaimReviewFailed, OSError) as exc:

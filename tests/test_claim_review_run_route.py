@@ -1,4 +1,4 @@
-"""Attacking a claim: the button's own route, and the attack a submitted claim starts."""
+"""Reviewing a claim: the button's own route, and the review a submitted claim starts."""
 from __future__ import annotations
 
 import logging
@@ -8,45 +8,28 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-import app.reviewer.run as claim_attack_run
-from app.reviewer.reviewers import render_attack_task
-from app.reviewer.evidence import render_evidence_pool
-from app.main import app
-from app.models.claim_review import (
-    Reviewer,
-    ReviewerAnswers,
-    Challenge,
-    ChallengeKind,
-    ChallengesAnswer,
-    OrchestratorAnswer,
-    Cost,
-    Grounding,
-    GroundingAnswer,
-    MeaningAnswer,
-    Moves,
-    OutputEvidence,
-    RaisedChallenge,
-    Rewrite,
-)
+import app.reviewer.run as reviewer_run
 from app.core.agent.store import AgentSession
-from app.models.claims import RowsRectangle, StageOutputTableCitation
+from app.main import app
+from app.models.citations import RowsRectangle, StageOutputTableCitation
+from app.models.claim_review import ChallengesAnswer
+from app.models.records.claim_review import (
+    ChallengeKind,
+    ClaimPart,
+    DraftChallenge,
+    Severity,
+)
+from app.models.citations import StageOutputColumnCitation
 from app.models.records.claims import Claim
 from app.models.records.workflow_output import WorkflowOutput
 from app.services import claim_review
 from app.services import claims as claims_service
 from claim_review_fixture import (
     PROJECT,
-    TOTAL_TEXT,
     claim_the_total,
     publish_the_outputs,
     run_the_fixture,
 )
-
-# The output value as the pool spells it, so a challenge backed by it is backed by the run.
-_ON_THE_POOL = "2200"
-_OFF_THE_POOL = "9,999 grants"
-# A gap has no figure to copy: it is backed on a line that prints what is missing.
-_A_GAP_BACKING = "reads: none"
 
 
 @pytest.fixture
@@ -60,95 +43,44 @@ def client() -> Any:
         yield running
 
 
-# ── the fakes: seven turns that submit without reaching a model ─────
+# ── the fakes: five reviewers that answer without reaching a model ─────
 
 
 class _FakeAgent:
-    def __init__(self, submitted: Any, task: str) -> None:
-        self.task = task
-        self.answer: Any = None
-        self._submitted = submitted
+    def __init__(self, answer: ChallengesAnswer) -> None:
+        self.answer = answer
+        self.last_usage = None
 
-    def build_engine(self) -> Any:
-        agent = self
-
-        class _Engine:
-            async def stream_turn(self, prompt: str, *, message_history: Any,
-                                  emit: Any, resume: Any):
-                agent.answer = agent._submitted
-                return [], None
-
-        return _Engine()
+    async def run(self, emit: Any = None) -> ChallengesAnswer:
+        return self.answer
 
 
-def make_answers() -> ReviewerAnswers:
-    raised = ChallengesAnswer(challenges=[RaisedChallenge(
-        kind=ChallengeKind.data, grounding_index=0, text="The figure counts rows, not grants.",
-        evidence="the amount column is blank", moves=Moves.moves, cost=Cost.free)])
-    return ReviewerAnswers(
-        grounding=GroundingAnswer(phrases=[Grounding(
-            start=0, end=len("Grants"), evidence=OutputEvidence(slug="grant-total"),
-            how="the cited figure counts the grant rows")]),
-        data_defects=raised, choices=raised, omissions=raised, coverage=raised,
-        meaning=MeaningAnswer(challenges=raised.challenges, rewrites=[Rewrite(
-            text="Five grants were recorded.", why="counts what was counted")]),
-    )
+def make_challenge(**overrides: Any) -> DraftChallenge:
+    fields: dict[str, Any] = dict(
+        kind=ChallengeKind.data, claim_part=ClaimPart(phrase="Grants"),
+        text="The figure counts rows, not grants.",
+        justification="the amount column is blank",
+        citations=[StageOutputColumnCitation(
+            run_id="RUN", stage_id="grant_totals", column="grants")],
+        severity=Severity.major)
+    return DraftChallenge.model_validate({**fields, **overrides})
 
 
-def make_draft(backing: str) -> OrchestratorAnswer:
-    return OrchestratorAnswer(
-        challenges=[Challenge(
-            reviewer=Reviewer.data_defects, kind=ChallengeKind.data, grounding_index=0,
-            text="The figure counts rows, not grants.",
-            evidence="the amount column is blank", backing=backing, severity=2,
-            moves=Moves.moves, cost=Cost.free)],
-        summary="It stands as a row count, not as money.")
-
-
-def make_groundless_answers() -> ReviewerAnswers:
-    """Every phrase lands on nothing: the apples case, where the run grounds no part of it."""
-    in_total = TOTAL_TEXT.index("in total")
-    silent = ChallengesAnswer(challenges=[])
-    return ReviewerAnswers(
-        grounding=GroundingAnswer(phrases=[
-            Grounding(start=0, end=len("Grants"), evidence=None,
-                      how="nothing in the run says the rows are grants"),
-            Grounding(start=in_total, end=in_total + len("in total"), evidence=None,
-                      how="nothing in the run says the file is the whole of it")]),
-        data_defects=silent, choices=silent, omissions=silent, coverage=silent,
-        meaning=MeaningAnswer(challenges=[], rewrites=[]))
-
-
-def make_gap_draft() -> OrchestratorAnswer:
-    return OrchestratorAnswer(
-        challenges=[Challenge(
-            reviewer=Reviewer.grounding, kind=ChallengeKind.gap, grounding_index=index,
-            text=text, evidence="the phrase rests on nothing the run holds",
-            backing=_A_GAP_BACKING, severity=3, moves=Moves.moves, cost=Cost.outside)
-            for index, text in enumerate([
-                "Nothing in the run says the rows it counts are grants.",
-                "Nothing in the run says the file is the whole of the grants."])],
-        summary="Neither phrase of the sentence lands on anything the run holds.")
-
-
-def install_fakes(monkeypatch, backing: str = _ON_THE_POOL, *,
-                  answers: ReviewerAnswers | None = None,
-                  draft: OrchestratorAnswer | None = None) -> None:
-    submitted = answers or make_answers()
-    merged = draft or make_draft(backing)
-
-    def _attacker(reviewer, bundle, *, grounding=None, model="sonnet"):
-        return _FakeAgent(_answer_of(reviewer, submitted),
-                          render_attack_task(reviewer, bundle, grounding))
-
-    monkeypatch.setattr(claim_attack_run, "build_attacker", _attacker)
+def install_fakes(monkeypatch, claim: Claim, **overrides: Any) -> None:
+    cited = [StageOutputColumnCitation(
+        run_id=claim.citation.run_id, stage_id="grant_totals", column="grants")]
+    answer = ChallengesAnswer(
+        challenges=[make_challenge(**{"citations": cited, **overrides})])
     monkeypatch.setattr(
-        claim_attack_run, "build_orchestrator",
-        lambda bundle, submitted, *, model="sonnet": _FakeAgent(merged, "merge"))
+        reviewer_run, "build_reviewer",
+        lambda reviewer, bundle, *, model="sonnet": _FakeAgent(answer))
 
 
-def _answer_of(reviewer: Reviewer, answers: ReviewerAnswers) -> Any:
-    return getattr(answers, reviewer.value)
+def install_silent_fakes(monkeypatch) -> None:
+    monkeypatch.setattr(
+        reviewer_run, "build_reviewer",
+        lambda reviewer, bundle, *, model="sonnet": _FakeAgent(
+            ChallengesAnswer(challenges=[])))
 
 
 def read_status_when_still(client: TestClient, session_id: str) -> dict:
@@ -158,79 +90,72 @@ def read_status_when_still(client: TestClient, session_id: str) -> dict:
             f"/project/{PROJECT}/generation-session/{session_id}/status").json()
         if not status["active"]:
             return status
-        assert time.monotonic() < deadline, "the attack never finished"
+        assert time.monotonic() < deadline, "the review never finished"
         time.sleep(0.02)
 
 
-def start_the_attack(client: TestClient, claim_id: str) -> Any:
-    return client.post(f"/project/{PROJECT}/claims/{claim_id}/attack")
+def start_the_review(client: TestClient, claim_id: str) -> Any:
+    return client.post(f"/project/{PROJECT}/claims/{claim_id}/review")
 
 
 # ── the button ─────
 
 
-def test_the_button_attacks_the_claim_and_the_review_lands(claim, client, monkeypatch):
-    pool = render_evidence_pool(claim_review.build_evidence_bundle(PROJECT, claim.id))
-    assert _ON_THE_POOL in pool
-    install_fakes(monkeypatch)
+def test_the_button_reviews_the_claim_and_the_review_lands(claim, client, monkeypatch):
+    install_fakes(monkeypatch, claim)
 
-    response = start_the_attack(client, claim.id)
+    response = start_the_review(client, claim.id)
 
     assert response.status_code == 200
     assert response.json()["ok"] is True
     assert read_status_when_still(client, response.json()["session"])["error"] is None
-    review = claim_review.load_claim_review(PROJECT, claim.id)
+    review = claim_review.load_claim_review(claim.id)
     assert review is not None
-    assert len(review.session_ids) == 7
-    assert [one.backing for one in review.challenges] == [_ON_THE_POOL]
+    # One challenge from each of the five reviewers, under the one session they ran in.
+    assert len(review.challenges) == len(reviewer_run.REVIEWERS)
+    assert review.session_id == response.json()["session"]
 
 
-def test_a_claim_the_run_grounds_nowhere_is_stored_as_gaps(claim, client, monkeypatch):
-    pool = render_evidence_pool(claim_review.build_evidence_bundle(PROJECT, claim.id))
-    assert _A_GAP_BACKING in pool
-    install_fakes(monkeypatch, answers=make_groundless_answers(), draft=make_gap_draft())
+def test_every_stored_citation_carries_the_project_the_store_stamped(claim, client, monkeypatch):
+    install_fakes(monkeypatch, claim)
 
-    response = start_the_attack(client, claim.id)
+    response = start_the_review(client, claim.id)
+    read_status_when_still(client, response.json()["session"])
 
-    assert read_status_when_still(client, response.json()["session"])["error"] is None
-    review = claim_review.load_claim_review(PROJECT, claim.id)
+    review = claim_review.load_claim_review(claim.id)
     assert review is not None
-    assert [one.kind for one in review.challenges] == [ChallengeKind.gap] * 2
-    assert [one.severity for one in review.challenges] == [3, 3]
-    assert [phrase.evidence for phrase in review.grounding] == [None, None]
+    assert {one.project_id for challenge in review.challenges
+            for one in challenge.citations} == {PROJECT}
 
 
-def test_a_backing_on_no_line_of_the_pool_stores_nothing(claim, client, monkeypatch):
-    install_fakes(monkeypatch, backing=_OFF_THE_POOL)
+def test_a_citation_the_run_does_not_hold_stores_nothing(claim, client, monkeypatch):
+    install_fakes(monkeypatch, claim, citations=[StageOutputColumnCitation(
+        run_id=claim.citation.run_id, stage_id="grant_totals", column="no_such_column")])
 
-    response = start_the_attack(client, claim.id)
+    response = start_the_review(client, claim.id)
 
     error = read_status_when_still(client, response.json()["session"])["error"]
-    assert error is not None and "is on no line of the pool" in error
-    assert claim_review.load_claim_review(PROJECT, claim.id) is None
+    assert error is not None and "no_such_column" in error
+    assert claim_review.load_claim_review(claim.id) is None
 
 
-def test_what_a_backing_is_checked_against_is_the_pool_alone(claim, client, monkeypatch):
-    bundle = claim_review.build_evidence_bundle(PROJECT, claim.id)
-    install_fakes(monkeypatch)
-    stored: dict[str, Any] = {}
-    monkeypatch.setattr(claim_review, "store_claim_review",
-                        lambda *args, **kwargs: stored.update(kwargs))
+def test_a_reviewer_that_raises_nothing_stores_an_empty_review(claim, client, monkeypatch):
+    install_silent_fakes(monkeypatch)
 
-    response = start_the_attack(client, claim.id)
+    response = start_the_review(client, claim.id)
 
-    read_status_when_still(client, response.json()["session"])
-    assert stored["corpus"] == render_evidence_pool(bundle)
-    assert TOTAL_TEXT not in stored["corpus"]
+    assert read_status_when_still(client, response.json()["session"])["error"] is None
+    review = claim_review.load_claim_review(claim.id)
+    assert review is not None and review.challenges == []
 
 
 def test_a_claim_that_already_holds_a_review_is_refused(claim, client, monkeypatch):
-    install_fakes(monkeypatch)
-    first = start_the_attack(client, claim.id)
+    install_fakes(monkeypatch, claim)
+    first = start_the_review(client, claim.id)
     read_status_when_still(client, first.json()["session"])
     opened = len(AgentSession.list())
 
-    response = start_the_attack(client, claim.id)
+    response = start_the_review(client, claim.id)
 
     assert response.status_code == 400
     assert "already has a review" in response.text
@@ -238,23 +163,24 @@ def test_a_claim_that_already_holds_a_review_is_refused(claim, client, monkeypat
 
 
 def test_a_claim_that_no_longer_stands_is_refused(claim, client, monkeypatch):
-    install_fakes(monkeypatch)
+    install_fakes(monkeypatch, claim)
     claims_service.decline_claim(PROJECT, claim.id)
 
-    response = start_the_attack(client, claim.id)
+    response = start_the_review(client, claim.id)
 
     assert response.status_code == 400
     assert "declined" in response.text
-    assert claim_review.load_claim_review(PROJECT, claim.id) is None
+    assert claim_review.load_claim_review(claim.id) is None
 
 
 # ── the submit button ─────
 
 
-def test_submitting_a_claim_attacks_it(projects_root, client, monkeypatch):
+def test_submitting_a_claim_reviews_it(projects_root, client, monkeypatch):
+    from claim_review_fixture import TOTAL_TEXT
     run_id = run_the_fixture(projects_root)
     publish_the_outputs(run_id)
-    install_fakes(monkeypatch)
+    install_silent_fakes(monkeypatch)
 
     response = client.post(f"/project/{PROJECT}/runs/{run_id}/submit/grant-total",
                            data={"text": TOTAL_TEXT})
@@ -264,13 +190,13 @@ def test_submitting_a_claim_attacks_it(projects_root, client, monkeypatch):
     assert _wait_for_the_review(claim.id) is not None
 
 
-def test_a_table_claim_stands_submitted_though_it_is_not_attacked(
+def test_a_table_claim_stands_submitted_though_it_is_not_reviewed(
     projects_root, client, monkeypatch, caplog
 ):
     run_id = run_the_fixture(projects_root)
     shape = publish_the_outputs(run_id)
     _publish_a_table(run_id, shape.id)
-    install_fakes(monkeypatch)
+    install_silent_fakes(monkeypatch)
 
     with caplog.at_level(logging.WARNING):
         response = client.post(f"/project/{PROJECT}/runs/{run_id}/submit/grant-rows",
@@ -279,14 +205,16 @@ def test_a_table_claim_stands_submitted_though_it_is_not_attacked(
     assert response.status_code == 303
     [claim] = Claim.find(created_by_project_id=PROJECT)
     assert claim.status == "submitted"
-    assert claim_review.load_claim_review(PROJECT, claim.id) is None
+    assert claim_review.load_claim_review(claim.id) is None
     assert "not reviewed" in caplog.text
 
 
-def test_a_claim_stands_when_its_attack_cannot_start(projects_root, client, monkeypatch, caplog):
+def test_a_claim_stands_when_its_review_cannot_start(projects_root, client, monkeypatch, caplog):
+    from app.services import claim_review_run
+    from claim_review_fixture import TOTAL_TEXT
     run_id = run_the_fixture(projects_root)
     publish_the_outputs(run_id)
-    monkeypatch.setattr(claim_review, "start_claim_review", _raise_a_missing_version)
+    monkeypatch.setattr(claim_review_run, "start_claim_review", _raise_a_missing_version)
 
     with caplog.at_level(logging.WARNING):
         response = client.post(f"/project/{PROJECT}/runs/{run_id}/submit/grant-total",
@@ -314,7 +242,7 @@ def _publish_a_table(run_id: str, shape_id: str) -> None:
 def _wait_for_the_review(claim_id: str) -> Any:
     deadline = time.monotonic() + 20.0
     while True:
-        review = claim_review.load_claim_review(PROJECT, claim_id)
+        review = claim_review.load_claim_review(claim_id)
         if review is not None:
             return review
         assert time.monotonic() < deadline, "the submitted claim was never reviewed"

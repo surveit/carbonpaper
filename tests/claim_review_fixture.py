@@ -29,7 +29,8 @@ def run_the_fixture(projects_root) -> str:
     return str(run_service.execute(PROJECT)["run_id"])
 
 
-def claim_the_total(run_id: str, text: str = TOTAL_TEXT) -> Claim:
+def publish_the_outputs(run_id: str):
+    """The two figures a claim may cite, without claiming either."""
     [shape] = claim_shapes.write_claim_shapes(PROJECT, [TOTAL_SHAPE])
     WorkflowOutput(
         slug="grant-total", label="What the grants came to", primary=True, shape_id=shape.id,
@@ -40,6 +41,11 @@ def claim_the_total(run_id: str, text: str = TOTAL_TEXT) -> Claim:
         slug="grant-count", label="How many grants", primary=False, shape_id=None,
         citation=StageOutputCellCitation(run_id=run_id, stage_id="grant_totals", row_ordinal=0, column="grants", value=5),
     ).save()
+    return shape
+
+
+def claim_the_total(run_id: str, text: str = TOTAL_TEXT) -> Claim:
+    publish_the_outputs(run_id)
     return claims.submit_claim(PROJECT, run_id, "grant-total", {}, text)
 
 

@@ -86,7 +86,7 @@ _DATA_DEFECTS_JOB = (
     "and its count, a filled/null/blank split, a distinct count, a line of stage code.\n"
     "WHAT YOU ARE NOT TOLD. You are not told the stage code beyond how it reads a column. "
     "Whether a threshold is the RIGHT threshold, or a filter the right filter, belongs to "
-    "another reviewer. Do not attack a decision; attack the file and the reading of it. "
+    "another reviewer. A decision belongs to another reviewer; yours is the file and the reading of it. "
     "How many rows a defect touches is yours to give only when a line of the pool says so; "
     "counting them is not something you can do, so say in `text` what rerun would. A "
     "defect that leaves the cited figure untouched is still yours to raise; weigh it for "
@@ -323,7 +323,7 @@ _MEANING_JOB = (
     "methodology, and you ask one question: is this sentence what that number says? The "
     "same figure read as a different sentence, a word the file cannot carry, a measure "
     "standing in for the thing it measures, an ambiguity the reader will resolve the "
-    "wrong way. Every challenge you raise has `kind` `semantic`.\n"
+    "wrong way. Every challenge you raise has `kind` `meaning`.\n"
     "WHAT YOU ARE NOT TOLD. You never touch arithmetic. Whether the number is right is "
     "another reviewer's job; whether the sentence is what that number says is yours. A "
     "semantic challenge is the case where the figure stands and the sentence reverses "
@@ -339,7 +339,7 @@ cases.SSNUMBER · empty · rows 9806 · 0 filled/9806 null/0 blank · distinct 0
 MEANING_EXAMPLE_JSON = """{
   "challenges": [
     {
-      "kind": "semantic",
+      "kind": "meaning",
       "claim_part": {"phrase": "<the phrase this lands on, copied from the claim>"},
       "text": "The sentence says guards. The run counts cases.",
       "justification": "cases.s_GUID and cases.SSNUMBER both read rows 9806 · 0 filled/9806 null/0 blank on the INPUT COLUMNS block, so a guard with three cases is three rows and two guards sharing a name are one.",
@@ -348,12 +348,6 @@ MEANING_EXAMPLE_JSON = """{
         {"kind": "stage_output_column", "run_id": "<run_id>", "stage_id": "cases", "column": "SSNUMBER"}
       ],
       "severity": 2
-    }
-  ],
-  "rewrites": [
-    {
-      "text": "A vast majority of inmate-abuse cases ended without a dismissal.",
-      "why": "The same count, said of cases. It drops the word the file cannot support."
     }
   ]
 }"""

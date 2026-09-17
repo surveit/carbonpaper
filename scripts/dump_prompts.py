@@ -18,7 +18,6 @@ import mcp.types as types
 from claude_agent_sdk import McpSdkServerConfig
 
 from app.agents.compiler.config import CONFIG as EDITING_CONFIG
-from app.reviewer.orchestrator import build_orchestrator
 from app.reviewer.reviewers import REVIEWERS, build_reviewer
 from app.agents.tutorial.config import CONFIG as TUTORIAL_CONFIG
 from app.compiler.review_guide import build_review_guide_author
@@ -172,7 +171,7 @@ def render_stage_tests_agent() -> str:
 def render_claim_reviewers() -> str:
     """The five turns that review one claim, and the sixth that merges what they found."""
     surfaces = [_render_reviewer(reviewer) for reviewer in REVIEWERS]
-    return "\n".join([*surfaces, _render_claim_orchestrator()])
+    return "\n".join(surfaces)
 
 
 def _render_reviewer(reviewer: Reviewer) -> str:
@@ -182,22 +181,6 @@ def _render_reviewer(reviewer: Reviewer) -> str:
         source="app/reviewer/reviewers_prompt.py",
         model=_GENERATION_MODEL,
         note=_REVIEWER_NOTE,
-        system_prompt=agent._system_prompt,
-        tools=read_agent_tools(agent),
-    )
-
-
-def _render_claim_orchestrator() -> str:
-    agent = build_orchestrator(_UNUSED_BUNDLE, [])
-    return render_surface(
-        title="Claim review · orchestrator",
-        source="app/reviewer/orchestrator_prompt.py",
-        model=_GENERATION_MODEL,
-        note=(
-            f"{_STRUCTURED_OUTPUT_NOTE} The last turn, and the only one that reads every "
-            "challenge raised: what it keeps becomes the stored review, and every citation "
-            "it writes is checked against the run before anything is stored."
-        ),
         system_prompt=agent._system_prompt,
         tools=read_agent_tools(agent),
     )
