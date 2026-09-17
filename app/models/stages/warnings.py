@@ -22,11 +22,7 @@ WarningKind = Literal[
     "nondeterministic",
 ]
 
-# The order the list is read in, and what each kind costs a reader.
-# A version snapshots whatever the author has, so none of these refuses an action.
-# `warning` is what an author may knowingly leave standing — a stage described in code
-# alone, one no example checks, a model call that re-rolls every run.
-# `error` marks the one the runtime is meant to refuse and does not yet.
+# Read in this order. Which severity a kind carries: docs/visual-language.md
 SEVERITY: dict[str, UserFacingErrorSeverity] = {
     "undescribed": UserFacingErrorSeverity.warning,
     "unnamed_rows": UserFacingErrorSeverity.error,
