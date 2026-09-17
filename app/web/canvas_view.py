@@ -82,7 +82,8 @@ def _list_cuts(
 ) -> list[CanvasCut]:
     """What the scope map read as taken out on the figure's route, per stage."""
     citation = StageOutputCellCitation(
-        run_id=run_id, stage_id=stage_id, row_ordinal=row, column=column, value=None)
+        project_id=project_id, run_id=run_id, stage_id=stage_id, row_ordinal=row,
+        column=column, value=None)
     scope, _ = load_scope_map(project_id, run_id, citation)
     return [
         CanvasCut(stage_id=drawn.stage.id, branch=removal.branch, rows=removal.rows)

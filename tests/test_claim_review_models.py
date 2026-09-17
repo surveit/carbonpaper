@@ -7,11 +7,11 @@ from pydantic import ValidationError
 from app.models.citations import StageCitation, StageOutputCellCitation
 from app.models.claim_review import (
     ChallengesAnswer,
-    ClaimPartsAnswer,
     OrchestratorAnswer,
     find_claim_part_spans,
 )
 from app.models.records.claim_review import (
+    Severity,
     SEVERITY_WORDS,
     Challenge,
     ChallengeKind,
@@ -21,10 +21,10 @@ from app.models.records.claim_review import (
 
 
 def _challenge(**overrides: object) -> Challenge:
-    fields = dict(kind=ChallengeKind.coverage, claim_part_index=0,
+    fields = dict(kind=ChallengeKind.coverage, claim_part=ClaimPart(phrase="Blank outcomes"),
                   text="Blank outcomes count as unknown.",
                   justification="28% of records are blank.",
-                  citations=[StageCitation(stage_id="outcomes")], severity=3)
+                  citations=[StageCitation(project_id="p", stage_id="outcomes")], severity=3)
     return Challenge.model_validate({**fields, **overrides})
 
 
@@ -54,40 +54,38 @@ def test_a_claim_part_needs_a_phrase_and_counts_occurrences_from_one():
 
 def test_a_challenge_carries_exactly_these_fields_in_this_order():
     assert list(Challenge.model_fields) == [
-        "kind", "claim_part_index", "text", "justification", "citations", "severity"]
+        "kind", "claim_part", "text", "justification", "citations", "severity"]
 
 
 def test_severity_runs_from_zero_to_three_and_each_has_a_word():
     assert [_challenge(severity=s).severity for s in range(4)] == [0, 1, 2, 3]
-    assert set(SEVERITY_WORDS) == {0, 1, 2, 3}
+    assert set(SEVERITY_WORDS) == set(Severity)
     with pytest.raises(ValidationError):
         _challenge(severity=4)
     with pytest.raises(ValidationError):
         _challenge(severity=-1)
     spelled = Challenge.model_fields["severity"].description or ""
-    assert spelled.startswith("How much it hurts the claim. ")
+    assert spelled.startswith("How wrong the reader is left. ")
     assert all(f"{level} {word}" in spelled for level, word in SEVERITY_WORDS.items())
 
 
 def test_the_two_highest_severities_divide_on_quantity_and_quality():
-    assert "its quantitative value risks a meaningful deviation" in SEVERITY_WORDS[2]
-    assert SEVERITY_WORDS[3].startswith("actively misleading on a qualitative basis")
+    assert "the figure moves enough to change what it means" in SEVERITY_WORDS[Severity.major]
+    assert SEVERITY_WORDS[Severity.misleading].startswith("the reader draws a conclusion")
 
 
-def test_a_review_or_an_answer_with_no_claim_parts_is_refused():
-    with pytest.raises(ValidationError, match="at least 1 item"):
-        ClaimPartsAnswer(claim_parts=[])
-    with pytest.raises(ValidationError, match="at least 1 item"):
-        ClaimReview(claim_id="c", claim_parts=[], challenges=[], summary="s", session_ids=[])
+def test_a_review_holds_no_claim_parts_of_its_own():
+    assert "claim_parts" not in ClaimReview.model_fields
 
 
 def test_a_citation_is_told_apart_by_its_kind():
     parsed = _challenge(citations=[
-        {"kind": "stage_output_cell", "run_id": "r", "stage_id": "s", "row_ordinal": 0,
-         "column": "c", "value": 1},
-        {"kind": "stage_output_column", "stage_id": "s", "column": "c"},
-        {"kind": "stage", "stage_id": "s"},
-        {"kind": "term", "name": "grant"},
+        {"kind": "stage_output_cell", "project_id": "p", "run_id": "r", "stage_id": "s",
+         "row_ordinal": 0, "column": "c", "value": 1},
+        {"kind": "stage_output_column", "project_id": "p", "run_id": "r", "stage_id": "s",
+         "column": "c"},
+        {"kind": "stage", "project_id": "p", "stage_id": "s"},
+        {"kind": "term", "project_id": "p", "name": "grant"},
     ])
 
     assert [citation.kind for citation in parsed.citations] == [
@@ -101,7 +99,7 @@ def test_every_field_an_agent_fills_on_a_cell_citation_is_described():
     described = {name: field.description for name, field in
                  StageOutputCellCitation.model_fields.items() if name != "kind"}
 
-    assert set(described) == {"run_id", "stage_id", "row_ordinal", "column", "value"}
+    assert set(described) == {"project_id", "run_id", "stage_id", "row_ordinal", "column", "value"}
     assert all(described.values())
 
 

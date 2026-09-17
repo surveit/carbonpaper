@@ -26,17 +26,18 @@ CHALLENGE_CITATION: TypeAdapter[ChallengeCitation] = TypeAdapter(ChallengeCitati
     [
         (
             {
-                "kind": "stage_output_cell", "run_id": "run-1", "stage_id": "total",
-                "row_ordinal": 0, "column": "amount", "value": 12,
+                "kind": "stage_output_cell", "project_id": "p", "run_id": "run-1",
+                "stage_id": "total", "row_ordinal": 0, "column": "amount", "value": 12,
             },
             StageOutputCellCitation,
         ),
         (
-            {"kind": "stage_output_column", "stage_id": "total", "column": "amount"},
+            {"kind": "stage_output_column", "project_id": "p", "run_id": "run-1",
+             "stage_id": "total", "column": "amount"},
             StageOutputColumnCitation,
         ),
-        ({"kind": "stage", "stage_id": "total"}, StageCitation),
-        ({"kind": "term", "name": "lobbying spend"}, TermCitation),
+        ({"kind": "stage", "project_id": "p", "stage_id": "total"}, StageCitation),
+        ({"kind": "term", "project_id": "p", "name": "lobbying spend"}, TermCitation),
     ],
 )
 def test_each_kind_round_trips_through_the_challenge_union_by_its_kind(
@@ -91,7 +92,7 @@ def test_each_new_kind_describes_its_fields_for_a_tool_schema(
 
 
 def _cell_of(value: int | str) -> StageOutputCellCitation:
-    return StageOutputCellCitation(run_id="r", stage_id="s", row_ordinal=0, column="c", value=value)
+    return StageOutputCellCitation(project_id="p", run_id="r", stage_id="s", row_ordinal=0, column="c", value=value)
 
 
 @pytest.mark.parametrize(("citation", "printed"), [

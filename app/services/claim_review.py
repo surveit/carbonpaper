@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from itertools import combinations
 
 from app.core.figure_text import render_figure
 from app.core.file_shape import VALUES_KEPT, measure_column_shape
@@ -24,7 +23,7 @@ from app.models.claim_review import (
     StageEvidenceItem,
     find_claim_part_spans,
 )
-from app.models.records.claim_review import Challenge, ChallengeKind, ClaimPart, ClaimReview
+from app.models.records.claim_review import Challenge, ChallengeKind, ClaimReview
 from app.models.stage import StageType
 from app.models.terms import render_terms
 from app.models.workflow import Workflow, find_stages_upstream_of, sort_stages_by_dependency
@@ -67,43 +66,31 @@ def load_claim_review(claim_id: ID) -> ClaimReview | None:
     return held[0] if held else None
 
 
-def store_claim_review(project_id: ID, claim_id: ID, *, claim_parts: list[ClaimPart],
-                       challenges: list[Challenge], summary: str,
-                       session_ids: list[ID]) -> ClaimReview:
+def store_claim_review(project_id: ID, claim_id: ID, *, challenges: list[Challenge],
+                       summary: str, session_ids: list[ID]) -> ClaimReview:
     claim = claims_service.load_claim(project_id, claim_id)
     cited = _require_cell_citation(claim.citation)
     if load_claim_review(claim_id) is not None:
         raise ClaimReviewRefused(
             [f"claim {claim_id} already has a review; a re-review is a new claim"])
-    issues = [*find_claim_part_issues(claim_parts, claim.text),
-              *find_challenge_issues(challenges, len(claim_parts)),
+    issues = [*find_challenge_issues(challenges, claim.text),
               *find_citation_issues(project_id, cited.run_id, challenges)]
     if issues:
         raise ClaimReviewRefused(issues)
     review = ClaimReview(
-        claim_id=claim_id, claim_parts=claim_parts, challenges=challenges, summary=summary,
-        session_ids=session_ids)
+        claim_id=claim_id, challenges=challenges, summary=summary, session_ids=session_ids)
     review.save()
     return review
 
 
-def find_claim_part_issues(claim_parts: list[ClaimPart], text: str) -> list[str]:
-    spans = find_claim_part_spans(text, claim_parts)
-    missing = [
-        f"claim part {index} {part.phrase!r}: the claim holds it fewer than "
-        f"{part.occurrence} times"
-        for index, (part, span) in enumerate(zip(claim_parts, spans)) if span is None
-    ]
-    return missing + _find_overlapping_claim_parts(spans)
-
-
-def find_challenge_issues(challenges: list[Challenge], claim_part_count: int) -> list[str]:
+def find_challenge_issues(challenges: list[Challenge], text: str) -> list[str]:
+    landed = [(index, one, one.claim_part)
+              for index, one in enumerate(challenges) if one.claim_part is not None]
+    spans = find_claim_part_spans(text, [part for _, _, part in landed])
     return [
-        f"{_name_challenge(index, challenge)}: claim_part_index {challenge.claim_part_index} "
-        f"names no claim part; the claim has {claim_part_count}"
-        for index, challenge in enumerate(challenges)
-        if challenge.claim_part_index is not None
-        and challenge.claim_part_index >= claim_part_count
+        f"{_name_challenge(index, one)}: the claim holds {part.phrase!r} fewer than "
+        f"{part.occurrence} times"
+        for (index, one, part), span in zip(landed, spans) if span is None
     ]
 
 
@@ -116,8 +103,16 @@ def find_citation_issues(project_id: ID, run_id: ID, challenges: list[Challenge]
     return [
         f"{_name_challenge(index, challenge)}: {citation.kind} citation {problem}"
         for index, challenge, citation in cited
-        if (problem := _find_citation_problem(held, citation)) is not None
+        if (problem := _find_address_problem(project_id, citation)
+            or _find_citation_problem(held, citation)) is not None
     ]
+
+
+def _find_address_problem(project_id: ID, citation: ChallengeCitation) -> str | None:
+    # The address is what opens the citation on its own, so a wrong one is a dead link.
+    if citation.project_id != project_id:
+        return f"names project {citation.project_id!r}, not the claim's project"
+    return None
 
 
 # ── what the run holds ──
@@ -211,16 +206,6 @@ class _RunHoldings:
 
 def _name_challenge(index: int, challenge: Challenge) -> str:
     return f"challenge {index} ({ChallengeKind(challenge.kind).value})"
-
-
-def _find_overlapping_claim_parts(spans: list[tuple[int, int] | None]) -> list[str]:
-    resolved = [(index, span) for index, span in enumerate(spans) if span is not None]
-    return [
-        f"claim parts {first} and {second} overlap"
-        for (first, (first_start, first_end)), (second, (second_start, second_end))
-        in combinations(resolved, 2)
-        if first_start < second_end and second_start < first_end
-    ]
 
 
 def _read_run_holdings(project_id: ID, run_id: ID,

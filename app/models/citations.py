@@ -19,13 +19,14 @@ class CitedValue(BaseModel):
 
 
 class Citation(BaseModel):
-    """Where the evidence sits. The kind decides what else a citation carries."""
+    """Where the evidence sits, addressed so it opens on its own: see render_source_url."""
 
     kind: str
 
 
 class StageOutputCellCitation(Citation):
     kind: Literal["stage_output_cell"] = "stage_output_cell"
+    project_id: ID = Field(description="The project the run belongs to.")
     run_id: ID = Field(description="The run, as the evidence pool names it.")
     stage_id: ID = Field(description="The stage, as the evidence pool names it.")
     row_ordinal: int = Field(description="The row's position in the stage output, counting from 0.")
@@ -81,17 +82,21 @@ class StageOutputRowCitation(Citation):
 
 class StageOutputColumnCitation(Citation):
     kind: Literal["stage_output_column"] = "stage_output_column"
+    project_id: ID = Field(description="The project the run belongs to.")
+    run_id: ID = Field(description="The run whose output holds the column.")
     stage_id: ID = Field(description="The stage, as the evidence pool names it.")
     column: str = Field(description="The column's name, spelled as the evidence pool spells it.")
 
 
 class StageCitation(Citation):
     kind: Literal["stage"] = "stage"
+    project_id: ID = Field(description="The project whose workflow holds the stage.")
     stage_id: ID = Field(description="The stage, as the evidence pool names it.")
 
 
 class TermCitation(Citation):
     kind: Literal["term"] = "term"
+    project_id: ID = Field(description="The project whose terms define it.")
     name: str = Field(description="The defined term, exactly as the terms name it.")
 
 

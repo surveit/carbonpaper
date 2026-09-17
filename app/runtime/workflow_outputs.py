@@ -85,7 +85,7 @@ def _publish_figure(
     return WorkflowOutput(
         slug=figure.slug, label=figure.label, primary=figure.primary, shape_id=figure.shape_id,
         citation=StageOutputCellCitation(
-            run_id=identity.run_id, stage_id=stage_id,
+            project_id=identity.project, run_id=identity.run_id, stage_id=stage_id,
             row_ordinal=PUBLISHED_ROW, column=figure.column,
             value=read_cell(table, figure.column, PUBLISHED_ROW),
         ),

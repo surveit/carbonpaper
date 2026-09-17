@@ -49,7 +49,7 @@ def _read(run_id: str):
 
 
 def cite(stage_id: str, column: str, ordinal: int, value) -> StageOutputCellCitation:
-    return StageOutputCellCitation(run_id="r", stage_id=stage_id, column=column,
+    return StageOutputCellCitation(project_id=PROJECT, run_id="r", stage_id=stage_id, column=column,
                                    row_ordinal=ordinal, value=value)
 
 

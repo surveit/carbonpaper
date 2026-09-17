@@ -1,7 +1,7 @@
 """A stored claim review: the claim's parts, the challenges kept, and the sessions behind them."""
 from __future__ import annotations
 
-from enum import Enum
+from enum import Enum, IntEnum
 from typing import ClassVar
 
 from pydantic import Field, model_validator
@@ -22,18 +22,24 @@ class ChallengeKind(str, Enum):
     gap = "gap"
 
 
-SEVERITY_FLOOR = 0
-SEVERITY_CEILING = 3
+class Severity(IntEnum):
+    """Ordered: the page folds the quiet ones behind a count and sorts the rest by weight."""
 
-SEVERITY_WORDS: dict[int, str] = {
-    0: "checked and does not hurt the claim, but the assumption is worth noting",
-    1: "low-probability or low-magnitude risks to the number or its framing",
-    2: "the claim's structure is right, but its quantitative value risks a meaningful deviation",
-    3: "actively misleading on a qualitative basis: it will lead readers to incorrect conclusions",
+    noted = 0
+    minor = 1
+    major = 2
+    misleading = 3
+
+
+SEVERITY_WORDS: dict[Severity, str] = {
+    Severity.noted: "nothing moves; a choice was made the reader should know about",
+    Severity.minor: "the figure moves, not by enough to change anything",
+    Severity.major: "the claim's shape holds, but the figure moves enough to change what it means",
+    Severity.misleading: "the reader draws a conclusion the run does not support",
 }
 
-_SEVERITY_DESCRIPTION = "How much it hurts the claim. " + ". ".join(
-    f"{level} {word}" for level, word in SEVERITY_WORDS.items()
+_SEVERITY_DESCRIPTION = "How wrong the reader is left. " + ". ".join(
+    f"{level.value} {word}" for level, word in SEVERITY_WORDS.items()
 )
 
 
@@ -46,9 +52,9 @@ class ClaimPart(_Base):
 
 class Challenge(_Base):
     kind: ChallengeKind = Field(description="What sort of stretch this is.")
-    claim_part_index: int | None = Field(
-        default=None, ge=0,
-        description="Which claim part it lands on, by position in the claim parts; null for the whole sentence.",
+    claim_part: ClaimPart | None = Field(
+        default=None,
+        description="The phrase of the claim it lands on; null when it is about the whole sentence.",
     )
     text: str = Field(description="The challenge in one sentence, addressed to the claim owner.")
     justification: str = Field(description="What in the run makes it stick, in one sentence.")
@@ -56,9 +62,7 @@ class Challenge(_Base):
         default_factory=list,
         description="The pieces of the run it rests on, so a reader can open every one.",
     )
-    severity: int = Field(
-        ge=SEVERITY_FLOOR, le=SEVERITY_CEILING, description=_SEVERITY_DESCRIPTION,
-    )
+    severity: Severity = Field(description=_SEVERITY_DESCRIPTION)
 
     @model_validator(mode="after")
     def _validate_cited(self) -> Challenge:
@@ -75,7 +79,6 @@ class ClaimReview(PersistedModel):
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
 
     claim_id: ID = Field(frozen=True)
-    claim_parts: list[ClaimPart] = Field(frozen=True, min_length=1)
     challenges: list[Challenge] = Field(frozen=True)
     summary: str = Field(frozen=True)
     # Every review session in the order it ran, so a reader can open the transcripts.

@@ -32,7 +32,7 @@ _EXPAND = Query(default=None)
 def scope_page(request: Request, project_id: str, run_id: str,
                      stage: str, row: int, column: str,
                      expand: list[str] | None = _EXPAND):
-    citation = _cite(run_id, stage, row, column)
+    citation = _cite(project_id, run_id, stage, row, column)
     try:
         scope, cuts = scope_view.load_scope_map(
             project_id, run_id, citation, frozenset(expand or ()))
@@ -52,7 +52,7 @@ def scope_page(request: Request, project_id: str, run_id: str,
 @router.get(f"{_SCOPE_PATH}.json", response_class=JSONResponse)
 def scope_json(project_id: str, run_id: str, stage: str, row: int, column: str,
                      expand: list[str] | None = _EXPAND):
-    citation = _cite(run_id, stage, row, column)
+    citation = _cite(project_id, run_id, stage, row, column)
     try:
         scope, cuts = scope_view.load_scope_map(project_id, run_id, citation,
                                                 frozenset(expand or ()))
@@ -66,7 +66,7 @@ def scope_panel(request: Request, project_id: str, run_id: str,
                 stage: str, row: int, column: str,
                 expand: list[str] | None = _EXPAND):
     """The same map, shell-less, for the frame the row lineage page holds it in."""
-    citation = _cite(run_id, stage, row, column)
+    citation = _cite(project_id, run_id, stage, row, column)
     try:
         scope, cuts = scope_view.load_scope_map(project_id, run_id, citation,
                                                 frozenset(expand or ()))
@@ -101,10 +101,11 @@ def scope_rows(request: Request, project_id: str, run_id: str,
     return templates.TemplateResponse(request, "_scope_rows.html", table)
 
 
-def _cite(run_id: str, stage: str, row: int, column: str) -> StageOutputCellCitation:
+def _cite(project_id: str, run_id: str, stage: str, row: int,
+          column: str) -> StageOutputCellCitation:
     # The cell's value is read back from the frame, so the caller need not carry it.
-    return StageOutputCellCitation(run_id=run_id, stage_id=stage, row_ordinal=row,
-                                   column=column, value=None)
+    return StageOutputCellCitation(project_id=project_id, run_id=run_id, stage_id=stage,
+                                   row_ordinal=row, column=column, value=None)
 
 
 def _payload(scope: ScopeMap, cuts: dict[BranchId, CutRows]) -> JsonDict:

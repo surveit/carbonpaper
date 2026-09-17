@@ -66,7 +66,8 @@ def input_file_slice(project_id: str, run_id: str, stage: str, row: int,
 def _load(project_id: str, run_id: str, stage: str, row: int,
           column: str) -> InputFilesView:
     return input_files_view.load_input_files(project_id, run_id, StageOutputCellCitation(
-        run_id=run_id, stage_id=stage, row_ordinal=row, column=column, value=None))
+        project_id=project_id, run_id=run_id, stage_id=stage, row_ordinal=row,
+        column=column, value=None))
 
 
 def _find_file(view: InputFilesView, stage_id: StageId) -> InputFileSlice:
