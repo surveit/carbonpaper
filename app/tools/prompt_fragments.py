@@ -187,7 +187,15 @@ Take the word from the project's Terms, which `read_terms` lists, and never coin
 the stage: a coined word is a second name for something the method already named, and a
 project export carrying one is refused. Worked example — a `dedupe` taking rows of
 `inspection_visit` down to one row per facility sets `"row_type_id": "facility"`, and the
-`enrich` below it sets nothing, because those rows are still facilities."""
+`enrich` below it sets nothing, because those rows are still facilities.
+
+Some rows are not a kind of thing at all, and `"row_type_id": "no_kind"` is how to say so.
+A `report` emits files rather than rows; an `aggregate` with no `group_by` emits one row
+that is a figure ABOUT the whole input population rather than one of the things counted.
+Both of those answer `no_kind`. Answering it is not the same as leaving the field out:
+out says nobody has answered yet, and the stage carries an `unnamed_rows` warning until
+someone does. Worked example — an `aggregate` totalling every fine in the state sets
+`"row_type_id": "no_kind"`, and the `report` reading it sets `"no_kind"` too."""
 
 _NULLS = """\
 Absence is null, never a filled-in value. An unmatched join lands nulls; an aggregate
@@ -224,12 +232,12 @@ def _render_row_type_table() -> str:
     declaring = sorted(t for t in _catalog_types() if declares_its_own_row_type(t))
     inheriting = sorted(t for t in _catalog_types() if not declares_its_own_row_type(t))
     return "\n".join([
-        "Which types name one. Fixed by type, like grain.",
-        f"  sets `row_type_id`: {_names(declaring)}",
-        f"  leaves it empty, minting no new kind of row: {_names(inheriting)}",
-        "An `aggregate` with no `group_by` leaves it empty too: its one row is a figure "
-        "ABOUT the input population, not a new kind of row. Setting the field where the "
-        "stage names none is refused on write.",
+        "Which types answer one. Fixed by type, like grain.",
+        f"  answers `row_type_id`: {_names(declaring)}",
+        f"  leaves it out, minting no new kind of row: {_names(inheriting)}",
+        "`report` always answers `no_kind`, and an `aggregate` answers `no_kind` when it "
+        "has no `group_by` and a word when it has one — each refused on write the other "
+        "way round. Setting the field at all on a type that leaves it out is refused too.",
     ])
 
 

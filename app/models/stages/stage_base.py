@@ -140,7 +140,7 @@ def is_grain_and_order_preserving(stage_type: StageType) -> bool:
     return find_row_effect(stage_type) in {RowEffect.creates, RowEffect.maps}
 
 
-# The types whose output rows are a NEW kind of thing; every other type inherits its input's.
+# The types that answer what their output rows are; every other type inherits its input's.
 _ROW_TYPE_DECLARING_TYPES: frozenset[StageType] = frozenset({
     StageType.input_data,
     StageType.aggregate,
@@ -148,7 +148,7 @@ _ROW_TYPE_DECLARING_TYPES: frozenset[StageType] = frozenset({
     StageType.explode,
     StageType.expand,
     StageType.python_frame_function,
-    # `report` is absent: it emits files, not rows.
+    StageType.report,
 })
 
 
@@ -440,13 +440,25 @@ class AbstractStage(AuthoredStageFields):
         return self
 
     @model_validator(mode="after")
-    def _new_rows_name_their_row_type(self) -> "AbstractStage":
-        if self.row_type_id and not self.declares_its_own_row_type:
-            raise ValueError(
+    def _refuse_a_row_type_that_contradicts_these_rows(self) -> "AbstractStage":
+        issues = self.find_row_type_issues()
+        if issues:
+            raise ValueError("; ".join(issues))
+        return self
+
+    def find_row_type_issues(self) -> list[str]:
+        row_type_id = self.row_type_id
+        if row_type_id is None:
+            return []
+        if not self.declares_its_own_row_type:
+            return [
                 f"stage `{self.id}`: these `{self.type}` output rows are the input's kind "
                 f"of thing, so this stage names no `row_type_id` of its own"
-            )
-        return self
+            ]
+        return self.find_declared_row_type_issues(row_type_id)
+
+    def find_declared_row_type_issues(self, row_type_id: ID) -> list[str]:
+        return []
 
     @property
     def is_grain_and_order_preserving(self) -> bool:

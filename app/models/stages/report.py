@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, ClassVar, Literal, Optional, Sequence
 
 from pydantic import ConfigDict, Field
 
+from app.core.ids import ID
+from app.models.row_types import NO_KIND_ROW_TYPE_ID
 from app.models.schema import StageConfig
 from app.models.stages.stage_base import StageInput, StageType
 from app.models.stages.code import (
@@ -69,6 +71,14 @@ class ReportStage(CarriesPythonFunctionStage):
                 f"signature produces must be empty"
             ]
         return []
+
+    def find_declared_row_type_issues(self, row_type_id: ID) -> list[str]:
+        if row_type_id == NO_KIND_ROW_TYPE_ID:
+            return []
+        return [
+            f"stage `{self.id}`: report emits files, not rows, so nothing it writes is a "
+            f"`{row_type_id}` — its `row_type_id` is `{NO_KIND_ROW_TYPE_ID}`, never a word"
+        ]
 
 
 def find_report_column_issues(

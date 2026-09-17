@@ -84,10 +84,10 @@ and blocked what was downstream. `warning` means a human should look, and is not
 thereby unimportant.
 
 Every COMPILER note is a warning. Nothing about a workflow as written refuses an
-action: a version snapshots whatever the author has, and an undescribed stage, one whose
-new rows go unnamed, one no example checks, or a model call that re-rolls every run are
-all things an author may knowingly leave standing. A compiler note borrowing `error`
-claimed a severity it could not act on.
+action: a version snapshots whatever the author has, and an undescribed stage, one that
+says nothing about what its output rows are, one no example checks, or a model call that
+re-rolls every run are all things an author may knowingly leave standing. A compiler note
+borrowing `error` claimed a severity it could not act on.
 
 | | the shape | the word | the row | the panel title |
 |---|---|---|---|---|

@@ -22,14 +22,17 @@ runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data
   which trims the server-owned fields a client echoes back before the draft sees them.
 - `stages/stage_base.py` — the stage types, and `AbstractStage`: the fields and rules every
   stored stage satisfies whatever its type, plus `RowEffect` — what each type does to its
-  input's rows — `is_grain_and_order_preserving` (1:1 row correspondence in order, read
-  off that effect; the eval gate depends on it) and `declares_its_own_row_type` (whether
-  this type's output rows are a NEW kind of thing). The six types that declare one
-  — `input_data`, `aggregate`, `dedupe`, `explode`, `expand`, `python_frame_function` — may
-  carry a `row_type_id`, the project's word for what ONE of those rows is; on any other type
-  the field is refused, and `AggregateStage` overrides the property to False when the
-  aggregate has no `group_by`, its single row being a figure about the input population.
-  A declaring stage that leaves it empty raises the `unnamed_rows` compiler warning.
+  input's rows — `is_grain_and_order_preserving` (1:1 row correspondence in order, read off
+  that effect; the eval gate depends on it) and `declares_its_own_row_type` (whether this
+  type answers what its output rows are, rather than reading its input's answer down). The
+  seven types that answer — `input_data`, `aggregate`, `dedupe`, `explode`, `expand`,
+  `python_frame_function`, `report` — may carry a `row_type_id`: either the project's word
+  for what ONE of those rows is, or `no_kind` (`app/models/row_types.py`, a reserved id no
+  `RowType` may take) where they are not a kind of thing at all. Absent is a third state —
+  nobody has answered — and raises the `unnamed_rows` compiler warning.
+  `find_row_type_issues` refuses the contradictions: the field on an inheriting type at all,
+  `no_kind` on a grouped `aggregate`, a word on an ungrouped one or on a `report`. The last
+  two are `find_declared_row_type_issues`, which each of those two types overrides.
 - `stages/signature.py` — `TransformSignature`, the contract every stored stage declares
   about what it reads and writes. Form `extends`: output is the first input's rows plus
   `rewrites` (revised in place) and `adds` (new columns), every other anchor column

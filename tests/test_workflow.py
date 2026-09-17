@@ -484,6 +484,7 @@ _KN = {"columns": [{"name": "k", "type": "str", "nullable": True},
                    {"name": "n", "type": "int", "nullable": True}]}
 _KT = {"columns": [{"name": "k", "type": "str", "nullable": True},
                    {"name": "total", "type": "int", "nullable": True}]}
+_TOTAL_ONLY = {"columns": [{"name": "total", "type": "int", "nullable": True}]}
 
 
 def _rows_of(stage_id, row_type_id=None, columns=_KN):
@@ -552,12 +553,22 @@ def test_a_grouped_aggregate_hands_the_stages_below_it_a_new_word():
     }
 
 
-def test_an_ungrouped_aggregate_reads_its_inputs_word_through():
+def test_an_ungrouped_aggregate_hands_no_kind_down_rather_than_its_inputs_word():
     stages = [parse_stage(s) for s in (
         _rows_of("load", row_type_id="visit"),
-        _totalled("one_figure", "load", []),
+        _totalled("one_figure", "load", [], row_type_id="no_kind"),
+        _kept_rows("if_it_is_big", "one_figure", columns=_TOTAL_ONLY),
     )]
-    assert m.resolve_row_type_ids(stages)["one_figure"] == "visit"
+    assert m.resolve_row_type_ids(stages) == {
+        "load": "visit", "one_figure": "no_kind", "if_it_is_big": "no_kind"}
+
+
+def test_an_answering_stage_that_answers_nothing_reads_as_silence_not_as_its_input():
+    stages = [parse_stage(s) for s in (
+        _rows_of("load", row_type_id="visit"),
+        _totalled("one_figure", "load", ["k"]),
+    )]
+    assert m.resolve_row_type_ids(stages)["one_figure"] is None
 
 
 def test_an_enrich_takes_its_subjects_word_and_not_its_references():
@@ -615,6 +626,27 @@ def test_a_union_input_with_no_word_does_not_disagree_with_one_that_has_it():
     assert m.resolve_row_type_ids(stages)["stacked"] == "filing"
 
 
+def test_stacking_rows_that_are_no_kind_of_thing_on_rows_of_one_is_a_disagreement():
+    stages = [parse_stage(s) for s in (
+        _rows_of("state_filings", row_type_id="filing"),
+        _rows_of("last_years_totals", row_type_id="no_kind"),
+        _stacked("stacked", ["state_filings", "last_years_totals"]),
+    )]
+    [issue] = m.validate_workflow(stages)
+    assert "`filing`" in issue and "`no_kind`" in issue
+
+
+def test_two_summary_rows_agree_with_each_other():
+    stages = [parse_stage(s) for s in (
+        _rows_of("state_filings", row_type_id="filing"),
+        _totalled("one_figure", "state_filings", [], row_type_id="no_kind"),
+        _totalled("another_figure", "state_filings", [], row_type_id="no_kind"),
+        _stacked("stacked", ["one_figure", "another_figure"]),
+    )]
+    assert m.validate_workflow(stages) == []
+    assert m.resolve_row_type_ids(stages)["stacked"] == "no_kind"
+
+
 _FILING = {"id": "filing", "title": "Filing", "definition": "One lobbying disclosure."}
 
 
@@ -625,6 +657,14 @@ def test_only_the_stage_naming_a_word_the_project_lacks_is_reported():
     )]
     [issue] = m.find_undeclared_row_type_issues(stages, [m.RowType(**_FILING)])
     assert "`mills`" in issue and "`mill`" in issue
+
+
+def test_no_kind_needs_no_declared_word_because_no_project_declares_it():
+    stages = [parse_stage(s) for s in (
+        _rows_of("filings", row_type_id="filing"),
+        _totalled("one_figure", "filings", [], row_type_id="no_kind"),
+    )]
+    assert m.find_undeclared_row_type_issues(stages, [m.RowType(**_FILING)]) == []
 
 
 def test_a_workflow_of_stages_naming_nothing_needs_no_declared_words():

@@ -129,14 +129,16 @@ def test_missing_description_outranks_missing_examples():
     assert _kinds(_stage(summary=None)) == ["undescribed"]
 
 
-def _report_stage(stage_id="pub"):
+def _report_stage(stage_id="pub", **kw):
     return m.parse_stage({
         "id": stage_id, "description": "Pub", "type": "report",
+        "row_type_id": "no_kind",
         "signature": {"form": "replaces"},
         "inputs": [{"id": "up"}],
         "report": {"format": "csv"},
         "function": {"kind": "inline", "summary": "Writes one file per row.",
                      "code": "def transform(df, output_dir, citation_provider):\n    return df"},
+        **kw,
     })
 
 
@@ -241,9 +243,10 @@ def test_the_warning_says_what_the_reader_loses_not_that_a_field_is_empty():
                  if w.kind == "unnamed_rows"]
     assert warning.severity == "warning"
     assert warning.detail == (
-        "its rows are a new kind of thing and no `row_type_id` says what one of them "
-        "is, so nothing written about them — this stage's own description, a review "
-        "guide, a published figure — can name the thing"
+        "no `row_type_id` says what one of its output rows is, so nothing written "
+        "about them — this stage's own description, a review guide, a published "
+        "figure — can name the thing: name the project's word for these rows, or "
+        "`no_kind` where they are not a kind of thing"
     )
 
 
@@ -252,16 +255,28 @@ def test_a_stage_whose_rows_are_still_its_inputs_kind_of_thing_says_nothing():
     assert _kinds(_llm_stage()) == []
 
 
-def test_an_ungrouped_aggregate_mints_no_kind_of_row_so_it_owes_no_word():
-    # Its one row is a figure ABOUT the input population, which the input already names.
-    ungrouped = m.parse_stage({
+def _ungrouped_aggregate(**kw):
+    return m.parse_stage({
         "id": "one_figure", "description": "Total everything", "type": "aggregate",
         "inputs": [{"id": "up"}],
         "signature": {"form": "replaces", "reads": reads_of("up", [_N]),
                       "produces": [_TOTAL]},
         "aggregate": {"group_by": [], "aggregations": [_A_SUM]},
+        **kw,
     })
-    assert _kinds(ungrouped) == []
+
+
+def test_an_ungrouped_aggregate_saying_nothing_still_owes_an_answer():
+    assert _kinds(_ungrouped_aggregate()) == ["unnamed_rows"]
+
+
+def test_saying_no_kind_clears_the_warning_as_a_word_does():
+    assert _kinds(_ungrouped_aggregate(row_type_id="no_kind")) == []
+    assert _kinds(_report_stage()) == []
+
+
+def test_a_report_saying_nothing_owes_an_answer_like_any_other_answering_type():
+    assert _kinds(_report_stage(row_type_id=None)) == ["unnamed_rows"]
 
 
 def test_unnamed_rows_sorts_above_the_kinds_that_leave_words_unchecked():

@@ -12,7 +12,9 @@ from pydantic import Field, model_validator
 from pydantic.json_schema import SkipJsonSchema, WithJsonSchema
 
 from app.core.errors import PredicateError
+from app.core.ids import ID
 from app.core.predicate import parse_predicate
+from app.models.row_types import NO_KIND_ROW_TYPE_ID
 from app.models.schema import StageConfig, TableSchema, _Base
 from app.models.stages.stage_base import AbstractStage, StageInput, StageType
 from app.models.stages.shared import (
@@ -87,10 +89,21 @@ class AggregateStage(AbstractStage):
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"aggregate": self.aggregate}
 
-    # An ungrouped aggregate's one row is a figure ABOUT the input population.
-    @property
-    def declares_its_own_row_type(self) -> bool:
-        return bool(self.aggregate.group_by)
+    def find_declared_row_type_issues(self, row_type_id: ID) -> list[str]:
+        names_no_kind = row_type_id == NO_KIND_ROW_TYPE_ID
+        if self.aggregate.group_by and names_no_kind:
+            return [
+                f"stage `{self.id}`: one output row per group of "
+                f"`{', '.join(self.aggregate.group_by)}` IS a kind of thing, so this stage "
+                f"names the project's word for it, never `{NO_KIND_ROW_TYPE_ID}`"
+            ]
+        if not self.aggregate.group_by and not names_no_kind:
+            return [
+                f"stage `{self.id}`: with no `group_by` its one output row is a figure "
+                f"ABOUT the whole input population, not a `{row_type_id}` — rows that are "
+                f"not a kind of thing answer `{NO_KIND_ROW_TYPE_ID}`"
+            ]
+        return []
 
     def find_config_column_issues(
         self, inputs: Sequence["WorkflowStageInput"]

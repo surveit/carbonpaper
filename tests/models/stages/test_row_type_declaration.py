@@ -1,10 +1,11 @@
-"""A stage whose output rows are a new kind of thing says which; the rest inherit."""
+"""A stage that answers what its output rows are says which word, or `no_kind`; the rest inherit."""
 from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
 
-from app.models import StageDraft, StageType, parse_stage
+from app.models import RowType, StageDraft, StageType, parse_stage
+from app.models.row_types import NO_KIND_ROW_TYPE_ID
 from app.models.stages.stage_base import declares_its_own_row_type
 from conftest import reads_of
 
@@ -21,12 +22,12 @@ _DECLARES_ITS_OWN_ROW_TYPE = {
     StageType.explode: True,
     StageType.expand: True,
     StageType.python_frame_function: True,
+    StageType.report: True,
     StageType.enrich: False,
     StageType.filter_rows: False,
     StageType.human_review_queue: False,
     StageType.llm_transform: False,
     StageType.python_row_function: False,
-    StageType.report: False,
     StageType.sort_rank: False,
     StageType.starlark_filter_rows: False,
     StageType.starlark_row_function: False,
@@ -50,6 +51,18 @@ def _filter_stage(**extra):
         "inputs": [{"id": "src"}],
         "signature": {"form": "extends", "reads": reads_of("src", _VISIT_COLUMNS)},
         "filter": {"code": "def should_include(row): return row['fine'] > 0"},
+        **extra,
+    }
+
+
+def _report_stage(**extra):
+    return {
+        "id": "write_the_cards", "type": "report", "description": "Write one card per visit",
+        "inputs": [{"id": "src"}],
+        "signature": {"form": "replaces", "reads": reads_of("src", _VISIT_COLUMNS)},
+        "report": {"format": "evidence_cards"},
+        "function": {"kind": "inline", "summary": "Writes one card per row.",
+                     "code": "def transform(df, output_dir, citation_provider):\n    return df"},
         **extra,
     }
 
@@ -111,13 +124,42 @@ def test_a_grouped_aggregate_declares_its_groups():
     assert stage.row_type_id == "facility"
 
 
-def test_an_ungrouped_aggregate_reads_through_to_its_input():
-    assert parse_stage(_aggregate_stage(group_by=[])).declares_its_own_row_type is False
+def test_an_ungrouped_aggregate_answers_no_kind():
+    stage = parse_stage(_aggregate_stage(group_by=[], row_type_id=NO_KIND_ROW_TYPE_ID))
+    assert stage.declares_its_own_row_type is True
+    assert stage.row_type_id == NO_KIND_ROW_TYPE_ID
 
 
-def test_an_ungrouped_aggregate_naming_a_row_type_is_refused():
-    with pytest.raises(ValidationError, match="`aggregate` output rows are the input's kind"):
+def test_an_ungrouped_aggregate_naming_a_word_is_refused():
+    with pytest.raises(ValidationError, match="a figure ABOUT the whole input population"):
         parse_stage(_aggregate_stage(group_by=[], row_type_id="facility"))
+
+
+def test_a_grouped_aggregate_answering_no_kind_is_refused():
+    with pytest.raises(ValidationError, match="`facility_id` IS a kind of thing"):
+        parse_stage(_aggregate_stage(group_by=["facility_id"],
+                                     row_type_id=NO_KIND_ROW_TYPE_ID))
+
+
+def test_a_report_answers_no_kind():
+    stage = parse_stage(_report_stage(row_type_id=NO_KIND_ROW_TYPE_ID))
+    assert stage.declares_its_own_row_type is True
+    assert stage.row_type_id == NO_KIND_ROW_TYPE_ID
+
+
+def test_a_report_naming_a_word_is_refused():
+    with pytest.raises(ValidationError, match="report emits files, not rows"):
+        parse_stage(_report_stage(row_type_id="facility"))
+
+
+def test_an_inheriting_stage_answering_no_kind_is_refused_too():
+    with pytest.raises(ValidationError, match="`filter_rows` output rows are the input's kind"):
+        parse_stage(_filter_stage(row_type_id=NO_KIND_ROW_TYPE_ID))
+
+
+def test_no_row_type_may_be_declared_under_the_reserved_word():
+    with pytest.raises(ValidationError, match="reserved for the stages"):
+        RowType(id=NO_KIND_ROW_TYPE_ID, title="No kind", definition="Not a kind of thing.")
 
 
 def test_a_draft_carries_the_word_through_to_the_stage_spec():
