@@ -159,9 +159,11 @@ an `if` that ran later, so every column collapses to one node.
 
 Two things it deliberately does not do.
 
-**Absent lineage is a declaration, not a gap.** A stage whose type preserves its rows writes no
-lineage, because output row *i* IS input row *i* by contract — `is_grain_and_order_preserving()`
-says which types those are. Twelve of the twenty-three stages in a real workflow are in that set.
+**Absent lineage is a declaration, not a gap.** A stage that reads one input and whose type
+preserves its rows writes no lineage, because output row *i* IS input row *i* by contract —
+`is_grain_and_order_preserving()` says which types those are. Twelve of the twenty-three stages
+in a real workflow are in that set. An `enrich` preserves its rows too but reads two inputs, so
+the walk cannot name the reference row from a position and the stage writes a sidecar anyway.
 Any other type that writes none raises `MissingLineage` rather than being guessed at.
 
 **Every expansion bottoms out in one frame.** Only an `aggregate` stage writes merge edges, and

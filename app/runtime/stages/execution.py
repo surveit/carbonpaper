@@ -1,8 +1,4 @@
-"""Handler shapes: what the runtime hands each stage type, and the row driver.
-
-A stage type's grain-and-order guarantee follows from HOW the runtime invokes its
-handler, not from the handler's body: RowMap and Source preserve (RowMap unless
-registered `drops_rows`, which keeps order but not grain), Frame does not."""
+"""Handler shapes and the row driver: a type's grain guarantee follows from its shape."""
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

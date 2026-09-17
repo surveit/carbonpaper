@@ -97,11 +97,17 @@ authoritative description):
 - That 1:1 alignment is only well-defined when every stage on the
   override→target path preserves grain (no fan-out/fan-in).
   `resolve_eval_run_settings` (`app/evals/run_settings.py`) walks the path and
-  checks each stage's `is_grain_and_order_preserving` (fixed per stage type in
-  `app/models/stages/stage_base.py`; the `python_row_function` type exists
-  precisely so the runtime *enforces* the 1:1 guarantee rather than trusting
-  it); a non-preserving stage makes the eval non-scorable and the settings say
-  why.
+  checks each stage's `is_grain_and_order_preserving` (read off `RowEffect`, the
+  per-stage-type classification in `app/models/stages/stage_base.py`; the
+  `python_row_function` type exists precisely so the runtime *enforces* the 1:1
+  guarantee rather than trusting it); a non-preserving stage makes the eval
+  non-scorable and the settings say why. A preserving stage with more than one
+  input aligns along its FIRST input alone, so the walk also blocks where the
+  dataset reached such a stage by a later one: an `enrich` emits one row per
+  subject row, and a dataset injected on its reference side would be scored
+  against rows it does not correspond to. This is why the function takes the
+  dataset stage and the reference overrides as separate arguments — a flat list
+  of both cannot tell which injection has to align.
 - **`StageOutputOverride`** injects a whole table as some stage's output,
   cutting that stage and everything upstream out of the run —
   `reference_overrides` use this to supply extra data an eval-dataset row

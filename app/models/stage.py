@@ -19,8 +19,10 @@ from app.models.stages.stage_base import (  # noqa: F401  (re-exported: the stag
     ReviewConfig,
     AbstractStage,
     AuthoredStageFields,
+    RowEffect,
     StageInput,
     StageType,
+    find_row_effect,
     is_grain_and_order_preserving,
 )
 from app.models.schema import _Base

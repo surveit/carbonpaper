@@ -44,15 +44,10 @@ _NO_ALIGNED_DIFF: frozenset[StageType] = frozenset({StageType.input_data})
 # release, and `validate_registry_matches_model` already holds the runtime
 # handlers to that same fact at import, so what this pane assumes is what the
 # executor enforces.
-#
-# enrich is added on top: it takes two inputs, so it is not grain-preserving as a
-# TYPE, but its left merge runs under pandas' validate="m:1", which VERIFIES the
-# reference holds at most one row per key — every subject row comes out once, in
-# input order. expand (m:n fan-out) has no such guarantee and stays out.
 ROW_ALIGNED_TYPES: frozenset[StageType] = frozenset(
     stage_type for stage_type in StageType
     if is_grain_and_order_preserving(stage_type) and stage_type not in _NO_ALIGNED_DIFF
-) | {StageType.enrich}
+)
 
 # The default row budget is the panel's shared one (app.web.loading), so a diffed
 # stage and an undiffed one draw the same depth. Callers with more room (the

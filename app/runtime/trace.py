@@ -253,10 +253,7 @@ def _advance(
         return TraceEnd(False, sid, _summarizes_nothing_message())
     if not parents:
         return TraceEnd(False, sid, "the manifest records no input edge for this stage")
-    # Nothing recorded: the only remaining route is the ordinal, and only where
-    # the type guarantees it. A join is NOT crossable this way even though an
-    # enrich's output happens to be in subject order — a run made before this
-    # recorded lineage stops here, and re-running it is what makes it traceable.
+    # Nothing recorded: the ordinal is the only route left, and only from ONE parent.
     if not _is_row_preserving(stage_type) or len(parents) != 1:
         return TraceEnd(False, sid, _not_preserving_message(stage_type))
     return _advance_positionally(frames, by_id, sid, parents[0], r, table)

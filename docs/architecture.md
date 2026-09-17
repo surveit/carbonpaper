@@ -21,8 +21,9 @@ runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data
   `add_stage` tools actually bind is `SubmittedStage` (`app/tools/submitted_stage.py`),
   which trims the server-owned fields a client echoes back before the draft sees them.
 - `stages/stage_base.py` — the stage types, and `AbstractStage`: the fields and rules every
-  stored stage satisfies whatever its type, plus `is_grain_and_order_preserving` (1:1 row
-  correspondence in order — the eval gate depends on it).
+  stored stage satisfies whatever its type, plus `RowEffect` — what each type does to its
+  input's rows — and `is_grain_and_order_preserving` (1:1 row correspondence in order, read
+  off that effect; the eval gate depends on it).
 - `stages/signature.py` — `TransformSignature`, the contract every stored stage declares
   about what it reads and writes. Form `extends`: output is the first input's rows plus
   `rewrites` (revised in place) and `adds` (new columns), every other anchor column
@@ -79,14 +80,27 @@ production code from calling `execute_subset` too, it simply doesn't.
 Stage handlers register under a *shape* (`app/runtime/stages/execution.py`):
 `RowMapHandler` (the runtime maps a per-row function over the stage's single
 input and reassembles results in input order — the function never sees the
-frame), `SourceHandler` (originates rows; no upstream frames), or
-`FrameHandler` (whole frames; may reshape). The shape fixes what the runtime
-hands the handler, so grain-and-order preservation is structural for
-row-mapped types rather than declared per stage. The preservation fact itself is
+frame), `SourceHandler` (originates rows; no upstream frames),
+`FrameHandler` (whole frames; may reshape), or `RowAlignedFrameHandler`
+(`app/runtime/stages/row_aligned.py` — whole frames like `FrameHandler`, but the
+shape then checks the recorded lineage names input[0]'s row *i* at output row *i*,
+and fails the run when it does not). The shape fixes what the runtime hands the
+handler, so grain-and-order preservation is structural rather than declared per
+stage. The preservation fact itself is
 owned by the domain models (`app.models.stage.is_grain_and_order_preserving`) so every layer
 can read it; `validate_registry_matches_model` raises at registry import if any
 type's registered shape disagrees with that core fact, and
 `tests/test_handler_registry.py` pins the same per-type equality in CI.
+
+That core fact is one answer read off a wider classification: `RowEffect`
+(`app/models/stages/stage_base.py`) says what each stage type does to its input's
+rows — `creates` them (`input_data` alone), `maps` them one for one in order,
+`selects` among them (every output row is an input row, but which ones and in what
+order may change), `builds` new ones (fan-out, fan-in, reshape), or `consumes` them
+and emits none (`report`). A type is grain-and-order preserving when its effect is
+`creates` or `maps`. The map is total over `StageType` and the module raises at
+import if a type is missing it, so a new stage type is classified rather than
+silently taking a default.
 
 ## `app/compiler/` — prose → LLM generation engines
 Two generators, each an `app.core.agent` Agent targeting a model schema:

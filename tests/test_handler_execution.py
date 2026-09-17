@@ -23,6 +23,7 @@ from app.runtime.stages.execution import (
     SourceHandler,
     validate_registry_matches_model,
 )
+from app.runtime.stages.row_aligned import RowAlignedFrameHandler
 from app.core.stage_cache import StageCacheEntry
 from app.runtime.stage_output import StageOutput
 from conftest import as_inputs, contribution_of, make_run_context, place_stage, reads_of, rows_of
@@ -309,6 +310,7 @@ def test_each_shape_reports_the_preservation_its_calling_convention_gives_it():
     assert mapping.preserves_grain_and_order is True
     assert SourceHandler(read=lambda stage, ctx: pd.DataFrame()).preserves_grain_and_order is True
     assert FrameTransformHandler(apply=lambda stage, inputs, ctx: None).preserves_grain_and_order is False
+    assert RowAlignedFrameHandler(apply=lambda stage, inputs, ctx: None).preserves_grain_and_order is True
 
 
 def test_source_handler_reads_without_frames():
@@ -330,7 +332,8 @@ def _registry(llm_shape):
         StageType.python_row_function: RowMapTransformHandler(make_mapper=lambda s, c, src: lambda r, i: r),
         StageType.llm_transform: llm_shape,
         StageType.python_frame_function: frame,
-        StageType.enrich: frame,
+        StageType.enrich: RowAlignedFrameHandler(
+            apply=lambda stage, inputs, ctx: StageOutput.from_frame(pd.DataFrame())),
         StageType.expand: frame,
         StageType.aggregate: frame,
         StageType.human_review_queue: RowMapTransformHandler(make_mapper=lambda s, c, src: lambda r, i: r),

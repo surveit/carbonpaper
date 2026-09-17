@@ -22,6 +22,7 @@ from .execution import (
     StageHandler,
     validate_registry_matches_model,
 )
+from .row_aligned import RowAlignedFrameHandler
 from .filter_rows import build_filter_mapper
 from .human_review_queue import build_human_review_mapper
 from .input_data import preflight_input_data, read_input_data
@@ -46,7 +47,8 @@ HANDLERS: dict[StageType, StageHandler] = {
     StageType.python_row_function: RowMapTransformHandler(build_python_row_mapper),
     # No frame handler consults the cache; each model's CACHE_IGNORED_BECAUSE says why.
     StageType.python_frame_function: FrameTransformHandler(handle_python_frame_function),
-    StageType.enrich: FrameTransformHandler(handle_enrich),
+    # validate="m:1" brings every subject row out once, in place; the shape checks it.
+    StageType.enrich: RowAlignedFrameHandler(handle_enrich),
     StageType.expand: FrameTransformHandler(handle_expand),
     StageType.aggregate: FrameTransformHandler(handle_aggregate),
     StageType.llm_transform: LLMTransformHandler(parallelism=DEFAULT_PARALLEL),
