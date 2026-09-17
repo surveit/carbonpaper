@@ -227,3 +227,37 @@ def test_the_restored_project_carries_the_captured_document(
 
     assert methodology.read_methodology(restored.project_id) == (
         "Two rows, judged one at a time.")
+
+
+def test_a_refused_tampered_input_leaves_no_project_behind(
+    projects_root, tmp_path, monkeypatch, model
+):
+    project_id = _seed_a_judging_project(projects_root)
+    run_id = str(run_service.execute(project_id)["run_id"])
+    into = tmp_path / "capture"
+    capture_run(project_id, run_id, into)
+    copied = into / CAPTURED_INPUTS / "load" / "rows.csv"
+    copied.write_text(copied.read_text(encoding="utf-8").replace("1", "7", 1),
+                      encoding="utf-8")
+    _empty_the_workspace(tmp_path, monkeypatch, "elsewhere")
+    before = project_service.list_projects()
+
+    with pytest.raises(RunRestoreRefused, match="hashes to"):
+        restore_run(into)
+
+    assert project_service.list_projects() == before
+
+
+def test_a_refused_review_queue_leaves_no_project_behind(projects_root, tmp_path):
+    into = tmp_path / "capture"
+    into.mkdir(parents=True, exist_ok=True)
+    (into / CAPTURED_ARCHIVE).write_bytes(_a_reviewing_project(projects_root))
+    (into / CAPTURED_RECORD).write_text(
+        '{"project_name": "Grants Awaiting Review", "run_id": "r1", "inputs": []}',
+        encoding="utf-8")
+    before = project_service.list_projects()
+
+    with pytest.raises(RunRestoreRefused, match="review_totals"):
+        restore_run(into)
+
+    assert project_service.list_projects() == before

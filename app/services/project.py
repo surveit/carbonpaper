@@ -544,6 +544,11 @@ def import_project_archive(raw: bytes) -> ProjectImportReport:
     return _import_workflow_with_cache(_read_workflow_member(raw), raw)
 
 
+def read_archive_workflow(raw: bytes) -> WorkflowFile:
+    """The bundle half alone, for a caller that must refuse before anything is written."""
+    return _read_workflow_member(raw)
+
+
 def import_bundle_file(bundle_path: Path) -> ProjectImportReport:
     """A committed bundle and the cache file beside it, which is how the tour ships one."""
     sidecar = name_cache_sidecar(bundle_path)

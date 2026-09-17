@@ -10,7 +10,6 @@ from pydantic import BaseModel, ValidationError
 from app.core.files import ProjectFile, compute_sha256, save_upload
 from app.core.ids import ID
 from app.core.run_status import RunStatus
-from app.models import Workflow
 from app.models.captured_run import (
     CAPTURED_ARCHIVE,
     CAPTURED_INPUTS,
@@ -21,13 +20,12 @@ from app.models.captured_run import (
 from app.models.records.run_manifest import RunManifest
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.models.stages.stage_base import StageType
-from app.models.workflow_stage import WorkflowStage
 from app.services.errors import ProjectArchiveRejected, RunRestoreRefused
-from app.services.project import import_project_archive
+from app.services.project import WorkflowFile, import_project_archive, read_archive_workflow
 from app.services.run import execute, read_run_manifest
 from app.services.stage_cache_transfer import CacheImportReport
 from app.services.uploads import resolve_files_binding
-from app.services.versioning import load_version_stages, resolve_version_id
+from app.services.versioning import resolve_version_id
 
 _RESTORED_STATUSES = (RunStatus.OK, RunStatus.WARNINGS)
 
@@ -38,11 +36,15 @@ class RestoredRun(BaseModel):
 
 
 def restore_run(from_dir: Path) -> RestoredRun:
+    """Everything the capture alone can settle is refused before a project is written."""
     captured = _read_the_captured_record(from_dir)
-    project_id = _import_the_captured_project_id(from_dir)
-    version_id = resolve_version_id(project_id, None)
-    _validate_no_stage_queues_rows_for_review(project_id, version_id)
+    archive = _find_the_captured_archive(from_dir)
+    raw = archive.read_bytes()
+    _validate_every_captured_input_is_what_was_captured(from_dir, captured.inputs)
+    _validate_no_stage_queues_rows_for_review(_read_the_bundled_workflow(archive, raw))
+    project_id = _import_the_captured_project_id(archive, raw)
     bindings = _bind_the_files_the_run_read(project_id, from_dir, captured.inputs)
+    version_id = resolve_version_id(project_id, None)
     run_id = str(execute(project_id, version_id=version_id, bindings=bindings)["run_id"])
     _validate_the_restored_run_finished(captured, read_run_manifest(project_id, run_id))
     return RestoredRun(project_id=project_id, run_id=run_id)
@@ -60,13 +62,35 @@ def _read_the_captured_record(from_dir: Path) -> CapturedRun:
         raise RunRestoreRefused(f"{record} is not a captured run: {exc}") from exc
 
 
-def _import_the_captured_project_id(from_dir: Path) -> ID:
+def _find_the_captured_archive(from_dir: Path) -> Path:
     archive = from_dir / CAPTURED_ARCHIVE
     if not archive.is_file():
         raise RunRestoreRefused(
             f"no {CAPTURED_ARCHIVE} at {archive} — there is no project to restore")
+    return archive
+
+
+def _read_the_bundled_workflow(archive: Path, raw: bytes) -> WorkflowFile:
     try:
-        report = import_project_archive(archive.read_bytes())
+        return read_archive_workflow(raw)
+    except ProjectArchiveRejected as exc:
+        raise RunRestoreRefused(f"{archive} did not import: {exc}") from exc
+
+
+def _validate_no_stage_queues_rows_for_review(workflow: WorkflowFile) -> None:
+    queueing = [
+        stage.id for stage in workflow.stages
+        if stage.type == StageType.human_review_queue
+    ]
+    if queueing:
+        raise RunRestoreRefused(
+            f"stage '{queueing[0]}' queues rows for human review, so the restored run "
+            "would halt waiting for a reviewer rather than finish")
+
+
+def _import_the_captured_project_id(archive: Path, raw: bytes) -> ID:
+    try:
+        report = import_project_archive(raw)
     except ProjectArchiveRejected as exc:
         raise RunRestoreRefused(f"{archive} did not import: {exc}") from exc
     _validate_the_cache_came_with_it(archive, report.cache)
@@ -82,25 +106,6 @@ def _validate_the_cache_came_with_it(archive: Path, cache: CacheImportReport | N
         raise RunRestoreRefused(
             f"{archive} carries {stored} cache entries and this workspace can read none "
             "of them: the stages they were computed for have moved since the capture")
-
-
-def _validate_no_stage_queues_rows_for_review(project_id: ID, version_id: str) -> None:
-    queueing = [
-        placed.id
-        for placed in _read_the_workflow_the_run_will_take(project_id, version_id)
-        if placed.stage.type is StageType.human_review_queue
-    ]
-    if queueing:
-        raise RunRestoreRefused(
-            f"stage '{queueing[0]}' queues rows for human review, so the restored run "
-            "would halt waiting for a reviewer rather than finish")
-
-
-def _read_the_workflow_the_run_will_take(
-    project_id: ID, version_id: str
-) -> Sequence[WorkflowStage]:
-    workflow = Workflow(stages=load_version_stages(project_id, version_id))
-    return workflow.list_workflow_stages()
 
 
 def _bind_the_files_the_run_read(
@@ -119,10 +124,20 @@ def _bind_the_files_the_run_read(
 def _save_one_captured_input(
     project_id: ID, from_dir: Path, entry: CapturedInput
 ) -> ProjectFile:
-    path = from_dir / CAPTURED_INPUTS / entry.stage_id / entry.filename
-    _validate_the_bytes_are_what_was_captured(entry, path)
-    with path.open("rb") as handle:
+    with _find_captured_input_path(from_dir, entry).open("rb") as handle:
         return save_upload(entry.filename, handle, project_id=project_id)
+
+
+def _validate_every_captured_input_is_what_was_captured(
+    from_dir: Path, inputs: Sequence[CapturedInput]
+) -> None:
+    for entry in inputs:
+        _validate_the_bytes_are_what_was_captured(
+            entry, _find_captured_input_path(from_dir, entry))
+
+
+def _find_captured_input_path(from_dir: Path, entry: CapturedInput) -> Path:
+    return from_dir / CAPTURED_INPUTS / entry.stage_id / entry.filename
 
 
 def _validate_the_bytes_are_what_was_captured(entry: CapturedInput, path: Path) -> None:
