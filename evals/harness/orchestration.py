@@ -28,7 +28,9 @@ from evals.harness.passes import (
     validate_pass_is_complete,
 )
 from evals.harness.report import (
+    build_pass_report,
     validate_pass_cases_are_in_dataset,
+    write_pass_report,
 )
 from evals.harness.validation import inflect
 
@@ -95,6 +97,9 @@ def judge_pass(
         for load in stored
     ]
     folder.replace_judgements(judged_attempts)
+    write_pass_report(
+        build_pass_report(definition, pass_dir, eval_dir=eval_dir, against=None), pass_dir
+    )
 
 
 def _select_cases(
