@@ -87,6 +87,11 @@ class AggregateStage(AbstractStage):
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"aggregate": self.aggregate}
 
+    # An ungrouped aggregate's one row is a figure ABOUT the input population.
+    @property
+    def declares_its_own_row_type(self) -> bool:
+        return bool(self.aggregate.group_by)
+
     def find_config_column_issues(
         self, inputs: Sequence["WorkflowStageInput"]
     ) -> list[str]:

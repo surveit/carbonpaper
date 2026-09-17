@@ -73,6 +73,18 @@ STAGE_DRAFT_DESCRIPTION = (
 
 STAGE_EDIT_DESCRIPTION = "The stage to change, and the fields of it that change."
 
+STAGE_ROW_TYPE_ID_DESCRIPTION = (
+    "Which of the project's row types ONE output row of this stage IS, by its id — the word a\n"
+    "reviewer meets in every sentence written about these rows. Fill it only where the rows are\n"
+    "a NEW kind of thing: a source's rows, one row per group, one per distinct key, one per\n"
+    "array element, one per reference match, or a frame function's reshape. LEAVE IT EMPTY on a\n"
+    "stage that filters, sorts, enriches or maps its input — those rows are still its input's\n"
+    "kind of thing, and a second word for them splits one thing into two. Name a row type this\n"
+    "project has already declared, never a word you coin here. Worked example: a dedupe taking\n"
+    "rows of `inspection_visit` down to one row per facility sets `row_type_id: \"facility\"`,\n"
+    "while the filter_rows below it leaves the field out."
+)
+
 STAGE_TEST_DESCRIPTION = (
     "A rows case states `expected` rows; a failure case states `expected: null`."
 )

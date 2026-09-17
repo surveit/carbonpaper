@@ -1,4 +1,4 @@
-"""A RowType is the word for what one row IS; a NamedSchema is a table shape that HAS one."""
+"""A RowType is the methodology's word for what ONE ROW is."""
 from __future__ import annotations
 
 from pydantic import ConfigDict, field_validator
