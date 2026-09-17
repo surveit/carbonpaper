@@ -11,6 +11,7 @@ from typing import Any, Mapping, Optional, Protocol, Sequence, TypeVar
 
 from pydantic import ValidationError, model_validator
 
+from app.models.row_types import RowType
 from app.models.schema import (
     StageId,
     TableSchema,
@@ -160,7 +161,7 @@ def graph_issues(stages: list[Stage]) -> list[str]:
     )
     if structural:
         return structural
-    return _find_resolution_issues(stages)
+    return _find_resolution_issues(stages) + _find_row_type_disagreements(stages)
 
 
 def resolve_workflow_stages(stages: list[Stage]) -> list[WorkflowStage]:
@@ -175,6 +176,78 @@ def resolve_workflow_stages(stages: list[Stage]) -> list[WorkflowStage]:
             stage=stage, inputs=inputs, output_schema=output_schema
         )
     return [resolved[stage.id] for stage in stages]
+
+
+def resolve_row_type_ids(stages: Sequence[Stage]) -> dict[ID, Optional[ID]]:
+    """None is a true unknown: nothing in that stage's ancestry ever named a row type."""
+    row_type_id_by_stage_id: dict[ID, Optional[ID]] = {}
+    for stage in sort_stages_by_dependency(stages):
+        row_type_id_by_stage_id[stage.id] = (
+            stage.resolve_own_row_type_id()
+            if stage.declares_its_own_row_type
+            else _read_inherited_row_type_id(stage, row_type_id_by_stage_id)
+        )
+    return row_type_id_by_stage_id
+
+
+def find_undeclared_row_type_issues(
+    stages: Sequence[Stage], row_types: Sequence[RowType]
+) -> list[str]:
+    """Needs the project's Terms, so it sits outside `graph_issues`, which sees stages alone."""
+    declared_row_type_ids = {row_type.id for row_type in row_types}
+    return [
+        f"`{stage.id}`: `row_type_id` names `{stage.row_type_id}`, a word this "
+        f"project's terms do not hold — name a row type the project declared, "
+        f"never one coined on a stage"
+        for stage in stages
+        if stage.row_type_id is not None
+        and stage.row_type_id not in declared_row_type_ids
+    ]
+
+
+def _read_inherited_row_type_id(
+    stage: Stage, row_type_id_by_stage_id: dict[ID, Optional[ID]]
+) -> Optional[ID]:
+    inherited = {
+        row_type_id_by_stage_id[input_id]
+        for input_id in stage.list_row_supplying_input_ids()
+    }
+    inherited.discard(None)
+    # Inputs that disagree name no single kind of thing; the graph check reports that.
+    if len(inherited) != 1:
+        return None
+    return next(iter(inherited))
+
+
+def _find_row_type_disagreements(stages: Sequence[Stage]) -> list[str]:
+    row_type_id_by_stage_id = resolve_row_type_ids(stages)
+    return [
+        issue
+        for stage in stages
+        for issue in _find_disagreeing_input_row_types(stage, row_type_id_by_stage_id)
+    ]
+
+
+def _find_disagreeing_input_row_types(
+    stage: Stage, row_type_id_by_stage_id: dict[ID, Optional[ID]]
+) -> list[str]:
+    # None is silence: an input with no word cannot disagree with one that has it.
+    input_ids_with_a_row_type = [
+        input_id
+        for input_id in stage.list_row_supplying_input_ids()
+        if row_type_id_by_stage_id[input_id] is not None
+    ]
+    if not input_ids_with_a_row_type:
+        return []
+    reference_id = input_ids_with_a_row_type[0]
+    reference_row_type_id = row_type_id_by_stage_id[reference_id]
+    return [
+        f"`{stage.id}`: input `{input_id}` is rows of "
+        f"`{row_type_id_by_stage_id[input_id]}`, but input `{reference_id}` is rows "
+        f"of `{reference_row_type_id}` — one stage's output rows are one kind of thing"
+        for input_id in input_ids_with_a_row_type[1:]
+        if row_type_id_by_stage_id[input_id] != reference_row_type_id
+    ]
 
 
 def _find_resolution_issues(stages: list[Stage]) -> list[str]:

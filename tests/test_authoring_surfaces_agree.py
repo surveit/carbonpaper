@@ -20,6 +20,7 @@ from app.models.stages.code import (
     CODE_CORNER_CASES_CONTRACT_NOTE,
     CODE_SUMMARY_CONTRACT_NOTE,
 )
+from app.models.stages.stage_base import StageType, declares_its_own_row_type
 from app.models.stages.stage_types import AUTHORABLE_TYPES
 from app.models.stages.signature import SIGNATURE_CONTRACT_NOTE
 from app.tools.prompt_fragments import WORKED_STAGE_EXAMPLE
@@ -89,3 +90,22 @@ def test_the_mcp_instructions_place_every_tool_it_offers() -> None:
     tools = asyncio.run(mcp.list_tools())
     unplaced = sorted(t.name for t in tools if t.name not in INSTRUCTIONS)
     assert not unplaced, f"offered but never placed in a phase: {unplaced}"
+
+
+def _read_row_type_bucket(anatomy: str, opening: str) -> list[str]:
+    line = next(line for line in anatomy.splitlines() if line.strip().startswith(opening))
+    return line.split(":", 1)[1].strip().split(", ")
+
+
+@pytest.mark.parametrize("stage_type", sorted(AUTHORABLE_TYPES))
+def test_the_anatomy_says_whether_each_type_names_what_its_rows_are(stage_type: str) -> None:
+    anatomy = render_stage_anatomy()
+    naming = _read_row_type_bucket(anatomy, "answers:")
+    silent = _read_row_type_bucket(anatomy, "inherits its input's answer:")
+    wanted = naming if declares_its_own_row_type(StageType(stage_type)) else silent
+    assert stage_type in wanted
+
+
+def test_the_anatomy_sends_the_author_to_the_projects_own_words_for_one() -> None:
+    # Where the declared row types come from: an author who coins one is the failure.
+    assert "read_terms" in render_stage_anatomy()

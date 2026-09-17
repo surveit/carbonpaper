@@ -9,6 +9,7 @@ from app.models.schema import StageConfig
 from app.models.stages.stage_base import AbstractStage, StageInput, StageType
 from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ExtendsSignature
+from app.core.ids import ID
 
 if TYPE_CHECKING:
     from app.models.workflow_stage import WorkflowStageInput
@@ -30,6 +31,9 @@ class UnionStage(AbstractStage):
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"union": self.union}
+
+    def list_row_supplying_input_ids(self) -> list[ID]:
+        return self.input_ids
 
     def find_config_column_issues(
         self, inputs: Sequence["WorkflowStageInput"]

@@ -26,6 +26,7 @@ from app.models import (
     StageEdit,
     Terms,
     Verb,
+    find_undeclared_row_type_issues,
     stage_to_json,
     stage_to_spec_dict,
     validate_no_word_is_written_twice,
@@ -427,6 +428,13 @@ class WorkflowFile(BaseModel):
     @model_validator(mode="after")
     def _one_meaning_per_word(self) -> "WorkflowFile":
         validate_no_word_is_written_twice(self.row_types, self.verbs)
+        return self
+
+    @model_validator(mode="after")
+    def _stages_write_in_the_declared_words(self) -> "WorkflowFile":
+        issues = find_undeclared_row_type_issues(self.stages, self.row_types)
+        if issues:
+            raise ValueError("; ".join(issues))
         return self
 
     @field_validator("stages", mode="before")

@@ -83,11 +83,15 @@ that stopped — a schema violation, an authored refusal, a raise — which ende
 and blocked what was downstream. `warning` means a human should look, and is not
 thereby unimportant.
 
-Every COMPILER note is a warning. Nothing about a workflow as written refuses an
-action: a version snapshots whatever the author has, and an undescribed stage, one no
+Most COMPILER notes are warnings, because nothing about a workflow as written refuses
+an action: a version snapshots whatever the author has, and an undescribed stage, one no
 example checks, or a model call that re-rolls every run are all things an author may
-knowingly leave standing. A compiler note borrowing `error` claimed a severity it
-could not act on.
+knowingly leave standing.
+
+`unnamed_rows` is the exception and carries `error`. It marks the one a workflow is meant
+to be refused for and is not yet: a stage that builds rows and says nothing about what one
+of them is. The severity leads the refusal rather than describing today's behaviour, which
+is the one place in this file where that is true. 1,856 stored stages carry it.
 
 | | the shape | the word | the row | the panel title |
 |---|---|---|---|---|

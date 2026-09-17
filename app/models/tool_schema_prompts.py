@@ -73,6 +73,16 @@ STAGE_DRAFT_DESCRIPTION = (
 
 STAGE_EDIT_DESCRIPTION = "The stage to change, and the fields of it that change."
 
+STAGE_ROW_TYPE_ID_DESCRIPTION = (
+    "Which of the project's row types ONE output row of this stage IS, by its id — the word a\n"
+    "reviewer meets in every sentence written about these rows. Name a row type this project\n"
+    "has already declared, never a word you coin here. LEAVE IT OUT on a stage that filters,\n"
+    "sorts, dedupes, enriches or maps its input: those rows are still its input's kind of\n"
+    "thing, and a second word for them splits one thing into two. Worked example: an\n"
+    "aggregate grouping incidents by guard sets `row_type_id: guard_incident_report`, and\n"
+    "the filter_rows below it leaves the field out."
+)
+
 STAGE_TEST_DESCRIPTION = (
     "A rows case states `expected` rows; a failure case states `expected: null`."
 )

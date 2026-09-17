@@ -12,7 +12,9 @@ from pydantic import Field, model_validator
 from pydantic.json_schema import SkipJsonSchema, WithJsonSchema
 
 from app.core.errors import PredicateError
+from app.core.ids import ID
 from app.core.predicate import parse_predicate
+from app.models.row_types import NO_KIND_ROW_TYPE_ID
 from app.models.schema import StageConfig, TableSchema, _Base
 from app.models.stages.stage_base import AbstractStage, StageInput, StageType
 from app.models.stages.shared import (
@@ -86,6 +88,18 @@ class AggregateStage(AbstractStage):
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"aggregate": self.aggregate}
+
+    def resolve_own_row_type_id(self) -> Optional[ID]:
+        return self.row_type_id if self.aggregate.group_by else NO_KIND_ROW_TYPE_ID
+
+    def find_declared_row_type_issues(self, row_type_id: ID) -> list[str]:
+        if self.aggregate.group_by:
+            return []
+        return [
+            f"stage `{self.id}`: with no `group_by` its one output row is a figure ABOUT "
+            f"the whole input population, not a `{row_type_id}` — rows that are not a kind "
+            f"of thing answer so themselves, leaving nothing to write here"
+        ]
 
     def find_config_column_issues(
         self, inputs: Sequence["WorkflowStageInput"]

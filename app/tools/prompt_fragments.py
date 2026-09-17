@@ -22,7 +22,11 @@ from app.models.stages.stage_types import (
     AUTHORABLE_TYPES,
     CODE_CARRYING_TYPES,
 )
-from app.models.stages.stage_base import StageType, is_grain_and_order_preserving
+from app.models.stages.stage_base import (
+    StageType,
+    declares_its_own_row_type,
+    is_grain_and_order_preserving,
+)
 
 
 # ─── What Carbon Paper is ────────────────────────────────────────
@@ -172,6 +176,22 @@ Results are recorded and replayed across runs only for `llm_transform` and
 `human_review_queue`; set `cache: true` on another stage when its code is expensive
 enough that recomputing every row costs more than storing it."""
 
+_ROW_TYPE_NOTE = """\
+Row type — the word for what ONE output row IS, and the definition under it. It is how
+precise language flows from what the input data IS, along the pipeline, into what the
+claims at the end SAY.
+
+The word comes from the project's Terms, which `read_terms` lists; a coined one is refused.
+Worked example — an `aggregate` grouping incidents by guard sets `"row_type_id":
+"guard_incident_report"`, and the `enrich` below it sets nothing, its rows still those
+reports. A stage that selects among rows rather than building new ones — `filter_rows`,
+`dedupe`, `sort_rank` — sets nothing either: the rows that survive are the rows that
+arrived. Where you want one row per something coarser, group by it.
+
+Two stages answer for themselves, and writing the field on either is refused: a `report`,
+which emits files, and an `aggregate` with no `group_by`, whose one row is a figure ABOUT
+the whole input population."""
+
 _NULLS = """\
 Absence is null, never a filled-in value. An unmatched join lands nulls; an aggregate
 over no rows reports every figure null rather than 0, which would claim something was
@@ -182,6 +202,8 @@ def render_stage_anatomy() -> str:
     return "\n\n".join([
         _WHAT_EVERY_STAGE_DECLARES,
         _render_grain_table(),
+        _ROW_TYPE_NOTE,
+        _render_row_type_table(),
         _NULLS,
     ])
 
@@ -197,6 +219,20 @@ def _render_grain_table() -> str:
         f"  may add, drop or reorder rows: {_names(reshaping)}",
         "A stage that reshapes breaks row-position provenance: a figure computed in "
         "one cannot be traced to the rows behind it.",
+    ])
+
+
+def _render_row_type_table() -> str:
+    """One line per type, so no type's own note has to restate whether it names one."""
+    declaring = sorted(t for t in _catalog_types() if declares_its_own_row_type(t))
+    inheriting = sorted(t for t in _catalog_types() if not declares_its_own_row_type(t))
+    return "\n".join([
+        "Which types answer what one of their output rows is. Fixed by type.",
+        f"  answers: {_names(declaring)}",
+        f"  inherits its input's answer: {_names(inheriting)}",
+        "You write that answer in `row_type_id`, except on a `report` and an `aggregate` "
+        "with no `group_by`, which answer for themselves and refuse the field. Setting "
+        "it on a type that inherits is refused too.",
     ])
 
 

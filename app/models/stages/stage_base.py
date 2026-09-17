@@ -27,6 +27,7 @@ from pydantic import (
     model_validator,
 )
 
+from app.models.row_types import NO_KIND_ROW_TYPE_ID
 from app.models.schema import (
     SourceRef,
     StageConfig,
@@ -42,6 +43,7 @@ from app.models.stages.signature import (
 )
 from app.models.stages.stage_tests import StageTest, validate_stage_tests
 from app.models.stages.warnings import CompilerWarning
+from app.models.tool_schema_prompts import STAGE_ROW_TYPE_ID_DESCRIPTION
 from app.core.utils import compute_short_hash
 from app.core.ids import ID
 
@@ -137,6 +139,12 @@ def find_row_effect(stage_type: StageType) -> RowEffect:
 # A created row answers to no input row; a mapped one holds its input row's place.
 def is_grain_and_order_preserving(stage_type: StageType) -> bool:
     return find_row_effect(stage_type) in {RowEffect.creates, RowEffect.maps}
+
+
+# A selected or mapped row is the row that arrived; only the other three make their own.
+def declares_its_own_row_type(stage_type: StageType) -> bool:
+    return find_row_effect(stage_type) in {
+        RowEffect.creates, RowEffect.builds, RowEffect.consumes}
 
 
 
@@ -267,6 +275,10 @@ class AuthoredStageFields(_Base):
     # Authored, so the draft carries it.
     workflow_outputs: Optional[list[WorkflowOutputRule]] = Field(
         default=None, description=WORKFLOW_OUTPUTS_DESCRIPTION
+    )
+    # Optional: no rule can fill it for the stages already written.
+    row_type_id: Optional[ID] = Field(
+        default=None, description=STAGE_ROW_TYPE_ID_DESCRIPTION
     )
 
     @field_validator("inputs", mode="before")
@@ -418,9 +430,47 @@ class AbstractStage(AuthoredStageFields):
             raise ValueError("; ".join(issues))
         return self
 
+    @model_validator(mode="after")
+    def _refuse_a_row_type_that_contradicts_these_rows(self) -> "AbstractStage":
+        issues = self.find_row_type_issues()
+        if issues:
+            raise ValueError("; ".join(issues))
+        return self
+
+    def find_row_type_issues(self) -> list[str]:
+        row_type_id = self.row_type_id
+        if row_type_id is None:
+            return []
+        if row_type_id == NO_KIND_ROW_TYPE_ID:
+            return [
+                f"stage `{self.id}`: `{NO_KIND_ROW_TYPE_ID}` is never written — it is what "
+                f"a `report` and an `aggregate` with no `group_by` answer of their own "
+                f"accord, and any other stage's output rows are a kind of thing"
+            ]
+        if not self.declares_its_own_row_type:
+            return [
+                f"stage `{self.id}`: these `{self.type}` output rows are the input's kind "
+                f"of thing, so this stage names no `row_type_id` of its own"
+            ]
+        return self.find_declared_row_type_issues(row_type_id)
+
+    def find_declared_row_type_issues(self, row_type_id: ID) -> list[str]:
+        return []
+
     @property
     def is_grain_and_order_preserving(self) -> bool:
         return is_grain_and_order_preserving(self.type)
+
+    @property
+    def declares_its_own_row_type(self) -> bool:
+        return declares_its_own_row_type(self.type)
+
+    def resolve_own_row_type_id(self) -> Optional[ID]:
+        return self.row_type_id
+
+    # inputs[0] is the anchor/subject; a later input supplies columns, not rows.
+    def list_row_supplying_input_ids(self) -> list[ID]:
+        return self.input_ids[:1]
 
 
 def find_stage_test_class(stage_cls: type[AbstractStage]) -> type[StageTest]:

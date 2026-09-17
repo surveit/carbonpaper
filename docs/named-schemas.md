@@ -45,6 +45,24 @@ name as a link. A schema NAME addresses a table rather than saying a word, so it
 not vocabulary. Constructing `Terms` refuses a word carried twice across the row
 types and the verbs.
 
+A STAGE does bind to one. `row_type_id` on `AuthoredStageFields`
+(`app/models/stages/stage_base.py`) names which row type ONE of that stage's output
+rows is, and only the seven types that answer for their own rows may carry it —
+`declares_its_own_row_type`. Every other stage's rows are still its input's kind of
+thing, so it names none and `resolve_row_type_ids` (`app/models/workflow.py`) reads the
+word down the graph to it.
+
+Two stages emit rows that are not a kind of thing, and nobody writes that down: a
+`report` emits files rather than rows, and an `aggregate` with no `group_by` emits one
+figure ABOUT the whole input population. Both answer `NO_KIND_ROW_TYPE_ID` — the reserved
+id `no_kind`, which `RowType` refuses so a project can never coin it — out of
+`resolve_own_row_type_id`, which each of the two overrides and which
+`resolve_row_type_ids` asks of every stage alike. `find_row_type_issues` refuses
+`no_kind` as an authored value on every type, so the stored field carries two states, not
+three: the id of a row type the project declared, or absent — which is every stage
+written before the field existed, and which raises the `unnamed_rows` compiler warning on
+every answering type but those two.
+
 Storage is `app/services/terms.py`, the sole reader and writer of all three: one
 `StoredTerms` document per project in the `terms` collection of the document
 store, keyed `<project_id>/terms`. The parts are stored apart and `load_terms`
@@ -65,7 +83,11 @@ nothing about one.
 
 A project export (`WorkflowFile`) carries `data_model`, `row_types` and `verbs` as
 separate fields, so a bundle written before either of the last two existed still
-imports.
+imports. It is also the one place holding a project's stages and its row types at
+once, which is where a stage naming a word the row types do not hold is refused —
+`find_undeclared_row_type_issues`, naming the stage and the unknown word. A stage that
+leaves `row_type_id` unset names no word and trips nothing, which is every stage
+written before the field existed.
 
 `render_terms` (also `app/models/terms.py`) is the one block every agent writing about
 a project is handed them in: the MCP `read_terms`/`write_terms` tools store them, the

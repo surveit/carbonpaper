@@ -22,8 +22,20 @@ runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data
   which trims the server-owned fields a client echoes back before the draft sees them.
 - `stages/stage_base.py` — the stage types, and `AbstractStage`: the fields and rules every
   stored stage satisfies whatever its type, plus `RowEffect` — what each type does to its
-  input's rows — and `is_grain_and_order_preserving` (1:1 row correspondence in order, read
-  off that effect; the eval gate depends on it).
+  input's rows — `is_grain_and_order_preserving` (1:1 row correspondence in order, read off
+  that effect; the eval gate depends on it) and `declares_its_own_row_type` (whether this
+  type answers what its output rows are, rather than reading its input's answer down; the
+  types whose effect is `creates`, `builds` or `consumes`). The six that answer —
+  `input_data`, `aggregate`, `explode`, `expand`, `python_frame_function`, `report` — name
+  the project's word for what ONE of those rows is in `row_type_id`.
+  `resolve_own_row_type_id` reads that answer back, and an answering type whose answer comes
+  back None raises the `unnamed_rows` compiler warning. Two overrides carry the two answers
+  nobody writes: a `report` and an `aggregate` with no `group_by` both answer `no_kind`
+  (`app/models/row_types.py`, a reserved id no `RowType` may take) whatever the field holds,
+  so neither is owed a word. `find_row_type_issues` refuses the contradictions: `no_kind` as
+  an authored value on any type, the field at all on an inheriting type, and a word on a
+  `report` or an ungrouped `aggregate` — the last through `find_declared_row_type_issues`,
+  which each of those two types overrides.
 - `stages/signature.py` — `TransformSignature`, the contract every stored stage declares
   about what it reads and writes. Form `extends`: output is the first input's rows plus
   `rewrites` (revised in place) and `adds` (new columns), every other anchor column
@@ -43,7 +55,12 @@ runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data
   and hands out `WorkflowStage` (`workflow_stage.py`) — the authored `Stage` plus what
   each input supplies and what the stage emits. Every consumer that needs a schema takes
   a `WorkflowStage`; the read/write seam (loader, stage_edit, drafts, versioning, seeds,
-  tools, mcp, agents, compiler) still names `Stage`. `named_schemas.py` — named schemas +
+  tools, mcp, agents, compiler) still names `Stage`. `resolve_row_type_ids` walks the same
+  dependency order to read a declared row type down to every stage below it, `None` meaning
+  nothing in that ancestry named one; `graph_issues` refuses a union whose inputs are rows of
+  two different things. `find_undeclared_row_type_issues` needs the project's Terms, which no
+  workflow holds, so it sits outside `graph_issues` and is called from the one place holding
+  both (`WorkflowFile`, `app/services/project.py`). `named_schemas.py` — named schemas +
   FK `references`. `eval.py` — `EvalConfig` + grain-preservation gate. `table.py` — `TableRef`.
 
 **Loading is normalizing + strict.** Stages persist in the project's `working_copy`

@@ -16,19 +16,16 @@ if TYPE_CHECKING:
 
 WarningKind = Literal[
     "undescribed",
+    "unnamed_rows",
     "unexemplified",
     "examples_failing",
     "nondeterministic",
 ]
 
-# The order the list is read in. Every kind is a `warning`: nothing here refuses an
-# action, a version snapshots whatever the author has, and each of these is something
-# an author may knowingly leave standing — a stage described in code alone, one no
-# example checks, a model call that re-rolls every run. `error` is the RUNTIME's
-# word, for a stage that actually stopped (app/web/run_issues.py), and a compiler
-# note borrowing it claimed a severity it could not act on.
+# Read in this order. Which severity a kind carries: docs/visual-language.md
 SEVERITY: dict[str, UserFacingErrorSeverity] = {
     "undescribed": UserFacingErrorSeverity.warning,
+    "unnamed_rows": UserFacingErrorSeverity.error,
     "unexemplified": UserFacingErrorSeverity.warning,
     "examples_failing": UserFacingErrorSeverity.warning,
     "nondeterministic": UserFacingErrorSeverity.warning,
