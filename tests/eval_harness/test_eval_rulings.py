@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue
 
+from evals.harness.binding import ResolvedEval, bind_eval
+from evals.harness.cli import main
 from evals.harness.definition import CaseRefused, EvalDefinition, Judgement
 from evals.harness.rulings import (
     Disagreement,
@@ -60,6 +62,42 @@ def test_a_ruling_the_judge_settles_the_persons_way_on_every_key_is_no_disagreem
     )
 
     assert find_ruling_disagreements(FIXED_OUTPUT_EVAL, path) == []
+
+
+@pytest.mark.parametrize(
+    ("answer", "person", "exit_code", "printed"),
+    [
+        (
+            "no",
+            "matched",
+            1,
+            "ruled answer: person matched, judge differed: answer 'no' is not 'yes'\n",
+        ),
+        ("yes", "matched", 0, ""),
+    ],
+    ids=["disagreement", "agreement"],
+)
+def test_rulings_exit_nonzero_on_disagreement_and_zero_without(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    answer: str,
+    person: str,
+    exit_code: int,
+    printed: str,
+) -> None:
+    eval_dir = tmp_path / FIXED_OUTPUT_EVAL.name
+    eval_dir.mkdir()
+    write_rulings(eval_dir, build_ruling("ruled", answer, answer=("yes", person)))
+
+    assert (
+        main(
+            ["rulings", FIXED_OUTPUT_EVAL.name],
+            evals_root=tmp_path,
+            resolve_eval=resolve_fixed_output,
+        )
+        == exit_code
+    )
+    assert capsys.readouterr().out == printed
 
 
 def test_every_ruling_the_evals_models_refuse_is_named_by_its_ruling_id(tmp_path: Path) -> None:
@@ -299,6 +337,10 @@ def write_ruled_rulings(tmp_path: Path) -> Path:
     return write_rulings(
         tmp_path, build_ruling("ruled", "yes", answer=("yes", "matched"), echo=("yes", "matched"))
     )
+
+
+def resolve_fixed_output(name: str) -> ResolvedEval:
+    return bind_eval(FIXED_OUTPUT_EVAL)
 
 
 def write_rulings(tmp_path: Path, *rulings: JsonValue) -> Path:
