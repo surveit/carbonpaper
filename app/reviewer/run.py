@@ -145,16 +145,16 @@ async def _run_in_a_session(
         messages, _resume = await engine.stream_turn(
             agent.task, message_history=None, emit=lambda event: None, resume=None)
     finally:
-        _book_the_turn(store, session_id, engine, messages)
+        _record_turn(store, session_id, engine, messages)
     if agent.answer is None:
         raise GenerationError(f"{title} submitted nothing")
     return _Landed(agent.answer, session_id)
 
 
-def _book_the_turn(
+def _record_turn(
     store: SessionStore, session_id: ID, engine: object, messages: list[dict[str, Any]]
 ) -> None:
-    """Called in teardown, so a turn that errored still books what it spent getting there."""
+    """Called in teardown, so a turn that errored still records what it spent getting there."""
     if messages:
         store.append_messages(session_id, messages)
     usage = getattr(engine, "last_usage", None)  # a custom engine need not track usage

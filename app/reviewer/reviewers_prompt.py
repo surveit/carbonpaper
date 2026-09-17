@@ -76,11 +76,12 @@ _SUBMIT = (
 )
 
 _DATA_DEFECTS_JOB = (
-    "YOUR JOB. You read the input column profiles and how each stage reads a column, and "
-    "you are the only reviewer allowed to say the FILE is wrong. A malformed cell. Two "
-    "spellings of one organisation. An exact-match test run against a column that is not "
-    "exactly spelled. A column read as a number that holds text. A reading that disagrees "
-    "with the source it was taken from. Every challenge you raise has `kind` `data`, and "
+    "YOUR JOB. Find anomalies in the input data. Missing values. Misspelled entries that "
+    "make duplicates or fail a join. Implausible values, which often mean the units do not "
+    "match. Truncated or part-written text. A column read as a number that holds text, or "
+    "an exact-match test run against a column that is not exactly spelled. You are the "
+    "only reviewer allowed to say the FILE is wrong. Every challenge you raise has `kind` "
+    "`data`, and "
     "every one of them points at rows or cells the pool actually shows you: a top value "
     "and its count, a filled/null/blank split, a distinct count, a line of stage code.\n"
     "WHAT YOU ARE NOT TOLD. You are not told the stage code beyond how it reads a column. "
