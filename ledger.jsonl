@@ -3094,3 +3094,4 @@
 {"run_id":"35228520376","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35228520376","created":"2026-09-17T13:40:45Z","branch":"feat/stage-declares-its-row-type","event":"pull_request","contracts_kept":17,"findings":[]}
 {"run_id":"35228673489","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35228673489","created":"2026-09-17T13:42:14Z","branch":"feat/stage-declares-its-row-type","event":"pull_request","contracts_kept":17,"findings":[]}
 {"run_id":"35228520376","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35228520376","created":"2026-09-17T13:43:21Z","branch":"feat/stage-declares-its-row-type","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"35228673489","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35228673489","created":"2026-09-17T13:43:56Z","branch":"feat/stage-declares-its-row-type","event":"pull_request","contracts_kept":null,"findings":[]}
