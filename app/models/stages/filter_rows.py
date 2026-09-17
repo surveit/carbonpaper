@@ -55,7 +55,8 @@ class FilterConfig(StageConfig):
     @model_validator(mode="after")
     def _inline_code_is_runnable(self) -> "FilterConfig":
         validate_inline_function_code(
-            self.code, self.function, default_name="should_include", return_hint="a bool"
+            self.code, self.function, default_name="should_include",
+            call_hint="it is called once per row and returns a bool",
         )
         return self
 
