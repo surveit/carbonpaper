@@ -11,6 +11,7 @@ from typing import Any, Mapping, Optional, Protocol, Sequence, TypeVar
 
 from pydantic import ValidationError, model_validator
 
+from app.models.row_types import RowType
 from app.models.schema import (
     StageId,
     TableSchema,
@@ -187,6 +188,20 @@ def resolve_row_type_ids(stages: Sequence[Stage]) -> dict[ID, Optional[ID]]:
             else _read_inherited_row_type_id(stage, row_type_id_by_stage_id)
         )
     return row_type_id_by_stage_id
+
+
+def find_undeclared_row_type_issues(
+    stages: Sequence[Stage], row_types: Sequence[RowType]
+) -> list[str]:
+    """Needs the project's Terms, so it sits outside `graph_issues`, which sees stages alone."""
+    declared = {row_type.id for row_type in row_types}
+    return [
+        f"`{stage.id}`: `row_type_id` names `{stage.row_type_id}`, a word this "
+        f"project's terms do not hold — name a row type the project declared, "
+        f"never one coined on a stage"
+        for stage in stages
+        if stage.row_type_id is not None and stage.row_type_id not in declared
+    ]
 
 
 def _read_inherited_row_type_id(

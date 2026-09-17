@@ -41,6 +41,7 @@ from app.models.workflow import (
     detect_cycle as detect_cycle,
     find_stages_reaching_report as find_stages_reaching_report,
     find_stages_upstream_of as find_stages_upstream_of,
+    find_undeclared_row_type_issues as find_undeclared_row_type_issues,
     parse_workflow as parse_workflow,
     resolve_row_type_ids as resolve_row_type_ids,
     resolve_workflow_stages as resolve_workflow_stages,

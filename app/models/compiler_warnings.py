@@ -38,7 +38,16 @@ def find_stage_compiler_warnings(
     # about the examples too would be noise — fix the description first.
     if not any(w.kind == "undescribed" for w in warnings):
         warnings += _find_unchecked_description_warnings(stage, failing_examples)
-    return warnings
+    return warnings + _find_unnamed_rows_warning(stage)
+
+
+def _find_unnamed_rows_warning(stage: Stage) -> list[CompilerWarning]:
+    if not stage.declares_its_own_row_type or stage.row_type_id:
+        return []
+    return [warn(stage, "unnamed_rows",
+                 "its rows are a new kind of thing and no `row_type_id` says what one "
+                 "of them is, so nothing written about them — this stage's own "
+                 "description, a review guide, a published figure — can name the thing")]
 
 
 def _find_unchecked_description_warnings(

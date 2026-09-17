@@ -480,8 +480,6 @@ def test_sort_stages_by_dependency_raises_on_a_cycle():
 
 
 # ─── The row type a stage's output rows are (resolve_row_type_ids) ────────────
-# Six types declare a row type of their own; every other type reads its input's
-# down to itself, and None means nothing in the ancestry ever said.
 _KN = {"columns": [{"name": "k", "type": "str", "nullable": True},
                    {"name": "n", "type": "int", "nullable": True}]}
 _KT = {"columns": [{"name": "k", "type": "str", "nullable": True},
@@ -615,3 +613,20 @@ def test_a_union_input_with_no_word_does_not_disagree_with_one_that_has_it():
     )]
     assert m.validate_workflow(stages) == []
     assert m.resolve_row_type_ids(stages)["stacked"] == "filing"
+
+
+_FILING = {"id": "filing", "title": "Filing", "definition": "One lobbying disclosure."}
+
+
+def test_only_the_stage_naming_a_word_the_project_lacks_is_reported():
+    stages = [parse_stage(s) for s in (
+        _rows_of("filings", row_type_id="filing"),
+        _rows_of("mills", row_type_id="mill"),
+    )]
+    [issue] = m.find_undeclared_row_type_issues(stages, [m.RowType(**_FILING)])
+    assert "`mills`" in issue and "`mill`" in issue
+
+
+def test_a_workflow_of_stages_naming_nothing_needs_no_declared_words():
+    stages = [parse_stage(s) for s in (_rows_of("load"), _kept_rows("recent", "load"))]
+    assert m.find_undeclared_row_type_issues(stages, []) == []

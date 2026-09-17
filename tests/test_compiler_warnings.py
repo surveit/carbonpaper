@@ -4,6 +4,7 @@ The gate the authoring agent must clear, and the list the Workflow page shows.
 """
 from __future__ import annotations
 
+import pytest
 from conftest import reads_of
 
 from app import models as m
@@ -170,6 +171,106 @@ def test_the_two_caching_types_warn_about_nothing_when_left_alone():
 def test_a_code_stage_not_caching_is_the_default_and_says_nothing():
     # Cache off is not a choice here, so it is not one to tell a reviewer about.
     assert _kinds(_stage(tests=[_PASSING_EXAMPLE])) == []
+
+
+# ── rows nobody has a word for ───────────────────────────────────────────────
+_K = {"name": "k", "type": "str", "nullable": True}
+_N = {"name": "n", "type": "int", "nullable": True}
+_TOTAL = {"name": "total", "type": "int", "nullable": True}
+_ITEMS = {"name": "items", "type": "list[str]", "nullable": True}
+_ONE_ITEM = {"name": "items", "type": "str", "nullable": True}
+_A_SUM = {"output_column": "total", "formula": "sum", "value_column": "n"}
+
+# Each as small as its own model allows, so only the type varies between them.
+_ROW_MINTING_SPECS = {
+    "input_data": {
+        "type": "input_data", "connector": {"kind": "file"},
+        "signature": {"form": "replaces", "produces": [_K]},
+    },
+    "aggregate": {
+        "type": "aggregate", "inputs": [{"id": "up"}],
+        "signature": {"form": "replaces", "reads": reads_of("up", [_K, _N]),
+                      "produces": [_K, _TOTAL]},
+        "aggregate": {"group_by": ["k"], "aggregations": [_A_SUM]},
+    },
+    "dedupe": {
+        "type": "dedupe", "inputs": [{"id": "up"}],
+        "signature": {"form": "extends", "reads": reads_of("up", [_K])},
+        "dedupe": {"keys": ["k"], "keep": "agree"},
+    },
+    "explode": {
+        "type": "explode", "inputs": [{"id": "up"}],
+        "signature": {"form": "extends", "reads": reads_of("up", [_ITEMS]),
+                      "rewrites": [_ONE_ITEM]},
+        "explode": {"column": "items"},
+    },
+    "expand": {
+        "type": "expand", "inputs": [{"id": "up"}, {"id": "ref"}],
+        "signature": {"form": "extends",
+                      "reads": reads_of("up", [_K]) + reads_of("ref", [_K, _N]),
+                      "adds": [_N]},
+        "join": {"keys": [{"left": "k", "right": "k"}], "enrich_with": {"n": "n"}},
+    },
+    "python_frame_function": {
+        "type": "python_frame_function", "inputs": [{"id": "up"}],
+        "signature": {"form": "replaces", "reads": reads_of("up", [_K]), "produces": [_K]},
+        "function": {"kind": "inline", "summary": "Pivots the frame.",
+                     "code": "def transform(frame):\n    return frame",
+                     "corner_cases": [{"case": "no rows", "expected": "no rows"}]},
+    },
+}
+
+
+def _row_minting_stage(type_, **kw):
+    return m.parse_stage({"id": f"s_{type_}", "description": f"Do {type_}",
+                          **_ROW_MINTING_SPECS[type_], **kw})
+
+
+@pytest.mark.parametrize("type_", sorted(_ROW_MINTING_SPECS))
+def test_every_type_minting_a_new_kind_of_row_warns_when_it_names_none(type_):
+    assert "unnamed_rows" in _kinds(_row_minting_stage(type_))
+
+
+@pytest.mark.parametrize("type_", sorted(_ROW_MINTING_SPECS))
+def test_naming_the_row_type_clears_the_warning(type_):
+    assert "unnamed_rows" not in _kinds(_row_minting_stage(type_, row_type_id="facility"))
+
+
+def test_the_warning_says_what_the_reader_loses_not_that_a_field_is_empty():
+    [warning] = [w for w in find_stage_compiler_warnings(_row_minting_stage("dedupe"))
+                 if w.kind == "unnamed_rows"]
+    assert warning.severity == "warning"
+    assert warning.detail == (
+        "its rows are a new kind of thing and no `row_type_id` says what one of them "
+        "is, so nothing written about them — this stage's own description, a review "
+        "guide, a published figure — can name the thing"
+    )
+
+
+def test_a_stage_whose_rows_are_still_its_inputs_kind_of_thing_says_nothing():
+    assert _kinds(_stage(tests=[_PASSING_EXAMPLE])) == []
+    assert _kinds(_llm_stage()) == []
+
+
+def test_an_ungrouped_aggregate_mints_no_kind_of_row_so_it_owes_no_word():
+    # Its one row is a figure ABOUT the input population, which the input already names.
+    ungrouped = m.parse_stage({
+        "id": "one_figure", "description": "Total everything", "type": "aggregate",
+        "inputs": [{"id": "up"}],
+        "signature": {"form": "replaces", "reads": reads_of("up", [_N]),
+                      "produces": [_TOTAL]},
+        "aggregate": {"group_by": [], "aggregations": [_A_SUM]},
+    })
+    assert _kinds(ungrouped) == []
+
+
+def test_unnamed_rows_sorts_above_the_kinds_that_leave_words_unchecked():
+    report = find_workflow_compiler_warnings([
+        _llm_stage(stage_id="note", cache=False),
+        _row_minting_stage("python_frame_function"),
+    ])
+    assert [w.kind for w in report.warnings] == [
+        "unnamed_rows", "unexemplified", "nondeterministic"]
 
 
 # ── the workflow-level gate ──────────────────────────────────────────────────

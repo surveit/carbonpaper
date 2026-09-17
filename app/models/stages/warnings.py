@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 WarningKind = Literal[
     "undescribed",
+    "unnamed_rows",
     "unexemplified",
     "examples_failing",
     "nondeterministic",
@@ -29,6 +30,7 @@ WarningKind = Literal[
 # note borrowing it claimed a severity it could not act on.
 SEVERITY: dict[str, UserFacingErrorSeverity] = {
     "undescribed": UserFacingErrorSeverity.warning,
+    "unnamed_rows": UserFacingErrorSeverity.warning,
     "unexemplified": UserFacingErrorSeverity.warning,
     "examples_failing": UserFacingErrorSeverity.warning,
     "nondeterministic": UserFacingErrorSeverity.warning,

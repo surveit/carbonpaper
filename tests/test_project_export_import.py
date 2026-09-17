@@ -58,9 +58,10 @@ _ENTITIES = ClaimShapeInput(
 )
 
 
-def _input_stage(stage_id: str) -> InputDataStage:
+def _input_stage(stage_id: str, row_type_id: str | None = None) -> InputDataStage:
     return InputDataStage(
         id=stage_id, description=stage_id, type=StageType.input_data,
+        row_type_id=row_type_id,
         connector=Connector(
             kind=ConnectorKind.file, params=FileConnectorParams(format=FileFormat.csv)),
         signature=ReplacesSignature(produces=[
@@ -68,6 +69,11 @@ def _input_stage(stage_id: str) -> InputDataStage:
             Column(name="entity_name", type="str", nullable=True),
         ]),
     )
+
+
+def _bundle(stages: list[Stage], row_types: list[RowType]) -> WorkflowFile:
+    return WorkflowFile(name="words", document="# doc", model="m", source="s",
+                        data_model=_TINY_LIBRARY, row_types=row_types, stages=stages)
 
 
 def test_a_bundle_carries_the_latest_versions_stages_not_the_working_copy(tmp_path):
@@ -436,3 +442,20 @@ def _list_slugs_with_shape_ids(stages: list[Stage]) -> list[tuple[str, str | Non
         for stage in stages
         for rule in [*stage.list_published_tables(), *stage.list_published_figures()]
     ]
+
+def test_a_bundle_whose_stage_names_a_word_the_project_does_not_hold_is_refused(tmp_path):
+    with pytest.raises(ValidationError) as caught:
+        _bundle([_input_stage("load_entities", row_type_id="facility")], [_ENTITY])
+    message = str(caught.value)
+    assert "`load_entities`" in message and "`facility`" in message
+
+
+def test_a_bundle_whose_stage_names_a_declared_word_is_kept(tmp_path):
+    bundle = _bundle([_input_stage("load_entities", row_type_id="entity")], [_ENTITY])
+    assert bundle.stages[0].row_type_id == "entity"
+
+
+def test_a_bundle_of_stages_and_no_terms_at_all_is_kept(tmp_path):
+    # Every stage written before the field existed leaves it unset; none of them owes a word.
+    bundle = _bundle([_input_stage("load_entities")], [])
+    assert bundle.stages[0].row_type_id is None

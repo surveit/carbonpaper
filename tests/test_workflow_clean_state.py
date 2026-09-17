@@ -29,6 +29,8 @@ _UNDESCRIBED = {
 def _make_load_stage(path):
     return {
         "id": "load", "description": "Load", "type": "input_data",
+        # A source's rows are a new kind of thing, so a clean one names what they are.
+        "row_type_id": "thing",
         "signature": {"form": "replaces", "produces": _SCHEMA["columns"]},
         "connector": {"kind": "file", "params": {"path": path, "format": "csv"}},
     }
