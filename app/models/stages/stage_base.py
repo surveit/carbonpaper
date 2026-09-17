@@ -141,19 +141,10 @@ def is_grain_and_order_preserving(stage_type: StageType) -> bool:
     return find_row_effect(stage_type) in {RowEffect.creates, RowEffect.maps}
 
 
-# The types that answer what their output rows are; every other type inherits its input's.
-_ROW_TYPE_DECLARING_TYPES: frozenset[StageType] = frozenset({
-    StageType.input_data,
-    StageType.aggregate,
-    StageType.explode,
-    StageType.expand,
-    StageType.python_frame_function,
-    StageType.report,
-})
-
-
+# A selected or mapped row is the row that arrived; only the other three make their own.
 def declares_its_own_row_type(stage_type: StageType) -> bool:
-    return stage_type in _ROW_TYPE_DECLARING_TYPES
+    return find_row_effect(stage_type) in {
+        RowEffect.creates, RowEffect.builds, RowEffect.consumes}
 
 
 
