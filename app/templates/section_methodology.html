@@ -104,7 +104,7 @@
 {% if row_types %}
 <div class="dm-cards">
   {% for row_type in row_types %}
-  <article class="dm-card">
+  <article class="dm-card" id="term-{{ row_type.id }}">
     <div class="dm-card-head">
       <code class="dm-card-name">{{ row_type.id }}</code>
     </div>
@@ -124,7 +124,7 @@
 {% if verbs %}
 <div class="dm-cards">
   {% for verb in verbs %}
-  <article class="dm-card">
+  <article class="dm-card" id="term-{{ verb.name }}">
     <div class="dm-card-head">
       <code class="dm-card-name">{{ verb.name }}</code>
     </div>
@@ -146,7 +146,7 @@
 {# A table with neither prose nor fields has nothing to disclose, so it is a line and
    not a fold: a ▸ opening onto nothing would read as data missing. #}
 {% if table.description or table.columns %}
-<details class="dm-table">
+<details class="dm-table" id="term-{{ table.name }}">
   <summary>{{ table_head(table) }}</summary>
   {% if table.description %}<p class="dm-card-desc">{{ table.description }}</p>{% endif %}
   {% if table.columns %}

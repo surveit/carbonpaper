@@ -20,6 +20,5 @@ def render_source_url(citation: AddressedChallengeCitation) -> str:
     if isinstance(citation, AddressedStageCitation):
         return f"/project/{citation.project_id}/node/{citation.stage_id}/panel"
     if isinstance(citation, AddressedTermCitation):
-        # No per-term page yet, so the glossary's own anchor for the noun.
-        return f"/project/{citation.project_id}/methodology#noun-{citation.name}"
+        return f"/project/{citation.project_id}/methodology#term-{citation.name}"
     raise ValueError(f"no source URL for a {citation.kind} citation")

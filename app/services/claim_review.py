@@ -226,7 +226,8 @@ def _read_run_holdings(project_id: ID, run_id: ID,
             stage_id: _read_stage_output_cells(project_id, run_id, stage_id, columns)
             for stage_id, columns in wanted.items() if stage_id in written},
         stage_ids={placed.id for placed in _read_workflow_stages(project_id, run_id)},
-        term_names={noun.name for noun in terms.nouns.schemas}
+        term_names={row_type.id for row_type in terms.row_types}
+        | {table.name for table in terms.schemas.schemas}
         | {verb.name for verb in terms.verbs},
     )
 
@@ -265,7 +266,7 @@ def _find_citation_problem(held: _RunHoldings, citation: ChallengeCitation) -> s
         return f"names stage {citation.stage_id!r}, which the run's workflow does not hold"
     if citation.name in held.term_names:
         return None
-    return f"names {citation.name!r}, which is no noun or verb in the project's terms"
+    return f"names {citation.name!r}, which the project's terms do not define"
 
 
 def _find_cell_problem(held: _RunHoldings, citation: StageOutputCellCitation) -> str | None:

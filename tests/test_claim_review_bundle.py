@@ -353,16 +353,16 @@ def test_a_stage_of_the_runs_workflow_is_accepted_and_one_it_lacks_is_refused(cl
     assert _store_citing(claim, [StageCitation(stage_id="funded")]).challenges[0].citations
 
 
-def _write_a_noun_and_a_verb() -> None:
+def _write_a_table_and_a_verb() -> None:
     terms_service.write_terms(PROJECT, Terms(
-        nouns=SchemaLibrary(schemas=[NamedSchema(name="grant", title="A grant")]),
+        schemas=SchemaLibrary(schemas=[NamedSchema(name="grant", title="A grant")]),
         verbs=[Verb(name="funded", definition="Paid out.")]))
 
 
 def test_a_term_the_project_defines_is_accepted_and_one_it_lacks_is_refused(claim):
-    _write_a_noun_and_a_verb()
+    _write_a_table_and_a_verb()
 
-    assert "no noun or verb in the project's terms" in _refuse_citing(
+    assert "which the project's terms do not define" in _refuse_citing(
         claim, TermCitation(name="grants"))
     stored = _store_citing(claim, [TermCitation(name="grant"), TermCitation(name="funded")])
     assert len(stored.challenges[0].citations) == 2
