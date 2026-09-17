@@ -5,8 +5,10 @@ from pydantic import ValidationError
 
 from app.core.ids import ID
 from app.core.json_types import JsonDict
+from app.core.run_status import RunStatus
 from app.models.claims import ClaimStatus, DataUniverseRequirement
 from app.models.records.claims import Claim, ClaimShape
+from app.models.records.run_manifest import RunManifest
 from app.models.records.workflow_output import WorkflowOutput
 from app.models.schema import TableSchema
 from app.services.claim_shapes import load_claim_shape
@@ -20,7 +22,7 @@ def submit_claim(
 ) -> Claim:
     """Proposed, not made: it stands behind nothing until review approves it."""
     output = read_workflow_run_output_by_slug(run_id, slug)
-    shape = _require_shape(project_id, output.shape_id)
+    shape = load_required_claim_shape(project_id, output.shape_id)
     held = read_context(shape, context)
     for standing in find_equivalent_claims(project_id, shape.id, held):
         _set_status(standing, ClaimStatus.superseded)
@@ -35,7 +37,7 @@ def submit_claim(
 def approve_claim(project_id: ID, claim_id: ID, run_read_everything: bool) -> Claim:
     """Re-checked before it stands: what was in the way can move while it waits."""
     claim = load_claim(project_id, claim_id)
-    shape = _require_shape(project_id, claim.shape_id)
+    shape = load_required_claim_shape(project_id, claim.shape_id)
     validate_run_covers_the_shape(shape, run_read_everything)
     validate_nothing_equivalent_stands(project_id, shape, claim.context, besides_claim_id=claim.id)
     return _set_status(claim, ClaimStatus.approved)
@@ -49,7 +51,7 @@ def decline_claim(project_id: ID, claim_id: ID) -> Claim:
 def decline_output(project_id: ID, run_id: ID, slug: str) -> Claim:
     """A skip: proposed and refused in one act, so the run's counts still add up."""
     output = read_workflow_run_output_by_slug(run_id, slug)
-    shape = _require_shape(project_id, output.shape_id)
+    shape = load_required_claim_shape(project_id, output.shape_id)
     claim = Claim(
         created_by_project_id=project_id, shape_id=shape.id,
         citation=output.citation, status=ClaimStatus.declined,
@@ -66,6 +68,13 @@ def load_claim(project_id: ID, claim_id: ID) -> Claim:
     if held is None or held.created_by_project_id != project_id:
         raise ClaimRefused([f"this project holds no claim '{claim_id}'"])
     return held
+
+
+def load_required_claim_shape(project_id: ID, shape_id: ID | None) -> ClaimShape:
+    shape = load_claim_shape(project_id, shape_id) if shape_id else None
+    if shape is None:
+        raise ClaimRefused([f"this project holds no claim shape '{shape_id}'"])
+    return shape
 
 
 def load_claims_of_shape(project_id: ID, shape_id: ID) -> list[Claim]:
@@ -88,6 +97,26 @@ def load_run_claims(project_id: ID, run_id: ID) -> dict[str, Claim]:
         if standing is None or standing.status == ClaimStatus.declined:
             held[claim.shape_id] = claim
     return held
+
+
+def read_every_run_output(run_id: ID) -> list[WorkflowOutput]:
+    """Everything the run published, shape or none, for evidence rather than for claiming."""
+    return sorted(
+        (output for output in WorkflowOutput.list() if output.citation.run_id == run_id),
+        key=lambda output: output.slug,
+    )
+
+
+def find_output_of_claim(claim: Claim) -> WorkflowOutput:
+    run_id = claim.citation.run_id
+    matches = [output for output in read_every_run_output(run_id)
+               if output.citation == claim.citation]
+    if not matches:
+        raise ClaimRefused([f"no output of run '{run_id}' carries this claim's citation"])
+    if len(matches) > 1:
+        raise ClaimRefused([f"{len(matches)} outputs of run '{run_id}' carry this claim's "
+                            "citation; the claim cannot say which it is"])
+    return matches[0]
 
 
 def read_workflow_run_outputs(run_id: ID) -> list[WorkflowOutput]:
@@ -131,6 +160,13 @@ def read_context(shape: ClaimShape, context: JsonDict) -> JsonDict:
     return held.model_dump(mode="json")
 
 
+def read_whether_the_run_read_everything(manifest: RunManifest) -> bool:
+    """It finished, and nothing narrowed what it read: no test window, no limit, no offset."""
+    parameters = manifest.parameters
+    return (manifest.status == RunStatus.OK and not parameters.is_test_run
+            and not parameters.limits and not parameters.offsets)
+
+
 def validate_run_covers_the_shape(shape: ClaimShape, run_read_everything: bool) -> None:
     if shape.universe == DataUniverseRequirement.closed and not run_read_everything:
         raise ClaimRefused([
@@ -152,16 +188,9 @@ def validate_nothing_equivalent_stands(
 
 def learn_the_template(project_id: ID, shape_id: ID, template: str) -> ClaimShape:
     """The template asserts nothing, so a claim that read better can rewrite it."""
-    shape = _require_shape(project_id, shape_id)
+    shape = load_required_claim_shape(project_id, shape_id)
     shape.template = template.strip()
     shape.save()
-    return shape
-
-
-def _require_shape(project_id: ID, shape_id: ID | None) -> ClaimShape:
-    shape = load_claim_shape(project_id, shape_id) if shape_id else None
-    if shape is None:
-        raise ClaimRefused([f"this project holds no claim shape '{shape_id}'"])
     return shape
 
 

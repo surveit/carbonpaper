@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import pyarrow as pa
 
 from dataclasses import dataclass
 
@@ -21,7 +22,7 @@ from app.core.errors import (
     StageNotInRun,
     StageOutputMissing,
 )
-from app.core.frames import read_frame_file
+from app.core.frames import read_frame_file, read_frame_table
 from app.core.json_types import JsonDict
 from app.core.run_status import RunStatus, StageStatus
 from app.models import WorkflowStage
@@ -138,6 +139,14 @@ def resolve_output_path(run_dir: Path, output_path: str | None) -> Path | None:
 
 
 def read_stage_output_frame(project_id: str, run_dir: Path, stage_id: str) -> pd.DataFrame:
+    return read_frame_file(_resolve_stage_output_file(project_id, run_dir, stage_id))
+
+
+def read_stage_output_frame_table(project_id: str, run_dir: Path, stage_id: str) -> pa.Table:
+    return read_frame_table(_resolve_stage_output_file(project_id, run_dir, stage_id))
+
+
+def _resolve_stage_output_file(project_id: str, run_dir: Path, stage_id: str) -> Path:
     records = read_run_manifest(project_id, run_dir.name).stage_records
     record = _find_stage_record(records, run_dir, stage_id)
     path = resolve_output_path(run_dir, record.output_path)
@@ -146,7 +155,7 @@ def read_stage_output_frame(project_id: str, run_dir: Path, stage_id: str) -> pd
             f"stage '{stage_id}' of run '{run_dir.name}' wrote no output "
             f"(its status is '{record.status}'), so it holds no values to read"
         )
-    return read_frame_file(path)
+    return path
 
 
 def _find_stage_record(

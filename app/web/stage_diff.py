@@ -13,7 +13,7 @@ from typing import ClassVar, Optional, Union
 
 import pandas as pd
 
-from app.web.figure_text import render_figure
+from app.core.figure_text import render_figure
 from app.models import StageType, WorkflowStage
 from app.models.stages.signature import list_read_column_names
 from app.models.stage import is_grain_and_order_preserving

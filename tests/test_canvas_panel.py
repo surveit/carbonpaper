@@ -9,10 +9,10 @@ from fastapi.testclient import TestClient
 import app.services.run as run_service
 from app.main import app
 from app.services.project import save_working_copy_as_version
+from app.services.scope import read_run_branches
 from app.services.workspace import resolve_run_dir
 from app.web.config import label_stage_type
 from app.web.loading import load_run_record
-from app.web.scope_view import read_run_branches
 from app.web.stage_diff import build_stage_diff
 from app.web.canvas_view import build_trace_scope, load_canvas_view
 from scope_fixture import stage_specs, write_inputs

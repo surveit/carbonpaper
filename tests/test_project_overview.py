@@ -33,8 +33,7 @@ def _record_run(*, status: RunStatus = RunStatus.OK,
 def _publish_a_figure() -> None:
     WorkflowOutput(
         slug="paid-filings", label="Paid filings behind that total", primary=True,
-        citation=StageOutputCellCitation(
-            run_id=_RUN, stage_id="paid_totals", row_ordinal=0,
+        citation=StageOutputCellCitation(run_id=_RUN, stage_id="paid_totals", row_ordinal=0,
             column="filings", value=40,
         ),
     ).save()
