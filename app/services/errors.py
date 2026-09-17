@@ -25,6 +25,10 @@ class ProjectArchiveRejected(Exception):
     """A project archive this workspace could not read a project out of."""
 
 
+class RunCaptureRefused(ValueError):
+    """Nothing is captured unless the run finished and its source files still match."""
+
+
 class ClaimShapeWriteRefused(ValueError):
     """The WRITE is refused, whole: a bad entry takes the batch with it."""
 
