@@ -126,7 +126,10 @@ def validate_inline_function_code(
     code: str,
     function: str | None,
     default_name: str = "transform",
-    return_hint: str = "a dict",
+    call_hint: str = (
+        "a row function is called once per row and returns a dict; a frame function is "
+        "called once with the input frame(s) and returns a frame"
+    ),
 ) -> None:
     try:
         tree = ast.parse(code)
@@ -136,13 +139,13 @@ def validate_inline_function_code(
     except SyntaxError as exc:
         raise ValueError(
             f"inline function code does not compile: {exc.msg} (line {exc.lineno}). "
-            f"Define a function, e.g. `def {default_name}(row): ...; return row`."
+            f"Define a top-level function, e.g. `def {default_name}(...): ...`."
         )
     wanted = function or default_name
     if not (_binds_name(tree, wanted) or _binds_name(tree, default_name)):
         raise ValueError(
             f"inline function code must define `def {wanted}(...)` at the top level — "
-            f"the runtime calls {wanted}(row) per row and expects {return_hint} back"
+            f"{call_hint}"
         )
 
 
