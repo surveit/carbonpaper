@@ -30,19 +30,10 @@ class ChallengesAnswer(_Base):
     )
 
 
-class OrchestratorAnswer(_Base):
-    challenges: list[DraftChallenge] = Field(
-        description="The challenges you kept, each with its severity ruled."
-    )
-    summary: str = Field(
-        description="What the claim can stand as, in one paragraph the claim owner reads first."
-    )
-
-
 class ClaimReviewResult(_Base):
     """What one review run produced: the merged answer, and every session behind it."""
 
-    draft: OrchestratorAnswer
+    challenges: list[DraftChallenge]
     session_ids: list[ID]
 
 

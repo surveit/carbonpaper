@@ -93,7 +93,6 @@ class ClaimReview(PersistedModel):
 
     claim_id: ID = Field(frozen=True)
     challenges: list[Challenge] = Field(frozen=True)
-    summary: str = Field(frozen=True)
     # Every review session in the order it ran, so a reader can open the transcripts.
     session_ids: list[ID] = Field(frozen=True)
 

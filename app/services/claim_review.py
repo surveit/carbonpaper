@@ -84,9 +84,8 @@ def start_claim_review(project_id: ID, claim_id: ID, *, model: str) -> str:
 
 
 def _finish_claim_review(project_id: ID, claim_id: ID, result: ClaimReviewResult) -> None:
-    store_claim_review(
-        project_id, claim_id, challenges=result.draft.challenges,
-        summary=result.draft.summary, session_ids=result.session_ids)
+    store_claim_review(project_id, claim_id, challenges=result.challenges,
+                       session_ids=result.session_ids)
 
 
 def _refuse_a_claim_already_reviewed(claim_id: ID) -> None:
@@ -118,7 +117,7 @@ def load_claim_review(claim_id: ID) -> ClaimReview | None:
 
 
 def store_claim_review(project_id: ID, claim_id: ID, *, challenges: list[DraftChallenge],
-                       summary: str, session_ids: list[ID]) -> ClaimReview:
+                       session_ids: list[ID]) -> ClaimReview:
     claim = claims_service.load_claim(project_id, claim_id)
     cited = _require_cell_citation(claim.citation)
     if load_claim_review(claim_id) is not None:
@@ -129,8 +128,7 @@ def store_claim_review(project_id: ID, claim_id: ID, *, challenges: list[DraftCh
               *find_citation_issues(project_id, cited.run_id, addressed)]
     if issues:
         raise ClaimReviewRefused(issues)
-    review = ClaimReview(
-        claim_id=claim_id, challenges=addressed, summary=summary, session_ids=session_ids)
+    review = ClaimReview(claim_id=claim_id, challenges=addressed, session_ids=session_ids)
     review.save()
     return review
 

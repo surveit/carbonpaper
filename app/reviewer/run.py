@@ -1,4 +1,4 @@
-"""Six turns over one claim: five reviewers at once, then the merge."""
+"""Five turns over one claim, all at once: one reviewer each, nothing after."""
 from __future__ import annotations
 
 import asyncio
@@ -16,7 +16,6 @@ from app.core.ids import ID
 from app.models.authoring_lifecycle_note import CompilerPhase
 from app.models.claim_review import ClaimReviewResult, EvidenceBundle, Reviewer
 from app.models.records.claim_review import DraftChallenge
-from app.reviewer.orchestrator import build_orchestrator
 from app.reviewer.reviewers import REVIEW_REQUEST, REVIEWERS, build_reviewer
 
 _LOG = logging.getLogger(__name__)
@@ -93,14 +92,11 @@ async def _review(
 async def _run_the_review(
     store: SessionStore, project_id: ID, bundle: EvidenceBundle, model: str
 ) -> ClaimReviewResult:
-    context = _build_session_context(project_id, bundle)
-    raised = await _raise_the_challenges(store, bundle, model, context)
-    merged = await _run_in_a_session(
-        store, build_orchestrator(bundle, _list_the_challenges(raised), model=model),
-        title=_name_the_session("orchestrator", bundle), context=context)
+    raised = await _raise_the_challenges(
+        store, bundle, model, _build_session_context(project_id, bundle))
     return ClaimReviewResult(
-        draft=merged.answer,
-        session_ids=[*(one.session_id for one in raised), merged.session_id],
+        challenges=_list_the_challenges(raised),
+        session_ids=[one.session_id for one in raised],
     )
 
 
