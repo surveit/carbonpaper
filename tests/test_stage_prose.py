@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import pytest
 
+from app.models.stage import stage_to_spec_dict
 from app.models.stages.aggregate import AggregateStage
+from app.models.stages.join import ExpandStage
 from app.models.workflow import Workflow
 from app.web.stage_prose import plan_an_aggregate, say_what_a_stage_did
 from scope_fixture import column, stage_specs
@@ -28,6 +30,15 @@ def test_a_join_names_both_sides_and_the_keys(stages):
     # Both sides call the key agency_code, so it is said once rather than as a pair.
     assert say_what_a_stage_did(stages["tag_portfolio"]) == (
         "Combine both_regions data with load_agencies data on agency_code")
+
+
+def test_only_an_expand_says_the_reference_may_match_more_than_once(stages):
+    enrich = stages["tag_portfolio"]
+    expand = ExpandStage.model_validate({**stage_to_spec_dict(enrich), "type": "expand"})
+    assert say_what_a_stage_did(expand) == (
+        "Combine both_regions data with load_agencies data on agency_code, "
+        "one row per match")
+    assert "one row per match" not in say_what_a_stage_did(enrich)
 
 
 def test_a_dedupe_names_the_keys_rows_share(stages):
