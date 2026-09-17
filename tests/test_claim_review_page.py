@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -10,6 +12,10 @@ from app.core.agent.store import SessionStore
 from app.main import app
 from app.models.citations import (
     RowsRectangle,
+    StageCitation,
+    StageOutputCellCitation,
+    TermCitation,
+    address_citation,
     StageOutputColumnCitation,
     StageOutputTableCitation,
 )
@@ -27,6 +33,7 @@ from app.reviewer.run import PARENT_ROLE
 from app.services import claims as claims_service
 from app.services.claim_review import store_claim_review
 from app.services.generation import GENERATION_FAILURE_PREFIX
+from app.web.citation_links import render_source_url
 from app.web.claim_review_view import KIND_WORDS, build_claim_review_page
 from claim_review_fixture import (
     PROJECT,
@@ -150,15 +157,41 @@ def test_a_card_carries_the_words_its_severity_and_kind_are_read_as(claim):
     assert card.kind_words == KIND_WORDS[ChallengeKind.coverage]
 
 
-def test_every_citation_on_a_card_opens_somewhere(claim):
+@pytest.mark.parametrize("citation", [
+    StageOutputCellCitation(run_id="r", stage_id="grant_totals", row_ordinal=0,
+                            column="total_amount", value=2200),
+    StageOutputColumnCitation(run_id="r", stage_id="grant_totals", column="grants"),
+    StageCitation(stage_id="grant_totals"),
+    TermCitation(name="grant"),
+], ids=lambda one: one.kind)
+def test_every_citation_kind_opens_a_page_the_app_serves(citation):
+    """A citation the reader cannot open is the one thing a citation may not be."""
+    url = render_source_url(address_citation(PROJECT, citation))
+
+    assert _find_get_route(url) is not None, f"{url} is on no GET route"
+
+
+def _find_get_route(url: str) -> str | None:
+    """Matched against the served path table, so a URL on no GET route is a dead link."""
+    path = url.split("#")[0].split("?")[0]
+    for template, methods in app.openapi()["paths"].items():
+        if "get" in methods and re.fullmatch(_as_pattern(template), path):
+            return template
+    return None
+
+
+def _as_pattern(template: str) -> str:
+    return re.sub(r"\\\{[^}]+\\\}", "[^/]+", re.escape(template))
+
+
+def test_every_citation_on_a_card_carries_words_and_a_link(claim):
     store_a_review(claim, _challenge(claim, _FIGURE, severity=Severity.major))
 
     [card] = build_claim_review_page(PROJECT, claim.id).open_challenges
 
     assert card.citations
     for citation in card.citations:
-        assert citation.href.startswith(f"/project/{PROJECT}/")
-        assert citation.words
+        assert citation.words and citation.href.startswith(f"/project/{PROJECT}/")
 
 
 def test_every_kind_has_words_on_the_page():

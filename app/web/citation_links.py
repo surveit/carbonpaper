@@ -16,7 +16,7 @@ def render_source_url(citation: AddressedChallengeCitation) -> str:
                 f"/stage/{citation.stage_id}/row/{citation.row_ordinal}/trace")
     if isinstance(citation, AddressedStageOutputColumnCitation):
         return (f"/project/{citation.project_id}/runs/{citation.run_id}"
-                f"/stage/{citation.stage_id}/preview#column-{citation.column}")
+                f"/stage/{citation.stage_id}/rows")
     if isinstance(citation, AddressedStageCitation):
         return f"/project/{citation.project_id}/node/{citation.stage_id}/panel"
     if isinstance(citation, AddressedTermCitation):
