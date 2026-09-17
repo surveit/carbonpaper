@@ -42,13 +42,12 @@ def find_stage_compiler_warnings(
 
 
 def _find_unnamed_rows_warning(stage: Stage) -> list[CompilerWarning]:
-    if not stage.declares_its_own_row_type or stage.row_type_id:
+    if not stage.declares_its_own_row_type or stage.resolve_own_row_type_id():
         return []
     return [warn(stage, "unnamed_rows",
-                 "no `row_type_id` says what one of its output rows is, so nothing "
-                 "written about them — this stage's own description, a review guide, a "
-                 "published figure — can name the thing: name the project's word for "
-                 "these rows, or `no_kind` where they are not a kind of thing")]
+                 "its rows are a new kind of thing and no `row_type_id` says what one "
+                 "of them is, so nothing written about them — this stage's own "
+                 "description, a review guide, a published figure — can name the thing")]
 
 
 def _find_unchecked_description_warnings(

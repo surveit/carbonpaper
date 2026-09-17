@@ -11,7 +11,7 @@ from typing import Any, Mapping, Optional, Protocol, Sequence, TypeVar
 
 from pydantic import ValidationError, model_validator
 
-from app.models.row_types import NO_KIND_ROW_TYPE_ID, RowType
+from app.models.row_types import RowType
 from app.models.schema import (
     StageId,
     TableSchema,
@@ -183,7 +183,7 @@ def resolve_row_type_ids(stages: Sequence[Stage]) -> dict[ID, Optional[ID]]:
     row_type_id_by_stage_id: dict[ID, Optional[ID]] = {}
     for stage in sort_stages_by_dependency(stages):
         row_type_id_by_stage_id[stage.id] = (
-            stage.row_type_id
+            stage.resolve_own_row_type_id()
             if stage.declares_its_own_row_type
             else _read_inherited_row_type_id(stage, row_type_id_by_stage_id)
         )
@@ -200,14 +200,9 @@ def find_undeclared_row_type_issues(
         f"project's terms do not hold — name a row type the project declared, "
         f"never one coined on a stage"
         for stage in stages
-        if _is_a_coined_word(stage.row_type_id, declared_row_type_ids)
+        if stage.row_type_id is not None
+        and stage.row_type_id not in declared_row_type_ids
     ]
-
-
-def _is_a_coined_word(row_type_id: Optional[ID], declared_row_type_ids: set[ID]) -> bool:
-    if row_type_id is None or row_type_id == NO_KIND_ROW_TYPE_ID:
-        return False
-    return row_type_id not in declared_row_type_ids
 
 
 def _read_inherited_row_type_id(

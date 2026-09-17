@@ -1,4 +1,4 @@
-"""A stage that answers what its output rows are says which word, or `no_kind`; the rest inherit."""
+"""A stage whose rows are a new kind of thing names the word; the rest read their input's."""
 from __future__ import annotations
 
 import pytest
@@ -67,6 +67,20 @@ def _report_stage(**extra):
     }
 
 
+def _frame_function_stage(**extra):
+    return {
+        "id": "pivot_visits", "type": "python_frame_function",
+        "description": "Pivot visits onto one row per facility",
+        "inputs": [{"id": "src"}],
+        "signature": {"form": "replaces", "reads": reads_of("src", _VISIT_COLUMNS),
+                      "produces": [dict(_VISIT_COLUMNS[0])]},
+        "function": {"kind": "inline", "summary": "Pivots the frame.",
+                     "code": "def transform(frame):\n    return frame",
+                     "corner_cases": [{"case": "no rows", "expected": "no rows"}]},
+        **extra,
+    }
+
+
 def _aggregate_stage(*, group_by, **extra):
     produces = [dict(_VISIT_COLUMNS[0])] if group_by else []
     return {
@@ -104,6 +118,7 @@ def test_a_declaring_stage_carries_the_word():
     stage = parse_stage(_dedupe_stage(row_type_id="facility"))
     assert stage.declares_its_own_row_type is True
     assert stage.row_type_id == "facility"
+    assert stage.resolve_own_row_type_id() == "facility"
 
 
 def test_an_inheriting_stage_leaves_the_field_absent():
@@ -124,10 +139,10 @@ def test_a_grouped_aggregate_declares_its_groups():
     assert stage.row_type_id == "facility"
 
 
-def test_an_ungrouped_aggregate_answers_no_kind():
-    stage = parse_stage(_aggregate_stage(group_by=[], row_type_id=NO_KIND_ROW_TYPE_ID))
-    assert stage.declares_its_own_row_type is True
-    assert stage.row_type_id == NO_KIND_ROW_TYPE_ID
+def test_an_ungrouped_aggregate_answers_no_kind_with_the_field_left_out():
+    stage = parse_stage(_aggregate_stage(group_by=[]))
+    assert stage.row_type_id is None
+    assert stage.resolve_own_row_type_id() == NO_KIND_ROW_TYPE_ID
 
 
 def test_an_ungrouped_aggregate_naming_a_word_is_refused():
@@ -135,16 +150,10 @@ def test_an_ungrouped_aggregate_naming_a_word_is_refused():
         parse_stage(_aggregate_stage(group_by=[], row_type_id="facility"))
 
 
-def test_a_grouped_aggregate_answering_no_kind_is_refused():
-    with pytest.raises(ValidationError, match="`facility_id` IS a kind of thing"):
-        parse_stage(_aggregate_stage(group_by=["facility_id"],
-                                     row_type_id=NO_KIND_ROW_TYPE_ID))
-
-
-def test_a_report_answers_no_kind():
-    stage = parse_stage(_report_stage(row_type_id=NO_KIND_ROW_TYPE_ID))
-    assert stage.declares_its_own_row_type is True
-    assert stage.row_type_id == NO_KIND_ROW_TYPE_ID
+def test_a_report_answers_no_kind_with_the_field_left_out():
+    stage = parse_stage(_report_stage())
+    assert stage.row_type_id is None
+    assert stage.resolve_own_row_type_id() == NO_KIND_ROW_TYPE_ID
 
 
 def test_a_report_naming_a_word_is_refused():
@@ -152,9 +161,24 @@ def test_a_report_naming_a_word_is_refused():
         parse_stage(_report_stage(row_type_id="facility"))
 
 
-def test_an_inheriting_stage_answering_no_kind_is_refused_too():
-    with pytest.raises(ValidationError, match="`filter_rows` output rows are the input's kind"):
-        parse_stage(_filter_stage(row_type_id=NO_KIND_ROW_TYPE_ID))
+@pytest.mark.parametrize("spec", [
+    pytest.param(_aggregate_stage(group_by=["facility_id"], row_type_id=NO_KIND_ROW_TYPE_ID),
+                 id="grouped_aggregate"),
+    pytest.param(_aggregate_stage(group_by=[], row_type_id=NO_KIND_ROW_TYPE_ID),
+                 id="ungrouped_aggregate"),
+    pytest.param(_report_stage(row_type_id=NO_KIND_ROW_TYPE_ID), id="report"),
+    pytest.param(_frame_function_stage(row_type_id=NO_KIND_ROW_TYPE_ID), id="frame_function"),
+    pytest.param(_dedupe_stage(row_type_id=NO_KIND_ROW_TYPE_ID), id="dedupe"),
+    pytest.param(_filter_stage(row_type_id=NO_KIND_ROW_TYPE_ID), id="filter_rows"),
+])
+def test_no_stage_may_be_told_the_reserved_word(spec):
+    with pytest.raises(ValidationError, match="`no_kind` is never written"):
+        parse_stage(spec)
+
+
+def test_a_frame_function_names_a_word_like_any_other_reshaping_type():
+    stage = parse_stage(_frame_function_stage(row_type_id="facility"))
+    assert stage.resolve_own_row_type_id() == "facility"
 
 
 def test_no_row_type_may_be_declared_under_the_reserved_word():

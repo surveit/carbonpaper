@@ -27,6 +27,7 @@ from pydantic import (
     model_validator,
 )
 
+from app.models.row_types import NO_KIND_ROW_TYPE_ID
 from app.models.schema import (
     SourceRef,
     StageConfig,
@@ -450,6 +451,12 @@ class AbstractStage(AuthoredStageFields):
         row_type_id = self.row_type_id
         if row_type_id is None:
             return []
+        if row_type_id == NO_KIND_ROW_TYPE_ID:
+            return [
+                f"stage `{self.id}`: `{NO_KIND_ROW_TYPE_ID}` is never written — it is what "
+                f"a `report` and an `aggregate` with no `group_by` answer of their own "
+                f"accord, and any other stage's output rows are a kind of thing"
+            ]
         if not self.declares_its_own_row_type:
             return [
                 f"stage `{self.id}`: these `{self.type}` output rows are the input's kind "
@@ -467,6 +474,9 @@ class AbstractStage(AuthoredStageFields):
     @property
     def declares_its_own_row_type(self) -> bool:
         return declares_its_own_row_type(self.type)
+
+    def resolve_own_row_type_id(self) -> Optional[ID]:
+        return self.row_type_id
 
     # inputs[0] is the anchor/subject; a later input supplies columns, not rows.
     def list_row_supplying_input_ids(self) -> list[ID]:

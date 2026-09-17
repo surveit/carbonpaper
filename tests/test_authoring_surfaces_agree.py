@@ -100,8 +100,8 @@ def _read_row_type_bucket(anatomy: str, opening: str) -> list[str]:
 @pytest.mark.parametrize("stage_type", sorted(AUTHORABLE_TYPES))
 def test_the_anatomy_says_whether_each_type_names_what_its_rows_are(stage_type: str) -> None:
     anatomy = render_stage_anatomy()
-    naming = _read_row_type_bucket(anatomy, "answers `row_type_id`")
-    silent = _read_row_type_bucket(anatomy, "leaves it out")
+    naming = _read_row_type_bucket(anatomy, "answers:")
+    silent = _read_row_type_bucket(anatomy, "inherits its input's answer:")
     wanted = naming if declares_its_own_row_type(StageType(stage_type)) else silent
     assert stage_type in wanted
 

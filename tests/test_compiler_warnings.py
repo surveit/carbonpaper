@@ -132,7 +132,6 @@ def test_missing_description_outranks_missing_examples():
 def _report_stage(stage_id="pub", **kw):
     return m.parse_stage({
         "id": stage_id, "description": "Pub", "type": "report",
-        "row_type_id": "no_kind",
         "signature": {"form": "replaces"},
         "inputs": [{"id": "up"}],
         "report": {"format": "csv"},
@@ -243,10 +242,9 @@ def test_the_warning_says_what_the_reader_loses_not_that_a_field_is_empty():
                  if w.kind == "unnamed_rows"]
     assert warning.severity == "warning"
     assert warning.detail == (
-        "no `row_type_id` says what one of its output rows is, so nothing written "
-        "about them — this stage's own description, a review guide, a published "
-        "figure — can name the thing: name the project's word for these rows, or "
-        "`no_kind` where they are not a kind of thing"
+        "its rows are a new kind of thing and no `row_type_id` says what one of them "
+        "is, so nothing written about them — this stage's own description, a review "
+        "guide, a published figure — can name the thing"
     )
 
 
@@ -266,17 +264,9 @@ def _ungrouped_aggregate(**kw):
     })
 
 
-def test_an_ungrouped_aggregate_saying_nothing_still_owes_an_answer():
-    assert _kinds(_ungrouped_aggregate()) == ["unnamed_rows"]
-
-
-def test_saying_no_kind_clears_the_warning_as_a_word_does():
-    assert _kinds(_ungrouped_aggregate(row_type_id="no_kind")) == []
+def test_the_two_stages_that_answer_for_themselves_are_owed_no_word():
+    assert _kinds(_ungrouped_aggregate()) == []
     assert _kinds(_report_stage()) == []
-
-
-def test_a_report_saying_nothing_owes_an_answer_like_any_other_answering_type():
-    assert _kinds(_report_stage(row_type_id=None)) == ["unnamed_rows"]
 
 
 def test_unnamed_rows_sorts_above_the_kinds_that_leave_words_unchecked():

@@ -72,12 +72,14 @@ class ReportStage(CarriesPythonFunctionStage):
             ]
         return []
 
+    def resolve_own_row_type_id(self) -> Optional[ID]:
+        return NO_KIND_ROW_TYPE_ID
+
     def find_declared_row_type_issues(self, row_type_id: ID) -> list[str]:
-        if row_type_id == NO_KIND_ROW_TYPE_ID:
-            return []
         return [
             f"stage `{self.id}`: report emits files, not rows, so nothing it writes is a "
-            f"`{row_type_id}` — its `row_type_id` is `{NO_KIND_ROW_TYPE_ID}`, never a word"
+            f"`{row_type_id}` — a report's rows are not a kind of thing and it answers so "
+            f"itself, leaving nothing to write here"
         ]
 
 

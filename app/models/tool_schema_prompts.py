@@ -75,20 +75,12 @@ STAGE_EDIT_DESCRIPTION = "The stage to change, and the fields of it that change.
 
 STAGE_ROW_TYPE_ID_DESCRIPTION = (
     "Which of the project's row types ONE output row of this stage IS, by its id — the word a\n"
-    "reviewer meets in every sentence written about these rows. Answer it only where the rows\n"
-    "are this stage's own to name: a source's rows, one row per group, one per distinct key,\n"
-    "one per array element, one per reference match, a frame function's reshape, or a report.\n"
-    "LEAVE IT OUT on a stage that filters, sorts, enriches or maps its input — those rows are\n"
-    "still its input's kind of thing, and a second word for them splits one thing into two.\n"
-    "Name a row type this project has already declared, never a word you coin here.\n"
-    "Answer `no_kind` where the rows are not a kind of thing at all: a report, which emits\n"
-    "files rather than rows, and an aggregate with no `group_by`, whose one row is a figure\n"
-    "ABOUT the whole input population rather than one of the things counted. `no_kind` is an\n"
-    "ANSWER — leaving the field out instead says nobody has answered yet, and the stage carries\n"
-    "an `unnamed_rows` warning until someone does.\n"
-    "Worked examples: a dedupe taking rows of `inspection_visit` down to one row per facility\n"
-    "sets `row_type_id: \"facility\"`, and the filter_rows below it leaves the field out; the\n"
-    "aggregate totalling every fine in the state sets `row_type_id: \"no_kind\"`."
+    "reviewer meets in every sentence written about these rows. Name a row type this project\n"
+    "has already declared, never a word you coin here. LEAVE IT OUT on a stage that filters,\n"
+    "sorts, enriches or maps its input: those rows are still its input's kind of thing, and a\n"
+    "second word for them splits one thing into two. Worked example: a dedupe taking rows of\n"
+    "`inspection_visit` down to one row per facility sets `row_type_id: \"facility\"`, and the\n"
+    "filter_rows below it leaves the field out."
 )
 
 STAGE_TEST_DESCRIPTION = (

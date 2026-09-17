@@ -177,25 +177,19 @@ Results are recorded and replayed across runs only for `llm_transform` and
 enough that recomputing every row costs more than storing it."""
 
 _ROW_TYPE_NOTE = """\
-Row type — the methodology owner's own word for what ONE output row IS. That owner is
-who reads this workflow back: they did not write it, and they are deciding whether each
-stage did what their method says. What reaches them is prose YOU write — each stage's
-`description`, and the review guide for the version — and that prose can only name these
-rows if the workflow holds a word for them. `row_type_id` is where it holds one.
+Row type — the word for what ONE output row IS, and the definition under it. It is how
+precise language flows from what the input data IS, along the pipeline, into what the
+claims at the end SAY.
 
-Take the word from the project's Terms, which `read_terms` lists, and never coin one on
-the stage: a coined word is a second name for something the method already named, and a
-project export carrying one is refused. Worked example — a `dedupe` taking rows of
+The word comes from the project's Terms, which `read_terms` lists; a coined one is refused.
+A `dedupe` that drops duplicate rows of the same thing names its input's word again; one
+that collapses to one row per something coarser names that coarser thing — taking rows of
 `inspection_visit` down to one row per facility sets `"row_type_id": "facility"`, and the
-`enrich` below it sets nothing, because those rows are still facilities.
+`enrich` below it sets nothing, its rows still facilities.
 
-Some rows are not a kind of thing at all, and `"row_type_id": "no_kind"` is how to say so.
-A `report` emits files rather than rows; an `aggregate` with no `group_by` emits one row
-that is a figure ABOUT the whole input population rather than one of the things counted.
-Both of those answer `no_kind`. Answering it is not the same as leaving the field out:
-out says nobody has answered yet, and the stage carries an `unnamed_rows` warning until
-someone does. Worked example — an `aggregate` totalling every fine in the state sets
-`"row_type_id": "no_kind"`, and the `report` reading it sets `"no_kind"` too."""
+Two stages answer for themselves, and writing the field on either is refused: a `report`,
+which emits files, and an `aggregate` with no `group_by`, whose one row is a figure ABOUT
+the whole input population."""
 
 _NULLS = """\
 Absence is null, never a filled-in value. An unmatched join lands nulls; an aggregate
@@ -232,12 +226,12 @@ def _render_row_type_table() -> str:
     declaring = sorted(t for t in _catalog_types() if declares_its_own_row_type(t))
     inheriting = sorted(t for t in _catalog_types() if not declares_its_own_row_type(t))
     return "\n".join([
-        "Which types answer one. Fixed by type, like grain.",
-        f"  answers `row_type_id`: {_names(declaring)}",
-        f"  leaves it out, minting no new kind of row: {_names(inheriting)}",
-        "`report` always answers `no_kind`, and an `aggregate` answers `no_kind` when it "
-        "has no `group_by` and a word when it has one — each refused on write the other "
-        "way round. Setting the field at all on a type that leaves it out is refused too.",
+        "Which types answer what one of their output rows is. Fixed by type, like grain.",
+        f"  answers: {_names(declaring)}",
+        f"  inherits its input's answer: {_names(inheriting)}",
+        "You write that answer in `row_type_id`, except on a `report` and an `aggregate` "
+        "with no `group_by`, which answer for themselves and refuse the field. Setting "
+        "it on a type that inherits is refused too.",
     ])
 
 

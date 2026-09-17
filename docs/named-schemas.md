@@ -52,15 +52,16 @@ rows is, and only the seven types that answer for their own rows may carry it �
 thing, so it names none and `resolve_row_type_ids` (`app/models/workflow.py`) reads the
 word down the graph to it.
 
-One field, three states. Absent means nobody has answered, which is every stage written
-before the field existed; an answering type that leaves it absent raises the
-`unnamed_rows` compiler warning rather than being refused. A row type's id means these
-rows are that kind of thing. `NO_KIND_ROW_TYPE_ID` — the reserved id `no_kind`, which
-`RowType` refuses so a project can never coin it — means they are not a kind of thing at
-all: a `report` emits files rather than rows, and an `aggregate` with no `group_by` emits
-one figure ABOUT the whole input population. Absence cannot carry that answer, because
-both stage records dump with `exclude_none=True` and would strip an explicit null.
-Alembic `0022` backfills the two mechanical cases across every stored stage spec.
+Two stages emit rows that are not a kind of thing, and nobody writes that down: a
+`report` emits files rather than rows, and an `aggregate` with no `group_by` emits one
+figure ABOUT the whole input population. Both answer `NO_KIND_ROW_TYPE_ID` — the reserved
+id `no_kind`, which `RowType` refuses so a project can never coin it — out of
+`resolve_own_row_type_id`, which each of the two overrides and which
+`resolve_row_type_ids` asks of every stage alike. `find_row_type_issues` refuses
+`no_kind` as an authored value on every type, so the stored field carries two states, not
+three: the id of a row type the project declared, or absent — which is every stage
+written before the field existed, and which raises the `unnamed_rows` compiler warning on
+every answering type but those two.
 
 Storage is `app/services/terms.py`, the sole reader and writer of all three: one
 `StoredTerms` document per project in the `terms` collection of the document
@@ -86,8 +87,7 @@ imports. It is also the one place holding a project's stages and its row types a
 once, which is where a stage naming a word the row types do not hold is refused —
 `find_undeclared_row_type_issues`, naming the stage and the unknown word. A stage that
 leaves `row_type_id` unset names no word and trips nothing, which is every stage
-written before the field existed, and `no_kind` is exempt: it is not a word a project
-declares.
+written before the field existed.
 
 `render_terms` (also `app/models/terms.py`) is the one block every agent writing about
 a project is handed them in: the MCP `read_terms`/`write_terms` tools store them, the

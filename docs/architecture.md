@@ -26,13 +26,15 @@ runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data
   that effect; the eval gate depends on it) and `declares_its_own_row_type` (whether this
   type answers what its output rows are, rather than reading its input's answer down). The
   seven types that answer — `input_data`, `aggregate`, `dedupe`, `explode`, `expand`,
-  `python_frame_function`, `report` — may carry a `row_type_id`: either the project's word
-  for what ONE of those rows is, or `no_kind` (`app/models/row_types.py`, a reserved id no
-  `RowType` may take) where they are not a kind of thing at all. Absent is a third state —
-  nobody has answered — and raises the `unnamed_rows` compiler warning.
-  `find_row_type_issues` refuses the contradictions: the field on an inheriting type at all,
-  `no_kind` on a grouped `aggregate`, a word on an ungrouped one or on a `report`. The last
-  two are `find_declared_row_type_issues`, which each of those two types overrides.
+  `python_frame_function`, `report` — name the project's word for what ONE of those rows is
+  in `row_type_id`. `resolve_own_row_type_id` reads that answer back, and an answering type
+  whose answer comes back None raises the `unnamed_rows` compiler warning. Two overrides
+  carry the two answers nobody writes: a `report` and an `aggregate` with no `group_by` both
+  answer `no_kind` (`app/models/row_types.py`, a reserved id no `RowType` may take) whatever
+  the field holds, so neither is owed a word. `find_row_type_issues` refuses the
+  contradictions: `no_kind` as an authored value on any type, the field at all on an
+  inheriting type, and a word on a `report` or an ungrouped `aggregate` — the last through
+  `find_declared_row_type_issues`, which each of those two types overrides.
 - `stages/signature.py` — `TransformSignature`, the contract every stored stage declares
   about what it reads and writes. Form `extends`: output is the first input's rows plus
   `rewrites` (revised in place) and `adds` (new columns), every other anchor column
