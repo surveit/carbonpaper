@@ -34,7 +34,7 @@ class ClaimReviewResult(_Base):
     """What one review run produced: the merged answer, and every session behind it."""
 
     challenges: list[DraftChallenge]
-    session_ids: list[ID]
+    session_id: ID
 
 
 def find_claim_part_spans(text: str, parts: list[ClaimPart]) -> list[tuple[int, int] | None]:

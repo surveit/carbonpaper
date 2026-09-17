@@ -91,8 +91,8 @@ class ClaimReview(PersistedModel):
 
     claim_id: ID = Field(frozen=True)
     challenges: list[Challenge] = Field(frozen=True)
-    # Every review session in the order it ran, so a reader can open the transcripts.
-    session_ids: list[ID] = Field(frozen=True)
+    # The one session the review ran under, so a reader can open what it spent.
+    session_id: ID = Field(frozen=True)
 
     def save(self) -> None:
         # Frozen fields stop a mutation; this stops a fresh record with a stored id.

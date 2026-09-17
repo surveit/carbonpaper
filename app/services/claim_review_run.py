@@ -31,7 +31,7 @@ def start_claim_review(project_id: ID, claim_id: ID, *, model: str) -> str:
 
 def _finish_claim_review(project_id: ID, claim_id: ID, result: ClaimReviewResult) -> None:
     store_claim_review(project_id, claim_id, challenges=result.challenges,
-                       session_ids=result.session_ids)
+                       session_id=result.session_id)
 
 
 def _refuse_a_claim_already_reviewed(claim_id: ID) -> None:
