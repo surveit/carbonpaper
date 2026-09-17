@@ -100,7 +100,7 @@ def test_create_project_tool_and_status(tmp_path, monkeypatch):
 # ── the two terms tools ──────────────────────────────────────────────────────
 
 _FILING = {"id": "filing", "title": "Filing", "definition": "One disclosure a firm sent in."}
-_FILINGS = {"name": "filings", "title": "Filings", "row_type_id": "filing"}
+_FILINGS = {"name": "filings", "title": "Filings"}
 _FLAG = {"name": "flag", "definition": "Mark a row for a human to decide on."}
 
 
@@ -129,7 +129,7 @@ def test_written_terms_read_back_whole(tmp_path):
     )
 
     assert [r.id for r in written.row_types] == ["filing"]
-    assert [s.row_type_id for s in written.schemas.schemas] == ["filing"]
+    assert [s.name for s in written.schemas.schemas] == ["filings"]
     assert [v.name for v in written.verbs] == ["flag"]
     # Read back off disk, not echoed: what the project now says.
     assert server.read_terms(project_id=project_id) == written

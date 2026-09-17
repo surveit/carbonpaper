@@ -123,16 +123,14 @@ that back with your additions rather than sending only what is new.
 
 A row type is the methodology's word for what ONE ROW is: an `id` in
 snake_case and what it means. A verb carries its name and what it means.
-One word is written one way — there is no second spelling of it. A schema is a TABLE — a `name`, a `title`, the columns if you
-know them, and `row_type_id`, the row type one of its rows is. Many tables
-name the same row type, because a row type outlives the stages that filter,
-sort or enrich its rows. A word with no table behind it is a row type and
-nothing else; that is the ordinary case, not a half-finished one.
+One word is written one way — there is no second spelling of it. A schema
+is a TABLE — a `name`, a `title`, and the columns if you know them. A word
+with no table behind it is a row type and nothing else; that is the
+ordinary case, not a half-finished one.
 
 REFUSED WHOLE, with nothing written, where one word is written twice — a
-row type and a verb of the same name, or two row types, or two verbs — or
-where a schema names a row type you did not declare. The refusal names
-the repeated word. It is not a formality: a stage
+row type and a verb of the same name, or two row types, or two verbs. The
+refusal names the repeated word. It is not a formality: a stage
 description written in an ambiguous word leaves the reader unable to tell
 which thing it meant.
 

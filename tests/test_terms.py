@@ -16,44 +16,12 @@ from app.services.methodology import write_methodology
 
 _FLAG = Verb(name="flag", definition="Mark a row for a human to decide on.")
 _ISSUE = RowType(id="issue", title="Issue", definition="One thing a reader should look at.")
-_ISSUE_TEXT = NamedSchema(name="issue_text", title="Issue text", row_type_id="issue")
-_UNTYPED_TABLE = NamedSchema(name="issue_text", title="Issue text")
+_ISSUE_TEXT = NamedSchema(name="issue_text", title="Issue text")
 _NO_SCHEMAS = SchemaLibrary(schemas=[])
 _PROJECT = "vocab_project"
 
 
-# ── a table names the row type its rows are ──────────────────────────────────
-def test_a_schema_names_the_row_type_one_of_its_rows_is():
-    terms.write_terms(_PROJECT, Terms(
-        row_types=[_ISSUE], schemas=SchemaLibrary(schemas=[_ISSUE_TEXT]), verbs=[]))
-
-    assert terms.load_terms(_PROJECT).schemas.schemas[0].row_type_id == "issue"
-
-
-def test_many_schemas_may_name_the_same_row_type():
-    kept = NamedSchema(name="issue_kept", title="Issue kept", row_type_id="issue")
-    stored = Terms(
-        row_types=[_ISSUE], schemas=SchemaLibrary(schemas=[_ISSUE_TEXT, kept]), verbs=[])
-    assert [schema.row_type_id for schema in stored.schemas.schemas] == ["issue", "issue"]
-
-
-def test_a_schema_naming_no_row_type_is_kept():
-    stored = Terms(row_types=[], schemas=SchemaLibrary(schemas=[_UNTYPED_TABLE]), verbs=[])
-    assert stored.schemas.schemas[0].row_type_id is None
-
-
-def test_a_row_type_id_naming_a_row_type_nobody_declared_is_refused():
-    ghost_table = NamedSchema(name="issue_text", title="Issue text", row_type_id="ghost")
-    with pytest.raises(ValidationError, match="ghost"):
-        Terms(row_types=[], schemas=SchemaLibrary(schemas=[ghost_table]), verbs=[])
-
-
-def test_that_refusal_names_the_schema_that_pointed_at_it():
-    ghost_table = NamedSchema(name="issue_text", title="Issue text", row_type_id="ghost")
-    with pytest.raises(ValidationError, match="issue_text"):
-        Terms(row_types=[], schemas=SchemaLibrary(schemas=[ghost_table]), verbs=[])
-
-
+# ── what a row type and a table each carry ───────────────────────────────────
 def test_a_row_types_id_is_snake_case_like_a_schema_name():
     with pytest.raises(ValidationError):
         RowType(id="BadName", title="Bad", definition="A row.")
@@ -139,20 +107,6 @@ def test_a_stored_document_whose_words_repeat_is_refused():
         terms.load_terms(_PROJECT)
 
 
-def test_a_stored_schema_pointing_at_no_declared_row_type_is_refused():
-    StoredTerms(
-        id=f"{_PROJECT}/terms",
-        row_types=[],
-        schemas=SchemaLibrary(schemas=[
-            NamedSchema(name="issue_text", title="Issue text", row_type_id="ghost")
-        ]),
-        verbs=[],
-    ).save()
-
-    with pytest.raises(ValidationError, match="ghost"):
-        terms.load_terms(_PROJECT)
-
-
 def test_one_projects_terms_are_not_read_under_a_project_whose_id_it_extends():
     terms.write_terms(
         "venezuela_lobbying", Terms(row_types=[], schemas=_NO_SCHEMAS, verbs=[_FLAG]))
@@ -169,7 +123,7 @@ def _write_schema_file(projects_root, schema: NamedSchema) -> None:
 
 
 def test_schema_files_written_before_the_store_are_still_read(projects_root):
-    _write_schema_file(projects_root, _UNTYPED_TABLE)
+    _write_schema_file(projects_root, _ISSUE_TEXT)
 
     stored = terms.load_terms(_PROJECT)
     assert [schema.name for schema in stored.schemas.schemas] == ["issue_text"]
@@ -177,7 +131,7 @@ def test_schema_files_written_before_the_store_are_still_read(projects_root):
 
 
 def test_the_first_write_moves_a_project_into_the_store_for_good(projects_root):
-    _write_schema_file(projects_root, _UNTYPED_TABLE)
+    _write_schema_file(projects_root, _ISSUE_TEXT)
     terms.write_terms(_PROJECT, Terms(row_types=[], schemas=_NO_SCHEMAS, verbs=[_FLAG]))
 
     # The file is still there and is no longer what the project says.
@@ -208,7 +162,7 @@ def test_the_block_names_the_words_and_nothing_about_the_tables():
 
 def test_a_project_whose_only_entries_are_tables_renders_nothing_at_all():
     assert render_terms(
-        Terms(row_types=[], schemas=SchemaLibrary(schemas=[_UNTYPED_TABLE]), verbs=[])) == ""
+        Terms(row_types=[], schemas=SchemaLibrary(schemas=[_ISSUE_TEXT]), verbs=[])) == ""
 
 
 def test_the_block_carries_every_word_and_its_meaning():
@@ -238,7 +192,7 @@ def _render_terms_section(stored: Terms | None, unreadable: str = "") -> str:
 
 def test_the_section_shows_a_schema_with_no_columns_without_marking_it_short_of_any():
     html = _render_terms_section(
-        Terms(row_types=[], schemas=SchemaLibrary(schemas=[_UNTYPED_TABLE]), verbs=[])
+        Terms(row_types=[], schemas=SchemaLibrary(schemas=[_ISSUE_TEXT]), verbs=[])
     )
     assert "issue_text" in html          # never dropped for having no table
     assert "0 column" not in html        # a count would read as data missing
@@ -251,7 +205,6 @@ def test_the_section_shows_a_row_type_its_table_and_a_verb():
         name="firm_filings",
         title="Firm filings",
         kind="input",
-        row_type_id="firm",
         columns=[{"name": "firm_id", "type": "str", "nullable": False}],
     )
     html = _render_terms_section(Terms(
@@ -296,7 +249,7 @@ def _get_terms_page(tmp_path, stored: Terms | None):
 def test_the_route_renders_every_part_of_what_the_project_stored(tmp_path):
     firm_word = RowType(id="firm", title="Firm", definition="A company that filed.")
     firm_table = NamedSchema(
-        name="firm_filings", title="Firm filings", row_type_id="firm",
+        name="firm_filings", title="Firm filings",
         columns=[{"name": "firm_id", "type": "str", "nullable": False}],
     )
     response = _get_terms_page(tmp_path, Terms(

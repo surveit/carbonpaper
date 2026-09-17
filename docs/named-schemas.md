@@ -21,10 +21,6 @@ The contract, in `app/models/named_schemas.py`:
 
 - A **`NamedSchema`** is a `TableSchema` (columns + primary key) plus:
   - `name` — snake_case identity.
-  - `row_type_id` (optional) — the `RowType` one of its rows is (see Terms
-    below). The spellings a methodology writes that row type as belong to the
-    row type, not here: many tables hold rows of one, so a table is no place to
-    say what a word means.
   - `kind` (`SchemaKind`, optional) — where the table sits in the pipeline. A
     kind is a claim about where the rows come from:
     - `reference` — dimension / lookup / benchmark data we must SOURCE, not
@@ -41,14 +37,13 @@ The contract, in `app/models/named_schemas.py`:
 ## Terms — the row types, the tables and the verbs
 
 `app/models/terms.py` composes the three parts of a project's vocabulary: `Terms`
-is `list[RowType]` (`app/models/row_types.py` — `id`, `title`, `definition`,
-`also_written`: the methodology's word for what ONE ROW is) plus a `SchemaLibrary`
-(the tables, each naming on `row_type_id` the row type its rows are) plus
-`list[Verb]` (`name`, `definition`, `also_written`). Many tables name the same row
-type, because a row type outlives the stages that filter, sort or enrich its rows.
-A schema NAME addresses a table rather than saying a word, so it is not vocabulary.
-Constructing `Terms` refuses a word carried twice across the row types and the
-verbs, and a `row_type_id` naming no declared row type.
+is `list[RowType]` (`app/models/row_types.py` — `id`, `title`, `definition`: the
+methodology's word for what ONE ROW is) plus a `SchemaLibrary` (the tables) plus
+`list[Verb]` (`name`, `definition`). Nothing binds a table to the row type its rows
+are: the two halves sit side by side, and only the migration's join treats a shared
+name as a link. A schema NAME addresses a table rather than saying a word, so it is
+not vocabulary. Constructing `Terms` refuses a word carried twice across the row
+types and the verbs.
 
 Storage is `app/services/terms.py`, the sole reader and writer of all three: one
 `StoredTerms` document per project in the `terms` collection of the document
@@ -59,16 +54,11 @@ card and the status snapshot use, so one unreadable table does not blank a listi
 and `has_terms` is the same tolerant read behind the overview's "Agree the project's
 terms" — true of a project that agreed only words, with no table yet.
 
-`RowTypesAndSchemas` (also `app/models/terms.py`) is `Terms` without the verbs: the
-shape the data-model generator (`app/compiler/data_model.py`) submits, since a table
-carrying a `row_type_id` is refused unless the row type it names arrives beside it.
-`write_data_model` stores that answer and leaves the verbs a human already agreed.
-
 Projects authored before that collection existed hold their nouns as one file per
 schema under `<project>/schemas/`. Those files are still READ, by `load_terms`
 alone and only where the store holds no document for the project; nothing writes
 them, so the first `write_terms` moves that project into the store for good. Each
-file mints both a row type and the table pointing at it —
+file mints both a row type and the table holding its rows —
 `split_pre_row_type_nouns`, which alembic `0021` also runs over the stored
 documents it rewrites from v1, dropping the table of a stored noun that said
 nothing about one.

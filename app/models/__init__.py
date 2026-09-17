@@ -66,7 +66,6 @@ from app.models.terms import (
     Verb as Verb,
     render_terms as render_terms,
     validate_no_word_is_written_twice as validate_no_word_is_written_twice,
-    validate_row_type_ids_resolve as validate_row_type_ids_resolve,
 )
 from app.models.workflow_stage import (
     WorkflowStage as WorkflowStage,

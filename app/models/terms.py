@@ -31,7 +31,6 @@ class Terms(_Base):
     @model_validator(mode="after")
     def _validate_terms(self) -> "Terms":
         validate_no_word_is_written_twice(self.row_types, self.verbs)
-        validate_row_type_ids_resolve(self.row_types, self.schemas)
         return self
 
 
@@ -49,14 +48,6 @@ def validate_no_word_is_written_twice(row_types: list[RowType], verbs: list[Verb
     repeated = sorted({word for word in words if words.count(word) > 1})
     if repeated:
         raise ValueError(f"word(s) written twice: {repeated}")
-
-
-def validate_row_type_ids_resolve(row_types: list[RowType], schemas: SchemaLibrary) -> None:
-    declared = {row_type.id for row_type in row_types}
-    for schema in schemas.schemas:
-        if schema.row_type_id is not None and schema.row_type_id not in declared:
-            raise ValueError(
-                f"`{schema.name}`: row_type_id `{schema.row_type_id}` names no declared row type")
 
 
 # ─── The block every agent writing about a project is handed ─────────────────

@@ -27,10 +27,6 @@ NAMED_SCHEMA_DESCRIPTION = (
     "with foreign keys on its columns."
 )
 
-NAMED_SCHEMA_ROW_TYPE_ID_DESCRIPTION = (
-    "The `id` of the row type one row of this table is."
-)
-
 PYTHON_FRAME_FUNCTION_STAGE_TEST_DESCRIPTION = (
     "Any rows in → any rows out, or a refusal: a frame function may reshape freely."
 )

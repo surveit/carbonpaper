@@ -32,10 +32,6 @@ _ENTITY_COLUMNS = [NamedColumn(name="entity_id", type="str", nullable=False),
 _TINY_LIBRARY = SchemaLibrary(schemas=[NamedSchema(
     name="entity", kind=SchemaKind.input, title="Entity", columns=_ENTITY_COLUMNS,
 )])
-_TYPED_LIBRARY = SchemaLibrary(schemas=[NamedSchema(
-    name="entity", kind=SchemaKind.input, title="Entity", row_type_id="entity",
-    columns=_ENTITY_COLUMNS,
-)])
 _ENTITY = RowType(id="entity", title="Entity", definition="One company under the shell.")
 _FLAG = Verb(name="flag", definition="Mark a filing for a human to decide on.")
 
@@ -222,7 +218,7 @@ def test_a_bundle_carries_the_row_types_across_and_import_writes_them(tmp_path):
     workspace.set_projects_dir(source_examples)
 
     name = project.create_project("Words Source", "Count the entities.", source="test").id
-    terms.write_terms(name, Terms(row_types=[_ENTITY], schemas=_TYPED_LIBRARY))
+    terms.write_terms(name, Terms(row_types=[_ENTITY], schemas=_TINY_LIBRARY))
 
     wf = WorkflowFile.model_validate_json(export_project(name).to_json())
     assert wf.row_types == [_ENTITY]
@@ -230,7 +226,7 @@ def test_a_bundle_carries_the_row_types_across_and_import_writes_them(tmp_path):
     workspace.set_projects_dir(target_examples)
     imported = terms.load_terms(import_project(wf, name="words_target"))
     assert imported.row_types == [_ENTITY]
-    assert [schema.row_type_id for schema in imported.schemas.schemas] == ["entity"]
+    assert [schema.name for schema in imported.schemas.schemas] == ["entity"]
 
 
 def test_a_bundle_written_before_row_types_existed_still_imports(tmp_path):
@@ -244,12 +240,3 @@ def test_a_bundle_written_before_row_types_existed_still_imports(tmp_path):
     project_id = import_project(wf, name="no_row_types_target")
     assert terms.load_terms(project_id).row_types == []
 
-
-def test_a_bundle_whose_table_names_a_row_type_it_left_out_is_refused(tmp_path):
-    # Without `row_types` on the bundle this is every export that agreed a word.
-    bundle = json.dumps({
-        "name": "dangling", "document": "# doc", "model": "m", "source": "s",
-        "data_model": _TYPED_LIBRARY.model_dump(mode="json"), "stages": [],
-    })
-    with pytest.raises(ValidationError, match="entity"):
-        WorkflowFile.model_validate_json(bundle)

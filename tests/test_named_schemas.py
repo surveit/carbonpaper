@@ -61,29 +61,6 @@ def test_named_column_carries_reference():
     assert s.columns[0].references == "company.company_id"
 
 
-def test_named_schema_names_the_row_type_one_of_its_rows_is():
-    s = m.NamedSchema.model_validate(
-        {"name": "company_filings", "kind": "input", "title": "Company filings",
-         "row_type_id": "company", "columns": []}
-    )
-    assert s.row_type_id == "company"
-
-
-def test_a_schema_naming_no_row_type_is_valid():
-    # Whether it resolves is Terms', which holds both halves — a library holds one.
-    assert m.NamedSchema.model_validate(
-        {"name": "scratch", "title": "Scratch", "columns": []}
-    ).row_type_id is None
-
-
-def test_a_row_type_id_is_not_checked_against_anything_a_library_holds():
-    lib = m.parse_schema_library(
-        [{"name": "cell", "kind": "computed", "title": "Cell",
-          "row_type_id": "nothing_declares_this", "columns": []}]
-    )
-    assert lib.schemas[0].row_type_id == "nothing_declares_this"
-
-
 def test_a_schema_no_longer_carries_its_own_spellings():
     with pytest.raises(ValidationError):
         m.NamedSchema.model_validate(

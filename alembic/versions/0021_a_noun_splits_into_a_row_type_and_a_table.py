@@ -48,7 +48,7 @@ def _drop_spellings(verb: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in verb.items() if key != "also_written"}
 
 
-_WHAT_A_WORD_ALONE_SAID = ("name", "title", "description", "row_type_id")
+_WHAT_A_WORD_ALONE_SAID = ("name", "title", "description")
 
 
 def _holds_rows(table: dict[str, Any]) -> bool:
@@ -60,35 +60,20 @@ def fuse_row_types_back_into_nouns(document: dict[str, Any]) -> bool:
     if row_types is None:
         return False
     tables = document["schemas"]["schemas"]
-    held_by = _index_tables_by_the_row_type_they_hold(tables)
-    nouns = [_fuse_one(row_type, held_by.get(row_type["id"])) for row_type in row_types]
-    nouns += [table for table in tables if not table.get("row_type_id")]
+    # The split named the row type after the noun and left the table under that same name.
+    table_by_name = {table["name"]: table for table in tables}
+    words = {row_type["id"] for row_type in row_types}
+    nouns = [_fuse_one(row_type, table_by_name.get(row_type["id"])) for row_type in row_types]
+    nouns += [table for table in tables if table["name"] not in words]
     document["nouns"] = {"schemas": nouns}
     document["verbs"] = [{**verb, "also_written": []} for verb in document.get("verbs", [])]
     del document["row_types"], document["schemas"]
     return True
 
 
-def _index_tables_by_the_row_type_they_hold(
-    tables: list[dict[str, Any]],
-) -> dict[str, dict[str, Any]]:
-    held_by: dict[str, dict[str, Any]] = {}
-    for table in tables:
-        row_type_id = table.get("row_type_id")
-        if row_type_id is None:
-            continue
-        if row_type_id in held_by:
-            raise ValueError(
-                f"`{held_by[row_type_id]['name']}` and `{table['name']}` both hold "
-                f"`{row_type_id}` rows, which one noun cannot say"
-            )
-        held_by[row_type_id] = table
-    return held_by
-
-
 def _fuse_one(row_type: dict[str, Any], table: dict[str, Any] | None) -> dict[str, Any]:
     if table is not None:
-        return {k: v for k, v in table.items() if k != "row_type_id"}
+        return table
     return {
         "name": row_type["id"],
         "title": row_type["title"],

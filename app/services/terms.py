@@ -64,7 +64,7 @@ def split_pre_row_type_nouns(nouns: list[JsonDict]) -> UncheckedRowTypesAndSchem
     """Each noun mints the row type its rows are AND the table holding them, in its own order."""
     return UncheckedRowTypesAndSchemas(
         row_types=[_mint_row_type(noun) for noun in nouns],
-        schemas=[_point_table_at_its_row_type(noun) for noun in nouns],
+        schemas=[_mint_table(noun) for noun in nouns],
     )
 
 
@@ -80,9 +80,8 @@ def _mint_row_type(noun: JsonDict) -> JsonDict:
     }
 
 
-def _point_table_at_its_row_type(noun: JsonDict) -> JsonDict:
-    table = {key: value for key, value in noun.items() if key != "also_written"}
-    return {**table, "row_type_id": noun["name"]}
+def _mint_table(noun: JsonDict) -> JsonDict:
+    return {key: value for key, value in noun.items() if key != "also_written"}
 
 
 def _read_pre_store_terms(project_id: str) -> Terms:

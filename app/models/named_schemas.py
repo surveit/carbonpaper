@@ -17,12 +17,10 @@ from app.models.schema import (
     _Base,
     _SNAKE_RE,
 )
-from app.core.ids import ID
 from app.core.utils import format_errors
 from app.models.tool_schema_prompts import (
     NAMED_COLUMN_DESCRIPTION,
     NAMED_SCHEMA_DESCRIPTION,
-    NAMED_SCHEMA_ROW_TYPE_ID_DESCRIPTION,
     SCHEMA_LIBRARY_DESCRIPTION,
 )
 
@@ -51,9 +49,6 @@ class NamedSchema(TableSchema):
     model_config = ConfigDict(json_schema_extra={"description": NAMED_SCHEMA_DESCRIPTION})
 
     name: str
-    row_type_id: Optional[ID] = Field(
-        default=None, description=NAMED_SCHEMA_ROW_TYPE_ID_DESCRIPTION
-    )
     kind: Optional[SchemaKind] = None
     title: str
     columns: list[NamedColumn] = Field(default_factory=list)

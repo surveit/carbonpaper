@@ -53,7 +53,7 @@ def test_every_noun_mints_a_row_type_and_only_the_tables_stay_tables():
         "record", "source", "document", "passage", "claim"]
 
 
-def test_the_word_with_no_table_keeps_its_definition_and_the_table_points_at_its_own():
+def test_the_word_with_no_table_keeps_its_definition_and_the_table_keeps_its_columns():
     # mill carries the register's definition and no columns; record carries the 22 columns.
     revision = _load_revision()
     document = _palm_oil_terms()
@@ -64,7 +64,6 @@ def test_the_word_with_no_table_keeps_its_definition_and_the_table_points_at_its
     assert by_id["mill"]["definition"].startswith("One physical palm oil mill")
     assert "mill" not in {t["name"] for t in document["schemas"]["schemas"]}
     record = next(t for t in document["schemas"]["schemas"] if t["name"] == "record")
-    assert record["row_type_id"] == "record"
     assert len(record["columns"]) == 22
 
 
@@ -100,7 +99,7 @@ def test_the_split_document_is_what_the_record_now_loads():
 
     stored = StoredTerms.model_validate(document)
     assert [row_type.id for row_type in stored.row_types][:2] == ["mill", "record"]
-    assert [schema.row_type_id for schema in stored.schemas.schemas] == [
+    assert [schema.name for schema in stored.schemas.schemas] == [
         "record", "source", "document", "passage", "claim"]
 
 
@@ -152,23 +151,6 @@ def test_a_downgrade_over_an_unsplit_store_changes_nothing():
 
     assert revision.fuse_row_types_back_into_nouns(document) is False
     assert document == _palm_oil_terms()
-
-
-def test_two_tables_holding_one_row_type_stop_the_downgrade():
-    """What the split cannot undo: one noun said both the word and the one table."""
-    revision = _load_revision()
-    document = {
-        "row_types": [{"id": "mill", "title": "Mill", "definition": "A mill.",
-                       "also_written": []}],
-        "schemas": {"schemas": [
-            {"name": "mill_seen", "title": "Mill seen", "row_type_id": "mill", "columns": []},
-            {"name": "mill_kept", "title": "Mill kept", "row_type_id": "mill", "columns": []},
-        ]},
-        "verbs": [],
-    }
-
-    with pytest.raises(ValueError, match="mill_seen"):
-        revision.fuse_row_types_back_into_nouns(document)
 
 
 def test_a_noun_carrying_no_name_stops_the_split():

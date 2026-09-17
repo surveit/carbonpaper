@@ -34,7 +34,6 @@
     <span class="muted">— {{ table.title }}</span>
     {# `kind` holds a plain string after validation (app.models.schema._Base). #}
     {% if table.kind %}<span class="type-tag {{ kind_class.get(table.kind, 'custom') }}">{{ kind_glyph.get(table.kind, '') }} {{ table.kind }}</span>{% endif %}
-    {% if table.row_type_id %}<span class="fact-chip">row type: {{ table.row_type_id }}</span>{% endif %}
     {% if table.columns %}<span class="dm-rows">{{ table.columns|length }} column{% if table.columns|length != 1 %}s{% endif %}</span>{% endif %}
 {%- endmacro %}
 
