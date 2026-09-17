@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.core.errors import ClaimReviewFailed
-from app.services import claim_review
+from app.services import claim_review_run
 from app.services import claims as claims_service
 from app.services import project as project_service
 from app.services.errors import ClaimRefused, ClaimReviewRefused
@@ -62,7 +62,7 @@ async def submit_claim(request: Request, project_id: str, run_id: str, slug: str
 async def attack_claim(project_id: str, claim_id: str):
     # async: start_claim_review calls asyncio.create_task, needing a running loop.
     validate_project_or_404(project_id)
-    session_id = _refusing_400(lambda: claim_review.start_claim_review(
+    session_id = _refusing_400(lambda: claim_review_run.start_claim_review(
         project_id, claim_id, model=_read_model(project_id)))
     return JSONResponse({"ok": True, "session": session_id})
 
@@ -77,7 +77,7 @@ async def skip_output(project_id: str, run_id: str, slug: str):
 def _attack_what_the_journalist_wrote(project_id: str, claim_id: str) -> None:
     """A claim whose attack could not start still stands; its page will say it was not reviewed."""
     try:
-        claim_review.start_claim_review(project_id, claim_id, model=_read_model(project_id))
+        claim_review_run.start_claim_review(project_id, claim_id, model=_read_model(project_id))
     except (ClaimReviewFailed, OSError) as exc:
         _LOG.warning("claim %s stands submitted but was not reviewed: %s", claim_id, exc)
 

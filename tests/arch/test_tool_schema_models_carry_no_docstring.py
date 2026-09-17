@@ -13,7 +13,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.claim_review import ChallengesAnswer, OrchestratorAnswer
+from app.models.claim_review import ChallengesAnswer
 from app.models.review_guide import ReviewGuideDraft
 from app.compiler.stage_tests_submission import SubmittedCase
 from app.models.stages.stage_base import StageTest
@@ -29,7 +29,6 @@ _SCHEMA_ROOTS: tuple[type[BaseModel], ...] = (
     StageTest,
     SubmittedCase,
     ChallengesAnswer,
-    OrchestratorAnswer,
 )
 
 # A target_schema the source computes rather than names, each mapped to the listed root

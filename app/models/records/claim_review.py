@@ -22,9 +22,8 @@ class ChallengeKind(str, Enum):
     gap = "gap"
 
 
+# Ordered: the page folds the quiet ones behind a count and sorts the rest by weight.
 class Severity(IntEnum):
-    """Ordered: the page folds the quiet ones behind a count and sorts the rest by weight."""
-
     noted = 0
     minor = 1
     major = 2
@@ -50,9 +49,8 @@ class ClaimPart(_Base):
     )
 
 
+# What a reviewer answers: no project, which it cannot read off the evidence pool.
 class DraftChallenge(_Base):
-    """What a reviewer answers: no project, which it cannot read off the evidence pool."""
-
     kind: ChallengeKind = Field(description="What sort of stretch this is.")
     claim_part: ClaimPart | None = Field(
         default=None,

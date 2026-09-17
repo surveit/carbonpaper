@@ -7,7 +7,6 @@ from pydantic import ValidationError
 from app.models.citations import StageCitation, StageOutputCellCitation
 from app.models.claim_review import (
     ChallengesAnswer,
-    OrchestratorAnswer,
     find_claim_part_spans,
 )
 from app.models.records.claim_review import (
@@ -105,5 +104,4 @@ def test_every_field_an_agent_fills_on_a_cell_citation_is_described():
 def test_no_answer_carries_a_suggested_rewrite():
     with pytest.raises(ValidationError):
         ChallengesAnswer.model_validate({"challenges": [], "rewrites": []})
-    with pytest.raises(ValidationError):
-        OrchestratorAnswer.model_validate({"challenges": [], "summary": "s", "rewrites": []})
+

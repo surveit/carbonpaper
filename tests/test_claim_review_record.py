@@ -9,7 +9,7 @@ from app.models.records.claim_review import ClaimReview
 
 _FIELDS = dict(
     claim_id="c1", challenges=[],
-    summary="Nothing in the run backs it.", session_ids=["session-parts", "session-data"],
+    session_ids=["session-parts", "session-data"],
 )
 
 
@@ -22,7 +22,7 @@ def test_a_review_is_stored_and_read_back_by_claim():
     review.save()
 
     [held] = ClaimReview.find(claim_id="c1")
-    assert held.summary == review.summary and held.challenges == review.challenges
+    assert held.challenges == review.challenges
     assert held.session_ids == ["session-parts", "session-data"]
 
 

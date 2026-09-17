@@ -109,12 +109,12 @@ def test_the_context_pre_fills_from_the_newest_standing_claim(tmp_path):
     assert "nothing — the same claim" in page
 
 
-def test_submitting_writes_the_sentence_puts_it_in_review_and_attacks_it(tmp_path, monkeypatch):
+def test_submitting_writes_the_sentence_puts_it_in_review_and_reviews_it(tmp_path, monkeypatch):
     client = _a_run(tmp_path)
-    attacks: list[str] = []
+    reviewed: list[str] = []
     monkeypatch.setattr(
-        claims_router.claim_review, "start_claim_attack",
-        lambda project_id, claim_id, *, model: attacks.append(claim_id))
+        claims_router.claim_review_run, "start_claim_review",
+        lambda project_id, claim_id, *, model: reviewed.append(claim_id))
 
     response = client.post(f"{_BASE}/submit/ai-spend", data=_FORM)
 
@@ -122,7 +122,7 @@ def test_submitting_writes_the_sentence_puts_it_in_review_and_attacks_it(tmp_pat
     [claim] = Claim.find(created_by_project_id=_PROJECT)
     assert (claim.text, claim.status) == (_SENTENCE, "submitted")
     assert claim.context["period_start"] == "2026-01-01"
-    assert attacks == [claim.id]
+    assert reviewed == [claim.id]
 
 
 def test_a_claim_with_no_sentence_is_refused(tmp_path):
