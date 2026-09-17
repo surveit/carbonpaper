@@ -103,7 +103,6 @@ ChallengeCitation = Annotated[
 
 
 # ── the same four, stamped with the project when a review is stored ──
-# A reviewer cannot read the project off the pool, so it is never asked for one.
 class AddressedStageOutputCellCitation(StageOutputCellCitation):
     project_id: ID
 
