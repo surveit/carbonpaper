@@ -477,3 +477,141 @@ def test_sort_stages_by_dependency_ignores_inputs_from_outside_the_given_set():
 def test_sort_stages_by_dependency_raises_on_a_cycle():
     with pytest.raises(ValueError, match="cyclic"):
         m.workflow.sort_stages_by_dependency([_build_stage_draft("a", ["b"]), _build_stage_draft("b", ["a"])])
+
+
+# ─── The row type a stage's output rows are (resolve_row_type_ids) ────────────
+# Six types declare a row type of their own; every other type reads its input's
+# down to itself, and None means nothing in the ancestry ever said.
+_KN = {"columns": [{"name": "k", "type": "str", "nullable": True},
+                   {"name": "n", "type": "int", "nullable": True}]}
+_KT = {"columns": [{"name": "k", "type": "str", "nullable": True},
+                   {"name": "total", "type": "int", "nullable": True}]}
+
+
+def _rows_of(stage_id, row_type_id=None, columns=_KN):
+    return S(id=stage_id, type="input_data", row_type_id=row_type_id,
+             connector={"kind": "file"},
+             signature={"form": "replaces", "produces": columns["columns"]})
+
+
+def _kept_rows(stage_id, upstream, columns=_KN):
+    return S(id=stage_id, type="filter_rows", inputs=[_in(upstream)],
+             filter={"code": "def should_include(row): return True"},
+             signature={"form": "extends",
+                        "reads": [{"input": upstream, "columns": columns["columns"]}]})
+
+
+def _totalled(stage_id, upstream, group_by, row_type_id=None):
+    grouped = [c for c in _KN["columns"] if c["name"] in group_by]
+    total = {"name": "total", "type": "int", "nullable": True}
+    return S(id=stage_id, type="aggregate", inputs=[_in(upstream)], row_type_id=row_type_id,
+             signature={"form": "replaces",
+                        "reads": [{"input": upstream,
+                                   "columns": grouped + [_KN["columns"][1]]}],
+                        "produces": grouped + [total]},
+             aggregate={"group_by": list(group_by),
+                        "aggregations": [{"output_column": "total", "formula": "sum",
+                                          "value_column": "n"}]})
+
+
+def _enriched(stage_id, subject, reference):
+    return S(id=stage_id, type="enrich", inputs=[_in(subject), _in(reference)],
+             join={"keys": [{"left": "k", "right": "y"}], "enrich_with": {"y": "y"}},
+             signature={"form": "extends",
+                        "reads": [{"input": subject, "columns": _K["columns"]},
+                                  {"input": reference, "columns": _Y["columns"]}],
+                        "adds": _Y["columns"]})
+
+
+def _stacked(stage_id, upstreams):
+    return S(id=stage_id, type="union", inputs=[_in(u) for u in upstreams], union={},
+             signature={"form": "extends", "reads": [], "adds": [], "rewrites": []})
+
+
+def test_the_declared_row_type_reads_down_a_chain_of_inheriting_stages():
+    stages = [parse_stage(s) for s in (
+        _rows_of("load", row_type_id="filing"),
+        _kept_rows("recent", "load"),
+        _kept_rows("recent_and_large", "recent"),
+        _kept_rows("still_open", "recent_and_large"),
+    )]
+    assert m.resolve_row_type_ids(stages) == {
+        "load": "filing", "recent": "filing",
+        "recent_and_large": "filing", "still_open": "filing",
+    }
+
+
+def test_a_grouped_aggregate_hands_the_stages_below_it_a_new_word():
+    stages = [parse_stage(s) for s in (
+        _rows_of("load", row_type_id="visit"),
+        _kept_rows("recent", "load"),
+        _totalled("per_facility", "recent", ["k"], row_type_id="facility"),
+        _kept_rows("fined", "per_facility", columns=_KT),
+    )]
+    assert m.resolve_row_type_ids(stages) == {
+        "load": "visit", "recent": "visit",
+        "per_facility": "facility", "fined": "facility",
+    }
+
+
+def test_an_ungrouped_aggregate_reads_its_inputs_word_through():
+    stages = [parse_stage(s) for s in (
+        _rows_of("load", row_type_id="visit"),
+        _totalled("one_figure", "load", []),
+    )]
+    assert m.resolve_row_type_ids(stages)["one_figure"] == "visit"
+
+
+def test_an_enrich_takes_its_subjects_word_and_not_its_references():
+    stages = [parse_stage(s) for s in (
+        _rows_of("filings", row_type_id="filing", columns=_K),
+        _rows_of("lobbyists", row_type_id="lobbyist", columns=_Y),
+        _enriched("filings_with_lobbyist", "filings", "lobbyists"),
+    )]
+    assert m.resolve_row_type_ids(stages)["filings_with_lobbyist"] == "filing"
+
+
+def test_a_workflow_where_nothing_declares_resolves_to_no_word_at_all():
+    stages = [parse_stage(s) for s in (_rows_of("load"), _kept_rows("recent", "load"))]
+    assert m.resolve_row_type_ids(stages) == {"load": None, "recent": None}
+
+
+def test_a_union_of_agreeing_inputs_keeps_their_word():
+    stages = [parse_stage(s) for s in (
+        _rows_of("state_filings", row_type_id="filing"),
+        _rows_of("federal_filings", row_type_id="filing"),
+        _stacked("all_filings", ["state_filings", "federal_filings"]),
+    )]
+    assert m.validate_workflow(stages) == []
+    assert m.resolve_row_type_ids(stages)["all_filings"] == "filing"
+
+
+def test_a_union_of_two_kinds_of_thing_is_flagged_naming_both():
+    stages = [parse_stage(s) for s in (
+        _rows_of("state_filings", row_type_id="filing"),
+        _rows_of("mills", row_type_id="mill"),
+        _stacked("stacked", ["state_filings", "mills"]),
+    )]
+    issues = m.validate_workflow(stages)
+    assert len(issues) == 1
+    assert "`stacked`" in issues[0]
+    assert "`filing`" in issues[0] and "`mill`" in issues[0]
+
+
+def test_parse_workflow_refuses_a_union_of_two_kinds_of_thing():
+    with pytest.raises(ValidationError, match="one kind of thing"):
+        m.parse_workflow([
+            _rows_of("state_filings", row_type_id="filing"),
+            _rows_of("mills", row_type_id="mill"),
+            _stacked("stacked", ["state_filings", "mills"]),
+        ])
+
+
+def test_a_union_input_with_no_word_does_not_disagree_with_one_that_has_it():
+    stages = [parse_stage(s) for s in (
+        _rows_of("state_filings", row_type_id="filing"),
+        _rows_of("unnamed_rows"),
+        _stacked("stacked", ["state_filings", "unnamed_rows"]),
+    )]
+    assert m.validate_workflow(stages) == []
+    assert m.resolve_row_type_ids(stages)["stacked"] == "filing"

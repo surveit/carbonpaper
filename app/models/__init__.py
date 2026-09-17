@@ -42,6 +42,7 @@ from app.models.workflow import (
     find_stages_reaching_report as find_stages_reaching_report,
     find_stages_upstream_of as find_stages_upstream_of,
     parse_workflow as parse_workflow,
+    resolve_row_type_ids as resolve_row_type_ids,
     resolve_workflow_stages as resolve_workflow_stages,
     validate_inputs_resolve as validate_inputs_resolve,
     validate_report_is_terminal as validate_report_is_terminal,

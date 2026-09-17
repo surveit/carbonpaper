@@ -456,6 +456,10 @@ class AbstractStage(AuthoredStageFields):
     def declares_its_own_row_type(self) -> bool:
         return declares_its_own_row_type(self.type)
 
+    # inputs[0] is the anchor/subject; a later input supplies columns, not rows.
+    def list_row_supplying_input_ids(self) -> list[ID]:
+        return self.input_ids[:1]
+
 
 def find_stage_test_class(stage_cls: type[AbstractStage]) -> type[StageTest]:
     sequence_type, _none_type = get_args(stage_cls.model_fields["tests"].annotation)
