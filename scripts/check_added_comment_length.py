@@ -14,7 +14,7 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _PROSE_CHAR_CEILING = 100
-_GOVERNED_PREFIXES = ("app/", "tests/")
+_GOVERNED_PREFIXES = ("app/", "tests/", "evals/")
 
 _HUNK_HEADER = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 _TOOL_DIRECTIVE = re.compile(r"^(noqa\b|type:\s*ignore\b|pragma:\s*no cover\b|pyright:\s*ignore\b)")
@@ -144,7 +144,7 @@ def _describe(span: ProseSpan) -> str:
 
 def _run_git_diff(base: str, head: str, repo_root: Path) -> str:
     result = subprocess.run(
-        ["git", "diff", "--no-color", "-U0", f"{base}...{head}", "--", "app", "tests"],
+        ["git", "diff", "--no-color", "-U0", f"{base}...{head}", "--", *_GOVERNED_PREFIXES],
         cwd=repo_root,
         capture_output=True,
         text=True,

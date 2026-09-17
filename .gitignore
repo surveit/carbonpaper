@@ -23,6 +23,9 @@ build/
 examples/
 saydo/
 
+# Nothing under an eval's passes/ directory in evals/ is committed.
+evals/*/passes/
+
 # Local process artifacts — brainstorming specs, plans, spikes, and scratch
 # scripts stay on the working machine, not in the repo/PRs.
 docs/superpowers/

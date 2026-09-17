@@ -1,9 +1,4 @@
-"""Architecture: every module docstring in ``app/`` and ``tests/`` at or under 5
-physical lines, no baseline; `_JUSTIFIED_EXCEPTIONS` (symbol-keyed, reason-mandatory,
-empty today) is meant to stay very rare — normally cut the docstring or move the
-content to docs/. Blank lines inside the docstring count, so a two-paragraph one
-measures over the ceiling by design: the rule forces one contiguous block.
-"""
+"""Architecture: a module docstring's physical lines are capped, counting blank lines inside it."""
 from __future__ import annotations
 
 import ast
@@ -17,11 +12,14 @@ from arch.test_complexity_ratchet import _SOURCE_EXEMPT_PARTS, find_app_source_f
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _APP_ROOT = _REPO_ROOT / "app"
 _TESTS_ROOT = _REPO_ROOT / "tests"
+_EVALS_ROOT = _REPO_ROOT / "evals"
 _DOCSTRING_LINE_CEILING = 5
 
 # The complexity ratchet's exemptions, minus "tests" — this rule governs the test
 # tree too, so a directory named `tests` inside it must stay in scope.
 _TESTS_EXEMPT_PARTS = _SOURCE_EXEMPT_PARTS - {"tests"}
+# Nothing under an eval's passes/ is committed, and loading code may write a .py there.
+_EVALS_EXEMPT_PARTS = _TESTS_EXEMPT_PARTS | {"passes"}
 
 # Modules whose docstring is allowed past the ceiling, each mapped to the written
 # reason it earned that. Keyed on the SYMBOL — here the repo-relative posix module
@@ -41,16 +39,20 @@ class ModuleDocstring:
     lines: int
 
 
-def find_governed_files(app_root: Path, tests_root: Path) -> list[Path]:
-    return find_app_source_files(app_root) + find_python_files(tests_root)
+def find_governed_files(app_root: Path, tests_root: Path, evals_root: Path) -> list[Path]:
+    return (
+        find_app_source_files(app_root)
+        + find_python_files(tests_root, _TESTS_EXEMPT_PARTS)
+        + find_python_files(evals_root, _EVALS_EXEMPT_PARTS)
+    )
 
 
-def find_python_files(root: Path) -> list[Path]:
+def find_python_files(root: Path, exempt: set[str]) -> list[Path]:
     files = [
         path
         for path in sorted(root.rglob("*.py"))
         if not any(
-            part.startswith(".") or part in _TESTS_EXEMPT_PARTS
+            part.startswith(".") or part in exempt
             for part in path.relative_to(root).parts
         )
     ]
@@ -89,11 +91,11 @@ def find_ratchet_violations(
 
 def test_module_docstrings_do_not_exceed_the_ratchet() -> None:
     measurements = measure_module_docstrings(
-        find_governed_files(_APP_ROOT, _TESTS_ROOT), _REPO_ROOT
+        find_governed_files(_APP_ROOT, _TESTS_ROOT, _EVALS_ROOT), _REPO_ROOT
     )
     offenders = find_ratchet_violations(measurements, _JUSTIFIED_EXCEPTIONS)
     assert not offenders, (
-        f"module-docstring ratchet (every module under app/ and tests/): a module "
+        f"module-docstring ratchet (every module under app/, tests/ and evals/): a module "
         f"docstring must be at most {_DOCSTRING_LINE_CEILING} physical lines, with no "
         "baseline. Write one line of what's in the file, plus at most the one or two "
         "lines carrying a real gotcha or non-obvious invariant; architecture narration "
@@ -223,14 +225,32 @@ def test_justified_exceptions_ships_empty_and_every_entry_carries_a_reason() -> 
 
 def test_find_python_files_raises_when_root_has_no_python_files(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="governs no source files"):
-        find_python_files(tmp_path)
+        find_python_files(tmp_path, _TESTS_EXEMPT_PARTS)
 
 
 def test_find_python_files_returns_the_python_files_in_the_root(tmp_path: Path) -> None:
     _write_module(tmp_path, "x = 1\n", name="a.py")
     _write_module(tmp_path, "x = 1\n", name="b.py")
     (tmp_path / "notes.txt").write_text("x", encoding="utf-8")
-    assert [path.name for path in find_python_files(tmp_path)] == ["a.py", "b.py"]
+    assert [path.name for path in find_python_files(tmp_path, _TESTS_EXEMPT_PARTS)] == [
+        "a.py",
+        "b.py",
+    ]
+
+
+def test_find_python_files_skips_a_pass_folder_only_under_the_evals_exemption(
+    tmp_path: Path,
+) -> None:
+    pass_dir = tmp_path / "fixed_output" / "passes" / "20260915T120000"
+    pass_dir.mkdir(parents=True)
+    _write_module(pass_dir, "x = 1\n", name="in_a_pass.py")
+    _write_module(tmp_path, "x = 1\n", name="top.py")
+
+    assert [path.name for path in find_python_files(tmp_path, _EVALS_EXEMPT_PARTS)] == ["top.py"]
+    assert [path.name for path in find_python_files(tmp_path, _TESTS_EXEMPT_PARTS)] == [
+        "in_a_pass.py",
+        "top.py",
+    ]
 
 
 def test_find_python_files_recurses_into_a_subpackage_but_skips_exempt_parts(tmp_path: Path) -> None:
@@ -241,22 +261,32 @@ def test_find_python_files_recurses_into_a_subpackage_but_skips_exempt_parts(tmp
     cache.mkdir()
     _write_module(cache, "x = 1\n", name="stale.py")
     _write_module(tmp_path, "x = 1\n", name="top.py")
-    assert [path.name for path in find_python_files(tmp_path)] == ["nested.py", "top.py"]
+    assert [path.name for path in find_python_files(tmp_path, _TESTS_EXEMPT_PARTS)] == [
+        "nested.py",
+        "top.py",
+    ]
 
 
 def test_find_python_files_ignores_a_dot_directory_in_the_scanned_root_prefix(tmp_path: Path) -> None:
     root = tmp_path / ".claude" / "worktrees" / "x" / "arch"
     root.mkdir(parents=True)
     _write_module(root, "x = 1\n")
-    assert [path.name for path in find_python_files(root)] == ["m.py"]
+    assert [path.name for path in find_python_files(root, _TESTS_EXEMPT_PARTS)] == ["m.py"]
 
 
-def test_find_governed_files_covers_app_and_the_whole_tests_tree() -> None:
+def test_find_governed_files_raises_when_the_evals_root_has_no_python_files(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="governs no source files"):
+        find_governed_files(_APP_ROOT, _TESTS_ROOT, tmp_path)
+
+
+def test_find_governed_files_covers_app_the_whole_tests_tree_and_evals() -> None:
     governed = {
-        path.relative_to(_REPO_ROOT).as_posix() for path in find_governed_files(_APP_ROOT, _TESTS_ROOT)
+        path.relative_to(_REPO_ROOT).as_posix()
+        for path in find_governed_files(_APP_ROOT, _TESTS_ROOT, _EVALS_ROOT)
     }
     assert "app/main.py" in governed
     assert "tests/conftest.py" in governed
     assert "tests/arch/test_module_docstring_ratchet.py" in governed
     # Every .py under tests/, not just tests/arch/ — the scope this rule governs.
     assert {path for path in governed if path.startswith("tests/") and not path.startswith("tests/arch/")}
+    assert "evals/harness/__init__.py" in governed

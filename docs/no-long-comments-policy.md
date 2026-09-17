@@ -27,6 +27,6 @@ GitHub issue and link that instead. Either way, the comment in the code stays on
 
 ## Scope
 
-Only `app/` and `tests/` are checked. The rule is diff-scoped by design: it never
+Only `app/`, `tests/` and `evals/` are checked. The rule is diff-scoped by design: it never
 requires a one-time sweep of the existing codebase, and it never grows an
 exception list — touch a long pre-existing comment and it's judged the same as a new one.
