@@ -1,8 +1,9 @@
 # Self-hosting — the file endpoint and the deploy
 
 Running it for yourself is [getting-started.md](getting-started.md), which also says
-what `~/.carbonpaper/` holds and which environment variables repoint it. This covers
-what only a server serving other people needs.
+what the store (`~/.carbonpaper/`, or `%LOCALAPPDATA%\carbonpaper\` on Windows)
+holds and which environment variables repoint it. This covers what only a server
+serving other people needs.
 
 ## Getting a data file in
 

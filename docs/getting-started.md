@@ -16,6 +16,9 @@ if it is missing, and uv builds `.venv` from `uv.lock`, fetching its own CPython
 `./start` after a `git pull` — a sync that is already current costs about a
 second.
 
+On Windows, run `./start` from Git Bash: it is a bash script, so PowerShell and
+`cmd` cannot run it. uv lands in `%USERPROFILE%\.local\bin`.
+
 ## Signing in, so the LLM stages run
 
 The server boots and serves with no credential at all. What fails without one is
@@ -44,7 +47,8 @@ Two environment variables override that CLI login, and both outrank it:
 
 ## Where your state lives
 
-Everything is under `~/.carbonpaper/`, outside the checkout, so every clone and
+Everything is under `~/.carbonpaper/` — on Windows,
+`%LOCALAPPDATA%\carbonpaper\` instead — outside the checkout, so every clone and
 every git worktree reads and writes the one store:
 
 | | |
