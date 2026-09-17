@@ -25,8 +25,8 @@ class ProjectArchiveRejected(Exception):
     """A project archive this workspace could not read a project out of."""
 
 
-class RunCaptureRefused(ValueError):
-    """Nothing is captured unless the run finished and its source files still match."""
+class RunRestoreRefused(ValueError):
+    """Nothing is restored unless the archive, the files and the re-run all hold up."""
 
 
 class ClaimShapeWriteRefused(ValueError):

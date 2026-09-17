@@ -4,18 +4,18 @@ from __future__ import annotations
 import pytest
 
 from app.core.run_status import RunStatus
-from app.models.captured_run import CapturedRun
-from app.models.records.project import Project
-from app.services import methodology
-from app.services.errors import RunCaptureRefused
-from app.services.run import read_run_manifest
-from app.services.run_capture import (
+from app.models.captured_run import (
     CAPTURED_ARCHIVE,
     CAPTURED_INPUTS,
     CAPTURED_RECORD,
-    capture_run,
+    CapturedRun,
 )
+from app.models.records.project import Project
+from app.services import methodology
+from app.services.run import read_run_manifest
 from claim_review_fixture import PROJECT, run_the_fixture
+from scripts.errors import RunCaptureRefused
+from scripts.run_capture import capture_run
 
 _SOURCE_STAGES = {"load_east": "east.csv", "load_west": "west.csv",
                   "load_agencies": "agencies.csv"}
@@ -48,7 +48,7 @@ def test_a_capture_carries_every_file_each_input_stage_read(
 
     captured = capture_run(PROJECT, run_id, into)
 
-    assert {i.stage_id: i.file.filename for i in captured.inputs} == _SOURCE_STAGES
+    assert {i.stage_id: i.filename for i in captured.inputs} == _SOURCE_STAGES
     for stage_id, filename in _SOURCE_STAGES.items():
         copied = into / CAPTURED_INPUTS / stage_id / filename
         source = projects_root / PROJECT / "data" / filename
@@ -59,9 +59,15 @@ def test_the_record_holds_what_the_run_measured(projects_root, run_id, tmp_path)
     captured = capture_run(PROJECT, run_id, tmp_path / "capture")
 
     for entry in captured.inputs:
-        source = projects_root / PROJECT / "data" / entry.file.filename
-        assert entry.file.bytes == source.stat().st_size
-        assert entry.file.path == str(source)
+        source = projects_root / PROJECT / "data" / entry.filename
+        assert entry.bytes == source.stat().st_size
+
+
+def test_the_record_names_no_path_on_the_capturing_machine(run_id, tmp_path):
+    captured = capture_run(PROJECT, run_id, tmp_path / "capture")
+
+    written = (tmp_path / "capture" / CAPTURED_RECORD).read_text(encoding="utf-8")
+    assert captured.inputs and str(tmp_path) not in written
 
 
 def test_a_run_that_did_not_finish_clean_is_refused(run_id, tmp_path):

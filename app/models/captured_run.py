@@ -1,18 +1,23 @@
-"""A captured run's own record, written beside the project archive it travels with."""
+"""A captured run's own record, and the layout it is written in beside its project archive."""
 
 from __future__ import annotations
 
 from pydantic import BaseModel
 
 from app.core.ids import ID
-from app.models.run_manifest import ReadFile
+
+CAPTURED_ARCHIVE = "project.zip"
+CAPTURED_RECORD = "run.json"
+CAPTURED_INPUTS = "inputs"
 
 
 class CapturedInput(BaseModel):
-    """`file` is the run's own measurement, so a restore can refuse bytes that moved."""
+    """One file a stage read, as the run measured it. No path: a restore stages its own."""
 
     stage_id: ID
-    file: ReadFile
+    filename: str
+    sha256: str
+    bytes: int
 
 
 class CapturedRun(BaseModel):
