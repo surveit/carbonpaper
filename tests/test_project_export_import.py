@@ -25,7 +25,6 @@ from app.models import (
     stage_to_spec_dict,
 )
 from app.models.claims import ClaimImportance, ClaimShapeInput, DataUniverseRequirement
-from app.models.records.project import Project
 from app.models.stages.input_data import (
     Connector, ConnectorKind, FileConnectorParams, FileFormat, InputDataStage,
 )
@@ -332,72 +331,25 @@ def test_import_repoints_each_rule_by_label_when_the_bundle_lists_a_secondary_sh
     ) == [("entities", new_shape_ids[_ENTITIES.label]), ("row-count", new_shape_ids[_ROWS.label])]
 
 
-def test_a_bundle_naming_a_shape_it_does_not_carry_is_refused_before_anything_is_written(tmp_path):
+def test_import_leaves_a_shape_id_the_bundle_does_not_carry_as_the_bundle_wrote_it(tmp_path):
     workspace.set_projects_dir(tmp_path)
     dangling = json.dumps({
         "name": "dangling", "document": "# doc", "model": "m", "source": "s",
         "data_model": _TINY_LIBRARY.model_dump(mode="json"),
-        "claim_shapes": [{"id": "carried_shape", **_ROWS.model_dump(mode="json")}],
+        "claim_shapes": [{"id": "bundled_entities", **_ENTITIES.model_dump(mode="json")}],
         "stages": [
-            stage_to_spec_dict(_input_stage("load_entities")),
+            stage_to_spec_dict(_parse_input_stage(_declare_entity_table("bundled_entities"))),
             stage_to_spec_dict(_parse_count_stage(_declare_row_count_figure("missing_shape"))),
         ],
     })
 
-    with pytest.raises(ValidationError) as caught:
-        import_project(WorkflowFile.model_validate_json(dangling))
+    imported_id = import_project(WorkflowFile.model_validate_json(dangling))
 
-    [error] = caught.value.errors()
-    assert "count_rows" in error["msg"]
-    assert "row-count" in error["msg"]
-    assert "missing_shape" in error["msg"]
-    assert Project.list() == []
-
-
-def test_a_bundle_carrying_one_shape_id_twice_is_refused_before_anything_is_written(tmp_path):
-    workspace.set_projects_dir(tmp_path)
-    twice = json.dumps({
-        "name": "one_id_twice", "document": "# doc", "model": "m", "source": "s",
-        "data_model": _TINY_LIBRARY.model_dump(mode="json"),
-        "claim_shapes": [
-            {"id": "shared_id", **_ROWS.model_dump(mode="json")},
-            {"id": "shared_id", **_ENTITIES.model_dump(mode="json")},
-        ],
-        "stages": [
-            stage_to_spec_dict(_input_stage("load_entities")),
-            stage_to_spec_dict(_parse_count_stage(_declare_row_count_figure("shared_id"))),
-        ],
-    })
-
-    with pytest.raises(ValidationError) as caught:
-        import_project(WorkflowFile.model_validate_json(twice))
-
-    [error] = caught.value.errors()
-    assert "claim shape id 'shared_id'" in error["msg"]
-    assert Project.list() == []
-
-
-def test_a_bundle_whose_shapes_a_project_would_refuse_is_refused_before_anything_is_written(tmp_path):
-    workspace.set_projects_dir(tmp_path)
-    refused = json.dumps({
-        "name": "refused_shapes", "document": "# doc", "model": "m", "source": "s",
-        "data_model": _TINY_LIBRARY.model_dump(mode="json"),
-        "claim_shapes": [
-            {"id": "rows", **_ROWS.model_dump(mode="json")},
-            {"id": "rows_again", **_ROWS.model_dump(mode="json")},
-            {"id": "entities", **_ENTITIES.model_dump(mode="json"),
-             "template": "The file names ${value} for ${period}."},
-        ],
-        "stages": [],
-    })
-
-    with pytest.raises(ValidationError) as caught:
-        import_project(WorkflowFile.model_validate_json(refused))
-
-    [error] = caught.value.errors()
-    assert "two shapes were sent with the label 'Rows the uploaded file holds'" in error["msg"]
-    assert "the template names ['period']" in error["msg"]
-    assert Project.list() == []
+    [imported_shape] = load_claim_shapes(imported_id)
+    [version] = versioning.list_versions(imported_id)
+    assert _list_slugs_with_shape_ids(
+        versioning.load_version_stages(imported_id, version.version_id)
+    ) == [("entities", imported_shape.id), ("row-count", "missing_shape")]
 
 
 def test_a_bundle_from_before_claim_shapes_still_imports(tmp_path):

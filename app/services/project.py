@@ -43,9 +43,7 @@ from app.services import stage_edit, terms, versioning, workspace
 from app.services import loader
 from app.services import methodology
 from app.services import run as run_service
-from app.services.claim_shapes import (
-    find_claim_shape_refusals, load_claim_shapes, write_claim_shapes,
-)
+from app.services.claim_shapes import load_claim_shapes, write_claim_shapes
 from app.services.errors import (
     CacheArchiveRejected, ProjectArchiveRejected, WorkflowLoadError,
 )
@@ -431,19 +429,6 @@ class WorkflowFile(BaseModel):
         validate_no_word_is_written_twice(self.row_types, self.verbs)
         return self
 
-    @model_validator(mode="after")
-    def _validate_claim_shapes(self) -> "WorkflowFile":
-        # Checked against no held shapes: an import writes them into a project it has just minted.
-        refusals = find_claim_shape_refusals(_drop_bundled_ids(self.claim_shapes), held=[])
-        problems = [
-            *_find_repeated_shape_ids(self.claim_shapes),
-            *_find_shapes_named_but_not_carried(self.stages, self.claim_shapes),
-            *refusals,
-        ]
-        if problems:
-            raise ValueError("; ".join(problems))
-        return self
-
     @field_validator("stages", mode="before")
     @classmethod
     def _drop_null_stage_keys(cls, v: Any) -> Any:
@@ -503,25 +488,6 @@ def import_project(
     return project_id
 
 
-def _find_repeated_shape_ids(shapes: list[BundledClaimShape]) -> list[str]:
-    shape_ids = [shape.id for shape in shapes]
-    repeated = sorted({shape_id for shape_id in shape_ids if shape_ids.count(shape_id) > 1})
-    return [f"claim shape id '{shape_id}' is carried more than once" for shape_id in repeated]
-
-
-def _find_shapes_named_but_not_carried(
-    stages: list[Stage], shapes: list[BundledClaimShape]
-) -> list[str]:
-    carried = {shape.id for shape in shapes}
-    return [
-        f"stage '{stage.id}' output '{rule.slug}' names claim shape '{rule.shape_id}', "
-        "which this bundle does not carry"
-        for stage in stages
-        for rule in stage.workflow_outputs or []
-        if rule.shape_id is not None and rule.shape_id not in carried
-    ]
-
-
 def _read_bundled_claim_shapes(project_id: str) -> list[BundledClaimShape]:
     carried = set(BundledClaimShape.model_fields)
     return [
@@ -547,7 +513,7 @@ def _repoint_stage(stage: Stage, new_id_by_bundled_id: dict[ID, ID]) -> Stage:
     if stage.workflow_outputs is None:
         return stage
     rules = [
-        rule if rule.shape_id is None
+        rule if rule.shape_id not in new_id_by_bundled_id
         else rule.model_copy(update={"shape_id": new_id_by_bundled_id[rule.shape_id]})
         for rule in stage.workflow_outputs
     ]
