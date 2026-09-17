@@ -159,9 +159,12 @@ def _validate_no_reference_override_on_target(config: EvalConfig) -> list[str]:
 def _resolve_grain_settings(
     config: EvalConfig, workflow: Workflow
 ) -> tuple[EvalRunSettings, list[str]]:
-    overrides = [config.override_stage,
-                *(ov.stage_id for ov in config.reference_overrides)]
-    settings = resolve_eval_run_settings(workflow, overrides, config.target_stage)
+    settings = resolve_eval_run_settings(
+        workflow,
+        config.override_stage,
+        [ov.stage_id for ov in config.reference_overrides],
+        config.target_stage,
+    )
     if settings.can_score_declaratively or config.code is not None:
         return settings, []
     return settings, [

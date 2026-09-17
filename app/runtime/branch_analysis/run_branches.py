@@ -130,14 +130,14 @@ def _read_branching_from_lineage(
 
 
 def _refuse_a_gap_in_the_lineage(stage: WorkflowStage) -> None:
-    """Absent lineage is a row-preserving type's contract, or a report. Never a gap."""
-    if is_grain_and_order_preserving(stage.stage.type):
+    """Absent lineage is a one-input row-preserving type's contract, or a report."""
+    if is_grain_and_order_preserving(stage.stage.type) and len(stage.inputs) <= 1:
         return
     if stage.stage.type == StageType.report:
         return
     raise MissingLineage(
-        f"stage '{stage.id}' is a {_name_the_type(stage)}, which neither preserves "
-        f"its rows nor reports, so it owed a lineage sidecar and wrote none")
+        f"stage '{stage.id}' is a {_name_the_type(stage)} over {len(stage.inputs)} input(s), "
+        f"so its rows are not one input's by position and it owed a lineage sidecar")
 
 
 def _name_the_type(stage: WorkflowStage) -> str:

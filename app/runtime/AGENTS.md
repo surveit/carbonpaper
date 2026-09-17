@@ -54,6 +54,13 @@ non-unique reference, `expand` allows m:n fan-out); `aggregate`;
 
 **A row-mapped stage sees only what its signature `reads`.**
 
+**An `enrich` keeps every subject row in its place, and its SHAPE checks that.** It registers
+under `RowAlignedFrameHandler` (`stages/row_aligned.py`), which hands the handler whole frames
+like a plain frame transform and then holds the result to one output row per `inputs[0]` row, in
+order, reading the ordinals the merge recorded in its lineage. A run whose merge fanned out or
+reordered fails there. That check is what lets the model call `enrich` grain-and-order preserving
+without taking the handler's body on trust; `expand` (m:n) stays a plain `FrameTransformHandler`.
+
 **Row caching is a property of the handler SHAPE, not of a stage type.** There is one row
 driver (`execution._run_row_mapper`): it narrows every row to the declared reads, answers
 what it can from the cache, groups what is left, and records each group as it lands. The only

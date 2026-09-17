@@ -74,6 +74,13 @@ class RowLineage:
     def __len__(self) -> int:
         return len(self.parents)
 
+    def read_parent_ordinals(self, stage_id: str) -> list[int | None]:
+        """Per output row, the row of `stage_id` it names — None where it names none."""
+        return [
+            next((p.row_ordinal for p in entry if p.stage_id == stage_id), None)
+            for entry in self.parents
+        ]
+
     def shifted(self, offset: int) -> "RowLineage":
         # One offset covers every parent: the runtime cuts the same window out of each input.
         if offset == 0:

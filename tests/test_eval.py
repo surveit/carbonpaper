@@ -106,8 +106,8 @@ def test_report_not_grain_and_order_preserving():
     assert s.is_grain_and_order_preserving is False
 
 
-def test_joins_and_aggregate_change_grain():
-    # enrich is m:1 yet False: preservation is earned by the row driver, never by the operation.
+def test_enrich_maps_its_subject_rows():
+    # validate="m:1" is what earns this: a repeating reference fails the run instead.
     j = m.parse_stage(S(id="j", type="enrich",
                                  inputs=[{"id": "a"}, {"id": "b"}],
                                  join={"keys": [{"left": "k", "right": "k"}], "enrich_with": {"v": "v"}},
@@ -119,6 +119,10 @@ def test_joins_and_aggregate_change_grain():
                                      ],
                                      "adds": [{"name": "v", "type": "str", "nullable": True}],
                                  }))
+    assert j.is_grain_and_order_preserving is True
+
+
+def test_expand_and_aggregate_change_grain():
     x = m.parse_stage(S(id="x", type="expand",
                                  inputs=[{"id": "a"}, {"id": "b"}],
                                  join={"keys": [{"left": "k", "right": "k"}], "enrich_with": {"v": "v"}},
@@ -142,7 +146,6 @@ def test_joins_and_aggregate_change_grain():
                                        "reads": [{"input": "a", "columns": agg_in["columns"]}],
                                        "produces": [{"name": "g", "type": "str", "nullable": True},
                                                     {"name": "t", "type": "int", "nullable": True}]}))
-    assert j.is_grain_and_order_preserving is False    # fan-out
     assert agg.is_grain_and_order_preserving is False  # fan-in
 
 
@@ -285,20 +288,20 @@ def _chain(tmp_path):
 
 
 def test_blocked_by_frame_on_frontier(tmp_path):
-    v = resolve_eval_run_settings(_chain(tmp_path), overrides=[], target="d")
+    v = resolve_eval_run_settings(_chain(tmp_path), None, [], target="d")
     assert v.can_score_declaratively is False
     assert v.blocking_stages == ["c"]
     assert set(v.frontier) == {"a", "b", "c", "d"}
 
 
 def test_override_cuts_above_the_frame_stage(tmp_path):
-    v = resolve_eval_run_settings(_chain(tmp_path), overrides=["c"], target="d")
+    v = resolve_eval_run_settings(_chain(tmp_path), "c", [], target="d")
     assert v.can_score_declaratively is True
     assert v.frontier == ["d"]
 
 
 def test_scorable_when_tapping_before_the_frame_stage(tmp_path):
-    v = resolve_eval_run_settings(_chain(tmp_path), overrides=[], target="b")
+    v = resolve_eval_run_settings(_chain(tmp_path), None, [], target="b")
     assert v.can_score_declaratively is True
     assert set(v.frontier) == {"a", "b"}
 
@@ -316,21 +319,55 @@ def test_expand_changes_grain_so_not_scorable(tmp_path):
               "adds": [{"name": "v", "type": "str", "nullable": True}],
           }),
     ])
-    v = resolve_eval_run_settings(meth, overrides=[], target="jn")
+    v = resolve_eval_run_settings(meth, None, [], target="jn")
     assert v.can_score_declaratively is False
     assert v.blocking_stages == ["jn"]
 
 
+def _enrich_workflow(tmp_path):
+    return m.parse_workflow([
+        _file_input("subject", tmp_path), _file_input("ref", tmp_path, output_schema=_KV),
+        S(id="joined", type="enrich", inputs=[{"id": "subject"}, {"id": "ref"}],
+          join={"keys": [{"left": "k", "right": "k"}], "enrich_with": {"v": "v"}}, signature={
+              "form": "extends",
+              "reads": [
+                  {"input": "subject", "columns": _K["columns"]},
+                  {"input": "ref", "columns": _K["columns"]},
+              ],
+              "adds": [{"name": "v", "type": "str", "nullable": True}],
+          }),
+    ])
+
+
+def test_an_enrich_keeps_every_subject_row_so_its_path_is_scorable(tmp_path):
+    v = resolve_eval_run_settings(_enrich_workflow(tmp_path), "subject", [], target="joined")
+    assert v.can_score_declaratively is True
+    assert v.blocking_stages == []
+
+
+def test_a_dataset_on_the_reference_side_of_an_enrich_is_not_scorable(tmp_path):
+    # An enrich emits one row per SUBJECT row, so reference row i is not output row i.
+    v = resolve_eval_run_settings(_enrich_workflow(tmp_path), "ref", [], target="joined")
+    assert v.can_score_declaratively is False
+    assert v.blocking_stages == ["joined"]
+
+
+def test_reference_data_on_that_side_still_scores_because_its_rows_are_not_the_dataset(tmp_path):
+    v = resolve_eval_run_settings(
+        _enrich_workflow(tmp_path), "subject", ["ref"], target="joined")
+    assert v.can_score_declaratively is True
+
+
 def test_unknown_target_raises(tmp_path):
     with pytest.raises(ValueError):
-        resolve_eval_run_settings(_chain(tmp_path), overrides=[], target="ghost")
+        resolve_eval_run_settings(_chain(tmp_path), None, [], target="ghost")
 
 
 def test_unknown_override_raises(tmp_path):
     with pytest.raises(ValueError):
-        resolve_eval_run_settings(_chain(tmp_path), overrides=["ghost"], target="d")
+        resolve_eval_run_settings(_chain(tmp_path), "ghost", [], target="d")
 
 
 def test_target_in_overrides_raises(tmp_path):
     with pytest.raises(ValueError):
-        resolve_eval_run_settings(_chain(tmp_path), overrides=["d"], target="d")
+        resolve_eval_run_settings(_chain(tmp_path), "d", [], target="d")

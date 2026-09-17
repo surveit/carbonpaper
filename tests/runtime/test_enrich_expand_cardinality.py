@@ -8,6 +8,7 @@ import pytest
 
 from app.models import Stage, parse_stage
 from app.runtime.stages.join import handle_enrich, handle_expand
+from app.runtime.stages.row_aligned import RowAlignedFrameHandler
 from conftest import as_inputs, make_run_context, place_stage, rows_of
 
 _SUBJECT = {"columns": [{"name": "x", "type": "int", "nullable": True}]}
@@ -52,6 +53,40 @@ def test_enrich_preserves_subject_order_even_when_the_keys_are_unsorted():
     out = handle_enrich(place_stage(stage), as_inputs({"subject": subject, "reference": reference}), make_run_context())
     assert list(rows_of(out)["x"]) == [30, 10, 20, 10]
     assert list(rows_of(out)["z"]) == ["thirty", "ten", "twenty", "ten"]
+
+
+def test_enrich_records_every_subject_ordinal_in_its_own_place():
+    # 99 matches nothing, so the run has to carry unmatched rows through in place too.
+    subject = pd.DataFrame({"x": [30, 99, 10, 20, 99]})
+    reference = pd.DataFrame({"x": [10, 20, 30], "z": ["ten", "twenty", "thirty"]})
+    out = handle_enrich(
+        place_stage(_join_stage("enrich")),
+        as_inputs({"subject": subject, "reference": reference}),
+        make_run_context(),
+    )
+    assert out.lineage is not None
+    subject_ordinals = [
+        [p.row_ordinal for p in parents if p.stage_id == "subject"]
+        for parents in out.lineage.parents
+    ]
+    assert subject_ordinals == [[0], [1], [2], [3], [4]]
+    reference_parents = [
+        [p.row_ordinal for p in parents if p.stage_id == "reference"]
+        for parents in out.lineage.parents
+    ]
+    assert reference_parents == [[2], [], [0], [1], []]
+
+
+def test_the_registered_shape_refuses_a_handler_that_moves_a_subject_row():
+    # handle_expand under enrich's shape: the m:n fan-out is exactly what it must catch.
+    handler = RowAlignedFrameHandler(handle_expand)
+    with pytest.raises(RuntimeError, match="output row i is 'subject' row i"):
+        handler.execute(
+            place_stage(_join_stage("expand")),
+            as_inputs({"subject": pd.DataFrame({"x": [1, 2]}),
+                       "reference": pd.DataFrame({"x": [1, 1], "z": ["a", "b"]})}),
+            make_run_context(),
+        )
 
 
 def test_enrich_fails_loudly_when_the_reference_repeats_a_key():

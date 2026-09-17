@@ -1,7 +1,34 @@
 from typing import get_args
 
 from app.models.stages import stage_types
-from app.models.stage import Stage, StageType
+from app.models.stage import (
+    RowEffect,
+    Stage,
+    StageType,
+    find_row_effect,
+    is_grain_and_order_preserving,
+)
+from app.models.stages.stage_base import _ROW_EFFECT_BY_TYPE
+
+
+def test_every_stage_type_names_a_row_effect() -> None:
+    """A type left out of the classification has no answer rather than a default one."""
+    assert set(_ROW_EFFECT_BY_TYPE) == set(StageType)
+
+
+def test_every_row_effect_claims_at_least_one_stage_type() -> None:
+    assert {find_row_effect(stage_type) for stage_type in StageType} == set(RowEffect)
+
+
+def test_a_created_or_mapped_row_is_what_preserves_grain_and_order() -> None:
+    assert {stage_type for stage_type in StageType if is_grain_and_order_preserving(stage_type)} == {
+        StageType.input_data,
+        StageType.python_row_function,
+        StageType.llm_transform,
+        StageType.human_review_queue,
+        StageType.starlark_row_function,
+        StageType.enrich,
+    }
 
 
 def test_stage_types_match_stage_type_enum() -> None:

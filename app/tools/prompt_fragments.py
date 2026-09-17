@@ -191,8 +191,8 @@ def _render_grain_table() -> str:
     one_to_one = sorted(t for t in _catalog_types() if is_grain_and_order_preserving(t))
     reshaping = sorted(t for t in _catalog_types() if not is_grain_and_order_preserving(t))
     return "\n".join([
-        "Row grain — whether one input row becomes exactly one output row, in order. "
-        "Fixed by type.",
+        "Row grain — whether the output holds exactly one row per row of the FIRST input, "
+        "in order. Fixed by type.",
         f"  1:1, order preserved: {_names(one_to_one)}",
         f"  may add, drop or reorder rows: {_names(reshaping)}",
         "A stage that reshapes breaks row-position provenance: a figure computed in "
