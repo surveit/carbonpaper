@@ -61,6 +61,13 @@ def test_named_column_carries_reference():
     assert s.columns[0].references == "company.company_id"
 
 
+def test_a_schema_no_longer_carries_its_own_spellings():
+    with pytest.raises(ValidationError):
+        m.NamedSchema.model_validate(
+            {"name": "firm", "title": "Firm", "also_written": ["registrant"], "columns": []}
+        )
+
+
 # ── library ──────────────────────────────────────────────────────────────────
 def test_library_unique_names():
     with pytest.raises(ValidationError):

@@ -20,7 +20,7 @@ from app.core.agent.turns import TurnManager
 from app.core.errors import GenerationError, ReviewGuideValidationError
 from app.main import app
 from app.models import (
-    NamedSchema, SchemaLibrary, Terms, find_stages_reaching_report, parse_stage,
+    RowType, Terms, find_stages_reaching_report, parse_stage,
 )
 from app.models.review_guide import ReviewGuideDraft, ReviewGuideStep
 from app.services import versioning, workspace
@@ -35,7 +35,7 @@ _DOUBLED = {"columns": [
     {"name": "doubled", "type": "float", "nullable": False},
 ]}
 
-_NO_TERMS = Terms(nouns=SchemaLibrary(schemas=[]), verbs=[])
+_NO_TERMS = Terms()
 
 _LOAD = {
     "id": "load", "description": "Load", "type": "input_data",
@@ -204,15 +204,14 @@ def test_render_guide_task_carries_the_words_the_guide_must_be_written_in(
     project_dir = _seed_project(tmp_path)
     version = project_service.save_working_copy_as_version(project_dir.name, message="v1"
     )
-    words = Terms(nouns=SchemaLibrary(schemas=[NamedSchema(
-        name="filing", title="Filing", description="One disclosure a firm sent in.",
-        also_written=["disclosure"])]), verbs=[])
+    words = Terms(row_types=[RowType(
+        id="filing", title="Filing", definition="One disclosure a firm sent in.")])
 
     task = compiler_review_guide.render_guide_task(
         version.stages, version.version_id, "Double the amount.", words
     )
 
-    assert "- filing — One disclosure a firm sent in. Also written: disclosure." in task
+    assert "- filing — One disclosure a firm sent in." in task
     # Before the document, which is the thing it is telling the author how to read.
     assert task.index("- filing") < task.index("METHODOLOGY DOCUMENT")
 

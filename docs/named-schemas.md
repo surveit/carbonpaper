@@ -21,12 +21,8 @@ The contract, in `app/models/named_schemas.py`:
 
 - A **`NamedSchema`** is a `TableSchema` (columns + primary key) plus:
   - `name` — snake_case identity.
-  - `also_written` — the methodology's other spellings for the same thing (the
-    document's *firm*, the data's *registrant*). `Verb` carries the same field,
-    and `Terms` checks the two halves' names and spellings together.
   - `kind` (`SchemaKind`, optional) — where the table sits in the pipeline. A
-    kind is a claim about where the rows come from, so a name that is vocabulary
-    alone (see Terms below) carries none:
+    kind is a claim about where the rows come from:
     - `reference` — dimension / lookup / benchmark data we must SOURCE, not
       compute (the "missing intermediate databases" of the forcing example).
     - `input` — raw data fetched into the pipeline.
@@ -38,28 +34,38 @@ The contract, in `app/models/named_schemas.py`:
 - A **`SchemaLibrary`** is the set of a project's named schemas;
   `parse_schema_library` / `validate_schema_library` are the entry points.
 
-## Terms — the nouns and the verbs
+## Terms — the row types, the tables and the verbs
 
-`app/models/terms.py` composes the two halves of a project's vocabulary: `Terms`
-is a `SchemaLibrary` (the nouns — a noun that is only a word carries no `kind`
-and no columns) plus `list[Verb]` (`name`, `definition`, `also_written`).
-Constructing it refuses a word carried twice across either half, since a word
-meaning two things is what the artifact exists to catch.
+`app/models/terms.py` composes the three parts of a project's vocabulary: `Terms`
+is `list[RowType]` (`app/models/row_types.py` — `id`, `title`, `definition`: the
+methodology's word for what ONE ROW is) plus a `SchemaLibrary` (the tables) plus
+`list[Verb]` (`name`, `definition`). Nothing binds a table to the row type its rows
+are: the two halves sit side by side, and only the migration's join treats a shared
+name as a link. A schema NAME addresses a table rather than saying a word, so it is
+not vocabulary. Constructing `Terms` refuses a word carried twice across the row
+types and the verbs.
 
-Storage is `app/services/terms.py`, the sole reader and writer of both halves:
-one `StoredTerms` document per project in the `terms` collection of the document
-store, keyed `<project_id>/terms`. The halves are stored apart and `load_terms`
+Storage is `app/services/terms.py`, the sole reader and writer of all three: one
+`StoredTerms` document per project in the `terms` collection of the document
+store, keyed `<project_id>/terms`. The parts are stored apart and `load_terms`
 composes them, which is where a word carrying two meanings raises; a project that
-stored nothing loads empty Terms. `count_nouns` is the tolerant count the project
-card and the status snapshot use, so one unreadable noun does not blank a listing.
+stored nothing loads empty Terms. `count_schemas` is the tolerant count the project
+card and the status snapshot use, so one unreadable table does not blank a listing,
+and `has_terms` is the same tolerant read behind the overview's "Agree the project's
+terms" — true of a project that agreed only words, with no table yet.
 
 Projects authored before that collection existed hold their nouns as one file per
 schema under `<project>/schemas/`. Those files are still READ, by `load_terms`
 alone and only where the store holds no document for the project; nothing writes
-them, so the first `write_terms` moves that project into the store for good.
+them, so the first `write_terms` moves that project into the store for good. Each
+file mints both a row type and the table holding its rows —
+`split_pre_row_type_nouns`, which alembic `0021` also runs over the stored
+documents it rewrites from v1, dropping the table of a stored noun that said
+nothing about one.
 
-A project export (`WorkflowFile`) carries `data_model` and `verbs` as separate
-fields, so a bundle written before verbs existed still imports.
+A project export (`WorkflowFile`) carries `data_model`, `row_types` and `verbs` as
+separate fields, so a bundle written before either of the last two existed still
+imports.
 
 `render_terms` (also `app/models/terms.py`) is the one block every agent writing about
 a project is handed them in: the MCP `read_terms`/`write_terms` tools store them, the

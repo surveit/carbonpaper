@@ -96,10 +96,10 @@ that too. Approving twice is not an error and does not extend anything.""",
         label="Reading the project's words",
         parameters={"project_id": PROJECT_ID},
         description="""\
-The project's agreed vocabulary: its NOUNS (the things its data is about,
-each with the columns it has if it has any) and its VERBS (the acts the
-methodology performs), plus the other spellings its owner writes each one
-as. These words are handed to every agent that writes prose about this
+The project's agreed vocabulary: its ROW TYPES (the word for what ONE ROW
+of its data is), its VERBS (the acts the methodology performs), and its
+SCHEMAS, the tables of the data model, each naming the row type its rows are. Many tables name
+the same row type. These words are handed to every agent that writes prose about this
 project — stage descriptions, generated examples, the review guide — and
 the human reads them on the project's Terms page, so what you read here is
 what your writing has to match. A word not in this list is a word to agree
@@ -111,25 +111,25 @@ been agreed yet, not that the project has none.""",
         label="Storing the project's words",
         parameters={
             "project_id": PROJECT_ID,
-            "terms": "The WHOLE vocabulary — `nouns` and `verbs` both, every time. What you send "
-                "replaces what is stored, so read_terms first and send that back with your "
-                "additions.",
+            "terms": "The WHOLE vocabulary — `row_types`, `schemas` and `verbs`, every time. What "
+                "you send replaces what is stored, so read_terms first and send that back with "
+                "your additions.",
         },
         description="""\
-Store the words this project is written in — the WHOLE vocabulary, both
-halves, every time. What you send REPLACES what is stored: a noun or verb
-you leave out is one the project stops using, so read_terms first and send
+Store the words this project is written in — the WHOLE vocabulary, all
+three parts, every time. What you send REPLACES what is stored: a word you
+leave out is one the project stops using, so read_terms first and send
 that back with your additions rather than sending only what is new.
 
-A noun is a named schema. One that is nothing but a word — a thing the
-methodology talks about with no table behind it — carries a `name` and a
-`title` and no columns and no `kind`; that is the ordinary case, not a
-half-finished one. Add columns only where you know the fields. A verb
-carries its name and what it means. Either may list `also_written`: the
-other spellings the owner uses for that same thing.
+A row type is the methodology's word for what ONE ROW is: an `id` in
+snake_case and what it means. A verb carries its name and what it means.
+One word is written one way — there is no second spelling of it. A schema
+is a TABLE — a `name`, a `title`, and the columns if you know them. A word
+with no table behind it is a row type and nothing else; that is the
+ordinary case, not a half-finished one.
 
-REFUSED WHOLE, with nothing written, where one word carries two meanings —
-a noun and a verb of the same name, or two words sharing a spelling. The
+REFUSED WHOLE, with nothing written, where one word is written twice — a
+row type and a verb of the same name, or two row types, or two verbs. The
 refusal names the repeated word. It is not a formality: a stage
 description written in an ambiguous word leaves the reader unable to tell
 which thing it meant.

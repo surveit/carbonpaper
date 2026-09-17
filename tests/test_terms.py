@@ -1,7 +1,4 @@
-"""app/models/terms.py + app/services/terms.py — a project's nouns and verbs, and the
-block an agent is handed them in. Both halves are one stored document per project. What
-is worth pinning: a noun that is only a word claims no kind, a word never means two
-things, a project that stored nothing has nothing, and no words render as nothing."""
+"""app/models/terms.py + app/services/terms.py — a project's words and how agents read them."""
 from __future__ import annotations
 
 import json
@@ -9,7 +6,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from app.models import NamedSchema, SchemaLibrary, Terms, Verb
+from app.models import NamedSchema, RowType, SchemaLibrary, Terms, Verb
 from app.models.terms import render_terms
 from app.services import terms
 from app.models.records.terms import StoredTerms
@@ -17,22 +14,17 @@ from app.web.config import templates
 from app.web.diagrams import SCHEMA_KIND_CLASS, SCHEMA_KIND_GLYPH
 from app.services.methodology import write_methodology
 
-_FLAG = Verb(
-    name="flag",
-    definition="Mark a row for a human to decide on.",
-    also_written=["flagged", "flagging"],
-)
+_FLAG = Verb(name="flag", definition="Mark a row for a human to decide on.")
+_ISSUE = RowType(id="issue", title="Issue", definition="One thing a reader should look at.")
 _ISSUE_TEXT = NamedSchema(name="issue_text", title="Issue text")
+_NO_SCHEMAS = SchemaLibrary(schemas=[])
 _PROJECT = "vocab_project"
 
 
-# ── the noun half: a word with no table ──────────────────────────────────────
-def test_a_noun_that_is_only_a_word_carries_no_kind_and_no_columns():
-    terms.write_terms(_PROJECT, Terms(nouns=SchemaLibrary(schemas=[_ISSUE_TEXT]), verbs=[]))
-
-    noun = terms.load_terms(_PROJECT).nouns.schemas[0]
-    assert noun.kind is None          # no kind stored is no source claimed
-    assert noun.columns == []
+# ── what a row type and a table each carry ───────────────────────────────────
+def test_a_row_types_id_is_snake_case_like_a_schema_name():
+    with pytest.raises(ValidationError):
+        RowType(id="BadName", title="Bad", definition="A row.")
 
 
 def test_a_declared_kind_still_has_to_be_one_of_the_four():
@@ -40,81 +32,74 @@ def test_a_declared_kind_still_has_to_be_one_of_the_four():
         NamedSchema.model_validate({"name": "x", "title": "X", "kind": "vocabulary"})
 
 
+def test_a_schema_no_longer_carries_its_own_spellings():
+    with pytest.raises(ValidationError):
+        NamedSchema.model_validate({"name": "x", "title": "X", "also_written": ["ex"]})
+
+
 # ── one word, one meaning ────────────────────────────────────────────────────
-def test_a_word_that_is_both_a_noun_and_a_verb_is_refused():
+def test_a_word_that_is_both_a_row_type_and_a_verb_is_refused():
+    flag = RowType(id="flag", title="Flag", definition="A row marked for a human.")
     with pytest.raises(ValidationError, match="flag"):
-        Terms(nouns=SchemaLibrary(schemas=[NamedSchema(name="flag", title="Flag")]), verbs=[_FLAG])
+        Terms(row_types=[flag], schemas=_NO_SCHEMAS, verbs=[_FLAG])
 
 
-def test_a_verb_spelling_that_repeats_another_verbs_name_is_refused():
-    flagged = Verb(name="flagged", definition="Already marked.")
-    with pytest.raises(ValidationError, match="flagged"):
-        Terms(nouns=SchemaLibrary(schemas=[]), verbs=[_FLAG, flagged])
-
-
-def test_a_noun_spelling_that_repeats_a_verb_is_refused():
-    # The pair the artifact exists for: the document says one word, the stages another.
-    registrant = NamedSchema(name="registrant", title="Registrant", also_written=["flag"])
+def test_two_verbs_of_one_name_are_refused():
+    twin = Verb(name="flag", definition="Already marked.")
     with pytest.raises(ValidationError, match="flag"):
-        Terms(nouns=SchemaLibrary(schemas=[registrant]), verbs=[_FLAG])
+        Terms(row_types=[], schemas=_NO_SCHEMAS, verbs=[_FLAG, twin])
 
 
-def test_two_nouns_written_the_same_second_way_are_refused():
-    firm = NamedSchema(name="firm", title="Firm", also_written=["registrant"])
-    filer = NamedSchema(name="filer", title="Filer", also_written=["registrant"])
-    with pytest.raises(ValidationError, match="registrant"):
-        Terms(nouns=SchemaLibrary(schemas=[firm, filer]), verbs=[])
+def test_two_row_types_of_one_id_are_refused():
+    firm = RowType(id="firm", title="Firm", definition="A company.")
+    twin = RowType(id="firm", title="Filer", definition="A filer.")
+    with pytest.raises(ValidationError, match="firm"):
+        Terms(row_types=[firm, twin], schemas=_NO_SCHEMAS, verbs=[])
 
 
-def test_a_nouns_other_spellings_read_back_from_the_store():
-    firm = NamedSchema(name="firm", title="Firm", also_written=["registrant", "filer"])
-    terms.write_terms(_PROJECT, Terms(nouns=SchemaLibrary(schemas=[firm]), verbs=[]))
+def test_a_schema_named_after_a_verb_is_kept():
+    # A schema name addresses a table; only row types and verbs say a word.
+    schemas = SchemaLibrary(schemas=[NamedSchema(name="flag", title="Flag")])
+    both = Terms(row_types=[], schemas=schemas, verbs=[_FLAG])
+    assert [schema.name for schema in both.schemas.schemas] == ["flag"]
 
-    library = terms.load_terms(_PROJECT).nouns
-    assert library.schemas[0].also_written == ["registrant", "filer"]
 
-
-def test_two_verbs_sharing_neither_a_name_nor_a_spelling_are_kept():
+def test_two_verbs_of_different_names_are_kept():
     resolve = Verb(name="resolve", definition="Settle a flagged row.")
-    both = Terms(nouns=SchemaLibrary(schemas=[_ISSUE_TEXT]), verbs=[_FLAG, resolve])
+    both = Terms(row_types=[_ISSUE], schemas=_NO_SCHEMAS, verbs=[_FLAG, resolve])
     assert [verb.name for verb in both.verbs] == ["flag", "resolve"]
 
 
 # ── storage ──────────────────────────────────────────────────────────────────
 def test_a_project_that_stored_nothing_has_no_words():
     stored = terms.load_terms(_PROJECT)
-    assert stored.nouns.schemas == []
+    assert stored.row_types == []
+    assert stored.schemas.schemas == []
     assert stored.verbs == []
 
 
-def test_both_halves_read_back_from_the_one_stored_document():
-    terms.write_terms(_PROJECT, Terms(nouns=SchemaLibrary(schemas=[_ISSUE_TEXT]), verbs=[_FLAG]))
+def test_every_part_reads_back_from_the_one_stored_document():
+    terms.write_terms(_PROJECT, Terms(
+        row_types=[_ISSUE], schemas=SchemaLibrary(schemas=[_ISSUE_TEXT]), verbs=[_FLAG]))
 
     stored = terms.load_terms(_PROJECT)
-    assert [schema.name for schema in stored.nouns.schemas] == ["issue_text"]
+    assert [row_type.id for row_type in stored.row_types] == ["issue"]
+    assert [schema.name for schema in stored.schemas.schemas] == ["issue_text"]
     assert stored.verbs == [_FLAG]
 
 
 def test_writing_no_verbs_retires_the_ones_already_stored():
-    terms.write_terms(_PROJECT, Terms(nouns=SchemaLibrary(schemas=[]), verbs=[_FLAG]))
-    terms.write_terms(_PROJECT, Terms(nouns=SchemaLibrary(schemas=[]), verbs=[]))
+    terms.write_terms(_PROJECT, Terms(row_types=[], schemas=_NO_SCHEMAS, verbs=[_FLAG]))
+    terms.write_terms(_PROJECT, Terms(row_types=[], schemas=_NO_SCHEMAS, verbs=[]))
     assert terms.load_terms(_PROJECT).verbs == []
 
 
-def test_generated_nouns_keep_the_verbs_the_project_already_agreed():
-    terms.write_terms(_PROJECT, Terms(nouns=SchemaLibrary(schemas=[]), verbs=[_FLAG]))
-    terms.write_nouns(_PROJECT, SchemaLibrary(schemas=[_ISSUE_TEXT]))
-
-    stored = terms.load_terms(_PROJECT)
-    assert [schema.name for schema in stored.nouns.schemas] == ["issue_text"]
-    assert stored.verbs == [_FLAG]
-
-
-def test_a_stored_document_whose_two_halves_share_a_word_is_refused():
+def test_a_stored_document_whose_words_repeat_is_refused():
     # Written past write_terms, which only ever takes an already-composed Terms.
     StoredTerms(
         id=f"{_PROJECT}/terms",
-        nouns=SchemaLibrary(schemas=[NamedSchema(name="flag", title="Flag")]),
+        row_types=[RowType(id="flag", title="Flag", definition="A row marked for a human.")],
+        schemas=_NO_SCHEMAS,
         verbs=[_FLAG],
     ).save()
 
@@ -123,11 +108,12 @@ def test_a_stored_document_whose_two_halves_share_a_word_is_refused():
 
 
 def test_one_projects_terms_are_not_read_under_a_project_whose_id_it_extends():
-    terms.write_terms("venezuela_lobbying", Terms(nouns=SchemaLibrary(schemas=[]), verbs=[_FLAG]))
+    terms.write_terms(
+        "venezuela_lobbying", Terms(row_types=[], schemas=_NO_SCHEMAS, verbs=[_FLAG]))
     assert terms.load_terms("venezuela").verbs == []
 
 
-# ── nouns authored before the store ──────────────────────────────────────────
+# ── schemas authored before the store ────────────────────────────────────────
 def _write_schema_file(projects_root, schema: NamedSchema) -> None:
     schemas_dir = projects_root / _PROJECT / "schemas"
     schemas_dir.mkdir(parents=True, exist_ok=True)
@@ -140,47 +126,52 @@ def test_schema_files_written_before_the_store_are_still_read(projects_root):
     _write_schema_file(projects_root, _ISSUE_TEXT)
 
     stored = terms.load_terms(_PROJECT)
-    assert [schema.name for schema in stored.nouns.schemas] == ["issue_text"]
+    assert [schema.name for schema in stored.schemas.schemas] == ["issue_text"]
     assert stored.verbs == []
 
 
 def test_the_first_write_moves_a_project_into_the_store_for_good(projects_root):
     _write_schema_file(projects_root, _ISSUE_TEXT)
-    terms.write_terms(_PROJECT, Terms(nouns=SchemaLibrary(schemas=[]), verbs=[_FLAG]))
+    terms.write_terms(_PROJECT, Terms(row_types=[], schemas=_NO_SCHEMAS, verbs=[_FLAG]))
 
     # The file is still there and is no longer what the project says.
     assert (projects_root / _PROJECT / "schemas" / "01_issue_text.json").is_file()
-    assert terms.load_terms(_PROJECT).nouns.schemas == []
+    assert terms.load_terms(_PROJECT).schemas.schemas == []
 
 
 # ── the block an agent is handed ─────────────────────────────────────────────
 def test_a_project_with_no_words_renders_nothing_at_all():
-    assert render_terms(Terms(nouns=SchemaLibrary(schemas=[]), verbs=[])) == ""
+    assert render_terms(Terms(row_types=[], schemas=_NO_SCHEMAS, verbs=[])) == ""
 
 
-def test_a_project_with_only_verbs_renders_no_noun_heading():
-    block = render_terms(Terms(nouns=SchemaLibrary(schemas=[]), verbs=[_FLAG]))
-    assert "Nouns:" not in block
+def test_a_project_whose_only_words_are_verbs_renders_no_row_type_heading():
+    block = render_terms(Terms(row_types=[], schemas=_NO_SCHEMAS, verbs=[_FLAG]))
+    assert "Row types:" not in block
     assert "- flag — Mark a row for a human to decide on." in block
 
 
-def test_the_block_carries_every_word_its_meaning_and_its_other_spellings():
-    firm = NamedSchema(
-        name="firm",
-        title="Firm",
-        description="A company that filed.",
-        also_written=["registrant"],
-    )
-    block = render_terms(Terms(nouns=SchemaLibrary(schemas=[firm]), verbs=[_FLAG]))
+def test_the_block_names_the_words_and_nothing_about_the_tables():
+    block = render_terms(Terms(
+        row_types=[_ISSUE], schemas=SchemaLibrary(schemas=[_ISSUE_TEXT]), verbs=[_FLAG]))
 
-    assert "- firm — A company that filed. Also written: registrant." in block
-    assert "- flag — Mark a row for a human to decide on. Also written: flagged, flagging." in block
+    assert "- issue — One thing a reader should look at." in block
+    assert "- flag — Mark a row for a human to decide on." in block
+    assert "issue_text" not in block
+    assert "Schemas" not in block and "Tables" not in block
+
+
+def test_a_project_whose_only_entries_are_tables_renders_nothing_at_all():
+    assert render_terms(
+        Terms(row_types=[], schemas=SchemaLibrary(schemas=[_ISSUE_TEXT]), verbs=[])) == ""
+
+
+def test_the_block_carries_every_word_and_its_meaning():
+    firm = RowType(id="firm", title="Firm", definition="A company that filed.")
+    block = render_terms(Terms(row_types=[firm], schemas=_NO_SCHEMAS, verbs=[_FLAG]))
+
+    assert "- firm — A company that filed." in block
+    assert "- flag — Mark a row for a human to decide on." in block
     assert "synonym" in block  # the framing: do not introduce one
-
-
-def test_a_noun_that_is_only_a_word_is_rendered_under_its_title():
-    block = render_terms(Terms(nouns=SchemaLibrary(schemas=[_ISSUE_TEXT]), verbs=[]))
-    assert "- issue_text — Issue text" in block
 
 
 # ── the Glossary tab, rendered over a word with a table and a word without ──
@@ -199,35 +190,35 @@ def _render_terms_section(stored: Terms | None, unreadable: str = "") -> str:
     return "".join(template.blocks["section"](context))
 
 
-def test_the_section_shows_a_noun_with_no_columns_without_marking_it_short_of_any():
+def test_the_section_shows_a_schema_with_no_columns_without_marking_it_short_of_any():
     html = _render_terms_section(
-        Terms(nouns=SchemaLibrary(schemas=[_ISSUE_TEXT]), verbs=[])
+        Terms(row_types=[], schemas=SchemaLibrary(schemas=[_ISSUE_TEXT]), verbs=[])
     )
     assert "issue_text" in html          # never dropped for having no table
     assert "0 column" not in html        # a count would read as data missing
     assert "Columns" not in html         # nor a reference section over nothing
 
 
-def test_the_section_shows_a_nouns_columns_and_the_spellings_of_both_halves():
-    firm = NamedSchema(
-        name="firm",
-        title="Firm",
+def test_the_section_shows_a_row_type_its_table_and_a_verb():
+    firm_word = RowType(id="firm", title="Firm", definition="A company that filed.")
+    firm_table = NamedSchema(
+        name="firm_filings",
+        title="Firm filings",
         kind="input",
-        also_written=["registrant"],
         columns=[{"name": "firm_id", "type": "str", "nullable": False}],
     )
-    html = _render_terms_section(Terms(nouns=SchemaLibrary(schemas=[firm]), verbs=[_FLAG]))
+    html = _render_terms_section(Terms(
+        row_types=[firm_word], schemas=SchemaLibrary(schemas=[firm_table]), verbs=[_FLAG]))
 
     assert "1 column" in html
     assert "firm_id" in html                      # the column table, not just the count
     assert "input" in html                        # the kind it declared
-    assert html.count("also written: registrant") == 1
-    assert html.count("also written: flagged") == 1
+    assert "A company that filed." in html        # the row type's definition
     assert "Mark a row for a human to decide on." in html
 
 
 def test_the_section_tells_a_project_with_no_words_what_to_do():
-    html = _render_terms_section(Terms(nouns=SchemaLibrary(schemas=[]), verbs=[]))
+    html = _render_terms_section(Terms(row_types=[], schemas=_NO_SCHEMAS, verbs=[]))
     assert "empty-state" in html
     assert "assistant" in html      # who agrees them with you
     assert "dm-card" not in html
@@ -255,20 +246,20 @@ def _get_terms_page(tmp_path, stored: Terms | None):
     return TestClient(app).get("/project/vocab/methodology?tab=glossary")
 
 
-def test_the_route_renders_both_halves_of_what_the_project_stored(tmp_path):
-    firm = NamedSchema(
-        name="firm", title="Firm", description="A company that filed.",
+def test_the_route_renders_every_part_of_what_the_project_stored(tmp_path):
+    firm_word = RowType(id="firm", title="Firm", definition="A company that filed.")
+    firm_table = NamedSchema(
+        name="firm_filings", title="Firm filings",
         columns=[{"name": "firm_id", "type": "str", "nullable": False}],
     )
-    response = _get_terms_page(
-        tmp_path, Terms(nouns=SchemaLibrary(schemas=[firm]), verbs=[_FLAG])
-    )
+    response = _get_terms_page(tmp_path, Terms(
+        row_types=[firm_word], schemas=SchemaLibrary(schemas=[firm_table]), verbs=[_FLAG]))
 
     assert response.status_code == 200
-    assert "A company that filed." in response.text            # the noun
+    assert "A company that filed." in response.text                  # the row type
     assert "Mark a row for a human to decide on." in response.text   # the verb
-    assert "firm_id" in response.text                          # the noun's columns
-    assert 'href="/project/vocab/methodology"' in response.text   # its own nav entry
+    assert "firm_id" in response.text                                # the table's columns
+    assert 'href="/project/vocab/methodology"' in response.text      # its own nav entry
 
 
 def test_the_route_renders_a_project_that_has_agreed_no_words(tmp_path):

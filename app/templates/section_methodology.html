@@ -16,18 +16,26 @@
     kind_class  = SCHEMA_KIND_CLASS ; kind_glyph = SCHEMA_KIND_GLYPH
 
   The Glossary pane is written by an agent through write_terms, never here; it is the
-  human's copy of what was agreed. A noun with no columns and no kind is the ordinary
-  case (a word the methodology uses, with no table behind it), so it renders as a
-  card and nothing more — no zero, no empty table, no missing-value mark.
+  human's copy of what was agreed. A row type with no table is the ordinary case (a
+  word the methodology uses, with nothing holding its rows yet), so its card says
+  nothing about tables — no zero, no empty table, no missing-value mark.
 #}
 {% block section %}
 {# Imported inside the block, not at the top: a caller rendering this block alone
    (the section tests) never evaluates the template's own top level. #}
 {% from "_schema_table.html" import constraint_cell %}
-{% set nouns = terms.nouns.schemas if terms else [] %}
+{% set row_types = terms.row_types if terms else [] %}
+{% set tables = terms.schemas.schemas if terms else [] %}
 {% set verbs = terms.verbs if terms else [] %}
-{% set with_columns = nouns | selectattr("columns") | list %}
 {% set on_glossary = active_tab == "glossary" %}
+
+{% macro table_head(table) -%}
+    <code>{{ table.name }}</code>
+    <span class="muted">— {{ table.title }}</span>
+    {# `kind` holds a plain string after validation (app.models.schema._Base). #}
+    {% if table.kind %}<span class="type-tag {{ kind_class.get(table.kind, 'custom') }}">{{ kind_glyph.get(table.kind, '') }} {{ table.kind }}</span>{% endif %}
+    {% if table.columns %}<span class="dm-rows">{{ table.columns|length }} column{% if table.columns|length != 1 %}s{% endif %}</span>{% endif %}
+{%- endmacro %}
 
 <div class="sec-head">
   <h1>Documentation</h1>
@@ -87,29 +95,21 @@
   <strong>⚠ The stored terms would not load</strong>
   <ul><li><code>{{ unreadable }}</code></li></ul>
 </div>
-{% elif nouns or verbs %}
+{% elif row_types or tables or verbs %}
 
 <h3 class="dm-group-heading">
-  <span class="type-tag">nouns</span>
-  <span class="muted">— {{ nouns|length }} word{% if nouns|length != 1 %}s{% endif %} for the things in this project's data</span>
+  <span class="type-tag">row types</span>
+  <span class="muted">— {{ row_types|length }} word{% if row_types|length != 1 %}s{% endif %} for what one row of this project's data is</span>
 </h3>
-{% if nouns %}
+{% if row_types %}
 <div class="dm-cards">
-  {% for noun in nouns %}
+  {% for row_type in row_types %}
   <article class="dm-card">
     <div class="dm-card-head">
-      <code class="dm-card-name">{{ noun.name }}</code>
-      {# `kind` holds a plain string after validation (app.models.schema._Base). #}
-      {% if noun.kind %}<span class="type-tag {{ kind_class.get(noun.kind, 'custom') }}">{{ kind_glyph.get(noun.kind, '') }} {{ noun.kind }}</span>{% endif %}
+      <code class="dm-card-name">{{ row_type.id }}</code>
     </div>
-    {% if noun.title and noun.title != noun.name %}<p class="dm-card-title">{{ noun.title }}</p>{% endif %}
-    {% if noun.description %}<p class="dm-card-desc">{{ noun.description }}</p>{% endif %}
-    {% if noun.also_written or noun.columns %}
-    <div class="dm-facts">
-      {% for spelling in noun.also_written %}<span class="fact-chip">also written: {{ spelling }}</span>{% endfor %}
-      {% if noun.columns %}<a class="fact-chip" href="#noun-{{ noun.name }}" data-role="open-columns">{{ noun.columns|length }} column{% if noun.columns|length != 1 %}s{% endif %} ▸</a>{% endif %}
-    </div>
-    {% endif %}
+    {% if row_type.title and row_type.title != row_type.id %}<p class="dm-card-title">{{ row_type.title }}</p>{% endif %}
+    <p class="dm-card-desc">{{ row_type.definition }}</p>
   </article>
   {% endfor %}
 </div>
@@ -129,11 +129,6 @@
       <code class="dm-card-name">{{ verb.name }}</code>
     </div>
     <p class="dm-card-desc">{{ verb.definition }}</p>
-    {% if verb.also_written %}
-    <div class="dm-facts">
-      {% for spelling in verb.also_written %}<span class="fact-chip">also written: {{ spelling }}</span>{% endfor %}
-    </div>
-    {% endif %}
   </article>
   {% endfor %}
 </div>
@@ -141,27 +136,26 @@
 <p class="lede">None agreed yet.</p>
 {% endif %}
 
-{# The columns a noun has, where it has any. A noun that is only a word is not
-   listed here at all — an empty table under its name would read as data missing. #}
-{% if with_columns %}
+{% if tables %}
 <div class="dm-ref-heading">
-  <h2>Columns</h2>
-  <p class="muted">The fields behind the nouns that have a table. A noun with no
-    table is not listed here.</p>
+  <h2>Tables</h2>
+  <p class="muted">The data model this project's rows flow through. Each table names
+    the row type one of its rows is, and many tables name the same one.</p>
 </div>
-{% for noun in with_columns %}
-<details class="dm-table" id="noun-{{ noun.name }}">
-  <summary>
-    <code>{{ noun.name }}</code>
-    <span class="muted">— {{ noun.title }}</span>
-    <span class="dm-rows">{{ noun.columns|length }} column{% if noun.columns|length != 1 %}s{% endif %}</span>
-  </summary>
+{% for table in tables %}
+{# A table with neither prose nor fields has nothing to disclose, so it is a line and
+   not a fold: a ▸ opening onto nothing would read as data missing. #}
+{% if table.description or table.columns %}
+<details class="dm-table">
+  <summary>{{ table_head(table) }}</summary>
+  {% if table.description %}<p class="dm-card-desc">{{ table.description }}</p>{% endif %}
+  {% if table.columns %}
   <table class="schema">
     <thead><tr><th>column</th><th>type</th><th>required?</th><th>references</th><th>range / enum</th><th>description</th></tr></thead>
     <tbody>
-      {% for c in noun.columns %}
+      {% for c in table.columns %}
       <tr>
-        <td><code>{{ c.name }}</code>{% if noun.primary_key and c.name in noun.primary_key %} <span class="strong">PK</span>{% endif %}</td>
+        <td><code>{{ c.name }}</code>{% if table.primary_key and c.name in table.primary_key %} <span class="strong">PK</span>{% endif %}</td>
         <td><span class="type-pill">{{ c.type }}</span></td>
         <td>{% if c.nullable %}<span class="muted">optional</span>{% else %}<span class="strong">required</span>{% endif %}</td>
         <td>{% if c.references %}<code class="range">→ {{ c.references }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
@@ -171,28 +165,19 @@
       {% endfor %}
     </tbody>
   </table>
+  {% endif %}
 </details>
+{% else %}
+<div class="dm-table dm-card-head">{{ table_head(table) }}</div>
+{% endif %}
 {% endfor %}
-<script>
-// A card's column chip targets a closed <details>, which the fragment alone does
-// not open.
-document.addEventListener('click', function (ev) {
-  const chip = ev.target.closest('[data-role="open-columns"]');
-  if (!chip) return;
-  const el = document.querySelector(chip.getAttribute('href'));
-  if (!el) return;
-  ev.preventDefault();
-  el.open = true;
-  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-});
-</script>
 {% endif %}
 
 {% else %}
 <div class="empty-state">
   <h2>No terms agreed yet</h2>
   <p class="muted">Ask the assistant to go through your methodology's own words with
-    you — the things its data is about and the decisions it makes — and it stores
+    you — what one row of its data is, and the decisions it makes — and it stores
     what you agree here.</p>
 </div>
 {% endif %}

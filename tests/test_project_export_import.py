@@ -10,6 +10,7 @@ from app.models import (
     Column,
     NamedColumn,
     NamedSchema,
+    RowType,
     SchemaKind,
     SchemaLibrary,
     StageType,
@@ -26,11 +27,12 @@ from app.services.loader import load_stage_entries, save_stages
 from app.services.project import WorkflowFile, export_project, import_project
 from app.services.methodology import read_methodology
 
+_ENTITY_COLUMNS = [NamedColumn(name="entity_id", type="str", nullable=False),
+                   NamedColumn(name="entity_name", type="str", nullable=True)]
 _TINY_LIBRARY = SchemaLibrary(schemas=[NamedSchema(
-    name="entity", kind=SchemaKind.input, title="Entity",
-    columns=[NamedColumn(name="entity_id", type="str", nullable=False),
-             NamedColumn(name="entity_name", type="str", nullable=True)],
+    name="entity", kind=SchemaKind.input, title="Entity", columns=_ENTITY_COLUMNS,
 )])
+_ENTITY = RowType(id="entity", title="Entity", definition="One company under the shell.")
 _FLAG = Verb(name="flag", definition="Mark a filing for a human to decide on.")
 
 
@@ -49,7 +51,7 @@ def _input_stage(stage_id: str) -> InputDataStage:
 def test_a_bundle_carries_the_latest_versions_stages_not_the_working_copy(tmp_path):
     workspace.set_projects_dir(tmp_path)
     name = project.create_project("Versioned", "Count the filings.", source="test").id
-    terms.write_terms(name, Terms(nouns=_TINY_LIBRARY, verbs=[]))
+    terms.write_terms(name, Terms(schemas=_TINY_LIBRARY))
     save_stages(name, [_input_stage("load_entities")])
     project.save_working_copy_as_version(name, message="What a run would pin")
 
@@ -62,7 +64,7 @@ def test_a_project_whose_stages_were_never_versioned_exports_none_of_them(tmp_pa
     """An unversioned working copy cannot be run here either, so a bundle of it carries no stages."""
     workspace.set_projects_dir(tmp_path)
     name = project.create_project("Unversioned", "Count the filings.", source="test").id
-    terms.write_terms(name, Terms(nouns=_TINY_LIBRARY, verbs=[]))
+    terms.write_terms(name, Terms(schemas=_TINY_LIBRARY))
     save_stages(name, [_input_stage("load_entities")])
 
     assert export_project(name).stages == []
@@ -77,7 +79,7 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
 
     name = project.create_project(
         "Round Trip Source", "Trace the shell companies.", source="test").id
-    terms.write_terms(name, Terms(nouns=_TINY_LIBRARY, verbs=[]))
+    terms.write_terms(name, Terms(schemas=_TINY_LIBRARY))
 
     stage = InputDataStage(
         id="load_entities", description="Load Entities", type=StageType.input_data,
@@ -103,7 +105,7 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
 
     assert read_methodology(imported_name) == "Trace the shell companies."
 
-    imported_library = terms.load_terms(imported_name).nouns
+    imported_library = terms.load_terms(imported_name).schemas
     assert imported_library.model_dump() == _TINY_LIBRARY.model_dump()
 
     [entry] = load_stage_entries(imported_name)
@@ -175,7 +177,7 @@ def test_a_bundle_carries_the_verbs_across_and_import_writes_them(tmp_path):
     workspace.set_projects_dir(source_examples)
 
     name = project.create_project("Verbs Source", "Flag the filings.", source="test").id
-    terms.write_terms(name, Terms(nouns=_TINY_LIBRARY, verbs=[_FLAG]))
+    terms.write_terms(name, Terms(schemas=_TINY_LIBRARY, verbs=[_FLAG]))
 
     wf = WorkflowFile.model_validate_json(export_project(name).to_json())
     assert wf.verbs == [_FLAG]
@@ -185,12 +187,56 @@ def test_a_bundle_carries_the_verbs_across_and_import_writes_them(tmp_path):
     assert terms.load_terms(imported).verbs == [_FLAG]
 
 
-def test_a_bundle_whose_verb_repeats_a_schema_name_is_refused(tmp_path):
+def test_a_bundle_whose_verb_repeats_a_row_type_is_refused(tmp_path):
     bundle = json.dumps({
         "name": "clash", "document": "# doc", "model": "m", "source": "s",
-        "data_model": _TINY_LIBRARY.model_dump(mode="json"),
+        "data_model": {"schemas": []},
+        "row_types": [_ENTITY.model_dump(mode="json")],
         "verbs": [{"name": "entity", "definition": "Name a thing."}],
         "stages": [],
     })
     with pytest.raises(ValidationError, match="entity"):
         WorkflowFile.model_validate_json(bundle)
+
+
+def test_a_bundle_whose_verb_repeats_only_a_schema_name_is_kept(tmp_path):
+    # A schema name addresses a table; only row types and verbs say a word.
+    bundle = json.dumps({
+        "name": "kept", "document": "# doc", "model": "m", "source": "s",
+        "data_model": _TINY_LIBRARY.model_dump(mode="json"),
+        "verbs": [{"name": "entity", "definition": "Name a thing."}],
+        "stages": [],
+    })
+    assert [verb.name for verb in WorkflowFile.model_validate_json(bundle).verbs] == ["entity"]
+
+
+def test_a_bundle_carries_the_row_types_across_and_import_writes_them(tmp_path):
+    source_examples = tmp_path / "source_examples"
+    target_examples = tmp_path / "target_examples"
+    source_examples.mkdir(parents=True, exist_ok=True)
+    target_examples.mkdir(parents=True, exist_ok=True)
+    workspace.set_projects_dir(source_examples)
+
+    name = project.create_project("Words Source", "Count the entities.", source="test").id
+    terms.write_terms(name, Terms(row_types=[_ENTITY], schemas=_TINY_LIBRARY))
+
+    wf = WorkflowFile.model_validate_json(export_project(name).to_json())
+    assert wf.row_types == [_ENTITY]
+
+    workspace.set_projects_dir(target_examples)
+    imported = terms.load_terms(import_project(wf, name="words_target"))
+    assert imported.row_types == [_ENTITY]
+    assert [schema.name for schema in imported.schemas.schemas] == ["entity"]
+
+
+def test_a_bundle_written_before_row_types_existed_still_imports(tmp_path):
+    legacy = json.dumps({
+        "name": "no_row_types", "document": "# doc", "model": "m", "source": "s",
+        "data_model": _TINY_LIBRARY.model_dump(mode="json"), "stages": [],
+    })
+    wf = WorkflowFile.model_validate_json(legacy)
+    assert wf.row_types == []
+
+    project_id = import_project(wf, name="no_row_types_target")
+    assert terms.load_terms(project_id).row_types == []
+

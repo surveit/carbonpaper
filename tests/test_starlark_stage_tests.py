@@ -9,7 +9,6 @@ from app.compiler.stage_tests import build_stage_test_generator, render_generati
 from app.core.frames import frame_to_table
 from app.services.frame_profile import profile_table
 from app.core.row_search import InputRows
-from app.models.named_schemas import SchemaLibrary
 from app.models.terms import Terms
 from app.models import Stage, parse_stage
 from app.models.stages.stage_base import find_stage_test_class
@@ -22,7 +21,7 @@ from app.runtime.stage_tests import (
     run_tests_for_stage,
 )
 
-_NO_TERMS = Terms(nouns=SchemaLibrary(schemas=[]), verbs=[])
+_NO_TERMS = Terms()
 _IN_SCHEMA = {"columns": [
     {"name": "filing_id", "type": "str", "nullable": False},
     {"name": "reported_amount", "type": "str", "nullable": True},

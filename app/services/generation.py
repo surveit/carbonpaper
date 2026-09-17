@@ -10,7 +10,6 @@ import logging
 
 from pydantic import BaseModel
 
-from app.compiler.data_model import start_data_model_generation_agent
 from app.compiler.review_guide import start_review_guide_generation_agent
 from app.compiler.stage_tests import start_stage_test_generation_agent
 from app.compiler.stage_tests_submission import dump_submitted_tests, read_selected_rows
@@ -20,7 +19,6 @@ from app.compiler.turn_failure import GENERATION_FAILURE_PREFIX as GENERATION_FA
 from app.core.errors import GenerationError
 from app.core.row_search import InputRows
 from app.models.review_guide import ReviewGuideDraft
-from app.models.named_schemas import SchemaLibrary
 from app.models.schema import StageId
 from app.models.stage import StageEdit, stage_to_spec_dict
 from app.models.stages.signature import transform_input_schemas
@@ -37,15 +35,6 @@ from app.services.stage_edit import (
 from app.services.stage_test_rows import load_stage_row_sources
 
 _log = logging.getLogger(__name__)
-
-
-def start_generation(project_id: str, *, document: str, model: str) -> str:
-    return start_data_model_generation_agent(
-        document=document,
-        project_name=project_id,
-        model=model,
-        on_answer=lambda answer: _finish_data_model(project_id, answer),
-    )
 
 
 def start_stage_test_generation(project_id: str, *, stage_id: str, model: str) -> str:
@@ -107,12 +96,6 @@ def start_review_guide_generation(
         model=model,
         on_answer=lambda draft: _finish_review_guide(project_id, version_id, draft),
     )
-
-
-def _finish_data_model(project_id: str, answer: SchemaLibrary | None) -> None:
-    if answer is None:
-        return
-    terms.write_nouns(project_id, answer)
 
 
 def _finish_review_guide(

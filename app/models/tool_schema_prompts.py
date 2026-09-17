@@ -22,10 +22,6 @@ NAMED_COLUMN_DESCRIPTION = (
     "schema, by name or `schema.column`."
 )
 
-NAMED_SCHEMA_ALSO_WRITTEN_DESCRIPTION = (
-    "The other spellings this methodology uses for this same thing."
-)
-
 NAMED_SCHEMA_DESCRIPTION = (
     "One named table in the data model: a schema promoted to an addressable artifact,\n"
     "with foreign keys on its columns."
@@ -59,6 +55,11 @@ REVIEW_GUIDE_STEP_DESCRIPTION = (
     "One step — a Workflow section in the UI. `prose` may carry `backticked` columns."
 )
 
+ROW_TYPE_DESCRIPTION = (
+    "The methodology's word for what ONE ROW is. Many tables and many stages name the\n"
+    "same one — a row type outlives the stages that filter, sort or enrich its rows."
+)
+
 SCHEMA_LIBRARY_DESCRIPTION = (
     "The whole data model: named schemas with unique names and resolvable FKs."
 )
@@ -83,12 +84,9 @@ TABLE_SCHEMA_DESCRIPTION = (
 )
 
 TERMS_DESCRIPTION = (
-    "A methodology's whole vocabulary: its nouns (the data model) and its verbs.\n"
-    "One word carries one meaning — no word appears twice across either half."
-)
-
-VERB_ALSO_WRITTEN_DESCRIPTION = (
-    "The other spellings this methodology uses for this same act."
+    "A methodology's words — its row types and its verbs — plus the tables of its data\n"
+    "model, each naming the row type its rows are. One word carries one meaning: no\n"
+    "word is both a row type and a verb, or two row types, or two verbs."
 )
 
 VERB_DESCRIPTION = (
