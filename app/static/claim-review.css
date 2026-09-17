@@ -68,6 +68,7 @@ table.ground {
 .ch-text { font-size: 15px; font-weight: 600; line-height: 1.4; }
 .ch-ev { font-size: 13.5px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
 .ch-side { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+a.backing { text-decoration: none; }
 .backing {
     font-family: var(--mono); font-size: 12.5px; font-variant-numeric: tabular-nums;
     color: var(--fg); background: var(--sunk-deep); border-radius: 4px; padding: 2px 7px;
@@ -135,7 +136,7 @@ table.pool-t { width: 100%; border-collapse: collapse; font-size: 13px; }
 .pool-t .note { color: var(--muted); }
 .pool-t tr.lit td { background: var(--sunk); }
 
-/* ── writing another wording, and what the attack is doing ── */
+/* ── writing another wording, and what the review is doing ── */
 .word-bar { display: flex; gap: 10px; align-items: center; margin: 4px 0 14px; flex-wrap: wrap; }
 .word-bar textarea {
     font: inherit; font-family: var(--prose); font-size: 20px; line-height: 1.45;
@@ -171,31 +172,6 @@ table.pool-t { width: 100%; border-collapse: collapse; font-size: 13px; }
 }
 .stand .cite { font-family: var(--mono); font-size: 12px; color: var(--muted); }
 .stand.is-claimed { border-color: var(--good-bd); background: var(--good-bg); color: var(--good-ink); }
-
-/* ── who attacked it ── */
-.attackers {
-    background: var(--raised); border: 1px solid var(--border); border-radius: 8px;
-    margin: 0 0 22px; overflow: hidden;
-}
-/* Six tiles, or seven when the orchestrator raised something of its own, so the closing
-   edges are drawn from position rather than from a fixed count: the last row's bottom
-   border is pulled under the box's own, and a lone last tile takes the full width. */
-.att-row {
-    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: -1px;
-}
-.att {
-    display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; padding: 10px 16px;
-    border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
-}
-.att:nth-child(3n), .att:last-child { border-right: 0; }
-.att:last-child:nth-child(3n+1) { grid-column: 1 / -1; }
-.att-n { font-family: var(--mono); font-size: 22px; line-height: 1.1; font-variant-numeric: tabular-nums; }
-/* An attacker that raised nothing says so in words rather than in a 0 — a count of zero
-   is not written, and "none" is the finding rather than the absence of one. */
-.att.zero .att-n { color: var(--muted-dim); font-size: 13px; line-height: 1.9; }
-.att-name { font-size: 13px; font-weight: 600; }
-.att-reads { font-size: 11.5px; color: var(--muted); }
-.att-does { font-size: 11.5px; color: var(--muted-dim); margin-top: 2px; line-height: 1.4; }
 
 /* ── the claim's own status ── */
 .status-chip {

@@ -2,14 +2,14 @@
 {% from "_sparkle.html" import sparkle %}
 {#
   THE CLAIM PAGE — one sentence, where each of its phrases lands in the run, and every
-  challenge the attackers raised against it.
+  challenge the reviewers raised against it.
 
   The underline under a phrase is its worst open challenge: the legend under the sentence
   names every weight in words, so the marking is never colour alone. A phrase the review
   grounds on nothing still carries its row in the ground table, saying so.
 
-  The attack itself is a background turn, so this page has four states of its own —
-  never attacked, running, failed, refused — and the block after the legend is whichever
+  The review itself is a background turn, so this page has four states of its own —
+  never reviewed, running, failed, refused — and the block after the legend is whichever
   one it is in. Running polls the session's status endpoint and reloads when it goes
   still; nothing here computes a result client-side.
 
@@ -54,15 +54,14 @@
 
 <p class="sentence">
   {%- for token in page.tokens -%}
-    {%- if token.grounding_index is none -%}{{ token.text }}
+    {%- if token.severity is none -%}{{ token.text }}
     {%- else -%}
-    {%- set weight = 's' ~ (token.severity if token.severity is not none else 0) -%}
-<span class="ph {{ weight }}" data-ph="{{ token.grounding_index }}">{{ token.text }}</span>
+<span class="ph s{{ token.severity }}">{{ token.text }}</span>
     {%- endif -%}
   {%- endfor -%}
 </p>
 
-{% if page.ground %}
+{% if page.open_challenges or page.quiet_challenges %}
 <div class="legend">
   <span class="l3"><i></i>could not stand as written</span>
   <span class="l2"><i></i>moves the figure, or bounds it</span>
@@ -71,18 +70,18 @@
 </div>
 {% endif %}
 
-{# ── what the attack is doing, if it is not done ── #}
-{% if page.attack == 'running' %}
+{# ── what the review is doing, if it is not done ── #}
+{% if page.review == 'running' %}
 <div class="round-note pending">
   {{ sparkle() }}<b>Attacking this sentence…</b>
-  <span>Six attackers are reading it against what the run holds. This page reloads
+  <span>Five reviewers are reading it against what the run holds. This page reloads
     when they are done.</span>
 </div>
 <script>
 (function () {
-  // The attack runs in a background turn, so the page watches the session rather than
+  // The review runs in a background turn, so the page watches the session rather than
   // the review: the status endpoint is what knows the turn is still in flight.
-  const url = {{ ("/project/" ~ state.id ~ "/generation-session/" ~ page.attack_session_id ~ "/status") | tojson }};
+  const url = {{ ("/project/" ~ state.id ~ "/generation-session/" ~ page.review_session_id ~ "/status") | tojson }};
   let timer = null;
   async function poll() {
     let state;
@@ -96,48 +95,24 @@
   timer = setInterval(poll, 2000); poll();
 })();
 </script>
-{% elif page.attack == 'failed' and page.status == 'submitted' %}
-<div class="mint-alert">⚠ <span>{{ page.attack_error }}</span></div>
-<form class="word-bar" id="attack-form" method="post" action="{{ base }}/attack">
-  <button class="btn primary" type="submit">{{ sparkle() }} Attack again</button>
+{% elif page.review == 'failed' and page.status == 'submitted' %}
+<div class="mint-alert">⚠ <span>{{ page.review_error }}</span></div>
+<form class="word-bar" id="review-form" method="post" action="{{ base }}/review">
+  <button class="btn primary" type="submit">{{ sparkle() }} Review it again</button>
   <span class="muted">Nothing was stored, so the sentence stands unread.</span>
 </form>
-{% elif page.attack == 'none' and page.status == 'submitted' %}
-<form class="word-bar" id="attack-form" method="post" action="{{ base }}/attack">
-  <button class="btn primary" type="submit">{{ sparkle() }} Attack this claim</button>
-  <span class="muted">Six attackers read the sentence against what the run holds,
-    and land every load-bearing phrase on a piece of it or on nothing.</span>
+{% elif page.review == 'none' and page.status == 'submitted' %}
+<form class="word-bar" id="review-form" method="post" action="{{ base }}/review">
+  <button class="btn primary" type="submit">{{ sparkle() }} Review this claim</button>
+  <span class="muted">Five reviewers read the sentence against what the run holds, and
+    each says what it can raise against it, with what in the run makes that stick.</span>
 </form>
-{% elif page.attack == 'refused' %}
+{% elif page.review == 'refused' %}
 <div class="round-note">
-  <b>Not attacked.</b>
+  <b>Not reviewed.</b>
   <span>This is a table claim: it cites a rectangle of rows rather than one figure, and
-    the attackers read a sentence written on a single value.</span>
+    a reviewer reads a sentence written on a single value.</span>
 </div>
-{% endif %}
-
-{% if page.summary %}
-<div class="round-note">{{ sparkle() }}<b>Written by the AI.</b> <span>{{ page.summary }}</span></div>
-{% endif %}
-
-{% if page.ground %}
-<table class="ground">
-  <thead><tr><th>the phrase</th><th>lands on</th><th>how</th></tr></thead>
-  <tbody>
-    {% for row in page.ground %}
-    <tr>
-      <td class="w">“{{ row.phrase }}”</td>
-      {% if row.lands_on %}
-      <td><span class="ev">{{ row.lands_on }}</span></td>
-      <td>{{ row.how }}</td>
-      {% else %}
-      <td><span class="ev none">nothing in the run</span></td>
-      <td class="none">{{ row.how }}</td>
-      {% endif %}
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
 {% endif %}
 
 {# ── what was raised ── #}
@@ -154,54 +129,42 @@
     {{ challenge_word(one) }}
     <div>
       <div class="ch-text">{{ one.text }}</div>
-      <div class="ch-ev">{{ one.evidence }}{% if one.raised_by %} · raised by {{ one.raised_by }}{% endif %}</div>
+      <div class="ch-ev">{{ one.justification }}</div>
     </div>
     <div class="ch-side">
-      <span class="backing">{{ one.backing }}</span>
-      <span class="mv {{ one.moves }}">{{ one.moves_words }}</span>
-      <span class="cost">to settle: <b>{{ one.cost_words }}</b></span>
+      {% for citation in one.citations %}
+      <a class="backing" href="{{ citation.href }}">{{ citation.words }}</a>
+      {% endfor %}
     </div>
   </div>
 </div>
 {% endfor %}
 
-{% if page.attack == 'done' and not page.open_challenges %}
+{% if page.review == 'done' and not page.open_challenges %}
 <div class="empty-line">Nothing open on this reading.</div>
 {% endif %}
 
 {% if page.quiet_challenges %}
 <details class="fold">
-  <summary>{{ page.quiet_challenges | length }} checked, and none moves this figure at published precision</summary>
+  <summary>{{ page.quiet_challenges | length }} checked, and none of them moves this figure</summary>
   <div class="quiet-box">
     {% for one in page.quiet_challenges %}
     <div class="quiet-row">
       {{ challenge_word(one) }}
-      <div>{{ one.text }} — {{ one.evidence }}</div>
-      <div><span class="backing">{{ one.backing }}</span></div>
+      <div>{{ one.text }} — {{ one.justification }}</div>
+      <div>{% for citation in one.citations %}<a class="backing"
+        href="{{ citation.href }}">{{ citation.words }}</a>{% endfor %}</div>
     </div>
     {% endfor %}
   </div>
 </details>
 {% endif %}
 
-{# ── another wording, which is another claim ── #}
-{% for rewrite in page.proposed_rewrites %}
-<div class="rw">
-  <p class="diff">{{ rewrite.text }}</p>
-  <p class="why">{{ rewrite.why }}</p>
-  <form class="acts" method="post" action="{{ base }}/rewrite">
-    <input type="hidden" name="text" value="{{ rewrite.text }}">
-    <button class="btn primary" type="submit">Submit this wording as a new claim</button>
-    <span class="muted">superseding this one, and attacked again</span>
-  </form>
-</div>
-{% endfor %}
-
-{% if page.attack != 'refused' %}
+{% if page.review != 'refused' %}
 <form class="word-bar" method="post" action="{{ base }}/rewrite">
   <textarea name="text" rows="2" aria-label="another wording of this claim"
             required>{{ page.text }}</textarea>
-  <button class="btn" type="submit">{{ sparkle() }} Re-attack this wording</button>
+  <button class="btn" type="submit">{{ sparkle() }} Review this wording</button>
   <span class="muted">Any text. It becomes a claim of its own, superseding this one, and
     the AI reads it against what the run holds rather than against this sentence.</span>
 </form>
@@ -235,41 +198,21 @@
   {% endif %}
 </div>
 
-{% if page.attack == 'done' %}
+{% if page.review == 'done' %}
 <details class="fold">
-  <summary>How this was attacked</summary>
-  <div class="attackers">
-    <div class="pool-h">
-      <span class="k">Who attacked this sentence</span>
-      <span class="run">one orchestrator reads the sentence, sends it to six attackers,
-        merges what comes back, weighs it, and writes the summary</span>
-    </div>
-    <div class="att-row">
-      {% for attacker in page.attackers %}
-      <div class="att{{ ' zero' if not attacker.count }}">
-        <div class="att-n">{{ attacker.count if attacker.count else "none" }}</div>
-        <div>
-          <div class="att-name">{{ attacker.name }}</div>
-          <div class="att-reads">reads {{ attacker.reads_what }}</div>
-          <div class="att-does">{{ attacker.does }}</div>
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-  </div>
-  {% if page.session_ids %}
-  <p class="muted">Every turn it took is kept:
-    {% for session_id in page.session_ids %}<a href="/chat/{{ session_id }}">turn {{ loop.index }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
-  </p>
+  <summary>How this was reviewed</summary>
+  {% if page.review_session_id %}
+  <p class="muted">Every turn it took is kept in
+    <a href="/chat/{{ page.review_session_id }}">this session</a>.</p>
   {% endif %}
 </details>
 {% endif %}
 
 <script>
 (function () {
-  // The attack route answers JSON to whoever started the turn, so this form is sent by
+  // The review route answers JSON to whoever started the turn, so this form is sent by
   // fetch: a started turn reloads the page, a refusal is drawn above the form unreloaded.
-  const form = document.getElementById('attack-form');
+  const form = document.getElementById('review-form');
   if (!form) return;
   const button = form.querySelector('button[type=submit]');
   function drawRefusal(text) {
@@ -284,7 +227,7 @@
     if (button) button.disabled = true;
     let answer;
     try { answer = await fetch(form.action, { method: 'POST' }); }
-    catch (e) { drawRefusal('the attack could not be sent to the server'); return; }
+    catch (e) { drawRefusal('the review could not be sent to the server'); return; }
     if (answer.ok) { location.reload(); return; }
     const refused = await answer.json().catch(function () { return {}; });
     drawRefusal(refused.detail || ('the server answered ' + answer.status));

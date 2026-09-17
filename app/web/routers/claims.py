@@ -8,11 +8,14 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.core.errors import ClaimReviewFailed
+from app.models.records.claims import Claim
 from app.services import claim_review_run
 from app.services import claims as claims_service
 from app.services import project as project_service
+from app.services import run as run_service
 from app.services.errors import ClaimRefused, ClaimReviewRefused
-from app.web.breadcrumbs import Crumb, build_section_crumbs
+from app.web.breadcrumbs import Crumb, build_run_child_crumbs, build_section_crumbs
+from app.web.claim_review_view import build_claim_review_page
 from app.web.claims_view import build_publish_view
 from app.web.config import templates
 from app.web.project_view import shell_state_off_nav, validate_project_or_404
@@ -137,12 +140,6 @@ def _read_whether_the_run_read_everything(project_id: str, claim_id: str) -> boo
         run_service.read_run_manifest(project_id, run_id))
 
 
-def _read_whether_the_run_read_everything(project_id: str, claim_id: str) -> bool:
-    run_id = claims_service.load_claim(project_id, claim_id).citation.run_id
-    return claims_service.read_whether_the_run_read_everything(
-        run_service.read_run_manifest(project_id, run_id))
-
-
 def _read_model(project_id: str) -> str:
     return project_service.project_meta(project_id).model or "sonnet"
 
@@ -179,11 +176,14 @@ def _back_to_the_claim(project_id: str, claim_id: str) -> RedirectResponse:
     )
 
 
-def _crumbs(project_id: str) -> list[Crumb]:
-    return build_section_crumbs(
-        project_id, label="Publish", parent=("Runs", f"/project/{project_id}/runs")
-    )
-
-
 def _build_claim_crumbs(project_id: str, run_id: str) -> list[Crumb]:
     return build_run_child_crumbs(project_id, run_id, label="Claim")
+
+
+def _refusing_404(read: Callable[[], _Written]) -> _Written:
+    try:
+        return read()
+    except ClaimRefused as exc:
+        raise HTTPException(status_code=404, detail="; ".join(exc.refusals)) from exc
+
+
