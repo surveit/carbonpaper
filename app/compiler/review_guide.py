@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Callable
 
 from app.compiler.review_guide_prompt import REVIEW_GUIDE_SYSTEM_PROMPT
-from app.compiler.turn_failure import persist_generation_failure
+from app.core.agent.turn_failure import persist_generation_failure
 from app.core.agent.agent import Agent
 from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager

@@ -9,7 +9,7 @@ from app.models.records.claim_review import ClaimReview
 
 _FIELDS = dict(
     claim_id="c1", challenges=[],
-    summary="Nothing in the run backs it.", session_ids=["session-parts", "session-data"],
+    session_id="session-review",
 )
 
 
@@ -22,8 +22,8 @@ def test_a_review_is_stored_and_read_back_by_claim():
     review.save()
 
     [held] = ClaimReview.find(claim_id="c1")
-    assert held.summary == review.summary and held.challenges == review.challenges
-    assert held.session_ids == ["session-parts", "session-data"]
+    assert held.challenges == review.challenges
+    assert held.session_id == "session-review"
 
 
 def test_a_review_names_no_project_and_no_run_of_its_own():
@@ -33,7 +33,7 @@ def test_a_review_names_no_project_and_no_run_of_its_own():
 
 def test_the_fields_below_are_every_field_a_review_declares():
     assert set(_FIELDS) == set(ClaimReview.model_fields) - {"id", "created_at", "updated_at"}
-    assert "session_ids" in _FIELDS
+    assert "session_id" in _FIELDS
 
 
 @pytest.mark.parametrize("left_out", [name for name in _FIELDS])

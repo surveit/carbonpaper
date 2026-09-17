@@ -9,7 +9,7 @@ import pytest
 
 import app.compiler.stage_tests as compiler_stage_tests
 import app.services.generation as generation
-from app.compiler.turn_failure import GENERATION_FAILURE_PREFIX
+from app.core.agent.turn_failure import GENERATION_FAILURE_PREFIX
 from app.core.agent.store import SessionStore
 from app.core.agent.turns import TurnManager
 from app.core.errors import GenerationError

@@ -1,6 +1,8 @@
 """A claim under review: what every reviewer is handed, and what each agent answers."""
 from __future__ import annotations
 
+from enum import Enum
+
 from pydantic import Field
 
 from app.core.file_shape import ColumnShape
@@ -8,25 +10,31 @@ from app.core.ids import ID
 from app.core.json_types import JsonDict
 from app.models.citations import StageOutputCellCitation
 from app.models.claims import ClaimShapeInput
-from app.models.records.claim_review import Challenge, ClaimPart
+from app.models.records.claim_review import ClaimPart, DraftChallenge
 from app.models.records.workflow_output import WorkflowOutput
 from app.models.schema import StageId, _Base
 
 
+class Reviewer(str, Enum):
+    data_defects = "data_defects"
+    choices = "choices"
+    omissions = "omissions"
+    coverage = "coverage"
+    meaning = "meaning"
+
+
 # ── What each agent answers ──
 class ChallengesAnswer(_Base):
-    challenges: list[Challenge] = Field(
+    challenges: list[DraftChallenge] = Field(
         description="Everything you found worth raising; an empty list if the claim survived you."
     )
 
 
-class OrchestratorAnswer(_Base):
-    challenges: list[Challenge] = Field(
-        description="The challenges you kept, each with its severity ruled."
-    )
-    summary: str = Field(
-        description="What the claim can stand as, in one paragraph the claim owner reads first."
-    )
+class ClaimReviewResult(_Base):
+    """What one review run produced: the merged answer, and every session behind it."""
+
+    challenges: list[DraftChallenge]
+    session_id: ID
 
 
 def find_claim_part_spans(text: str, parts: list[ClaimPart]) -> list[tuple[int, int] | None]:

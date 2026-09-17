@@ -22,9 +22,8 @@ class ChallengeKind(str, Enum):
     gap = "gap"
 
 
+# Ordered: the page folds the quiet ones behind a count and sorts the rest by weight.
 class Severity(IntEnum):
-    """Ordered: the page folds the quiet ones behind a count and sorts the rest by weight."""
-
     noted = 0
     minor = 1
     major = 2
@@ -50,9 +49,8 @@ class ClaimPart(_Base):
     )
 
 
+# What a reviewer answers: no project, which it cannot read off the evidence pool.
 class DraftChallenge(_Base):
-    """What a reviewer answers: no project, which it cannot read off the evidence pool."""
-
     kind: ChallengeKind = Field(description="What sort of stretch this is.")
     claim_part: ClaimPart | None = Field(
         default=None,
@@ -93,9 +91,8 @@ class ClaimReview(PersistedModel):
 
     claim_id: ID = Field(frozen=True)
     challenges: list[Challenge] = Field(frozen=True)
-    summary: str = Field(frozen=True)
-    # Every review session in the order it ran, so a reader can open the transcripts.
-    session_ids: list[ID] = Field(frozen=True)
+    # The one session the review ran under, so a reader can open what it spent.
+    session_id: ID = Field(frozen=True)
 
     def save(self) -> None:
         # Frozen fields stop a mutation; this stops a fresh record with a stored id.

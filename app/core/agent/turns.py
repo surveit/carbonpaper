@@ -115,7 +115,7 @@ class TurnManager:
 
 
 def _record_turn_spend(engine, store, session_id: ID) -> None:
-    """Called in teardown, so a turn that errored still books what it spent getting there."""
+    """Called in teardown, so a turn that errored still records what it spent getting there."""
     usage = getattr(engine, "last_usage", None)  # a custom engine need not track usage
     if usage is not None:
         # None is a turn that reported nothing, which is not a turn that cost nothing.

@@ -29,6 +29,10 @@ class ClaimShapeIsImmutable(ValueError):
     """A shape is written once: every claim under it asserts what it said."""
 
 
+class ClaimReviewFailed(ValueError):
+    """A review that did not happen: an agent that would not answer, or a refused review."""
+
+
 class ClaimReviewIsImmutable(ValueError):
     """A review is written once: a re-review is a new claim and a new review."""
 

@@ -98,7 +98,7 @@ def test_a_cell_citation_copied_off_the_pool_is_one_the_store_accepts(
         column=printed["column"], value=printed["value"])
 
     stored = claim_review.store_claim_review(
-        project_id, held.id, summary="s", session_ids=_SESSIONS,
+        project_id, held.id, session_id=_SESSION,
         challenges=[_challenge(held, claim_part=None, citations=[copied])])
 
     assert stored.challenges[0].citations == [address_citation(project_id, copied)]
@@ -214,7 +214,7 @@ def _challenge(claim, **overrides: object) -> DraftChallenge:
     return DraftChallenge.model_validate({**fields, **overrides})
 
 
-_SESSIONS = ["session-parts", "session-data", "session-orchestrator"]
+_SESSION = "session-review"
 _NO_CHALLENGES: list[DraftChallenge] = []
 
 
@@ -222,9 +222,9 @@ def _pool_of(claim) -> str:
     return render_evidence_pool(claim_review.build_evidence_bundle(PROJECT, claim.id))
 
 
-def _store(claim, *, challenges: list[DraftChallenge] = _NO_CHALLENGES, summary: str = "s"):
+def _store(claim, *, challenges: list[DraftChallenge] = _NO_CHALLENGES):
     return claim_review.store_claim_review(
-        PROJECT, claim.id, challenges=challenges, summary=summary, session_ids=_SESSIONS)
+        PROJECT, claim.id, challenges=challenges, session_id=_SESSION)
 
 
 def _refusals_of(claim, *, challenges: list[DraftChallenge] = _NO_CHALLENGES) -> list[str]:

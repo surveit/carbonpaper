@@ -18,6 +18,7 @@ import mcp.types as types
 from claude_agent_sdk import McpSdkServerConfig
 
 from app.agents.compiler.config import CONFIG as EDITING_CONFIG
+from app.reviewer.reviewers import REVIEWERS, build_reviewer
 from app.agents.tutorial.config import CONFIG as TUTORIAL_CONFIG
 from app.compiler.review_guide import build_review_guide_author
 from app.compiler.review_guide_prompt import REVIEW_GUIDE_SYSTEM_PROMPT
@@ -27,6 +28,9 @@ from app.core.agent.bound_tool import BoundToolSpec
 from app.core.agent.registry import build_mcp_server
 from app.core.agent.sdk_engine import MCP_SERVER_NAME
 from app.models import Terms
+from app.models.citations import StageOutputCellCitation
+from app.models.claim_review import EvidenceBundle, Reviewer
+from app.models.claims import ClaimImportance, ClaimShapeInput, DataUniverseRequirement
 from app.runtime.llm import SYSTEM_PROMPT as RUNTIME_SYSTEM_PROMPT
 from app.tools.editing import EditingContext, build_editing_tools
 from app.tools.prompt_fragments import render_link_map
@@ -40,6 +44,19 @@ _UNUSED_DOCUMENT = "(placeholder — the task is per-run and not dumped)"
 _UNUSED_TERMS = Terms()
 # No reader has an address here, so the dump says so in the link map's own shape.
 _PLACEHOLDER_HOST = "http://<host>/"
+
+# One claim's evidence, empty: an reviewer's prompt and answer schema are the same
+# whatever the run holds, and what the run holds is the per-claim task.
+_UNUSED_BUNDLE = EvidenceBundle(
+    claim_id="<claim_id>", claim_text=_UNUSED_DOCUMENT, claim_context={},
+    cited=StageOutputCellCitation(
+        run_id="<run_id>", stage_id="<stage_id>", row_ordinal=0, column="<column>", value=0),
+    shape=ClaimShapeInput(label="<shape>", universe=DataUniverseRequirement.closed,
+                          importance=ClaimImportance.primary),
+    run_read_everything=True, outputs=[], cited_slug="<slug>", stages=[], branches=[],
+    input_columns=[], terms="", methodology=None,
+)
+
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -61,6 +78,7 @@ def render_prompt_dump() -> str:
         render_carbonpaper_server(),
         render_review_guide_agent(),
         render_stage_tests_agent(),
+        render_claim_reviewers(),
         render_llm_transform_stage(),
     ]
     return "\n".join([_preamble(), *surfaces])
@@ -150,6 +168,24 @@ def render_stage_tests_agent() -> str:
     )
 
 
+def render_claim_reviewers() -> str:
+    """The five turns that review one claim, and the sixth that merges what they found."""
+    surfaces = [_render_reviewer(reviewer) for reviewer in REVIEWERS]
+    return "\n".join(surfaces)
+
+
+def _render_reviewer(reviewer: Reviewer) -> str:
+    agent = build_reviewer(reviewer, _UNUSED_BUNDLE)
+    return render_surface(
+        title=f"Claim reviewer · {reviewer.value}",
+        source="app/reviewer/reviewers_prompt.py",
+        model=_GENERATION_MODEL,
+        note=_REVIEWER_NOTE,
+        system_prompt=agent._system_prompt,
+        tools=read_agent_tools(agent),
+    )
+
+
 def render_llm_transform_stage() -> str:
     # The runtime, not the compiler: this is what an llm_transform row's model reads.
     return render_surface(
@@ -174,6 +210,10 @@ def render_llm_transform_stage() -> str:
 _GENERATION_MODEL = "caller-supplied (sonnet at every call site today)"
 _STRUCTURED_OUTPUT_NOTE = (
     "Structured output: the answer IS the submit_answer call's arguments."
+)
+_REVIEWER_NOTE = (
+    f"{_STRUCTURED_OUTPUT_NOTE} One of five turns over a single claim, all reading the "
+    "same task: the claim, and the evidence pool of what the run holds."
 )
 
 
