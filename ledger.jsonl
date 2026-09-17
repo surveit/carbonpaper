@@ -3131,3 +3131,4 @@
 {"run_id":"35246262139","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35246262139","created":"2026-09-17T16:25:21Z","branch":"fix/stage-type-is-never-an-enum-member","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"35246570836","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35246570836","created":"2026-09-17T16:26:47Z","branch":"fix/inline-function-error-names-the-shape","event":"pull_request","contracts_kept":17,"findings":[]}
 {"run_id":"35246570836","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35246570836","created":"2026-09-17T16:29:10Z","branch":"fix/inline-function-error-names-the-shape","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"35247373135","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35247373135","created":"2026-09-17T16:34:40Z","branch":"claim-review/list-and-nav","event":"pull_request","contracts_kept":17,"findings":[]}
