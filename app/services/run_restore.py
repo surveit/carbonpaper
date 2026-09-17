@@ -40,9 +40,10 @@ class RestoredRun(BaseModel):
 def restore_run(from_dir: Path) -> RestoredRun:
     captured = _read_the_captured_record(from_dir)
     project_id = _import_the_captured_project_id(from_dir)
-    _validate_no_stage_queues_rows_for_review(project_id)
+    version_id = resolve_version_id(project_id, None)
+    _validate_no_stage_queues_rows_for_review(project_id, version_id)
     bindings = _bind_the_files_the_run_read(project_id, from_dir, captured.inputs)
-    run_id = str(execute(project_id, bindings=bindings)["run_id"])
+    run_id = str(execute(project_id, version_id=version_id, bindings=bindings)["run_id"])
     _validate_the_restored_run_finished(captured, read_run_manifest(project_id, run_id))
     return RestoredRun(project_id=project_id, run_id=run_id)
 
@@ -83,9 +84,10 @@ def _validate_the_cache_came_with_it(archive: Path, cache: CacheImportReport | N
             "of them: the stages they were computed for have moved since the capture")
 
 
-def _validate_no_stage_queues_rows_for_review(project_id: ID) -> None:
+def _validate_no_stage_queues_rows_for_review(project_id: ID, version_id: str) -> None:
     queueing = [
-        placed.id for placed in _read_the_workflow_the_run_will_take(project_id)
+        placed.id
+        for placed in _read_the_workflow_the_run_will_take(project_id, version_id)
         if placed.stage.type is StageType.human_review_queue
     ]
     if queueing:
@@ -94,8 +96,9 @@ def _validate_no_stage_queues_rows_for_review(project_id: ID) -> None:
             "would halt waiting for a reviewer rather than finish")
 
 
-def _read_the_workflow_the_run_will_take(project_id: ID) -> Sequence[WorkflowStage]:
-    version_id = resolve_version_id(project_id, None)
+def _read_the_workflow_the_run_will_take(
+    project_id: ID, version_id: str
+) -> Sequence[WorkflowStage]:
     workflow = Workflow(stages=load_version_stages(project_id, version_id))
     return workflow.list_workflow_stages()
 
