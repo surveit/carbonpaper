@@ -3047,3 +3047,4 @@
 {"run_id":"35138975450","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35138975450","created":"2026-09-16T19:13:53Z","branch":"eval/saved-runs","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"35200224286","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35200224286","created":"2026-09-17T08:32:58Z","branch":"feat/noun-grain","event":"pull_request","contracts_kept":16,"findings":[]}
 {"run_id":"35200224286","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35200224286","created":"2026-09-17T08:34:40Z","branch":"feat/noun-grain","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"35201973942","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35201973942","created":"2026-09-17T08:52:27Z","branch":"eval/archive-claim-shapes","event":"pull_request","contracts_kept":16,"findings":[]}
