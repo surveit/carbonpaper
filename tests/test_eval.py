@@ -358,6 +358,29 @@ def test_reference_data_on_that_side_still_scores_because_its_rows_are_not_the_d
     assert v.can_score_declaratively is True
 
 
+def test_a_dataset_further_above_the_reference_side_is_not_scorable_either(tmp_path):
+    # The walk up the reference branch is what `_reads_the_dataset` recurses for.
+    workflow = m.parse_workflow([
+        _file_input("subject", tmp_path), _file_input("ref_source", tmp_path,
+                                                      output_schema=_KV),
+        _py("ref_cleaned", ["ref_source"], granularity="row"),
+        S(id="joined", type="enrich", inputs=[{"id": "subject"}, {"id": "ref_cleaned"}],
+          join={"keys": [{"left": "k", "right": "k"}], "enrich_with": {"v": "v"}}, signature={
+              "form": "extends",
+              "reads": [
+                  {"input": "subject", "columns": _K["columns"]},
+                  {"input": "ref_cleaned", "columns": _K["columns"]},
+              ],
+              "adds": [{"name": "v", "type": "str", "nullable": True}],
+          }),
+    ])
+
+    v = resolve_eval_run_settings(workflow, "ref_source", [], target="joined")
+
+    assert v.can_score_declaratively is False
+    assert v.blocking_stages == ["joined"]
+
+
 def test_unknown_target_raises(tmp_path):
     with pytest.raises(ValueError):
         resolve_eval_run_settings(_chain(tmp_path), None, [], target="ghost")

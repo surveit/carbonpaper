@@ -8,12 +8,10 @@ from app.models.stage import (
     find_row_effect,
     is_grain_and_order_preserving,
 )
-from app.models.stages.stage_base import _ROW_EFFECT_BY_TYPE
-
 
 def test_every_stage_type_names_a_row_effect() -> None:
-    """A type left out of the classification has no answer rather than a default one."""
-    assert set(_ROW_EFFECT_BY_TYPE) == set(StageType)
+    """mypy refuses an unclassified type at `assert_never`; this catches a run without it."""
+    assert all(find_row_effect(stage_type) in RowEffect for stage_type in StageType)
 
 
 def test_every_row_effect_claims_at_least_one_stage_type() -> None:

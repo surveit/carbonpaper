@@ -10,13 +10,14 @@ import json
 from collections.abc import Sequence
 from enum import Enum
 from typing import (
-    TYPE_CHECKING,
     Annotated,
     Any,
     ClassVar,
     Literal,
     Optional,
+    TYPE_CHECKING,
     Union,
+    assert_never,
     get_args,
 )
 
@@ -109,49 +110,33 @@ class RowEffect(str, Enum):
 
 
 def find_row_effect(stage_type: StageType) -> RowEffect:
-    return _ROW_EFFECT_BY_TYPE[stage_type]
+    match stage_type:
+        # Rows of its own, with no input to answer to.
+        case StageType.input_data:
+            return RowEffect.creates
+        # One output row per input row, in input order.
+        case (StageType.python_row_function | StageType.llm_transform
+              | StageType.human_review_queue | StageType.starlark_row_function
+              | StageType.enrich):
+            return RowEffect.maps
+        # Every output row IS an input row; which ones and in what order may change.
+        case (StageType.filter_rows | StageType.starlark_filter_rows
+              | StageType.sort_rank | StageType.dedupe | StageType.union):
+            return RowEffect.selects
+        # Rows no input row stands behind one-for-one: fanned out, fanned in, reshaped.
+        case (StageType.aggregate | StageType.explode
+              | StageType.expand | StageType.python_frame_function):
+            return RowEffect.builds
+        # Reads the rows and emits none.
+        case StageType.report:
+            return RowEffect.consumes
+    # mypy names the unclassified type here, so a new one cannot default its way in.
+    assert_never(stage_type)
 
 
 # A created row answers to no input row; a mapped one holds its input row's place.
 def is_grain_and_order_preserving(stage_type: StageType) -> bool:
     return find_row_effect(stage_type) in {RowEffect.creates, RowEffect.maps}
-
-
-_ROW_EFFECT_BY_TYPE: dict[StageType, RowEffect] = {
-    # Rows of its own, with no input to answer to.
-    StageType.input_data: RowEffect.creates,
-    # One output row per input row, in input order.
-    StageType.python_row_function: RowEffect.maps,
-    StageType.llm_transform: RowEffect.maps,
-    StageType.human_review_queue: RowEffect.maps,
-    StageType.starlark_row_function: RowEffect.maps,
-    StageType.enrich: RowEffect.maps,
-    # Every output row IS an input row; which ones and in what order may change.
-    StageType.filter_rows: RowEffect.selects,
-    StageType.starlark_filter_rows: RowEffect.selects,
-    StageType.sort_rank: RowEffect.selects,
-    StageType.dedupe: RowEffect.selects,
-    StageType.union: RowEffect.selects,
-    # Rows no input row stands behind one-for-one: fanned out, fanned in, reshaped.
-    StageType.aggregate: RowEffect.builds,
-    StageType.explode: RowEffect.builds,
-    StageType.expand: RowEffect.builds,
-    StageType.python_frame_function: RowEffect.builds,
-    # Reads the rows and emits none.
-    StageType.report: RowEffect.consumes,
-}
-
-
-def _refuse_an_unclassified_stage_type() -> None:
-    missing = sorted(t.value for t in StageType if t not in _ROW_EFFECT_BY_TYPE)
-    if missing:
-        raise RuntimeError(
-            f"stage type(s) {missing} name no RowEffect: say what each does to its "
-            f"input's rows, because a type left out has no answer rather than a default"
-        )
-
-
-_refuse_an_unclassified_stage_type()
 
 
 
