@@ -1,13 +1,19 @@
 import hashlib
+from pathlib import Path
 
 import pytest
 
+from app.core.run_status import RunStatus
 from app.evals.case import Case, CaseSource
 from app.evals.errors import CaseDidNotReplay
 from app.evals.replay import (
-    find_model_calling_stages, validate_run_called_no_model, validate_sources_match_capture)
+    find_model_calling_stages, find_stages_that_replayed_no_row, find_unlisted_input_paths,
+    validate_imported_cache_is_reachable, validate_run_called_no_model,
+    validate_run_finished_whole, validate_sources_match_capture)
 from app.models import Workflow, parse_stage
 from app.runtime.run_log import ROW_OK, SOURCE_CACHED, SOURCE_COMPUTED, RunLog
+from app.services.project import ProjectImportReport
+from app.services.stage_cache_transfer import CacheImportReport
 
 PROJECT = "eval-replay-tests"
 
@@ -38,6 +44,18 @@ def workflow():
     return Workflow(stages=[_LOAD, _JUDGE])
 
 
+def _reading(*paths: Path) -> Workflow:
+    """The same workflow, with the source stage reading the files named here."""
+    load = parse_stage({
+        "id": "load", "type": "input_data", "description": "rows for load",
+        "connector": {"kind": "file",
+                      "params": {"paths": [str(path) for path in paths], "format": "csv"}},
+        "signature": {"form": "replaces", "produces": [
+            {"name": "text", "type": "str", "nullable": True}]},
+    })
+    return Workflow(stages=[load, _JUDGE])
+
+
 def _log_rows(project_id, run_id, rows):
     log = RunLog(project_id, run_id)
     for stage, source in rows:
@@ -51,7 +69,7 @@ def test_a_replayed_llm_stage_names_nothing(tmp_project, workflow):
 
 
 def test_a_recomputed_input_stage_is_not_a_model_call(tmp_project, workflow):
-    _log_rows(tmp_project, "run_1", [("load", SOURCE_COMPUTED)])
+    _log_rows(tmp_project, "run_1", [("load", SOURCE_COMPUTED), ("judge", SOURCE_CACHED)])
     validate_run_called_no_model(tmp_project, "run_1", workflow)  # does not raise
 
 
@@ -60,6 +78,53 @@ def test_a_recomputed_llm_stage_is_refused_by_name(tmp_project, workflow):
     with pytest.raises(CaseDidNotReplay) as refusal:
         validate_run_called_no_model(tmp_project, "run_1", workflow)
     assert "judge" in str(refusal.value)
+
+
+def test_a_model_stage_that_replayed_no_row_is_refused_by_name(tmp_project, workflow):
+    """Silence is not proof: the stage may have errored, been blocked, or never run."""
+    _log_rows(tmp_project, "run_1", [("load", SOURCE_COMPUTED)])
+    assert find_stages_that_replayed_no_row(tmp_project, "run_1", workflow) == ["judge"]
+    with pytest.raises(CaseDidNotReplay) as refusal:
+        validate_run_called_no_model(tmp_project, "run_1", workflow)
+    assert "judge" in str(refusal.value)
+
+
+def test_an_unreadable_run_log_is_refused_rather_than_read_as_a_replay(tmp_project, workflow):
+    with pytest.raises(CaseDidNotReplay):
+        validate_run_called_no_model(tmp_project, "run_that_logged_nothing", workflow)
+
+
+@pytest.mark.parametrize("status", [RunStatus.OK, RunStatus.WARNINGS])
+def test_a_whole_run_is_accepted(status):
+    validate_run_finished_whole({"run_id": "run_1", "status": str(status)})
+
+
+@pytest.mark.parametrize(
+    "status", [RunStatus.ERRORS, RunStatus.AWAITING_REVIEW, RunStatus.CANCELLED,
+               RunStatus.RUNNING])
+def test_a_run_that_did_not_finish_whole_is_refused_by_status(status):
+    with pytest.raises(CaseDidNotReplay) as refusal:
+        validate_run_finished_whole({"run_id": "run_1", "status": str(status)})
+    assert str(status) in str(refusal.value)
+
+
+def _report(reachable: int | None) -> ProjectImportReport:
+    if reachable is None:
+        return ProjectImportReport(project_id="p", cache=None)
+    return ProjectImportReport(project_id="p", cache=CacheImportReport(
+        source_project="p", written=1, already_stored=0, frames_skipped=0,
+        reachable=reachable, stages=[]))
+
+
+def test_an_import_the_workflow_can_read_is_accepted():
+    validate_imported_cache_is_reachable(_report(3))
+
+
+@pytest.mark.parametrize("reachable", [0, None])
+def test_an_import_no_stage_can_read_is_refused(reachable):
+    with pytest.raises(CaseDidNotReplay) as refusal:
+        validate_imported_cache_is_reachable(_report(reachable))
+    assert "reachable" in str(refusal.value) or "cache" in str(refusal.value)
 
 
 def _write_source(case_dir, name, text):
@@ -78,7 +143,8 @@ def _case(sources):
 def test_an_unchanged_source_is_accepted(tmp_path):
     digest = _write_source(tmp_path, "sources/a.csv", "x,y\n1,2\n")
     validate_sources_match_capture(
-        tmp_path, _case([CaseSource(path="sources/a.csv", sha256=digest)]))
+        tmp_path, _case([CaseSource(path="sources/a.csv", sha256=digest)]),
+        _reading(tmp_path / "sources" / "a.csv"))
 
 
 def test_a_changed_source_is_refused_by_name(tmp_path):
@@ -86,12 +152,33 @@ def test_a_changed_source_is_refused_by_name(tmp_path):
     _write_source(tmp_path, "sources/a.csv", "x,y\n9,9\n")
     with pytest.raises(CaseDidNotReplay) as refusal:
         validate_sources_match_capture(
-            tmp_path, _case([CaseSource(path="sources/a.csv", sha256=digest)]))
+            tmp_path, _case([CaseSource(path="sources/a.csv", sha256=digest)]),
+            _reading(tmp_path / "sources" / "a.csv"))
     assert "sources/a.csv" in str(refusal.value)
 
 
 def test_a_missing_source_is_refused_by_name(tmp_path):
     with pytest.raises(CaseDidNotReplay) as refusal:
         validate_sources_match_capture(
-            tmp_path, _case([CaseSource(path="sources/gone.csv", sha256="abc")]))
+            tmp_path, _case([CaseSource(path="sources/gone.csv", sha256="abc")]),
+            _reading(tmp_path / "sources" / "gone.csv"))
     assert "sources/gone.csv" in str(refusal.value)
+
+
+def test_a_file_the_run_reads_but_the_case_never_listed_is_refused(tmp_path):
+    _write_source(tmp_path, "sources/a.csv", "x,y\n1,2\n")
+    workflow = _reading(tmp_path / "sources" / "a.csv")
+    assert find_unlisted_input_paths(tmp_path, _case([]), workflow)
+    with pytest.raises(CaseDidNotReplay) as refusal:
+        validate_sources_match_capture(tmp_path, _case([]), workflow)
+    assert "a.csv" in str(refusal.value)
+
+
+def test_a_case_listing_the_wrong_file_is_refused(tmp_path):
+    _write_source(tmp_path, "sources/a.csv", "x,y\n1,2\n")
+    digest = _write_source(tmp_path, "sources/b.csv", "x,y\n3,4\n")
+    with pytest.raises(CaseDidNotReplay) as refusal:
+        validate_sources_match_capture(
+            tmp_path, _case([CaseSource(path="sources/b.csv", sha256=digest)]),
+            _reading(tmp_path / "sources" / "a.csv"))
+    assert "a.csv" in str(refusal.value)

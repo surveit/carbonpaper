@@ -20,7 +20,7 @@ from app.services.methodology import write_methodology
 from app.services.project import export_project_archive, save_working_copy_as_version
 from claim_review_fixture import PROJECT, TOTAL_SHAPE, TOTAL_TEXT, add_a_sandboxed_filter
 from run_seed import list_run_ids
-from scope_fixture import stage_specs, write_inputs
+from scope_fixture import column, review_tail, stage_specs, write_inputs
 from stage_seed import set_stages
 
 _SUMMARY = "the figure is a share, not a count"
@@ -55,6 +55,18 @@ def _a_review_that_lands_late(project_id: str, claim_id: str, *, model: str) -> 
     return session_id
 
 
+_ORPHANS: list[asyncio.Task] = []
+
+
+def _a_review_that_keeps_running(project_id: str, claim_id: str, *, model: str) -> str:
+    """The shape of a real reviewer: a task holding a `claude` subprocess, storing nothing."""
+    async def keep_running() -> None:
+        await asyncio.sleep(3600)
+
+    _ORPHANS.append(asyncio.get_running_loop().create_task(keep_running()))
+    return "fake-session"
+
+
 def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -69,8 +81,30 @@ def _declare_the_total_as_an_output(specs: list[dict], shape_id: str) -> list[di
     return specs
 
 
+def _a_judging_stage(*, cache: bool) -> dict:
+    return {
+        "id": "judge", "type": "llm_transform", "cache": cache,
+        "description": "What the model made of each grant.",
+        "inputs": [{"id": "grants_only"}],
+        "signature": {"form": "extends", "reads": [
+            {"input": "grants_only", "columns": [column("grant_id", "str", False)]}],
+            "adds": [column("verdict", "str")], "rewrites": []},
+        "llm": {"prompt_instructions": "judge it", "prompt_data_template": "{grant_id}",
+                "batch_size": 1},
+    }
+
+
+def _a_stubbed_verdict(*args, **kwargs) -> dict:
+    return {"verdict": "sound"}
+
+
 @pytest.fixture
-def seeded_case_dir(tmp_path, projects_root) -> Path:
+def seeded_case_dir(tmp_path, projects_root, monkeypatch) -> Path:
+    return capture_a_case(tmp_path, projects_root, monkeypatch)
+
+
+def capture_a_case(tmp_path, projects_root, monkeypatch, *, judged_cache=True, tail=()) -> Path:
+    """Runs the fixture with the model stubbed, so the archive carries a warmed cache."""
     case_dir = tmp_path / "case"
     sources = case_dir / "sources"
     (projects_root / PROJECT).mkdir(parents=True, exist_ok=True)
@@ -78,10 +112,13 @@ def seeded_case_dir(tmp_path, projects_root) -> Path:
     write_methodology(PROJECT, "How the grants were totalled.")
     write_inputs(sources)
     [shape] = write_claim_shapes(PROJECT, [TOTAL_SHAPE])
-    set_stages(PROJECT, _declare_the_total_as_an_output(
-        add_a_sandboxed_filter(stage_specs(sources)), shape.id))
+    set_stages(PROJECT, [*_declare_the_total_as_an_output(
+        add_a_sandboxed_filter(stage_specs(sources)), shape.id),
+        _a_judging_stage(cache=judged_cache), *tail])
     save_working_copy_as_version(PROJECT, message="fixture")
+    monkeypatch.setattr("app.runtime.stages.llm_transform.call_llm", _a_stubbed_verdict)
     run_service.execute(PROJECT)
+    monkeypatch.undo()
     (case_dir / ARCHIVE_FILE).write_bytes(export_project_archive(PROJECT))
     (case_dir / CASE_FILE).write_text(json.dumps({
         "output_slug": _SLUG, "claim_context": {}, "claim_text": TOTAL_TEXT,
@@ -147,3 +184,58 @@ def test_a_review_that_lands_after_a_poll_is_waited_for(capsys, seeded_case_dir,
 
     assert exit_code == 0
     assert [one["text"] for one in json.loads(capsys.readouterr().out)["challenges"]] == [_SUMMARY]
+
+
+def test_the_model_stage_replays_from_the_imported_cache(capsys, seeded_case_dir, monkeypatch):
+    """`call_llm` is left unstubbed: a cache miss would raise rather than bill a call."""
+    monkeypatch.setattr("app.evals.review_case.start_claim_review", _a_fake_review)
+
+    exit_code = main([str(seeded_case_dir)])
+
+    assert exit_code == 0, capsys.readouterr().out
+
+
+def test_a_model_stage_that_computed_a_row_is_refused_by_name(
+    capsys, tmp_path, projects_root, monkeypatch
+):
+    case_dir = capture_a_case(tmp_path, projects_root, monkeypatch, judged_cache=False)
+    monkeypatch.setattr("app.runtime.stages.llm_transform.call_llm", _a_stubbed_verdict)
+    monkeypatch.setattr("app.evals.review_case.start_claim_review", _a_fake_review)
+
+    exit_code = main([str(case_dir)])
+
+    printed = capsys.readouterr().out
+    assert exit_code == 1
+    assert "judge" in printed and '"challenges"' not in printed
+
+
+def test_a_run_that_did_not_finish_is_refused_rather_than_scored(
+    capsys, tmp_path, projects_root, monkeypatch
+):
+    case_dir = capture_a_case(tmp_path, projects_root, monkeypatch, tail=review_tail())
+    monkeypatch.setattr("app.evals.review_case.start_claim_review", _a_fake_review)
+
+    exit_code = main([str(case_dir)])
+
+    printed = capsys.readouterr().out
+    assert exit_code == 1
+    assert "awaiting_review" in printed and '"challenges"' not in printed
+
+
+def test_a_case_without_its_archive_is_refused_by_path(capsys, seeded_case_dir):
+    (seeded_case_dir / ARCHIVE_FILE).unlink()
+
+    exit_code = main([str(seeded_case_dir)])
+
+    assert exit_code == 1
+    assert ARCHIVE_FILE in capsys.readouterr().out
+
+
+def test_a_refused_case_leaves_no_reviewer_task_running(capsys, seeded_case_dir, monkeypatch):
+    monkeypatch.setattr("app.evals.review_case.start_claim_review", _a_review_that_keeps_running)
+    _ORPHANS.clear()
+
+    exit_code = main([str(seeded_case_dir)])
+
+    assert exit_code == 1
+    assert [task.cancelled() for task in _ORPHANS] == [True]
