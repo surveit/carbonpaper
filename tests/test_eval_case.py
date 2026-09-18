@@ -2,7 +2,8 @@ import json
 import pytest
 
 from app.core.llm.options import LLMModel
-from app.evals.case import Case, CaseInvalid, read_case
+from app.evals.case import read_case
+from app.evals.errors import CaseInvalid
 
 
 def _write_case(case_dir, payload):

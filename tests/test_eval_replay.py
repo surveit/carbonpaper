@@ -3,9 +3,9 @@ import hashlib
 import pytest
 
 from app.evals.case import Case, CaseSource
+from app.evals.errors import CaseDidNotReplay
 from app.evals.replay import (
-    CaseDidNotReplay, find_model_calling_stages, validate_run_called_no_model,
-    validate_sources_match_capture)
+    find_model_calling_stages, validate_run_called_no_model, validate_sources_match_capture)
 from app.models import Workflow, parse_stage
 from app.runtime.run_log import ROW_OK, SOURCE_CACHED, SOURCE_COMPUTED, RunLog
 

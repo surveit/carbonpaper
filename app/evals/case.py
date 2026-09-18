@@ -6,13 +6,10 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from app.core.llm.options import LLMModel
+from app.evals.errors import CaseInvalid
 from app.models.schema import _Base
 
 CASE_FILE = "case.json"
-
-
-class CaseInvalid(Exception):
-    pass
 
 
 class CaseSource(_Base):
