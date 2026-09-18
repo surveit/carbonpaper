@@ -3147,3 +3147,4 @@
 {"run_id":"35252366070","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35252366070","created":"2026-09-17T17:25:13Z","branch":"chore/mit-license","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"35343796355","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35343796355","created":"2026-09-18T12:17:08Z","branch":"eval/in-app-claim-review","event":"pull_request","contracts_kept":17,"findings":[]}
 {"run_id":"35343796355","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35343796355","created":"2026-09-18T12:19:00Z","branch":"eval/in-app-claim-review","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"35347705890","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35347705890","created":"2026-09-18T13:00:55Z","branch":"claim-review/sentence-page","event":"pull_request","contracts_kept":17,"findings":[]}
