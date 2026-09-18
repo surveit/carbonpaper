@@ -1,7 +1,11 @@
+import hashlib
+
 import pytest
 
+from app.evals.case import Case, CaseSource
 from app.evals.replay import (
-    CaseDidNotReplay, find_model_calling_stages, validate_run_called_no_model)
+    CaseDidNotReplay, find_model_calling_stages, validate_run_called_no_model,
+    validate_sources_match_capture)
 from app.models import Workflow, parse_stage
 from app.runtime.run_log import ROW_OK, SOURCE_CACHED, SOURCE_COMPUTED, RunLog
 
@@ -56,3 +60,37 @@ def test_a_recomputed_llm_stage_is_refused_by_name(tmp_project, workflow):
     with pytest.raises(CaseDidNotReplay) as refusal:
         validate_run_called_no_model(tmp_project, "run_1", workflow)
     assert "judge" in str(refusal.value)
+
+
+def _write_source(case_dir, name, text):
+    path = case_dir / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = text.encode("utf-8")
+    path.write_bytes(data)
+    return hashlib.sha256(data).hexdigest()
+
+
+def _case(sources):
+    return Case(claim_id="c1", model="claude-sonnet-5", sources=sources, expected_outputs=[])
+
+
+def test_an_unchanged_source_is_accepted(tmp_path):
+    digest = _write_source(tmp_path, "sources/a.csv", "x,y\n1,2\n")
+    validate_sources_match_capture(
+        tmp_path, _case([CaseSource(path="sources/a.csv", sha256=digest)]))
+
+
+def test_a_changed_source_is_refused_by_name(tmp_path):
+    digest = _write_source(tmp_path, "sources/a.csv", "x,y\n1,2\n")
+    _write_source(tmp_path, "sources/a.csv", "x,y\n9,9\n")
+    with pytest.raises(CaseDidNotReplay) as refusal:
+        validate_sources_match_capture(
+            tmp_path, _case([CaseSource(path="sources/a.csv", sha256=digest)]))
+    assert "sources/a.csv" in str(refusal.value)
+
+
+def test_a_missing_source_is_refused_by_name(tmp_path):
+    with pytest.raises(CaseDidNotReplay) as refusal:
+        validate_sources_match_capture(
+            tmp_path, _case([CaseSource(path="sources/gone.csv", sha256="abc")]))
+    assert "sources/gone.csv" in str(refusal.value)
