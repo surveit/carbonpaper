@@ -3150,3 +3150,4 @@
 {"run_id":"35347705890","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35347705890","created":"2026-09-18T13:00:55Z","branch":"claim-review/sentence-page","event":"pull_request","contracts_kept":17,"findings":[]}
 {"run_id":"35347705890","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35347705890","created":"2026-09-18T13:03:39Z","branch":"claim-review/sentence-page","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"35347959027","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35347959027","created":"2026-09-18T13:03:43Z","branch":"fix/count-compiler-errors-as-errors","event":"pull_request","contracts_kept":17,"findings":[]}
+{"run_id":"35348106560","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35348106560","created":"2026-09-18T13:05:15Z","branch":"claim-review/list-and-nav","event":"pull_request","contracts_kept":17,"findings":[]}
