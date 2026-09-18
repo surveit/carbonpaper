@@ -86,12 +86,13 @@ def _roll_up_metrics(checks: list[_Check], per_row: pd.DataFrame) -> dict[str, A
     metrics: dict[str, Any] = {
         "rows_scored": n,
         "rows_passed": int(per_row["row_passed"].sum()) if n else 0,
-        "accuracy": float(per_row["row_passed"].mean()) if n else 0.0,
     }
+    if not n:
+        return metrics
+    metrics["accuracy"] = float(per_row["row_passed"].mean())
     for check in checks:
-        col = f"{check.target_column}__match"
-        metrics[f"accuracy.{check.target_column}"] = (
-            float(per_row[col].mean()) if n else 0.0)
+        metrics[f"accuracy.{check.target_column}"] = float(
+            per_row[f"{check.target_column}__match"].mean())
     return metrics
 
 
