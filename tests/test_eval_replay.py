@@ -71,7 +71,8 @@ def _write_source(case_dir, name, text):
 
 
 def _case(sources):
-    return Case(claim_id="c1", model="claude-sonnet-5", sources=sources, expected_outputs=[])
+    return Case(output_slug="grant-total", claim_context={}, claim_text="Grants came to 5.",
+                model="claude-sonnet-5", sources=sources, expected_outputs=[])
 
 
 def test_an_unchanged_source_is_accepted(tmp_path):

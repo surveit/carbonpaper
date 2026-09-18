@@ -11,16 +11,20 @@ import pytest
 from app.core.agent.store import open_session_store
 from app.evals.case import CASE_FILE
 from app.models.records.claim_review import Challenge, ChallengeKind, ClaimReview, Severity
+from app.models.records.claims import Claim
 from app.models.records.project import Project
-from app.review_case import POLL_SECONDS, ARCHIVE_FILE, main
+from app.review_case import ARCHIVE_FILE, POLL_SECONDS, main
 from app.services import run as run_service
+from app.services.claim_shapes import write_claim_shapes
 from app.services.methodology import write_methodology
 from app.services.project import export_project_archive, save_working_copy_as_version
-from claim_review_fixture import PROJECT, add_a_sandboxed_filter, claim_the_total
+from claim_review_fixture import PROJECT, TOTAL_SHAPE, TOTAL_TEXT, add_a_sandboxed_filter
+from run_seed import list_run_ids
 from scope_fixture import stage_specs, write_inputs
 from stage_seed import set_stages
 
 _SUMMARY = "the figure is a share, not a count"
+_SLUG = "grant-total"
 
 
 def _a_fake_review(project_id: str, claim_id: str, *, model: str) -> str:
@@ -55,6 +59,16 @@ def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _declare_the_total_as_an_output(specs: list[dict], shape_id: str) -> list[dict]:
+    """The run itself publishes the slug the case claims; a claim needs no seeding."""
+    for spec in specs:
+        if spec["id"] == "grant_totals":
+            spec["workflow_outputs"] = [{
+                "kind": "figure", "slug": _SLUG, "label": "What the grants came to",
+                "primary": True, "column": "total_amount", "shape_id": shape_id}]
+    return specs
+
+
 @pytest.fixture
 def seeded_case_dir(tmp_path, projects_root) -> Path:
     case_dir = tmp_path / "case"
@@ -63,28 +77,46 @@ def seeded_case_dir(tmp_path, projects_root) -> Path:
     Project(id=PROJECT, name=PROJECT, model="claude-sonnet-5", source="fixture").save()
     write_methodology(PROJECT, "How the grants were totalled.")
     write_inputs(sources)
-    set_stages(PROJECT, add_a_sandboxed_filter(stage_specs(sources)))
+    [shape] = write_claim_shapes(PROJECT, [TOTAL_SHAPE])
+    set_stages(PROJECT, _declare_the_total_as_an_output(
+        add_a_sandboxed_filter(stage_specs(sources)), shape.id))
     save_working_copy_as_version(PROJECT, message="fixture")
-    claim = claim_the_total(str(run_service.execute(PROJECT)["run_id"]))
+    run_service.execute(PROJECT)
     (case_dir / ARCHIVE_FILE).write_bytes(export_project_archive(PROJECT))
     (case_dir / CASE_FILE).write_text(json.dumps({
-        "claim_id": claim.id, "model": "claude-sonnet-5", "expected_outputs": ["grant-total"],
+        "output_slug": _SLUG, "claim_context": {}, "claim_text": TOTAL_TEXT,
+        "model": "claude-sonnet-5", "expected_outputs": [_SLUG],
         "sources": [{"path": f"sources/{name}", "sha256": _digest(sources / name)}
                     for name in sorted(path.name for path in sources.iterdir())],
     }), encoding="utf-8")
     return case_dir
 
 
-def test_a_replayable_case_prints_its_challenges(capsys, seeded_case_dir, monkeypatch):
+def test_a_replayable_case_submits_its_claim_and_prints_the_challenges(
+    capsys, seeded_case_dir, monkeypatch
+):
     monkeypatch.setattr("app.review_case.start_claim_review", _a_fake_review)
 
     exit_code = main([str(seeded_case_dir)])
 
     printed = json.loads(capsys.readouterr().out)
     assert exit_code == 0
-    assert printed["claim_id"] == json.loads(
-        (seeded_case_dir / CASE_FILE).read_text(encoding="utf-8"))["claim_id"]
+    # Minted by submit_claim against the replayed run: the case carried no claim id.
+    assert printed["claim_id"]
     assert [challenge["text"] for challenge in printed["challenges"]] == [_SUMMARY]
+
+
+def test_the_claim_is_submitted_against_the_replayed_run_not_the_captured_one(
+    capsys, seeded_case_dir, monkeypatch
+):
+    monkeypatch.setattr("app.review_case.start_claim_review", _a_fake_review)
+    captured = set(list_run_ids(PROJECT))
+
+    main([str(seeded_case_dir)])
+
+    claim = Claim.load(json.loads(capsys.readouterr().out)["claim_id"])
+    assert claim.text == TOTAL_TEXT
+    assert captured and claim.citation.run_id not in captured
 
 
 def test_a_drifted_source_is_refused_before_anything_runs(capsys, seeded_case_dir):
