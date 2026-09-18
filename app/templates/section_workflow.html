@@ -74,12 +74,13 @@
 
    Drawn with the issue table the run page indexes ITS issues with: the severity
    word leads, the stage links its panel, the kind rides in the narrow cell a run
-   gives the column name. Every compiler note is a warning — none of them refuses
-   anything — so the panel is titled by that one count. #}
+   gives the column name. #}
 {% if compiler_warnings and compiler_warnings.warnings %}
 
+{% set compiler_errors = compiler_warnings.warnings|selectattr("severity", "equalto", "error")|list %}
 <div class="wf-issue-index">
-{% call issue_panel(0, compiler_warnings.warnings|length) %}
+{% call issue_panel(compiler_errors|length,
+                    compiler_warnings.warnings|length - compiler_errors|length) %}
   {% for warning in compiler_warnings.warnings %}
   {{ issue_row(severity=warning.severity, stage_id=warning.stage_id,
                subject=warning.kind, message=warning.detail) }}
