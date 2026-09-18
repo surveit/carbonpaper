@@ -117,7 +117,7 @@ def _say_the_join(stage: AbstractStage) -> str:
     subject = inputs[0] if inputs else "these rows"
     reference = inputs[1] if len(inputs) > 1 else "the reference table"
     on = f" on {_and_list(pairs)}" if pairs else ""
-    if stage.type is StageType.expand:
+    if isinstance(stage, ExpandStage):
         return f"Combine {subject} data with {reference} data{on}, one row per match"
     return f"Combine {subject} data with {reference} data{on}"
 
