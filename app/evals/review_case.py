@@ -13,13 +13,17 @@ from app.core.ids import ID
 from app.core.store_config import configure_default_stores, refuse_renamed_env_vars
 from app.evals.case import Case, read_case
 from app.evals.errors import CaseDidNotReplay, CaseInvalid
-from app.evals.replay import validate_run_called_no_model, validate_sources_match_capture
+from app.evals.replay import (
+    validate_imported_cache_is_reachable, validate_run_called_no_model,
+    validate_run_finished_whole, validate_sources_match_capture)
+from app.models import Workflow
 from app.services.claim_review import load_claim_review
 from app.services.claims import submit_claim
 from app.services.claim_review_run import start_claim_review
 from app.services.errors import ClaimReviewRefused
 from app.services.project import import_project_archive
 from app.services.run import execute, load_run_workflow
+from app.services.versioning import load_version_stages, resolve_version_id
 from app.services.workspace import configure_projects_dir_from_env
 
 ARCHIVE_FILE = "project.zip"
@@ -45,9 +49,10 @@ def main(argv: list[str] | None = None) -> int:
 
 def _review_one_case(case_dir: Path) -> dict[str, object]:
     case = read_case(case_dir)
-    validate_sources_match_capture(case_dir, case)
-    project_id = import_project_archive((case_dir / ARCHIVE_FILE).read_bytes()).project_id
+    project_id = _import_the_case_archive(case_dir)
+    validate_sources_match_capture(case_dir, case, _load_the_workflow_to_run(project_id))
     manifest = execute(project_id)
+    validate_run_finished_whole(manifest)
     run_id = str(manifest["run_id"])
     validate_run_called_no_model(
         project_id, run_id, load_run_workflow(project_id, manifest))
@@ -57,15 +62,41 @@ def _review_one_case(case_dir: Path) -> dict[str, object]:
     return _run_the_review(project_id, case, claim.id)
 
 
+def _import_the_case_archive(case_dir: Path) -> str:
+    archive = case_dir / ARCHIVE_FILE
+    try:
+        raw = archive.read_bytes()
+    except FileNotFoundError as absent:
+        raise CaseInvalid(f"{archive} does not exist") from absent
+    report = import_project_archive(raw)
+    validate_imported_cache_is_reachable(report)
+    return report.project_id
+
+
+def _load_the_workflow_to_run(project_id: str) -> Workflow:
+    return Workflow(
+        stages=load_version_stages(project_id, resolve_version_id(project_id, None)))
+
+
 def _run_the_review(project_id: ID, case: Case, claim_id: ID) -> dict[str, object]:
     loop = create_event_loop()
     try:
         asyncio.set_event_loop(loop)
         loop.run_until_complete(_await_the_review(project_id, case, claim_id))
     finally:
+        _settle_pending_tasks(loop)
         asyncio.set_event_loop(None)
         loop.close()
     return _read_the_stored_review(project_id, claim_id)
+
+
+def _settle_pending_tasks(loop: asyncio.AbstractEventLoop) -> None:
+    """A refused review leaves its reviewer task holding a `claude` subprocess."""
+    pending = [task for task in asyncio.all_tasks(loop) if not task.done()]
+    for task in pending:
+        task.cancel()
+    if pending:
+        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
 
 
 async def _await_the_review(project_id: ID, case: Case, claim_id: ID) -> None:
