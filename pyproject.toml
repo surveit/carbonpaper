@@ -110,7 +110,7 @@ allowed_importers = ["app.main"]
 name = "app.services imported only by cli, web, runtime, evals, compiler, agents, seeds, tools"
 type = "protected"
 protected_modules = ["app.services"]
-allowed_importers = ["app.cli", "app.web", "app.runtime", "app.evals", "app.compiler", "app.agents", "app.seeds", "app.tools"]
+allowed_importers = ["app.cli", "app.review_case", "app.web", "app.runtime", "app.evals", "app.compiler", "app.agents", "app.seeds", "app.tools"]
 # Domain logic the upper layers lean on. As a declared whitelist, a new importer is
 # a deliberate edit, not an accident. (services → compiler is fine — compilation and
 # generation wrap it — which is why app.compiler lists app.services below.) app.cli is
@@ -165,15 +165,16 @@ allowed_importers = ["app.web"]
 # above, importable only by app.main). Frames of text must never flow back toward the runner.
 
 [[tool.importlinter.contracts]]
-name = "app.evals is a leaf — imported only by web and tools"
+name = "app.evals is a leaf — imported only by web, tools and the review_case entrypoint"
 type = "protected"
 protected_modules = ["app.evals"]
-allowed_importers = ["app.web", "app.tools"]
+allowed_importers = ["app.web", "app.tools", "app.review_case"]
 # evals depends on core (models/runtime/services) and is surfaced by app.web; the
 # arrow points toward core. A lower layer importing evals would be a cycle-forming
 # inversion — e.g. runtime.run_subset must stay eval-agnostic. app.tools is not a lower
 # layer: it sits beside app.evals, above app.services and below the surfaces that expose
 # a tool, so the run_eval tool reaches the runner the same way the Run button does.
+# app.review_case is an entrypoint, not a layer: `python -m app.review_case` reviews one case.
 
 [[tool.importlinter.contracts]]
 name = "app.core.sqlite_store imported only by the store wiring"
