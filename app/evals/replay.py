@@ -5,13 +5,10 @@ import hashlib
 from pathlib import Path
 
 from app.evals.case import Case
+from app.evals.errors import CaseDidNotReplay
 from app.models import Workflow
 from app.models.stages.stage_base import StageType
 from app.runtime.run_log import ROW_OK, SOURCE_CACHED, read_events_since
-
-
-class CaseDidNotReplay(Exception):
-    pass
 
 
 def validate_run_called_no_model(project_id: str, run_id: str, workflow: Workflow) -> None:
