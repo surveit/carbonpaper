@@ -69,8 +69,8 @@ def test_severity_runs_from_zero_to_three_and_each_has_a_word():
 
 
 def test_the_two_highest_severities_divide_on_quantity_and_quality():
-    assert "the figure moves materially" in SEVERITY_WORDS[Severity.major]
-    assert SEVERITY_WORDS[Severity.misleading].startswith("a reader draws a conclusion")
+    assert "the figure moves materially" in SEVERITY_WORDS[Severity.high]
+    assert SEVERITY_WORDS[Severity.critical].startswith("a reader draws a conclusion")
 
 
 def test_a_review_holds_no_claim_parts_of_its_own():

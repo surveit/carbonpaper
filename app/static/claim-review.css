@@ -10,6 +10,8 @@
     font-family: var(--prose); font-size: 30px; line-height: 1.5;
     letter-spacing: -0.01em; margin: 6px 0 10px; max-width: 30ch;
 }
+a.ph { color: inherit; text-decoration: none; }
+a.ph:hover { background: var(--hover); }
 .ph { border-bottom: 2px solid var(--border-strong); padding-bottom: 1px; white-space: nowrap; }
 .ph.s3 { border-bottom: 4px solid var(--bad-bd); }
 .ph.s2 { border-bottom: 2.5px solid var(--warn-bd); }
@@ -20,6 +22,7 @@
     display: flex; gap: 18px; align-items: center; font-size: 12.5px;
     color: var(--muted); margin: 0 0 6px; flex-wrap: wrap;
 }
+.legend span { cursor: help; }
 .legend span i { display: inline-block; width: 28px; margin-right: 6px; vertical-align: middle; }
 .legend .l3 i { border-bottom: 4px solid var(--bad-bd); }
 .legend .l2 i { border-bottom: 2.5px solid var(--warn-bd); }
@@ -55,15 +58,15 @@ table.ground {
     background: var(--raised); border: 1px solid var(--border); border-radius: 8px;
     margin-bottom: 10px; overflow: hidden;
 }
-.ch-top.b2 {
-    display: grid; grid-template-columns: 170px minmax(0, 1fr) 230px; gap: 18px;
-    padding: 14px 18px;
+.ch { padding: 14px 18px; }
+.ch:target { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ch-head {
+    display: flex; gap: 12px; align-items: baseline; margin-bottom: 6px;
 }
-.ch-word { font-family: var(--prose); font-size: 14px; color: var(--fg); }
-.ch-word b { color: var(--fg); font-weight: 600; }
-.ch-word small {
-    display: block; font-family: var(--ui); font-size: 11.5px;
-    color: var(--muted-dim); margin-top: 3px;
+.ch-on { font-family: var(--prose); font-size: 15px; color: var(--fg); }
+.ch-on::before {
+    content: "on\A0"; font-family: var(--ui); font-size: 10.5px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--muted-dim);
 }
 .ch-text { font-size: 15px; font-weight: 600; line-height: 1.4; }
 .ch-ev { font-size: 13.5px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
@@ -74,12 +77,59 @@ a.backing { text-decoration: none; }
     color: var(--fg); background: var(--sunk-deep); border-radius: 4px; padding: 2px 7px;
     white-space: nowrap;
 }
-.sev-tag { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
-.sev-tag i { display: inline-block; width: 22px; }
-.sev-tag.s3 i { border-bottom: 4px solid var(--bad-bd); }
-.sev-tag.s2 i { border-bottom: 2.5px solid var(--warn-bd); }
-.sev-tag.s1 i { border-bottom: 1.5px solid var(--muted-dim); }
-.sev-tag.s0 i { border-bottom: 1px dotted var(--border-strong); }
+/* The name is the label and the rubric line is its title, so the weight reads at a
+   glance and still says what it means to anyone who stops on it. */
+.sev-tag {
+    margin-left: auto; cursor: help; font-size: 10.5px; font-weight: 600;
+    letter-spacing: .09em; text-transform: uppercase; padding: 3px 8px; border-radius: 4px;
+    border: 1px solid var(--border-strong); background: var(--raised); color: var(--muted);
+}
+.sev-tag.s3 { border-color: var(--bad-bd); background: var(--bad-bg); color: var(--bad-ink); }
+.sev-tag.s2 { border-color: var(--warn-bd); background: var(--warn-bg); color: var(--warn-ink); }
+.sev-tag.s1 { border-color: var(--idle-bd); background: var(--idle-bg); color: var(--idle-ink); }
+.sev-tag.s0 { border-color: var(--info-bd); background: var(--info-bg); color: var(--info-ink); }
+
+/* ── the citations a challenge rests on ── */
+.cites {
+    margin-top: 10px; padding: 8px 10px; background: var(--sunk);
+    border: 1px solid var(--border); border-radius: 6px;
+}
+.cites-h {
+    font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted-dim); margin-bottom: 5px;
+}
+.cite-row { display: flex; gap: 10px; align-items: baseline; padding: 3px 0; }
+.cite-row + .cite-row { border-top: 1px dashed var(--border); }
+.cite-what {
+    font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--muted-dim); min-width: 4.5em;
+}
+
+.sub-h {
+    font-size: 12px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--muted); margin: 26px 0 8px;
+}
+p.note { font-size: 12px; color: var(--muted-dim); margin: 6px 0 0; }
+
+/* ── the claim, and the verdict that sits with it ── */
+.claimcard {
+    background: var(--raised); border: 1px solid var(--border); border-radius: 10px;
+    padding: 18px 22px 16px; margin-bottom: 14px;
+}
+.claimcard .sentence { margin-top: 0; }
+.acts {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding-top: 14px; border-top: 1px solid var(--border);
+}
+.acts form { display: contents; }
+.acts .cite { font-size: 12px; color: var(--muted-dim); margin-left: 4px; }
+.editbox { margin-top: 12px; }
+.editbox textarea {
+    width: 100%; font-family: var(--prose); font-size: 17px; line-height: 1.5;
+    padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: 8px;
+    background: var(--sunk); resize: vertical;
+}
+.editrow { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
 
 .mv {
     font-size: 12.5px; padding: 3px 9px; border-radius: 4px;

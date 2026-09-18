@@ -12,11 +12,10 @@ from app.models.citations import (
 )
 from app.models.records.claim_review import (
     SEVERITY_WORDS,
-    Severity,
     Challenge,
-    ChallengeKind,
     ClaimPart,
     ClaimReview,
+    Severity,
 )
 from app.models.records.claims import Claim, ClaimShape
 from app.runtime.citations import build_row_trace_url
@@ -38,18 +37,11 @@ REVIEW_FAILED = "failed"
 REVIEW_DONE = "done"
 REVIEW_REFUSED = "refused"
 
-KIND_WORDS: dict[ChallengeKind, str] = {
-    ChallengeKind.data: "data",
-    ChallengeKind.choice: "a choice made",
-    ChallengeKind.omission: "a decision never made",
-    ChallengeKind.coverage: "coverage",
-    ChallengeKind.meaning: "what it means",
-    ChallengeKind.gap: "not examined",
-}
 
 
 class LegendRow(BaseModel):
     severity: int
+    name: str
     words: str
 
 
@@ -58,18 +50,20 @@ class SentenceToken(BaseModel):
 
     text: str
     severity: int | None = None
+    anchor: str | None = None
 
 
 class CitationLink(BaseModel):
+    kind_words: str
     words: str
     href: str
 
 
 class ChallengeCard(BaseModel):
+    anchor: str
     phrase: str
-    kind: str
-    kind_words: str
     severity: int
+    severity_name: str
     severity_words: str
     text: str
     justification: str
@@ -100,8 +94,7 @@ class ClaimReviewPage(BaseModel):
     review_error: str | None
     review_session_id: ID | None
     tokens: list[SentenceToken]
-    open_challenges: list[ChallengeCard]
-    quiet_challenges: list[ChallengeCard]
+    challenges: list[ChallengeCard]
     legend: list[LegendRow]
 
 
@@ -119,7 +112,7 @@ def build_claim_review_page(project_id: ID, claim_id: ID) -> ClaimReviewPage:
 def _build_page(project_id: ID, claim: Claim, shape: ClaimShape, run: RunIndexRow,
                 review: ClaimReview | None) -> ClaimReviewPage:
     running = _read_review_state(claim, review)
-    challenges = _read_challenges(review)
+    cards = _build_cards(_read_challenges(review))
     return ClaimReviewPage(
         claim_id=claim.id,
         run_id=claim.citation.run_id,
@@ -135,15 +128,14 @@ def _build_page(project_id: ID, claim: Claim, shape: ClaimShape, run: RunIndexRo
         review=running.review,
         review_error=running.error,
         review_session_id=running.session_id,
-        tokens=_build_tokens(claim.text, challenges),
-        open_challenges=_build_cards([one for one in challenges if one.severity > 0]),
-        quiet_challenges=_build_cards([one for one in challenges if one.severity == 0]),
+        challenges=cards,
+        tokens=_build_tokens(claim.text, cards),
         legend=_build_legend(),
     )
 
 
 def _build_legend() -> list[LegendRow]:
-    return [LegendRow(severity=weight, words=words)
+    return [LegendRow(severity=weight, name=weight.name, words=words)
             for weight, words in sorted(SEVERITY_WORDS.items(), reverse=True)]
 
 
@@ -184,13 +176,23 @@ def _build_citation_href(project_id: ID, citation: PublishedCitation) -> str:
 # ── the sentence ─────
 
 
-def _build_tokens(text: str, challenges: list[Challenge]) -> list[SentenceToken]:
+def _build_tokens(text: str, cards: list[ChallengeCard]) -> list[SentenceToken]:
     """Two challenges may land on overlapping phrases, so the sentence is cut at every edge."""
-    spans = [(span, one.severity) for one, span in
-             ((one, _find_span(text, one.claim_part)) for one in challenges)
-             if span is not None]
-    return [SentenceToken(text=text[start:end], severity=_worst_over(spans, start, end))
-            for start, end in _cut_at_every_edge(text, [span for span, _ in spans])]
+    landed = [(span, card) for span, card in
+              ((_find_span_of(text, card.phrase), card) for card in cards)
+              if span is not None]
+    return [_build_token(text[start:end], _worst_over(landed, start, end))
+            for start, end in _cut_at_every_edge(text, [span for span, _ in landed])]
+
+
+def _build_token(text: str, worst: ChallengeCard | None) -> SentenceToken:
+    if worst is None:
+        return SentenceToken(text=text)
+    return SentenceToken(text=text, severity=worst.severity, anchor=worst.anchor)
+
+
+def _find_span_of(text: str, phrase: str) -> tuple[int, int] | None:
+    return _find_span(text, ClaimPart(phrase=phrase)) if phrase else None
 
 
 def _find_span(text: str, part: ClaimPart | None) -> tuple[int, int] | None:
@@ -209,47 +211,57 @@ def _cut_at_every_edge(text: str, spans: list[tuple[int, int]]) -> list[tuple[in
     return [(start, end) for start, end in zip(edges, edges[1:]) if end > start]
 
 
-def _worst_over(spans: list[tuple[tuple[int, int], Severity]],
-                start: int, end: int) -> int | None:
-    covering = [severity for (span_start, span_end), severity in spans
+def _worst_over(landed: list[tuple[tuple[int, int], ChallengeCard]],
+                start: int, end: int) -> ChallengeCard | None:
+    covering = [card for (span_start, span_end), card in landed
                 if span_start <= start and end <= span_end]
-    return max(covering) if covering else None
+    return max(covering, key=lambda card: card.severity) if covering else None
 
 
 # ── what was raised ─────
 
 
 def _build_cards(challenges: list[Challenge]) -> list[ChallengeCard]:
-    return [_build_card(one) for one in
-            sorted(challenges, key=lambda one: -one.severity)]
+    ranked = sorted(enumerate(challenges), key=lambda pair: -pair[1].severity)
+    return [_build_card(f"challenge-{index}", one) for index, one in ranked]
 
 
-def _build_card(challenge: Challenge) -> ChallengeCard:
+def _build_card(anchor: str, challenge: Challenge) -> ChallengeCard:
+    weight = Severity(challenge.severity)
     return ChallengeCard(
+        anchor=anchor,
         phrase=challenge.claim_part.phrase if challenge.claim_part else "",
-        kind=challenge.kind,
-        kind_words=KIND_WORDS[ChallengeKind(challenge.kind)],
-        severity=challenge.severity,
-        severity_words=SEVERITY_WORDS[challenge.severity],
+        severity=weight,
+        severity_name=weight.name,
+        severity_words=SEVERITY_WORDS[weight],
         text=challenge.text,
         justification=challenge.justification,
         citations=[_build_citation_link(one) for one in challenge.citations],
     )
 
 
+CITATION_KIND_WORDS: dict[str, str] = {
+    "stage_output_cell": "cell",
+    "stage_output_column": "column",
+    "stage": "stage",
+    "term": "term",
+}
+
+
 def _build_citation_link(citation: AddressedChallengeCitation) -> CitationLink:
-    return CitationLink(words=_describe_citation(citation),
+    return CitationLink(kind_words=CITATION_KIND_WORDS[citation.kind],
+                        words=_describe_citation(citation),
                         href=render_source_url(citation))
 
 
 def _describe_citation(citation: AddressedChallengeCitation) -> str:
     if citation.kind == "stage_output_cell":
-        return f"{citation.stage_id}.{citation.column} row {citation.row_ordinal}"
+        return f"{citation.stage_id} · {citation.column} · row {citation.row_ordinal}"
     if citation.kind == "stage_output_column":
-        return f"{citation.stage_id}.{citation.column}"
+        return f"{citation.stage_id} · {citation.column}"
     if citation.kind == "stage":
-        return f"stage {citation.stage_id}"
-    return f"term {citation.name}"
+        return citation.stage_id
+    return citation.name
 
 
 # ── the review behind it ─────

@@ -34,7 +34,7 @@ from app.services import claims as claims_service
 from app.services.claim_review import store_claim_review
 from app.services.generation import GENERATION_FAILURE_PREFIX
 from app.web.citation_links import render_source_url
-from app.web.claim_review_view import KIND_WORDS, build_claim_review_page
+from app.web.claim_review_view import build_claim_review_page
 from claim_review_fixture import (
     PROJECT,
     TOTAL_TEXT,
@@ -97,64 +97,72 @@ def test_a_claim_with_no_review_reads_as_one_plain_sentence(claim):
 
 
 def test_a_stored_review_bands_the_phrase_its_challenge_lands_on(claim):
-    store_a_review(claim, _challenge(claim, _FIGURE, severity=Severity.major))
+    store_a_review(claim, _challenge(claim, _FIGURE, severity=Severity.high))
 
     page = build_claim_review_page(PROJECT, claim.id)
 
     banded = [token for token in page.tokens if token.severity is not None]
     assert [token.text for token in banded] == [_FIGURE]
-    assert banded[0].severity == Severity.major
+    assert banded[0].severity == Severity.high
     assert "".join(token.text for token in page.tokens) == TOTAL_TEXT
 
 
 def test_two_challenges_on_overlapping_phrases_cut_the_sentence_at_every_edge(claim):
     store_a_review(
         claim,
-        _challenge(claim, "Grants came", severity=Severity.minor),
-        _challenge(claim, "came to", severity=Severity.misleading))
+        _challenge(claim, "Grants came", severity=Severity.low),
+        _challenge(claim, "came to", severity=Severity.critical))
 
     page = build_claim_review_page(PROJECT, claim.id)
 
     # The overlap is banded by the worse of the two, and no character is drawn twice.
     assert "".join(token.text for token in page.tokens) == TOTAL_TEXT
     overlap = [token for token in page.tokens if token.text == "came"]
-    assert [token.severity for token in overlap] == [Severity.misleading]
+    assert [token.severity for token in overlap] == [Severity.critical]
 
 
 def test_a_challenge_about_the_whole_sentence_bands_nothing(claim):
-    store_a_review(claim, _challenge(claim, None, severity=Severity.misleading))
+    store_a_review(claim, _challenge(claim, None, severity=Severity.critical))
 
     page = build_claim_review_page(PROJECT, claim.id)
 
     assert [token.severity for token in page.tokens] == [None]
-    assert page.open_challenges[0].phrase == ""
+    assert page.challenges[0].phrase == ""
 
 
 # ── what was raised ─────
 
 
-def test_open_challenges_run_worst_first_and_the_quiet_ones_fold(claim):
+def test_every_challenge_is_in_one_list_worst_first(claim):
     store_a_review(
         claim,
-        _challenge(claim, _WHOLE, severity=Severity.noted),
-        _challenge(claim, _FIGURE, severity=Severity.minor),
-        _challenge(claim, "Grants", severity=Severity.misleading))
+        _challenge(claim, _WHOLE, severity=Severity.info),
+        _challenge(claim, _FIGURE, severity=Severity.low),
+        _challenge(claim, "Grants", severity=Severity.critical))
 
     page = build_claim_review_page(PROJECT, claim.id)
 
-    assert [one.severity for one in page.open_challenges] == [
-        Severity.misleading, Severity.minor]
-    assert [one.severity for one in page.quiet_challenges] == [Severity.noted]
+    assert [one.severity for one in page.challenges] == [
+        Severity.critical, Severity.low, Severity.info]
 
 
-def test_a_card_carries_the_words_its_severity_and_kind_are_read_as(claim):
-    store_a_review(claim, _challenge(claim, _FIGURE, severity=Severity.major,
+def test_a_banded_phrase_opens_the_challenge_it_carries(claim):
+    store_a_review(claim, _challenge(claim, _FIGURE, severity=Severity.high))
+
+    page = build_claim_review_page(PROJECT, claim.id)
+
+    [banded] = [token for token in page.tokens if token.severity is not None]
+    assert banded.anchor == page.challenges[0].anchor
+
+
+def test_a_card_names_its_weight_and_carries_the_rubric_line(claim):
+    store_a_review(claim, _challenge(claim, _FIGURE, severity=Severity.high,
                                      kind=ChallengeKind.coverage))
 
-    [card] = build_claim_review_page(PROJECT, claim.id).open_challenges
+    [card] = build_claim_review_page(PROJECT, claim.id).challenges
 
-    assert card.severity_words == SEVERITY_WORDS[Severity.major]
-    assert card.kind_words == KIND_WORDS[ChallengeKind.coverage]
+    assert card.severity_name == "high"
+    assert card.severity_words == SEVERITY_WORDS[Severity.high]
 
 
 @pytest.mark.parametrize("citation", [
@@ -185,17 +193,13 @@ def _as_pattern(template: str) -> str:
 
 
 def test_every_citation_on_a_card_carries_words_and_a_link(claim):
-    store_a_review(claim, _challenge(claim, _FIGURE, severity=Severity.major))
+    store_a_review(claim, _challenge(claim, _FIGURE, severity=Severity.high))
 
-    [card] = build_claim_review_page(PROJECT, claim.id).open_challenges
+    [card] = build_claim_review_page(PROJECT, claim.id).challenges
 
     assert card.citations
     for citation in card.citations:
         assert citation.words and citation.href.startswith(f"/project/{PROJECT}/")
-
-
-def test_every_kind_has_words_on_the_page():
-    assert set(KIND_WORDS) == set(ChallengeKind)
 
 
 def test_the_legend_is_the_rubric_itself_worst_first(claim):
@@ -254,7 +258,7 @@ def test_a_session_on_another_claim_says_nothing_about_this_one(claim):
 
 
 def test_a_stored_review_reads_as_done_and_names_its_session(claim):
-    store_a_review(claim, _challenge(claim, _FIGURE, severity=Severity.major))
+    store_a_review(claim, _challenge(claim, _FIGURE, severity=Severity.high))
 
     page = build_claim_review_page(PROJECT, claim.id)
 
@@ -302,12 +306,12 @@ def test_a_claim_nobody_has_read_offers_the_review(claim, client):
 
 
 def test_the_page_draws_a_stored_review(claim, client):
-    store_a_review(claim, _challenge(claim, _FIGURE, severity=Severity.misleading))
+    store_a_review(claim, _challenge(claim, _FIGURE, severity=Severity.critical))
 
     page = read_the_page(client, claim.id)
 
     assert page.status_code == 200
-    assert SEVERITY_WORDS[Severity.misleading] in page.text
+    assert SEVERITY_WORDS[Severity.critical] in page.text
 
 
 def test_a_claim_this_project_does_not_hold_is_a_404(client, projects_root):

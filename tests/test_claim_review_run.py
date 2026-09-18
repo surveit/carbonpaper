@@ -46,7 +46,7 @@ def make_challenge(text: str = "The figure counts rows, not grants.") -> DraftCh
         justification="the amount column is blank",
         citations=[StageOutputColumnCitation(
             run_id="r", stage_id="grant_totals", column="grants")],
-        severity=Severity.major)
+        severity=Severity.high)
 
 
 # ── what a reviewer is handed ─────
