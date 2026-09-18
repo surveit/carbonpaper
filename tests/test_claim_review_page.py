@@ -53,13 +53,14 @@ def claim(projects_root) -> Claim:
 
 
 def _challenge(claim: Claim, phrase: str | None, *, severity: Severity,
-               kind: ChallengeKind = ChallengeKind.data) -> DraftChallenge:
+               kind: ChallengeKind = ChallengeKind.data,
+               citations: list | None = None) -> DraftChallenge:
     return DraftChallenge(
         kind=kind,
         claim_part=ClaimPart(phrase=phrase) if phrase is not None else None,
         text=f"what {phrase!r} says is not what the run counted",
         justification="the amount column is blank on every row",
-        citations=[StageOutputColumnCitation(
+        citations=citations or [StageOutputColumnCitation(
             run_id=claim.citation.run_id, stage_id="grant_totals", column="grants")],
         severity=severity)
 
@@ -192,14 +193,27 @@ def _as_pattern(template: str) -> str:
     return re.sub(r"\\\{[^}]+\\\}", "[^/]+", re.escape(template))
 
 
-def test_every_citation_on_a_card_carries_words_and_a_link(claim):
+def test_a_citation_reads_as_a_trail_and_a_cell_one_carries_its_value(claim):
+    cell = StageOutputCellCitation(run_id=claim.citation.run_id, stage_id="grant_totals",
+                                   row_ordinal=0, column="total_amount", value=2200)
+    store_a_review(claim, _challenge(claim, _FIGURE, severity=Severity.high,
+                                     citations=[cell]))
+
+    [card] = build_claim_review_page(PROJECT, claim.id).challenges
+
+    [cited] = card.citations
+    assert cited.trail == ["grant_totals", "total_amount", "row 0"]
+    assert cited.value == "2200"
+    assert cited.href.startswith(f"/project/{PROJECT}/")
+
+
+def test_a_citation_that_names_no_single_value_shows_none(claim):
     store_a_review(claim, _challenge(claim, _FIGURE, severity=Severity.high))
 
     [card] = build_claim_review_page(PROJECT, claim.id).challenges
 
-    assert card.citations
-    for citation in card.citations:
-        assert citation.words and citation.href.startswith(f"/project/{PROJECT}/")
+    [cited] = card.citations
+    assert cited.trail == ["grant_totals", "grants"] and cited.value == ""
 
 
 def test_the_legend_is_the_rubric_itself_worst_first(claim):

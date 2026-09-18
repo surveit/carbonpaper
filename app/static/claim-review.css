@@ -98,11 +98,23 @@ a.backing { text-decoration: none; }
     font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase;
     color: var(--muted-dim); margin-bottom: 5px;
 }
-.cite-row { display: flex; gap: 10px; align-items: baseline; padding: 3px 0; }
+.cite-row { display: flex; gap: 10px; align-items: baseline; padding: 4px 0; }
 .cite-row + .cite-row { border-top: 1px dashed var(--border); }
 .cite-what {
     font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase;
     color: var(--muted-dim); min-width: 4.5em;
+}
+/* The same trail the header draws, so where a citation points reads the way the
+   reader's own position does. */
+.cite-trail {
+    display: flex; align-items: baseline; flex-wrap: wrap; gap: 5px;
+    font-family: var(--mono); font-size: 12px; text-decoration: none; min-width: 0;
+}
+.cite-trail:hover .crumb-here { color: var(--accent); text-decoration: underline; }
+.cite-value {
+    margin-left: auto; font-family: var(--mono); font-size: 12.5px;
+    font-variant-numeric: tabular-nums; color: var(--fg);
+    background: var(--sunk-deep); border-radius: 4px; padding: 2px 8px; white-space: nowrap;
 }
 
 .sub-h {

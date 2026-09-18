@@ -145,7 +145,13 @@
     {% for citation in one.citations %}
     <div class="cite-row">
       <span class="cite-what">{{ citation.kind_words }}</span>
-      <a class="backing" href="{{ citation.href }}">{{ citation.words }}</a>
+      <a class="cite-trail" href="{{ citation.href }}">
+        {%- for step in citation.trail -%}
+        {%- if not loop.first %}<span class="crumb-sep" aria-hidden="true">/</span>{% endif -%}
+        <span class="{{ 'crumb-here' if loop.last else 'crumb-link' }}">{{ step }}</span>
+        {%- endfor -%}
+      </a>
+      {% if citation.value %}<span class="cite-value">{{ citation.value }}</span>{% endif %}
     </div>
     {% endfor %}
   </div>

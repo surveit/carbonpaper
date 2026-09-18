@@ -5,8 +5,10 @@ from pydantic import BaseModel
 
 from app.core.agent.store import AgentSession, SessionStore
 from app.core.ids import ID
+from app.core.figure_text import render_figure
 from app.models.citations import (
     AddressedChallengeCitation,
+    AddressedStageOutputCellCitation,
     PublishedCitation,
     StageOutputCellCitation,
 )
@@ -54,8 +56,11 @@ class SentenceToken(BaseModel):
 
 
 class CitationLink(BaseModel):
+    """Read as a trail, so where a citation sits is the same shape as where the reader is."""
+
     kind_words: str
-    words: str
+    trail: list[str]
+    value: str
     href: str
 
 
@@ -250,18 +255,26 @@ CITATION_KIND_WORDS: dict[str, str] = {
 
 def _build_citation_link(citation: AddressedChallengeCitation) -> CitationLink:
     return CitationLink(kind_words=CITATION_KIND_WORDS[citation.kind],
-                        words=_describe_citation(citation),
+                        trail=_build_trail(citation),
+                        value=_read_cited_figure(citation),
                         href=render_source_url(citation))
 
 
-def _describe_citation(citation: AddressedChallengeCitation) -> str:
+def _build_trail(citation: AddressedChallengeCitation) -> list[str]:
     if citation.kind == "stage_output_cell":
-        return f"{citation.stage_id} · {citation.column} · row {citation.row_ordinal}"
+        return [citation.stage_id, citation.column, f"row {citation.row_ordinal}"]
     if citation.kind == "stage_output_column":
-        return f"{citation.stage_id} · {citation.column}"
+        return [citation.stage_id, citation.column]
     if citation.kind == "stage":
-        return citation.stage_id
-    return citation.name
+        return [citation.stage_id]
+    return [citation.name]
+
+
+def _read_cited_figure(citation: AddressedChallengeCitation) -> str:
+    """Only a cell citation names a value; the other kinds point at no single one."""
+    if isinstance(citation, AddressedStageOutputCellCitation):
+        return render_figure(citation.value)
+    return ""
 
 
 # ── the review behind it ─────
