@@ -65,6 +65,24 @@ def test_a_workflow_with_a_warning_lists_it_instead(tmp_path):
     assert "0 errors" not in page
 
 
+def test_a_workflow_whose_rows_go_unnamed_is_counted_as_an_error(tmp_path):
+    unnamed = {**_make_load_stage(str(tmp_path / "things.csv"))}
+    del unnamed["row_type_id"]
+    page = _workflow_page(tmp_path, "unnamed", [unnamed])
+
+    assert "1 error" in page
+    assert "1 warning" not in page
+    assert "issue-panel-error" in page
+
+
+def test_errors_and_warnings_are_counted_apart(tmp_path):
+    unnamed = {**_make_load_stage(str(tmp_path / "things.csv"))}
+    del unnamed["row_type_id"]
+    page = _workflow_page(tmp_path, "both", [unnamed, _UNDESCRIBED])
+
+    assert "1 warning, 1 error" in page
+
+
 def test_a_workflow_that_does_not_load_claims_nothing(tmp_path):
     # A relative connector path is rejected by input_data, so nothing types.
     page = _workflow_page(tmp_path, "broken", [_make_load_stage("data/things.csv")])
