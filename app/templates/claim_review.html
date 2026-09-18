@@ -1,0 +1,242 @@
+{% extends "project_shell.html" %}
+{% from "_sparkle.html" import sparkle %}
+{#
+  THE CLAIM PAGE — one sentence, where each of its phrases lands in the run, and every
+  challenge the reviewers raised against it.
+
+  The underline under a phrase is its worst open challenge: the legend under the sentence
+  names every weight in words, so the marking is never colour alone. A phrase the review
+  grounds on nothing still carries its row in the ground table, saying so.
+
+  The review itself is a background turn, so this page has four states of its own —
+  never reviewed, running, failed, refused — and the block after the legend is whichever
+  one it is in. Running polls the session's status endpoint and reloads when it goes
+  still; nothing here computes a result client-side.
+
+  Context the route passes:
+    state = project_view.shell_state_off_nav(project_id, crumbs); section = "runs"
+    page  = claim_review_view.build_claim_review_page(project_id, claim_id)
+#}
+{% block title %}Claim · {{ state.meta.display_name }}{% endblock %}
+
+{% block section %}
+{% set base = "/project/" ~ state.id ~ "/claims/" ~ page.claim_id %}
+{% set would_be_refused = page.universe == 'closed' and not page.run_read_everything %}
+
+<div class="sec-head">
+  <h1>The claim
+    <span class="status-chip {{ page.status }}">{{ "needs review" if page.status == 'submitted' else page.status }}</span>
+  </h1>
+  <p class="lede">A sentence this project proposes to publish, and every challenge the
+    reviewers raised against it. Each challenge cites the pieces of the run it rests on.
+    Nothing here changes the claim or the run: you approve it, edit it, or close it.</p>
+</div>
+
+<div class="claimcard">
+<p class="sentence">
+  {%- for token in page.tokens -%}
+    {%- if token.severity is none -%}{{ token.text }}
+    {%- else -%}
+<a class="ph s{{ token.severity }}" href="#{{ token.anchor }}">{{ token.text }}</a>
+    {%- endif -%}
+  {%- endfor -%}
+</p>
+
+  {% if page.status == 'submitted' %}
+  <div class="acts">
+    <form method="post" action="{{ base }}/approve">
+      <button class="btn primary" type="submit" {% if would_be_refused %}disabled{% endif %}>Approve</button>
+    </form>
+    <button class="btn" type="button" data-opens="edit-claim">Edit</button>
+    <form method="post" action="{{ base }}/decline">
+      <button class="btn" type="submit">Close</button>
+    </form>
+    <span class="cite">approving cites <a class="lineage-value" href="{{ page.value_href }}">{{ page.value }}</a>
+      of run {{ page.run_id }}</span>
+  </div>
+  {% if page.review != 'refused' %}
+  <form class="editbox" id="edit-claim" method="post" action="{{ base }}/rewrite" hidden>
+    <textarea name="text" rows="2" aria-label="another wording of this claim"
+              required>{{ page.text }}</textarea>
+    <div class="editrow">
+      <button class="btn primary" type="submit">{{ sparkle() }} Save and review it</button>
+      <button class="btn" type="button" data-closes="edit-claim">Cancel</button>
+    </div>
+  </form>
+  {% endif %}
+  {% elif page.status == 'approved' %}
+  <div class="acts"><b>Approved.</b>
+    <span class="cite">cites <a class="lineage-value" href="{{ page.value_href }}">{{ page.value }}</a> of run {{ page.run_id }}</span>
+  </div>
+  {% elif page.status == 'declined' %}
+  <div class="acts"><b>Closed.</b>
+    <span class="muted">The run keeps the number; nothing stands behind this sentence.</span></div>
+  {% else %}
+  <div class="acts"><b>Superseded.</b>
+    <span class="muted">Another wording of this claim replaced it.</span></div>
+  {% endif %}
+</div>
+
+{% if page.challenges %}
+<div class="legend">
+  {% for row in page.legend %}
+  <span class="l{{ row.severity }}" title="{{ row.words }}"><i></i>{{ row.name }}</span>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ── what the review is doing, if it is not done ── #}
+{% if page.review == 'running' %}
+<div class="round-note pending">
+  {{ sparkle() }}<b>Attacking this sentence…</b>
+  <span>Five reviewers are reading it against what the run holds. This page reloads
+    when they are done.</span>
+</div>
+<script>
+(function () {
+  // The review runs in a background turn, so the page watches the session rather than
+  // the review: the status endpoint is what knows the turn is still in flight.
+  const url = {{ ("/project/" ~ state.id ~ "/generation-session/" ~ page.review_session_id ~ "/status") | tojson }};
+  let timer = null;
+  async function poll() {
+    let state;
+    try {
+      const answer = await fetch(url, { cache: 'no-store' });
+      if (!answer.ok) return;
+      state = await answer.json();
+    } catch (e) { return; }
+    if (!state.active) { if (timer) clearInterval(timer); location.reload(); }
+  }
+  timer = setInterval(poll, 2000); poll();
+})();
+</script>
+{% elif page.review == 'failed' and page.status == 'submitted' %}
+<div class="mint-alert">⚠ <span>{{ page.review_error }}</span></div>
+<form class="word-bar" id="review-form" method="post" action="{{ base }}/review">
+  <button class="btn primary" type="submit">{{ sparkle() }} Review it again</button>
+  <span class="muted">Nothing was stored, so the sentence stands unread.</span>
+</form>
+{% elif page.review == 'none' and page.status == 'submitted' %}
+<form class="word-bar" id="review-form" method="post" action="{{ base }}/review">
+  <button class="btn primary" type="submit">{{ sparkle() }} Review this claim</button>
+  <span class="muted">Five reviewers read the sentence against what the run holds, and
+    each says what it can raise against it, with what in the run makes that stick.</span>
+</form>
+{% elif page.review == 'refused' %}
+<div class="round-note">
+  <b>Not reviewed.</b>
+  <span>This is a table claim: it cites a rectangle of rows rather than one figure, and
+    a reviewer reads a sentence written on a single value.</span>
+</div>
+{% endif %}
+
+{# ── what was raised ── #}
+{% for one in page.challenges %}
+<div class="ch" id="{{ one.anchor }}">
+  <div class="ch-head">
+    <span class="ch-on">{% if one.phrase %}“{{ one.phrase }}”{% else %}the whole sentence{% endif %}</span>
+    <span class="sev-tag s{{ one.severity }}" title="{{ one.severity_words }}">{{ one.severity_name }}</span>
+  </div>
+  <div class="ch-text">{{ one.text }}</div>
+  <div class="ch-ev">{{ one.justification }}</div>
+  {% if one.citations %}
+  <div class="cites">
+    <div class="cites-h">Citations</div>
+    {% for citation in one.citations %}
+    <div class="cite-row">
+      <span class="cite-what">{{ citation.kind_words }}</span>
+      <a class="cite-trail" href="{{ citation.href }}">
+        {%- for step in citation.trail -%}
+        {%- if not loop.first %}<span class="crumb-sep" aria-hidden="true">/</span>{% endif -%}
+        <span class="{{ 'crumb-here' if loop.last else 'crumb-link' }}">{{ step }}</span>
+        {%- endfor -%}
+      </a>
+      {% if citation.value %}<span class="cite-value">{{ citation.value }}</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+
+{% if page.review == 'done' and not page.challenges %}
+<div class="empty-line">Nothing was raised against this sentence.</div>
+{% endif %}
+
+{# ── standing behind it, or not ── #}
+{% if would_be_refused and page.blocked %}
+<div class="mint-alert">⚠ <span>{{ page.blocked }} This claim's shape needs the whole
+  input, so it cannot be approved from this run.</span></div>
+{% endif %}
+
+{# ── what the claim cites off the run ── #}
+<h2 class="sub-h">What the claim cites</h2>
+<div class="pool">
+  <table class="pool-t">
+    <tbody>
+      {% for output in page.outputs %}
+      <tr class="{{ 'lit' if output.cited }}">
+        <td><span class="ev">{{ output.slug }}</span> {{ output.label }}</td>
+        <td class="v"><a class="lineage-value" href="{{ output.href }}">{{ output.value }}</a></td>
+        <td class="note">{{ page.shape_label if output.cited }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="note">Every figure of this run a claim may be written on. The shaded row is
+  the one this sentence is read from.</p>
+
+{% if page.review == 'done' %}
+<details class="fold">
+  <summary>How this was reviewed</summary>
+  {% if page.review_session_id %}
+  <p class="muted">Every turn it took is kept in
+    <a href="/chat/{{ page.review_session_id }}">this session</a>.</p>
+  {% endif %}
+</details>
+{% endif %}
+
+<script>
+(function () {
+  // Edit opens the box under the sentence rather than a second page: the words being
+  // judged and the words replacing them are read in one place.
+  const box = document.getElementById('edit-claim');
+  if (box) {
+    for (const button of document.querySelectorAll('[data-opens="edit-claim"]')) {
+      button.addEventListener('click', function () {
+        box.hidden = false;
+        box.querySelector('textarea').focus();
+      });
+    }
+    for (const button of document.querySelectorAll('[data-closes="edit-claim"]')) {
+      button.addEventListener('click', function () { box.hidden = true; });
+    }
+  }
+})();
+(function () {
+  // The review route answers JSON to whoever started the turn, so this form is sent by
+  // fetch: a started turn reloads the page, a refusal is drawn above the form unreloaded.
+  const form = document.getElementById('review-form');
+  if (!form) return;
+  const button = form.querySelector('button[type=submit]');
+  function drawRefusal(text) {
+    const note = document.createElement('div');
+    note.className = 'mint-alert';
+    note.textContent = '⚠ ' + text;
+    form.parentNode.insertBefore(note, form);
+    if (button) button.disabled = false;
+  }
+  form.addEventListener('submit', async function (event) {
+    event.preventDefault();
+    if (button) button.disabled = true;
+    let answer;
+    try { answer = await fetch(form.action, { method: 'POST' }); }
+    catch (e) { drawRefusal('the review could not be sent to the server'); return; }
+    if (answer.ok) { location.reload(); return; }
+    const refused = await answer.json().catch(function () { return {}; });
+    drawRefusal(refused.detail || ('the server answered ' + answer.status));
+  });
+})();
+</script>
+{% endblock %}

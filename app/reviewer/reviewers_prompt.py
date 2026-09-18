@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from app.models.records.claim_review import SEVERITY_WORDS
 
-_SEVERITY_SHOWN = "\n".join(f"  {weight} — {word}" for weight, word in SEVERITY_WORDS.items())
+_SEVERITY_SHOWN = "\n".join(
+    f"  {weight.value} `{weight.name}` — {word}" for weight, word in SEVERITY_WORDS.items())
 
 _AGENT_CONTEXT = (
     "YOUR PLACE. You are reading ONE sentence proposed for publication. It cites one cell "

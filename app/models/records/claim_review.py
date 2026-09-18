@@ -24,17 +24,18 @@ class ChallengeKind(str, Enum):
 
 # Ordered: the page folds the quiet ones behind a count and sorts the rest by weight.
 class Severity(IntEnum):
-    noted = 0
-    minor = 1
-    major = 2
-    misleading = 3
+    info = 0
+    low = 1
+    high = 2
+    critical = 3
 
 
+# The name is the label; the words are what a reader is shown on hovering it.
 SEVERITY_WORDS: dict[Severity, str] = {
-    Severity.noted: "nothing moves; a choice was made a reader should know about",
-    Severity.minor: "the figure moves, but not materially",
-    Severity.major: "the claim's shape holds, but the figure moves materially",
-    Severity.misleading: "a reader draws a conclusion the run does not support",
+    Severity.info: "nothing moves; a choice was made a reader should know about",
+    Severity.low: "the figure moves, but not materially",
+    Severity.high: "the claim's shape holds, but the figure moves materially",
+    Severity.critical: "a reader draws a conclusion the run does not support",
 }
 
 _SEVERITY_DESCRIPTION = "How wrong a reader is left. " + ". ".join(
