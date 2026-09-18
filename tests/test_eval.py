@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pandas as pd
 import pytest
 
 from conftest import queue_added_columns, queue_columns, reads_of
@@ -9,6 +10,7 @@ from app import models as m
 from app.models.records.eval_config import EvalConfig
 from app.models.records.eval_run import EvalRun
 from app.evals.run_settings import resolve_eval_run_settings
+from app.evals.scoring import score_expected_outputs
 
 
 def S(**kw):
@@ -254,6 +256,21 @@ def test_expected_output_rejects_stray_expected_field():
 def test_stage_output_override():
     o = m.StageOutputOverride.model_validate({"stage_id": "benchmark_library", "table": _ref()})
     assert o.stage_id == "benchmark_library"
+
+
+def test_an_eval_that_scored_no_rows_records_no_accuracy(tmp_path):
+    override = m.parse_workflow([_file_input("ov", tmp_path)]).find_workflow_stage("ov")
+    target = m.parse_workflow(
+        [_file_input("tg", tmp_path, output_schema=_KV)]).find_workflow_stage("tg")
+    config = EvalConfig(
+        eval_id="e", project="p", name="e", override_stage="ov", target_stage="tg",
+        expected_outputs=[m.ExpectedOutput(output_column="v", metric="exact")])
+    empty_dataset = pd.DataFrame({"k": [], "v": []})
+    empty_target = pd.DataFrame({"k": [], "v": []})
+
+    result = score_expected_outputs(config, override, target, empty_dataset, empty_target)
+    assert result.metrics["rows_scored"] == 0
+    assert "accuracy" not in result.metrics
 
 
 # ── EvalRun embeds settings (no overall pass/fail) ────────────────────────────
