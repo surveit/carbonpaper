@@ -5,6 +5,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from app.core.json_types import JsonDict
 from app.core.llm.options import LLMModel
 from app.evals.errors import CaseInvalid
 from app.models.schema import _Base
@@ -18,7 +19,10 @@ class CaseSource(_Base):
 
 
 class Case(_Base):
-    claim_id: str
+    # What it takes to SUBMIT the claim: an imported archive carries no claims.
+    output_slug: str
+    claim_context: JsonDict
+    claim_text: str
     model: LLMModel
     sources: list[CaseSource]
     expected_outputs: list[str]

@@ -15,6 +15,7 @@ from app.evals.case import Case, read_case
 from app.evals.errors import CaseDidNotReplay, CaseInvalid
 from app.evals.replay import validate_run_called_no_model, validate_sources_match_capture
 from app.services.claim_review import load_claim_review
+from app.services.claims import submit_claim
 from app.services.claim_review_run import start_claim_review
 from app.services.errors import ClaimReviewRefused
 from app.services.project import import_project_archive
@@ -47,26 +48,30 @@ def _review_one_case(case_dir: Path) -> dict[str, object]:
     validate_sources_match_capture(case_dir, case)
     project_id = import_project_archive((case_dir / ARCHIVE_FILE).read_bytes()).project_id
     manifest = execute(project_id)
+    run_id = str(manifest["run_id"])
     validate_run_called_no_model(
-        project_id, str(manifest["run_id"]), load_run_workflow(project_id, manifest))
-    return _run_the_review(project_id, case)
+        project_id, run_id, load_run_workflow(project_id, manifest))
+    # A fresh claim id per call, so repeating a case is not refused as already reviewed.
+    claim = submit_claim(project_id, run_id, case.output_slug, case.claim_context,
+                         case.claim_text)
+    return _run_the_review(project_id, case, claim.id)
 
 
-def _run_the_review(project_id: ID, case: Case) -> dict[str, object]:
+def _run_the_review(project_id: ID, case: Case, claim_id: ID) -> dict[str, object]:
     loop = create_event_loop()
     try:
         asyncio.set_event_loop(loop)
-        loop.run_until_complete(_await_the_review(project_id, case))
+        loop.run_until_complete(_await_the_review(project_id, case, claim_id))
     finally:
         asyncio.set_event_loop(None)
         loop.close()
-    return _read_the_stored_review(project_id, case.claim_id)
+    return _read_the_stored_review(project_id, claim_id)
 
 
-async def _await_the_review(project_id: ID, case: Case) -> None:
+async def _await_the_review(project_id: ID, case: Case, claim_id: ID) -> None:
     validate_running_loop_can_spawn_subprocesses()
-    session_id = start_claim_review(project_id, case.claim_id, model=str(case.model))
-    await _await_the_review_landing(session_id, case.claim_id)
+    session_id = start_claim_review(project_id, claim_id, model=str(case.model))
+    await _await_the_review_landing(session_id, claim_id)
 
 
 async def _await_the_review_landing(session_id: ID, claim_id: ID) -> None:
