@@ -1,4 +1,4 @@
-"""python -m app.review_case <case_dir> — replay a captured case and review its claim."""
+"""python -m app.evals.review_case <case_dir> — replay a captured case and review its claim."""
 from __future__ import annotations
 
 import argparse
@@ -106,7 +106,7 @@ def _read_the_stored_review(project_id: ID, claim_id: ID) -> dict[str, object]:
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="python -m app.review_case",
+        prog="python -m app.evals.review_case",
         description="Review a captured case's claim, replaying its run.")
     parser.add_argument("case_dir", type=Path, help="the case directory holding case.json")
     return parser.parse_args(argv)

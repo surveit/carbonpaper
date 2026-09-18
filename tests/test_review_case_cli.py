@@ -1,4 +1,4 @@
-"""`python -m app.review_case <case_dir>`: what it prints, and what it refuses to print."""
+"""`python -m app.evals.review_case <case_dir>`: what it prints, and what it refuses to print."""
 from __future__ import annotations
 
 import asyncio
@@ -13,7 +13,7 @@ from app.evals.case import CASE_FILE
 from app.models.records.claim_review import Challenge, ChallengeKind, ClaimReview, Severity
 from app.models.records.claims import Claim
 from app.models.records.project import Project
-from app.review_case import ARCHIVE_FILE, POLL_SECONDS, main
+from app.evals.review_case import ARCHIVE_FILE, POLL_SECONDS, main
 from app.services import run as run_service
 from app.services.claim_shapes import write_claim_shapes
 from app.services.methodology import write_methodology
@@ -95,7 +95,7 @@ def seeded_case_dir(tmp_path, projects_root) -> Path:
 def test_a_replayable_case_submits_its_claim_and_prints_the_challenges(
     capsys, seeded_case_dir, monkeypatch
 ):
-    monkeypatch.setattr("app.review_case.start_claim_review", _a_fake_review)
+    monkeypatch.setattr("app.evals.review_case.start_claim_review", _a_fake_review)
 
     exit_code = main([str(seeded_case_dir)])
 
@@ -109,7 +109,7 @@ def test_a_replayable_case_submits_its_claim_and_prints_the_challenges(
 def test_the_claim_is_submitted_against_the_replayed_run_not_the_captured_one(
     capsys, seeded_case_dir, monkeypatch
 ):
-    monkeypatch.setattr("app.review_case.start_claim_review", _a_fake_review)
+    monkeypatch.setattr("app.evals.review_case.start_claim_review", _a_fake_review)
     captured = set(list_run_ids(PROJECT))
 
     main([str(seeded_case_dir)])
@@ -131,7 +131,7 @@ def test_a_drifted_source_is_refused_before_anything_runs(capsys, seeded_case_di
 def test_a_review_that_stored_nothing_is_refused_rather_than_printed_empty(
     capsys, seeded_case_dir, monkeypatch
 ):
-    monkeypatch.setattr("app.review_case.start_claim_review", _a_review_that_never_stores)
+    monkeypatch.setattr("app.evals.review_case.start_claim_review", _a_review_that_never_stores)
 
     exit_code = main([str(seeded_case_dir)])
 
@@ -141,7 +141,7 @@ def test_a_review_that_stored_nothing_is_refused_rather_than_printed_empty(
 
 
 def test_a_review_that_lands_after_a_poll_is_waited_for(capsys, seeded_case_dir, monkeypatch):
-    monkeypatch.setattr("app.review_case.start_claim_review", _a_review_that_lands_late)
+    monkeypatch.setattr("app.evals.review_case.start_claim_review", _a_review_that_lands_late)
 
     exit_code = main([str(seeded_case_dir)])
 
