@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Stre
 
 from app.core.errors import EvalNotScorableError
 from app.core.frames import list_rows
-from app.models import WorkflowNotFormed
+from app.models import Workflow, WorkflowNotFormed
 from app.models.records.eval_config import EvalConfig
 from app.models.records.eval_run import EvalRun
 from app.evals.compatibility import CompatibilityReport, validate_eval_compatibility
@@ -34,7 +34,11 @@ from app.web.eval_run_view import (
     build_eval_run_rows,
     describe_eval_run_duration,
 )
-from app.web.loading import StageListing, load_stages_or_empty, render_frame_as_text
+from app.web.loading import (
+    load_stages_or_empty,
+    load_workflow_or_latest_version,
+    render_frame_as_text,
+)
 from app.web.project_view import shell_state, validate_project_or_404
 from app.runtime.run_log import count_events
 from app.web.run_events import (
@@ -62,14 +66,15 @@ def evals_index(request: Request, project_id: str):
         {
             "state": shell_state(project_id, "evals"),
             "section": "evals",
-            "evals": _build_eval_index_rows(project_id, listing),
+            "evals": _build_eval_index_rows(
+                project_id, load_workflow_or_latest_version(project_id)),
             "load_issues": listing.issues,
         },
     )
 
 
 def _build_eval_index_rows(
-    project_id: str, listing: StageListing
+    project_id: str, workflow: Workflow | WorkflowNotFormed
 ) -> list[dict[str, Any]]:
     latest_version = latest_version_id(project_id)
     rows: list[dict[str, Any]] = []
@@ -78,8 +83,8 @@ def _build_eval_index_rows(
             rows.append({"id": entry.id, "name": entry.id,
                          "status": "broken", "issues": entry.issues})
             continue
-        status, run_issue = _resolve_eval_status(entry.config, listing, project_id,
-                                                  latest_version)
+        status, run_issue = _resolve_eval_status(entry.config, workflow, project_id,
+                                                 latest_version)
         rows.append({"id": entry.config.eval_id, "name": entry.config.name,
                      "status": status, "issues": [run_issue] if run_issue else []})
     return rows
@@ -97,8 +102,7 @@ def eval_detail(request: Request, project_id: str, eval_id: str):
 def _render_eval_detail(
     request: Request, project_id: str, config: EvalConfig
 ) -> HTMLResponse:
-    listing = load_stages_or_empty(project_id)
-    report = _report_compatibility(config, listing)
+    report = _report_compatibility(config, load_workflow_or_latest_version(project_id))
     runs, runs_error = _list_eval_runs_safely(project_id, config.eval_id)
     latest_version = latest_version_id(project_id)
     status = ("broken" if runs_error else
@@ -294,8 +298,9 @@ def _load_config_or_404(project_id: str, eval_id: str) -> EvalConfig:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-def _report_compatibility(config: EvalConfig, listing: StageListing) -> CompatibilityReport:
-    workflow = listing.workflow
+def _report_compatibility(
+    config: EvalConfig, workflow: Workflow | WorkflowNotFormed
+) -> CompatibilityReport:
     if isinstance(workflow, WorkflowNotFormed):
         return CompatibilityReport(ok=False, problems=[
             "cannot verify the path: the workflow has structural problems: "
@@ -304,10 +309,10 @@ def _report_compatibility(config: EvalConfig, listing: StageListing) -> Compatib
 
 
 def _resolve_eval_status(
-    config: EvalConfig, listing: StageListing, project_id: str,
+    config: EvalConfig, workflow: Workflow | WorkflowNotFormed, project_id: str,
     latest_version: str | None,
 ) -> tuple[str, str | None]:
-    report = _report_compatibility(config, listing)
+    report = _report_compatibility(config, workflow)
     runs, run_issue = _list_eval_runs_safely(project_id, config.eval_id)
     status = ("broken" if run_issue else
               eval_status(report, runs, latest_version,
