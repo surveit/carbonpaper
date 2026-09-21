@@ -3190,3 +3190,4 @@
 {"run_id":"35597531012","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35597531012","created":"2026-09-21T12:08:48Z","branch":"claim-review/list-and-nav","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"35597531600","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35597531600","created":"2026-09-21T12:08:54Z","branch":"claim-review/list-and-nav","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"35597817683","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35597817683","created":"2026-09-21T12:09:06Z","branch":"feat/dedupe-the-challenges","event":"pull_request","contracts_kept":17,"findings":[]}
+{"run_id":"35597829541","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35597829541","created":"2026-09-21T12:09:20Z","branch":"fix/predicate-arms","event":"pull_request","contracts_kept":17,"findings":[]}
