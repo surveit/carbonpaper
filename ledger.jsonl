@@ -3171,3 +3171,4 @@
 {"run_id":"35587743330","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35587743330","created":"2026-09-21T10:17:41Z","branch":"feat/workflow-source-connector","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"35588217054","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35588217054","created":"2026-09-21T10:21:12Z","branch":"feat/one-review-entry-point","event":"pull_request","contracts_kept":17,"findings":[]}
 {"run_id":"35588217054","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35588217054","created":"2026-09-21T10:23:14Z","branch":"feat/one-review-entry-point","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"35594328687","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35594328687","created":"2026-09-21T11:30:13Z","branch":"feat/dedupe-the-challenges","event":"pull_request","contracts_kept":17,"findings":[]}
