@@ -17,6 +17,7 @@ from app.models.branch_analysis import (
     RowOrdinal,
 )
 from app.models.schema import StageId
+from app.models.stages.predicates import read_the_predicate
 from app.models.stage import StageType, is_grain_and_order_preserving
 from app.models.workflow_stage import WorkflowStage
 from app.runtime.branch_analysis.stage_code import (
@@ -224,7 +225,11 @@ def _name_the_removal(stage: WorkflowStage) -> tuple[str, str]:
     # A dedupe removes rows the way a filter does, but it has keys, not a predicate.
     if stage.stage.type == StageType.dedupe:
         return "kept, one row per key", "dropped as a repeat of a kept row"
-    return "kept by the predicate", "dropped by the predicate"
+    said = read_the_predicate(stage.stage)
+    if said is None:
+        return "kept by the predicate", "dropped by the predicate"
+    # "not" rather than an inverted phrase: nothing here can negate English.
+    return said, f"not: {said}"
 
 
 def _hold(read: BranchingReadFromLineage, flags: list[bool],

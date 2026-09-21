@@ -10,6 +10,10 @@ from typing import Mapping
 from pydantic import BaseModel
 
 from app.models.stage import Stage
+from app.models.stages.predicates import (
+    decides_which_rows_are_kept,
+    read_the_predicate,
+)
 from app.models.stages.warnings import SEVERITY, CompilerWarning, warn
 
 
@@ -38,7 +42,8 @@ def find_stage_compiler_warnings(
     # about the examples too would be noise — fix the description first.
     if not any(w.kind == "undescribed" for w in warnings):
         warnings += _find_unchecked_description_warnings(stage, failing_examples)
-    return warnings + _find_unnamed_rows_warning(stage)
+    return (warnings + _find_unnamed_rows_warning(stage)
+            + _find_unsaid_test_warning(stage))
 
 
 def _find_unnamed_rows_warning(stage: Stage) -> list[CompilerWarning]:
@@ -48,6 +53,14 @@ def _find_unnamed_rows_warning(stage: Stage) -> list[CompilerWarning]:
                  "its rows are a new kind of thing and no `row_type_id` says what one "
                  "of them is, so nothing written about them — this stage's own "
                  "description, a review guide, a published figure — can name the thing")]
+
+
+def _find_unsaid_test_warning(stage: Stage) -> list[CompilerWarning]:
+    if not decides_which_rows_are_kept(stage) or read_the_predicate(stage):
+        return []
+    return [warn(stage, "unsaid_test",
+                 "no `predicate` says what this step keeps, so every branch of it a "
+                 "reader meets is labelled with its code or with nothing")]
 
 
 def _find_unchecked_description_warnings(

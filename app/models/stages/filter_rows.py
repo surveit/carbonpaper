@@ -10,7 +10,13 @@ from pydantic import Field, model_validator
 
 from app.models.errors import StepRefused
 from app.models.schema import StageConfig
-from app.models.stages.stage_base import AbstractStage, StageInput, StageType
+from app.models.stages.stage_base import (
+    PREDICATE_DESCRIPTION,
+    PREDICATE_MAX_CHARS,
+    AbstractStage,
+    StageInput,
+    StageType,
+)
 from app.models.stages.warnings import CompilerWarning, warn
 from app.models.stages.code import (
     CORNER_CASES_DESCRIPTION,
@@ -25,9 +31,13 @@ from app.models.stages.stage_tests import FilterRowsStageTest
 
 class FilterConfig(StageConfig):
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"code", "function"})
-    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({"summary", "corner_cases"})
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset(
+        {"summary", "corner_cases", "predicate"})
 
     summary: Optional[str] = Field(default=None, description=SUMMARY_DESCRIPTION)
+    predicate: Optional[str] = Field(
+        default=None, max_length=PREDICATE_MAX_CHARS, description=PREDICATE_DESCRIPTION
+    )
     corner_cases: list[CornerCase] = Field(
         default_factory=list, description=CORNER_CASES_DESCRIPTION
     )
@@ -111,7 +121,7 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
         blocks=["filter"],
         requires_inputs=True,
         min_inputs=1,
-        required=["code"],
+        required=["code", "predicate"],
         optional=["function", "summary"],
         notes=(
             "Takes exactly ONE input. The predicate is INLINE code only — there is no "

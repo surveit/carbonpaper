@@ -121,3 +121,45 @@ def test_a_cached_stage_keeps_its_code_arms_as_well_as_its_lineage_ones(scoped):
         "size_band|transform/1:if",
     ]
     assert "funded|removed" in run.branch_options
+
+
+def test_a_filter_that_says_what_it_keeps_labels_its_branches_with_it():
+    """The paths a row took read in the author's words, never in the predicate's code."""
+    from app import models as m
+    from app.runtime.branch_analysis.run_branches import _name_the_removal
+
+    column = {"name": "income", "type": "float", "nullable": True}
+    stages = m.Workflow(stages=[m.parse_stage(spec) for spec in [
+        {"id": "load", "description": "Load the filings", "type": "input_data",
+         "connector": {"kind": "file", "params": {"paths": ["/in/f.csv"]}},
+         "signature": {"form": "replaces", "produces": [column]}},
+        {"id": "paid", "description": "Keep the paid filings", "type": "filter_rows",
+         "inputs": [{"id": "load"}],
+         "filter": {"code": "def should_include(row): return True",
+                    "predicate": "carry an income"},
+         "signature": {"form": "extends",
+                       "reads": [{"input": "load", "columns": [column]}]}},
+    ]]).index_workflow_stages_by_id()
+
+    assert _name_the_removal(stages["paid"]) == (
+        "carry an income", "not: carry an income")
+
+
+def test_a_filter_nobody_wrote_a_predicate_for_still_names_its_branches():
+    from app import models as m
+    from app.runtime.branch_analysis.run_branches import _name_the_removal
+
+    column = {"name": "income", "type": "float", "nullable": True}
+    stages = m.Workflow(stages=[m.parse_stage(spec) for spec in [
+        {"id": "load", "description": "Load the filings", "type": "input_data",
+         "connector": {"kind": "file", "params": {"paths": ["/in/f.csv"]}},
+         "signature": {"form": "replaces", "produces": [column]}},
+        {"id": "paid", "description": "Keep the paid filings", "type": "filter_rows",
+         "inputs": [{"id": "load"}],
+         "filter": {"code": "def should_include(row): return True"},
+         "signature": {"form": "extends",
+                       "reads": [{"input": "load", "columns": [column]}]}},
+    ]]).index_workflow_stages_by_id()
+
+    assert _name_the_removal(stages["paid"]) == (
+        "kept by the predicate", "dropped by the predicate")

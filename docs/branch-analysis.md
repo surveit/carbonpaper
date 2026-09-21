@@ -19,6 +19,15 @@ load_grants|loaded                at `load_grants`, "loaded by load_grants"
 mark_groups|transform/5:choice1:else   at `mark_groups`, "else"
 ```
 
+A filter's or a queue's two branches are labelled with the step's own `predicate` — the
+phrase its author wrote for what the step KEEPS ("carry an income"), and the same phrase
+under `not:` for the rows it dropped. Nothing here inverts English, which is why the
+dropped side is prefixed rather than rewritten. Where no predicate is written the labels
+fall back to "kept by the predicate" / "dropped by the predicate", and the stage raises
+the `unsaid_test` compiler warning. A `code` branch is still labelled with the line it
+was decided on (`elif text.startswith('$')`, or a bare `try:`), because no arm of a
+transform carries an authored phrase yet.
+
 The id is opaque. Nothing reads anything back out of it — a `BranchOption` carries every fact a
 caller needs as a field, including `rows_live_in_stage_id`, the frame its rows are rows of.
 
