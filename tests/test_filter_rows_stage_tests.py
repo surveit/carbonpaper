@@ -25,7 +25,7 @@ def _filter_stage(code: str, tests: list[dict], stage_id: str = "keep_active") -
         "id": stage_id, "description": "Keep active", "type": "filter_rows",
         "inputs": [{"id": "load"}],
         "signature": {"form": "extends", "reads": reads_of("load", _SCHEMA["columns"])},
-        "filter": {"summary": "Keeps the rows marked active.", "code": code},
+        "filter": {"predicate": "pass this step's test", "summary": "Keeps the rows marked active.", "code": code},
         "tests": tests,
     })
 

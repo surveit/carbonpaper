@@ -106,7 +106,7 @@ def add_a_sandboxed_filter(specs: list[dict]) -> list[dict]:
         "id": "sandboxed_positive", "type": "starlark_filter_rows", "cache": True,
         "description": "Keeps the grants recorded above zero, in the sandbox.",
         "inputs": [{"id": "grants_only"}],
-        "starlark_filter": {
+        "starlark_filter": {"predicate": "pass this step's test", 
             "summary": "Keeps a grant only where the recorded amount is above zero.",
             "corner_cases": [{"case": "amount is 0", "expected": "the row is dropped"}],
             "code": SANDBOXED_CODE,

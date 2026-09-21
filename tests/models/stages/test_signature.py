@@ -420,7 +420,7 @@ def test_review_queue_add_outside_the_review_columns_rejected():
         "description": "Check",
         "type": "human_review_queue",
         "inputs": [{"id": "bills"}],
-        "queue": {
+        "queue": {"predicate": "pass this step's test", 
             "reviewed_columns": {"price": "reviewed_price"},
             "verdict_column": "verdict",
             "reviewer_column": "reviewer",

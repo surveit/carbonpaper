@@ -35,8 +35,8 @@ class FilterConfig(StageConfig):
         {"summary", "corner_cases", "predicate"})
 
     summary: Optional[str] = Field(default=None, description=SUMMARY_DESCRIPTION)
-    predicate: Optional[str] = Field(
-        default=None, max_length=PREDICATE_MAX_CHARS, description=PREDICATE_DESCRIPTION
+    predicate: str = Field(
+        max_length=PREDICATE_MAX_CHARS, description=PREDICATE_DESCRIPTION
     )
     corner_cases: list[CornerCase] = Field(
         default_factory=list, description=CORNER_CASES_DESCRIPTION

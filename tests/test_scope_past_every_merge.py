@@ -82,7 +82,7 @@ def stage_specs(data: Path) -> list[dict]:
         {"id": "reporting_regions", "type": "filter_rows", "cache": True,
          "description": "Keeps the regions that sold anything.",
          "inputs": [{"id": "by_region"}],
-         "filter": {"summary": "Keeps a region only where its total is above zero.",
+         "filter": {"predicate": "pass this step's test", "summary": "Keeps a region only where its total is above zero.",
                     "corner_cases": [],
                     "code": 'def should_include(row):\n'
                             '    return row["region_total"] > 0\n'},
@@ -103,7 +103,7 @@ def stage_specs(data: Path) -> list[dict]:
         {"id": "big_regions", "type": "filter_rows", "cache": True,
          "description": "Keeps the regions that sold at least a thousand.",
          "inputs": [{"id": "by_region"}],
-         "filter": {"summary": "Keeps a region only where its total reaches a thousand.",
+         "filter": {"predicate": "pass this step's test", "summary": "Keeps a region only where its total reaches a thousand.",
                     "corner_cases": [],
                     "code": 'def should_include(row):\n'
                             '    return row["region_total"] >= 1000\n'},

@@ -16,7 +16,7 @@ def _filter_stage(*, signature=None, filter_cfg=None):
         "signature": signature or {
             "form": "extends", "reads": reads_of("src", _AB_SCHEMA["columns"]),
         },
-        "filter": filter_cfg or {"code": "def should_include(row): return row['b'] > 0"},
+        "filter": filter_cfg or {"predicate": "pass this step's test", "code": "def should_include(row): return row['b'] > 0"},
     }
 
 
@@ -54,7 +54,9 @@ def test_a_signature_that_rewrites_is_rejected():
 
 def test_inline_code_must_define_should_include():
     with pytest.raises(ValidationError, match="should_include"):
-        parse_stage(_filter_stage(filter_cfg={"code": "def other(row): return True"}))
+        parse_stage(_filter_stage(filter_cfg={
+            "predicate": "pass this step's test",
+            "code": "def other(row): return True"}))
 
 
 def test_takes_exactly_one_input():

@@ -56,7 +56,7 @@ def _filter_rows(stage_id, source, reads):
     return m.parse_stage({
         "id": stage_id, "description": stage_id, "type": "filter_rows",
         "inputs": [{"id": source}],
-        "filter": {"code": "def should_include(row): return True"},
+        "filter": {"predicate": "pass this step's test", "code": "def should_include(row): return True"},
         "signature": {
             "form": "extends",
             "reads": [{"input": source, "columns": [_column(name) for name in reads]}],
@@ -68,7 +68,7 @@ def _starlark_filter_rows(stage_id, source, reads):
     return m.parse_stage({
         "id": stage_id, "description": stage_id, "type": "starlark_filter_rows",
         "inputs": [{"id": source}],
-        "starlark_filter": {"code": "def should_include(row): return True"},
+        "starlark_filter": {"predicate": "pass this step's test", "code": "def should_include(row): return True"},
         "signature": {
             "form": "extends",
             "reads": [{"input": source, "columns": [_column(name) for name in reads]}],

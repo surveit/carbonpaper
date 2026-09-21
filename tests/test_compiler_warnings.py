@@ -9,6 +9,7 @@ from conftest import reads_of
 
 from app import models as m
 from app.models import find_stage_compiler_warnings, find_workflow_compiler_warnings
+from app.models.stages.predicates import PREDICATE_NOT_WRITTEN
 
 _SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}]}
 # Which signature form a type takes: the reshaping family replaces its input,
@@ -35,6 +36,8 @@ _PASSING_EXAMPLE = {"name": "passes_through",
 def _stage(stage_id="s", type_="python_row_function", handle="function", **kw):
     block = {"summary": kw.pop("summary", "Passes every row through unchanged."),
              "code": _CODE if handle == "function" else "def should_include(row):\n    return True"}
+    if handle == "filter":
+        block["predicate"] = kw.pop("predicate", PREDICATE_NOT_WRITTEN)
     if handle == "function":
         block = {"kind": kw.pop("kind", "inline"), **block}
         if block["kind"] == "module":
@@ -87,10 +90,7 @@ def _queue_stage(stage_id="rev", **kw):
 
 
 def _filter_stage(stage_id="filt", **kw):
-    predicate = kw.pop("predicate", None)
-    stage = _stage(stage_id=stage_id, type_="filter_rows", handle="filter", **kw)
-    stage.filter.predicate = predicate
-    return stage
+    return _stage(stage_id=stage_id, type_="filter_rows", handle="filter", **kw)
 
 
 def _kinds(stage):
@@ -179,7 +179,8 @@ def test_a_filter_nobody_said_the_meaning_of_is_unsaid():
 
 
 def test_a_queue_nobody_said_the_meaning_of_is_unsaid():
-    assert _kinds(_queue_stage(predicate=None)) == ["unsaid_test"]
+    # The field is required, so "unwritten" is the filler a migration put there.
+    assert _kinds(_queue_stage(predicate=PREDICATE_NOT_WRITTEN)) == ["unsaid_test"]
 
 
 def test_an_llm_stage_with_cache_off_is_a_note_not_a_blocker():

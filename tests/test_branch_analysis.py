@@ -159,7 +159,7 @@ def test_a_filter_nobody_wrote_a_predicate_for_still_names_its_branches():
          "signature": {"form": "replaces", "produces": [column]}},
         {"id": "paid", "description": "Keep the paid filings", "type": "filter_rows",
          "inputs": [{"id": "load"}],
-         "filter": {"code": "def should_include(row): return True"},
+         "filter": {"predicate": "pass this step's test", "code": "def should_include(row): return True"},
          "signature": {"form": "extends",
                        "reads": [{"input": "load", "columns": [column]}]}},
     ]]).index_workflow_stages_by_id()

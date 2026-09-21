@@ -55,7 +55,7 @@ def _stage_specs(data: Path) -> list[dict]:
             "id": "big_grants", "type": "filter_rows", "cache": True,
             "description": "Keeps the grants of five hundred and over.",
             "inputs": [{"id": "both_files"}],
-            "filter": {
+            "filter": {"predicate": "pass this step's test", 
                 "summary": "Keeps a grant only where the recorded amount is 500 or more.",
                 "corner_cases": [{"case": "amount is 400",
                                   "expected": "the row is dropped"}],

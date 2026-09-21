@@ -86,7 +86,7 @@ def _filter_stage() -> Stage:
     return parse_stage({
         "id": "keep", "description": "Keep", "type": "filter_rows",
         "inputs": [{"id": LOAD_ID}],
-        "filter": {"code": "def should_include(row):\n    return row['val'] is not None\n"},
+        "filter": {"predicate": "pass this step's test", "code": "def should_include(row):\n    return row['val'] is not None\n"},
         "signature": {"form": "extends", "reads": reads_of(LOAD_ID, _IN_COLUMNS)},
     })
 
@@ -95,7 +95,7 @@ def _starlark_filter_stage() -> Stage:
     return parse_stage({
         "id": "keep", "description": "Keep", "type": "starlark_filter_rows",
         "inputs": [{"id": LOAD_ID}],
-        "starlark_filter": {
+        "starlark_filter": {"predicate": "pass this step's test", 
             "code": "def should_include(row):\n    return row['val'] != None\n"},
         "signature": {"form": "extends", "reads": reads_of(LOAD_ID, _IN_COLUMNS)},
     })
@@ -255,7 +255,7 @@ def test_a_review_queue_shows_the_human_answer_beside_what_it_answered(tmp_path:
     stage = parse_stage({
         "id": "gate", "description": "Gate", "type": "human_review_queue",
         "inputs": [{"id": LOAD_ID}],
-        "queue": {
+        "queue": {"predicate": "pass this step's test", 
             "reviewed_columns": {"name": "reviewed_name"},
             "verdict_column": "verdict",
             "reviewer_column": "reviewer",

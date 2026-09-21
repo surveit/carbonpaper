@@ -41,6 +41,7 @@ def test_hrq_note_names_every_queue_field_that_adds_a_column():
     from app.models.stages.human_review_queue import QueueConfig, find_added_columns
 
     queue = QueueConfig(
+        predicate="pass this step's test",
         reviewed_columns={"src": "reviewed_src"}, verdict_column="v",
         reviewer_column="r", reviewed_at_column="at", review_notes_column="n",
     )

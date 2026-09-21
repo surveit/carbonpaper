@@ -52,7 +52,7 @@ _STAGES: list[dict[str, Any]] = [
      }},
     {"id": "keep_flagged", "description": "Keep the flagged rows", "type": "filter_rows",
      "inputs": [{"id": "add_flag"}],
-     "filter": {"code": "def should_include(row):\n    return row['flag']\n"},
+     "filter": {"predicate": "pass this step's test", "code": "def should_include(row):\n    return row['flag']\n"},
      "signature": {"form": "extends",
                    "reads": [{"input": "add_flag", "columns": [_FLAG]}]}},
     {"id": "attach_source", "description": "Attach the source", "type": "enrich",

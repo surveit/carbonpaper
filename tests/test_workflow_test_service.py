@@ -84,7 +84,7 @@ _QUEUE = {
             {"name": "review_notes", "type": "str", "nullable": True},
         ],
     },
-    "queue": {**QUEUE_COLUMNS, "reviewer_instructions": "check"},
+    "queue": {"predicate": "pass this step's test", **QUEUE_COLUMNS, "reviewer_instructions": "check"},
 }
 
 

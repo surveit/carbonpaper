@@ -82,7 +82,7 @@ def test_filtered_out_row_is_skipped_with_the_source_value_copied(tmp_path):
 
 
 def test_declared_names_are_the_only_columns_added(tmp_path):
-    stage = _stage({
+    stage = _stage({"predicate": "pass this step's test", 
         "reviewed_columns": {"score": "checked_score"},
         "verdict_column": "review_verdict",
         "reviewer_column": "checked_by",
@@ -98,7 +98,7 @@ def test_declared_names_are_the_only_columns_added(tmp_path):
 
 
 def test_each_reviewed_pair_maps_independently(tmp_path):
-    stage = _stage({
+    stage = _stage({"predicate": "pass this step's test", 
         **queue_columns(),
         "reviewed_columns": {"score": "human_score", "label": "human_label"},
     }, flt="id == 'nobody'")
@@ -130,7 +130,7 @@ def test_auto_approve_copies_the_source_value_under_the_approve_verdict(tmp_path
 
 
 def test_a_source_column_absent_from_the_frame_raises(tmp_path):
-    stage = _stage({
+    stage = _stage({"predicate": "pass this step's test", 
         **queue_columns(), "reviewed_columns": {"confidence": "human_confidence"},
     }, flt="id == 'nobody'")
 
@@ -142,7 +142,7 @@ def test_a_source_column_absent_from_the_frame_raises(tmp_path):
 
 def test_a_queued_row_also_refuses_an_absent_source_column(tmp_path):
     # With no filter every row is queued, so nothing reads `reviewed_columns` per row.
-    stage = _stage({
+    stage = _stage({"predicate": "pass this step's test", 
         **queue_columns(), "reviewed_columns": {"confidence": "human_confidence"},
     })
 
@@ -151,7 +151,7 @@ def test_a_queued_row_also_refuses_an_absent_source_column(tmp_path):
 
 
 def test_auto_approve_also_refuses_an_absent_source_column(tmp_path):
-    stage = _stage({
+    stage = _stage({"predicate": "pass this step's test", 
         **queue_columns(), "reviewed_columns": {"confidence": "human_confidence"},
     })
 

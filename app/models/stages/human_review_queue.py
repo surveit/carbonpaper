@@ -83,9 +83,8 @@ class QueueConfig(StageConfig):
     })
 
     filter: Optional[str] = None
-    predicate: Optional[str] = Field(
-        default=None, max_length=PREDICATE_MAX_CHARS,
-        description=REVIEW_PREDICATE_DESCRIPTION,
+    predicate: str = Field(
+        max_length=PREDICATE_MAX_CHARS, description=REVIEW_PREDICATE_DESCRIPTION,
     )
     reviewer_instructions: Optional[str] = None
     reviewed_columns: dict[str, str] = Field(

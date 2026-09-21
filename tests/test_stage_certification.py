@@ -40,7 +40,7 @@ def _stage(*, summary=None, type_="python_row_function", handle="function"):
             "code": "def transform(row):\n    return row",
         }
     else:
-        spec["filter"] = {
+        spec["filter"] = {"predicate": "pass this step's test", 
             "summary": summary,
             "code": "def should_include(row):\n    return True",
         }
