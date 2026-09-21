@@ -30,6 +30,16 @@ _REVIEW_FAILURES = (GenerationError, ClaudeSDKError, OSError, ClaimReviewFailed)
 _REVIEWS: set[asyncio.Task[None]] = set()
 
 
+async def review_claim(
+    bundle: EvidenceBundle, *, model: str, session_id: ID
+) -> ClaimReviewResult:
+    """Awaited anywhere: a worker thread drives it through `run_sync`, off any server loop."""
+    store = open_session_store()
+    raised = await _raise_the_challenges(store, session_id, bundle, model)
+    kept = await _drop_the_repeats(store, session_id, bundle, model, raised)
+    return ClaimReviewResult(challenges=kept, session_id=session_id)
+
+
 def start_claim_review_agents(
     *,
     project_id: ID,
@@ -67,9 +77,7 @@ async def _review(
 ) -> None:
     delivered = False
     try:
-        raised = await _raise_the_challenges(store, session_id, bundle, model)
-        kept = await _drop_the_repeats(store, session_id, bundle, model, raised)
-        on_answer(ClaimReviewResult(challenges=kept, session_id=session_id))
+        on_answer(await review_claim(bundle, model=model, session_id=session_id))
         delivered = True
         store.set_pending_user(session_id, None)
     except _REVIEW_FAILURES as exc:
