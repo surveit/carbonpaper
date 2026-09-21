@@ -1,6 +1,6 @@
 // Putting one stage's server-rendered partial into the panel a page keeps for it, and
 // outlining that stage in the graph beside it. Three pages hold such a panel — the
-// working copy's stage review, a frozen version's, and a run's — and differ in the URL
+// workflow's stage review, a frozen version's, and a run's — and differ in the URL
 // they fetch and in what they do once the partial is in.
 
 // innerHTML parses <script> without running it, and every stage partial ships its own

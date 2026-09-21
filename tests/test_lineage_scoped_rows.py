@@ -11,9 +11,8 @@ from fastapi.testclient import TestClient
 import app.services.run as run_service
 from app.main import app
 from app.web.run_stage_view import SCOPED_ROWS_SHOWN
-from app.services.project import save_working_copy_as_version
 from scope_fixture import column
-from stage_seed import set_stages
+from stage_seed import save_version, set_stages
 
 PROJECT = "row_neighbours_fixture"
 ROWS = 60
@@ -42,7 +41,7 @@ def run_id(projects_root):
                                   "columns": [column("amount", "int", False)]}],
                        "adds": [column("doubled", "int", False)], "rewrites": []}},
     ])
-    save_working_copy_as_version(PROJECT, message="fixture")
+    save_version(PROJECT, message="fixture")
     return str(run_service.execute(PROJECT)["run_id"])
 
 

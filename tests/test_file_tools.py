@@ -14,10 +14,9 @@ from app.services import workspace
 from app.core import files as file_store
 from app.core.errors import FileNotStoredError, StoreOverQuota
 from app.core.files import files_root, save_upload
-from app.services.project import save_working_copy_as_version
 from app.services.uploads import resolve_files_binding
 from app.tools import shared
-from stage_seed import add_stage
+from stage_seed import add_stage, save_version
 
 client = TestClient(app)
 
@@ -129,7 +128,7 @@ def test_run_workflow_binds_several_files_to_one_input_as_one_table(project, mon
             ],
         },
     })
-    save_working_copy_as_version("demo", message="seed")
+    save_version("demo", message="seed")
 
     result = shared.run_workflow("demo", files={"load": [first.id, second.id]})
 

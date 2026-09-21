@@ -25,7 +25,6 @@ _GRANDFATHERED: frozenset[str] = frozenset({
     "run_log.py::RunEventChunk",
     "human_review_queue.py::QueueFingerprints",
     "drafts.py::Draft",
-    "loader.py::WorkingCopy",
     "methodology.py::Methodology",
     "project.py::Project",
     # Composes the scope prefix the store's prefix-selected list() needs, then a

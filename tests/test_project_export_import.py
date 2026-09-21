@@ -32,11 +32,12 @@ from app.models.stages.signature import ReplacesSignature
 from app.services import project, terms, versioning, workspace
 from app.services.claim_shapes import load_claim_shapes, write_claim_shapes
 from app.services.claims import submit_claim
-from app.services.loader import load_stage_entries, save_stages
+from app.services.loader import load_stage_entries
 from app.services.project import WorkflowFile, export_project, import_project
 from app.services.methodology import read_methodology
 from app.services.run import execute
 from app.services.uploads import resolve_files_binding
+from stage_seed import save_version, set_parsed_stages
 
 _ENTITY_COLUMNS = [NamedColumn(name="entity_id", type="str", nullable=False),
                    NamedColumn(name="entity_name", type="str", nullable=True)]
@@ -76,24 +77,24 @@ def _bundle(stages: list[Stage], row_types: list[RowType]) -> WorkflowFile:
                         data_model=_TINY_LIBRARY, row_types=row_types, stages=stages)
 
 
-def test_a_bundle_carries_the_latest_versions_stages_not_the_working_copy(tmp_path):
+def test_a_bundle_carries_the_latest_versions_stages(tmp_path):
     workspace.set_projects_dir(tmp_path)
     name = project.create_project("Versioned", "Count the filings.", source="test").id
     terms.write_terms(name, Terms(schemas=_TINY_LIBRARY))
-    save_stages(name, [_input_stage("load_entities")])
-    project.save_working_copy_as_version(name, message="What a run would pin")
+    set_parsed_stages(name, [_input_stage("load_entities")])
+    save_version(name, message="An older snapshot")
 
-    save_stages(name, [_input_stage("load_entities"), _input_stage("load_later")])
+    set_parsed_stages(name, [_input_stage("load_entities"), _input_stage("load_later")])
+    save_version(name, message="What a run would pin")
 
-    assert [stage.id for stage in export_project(name).stages] == ["load_entities"]
+    assert [stage.id for stage in export_project(name).stages] == [
+        "load_entities", "load_later"]
 
 
-def test_a_project_whose_stages_were_never_versioned_exports_none_of_them(tmp_path):
-    """An unversioned working copy cannot be run here either, so a bundle of it carries no stages."""
+def test_a_project_with_no_stages_exports_none_of_them(tmp_path):
     workspace.set_projects_dir(tmp_path)
     name = project.create_project("Unversioned", "Count the filings.", source="test").id
     terms.write_terms(name, Terms(schemas=_TINY_LIBRARY))
-    save_stages(name, [_input_stage("load_entities")])
 
     assert export_project(name).stages == []
 
@@ -118,9 +119,8 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
             Column(name="entity_name", type="str", nullable=True),
         ]),
     )
-    save_stages(name, [stage])
-    # export_project reads the latest version, so the working copy is saved as one.
-    project.save_working_copy_as_version(name, message="Round trip")
+    set_parsed_stages(name, [stage])
+    save_version(name, message="Round trip")
 
     exported = export_project(name)
     wf = WorkflowFile.model_validate_json(exported.to_json())
@@ -406,8 +406,8 @@ def _create_source_project(*shapes: ClaimShapeInput) -> tuple[str, dict[str, str
 
 
 def _save_version(project_id: str, stages: list[Stage]) -> None:
-    save_stages(project_id, stages)
-    project.save_working_copy_as_version(project_id, message="Name the claim shapes")
+    set_parsed_stages(project_id, stages)
+    save_version(project_id, message="Name the claim shapes")
 
 
 def _parse_input_stage(*outputs: dict[str, object]) -> Stage:

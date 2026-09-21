@@ -68,7 +68,7 @@ def test_read_stage_handler_returns_text_content(examples_root: Path) -> None:
     _server, _allowed, tools = _build("congresswatch")
     tool = next(t for t in tools if t.name == "read_draft_stage")  # SdkMcpTool
 
-    from app.services.workspace import project_workflow_summary
+    from app.services.workflow_summary import project_workflow_summary
 
     stage_id = project_workflow_summary(pdir.name).stages[0].id
     out = _call(tool, {"project_id": "congresswatch", "draft_id": SEED_DRAFT,

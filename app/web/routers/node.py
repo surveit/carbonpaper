@@ -51,8 +51,7 @@ def node_panel(request: Request, project_id: str, stage_id: str):
             "type_glyph": TYPE_GLYPH,
             "test_views": (views := shape_test_views(workflow_stage)),
             "certification": build_certification(workflow_stage, views),
-            # The working copy is not a version, so the freshest an eval can be here is
-            # "it scored the latest version" — the same test eval_status applies.
+            # Off a run, the freshest an eval can be is "it scored the latest".
             "eval_coverages": find_eval_coverages(
                 project_id, stage_id, versioning.find_latest_version_id(project_id)),
             "can_generate_tests": stage.CARRIES_RUNNABLE_TESTS,
@@ -128,38 +127,5 @@ def _find_generation_failure(messages: list[dict]) -> str | None:
     return None
 
 
-# ─── Versioning ──────────────────────────────────────────────────────────────
-
-
-@router.post("/project/{project_id}/version")
-def create_version_route(project_id: str, message: str = Form(...)):
-    validate_project_or_404(project_id)
-
-    # No compiler gate: a version is a snapshot of what the author has, and the
-    # Workflow page already tells them what is wrong with it. A workflow that
-    # published an artifact is one someone may want to pin whatever it is owed. The
-    # only refusal left is a working copy that does not LOAD, which
-    # save_working_copy_as_version raises below.
-    try:
-        version = project_service.save_working_copy_as_version(
-            project_id,
-            message=message,
-            # The latest existing version — None for the very first one.
-            parent_version=versioning.find_latest_version_id(project_id),
-        )
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except WorkflowLoadError as exc:
-        # save_working_copy_as_version validates the working copy first; hand its
-        # itemized issue report to the save handler (which renders `issues`) as
-        # a structured 400 — the same shape trigger_run uses — never a bare 500.
-        return JSONResponse(
-            {"ok": False,
-             "detail": ("Cannot save a version: the current working copy failed "
-                        "validation. Fix these stages and save again."),
-             "issues": exc.issues},
-            status_code=400,
-        )
-    return JSONResponse({"ok": True, "version": version.model_dump(mode="json")})
 
 

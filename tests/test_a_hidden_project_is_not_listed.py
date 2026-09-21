@@ -1,4 +1,4 @@
-"""Two things drop a project from a listing: `private` on its record, and a deleted working copy."""
+"""Two things drop a project from a listing: `private` on its record, and deletion."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -98,7 +98,7 @@ def test_the_flag_is_set_and_cleared_from_the_project_itself(workspace_dir: Path
 # ─── deleted ─────────────────────────────────────────────────────────────────
 
 
-def test_a_project_whose_working_copy_is_gone_is_dropped_everywhere(workspace_dir: Path) -> None:
+def test_a_deleted_project_is_dropped_everywhere(workspace_dir: Path) -> None:
     """delete_project keeps the store row, so the record alone never means a live project."""
     _make_project(workspace_dir, "shown")
     _make_project(workspace_dir, "gone")

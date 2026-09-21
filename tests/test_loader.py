@@ -1,12 +1,10 @@
-"""The working-copy loader: tolerant per-stage for the viewer,
-strict (reject the whole workflow) for the runner."""
+"""The stage loader: per-stage for the viewer, whole-workflow for the runner."""
 from __future__ import annotations
 
 import pytest
 
-from app.core.persistence import get_store
 from app.services.loader import WorkflowLoadError, load_stage_entries, load_workflow
-from app.models.records.working_copy import WorkingCopy
+from stage_seed import set_stages
 
 
 def _valid(tmp_path):
@@ -29,10 +27,7 @@ INVALID = {  # file connector params.path is relative, not absolute
 
 
 def _store(project, *specs):
-    get_store().write(WorkingCopy.collection, project, {
-        "id": project, "created_at": "2026-01-01T00:00:00",
-        "updated_at": "2026-01-01T00:00:00", "stages": list(specs),
-    })
+    set_stages(project, list(specs))
 
 
 def test_tolerant_load_reports_per_stage_issues(tmp_path):
@@ -83,7 +78,7 @@ def test_strict_load_catches_cross_stage_issues(tmp_path):
     assert any("missing_upstream" in i for i in exc.value.issues)
 
 
-def test_strict_load_rejects_an_unstored_or_empty_working_copy():
+def test_strict_load_rejects_an_unstored_or_empty_project():
     """A typo'd project name must fail loudly, not produce a valid 0-stage workflow."""
     with pytest.raises(WorkflowLoadError, match="has no stages"):
         load_workflow("never_stored")

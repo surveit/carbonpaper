@@ -3,10 +3,9 @@ from __future__ import annotations
 import pandas as pd
 
 from app.runtime.runner import execute_run, resume_run
-from app.services.project import save_working_copy_as_version
 from conftest import pinned_stages, resumed_stages
 from run_seed import read_manifest
-from stage_seed import add_stage
+from stage_seed import add_stage, save_version
 
 _COLUMNS = [{"name": "x", "type": "int", "nullable": True}]
 
@@ -54,7 +53,7 @@ def _find_stage(manifest, stage_id: str):
 def test_row_progress_is_persisted_when_every_row_comes_from_cache(tmp_path):
     _add_source(tmp_path)
     _add_row_stage(tmp_path)
-    save_working_copy_as_version(tmp_path.name, message="seed")
+    save_version(tmp_path.name, message="seed")
 
     execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
     replayed = execute_run(
@@ -99,7 +98,7 @@ def test_resume_starts_a_new_progress_sequence_for_the_rerun(tmp_path):
         },
         "function": {"kind": "inline", "code": code},
     })
-    save_working_copy_as_version(tmp_path.name, message="seed")
+    save_version(tmp_path.name, message="seed")
 
     first = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
     assert first["status"] == "errors"

@@ -14,10 +14,9 @@ import pytest
 
 from app.runtime.runner import execute_run
 from app.services import workspace
-from app.services import project as project_service
 from app.services.workflow_test import run_workflow_test
 from conftest import pinned_stages
-from stage_seed import add_stage
+from stage_seed import add_stage, save_version
 
 _ROWS = [{"name": "a", "val": 1}, {"name": "b", "val": 2}, {"name": "c", "val": 3}]
 _LOADED = [{"name": "name", "type": "str", "nullable": True}, {"name": "val", "type": "int", "nullable": True}]
@@ -62,7 +61,7 @@ def _write_project(root: Path) -> Path:
 
 
 def _publish(root: Path) -> str:
-    version = project_service.save_working_copy_as_version(root.name, message="e2e")
+    version = save_version(root.name, message="e2e")
     return version.version_id
 
 

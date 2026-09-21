@@ -1,9 +1,4 @@
-"""workspace.py — the projects workspace: the projects storage root, name→directory
-resolution, the named-schema data-model reader, and project enumeration + workflow
-summaries. These back the editing agent's read tools and the status model. Uses the
-tolerant loader (a malformed compiled file becomes an issue, not an exception);
-imports nothing from the web layer."""
-
+"""The projects workspace: its storage root, name→directory resolution, enumeration."""
 from __future__ import annotations
 
 import json
@@ -11,11 +6,8 @@ import os
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel
 
 from app.core.paths import CARBON_PAPER_HOME
-from app.models import StageType
-from app.services.loader import load_stage_entries
 # The projects storage root: <root>/<name>/ working copies live here. There is
 # exactly ONE in a running process — the app does not serve multiple
 # workspaces, so no function takes a root as an argument. Configure it the way
@@ -100,33 +92,3 @@ def load_schemas(project_id: str) -> list[dict[str, Any]]:
     return schemas
 
 
-class StageSummary(BaseModel):
-    id: str
-    type: StageType
-    description: str
-    inputs: list[str]
-
-
-class WorkflowSummary(BaseModel):
-    name: str
-    stages: list[StageSummary]
-    # One per stored stage that would not parse — the stage is absent from `stages`
-    # rather than standing in the list as a half-read one.
-    issues: list[str]
-
-
-def project_workflow_summary(project_id: str) -> WorkflowSummary:
-    stages: list[StageSummary] = []
-    issues: list[str] = []
-    for compiled_file in load_stage_entries(project_id):
-        if compiled_file.stage is None:
-            issues.append(f"{compiled_file.label}: {'; '.join(compiled_file.issues)}")
-            continue
-        stage = compiled_file.stage
-        stages.append(StageSummary(
-            id=stage.id,
-            type=stage.type,
-            description=stage.description,
-            inputs=[ref.id for ref in stage.inputs],
-        ))
-    return WorkflowSummary(name=project_id, stages=stages, issues=issues)

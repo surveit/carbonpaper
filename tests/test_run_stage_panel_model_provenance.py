@@ -13,9 +13,8 @@ import app.services.workspace as workspace
 from app.core.agent.usage import LlmUsage
 from app.main import app
 from app.runtime.runner import execute_run
-from app.services import project as project_service
 from conftest import pinned_stages
-from stage_seed import add_stage
+from stage_seed import add_stage, save_version
 
 PROJECT = "model_provenance_panel"
 _COLUMNS = [{"name": "x", "type": "int", "nullable": True}]
@@ -67,7 +66,7 @@ def _build_project(
 
     monkeypatch.setattr(
         "app.runtime.stages.llm_transform.call_llm_batch", fake_call_llm_batch)
-    project_service.save_working_copy_as_version(pdir.name, message="v1")
+    save_version(pdir.name, message="v1")
     return pdir
 
 

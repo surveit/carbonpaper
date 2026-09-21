@@ -9,14 +9,13 @@ from fastapi.testclient import TestClient
 
 import app.services.run as run_service
 from app.main import app
-from app.services.project import save_working_copy_as_version
 from scope_fixture import (
     give_the_lookup_a_stage_of_its_own,
     review_tail,
     stage_specs,
     write_inputs,
 )
-from stage_seed import set_stages
+from stage_seed import save_version, set_stages
 
 PROJECT = "scope_fixture"
 # Its own project: the run halts at the review stage, which the tests above must not.
@@ -29,7 +28,7 @@ def _execute(project: str, stages: list[dict], projects_root) -> str:
     data = projects_root / project / "data"
     write_inputs(data)
     set_stages(project, stages)
-    save_working_copy_as_version(project, message="fixture")
+    save_version(project, message="fixture")
     return str(run_service.execute(project)["run_id"])
 
 

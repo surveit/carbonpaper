@@ -1,8 +1,4 @@
-"""Builds the agent that authors a review guide for ONE frozen workflow version.
-The version's own stages are rendered into the task, and the agent holds no tool that
-reads a project, so what it narrates cannot be the working copy the version was cut
-from. The submitted guide comes back through a callback; storing it is the caller's
-job (app.services.generation)."""
+"""The agent authoring a guide for ONE version, holding no tool that reads a project."""
 from __future__ import annotations
 
 from typing import Callable

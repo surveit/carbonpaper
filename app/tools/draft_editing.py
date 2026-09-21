@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from app.services import drafts, project as project_service, versioning
 from app.services.drafts import SaveResult as SaveResult
 from app.services.stage_edit import EditStageResult as EditStageResult
-from app.services.workspace import StageSummary
+from app.services.workflow_summary import StageSummary
 from app.tools.shared import STAGE_TOOL_ERRORS, validate_project_exists
 
 

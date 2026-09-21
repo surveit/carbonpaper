@@ -8,14 +8,13 @@ from app.models.branch_analysis import BranchReason
 from app.models.workflow import Workflow
 from app.runtime.branch_analysis import reconstruct_run_branches
 from app.runtime.manifest import read_run_manifest
-from app.services.project import save_working_copy_as_version
 from app.services.run import read_pinned_version
 from app.services.versioning import load_version_stages
 from app.services.workspace import resolve_run_dir
 from app.web.panel_links import AppPanelLinks, PacketPanelLinks
 from app.web.row_paths import CitedFigure, find_paths_behind_figure
 from scope_fixture import stage_specs, write_inputs
-from stage_seed import set_stages
+from stage_seed import save_version, set_stages
 
 PROJECT = "scope_fixture"
 # by_portfolio's three groups: 5 rows on 2 paths, 2 on 2, and 1 on 1.
@@ -27,7 +26,7 @@ def scoped(projects_root):
     data = projects_root / PROJECT / "data"
     write_inputs(data)
     set_stages(PROJECT, stage_specs(data))
-    save_working_copy_as_version(PROJECT, message="fixture")
+    save_version(PROJECT, message="fixture")
     run_id = str(run_service.execute(PROJECT)["run_id"])
     manifest = read_run_manifest(PROJECT, run_id).to_dict()
     order = [r["stage_id"] for r in manifest["stage_records"]]

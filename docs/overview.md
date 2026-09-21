@@ -19,12 +19,12 @@ number or unsourced claim defeats the purpose. Two rules recur in the code:
 ## Vocabulary (locked 2026-07-04)
 - **project** — the container directory holding everything below.
 - **methodology** — the authored prose method (a `methodology` document).
-- **workflow** — the executable stage graph it compiles into (the project's
-  `working_copy` document; a DAG of typed stages whose schemas resolve from the graph).
+- **workflow** — the executable stage graph it compiles into (the project's newest
+  `workflow_version`; a DAG of typed stages whose schemas resolve from the graph).
 
 A project dir also holds `code/`, `data/` and `runs/<id>/` (a run's parquet outputs,
 its artifacts and its review queue) — runtime data, not source. Everything else a
-project holds is a document in the store: its methodology and working copy, its
+project holds is a document in the store: its methodology, its drafts, its
 versions (`workflow_version`), each run's record and event log, and the review
 decisions (`app.core.stage_cache`).
 

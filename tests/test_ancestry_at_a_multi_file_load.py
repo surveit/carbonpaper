@@ -7,11 +7,10 @@ import pytest
 
 import app.services.run as run_service
 from app.core.frames import read_frame_table
-from app.services.project import save_working_copy_as_version
 from app.services.scope import find_rows_reached_per_stage, read_run_branches
 from app.services.workspace import resolve_run_dir
 from scope_fixture import column, write_inputs
-from stage_seed import set_stages
+from stage_seed import save_version, set_stages
 
 PROJECT = "two_file_load_fixture"
 
@@ -21,7 +20,7 @@ def run_id(projects_root):
     data = projects_root / PROJECT / "data"
     write_inputs(data)
     set_stages(PROJECT, _stage_specs(data))
-    save_working_copy_as_version(PROJECT, message="fixture")
+    save_version(PROJECT, message="fixture")
     return str(run_service.execute(PROJECT)["run_id"])
 
 

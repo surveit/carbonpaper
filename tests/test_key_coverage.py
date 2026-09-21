@@ -14,10 +14,9 @@ from app.models import parse_stage
 from app.models.severity import UserFacingErrorSeverity
 from app.runtime.key_coverage import find_key_coverage_issues
 from app.runtime.runner import execute_run
-from app.services.project import save_working_copy_as_version
 from app.web.run_issues import build_run_issues
 from conftest import as_inputs, pinned_stages, place_stage
-from stage_seed import add_stage
+from stage_seed import add_stage, save_version
 
 # The 50 states and DC — the 51 jurisdictions the published table ranked.
 STATES = [
@@ -167,7 +166,7 @@ def _write_wyoming_project(root):
 def test_the_gap_reaches_the_run_issue_index(tmp_path):
     # The unit tests above prove the check; this proves a reviewer is shown it.
     _write_wyoming_project(tmp_path)
-    save_working_copy_as_version(tmp_path.name, message="wyoming")
+    save_version(tmp_path.name, message="wyoming")
     workflow, version = pinned_stages(tmp_path)
     manifest = execute_run(tmp_path / "runs", tmp_path.name, workflow, version)
 

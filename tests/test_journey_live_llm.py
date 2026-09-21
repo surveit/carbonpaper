@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 import app.services.run as run_service
 from app.main import app
 from app.services.project import create_project
-from stage_seed import set_stages
+from stage_seed import save_version, set_stages
 from test_journey_smoke import _point_examples_dir_at, assert_run_ok
 
 client = TestClient(app)
@@ -47,9 +47,7 @@ def test_live_llm_journey_reaches_its_artifact(live_project):
     )
     project = live_project.name
 
-    resp = client.post(f"/project/{project}/version", data={"message": "live smoke"})
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["ok"] is True, resp.text
+    save_version(project, message="live smoke")
 
     resp = client.post(f"/project/{project}/run", data={}, follow_redirects=False)
     assert resp.status_code == 303, resp.text

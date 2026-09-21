@@ -15,7 +15,7 @@ from app.main import app
 from app.web import breadcrumbs
 from app.services import project as project_service
 from app.services import workspace
-from stage_seed import add_stage
+from stage_seed import add_stage, save_version
 
 client = TestClient(app)
 
@@ -43,7 +43,7 @@ def _picker_hrefs(crumbs: list[breadcrumbs.Crumb]) -> list[str]:
 
 
 def test_every_switcher_rung_points_at_a_route_that_answers(project: Path) -> None:
-    meta = project_service.save_working_copy_as_version(project.name, message="v1")
+    meta = save_version(project.name, message="v1")
     trails = [
         breadcrumbs.build_section_crumbs("demo", label="Runs"),
         breadcrumbs.build_version_crumbs("demo", meta.version_id),
@@ -57,7 +57,7 @@ def test_every_switcher_rung_points_at_a_route_that_answers(project: Path) -> No
 
 
 def test_the_version_rung_lists_versions_with_their_message(project: Path) -> None:
-    meta = project_service.save_working_copy_as_version(project.name, message="Nine flat categories."
+    meta = save_version(project.name, message="Nine flat categories."
     )
     trail = breadcrumbs.build_version_crumbs("demo", meta.version_id)
 
@@ -68,7 +68,7 @@ def test_the_version_rung_lists_versions_with_their_message(project: Path) -> No
 
 
 def test_a_version_with_no_message_is_said_to_have_none(project: Path) -> None:
-    meta = project_service.save_working_copy_as_version(project.name, message="")
+    meta = save_version(project.name, message="")
     trail = breadcrumbs.build_version_crumbs("demo", meta.version_id)
 
     body = client.get(_picker_hrefs(trail)[-1]).text

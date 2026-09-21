@@ -308,11 +308,7 @@ def run_artifact(project_id: str, run_id: str, filename: str):
 def resume_run_route(project_id: str, run_id: str):
     validate_project_or_404(project_id)
     load_manifest(project_id, run_id)  # 404s if the run doesn't exist
-    # Resume executes the version the run PINNED, so that snapshot is what has to
-    # load — validating the live working copy here would block resuming a valid
-    # run because of an unrelated edit. The seam loads it synchronously and only
-    # then goes to a background thread (the re-run is LLM-heavy), so a bad
-    # snapshot surfaces as a 400 here rather than dying where nothing reports it.
+    # The PINNED snapshot loads here: a bad one is a 400, not a dead thread.
     try:
         run_service.resume(project_id, run_id)
     except RunVersionUnresolvableError as exc:

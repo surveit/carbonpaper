@@ -14,7 +14,7 @@ import app.services.run as run_service
 from app.main import app
 from app.services.project import create_project
 from app.services import workspace
-from stage_seed import add_stage
+from stage_seed import add_stage, save_version
 from run_seed import manifest_exists, read_manifest
 
 client = TestClient(app)
@@ -45,10 +45,7 @@ def assert_run_ok(status: dict, project_dir, run_id: str) -> None:
 
 
 def test_offline_journey_reaches_its_artifact(journey_project, tmp_path):
-    # Version the working copy through the web endpoint.
-    resp = client.post(f"/project/{journey_project.name}/version", data={"message": "first version"})
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["ok"] is True, resp.text
+    save_version(journey_project.name, message="first version")
 
     # The run form offers a binding field for the file input stage.
     resp = client.get(f"/project/{journey_project.name}/runs/new")

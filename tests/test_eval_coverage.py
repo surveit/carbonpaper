@@ -19,7 +19,7 @@ from app.models.records.eval_run import EvalRun
 from app.evals.store import save_eval_config, save_eval_run
 from app.services import workspace
 from app.web.eval_coverage import find_eval_coverages
-from stage_seed import add_stage
+from stage_seed import add_stage, read_stages
 
 client = TestClient(app)
 
@@ -157,8 +157,10 @@ def test_a_missing_result_table_states_nothing_rather_than_guessing(tmp_path):
 
 def _stored_version(version_id: str) -> None:
     from app.models.records.workflow_version import WorkflowVersion
+    from app.models.stage import parse_stage
     WorkflowVersion(id=f"demo/{version_id}", version_id=version_id,
-                    created_at="2026-08-12T00:00:00", message="m").save()
+                    created_at="2026-08-12T00:00:00", message="m",
+                    stages=[parse_stage(spec) for spec in read_stages("demo")]).save()
 
 
 def _eval_section(html: str) -> str:

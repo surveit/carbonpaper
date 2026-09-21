@@ -15,9 +15,8 @@ from app.core.agent.usage import LlmUsage
 from app.main import app
 from app.runtime.manifest import read_run_manifest, write_manifest
 from app.runtime.runner import execute_run, prepare_run
-from app.services import project as project_service
 from conftest import pinned_stages
-from stage_seed import add_stage
+from stage_seed import add_stage, save_version
 
 PROJECT = "cached_llm_panel"
 _COLUMNS = [{"name": "x", "type": "int", "nullable": True}]
@@ -61,7 +60,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         return {"verdict": f"v{row['x']}"}
 
     monkeypatch.setattr("app.runtime.stages.llm_transform.call_llm", fake_call_llm)
-    project_service.save_working_copy_as_version(pdir.name, message="v1")
+    save_version(pdir.name, message="v1")
     return pdir
 
 

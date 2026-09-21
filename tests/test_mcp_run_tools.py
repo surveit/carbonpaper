@@ -5,10 +5,9 @@ import pandas as pd
 
 import app.services.run as run_service
 from app.models import parse_stage
-from app.services.project import save_working_copy_as_version
 from app.models.records.workflow_version import WorkflowVersion
 from app.services import workspace
-from stage_seed import add_stage
+from stage_seed import add_stage, save_version
 from run_seed import manifest_exists
 
 
@@ -31,7 +30,7 @@ def _make_run_project(root):
         },
     }
     add_stage(root, stage)
-    return save_working_copy_as_version(root.name, message="seed").version_id
+    return save_version(root.name, message="seed").version_id
 
 
 _LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": True},

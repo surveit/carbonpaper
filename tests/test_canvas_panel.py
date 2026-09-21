@@ -8,7 +8,6 @@ from fastapi.testclient import TestClient
 
 import app.services.run as run_service
 from app.main import app
-from app.services.project import save_working_copy_as_version
 from app.services.scope import read_run_branches
 from app.services.workspace import resolve_run_dir
 from app.web.config import label_stage_type
@@ -16,7 +15,7 @@ from app.web.loading import load_run_record
 from app.web.stage_diff import build_stage_diff
 from app.web.canvas_view import build_trace_scope, load_canvas_view
 from scope_fixture import stage_specs, write_inputs
-from stage_seed import set_stages
+from stage_seed import save_version, set_stages
 
 PROJECT = "values_fixture"
 # The grand total, which five grants feed; `funded` dropped the zero-amount one.
@@ -28,7 +27,7 @@ def run_id(projects_root):
     data = projects_root / PROJECT / "data"
     write_inputs(data)
     set_stages(PROJECT, stage_specs(data))
-    save_working_copy_as_version(PROJECT, message="fixture")
+    save_version(PROJECT, message="fixture")
     return str(run_service.execute(PROJECT)["run_id"])
 
 

@@ -6,9 +6,11 @@ say so — and a workflow that never loaded must not say it.
 from __future__ import annotations
 
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.services.errors import WorkflowLoadError
 from app.services.project import create_project
 from test_journey_smoke import _point_examples_dir_at
 from stage_seed import add_stage
@@ -65,8 +67,7 @@ def test_a_workflow_with_a_warning_lists_it_instead(tmp_path):
     assert "0 errors" not in page
 
 
-def test_a_workflow_that_does_not_load_claims_nothing(tmp_path):
+def test_a_workflow_that_does_not_load_fails_loudly(tmp_path):
     # A relative connector path is rejected by input_data, so nothing types.
-    page = _workflow_page(tmp_path, "broken", [_make_load_stage("data/things.csv")])
-    assert _CLEAN_LINE not in page
-    assert "wf-issues" not in page
+    with pytest.raises(WorkflowLoadError, match="ABSOLUTE"):
+        _workflow_page(tmp_path, "broken", [_make_load_stage("data/things.csv")])

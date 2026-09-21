@@ -1,8 +1,4 @@
-"""The Generate-guide button: the route, the service that starts the turn, and the one
-property the whole feature rests on — the agent is handed the VERSION's frozen stages,
-never the working copy, which has usually moved on by the time a guide is written.
-The TestClient is a context manager so its loop survives the POST and the status polls.
-"""
+"""Generate-guide: the agent is handed the VERSION's frozen stages, never newer ones."""
 from __future__ import annotations
 
 import asyncio
@@ -24,8 +20,7 @@ from app.models import (
 )
 from app.models.review_guide import ReviewGuideDraft, ReviewGuideStep
 from app.services import versioning, workspace
-from app.services import project as project_service
-from stage_seed import add_stage
+from stage_seed import add_stage, save_version
 from app.services.methodology import write_methodology
 from app.models.records.methodology import Methodology
 
@@ -51,8 +46,7 @@ _DOUBLE = {
     "function": {"kind": "inline", "summary": "Doubles the amount.", "corner_cases": [],
                  "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"},
 }
-# Added to the WORKING COPY after the version is cut, never to the version itself:
-# a guide naming it would be describing a workflow the version does not contain.
+# Seeded after the version is cut: a guide naming it would describe another workflow.
 _TRIPLE = {
     "id": "triple", "description": "Triple", "type": "python_row_function",
     "inputs": [{"id": "load"}], "signature": {
@@ -75,7 +69,7 @@ def _seed_project(root: Path) -> Path:
     return project_dir
 
 
-def _add_stage_to_the_working_copy(project_dir: Path) -> None:
+def _add_stage_after_the_version(project_dir: Path) -> None:
     add_stage(project_dir, _TRIPLE)
 
 
@@ -142,13 +136,13 @@ def _poll_until_inactive(client: TestClient, sid: str, *, timeout: float = 5.0) 
 # ── the version-scoping property ────────────────────────────────────────────
 
 
-def test_the_author_is_given_the_versions_stages_not_the_working_copy(
+def test_the_author_is_given_the_versions_stages_not_the_newer_ones(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     project_dir = _seed_project(tmp_path)
-    version = project_service.save_working_copy_as_version(project_dir.name, message="v1"
+    version = save_version(project_dir.name, message="v1"
     )
-    _add_stage_to_the_working_copy(project_dir)
+    _add_stage_after_the_version(project_dir)
     store, turns = SessionStore(), TurnManager()
     monkeypatch.setattr(compiler_review_guide, "open_session_store", lambda: store)
     monkeypatch.setattr(compiler_review_guide, "default_turn_manager", lambda: turns)
@@ -171,8 +165,7 @@ def test_the_author_is_given_the_versions_stages_not_the_working_copy(
 
     assert seen["stage_ids"] == ["load", "double"]
     assert "triple" not in seen["task"]
-    # And the guide the turn wrote is the version's — the working copy's extra stage
-    # is nowhere in it, which is also the only way save_version_guide would accept it.
+    # The guide is the version's: save_version_guide accepts no other.
     stored = versioning.find_latest_review_guide(project_dir.name, version.version_id)
     assert stored is not None
     assert stored.steps[0].stage_ids == ["load", "double"]
@@ -182,7 +175,7 @@ def test_render_guide_task_carries_the_request_the_document_and_the_stages(
     tmp_path: Path,
 ) -> None:
     project_dir = _seed_project(tmp_path)
-    version = project_service.save_working_copy_as_version(project_dir.name, message="v1"
+    version = save_version(project_dir.name, message="v1"
     )
 
     task = compiler_review_guide.render_guide_task(
@@ -202,7 +195,7 @@ def test_render_guide_task_carries_the_words_the_guide_must_be_written_in(
     tmp_path: Path,
 ) -> None:
     project_dir = _seed_project(tmp_path)
-    version = project_service.save_working_copy_as_version(project_dir.name, message="v1"
+    version = save_version(project_dir.name, message="v1"
     )
     words = Terms(row_types=[RowType(
         id="filing", title="Filing", definition="One disclosure a firm sent in.")])
@@ -260,7 +253,7 @@ def test_the_flag_comes_from_the_walk_the_validator_refuses_on() -> None:
 
 def test_the_author_holds_no_tool_but_submit_answer(tmp_path: Path) -> None:
     project_dir = _seed_project(tmp_path)
-    version = project_service.save_working_copy_as_version(project_dir.name, message="v1"
+    version = save_version(project_dir.name, message="v1"
     )
 
     engine = compiler_review_guide.build_review_guide_author(
@@ -293,7 +286,7 @@ def test_start_refuses_a_version_that_already_has_a_guide(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     project_dir = _seed_project(tmp_path)
-    version = project_service.save_working_copy_as_version(project_dir.name, message="v1"
+    version = save_version(project_dir.name, message="v1"
     )
     _save_guide(project_dir, version.version_id, ["load", "double"])
     store = SessionStore()
@@ -312,7 +305,7 @@ def test_start_refuses_a_project_with_no_document(
 ) -> None:
     project_dir = _seed_project(tmp_path)
     Methodology.delete(project_dir.name)
-    version = project_service.save_working_copy_as_version(project_dir.name, message="v1"
+    version = save_version(project_dir.name, message="v1"
     )
     store = SessionStore()
     monkeypatch.setattr(compiler_review_guide, "open_session_store", lambda: store)
@@ -330,7 +323,7 @@ def test_start_refuses_a_project_with_no_document(
 
 def test_finish_stores_the_guide_on_the_version(tmp_path: Path) -> None:
     project_dir = _seed_project(tmp_path)
-    version = project_service.save_working_copy_as_version(project_dir.name, message="v1"
+    version = save_version(project_dir.name, message="v1"
     )
 
     generation._finish_review_guide(project_dir.name, version.version_id, _guide_of(["load", "double"])
@@ -343,7 +336,7 @@ def test_finish_stores_the_guide_on_the_version(tmp_path: Path) -> None:
 
 def test_finish_with_no_guide_raises_and_writes_nothing(tmp_path: Path) -> None:
     project_dir = _seed_project(tmp_path)
-    version = project_service.save_working_copy_as_version(project_dir.name, message="v1"
+    version = save_version(project_dir.name, message="v1"
     )
 
     with pytest.raises(GenerationError, match="did not submit a guide"):
@@ -354,7 +347,7 @@ def test_finish_with_no_guide_raises_and_writes_nothing(tmp_path: Path) -> None:
 
 def test_finish_refuses_a_guide_that_misses_a_stage(tmp_path: Path) -> None:
     project_dir = _seed_project(tmp_path)
-    version = project_service.save_working_copy_as_version(project_dir.name, message="v1"
+    version = save_version(project_dir.name, message="v1"
     )
 
     with pytest.raises(ReviewGuideValidationError, match="double"):
@@ -371,7 +364,7 @@ def test_post_generates_the_guide_and_stores_it_on_the_version(
     client: TestClient, tmp_path: Path, monkeypatch: Any
 ) -> None:
     project_dir = _seed_project(tmp_path)
-    version = project_service.save_working_copy_as_version(project_dir.name, message="v1"
+    version = save_version(project_dir.name, message="v1"
     )
     monkeypatch.setattr(compiler_review_guide, "default_turn_manager", lambda: TurnManager())
     monkeypatch.setattr(
@@ -392,7 +385,7 @@ def test_post_reports_a_turn_that_submitted_nothing(
     client: TestClient, tmp_path: Path, monkeypatch: Any
 ) -> None:
     project_dir = _seed_project(tmp_path)
-    version = project_service.save_working_copy_as_version(project_dir.name, message="v1"
+    version = save_version(project_dir.name, message="v1"
     )
     monkeypatch.setattr(compiler_review_guide, "default_turn_manager", lambda: TurnManager())
     monkeypatch.setattr(
@@ -426,7 +419,7 @@ def test_post_for_a_version_that_already_has_a_guide_is_400(
     client: TestClient, tmp_path: Path
 ) -> None:
     project_dir = _seed_project(tmp_path)
-    version = project_service.save_working_copy_as_version(project_dir.name, message="v1"
+    version = save_version(project_dir.name, message="v1"
     )
     _save_guide(project_dir, version.version_id, ["load", "double"])
 

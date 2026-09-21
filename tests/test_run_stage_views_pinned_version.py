@@ -1,8 +1,4 @@
-"""A run's stage views must describe the version the run PINNED, never the live
-`compiled/` working copy: the stage panel's source and schemas, the lineage
-panel's transform, and the scratch re-run's handler. When the pinned version
-cannot be resolved the panels say so and the scratch re-run refuses to execute.
-"""
+"""A run's stage views describe the version it PINNED, or say they cannot."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,9 +10,8 @@ from fastapi.testclient import TestClient
 import app.services.workspace as workspace
 from app.main import app
 from app.runtime.runner import execute_run
-from app.services import project as project_service
 from conftest import pinned_stages
-from stage_seed import add_stage
+from stage_seed import add_stage, save_version
 from run_seed import read_manifest, store_manifest
 
 client = TestClient(app)
@@ -79,11 +74,11 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _run_once(project_dir: Path) -> str:
-    project_service.save_working_copy_as_version(project_dir.name, message="v1")
+    save_version(project_dir.name, message="v1")
     return str(execute_run(project_dir / "runs", project_dir.name, *pinned_stages(project_dir))["run_id"])
 
 
-def _drift_the_working_copy(project_dir: Path) -> None:
+def _drift_the_stages(project_dir: Path) -> None:
     add_stage(project_dir, _classify_stage(DRIFTED_MARKER))
 
 
@@ -115,11 +110,11 @@ def _scratch_preview(run_id: str):
 
 # ─── The regression: stage views track the pinned version, not compiled/ ─────
 
-def test_stage_panel_shows_the_source_that_ran_after_the_working_copy_drifts(
+def test_stage_panel_shows_the_source_that_ran_after_the_stages_drift(
     project: Path,
 ) -> None:
     run_id = _run_once(project)
-    _drift_the_working_copy(project)
+    _drift_the_stages(project)
 
     panel = _stage_panel(run_id)
     assert panel.status_code == 200
@@ -129,7 +124,7 @@ def test_stage_panel_shows_the_source_that_ran_after_the_working_copy_drifts(
 
 def test_lineage_panel_shows_the_transform_that_ran_after_drift(project: Path) -> None:
     run_id = _run_once(project)
-    _drift_the_working_copy(project)
+    _drift_the_stages(project)
 
     panel = _lineage_panel(run_id)
     assert panel.status_code == 200
@@ -137,11 +132,11 @@ def test_lineage_panel_shows_the_transform_that_ran_after_drift(project: Path) -
     assert DRIFTED_MARKER not in panel.text
 
 
-def test_scratch_preview_executes_the_stage_that_ran_not_the_working_copy(
+def test_scratch_preview_executes_the_stage_that_ran_not_the_latest_one(
     project: Path,
 ) -> None:
     run_id = _run_once(project)
-    _drift_the_working_copy(project)
+    _drift_the_stages(project)
 
     body = _scratch_preview(run_id).json()
     assert body["ok"] is True
@@ -169,7 +164,7 @@ def test_stage_panel_says_the_definition_is_unavailable_when_the_run_is_unpinned
     project: Path,
 ) -> None:
     run_id = _run_once(project)
-    _drift_the_working_copy(project)
+    _drift_the_stages(project)
     _unpin_the_run(project, run_id)
 
     panel = _stage_panel(run_id)
@@ -183,7 +178,7 @@ def test_lineage_panel_says_the_definition_is_unavailable_when_the_run_is_unpinn
     project: Path,
 ) -> None:
     run_id = _run_once(project)
-    _drift_the_working_copy(project)
+    _drift_the_stages(project)
     _unpin_the_run(project, run_id)
 
     panel = _lineage_panel(run_id)
@@ -196,7 +191,7 @@ def test_scratch_preview_refuses_to_execute_an_unresolvable_version(
     project: Path,
 ) -> None:
     run_id = _run_once(project)
-    _drift_the_working_copy(project)
+    _drift_the_stages(project)
     _unpin_the_run(project, run_id)
 
     response = _scratch_preview(run_id)

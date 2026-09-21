@@ -263,7 +263,7 @@ def create_project(
 
 
 def delete_project(project_id: str) -> None:
-    """The working copy only — store documents survive a re-created project."""
+    """The project's directory only — store documents survive a re-created project."""
     shutil.rmtree(workspace.resolve_project_dir(project_id), ignore_errors=True)
 
 
@@ -283,7 +283,7 @@ def list_project_listings() -> list[ProjectListing]:
     """Every project a reader may see, and the only listing of them there is."""
     return [
         ProjectListing(id=record.id, name=record.display_name())
-        # delete_project keeps the record and drops the working copy; project_exists sees that.
+        # delete_project keeps the record and drops the directory; project_exists sees that.
         for record in sorted(Project.list(), key=lambda r: r.id)
         if not record.private and project_exists(record.id)
     ]
@@ -303,10 +303,6 @@ def edit_project(project_id: str, edit: ProjectEdit) -> ProjectMeta:
     return project_meta(project_id)
 
 
-def read_workflow_summary(name: str) -> workspace.WorkflowSummary:
-    return workspace.project_workflow_summary(workspace.validate_project_id(name))
-
-
 def read_stage(name: str, stage_id: str) -> str:
     workspace.validate_project_id(name)
     stage = loader.find_parsed_stage(loader.load_stage_entries(name), stage_id)
@@ -317,26 +313,6 @@ def read_stage(name: str, stage_id: str) -> str:
 
 def edit_stages(name: str, draft_id: str, edits: Sequence[StageEdit]) -> EditStageResult:
     return stage_edit.patch_stage_specs(_project_to_write(name), draft_id, edits)
-
-
-def save_working_copy_as_version(
-    project_id: str,
-    *,
-    message: str,
-    parent_version: str | None = None,
-) -> versioning.WorkflowVersion:
-    """Strict-loads the working copy, so an invalid one raises and no version is written."""
-    if not loader.exists(project_id):
-        raise FileNotFoundError(
-            f"Cannot create a version: project '{project_id}' has no workflow"
-        )
-    stages = loader.load_workflow(project_id)
-    return versioning.create_version_from_stages(
-        project_id,
-        [stage_to_spec_dict(s) for s in stages],
-        message=message,
-        parent_version=parent_version,
-    )
 
 
 def add_stages_reporting_outcome(
@@ -465,7 +441,7 @@ def export_project(project_id: str) -> WorkflowFile:
     if document is None:
         raise ValueError(f"project '{project_id}' has no document — cannot export")
     project_terms = terms.load_terms(project_id)
-    # A run pins a version, never the working copy.
+    # A run pins a version, and an export carries the newest.
     latest = versioning.find_latest_version_id(project_id)
     return WorkflowFile(
         name=meta.name,
@@ -491,8 +467,9 @@ def import_project(
     new_id_by_bundled_id = _write_shapes_under_new_ids(project_id, wf.claim_shapes)
     if wf.stages:
         stages = [_repoint_stage(stage, new_id_by_bundled_id) for stage in wf.stages]
-        loader.save_stages(project_id, stages)
-        save_working_copy_as_version(project_id, message=f"Imported '{label}'")
+        versioning.create_version_from_stages(
+            project_id, [stage_to_spec_dict(s) for s in stages],
+            message=f"Imported '{label}'")
     return project_id
 
 

@@ -8,10 +8,9 @@ import pandas as pd
 import pytest
 
 import app.services.run as run_service
-from app.services.project import save_working_copy_as_version
 from app.services import workspace
 from app.tools import shared
-from stage_seed import add_stage
+from stage_seed import add_stage, save_version
 
 _PROJECT = "filings_review"
 _ROWS = 60
@@ -35,7 +34,7 @@ def _make_project(root: Path) -> str:
         ]},
     }
     add_stage(root, stage)
-    save_working_copy_as_version(root.name, message="seed")
+    save_version(root.name, message="seed")
     return str(run_service.execute(_PROJECT)["run_id"])
 
 

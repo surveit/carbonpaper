@@ -34,7 +34,7 @@ def _stage_record(stage_id: str, usage: LlmUsage | None, started_at: str) -> Sta
 
 
 def _store_run(project: str, run_id: str, records: list[StageRecord], area: str = "runs") -> None:
-    # The working copy too: spend reads runs per project, and a project is its directory.
+    # The stages too: spend reads runs per project, and a project is its directory.
     resolve_project_dir(project).mkdir(parents=True, exist_ok=True)
     Project(id=project, name=project).save()
     RunManifest(

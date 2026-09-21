@@ -42,7 +42,7 @@ from app.services.workspace import resolve_run_dir, resolve_runs_dir
 
 
 def list_every_run_entry() -> list[RunEntry]:
-    """Every run the store holds. One outlives its project's working copy, and so does its cost."""
+    """Every run the store holds. One outlives the project's stages, and so does its cost."""
     entries = [read_run_entry(*_split_run_key(key)) for key in RunManifest.list_ids()]
     return sorted(entries, key=lambda entry: (entry.project, entry.area, entry.run_id))
 

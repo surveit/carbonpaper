@@ -9,9 +9,8 @@ from app.core.errors import MissingInputBindingError
 from app.models import Workflow, parse_stage, Stage
 from app.runtime.runner import validate_stages_ready, execute_run
 from app.runtime.stages.input_data import read_input_data
-from app.services.project import save_working_copy_as_version
 from conftest import make_run_context, pinned_stages, place_stage
-from stage_seed import add_stage
+from stage_seed import add_stage, save_version
 
 
 # The one column the file-writing tests here create; Stage._schemas_declared wants it.
@@ -155,7 +154,7 @@ def _make_bound_project(root, filename="a.csv"):
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
     add_stage(root, stage)
-    save_working_copy_as_version(root.name, message="seed")
+    save_version(root.name, message="seed")
     return data
 
 
@@ -193,7 +192,7 @@ def test_unbound_input_leaves_no_run_dir(tmp_path):
              "signature": {"form": "replaces", "produces": _ROWS_SCHEMA["columns"]},
              "connector": {"kind": "file", "params": {}}}
     add_stage(tmp_path, stage)
-    save_working_copy_as_version(tmp_path.name, message="seed")
+    save_version(tmp_path.name, message="seed")
 
     with pytest.raises(MissingInputBindingError, match="load"):
         execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))

@@ -25,8 +25,8 @@ case: `validate_workflow(stages) -> list[str]` and `validate_stage(stage) -> lis
   compiled workflows (weighting is done inside `python_frame_function` modules).
 
 **Enforced at load, via `app/services/loader.py`.** This is the only place that
-reads a project's `working_copy` document (a list of stage specs, each the JSON
-dump of a validated `Stage`, in the order the UI shows them); everything past it
+reads a project's stages off its newest `workflow_version` (a list of stage specs, each
+the JSON dump of a validated `Stage`, in graph order); everything past it
 speaks `Stage` objects, not dicts. Two entry points, both parsing each spec
 through `parse_stage`:
 - `load_workflow` — strict, for the runner. Any invalid stage or
@@ -46,7 +46,7 @@ A project's state lives in exactly two places:
 
 - **The document store** (`app/core/persistence.py`), a SQLite key-value table
   keyed `(collection, id)`. Every stored record is a `PersistedModel`: the
-  methodology, the working copy, each `workflow_version`, a run's record and its
+  methodology, each draft, each `workflow_version`, a run's record and its
   chunked event log, the review-queue fingerprints, the review decisions, the
   terms, and the uploaded-file index.
 - **Frames** (`app/core/frames.py`), the parquet files a run reads and writes.
@@ -116,12 +116,12 @@ needs it: `ProjectFile` (`app/core/files.py`), `StageCacheEntry`
 
 ### The stage spec-dict shape
 
-`WorkflowVersion`, `WorkingCopy` and `Draft` each embed a list of `Stage` objects and
-each sets `DUMP_OPTS = {"by_alias": True, "exclude_none": True}`. That is the *spec-dict
-shape* — field aliases restored, unset optionals dropped — which is what
-`stage_to_spec_dict` produces. All three share it deliberately: a stage must read
-identically in the working copy, in a draft, and in a version cut from either, so an
-edit that changes nothing produces no diff in the stored document.
+`WorkflowVersion` and `Draft` each embed a list of `Stage` objects and each sets
+`DUMP_OPTS = {"by_alias": True, "exclude_none": True}`. That is the *spec-dict shape*
+— field aliases restored, unset optionals dropped — which is what
+`stage_to_spec_dict` produces. Both share it deliberately: a stage must read
+identically in a draft and in the version cut from it, so an edit that changes
+nothing produces no diff in the stored document.
 
 ### An optional field may be load-bearing
 
@@ -148,7 +148,7 @@ backwards to the version that revision wrote.
 
 `tests/test_migration_replay.py` holds it. The store it upgrades is seeded through the
 same service calls the app uses — `create_project`, `add_stages`,
-`save_working_copy_as_version`, `save_upload` — so the documents under test are whatever
+`drafts.save_version`, `save_upload` — so the documents under test are whatever
 today's models write, and a model change moves the fixture with it. After
 `upgrade head` every document must be byte-identical, `schema_version` included, the
 uploaded bytes must be where they were, and `alembic_version` must read head.
@@ -157,8 +157,8 @@ uploaded bytes must be where they were, and `alembic_version` must read head.
 
 `app/models/stage.py` holds one counter for the shape of a stored stage spec: what a
 record embedding stages stamps into its `schema_version` column, and what an alembic
-revision rewrites a payload up to. `WorkflowVersion`, `WorkingCopy` and `Draft` all
-declare it as their `SCHEMA_VERSION`.
+revision rewrites a payload up to. `WorkflowVersion` and `Draft` both declare it as
+their `SCHEMA_VERSION`.
 
 | v | what moved | revision |
 |---|---|---|

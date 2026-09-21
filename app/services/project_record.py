@@ -15,6 +15,6 @@ def read_project_name(project_id: str) -> str:
 
 
 def read_project_edited_at(project_id: str) -> datetime | None:
-    """Renames and creation only — the stage specs are the working copy's to date."""
+    """Renames and creation only — a version owns the stage specs."""
     raw = Project.load_raw_or_none(project_id)
     return None if raw is None else read_orderable_stamp(raw.get("updated_at"))

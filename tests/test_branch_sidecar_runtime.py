@@ -10,11 +10,10 @@ from app.runtime.branches import BRANCH_SCHEMA, RowBranches
 from app.runtime.lineage_sidecar import read_lineage_sidecar, resolve_lineage_sidecar_path
 from app.runtime.executor import execute_subset
 from app.runtime.runner import prepare_run, run_prepared
-from app.services.project import save_working_copy_as_version
 from app.core.persistence import get_store
 from app.core.stage_cache import StageCacheEntry, compute_row_fingerprint
 from conftest import pinned_stages
-from stage_seed import add_stage
+from stage_seed import add_stage, save_version
 
 _COLS = [{"name": "a", "type": "str", "nullable": True},
          {"name": "b", "type": "int", "nullable": True}]
@@ -212,7 +211,7 @@ def _run_twice_over_a_warm_cache(
     src = pd.DataFrame({"a": ["x", "y", "z"], "b": [5, 1, 0]})
     add_stage(tmp_path, _load_stage("src", src, tmp_path).model_dump(mode="json", exclude_none=True))
     add_stage(tmp_path, _cached_row_function("tier", "src").model_dump(mode="json", exclude_none=True))
-    save_working_copy_as_version(
+    save_version(
         tmp_path.name, message="branch cache").version_id
 
     sidecars = []
@@ -276,7 +275,7 @@ def test_a_warm_cache_preserves_the_lineage_sidecar_too(tmp_path) -> None:
     add_stage(tmp_path, _load_stage("src", src, tmp_path).model_dump(mode="json", exclude_none=True))
     add_stage(tmp_path, _cached_filter("kept", "src", _KEEP_HIGH).model_dump(
         mode="json", exclude_none=True))
-    save_working_copy_as_version(
+    save_version(
         tmp_path.name, message="filter cache").version_id
 
     runs = []

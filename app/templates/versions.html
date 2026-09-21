@@ -12,12 +12,12 @@
 <div class="sec-head wf-head">
   <div class="wf-head-title">
     <h1>Versions</h1>
-    <p class="lede">Each version is an immutable snapshot of the working copy +
-      the project's tables. A run pins to a version and reads its snapshot, so it is reproducible against the exact
-      workflow it executed.</p>
+    <p class="lede">Each version is an immutable snapshot of the workflow and the
+      project's tables. A run pins to a version and reads its snapshot, so it is
+      reproducible against the exact workflow it executed.</p>
   </div>
   <div class="actions wf-actions">
-    <a href="/project/{{ state.id }}/workflow" class="btn">Current working copy</a>
+    <a href="/project/{{ state.id }}/workflow" class="btn">Workflow</a>
     <a href="/project/{{ state.id }}/runs" class="btn">Runs</a>
   </div>
 </div>
