@@ -64,3 +64,13 @@ def test_a_capture_names_the_stage_whose_file_went_missing(
 
     with pytest.raises(RunCaptureRefused, match="load_west"):
         capture_run(PROJECT, run_id, tmp_path / "capture")
+
+
+def test_a_capture_into_a_directory_that_already_holds_one_is_refused(
+    projects_root, run_id, tmp_path
+):
+    into = tmp_path / "capture"
+    capture_run(PROJECT, run_id, into)
+
+    with pytest.raises(RunCaptureRefused, match=CAPTURED_ARCHIVE):
+        capture_run(PROJECT, run_id, into)

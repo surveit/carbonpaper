@@ -2,26 +2,30 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.core.files import ProjectFile, save_upload
 from app.core.ids import ID
 from app.core.run_status import RunStatus
+from app.models import Workflow, WorkflowStage
+from app.models.captured_run import CapturedDecision, CapturedRun
 from app.models.records.run_manifest import RunManifest
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
-from app.models.stages.stage_base import StageType
+from app.services import review
 from app.services.errors import ProjectArchiveRejected, RunRestoreRefused
 from app.services.project import WorkflowFile, import_project_archive, read_archive_workflow
 from app.services.run import execute, read_run_manifest
 from app.services.stage_cache_transfer import CacheImportReport
 from app.services.uploads import resolve_files_binding
-from app.services.versioning import resolve_version_id
+from app.services.versioning import load_version_stages, resolve_version_id
 
 # The capture writes this layout and a restore reads it, so it is named with the reader.
 CAPTURED_ARCHIVE = "project.zip"
 CAPTURED_INPUTS = "inputs"
+CAPTURED_RECORD = "run.json"
 
 _RESTORED_STATUSES = (RunStatus.OK, RunStatus.WARNINGS)
 
@@ -36,14 +40,94 @@ def restore_run(from_dir: Path) -> RestoredRun:
     archive = _find_the_captured_archive(from_dir)
     raw = archive.read_bytes()
     workflow = _read_the_bundled_workflow(archive, raw)
-    _validate_no_stage_queues_rows_for_review(workflow)
+    captured = _read_the_captured_record(from_dir)
     _validate_every_input_directory_names_a_stage(from_dir, workflow)
     project_id = _import_the_captured_project_id(archive, raw)
     bindings = _bind_the_files_the_run_read(project_id, from_dir)
     version_id = resolve_version_id(project_id, None)
-    run_id = str(execute(project_id, version_id=version_id, bindings=bindings)["run_id"])
+    _rerecord_the_captured_decisions(project_id, version_id, captured.decisions)
+    run_id = _execute_as_captured(project_id, version_id, bindings, captured)
     _validate_the_restored_run_finished(read_run_manifest(project_id, run_id))
     return RestoredRun(project_id=project_id, run_id=run_id)
+
+
+def _execute_as_captured(
+    project_id: ID,
+    version_id: str,
+    bindings: dict[StageId, TypeUnsafeUserStageConfigOverride],
+    captured: CapturedRun,
+) -> str:
+    parameters = captured.parameters
+    return str(execute(
+        project_id,
+        version_id=version_id,
+        bindings=bindings,
+        limits=dict(parameters.limits),
+        offsets=dict(parameters.offsets),
+        bust_cache=parameters.bust_cache,
+    )["run_id"])
+
+
+def _read_the_captured_record(from_dir: Path) -> CapturedRun:
+    record = from_dir / CAPTURED_RECORD
+    if not record.is_file():
+        raise RunRestoreRefused(
+            f"no {CAPTURED_RECORD} at {record} — the row window the captured run used "
+            "and the decisions made in it are recorded nowhere else")
+    try:
+        return CapturedRun.model_validate_json(record.read_text(encoding="utf-8"))
+    except ValidationError as exc:
+        raise RunRestoreRefused(f"{record} is not a captured run: {exc}") from exc
+
+
+def _rerecord_the_captured_decisions(
+    project_id: ID, version_id: str, decisions: Sequence[CapturedDecision]
+) -> None:
+    """The ledger is project-scoped, so the fresh project can see none of the originals."""
+    if not decisions:
+        return
+    workflow = Workflow(stages=load_version_stages(project_id, version_id))
+    for decision in decisions:
+        _rerecord_one_decision(project_id, version_id, workflow, decision)
+
+
+def _rerecord_one_decision(
+    project_id: ID, version_id: str, workflow: Workflow, decision: CapturedDecision
+) -> None:
+    stage = _require_the_stage_that_was_reviewed(workflow, decision)
+    review.record_decision(
+        project_id=project_id, stage=stage,
+        stage_fingerprint=decision.stage_fingerprint,
+        input_fingerprint=decision.input_fingerprint,
+        frozen_row=decision.frozen_input,
+        verdict=decision.verdict,
+        reviewed_values=decision.reviewed_values,
+        review_notes=decision.review_notes,
+        reviewer=decision.reviewer,
+        reviewed_at=decision.reviewed_at,
+        workflow_version_id=version_id,
+        # No run has started; the run that made the decision was in another workspace.
+        workflow_run_id=None,
+    )
+
+
+def _require_the_stage_that_was_reviewed(
+    workflow: Workflow, decision: CapturedDecision
+) -> WorkflowStage:
+    """A drifted stage is refused here: its decisions would never be looked up again."""
+    try:
+        stage = workflow.find_workflow_stage(decision.stage_id)
+    except KeyError as exc:
+        raise RunRestoreRefused(
+            f"a captured decision was made on stage '{decision.stage_id}', and the "
+            "restored workflow has no such stage") from exc
+    restored = stage.stage.compute_definition_fingerprint()
+    if restored != decision.stage_fingerprint:
+        raise RunRestoreRefused(
+            f"stage '{decision.stage_id}' is {restored} in the restored workflow and "
+            f"was {decision.stage_fingerprint} when it was reviewed, so the restored "
+            "run would queue its rows again rather than read the decisions")
+    return stage
 
 
 def _find_the_captured_archive(from_dir: Path) -> Path:
@@ -59,17 +143,6 @@ def _read_the_bundled_workflow(archive: Path, raw: bytes) -> WorkflowFile:
         return read_archive_workflow(raw)
     except ProjectArchiveRejected as exc:
         raise RunRestoreRefused(f"{archive} did not import: {exc}") from exc
-
-
-def _validate_no_stage_queues_rows_for_review(workflow: WorkflowFile) -> None:
-    queueing = [
-        stage.id for stage in workflow.stages
-        if stage.type == StageType.human_review_queue
-    ]
-    if queueing:
-        raise RunRestoreRefused(
-            f"stage '{queueing[0]}' queues rows for human review, so the restored run "
-            "would halt waiting for a reviewer rather than finish")
 
 
 def _validate_every_input_directory_names_a_stage(
