@@ -18,7 +18,7 @@ UNNAMED_ROWS = "rows"
 
 class PhraseStyle(str, Enum):
     prose = "prose"
-    # A count and its noun: the two the page prints, one at each end of the route.
+    # A count and its noun: the two the page prints.
     count_ = "count"  # trailing underscore: `count` would shadow str.count
     column = "column"
     # A stage's own id, said where nobody wrote what the step means.
@@ -49,8 +49,7 @@ def name_phrase(stage_id: str, hover: str) -> Phrase:
     return Phrase(text=stage_id, style=PhraseStyle.name, hover=hover)
 
 
-# Grouped from the first thousand, unlike a cell (app.core.figure_text), where four
-# bare digits are a year or an ordinal. Every number in a told figure is a count of rows.
+# Grouped from the first thousand: every number here is a count, never a year.
 def say_count(rows: int) -> str:
     return format(rows, ",")
 

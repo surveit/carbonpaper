@@ -107,8 +107,7 @@ class _Place:
 
     rows_in: int
     incoming: Optional[RowType]
-    # Which load this is of the walk's loads, and how many there are: two populations
-    # meet at a union, and only the last of them says what the figure reads.
+    # Which load of the walk's loads this is: two populations can meet at a union.
     loads_at: int
     loads: int
     # Whether this is the paragraph's first narrowing, which is the one that names the noun.
@@ -121,8 +120,7 @@ def _place_the_step(
     paragraph: list[FigureClause],
 ) -> _Place:
     before = steps[position - 1] if position else None
-    # Not the stage's own rows_in: a regrain collapses rows rather than dropping them,
-    # so what reached it is what the step before it wrote.
+    # What the step before wrote: a regrain's own rows_in counts nothing it collapsed.
     rows_in = before.rows.rows_out if before else steps[position].rows.rows_out
     loads = [at for at, held in enumerate(steps) if _loads_rows(held)]
     return _Place(loads_at=loads.index(position) if position in loads else 0,

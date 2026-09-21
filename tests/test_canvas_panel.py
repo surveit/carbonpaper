@@ -302,8 +302,7 @@ def _told(run_id, cited):
 
 
 def test_the_figure_is_told_as_prose_off_the_same_walk_the_canvas_draws(run_id):
-    # Two loads meet at a union, and both are behind the grand total. Neither this
-    # project nor this fixture names a row type, so every noun degrades to "rows".
+    # Two loads meet at a union, both behind the total; no row type names the rows.
     assert _told(run_id, TOTAL) == [
         "The run loads 6 rows from load_east. It also loads 4 rows from load_west."
         " The figure reads amount. Each has portfolio looked up."

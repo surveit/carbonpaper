@@ -213,9 +213,7 @@ STAGE_DESCRIPTION_DESCRIPTION = (
 )
 
 
-# A filter's or a queue's own words for the test it applies, said where a reader meets
-# the figure that rests on it. Shorter than a description: it is a phrase inside someone
-# else's sentence, not a line of its own.
+# A phrase inside someone else's sentence, so shorter than a description.
 PREDICATE_MAX_CHARS = 120
 
 PREDICATE_DESCRIPTION = (
