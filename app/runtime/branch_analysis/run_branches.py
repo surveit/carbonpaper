@@ -49,8 +49,7 @@ class WorkflowRunBranches:
     stages: dict[StageId, WorkflowStage]
     ordered_stage_ids: list[StageId]
     row_counts: dict[StageId, int]
-    # What each stage took out. A dropped row is in no frame, so it holds no branch
-    # and is counted here rather than named as one.
+    # What each stage took out. docs/branch-analysis.md
     rows_dropped_per_stage: dict[StageId, int] = field(default_factory=dict)
 
     def find_branching_stage_ids(self) -> set[StageId]:

@@ -145,8 +145,7 @@ def test_an_arm_no_row_took_reads_zero(claim):
 def test_the_arms_the_run_recorded_come_with_their_row_counts(claim):
     bundle = claim_review.build_evidence_bundle(PROJECT, claim.id)
 
-    # One arm, for the rows it kept: the zero-amount G-007 is in no frame below it,
-    # so the evidence counts nine kept rather than naming a tenth branch.
+    # One arm, for the rows it kept: nine, the zero-amount G-007 not among them.
     at_funded = [b for b in bundle.branches if b.stage_id == "funded"]
     assert [b.rows_count for b in at_funded] == [9]
     assert not [b for b in bundle.branches if b.reason == "merge"]

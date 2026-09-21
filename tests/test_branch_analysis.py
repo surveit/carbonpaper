@@ -63,8 +63,7 @@ def test_every_branch_reason_is_recorded(scoped):
 def test_a_dedupe_drops_rows_the_way_a_filter_does(scoped):
     run, _ = scoped
     assert not [b for b in run.branch_options if b.startswith("one_row_per_grant|merged:")]
-    # One option, for the rows kept. What it dropped is a count: those rows are in
-    # no frame below it, so nothing there can hold a branch for them.
+    # One option, for the rows kept; what it dropped is a count.
     assert "one_row_per_grant|removed" not in run.branch_options
     assert run.branch_options["one_row_per_grant|kept"].label == "kept, one row per key"
     assert run.rows_dropped_per_stage["one_row_per_grant"] == 1

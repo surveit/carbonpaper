@@ -107,8 +107,7 @@ class ScopeMap(BaseModel):
     columns: list[str]
     branch_paths: list[BranchPath]
     branch_path_index: list[int]
-    # What each stage took out. A dropped row holds no branch: it is in no frame to
-    # hold one, so it is a count here and never a pathway.
+    # What each stage took out. docs/branch-analysis.md
     rows_dropped_per_stage: dict[StageId, int] = {}
     # NOT the stages in its path: one it passed without branching is here, not there.
     came_through: list[list[StageId]]
