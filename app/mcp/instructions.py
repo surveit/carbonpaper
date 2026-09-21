@@ -102,14 +102,10 @@ record, and it returns the project record, whose `id` every other tool takes.
              then hand over: the version, its guide, the test run it was written
              against, and the warnings still open.
   CLAIM      submit_claim once a full run has published a figure that names a
-             shape: one sentence a person would publish, read off that figure.
-             Submitting starts the review, so read_claim_review is how it comes
-             back — five reviewers, a few minutes, each challenge naming the
-             phrase it lands on and what in the run makes it stick. A sentence
-             you would not publish given them is one to submit again, reworded,
-             which replaces it. cancel_claim_submission withdraws one that
-             should not have been proposed at all. A person approves; you do
-             not.
+             shape: one sentence read off that figure, proposed like a pull
+             request. The AI review launches itself; read_claim_review brings it
+             back. Submitting again makes a new claim, and
+             cancel_claim_submission withdraws one. A person rules on it.
 
 A run executes a stored version, and run_workflow(project_id, version_id?) is the
 full one — get_run_status(project_id, run_id) follows it to its outcome, and list_runs

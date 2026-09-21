@@ -147,19 +147,18 @@ user before you store them — never invent one to fill the list out.""",
             "run_id": "The finished run the sentence is read from.",
             "slug": "The published figure it cites, by the slug the stage's figure rule "
                 "gave it. The figure must name a claim shape or there is nothing to claim.",
-            "text": "The sentence a person would publish, in their words. Not a summary "
-                "of the run and not a description of the figure: the claim itself.",
+            "text": "The sentence to publish, in a person's words — the claim itself, "
+                "not a summary of the run.",
             "context": "One value per context column the shape declares, or nothing when "
                 "it declares none.",
         },
         description="""\
-Propose one sentence for review. It stands behind nothing: five reviewers read
-it against what the run holds, and a person then approves, edits or closes it.
-Submitting starts that review, so there is nothing else to call.
+Propose a sentence for eventual publication, read off a figure this run
+published. It works like a pull request: submitting launches the AI review
+automatically, and a person rules on it after.
 
-Submitting again for the same shape and context REPLACES what stood there, so
-a reworded sentence is another submit rather than an edit. Read the review back
-with `read_claim_review`; it takes a few minutes.""",
+Submitting again makes a new claim, not an edit. Read the review back with
+`read_claim_review`.""",
     ),
     "read_claim_review": AgentTool(
         fn=claim_tools.read_claim_review,
@@ -169,15 +168,8 @@ with `read_claim_review`; it takes a few minutes.""",
             "claim_id": "The claim, as `submit_claim` returned it.",
         },
         description="""\
-What the reviewers raised against a sentence, once they are done. `review` says
-which: `running` is still in flight, `done` carries the challenges, `failed`
-carries the error, `none` means no review has started, and `refused` means the
-claim cites a table rather than one figure, which is not reviewed.
-
-Each challenge names the phrase it lands on, what makes it stick, its weight and
-the pieces of the run it cites. They are not yours to answer — a person decides —
-but a sentence you would not publish given them is one to rewrite before they
-have to.""",
+Read the results of the AI claim review on a claim, including its status while
+it is still running.""",
     ),
     "cancel_claim_submission": AgentTool(
         fn=claim_tools.cancel_claim_submission,
@@ -187,9 +179,8 @@ have to.""",
             "claim_id": "The claim to withdraw.",
         },
         description="""\
-Withdraw a sentence you proposed, so nothing stands behind it and no one is
-asked to rule on it. Use it where the sentence was wrong to propose at all; to
-reword one, submit the new wording instead, which replaces this one.""",
+Withdraw a claim now understood to be wrong, superseded, or no longer relevant,
+so no one is asked to rule on it.""",
     ),
     "read_claim_shapes": AgentTool(
         fn=claim_shape_tools.read_claim_shapes,
