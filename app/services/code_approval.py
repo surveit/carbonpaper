@@ -10,9 +10,7 @@ from __future__ import annotations
 from app.core.timestamp_ids import now_iso
 from app.models.records.code_approval import CodeExecutionApproval
 
-# What the owner is told before they answer. Rendered by every surface that asks
-# — the tool that requests it and the page that grants it — so the warning a
-# person agrees to is the same text wherever they meet it.
+# What the owner reads before they answer, on the settings page where they answer.
 CODE_EXECUTION_WARNING = (
     "Carbon Paper is not built for arbitrary code execution. A Python step runs on the "
     "machine hosting this project with its permissions: it can read files, reach the "
@@ -31,7 +29,7 @@ def read_code_execution_approval(project_id: str) -> CodeExecutionApproval | Non
 
 
 def approve_code_execution(project_id: str, reason: str) -> CodeExecutionApproval:
-    """Records an answer the owner has already given. Never call it to ASK."""
+    """Reached only from the settings page: no tool or MCP surface offers this."""
     if not reason.strip():
         raise ValueError(
             "approving code execution needs the reason the owner was asked for it — "

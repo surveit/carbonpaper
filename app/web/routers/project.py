@@ -22,6 +22,7 @@ from app.models import (
     validate_named_schema,
 )
 from app.models.claims import DATA_UNIVERSE_TOOLTIP
+from app.models.stages.stage_types import APPROVAL_REQUIRED_TYPES
 from app.services import (
     claim_shapes, code_approval, methodology, project, terms, versioning,
 )
@@ -68,11 +69,23 @@ def edit_project(project_name: str, edit: ProjectEdit) -> JSONResponse:
     return JSONResponse(meta.model_dump(mode="json"))
 
 
+@router.post("/project/{project_name}/code-execution/approve")
+def approve_code_execution(project_name: str, reason: str = Form("")):
+    """The only door onto code execution; no tool or MCP surface offers another."""
+    project_id = validate_project_or_404(project_name)
+    try:
+        code_approval.approve_code_execution(project_id, reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return RedirectResponse(f"/project/{project_id}/settings", status_code=303)
+
+
 @router.post("/project/{project_name}/code-execution/withdraw")
 def withdraw_code_execution(project_name: str):
     """Only stops NEW python stages being written; ones already stored keep running."""
-    code_approval.withdraw_code_execution_approval(validate_project_or_404(project_name))
-    return RedirectResponse(f"/project/{project_name}", status_code=303)
+    project_id = validate_project_or_404(project_name)
+    code_approval.withdraw_code_execution_approval(project_id)
+    return RedirectResponse(f"/project/{project_id}/settings", status_code=303)
 
 
 @router.post("/project/{project_name}/private")
@@ -133,6 +146,22 @@ def project_documentation(request: Request, project_name: str, tab: str = "metho
             "unreadable": "; ".join(unreadable),
             "kind_class": SCHEMA_KIND_CLASS,
             "kind_glyph": SCHEMA_KIND_GLYPH,
+        },
+    )
+
+
+@router.get("/project/{project_name}/settings", response_class=HTMLResponse)
+def render_project_settings(request: Request, project_name: str):
+    validate_project_or_404(project_name)
+    return templates.TemplateResponse(
+        request,
+        "section_settings.html",
+        {
+            "state": shell_state(project_name, "settings"),
+            "section": "settings",
+            "code_execution": code_approval.read_code_execution_approval(project_name),
+            "code_execution_warning": code_approval.CODE_EXECUTION_WARNING,
+            "code_execution_types": APPROVAL_REQUIRED_TYPES,
         },
     )
 

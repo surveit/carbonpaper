@@ -11,9 +11,9 @@ bite most often.
 
 ## Pages / routes
 - `/` project list · `/project/<m>` the project shell (Overview, Workflow, Runs, Claims,
-  Evals, Files, and Documentation — one page, `/project/<m>/methodology`, holding the
+  Evals, Files, Documentation — one page, `/project/<m>/methodology`, holding the
   Methodology and Glossary tabs; `?tab=glossary` opens on the Glossary tab, and
-  `/project/<m>/glossary` redirects there). `/project/<m>/workflow` carries the mermaid
+  `/project/<m>/glossary` redirects there — and Settings). `/project/<m>/workflow` carries the mermaid
   graph + inline node review (`/project/<m>/node/<id>/review-partial`); it has no nav
   row, and is reached from Workflow's own page.
 - **Overview** (`section_overview.html` ← `app.web.project_overview`) is the latest run and
@@ -37,6 +37,12 @@ bite most often.
   tally that writes no count of zero. `/project/<m>/claims/<id>` is one claim: the sentence,
   where each phrase lands in the run, and what the attackers raised. It sits under the
   Claims leaf — reached from the list, or from a run's publish page, which leaves Runs.
+- `/project/<m>/settings` (`section_settings.html`) — what the project allows. Code
+  execution is the only entry: whether unsandboxed Python is on, the standing approval's
+  stamp and the reason typed with it, and the two forms that turn it on and off
+  (`/code-execution/approve`, `/code-execution/withdraw`). It is the ONLY surface that
+  turns it on — no tool, agent or MCP surface does, held by the `app.services.code_approval`
+  contract in `pyproject.toml`.
 
 ## Zero states (`.empty-state`, styled in `app/static/split-view.css`)
 A list, panel or section with nothing in it reads as a heading naming what is absent,

@@ -131,6 +131,7 @@ _PAGES = [
     ("one run", "/project/<project_id>/runs/<run_id>"),
     ("one stage of a run", "/project/<project_id>/runs/<run_id>#<stage_id>"),
     ("the files", "/project/<project_id>/files"),
+    ("its settings", "/project/<project_id>/settings"),
 ]
 
 
@@ -269,7 +270,9 @@ CODE_EXECUTION_ESCAPE_NOTE = (
     "Do not assume you may use one, and do not write one to find out. If a step "
     "genuinely needs Python, tell the project's owner in plain words what it will do and "
     "why nothing above fits, ask whether to turn code execution on, and WAIT for their "
-    "answer. Only if they say yes, call `approve_code_execution`."
+    "answer. No tool turns it on: only a person can, on the project's Settings page "
+    "(`/project/<project_id>/settings`), where the reason they give is stored. Send "
+    "them that address, wait, and write the stage once they say it is on."
 )
 
 

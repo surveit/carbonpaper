@@ -82,6 +82,7 @@ def build_nav(project_id: str) -> list[NavBlock]:
         _nav_leaf("evals", "Evals", f"{base}/evals"),
         _nav_leaf("files", "Files", f"{base}/files"),
         _nav_leaf("documentation", "Documentation", f"{base}/methodology"),
+        _nav_leaf("settings", "Settings", f"{base}/settings"),
     ]
 
 

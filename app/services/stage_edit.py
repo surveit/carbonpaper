@@ -115,7 +115,8 @@ CODE_EXECUTION_REFUSAL = (
     "the rest of the reshapes. Try those first.\n"
     "If this genuinely needs Python, tell the project's owner what it will do and why no "
     "declared stage fits, and ask whether to turn code execution on for this project. "
-    "Only once THEY have answered yes, call `approve_code_execution`."
+    "You cannot turn it on: a person does, on the project's Settings page, and this "
+    "write goes through once they have."
 )
 
 
