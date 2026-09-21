@@ -3241,3 +3241,4 @@
 {"run_id":"35619069209","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35619069209","created":"2026-09-21T15:28:04Z","branch":"master","event":"push","contracts_kept":17,"findings":[]}
 {"run_id":"35618996297","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35618996297","created":"2026-09-21T15:30:21Z","branch":"feat/predicate-says-what-a-step-keeps","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"35619069209","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35619069209","created":"2026-09-21T15:30:49Z","branch":"master","event":"push","contracts_kept":null,"findings":[]}
+{"run_id":"35621326970","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35621326970","created":"2026-09-21T15:48:07Z","branch":"chore/retire-the-working-copy","event":"pull_request","contracts_kept":17,"findings":[]}
