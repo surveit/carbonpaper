@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.paths import repo_root
+from app.core.run_status import RunStatus
 from app.core.store_config import configure_default_stores, refuse_renamed_env_vars
 from app.evals.dataset_columns import deconflict_column_names, get_output_columns_from_stage
 from app.evals.runner import run_eval
@@ -20,13 +21,15 @@ from app.models.eval import ExpectedOutput, ScoringMetric
 from app.models.records.claims import Claim, ClaimShape
 from app.models.records.eval_config import EvalConfig
 from app.models.records.eval_run import EvalRun
+from app.models.records.run_manifest import RunManifest
 from app.models.records.workflow_output import WorkflowOutput
 from app.models.schema import Column, TableSchema
+from app.models.stage import stage_to_spec_dict
 from app.models.stages.input_data import FileFormat
 from app.models.table import TableRef
-from app.models.workflow import Workflow
+from app.models.workflow import Workflow, parse_workflow
 from app.models.workflow_stage import WorkflowStage
-from app.services import drafts, run as run_service
+from app.services import drafts, run as run_service, versioning
 from app.services.claim_shapes import load_claim_shapes, write_claim_shapes
 from app.services.claims import load_claims_of_shape, submit_claim
 from app.services.code_approval import approve_code_execution
@@ -150,15 +153,15 @@ def main() -> None:
     claim = ensure_the_claim(shape)
     project_id = ensure_the_eval_project()
     cases_path = write_the_cases_file(project_id, claim)
-    version_id = save_the_eval_version(project_id, cases_path)
-    manifest = run_service.execute(project_id, version_id=version_id)
+    version_id = ensure_the_eval_version(project_id, cases_path)
+    manifest = ensure_the_workflow_ran(project_id, version_id)
     config = save_the_eval_config(project_id, version_id, claim)
     eval_run = run_eval(project_id, config, version_id=version_id)
 
     print(f"claim:          {claim.id} ({claim.status})")
     print(f"eval project:   {project_id}")
     print(f"eval version:   {version_id}")
-    print(f"workflow run:   {manifest['run_id']} ({manifest['status']})")
+    print(f"workflow run:   {manifest.run_id} ({manifest.status})")
     describe_eval_run(eval_run)
 
 
@@ -237,6 +240,38 @@ def write_the_cases_file(project_id: str, claim: Claim) -> Path:
     return path
 
 
+def ensure_the_eval_version(project_id: str, cases_path: Path) -> str:
+    """Re-seeding must not mint a second version of stages the project already holds."""
+    wanted = [stage_to_spec_dict(stage)
+              for stage in parse_workflow(build_eval_stages(cases_path)).stages]
+    for version in versioning.list_versions(project_id):
+        if [stage_to_spec_dict(stage) for stage in version.stages] == wanted:
+            return version.version_id
+    return save_the_eval_version(project_id, cases_path)
+
+
+def ensure_the_workflow_ran(project_id: str, version_id: str) -> RunManifest:
+    held = find_finished_run(project_id, version_id)
+    if held is not None:
+        return held
+    run_service.execute(project_id, version_id=version_id)
+    ran = find_finished_run(project_id, version_id)
+    if ran is None:
+        raise SystemExit(
+            f"the run of version '{version_id}' recorded no manifest at status "
+            f"'{RunStatus.OK}' — the five reviewers did not all answer")
+    return ran
+
+
+def find_finished_run(project_id: str, version_id: str) -> RunManifest | None:
+    for entry in run_service.list_run_entries(project_id):
+        held = entry.manifest
+        if (held is not None and held.workflow_version == version_id
+                and held.status == RunStatus.OK):
+            return held
+    return None
+
+
 def save_the_eval_version(project_id: str, cases_path: Path) -> str:
     draft_id = drafts.create_draft(project_id).id
     drafts.write_draft_stages(project_id, draft_id, build_eval_stages(cases_path))
@@ -276,8 +311,9 @@ def write_the_eval_dataset(
     override_columns: list[Column], injected: list[Column], verdict: Column, claim: Claim,
 ) -> Path:
     values = read_the_labelled_values(override_columns, claim)
-    row: dict[str, Any] = {injected[i].name: values[column.name]
-                           for i, column in enumerate(override_columns)}
+    row: dict[str, str | bool] = {
+        dataset_column.name: values[stage_column.name]
+        for dataset_column, stage_column in zip(injected, override_columns)}
     row[verdict.name] = EXPECTED_VERDICT
     path = repo_root() / EVAL_DATASET_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -290,7 +326,7 @@ def write_the_eval_dataset(
 
 def read_the_labelled_values(
     override_columns: list[Column], claim: Claim,
-) -> dict[str, Any]:
+) -> dict[str, str]:
     values = {"case_id": CASE_ID, "project_id": CASE_PROJECT_ID, "claim_id": claim.id,
               "model": REVIEW_MODEL, "expected_defect": EXPECTED_DEFECT}
     unlabelled = [column.name for column in override_columns if column.name not in values]

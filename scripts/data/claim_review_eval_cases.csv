@@ -1,0 +1,2 @@
+case_id,project_id,claim_id,model,expected_defect,found
+ai-spend-row-window,20260921T105528.171720,b48fc7f750824583a62c8f2e5e7e7764,sonnet,"The $0 total is an artifact of a row cap, not a finding about the data. The run read a 50-row window out of two full quarterly LDA exports, so the figure describes those 50 rows and says nothing about the disclosures as a whole.",True
