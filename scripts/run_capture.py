@@ -9,13 +9,11 @@ from pathlib import Path
 
 from app.core.ids import ID
 from app.core.run_status import RunStatus
-from app.models.captured_run import CapturedDecision, CapturedRun
-from app.models.records.review_decision import ReviewDecision
+from app.models.captured_run import CapturedRun
 from app.models.records.run_manifest import RunManifest
 from app.models.run_manifest import StageInputRecord
 from app.models.run_parameters import RunParameters
 from app.services.project import export_project_archive
-from app.services.review import find_decisions_oldest_first
 from app.services.run import read_run_manifest
 from app.services.run_restore import CAPTURED_ARCHIVE, CAPTURED_INPUTS, CAPTURED_RECORD
 from scripts.errors import RunCaptureRefused
@@ -34,7 +32,7 @@ def capture_run(project_id: str, run_id: str, into: Path) -> None:
     manifest = read_run_manifest(project_id, run_id)
     _validate_the_run_finished(manifest)
     reads = _find_the_files_the_run_read(manifest)
-    record = _record_what_the_workflow_does_not_carry(project_id, manifest)
+    record = _record_what_the_workflow_does_not_carry(manifest)
     _validate_nothing_is_there_already(into)
     into.mkdir(parents=True, exist_ok=True)
     (into / CAPTURED_ARCHIVE).write_bytes(export_project_archive(project_id))
@@ -44,9 +42,7 @@ def capture_run(project_id: str, run_id: str, into: Path) -> None:
         _copy_one_input(read, into)
 
 
-def _record_what_the_workflow_does_not_carry(
-    project_id: str, manifest: RunManifest
-) -> CapturedRun:
+def _record_what_the_workflow_does_not_carry(manifest: RunManifest) -> CapturedRun:
     parameters = manifest.parameters
     return CapturedRun(
         parameters=RunParameters(
@@ -54,24 +50,6 @@ def _record_what_the_workflow_does_not_carry(
             offsets=parameters.offsets,
             bust_cache=parameters.bust_cache,
         ),
-        decisions=[
-            _record_one_decision(decision)
-            for decision in find_decisions_oldest_first(project_id)
-        ],
-    )
-
-
-def _record_one_decision(decision: ReviewDecision) -> CapturedDecision:
-    return CapturedDecision(
-        stage_id=decision.stage_id,
-        stage_fingerprint=decision.stage_fingerprint,
-        input_fingerprint=decision.input_fingerprint,
-        frozen_input=decision.frozen_input,
-        verdict=decision.verdict,
-        reviewed_values=decision.reviewed_values,
-        review_notes=decision.review_notes,
-        reviewer=decision.reviewer,
-        reviewed_at=decision.reviewed_at,
     )
 
 

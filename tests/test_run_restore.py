@@ -231,7 +231,7 @@ def test_a_reviewed_run_restores_through_its_queue_without_calling_the_model(
         run_service, "_run_in_background", lambda target, *args: target(*args))
     project_id = project_service.import_bundle_file(_SEED_BUNDLE).project_id
     run_id = _run_the_seeded_window(project_id)
-    approved = _approve_every_queued_row(project_id, run_id)
+    _approve_every_queued_row(project_id, run_id)
     run_service.resume(project_id, run_id)
     was_reported = run_service.read_stage_output(project_id, run_id, _REPORTING_STAGE)
     assert run_service.read_run_manifest(project_id, run_id).status == "ok"
@@ -245,9 +245,6 @@ def test_a_reviewed_run_restores_through_its_queue_without_calling_the_model(
     assert model.calls == 0
     assert run_service.read_run_manifest(
         restored.project_id, restored.run_id).parameters.limits == {_INPUT_STAGE: _WINDOW}
-    re_recorded = review.find_decisions_oldest_first(restored.project_id)
-    assert {one.reviewer for one in re_recorded} == {_SEEDED_BY}
-    assert len(re_recorded) == approved
     pd.testing.assert_frame_equal(
         run_service.read_stage_output(
             restored.project_id, restored.run_id, _REPORTING_STAGE),
@@ -270,7 +267,7 @@ def _bind_the_seed_filings(project_id: str) -> dict:
     return {_INPUT_STAGE: uploads.resolve_files_binding(project_id, stored)}
 
 
-def _approve_every_queued_row(project_id: str, run_id: str) -> int:
+def _approve_every_queued_row(project_id: str, run_id: str) -> None:
     """What the decide route does, minus the form: the received value back is an approve."""
     queued = _read_the_queue(project_id, run_id)
     for fingerprint, row in queued.rows_by_fingerprint.items():
@@ -287,7 +284,6 @@ def _approve_every_queued_row(project_id: str, run_id: str) -> int:
             workflow_run_id=run_id,
         )
     assert queued.rows_by_fingerprint
-    return len(queued.rows_by_fingerprint)
 
 
 @dataclass(frozen=True)

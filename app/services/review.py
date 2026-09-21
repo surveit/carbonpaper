@@ -69,12 +69,6 @@ def record_decision(
     )
 
 
-def find_decisions_oldest_first(project_id: str) -> list[ReviewDecision]:
-    """Re-recording them in this order leaves the same one latest per row."""
-    return sorted(
-        ReviewDecision.find(project=project_id), key=lambda one: one.created_at)
-
-
 def resolve_review_decisions(
     project_id: str, workflow: Workflow
 ) -> list[tuple[str, dict[str, JsonDict]]]:
