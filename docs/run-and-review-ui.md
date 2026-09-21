@@ -287,6 +287,17 @@ header names the stage, the row and the column; three tabs under it:
   cut to the figure's rows. Drag pans, the wheel zooms, Escape closes. The
   payload is `app.web.canvas_payload.CanvasView`, and the script reads
   `cited_stage`, `column`, `steps`, `nodes`, `edges` and `sheets`.
+  Over the canvas the same walk is **told as prose**
+  (`_supported_statement.html` ← `app.web.supported_statement_view`, built by
+  `app.models.supported_statement`): one clause per stage that narrowed the
+  population, changed what one row is, or put the rows in front of a person —
+  every other stage contributes no words. A regrain closes its paragraph and
+  the next one names its own noun, which is the stage's row type. Two counts
+  are printed, where the route starts and what it ends as; every other count is
+  a tooltip carrying the rows that went on and their share. A clause carries
+  `data-stage`, so clicking it opens the same drawer a box opens. Where no
+  `predicate` is authored on a filter or a queue the clause names the step
+  instead and says less; it never invents one.
 - **Input files** (`_input_files_panel.html` ← `app/web/routers/input_files.py`)
   — each source file the figure read, sliced to the rows and columns it used.
 
