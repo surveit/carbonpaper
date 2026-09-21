@@ -12,7 +12,6 @@ from app.models.supported_statement import (
     SupportedStatement,
     build_supported_statement,
 )
-from app.models.stage import Stage
 from app.models.workflow import resolve_row_type_ids
 from app.services import project as project_service
 from app.services import terms as terms_service
@@ -55,24 +54,25 @@ def _index_row_types(
     """The run's stages name the word; the project's terms hold what the word means."""
     declared = {row_type.id: row_type
                 for row_type in terms_service.load_terms(project_id).row_types}
-    written = [placed.stage for placed in stages.values()]
-    named = resolve_row_type_ids(written)
-    words = _read_the_words(named, declared)
+    words = _read_the_words(
+        resolve_row_type_ids([placed.stage for placed in stages.values()]), declared)
     if any(words.values()):
         return words, False
     # A version that named nothing would say "rows"; the hover says whose words these are.
-    later = _read_the_words(
-        resolve_row_type_ids(_name_as_the_project_does_now(project_id, written)), declared)
+    later = _read_the_words(_name_as_the_project_does_now(project_id, stages), declared)
     return later, any(later.values())
 
 
-def _name_as_the_project_does_now(project_id: str, written: list[Stage]) -> list[Stage]:
-    """Each stage of the run, carrying the row type the project's current version declares."""
+def _name_as_the_project_does_now(
+    project_id: str, stages: WorkflowStagesById
+) -> dict[StageId, Optional[str]]:
+    """This run's stages, resolved against the row types the project declares today."""
     now = {spec.get("id"): spec.get("row_type_id")
            for spec in project_service.load_stage_specs(project_id)}
-    return [stage if now.get(stage.id) is None
-            else stage.model_copy(update={"row_type_id": now[stage.id]})
-            for stage in written]
+    return resolve_row_type_ids([
+        placed.stage if now.get(sid) is None
+        else placed.stage.model_copy(update={"row_type_id": now[sid]})
+        for sid, placed in stages.items()])
 
 
 def _read_the_words(
