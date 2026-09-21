@@ -23,15 +23,6 @@
 {% set base = "/project/" ~ state.id ~ "/claims/" ~ page.claim_id %}
 {% set would_be_refused = page.universe == 'closed' and not page.run_read_everything %}
 
-<div class="sec-head">
-  <h1>The claim
-    <span class="status-chip {{ page.status }}">{{ "needs review" if page.status == 'submitted' else page.status }}</span>
-  </h1>
-  <p class="lede">A sentence this project proposes to publish, and every challenge the
-    reviewers raised against it. Each challenge cites the pieces of the run it rests on.
-    Nothing here changes the claim or the run: you approve it, edit it, or close it.</p>
-</div>
-
 <div class="claimcard">
 <p class="sentence">
   {%- for token in page.tokens -%}
