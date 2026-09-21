@@ -27,7 +27,7 @@ def tell_the_cited_figure(
     if cited_stage not in rows_by_stage:
         return None
     row_types = _index_row_types(project_id, stages)
-    walked = [sid for sid in _end_on_the_cited_stage(steps, cited_stage)
+    walked = [sid for sid in _place_the_cited_stage_last(steps, cited_stage)
               if sid in rows_by_stage and sid in stages]
     told = [FigureStep(stage=stages[sid], rows=_read_step_rows(rows_by_stage[sid]),
                        row_type=row_types.get(sid))
@@ -35,7 +35,7 @@ def tell_the_cited_figure(
     return build_supported_statement(told, column)
 
 
-def _end_on_the_cited_stage(steps: list[StageId], cited_stage: StageId) -> list[StageId]:
+def _place_the_cited_stage_last(steps: list[StageId], cited_stage: StageId) -> list[StageId]:
     """The walk reads to the figure and stops: a stage past it told these rows nothing."""
     others = [sid for sid in steps if sid != cited_stage]
     return others + [cited_stage]

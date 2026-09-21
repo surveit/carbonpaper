@@ -306,13 +306,13 @@ def _say_the_regrain(step: FigureStep, place: _Place) -> list[Phrase]:
     asserts = says_nothing_was_combined(step.stage)
     noun = _say_the_new_noun(step, place)
     if not noun:
-        return _lead_the_regrain(step, asserts) + [text_phrase(".")]
+        return _open_the_regrain(step, asserts) + [text_phrase(".")]
     joined = ", and becomes " if asserts else ", becoming "
-    return _lead_the_regrain(step, asserts) + [text_phrase(joined)] + noun + [
+    return _open_the_regrain(step, asserts) + [text_phrase(joined)] + noun + [
         text_phrase(".")]
 
 
-def _lead_the_regrain(step: FigureStep, asserts: bool) -> list[Phrase]:
+def _open_the_regrain(step: FigureStep, asserts: bool) -> list[Phrase]:
     per_key = say_and_list([_say_a_column(step, name)
                             for name in name_the_group_keys(step.stage)])
     if asserts:
