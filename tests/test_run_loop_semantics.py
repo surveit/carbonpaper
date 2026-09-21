@@ -15,13 +15,12 @@ from app.runtime.stages import llm_transform as lt
 from app.services import run as run_service
 from app.services.errors import WorkflowLoadError
 from app.services.loader import load_workflow
-from app.services.project import save_working_copy_as_version
 from app.services import workspace
 from conftest import (
     pinned_stages, queue_added_columns, queue_columns, resumed_stages,
     run_like_the_app,
 )
-from stage_seed import add_stage
+from stage_seed import add_stage, save_version
 from run_seed import read_manifest, store_manifest
 
 
@@ -39,7 +38,7 @@ _SCORED_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True},
 
 
 def _seed_version(root):
-    vid = save_working_copy_as_version(root.name, message="test seed").version_id
+    vid = save_version(root.name, message="test seed").version_id
     return vid
 
 
@@ -489,7 +488,7 @@ def test_resume_refuses_stages_belonging_to_another_version(tmp_path):
                           halted["run_id"], stages, "20990101T000000")
 
 
-def test_resume_reads_the_pinned_version_not_the_working_copy(tmp_path):
+def test_resume_reads_the_pinned_version_not_the_latest_stages(tmp_path):
     workspace.set_projects_dir(tmp_path)
     project_dir = tmp_path / "drifted_copy"
     _write_stage(project_dir, "01_load.json", _load_items_stage(project_dir))
@@ -499,8 +498,7 @@ def test_resume_reads_the_pinned_version_not_the_working_copy(tmp_path):
     halted = run_like_the_app(project_dir, *pinned_stages(project_dir))
     assert halted["status"] == "awaiting_review"
 
-    # Break the working copy AFTER the run pinned its version. The pinned
-    # snapshot is untouched, so the resume must still find loadable stages.
+    # Broken AFTER the run pinned: the snapshot resume reads is untouched.
     _write_stage(project_dir, "01_load.json", {"id": "load", "type": "input_data"})
     with pytest.raises(WorkflowLoadError):
         load_workflow(project_dir.name)

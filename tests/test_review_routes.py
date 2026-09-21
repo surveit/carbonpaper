@@ -24,7 +24,6 @@ import pyarrow as pa
 import app.web.routers.review as review_routes
 from app.core.frames import write_frame_table
 from app.core.stage_cache import StageCache, StageCacheEntry, compute_row_fingerprint
-from app.services.project import save_working_copy_as_version
 from app.models import WorkflowStage, parse_stage
 from app.models.stages.human_review_queue import ReviewVerdict
 from conftest import (
@@ -33,13 +32,13 @@ from conftest import (
     QUEUE_COLUMNS, pinned_stages, place_stage, queue_added_columns, queue_columns,
     reads_of,
 )
-from stage_seed import add_stage
+from stage_seed import add_stage, save_version
 
 PROJECT = "queue_route_journey"
 
 
 def _seed_version(root):
-    save_working_copy_as_version(root.name, message="test seed")
+    save_version(root.name, message="test seed")
 
 
 def _with_queue_signature(stage, input_columns):

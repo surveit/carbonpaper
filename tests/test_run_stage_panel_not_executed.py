@@ -14,10 +14,9 @@ from fastapi.testclient import TestClient
 import app.services.workspace as workspace
 from app.main import app
 from app.runtime.runner import execute_run
-from app.services import project as project_service
 from app.services.workflow_test import run_workflow_test
 from conftest import pinned_stages
-from stage_seed import add_stage
+from stage_seed import add_stage, save_version
 from run_seed import read_manifest
 
 client = TestClient(app)
@@ -57,7 +56,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     for index, stage in enumerate(_stages(data), start=1):
         add_stage(pdir, stage)
     workspace.set_projects_dir(tmp_path)
-    project_service.save_working_copy_as_version(pdir.name, message="v1")
+    save_version(pdir.name, message="v1")
     return pdir
 
 

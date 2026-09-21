@@ -258,10 +258,7 @@ async def run_stage_scratch_preview(
         except (TypeError, ValueError):
             continue
 
-    # This executes a stage against THIS run's rows and is read as "what that
-    # stage did here", so it runs the version the run pinned. With no resolvable
-    # version it refuses: executing the working copy would answer a question
-    # nobody asked, under the label of this run.
+    # Read as "what that stage did HERE", so an unresolvable version refuses.
     pinned = run_service.load_pinned_stage_def(project_id, manifest, stage_id)
     if pinned.error is not None:
         return JSONResponse({"ok": False, "error": pinned.error}, status_code=409)

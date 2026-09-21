@@ -12,10 +12,9 @@ from fastapi.testclient import TestClient
 from app.core.run_status import RunStatus, StageStatus
 from app.main import app
 from app.runtime.runner import execute_run
-from app.services.project import save_working_copy_as_version
 from app.services import workspace
 from conftest import pinned_stages
-from stage_seed import add_stage
+from stage_seed import add_stage, save_version
 from run_seed import manifest_text
 
 # The exact value sets, collected by grepping every `record["status"]` /
@@ -87,7 +86,7 @@ def _make_project(root) -> None:
 
 
 def _seed_and_publish(project_dir) -> None:
-    save_working_copy_as_version(project_dir.name, message="seed")
+    save_version(project_dir.name, message="seed")
 
 
 def test_a_real_run_produces_enum_statuses_that_round_trip_to_bare_strings(tmp_path) -> None:

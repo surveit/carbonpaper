@@ -17,7 +17,7 @@ from app.tools.submitted_stage import SubmittedStage
 from app.models.stage import StageEdit
 from app.services import drafts, workspace
 from app.services.project import ProjectListing
-from stage_seed import SEED_DRAFT, read_stages, set_stages
+from stage_seed import SEED_DRAFT, list_saved_version_ids, read_stages, set_stages
 
 HEADERS = {
     "Accept": "application/json, text/event-stream",
@@ -315,7 +315,7 @@ def test_mcp_stage_tools_report_an_unknown_stage_id_as_issues(tmp_path, monkeypa
 
 
 def test_a_draft_cannot_hold_a_stage_that_does_not_parse(tmp_path, monkeypatch):
-    """The working copy stored raw JSON and read it tolerantly; a draft's stages are typed."""
+    """A draft's stages are typed, so a spec that does not parse never reaches one."""
     from app.services import drafts
 
     workspace.set_projects_dir(tmp_path)
@@ -445,7 +445,7 @@ def test_add_stage_input_schema_omits_the_server_owned_fields(tmp_path, monkeypa
     assert not {"tests", "eval", "review", "source"} & set(defs["SubmittedStage"]["properties"])
 
 
-def test_mcp_save_version_snapshots_the_working_copy(tmp_path, monkeypatch):
+def test_mcp_save_version_snapshots_the_draft(tmp_path, monkeypatch):
     from app.mcp import server
     from app.services import versioning
 
@@ -457,8 +457,7 @@ def test_mcp_save_version_snapshots_the_working_copy(tmp_path, monkeypatch):
     saved = server.save_version(project_id=project_id, draft_id=SEED_DRAFT, message="first cut")
     assert saved.ok is True and saved.issues == []
 
-    [version] = versioning.list_versions(pdir.name)
-    assert saved.version_id == version.version_id
+    version = versioning.load_version(pdir.name, saved.version_id)
     assert version.message == "first cut"
     assert {s.id for s in version.stages} == {"load", "double", "untested"}
 
@@ -523,7 +522,6 @@ def test_mcp_save_version_override_carries_none_of_the_other_draft(tmp_path, mon
 
 def test_mcp_save_version_refuses_a_draft_that_is_not_a_whole_workflow(tmp_path, monkeypatch):
     from app.mcp import server
-    from app.services import versioning
 
     workspace.set_projects_dir(tmp_path)
     project_id = "trail"
@@ -538,7 +536,7 @@ def test_mcp_save_version_refuses_a_draft_that_is_not_a_whole_workflow(tmp_path,
     refused = server.save_version(project_id=project_id, draft_id=SEED_DRAFT, message="doomed")
     assert refused.ok is False and refused.issues
     assert refused.version_id is None
-    assert versioning.list_versions(pdir.name) == []
+    assert list_saved_version_ids(pdir) == []
 
 
 def test_mcp_save_version_refuses_to_invent_a_project(tmp_path, monkeypatch):

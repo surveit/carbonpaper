@@ -11,12 +11,11 @@ from fastapi.testclient import TestClient
 import app.services.run as run_service
 from app.main import app
 from app.services import workspace
-from app.services.project import save_working_copy_as_version
 from app.services.methodology import write_methodology
 from app.services.run_manifest_metadata import read_run_metadata, read_run_name
 from app.web.run_index import build_run_index_rows
 from run_seed import read_manifest, store_manifest
-from stage_seed import add_stage
+from stage_seed import add_stage, save_version
 
 client = TestClient(app)
 GOLDENS = Path(__file__).parent / "goldens"
@@ -99,7 +98,7 @@ def runnable_project(tmp_path: Path, monkeypatch):
                      "signature": {"form": "replaces", "produces": _ROWS_SCHEMA},
                      "connector": {"kind": "file",
                                    "params": {"path": str(data), "format": "csv"}}})
-    save_working_copy_as_version(proj.name, message="v1")
+    save_version(proj.name, message="v1")
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(run_service, "_run_in_background",
                         lambda target, *args: target(*args))

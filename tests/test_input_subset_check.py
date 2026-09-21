@@ -20,9 +20,8 @@ import pytest
 
 from app.services import run as run_service
 from app.services.scope import find_rows_reached_per_stage, read_run_branches
-from app.services.project import save_working_copy_as_version
 from scope_fixture import stage_specs, write_inputs
-from stage_seed import set_stages
+from stage_seed import save_version, set_stages
 
 PROJECT = "subset_check_fixture"
 SHEET_PROJECT = "subset_check_sheet"
@@ -34,7 +33,7 @@ def run_id(projects_root):
     data = projects_root / PROJECT / "data"
     write_inputs(data)
     set_stages(PROJECT, stage_specs(data))
-    save_working_copy_as_version(PROJECT, message="fixture")
+    save_version(PROJECT, message="fixture")
     return str(run_service.execute(PROJECT)["run_id"])
 
 
@@ -81,7 +80,7 @@ def sheet_run_id(projects_root):
     pd.DataFrame(SHEET, columns=["grant_id", "agency_code", "amount"]).to_excel(
         book, sheet_name="Sheet1", index=False)
     set_stages(SHEET_PROJECT, _sheet_stages(book))
-    save_working_copy_as_version(SHEET_PROJECT, message="fixture")
+    save_version(SHEET_PROJECT, message="fixture")
     return str(run_service.execute(SHEET_PROJECT)["run_id"])
 
 

@@ -10,11 +10,10 @@ from fastapi.testclient import TestClient
 import app.services.run as run_service
 from app.main import app
 from app.services import versioning
-from app.services import project as project_service
 from app.models.review_guide import ReviewGuideStep
 from app.models.records.review_guide import ReviewGuide
 from app.services import workspace
-from stage_seed import add_stage
+from stage_seed import add_stage, save_version
 
 client = TestClient(app)
 
@@ -48,7 +47,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def test_version_detail_renders_the_frozen_graph(project: Path) -> None:
-    meta = project_service.save_working_copy_as_version(project.name, message="v1")
+    meta = save_version(project.name, message="v1")
     page = client.get(f"/project/demo/workflow/version/{meta.version_id}")
     assert page.status_code == 200
     assert meta.version_id in page.text
@@ -60,7 +59,7 @@ def test_version_detail_renders_the_frozen_graph(project: Path) -> None:
 
 
 def test_version_detail_does_not_offer_to_generate_a_guide(project: Path) -> None:
-    meta = project_service.save_working_copy_as_version(project.name, message="v1")
+    meta = save_version(project.name, message="v1")
 
     page = client.get(f"/project/demo/workflow/version/{meta.version_id}")
 
@@ -68,7 +67,7 @@ def test_version_detail_does_not_offer_to_generate_a_guide(project: Path) -> Non
 
 
 def test_the_description_is_the_page_heading(project: Path) -> None:
-    meta = project_service.save_working_copy_as_version(project.name, message="Nine flat categories, no severity."
+    meta = save_version(project.name, message="Nine flat categories, no severity."
     )
 
     page = client.get(f"/project/demo/workflow/version/{meta.version_id}")
@@ -78,7 +77,7 @@ def test_the_description_is_the_page_heading(project: Path) -> None:
 
 
 def test_version_detail_says_when_no_description_was_written(project: Path) -> None:
-    meta = project_service.save_working_copy_as_version(project.name, message="")
+    meta = save_version(project.name, message="")
 
     page = client.get(f"/project/demo/workflow/version/{meta.version_id}")
 
@@ -100,7 +99,7 @@ def _save_covering_guide(project_dir: Path, version_id: str) -> None:
 
 
 def test_version_detail_drops_the_offer_once_a_guide_exists(project: Path) -> None:
-    meta = project_service.save_working_copy_as_version(project.name, message="v1")
+    meta = save_version(project.name, message="v1")
     _save_covering_guide(project, meta.version_id)
 
     page = client.get(f"/project/demo/workflow/version/{meta.version_id}")
@@ -113,7 +112,7 @@ def test_version_detail_404_for_unknown_version(project: Path) -> None:
 
 
 def test_run_this_version_opens_the_run_form_on_this_version(project: Path) -> None:
-    meta = project_service.save_working_copy_as_version(project.name, message="v1")
+    meta = save_version(project.name, message="v1")
     vid = meta.version_id
 
     page = client.get(f"/project/demo/workflow/version/{vid}")
@@ -128,7 +127,7 @@ def test_run_this_version_opens_the_run_form_on_this_version(project: Path) -> N
 
 
 def test_run_this_version_is_offered(project: Path) -> None:
-    meta = project_service.save_working_copy_as_version(project.name, message="v1")
+    meta = save_version(project.name, message="v1")
     vid = meta.version_id
     link = f'href="/project/demo/runs/new?version_id={vid}"'
 

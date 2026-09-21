@@ -22,7 +22,7 @@ def test_only_the_project_service_enumerates_project_records() -> None:
         "Project.list() hands back every stored project, private ones included. There is no "
         "listing that shows a private project — /admin is served without auth, so an "
         "operator-only view would be a public one — and this is how that stays true: "
-        f"{_SERVICE}'s list_project_listings walks the working copies and drops any whose "
+        f"{_SERVICE}'s list_project_listings walks the stored projects and drops any whose "
         "record is private, and list_projects wraps it. Call one of those, and a project "
         "deleted out of the workspace drops out for free:\n  " + "\n  ".join(offenders)
     )

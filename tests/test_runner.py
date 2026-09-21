@@ -2,6 +2,7 @@ from __future__ import annotations
 
 
 import pandas as pd
+import pydantic
 import pytest
 
 from app import cli
@@ -14,11 +15,9 @@ from app.runtime.executor import _raise_if_run_failed, execute_subset
 from app.models.records.run_manifest import RunManifest
 from app.runtime.trace import trace_row
 from app.runtime.stages import llm_transform as lt
-from app.services.loader import WorkflowLoadError
-from app.services.project import save_working_copy_as_version
 from app.services.versioning import list_versions
 from conftest import pinned_stages, resumed_stages
-from stage_seed import add_stage
+from stage_seed import add_stage, drop_versions, list_saved_version_ids, save_version
 from run_seed import read_manifest, store_manifest
 
 
@@ -32,7 +31,7 @@ _ID_TEXT_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True},
 
 
 def _seed_version(root):
-    return save_working_copy_as_version(root.name, message="test seed").version_id
+    return save_version(root.name, message="test seed").version_id
 
 
 def _make_project(root):
@@ -555,7 +554,8 @@ def test_raise_if_run_failed_lists_halted_stages_as_readable_text():
 
 
 def test_run_without_a_version_fails_loudly(tmp_path):
-    _make_project(tmp_path)  # valid working copy, but no version created
+    _make_project(tmp_path)
+    drop_versions(tmp_path)
     with pytest.raises(NoVersionToRunError):
         execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
     assert not (tmp_path / "runs").exists()
@@ -566,7 +566,7 @@ def test_the_newest_version_runs_even_when_an_older_one_is_the_published_one(tmp
     _make_project(tmp_path)
     _seed_version(tmp_path)
 
-    newer = save_working_copy_as_version(tmp_path.name, message="unpublished newer").version_id
+    newer = save_version(tmp_path.name, message="unpublished newer").version_id
 
     manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
     assert manifest["workflow_version"] == newer
@@ -575,7 +575,7 @@ def test_the_newest_version_runs_even_when_an_older_one_is_the_published_one(tmp
 
 def test_run_with_no_published_version_succeeds(tmp_path):
     _make_project(tmp_path)
-    vid = save_working_copy_as_version(tmp_path.name, message="unpublished").version_id
+    vid = save_version(tmp_path.name, message="unpublished").version_id
 
     manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
     assert manifest["workflow_version"] == vid
@@ -584,14 +584,14 @@ def test_run_with_no_published_version_succeeds(tmp_path):
 
 def test_run_with_explicit_unpublished_id_succeeds(tmp_path):
     _make_project(tmp_path)
-    unpublished_id = save_working_copy_as_version(tmp_path.name, message="unpublished").version_id
+    unpublished_id = save_version(tmp_path.name, message="unpublished").version_id
 
     manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path, unpublished_id))
     assert manifest["workflow_version"] == unpublished_id
     assert manifest["status"] == "ok"
 
 
-def test_create_version_rejects_invalid_working_copy(tmp_path):
+def test_create_version_rejects_invalid_stages(tmp_path):
     tmp_path.mkdir(parents=True, exist_ok=True)
     bad = {"id": "load", "description": "Load", "type": "input_data",
            "connector": {"kind": "file",
@@ -599,49 +599,10 @@ def test_create_version_rejects_invalid_working_copy(tmp_path):
            "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]}}
     add_stage(tmp_path, bad)
 
-    with pytest.raises(WorkflowLoadError) as exc:
-        save_working_copy_as_version(tmp_path.name, message="x")
-    assert any("params.path" in i for i in exc.value.issues)
-    assert list_versions(tmp_path.name) == []  # snapshotted nothing
-
-
-def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_path):
-    # Invalid working copy: file connector params.path is relative, not absolute.
-    tmp_path.mkdir(parents=True, exist_ok=True)
-    bad = {"id": "load", "description": "Load", "type": "input_data",
-           "connector": {"kind": "file",
-                         "params": {"path": "data/items.csv", "format": "csv"}},
-           "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]}}
-    add_stage(tmp_path, bad)
-
-    # You cannot make a version from it, and it writes nothing.
-    with pytest.raises(WorkflowLoadError):
-        save_working_copy_as_version(tmp_path.name, message="x")
-    assert list_versions(tmp_path.name) == []
-
-    # A run refuses (no version) and does NOT auto-create one — nothing on disk.
-    with pytest.raises(NoVersionToRunError):
-        execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
-    assert list_versions(tmp_path.name) == []
-    assert not (tmp_path / "runs").exists()
-
-    # Fix the working copy. A run STILL refuses until a version is created
-    # explicitly — it never silently pins to a stale snapshot (there is none).
-    (tmp_path / "data").mkdir(parents=True, exist_ok=True)
-    pd.DataFrame({"name": ["a"], "val": [1]}).to_csv(
-        tmp_path / "data" / "items.csv", index=False)
-    good = {"id": "load", "description": "Load", "type": "input_data",
-            "connector": {"kind": "file",
-                          "params": {"path": str(tmp_path / "data" / "items.csv"), "format": "csv"}},
-            "signature": {"form": "replaces", "produces": _NAME_VAL_SCHEMA["columns"]}}
-    add_stage(tmp_path, good)
-    with pytest.raises(NoVersionToRunError):
-        execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
-
-    # Explicit creation, then the run succeeds against that version.
-    _seed_version(tmp_path)
-    manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
-    assert manifest["status"] == "ok"
+    with pytest.raises(pydantic.ValidationError) as exc:
+        save_version(tmp_path.name, message="x")
+    assert "params.paths.0" in str(exc.value)
+    assert list_saved_version_ids(tmp_path) == []  # snapshotted nothing
 
 
 def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):

@@ -14,7 +14,7 @@ from app.core.files import list_project_files, save_upload
 from app.models import Stage, Workflow
 from app.models.review_guide import ReviewGuideDraft
 from app.models.stages.human_review_queue import HumanReviewQueueStage
-from app.services import project, run as run_service, uploads, versioning
+from app.services import project, run as run_service, uploads, versioning, workflow_summary
 from app.services.loader import load_workflow
 from app.services.project import WorkflowFile, import_project
 from app.tools.tutorial import (
@@ -122,7 +122,7 @@ def test_committed_fixture_imports_and_validates_cleanly(tmp_path):
     imported_name = import_project(wf, name="ai_lobbying_smoke")
     assert imported_name in project.list_projects()
 
-    summary = project.read_workflow_summary(imported_name)
+    summary = workflow_summary.read_workflow_summary(imported_name)
     assert summary.issues == []
     assert [stage.id for stage in summary.stages] == _EXPECTED_STAGE_IDS
 

@@ -13,7 +13,7 @@ from app.models import Column, StageType
 from app.models.stages.input_data import Connector, ConnectorKind, InputDataStage, FileConnectorParams, FileFormat
 from app.models.stages.signature import ReplacesSignature
 from app.services import loader, project
-from app.services.loader import save_stages
+from stage_seed import set_parsed_stages
 from app.services.stage_cache_transfer import (
     CacheArchiveRejected, StageImportCount, count_cached_entries, export_stage_cache,
     import_stage_cache,
@@ -163,7 +163,7 @@ def destination_project() -> str:
     """A real project with a real stage: reachability is measured against parsed stages."""
     project_id = project.create_project(
         "destination", "Trace the shell companies.", source="test").id
-    save_stages(project_id, [InputDataStage(
+    set_parsed_stages(project_id, [InputDataStage(
         id="load_entities", description="Load Entities", type=StageType.input_data,
         connector=Connector(kind=ConnectorKind.file,
                             params=FileConnectorParams(format=FileFormat.csv)),

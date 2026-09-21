@@ -242,8 +242,8 @@ but nothing compared what it produced to anything. **Staleness outranks the scor
 stale row's result cell reads `stale` and carries no figure, since the figure is a verdict
 on code that has moved — the version it did score is its own column. Which version counts
 as current differs by surface: a run panel uses the version THAT RUN pinned (exact), the
-node panel the latest stored version (the test `eval_status` already applies, since a
-working copy is not a version). A step no eval targets renders nothing.
+node panel the latest stored version (the test `eval_status` already applies). A step
+no eval targets renders nothing.
 
 ## Live progress + the stage simulator
 `POST /project/<m>/run` → `prepare_run` (initial `running` manifest) → background thread →
@@ -267,6 +267,6 @@ handler **in memory** and persists nothing; refused for `report`/`human_review_q
 
 Every stage definition a run page shows or executes (panel, lineage panel, simulator)
 comes from the version the run pinned, via `services.run.load_pinned_stage_def` /
-`load_run_workflow` — never the working copy.
+`load_run_workflow` — never the project's newest.
 Unresolvable version → the panels show a stated reason in place of the definition and the
-in-memory re-run returns 409 rather than executing the working copy.
+in-memory re-run returns 409 rather than executing some other version.

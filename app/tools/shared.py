@@ -6,7 +6,7 @@ context, and app.tools.tool_specs holds nothing of it but the description.
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, Callable
 
 from pydantic import BaseModel
 
@@ -164,6 +164,14 @@ class EditedStages(BaseModel):
     edited: list[str]
     issues: list[str]
     warnings: list[str] = []
+
+
+def catch_stage_edit_refusals(edit: Callable[[], EditedStages]) -> EditedStages:
+    """A workflow too broken to load is an issue the caller can read, not a transport error."""
+    try:
+        return edit()
+    except STAGE_TOOL_ERRORS as exc:
+        return EditedStages(ok=False, edited=[], issues=[str(exc)])
 
 
 class StoredFileView(BaseModel):

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from app.core.paths import CARBON_PAPER_HOME
-from app.services import workspace
+from app.services import workflow_summary, workspace
 from stage_seed import add_stage
 
 
@@ -49,7 +49,7 @@ def test_workflow_summary_reports_ids_types_and_inputs(tmp_path: Path) -> None:
     pdir = tmp_path / "alpha"
     _write_stage(pdir, 1, "load", "input_data", [])
     _write_stage(pdir, 2, "score", "llm_transform", ["load"])
-    summary = workspace.project_workflow_summary(pdir.name)
+    summary = workflow_summary.project_workflow_summary(pdir.name)
     assert summary.name == "alpha"
     by_id = {s.id: s for s in summary.stages}
     assert by_id["score"].type == "llm_transform"

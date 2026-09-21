@@ -63,8 +63,8 @@ runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data
   both (`WorkflowFile`, `app/services/project.py`). `named_schemas.py` — named schemas +
   FK `references`. `eval.py` — `EvalConfig` + grain-preservation gate. `table.py` — `TableRef`.
 
-**Loading is normalizing + strict.** Stages persist in the project's `working_copy`
-document, one validated `Stage` per entry; `app/services/loader.py` is the one loader — the
+**Loading is normalizing + strict.** A project's stages are its newest
+`workflow_version`'s; `app/services/loader.py` is the one loader — the
 runner refuses a workflow with an invalid stage (`WorkflowLoadError`), the viewer (same
 loader) renders per-stage issues. Typed `Stage` objects flow end-to-end.
 
@@ -72,7 +72,7 @@ loader) renders per-stage issues. Typed `Stage` objects flow end-to-end.
 `runner.py` — `execute_run`/`prepare_run`/`run_prepared`/`resume_run`, each taking the
 version the run pins as a `Workflow`. The runner reads no versions: the caller resolves one
 (`app/services/versioning.py: resolve_version_id`, defaulting to the newest STORED version,
-published or not — never the working copy, never a draft), loads its frozen stages and
+published or not — never a draft), loads its frozen stages and
 hands them in. A run's per-stage connector bindings are merged by
 `Workflow.apply_run_bindings`, which rebuilds the workflow rather than letting the runner
 hold bare stages. `app/services/run.py` is the one place that composes this, and an
@@ -128,7 +128,7 @@ its `ReviewGuide`).
 Both submit through `submit_answer`, so a schema-invalid reply is **re-asked inside
 the agent's own loop**, not just parse-checked. `app/services/generation.py` drives them
 and persists what comes back. The guide author is given the version's stages and no tool
-that reads a project, so it cannot narrate the working copy the version was cut from.
+that reads a project, so it cannot narrate anything the version does not carry.
 Workflow stages are authored through `app/services/stage_edit.py`, a batch at a time,
 validated together.
 
@@ -145,7 +145,7 @@ lists every version newest-first, `/workflow/version/{id}` is one immutable vers
 read-only detail with Publish/Run-this-version; the mutable editor stays at `/workflow`),
 `runs.py` (trigger/list/detail/status-poll, rows + CSV, scratch preview, resume, plus
 running one specific pinned version), `review.py` (review queue), `node.py` (the per-node
-panel + spec editing + version creation + publish — the only writer to the working copy),
+panel + spec editing + publish; a spec edit saves a version through `drafts.save_version`),
 `guide.py` (`POST /workflow/version/{id}/guide` — starts review-guide authoring for one
 version, watched through node.py's generation-session status endpoint).
 `web/{config,loading,diagrams}.py` — paths + Jinja · viewer reads over the loader ·
@@ -157,9 +157,9 @@ pages draw.
 Everything a run page states about the workflow — its graph, each
 stage's source and schemas, the lineage panel, and the scratch re-run's handler — is read
 from the version its manifest pinned to (`run.load_run_workflow` /
-`run.load_pinned_stage_def` in `app/services/`), never from the working copy; a manifest naming no resolvable version raises
-`RunVersionUnresolvableError`, and the page shows an unavailable notice instead of the
-working copy while the scratch re-run refuses to execute (409).
+`run.load_pinned_stage_def` in `app/services/`), never from the project's newest; a manifest
+naming no resolvable version raises `RunVersionUnresolvableError`, and the page shows an
+unavailable notice while the scratch re-run refuses to execute (409).
 
 ## `app/services/` — web-independent workflow logic
 `run.py` (the production run seam — start/execute/resume/status, and the only module that

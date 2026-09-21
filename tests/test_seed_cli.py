@@ -37,10 +37,10 @@ def test_seed_cli_subprocess_bootstraps_the_store_and_seeds(tmp_path):
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
     assert f"imported: {_TUTORIAL}" in result.stdout
-    # The subprocess has its own store; read the working copies straight out of it.
+    # The subprocess has its own store; read the versions straight out of it.
     with sqlite3.connect(tmp_path / "app.db") as connection:
         stored = connection.execute(
-            "SELECT id FROM documents WHERE collection='working_copy'").fetchall()
+            "SELECT id FROM documents WHERE collection='workflow_version'").fetchall()
     assert stored
 
 

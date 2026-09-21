@@ -67,6 +67,9 @@ def _write_one_stage_project(examples_dir: Path) -> None:
     (proj_dir / "data").mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"name": ["a"], "val": [1]}).to_csv(proj_dir / "data" / "items.csv", index=False)
     stage = {"id": "load", "description": "Load items", "type": "input_data",
+             "signature": {"form": "replaces", "produces": [
+                 {"name": "name", "type": "str", "nullable": True},
+                 {"name": "val", "type": "int", "nullable": True}]},
              "connector": {"kind": "file",
                            "params": {"path": str(proj_dir / "data" / "items.csv"), "format": "csv"}}}
     add_stage(proj_dir, stage)

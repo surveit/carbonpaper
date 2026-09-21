@@ -1,8 +1,4 @@
-"""Load + save for a project's WORKING COPY — its mutable list of stages.
-
-One `working_copy` document per project, keyed by project name. This module is
-the ONE place that reaches the store for it: nothing else names the collection.
-"""
+"""A project's stages: its newest version's, parsed one spec at a time. Nothing writes."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -10,15 +6,14 @@ from datetime import datetime
 
 from pydantic import ValidationError
 
-from app.core.errors import DocumentNotFound
 from app.core.timestamp_ids import read_orderable_stamp
 from app.core.json_types import JsonDict
 from app.models.stage import Stage, parse_stage, stage_to_spec_dict
 from app.models.workflow import Workflow, validate_workflow
-from app.models.records.working_copy import WorkingCopy
 from app.core.utils import format_errors
 
 from .errors import WorkflowLoadError
+from .versioning import read_latest_version_raw
 
 
 @dataclass
@@ -41,9 +36,9 @@ def find_parsed_stage(entries: list[StageEntry], stage_id: str) -> Stage | None:
     return next((s for s in list_parsed_stages(entries) if s.id == stage_id), None)
 
 
-def exists(project_id: str) -> bool:
-    """Whether a working copy is stored; says nothing about whether it validates."""
-    return WorkingCopy.exists(project_id)
+def has_stages(project_id: str) -> bool:
+    """Whether any version is stored; says nothing about whether its stages validate."""
+    return read_latest_version_raw(project_id) is not None
 
 
 def load_stage_entries(project_id: str) -> list[StageEntry]:
@@ -59,7 +54,7 @@ def load_stage_entries(project_id: str) -> list[StageEntry]:
 
 
 def load_workflow_object(project_id: str) -> Workflow:
-    """Strict: raises WorkflowLoadError on an empty or invalid working copy."""
+    """Strict: raises WorkflowLoadError when a project has no stages, or invalid ones."""
     entries = load_stage_entries(project_id)
     issues = find_file_issues(entries)
     if not entries:
@@ -67,7 +62,7 @@ def load_workflow_object(project_id: str) -> Workflow:
     stages = list_parsed_stages(entries)
     issues += validate_workflow(stages)
     if issues:
-        raise WorkflowLoadError(f"project {project_id!r} working copy", issues)
+        raise WorkflowLoadError(f"project {project_id!r} stages", issues)
     return Workflow(stages=stages)
 
 
@@ -75,40 +70,21 @@ def load_workflow(project_id: str) -> list[Stage]:
     return load_workflow_object(project_id).stages
 
 
-# ─── Raw specs & save ────────────────────────────────────────────────────────
+# ─── Raw specs ───────────────────────────────────────────────────────────────
 
 def read_stage_specs(project_id: str) -> list[JsonDict]:
-    """The stored stage specs, unvalidated and in order; [] when unstored."""
-    try:
-        # Strict `read`: an ABSENT working copy is a real empty answer, but an
-        # unparseable one is corruption and must raise rather than read as empty
-        # and let an edit build on a workflow it never saw.
-        document = WorkingCopy.load_raw(project_id)
-    except DocumentNotFound:
+    """The newest version's stage specs, unvalidated and in order; [] when unversioned."""
+    document = read_latest_version_raw(project_id)
+    if document is None:
         return []
     stages = document.get("stages")
     return [s for s in stages if isinstance(s, dict)] if isinstance(stages, list) else []
 
 
-def read_working_copy_edited_at(project_id: str) -> datetime | None:
-    """When the stages were last SAVED; None for a project that has never had any."""
-    raw = WorkingCopy.load_raw_or_none(project_id)
-    return None if raw is None else read_orderable_stamp(raw.get("updated_at"))
-
-
-def save_stages(project_id: str, stages: list[Stage]) -> None:
-    """A whole-list write, so a removal leaves nothing behind."""
-    stored = WorkingCopy.load_or_none(project_id)
-    # A fresh record, not a mutated one: `.stages` is never assigned from outside
-    # app/models (tests/arch/test_model_encapsulation.py). `created_at` carries
-    # forward so it keeps meaning first-authored.
-    born = {"created_at": stored.created_at} if stored is not None else {}
-    WorkingCopy(id=project_id, stages=stages, **born).save()
-
-
-def save_stage_specs(project_id: str, specs: list[JsonDict]) -> None:
-    """Raises `pydantic.ValidationError` if any spec is not a stage."""
-    save_stages(project_id, [parse_stage(spec) for spec in specs])
+def read_stages_edited_at(project_id: str) -> datetime | None:
+    """When the newest version was saved; None for a project that has never had stages."""
+    document = read_latest_version_raw(project_id)
+    return None if document is None else read_orderable_stamp(document.get("created_at"))
 
 
 def index_stage_specs_by_id(project_id: str) -> dict[str, JsonDict]:

@@ -5,10 +5,9 @@ import pytest
 
 from app.models.citations import StageOutputCellCitation
 from app.services import run as run_service
-from app.services.project import save_working_copy_as_version
 from app.web.input_files_view import load_input_files
 from scope_fixture import stage_specs, write_inputs
-from stage_seed import set_stages
+from stage_seed import save_version, set_stages
 
 PROJECT = "input_files_fixture"
 
@@ -18,7 +17,7 @@ def run_id(projects_root):
     data = projects_root / PROJECT / "data"
     write_inputs(data)
     set_stages(PROJECT, stage_specs(data))
-    save_working_copy_as_version(PROJECT, message="fixture")
+    save_version(PROJECT, message="fixture")
     return str(run_service.execute(PROJECT)["run_id"])
 
 

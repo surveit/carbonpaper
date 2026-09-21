@@ -17,13 +17,12 @@ from app.services.scope import (
     find_contributing_rows,
     measure_frame_scale,
 )
-from app.services.project import save_working_copy_as_version
 from app.services.run import read_pinned_version
 from app.services.versioning import load_version_stages
 from app.services.workspace import resolve_run_dir
 from app.models.workflow import Workflow
 from scope_fixture import stage_specs, write_inputs
-from stage_seed import set_stages
+from stage_seed import save_version, set_stages
 
 PROJECT = "scope_fixture"
 
@@ -33,7 +32,7 @@ def scoped(projects_root):
     data = projects_root / PROJECT / "data"
     write_inputs(data)
     set_stages(PROJECT, stage_specs(data))
-    save_working_copy_as_version(PROJECT, message="fixture")
+    save_version(PROJECT, message="fixture")
     run_id = str(run_service.execute(PROJECT)["run_id"])
     return _read(run_id), run_id
 

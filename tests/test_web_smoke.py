@@ -183,7 +183,7 @@ def test_versions_page_uses_the_project_shell():
     assert r.status_code == 200
     html = r.text
     assert 'class="app-side-nav"' in html          # the shell sidebar is present
-    assert 'href="/project/demo/workflow"' in html  # sibling nav renders
+    assert 'href="/project/demo/runs"' in html     # sibling nav renders
 
 
 def test_nav_zero_lands_the_shell_collapsed():
@@ -267,8 +267,7 @@ def test_cmdk_palette_sends_a_stage_to_the_run_being_read(demo_project, monkeypa
     rows = client.get("/cmdk_palette/index",
                       params={"project_id": "demo", "run": "20260813T090000"}).json()["rows"]
     stages = [row for row in rows if row["kind"] == "stage"]
-    # The RUN's stages, not the working copy's: `gone` is only in the run, and
-    # `extract` is only in the working copy.
+    # The RUN's stages: `gone` is only in the run, `extract` only in the latest.
     assert [row["label"] for row in stages] == ["load", "gone"]
     assert stages[0]["href"] == "/project/demo/runs/20260813T090000#load"
     assert stages[0]["meta"] == "done"

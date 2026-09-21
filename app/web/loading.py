@@ -30,16 +30,15 @@ from app.models.records.run_manifest import RunManifest
 from app.services.run import resolve_version
 from app.services.loader import (
     StageEntry,
-    exists as has_working_copy,
+    has_stages,
     find_file_issues,
     list_parsed_stages,
     load_stage_entries,
     read_stage_specs,
-    read_working_copy_edited_at,
+    read_stages_edited_at,
 )
 from app.services.errors import WorkflowLoadError
 from app.services.versioning import (
-    find_latest_version_id,
     list_versions,
     load_version_stages,
 )
@@ -73,8 +72,8 @@ def _rank_by_recency(card: ProjectCard) -> tuple[bool, datetime]:
 
 
 def _build_project_card(project_id: str) -> ProjectCard | None:
-    n_stages = len(read_stage_specs(project_id))
-    has_workflow = n_stages > 0
+    n_stages = _count_stored_stages(project_id)
+    has_workflow = bool(n_stages)
     n_schemas = count_schemas(project_id)
     has_schemas = n_schemas > 0
     runs = read_run_summary(project_id)
@@ -89,11 +88,12 @@ def _build_project_card(project_id: str) -> ProjectCard | None:
         has_workflow=has_workflow,
         has_schemas=has_schemas,
         is_ready=bool(n_versions),
-        n_stages=n_stages,
+        n_stages=n_stages or 0,
         n_schemas=n_schemas,
         n_runs=runs.real,
         n_test_runs=runs.tests,
-        status=runs.headline if n_versions is not None else ProjectStatus.UNREADABLE,
+        status=(runs.headline if n_versions is not None and n_stages is not None
+                else ProjectStatus.UNREADABLE),
         last_activity=_read_last_activity(project_id, runs),
     )
 
@@ -101,9 +101,25 @@ def _build_project_card(project_id: str) -> ProjectCard | None:
 def _read_last_activity(project_id: str, runs: RunSummary) -> datetime | None:
     """Three records touch a project, and each is blind to the other two."""
     stamps = [runs.latest_start,
-              read_working_copy_edited_at(project_id),
+              _read_stages_edited_at_or_none(project_id),
               read_project_edited_at(project_id)]
     return max((s for s in stamps if s is not None), default=None)
+
+
+def _read_stages_edited_at_or_none(project_id: str) -> datetime | None:
+    # An unreadable snapshot still has the other two stamps to date the project by.
+    try:
+        return read_stages_edited_at(project_id)
+    except WorkflowLoadError:
+        return None
+
+
+def _count_stored_stages(project_id: str) -> int | None:
+    # None: the newest snapshot is not one, so no count is knowable here.
+    try:
+        return len(read_stage_specs(project_id))
+    except WorkflowLoadError:
+        return None
 
 
 def _count_stored_versions(project_id: str) -> int | None:
@@ -118,14 +134,13 @@ def _count_stored_versions(project_id: str) -> int | None:
 class StageListing:
     """All-or-nothing: one invalid stage empties `entries`, and `issues` names the broken ones."""
     entries: list[StageEntry]
-    # A working copy mid-edit often forms no workflow; `WorkflowNotFormed` says why,
-    # so no reader has to hold a reason beside a missing one.
+    # `WorkflowNotFormed` says WHY none formed, beside no missing value.
     workflow: Workflow | WorkflowNotFormed
     issues: list[StageEntry]
 
 
 def load_stages(project_id: str) -> StageListing:
-    if not has_working_copy(project_id):
+    if not has_stages(project_id):
         raise HTTPException(status_code=404, detail=f"No workflow for {project_id}")
     entries = load_stage_entries(project_id)
     issues = [e for e in entries if e.issues]
@@ -145,26 +160,12 @@ def load_stages(project_id: str) -> StageListing:
 
 
 def load_stages_or_empty(project_id: str) -> StageListing:
-    if not has_working_copy(project_id):
+    if not has_stages(project_id):
         return StageListing(
             entries=[],
             workflow=WorkflowNotFormed(issues=["the project has no stages yet"]),
             issues=[])
     return load_stages(project_id)
-
-
-def load_workflow_or_latest_version(project_id: str) -> Workflow | WorkflowNotFormed:
-    """A project authored by script has versions and no working copy; judge that by its latest."""
-    if has_working_copy(project_id):
-        return load_stages(project_id).workflow
-    version_id = find_latest_version_id(project_id)
-    if version_id is None:
-        return WorkflowNotFormed(issues=["the project has no stages yet"])
-    try:
-        stages = load_version_stages(project_id, version_id)
-    except (FileNotFoundError, ValueError) as exc:
-        return WorkflowNotFormed(issues=[f"version '{version_id}' will not load: {exc}"])
-    return build_workflow(stages)
 
 
 def find_workflow_stage(

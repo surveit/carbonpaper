@@ -1,4 +1,4 @@
-"""Create a project's working copy and its record together, as create_project does."""
+"""Create a project's stages and its record together, as create_project does."""
 from __future__ import annotations
 
 from pathlib import Path

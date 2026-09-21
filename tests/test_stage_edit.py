@@ -250,7 +250,7 @@ _FIRST_STAGE = {"id": "load", "description": "Load", "type": "input_data",
 
 
 def _seed_empty(tmp_path: Path) -> str:
-    """A stored working copy holding no stages — before its first stage is added."""
+    """A stored draft holding no stages — before its first stage is added."""
     set_stages("gamma", [])
     return "gamma"
 

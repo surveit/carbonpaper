@@ -133,7 +133,7 @@ def build_run_stage_panel(
         llm_example=build_llm_example(pinned.workflow_stage, input_previews),
         test_views=(views := shape_test_views(pinned.workflow_stage)),
         certification=build_certification(pinned.workflow_stage, views),
-        # Judged against the version THIS run pinned, never the working copy.
+        # Judged against the version THIS run pinned, never the project's newest.
         eval_coverages=find_eval_coverages(
             project_id, stage_id, manifest.get("workflow_version")),
         previewable=stage_def is not None and stage_def.type in PREVIEWABLE_TYPES,

@@ -11,7 +11,7 @@ from app.runtime.stages import HANDLERS
 from conftest import (
     as_inputs, contribution_of, make_run_context, pinned_stages, place_stage, rows_of,
 )
-from stage_seed import add_stage
+from stage_seed import add_stage, save_version
 
 
 def test_summed_adds_fields_and_counts_calls():
@@ -93,8 +93,7 @@ def test_row_usage_sums_across_rows_into_ctx(monkeypatch):
 def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
 
     from app.runtime.runner import execute_run
-    from app.services.project import save_working_copy_as_version
-
+    
     monkeypatch.setattr(lt, "call_llm", _fake_call_llm(
         {"score": 5}, LlmUsage(input_tokens=10, output_tokens=4, cost_usd=0.001, calls=1)))
 
@@ -127,7 +126,7 @@ def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
                 "llm": {"prompt_template": "{text}"}}
     add_stage(tmp_path, load)
     add_stage(tmp_path, classify)
-    save_working_copy_as_version(tmp_path.name, message="seed")
+    save_version(tmp_path.name, message="seed")
 
     manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
 

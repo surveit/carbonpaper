@@ -34,11 +34,7 @@ from app.web.eval_run_view import (
     build_eval_run_rows,
     describe_eval_run_duration,
 )
-from app.web.loading import (
-    load_stages_or_empty,
-    load_workflow_or_latest_version,
-    render_frame_as_text,
-)
+from app.web.loading import load_stages_or_empty, render_frame_as_text
 from app.web.project_view import shell_state, validate_project_or_404
 from app.runtime.run_log import count_events
 from app.web.run_events import (
@@ -66,8 +62,7 @@ def evals_index(request: Request, project_id: str):
         {
             "state": shell_state(project_id, "evals"),
             "section": "evals",
-            "evals": _build_eval_index_rows(
-                project_id, load_workflow_or_latest_version(project_id)),
+            "evals": _build_eval_index_rows(project_id, listing.workflow),
             "load_issues": listing.issues,
         },
     )
@@ -102,7 +97,8 @@ def eval_detail(request: Request, project_id: str, eval_id: str):
 def _render_eval_detail(
     request: Request, project_id: str, config: EvalConfig
 ) -> HTMLResponse:
-    report = _report_compatibility(config, load_workflow_or_latest_version(project_id))
+    listing = load_stages_or_empty(project_id)
+    report = _report_compatibility(config, listing.workflow)
     runs, runs_error = _list_eval_runs_safely(project_id, config.eval_id)
     latest_version = latest_version_id(project_id)
     status = ("broken" if runs_error else

@@ -12,13 +12,12 @@ from app.models.citations import StageOutputCellCitation
 from app.models.workflow import Workflow
 from app.runtime.branch_analysis import group_rows_by_path, reconstruct_run_branches
 from app.runtime.manifest import read_run_manifest
-from app.services.project import save_working_copy_as_version
 from app.services.run import read_pinned_version
 from app.services.scope import find_contributing_rows, find_stages_on_route
 from app.services.versioning import load_version_stages
 from app.services.workspace import resolve_run_dir
 from app.web.merge_alias import find_branches_that_tell_rows_apart
-from stage_seed import set_stages
+from stage_seed import save_version, set_stages
 
 PROJECT = "sales_by_region"
 
@@ -131,7 +130,7 @@ def scoped(projects_root):
     pd.DataFrame(SALES, columns=["region", "amount"]).to_csv(
         data / "sales.csv", index=False)
     set_stages(PROJECT, stage_specs(data))
-    save_working_copy_as_version(PROJECT, message="fixture")
+    save_version(PROJECT, message="fixture")
     run_id = str(run_service.execute(PROJECT)["run_id"])
     manifest = read_run_manifest(PROJECT, run_id).to_dict()
     order = [record["stage_id"] for record in manifest["stage_records"]]

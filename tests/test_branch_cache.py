@@ -15,14 +15,13 @@ from app.runtime.branch_analysis import (
     reconstruct_run_branches,
 )
 from app.runtime.manifest import read_run_manifest
-from app.services.project import save_working_copy_as_version
 from app.services.run import read_pinned_version
 from app.services.versioning import load_version_stages
 from app.services.scope import read_run_branches
 from app.services.workspace import resolve_run_dir
 from app.web.row_paths import CitedFigure, find_paths_behind_figure
 from scope_fixture import stage_specs, write_inputs
-from stage_seed import set_stages
+from stage_seed import save_version, set_stages
 
 PROJECT = "scope_fixture"
 _TRANSPORT = 1
@@ -33,7 +32,7 @@ def run_facts(projects_root):
     data = projects_root / PROJECT / "data"
     write_inputs(data)
     set_stages(PROJECT, stage_specs(data))
-    save_working_copy_as_version(PROJECT, message="fixture")
+    save_version(PROJECT, message="fixture")
     run_id = str(run_service.execute(PROJECT)["run_id"])
     manifest = read_run_manifest(PROJECT, run_id).to_dict()
     order = [r["stage_id"] for r in manifest["stage_records"]]
@@ -140,7 +139,7 @@ def test_a_finished_run_leaves_the_analysis_kept(projects_root):
     data = projects_root / PROJECT / "data"
     write_inputs(data)
     set_stages(PROJECT, stage_specs(data))
-    save_working_copy_as_version(PROJECT, message="fixture")
+    save_version(PROJECT, message="fixture")
     run_id = str(run_service.execute(PROJECT)["run_id"])
 
     assert (resolve_run_dir(PROJECT, run_id) / "branches").exists()
@@ -150,7 +149,7 @@ def test_the_reader_takes_what_the_run_kept_without_working_it_out(projects_root
     data = projects_root / PROJECT / "data"
     write_inputs(data)
     set_stages(PROJECT, stage_specs(data))
-    save_working_copy_as_version(PROJECT, message="fixture")
+    save_version(PROJECT, message="fixture")
     run_id = str(run_service.execute(PROJECT)["run_id"])
 
     def refuse(*args, **kwargs):

@@ -7,9 +7,8 @@ from app.models.records.claims import Claim
 from app.models.records.workflow_output import WorkflowOutput
 from app.services import claim_shapes, claims
 from app.services import run as run_service
-from app.services.project import save_working_copy_as_version
 from scope_fixture import column, stage_specs, write_inputs
-from stage_seed import set_stages
+from stage_seed import save_version, set_stages
 
 PROJECT = "scope_fixture"
 TOTAL_TEXT = "Grants came to 2,200 in total."
@@ -25,7 +24,7 @@ def run_the_fixture(projects_root) -> str:
     data = projects_root / PROJECT / "data"
     write_inputs(data)
     set_stages(PROJECT, add_a_sandboxed_filter(stage_specs(data)))
-    save_working_copy_as_version(PROJECT, message="fixture")
+    save_version(PROJECT, message="fixture")
     return str(run_service.execute(PROJECT)["run_id"])
 
 
@@ -66,7 +65,7 @@ def claim_a_nullable_figure(projects_root) -> Claim:
     data.mkdir(parents=True, exist_ok=True)
     (data / "amounts.csv").write_text("name,amount\nA,11000\nB,1\nC,1100\n", encoding="utf-8")
     set_stages(NULLABLE_PROJECT, _nullable_stage_specs(data))
-    save_working_copy_as_version(NULLABLE_PROJECT, message="fixture")
+    save_version(NULLABLE_PROJECT, message="fixture")
     run_id = str(run_service.execute(NULLABLE_PROJECT)["run_id"])
     [shape] = claim_shapes.write_claim_shapes(NULLABLE_PROJECT, [TOTAL_SHAPE])
     for slug, row_ordinal, value, shape_id in [("doubled-large", 0, 22000, shape.id),

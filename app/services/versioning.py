@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from app.core.errors import DocumentNotFound, NoVersionToRunError, ReviewGuideValidationError
+from app.core.json_types import JsonDict
 from app.core.timestamp_ids import mint_timestamp_id
 from app.models import Stage
 from app.models.workflow import find_stages_reaching_report, parse_workflow
@@ -185,9 +186,27 @@ def list_versions(project_id: str) -> list[WorkflowVersion]:
     return versions
 
 
+def read_latest_version_raw(project_id: str) -> JsonDict | None:
+    """The stages are left unparsed: a stale spec is one issue to report, not a dead page."""
+    version_id = find_latest_version_id(project_id)
+    if version_id is None:
+        return None
+    doc_id = f"{project_id}/{version_id}"
+    document = WorkflowVersion.load_raw(doc_id)
+    if not isinstance(document.get("stages"), list):
+        # [] here would read as the survivable "this project has no stages".
+        raise WorkflowLoadError(
+            f"version document {doc_id}", ["holds no `stages` list"])
+    return document
+
+
 def find_latest_version_id(project_id: str) -> str | None:
-    versions = list_versions(project_id)  # newest-first
-    return versions[0].version_id if versions else None
+    """Ids only: which snapshot is newest does not depend on whether it still parses."""
+    doc_ids = WorkflowVersion.list_ids(f"{project_id}/")
+    if not doc_ids:
+        return None
+    # Version ids are strftime timestamps, so the highest doc_id is the newest.
+    return max(doc_ids).split("/", 1)[1]
 
 
 def resolve_version_id(project_id: str, version_id: str | None) -> str:
@@ -200,9 +219,7 @@ def resolve_version_id(project_id: str, version_id: str | None) -> str:
 
     latest = find_latest_version_id(project_id)
     if latest is None:
-        # Never immortalise the working copy as a version to have something to run —
-        # that is what let an invalid working copy poison "the latest" and fail every
-        # subsequent run.
+        # A minted-to-run version poisons "the latest" for every run after it.
         raise NoVersionToRunError(
             f"No version to run for '{project_id}'. A run executes a stored "
             f"version and never creates one — save a version first."

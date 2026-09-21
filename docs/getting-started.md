@@ -55,7 +55,7 @@ every git worktree reads and writes the one store:
 |---|---|
 | `app.db` | The document store: projects, workflow versions, runs, chats. |
 | `frames/` | Stage outputs, as parquet. |
-| `examples/` | The project working copies. |
+| `examples/` | A project's own files. |
 | `files/` | Uploaded input data, one directory per record, named by the record's id. |
 
 `./start` runs `alembic upgrade head` on every boot, which is what keeps that

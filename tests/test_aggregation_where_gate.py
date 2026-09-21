@@ -105,7 +105,7 @@ def test_a_stage_of_another_type_is_never_looked_at():
         {"id": "x", "type": "union", "aggregate": "not a block"}) == []
 
 
-def test_the_writer_refuses_it_so_no_working_copy_can_acquire_one():
+def test_the_writer_refuses_it_so_no_draft_can_acquire_one():
     start_draft("p1")
     assert stage_edit.add_stage_spec("p1", SEED_DRAFT, json.dumps(source_stage("filings", _READ))).ok
     result = stage_edit.add_stage_spec("p1", SEED_DRAFT, json.dumps(_WHERE_STAGE))

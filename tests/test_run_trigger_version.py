@@ -10,12 +10,11 @@ from fastapi.testclient import TestClient
 import app.services.run as run_service
 from app.services import workspace
 from app.main import app
-from app.services.project import save_working_copy_as_version
 from app.services.versioning import (
     create_version_from_stages,
     list_versions,
 )
-from stage_seed import add_stage, set_stages
+from stage_seed import add_stage, drop_versions, save_version, set_stages
 from run_seed import read_manifest
 
 client = TestClient(app)
@@ -36,8 +35,8 @@ def project_two_versions(tmp_path, monkeypatch):
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
     add_stage(proj, stage)
-    save_working_copy_as_version(proj.name, message="v1")
-    save_working_copy_as_version(proj.name, message="v2")
+    save_version(proj.name, message="v1")
+    save_version(proj.name, message="v2")
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(run_service, "_run_in_background",
                         lambda target, *args: target(*args))
@@ -109,8 +108,8 @@ def _seed_load_stage(proj):
 def test_run_picker_offers_every_stored_version(tmp_path, monkeypatch):
     proj = tmp_path / "demo"
     _seed_load_stage(proj)
-    older = save_working_copy_as_version(proj.name, message="approved").version_id
-    newer = save_working_copy_as_version(proj.name, message="draft").version_id
+    older = save_version(proj.name, message="approved").version_id
+    newer = save_version(proj.name, message="draft").version_id
     workspace.set_projects_dir(tmp_path)
 
     resp = client.get("/project/demo/runs/new")
@@ -124,7 +123,7 @@ def test_run_picker_offers_every_stored_version(tmp_path, monkeypatch):
 def test_run_form_shown_when_the_only_version_is_unpublished(tmp_path, monkeypatch):
     proj = tmp_path / "demo"
     _seed_load_stage(proj)
-    vid = save_working_copy_as_version(proj.name, message="unpublished").version_id
+    vid = save_version(proj.name, message="unpublished").version_id
     workspace.set_projects_dir(tmp_path)
 
     resp = client.get("/project/demo/runs/new")
@@ -134,16 +133,17 @@ def test_run_form_shown_when_the_only_version_is_unpublished(tmp_path, monkeypat
     assert "No version to run" not in resp.text
 
 
-def test_run_form_hidden_when_the_project_has_no_version(tmp_path, monkeypatch):
+def test_run_form_hidden_when_the_project_has_no_stages(tmp_path, monkeypatch):
     proj = tmp_path / "demo"
     _seed_load_stage(proj)
+    drop_versions(proj)
     workspace.set_projects_dir(tmp_path)
 
     resp = client.get("/project/demo/runs/new")
     assert resp.status_code == 200
     assert 'name="version_id"' not in resp.text   # no run form
     # The zero state names what is missing and offers the one action that fixes it.
-    assert "No version to run" in resp.text
+    assert "No workflow to run" in resp.text
     assert 'href="/project/demo/workflow" class="btn primary"' in resp.text
 
 
@@ -162,9 +162,9 @@ def project_versions_diff_paths(tmp_path, monkeypatch):
                            "params": {"path": str(path), "format": "csv"}}}])
 
     _author(a)
-    save_working_copy_as_version(proj.name, message="v1 reads a.csv")
+    save_version(proj.name, message="v1 reads a.csv")
     _author(b)
-    save_working_copy_as_version(proj.name, message="v2 reads b.csv")
+    save_version(proj.name, message="v2 reads b.csv")
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(run_service, "_run_in_background",
                         lambda target, *args: target(*args))
@@ -215,7 +215,7 @@ def test_run_inputs_endpoint_returns_the_selected_versions_inputs(
     assert latest["files"] == older["files"]
 
 
-def _store_version_without_working_copy(tmp_path) -> str:
+def _store_version_written_from_outside(tmp_path) -> str:
     """A version written straight to the store, the way a rebuild from outside does."""
     proj = tmp_path / "demo"
     proj.mkdir(parents=True, exist_ok=True)
@@ -232,8 +232,8 @@ def _store_version_without_working_copy(tmp_path) -> str:
     ).version_id
 
 
-def test_run_form_shown_for_a_version_stored_without_a_working_copy(tmp_path):
-    vid = _store_version_without_working_copy(tmp_path)
+def test_run_form_shown_for_a_version_written_from_outside(tmp_path):
+    vid = _store_version_written_from_outside(tmp_path)
 
     resp = client.get(f"/project/demo/runs/new?version_id={vid}")
 
@@ -244,8 +244,8 @@ def test_run_form_shown_for_a_version_stored_without_a_working_copy(tmp_path):
     assert "No workflow to run" not in resp.text
 
 
-def test_runs_page_offers_a_new_run_without_a_working_copy(tmp_path):
-    _store_version_without_working_copy(tmp_path)
+def test_runs_page_offers_a_new_run_for_a_version_written_from_outside(tmp_path):
+    _store_version_written_from_outside(tmp_path)
 
     resp = client.get("/project/demo/runs")
 

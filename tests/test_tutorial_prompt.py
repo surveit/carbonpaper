@@ -14,7 +14,7 @@ from app.models.stage_contribution import QueueStats
 from app.models.records.run_manifest import RunManifest
 from app.services.project import WorkflowFile
 from app.models.records.project import Project
-from app.services.workspace import StageSummary
+from app.services.workflow_summary import StageSummary
 from app.tools.shared import StageOutputRow, StageOutputRows
 from app.tools.tool_specs import find_tool_names
 from app.tools.tutorial import _FIXTURE, TutorialAgentReference, TutorialContext

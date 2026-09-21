@@ -1,8 +1,4 @@
-"""The single validated writer for one stage of a project's working copy.
-
-Every change is validated against the whole resulting workflow before anything is
-written; every write goes through the loader's `save_stage_specs`.
-"""
+"""The single validated writer for one stage of a draft, checked against the whole."""
 
 from __future__ import annotations
 
@@ -29,11 +25,6 @@ from app.models.workflow import (
     validate_workflow_draft,
 )
 from app.services import drafts
-from app.services.loader import (
-    exists as has_working_copy,
-    read_stage_specs,
-    index_stage_specs_by_id,
-)
 
 
 class EditStageResult(BaseModel):
@@ -73,13 +64,6 @@ def _merge_patch(target: object, patch: object) -> object:
         else:
             base[key] = _merge_patch(base.get(key), value)
     return base
-
-
-def _read_working_copy_specs(project_id: str) -> dict[str, JsonDict]:
-    """An EMPTY workflow reads as {}; a load failure raises — never read a failure as emptiness."""
-    if not has_working_copy(project_id) or not read_stage_specs(project_id):
-        return {}
-    return index_stage_specs_by_id(project_id)
 
 
 # The config blocks whose behaviour is authored code, so a reviewer cannot read the

@@ -19,6 +19,7 @@ from app.models.review_guide import ReviewGuideDraft
 from app.services import (
     project as project_service,
     run as run_service,
+    workflow_summary,
     workspace,
 )
 from app.services.project import WorkflowFile, import_project, name_cache_sidecar
@@ -56,7 +57,7 @@ class TutorialAgentReference(BaseModel):
     version_id: str
     # The stages as seeded: the tour reads its stage ids and types off this rather than
     # off a name written into its prompt.
-    workflow: workspace.WorkflowSummary
+    workflow: workflow_summary.WorkflowSummary
     # Pass straight to run_workflow's `files`: which stored file(s) each input step reads.
     input_files: dict[str, list[str]]
     workflow_url: str
@@ -93,7 +94,7 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialAgentReference:
     return TutorialAgentReference(
         project=_read_seeded_record(name),
         version_id=version_id,
-        workflow=project_service.read_workflow_summary(name),
+        workflow=workflow_summary.read_workflow_summary(name),
         input_files=store_tour_files(name),
         workflow_url=f"{ctx.base_url}project/{name}/workflow",
         guide_url=f"{ctx.base_url}project/{name}/workflow/version/{version_id}",

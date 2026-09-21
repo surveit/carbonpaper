@@ -165,11 +165,4 @@
 </form>
 <script src="/static/run_controls.js"></script>
 <script src="/static/file-preview.js"></script>
-{% else %}
-<div class="empty-state">
-  <h2>No version to run</h2>
-  <p>A run pins to a version and reads its snapshot, so there is nothing for it to
-    execute until the workflow has been snapshotted once.</p>
-  <a href="/project/{{ state.id }}/workflow" class="btn primary">Create version</a>
-</div>
 {% endif %}

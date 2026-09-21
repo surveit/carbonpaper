@@ -7,11 +7,11 @@ from app.core.persistence import get_store
 from app.core.run_status import RunStatus
 from app.models.records.project import Project
 from app.services import workspace
-from app.services.loader import save_stages
 from app.services.methodology import write_methodology
 from app.web.loading import list_projects
 from project_seed import seed_project
 from run_seed import store_manifest
+from stage_seed import save_version
 
 _LONG_AGO = "2020-01-01T00:00:00.000000"
 
@@ -59,7 +59,7 @@ def test_a_run_id_that_is_not_a_stamp_is_dated_by_its_manifest(examples_root):
 def test_an_edit_dates_a_project_that_has_never_run(examples_root):
     _seed_project("old_run", [("20260101T000000", "2026-01-01T09:00:00")])
     _seed_project("recently_edited")
-    save_stages("recently_edited", [])
+    save_version("recently_edited", message="an edit")
     assert _order() == ["recently_edited", "old_run"]
 
 

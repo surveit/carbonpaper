@@ -21,7 +21,6 @@ from app.core.frames import list_table_rows, read_frame_table
 from app.core.stage_cache import (
     StageCache, compute_row_fingerprint,
 )
-from app.services.project import save_working_copy_as_version
 from conftest import (
     resume_like_the_app,
     run_like_the_app,
@@ -29,7 +28,7 @@ from conftest import (
     place_stage, queue_added_columns, reads_of, require_awaiting_review, rows_of,
 )
 
-from stage_seed import add_stage
+from stage_seed import add_stage, save_version
 from run_seed import read_manifest
 
 PROJECT = "hrq-cache-tests"
@@ -646,7 +645,7 @@ def _write_stage(root, filename, stage):
 
 
 def _seed_version(root):
-    save_working_copy_as_version(root.name, message="test seed")
+    save_version(root.name, message="test seed")
 
 
 def _load_stage(root):

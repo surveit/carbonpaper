@@ -21,7 +21,6 @@ from app.runtime.trace import (
     StageTransform,
     trace_row,
 )
-from app.services.project import save_working_copy_as_version
 from app.services.run import read_pinned_version
 from app.services.scope import find_sample_choices_behind
 from app.services.versioning import load_version_stages
@@ -33,7 +32,7 @@ from app.web.row_paths import (
     find_paths_behind_figure,
 )
 from scope_fixture import stage_specs, write_inputs
-from stage_seed import set_stages
+from stage_seed import save_version, set_stages
 
 PROJECT = "scope_fixture"
 _HEALTH = 0  # by_portfolio's first group: five grants, on two paths
@@ -44,7 +43,7 @@ def scoped(projects_root):
     data = projects_root / PROJECT / "data"
     write_inputs(data)
     set_stages(PROJECT, stage_specs(data))
-    save_working_copy_as_version(PROJECT, message="fixture")
+    save_version(PROJECT, message="fixture")
     run_id = str(run_service.execute(PROJECT)["run_id"])
     manifest = read_run_manifest(PROJECT, run_id).to_dict()
     order = [r["stage_id"] for r in manifest["stage_records"]]

@@ -23,9 +23,9 @@ from app.core.persistence import get_store
 from app.evals.store import save_eval_config, save_eval_run
 from app.runtime.run_log import count_events
 from app.models.records.workflow_version import WorkflowVersion
-from app.models.records.working_copy import WorkingCopy
-from app.services import versioning, workspace
-from stage_seed import add_stage, read_stages, set_stages
+from app.services import workspace
+from app.services.errors import WorkflowLoadError
+from stage_seed import add_stage, drop_versions, read_stages, save_version, set_stages
 from run_seed import store_events
 
 client = TestClient(app)
@@ -120,7 +120,7 @@ def test_eval_detail_shows_pathway_compatibility_and_dataset():
     assert "label" in r.text                                   # the checked column
 
 
-def test_eval_pages_render_a_working_copy_whose_stages_form_no_workflow(demo_project):
+def test_eval_pages_render_stages_that_form_no_workflow(demo_project):
     spare = {**_TARGET, "id": "spare", "inputs": [{"id": "missing"}]}
     spare["signature"] = {**_TARGET["signature"],
                           "reads": [{"input": "missing",
@@ -135,15 +135,13 @@ def test_eval_pages_render_a_working_copy_whose_stages_form_no_workflow(demo_pro
     assert client.get("/project/demo/evals").status_code == 200
 
 
-def test_eval_detail_names_the_stage_that_would_not_parse(demo_project):
+def test_eval_detail_fails_loudly_when_a_stage_will_not_parse(demo_project):
     stages = read_stages(demo_project / "demo")
     stages[1] = {"id": "classify", "type": "not_a_real_type"}
     set_stages(demo_project / "demo", stages)
 
-    r = client.get("/project/demo/evals/label_check")
-    assert r.status_code == 200
-    assert "structural problems" in r.text
-    assert "classify" in r.text
+    with pytest.raises(WorkflowLoadError, match="not_a_real_type"):
+        client.get("/project/demo/evals/label_check")
 
 
 def test_eval_detail_404_for_unknown_config():
@@ -169,18 +167,12 @@ def test_eval_run_page_404_when_run_missing():
     assert client.get("/project/demo/evals/label_check/runs/ghost").status_code == 404
 
 
-def test_eval_detail_shows_no_versions_note_when_project_has_no_version():
-    r = client.get("/project/demo/evals/label_check")
-    assert r.status_code == 200
-    assert 'name="version_id"' not in r.text
-    assert "no workflow version" in r.text.lower()
-
-
 def test_eval_detail_offers_a_version_select_newest_first():
+    stages = read_stages("demo")
     WorkflowVersion(id="demo/v1", version_id="v1", created_at="2026-07-10T00:00:00",
-                    message="m").save()
-    WorkflowVersion(id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
-                    message="m").save()
+                    message="m", stages=stages).save()
+    WorkflowVersion(id="demo/v2-draft", version_id="v2-draft",
+                    created_at="2026-07-11T00:00:00", message="m", stages=stages).save()
 
     r = client.get("/project/demo/evals/label_check")
     assert r.status_code == 200
@@ -405,16 +397,10 @@ def test_a_run_that_stored_no_accuracy_is_not_given_one(tmp_path):
     assert "%" not in r.text.split('class="stages runs-table"')[1].split("</table>")[0]
 
 
-# ── A project authored by script: versions, no working copy (issue #1067) ──────
+# ── A project's stages are its latest version's (issue #1067) ─────────────────
 
-def _drop_working_copy_leaving_a_version(demo_project) -> None:
-    versioning.create_version_from_stages(
-        "demo", read_stages(demo_project / "demo"), message="seeded")
-    WorkingCopy.delete("demo")
-
-
-def test_eval_status_falls_back_to_the_latest_version_when_no_working_copy(demo_project):
-    _drop_working_copy_leaving_a_version(demo_project)
+def test_eval_status_reads_the_stages_of_the_latest_version(demo_project):
+    save_version(demo_project / "demo", message="seeded")
 
     index = client.get("/project/demo/evals")
     assert index.status_code == 200
@@ -426,8 +412,8 @@ def test_eval_status_falls_back_to_the_latest_version_when_no_working_copy(demo_
     assert "fits the workflow" in detail.text
 
 
-def test_eval_status_still_reports_a_project_with_neither_stages_nor_versions(demo_project):
-    WorkingCopy.delete("demo")
+def test_eval_status_still_reports_a_project_with_no_stages(demo_project):
+    drop_versions("demo")
 
     detail = client.get("/project/demo/evals/label_check")
     assert detail.status_code == 200

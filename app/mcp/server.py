@@ -21,7 +21,6 @@ from app.tools import (
     draft_editing,
     shared,
     versions,
-    working_copy,
 )
 from app.models.stage import StageEdit
 from app.tools.submitted_stage import (
@@ -189,7 +188,7 @@ def read_workflow_draft(project_id: str, draft_id: str) -> draft_editing.Workflo
 def edit_stages(
     project_id: str, draft_id: str, edits: list[StageEdit]
 ) -> shared.EditedStages:
-    return working_copy.catch_stage_edit_refusals(
+    return shared.catch_stage_edit_refusals(
         lambda: edit_stages_reporting_drops(project_id, draft_id, edits)
     )
 

@@ -14,11 +14,10 @@ from app.models import AbstractStage
 from app.models.review_guide import ReviewGuideStep
 from app.core.persistence import get_store
 from app.services.loader import WorkflowLoadError
-from app.services.project import save_working_copy_as_version
 from app.services.versioning import create_version_from_stages, list_versions, load_version, find_latest_review_guide, find_latest_version_id, load_version_stages, resolve_version_id, save_version_guide
 from app.models.records.review_guide import ReviewGuide
 from app.models.records.workflow_version import WorkflowVersion
-from stage_seed import add_stage
+from stage_seed import add_stage, list_saved_version_ids, save_version
 
 # AbstractStage._schemas_declared wants every non-report stage to say what it outputs.
 _ROWS_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": False}]}
@@ -37,11 +36,11 @@ def _seed(project_dir: Path, stage: dict = _LOAD_STAGE) -> None:
     add_stage(compiled, stage)
 
 
-# ── save_working_copy_as_version ─────────────────────────────────────────────────
+# ── create_version_from_stages ───────────────────────────────────
 
 def test_create_version_returns_meta_and_round_trips(tmp_path):
     _seed(tmp_path)
-    meta = save_working_copy_as_version(tmp_path.name, message="first cut")
+    meta = save_version(tmp_path.name, message="first cut")
 
     assert meta.message == "first cut"
     assert meta.parent_version is None
@@ -58,17 +57,11 @@ def test_create_version_returns_meta_and_round_trips(tmp_path):
 def test_create_version_records_parent(tmp_path):
     _seed(tmp_path)
 
-    first = save_working_copy_as_version(tmp_path.name, message="v1")
-    second = save_working_copy_as_version(tmp_path.name, message="v2",
+    first = save_version(tmp_path.name, message="v1")
+    second = save_version(tmp_path.name, message="v2",
                                       parent_version=first.version_id)
     assert second.version_id != first.version_id
     assert second.parent_version == first.version_id
-
-
-def test_create_version_no_compiled_dir_raises_file_not_found(tmp_path):
-    with pytest.raises(FileNotFoundError):
-        save_working_copy_as_version(tmp_path.name, message="x")
-    assert list_versions(tmp_path.name) == []
 
 
 def test_create_version_invalid_workflow_raises_and_writes_nothing(tmp_path):
@@ -79,17 +72,17 @@ def test_create_version_invalid_workflow_raises_and_writes_nothing(tmp_path):
                          "params": {"path": "data/items.csv", "format": "csv"}}}  # relative path
     add_stage(tmp_path, bad)
 
-    with pytest.raises(WorkflowLoadError) as exc:
-        save_working_copy_as_version(tmp_path.name, message="x")
-    assert any("params.path" in i for i in exc.value.issues)
-    assert list_versions(tmp_path.name) == []
+    with pytest.raises(pydantic.ValidationError) as exc:
+        save_version(tmp_path.name, message="x")
+    assert "params.paths.0" in str(exc.value)
+    assert list_saved_version_ids(tmp_path) == []
 
 
 def test_create_version_twice_within_a_second_keeps_both(tmp_path):
     _seed(tmp_path)
 
-    save_working_copy_as_version(tmp_path.name, message="first")
-    save_working_copy_as_version(tmp_path.name, message="second")
+    save_version(tmp_path.name, message="first")
+    save_version(tmp_path.name, message="second")
 
     assert [v.message for v in list_versions(tmp_path.name)] == ["second", "first"]
 
@@ -98,8 +91,8 @@ def test_versions_are_scoped_per_project(tmp_path):
     proj_a, proj_b = tmp_path / "alpha", tmp_path / "beta"
     _seed(proj_a)
     _seed(proj_b)
-    meta_a = save_working_copy_as_version(proj_a.name, message="a")
-    meta_b = save_working_copy_as_version(proj_b.name, message="b")
+    meta_a = save_version(proj_a.name, message="a")
+    meta_b = save_version(proj_b.name, message="b")
     assert [v.version_id for v in list_versions(proj_a.name)] == [meta_a.version_id]
     assert [v.version_id for v in list_versions(proj_b.name)] == [meta_b.version_id]
 
@@ -120,7 +113,7 @@ def test_list_versions_newest_first(tmp_path):
 
 def test_list_versions_errors_on_a_corrupt_document(tmp_path):
     _seed(tmp_path)
-    save_working_copy_as_version(tmp_path.name, message="good")
+    save_version(tmp_path.name, message="good")
     get_store().write("workflow_version", f"{tmp_path.name}/20260101T000000", {"bogus": "data"})
     with pytest.raises(WorkflowLoadError, match="20260101T000000"):
         list_versions(tmp_path.name)
@@ -589,12 +582,12 @@ def test_a_version_document_with_an_embedded_guide_fails_loudly(tmp_path):
 def test_a_description_longer_than_the_ceiling_is_refused(tmp_path):
     _seed(tmp_path)
     with pytest.raises(WorkflowLoadError) as caught:
-        save_working_copy_as_version(tmp_path.name, message="x" * 151)
+        save_version(tmp_path.name, message="x" * 151)
     assert "150" in str(caught.value)
-    assert list_versions(tmp_path.name) == []
+    assert list_saved_version_ids(tmp_path) == []
 
 
 def test_a_description_at_the_ceiling_is_kept(tmp_path):
     _seed(tmp_path)
-    meta = save_working_copy_as_version(tmp_path.name, message="x" * 150)
+    meta = save_version(tmp_path.name, message="x" * 150)
     assert meta.message == "x" * 150

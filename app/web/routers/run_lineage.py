@@ -182,7 +182,7 @@ def _read_run_stages(project_id: str, manifest: dict[str, Any]) -> dict[str, Wor
         return run_service.load_run_workflow(
             project_id, manifest).index_workflow_stages_by_id()
     except RunVersionUnresolvableError:
-        # Never the working copy: the story still lists the ancestry, and no graph is drawn.
+        # Never another version: the story still lists the ancestry, and no graph is drawn.
         return {}
 
 
