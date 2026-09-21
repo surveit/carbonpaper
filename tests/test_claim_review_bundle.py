@@ -314,6 +314,22 @@ def test_a_fabricated_cell_is_refused(claim, overrides, fragment):
     assert fragment in _refuse_citing(claim, _cell(claim, **overrides))
 
 
+@pytest.mark.parametrize("cell, cited, same", [
+    (62187729.0, 62187729, True),
+    (62187729, 62187729.0, True),
+    (2200, 2200, True),
+    (62187729.0, 62187728, False),
+    (2200.5, 2200, False),
+    # A bool is not a number: True must never match 1.
+    (True, 1, False),
+    (1, True, False),
+    # A string is compared as the pool prints it, never parsed into a number.
+    ("22000", 22000, False),
+])
+def test_one_number_is_the_cell_however_it_is_spelled(cell, cited, same) -> None:
+    assert claim_review._is_the_cell_value(cell, cited) is same
+
+
 @pytest.mark.parametrize("value, problems", [
     ("22,000", []),
     ("22000", ["challenge 0 (coverage): stage_output_cell citation gives value '22000', "

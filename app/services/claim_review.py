@@ -279,11 +279,25 @@ def _find_cell_problem(held: _RunHoldings, citation: StageOutputCellCitation) ->
     if not 0 <= citation.row_ordinal < output.row_count:
         return (f"names row {citation.row_ordinal}, which the output of "
                 f"{citation.stage_id!r} does not hold ({output.row_count} rows)")
-    # Compared as rendered: cell 22000 matches "22,000", not "22000".
-    cell = render_figure(output.cells_by_column[citation.column][citation.row_ordinal])
-    if cell != render_figure(citation.value):
-        return f"gives value {citation.value!r}, but that cell holds {cell!r}"
+    cell = output.cells_by_column[citation.column][citation.row_ordinal]
+    if not _is_the_cell_value(cell, citation.value):
+        return f"gives value {citation.value!r}, but that cell holds {render_figure(cell)!r}"
     return None
+
+
+def _is_the_cell_value(cell: JsonScalar, cited: JsonScalar) -> bool:
+    """Rendered, so 22000 matches "22,000"; or numeric, so 62187729.0 matches 62187729."""
+    if render_figure(cell) == render_figure(cited):
+        return True
+    held = _read_number(cell)
+    return held is not None and held == _read_number(cited)
+
+
+def _read_number(value: JsonScalar) -> float | None:
+    # A bool is not a number here, so True never matches 1.
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
 
 
 def _find_column_problem(held: _RunHoldings, stage_id: str, column: str) -> str | None:
