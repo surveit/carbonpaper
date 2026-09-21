@@ -92,6 +92,7 @@ def build_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         "list_projects", "list_versions", "read_version_stage",
         "read_terms", "write_terms",
         "read_claim_shapes", "write_claim_shapes",
+        "submit_claim", "read_claim_review", "cancel_claim_submission",
         "read_review_guide", "write_review_guide",
         "get_project_status", "generate_stage_tests",
         "run_stage_tests", "report_compiler_warnings",

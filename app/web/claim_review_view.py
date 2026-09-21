@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from app.core.agent.store import AgentSession, SessionStore
 from app.core.ids import ID
 from app.core.figure_text import render_figure
 from app.models.citations import (
@@ -23,21 +22,14 @@ from app.models.records.claims import Claim, ClaimShape
 from app.runtime.citations import build_row_trace_url
 from app.services import claims as claims_service
 from app.services.claim_review import load_claim_review
-from app.services.claim_review_run import find_review_sessions
+from app.services.claim_review_run import read_review_state
 from app.services.claim_shapes import load_claim_shape
 from app.services.errors import ClaimRefused
-from app.services.generation import GENERATION_FAILURE_PREFIX
 from app.services.run import read_run_manifest
 from app.web.citation_links import render_source_url
 from app.web.claims_view import describe_what_blocks_the_run
 from app.web.panel_links import AppPanelLinks
 from app.web.run_index import RunIndexRow, find_run_row
-
-REVIEW_NONE = "none"
-REVIEW_RUNNING = "running"
-REVIEW_FAILED = "failed"
-REVIEW_DONE = "done"
-REVIEW_REFUSED = "refused"
 
 
 
@@ -116,7 +108,7 @@ def build_claim_review_page(project_id: ID, claim_id: ID) -> ClaimReviewPage:
 
 def _build_page(project_id: ID, claim: Claim, shape: ClaimShape, run: RunIndexRow,
                 review: ClaimReview | None) -> ClaimReviewPage:
-    running = _read_review_state(claim, review)
+    running = read_review_state(claim, review)
     cards = _build_cards(_read_challenges(review))
     return ClaimReviewPage(
         claim_id=claim.id,
@@ -275,43 +267,6 @@ def _read_cited_figure(citation: AddressedChallengeCitation) -> str:
     if isinstance(citation, AddressedStageOutputCellCitation):
         return render_figure(citation.value)
     return ""
-
-
-# ── the review behind it ─────
-
-
-class _ReviewState(BaseModel):
-    review: str
-    error: str | None = None
-    session_id: ID | None = None
-
-
-def _read_review_state(claim: Claim, review: ClaimReview | None) -> _ReviewState:
-    if review is not None:
-        return _ReviewState(review=REVIEW_DONE, session_id=review.session_id)
-    if not isinstance(claim.citation, StageOutputCellCitation):
-        return _ReviewState(review=REVIEW_REFUSED)
-    reviewed = find_review_sessions(claim.id)
-    if not reviewed:
-        return _ReviewState(review=REVIEW_NONE)
-    return _read_session_state(reviewed[0])
-
-
-def _read_session_state(session: AgentSession) -> _ReviewState:
-    if session.active_turn is not None:
-        return _ReviewState(review=REVIEW_RUNNING, session_id=session.id)
-    failure = _find_generation_failure(session.id)
-    if failure is None:
-        return _ReviewState(review=REVIEW_NONE, session_id=session.id)
-    return _ReviewState(review=REVIEW_FAILED, error=failure, session_id=session.id)
-
-
-def _find_generation_failure(session_id: ID) -> str | None:
-    return next(
-        (text for text in SessionStore().read_last_reply_texts(session_id)
-         if text.startswith(GENERATION_FAILURE_PREFIX)),
-        None,
-    )
 
 
 # ── what the claim sits on ─────

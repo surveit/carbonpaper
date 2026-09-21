@@ -330,3 +330,48 @@ def test_the_page_draws_a_stored_review(claim, client):
 
 def test_a_claim_this_project_does_not_hold_is_a_404(client, projects_root):
     assert read_the_page(client, "no-such-claim").status_code == 404
+
+
+# ── what an agent can do with a claim ─────
+
+
+def test_submitting_through_the_tool_starts_the_review(claim, monkeypatch):
+    from app.tools import claims as claim_tools
+    started: list[str] = []
+    monkeypatch.setattr(claim_tools.claim_review_run, "start_claim_review",
+                        lambda project_id, claim_id, *, model: started.append(claim_id))
+
+    written = claim_tools.submit_claim(
+        PROJECT, claim.citation.run_id, "grant-total", "Grants came to 2,200 in total.")
+
+    assert written.claim.status == "submitted"
+    assert started == [written.claim.id]
+    assert written.claim_url == f"/project/{PROJECT}/claims/{written.claim.id}"
+
+
+def test_reading_a_review_before_one_runs_says_so(claim):
+    from app.tools import claims as claim_tools
+
+    read = claim_tools.read_claim_review(PROJECT, claim.id)
+
+    assert read.review == "none" and read.challenges == []
+
+
+def test_reading_a_stored_review_carries_every_challenge(claim):
+    from app.tools import claims as claim_tools
+    store_a_review(claim, _challenge(claim, _FIGURE, severity=Severity.high))
+
+    read = claim_tools.read_claim_review(PROJECT, claim.id)
+
+    assert read.review == "done"
+    assert [one.severity for one in read.challenges] == [Severity.high]
+    assert read.claim_text == claim.text
+    assert read.claim_url == f"/project/{PROJECT}/claims/{claim.id}"
+
+
+def test_cancelling_a_submission_leaves_nothing_standing(claim):
+    from app.tools import claims as claim_tools
+
+    withdrawn = claim_tools.cancel_claim_submission(PROJECT, claim.id)
+
+    assert withdrawn.status == "declined"

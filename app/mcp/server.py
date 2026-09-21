@@ -14,9 +14,10 @@ from starlette.types import Receive, Scope, Send
 
 from app.mcp.instructions import INSTRUCTIONS
 from app.models.claims import ClaimShapeInput
-from app.models.records.claims import ClaimShape
+from app.models.records.claims import Claim, ClaimShape
 from app.tools import (
     claim_shapes as claim_shape_tools,
+    claims as claim_tools,
     draft_editing,
     shared,
     versions,
@@ -140,6 +141,23 @@ def write_claim_shapes(
     project_id: str, shapes: list[ClaimShapeInput]
 ) -> list[ClaimShape]:
     return claim_shape_tools.write_claim_shapes(project_id, shapes)
+
+
+@mcp.tool(description=read_tool_description("submit_claim"))
+def submit_claim(
+    project_id: str, run_id: str, slug: str, text: str, context: dict[str, Any] | None = None
+) -> claim_tools.SubmittedClaim:
+    return claim_tools.submit_claim(project_id, run_id, slug, text, context)
+
+
+@mcp.tool(description=read_tool_description("read_claim_review"))
+def read_claim_review(project_id: str, claim_id: str) -> claim_tools.ClaimReviewRead:
+    return claim_tools.read_claim_review(project_id, claim_id)
+
+
+@mcp.tool(description=read_tool_description("cancel_claim_submission"))
+def cancel_claim_submission(project_id: str, claim_id: str) -> Claim:
+    return claim_tools.cancel_claim_submission(project_id, claim_id)
 
 
 @mcp.tool(description=read_tool_description("read_draft_stage"))

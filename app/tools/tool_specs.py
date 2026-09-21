@@ -5,7 +5,8 @@ together, so binding it is a single lookup and no half of it can go missing.
 from __future__ import annotations
 
 from app.core.agent.bound_tool import BoundToolSpec, bind_by_signature
-from app.tools import claim_shapes as claim_shape_tools, draft_editing, shared, versions
+from app.tools import claim_shapes as claim_shape_tools
+from app.tools import claims as claim_tools, draft_editing, shared, versions
 from app.tools.shared import MAX_OUTPUT_ROWS, MAX_RUNS_LISTED, MAX_SLEEP_SECONDS
 from app.tools.types import AgentTool, ToolParameterProse
 
@@ -137,6 +138,50 @@ which thing it meant.
 What is stored reaches every agent that writes prose about this project and
 is shown to the human on the project's Terms page. Agree the words with the
 user before you store them — never invent one to fill the list out.""",
+    ),
+    "submit_claim": AgentTool(
+        fn=claim_tools.submit_claim,
+        label="Proposing a sentence for review",
+        parameters={
+            "project_id": PROJECT_ID,
+            "run_id": "The finished run the sentence is read from.",
+            "slug": "The published figure it cites, by the slug the stage's figure rule "
+                "gave it. The figure must name a claim shape or there is nothing to claim.",
+            "text": "The sentence to publish, in a person's words — the claim itself, "
+                "not a summary of the run.",
+            "context": "One value per context column the shape declares, or nothing when "
+                "it declares none.",
+        },
+        description="""\
+Propose a sentence for eventual publication, read off a figure this run
+published. It works like a pull request: submitting launches the AI review
+automatically, and a person rules on it after.
+
+Submitting again makes a new claim, not an edit. Read the review back with
+`read_claim_review`, and give the person `claim_url` — that page is where they
+rule on it.""",
+    ),
+    "read_claim_review": AgentTool(
+        fn=claim_tools.read_claim_review,
+        label="Reading what the reviewers raised",
+        parameters={
+            "project_id": PROJECT_ID,
+            "claim_id": "The claim, as `submit_claim` returned it.",
+        },
+        description="""\
+Read the results of the AI claim review on a claim, including its status while
+it is still running.""",
+    ),
+    "cancel_claim_submission": AgentTool(
+        fn=claim_tools.cancel_claim_submission,
+        label="Withdrawing a proposed sentence",
+        parameters={
+            "project_id": PROJECT_ID,
+            "claim_id": "The claim to withdraw.",
+        },
+        description="""\
+Withdraw a claim now understood to be wrong, superseded, or no longer relevant,
+so no one is asked to rule on it.""",
     ),
     "read_claim_shapes": AgentTool(
         fn=claim_shape_tools.read_claim_shapes,
