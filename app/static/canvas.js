@@ -228,6 +228,8 @@ window.Canvas = window.Canvas || (function(){
 
   function markPicked(view){
     const picked = view.picked;
+    view.pane.querySelectorAll('.statement-clause').forEach(clause => clause.classList.toggle(
+      'picked', Boolean(picked) && picked.id === clause.dataset.stage));
     view.world.querySelectorAll('[data-stage]').forEach(box => box.classList.toggle(
       'picked', Boolean(picked) && picked.kind === 'stage' && picked.id === box.dataset.stage));
     view.world.querySelectorAll('[data-sheet]').forEach(sheet => sheet.classList.toggle(
@@ -300,6 +302,12 @@ window.Canvas = window.Canvas || (function(){
       const pick = event.target.closest('[data-rows]');
       if(pick && view.picked) openPanel(view, view.picked.kind, view.picked.id,
                                         pick.dataset.rows);
+    }, {signal});
+    // The told figure over the canvas: a clause opens its own stage, in this drawer.
+    const said = view.pane.querySelector('.statement');
+    if(said) said.addEventListener('click', event => {
+      const clause = event.target.closest('[data-stage]');
+      if(clause) openPanel(view, 'stage', clause.dataset.stage);
     }, {signal});
     let drag = null;
     view.svg.addEventListener('mousedown', event => {

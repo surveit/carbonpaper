@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from app.models.branch_analysis import BranchId, RowOrdinal
 from app.models.schema import StageId
+from app.models.supported_statement import SupportedStatement
 
 
 class CanvasNode(BaseModel):
@@ -71,3 +72,5 @@ class CanvasView(BaseModel):
     counts_rows: bool
     # In the run's stage order, one per stage that wrote a frame.
     sheets: list[CanvasSheet]
+    # None where the cited stage wrote no frame, so no count can speak for a clause.
+    statement: SupportedStatement | None = None

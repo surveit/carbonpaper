@@ -1,0 +1,25 @@
+{# The figure told as prose, over the canvas of the same walk. Every clause is a stage
+   and opens that stage's own panel in the canvas drawer (static/canvas.js); every count
+   past the first and the last is a tooltip on the phrase it belongs to.
+
+   Context: statement (app.models.supported_statement.SupportedStatement). #}
+{% macro say(phrase) -%}
+{%- if phrase.style.value == "prose" -%}{{ phrase.text }}
+{%- elif phrase.style.value == "count" -%}
+<b class="statement-count has-tip" data-tip="{{ phrase.hover }}" tabindex="0">{{ phrase.text }}</b>
+{%- elif phrase.style.value == "column" -%}
+<code class="has-tip" data-tip="{{ phrase.hover }}" tabindex="0">{{ phrase.text }}</code>
+{%- else -%}
+<code class="statement-name has-tip" data-tip="{{ phrase.hover }}" tabindex="0">{{ phrase.text }}</code>
+{%- endif -%}
+{%- endmacro %}
+<div class="statement">
+  {% for paragraph in statement.paragraphs %}
+  <p class="statement-say">
+    {%- for clause in paragraph -%}
+    <span class="statement-clause" data-stage="{{ clause.stage_id }}"
+          title="open {{ clause.stage_id }}">{% for phrase in clause.phrases %}{{ say(phrase) }}{% endfor %}</span>
+    {% endfor -%}
+  </p>
+  {% endfor %}
+</div>

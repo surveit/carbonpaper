@@ -14,6 +14,7 @@ from app.web.run_stage_view import TraceScope
 from app.web.scope_drawing import draw_the_scope
 from app.web.scope_view import load_scope_map
 from app.web.sheet_preview import build_canvas_sheets
+from app.web.supported_statement_view import tell_the_cited_figure
 from app.web.canvas_payload import CanvasCut, CanvasEdge, CanvasNode, CanvasView
 from app.web.column_walk import (
     ColumnAt,
@@ -43,18 +44,22 @@ def load_canvas_view(
                else _list_stages_on_the_walk(walk))
     edges = _list_edges(parents, on_walk, behind)
     cuts = _list_cuts(project_id, run_id, stage_id, column, row)
+    walked = sorted(on_walk, key=lambda sid: (level[sid], sid))
+    sheets = build_canvas_sheets(project_id, run_id, run_branches, reached,
+                                 record.stage_records, cuts,
+                                 _index_columns_behind(walk, stages))
     return CanvasView(
         cited_stage=stage_id,
         column=column,
         row=row,
-        steps=sorted(on_walk, key=lambda sid: (level[sid], sid)),
+        steps=walked,
         nodes=_list_nodes(stages, on_walk, behind),
         edges=edges,
         cuts=cuts,
         counts_rows=counts_rows,
-        sheets=build_canvas_sheets(project_id, run_id, run_branches, reached,
-                                   record.stage_records, cuts,
-                                   _index_columns_behind(walk, stages)),
+        sheets=sheets,
+        statement=tell_the_cited_figure(project_id, stages, walked, sheets,
+                                        stage_id, column),
     )
 
 

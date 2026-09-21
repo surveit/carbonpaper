@@ -213,6 +213,22 @@ STAGE_DESCRIPTION_DESCRIPTION = (
 )
 
 
+# A filter's or a queue's own words for the test it applies, said where a reader meets
+# the figure that rests on it. Shorter than a description: it is a phrase inside someone
+# else's sentence, not a line of its own.
+PREDICATE_MAX_CHARS = 120
+
+PREDICATE_DESCRIPTION = (
+    "Optional: the test this step applies, as a verb phrase completing \"only the ones "
+    "that ___ go on\" — \"use one of six AI terms in their issue text\", \"are one "
+    "organisation paying another to lobby\". Lower case, no full stop, and no leading "
+    "\"rows that\". It is read inside the sentence a published figure is explained by, "
+    "beside the count the step kept, so it says what the test MEANS to someone deciding "
+    "whether to trust the figure — never how the code spells it. Leave it out rather "
+    "than guessing: the sentence renders without it and says less. HARD LIMIT: "
+    f"{PREDICATE_MAX_CHARS} characters, refused above that."
+)
+
 # ── The shared field list ────────────────────────────────────────────────────
 class _WorkflowOutputFields(_Base):
     # A slug identifies the output across runs; what it holds is per run.

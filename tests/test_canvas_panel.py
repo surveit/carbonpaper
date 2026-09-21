@@ -291,3 +291,42 @@ def test_a_step_leads_with_the_stage_description_and_says_the_mechanism(run_id):
         f"/project/{PROJECT}/runs/{run_id}/stage/by_portfolio/row/1/trace/view")
     assert "Lands each grant&#39;s portfolio. AGENCY-Z matches nothing." in page.text
     assert "Combine both_regions data with load_agencies data on agency_code" in page.text
+
+
+def _told(run_id, cited):
+    stage, column, row = cited
+    statement = load_canvas_view(PROJECT, run_id, stage, column, row).statement
+    return [" ".join("".join(phrase.text for phrase in clause.phrases)
+                     for clause in paragraph)
+            for paragraph in statement.paragraphs]
+
+
+def test_the_figure_is_told_as_prose_off_the_same_walk_the_canvas_draws(run_id):
+    # Two loads meet at a union, and both are behind the grand total. Neither this
+    # project nor this fixture names a row type, so every noun degrades to "rows".
+    assert _told(run_id, TOTAL) == [
+        "The run loads 6 rows from load_east. It also loads 4 rows from load_west."
+        " The figure reads amount. Each has portfolio looked up."
+        " Of those rows, only the ones funded kept go on."
+        " What survives is held to one row per grant_id, the duplicates having to agree.",
+        "Of those rows, only the ones grants_only kept go on."
+        " Their amount, summed, is the figure.",
+    ]
+
+
+def test_a_stage_that_only_carried_the_value_is_no_clause(run_id):
+    # size_band adds a column this figure never reads, and tag_portfolio's lookup does.
+    told = load_canvas_view(PROJECT, run_id, *TOTAL).statement
+    said = [clause.stage_id for paragraph in told.paragraphs for clause in paragraph]
+    assert "size_band" not in said
+    assert "tag_portfolio" in said
+
+
+def test_the_panel_hands_each_clause_the_stage_it_opens(run_id):
+    page = TestClient(app).get(
+        f"/project/{PROJECT}/runs/{run_id}/canvas/panel"
+        "?stage=grant_totals&row=0&column=total_amount").text
+    # What canvas.js opens the drawer on, the same attribute a stage box carries.
+    assert 'class="statement-clause" data-stage="funded"' in page
+    # A count past the first and the last is a tooltip rather than a printed number.
+    assert 'data-tip="9 of 10 go on · 90%"' in page

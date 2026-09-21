@@ -18,7 +18,12 @@ from app.models.schema import (
     TableSchema,
     _Base,
 )
-from app.models.stages.stage_base import AbstractStage, StageInput, StageType
+from app.models.stages.stage_base import (
+    PREDICATE_MAX_CHARS,
+    AbstractStage,
+    StageInput,
+    StageType,
+)
 from app.models.stages.shared import find_predicate_column_issues
 from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ExtendsSignature
@@ -26,6 +31,16 @@ from app.models.stages.warnings import CompilerWarning, warn
 
 if TYPE_CHECKING:
     from app.models.workflow_stage import WorkflowStageInput
+
+
+REVIEW_PREDICATE_DESCRIPTION = (
+    "Optional: what the person at this step did, as a verb phrase completing \"each ___ "
+    "before it counted\" — \"went in front of a person\", \"was read against the filing "
+    "text by a reviewer\". Lower case, no full stop. It is read inside the sentence a "
+    "published figure is explained by, so it says what the review MEANT for the rows, "
+    "never how the queue is configured. Leave it out rather than guessing. HARD LIMIT: "
+    f"{PREDICATE_MAX_CHARS} characters, refused above that."
+)
 
 
 class ReviewVerdict(str, Enum):
@@ -63,9 +78,13 @@ class QueueConfig(StageConfig):
     })
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({
         "routing", "conflict_resolution", "estimated_volume_per_week", "sort",
+        "predicate",
     })
 
     filter: Optional[str] = None
+    predicate: Optional[str] = Field(
+        default=None, max_length=PREDICATE_MAX_CHARS, description=REVIEW_PREDICATE_DESCRIPTION
+    )
     reviewer_instructions: Optional[str] = None
     reviewed_columns: dict[str, str] = Field(
         description=(
@@ -443,7 +462,7 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
         min_inputs=1,
         required=["reviewed_columns", "verdict_column", "reviewer_column",
                      "reviewed_at_column"],
-        optional=["filter", "reviewer_instructions", "review_notes_column",
+        optional=["filter", "predicate", "reviewer_instructions", "review_notes_column",
                      "context_columns", "sort",
                      "routing", "conflict_resolution", "estimated_volume_per_week"],
         notes=(
