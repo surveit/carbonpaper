@@ -217,14 +217,19 @@ STAGE_DESCRIPTION_DESCRIPTION = (
 PREDICATE_MAX_CHARS = 120
 
 PREDICATE_DESCRIPTION = (
-    "Optional: the test this step applies, as a verb phrase completing \"only the ones "
-    "that ___ go on\" — \"use one of six AI terms in their issue text\", \"are one "
-    "organisation paying another to lobby\". Lower case, no full stop, and no leading "
-    "\"rows that\". It is read inside the sentence a published figure is explained by, "
-    "beside the count the step kept, so it says what the test MEANS to someone deciding "
-    "whether to trust the figure — never how the code spells it. Leave it out rather "
-    "than guessing: the sentence renders without it and says less. HARD LIMIT: "
-    f"{PREDICATE_MAX_CHARS} characters, refused above that."
+    "The test this step applies, as a verb phrase completing \"only the ones that ___ "
+    "go on\" — \"use one of six AI terms in their issue text\", \"are one organisation "
+    "paying another to lobby\". Lower case, no full stop, no leading \"rows that\".\n"
+    "Say what the step KEEPS. A step that drops is still written from the kept side: "
+    "code spelled `not row[\"mentions_ai\"]` and a description reading \"drops every row "
+    "whose issue text uses no AI term\" both become \"use an AI term in their issue "
+    "text\". Nothing downstream can turn a negation into its opposite, so a reader is "
+    "handed whichever one you write.\n"
+    "This is read inside the sentence a published figure is explained by, beside the "
+    "count the step kept, so it says what the test MEANS to someone deciding whether to "
+    "trust the figure — never how the code spells it. Write it from the data in front "
+    "of you; leave it out rather than guessing at a rule the code does not apply. "
+    f"HARD LIMIT: {PREDICATE_MAX_CHARS} characters, refused above that."
 )
 
 # ── The shared field list ────────────────────────────────────────────────────

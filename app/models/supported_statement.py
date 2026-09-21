@@ -235,7 +235,7 @@ def _describe_column(step: FigureStep, name: str) -> Optional[str]:
 # ── a step that narrowed the population ──────────────────────────────────────
 
 def _say_the_restriction(step: FigureStep, place: _Place) -> list[Phrase]:
-    predicate = read_the_predicate(step.stage)
+    predicate = read_the_predicate(step.stage.stage)
     if predicate is None:
         return _say_the_step_s_own_test(step, place)
     held = [Phrase(text=f"that {predicate}", hover=_hover_the_restriction(step, place))]
@@ -270,7 +270,7 @@ def _hover_the_restriction(step: FigureStep, place: _Place) -> str:
 # ── a step a person or a lookup stood in ─────────────────────────────────────
 
 def _say_the_review(step: FigureStep, place: _Place) -> list[Phrase]:
-    predicate = read_the_predicate(step.stage) or "went in front of a person"
+    predicate = read_the_predicate(step.stage.stage) or "went in front of a person"
     if not reviews_every_row(step.stage):
         return _say_the_partial_review(step, predicate)
     hover = f"All {say_count(step.rows.rows_out)} of them were reviewed at this step."

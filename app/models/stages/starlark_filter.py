@@ -119,8 +119,8 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
         blocks=["starlark_filter"],
         requires_inputs=True,
         min_inputs=1,
-        required=["code"],
-        optional=["function", "summary", "predicate"],
+        required=["code", "predicate"],
+        optional=["function", "summary"],
         notes=(
             "Takes exactly ONE input and changes no cell — the output is a SUBSET of the "
             "input's rows. The signature READS the columns the predicate consults and "

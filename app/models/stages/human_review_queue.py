@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
 
 REVIEW_PREDICATE_DESCRIPTION = (
-    "Optional: what the person at this step did, as a verb phrase completing \"each ___ "
+    "What the person at this step did, as a verb phrase completing \"each ___ "
     "before it counted\" — \"went in front of a person\", \"was read against the filing "
     "text by a reviewer\". Lower case, no full stop. It is read inside the sentence a "
     "published figure is explained by, so it says what the review MEANT for the rows, "
@@ -461,8 +461,8 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
         requires_inputs=True,
         min_inputs=1,
         required=["reviewed_columns", "verdict_column", "reviewer_column",
-                     "reviewed_at_column"],
-        optional=["filter", "predicate", "reviewer_instructions", "review_notes_column",
+                     "reviewed_at_column", "predicate"],
+        optional=["filter", "reviewer_instructions", "review_notes_column",
                      "context_columns", "sort",
                      "routing", "conflict_resolution", "estimated_volume_per_week"],
         notes=(

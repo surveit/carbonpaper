@@ -80,9 +80,17 @@ def _queue_stage(stage_id="rev", **kw):
             ],
         },
         "queue": {"reviewed_columns": {"id": "reviewed_id"}, "verdict_column": "verdict",
-                  "reviewer_column": "reviewer", "reviewed_at_column": "reviewed_at"},
+                  "reviewer_column": "reviewer", "reviewed_at_column": "reviewed_at",
+                  "predicate": kw.pop("predicate", "went in front of a person")},
         **kw,
     })
+
+
+def _filter_stage(stage_id="filt", **kw):
+    predicate = kw.pop("predicate", None)
+    stage = _stage(stage_id=stage_id, type_="filter_rows", handle="filter", **kw)
+    stage.filter.predicate = predicate
+    return stage
 
 
 def _kinds(stage):
@@ -153,9 +161,26 @@ def test_a_type_that_cannot_run_examples_still_owes_a_description():
 
 
 def test_a_filter_with_no_examples_is_unexemplified():
-    warnings = find_stage_compiler_warnings(
-        _stage(stage_id="filt", type_="filter_rows", handle="filter"))
+    warnings = find_stage_compiler_warnings(_filter_stage(predicate="carry an income"))
     assert [w.kind for w in warnings] == ["unexemplified"]
+
+
+# ── a test whose meaning nobody wrote down ───────────────────────────────────
+def test_a_filter_that_says_what_it_keeps_owes_nothing_further():
+    written = _filter_stage(predicate="carry an income")
+    assert "unsaid_test" not in _kinds(written)
+
+
+def test_a_filter_nobody_said_the_meaning_of_is_unsaid():
+    warnings = find_stage_compiler_warnings(_filter_stage())
+    unsaid = next(w for w in warnings if w.kind == "unsaid_test")
+    # A warning, not an error: a version snapshots whatever the author has.
+    assert unsaid.severity == "warning"
+    assert "`predicate`" in unsaid.detail
+
+
+def test_a_queue_nobody_said_the_meaning_of_is_unsaid():
+    assert _kinds(_queue_stage(predicate=None)) == ["unsaid_test"]
 
 
 def test_an_llm_stage_with_cache_off_is_a_note_not_a_blocker():

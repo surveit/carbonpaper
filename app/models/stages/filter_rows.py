@@ -121,8 +121,8 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
         blocks=["filter"],
         requires_inputs=True,
         min_inputs=1,
-        required=["code"],
-        optional=["function", "summary", "predicate"],
+        required=["code", "predicate"],
+        optional=["function", "summary"],
         notes=(
             "Takes exactly ONE input. The predicate is INLINE code only — there is no "
             "kind/module here; a filter that needs an importable module is doing more "

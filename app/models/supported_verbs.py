@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from app.models.stages.aggregate import AggFormula
-from app.models.stages.stage_base import StageType
+from app.models.stages.stage_base import AbstractStage, StageType
 from app.models.workflow_stage import WorkflowStage
 
 # A formula in this set combines nothing: the group-by is asserting its rows agreed.
@@ -24,14 +24,23 @@ _SAID_FORMULAS = {
 }
 
 
-def read_the_predicate(stage: WorkflowStage) -> Optional[str]:
+# Every block that carries a `predicate`: what its step tests, said for a reader.
+PREDICATE_BLOCKS = ("filter", "starlark_filter", "queue")
+
+
+def read_the_predicate(authored: AbstractStage) -> Optional[str]:
     """The authored verb phrase for what this step tests; None where nobody wrote one."""
-    for holder in ("filter", "starlark_filter", "queue"):
-        block = getattr(stage.stage, holder, None)
+    for holder in PREDICATE_BLOCKS:
+        block = getattr(authored, holder, None)
         written = getattr(block, "predicate", None) if block is not None else None
         if written:
             return str(written)
     return None
+
+
+def decides_which_rows_go_on(authored: AbstractStage) -> bool:
+    return any(getattr(authored, holder, None) is not None
+               for holder in PREDICATE_BLOCKS)
 
 
 def name_the_columns_tested(stage: WorkflowStage) -> list[str]:
