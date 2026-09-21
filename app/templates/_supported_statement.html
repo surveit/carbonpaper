@@ -24,8 +24,8 @@
   {% for paragraph in statement.paragraphs %}
   <p class="statement-say">
     {%- for clause in paragraph -%}
-    <span class="statement-clause" data-stage="{{ clause.stage_id }}"
-          title="open {{ clause.stage_id }}">{% for phrase in clause.phrases %}{{ say(phrase) }}{% endfor %}
+    {#- No `title`: the browser's own tip would sit beside the app's on every phrase. -#}
+    <span class="statement-clause" data-stage="{{ clause.stage_id }}">{% for phrase in clause.phrases %}{{ say(phrase) }}{% endfor %}
     </span>
     {% endfor -%}
   </p>
