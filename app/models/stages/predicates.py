@@ -9,9 +9,7 @@ from app.models.stages.stage_base import AbstractStage
 # Every config block that carries a `predicate`: the blocks whose step decides.
 PREDICATE_BLOCKS = ("filter", "starlark_filter", "queue")
 
-# What a stage written before the field existed was migrated to. It is the field
-# being filled, never a step being explained: everything reading a predicate treats
-# it as unwritten, and `unsaid_test` names every stage still carrying it.
+# The migration filler, which every reader treats as unwritten. Alembic 0022.
 PREDICATE_NOT_WRITTEN = "pass this step's test"
 
 
