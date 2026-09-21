@@ -16,6 +16,7 @@ from app.models.records.claim_review import (
     DraftChallenge,
     Severity,
 )
+from app.reviewer.dedupe import DedupeAnswer
 from app.reviewer.reviewers import REVIEWERS
 from app.services.claim_review_eval import review_the_claim_a_row_names
 from app.services.errors import ClaimRefused
@@ -23,11 +24,11 @@ from claim_review_fixture import PROJECT, claim_the_total, run_the_fixture
 
 
 class _FakeAgent:
-    def __init__(self, answer: ChallengesAnswer) -> None:
+    def __init__(self, answer: ChallengesAnswer | DedupeAnswer) -> None:
         self.answer = answer
         self.last_usage = None
 
-    async def run(self, emit: Any = None) -> ChallengesAnswer:
+    async def run(self, emit: Any = None) -> ChallengesAnswer | DedupeAnswer:
         return self.answer
 
 
@@ -39,7 +40,7 @@ def _one_challenge() -> ChallengesAnswer:
         justification="the amount column is blank",
         citations=[StageOutputColumnCitation(
             run_id="r", stage_id="grant_totals", column="grants")],
-        severity=Severity.major)])
+        severity=Severity.high)])
 
 
 @pytest.fixture
@@ -47,6 +48,9 @@ def claim_id(projects_root, monkeypatch) -> str:
     monkeypatch.setattr(
         reviewer_run, "build_reviewer",
         lambda reviewer, bundle, *, model="sonnet": _FakeAgent(_one_challenge()))
+    monkeypatch.setattr(
+        reviewer_run, "build_deduper",
+        lambda bundle, raised, *, model="sonnet": _FakeAgent(DedupeAnswer(drop=[])))
     return claim_the_total(run_the_fixture(projects_root)).id
 
 
@@ -67,7 +71,7 @@ def test_a_reviewed_claim_comes_back_as_one_row_of_challenges(claim_id) -> None:
         "claim_part_occurrence": 1,
         "text": "The figure counts rows, not grants.",
         "justification": "the amount column is blank",
-        "severity": "major",
+        "severity": "high",
     }
 
 
