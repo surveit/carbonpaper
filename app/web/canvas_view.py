@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from app.core.errors import ColumnNotInFrame, StageNotInRun
-from app.models.citations import StageOutputCellCitation
 from app.models import WorkflowStage
 from app.models.schema import StageId
 from app.services import run as run_service
@@ -11,10 +10,8 @@ from app.services.scope import find_rows_reached_per_stage, read_run_branches
 from app.web.diagrams import TYPE_GLYPH
 from app.web.loading import load_run_record
 from app.web.run_stage_view import TraceScope
-from app.web.scope_drawing import draw_the_scope
-from app.web.scope_view import load_scope_map
 from app.web.sheet_preview import build_canvas_sheets
-from app.web.canvas_payload import CanvasCut, CanvasEdge, CanvasNode, CanvasView
+from app.web.canvas_payload import CanvasEdge, CanvasNode, CanvasView
 from app.web.column_walk import (
     ColumnAt,
     ColumnWalk,
@@ -42,7 +39,6 @@ def load_canvas_view(
     on_walk = ({sid for sid, rows in behind.items() if rows} if counts_rows
                else _list_stages_on_the_walk(walk))
     edges = _list_edges(parents, on_walk, behind)
-    cuts = _list_cuts(project_id, run_id, stage_id, column, row)
     return CanvasView(
         cited_stage=stage_id,
         column=column,
@@ -50,10 +46,9 @@ def load_canvas_view(
         steps=sorted(on_walk, key=lambda sid: (level[sid], sid)),
         nodes=_list_nodes(stages, on_walk, behind),
         edges=edges,
-        cuts=cuts,
         counts_rows=counts_rows,
         sheets=build_canvas_sheets(project_id, run_id, run_branches, reached,
-                                   record.stage_records, cuts,
+                                   record.stage_records,
                                    _index_columns_behind(walk, stages)),
     )
 
@@ -75,20 +70,6 @@ def _read_columns_this_frame_keeps(
         return set()
     kept = {column.name for column in schema.columns}
     return {name for name in walk.list_columns_read_at(stage_id) if name in kept}
-
-
-def _list_cuts(
-    project_id: str, run_id: str, stage_id: StageId, column: str, row: int
-) -> list[CanvasCut]:
-    """What the scope map read as taken out on the figure's route, per stage."""
-    citation = StageOutputCellCitation(
-        run_id=run_id, stage_id=stage_id, row_ordinal=row, column=column, value=None)
-    scope, _ = load_scope_map(project_id, run_id, citation)
-    return [
-        CanvasCut(stage_id=drawn.stage.id, branch=removal.branch, rows=removal.rows)
-        for drawn in draw_the_scope(scope, every_stage=True).columns
-        for removal in drawn.removals
-    ]
 
 
 def build_trace_scope(

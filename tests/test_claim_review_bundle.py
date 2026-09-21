@@ -137,8 +137,7 @@ def test_a_sandboxed_filters_predicate_reaches_the_reviewer_too(claim):
 def test_an_arm_no_row_took_reads_zero(claim):
     bundle = claim_review.build_evidence_bundle(PROJECT, claim.id)
 
-    kept = next(b for b in bundle.branches
-                if b.stage_id == "over_a_million" and b.role == "keeps")
+    kept = next(b for b in bundle.branches if b.stage_id == "over_a_million")
     assert kept.rows_count == 0
     assert "rows 0" in render_evidence_pool(bundle)
 
@@ -146,9 +145,10 @@ def test_an_arm_no_row_took_reads_zero(claim):
 def test_the_arms_the_run_recorded_come_with_their_row_counts(claim):
     bundle = claim_review.build_evidence_bundle(PROJECT, claim.id)
 
+    # One arm, for the rows it kept: the zero-amount G-007 is in no frame below it,
+    # so the evidence counts nine kept rather than naming a tenth branch.
     at_funded = [b for b in bundle.branches if b.stage_id == "funded"]
-    assert {b.role for b in at_funded} == {"keeps", "removes"}
-    assert next(b.rows_count for b in at_funded if b.role == "removes") == 1   # G-007, the zero
+    assert [b.rows_count for b in at_funded] == [9]
     assert not [b for b in bundle.branches if b.reason == "merge"]
 
 

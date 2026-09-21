@@ -8,7 +8,6 @@ import pandas as pd
 import pytest
 
 import app.services.run as run_service
-from app.models.branch_analysis import BranchRole
 from app.models.citations import StageOutputCellCitation
 from app.models.workflow import Workflow
 from app.runtime.branch_analysis import group_rows_by_path, reconstruct_run_branches
@@ -219,14 +218,14 @@ def test_a_cut_below_the_drawn_grain_still_reaches_the_map(scoped):
     assert drawn.covers.at_stage == "banded"
     assert not any(branch.startswith("big_regions|")
                    for path in drawn.branch_paths for branch in path)
-    assert drawn.branches["big_regions|removed"].role is BranchRole.removes
-    cut = next(r for r in drawn.reach if r.branch == "big_regions|removed")
-    assert (cut.taken, cut.here) == (1, 0)
+    # The row it took out holds no branch anywhere; the stage states the count.
+    assert "big_regions|removed" not in drawn.branches
+    assert drawn.rows_dropped_per_stage["big_regions"] == 1
 
 
-def test_a_cut_draws_its_own_groups_and_not_the_figures(scoped):
-    """The 1 row big_regions cut lives at by_region, so by_region is ITS nearest merge."""
-    from app.web.scope_payload import build_scope_map, find_cuts_to_offer
+def test_a_figure_past_every_merge_still_says_what_each_stage_dropped(scoped):
+    """The row big_regions dropped is counted there, at the stage that dropped it."""
+    from app.web.scope_payload import build_scope_map
 
     run, run_id = scoped
     outputs = Path(resolve_run_dir(PROJECT, run_id)) / "outputs"
@@ -236,7 +235,4 @@ def test_a_cut_draws_its_own_groups_and_not_the_figures(scoped):
                                 column="total", value=None))
     assert drawn.nearest_merge == "big_total"
     assert set(drawn.aliased_merges) == {"by_region"}
-    cut = find_cuts_to_offer(run, outputs, drawn)["big_regions|removed"]
-    assert (cut.at_stage, cut.total) == ("by_region", 1)
-    assert cut.nearest_merge == "by_region"
-    assert cut.aliased_merges == {}
+    assert drawn.rows_dropped_per_stage == {"big_regions": 1}

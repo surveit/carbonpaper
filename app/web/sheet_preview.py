@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import Counter
 from pathlib import Path
 
 import pyarrow as pa
@@ -17,7 +16,7 @@ from app.runtime.branch_analysis import WorkflowRunBranches
 from app.runtime.manifest import resolve_output_path
 from app.services.workspace import resolve_run_dir
 from app.web.stage_diff import FILTER_TYPES, FilterRowsDiff, build_stage_diff
-from app.web.canvas_payload import CanvasSheet, CanvasCut, SheetRow
+from app.web.canvas_payload import CanvasSheet, SheetRow
 
 PREVIEW_ROWS = 8
 CELL_CHARS = 60
@@ -31,12 +30,11 @@ ColumnsBehindByStage = dict[StageId, set[str]]
 def build_canvas_sheets(project_id: str, run_id: str, run_branches: WorkflowRunBranches,
                         reached: dict[StageId, set[RowOrdinal]],
                         stage_records: list[StageRecord],
-                        cuts: list[CanvasCut],
                         columns_behind: ColumnsBehindByStage) -> list[CanvasSheet]:
     run_dir = resolve_run_dir(project_id, run_id)
     output_by_id: OutputPathByStage = {
         record.stage_id: record.output_path for record in stage_records}
-    dropped = _count_dropped_per_stage(cuts)
+    dropped = run_branches.rows_dropped_per_stage
     sheets = []
     for stage_id in run_branches.ordered_stage_ids:
         frame_path = resolve_output_path(run_dir, output_by_id[stage_id])
@@ -44,7 +42,8 @@ def build_canvas_sheets(project_id: str, run_id: str, run_branches: WorkflowRunB
             continue
         sheets.append(_build_sheet(
             run_branches, stage_id, run_dir, frame_path, output_by_id,
-            mine=sorted(reached.get(stage_id, ())), rows_dropped=dropped[stage_id],
+            mine=sorted(reached.get(stage_id, ())),
+            rows_dropped=dropped[stage_id] if stage_id in dropped else 0,
             behind=columns_behind[stage_id]))
     return sheets
 
@@ -52,13 +51,6 @@ def build_canvas_sheets(project_id: str, run_id: str, run_branches: WorkflowRunB
 def render_sheet_cell(value: JsonScalar) -> str:
     text = "" if value is None else str(value)
     return text if len(text) <= CELL_CHARS else text[:CELL_CHARS - 1] + "…"
-
-
-def _count_dropped_per_stage(cuts: list[CanvasCut]) -> Counter[StageId]:
-    dropped: Counter[StageId] = Counter()
-    for cut in cuts:
-        dropped[cut.stage_id] += cut.rows
-    return dropped
 
 
 def _build_sheet(run_branches: WorkflowRunBranches, stage_id: StageId, run_dir: Path,

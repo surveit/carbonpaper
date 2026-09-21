@@ -13,7 +13,6 @@ from app.models.branch_analysis import (
     BranchOption,
     BranchPath,
     BranchReason,
-    BranchRole,
     RowOrdinal,
 )
 from app.models.schema import StageId
@@ -50,6 +49,9 @@ class WorkflowRunBranches:
     stages: dict[StageId, WorkflowStage]
     ordered_stage_ids: list[StageId]
     row_counts: dict[StageId, int]
+    # What each stage took out. A dropped row is in no frame, so it holds no branch
+    # and is counted here rather than named as one.
+    rows_dropped_per_stage: dict[StageId, int] = field(default_factory=dict)
 
     def find_branching_stage_ids(self) -> set[StageId]:
         return {option.stage_id for option in self.branch_options.values()}
@@ -81,6 +83,9 @@ def reconstruct_run_branches(
                                                        merges_per_row),
         merges_per_row=merges_per_row, lineages=lineages, stages=stages,
         ordered_stage_ids=ordered_stage_ids, row_counts=row_counts,
+        rows_dropped_per_stage={sid: read.rows_dropped
+                                for sid, read in from_lineage.items()
+                                if read.rows_dropped},
     )
 
 
@@ -103,8 +108,8 @@ class BranchingReadFromLineage:
     """What one stage's lineage says about how it told its rows apart."""
 
     per_row: BranchesPerRow = field(default_factory=list)
-    # Branches with no surviving row to carry them: a filter's removed side.
-    rows_with_no_survivor: dict[BranchId, int] = field(default_factory=dict)
+    # Rows this stage took out. They hold no branch: they are in no frame to hold one.
+    rows_dropped: int = 0
     options: dict[BranchId, BranchOption] = field(default_factory=dict)
 
 
@@ -153,7 +158,7 @@ def _read_the_load(stage: WorkflowStage, rows: int) -> BranchingReadFromLineage:
     branch_id = f"{stage.id}|loaded"
     option = BranchOption(
         id=branch_id, stage_id=stage.id, rows_live_in_stage_id=stage.id,
-        reason=BranchReason.load, role=BranchRole.keeps,
+        reason=BranchReason.load,
         label=f"loaded by {stage.id}", source_code=stage.stage.description or "")
     return BranchingReadFromLineage([(branch_id,)] * rows, options={branch_id: option})
 
@@ -178,7 +183,7 @@ def _read_which_input(read: BranchingReadFromLineage, stage: WorkflowStage,
     for input_stage_id, flags in reaching.items():
         branch_id = f"{stage.id}|from:{input_stage_id}"
         read.options[branch_id] = _option(
-            stage, branch_id, BranchReason.union, BranchRole.keeps,
+            stage, branch_id, BranchReason.union,
             f"came from {input_stage_id}", stage.id)
         _hold(read, flags, branch_id)
 
@@ -191,9 +196,9 @@ def _read_join_misses(read: BranchingReadFromLineage, stage: WorkflowStage,
             continue  # every row matched, or none did: no distinction to draw
         hit = f"{stage.id}|matched:{input_stage_id}"
         miss = f"{stage.id}|missed:{input_stage_id}"
-        read.options[hit] = _option(stage, hit, BranchReason.join, BranchRole.keeps,
+        read.options[hit] = _option(stage, hit, BranchReason.join,
                                     f"matched a row in {input_stage_id}", stage.id)
-        read.options[miss] = _option(stage, miss, BranchReason.join, BranchRole.keeps,
+        read.options[miss] = _option(stage, miss, BranchReason.join,
                                      f"no match in {input_stage_id}", stage.id)
         _hold(read, flags, hit)
         _hold(read, [not flag for flag in flags], miss)
@@ -202,34 +207,27 @@ def _read_join_misses(read: BranchingReadFromLineage, stage: WorkflowStage,
 def _read_removals(read: BranchingReadFromLineage, stage: WorkflowStage,
                    lineage: RowLineage, reaching: RowsReachingEachInput,
                    row_counts: dict[StageId, int]) -> None:
-    """An input every row reaches is the spine; its rows nothing reaches were removed."""
+    """An input every row reaches is the spine; its rows nothing reaches were dropped."""
     for input_stage_id, flags in reaching.items():
         if not all(flags):
             continue
         reached = {p.row_ordinal for entry in lineage.parents for p in entry
                    if p.stage_id == input_stage_id}
-        removed = row_counts[input_stage_id] - len(reached)
-        if removed <= 0:
+        dropped = row_counts[input_stage_id] - len(reached)
+        if dropped <= 0:
             continue
-        kept, gone = f"{stage.id}|kept", f"{stage.id}|removed"
-        keep_label, remove_label = _name_the_removal(stage)
+        kept = f"{stage.id}|kept"
         read.options[kept] = _option(stage, kept, BranchReason.predicate,
-                                     BranchRole.keeps, keep_label, stage.id)
-        read.options[gone] = _option(stage, gone, BranchReason.predicate,
-                                     BranchRole.removes, remove_label, input_stage_id)
+                                     _name_what_was_kept(stage), stage.id)
         _hold(read, flags, kept)
-        read.rows_with_no_survivor[gone] = removed
+        read.rows_dropped = dropped
 
 
-def _name_the_removal(stage: WorkflowStage) -> tuple[str, str]:
-    # A dedupe removes rows the way a filter does, but it has keys, not a predicate.
+def _name_what_was_kept(stage: WorkflowStage) -> str:
+    """A dedupe keeps rows the way a filter does, but it has keys, not a predicate."""
     if stage.stage.type == StageType.dedupe:
-        return "kept, one row per key", "dropped as a repeat of a kept row"
-    said = read_the_predicate(stage.stage)
-    if said is None:
-        return "kept by the predicate", "dropped by the predicate"
-    # "not" rather than an inverted phrase: nothing here can negate English.
-    return said, f"not: {said}"
+        return "kept, one row per key"
+    return read_the_predicate(stage.stage) or "kept by the predicate"
 
 
 def _hold(read: BranchingReadFromLineage, flags: list[bool],
@@ -239,11 +237,10 @@ def _hold(read: BranchingReadFromLineage, flags: list[bool],
 
 
 def _option(stage: WorkflowStage, branch_id: BranchId, reason: BranchReason,
-            role: BranchRole, label: str, rows_live_in: StageId) -> BranchOption:
+            label: str, rows_live_in: StageId) -> BranchOption:
     return BranchOption(
         id=branch_id, stage_id=stage.id, rows_live_in_stage_id=rows_live_in,
-        reason=reason, role=role, label=label,
-        source_code=read_decision_source(stage))
+        reason=reason, label=label, source_code=read_decision_source(stage))
 
 
 # ─── which rows a stage merged into one ──────────────────────────────────────
@@ -272,8 +269,7 @@ def _merge_option(sid: StageId, branch_id: BranchId, ordinal: RowOrdinal,
                   parent: RowParent) -> BranchOption:
     return BranchOption(
         id=branch_id, stage_id=sid, rows_live_in_stage_id=parent.stage_id,
-        reason=BranchReason.merge, role=BranchRole.keeps,
-        merged_into_row_ordinal=ordinal)
+        reason=BranchReason.merge, merged_into_row_ordinal=ordinal)
 
 
 # ─── one path per row, out of the per-stage branches ─────────────────────────
@@ -344,7 +340,6 @@ def _count_rows_per_branch(
         for branch_id in _name_arms(sid, cell))
     for read in from_lineage.values():
         counted.update(b for path in read.per_row for b in path)
-        counted.update(read.rows_with_no_survivor)
     counted.update(b for rows in merges_per_row.values()
                    for path in rows.values() for b in path)
     return counted

@@ -79,7 +79,6 @@ class BranchEvidenceItem(_Base):
     branch_id: str
     stage_id: StageId
     reason: str
-    role: str
     label: str
     source_code: str
     # 0 is a count: the arm no row took. Every option here comes from an enumerated stage.

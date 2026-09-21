@@ -91,7 +91,7 @@ class Node:
 
 class Column:
     def __init__(self, stage: DrawnStage, nodes: list[Node],
-                 gone: list[tuple[BranchId, int]], alias: AliasedMerge | None,
+                 gone: int, alias: AliasedMerge | None,
                  expanded: bool) -> None:
         self.stage = stage
         self.nodes = nodes
@@ -124,12 +124,8 @@ def _build_column(facts: Facts, stage: DrawnStage) -> Column:
         node.alias_of = alias
         if stage.id == facts.scope.citation.stage_id and not facts.scope.is_a_cut:
             node.is_figure, node.drawn_rows = True, 1
-    held = {b for node in nodes for b in node.branches}
-    gone = sorted(((r.branch, r.taken) for r in facts.scope.reach
-                   if facts.scope.branches[r.branch].stage_id == stage.id
-                   and r.branch not in held
-                   and facts.scope.branches[r.branch].role.value == "removes"),
-                  key=lambda pair: -pair[1])
+    gone = facts.scope.rows_dropped_per_stage[stage.id] \
+        if stage.id in facts.scope.rows_dropped_per_stage else 0
     expanded = (alias is None and stage.id != facts.scope.nearest_merge
                 and stage.id in facts.scope.resolved_merges)
     return Column(stage, nodes, gone, alias, expanded)
@@ -332,7 +328,7 @@ def _place_labels(nodes: list[Node], top: float) -> float:
 
 
 def count_removal_lines(columns: list[Column]) -> int:
-    return max([len(column.gone) for column in columns] + [0])
+    return 1 if any(column.gone for column in columns) else 0
 
 
 def measure_height(columns: list[Column]) -> float:

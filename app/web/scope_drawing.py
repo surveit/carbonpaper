@@ -6,7 +6,7 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from app.core.figure_text import render_figure
-from app.models.branch_analysis import BranchId, RowOrdinal
+from app.models.branch_analysis import RowOrdinal
 from app.models.schema import StageId
 from app.web.scope_layout import (
     BAND_GAP,
@@ -67,13 +67,12 @@ class DrawnRibbon(BaseModel):
 
 
 class DrawnRemoval(BaseModel):
-    """Rows a stage took out of the workflow, named on its header line."""
+    """Rows a stage took out of the workflow, counted on its header line."""
 
-    branch: BranchId
     label: str
     tip: str
     line: int
-    # The branch's recorded count, so no reader has to parse it back out of `label`.
+    # The count, so no reader has to parse it back out of `label`.
     rows: int
 
 
@@ -137,8 +136,7 @@ def _render_column(facts: Facts, column: Column) -> DrawnColumn:
         head_note=_clip(column.stage.description or column.stage.type, room // 5.6),
         head_tip=about,
         bars=[_render_bar(facts, column, node) for node in column.nodes],
-        removals=[_render_removal(branch, rows, line, room)
-                  for line, (branch, rows) in enumerate(column.gone)],
+        removals=_render_removal(column.gone, room),
         scale_label="" if step is None else _clip(
             f"{render_figure(step.included_rows_count)} of {render_figure(step.rows_count)}"
             f"{' row at ' if step.rows_count == 1 else ' rows at '}"
@@ -194,14 +192,16 @@ def _say_what_the_bar_holds(node: Node, label: str) -> str:
 
 
 # Its count is true and its width is not, so it is text and never a ribbon.
-def _render_removal(branch: BranchId, rows: int, line: int,
-                    room: float) -> DrawnRemoval:
-    return DrawnRemoval(
-        branch=branch, line=line, rows=rows,
-        label=_clip(f"{render_figure(rows)} row{'' if rows == 1 else 's'} filtered here", room - 2),
-        tip=f"{render_figure(rows)} row{' was' if rows == 1 else 's were'} dropped from the "
-            f"workflow at this stage. Click to draw them in a new tab: they are a "
-            f"different set of rows, so the page around this one stops fitting.")
+def _render_removal(rows: int, room: float) -> list[DrawnRemoval]:
+    """One line or none: what a stage dropped is a count, never a set to walk into."""
+    if not rows:
+        return []
+    return [DrawnRemoval(
+        line=0, rows=rows,
+        label=_clip(f"{render_figure(rows)} row{'' if rows == 1 else 's'} dropped here",
+                    room - 2),
+        tip=f"{render_figure(rows)} row{' was' if rows == 1 else 's were'} dropped from "
+            f"the workflow at this stage, and is in no frame below it.")]
 
 
 def _say_the_other_reading(column: Column) -> str:

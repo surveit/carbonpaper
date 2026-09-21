@@ -93,13 +93,12 @@ def test_the_cited_stage_shows_its_one_row_as_the_figures(values):
     assert sheet.rows[0].cells[sheet.columns.index("total_amount")] == "2200"
 
 
-def test_a_cut_carries_the_branchs_recorded_count_not_its_label(run_id, values):
-    # The dedupe took out west's copy of G-004, so it is a cut as much as a filter is.
+def test_a_sheet_counts_what_its_stage_dropped(run_id, values):
+    # The dedupe took out west's copy of G-004, so it drops rows as a filter does.
     run_branches = read_run_branches(PROJECT, run_id)
-    for cut in values.cuts:
-        assert cut.rows == run_branches.row_count_per_branch_id[cut.branch]
-    assert {cut.stage_id: cut.rows for cut in values.cuts} == {
-        "funded": 1, "one_row_per_grant": 1, "grants_only": 3}
+    dropped = run_branches.rows_dropped_per_stage
+    assert {sid: dropped[sid] for sid in ("funded", "one_row_per_grant", "grants_only")
+            } == {"funded": 1, "one_row_per_grant": 1, "grants_only": 3}
     deduped = _sheet(values, "one_row_per_grant")
     assert (deduped.rows_in, deduped.rows_out, deduped.rows_dropped) == (9, 8, 1)
 
