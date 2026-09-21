@@ -1,5 +1,4 @@
-"""Dropping the repeats after the five reviewers answer: a post-processing step, not a turn
-that judges. It may remove a challenge and do nothing else."""
+"""Dropping the repeats among what the five raised. It may remove and nothing else."""
 from __future__ import annotations
 
 import json
