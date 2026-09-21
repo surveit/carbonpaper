@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 import app.web.routers.claims as claims_router
 
+from app.models.run_manifest import RunKind
 from app.core.run_status import RunStatus
 from app.main import app
 from app.models.claims import (
@@ -47,7 +48,7 @@ def _a_run(tmp_path, parameters: RunParameters | None = None) -> TestClient:
     (tmp_path / _PROJECT).mkdir()
     write_methodology(_PROJECT, "Follow the filings.")
     RunManifest(
-        id=RunManifest.compose_id(_PROJECT, _RUN), run_id=_RUN,
+        id=RunManifest.compose_id(_PROJECT, _RUN), kind=RunKind.production, run_id=_RUN,
         started_at="2026-09-01T10:37:53", project=_PROJECT,
         workflow_version="20260901T103742.393151", parameters=parameters or RunParameters(),
         input_bindings={}, human_review_queue_stats={}, dropped_columns={},
@@ -96,7 +97,7 @@ def test_the_context_pre_fills_from_the_newest_standing_claim(tmp_path):
         ),
     ).save()
     RunManifest(
-        id=RunManifest.compose_id(_PROJECT, "20260902T090000.000000"),
+        id=RunManifest.compose_id(_PROJECT, "20260902T090000.000000"), kind=RunKind.production,
         run_id="20260902T090000.000000", started_at="2026-09-02T09:00:00", project=_PROJECT,
         workflow_version="20260901T103742.393151", parameters=RunParameters(),
         input_bindings={}, human_review_queue_stats={}, dropped_columns={},

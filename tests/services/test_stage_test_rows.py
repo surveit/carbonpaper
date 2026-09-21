@@ -60,7 +60,7 @@ def _write_run(
     rows = pd.DataFrame({"amount": _AMOUNTS, "memo": _MEMOS}) if frame is None else frame
     rows.to_parquet(run / "outputs" / f"{stage_id}.parquet", index=False)
     store_manifest(project_dir, run_id, {
-        "run_id": run_id, "started_at": run_id, "project": project_dir.name,
+        "kind": "runs", "run_id": run_id, "started_at": run_id, "project": project_dir.name,
         "workflow_version": run_id, "human_review_queue_stats": {}, "status": "ok",
         "stage_records": [{
             "stage_id": stage_id, "type": "input_data", "status": status,

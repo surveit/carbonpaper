@@ -15,6 +15,7 @@ from app.web.claims_view import ClaimCounts, build_publish_view
 from app.services.workspace import resolve_run_dir
 from app.web.run_index import RunIndexRow, RunInputCell, StageRowCap, build_run_index_rows
 from app.web.run_published import RunPublished, read_published_outputs
+from app.models.run_manifest import RunKind
 
 DeliverableState = Literal["clean", "warned", "no_runs"]
 
@@ -122,7 +123,7 @@ def build_deliverable(
     row = rows[0]
     manifest = run_service.read_run_status(project_id, row.run_id)
     published = read_published_outputs(
-        project_id, row.run_id, resolve_run_dir(project_id, row.run_id), manifest
+        project_id, row.run_id, resolve_run_dir(project_id, row.run_id, RunKind.production), manifest
     )
     checks = build_checks(project_id, row, published)
     return Deliverable(

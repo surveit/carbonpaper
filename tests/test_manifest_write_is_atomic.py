@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import threading
 
+from app.models.run_manifest import RunKind
 from app.core.run_status import RunStatus, StageStatus
 from app.models import StageType
 from app.models.run_manifest import StageRecord
@@ -20,7 +21,7 @@ _PROJECT = "demo"
 
 def _manifest(run_id: str, stages: int) -> RunManifest:
     return RunManifest(
-        id=RunManifest.compose_id(_PROJECT, run_id),
+        id=RunManifest.compose_id(_PROJECT, run_id), kind=RunKind.production,
         run_id=run_id,
         started_at="2026-08-10T00:00:00",
         project=_PROJECT,
@@ -59,7 +60,7 @@ def test_a_reader_never_sees_a_half_written_manifest() -> None:
     try:
         while not stop.is_set():
             try:
-                assert read_run_manifest(_PROJECT, "R-1").run_id == "R-1"
+                assert read_run_manifest(_PROJECT, "R-1", RunKind.production).run_id == "R-1"
             except Exception as exc:  # noqa: BLE001 — the point is that NOTHING raises
                 failures.append(exc)
                 break

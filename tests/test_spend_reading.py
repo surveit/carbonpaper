@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from app.models.run_manifest import RunKind
 from app.core.agent.store import AgentSession, SessionStore
 from app.core.agent.usage import LlmUsage
 from app.core.persistence import get_store
@@ -33,12 +34,13 @@ def _stage_record(stage_id: str, usage: LlmUsage | None, started_at: str) -> Sta
     )
 
 
-def _store_run(project: str, run_id: str, records: list[StageRecord], area: str = "runs") -> None:
+def _store_run(project: str, run_id: str, records: list[StageRecord],
+               kind: RunKind = RunKind.production) -> None:
     # The stages too: spend reads runs per project, and a project is its directory.
     resolve_project_dir(project).mkdir(parents=True, exist_ok=True)
     Project(id=project, name=project).save()
     RunManifest(
-        id=RunManifest.compose_id(project, run_id, area),
+        id=RunManifest.compose_id(project, run_id), kind=kind,
         run_id=run_id, started_at="2026-08-16T09:00:00", project=project,
         workflow_version=None, human_review_queue_stats={},
         status=RunStatus.OK, stage_records=records,
@@ -94,7 +96,7 @@ def test_a_manifest_this_app_cannot_parse_is_counted_not_skipped_silently():
 def test_an_eval_run_is_totalled_but_carries_no_link():
     _store_run("congresswatch", "20260816T110000",
                [_stage_record("score", LlmUsage(cost_usd=0.40, calls=1), "2026-08-16T11:00:00")],
-               area="eval_run")
+               kind="eval_run")
 
     spend = read_workspace_spend()
 
@@ -142,8 +144,9 @@ def test_a_private_projects_runs_stay_in_the_total_under_its_bare_id():
 def test_a_run_whose_project_record_never_existed_is_still_counted():
     """The sweep reads the runs, so nothing about the project has to be on file."""
     RunManifest(
-        id=RunManifest.compose_id("no_record_at_all", "20260816T090000", "runs"),
-        run_id="20260816T090000", started_at="2026-08-16T09:00:00",
+        id=RunManifest.compose_id("no_record_at_all", "20260816T090000"),
+        run_id="20260816T090000", kind=RunKind.production,
+        started_at="2026-08-16T09:00:00",
         project="no_record_at_all", workflow_version=None, human_review_queue_stats={},
         status=RunStatus.OK,
         stage_records=[_stage_record("score", LlmUsage(cost_usd=2.0, calls=1),

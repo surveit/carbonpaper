@@ -22,6 +22,7 @@ from app.models.run_parameters import RunParameters
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.core.run_status import StageStatus, is_run_still_going
 
+from app.models.run_manifest import RunKind
 from .branch_analysis import load_run_branches
 from .context import RunContext
 from .executor import _execute_stages, topological_sort
@@ -109,6 +110,8 @@ def prepare_run(
         project_id=project_id,
         workflow_version=workflow_version,
         input_bindings=input_records,
+        # The runner drives the triggered-run lifecycle and no other.
+        kind=RunKind.production,
     )
     write_manifest(manifest)
     return {"run_id": run_id, "run_dir": run_dir, "ctx": ctx,
@@ -164,7 +167,7 @@ def resume_run(
     workflow: Workflow,
     workflow_version: str,
 ) -> dict[str, Any]:
-    manifest = read_run_manifest(project_id, run_id)
+    manifest = read_run_manifest(project_id, run_id, RunKind.production)
 
     if manifest.workflow_version != workflow_version:
         raise ValueError(

@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 import app.services.run as run_service
+from app.models.run_manifest import RunKind
 from app.models.citations import StageOutputCellCitation
 from app.models.workflow import Workflow
 from app.runtime.branch_analysis import group_rows_by_path, reconstruct_run_branches
@@ -132,7 +133,7 @@ def scoped(projects_root):
     set_stages(PROJECT, stage_specs(data))
     save_version(PROJECT, message="fixture")
     run_id = str(run_service.execute(PROJECT)["run_id"])
-    manifest = read_run_manifest(PROJECT, run_id).to_dict()
+    manifest = read_run_manifest(PROJECT, run_id, RunKind.production).to_dict()
     order = [record["stage_id"] for record in manifest["stage_records"]]
     rows = {record["stage_id"]: record["output_row_count"]
             for record in manifest["stage_records"]}
@@ -140,7 +141,7 @@ def scoped(projects_root):
     workflow = Workflow(stages=stages)
     placed = {stage.id: workflow.find_workflow_stage(stage.id) for stage in stages}
     return reconstruct_run_branches(
-        resolve_run_dir(PROJECT, run_id), placed, order, rows), run_id
+        resolve_run_dir(PROJECT, run_id, RunKind.production), placed, order, rows), run_id
 
 
 def test_each_sale_took_one_arm(scoped):
@@ -195,7 +196,7 @@ def test_the_column_counts_what_its_header_counts(scoped):
     from app.web.scope_payload import build_scope_map
 
     run, run_id = scoped
-    outputs = Path(resolve_run_dir(PROJECT, run_id)) / "outputs"
+    outputs = Path(resolve_run_dir(PROJECT, run_id, RunKind.production)) / "outputs"
     drawn = build_scope_map(
         run, PROJECT, run_id, outputs,
         StageOutputCellCitation(run_id=run_id, stage_id="grand_total", row_ordinal=0,
@@ -209,7 +210,7 @@ def test_a_cut_below_the_drawn_grain_still_reaches_the_map(scoped):
     from app.web.scope_payload import build_scope_map
 
     run, run_id = scoped
-    outputs = Path(resolve_run_dir(PROJECT, run_id)) / "outputs"
+    outputs = Path(resolve_run_dir(PROJECT, run_id, RunKind.production)) / "outputs"
     drawn = build_scope_map(
         run, PROJECT, run_id, outputs,
         StageOutputCellCitation(run_id=run_id, stage_id="big_total", row_ordinal=0,
@@ -227,7 +228,7 @@ def test_a_figure_past_every_merge_still_says_what_each_stage_dropped(scoped):
     from app.web.scope_payload import build_scope_map
 
     run, run_id = scoped
-    outputs = Path(resolve_run_dir(PROJECT, run_id)) / "outputs"
+    outputs = Path(resolve_run_dir(PROJECT, run_id, RunKind.production)) / "outputs"
     drawn = build_scope_map(
         run, PROJECT, run_id, outputs,
         StageOutputCellCitation(run_id=run_id, stage_id="big_total", row_ordinal=0,

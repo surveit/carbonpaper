@@ -7,6 +7,7 @@ from typing import Sequence
 
 import pyarrow as pa
 
+from app.models.run_manifest import RunKind
 from app.core.errors import StageNotInRun
 from app.core.frames import frame_to_table, read_frame_table
 from app.core.source_files import read_source_file, resolve_file_format
@@ -129,7 +130,7 @@ def compare_slice_to_the_file(project_id: str, run_id: str, stage_id: StageId,
     """Re-reads the file the way the run read it, then compares the slice cell by cell."""
     path = _read_the_binding(project_id, run_id, stage_id)
     ran = read_frame_table(
-        resolve_run_dir(project_id, run_id) / "outputs" / f"{stage_id}.parquet")
+        resolve_run_dir(project_id, run_id, RunKind.production) / "outputs" / f"{stage_id}.parquet")
     source = frame_to_table(_reread_the_source(project_id, run_id, stage_id, path))
     ran_rows = ran.take(pa.array(list(ordinals)))
     source_rows, located_by = _align_rows(

@@ -47,6 +47,7 @@ from app.services.project_record import read_project_edited_at, read_project_nam
 from app.services.terms import count_schemas
 from app.services.workspace import resolve_run_dir
 from app.web.panel_links import RectangleRequest
+from app.models.run_manifest import RunKind
 from app.web.project_cards import (
     ProjectCard,
     ProjectStatus,
@@ -200,7 +201,7 @@ def load_manifest(project_id: str, run_id: str) -> dict[str, Any]:
 
 def load_run_record(project_id: str, run_id: str) -> RunManifest:
     try:
-        return read_run_manifest(project_id, run_id)
+        return read_run_manifest(project_id, run_id, RunKind.production)
     except RunNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Run not found") from exc
 
@@ -435,7 +436,7 @@ def queue_snapshot_rows(project_id: str, run_id: str, stage_id: str) -> list[dic
 
 def find_queue_snapshot_path(project_id: str, run_id: str, stage_id: str) -> Path | None:
     """A run that halted for review here left the rows it halted on; nothing removes them."""
-    run_dir = resolve_run_dir(project_id, run_id)
+    run_dir = resolve_run_dir(project_id, run_id, RunKind.production)
     return next(
         (path for ext in (".parquet", ".csv")
          if (path := run_dir / "queue" / f"{stage_id}{ext}").exists()),

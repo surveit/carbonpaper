@@ -4,6 +4,7 @@ payload. The manifest itself is a stored record — `app.runtime.manifest`.
 
 from __future__ import annotations
 
+from enum import Enum
 from datetime import datetime
 from pathlib import PurePath
 from typing import Any
@@ -52,6 +53,13 @@ FINISHED_STAGE_STATUSES = (StageStatus.OK, StageStatus.VALIDATION_WARNINGS)
 
 # What a READER states for a manifest that will not parse. Not a RunStatus member:
 # no run records it, and a stored status this model rejected is how it is reached.
+class RunKind(str, Enum):
+    """Which set of runs a run belongs to. docs/run-manifest.md"""
+
+    production = "runs"
+    eval = "eval_run"
+
+
 UNREADABLE_RUN_STATUS = "corrupt"
 
 

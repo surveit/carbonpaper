@@ -58,7 +58,7 @@ def _manifest(stage_ids: list[str], limits: dict[str, int] | None = None) -> dic
                                  "bytes": 120}], "source": "workflow"},
     }
     return {
-        "run_id": "T1",
+        "kind": "runs", "run_id": "T1",
         "parameters": {"limits": limits or {}, "offsets": {}},
         "input_bindings": {sid: files[sid] for sid in stage_ids if sid in files},
         "stage_records": [

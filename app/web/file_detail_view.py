@@ -11,6 +11,7 @@ from app.web.file_preview import FilePreview, build_file_preview
 from app.web.file_sizes import describe_bytes
 from app.web.files_view import count_runs_by_file
 from app.runtime.manifest import list_run_entries
+from app.models.run_manifest import RunKind
 
 
 class FacetValue(BaseModel):
@@ -133,7 +134,7 @@ def _find_reading_runs(project_id: str, record: ProjectFile) -> list[ReadingRun]
     return [ReadingRun(run_id=entry.run_id,
                        started_at=str((entry.raw or {}).get("started_at") or ""),
                        status=str((entry.raw or {}).get("status") or "unrecorded"))
-            for entry in reversed(list_run_entries(project_id))
+            for entry in reversed(list_run_entries(project_id, RunKind.production))
             if entry.run_id in read_by]
 
 

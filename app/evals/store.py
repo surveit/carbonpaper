@@ -17,9 +17,9 @@ from app.models.records.eval_config import EvalConfig
 from app.models.records.eval_run import EvalRun
 from app.core.utils import format_errors
 from app.evals.compatibility import CompatibilityReport
-from app.models.records.run_manifest import EVAL_RUNS
+from app.models.run_manifest import RunKind
 from app.services.project import write_eval_config
-from app.services.workspace import resolve_project_dir
+from app.services.workspace import resolve_project_dir, resolve_run_dir
 from app.services.versioning import find_latest_version_id
 
 _SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -136,7 +136,7 @@ def resolve_eval_result_path(project_id: str, result_ref: str) -> Path:
 
 
 def resolve_eval_run_dir(project_id: str, run_id: str) -> Path:
-    return resolve_project_dir(project_id) / EVAL_RUNS / run_id
+    return resolve_run_dir(project_id, run_id, RunKind.eval)
 
 
 # The one thing here still on disk rather than in the document store, so the one

@@ -23,13 +23,14 @@ from app.services.workspace import resolve_run_dir
 from app.web.diagrams import build_mermaid_graph
 from app.web.review_packet.lineage import write_packet_lineage
 from app.web.review_packet.pages import write_packet_pages
+from app.models.run_manifest import RunKind
 
 _log = logging.getLogger(__name__)
 
 
 def export_review_packet(project_id: str, run_id: str, dest_root: Path) -> ReviewPacket:
     # Writes `dest_root/<project>-<run_id>/`. No manifest raises, not an empty packet.
-    run_dir = resolve_run_dir(project_id, run_id)
+    run_dir = resolve_run_dir(project_id, run_id, RunKind.production)
     manifest = run_service.read_run_status(project_id, run_id)
     workflow_stages, workflow, definition_error = _load_pinned_workflow(project_id, manifest)
     workflow_stages_by_id = {resolved.id: resolved for resolved in workflow_stages}

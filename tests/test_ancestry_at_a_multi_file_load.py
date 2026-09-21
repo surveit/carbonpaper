@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 import app.services.run as run_service
+from app.models.run_manifest import RunKind
 from app.core.frames import read_frame_table
 from app.services.scope import find_rows_reached_per_stage, read_run_branches
 from app.services.workspace import resolve_run_dir
@@ -33,7 +34,7 @@ def test_a_load_of_two_files_reaches_only_the_rows_that_reached_the_total(run_id
 
 
 def _read_column(run_id: str, stage_id: str, name: str) -> list[str]:
-    path = resolve_run_dir(PROJECT, run_id) / "outputs" / f"{stage_id}.parquet"
+    path = resolve_run_dir(PROJECT, run_id, RunKind.production) / "outputs" / f"{stage_id}.parquet"
     return read_frame_table(path).column(name).to_pylist()
 
 

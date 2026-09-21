@@ -5,22 +5,39 @@ by `app/runtime/executor.py` and read by every screen that reports on a run. Thi
 holds the reasoning its fields depend on, so the record itself stays short enough to
 read in one screen.
 
-## Areas: two prefixes under one collection
+## The set a run belongs to
 
-A manifest is stored at `run/<project>/<area>/<run_id>`, where `area` is both the run
-directory on disk and a segment of the store key.
+A run is either one someone triggered or one an eval executed, and the two are kept
+apart so an eval never contaminates what the runs index, the project card or the spend
+report count. `RunKind` (`app/models/run_manifest.py`) names the two:
 
-| Constant | Value | What it holds |
+| Member | Value | What it holds |
 |---|---|---|
-| `PRODUCTION_RUNS` | `runs` | a run someone triggered |
-| `EVAL_RUNS` | `eval_run` | an eval's subset run |
-| `RUN_AREAS` | both, in that order | for a reader totalling a project's whole spend |
+| `RunKind.production` | `runs` | a run someone triggered |
+| `RunKind.eval` | `eval_run` | an eval's subset run |
 
-`runs/` vs `eval_run/` was the discriminator before the manifest moved into the store,
-and keeping it as a key segment means a project's production runs stay one prefix scan
-and an eval run can never appear in the runs index.
-`app.evals.store.resolve_eval_run_dir` builds its directory from `EVAL_RUNS`, so the
-name a run is written under and the name a reader filters by are one string.
+**The set is a FIELD on the record, not a segment of its key.** A manifest is stored at
+`run/<project>/<run_id>`, and `kind` is a stored field. The key carries the project
+because a project owns its runs; it carries nothing else, so a reader holding a run id
+can look the run up without first guessing which set it is in.
+
+**Every reader names the set it wants.** `read_run_manifest(project_id, run_id,
+expected_kind)` raises `RunNotFoundError` when the record it finds belongs to another
+set — a reader cannot be handed an eval run by accident, and there is no parameter
+default that would let a new one silently read production. `resolve_run_dir` takes the
+`RunKind` too, and `resolve_kind_dir` (`app/services/workspace.py`) is the only place a
+member becomes a directory name.
+
+That last property is what `tests/arch/test_a_run_kind_becomes_a_path_once.py` holds.
+It fails on a `RunKind.<member>.value` outside the resolver, and on an `kind` parameter
+annotated `str` — the two edits that would let a bare `"runs"` back in. Neither check is by name alone: `"runs"` is also a nav section and a URL segment,
+and `kind` also names an event's and a branch's, so the widening check only reads a
+module that imports `RunKind`.
+
+`list_run_entries` reads the project off the key and the set off each record, because
+that is where each is written down. Filtering both in the store would require the key
+and the field to agree about the project, and nothing checks that they do. A torn
+payload records no set, so it stays in the listing rather than vanishing from every one.
 
 ## `exclude_unset` is load-bearing, not a size optimisation
 

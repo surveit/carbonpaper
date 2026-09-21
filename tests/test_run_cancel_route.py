@@ -34,7 +34,7 @@ def client() -> TestClient:
 def _write_manifest(examples_dir: Path, status: str) -> Path:
     run_dir = examples_dir / PROJ / "runs" / RUN
     run_dir.mkdir(parents=True, exist_ok=True)
-    store_manifest(run_dir.parent.parent, run_dir.name, {"run_id": RUN, "started_at": RUN, "project": PROJ,
+    store_manifest(run_dir.parent.parent, run_dir.name, {"kind": "runs", "run_id": RUN, "started_at": RUN, "project": PROJ,
                     "workflow_version": RUN, "status": status,
                     "human_review_queue_stats": {}, "stage_records": []})
     return run_dir
@@ -84,7 +84,7 @@ def _write_status_manifest(examples_dir: Path, stage_statuses: list[tuple[str, s
          "input_validation_report": [], "output_validation_report": None,
          "output_row_count": 0}
         for sid, status in stage_statuses]
-    store_manifest(run_dir.parent.parent, run_dir.name, {"run_id": RUN, "started_at": RUN, "project": PROJ,
+    store_manifest(run_dir.parent.parent, run_dir.name, {"kind": "runs", "run_id": RUN, "started_at": RUN, "project": PROJ,
                     "workflow_version": RUN, "status": status,
                     "human_review_queue_stats": {}, "stage_records": stages})
     return run_dir

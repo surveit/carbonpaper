@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.models.run_manifest import RunKind
 from app.core.figure_text import render_figure
 from app.core.errors import StageNotInRun
 from app.models.citations import StageOutputCellCitation
@@ -18,7 +19,7 @@ from app.web.scope_payload import ScopeMap, build_scope_map
 def load_scope_map(project_id: str, run_id: str, citation: StageOutputCellCitation,
                    expand: frozenset[StageId] = frozenset()) -> ScopeMap:
     run_branches = read_run_branches(project_id, run_id)
-    outputs = resolve_run_dir(project_id, run_id) / "outputs"
+    outputs = resolve_run_dir(project_id, run_id, RunKind.production) / "outputs"
     return build_scope_map(run_branches, project_id, run_id, outputs, citation, expand)
 
 
@@ -37,7 +38,7 @@ def load_the_rows_that_reached(project_id: str, run_id: str, stage_id: StageId,
     return {
         "project": project_id, "run_id": run_id, "stage": record,
         "diff": build_stage_diff(
-            pinned.workflow_stage, resolve_run_dir(project_id, run_id),
+            pinned.workflow_stage, resolve_run_dir(project_id, run_id, RunKind.production),
             record.get("output_path"),
             {entry.get("stage_id"): entry.get("output_path")
              for entry in manifest.get("stage_records", [])},
@@ -45,7 +46,7 @@ def load_the_rows_that_reached(project_id: str, run_id: str, stage_id: StageId,
         "links": resolve_panel_links(project_id, run_id),
         "ordinals": at_rows,
         "preview": load_output_rows_at(
-            resolve_run_dir(project_id, run_id), record.get("output_path"),
+            resolve_run_dir(project_id, run_id, RunKind.production), record.get("output_path"),
             at_rows, MAX_TABLE_ROWS),
         "full_rows": True,
     }

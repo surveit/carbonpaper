@@ -8,6 +8,7 @@ from typing import Any
 
 
 from app.core.paths import CARBON_PAPER_HOME
+from app.models.run_manifest import RunKind
 # The projects storage root: <root>/<name>/ working copies live here. There is
 # exactly ONE in a running process — the app does not serve multiple
 # workspaces, so no function takes a root as an argument. Configure it the way
@@ -52,13 +53,18 @@ def resolve_project_dir(project_id: str) -> Path:
     return projects_dir().resolve() / validate_project_id(project_id)
 
 
+def resolve_kind_dir(project_id: str, kind: RunKind) -> Path:
+    """The ONE place a run set becomes a directory; everywhere else passes the RunKind."""
+    return resolve_project_dir(project_id) / kind.value
+
+
 def resolve_runs_dir(project_id: str) -> Path:
-    """Where this project's runs go — the runtime is handed this, never the project."""
-    return resolve_project_dir(project_id) / "runs"
+    """Where a triggered run goes — the runtime is handed this, never the project."""
+    return resolve_kind_dir(project_id, RunKind.production)
 
 
-def resolve_run_dir(project_id: str, run_id: str) -> Path:
-    return resolve_runs_dir(project_id) / run_id
+def resolve_run_dir(project_id: str, run_id: str, kind: RunKind) -> Path:
+    return resolve_kind_dir(project_id, kind) / run_id
 
 
 # Keys this reader injects onto a loaded schema dict for its own bookkeeping —

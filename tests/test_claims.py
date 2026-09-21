@@ -6,6 +6,7 @@ from datetime import date
 import pytest
 from pydantic import ValidationError
 
+from app.models.run_manifest import RunKind
 from app.models.claims import (
     ClaimImportance,
     ClaimShapeInput,
@@ -277,7 +278,7 @@ def test_a_citation_two_outputs_carry_names_neither_of_them():
 
 def _manifest(status: RunStatus = RunStatus.OK, **parameters) -> RunManifest:
     return RunManifest(
-        run_id=_RUN, started_at="2026-09-01T10:37:53", project=_PROJECT,
+        run_id=_RUN, kind=RunKind.production, started_at="2026-09-01T10:37:53", project=_PROJECT,
         workflow_version="v1", human_review_queue_stats={}, status=status,
         stage_records=[], parameters=RunParameters(**parameters))
 

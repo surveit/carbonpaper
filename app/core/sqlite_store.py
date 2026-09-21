@@ -102,8 +102,8 @@ class SqliteKvStore:
     def find(
         self, collection: str, fields: Mapping[str, JsonScalar]
     ) -> Iterator[tuple[str, JsonDict]]:
-        # None matches a stored null and an absent key alike: json_extract cannot tell them apart.
-        tests: list[str] = ["collection=?"]
+        # json_extract RAISES on a torn payload, and reads a stored null as an absent key.
+        tests: list[str] = ["collection=?", "json_valid(data)"]
         params: list[JsonScalar] = [collection]
         for name, value in fields.items():
             path = f"$.{name}"

@@ -36,6 +36,7 @@ from app.models.terms import render_terms
 from app.models.workflow import Workflow, find_stages_upstream_of, sort_stages_by_dependency
 from app.models.workflow_stage import WorkflowStage
 from app.services import claims as claims_service
+from app.models.run_manifest import RunKind
 from app.services import run as run_service
 from app.services import scope as scope_service
 from app.services import terms as terms_service
@@ -48,7 +49,7 @@ def build_evidence_bundle(project_id: ID, claim_id: ID) -> EvidenceBundle:
     claim = claims_service.load_claim(project_id, claim_id)
     cited = _require_cell_citation(claim.citation)
     run_id = cited.run_id
-    manifest = run_service.read_run_manifest(project_id, run_id)
+    manifest = run_service.read_run_manifest(project_id, run_id, RunKind.production)
     stages = _read_workflow_stages(project_id, run_id)
     written = {record.stage_id for record in manifest.stage_records if record.output_path}
     return EvidenceBundle(
@@ -216,7 +217,7 @@ def _name_challenge(index: int, challenge: Challenge) -> str:
 
 def _read_run_holdings(project_id: ID, run_id: ID,
                        citations: list[ChallengeCitation]) -> _RunHoldings:
-    manifest = run_service.read_run_manifest(project_id, run_id)
+    manifest = run_service.read_run_manifest(project_id, run_id, RunKind.production)
     written = {record.stage_id for record in manifest.stage_records if record.output_path}
     wanted = _find_cited_columns_by_stage_id(run_id, citations)
     terms = terms_service.load_terms(project_id)

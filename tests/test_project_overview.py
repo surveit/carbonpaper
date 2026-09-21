@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from app.models.run_manifest import RunKind
 from app.core.run_status import RunStatus
 from app.models.citations import StageOutputCellCitation
 from app.models.records.run_manifest import RunManifest
@@ -21,7 +22,7 @@ _RUN = "20260825T132644.199715"
 def _record_run(*, status: RunStatus = RunStatus.OK,
                 parameters: RunParameters | None = None) -> None:
     RunManifest(
-        id=RunManifest.compose_id(_PROJECT, _RUN),
+        id=RunManifest.compose_id(_PROJECT, _RUN), kind=RunKind.production,
         run_id=_RUN, started_at="2026-08-25T13:26:44", project=_PROJECT,
         workflow_version="20260825T132440.925374",
         parameters=parameters or RunParameters(),

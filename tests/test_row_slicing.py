@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from app.models.run_manifest import RunKind
 from app.core.errors import SubsetRunError
 from app.core.frames import table_to_frame
 from app.models import parse_stage, Stage, Workflow
@@ -47,7 +48,7 @@ def _run(
     return execute_subset(
         Workflow(stages=stages), injected_outputs={},
         stage_ids=[s.id for s in stages], run_dir=tmp_path / "runs" / name,
-        params=RunParameters(limits=limits or {}), project_id=(tmp_path / "runs" / name).parent.parent.name)
+        params=RunParameters(limits=limits or {}), kind=RunKind.production, project_id=(tmp_path / "runs" / name).parent.parent.name)
 
 
 def test_limit_caps_the_rows_a_frame_handler_is_given(tmp_path):

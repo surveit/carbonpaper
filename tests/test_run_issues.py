@@ -65,7 +65,7 @@ def _record(stage_id: str, status: str, **extra: Any) -> dict[str, Any]:
 
 def _manifest(*records: dict[str, Any]) -> dict[str, Any]:
     return {
-        "run_id": RUN, "started_at": "2026-08-06T09:01:00", "project": PROJECT,
+        "kind": "runs", "run_id": RUN, "started_at": "2026-08-06T09:01:00", "project": PROJECT,
         "workflow_version": "20260806T085500", "status": "errors",
         "human_review_queue_stats": {}, "stage_records": list(records),
     }

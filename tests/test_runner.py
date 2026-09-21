@@ -5,6 +5,7 @@ import pandas as pd
 import pydantic
 import pytest
 
+from app.models.run_manifest import RunKind
 from app import cli
 from app.core.errors import NoVersionToRunError, SubsetRunError
 from app.services import run as run_service
@@ -118,7 +119,7 @@ def test_cli_bust_cache_flag_reaches_the_run(monkeypatch):
     def fake_execute(project, *, version_id=None, bindings=None, limits=None,
                      offsets=None, bust_cache=False):
         calls.append(bust_cache)
-        return {"run_id": "r", "workflow_version": "v", "status": RunStatus.OK,
+        return {"kind": "runs", "run_id": "r", "workflow_version": "v", "status": RunStatus.OK,
                 "stage_records": []}
 
     monkeypatch.setattr(run_service, "execute", fake_execute)
@@ -484,7 +485,8 @@ def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch)
     with pytest.raises(SubsetRunError) as exc_info:
         execute_subset(
             workflow, injected_outputs=injected_outputs, stage_ids=["score"],
-            run_dir=tmp_path / "runs" / "subset1", project_id=(tmp_path / "runs" / "subset1").parent.parent.name)
+            run_dir=tmp_path / "runs" / "subset1", kind=RunKind.production,
+            project_id=(tmp_path / "runs" / "subset1").parent.parent.name)
 
     message = str(exc_info.value)
     assert "failed generation" in message and "boom" in message
@@ -522,7 +524,8 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
     with pytest.raises(SubsetRunError):
         execute_subset(
             workflow, injected_outputs=injected, stage_ids=["clean", "score"],
-            run_dir=run_dir, project_id=(run_dir).parent.parent.name)
+            run_dir=run_dir, kind=RunKind.production,
+            project_id=(run_dir).parent.parent.name)
 
     manifest = read_manifest(run_dir.parent.parent, run_dir.name)
     records = {r["stage_id"]: r for r in manifest["stage_records"]}
@@ -539,7 +542,7 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
 
 def test_raise_if_run_failed_lists_halted_stages_as_readable_text():
     manifest = RunManifest(
-        run_id="r", started_at="t", project="p", workflow_version=None,
+        run_id="r", kind=RunKind.production, started_at="t", project="p", workflow_version=None,
         input_bindings={},
         human_review_queue_stats={}, dropped_columns={}, status="awaiting_review",
         stage_records=[], halted_at=["review_a", "review_b"],
@@ -622,7 +625,7 @@ def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
     run_dir = tmp_path / "runs" / run_id
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
     manifest = {
-        "run_id": run_id, "started_at": run_id, "project": tmp_path.name,
+        "kind": "runs", "run_id": run_id, "started_at": run_id, "project": tmp_path.name,
         "workflow_version": version_id,
         "status": "awaiting_review",
         "run_bindings": {"load": {"path": str(bound_csv)}},
@@ -655,7 +658,7 @@ def test_resume_of_a_test_run_keeps_the_read_only_cache_it_ran_under(tmp_path):
     run_dir = tmp_path / "runs" / run_id
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
     store_manifest(run_dir.parent.parent, run_id, {
-        "run_id": run_id, "started_at": run_id, "project": tmp_path.name,
+        "kind": "runs", "run_id": run_id, "started_at": run_id, "project": tmp_path.name,
         "workflow_version": version_id, "status": "cancelled",
         "parameters": {"is_test_run": True, "queue_auto_approve": True},
         "human_review_queue_stats": {},

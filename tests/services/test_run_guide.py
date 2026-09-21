@@ -120,7 +120,7 @@ def _manifest(
     ran = _STAGES if executed is None else [s for s in _STAGES if s["id"] in executed]
     measured = _COUNTS if counts is None else counts
     return {
-        "run_id": _RUN_ID,
+        "kind": "runs", "run_id": _RUN_ID,
         "workflow_version": version_id,
         "stage_records": [
             {"stage_id": s["id"], "status": "ok",

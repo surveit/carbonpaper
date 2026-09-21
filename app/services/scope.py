@@ -26,6 +26,7 @@ from app.runtime.lineage import RowParent
 from app.services import run as run_service
 from app.services.versioning import load_version_stages
 from app.services.workspace import resolve_run_dir
+from app.models.run_manifest import RunKind
 
 
 def read_run_branches(project_id: str, run_id: str) -> WorkflowRunBranches:
@@ -41,7 +42,7 @@ def read_run_branches(project_id: str, run_id: str) -> WorkflowRunBranches:
     workflow = Workflow(stages=stages)
     placed = {stage.id: workflow.find_workflow_stage(stage.id)
               for stage in stages if stage.id in rows}
-    run_dir = resolve_run_dir(project_id, run_id)
+    run_dir = resolve_run_dir(project_id, run_id, RunKind.production)
     if is_run_still_going(manifest["status"]):
         return reconstruct_run_branches(run_dir, placed, order, rows)
     return load_run_branches(run_dir, placed, order, rows, pinned_version_id)

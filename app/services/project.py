@@ -53,6 +53,7 @@ from app.services.stage_cache_transfer import (
     CacheImportReport, export_stage_cache, import_stage_cache, validate_cache_archive,
 )
 from app.services.stage_edit import AddStagesResult, EditStageResult
+from app.models.run_manifest import RunKind
 
 
 # ─── Project identity record ──────────────────────────────────────────────────
@@ -146,7 +147,7 @@ def load_stage_specs(project_id: str) -> list[dict[str, Any]]:
 def _runs_summary(project_id: str) -> RunsSummary:
     statuses: list[tuple[str, str]] = []  # (run_id, status)
     awaiting = 0
-    for entry in run_service.list_run_entries(project_id):
+    for entry in run_service.list_run_entries(project_id, RunKind.production):
         if entry.raw is None:
             # Counted, not hidden: a record this reader cannot read at all carries
             # no `is_test_run` to exclude it by, so it is treated as non-test, the

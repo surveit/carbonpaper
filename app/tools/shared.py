@@ -40,6 +40,7 @@ from app.services.errors import WorkflowLoadError
 from app.services.project import ProjectListing
 from app.models.records.project import Project
 from app.models.records.review_guide import ReviewGuide
+from app.models.run_manifest import RunKind
 
 # Domain failures a run tool turns into {ok: False, error: str(exc)} — a loud, honest
 # verdict rather than a traceback or a fabricated run id/status. Anything outside this
@@ -307,7 +308,7 @@ class RunHistory(BaseModel):
 
 def list_runs(project_id: str, limit: int = MAX_RUNS_LISTED) -> RunHistory:
     validate_project_exists(project_id)
-    entries = list(reversed(run_service.list_run_entries(project_id)))
+    entries = list(reversed(run_service.list_run_entries(project_id, RunKind.production)))
     kept = min(max(limit, 1), MAX_RUNS_LISTED)
     return RunHistory(
         run_count=len(entries),

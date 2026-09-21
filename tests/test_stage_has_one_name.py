@@ -79,7 +79,7 @@ def test_a_description_holding_a_quote_cannot_end_the_mermaid_tooltip_early():
 
 
 def test_a_manifest_written_before_the_rename_still_loads():
-    legacy = """{"run_id": "r1", "started_at": "2026-01-01T00:00:00",
+    legacy = """{"kind": "runs", "run_id": "r1", "started_at": "2026-01-01T00:00:00",
       "project": "demo", "workflow_version": null, "limit_overrides": {},
       "offset_overrides": {}, "run_bindings": {}, "input_bindings": {},
       "human_review_queue_stats": {}, "dropped_columns": {}, "status": "ok",

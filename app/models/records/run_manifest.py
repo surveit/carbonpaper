@@ -7,7 +7,7 @@ from pydantic import ConfigDict, field_validator, model_validator
 from app.core.json_types import JsonDict
 from app.core.record import PersistedModel, PersistenceScope
 from app.core.run_status import RunStatus
-from app.models.run_manifest import StageRecord
+from app.models.run_manifest import RunKind as RunKind, StageRecord
 from app.models.stage_contribution import QueueStats
 from app.models.run_parameters import RunParameters
 
@@ -21,16 +21,6 @@ _LEGACY_PARAMETER_KEYS = {
     "is_test_run": "is_test_run",
     "run_bindings": "run_bindings",
 }
-
-
-# docs/run-manifest.md
-PRODUCTION_RUNS = "runs"
-
-
-EVAL_RUNS = "eval_run"
-
-
-RUN_AREAS = (PRODUCTION_RUNS, EVAL_RUNS)
 
 
 _STORE_BOOKKEEPING = {"id", "created_at", "updated_at"}
@@ -47,6 +37,8 @@ class RunManifest(PersistedModel):
     DUMP_OPTS: ClassVar[JsonDict] = {"exclude_unset": True}
 
     run_id: str
+    # docs/run-manifest.md
+    kind: RunKind
     started_at: str
     # Required: a run that cannot name its project has no id to be stored under.
     project: str
@@ -110,9 +102,9 @@ class RunManifest(PersistedModel):
         return next((r for r in self.stage_records if r.stage_id == stage_id), None)
 
     @staticmethod
-    def compose_id(project_id: str, run_id: str, area: str = PRODUCTION_RUNS) -> str:
-        """The store key; `area` is the directory that held the run."""
-        return f"{project_id}/{area}/{run_id}"
+    def compose_id(project_id: str, run_id: str) -> str:
+        """The store key. The kind is a FIELD — an id carrying it could not be looked up."""
+        return f"{project_id}/{run_id}"
 
     def to_dict(self) -> dict[str, Any]:
         """What this run RECORDED — the boundary shape every reader consumes."""

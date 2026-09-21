@@ -305,7 +305,10 @@ def _inherit(sid: StageId, stage: WorkflowStage | None, lineage: RowLineage | No
     # No lineage: the stage type's contract says output row i IS input row i.
     inputs = [ref.id for ref in stage.inputs] if stage else []
     if len(inputs) == 1 and stage and is_grain_and_order_preserving(stage.stage.type):
-        return list(paths[inputs[0]])
+        # A subset run's frontier starts mid-workflow: its input was injected, not run.
+        carried = paths.get(inputs[0])
+        if carried is not None:
+            return list(carried)
     return [()] * row_counts[sid]
 
 

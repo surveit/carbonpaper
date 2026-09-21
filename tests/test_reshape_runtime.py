@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+from app.models.run_manifest import RunKind
 from app.core.errors import SubsetRunError
 from app.core.frames import table_to_frame
 from app.models import parse_stage, Stage, Workflow
@@ -52,7 +53,7 @@ def _source_stage(sid: str, rows: list[dict], columns: list[dict], tmp_path) -> 
 def _run(workflow: Workflow, stage_ids: list[str], run_dir):
     return execute_subset(
         workflow, injected_outputs={}, stage_ids=stage_ids,
-        run_dir=run_dir, project_id=run_dir.parent.parent.name)
+        run_dir=run_dir, kind=RunKind.production, project_id=run_dir.parent.parent.name)
 
 
 # ── explode ───────────────────────────────────────────────────────────────────

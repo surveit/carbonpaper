@@ -36,7 +36,7 @@ def _write_run(
     else:
         df.to_csv(run_dir / output_rel, index=False)
     manifest = {
-        "run_id": RUN,
+        "kind": "runs", "run_id": RUN,
         "started_at": RUN,
         "project": PROJ,
         "workflow_version": RUN,
