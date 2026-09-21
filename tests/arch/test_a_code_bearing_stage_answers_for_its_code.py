@@ -1,11 +1,5 @@
-"""Architecture: a stage type that holds authored code answers ``find_authored_code_block``.
-Readers that want a stage's source ask that hook; the branch analysis reads the arms out of what
-it returns, the stage-test compiler reads the function out of it, and the review packet quotes it.
-A type whose config block carries ``code`` but that leaves the base hook returning ``None`` is
-invisible to every one of them, and nothing else fails: the arms a run recorded simply stop
-having a description. That is how ``starlark_filter_rows`` came to report no arms — see
-docs/branch-analysis.md.
-"""
+"""Architecture: a stage type holding code answers find_authored_code_block.
+docs/branch-analysis.md"""
 from __future__ import annotations
 
 from typing import get_args
