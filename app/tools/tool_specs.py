@@ -5,7 +5,8 @@ together, so binding it is a single lookup and no half of it can go missing.
 from __future__ import annotations
 
 from app.core.agent.bound_tool import BoundToolSpec, bind_by_signature
-from app.tools import claim_shapes as claim_shape_tools, draft_editing, shared, versions
+from app.tools import claim_shapes as claim_shape_tools
+from app.tools import claims as claim_tools, draft_editing, shared, versions
 from app.tools.shared import MAX_OUTPUT_ROWS, MAX_RUNS_LISTED, MAX_SLEEP_SECONDS
 from app.tools.types import AgentTool, ToolParameterProse
 
@@ -137,6 +138,58 @@ which thing it meant.
 What is stored reaches every agent that writes prose about this project and
 is shown to the human on the project's Terms page. Agree the words with the
 user before you store them — never invent one to fill the list out.""",
+    ),
+    "submit_claim": AgentTool(
+        fn=claim_tools.submit_claim,
+        label="Proposing a sentence for review",
+        parameters={
+            "project_id": PROJECT_ID,
+            "run_id": "The finished run the sentence is read from.",
+            "slug": "The published figure it cites, by the slug the stage's figure rule "
+                "gave it. The figure must name a claim shape or there is nothing to claim.",
+            "text": "The sentence a person would publish, in their words. Not a summary "
+                "of the run and not a description of the figure: the claim itself.",
+            "context": "One value per context column the shape declares, or nothing when "
+                "it declares none.",
+        },
+        description="""\
+Propose one sentence for review. It stands behind nothing: five reviewers read
+it against what the run holds, and a person then approves, edits or closes it.
+Submitting starts that review, so there is nothing else to call.
+
+Submitting again for the same shape and context REPLACES what stood there, so
+a reworded sentence is another submit rather than an edit. Read the review back
+with `read_claim_review`; it takes a few minutes.""",
+    ),
+    "read_claim_review": AgentTool(
+        fn=claim_tools.read_claim_review,
+        label="Reading what the reviewers raised",
+        parameters={
+            "project_id": PROJECT_ID,
+            "claim_id": "The claim, as `submit_claim` returned it.",
+        },
+        description="""\
+What the reviewers raised against a sentence, once they are done. `review` says
+which: `running` is still in flight, `done` carries the challenges, `failed`
+carries the error, `none` means no review has started, and `refused` means the
+claim cites a table rather than one figure, which is not reviewed.
+
+Each challenge names the phrase it lands on, what makes it stick, its weight and
+the pieces of the run it cites. They are not yours to answer — a person decides —
+but a sentence you would not publish given them is one to rewrite before they
+have to.""",
+    ),
+    "cancel_claim_submission": AgentTool(
+        fn=claim_tools.cancel_claim_submission,
+        label="Withdrawing a proposed sentence",
+        parameters={
+            "project_id": PROJECT_ID,
+            "claim_id": "The claim to withdraw.",
+        },
+        description="""\
+Withdraw a sentence you proposed, so nothing stands behind it and no one is
+asked to rule on it. Use it where the sentence was wrong to propose at all; to
+reword one, submit the new wording instead, which replaces this one.""",
     ),
     "read_claim_shapes": AgentTool(
         fn=claim_shape_tools.read_claim_shapes,
