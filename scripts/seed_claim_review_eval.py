@@ -11,15 +11,27 @@ import csv
 from pathlib import Path
 from typing import Any
 
+from app.core.paths import repo_root
 from app.core.store_config import configure_default_stores, refuse_renamed_env_vars
+from app.evals.dataset_columns import deconflict_column_names, get_output_columns_from_stage
+from app.evals.runner import run_eval
 from app.models.claims import ClaimImportance, ClaimShapeInput, DataUniverseRequirement
+from app.models.eval import ExpectedOutput, ScoringMetric
 from app.models.records.claims import Claim, ClaimShape
+from app.models.records.eval_config import EvalConfig
+from app.models.records.eval_run import EvalRun
 from app.models.records.workflow_output import WorkflowOutput
+from app.models.schema import Column, TableSchema
+from app.models.stages.input_data import FileFormat
+from app.models.table import TableRef
+from app.models.workflow import Workflow
+from app.models.workflow_stage import WorkflowStage
 from app.services import drafts, run as run_service
 from app.services.claim_shapes import load_claim_shapes, write_claim_shapes
 from app.services.claims import load_claims_of_shape, submit_claim
 from app.services.code_approval import approve_code_execution
-from app.services.project import create_project, find_projects_by_name
+from app.services.project import create_project, find_projects_by_name, write_eval_config
+from app.services.versioning import load_version_stages
 from app.services.workspace import configure_projects_dir_from_env, resolve_project_dir
 
 CASE_PROJECT_ID = "20260921T105528.171720"
@@ -43,6 +55,21 @@ CASE_ID = "ai-spend-row-window"
 EVAL_PROJECT_NAME = "claim_review_eval"
 REVIEW_MODEL = "sonnet"
 JUDGE_MODEL = "claude-sonnet-4-6"
+
+OVERRIDE_STAGE = "load_cases"
+TARGET_STAGE = "judge_the_review"
+VERDICT_COLUMN = "found"
+EVAL_ID = "reviewers-name-the-defect"
+EVAL_NAME = "Do the reviewers name the labelled defect?"
+# `TableRef.path` is checkout-relative, so the file rides in the repository.
+EVAL_DATASET_PATH = "scripts/data/claim_review_eval_cases.csv"
+
+# What the case is labelled with: a reviewer SHOULD name the row window.
+EXPECTED_VERDICT = True
+
+EVAL_DESCRIPTION = (
+    "The judging workflow reduces five reviewers' challenges to one boolean; this "
+    "asks whether that boolean matches the labelled verdict for the case.")
 
 EVAL_METHODOLOGY = """# Does a claim review catch a row-window artifact?
 
@@ -125,11 +152,21 @@ def main() -> None:
     cases_path = write_the_cases_file(project_id, claim)
     version_id = save_the_eval_version(project_id, cases_path)
     manifest = run_service.execute(project_id, version_id=version_id)
+    config = save_the_eval_config(project_id, version_id, claim)
+    eval_run = run_eval(project_id, config, version_id=version_id)
 
     print(f"claim:          {claim.id} ({claim.status})")
     print(f"eval project:   {project_id}")
     print(f"eval version:   {version_id}")
-    print(f"eval run:       {manifest['run_id']} ({manifest['status']})")
+    print(f"workflow run:   {manifest['run_id']} ({manifest['status']})")
+    describe_eval_run(eval_run)
+
+
+def describe_eval_run(eval_run: EvalRun) -> None:
+    print(f"eval run:       {eval_run.run_id} ({eval_run.status})")
+    print(f"eval metrics:   {eval_run.metrics}")
+    for note in eval_run.notes:
+        print(f"eval note:      {note}")
 
 
 def validate_the_case_run_is_held() -> None:
@@ -207,6 +244,71 @@ def save_the_eval_version(project_id: str, cases_path: Path) -> str:
     if not saved.ok or saved.version_id is None:
         raise SystemExit("the eval workflow was refused: " + "; ".join(saved.issues))
     return saved.version_id
+
+
+def save_the_eval_config(project_id: str, version_id: str, claim: Claim) -> EvalConfig:
+    workflow = Workflow(stages=load_version_stages(project_id, version_id))
+    by_id = workflow.index_workflow_stages_by_id()
+    override_columns = get_output_columns_from_stage(read_the_stage(by_id, OVERRIDE_STAGE))
+    injected, expected = deconflict_column_names(
+        override_columns, [read_the_verdict_column(read_the_stage(by_id, TARGET_STAGE))])
+    write_the_eval_dataset(override_columns, injected, expected[0], claim)
+    config = build_the_eval_config(project_id, injected + expected)
+    write_eval_config(project_id, config)
+    return config
+
+
+def read_the_stage(by_id: dict[str, WorkflowStage], stage_id: str) -> WorkflowStage:
+    if stage_id not in by_id:
+        raise SystemExit(f"the saved version holds no stage '{stage_id}': {sorted(by_id)}")
+    return by_id[stage_id]
+
+
+def read_the_verdict_column(target: WorkflowStage) -> Column:
+    for column in get_output_columns_from_stage(target):
+        if column.name == VERDICT_COLUMN:
+            return column
+    raise SystemExit(
+        f"stage '{target.id}' emits no '{VERDICT_COLUMN}' column for the scorer to read")
+
+
+def write_the_eval_dataset(
+    override_columns: list[Column], injected: list[Column], verdict: Column, claim: Claim,
+) -> Path:
+    values = read_the_labelled_values(override_columns, claim)
+    row: dict[str, Any] = {injected[i].name: values[column.name]
+                           for i, column in enumerate(override_columns)}
+    row[verdict.name] = EXPECTED_VERDICT
+    path = repo_root() / EVAL_DATASET_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(row))
+        writer.writeheader()
+        writer.writerow(row)
+    return path
+
+
+def read_the_labelled_values(
+    override_columns: list[Column], claim: Claim,
+) -> dict[str, Any]:
+    values = {"case_id": CASE_ID, "project_id": CASE_PROJECT_ID, "claim_id": claim.id,
+              "model": REVIEW_MODEL, "expected_defect": EXPECTED_DEFECT}
+    unlabelled = [column.name for column in override_columns if column.name not in values]
+    if unlabelled:
+        raise SystemExit(
+            f"stage '{OVERRIDE_STAGE}' now produces {unlabelled}, which this script holds "
+            f"no labelled value for — the eval dataset would be short a column")
+    return values
+
+
+def build_the_eval_config(project_id: str, columns: list[Column]) -> EvalConfig:
+    return EvalConfig(
+        eval_id=EVAL_ID, project=project_id, name=EVAL_NAME, description=EVAL_DESCRIPTION,
+        override_stage=OVERRIDE_STAGE, target_stage=TARGET_STAGE,
+        table=TableRef(path=EVAL_DATASET_PATH, format=FileFormat.csv,
+                       table_schema=TableSchema(columns=columns)),
+        expected_outputs=[ExpectedOutput(output_column=VERDICT_COLUMN,
+                                         metric=ScoringMetric.exact)])
 
 
 def build_eval_stages(cases_path: Path) -> list[dict[str, Any]]:
