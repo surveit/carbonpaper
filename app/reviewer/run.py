@@ -14,6 +14,7 @@ from app.core.ids import ID
 from app.models.authoring_lifecycle_note import CompilerPhase
 from app.models.claim_review import ChallengesAnswer, ClaimReviewResult, EvidenceBundle
 from app.models.records.claim_review import DraftChallenge
+from app.reviewer.dedupe import build_deduper, keep_what_is_not_a_repeat
 from app.reviewer.reviewers import REVIEW_REQUEST, REVIEWERS, build_reviewer
 
 _LOG = logging.getLogger(__name__)
@@ -66,8 +67,9 @@ async def _review(
 ) -> None:
     delivered = False
     try:
-        challenges = await _raise_the_challenges(store, session_id, bundle, model)
-        on_answer(ClaimReviewResult(challenges=challenges, session_id=session_id))
+        raised = await _raise_the_challenges(store, session_id, bundle, model)
+        kept = await _drop_the_repeats(store, session_id, bundle, model, raised)
+        on_answer(ClaimReviewResult(challenges=kept, session_id=session_id))
         delivered = True
         store.set_pending_user(session_id, None)
     except _REVIEW_FAILURES as exc:
@@ -83,6 +85,20 @@ async def _review(
                     store, session_id, RuntimeError("the review did not finish"))
         finally:
             store.set_active_turn(session_id, None)
+
+
+async def _drop_the_repeats(
+    store: SessionStore, session_id: ID, bundle: EvidenceBundle, model: str,
+    raised: list[DraftChallenge],
+) -> list[DraftChallenge]:
+    """Nothing repeats one challenge, so the turn is only worth taking from two up."""
+    if len(raised) < 2:
+        return raised
+    agent = build_deduper(bundle, raised, model=model)
+    answer = await agent.run()
+    if agent.last_usage is not None:
+        store.record_turn_spend(session_id, agent.last_usage)
+    return keep_what_is_not_a_repeat(raised, answer)
 
 
 async def _raise_the_challenges(

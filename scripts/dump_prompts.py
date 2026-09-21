@@ -18,6 +18,7 @@ import mcp.types as types
 from claude_agent_sdk import McpSdkServerConfig
 
 from app.agents.compiler.config import CONFIG as EDITING_CONFIG
+from app.reviewer.dedupe import build_deduper
 from app.reviewer.reviewers import REVIEWERS, build_reviewer
 from app.agents.tutorial.config import CONFIG as TUTORIAL_CONFIG
 from app.compiler.review_guide import build_review_guide_author
@@ -171,7 +172,20 @@ def render_stage_tests_agent() -> str:
 def render_claim_reviewers() -> str:
     """The five turns that review one claim, and the sixth that merges what they found."""
     surfaces = [_render_reviewer(reviewer) for reviewer in REVIEWERS]
-    return "\n".join(surfaces)
+    return "\n".join([*surfaces, _render_the_deduper()])
+
+
+def _render_the_deduper() -> str:
+    agent = build_deduper(_UNUSED_BUNDLE, [])
+    return render_surface(
+        title="Claim review · deduper",
+        source="app/reviewer/dedupe_prompt.py",
+        model=_GENERATION_MODEL,
+        note=(f"{_STRUCTURED_OUTPUT_NOTE} Runs after the five and may only DROP a "
+              "challenge that repeats another; it never edits, reweighs or adds one."),
+        system_prompt=agent._system_prompt,
+        tools=read_agent_tools(agent),
+    )
 
 
 def _render_reviewer(reviewer: Reviewer) -> str:
