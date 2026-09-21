@@ -210,7 +210,7 @@ def _cell(claim, **overrides: object) -> StageOutputCellCitation:
 
 def _challenge(claim, **overrides: object) -> DraftChallenge:
     fields = dict(kind=ChallengeKind.coverage, claim_part=ClaimPart(phrase="Grants"), text="t",
-                  justification="j", citations=[_cell(claim)], severity=Severity.major)
+                  justification="j", citations=[_cell(claim)], severity=Severity.high)
     return DraftChallenge.model_validate({**fields, **overrides})
 
 
@@ -245,7 +245,7 @@ def test_a_challenge_citing_nothing_is_refused(claim):
 def test_a_gap_challenge_needs_no_citation(claim):
     stored = _store(claim, challenges=[
         DraftChallenge(kind=ChallengeKind.gap, claim_part=ClaimPart(phrase="Grants"), text="t",
-                  justification="j", severity=Severity.misleading)])
+                  justification="j", severity=Severity.critical)])
 
     assert stored.challenges[0].citations == []
 

@@ -47,6 +47,14 @@ def _refuse_a_claim_already_under_review(claim_id: ID) -> None:
             [f"claim {claim_id} is already being reviewed; it is reviewed once at a time"])
 
 
+def find_review_sessions(claim_id: ID) -> list[AgentSession]:
+    """Every review of this claim, newest first; a running one still holds an active turn."""
+    held = [session for session in AgentSession.list()
+            if session.context.get("role") == PARENT_ROLE
+            and session.context.get("claim_id") == claim_id]
+    return sorted(held, key=lambda session: (session.created_at, session.id), reverse=True)
+
+
 def _find_running_reviews(claim_id: ID) -> list[AgentSession]:
     return [session for session in AgentSession.list()
             if session.context.get("role") == PARENT_ROLE

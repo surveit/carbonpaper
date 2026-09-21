@@ -62,7 +62,7 @@ def make_challenge(**overrides: Any) -> DraftChallenge:
         justification="the amount column is blank",
         citations=[StageOutputColumnCitation(
             run_id="RUN", stage_id="grant_totals", column="grants")],
-        severity=Severity.major)
+        severity=Severity.high)
     return DraftChallenge.model_validate({**fields, **overrides})
 
 
