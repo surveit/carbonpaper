@@ -315,8 +315,6 @@ def test_a_fabricated_cell_is_refused(claim, overrides, fragment):
 
 
 @pytest.mark.parametrize("cell, cited, same", [
-    # The run writes a money column as a float; a reviewer copies the figure off the
-    # pool without its trailing zero, and both spell one number.
     (62187729.0, 62187729, True),
     (62187729, 62187729.0, True),
     (2200, 2200, True),
