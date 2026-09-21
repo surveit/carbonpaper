@@ -49,7 +49,7 @@ def _filter(stage_id, source, reads, predicate=None):
     }
 
 
-def _row_function(stage_id, source, reads):
+def _row_function(stage_id, source, reads, adds=()):
     return {
         "id": stage_id, "description": f"Rewrite {source}",
         "type": "python_row_function", "inputs": [{"id": source}],
@@ -57,7 +57,8 @@ def _row_function(stage_id, source, reads):
         "signature": {"form": "extends",
                       "reads": [{"input": source,
                                  "columns": [_column(name, type_)
-                                             for name, type_ in reads.items()]}]},
+                                             for name, type_ in reads.items()]}],
+                      "adds": [_column(name, "str") for name in adds]},
     }
 
 
@@ -173,9 +174,44 @@ def test_a_regrain_closes_its_paragraph_and_the_next_one_names_its_own_noun(told
     ]
 
 
-def test_a_stage_that_changed_neither_the_population_nor_the_noun_says_nothing(told):
+def test_a_stage_that_wrote_no_column_and_took_no_row_says_nothing(told):
     assert "find_ai_mentions" not in [clause.stage_id for paragraph in told.paragraphs
                                       for clause in paragraph]
+
+
+def test_a_stage_that_wrote_on_every_row_says_what_it_wrote():
+    route = [_load("input_filings", FILING_COLUMNS),
+             _row_function("find_ai_mentions", "input_filings", MONEY_READ,
+                           adds=["mentions_ai", "ai_terms_found"]),
+             _aggregate("totals", "find_ai_mentions", [],
+                        [{"output_column": "total", "formula": "sum",
+                          "value_column": "income_usd"}], FILING_COLUMNS)]
+    rows = {"input_filings": ROWS["input_filings"],
+            "find_ai_mentions": StepRows(rows_out=45061, rows_dropped=0,
+                                         rows_behind=1294),
+            "totals": StepRows(rows_out=1, rows_dropped=0, rows_behind=1)}
+    statement = build_supported_statement(_hold(route, rows, NOUNS), "total")
+    assert "Each is given mentions_ai and ai_terms_found." in _read(statement)[0]
+
+
+def test_a_clause_that_says_only_a_name_asks_for_the_step_s_own_line(told):
+    route = [_load("input_filings", FILING_COLUMNS),
+             _filter("keep_ai_candidates", "input_filings", MONEY_READ),
+             _aggregate("totals", "keep_ai_candidates", [],
+                        [{"output_column": "total", "formula": "sum",
+                          "value_column": "income_usd"}], FILING_COLUMNS)]
+    rows = {"input_filings": ROWS["input_filings"],
+            "keep_ai_candidates": ROWS["keep_ai_candidates"],
+            "totals": StepRows(rows_out=1, rows_dropped=0, rows_behind=1)}
+    unwritten = build_supported_statement(_hold(route, rows, NOUNS), "total")
+    said = unwritten.paragraphs[0][1]
+    assert said.needs_the_description is True
+    assert said.description == "Keep some of input_filings"
+    # The same filter with a predicate says its own meaning, so it asks for nothing.
+    written = {clause.stage_id: clause for paragraph in told.paragraphs
+               for clause in paragraph}["keep_ai_candidates"]
+    assert (written.needs_the_description, written.description) == (
+        False, "Keep some of find_ai_mentions")
 
 
 def test_every_clause_names_the_stage_it_opens(told):

@@ -1,8 +1,11 @@
-{# The figure told as prose, over the canvas of the same walk. Every clause is a stage
-   and opens that stage's own panel in the canvas drawer (static/canvas.js); every count
-   past the first and the last is a tooltip on the phrase it belongs to.
+{# The figure told as prose, in the Paths pane beside the steps it is the same walk as.
+   Every clause is a stage and opens it in the panel on the right; every count past the
+   first and the last is a tooltip on the phrase it belongs to.
 
-   Context: statement (app.models.supported_statement.SupportedStatement). #}
+   The paragraphs a reader reads; the step list beside it is the same walk scanned,
+   and lineage.html shows one shape at a time.
+
+   Context: statement (app.models.supported_statement.SupportedStatement), or reason. #}
 {% macro say(phrase) -%}
 {%- if phrase.style.value == "prose" -%}{{ phrase.text }}
 {%- elif phrase.style.value == "count" -%}
@@ -13,13 +16,20 @@
 <code class="statement-name has-tip" data-tip="{{ phrase.hover }}" tabindex="0">{{ phrase.text }}</code>
 {%- endif -%}
 {%- endmacro %}
+{% if reason %}
+<p class="banner banner-warn">No route to tell for <code>{{ column }}</code> at
+  <code>{{ stage_id }}</code> — {{ reason }}.</p>
+{% else %}
 <div class="statement">
   {% for paragraph in statement.paragraphs %}
   <p class="statement-say">
     {%- for clause in paragraph -%}
     <span class="statement-clause" data-stage="{{ clause.stage_id }}"
-          title="open {{ clause.stage_id }}">{% for phrase in clause.phrases %}{{ say(phrase) }}{% endfor %}</span>
+          title="open {{ clause.stage_id }}">{% for phrase in clause.phrases %}{{ say(phrase) }}{% endfor %}
+      {%- if clause.needs_the_description %} <span class="statement-aside">{{ clause.description }}</span>{% endif -%}
+    </span>
     {% endfor -%}
   </p>
   {% endfor %}
 </div>
+{% endif %}

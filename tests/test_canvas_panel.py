@@ -306,6 +306,7 @@ def test_the_figure_is_told_as_prose_off_the_same_walk_the_canvas_draws(run_id):
     assert _told(run_id, TOTAL) == [
         "The run loads 6 rows from load_east. It also loads 4 rows from load_west."
         " The figure reads amount. Each has portfolio looked up."
+        " Each is given band and digits."
         " Of those rows, only the ones funded kept go on."
         " What survives is held to one row per grant_id, the duplicates having to agree.",
         "Of those rows, only the ones grants_only kept go on."
@@ -313,19 +314,19 @@ def test_the_figure_is_told_as_prose_off_the_same_walk_the_canvas_draws(run_id):
     ]
 
 
-def test_a_stage_that_only_carried_the_value_is_no_clause(run_id):
-    # size_band adds a column this figure never reads, and tag_portfolio's lookup does.
+def test_a_stage_that_carried_the_rows_untouched_is_no_clause(run_id):
+    # both_regions stacks two inputs and writes nothing of its own.
     told = load_canvas_view(PROJECT, run_id, *TOTAL).statement
     said = [clause.stage_id for paragraph in told.paragraphs for clause in paragraph]
-    assert "size_band" not in said
-    assert "tag_portfolio" in said
+    assert "both_regions" not in said
+    assert "size_band" in said
 
 
-def test_the_panel_hands_each_clause_the_stage_it_opens(run_id):
+def test_the_told_figure_hands_each_clause_the_stage_it_opens(run_id):
     page = TestClient(app).get(
-        f"/project/{PROJECT}/runs/{run_id}/canvas/panel"
+        f"/project/{PROJECT}/runs/{run_id}/statement/panel"
         "?stage=grant_totals&row=0&column=total_amount").text
-    # What canvas.js opens the drawer on, the same attribute a stage box carries.
+    # What the Paths pane opens its right-hand panel on, off the step the clause is.
     assert 'class="statement-clause" data-stage="funded"' in page
     # A count past the first and the last is a tooltip rather than a printed number.
     assert 'data-tip="9 of 10 go on · 90%"' in page

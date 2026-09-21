@@ -18,7 +18,6 @@
 <script type="application/json" class="canvas-type-labels">{
   {%- for sheet in values.sheets %}{{ sheet.stage_id | tojson }}: {{ sheet.type | label_stage_type | tojson }}{% if not loop.last %}, {% endif %}{% endfor -%}
 }</script>
-{% if values.statement %}{% with statement = values.statement %}{% include "_supported_statement.html" %}{% endwith %}{% endif %}
 <div class="canvas-view">
   <svg class="canvas-svg"><g class="canvas-world"></g></svg>
   <div class="canvas-drawer" hidden>

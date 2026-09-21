@@ -28,6 +28,7 @@ from app.models.supported_phrases import (
 from app.models.supported_verbs import (
     find_the_formula_behind,
     list_the_formulas,
+    name_the_columns_written,
     name_the_group_keys,
     name_the_looked_up_columns,
     name_the_reference_input,
@@ -35,6 +36,7 @@ from app.models.supported_verbs import (
     reviews_every_row,
     say_the_formulas,
     says_nothing_was_combined,
+    writes_columns,
 )
 from app.models.workflow_stage import WorkflowStage
 
@@ -48,6 +50,7 @@ class ClauseKind(str, Enum):
     review = "review"
     lookup = "lookup"
     regrain = "regrain"
+    transform = "transform"
     head = "head"
 
 
@@ -75,6 +78,10 @@ class FigureClause(BaseModel):
     kind: ClauseKind
     stage_id: StageId
     phrases: list[Phrase]
+    # The stage's own authored line, which the list view prints under every clause.
+    description: str = ""
+    # Set where the clause's own words say no more than what the step is called.
+    needs_the_description: bool = False
 
 
 class SupportedStatement(BaseModel):
@@ -95,7 +102,9 @@ def build_supported_statement(
         place = _place_the_step(steps, position, cited_column, paragraphs[-1])
         paragraphs[-1].append(FigureClause(
             kind=kind, stage_id=step.stage.stage.id,
-            phrases=_TELLERS[kind](step, place)))
+            phrases=_TELLERS[kind](step, place),
+            description=step.stage.stage.description,
+            needs_the_description=_says_only_a_name(kind, step)))
         if kind is ClauseKind.regrain:
             paragraphs.append([])
     return SupportedStatement(paragraphs=[held for held in paragraphs if held])
@@ -150,8 +159,16 @@ def _read_clause_kind(step: FigureStep, is_the_figure: bool) -> Optional[ClauseK
         return ClauseKind.lookup
     if _regrains(step):
         return ClauseKind.regrain
-    # A stage that changed neither the population nor the word for a row says nothing.
+    if writes_columns(step.stage):
+        return ClauseKind.transform
+    # A stage that changed neither the rows, their columns nor their word says nothing.
     return None
+
+
+def _says_only_a_name(kind: ClauseKind, step: FigureStep) -> bool:
+    """A test nobody wrote a predicate for is named, never explained, by this builder."""
+    return (kind in (ClauseKind.restriction, ClauseKind.review)
+            and read_the_predicate(step.stage) is None)
 
 
 def _regrains(step: FigureStep) -> bool:
@@ -332,6 +349,34 @@ def _say_the_new_noun(step: FigureStep, place: _Place) -> list[Phrase]:
     return [count_phrase(say_plural(step.row_type), hover=hover)]
 
 
+# ── a step that wrote on every row ──────────────────────────────────────────
+
+def _say_the_transform(step: FigureStep, place: _Place) -> list[Phrase]:
+    adds, rewrites = name_the_columns_written(step.stage)
+    hover = _hover_the_transform(step, place)
+    if StageType(step.stage.stage.type) is StageType.llm_transform:
+        lead = [text_phrase("A model read each and "),
+                Phrase(text="gave it" if adds else "rewrote", hover=hover),
+                text_phrase(" ")]
+        return lead + _say_the_written(step, adds or rewrites) + [text_phrase(".")]
+    if not adds:
+        return ([text_phrase("Each has ")] + _say_the_written(step, rewrites)
+                + [Phrase(text=" rewritten", hover=hover), text_phrase(".")])
+    return ([text_phrase("Each is "), Phrase(text="given", hover=hover),
+             text_phrase(" ")] + _say_the_written(step, adds) + [text_phrase(".")])
+
+
+def _say_the_written(step: FigureStep, columns: list[str]) -> list[Phrase]:
+    return say_and_list([_say_a_column(step, name) for name in columns])
+
+
+def _hover_the_transform(step: FigureStep, place: _Place) -> str:
+    if not step.rows.rows_dropped:
+        return f"All {say_count(place.rows_in)} rows carried on."
+    return (f"{say_count(step.rows.rows_out)} of {say_count(place.rows_in)} carried on"
+            f" · {say_share(step.rows.rows_out, place.rows_in)}")
+
+
 # ── the figure itself ────────────────────────────────────────────────────────
 
 def _say_the_head(step: FigureStep, place: _Place) -> list[Phrase]:
@@ -386,5 +431,6 @@ _TELLERS = {
     ClauseKind.review: _say_the_review,
     ClauseKind.lookup: _say_the_lookup,
     ClauseKind.regrain: _say_the_regrain,
+    ClauseKind.transform: _say_the_transform,
     ClauseKind.head: _say_the_head,
 }

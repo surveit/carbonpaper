@@ -271,6 +271,20 @@ header names the stage, the row and the column; three tabs under it:
 - **Paths** (`_row_paths.html` ← `app.web.row_paths`) — every distinct route the
   rows behind this figure took, told apart by the branches they took.
   `docs/branch-analysis.md` says which branches it leaves out.
+  Its middle column holds ONE walk in two shapes, toggled: **Paragraph**, the
+  figure told as prose (`_supported_statement.html` ←
+  `…/statement/panel`, `app.web.supported_statement_view`, built by
+  `app.models.supported_statement`), and **List**, the step-by-step the page
+  writes from its own payload. The prose says one clause per stage that narrowed
+  the population, wrote on every row, changed what one row is, or put the rows in
+  front of a person; a stage that did none of those contributes no words. A
+  regrain closes its paragraph and the next names its own noun, which is the
+  stage's row type. Two counts are printed, where the route starts and what it
+  ends as; every other count is a tooltip carrying the rows that went on and
+  their share. Where no `predicate` is authored on a filter or a queue the clause
+  names the step and prints the step's own description after it — it never
+  invents one. Clicking a clause selects that step, so the panel on the right is
+  the one the step list opens.
 - **Rows & columns** (`_canvas_panel.html` ← `app/web/routers/values.py`,
   `app.web.canvas_view`, drawn by `static/canvas.js`) — the run as a canvas: one
   box per stage, wired in the workflow's own graph, and under each stage that
@@ -287,23 +301,14 @@ header names the stage, the row and the column; three tabs under it:
   cut to the figure's rows. Drag pans, the wheel zooms, Escape closes. The
   payload is `app.web.canvas_payload.CanvasView`, and the script reads
   `cited_stage`, `column`, `steps`, `nodes`, `edges` and `sheets`.
-  Over the canvas the same walk is **told as prose**
-  (`_supported_statement.html` ← `app.web.supported_statement_view`, built by
-  `app.models.supported_statement`): one clause per stage that narrowed the
-  population, changed what one row is, or put the rows in front of a person —
-  every other stage contributes no words. A regrain closes its paragraph and
-  the next one names its own noun, which is the stage's row type. Two counts
-  are printed, where the route starts and what it ends as; every other count is
-  a tooltip carrying the rows that went on and their share. A clause carries
-  `data-stage`, so clicking it opens the same drawer a box opens. Where no
-  `predicate` is authored on a filter or a queue the clause names the step
-  instead and says less; it never invents one.
 - **Input files** (`_input_files_panel.html` ← `app/web/routers/input_files.py`)
   — each source file the figure read, sliced to the rows and columns it used.
 
 The Rows & columns tab fetches its walk when first opened, for the header's
-column. In a review packet the page is a file in a zip with no server to ask,
-so that tab is an empty state and the other two are written in place.
+column; the Paths pane asks for its prose on load, for the same column, and
+follows the header's column picker. In a review packet the page is a file in a
+zip with no server to ask, so that tab is an empty state, the Paths pane is the
+list shape alone, and the other two are written in place.
 The standalone scope page (`app/web/routers/scope.py`, `_scope_map.html`,
 `static/scope_map.js`) is what a cut opens, and stays its own page.
 

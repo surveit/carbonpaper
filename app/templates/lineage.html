@@ -169,6 +169,21 @@ a.snavbtn:hover{background:var(--hover)}
   padding:5px 9px 5px 10px;border:1px solid var(--border);border-radius:7px;
   background:var(--raised);font-size:11.5px;line-height:1.4;color:var(--muted)}
 .sampled a{color:inherit;font-weight:600}
+/* One walk, two shapes: the toggle over them reads as a tab strip, not a control panel. */
+.lin-shape{display:flex;gap:10px;margin:0 0 6px}
+.lin-shape button{border:0;background:none;font:inherit;font-size:12px;color:var(--muted);
+  padding:3px 0;cursor:pointer;border-bottom:2px solid transparent}
+.lin-shape button.on{color:var(--fg);border-bottom-color:var(--accent);font-weight:600}
+/* The told figure: the same walk as the steps, read rather than scanned. */
+.statement-say{font-family:var(--prose);font-size:var(--prose-size);line-height:var(--prose-lh);
+  max-width:64ch;margin:0 0 12px}
+.statement-clause{cursor:pointer;border-radius:3px;padding:0 1px}
+.statement-clause:hover{background:var(--hover)}
+.statement-clause.on{background:var(--state-review-bg);box-shadow:inset 0 -2px 0 var(--accent)}
+.statement-count{font-weight:700;font-variant-numeric:tabular-nums}
+/* A step nobody wrote a predicate for is named by its id, and says its own line after. */
+.statement-name{font-family:var(--mono);font-size:.86em;color:var(--info-ink)}
+.statement-aside{color:var(--muted);font-size:.84em}
 .lin-graph{margin-top:18px;border-top:1px solid var(--border);padding-top:10px}
 .lin-graph summary{cursor:pointer;font-size:13px;color:var(--muted)}
 .mermaid{background:var(--raised)}.nograph{color:var(--muted);font-size:13px}
@@ -322,7 +337,15 @@ tr.lin-opens:hover td{background:var(--hover)}
     {% else %}<div id="paths-head" class="paths-wait">
       <div class="paths-sk paths-sk-title"></div><div class="paths-sk paths-sk-sub"></div>
     </div>{% endif %}
-    <div id="steps"></div>
+    {# Two shapes of one walk: told as paragraphs, or listed step by step. A folder
+       has no server to tell it, so there the list is the only shape. #}
+    {% if not offline %}<div class="lin-shape" id="shape">
+      <button data-shape="say" class="on">Paragraph</button>
+      <button data-shape="list">List</button>
+    </div>
+    <div id="say" class="paths-wait"><div class="paths-sk"></div>
+      <div class="paths-sk"></div><div class="paths-sk paths-sk-last"></div></div>{% endif %}
+    <div id="steps"{% if not offline %} hidden{% endif %}></div>
     <details class="lin-graph"><summary>Lineage graph</summary>
       <pre class="mermaid" id="mmd">{{ mermaid }}</pre>
       <div id="nograph" class="nograph hidden">Graph needs the compiled workflow, which isn't available for this run.</div>
@@ -669,7 +692,10 @@ function markWhatIsClipped(){
   document.querySelectorAll('#pbody .lin-clip').forEach(
     el => el.classList.toggle('is-clipped', el.scrollHeight > el.clientHeight + 1));
 }
-function select(i){ sel = i; tab = 'row'; render(); document.getElementById('pbody').scrollTop = 0; }
+function select(i){
+  sel = i; tab = 'row'; render(); markSaidStep();
+  document.getElementById('pbody').scrollTop = 0;
+}
 
 document.getElementById('steps').addEventListener('click', e => {
   const toRows = e.target.closest('.to-rows');
@@ -680,6 +706,51 @@ document.getElementById('steps').addEventListener('click', e => {
   }
   const step = e.target.closest('.step'); if(step) select(+step.dataset.i);
 });
+// ---- The told figure: the same walk, in prose, beside the steps ------------
+// Its counts are the whole run's, so it is fetched rather than read off V, and it
+// is fetched per COLUMN: a different cell of this row came a different way.
+const shapes = document.getElementById('shape');
+const sayRoot = document.getElementById('say');
+let saidColumn = null;
+
+function tellTheFigure(column){
+  saidColumn = column;
+  const q = new URLSearchParams({stage: V.start_stage, row: V.start_row, column});
+  fetch(`${RUN_BASE}/statement/panel?${q}`)
+    .then(answer => answer.ok ? answer.text()
+      : `<p class="muted">could not tell this figure (${answer.status})</p>`)
+    .catch(failure => `<p class="muted">error: ${esc(failure)}</p>`)
+    .then(html => {
+      if(saidColumn !== column) return;
+      sayRoot.classList.remove('paths-wait');
+      sayRoot.innerHTML = html;
+      markSaidStep();
+    });
+}
+function showShape(shape){
+  shapes.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.shape === shape));
+  sayRoot.hidden = shape !== 'say';
+  document.getElementById('steps').hidden = shape !== 'list';
+}
+// The clause a reader is on, marked the way the step it stands for is marked.
+function markSaidStep(){
+  if(!sayRoot) return;
+  const on = V.nodes[sel];
+  sayRoot.querySelectorAll('.statement-clause').forEach(clause => clause.classList.toggle(
+    'on', Boolean(on) && clause.dataset.stage === on.stage_id));
+}
+if(shapes){
+  shapes.addEventListener('click', e => {
+    if(e.target.dataset.shape) showShape(e.target.dataset.shape);
+  });
+  // A clause is the control the step is: it opens that stage in the panel on the right.
+  sayRoot.addEventListener('click', e => {
+    const clause = e.target.closest('.statement-clause');
+    if(!clause) return;
+    const i = V.nodes.findIndex(n => n.stage_id === clause.dataset.stage);
+    if(i >= 0) select(i);
+  });
+}
 document.querySelector('.lin-tabs').addEventListener('click', e => {
   if(e.target.dataset.tab){ tab = e.target.dataset.tab; render(); }
 });
@@ -734,6 +805,7 @@ function showColumn(column){
   // Replaced, not pushed: the reader is reading one row, and the back button is
   // still the way out of it. The address stays the one a figure links with.
   history.replaceState(null, '', lineageHref(COORD.stage_id, COORD.row, COORD.column));
+  if(saidColumn !== null && COORD.column) tellTheFigure(COORD.column);
   if(valuesColumn !== null && COORD.column) walkValuesFor(COORD.column);
   if(scopeColumn !== null && COORD.column) drawScopeFor(COORD.column);
   if(inputFilesColumn !== null && COORD.column) readInputFilesFor(COORD.column);
@@ -867,6 +939,8 @@ async function readPaths(){
 if(pathsNav) readPaths();
 
 render();
+// The paragraph is the shape the pane opens on, so its walk is asked for at once.
+if(sayRoot && COORD && COORD.cells.length) tellTheFigure(COORD.column || COORD.cells[0].column);
 
 // A pane is a deep link, so a link can hand someone the tool, not the page.
 document.getElementById('pagetabs').addEventListener('click', e => {

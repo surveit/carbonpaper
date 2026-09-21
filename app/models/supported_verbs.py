@@ -34,6 +34,19 @@ def read_the_predicate(stage: WorkflowStage) -> Optional[str]:
     return None
 
 
+def name_the_columns_written(stage: WorkflowStage) -> tuple[list[str], list[str]]:
+    """What a transform added and what it rewrote, off the signature it declared."""
+    signature = getattr(stage.stage, "signature", None)
+    adds = [column.name for column in getattr(signature, "adds", [])]
+    rewrites = [column.name for column in getattr(signature, "rewrites", [])]
+    return adds, rewrites
+
+
+def writes_columns(stage: WorkflowStage) -> bool:
+    adds, rewrites = name_the_columns_written(stage)
+    return bool(adds or rewrites)
+
+
 def reviews_every_row(stage: WorkflowStage) -> bool:
     """A queue that selects or routes put only some rows in front of a person."""
     queue = getattr(stage.stage, "queue", None)

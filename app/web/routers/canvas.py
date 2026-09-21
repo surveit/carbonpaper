@@ -48,6 +48,23 @@ def canvas_panel(request: Request, project_id: str, run_id: str,
 
 
 @router.get(
+    "/project/{project_id}/runs/{run_id}/statement/panel", response_class=HTMLResponse
+)
+def statement_panel(request: Request, project_id: str, run_id: str,
+                    stage: str, row: int, column: str):
+    """The figure told as prose, shell-less: the Paths pane holds it beside the steps."""
+    try:
+        payload = canvas_view.load_canvas_view(project_id, run_id, stage, column, row)
+    except NO_WALK as no_walk:
+        return templates.TemplateResponse(
+            request, "_supported_statement.html",
+            {"column": column, "stage_id": stage, "reason": str(no_walk)})
+    return templates.TemplateResponse(
+        request, "_supported_statement.html",
+        {"column": column, "stage_id": stage, "statement": payload.statement})
+
+
+@router.get(
     "/project/{project_id}/runs/{run_id}/stage/{stage_id}/traced",
     response_class=HTMLResponse,
 )
