@@ -158,7 +158,8 @@ published. It works like a pull request: submitting launches the AI review
 automatically, and a person rules on it after.
 
 Submitting again makes a new claim, not an edit. Read the review back with
-`read_claim_review`.""",
+`read_claim_review`, and give the person `claim_url` — that page is where they
+rule on it.""",
     ),
     "read_claim_review": AgentTool(
         fn=claim_tools.read_claim_review,

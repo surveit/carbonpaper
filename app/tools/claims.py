@@ -12,10 +12,18 @@ from app.services import claims as claims_service
 from app.tools.shared import validate_project_exists
 
 
+class SubmittedClaim(BaseModel):
+    """What was proposed, and where a person reads it."""
+
+    claim: Claim
+    claim_url: str
+
+
 class ClaimReviewRead(BaseModel):
     """What a review came to, or why there is nothing to read yet."""
 
     claim_id: str
+    claim_url: str
     claim_text: str
     status: str
     review: str
@@ -25,11 +33,11 @@ class ClaimReviewRead(BaseModel):
 
 def submit_claim(
     project_id: str, run_id: str, slug: str, text: str, context: JsonDict | None = None
-) -> Claim:
+) -> SubmittedClaim:
     validate_project_exists(project_id)
     claim = claims_service.submit_claim(project_id, run_id, slug, context or {}, text)
     claim_review_run.start_claim_review(project_id, claim.id, model="sonnet")
-    return claim
+    return SubmittedClaim(claim=claim, claim_url=claims_service.build_claim_url(project_id, claim.id))
 
 
 def read_claim_review(project_id: str, claim_id: str) -> ClaimReviewRead:
@@ -38,7 +46,8 @@ def read_claim_review(project_id: str, claim_id: str) -> ClaimReviewRead:
     review = claim_review_service.load_claim_review(claim_id)
     state = claim_review_run.read_review_state(claim, review)
     return ClaimReviewRead(
-        claim_id=claim.id, claim_text=claim.text, status=claim.status,
+        claim_id=claim.id, claim_url=claims_service.build_claim_url(project_id, claim.id),
+        claim_text=claim.text, status=claim.status,
         review=state.review, error=state.error,
         challenges=list(review.challenges) if review is not None else [],
     )

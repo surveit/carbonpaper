@@ -344,8 +344,9 @@ def test_submitting_through_the_tool_starts_the_review(claim, monkeypatch):
     written = claim_tools.submit_claim(
         PROJECT, claim.citation.run_id, "grant-total", "Grants came to 2,200 in total.")
 
-    assert written.status == "submitted"
-    assert started == [written.id]
+    assert written.claim.status == "submitted"
+    assert started == [written.claim.id]
+    assert written.claim_url == f"/project/{PROJECT}/claims/{written.claim.id}"
 
 
 def test_reading_a_review_before_one_runs_says_so(claim):
@@ -365,6 +366,7 @@ def test_reading_a_stored_review_carries_every_challenge(claim):
     assert read.review == "done"
     assert [one.severity for one in read.challenges] == [Severity.high]
     assert read.claim_text == claim.text
+    assert read.claim_url == f"/project/{PROJECT}/claims/{claim.id}"
 
 
 def test_cancelling_a_submission_leaves_nothing_standing(claim):

@@ -17,6 +17,11 @@ from app.services.errors import ClaimRefused
 _STILL_STANDS = (ClaimStatus.submitted, ClaimStatus.approved)
 
 
+def build_claim_url(project_id: ID, claim_id: ID) -> str:
+    """Root-relative: where a person reads a claim and rules on it."""
+    return f"/project/{project_id}/claims/{claim_id}"
+
+
 def submit_claim(
     project_id: ID, run_id: ID, slug: str, context: JsonDict, text: str
 ) -> Claim:

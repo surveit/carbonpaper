@@ -146,7 +146,7 @@ def write_claim_shapes(
 @mcp.tool(description=read_tool_description("submit_claim"))
 def submit_claim(
     project_id: str, run_id: str, slug: str, text: str, context: dict[str, Any] | None = None
-) -> Claim:
+) -> claim_tools.SubmittedClaim:
     return claim_tools.submit_claim(project_id, run_id, slug, text, context)
 
 
