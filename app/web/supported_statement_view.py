@@ -60,8 +60,7 @@ def _index_row_types(
     words = _read_the_words(named, declared)
     if any(words.values()):
         return words, False
-    # A run whose version predates row types would say "rows" of everything, so the
-    # words the project holds NOW are read onto it, and every noun's hover says so.
+    # A version that named nothing would say "rows"; the hover says whose words these are.
     later = _read_the_words(
         resolve_row_type_ids(_name_as_the_project_does_now(project_id, written)), declared)
     return later, any(later.values())
