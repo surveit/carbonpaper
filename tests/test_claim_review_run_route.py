@@ -12,7 +12,7 @@ import app.reviewer.run as reviewer_run
 from app.core.agent.store import AgentSession
 from app.main import app
 from app.models.citations import RowsRectangle, StageOutputTableCitation
-from app.models.claim_review import ChallengesAnswer
+from app.models.claim_review import ChallengesAnswer, DedupeAnswer
 from app.models.records.claim_review import (
     ChallengeKind,
     ClaimPart,
@@ -47,11 +47,13 @@ def client() -> Any:
 
 
 class _FakeAgent:
-    def __init__(self, answer: ChallengesAnswer) -> None:
+    """Stands in for whichever agent the step builds, so one class serves both."""
+
+    def __init__(self, answer: ChallengesAnswer | DedupeAnswer) -> None:
         self.answer = answer
         self.last_usage = None
 
-    async def run(self, emit: Any = None) -> ChallengesAnswer:
+    async def run(self, emit: Any = None) -> ChallengesAnswer | DedupeAnswer:
         return self.answer
 
 
@@ -74,6 +76,7 @@ def install_fakes(monkeypatch, claim: Claim, **overrides: Any) -> None:
     monkeypatch.setattr(
         reviewer_run, "build_reviewer",
         lambda reviewer, bundle, *, model="sonnet": _FakeAgent(answer))
+    _install_a_deduper_that_drops_nothing(monkeypatch)
 
 
 def install_silent_fakes(monkeypatch) -> None:
@@ -81,6 +84,13 @@ def install_silent_fakes(monkeypatch) -> None:
         reviewer_run, "build_reviewer",
         lambda reviewer, bundle, *, model="sonnet": _FakeAgent(
             ChallengesAnswer(challenges=[])))
+    _install_a_deduper_that_drops_nothing(monkeypatch)
+
+
+def _install_a_deduper_that_drops_nothing(monkeypatch) -> None:
+    monkeypatch.setattr(
+        reviewer_run, "build_deduper",
+        lambda bundle, raised, *, model="sonnet": _FakeAgent(DedupeAnswer(drop=[])))
 
 
 def read_status_when_still(client: TestClient, session_id: str) -> dict:

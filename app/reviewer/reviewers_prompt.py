@@ -39,6 +39,19 @@ _THE_POOL = (
     "finding; supplying it from memory is not.\n\n"
 )
 
+_WHAT_THE_RUN_GUARANTEES = (
+    "WHAT THE RUN ALREADY GUARANTEES, so you do not raise it. A finding that cannot "
+    "happen costs the reader as much as a wrong one.\n"
+    "  A stage that raised is not in this run at all. The run finished, so every stage "
+    "returned: an `llm_transform` that failed to answer a row would have stopped the run, "
+    "and there are no unadjudicated rows sitting in an output.\n"
+    "  A value that cannot move the figure does not move it. A row contributing 0 to a "
+    "sum changes no sum; a row dropped from a count changes no sum either. Work out which "
+    "of the two the cited figure is before you say a row moves it.\n"
+    "  The row counts on the pool's lines are what ran. A branch line's count is the rows "
+    "that actually took that arm, not an estimate.\n\n"
+)
+
 _THE_RULE_OF_EVIDENCE = (
     "THE RULE OF EVIDENCE. Cite. Every challenge points at the pieces of the run it rests "
     "on, and a figure you write is copied off a line of the pool character for character. "
@@ -54,8 +67,12 @@ _THE_CHALLENGE_FIELDS = (
     "  `claim_part` — the phrase of the sentence it lands on: `phrase` copied word for "
     "word from the claim, and `occurrence` when that phrase appears more than once "
     "(1 for the first). Use `null` when the challenge is about the whole sentence.\n"
-    "  `text` — the challenge in ONE sentence, addressed to the claim's owner.\n"
-    "  `justification` — what in the run makes it stick, in one sentence.\n"
+    "  `text` — the challenge in ONE short sentence, addressed to the claim's owner. Say "
+    "the trouble and stop. Do not explain it, do not restate the evidence, do not walk "
+    "through the consequence: `justification` is where the reading goes.\n"
+    "  `justification` — what in the run makes it stick. Two sentences at most, and they "
+    "are the specific ones: name the column, the branch, the line of code and the counts, "
+    "as the pool prints them. Prefer a figure to a description of a figure.\n"
     "  `citations` — the pieces of the run it rests on, so the reader can open each. One "
     "or more, of these shapes:\n"
     '    {"kind": "stage_output_cell", "run_id": "...", "stage_id": "...", '
@@ -366,26 +383,31 @@ _MEANING_EXAMPLE = (
 
 
 DATA_DEFECTS_SYSTEM_PROMPT = (
-    _AGENT_CONTEXT + _THE_POOL + _DATA_DEFECTS_JOB + _THE_RULE_OF_EVIDENCE
+    _AGENT_CONTEXT + _THE_POOL + _DATA_DEFECTS_JOB + _WHAT_THE_RUN_GUARANTEES
+    + _THE_RULE_OF_EVIDENCE
     + _THE_CHALLENGE_FIELDS + _DATA_DEFECTS_EXAMPLE + _SUBMIT
 )
 
 CHOICES_SYSTEM_PROMPT = (
-    _AGENT_CONTEXT + _THE_POOL + _CHOICES_JOB + _THE_RULE_OF_EVIDENCE
+    _AGENT_CONTEXT + _THE_POOL + _CHOICES_JOB + _WHAT_THE_RUN_GUARANTEES
+    + _THE_RULE_OF_EVIDENCE
     + _THE_CHALLENGE_FIELDS + _CHOICES_EXAMPLE + _SUBMIT
 )
 
 OMISSIONS_SYSTEM_PROMPT = (
-    _AGENT_CONTEXT + _THE_POOL + _OMISSIONS_JOB + _THE_RULE_OF_EVIDENCE
+    _AGENT_CONTEXT + _THE_POOL + _OMISSIONS_JOB + _WHAT_THE_RUN_GUARANTEES
+    + _THE_RULE_OF_EVIDENCE
     + _THE_CHALLENGE_FIELDS + _OMISSIONS_EXAMPLE + _SUBMIT
 )
 
 COVERAGE_SYSTEM_PROMPT = (
-    _AGENT_CONTEXT + _THE_POOL + _COVERAGE_JOB + _THE_RULE_OF_EVIDENCE
+    _AGENT_CONTEXT + _THE_POOL + _COVERAGE_JOB + _WHAT_THE_RUN_GUARANTEES
+    + _THE_RULE_OF_EVIDENCE
     + _THE_CHALLENGE_FIELDS + _COVERAGE_EXAMPLE + _SUBMIT
 )
 
 MEANING_SYSTEM_PROMPT = (
-    _AGENT_CONTEXT + _THE_POOL + _MEANING_JOB + _THE_RULE_OF_EVIDENCE
+    _AGENT_CONTEXT + _THE_POOL + _MEANING_JOB + _WHAT_THE_RUN_GUARANTEES
+    + _THE_RULE_OF_EVIDENCE
     + _THE_CHALLENGE_FIELDS + _MEANING_EXAMPLE + _SUBMIT
 )

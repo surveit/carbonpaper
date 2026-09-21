@@ -12,7 +12,12 @@ from app.core.agent.store import SessionStore
 from app.core.agent.usage import LlmUsage
 from app.core.errors import GenerationError
 from app.models.citations import StageOutputColumnCitation
-from app.models.claim_review import ChallengesAnswer, ClaimReviewResult
+from app.models.claim_review import (
+    ChallengesAnswer,
+    ClaimReviewResult,
+    DedupeAnswer,
+    DroppedChallenge,
+)
 from app.models.records.claim_review import (
     ChallengeKind,
     ClaimPart,
@@ -107,10 +112,13 @@ def _one_challenge_each() -> ChallengesAnswer:
     return ChallengesAnswer(challenges=[make_challenge()])
 
 
-def install(monkeypatch, make_agent) -> None:
+def install(monkeypatch, make_agent, *, drop=()) -> None:
     monkeypatch.setattr(
         reviewer_run, "build_reviewer",
         lambda reviewer, bundle, *, model="sonnet": make_agent(reviewer))
+    monkeypatch.setattr(
+        reviewer_run, "build_deduper",
+        lambda bundle, raised, *, model="sonnet": _FakeAgent(DedupeAnswer(drop=list(drop))))
 
 
 def _store_of(monkeypatch: Any) -> SessionStore:
@@ -299,3 +307,28 @@ def test_the_running_review_is_held_until_it_finishes(bundle, monkeypatch) -> No
     assert seen == [1]
     assert reviewer_run._REVIEWS == set()
 
+
+def test_a_repeat_the_deduper_names_is_dropped_and_the_rest_are_untouched(
+    bundle, monkeypatch
+) -> None:
+    install(monkeypatch, lambda reviewer: _FakeAgent(_one_challenge_each()),
+            drop=[DroppedChallenge(index=1, duplicate_of=0, because="the same defect")])
+    landed: list[ClaimReviewResult] = []
+
+    _run_the_review(bundle, landed.append)
+
+    kept = landed[0].challenges
+    assert len(kept) == len(REVIEWERS) - 1
+    assert all(one == make_challenge() for one in kept)
+
+
+def test_a_deduper_naming_a_challenge_nobody_raised_fails_the_review(
+    bundle, monkeypatch
+) -> None:
+    install(monkeypatch, lambda reviewer: _FakeAgent(_one_challenge_each()),
+            drop=[DroppedChallenge(index=99, duplicate_of=0, because="no such challenge")])
+    store = _store_of(monkeypatch)
+
+    session_id = _run_the_review(bundle, lambda result: None)
+
+    assert "which was never raised" in (_failure_on(store, session_id) or "")

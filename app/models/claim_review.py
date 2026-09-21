@@ -30,6 +30,20 @@ class ChallengesAnswer(_Base):
     )
 
 
+class DroppedChallenge(_Base):
+    index: int = Field(
+        ge=0, description="The challenge to drop, by its number in the list you were given.")
+    duplicate_of: int = Field(
+        ge=0, description="The challenge it repeats, by its number. Keep that one.")
+    because: str = Field(
+        description="What the two say that is the same thing, in one sentence.")
+
+
+class DedupeAnswer(_Base):
+    drop: list[DroppedChallenge] = Field(
+        description="Every challenge that repeats another; an empty list if none does.")
+
+
 class ClaimReviewResult(_Base):
     """What one review run produced: the merged answer, and every session behind it."""
 
