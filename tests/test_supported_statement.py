@@ -162,12 +162,12 @@ def told():
 def test_a_regrain_closes_its_paragraph_and_the_next_one_names_its_own_noun(told):
     assert _read(told) == [
         "The run loads 45,061 filing records."
-        " The figure reads income_usd, filing_uuid."
+        " The figure's value comes through income_usd, filing_uuid."
         " Of those filing records, only the ones that use one of six AI terms in their"
         " issue text go on."
         " Of those, the ones that a model read as really about AI remain."
-        " What survives is held to one row per filing_uuid, the duplicates having to"
-        " agree, and becomes filings.",
+        " The resulting table holds one row per filing_uuid, the duplicates having to"
+        " agree. From here, one row is one filing.",
         "Of those filings, only the ones that are one organisation paying another to"
         " lobby go on."
         " Their income_usd, summed, is the figure.",
@@ -191,10 +191,10 @@ def test_a_stage_that_wrote_on_every_row_says_what_it_wrote():
                                          rows_behind=1294),
             "totals": StepRows(rows_out=1, rows_dropped=0, rows_behind=1)}
     statement = build_supported_statement(_hold(route, rows, NOUNS), "total")
-    assert "Each is given mentions_ai and ai_terms_found." in _read(statement)[0]
+    assert "Code gives each mentions_ai and ai_terms_found." in _read(statement)[0]
 
 
-def test_a_clause_that_says_only_a_name_asks_for_the_step_s_own_line(told):
+def test_a_step_nobody_wrote_a_predicate_for_is_told_in_its_own_words(told):
     route = [_load("input_filings", FILING_COLUMNS),
              _filter("keep_ai_candidates", "input_filings", MONEY_READ),
              _aggregate("totals", "keep_ai_candidates", [],
@@ -204,14 +204,12 @@ def test_a_clause_that_says_only_a_name_asks_for_the_step_s_own_line(told):
             "keep_ai_candidates": ROWS["keep_ai_candidates"],
             "totals": StepRows(rows_out=1, rows_dropped=0, rows_behind=1)}
     unwritten = build_supported_statement(_hold(route, rows, NOUNS), "total")
-    said = unwritten.paragraphs[0][1]
-    assert said.needs_the_description is True
-    assert said.description == "Keep some of input_filings"
-    # The same filter with a predicate says its own meaning, so it asks for nothing.
-    written = {clause.stage_id: clause for paragraph in told.paragraphs
-               for clause in paragraph}["keep_ai_candidates"]
-    assert (written.needs_the_description, written.description) == (
-        False, "Keep some of find_ai_mentions")
+    # ONE sentence, carrying the step's own authored line rather than repeating it.
+    assert ("Of those filing records, keep_ai_candidates keep some of input_filings."
+            in _read(unwritten)[0])
+    # Where a predicate WAS written for this sentence, the predicate is the sentence.
+    assert ("only the ones that use one of six AI terms in their issue text go on"
+            in _read(told)[0])
 
 
 def test_every_clause_names_the_stage_it_opens(told):
@@ -223,13 +221,13 @@ def test_every_clause_names_the_stage_it_opens(told):
 
 def test_a_narrowing_hovers_its_two_counts_and_the_share_that_went_on(told):
     assert (_hovers(told)["that use one of six AI terms in their issue text"]
-            == "2,139 of 45,061 go on · 4.7%")
+            == "2,139 of 45,061 go on · 4.7% · tested against income_usd")
 
 
 def test_the_two_counts_the_page_prints_are_the_ends_of_the_route(told):
     printed = [phrase.text for paragraph in told.paragraphs for clause in paragraph
                for phrase in clause.phrases if phrase.style is PhraseStyle.count_]
-    assert printed == ["45,061 filing records", "filings"]
+    assert printed == ["45,061 filing records", "filing"]
 
 
 def test_the_population_hovers_the_row_type_and_what_the_figure_rests_on(told):
@@ -248,7 +246,7 @@ def test_a_filter_nobody_wrote_a_predicate_for_is_named_by_its_stage():
             "keep_ai_candidates": ROWS["keep_ai_candidates"],
             "totals": StepRows(rows_out=1, rows_dropped=0, rows_behind=1)}
     statement = build_supported_statement(_hold(route, rows, NOUNS), "total")
-    assert ("Of those filing records, only the ones keep_ai_candidates kept go on."
+    assert ("Of those filing records, keep_ai_candidates keep some of input_filings."
             in _read(statement)[0])
 
 
@@ -284,8 +282,9 @@ def test_a_grouping_that_combines_values_is_told_as_a_gather_not_an_assert():
             "by_income_group": StepRows(rows_out=139, rows_dropped=0, rows_behind=1)}
     statement = build_supported_statement(_hold(route, rows, {}), "mean_share")
     assert _read(statement) == [
-        "The run loads 37,403 rows. The figure reads value."
-        " These are gathered into one row per iso3 and year_int, their values summed.",
+        "The run loads 37,403 rows. The figure's value comes through value."
+        " The resulting table gathers them into one row per iso3 and year_int, their"
+        " values summed. From here, one row is one iso3 and year_int pair.",
         "Their value is averaged for each iso3 — 139 rows in all — and that is"
         " the figure.",
     ]

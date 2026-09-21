@@ -271,20 +271,27 @@ header names the stage, the row and the column; three tabs under it:
 - **Paths** (`_row_paths.html` ← `app.web.row_paths`) — every distinct route the
   rows behind this figure took, told apart by the branches they took.
   `docs/branch-analysis.md` says which branches it leaves out.
-  Its middle column holds ONE walk in two shapes, toggled: **Paragraph**, the
-  figure told as prose (`_supported_statement.html` ←
-  `…/statement/panel`, `app.web.supported_statement_view`, built by
-  `app.models.supported_statement`), and **List**, the step-by-step the page
-  writes from its own payload. The prose says one clause per stage that narrowed
-  the population, wrote on every row, changed what one row is, or put the rows in
-  front of a person; a stage that did none of those contributes no words. A
-  regrain closes its paragraph and the next names its own noun, which is the
-  stage's row type. Two counts are printed, where the route starts and what it
-  ends as; every other count is a tooltip carrying the rows that went on and
-  their share. Where no `predicate` is authored on a filter or a queue the clause
-  names the step and prints the step's own description after it — it never
-  invents one. Clicking a clause selects that step, so the panel on the right is
-  the one the step list opens.
+  Its middle column holds two shapes, toggled: **Paragraph**, the figure told as
+  prose (`_supported_statement.html` ← `…/statement/panel`,
+  `app.web.supported_statement_view`, built by `app.models.supported_statement`),
+  and **List**, the step-by-step the page writes from its own payload. They answer
+  different questions and the toggle says which: the prose is every row behind the
+  figure whatever path it took, the list is the ONE path picked on the left.
+  The prose says one clause per stage that narrowed the population, wrote on every
+  row, changed what one row is, or put the rows in front of a person; a stage that
+  did none of those contributes no words. A regrain closes its paragraph and states
+  outright what one row is from then on — its row type where the version names one,
+  its group-by keys where none does. Two counts are printed, where the route starts
+  and what it ends as; every other count is a tooltip, carrying the rows that went
+  on, their share, and the columns the step tested. Where no `predicate` is authored
+  on a filter or a queue, the clause is the step's OWN description, in one sentence
+  — never a second sentence repeating it, and never an inversion of it: turning
+  "drops every row with no AI term" into "keeps the rows that have one" is not
+  something this can work out, so it says what the author wrote.
+  Nouns come from the run's own version; where that version named none, the
+  project's current words are read onto it and every noun's hover says so.
+  Clicking a clause selects that step, so the panel on the right is the one the
+  step list opens.
 - **Rows & columns** (`_canvas_panel.html` ← `app/web/routers/values.py`,
   `app.web.canvas_view`, drawn by `static/canvas.js`) — the run as a canvas: one
   box per stage, wired in the workflow's own graph, and under each stage that

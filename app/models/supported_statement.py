@@ -28,12 +28,14 @@ from app.models.supported_phrases import (
 from app.models.supported_verbs import (
     find_the_formula_behind,
     list_the_formulas,
+    name_the_columns_tested,
     name_the_columns_written,
     name_the_group_keys,
     name_the_looked_up_columns,
     name_the_reference_input,
     read_the_predicate,
     reviews_every_row,
+    say_the_line_lower,
     say_the_formulas,
     says_nothing_was_combined,
     writes_columns,
@@ -78,10 +80,8 @@ class FigureClause(BaseModel):
     kind: ClauseKind
     stage_id: StageId
     phrases: list[Phrase]
-    # The stage's own authored line, which the list view prints under every clause.
+    # The stage's own authored line, for a reader who wants it beside the clause.
     description: str = ""
-    # Set where the clause's own words say no more than what the step is called.
-    needs_the_description: bool = False
 
 
 class SupportedStatement(BaseModel):
@@ -90,8 +90,13 @@ class SupportedStatement(BaseModel):
     paragraphs: list[list[FigureClause]] = Field(default_factory=list)
 
 
+# Said in the hover of any noun this run's own version did not name.
+LATER_VERSION_NOTE = (
+    "Named by the project's workflow as it stands now; this run's version named nothing.")
+
+
 def build_supported_statement(
-    steps: Sequence[FigureStep], cited_column: str
+    steps: Sequence[FigureStep], cited_column: str, nouns_are_later: bool = False
 ) -> SupportedStatement:
     """`steps` is the lineage walk, upstream first, the stage the figure is cited on last."""
     paragraphs: list[list[FigureClause]] = [[]]
@@ -99,12 +104,12 @@ def build_supported_statement(
         kind = _read_clause_kind(step, is_the_figure=position == len(steps) - 1)
         if kind is None:
             continue
-        place = _place_the_step(steps, position, cited_column, paragraphs[-1])
+        place = _place_the_step(steps, position, cited_column, paragraphs[-1],
+                                nouns_are_later)
         paragraphs[-1].append(FigureClause(
             kind=kind, stage_id=step.stage.stage.id,
             phrases=_TELLERS[kind](step, place),
-            description=step.stage.stage.description,
-            needs_the_description=_says_only_a_name(kind, step)))
+            description=step.stage.stage.description))
         if kind is ClauseKind.regrain:
             paragraphs.append([])
     return SupportedStatement(paragraphs=[held for held in paragraphs if held])
@@ -122,11 +127,13 @@ class _Place:
     # Whether this is the paragraph's first narrowing, which is the one that names the noun.
     narrows_first: bool
     cited_column: str
+    # Whether the nouns come from a version later than the one that ran.
+    nouns_are_later: bool
 
 
 def _place_the_step(
     steps: Sequence[FigureStep], position: int, cited_column: str,
-    paragraph: list[FigureClause],
+    paragraph: list[FigureClause], nouns_are_later: bool,
 ) -> _Place:
     before = steps[position - 1] if position else None
     # What the step before wrote: a regrain's own rows_in counts nothing it collapsed.
@@ -138,7 +145,7 @@ def _place_the_step(
                   incoming=before.row_type if before else None,
                   narrows_first=not any(clause.kind is ClauseKind.restriction
                                         for clause in paragraph),
-                  cited_column=cited_column)
+                  cited_column=cited_column, nouns_are_later=nouns_are_later)
 
 
 def _loads_rows(step: FigureStep) -> bool:
@@ -165,12 +172,6 @@ def _read_clause_kind(step: FigureStep, is_the_figure: bool) -> Optional[ClauseK
     return None
 
 
-def _says_only_a_name(kind: ClauseKind, step: FigureStep) -> bool:
-    """A test nobody wrote a predicate for is named, never explained, by this builder."""
-    return (kind in (ClauseKind.restriction, ClauseKind.review)
-            and read_the_predicate(step.stage) is None)
-
-
 def _regrains(step: FigureStep) -> bool:
     stage_type = StageType(step.stage.stage.type)
     if stage_type is StageType.dedupe:
@@ -184,7 +185,7 @@ def _say_the_population(step: FigureStep, place: _Place) -> list[Phrase]:
     noun = say_plural(step.row_type)
     said = [text_phrase("The run loads " if not place.loads_at else "It also loads "),
             count_phrase(f"{say_count(step.rows.rows_out)} {noun}",
-                         hover=_hover_the_population(step, noun))]
+                         hover=_hover_the_population(step, place, noun))]
     # Two loads meet at a union, and a reader needs to know which rows came from where.
     if place.loads > 1:
         said += [text_phrase(" from "),
@@ -195,18 +196,25 @@ def _say_the_population(step: FigureStep, place: _Place) -> list[Phrase]:
     return said + _say_what_the_figure_reads(step)
 
 
-def _hover_the_population(step: FigureStep, noun: str) -> str:
+def _hover_the_population(step: FigureStep, place: _Place, noun: str) -> str:
     behind = (f"{say_count(step.rows.rows_behind)} of them behind this figure"
               if step.rows.rows_behind else "none of them behind this figure")
     definition = f"{step.row_type.definition} " if step.row_type else ""
-    return f"{definition}{say_count(step.rows.rows_out)} {noun} here, {behind}."
+    return (f"{definition}{say_count(step.rows.rows_out)} {noun} here, {behind}."
+            + _say_where_the_noun_came_from(step, place))
+
+
+def _say_where_the_noun_came_from(step: FigureStep, place: _Place) -> str:
+    return (f" {LATER_VERSION_NOTE}"
+            if place.nouns_are_later and step.row_type is not None else "")
 
 
 def _say_what_the_figure_reads(step: FigureStep) -> list[Phrase]:
+    """What the VALUE came through. What each decision read is said at the decision."""
     columns = [_say_a_column(step, name) for name in step.rows.columns_behind]
     if not columns:
         return []
-    return ([text_phrase(" The figure reads ")] + say_list(columns)
+    return ([text_phrase(" The figure's value comes through ")] + say_list(columns)
             + [text_phrase(".")])
 
 
@@ -228,38 +236,35 @@ def _describe_column(step: FigureStep, name: str) -> Optional[str]:
 
 def _say_the_restriction(step: FigureStep, place: _Place) -> list[Phrase]:
     predicate = read_the_predicate(step.stage)
-    held = _hold_the_test(step, place, predicate)
+    if predicate is None:
+        return _say_the_step_s_own_test(step, place)
+    held = [Phrase(text=f"that {predicate}", hover=_hover_the_restriction(step, place))]
     if not step.rows.rows_dropped:
-        return _say_the_narrowing_that_was_not(held, predicate)
+        return ([text_phrase("Every one ")] + held
+                + [text_phrase(", so the step narrowed nothing.")])
     if place.narrows_first:
         return ([text_phrase(f"Of those {say_plural(place.incoming)}, only the ones ")]
                 + held + [text_phrase(" go on.")])
     return [text_phrase("Of those, the ones ")] + held + [text_phrase(" remain.")]
 
 
-def _say_the_narrowing_that_was_not(
-    held: list[Phrase], predicate: Optional[str]
-) -> list[Phrase]:
-    if predicate is None:
-        return ([text_phrase("Every one went on, so ")]
-                + held[:1] + [text_phrase(" narrowed nothing.")])
-    return ([text_phrase("Every one ")] + held
-            + [text_phrase(", so the step narrowed nothing.")])
-
-
-def _hold_the_test(
-    step: FigureStep, place: _Place, predicate: Optional[str]
-) -> list[Phrase]:
-    hover = _hover_the_restriction(step, place)
-    # Nobody wrote what the test means, so the step's own name is all there is to say.
-    if predicate is None:
-        return [name_phrase(step.stage.stage.id, hover=hover), text_phrase(" kept")]
-    return [Phrase(text=f"that {predicate}", hover=hover)]
+def _say_the_step_s_own_test(step: FigureStep, place: _Place) -> list[Phrase]:
+    """Nobody wrote what the test means for this sentence, so the step's own line is it."""
+    named = name_phrase(step.stage.stage.id, hover=_hover_the_restriction(step, place))
+    said = say_the_line_lower(step.stage.stage.description).rstrip(".")
+    opening = (f"Of those {say_plural(place.incoming)}, " if place.narrows_first
+               else "Of those, ")
+    if not step.rows.rows_dropped:
+        return [text_phrase(f"{opening}none was dropped: "), named,
+                text_phrase(f" {said}.")]
+    return [text_phrase(opening), named, text_phrase(f" {said}.")]
 
 
 def _hover_the_restriction(step: FigureStep, place: _Place) -> str:
+    tested = name_the_columns_tested(step.stage)
+    reads = f" · tested against {', '.join(tested)}" if tested else ""
     return (f"{say_count(step.rows.rows_out)} of {say_count(place.rows_in)} go on"
-            f" · {say_share(step.rows.rows_out, place.rows_in)}")
+            f" · {say_share(step.rows.rows_out, place.rows_in)}{reads}")
 
 
 # ── a step a person or a lookup stood in ─────────────────────────────────────
@@ -303,23 +308,31 @@ def _say_the_reference(step: FigureStep, reference: Optional[str], hover: str) -
 # ── a step that changed what one row is ──────────────────────────────────────
 
 def _say_the_regrain(step: FigureStep, place: _Place) -> list[Phrase]:
+    """The grain moved here, so the clause says outright what one row is from now on."""
     asserts = says_nothing_was_combined(step.stage)
-    noun = _say_the_new_noun(step, place)
-    if not noun:
-        return _open_the_regrain(step, asserts) + [text_phrase(".")]
-    joined = ", and becomes " if asserts else ", becoming "
-    return _open_the_regrain(step, asserts) + [text_phrase(joined)] + noun + [
-        text_phrase(".")]
+    return (_open_the_regrain(step, asserts) + [text_phrase(". ")]
+            + _declare_the_grain(step, place))
+
+
+def _declare_the_grain(step: FigureStep, place: _Place) -> list[Phrase]:
+    keys = name_the_group_keys(step.stage)
+    named = _say_the_new_noun(step, place)
+    if named:
+        return [text_phrase("From here, one row is one ")] + named + [text_phrase(".")]
+    # No word for it, so the keys say what one row is: a pair of them is not "one iso3".
+    said = say_and_list([_say_a_column(step, name) for name in keys])
+    closing = "." if len(keys) < 2 else " pair."
+    return [text_phrase("From here, one row is one ")] + said + [text_phrase(closing)]
 
 
 def _open_the_regrain(step: FigureStep, asserts: bool) -> list[Phrase]:
     per_key = say_and_list([_say_a_column(step, name)
                             for name in name_the_group_keys(step.stage)])
     if asserts:
-        return ([text_phrase("What survives is held to one row per ")] + per_key
+        return ([text_phrase("The resulting table holds one row per ")] + per_key
                 + [text_phrase(", "), Phrase(text="the duplicates having to agree",
                                              hover=_hover_the_assert(step))])
-    return ([text_phrase("These are gathered into one row per ")] + per_key
+    return ([text_phrase("The resulting table gathers them into one row per ")] + per_key
             + [text_phrase(", their values "),
                Phrase(text=say_the_formulas(step.stage),
                       hover=_hover_the_gather(step))])
@@ -342,28 +355,23 @@ def _hover_the_gather(step: FigureStep) -> str:
 def _say_the_new_noun(step: FigureStep, place: _Place) -> list[Phrase]:
     if step.row_type is None or step.row_type.id == NO_KIND_ROW_TYPE_ID:
         return []
-    if place.incoming is not None and step.row_type.id == place.incoming.id:
-        return []
-    hover = (f"{say_count(place.rows_in)} {say_plural(place.incoming)} become "
-             f"{say_count(step.rows.rows_out)}.")
-    return [count_phrase(say_plural(step.row_type), hover=hover)]
+    hover = (f"{step.row_type.definition} {say_count(place.rows_in)} "
+             f"{say_plural(place.incoming)} become {say_count(step.rows.rows_out)}."
+             + _say_where_the_noun_came_from(step, place))
+    return [count_phrase(step.row_type.title.lower(), hover=hover)]
 
 
 # ── a step that wrote on every row ──────────────────────────────────────────
 
 def _say_the_transform(step: FigureStep, place: _Place) -> list[Phrase]:
     adds, rewrites = name_the_columns_written(step.stage)
-    hover = _hover_the_transform(step, place)
-    if StageType(step.stage.stage.type) is StageType.llm_transform:
-        lead = [text_phrase("A model read each and "),
-                Phrase(text="gave it" if adds else "rewrote", hover=hover),
-                text_phrase(" ")]
-        return lead + _say_the_written(step, adds or rewrites) + [text_phrase(".")]
-    if not adds:
-        return ([text_phrase("Each has ")] + _say_the_written(step, rewrites)
-                + [Phrase(text=" rewritten", hover=hover), text_phrase(".")])
-    return ([text_phrase("Each is "), Phrase(text="given", hover=hover),
-             text_phrase(" ")] + _say_the_written(step, adds) + [text_phrase(".")])
+    hand = ("A model" if StageType(step.stage.stage.type) is StageType.llm_transform
+            else "Code")
+    verb = "gives" if adds else "rewrites"
+    written = _say_the_written(step, adds or rewrites)
+    return ([text_phrase(f"{hand} "),
+             Phrase(text=f"{verb} each", hover=_hover_the_transform(step, place)),
+             text_phrase(" ")] + written + [text_phrase(".")])
 
 
 def _say_the_written(step: FigureStep, columns: list[str]) -> list[Phrase]:

@@ -34,6 +34,22 @@ def read_the_predicate(stage: WorkflowStage) -> Optional[str]:
     return None
 
 
+def name_the_columns_tested(stage: WorkflowStage) -> list[str]:
+    """The columns a decision consumed, which are never the ones its rows' value came through."""
+    signature = getattr(stage.stage, "signature", None)
+    return [column.name
+            for read in getattr(signature, "reads", [])
+            for column in read.columns]
+
+
+def say_the_line_lower(description: str) -> str:
+    """An authored line dropped mid-sentence, with its own capital only where it is a name."""
+    head = description.split(" ", 1)[0]
+    if not head[:1].isalpha() or head.isupper() or "_" in head:
+        return description
+    return description[0].lower() + description[1:]
+
+
 def name_the_columns_written(stage: WorkflowStage) -> tuple[list[str], list[str]]:
     """What a transform added and what it rewrote, off the signature it declared."""
     signature = getattr(stage.stage, "signature", None)

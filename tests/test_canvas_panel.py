@@ -305,11 +305,12 @@ def test_the_figure_is_told_as_prose_off_the_same_walk_the_canvas_draws(run_id):
     # Two loads meet at a union, both behind the total; no row type names the rows.
     assert _told(run_id, TOTAL) == [
         "The run loads 6 rows from load_east. It also loads 4 rows from load_west."
-        " The figure reads amount. Each has portfolio looked up."
-        " Each is given band and digits."
-        " Of those rows, only the ones funded kept go on."
-        " What survives is held to one row per grant_id, the duplicates having to agree.",
-        "Of those rows, only the ones grants_only kept go on."
+        " The figure's value comes through amount. Each has portfolio looked up."
+        " Code gives each band and digits."
+        " Of those rows, funded drops the grants recorded at zero."
+        " The resulting table holds one row per grant_id, the duplicates having to"
+        " agree. From here, one row is one grant_id.",
+        "Of those rows, grants_only keeps the grants, dropping the loans."
         " Their amount, summed, is the figure.",
     ]
 
@@ -329,4 +330,4 @@ def test_the_told_figure_hands_each_clause_the_stage_it_opens(run_id):
     # What the Paths pane opens its right-hand panel on, off the step the clause is.
     assert 'class="statement-clause" data-stage="funded"' in page
     # A count past the first and the last is a tooltip rather than a printed number.
-    assert 'data-tip="9 of 10 go on · 90%"' in page
+    assert 'data-tip="9 of 10 go on · 90% · tested against amount"' in page

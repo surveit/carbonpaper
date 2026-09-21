@@ -26,8 +26,6 @@
     {%- for clause in paragraph -%}
     <span class="statement-clause" data-stage="{{ clause.stage_id }}"
           title="open {{ clause.stage_id }}">{% for phrase in clause.phrases %}{{ say(phrase) }}{% endfor %}
-      {#- The step's own line, which may or may not have been written with a stop. -#}
-      {%- if clause.needs_the_description %} <span class="statement-aside">{{ clause.description }}{% if not clause.description.endswith((".", "!", "?")) %}.{% endif %}</span>{% endif -%}
     </span>
     {% endfor -%}
   </p>
