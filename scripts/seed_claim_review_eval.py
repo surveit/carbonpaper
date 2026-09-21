@@ -33,6 +33,7 @@ from app.services import drafts, run as run_service, versioning
 from app.services.claim_shapes import load_claim_shapes, write_claim_shapes
 from app.services.claims import load_claims_of_shape, submit_claim
 from app.services.code_approval import approve_code_execution
+from app.services.loader import save_stages
 from app.services.project import create_project, find_projects_by_name, write_eval_config
 from app.services.versioning import load_version_stages
 from app.services.workspace import configure_projects_dir_from_env, resolve_project_dir
@@ -154,6 +155,7 @@ def main() -> None:
     project_id = ensure_the_eval_project()
     cases_path = write_the_cases_file(project_id, claim)
     version_id = ensure_the_eval_version(project_id, cases_path)
+    ensure_the_working_copy_holds_the_version(project_id, version_id)
     manifest = ensure_the_workflow_ran(project_id, version_id)
     config = save_the_eval_config(project_id, version_id, claim)
     eval_run = run_eval(project_id, config, version_id=version_id)
@@ -248,6 +250,11 @@ def ensure_the_eval_version(project_id: str, cases_path: Path) -> str:
         if [stage_to_spec_dict(stage) for stage in version.stages] == wanted:
             return version.version_id
     return save_the_eval_version(project_id, cases_path)
+
+
+def ensure_the_working_copy_holds_the_version(project_id: str, version_id: str) -> None:
+    """The evals page reads the working copy, so a version alone shows every eval as broken."""
+    save_stages(project_id, load_version_stages(project_id, version_id))
 
 
 def ensure_the_workflow_ran(project_id: str, version_id: str) -> RunManifest:
