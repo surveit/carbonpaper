@@ -164,12 +164,12 @@ def test_a_regrain_closes_its_paragraph_and_the_next_one_names_its_own_noun(told
         "The run loads 45,061 filing records."
         " The figure's value comes through income_usd, filing_uuid."
         " Of those filing records, only the ones that use one of six AI terms in their"
-        " issue text go on."
-        " Of those, the ones that a model read as really about AI remain."
+        " issue text are kept."
+        " Of those, only the ones that a model read as really about AI are kept."
         " The resulting table holds one row per filing_uuid, the duplicates having to"
         " agree. From here, one row is one filing.",
         "Of those filings, only the ones that are one organisation paying another to"
-        " lobby go on."
+        " lobby are kept."
         " Their income_usd, summed, is the figure.",
     ]
 
@@ -208,7 +208,7 @@ def test_a_step_nobody_wrote_a_predicate_for_is_told_in_its_own_words(told):
     assert ("Of those filing records, keep_ai_candidates keep some of input_filings."
             in _read(unwritten)[0])
     # Where a predicate WAS written for this sentence, the predicate is the sentence.
-    assert ("only the ones that use one of six AI terms in their issue text go on"
+    assert ("only the ones that use one of six AI terms in their issue text are kept"
             in _read(told)[0])
 
 
@@ -221,7 +221,7 @@ def test_every_clause_names_the_stage_it_opens(told):
 
 def test_a_narrowing_hovers_its_two_counts_and_the_share_that_went_on(told):
     assert (_hovers(told)["that use one of six AI terms in their issue text"]
-            == "2,139 of 45,061 go on · 4.7% · tested against income_usd")
+            == "2,139 of 45,061 kept · 4.7% · tested against income_usd")
 
 
 def test_the_two_counts_the_page_prints_are_the_ends_of_the_route(told):
@@ -262,7 +262,7 @@ def test_a_step_that_dropped_nothing_says_so_rather_than_narrowing():
                                         rows_behind=1294),
             "totals": StepRows(rows_out=1, rows_dropped=0, rows_behind=1)}
     statement = build_supported_statement(_hold(route, rows, NOUNS), "total")
-    assert "Every one that carry an income, so the step narrowed nothing." in _read(
+    assert "Every one that carry an income, so none was dropped here." in _read(
         statement)[0]
 
 

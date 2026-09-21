@@ -330,4 +330,4 @@ def test_the_told_figure_hands_each_clause_the_stage_it_opens(run_id):
     # What the Paths pane opens its right-hand panel on, off the step the clause is.
     assert 'class="statement-clause" data-stage="funded"' in page
     # A count past the first and the last is a tooltip rather than a printed number.
-    assert 'data-tip="9 of 10 go on · 90% · tested against amount"' in page
+    assert 'data-tip="9 of 10 kept · 90% · tested against amount"' in page

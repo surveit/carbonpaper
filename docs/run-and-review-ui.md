@@ -282,8 +282,8 @@ header names the stage, the row and the column; three tabs under it:
   did none of those contributes no words. A regrain closes its paragraph and states
   outright what one row is from then on — its row type where the version names one,
   its group-by keys where none does. Two counts are printed, where the route starts
-  and what it ends as; every other count is a tooltip, carrying the rows that went
-  on, their share, and the columns the step tested. Where no `predicate` is authored
+  and what it ends as; every other count is a tooltip, carrying the rows kept,
+  their share, and the columns the step tested. Where no `predicate` is authored
   on a filter or a queue, the clause is the step's OWN description, in one sentence
   — never a second sentence repeating it, and never an inversion of it: turning
   "drops every row with no AI term" into "keeps the rows that have one" is not

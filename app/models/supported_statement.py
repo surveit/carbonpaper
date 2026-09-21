@@ -241,11 +241,10 @@ def _say_the_restriction(step: FigureStep, place: _Place) -> list[Phrase]:
     held = [Phrase(text=f"that {predicate}", hover=_hover_the_restriction(step, place))]
     if not step.rows.rows_dropped:
         return ([text_phrase("Every one ")] + held
-                + [text_phrase(", so the step narrowed nothing.")])
-    if place.narrows_first:
-        return ([text_phrase(f"Of those {say_plural(place.incoming)}, only the ones ")]
-                + held + [text_phrase(" go on.")])
-    return [text_phrase("Of those, the ones ")] + held + [text_phrase(" remain.")]
+                + [text_phrase(", so none was dropped here.")])
+    opening = (f"Of those {say_plural(place.incoming)}, only the ones "
+               if place.narrows_first else "Of those, only the ones ")
+    return [text_phrase(opening)] + held + [text_phrase(" are kept.")]
 
 
 def _say_the_step_s_own_test(step: FigureStep, place: _Place) -> list[Phrase]:
@@ -263,7 +262,7 @@ def _say_the_step_s_own_test(step: FigureStep, place: _Place) -> list[Phrase]:
 def _hover_the_restriction(step: FigureStep, place: _Place) -> str:
     tested = name_the_columns_tested(step.stage)
     reads = f" · tested against {', '.join(tested)}" if tested else ""
-    return (f"{say_count(step.rows.rows_out)} of {say_count(place.rows_in)} go on"
+    return (f"{say_count(step.rows.rows_out)} of {say_count(place.rows_in)} kept"
             f" · {say_share(step.rows.rows_out, place.rows_in)}{reads}")
 
 
@@ -288,7 +287,7 @@ def _say_the_partial_review(step: FigureStep, predicate: str) -> list[Phrase]:
 def _say_the_lookup(step: FigureStep, place: _Place) -> list[Phrase]:
     landed = name_the_looked_up_columns(step.stage)
     reference = name_the_reference_input(step.stage)
-    hover = (f"{say_count(step.rows.rows_out)} rows carried on; a lookup that matched "
+    hover = (f"{say_count(step.rows.rows_out)} rows kept; a lookup that matched "
              f"nothing is not counted here.")
     if not landed:
         return [text_phrase("Each is matched against "),
@@ -380,8 +379,8 @@ def _say_the_written(step: FigureStep, columns: list[str]) -> list[Phrase]:
 
 def _hover_the_transform(step: FigureStep, place: _Place) -> str:
     if not step.rows.rows_dropped:
-        return f"All {say_count(place.rows_in)} rows carried on."
-    return (f"{say_count(step.rows.rows_out)} of {say_count(place.rows_in)} carried on"
+        return f"All {say_count(place.rows_in)} rows kept."
+    return (f"{say_count(step.rows.rows_out)} of {say_count(place.rows_in)} kept"
             f" · {say_share(step.rows.rows_out, place.rows_in)}")
 
 

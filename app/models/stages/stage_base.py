@@ -218,7 +218,7 @@ PREDICATE_MAX_CHARS = 120
 
 PREDICATE_DESCRIPTION = (
     "The test this step applies, as a verb phrase completing \"only the ones that ___ "
-    "go on\" — \"use one of six AI terms in their issue text\", \"are one organisation "
+    "are kept\" — \"use one of six AI terms in their issue text\", \"are one organisation "
     "paying another to lobby\". Lower case, no full stop, no leading \"rows that\".\n"
     "Say what the step KEEPS. A step that drops is still written from the kept side: "
     "code spelled `not row[\"mentions_ai\"]` and a description reading \"drops every row "
