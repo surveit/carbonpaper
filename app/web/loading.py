@@ -38,7 +38,11 @@ from app.services.loader import (
     read_working_copy_edited_at,
 )
 from app.services.errors import WorkflowLoadError
-from app.services.versioning import list_versions, load_version_stages
+from app.services.versioning import (
+    find_latest_version_id,
+    list_versions,
+    load_version_stages,
+)
 from app.services.project import has_document, list_project_listings
 from app.services.project_record import read_project_edited_at, read_project_name
 from app.services.terms import count_schemas
@@ -147,6 +151,20 @@ def load_stages_or_empty(project_id: str) -> StageListing:
             workflow=WorkflowNotFormed(issues=["the project has no stages yet"]),
             issues=[])
     return load_stages(project_id)
+
+
+def load_workflow_or_latest_version(project_id: str) -> Workflow | WorkflowNotFormed:
+    """A project authored by script has versions and no working copy; judge that by its latest."""
+    if has_working_copy(project_id):
+        return load_stages(project_id).workflow
+    version_id = find_latest_version_id(project_id)
+    if version_id is None:
+        return WorkflowNotFormed(issues=["the project has no stages yet"])
+    try:
+        stages = load_version_stages(project_id, version_id)
+    except (FileNotFoundError, ValueError) as exc:
+        return WorkflowNotFormed(issues=[f"version '{version_id}' will not load: {exc}"])
+    return build_workflow(stages)
 
 
 def find_workflow_stage(

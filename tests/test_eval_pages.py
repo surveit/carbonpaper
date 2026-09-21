@@ -23,7 +23,8 @@ from app.core.persistence import get_store
 from app.evals.store import save_eval_config, save_eval_run
 from app.runtime.run_log import count_events
 from app.models.records.workflow_version import WorkflowVersion
-from app.services import workspace
+from app.models.records.working_copy import WorkingCopy
+from app.services import versioning, workspace
 from stage_seed import add_stage, read_stages, set_stages
 from run_seed import store_events
 
@@ -402,3 +403,32 @@ def test_a_run_that_stored_no_accuracy_is_not_given_one(tmp_path):
 
     assert "Not scorable" in r.text
     assert "%" not in r.text.split('class="stages runs-table"')[1].split("</table>")[0]
+
+
+# ── A project authored by script: versions, no working copy (issue #1067) ──────
+
+def _drop_working_copy_leaving_a_version(demo_project) -> None:
+    versioning.create_version_from_stages(
+        "demo", read_stages(demo_project / "demo"), message="seeded")
+    WorkingCopy.delete("demo")
+
+
+def test_eval_status_falls_back_to_the_latest_version_when_no_working_copy(demo_project):
+    _drop_working_copy_leaving_a_version(demo_project)
+
+    index = client.get("/project/demo/evals")
+    assert index.status_code == 200
+    assert "no stages yet" not in index.text
+    assert "never run" in index.text
+
+    detail = client.get("/project/demo/evals/label_check")
+    assert detail.status_code == 200
+    assert "fits the workflow" in detail.text
+
+
+def test_eval_status_still_reports_a_project_with_neither_stages_nor_versions(demo_project):
+    WorkingCopy.delete("demo")
+
+    detail = client.get("/project/demo/evals/label_check")
+    assert detail.status_code == 200
+    assert "no stages yet" in detail.text
