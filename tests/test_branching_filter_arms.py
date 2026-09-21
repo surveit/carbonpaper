@@ -20,11 +20,11 @@ PROJECT = "branching_filter"
 
 _ROWS = [("S-1", True, 1, 50), ("S-2", True, 9, 400_000), ("S-3", False, 1, 400_000),
          ("S-4", True, 9, 50)]
-_COLUMNS = ["station_id", "canonical", "tier", "pop"]
+_COLUMNS = ["station_id", "reporting", "tier", "pop"]
 
 # Three ways out, each on its own line, so a reader can tell which one decided a row.
 _PREDICATE = '''def should_include(row):
-    if row["canonical"] != True:
+    if row["reporting"] != True:
         return False
     if row["tier"] <= 2:
         return True
@@ -33,7 +33,7 @@ _PREDICATE = '''def should_include(row):
 
 
 def _station_columns() -> list[dict]:
-    return [column("station_id", "str", False), column("canonical", "bool", False),
+    return [column("station_id", "str", False), column("reporting", "bool", False),
             column("tier", "int", False), column("pop", "int", False)]
 
 
@@ -46,15 +46,15 @@ def _specs(data, filter_type: str) -> list[dict]:
                        "params": {"paths": [str(data / "stations.csv")], "format": "csv"}},
          "signature": {"form": "replaces", "produces": _station_columns()}},
         {"id": "city_stations", "type": filter_type,
-         "description": "Keeps a canonical station that is high tier or in a big city.",
+         "description": "Keeps a reporting station that is high tier or in a big city.",
          "inputs": [{"id": "load_stations"}],
-         holder: {"summary": "Keeps a canonical station by tier or by population.",
-                  "corner_cases": [{"case": "canonical is false",
+         holder: {"summary": "Keeps a reporting station by tier or by population.",
+                  "corner_cases": [{"case": "reporting is false",
                                     "expected": "the row is dropped"}],
                   "code": _PREDICATE},
          "signature": {"form": "extends", "reads": [
              {"input": "load_stations",
-              "columns": [column("canonical", "bool", False), column("tier", "int", False),
+              "columns": [column("reporting", "bool", False), column("tier", "int", False),
                           column("pop", "int", False)]}],
              "adds": [], "rewrites": []}},
     ]
@@ -87,7 +87,7 @@ def _arms(run) -> dict[str, tuple[int | None, int | None, int | None]]:
 
 def test_each_arm_of_a_predicate_carries_the_lines_that_decided(branched) -> None:
     assert _arms(branched) == {
-        'if row["canonical"] != True:': (2, 3, 3),
+        'if row["reporting"] != True:': (2, 3, 3),
         'if row["tier"] <= 2:': (4, 5, 5),
     }
 
@@ -102,7 +102,7 @@ def test_the_kept_rows_are_split_across_the_arms_they_took(branched) -> None:
 
 def test_an_arm_only_dropped_rows_took_is_offered_with_none_of_them_on_it(branched) -> None:
     dropping = next(option for option in branched.branch_options.values()
-                    if option.label == 'if row["canonical"] != True:')
+                    if option.label == 'if row["reporting"] != True:')
     # https://github.com/surveit/carbonpaper/issues/1063
     assert branched.row_count_per_branch_id[dropping.id] == 0
 
