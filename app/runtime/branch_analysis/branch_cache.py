@@ -30,6 +30,7 @@ _ROW_KEY = "row_ordinal"
 _BRANCHES_KEY = "branches"
 _BRANCH_KEY = "branch_id"
 _VERSION_KEY = "pinned_version_id"
+_ANALYSIS_KEY = "analysis_version"
 _STAGE_KEY = "stage_id"
 _COUNT_KEY = "row_count"
 
@@ -38,8 +39,12 @@ _PATHS_SCHEMA = pa.schema([(_PATH_KEY, pa.list_(pa.string()))])
 _MERGES_SCHEMA = pa.schema([(_ROW_KEY, pa.int64()), (_BRANCHES_KEY, pa.list_(pa.string()))])
 _ROW_COUNTS_SCHEMA = pa.schema([(_BRANCH_KEY, pa.string()), (_COUNT_KEY, pa.int64())])
 _STAMP_SCHEMA = pa.schema([(_VERSION_KEY, pa.string()),
+                           (_ANALYSIS_KEY, pa.int64()),
                            (_STAGE_KEY, pa.list_(pa.string())),
                            (_COUNT_KEY, pa.list_(pa.int64()))])
+
+# Bumped when the analysis reads different branches out of the same sidecars.
+ANALYSIS_VERSION = 2
 
 _OPTION_FIELDS = tuple(BranchOption.model_fields)
 
@@ -57,6 +62,7 @@ class BranchCacheStamp(BaseModel):
     """What the analysis was read from. Anything else on disk describes a different run."""
 
     pinned_version_id: str
+    analysis_version: int = ANALYSIS_VERSION
     frame_sizes: list[StageFrameSize]
 
     def list_stage_ids(self) -> list[StageId]:
@@ -220,6 +226,7 @@ def _write_stamp(path: Path, stamp: BranchCacheStamp) -> None:
     beside = path.with_suffix(".part.parquet")
     write_frame_table(
         pa.table({_VERSION_KEY: [stamp.pinned_version_id],
+                  _ANALYSIS_KEY: [stamp.analysis_version],
                   _STAGE_KEY: [stamp.list_stage_ids()],
                   _COUNT_KEY: [[size.row_count for size in stamp.frame_sizes]]},
                  schema=_STAMP_SCHEMA),
@@ -235,8 +242,11 @@ def _read_stamp(path: Path) -> BranchCacheStamp | None:
         table = read_frame_table(path)
     except (pa.ArrowInvalid, OSError):
         return None
+    if _ANALYSIS_KEY not in table.column_names:
+        return None
     return BranchCacheStamp(
         pinned_version_id=read_native_cell(table, _VERSION_KEY, 0),
+        analysis_version=read_native_cell(table, _ANALYSIS_KEY, 0),
         frame_sizes=[StageFrameSize(stage_id=stage_id, row_count=row_count)
                      for stage_id, row_count in zip(read_native_cell(table, _STAGE_KEY, 0),
                                                     read_native_cell(table, _COUNT_KEY, 0))])

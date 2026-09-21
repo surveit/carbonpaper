@@ -45,7 +45,7 @@ It does mean a drawing cannot offer one option per group. See "Aliasing a merge"
 
 Only **one** kind of branch is recorded while the run executes.
 
-`app/core/branch_source.py` rewrites a stage's Starlark before it runs, opening every
+`app/core/branch_source.py` rewrites a stage's code before it runs, opening every
 `if` / `elif` / `else` / `try` / `except` with a call that reports itself. Each output row's list
 of arms lands in the `_branches` column of `<stage>.lineage.parquet` beside its frame. That is
 the `code` reason, and it is the only one that costs anything to collect.
@@ -59,6 +59,21 @@ own label (`if in_window`, `else`), since no line opens it for `read_branch_test
 Two places a conditional expression is deliberately **not** recorded. Inside a comprehension or
 a lambda it runs per element and per call, so "which arm did this row take" has no one answer.
 And a `def`'s own decorators and defaults run where the `def` is written, not once per row.
+
+A filter's predicate is rewritten like any other stage's code, so a filter that decides several
+ways carries `code` arms beside the kept/dropped pair worked out below. The two are two views of
+one decision, not two decisions: the `predicate` pair says what became of the row, and the arm
+says which line decided it. The pair is what a row's fate is read from, because the arm is not
+enough on its own — `should_include` can also decide by falling off the end, where there is no
+arm to record.
+
+`read_stage_code` finds the code by asking the stage for its authored block, so a stage type that
+holds code answers with it or the analysis sees none. That hook is the whole registry; an arch
+test holds it (`tests/arch/test_a_code_bearing_stage_answers_for_its_code.py`).
+
+One limit. A filter's sidecar is keyed by output row, so the arms of the rows it DROPPED are not
+written, and an arm only dropped rows took is offered with no rows on it. See
+https://github.com/surveit/carbonpaper/issues/1063.
 
 The other five are **worked out afterwards**, from the shape of the same sidecar's other half.
 Its `_trace_source_*` columns say, for each output row, which input rows it came from.
@@ -88,6 +103,14 @@ A dedupe is the case that shows this working. It writes one parent per surviving
 at all for a collapsed row — the same shape a filter writes — so the `predicate` rule gives it
 kept and dropped arms with no code of its own. Only the wording differs, because a dedupe has
 keys rather than a predicate (`_name_the_removal`).
+
+## The analysis is cached beside the run
+
+Working a run's branches out reads every sidecar, so `app/runtime/branch_analysis/branch_cache.py`
+writes the result under `<run_dir>/branches/` and answers from it next time. Its stamp is what the
+analysis was read from: the pinned version, every stage's frame size, and `ANALYSIS_VERSION` —
+raised whenever the analysis reads a different set of branches out of the same sidecars, so a run
+already read once is worked out again rather than answering from a file the old code wrote.
 
 ## A path is every branch a row ever took
 
