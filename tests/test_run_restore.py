@@ -9,13 +9,12 @@ import pandas as pd
 import pytest
 
 from app.core.agent.usage import LlmUsage
-from app.models.captured_run import CAPTURED_ARCHIVE, CAPTURED_INPUTS, CAPTURED_RECORD
 from app.services import methodology, workspace
 from app.services import project as project_service
 from app.services import run as run_service
 from app.services.errors import RunRestoreRefused
 from app.services.project import export_project_archive
-from app.services.run_restore import restore_run
+from app.services.run_restore import CAPTURED_ARCHIVE, CAPTURED_INPUTS, restore_run
 from scope_fixture import review_tail, stage_specs, write_inputs
 from scripts.run_capture import capture_run
 from stage_seed import set_stages
@@ -124,23 +123,6 @@ def test_a_restore_reads_the_files_it_was_handed_rather_than_the_recorded_paths(
                                             "load")) == 2
 
 
-def test_an_input_file_tampered_with_since_the_capture_is_refused(
-    projects_root, tmp_path, monkeypatch, model
-):
-    project_id = _seed_a_judging_project(projects_root)
-    run_id = str(run_service.execute(project_id)["run_id"])
-    into = tmp_path / "capture"
-    capture_run(project_id, run_id, into)
-    copied = into / CAPTURED_INPUTS / "load" / "rows.csv"
-    # Same length, so the byte count still matches and only the digest can catch it.
-    copied.write_text(copied.read_text(encoding="utf-8").replace("1", "7", 1),
-                      encoding="utf-8")
-    _empty_the_workspace(tmp_path, monkeypatch, "elsewhere")
-
-    with pytest.raises(RunRestoreRefused, match="hashes to"):
-        restore_run(into)
-
-
 def test_an_archive_carrying_no_stage_cache_is_refused(
     projects_root, tmp_path, monkeypatch, model
 ):
@@ -171,9 +153,6 @@ def test_a_workflow_that_queues_rows_for_review_is_refused_before_it_runs(
     into = tmp_path / "capture"
     into.mkdir(parents=True, exist_ok=True)
     (into / CAPTURED_ARCHIVE).write_bytes(_a_reviewing_project(projects_root))
-    (into / CAPTURED_RECORD).write_text(
-        '{"project_name": "Grants Awaiting Review", "run_id": "r1", "inputs": []}',
-        encoding="utf-8")
 
     with pytest.raises(RunRestoreRefused, match="review_totals"):
         restore_run(into)
@@ -190,28 +169,9 @@ def _a_reviewing_project(projects_root: Path) -> bytes:
     return export_project_archive(project_id)
 
 
-def test_a_capture_directory_with_no_record_is_refused(tmp_path):
-    with pytest.raises(RunRestoreRefused, match=CAPTURED_RECORD):
-        restore_run(tmp_path / "nothing-here")
-
-
-def test_a_record_that_does_not_validate_is_refused(tmp_path):
-    into = tmp_path / "capture"
-    into.mkdir()
-    (into / CAPTURED_RECORD).write_text('{"run_id": "r1"}', encoding="utf-8")
-
-    with pytest.raises(RunRestoreRefused, match="not a captured run"):
-        restore_run(into)
-
-
 def test_a_capture_directory_with_no_archive_is_refused(tmp_path):
-    into = tmp_path / "capture"
-    into.mkdir()
-    (into / CAPTURED_RECORD).write_text(
-        '{"project_name": "p", "run_id": "r1", "inputs": []}', encoding="utf-8")
-
     with pytest.raises(RunRestoreRefused, match=CAPTURED_ARCHIVE):
-        restore_run(into)
+        restore_run(tmp_path / "nothing-here")
 
 
 def test_the_restored_project_carries_the_captured_document(
@@ -229,20 +189,20 @@ def test_the_restored_project_carries_the_captured_document(
         "Two rows, judged one at a time.")
 
 
-def test_a_refused_tampered_input_leaves_no_project_behind(
+def test_an_input_directory_naming_a_stage_the_workflow_lacks_is_refused(
     projects_root, tmp_path, monkeypatch, model
 ):
     project_id = _seed_a_judging_project(projects_root)
     run_id = str(run_service.execute(project_id)["run_id"])
     into = tmp_path / "capture"
     capture_run(project_id, run_id, into)
-    copied = into / CAPTURED_INPUTS / "load" / "rows.csv"
-    copied.write_text(copied.read_text(encoding="utf-8").replace("1", "7", 1),
-                      encoding="utf-8")
+    stale = into / CAPTURED_INPUTS / "load_west"
+    stale.mkdir()
+    (stale / "rows.csv").write_text("x\n7\n", encoding="utf-8")
     _empty_the_workspace(tmp_path, monkeypatch, "elsewhere")
     before = project_service.list_projects()
 
-    with pytest.raises(RunRestoreRefused, match="hashes to"):
+    with pytest.raises(RunRestoreRefused, match="load_west"):
         restore_run(into)
 
     assert project_service.list_projects() == before
@@ -252,9 +212,6 @@ def test_a_refused_review_queue_leaves_no_project_behind(projects_root, tmp_path
     into = tmp_path / "capture"
     into.mkdir(parents=True, exist_ok=True)
     (into / CAPTURED_ARCHIVE).write_bytes(_a_reviewing_project(projects_root))
-    (into / CAPTURED_RECORD).write_text(
-        '{"project_name": "Grants Awaiting Review", "run_id": "r1", "inputs": []}',
-        encoding="utf-8")
     before = project_service.list_projects()
 
     with pytest.raises(RunRestoreRefused, match="review_totals"):

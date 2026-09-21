@@ -4,15 +4,10 @@ from __future__ import annotations
 import pytest
 
 from app.core.run_status import RunStatus
-from app.models.captured_run import (
-    CAPTURED_ARCHIVE,
-    CAPTURED_INPUTS,
-    CAPTURED_RECORD,
-    CapturedRun,
-)
 from app.models.records.project import Project
 from app.services import methodology
 from app.services.run import read_run_manifest
+from app.services.run_restore import CAPTURED_ARCHIVE, CAPTURED_INPUTS
 from claim_review_fixture import PROJECT, run_the_fixture
 from scripts.errors import RunCaptureRefused
 from scripts.run_capture import capture_run
@@ -30,44 +25,27 @@ def run_id(projects_root) -> str:
     return finished
 
 
-def test_a_clean_capture_round_trips_its_record(run_id, tmp_path):
-    into = tmp_path / "capture"
-
-    captured = capture_run(PROJECT, run_id, into)
-
-    assert CapturedRun.model_validate_json(
-        (into / CAPTURED_RECORD).read_text(encoding="utf-8")) == captured
-    assert captured.project_name == PROJECT and captured.run_id == run_id
-    assert (into / CAPTURED_ARCHIVE).read_bytes()[:2] == b"PK"
-
-
-def test_a_capture_carries_every_file_each_input_stage_read(
+def test_a_capture_writes_the_archive_beside_the_files_each_input_stage_read(
     projects_root, run_id, tmp_path
 ):
     into = tmp_path / "capture"
 
-    captured = capture_run(PROJECT, run_id, into)
+    capture_run(PROJECT, run_id, into)
 
-    assert {i.stage_id: i.filename for i in captured.inputs} == _SOURCE_STAGES
+    assert (into / CAPTURED_ARCHIVE).read_bytes()[:2] == b"PK"
+    copied = {path.parent.name: path.name
+              for path in (into / CAPTURED_INPUTS).glob("*/*")}
+    assert copied == _SOURCE_STAGES
+
+
+def test_a_capture_copies_each_file_byte_for_byte(projects_root, run_id, tmp_path):
+    into = tmp_path / "capture"
+
+    capture_run(PROJECT, run_id, into)
+
     for stage_id, filename in _SOURCE_STAGES.items():
-        copied = into / CAPTURED_INPUTS / stage_id / filename
-        source = projects_root / PROJECT / "data" / filename
-        assert copied.read_bytes() == source.read_bytes()
-
-
-def test_the_record_holds_what_the_run_measured(projects_root, run_id, tmp_path):
-    captured = capture_run(PROJECT, run_id, tmp_path / "capture")
-
-    for entry in captured.inputs:
-        source = projects_root / PROJECT / "data" / entry.filename
-        assert entry.bytes == source.stat().st_size
-
-
-def test_the_record_names_no_path_on_the_capturing_machine(run_id, tmp_path):
-    captured = capture_run(PROJECT, run_id, tmp_path / "capture")
-
-    written = (tmp_path / "capture" / CAPTURED_RECORD).read_text(encoding="utf-8")
-    assert captured.inputs and str(tmp_path) not in written
+        assert (into / CAPTURED_INPUTS / stage_id / filename).read_bytes() == (
+            projects_root / PROJECT / "data" / filename).read_bytes()
 
 
 def test_a_run_that_did_not_finish_clean_is_refused(run_id, tmp_path):
@@ -76,15 +54,6 @@ def test_a_run_that_did_not_finish_clean_is_refused(run_id, tmp_path):
     manifest.save()
 
     with pytest.raises(RunCaptureRefused, match="errors"):
-        capture_run(PROJECT, run_id, tmp_path / "capture")
-
-
-def test_a_source_file_edited_since_the_run_is_refused(projects_root, run_id, tmp_path):
-    edited = projects_root / PROJECT / "data" / "east.csv"
-    edited.write_text(edited.read_text(encoding="utf-8") + "G-099,east,AGENCY-A,1,grant\n",
-                      encoding="utf-8")
-
-    with pytest.raises(RunCaptureRefused, match="changed since the run"):
         capture_run(PROJECT, run_id, tmp_path / "capture")
 
 

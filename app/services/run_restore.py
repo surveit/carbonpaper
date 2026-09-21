@@ -2,21 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from pathlib import Path
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
-from app.core.files import ProjectFile, compute_sha256, save_upload
+from app.core.files import ProjectFile, save_upload
 from app.core.ids import ID
 from app.core.run_status import RunStatus
-from app.models.captured_run import (
-    CAPTURED_ARCHIVE,
-    CAPTURED_INPUTS,
-    CAPTURED_RECORD,
-    CapturedInput,
-    CapturedRun,
-)
 from app.models.records.run_manifest import RunManifest
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.models.stages.stage_base import StageType
@@ -26,6 +18,10 @@ from app.services.run import execute, read_run_manifest
 from app.services.stage_cache_transfer import CacheImportReport
 from app.services.uploads import resolve_files_binding
 from app.services.versioning import resolve_version_id
+
+# The capture writes this layout and a restore reads it, so it is named with the reader.
+CAPTURED_ARCHIVE = "project.zip"
+CAPTURED_INPUTS = "inputs"
 
 _RESTORED_STATUSES = (RunStatus.OK, RunStatus.WARNINGS)
 
@@ -37,29 +33,17 @@ class RestoredRun(BaseModel):
 
 def restore_run(from_dir: Path) -> RestoredRun:
     """Everything the capture alone can settle is refused before a project is written."""
-    captured = _read_the_captured_record(from_dir)
     archive = _find_the_captured_archive(from_dir)
     raw = archive.read_bytes()
-    _validate_every_captured_input_is_what_was_captured(from_dir, captured.inputs)
-    _validate_no_stage_queues_rows_for_review(_read_the_bundled_workflow(archive, raw))
+    workflow = _read_the_bundled_workflow(archive, raw)
+    _validate_no_stage_queues_rows_for_review(workflow)
+    _validate_every_input_directory_names_a_stage(from_dir, workflow)
     project_id = _import_the_captured_project_id(archive, raw)
-    bindings = _bind_the_files_the_run_read(project_id, from_dir, captured.inputs)
+    bindings = _bind_the_files_the_run_read(project_id, from_dir)
     version_id = resolve_version_id(project_id, None)
     run_id = str(execute(project_id, version_id=version_id, bindings=bindings)["run_id"])
-    _validate_the_restored_run_finished(captured, read_run_manifest(project_id, run_id))
+    _validate_the_restored_run_finished(read_run_manifest(project_id, run_id))
     return RestoredRun(project_id=project_id, run_id=run_id)
-
-
-def _read_the_captured_record(from_dir: Path) -> CapturedRun:
-    record = from_dir / CAPTURED_RECORD
-    if not record.is_file():
-        raise RunRestoreRefused(
-            f"no {CAPTURED_RECORD} at {record} — a captured run carries its own record "
-            "beside the archive")
-    try:
-        return CapturedRun.model_validate_json(record.read_text(encoding="utf-8"))
-    except ValidationError as exc:
-        raise RunRestoreRefused(f"{record} is not a captured run: {exc}") from exc
 
 
 def _find_the_captured_archive(from_dir: Path) -> Path:
@@ -88,6 +72,17 @@ def _validate_no_stage_queues_rows_for_review(workflow: WorkflowFile) -> None:
             "would halt waiting for a reviewer rather than finish")
 
 
+def _validate_every_input_directory_names_a_stage(
+    from_dir: Path, workflow: WorkflowFile
+) -> None:
+    known = {stage.id for stage in workflow.stages}
+    for directory in _find_the_captured_input_directories(from_dir):
+        if directory.name not in known:
+            raise RunRestoreRefused(
+                f"the capture holds {CAPTURED_INPUTS}/{directory.name}, and the restored "
+                f"workflow has no stage '{directory.name}' to read those files")
+
+
 def _import_the_captured_project_id(archive: Path, raw: bytes) -> ID:
     try:
         report = import_project_archive(raw)
@@ -109,61 +104,41 @@ def _validate_the_cache_came_with_it(archive: Path, cache: CacheImportReport | N
 
 
 def _bind_the_files_the_run_read(
-    project_id: ID, from_dir: Path, inputs: Sequence[CapturedInput]
+    project_id: ID, from_dir: Path
 ) -> dict[StageId, TypeUnsafeUserStageConfigOverride]:
-    staged_file_ids: dict[StageId, list[ID]] = {}
-    for entry in inputs:
-        record = _save_one_captured_input(project_id, from_dir, entry)
-        staged_file_ids.setdefault(entry.stage_id, []).append(record.id)
     return {
-        stage_id: resolve_files_binding(project_id, file_ids)
-        for stage_id, file_ids in staged_file_ids.items()
+        directory.name: _bind_the_files_of_one_stage(project_id, directory)
+        for directory in _find_the_captured_input_directories(from_dir)
     }
 
 
-def _save_one_captured_input(
-    project_id: ID, from_dir: Path, entry: CapturedInput
-) -> ProjectFile:
-    with _find_captured_input_path(from_dir, entry).open("rb") as handle:
-        return save_upload(entry.filename, handle, project_id=project_id)
+def _find_the_captured_input_directories(from_dir: Path) -> list[Path]:
+    inputs = from_dir / CAPTURED_INPUTS
+    if not inputs.is_dir():
+        return []
+    return sorted(path for path in inputs.iterdir() if path.is_dir())
 
 
-def _validate_every_captured_input_is_what_was_captured(
-    from_dir: Path, inputs: Sequence[CapturedInput]
-) -> None:
-    for entry in inputs:
-        _validate_the_bytes_are_what_was_captured(
-            entry, _find_captured_input_path(from_dir, entry))
+def _bind_the_files_of_one_stage(
+    project_id: ID, directory: Path
+) -> TypeUnsafeUserStageConfigOverride:
+    saved = [
+        _save_one_captured_input(project_id, path)
+        for path in sorted(directory.iterdir()) if path.is_file()
+    ]
+    return resolve_files_binding(project_id, [record.id for record in saved])
 
 
-def _find_captured_input_path(from_dir: Path, entry: CapturedInput) -> Path:
-    return from_dir / CAPTURED_INPUTS / entry.stage_id / entry.filename
+def _save_one_captured_input(project_id: ID, path: Path) -> ProjectFile:
+    with path.open("rb") as handle:
+        return save_upload(path.name, handle, project_id=project_id)
 
 
-def _validate_the_bytes_are_what_was_captured(entry: CapturedInput, path: Path) -> None:
-    if not path.is_file():
-        raise RunRestoreRefused(
-            f"stage '{entry.stage_id}' read '{entry.filename}', which the capture does "
-            f"not hold at {path}")
-    weighed = path.stat().st_size
-    if weighed != entry.bytes:
-        raise RunRestoreRefused(
-            f"stage '{entry.stage_id}': {path} weighs {weighed} bytes, not the "
-            f"{entry.bytes} the capture recorded")
-    digest = compute_sha256(path)
-    if digest != entry.sha256:
-        raise RunRestoreRefused(
-            f"stage '{entry.stage_id}': {path} hashes to {digest}, not the "
-            f"{entry.sha256} the capture recorded")
-
-
-def _validate_the_restored_run_finished(
-    captured: CapturedRun, manifest: RunManifest
-) -> None:
+def _validate_the_restored_run_finished(manifest: RunManifest) -> None:
     if manifest.status in _RESTORED_STATUSES:
         return
     raise RunRestoreRefused(
-        f"the restored run of '{captured.run_id}' is {manifest.status}, not "
+        f"the restored run is {manifest.status}, not "
         f"{' or '.join(_RESTORED_STATUSES)}: " + "; ".join(_quote_the_failures(manifest))
     )
 
