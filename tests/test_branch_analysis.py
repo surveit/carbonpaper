@@ -6,7 +6,7 @@ import pytest
 
 import app.services.run as run_service
 from app.models.citations import StageOutputCellCitation
-from app.models.branch_analysis import BranchReason, BranchRole
+from app.models.branch_analysis import BranchReason
 from app.runtime.manifest import read_run_manifest
 from app.runtime.branch_analysis import (
     find_reference_inputs,
@@ -63,8 +63,10 @@ def test_every_branch_reason_is_recorded(scoped):
 def test_a_dedupe_drops_rows_the_way_a_filter_does(scoped):
     run, _ = scoped
     assert not [b for b in run.branch_options if b.startswith("one_row_per_grant|merged:")]
-    assert run.branch_options["one_row_per_grant|removed"].role is BranchRole.removes
-    assert run.branch_options["one_row_per_grant|kept"].role is BranchRole.keeps
+    # One option, for the rows kept; what it dropped is a count.
+    assert "one_row_per_grant|removed" not in run.branch_options
+    assert run.branch_options["one_row_per_grant|kept"].label == "kept, one row per key"
+    assert run.rows_dropped_per_stage["one_row_per_grant"] == 1
 
 
 def test_a_deduped_grant_resolves_to_the_survivor(scoped):
@@ -83,12 +85,12 @@ def test_the_group_branch_names_exactly_the_rows_lineage_says(scoped):
         assert (at_stage, members) == (covers.at_stage, covers.ordinals)
 
 
-def test_a_branch_that_removes_nothing_is_not_a_loss(scoped):
+def test_a_stage_that_dropped_nothing_counts_nothing(scoped):
     run, _ = scoped
-    # size_band removes nothing; the row taking amount == 0 is dropped at funded.
-    arms = [f for f in run.branch_options.values() if f.stage_id == "size_band"]
-    assert arms and all(f.role is BranchRole.keeps for f in arms)
-    assert run.branch_options["funded|removed"].role is BranchRole.removes
+    # size_band drops nothing; the row taking amount == 0 is dropped at funded.
+    assert [f for f in run.branch_options.values() if f.stage_id == "size_band"]
+    assert "size_band" not in run.rows_dropped_per_stage
+    assert run.rows_dropped_per_stage["funded"] == 1
 
 
 def test_the_scale_names_the_frame_the_figure_barely_covers(scoped):
@@ -101,10 +103,12 @@ def test_the_scale_names_the_frame_the_figure_barely_covers(scoped):
     assert [s.stage for s in scale if s.stage in lookups] == ["load_agencies"]
 
 
-def test_a_dropped_row_is_found_in_the_frame_it_was_dropped_from(scoped):
+def test_a_dropped_row_takes_no_branch_at_all(scoped):
     run, _ = scoped
-    at_stage, ordinals = find_rows_that_took(run, "funded|removed")
-    assert at_stage == "size_band" and len(ordinals) == 1
+    at_stage, ordinals = find_rows_that_took(run, "funded|kept")
+    # Nine of the ten rows reaching `funded` are kept; the tenth holds nothing.
+    assert (at_stage, len(ordinals)) == ("funded", 9)
+    assert run.rows_dropped_per_stage["funded"] == 1
 
 
 def _size_band_arms(run) -> list[str]:
@@ -120,4 +124,44 @@ def test_a_cached_stage_keeps_its_code_arms_as_well_as_its_lineage_ones(scoped):
         "size_band|transform/1:else",
         "size_band|transform/1:if",
     ]
-    assert "funded|removed" in run.branch_options
+    assert run.rows_dropped_per_stage["funded"] == 1
+
+
+def test_a_filter_that_says_what_it_keeps_labels_its_branches_with_it():
+    """The paths a row took read in the author's words, never in the predicate's code."""
+    from app import models as m
+    from app.runtime.branch_analysis.run_branches import _name_what_was_kept
+
+    column = {"name": "income", "type": "float", "nullable": True}
+    stages = m.Workflow(stages=[m.parse_stage(spec) for spec in [
+        {"id": "load", "description": "Load the filings", "type": "input_data",
+         "connector": {"kind": "file", "params": {"paths": ["/in/f.csv"]}},
+         "signature": {"form": "replaces", "produces": [column]}},
+        {"id": "paid", "description": "Keep the paid filings", "type": "filter_rows",
+         "inputs": [{"id": "load"}],
+         "filter": {"code": "def should_include(row): return True",
+                    "predicate": "carry an income"},
+         "signature": {"form": "extends",
+                       "reads": [{"input": "load", "columns": [column]}]}},
+    ]]).index_workflow_stages_by_id()
+
+    assert _name_what_was_kept(stages["paid"]) == "carry an income"
+
+
+def test_a_filter_nobody_wrote_a_predicate_for_still_names_its_branches():
+    from app import models as m
+    from app.runtime.branch_analysis.run_branches import _name_what_was_kept
+
+    column = {"name": "income", "type": "float", "nullable": True}
+    stages = m.Workflow(stages=[m.parse_stage(spec) for spec in [
+        {"id": "load", "description": "Load the filings", "type": "input_data",
+         "connector": {"kind": "file", "params": {"paths": ["/in/f.csv"]}},
+         "signature": {"form": "replaces", "produces": [column]}},
+        {"id": "paid", "description": "Keep the paid filings", "type": "filter_rows",
+         "inputs": [{"id": "load"}],
+         "filter": {"predicate": "pass this step's test", "code": "def should_include(row): return True"},
+         "signature": {"form": "extends",
+                       "reads": [{"input": "load", "columns": [column]}]}},
+    ]]).index_workflow_stages_by_id()
+
+    assert _name_what_was_kept(stages["paid"]) == "kept by the predicate"

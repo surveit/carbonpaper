@@ -120,7 +120,7 @@ def _filtered_queue_stage(stage_id, input_id, flt, name="Review"):
             "signature": {"form": "extends",
                           "reads": [{"input": input_id, "columns": _ID_VAL_SCHEMA["columns"]}],
                           "adds": queue_added_columns("human_val")},
-            "queue": {**queue_columns("val", "human_val"), "filter": flt}}
+            "queue": {"predicate": "pass this step's test", **queue_columns("val", "human_val"), "filter": flt}}
 
 
 def _stage_status(manifest, stage_id):

@@ -534,7 +534,7 @@ def test_decide_400_on_notes_when_the_stage_declares_no_notes_column(tmp_path, m
 
 def _drift_the_review_stage(project_dir):
     drifted = _review_stage()
-    drifted["queue"] = {**QUEUE_COLUMNS, "reviewed_columns": {"score": "checked_score"}}
+    drifted["queue"] = {"predicate": "pass this step's test", **QUEUE_COLUMNS, "reviewed_columns": {"score": "checked_score"}}
     drifted["signature"] = {**drifted["signature"], "adds": [
         {"name": "checked_score", "type": "int", "nullable": True} if column["name"] == "human_score" else column
         for column in drifted["signature"]["adds"]
@@ -614,7 +614,7 @@ def _bool_review_stage(nullable):
     return _with_queue_signature({
         "id": "review", "description": "Review flags", "type": "human_review_queue",
         "inputs": [{"id": "load"}],
-        "queue": {**queue_columns(source="flag", target="human_flag")}}, [
+        "queue": {"predicate": "pass this step's test", **queue_columns(source="flag", target="human_flag")}}, [
         {"name": "id", "type": "str", "nullable": True},
         {"name": "flag", "type": "bool", "nullable": nullable}])
 
@@ -724,7 +724,7 @@ def _temporal_review_stage(column_type):
     return _with_queue_signature({
         "id": "review", "description": "Review times", "type": "human_review_queue",
         "inputs": [{"id": "load"}],
-        "queue": {**queue_columns(source="seen_at", target="human_seen_at")}}, [
+        "queue": {"predicate": "pass this step's test", **queue_columns(source="seen_at", target="human_seen_at")}}, [
         {"name": "id", "type": "str", "nullable": True},
         {"name": "seen_at", "type": column_type, "nullable": True}])
 
@@ -969,7 +969,7 @@ def _review_labels_stage():
     return _with_queue_signature({
         "id": "review", "description": "Review labels", "type": "human_review_queue",
         "inputs": [{"id": "label"}],
-        "queue": {**queue_columns(source="label", target="human_label")}}, [
+        "queue": {"predicate": "pass this step's test", **queue_columns(source="label", target="human_label")}}, [
         {"name": "id", "type": "str", "nullable": True},
         {"name": "score", "type": "int", "nullable": True},
         {"name": "label", "type": "str", "nullable": True}])
@@ -1022,7 +1022,7 @@ def _described_review_stage(context_columns=None):
                     {"name": "review_notes", "type": "str", "nullable": True},
                 ],
             },
-            "queue": {
+            "queue": {"predicate": "pass this step's test", 
                 **queue_columns(source="label", target="human_label"),
                 **({} if context_columns is None else {"context_columns": context_columns}),
                 "reviewer_instructions": "Confirm the label against the score.",
@@ -1204,7 +1204,7 @@ def _long_note_review_stage():
     return _with_queue_signature({
         "id": "review", "description": "Review notes", "type": "human_review_queue",
         "inputs": [{"id": "load"}],
-        "queue": {**queue_columns(source="note", target="human_note")}}, [
+        "queue": {"predicate": "pass this step's test", **queue_columns(source="note", target="human_note")}}, [
         {"name": "id", "type": "str", "nullable": True},
         {"name": "note", "type": "str", "nullable": True}])
 
@@ -1330,7 +1330,7 @@ def _empty_string_review_stage():
     return _with_queue_signature({
         "id": "review", "description": "Review notes", "type": "human_review_queue",
         "inputs": [{"id": "note"}],
-        "queue": {**queue_columns(source="flag", target="human_flag")}}, [
+        "queue": {"predicate": "pass this step's test", **queue_columns(source="flag", target="human_flag")}}, [
         {"name": "id", "type": "str", "nullable": True},
         {"name": "flag", "type": "bool", "nullable": True},
         {"name": "note", "type": "str", "nullable": True}])

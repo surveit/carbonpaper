@@ -18,7 +18,7 @@ def _load(stage_id: str) -> dict:
 def _passthrough(stage_id: str, *inputs: str) -> dict:
     return {"id": stage_id, "description": "Keeps every row", "type": "filter_rows",
             "inputs": [{"id": i} for i in inputs],
-            "filter": {"summary": "Keeps all.", "corner_cases": [],
+            "filter": {"predicate": "pass this step's test", "summary": "Keeps all.", "corner_cases": [],
                        "code": "def should_include(row):\n    return True\n"},
             "signature": {"form": "extends",
                           "reads": [{"input": inputs[0], "columns": _ROWS}],

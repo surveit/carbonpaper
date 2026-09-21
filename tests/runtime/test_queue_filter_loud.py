@@ -25,7 +25,7 @@ def test_bad_filter_raises_instead_of_skipping_review(tmp_path):
         "inputs": [{"id": "a"}],
         "signature": {"form": "extends", "adds": queue_added_columns(),
                       "reads": reads_of("a", columns)},
-        "queue": {**QUEUE_COLUMNS, "filter": "nonexistent == True"},
+        "queue": {"predicate": "pass this step's test", **QUEUE_COLUMNS, "filter": "nonexistent == True"},
     })
     # `score` is here because QUEUE_COLUMNS reviews it: the stage refuses a frame
     # missing a declared source column before it ever evaluates the filter, and
@@ -50,7 +50,7 @@ def test_a_cell_the_filter_cannot_answer_names_the_stage_and_the_filter(tmp_path
         "inputs": [{"id": "a"}],
         "signature": {"form": "extends", "adds": queue_added_columns(),
                       "reads": reads_of("a", columns)},
-        "queue": {**QUEUE_COLUMNS, "filter": "score > 1"},
+        "queue": {"predicate": "pass this step's test", **QUEUE_COLUMNS, "filter": "score > 1"},
     })
     inputs = {"a": pd.DataFrame({
         "claim_id": ["c1"], "score": pd.Series([np.array([1, 2, 3])], dtype=object),

@@ -63,7 +63,7 @@ def _filter(sid: str, input_id: str, code: str) -> Stage:
         "inputs": [{"id": input_id}],
         "signature": {"form": "extends",
                       "reads": [{"input": input_id, "columns": _COLS}]},
-        "filter": {"code": code},
+        "filter": {"predicate": "pass this step's test", "code": code},
     })
 
 

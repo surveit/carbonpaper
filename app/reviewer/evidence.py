@@ -82,7 +82,7 @@ def _render_branches(branches: list[BranchEvidenceItem]) -> str:
     lines = []
     for branch in branches:
         lines.append(_FIELD.join([
-            branch.branch_id, branch.stage_id, f"{branch.reason}/{branch.role}",
+            branch.branch_id, branch.stage_id, branch.reason,
             f"rows {branch.rows_count}", branch.label or _NOTHING]))
         if branch.source_code:
             lines.extend(["  source:", *_indent(branch.source_code)])

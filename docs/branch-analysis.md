@@ -13,17 +13,25 @@ branch below is read back off what the run wrote while it executed.
 A branch has an id, the stage it happened at, and a label a person can read:
 
 ```
-funded|removed                    at `funded`, "dropped by the predicate"
+funded|kept                       at `funded`, "carry an income"
 read_money|transform/3:elif0      at `read_money`, "elif text.startswith('$')"
 load_grants|loaded                at `load_grants`, "loaded by load_grants"
 mark_groups|transform/5:choice1:else   at `mark_groups`, "else"
 ```
 
+A filter's or a queue's two branches are labelled with the step's own `predicate` — the
+phrase its author wrote for what the step KEEPS ("carry an income"), and the same phrase
+under `not:` for the rows it dropped. Nothing here inverts English, which is why the
+dropped side is prefixed rather than rewritten. Where no predicate is written the labels
+fall back to "kept by the predicate" / "dropped by the predicate", and the stage raises
+the `unsaid_test` compiler warning. A `code` branch is still labelled with the line it
+was decided on (`elif text.startswith('$')`, or a bare `try:`), because no arm of a
+transform carries an authored phrase yet.
+
 The id is opaque. Nothing reads anything back out of it — a `BranchOption` carries every fact a
 caller needs as a field, including `rows_live_in_stage_id`, the frame its rows are rows of.
 
-A branch carries a `BranchReason` (why the rows differ) and a `BranchRole` (what the branch did
-to the rows that took it). Both are in `app/models/branch_analysis.py`.
+A branch carries a `BranchReason` — why the rows differ — in `app/models/branch_analysis.py`.
 
 ## How many options a stage has
 
@@ -119,23 +127,24 @@ still be different facts — a join that matched a reference table, and the code
 the result of that join, split the rows the same way and are separate decisions a reader needs
 to see. Only a `load`, and only under a stage that explains it, is dropped.
 
-## What a branch did to its rows
+## Every branch is a branch rows were KEPT by
 
-`BranchRole` has two values, and they answer one question: what happened to the rows that took
-this branch?
+A dropped row holds no branch. It is in no frame below the stage that dropped it, so there is
+nothing there to carry one, and a label reading "dropped by the predicate" was a second name for
+an absence. What a stage took out is a count instead: `WorkflowRunBranches.rows_dropped_per_stage`,
+written to its own file in the branch cache and stated on the stage's own column in the drawing
+("3,923 rows dropped here"). There is no pathway to walk into and no page to open.
 
-| role | meaning |
-|---|---|
-| `removes` | those rows were taken out of the frame — a filter's drop, a dedupe's collapse |
-| `keeps` | the rows carried on |
+A filter's or a queue's one branch is labelled with the step's own `predicate` — the phrase its
+author wrote for what the step KEEPS ("carry an income"). Nothing here inverts English, which is
+why the dropped side is a number rather than a sentence. Where no predicate is written the label
+falls back to "kept by the predicate", and the stage raises the `unsaid_test` compiler warning. A
+`code` branch is still labelled with the line it was decided on (`elif text.startswith('$')`, or a
+bare `try:`), because no arm of a transform carries an authored phrase yet.
 
-There is deliberately no third value for "in a different group". Whether a merge branch included
-or excluded a row depends on **which output row you asked about**, and the branch does not know
-the question. `app/services/scope.py` answers that, where the citation is in hand.
-
-`keeps` does **not** mean the rows reached any particular figure. It means this branch did not
-remove them. In the test fixture, `size_band` removes nothing, so all of its arms are `keeps` —
-and the row that took `if amount == 0` is still dropped two stages later at `funded`.
+A branch does not say whether the rows that took it reached any particular figure. In the test
+fixture, `size_band` drops nothing; the row that took `if amount == 0` is dropped two stages later
+at `funded`, which is where that count appears.
 
 ## Asking which rows produced a figure
 
@@ -191,10 +200,10 @@ The inverse, in `app/runtime/branch_analysis/rows_behind_a_branch.py`. Given a b
 rows took it — and, the part that is easy to get wrong, **which frame those rows are in**.
 
 `BranchOption.rows_live_in_stage_id` answers it, so no caller works it out. For most branches it
-is the stage's own output frame. For a `removes` branch it is the opposite: those rows are not in
-the output at all, by definition, so it names the *input* frame and they are the rows of it no
-output row reaches (`_find_removed_rows`). A `merge` branch names the merged stage's input frame
-too, and its rows are the ones merged into one output row (`_find_merged_rows`).
+is the stage's own output frame. A `merge` branch names the merged stage's input frame instead,
+and its rows are the ones merged into one output row (`_find_merged_rows`). Rows a stage dropped
+are not asked for here at all: they took no branch. The Rows & columns pane draws them in place
+from the stage diff, which reconstructs them by comparing input against output.
 
 ## Aliasing a merge
 
@@ -221,7 +230,7 @@ its groups this figure came through. A merge that vanished from the drawing woul
 re-graining, which is the thing a reader most needs to see.
 
 A filter is untouched by any of this. Its `predicate` branch has its own id and its own stub,
-so aliasing a merge never hides what a stage removed.
+and what it dropped is a count on the stage, so aliasing a merge hides neither.
 
 **Aliasing is a view choice, and only the view knows about it.** `group_rows_by_path` in
 `app.runtime` takes `told_apart_by` — the branch ids these rows may be told apart by — and
@@ -233,7 +242,7 @@ set is a real answer, so it is a required argument rather than a defaulted one.
 
 | module | holds |
 |---|---|
-| `app/models/branch_analysis.py` | `BranchOption`, `BranchReason`, `BranchRole`, `BranchPath`, `RowSet`, `FrameScale` |
+| `app/models/branch_analysis.py` | `BranchOption`, `BranchReason`, `BranchPath`, `RowSet`, `FrameScale` |
 | `app/core/branch_source.py` | finding and instrumenting a stage's branches, and locating the line one tests on |
 | `app/runtime/branch_analysis/run_branches.py` | reading the sidecar, working out the other five reasons, building a path per row |
 | `app/runtime/branch_analysis/stage_code.py` | the stage source a branch decided in |

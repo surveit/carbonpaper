@@ -9,6 +9,7 @@ from conftest import reads_of
 
 from app import models as m
 from app.models import find_stage_compiler_warnings, find_workflow_compiler_warnings
+from app.models.stages.predicates import PREDICATE_NOT_WRITTEN
 
 _SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}]}
 # Which signature form a type takes: the reshaping family replaces its input,
@@ -35,6 +36,8 @@ _PASSING_EXAMPLE = {"name": "passes_through",
 def _stage(stage_id="s", type_="python_row_function", handle="function", **kw):
     block = {"summary": kw.pop("summary", "Passes every row through unchanged."),
              "code": _CODE if handle == "function" else "def should_include(row):\n    return True"}
+    if handle == "filter":
+        block["predicate"] = kw.pop("predicate", PREDICATE_NOT_WRITTEN)
     if handle == "function":
         block = {"kind": kw.pop("kind", "inline"), **block}
         if block["kind"] == "module":
@@ -80,9 +83,14 @@ def _queue_stage(stage_id="rev", **kw):
             ],
         },
         "queue": {"reviewed_columns": {"id": "reviewed_id"}, "verdict_column": "verdict",
-                  "reviewer_column": "reviewer", "reviewed_at_column": "reviewed_at"},
+                  "reviewer_column": "reviewer", "reviewed_at_column": "reviewed_at",
+                  "predicate": kw.pop("predicate", "went in front of a person")},
         **kw,
     })
+
+
+def _filter_stage(stage_id="filt", **kw):
+    return _stage(stage_id=stage_id, type_="filter_rows", handle="filter", **kw)
 
 
 def _kinds(stage):
@@ -153,9 +161,26 @@ def test_a_type_that_cannot_run_examples_still_owes_a_description():
 
 
 def test_a_filter_with_no_examples_is_unexemplified():
-    warnings = find_stage_compiler_warnings(
-        _stage(stage_id="filt", type_="filter_rows", handle="filter"))
+    warnings = find_stage_compiler_warnings(_filter_stage(predicate="carry an income"))
     assert [w.kind for w in warnings] == ["unexemplified"]
+
+
+# ── a test whose meaning nobody wrote down ───────────────────────────────────
+def test_a_filter_that_says_what_it_keeps_owes_nothing_further():
+    assert "unsaid_test" not in _kinds(_filter_stage(predicate="carry an income"))
+
+
+def test_a_filter_nobody_said_the_meaning_of_is_unsaid():
+    unsaid = next(w for w in find_stage_compiler_warnings(_filter_stage())
+                  if w.kind == "unsaid_test")
+    # A warning, not an error: a version snapshots whatever the author has.
+    assert unsaid.severity == "warning"
+    assert "`predicate`" in unsaid.detail
+
+
+def test_a_queue_nobody_said_the_meaning_of_is_unsaid():
+    # The field is required, so "unwritten" is the filler a migration put there.
+    assert _kinds(_queue_stage(predicate=PREDICATE_NOT_WRITTEN)) == ["unsaid_test"]
 
 
 def test_an_llm_stage_with_cache_off_is_a_note_not_a_blocker():

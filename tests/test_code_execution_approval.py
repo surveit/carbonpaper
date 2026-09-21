@@ -150,7 +150,7 @@ _FILTER_STAGE = {
     "inputs": [{"id": "filings"}],
     "signature": {"form": "extends", "reads": [{"input": "filings", "columns": [
         {"name": "status", "type": "str", "nullable": False}]}]},
-    "filter": {"summary": "Keeps filings still active.",
+    "filter": {"predicate": "pass this step's test", "summary": "Keeps filings still active.",
                "code": 'def should_include(row):\n    return row["status"] == "Active"\n'},
 }
 

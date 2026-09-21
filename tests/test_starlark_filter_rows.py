@@ -48,7 +48,7 @@ def _filter_stage(sid: str, input_id: str, code: str, reads: list[str]) -> Stage
         "signature": {"form": "extends",
                       "reads": [{"input": input_id,
                                  "columns": [by_name[name] for name in reads]}]},
-        "starlark_filter": {"code": code},
+        "starlark_filter": {"predicate": "pass this step's test", "code": code},
     })
 
 
@@ -91,7 +91,7 @@ def test_a_named_predicate(tmp_path):
             "signature": {"form": "extends", "reads": [
                 {"input": "filings", "columns": [
                     c for c in _COLUMNS if c["name"] == "amount_usd"]}]},
-            "starlark_filter": {
+            "starlark_filter": {"predicate": "pass this step's test", 
                 "function": "is_large",
                 "code": 'def is_large(row):\n    return row["amount_usd"] > 200000\n'},
         }),
@@ -131,7 +131,7 @@ def test_a_signature_that_reads_nothing_is_refused():
             "id": "in_scope", "description": "in_scope", "type": "starlark_filter_rows",
             "inputs": [{"id": "filings"}],
             "signature": {"form": "extends", "reads": []},
-            "starlark_filter": {"code": 'def should_include(row):\n    return True\n'},
+            "starlark_filter": {"predicate": "pass this step's test", "code": 'def should_include(row):\n    return True\n'},
         })
 
 
@@ -143,7 +143,7 @@ def test_a_signature_that_writes_is_refused():
             "signature": {"form": "extends",
                           "reads": [{"input": "filings", "columns": [_COLUMNS[2]]}],
                           "adds": [{"name": "kept", "type": "bool", "nullable": False}]},
-            "starlark_filter": {"code": 'def should_include(row):\n    return True\n'},
+            "starlark_filter": {"predicate": "pass this step's test", "code": 'def should_include(row):\n    return True\n'},
         })
 
 

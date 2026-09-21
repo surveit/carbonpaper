@@ -104,17 +104,17 @@ def test_the_page_says_nothing_of_the_kind_where_rows_did_feed_the_figure(run_id
     assert "No row fed this figure" not in page.text
 
 
-def test_the_payload_carries_a_map_for_each_cut_and_none_for_an_untaken_arm(run_id):
+def test_the_payload_states_what_each_stage_dropped_and_offers_no_pathway(run_id):
     page = TestClient(app).get(scope_url(PROJECT, run_id, "grant_totals", "total_amount", 0))
     payload = json.loads(re.search(
         r'<script id="scope-payload" type="application/json">(.*?)</script>',
         page.text, re.S).group(1))
-    cuts = payload["cuts"]
-    assert "funded|removed" in cuts
-    # size_band removes nothing, so its untaken branch gets no cut to draw.
-    assert not [branch for branch in cuts if branch.startswith("size_band|")]
-    removed = cuts["funded|removed"]
-    assert sum(removed["rows_per_branch_path"]) == removed["total"]
+    # A dropped row is in no frame below the stage, so it holds no branch to walk into.
+    assert "cuts" not in payload
+    assert not [branch for branch in payload["branches"] if branch.endswith("|removed")]
+    assert payload["rows_dropped_per_stage"]["funded"] == 1
+    # size_band drops nothing, so it states nothing.
+    assert "size_band" not in payload["rows_dropped_per_stage"]
 
 
 def test_the_json_route_serves_the_same_map(run_id):

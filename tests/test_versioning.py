@@ -170,7 +170,7 @@ def test_a_stored_queue_stage_written_before_queue_sort_still_loads(tmp_path):
         "inputs": [{"id": "load"}],
         "signature": {"form": "extends", "adds": reviewed,
                       "reads": [{"input": "load", "columns": scored}]},
-        "queue": {
+        "queue": {"predicate": "pass this step's test", 
             "reviewed_columns": {"score": "human_score"}, "verdict_column": "decision",
             "reviewer_column": "reviewer_id", "reviewed_at_column": "reviewed_at",
         },

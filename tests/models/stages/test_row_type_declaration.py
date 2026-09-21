@@ -50,7 +50,7 @@ def _filter_stage(**extra):
         "id": "fined_only", "type": "filter_rows", "description": "Keep fined visits",
         "inputs": [{"id": "src"}],
         "signature": {"form": "extends", "reads": reads_of("src", _VISIT_COLUMNS)},
-        "filter": {"code": "def should_include(row): return row['fine'] > 0"},
+        "filter": {"predicate": "pass this step's test", "code": "def should_include(row): return row['fine'] > 0"},
         **extra,
     }
 

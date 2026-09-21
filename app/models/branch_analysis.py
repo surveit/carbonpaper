@@ -45,7 +45,6 @@ class BranchOption(BaseModel):
     # The frame this branch's rows are rows of. See docs/branch-analysis.md.
     rows_live_in_stage_id: StageId
     reason: BranchReason
-    role: BranchRole
     # Empty for a merge: its words name a row, which the reader's layer writes.
     label: str = ""
     source_code: str = ""

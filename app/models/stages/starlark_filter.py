@@ -9,7 +9,13 @@ from typing import ClassVar, Literal, Optional
 from pydantic import Field, model_validator
 
 from app.models.schema import StageConfig
-from app.models.stages.stage_base import AbstractStage, StageInput, StageType
+from app.models.stages.stage_base import (
+    PREDICATE_DESCRIPTION,
+    PREDICATE_MAX_CHARS,
+    AbstractStage,
+    StageInput,
+    StageType,
+)
 from app.models.stages.code import CORNER_CASES_DESCRIPTION, SUMMARY_DESCRIPTION, CornerCase
 from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ExtendsSignature
@@ -34,9 +40,13 @@ _CODE_DESCRIPTION = (
 
 class StarlarkFilter(StageConfig):
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"code", "function"})
-    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({"summary", "corner_cases"})
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset(
+        {"summary", "corner_cases", "predicate"})
 
     summary: Optional[str] = Field(default=None, description=SUMMARY_DESCRIPTION)
+    predicate: str = Field(
+        max_length=PREDICATE_MAX_CHARS, description=PREDICATE_DESCRIPTION
+    )
     corner_cases: list[CornerCase] = Field(
         default_factory=list, description=CORNER_CASES_DESCRIPTION
     )
@@ -109,7 +119,7 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
         blocks=["starlark_filter"],
         requires_inputs=True,
         min_inputs=1,
-        required=["code"],
+        required=["code", "predicate"],
         optional=["function", "summary"],
         notes=(
             "Takes exactly ONE input and changes no cell — the output is a SUBSET of the "

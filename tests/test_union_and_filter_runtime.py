@@ -29,7 +29,7 @@ def _filter_stage(sid: str, input_id: str, predicate_code: str) -> Stage:
         "inputs": [{"id": input_id}],
         "signature": {"form": "extends",
                       "reads": [{"input": input_id, "columns": _AB_SCHEMA["columns"]}]},
-        "filter": {"code": predicate_code},
+        "filter": {"predicate": "pass this step's test", "code": predicate_code},
     })
 
 

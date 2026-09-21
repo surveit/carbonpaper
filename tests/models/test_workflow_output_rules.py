@@ -44,7 +44,7 @@ def test_any_stage_type_may_publish_a_result():
         "inputs": [{"id": "flag_in_house_filings"}],
         "signature": {"form": "extends", "reads": [{"input": "flag_in_house_filings",
             "columns": [{"name": "in_scope", "type": "bool", "nullable": False}]}]},
-        "filter": {"code": "def should_include(row):\n    return row['in_scope']\n"},
+        "filter": {"predicate": "pass this step's test", "code": "def should_include(row):\n    return row['in_scope']\n"},
         "workflow_outputs": [{"kind": "figure", "slug": "in-scope", "label": "In scope",
                              "column": "in_scope"}],
     })

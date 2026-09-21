@@ -213,6 +213,25 @@ STAGE_DESCRIPTION_DESCRIPTION = (
 )
 
 
+# A phrase inside someone else's sentence, so shorter than a description.
+PREDICATE_MAX_CHARS = 120
+
+PREDICATE_DESCRIPTION = (
+    "The test this step applies, as a verb phrase completing \"only the ones that ___ "
+    "are kept\" — \"use one of six AI terms in their issue text\", \"are one organisation "
+    "paying another to lobby\". Lower case, no full stop, no leading \"rows that\".\n"
+    "Say what the step KEEPS. A step that drops is still written from the kept side: "
+    "code spelled `not row[\"mentions_ai\"]` and a description reading \"drops every row "
+    "whose issue text uses no AI term\" both become \"use an AI term in their issue "
+    "text\". Nothing downstream can turn a negation into its opposite, so a reader is "
+    "handed whichever one you write.\n"
+    "It labels this step's branches wherever a reader meets them — the paths a row took, "
+    "a figure's provenance — so it says what the test MEANS to someone deciding whether "
+    "to trust a number, never how the code spells it. Write it from the data in front of "
+    "you; leave it out rather than guessing at a rule the code does not apply. "
+    f"HARD LIMIT: {PREDICATE_MAX_CHARS} characters, refused above that."
+)
+
 # ── The shared field list ────────────────────────────────────────────────────
 class _WorkflowOutputFields(_Base):
     # A slug identifies the output across runs; what it holds is per run.

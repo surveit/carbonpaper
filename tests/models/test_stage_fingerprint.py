@@ -17,7 +17,7 @@ def _row_function_stage(input_id="src", **overrides):
 
 
 def _queue_stage(**queue_overrides):
-    queue = {
+    queue = {"predicate": "pass this step's test", 
         "filter": "score > 0.5",
         "reviewer_instructions": "check it",
         "routing": "team-a",

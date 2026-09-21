@@ -86,7 +86,7 @@ def test_an_edge_is_satisfied_by_the_upstream_resolved_outer():
     downstream = parse_stage({
         "id": "keep", "description": "Keep", "type": "filter_rows",
         "inputs": [{"id": "clean"}],
-        "filter": {"code": "def should_include(row):\n    return row['price'] is not None"},
+        "filter": {"predicate": "pass this step's test", "code": "def should_include(row):\n    return row['price'] is not None"},
         "signature": {"form": "extends", "reads": [{"input": "clean", "columns": [
             {"name": "price", "type": "float", "nullable": True},
         ]}]},

@@ -24,7 +24,6 @@
 
   var SEP = " ";
   // Says the link leaves this page, the way it does anywhere else.
-  var OUTWARD = "\u00a0\u2197";
   // Gutter mark against a branch the drawn rows are here by. A glyph, not a tint:
   // highlight.js owns the code element's markup and rewrites it wholesale.
   var MARK = "\u25B8";
@@ -89,7 +88,6 @@
   }
 
   function drawing() {
-    if (D.drilled) return (D.cuts[D.drilled.branch] || {}).drawn;
     return showAll ? D.drawn_every_stage : D.drawn;
   }
 
@@ -121,12 +119,6 @@
   function bindTheDrawing(svg) {
     svg.querySelectorAll("[data-node]").forEach(function (el) {
       el.onclick = function (event) { event.stopPropagation(); pick(el.dataset.node); };
-    });
-    svg.querySelectorAll("[data-cut]").forEach(function (el) {
-      el.onclick = function (event) {
-        event.stopPropagation();
-        window.open(scopePageFor(el.dataset.cut), "_blank");
-      };
     });
     svg.querySelectorAll("[data-expand]").forEach(function (el) {
       el.onclick = function (event) {
@@ -181,10 +173,11 @@
       drawMergeControl(g, c);
   }
 
+  // A count, not a control: the rows it names are in no frame to draw.
   function drawRemoval(g, c, r) {
-    return '<text class="scope-out-gone" data-cut="' + esc(r.branch) +
-      '" data-tip="' + esc(r.tip) + '" x="' + c.x + '" y="' +
-      (39 + (r.line + 1) * 11) + '">' + esc(r.label) + OUTWARD + "</text>";
+    return '<text class="scope-out-gone" data-tip="' + esc(r.tip) +
+      '" x="' + c.x + '" y="' + (39 + (r.line + 1) * 11) + '">' +
+      esc(r.label) + "</text>";
   }
 
   // Aliased or expanded, a merge stage offers the other reading of itself here.
@@ -194,17 +187,6 @@
       '" data-want="' + (c.merge_wants ? "1" : "0") + '" x="' +
       (c.x + g.bar_width + 12) + '" y="' + (c.bottom + 7) + '">' +
       esc(c.merge_label) + "</text>";
-  }
-
-  // The standalone scope page, never `location`: drawn inside the lineage page's
-  // frame this link leaves that page's figure behind, so it may not address it.
-  function scopePageFor(branch) {
-    var query = new URLSearchParams({
-      stage: D.citation.stage_id, row: String(D.citation.row_ordinal),
-      column: D.citation.column, cut: branch,
-    });
-    return "/project/" + encodeURIComponent(D.project_id) + "/runs/" +
-      encodeURIComponent(D.run_id) + "/scope?" + query.toString();
   }
 
   // ── what is picked ───────────────────────────────────────────────────────
@@ -229,92 +211,29 @@
     return bar ? bar.on : [];
   }
 
-  // ── drilling into a cut ──────────────────────────────────────────────────
-  //
-  // A cut is a page of its own, addressed by `?cut=`, and this reads it once on
-  // load. The rows behind it arrive as counts per path; the synthetic index below
-  // sizes the ribbons and is never a name for a row.
-
-  function openCut(branch) {
-    var cut = (D.cuts || {})[branch];
-    if (!cut) return false;
-    var index = [];
-    cut.rows_per_branch_path.forEach(function (rows, path) {
-      for (var n = 0; n < rows; n++) index.push(path);
-    });
-    D = Object.assign({}, D, {
-      covers: { at_stage: cut.at_stage,
-                ordinals: index.map(function (_, i) { return i; }),
-                merges_walked_down: [] },
-      branch_paths: cut.branch_paths, branch_path_index: index, rows: cut.rows, columns: cut.columns,
-      stages: cut.stages, reach: [], scale: [], sampled_from: cut.total,
-      aliased_merges: cut.aliased_merges, resolved_merges: cut.resolved_merges,
-      nearest_merge: cut.nearest_merge,
-      // A cut's rows arrive as counts per path, which say no frame each was a row of.
-      came_through: [], came_through_index: [],
-      drilled: { branch: branch, label: D.branches[branch].label,
-                 stage: D.branches[branch].stage_id, total: cut.total },
-    });
-    pickedNode = null;
-    pickedRow = null;
-    shape();
-    return true;
-  }
-
-  // ── expanding a merge ────────────────────────────────────────────────────
-  //
-  // A merge's groups are aliased into one node by default. Expanding one asks the
-  // route to resolve it, so the drawing splits into a node per group.
-
-  function expandUrl(stageId, want) {
-    var query = new URLSearchParams(location.search);
-    query.delete("expand");
-    (D.resolved_merges || []).concat(want ? [stageId] : []).forEach(function (id) {
-      if (id !== D.nearest_merge && (want || id !== stageId)) query.append("expand", id);
-    });
-    return location.pathname + "?" + query.toString();
-  }
-
-  // ── the words under the drawing ──────────────────────────────────────────
-
   function render() {
     draw();
-    renderHere();
     renderBar();
     renderTable();
     renderTabs();
     var cut = drawing().columns.some(function (c) { return c.removals.length; });
     byId("scope-legend").textContent =
-      (cut ? "An underlined count is rows that stage took out of the workflow — click " +
-        "one to draw them in a new tab. Nothing in the drawing is scaled to it. " : "") +
+      (cut ? "A greyed count is rows that stage dropped from the workflow. They are in "
+        + "no frame below it, so nothing in the drawing is scaled to them. " : "") +
       sayWhatIsNotDrawn();
   }
 
   // The whole lookup side is left out of the drawing, so it is named here instead.
   function sayWhatIsNotDrawn() {
     var lookups = D.lookup_tables || [];
-    if (!lookups.length || D.drilled) return "";
+    if (!lookups.length) return "";
     return "This figure also read " + (lookups.length === 1 ? "a lookup table, " :
       lookups.length + " lookup tables, ") + lookups.join(", ") +
       ". Neither they nor the stages behind them are drawn yet: a row that matched " +
       "one leaves as one row, which no ribbon here carries.";
   }
 
-  function renderHere() {
-    var note = byId("scope-drilled");
-    var section = document.querySelector(".scope");
-    if (!D.drilled) {
-      section.removeAttribute("data-drilled");
-      note.textContent = "";
-      return;
-    }
-    section.setAttribute("data-drilled", "");
-    note.innerHTML = "<b>" + num(D.drilled.total) + "</b> row" +
-      (D.drilled.total === 1 ? "" : "s") + " that <code>" + esc(D.drilled.stage) +
-      "</code> " + esc(D.drilled.label) + ", drawn over <code>" +
-      esc(D.covers.at_stage) + "</code> where they were still present. Their path is " +
-      "why they left: whatever they did differently is upstream of that stage.";
-  }
+
 
   function renderBar() {
     var bar = byId("scope-bar");
@@ -460,7 +379,7 @@
 
   // The figure's node is ONE output row, not a slice of what fed it.
   function pickedFigure() {
-    if (!pickedNode || D.drilled) return false;
+    if (!pickedNode) return false;
     return bars().some(function (b) {
       return b.is_figure && b.key === pickedNode;
     });
@@ -516,6 +435,4 @@
     every.onchange = function () { showAll = every.checked; shape(); };
   }
   shape();
-  var asked = new URLSearchParams(location.search).get("cut");
-  if (asked) openCut(asked);
 })();

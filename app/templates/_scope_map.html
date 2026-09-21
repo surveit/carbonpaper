@@ -16,13 +16,9 @@
   Context the route passes:
     scope   = app.web.scope_payload.ScopeMap
     unfed   = what no row fed, or None when every row it names has rows behind it
-    payload = the same map as JSON, plus `cuts`, for the drawing
+    payload = the same map as JSON, drawn both ways for the switch
 #}
 <section class="scope">
-  {# Written by scope_map.js while a cut is drawn, when the drawing is no longer
-     the figure and only this sentence says so. #}
-  <p class="scope-drilled" id="scope-drilled"></p>
-
   {% if unfed %}
   <p class="banner banner-failed">{{ severity_icon("error") }}{{ unfed }}</p>
   {% endif %}

@@ -106,7 +106,7 @@ def _queueless_queue_stage() -> dict[str, Any]:
     return {"id": "gate", "description": "Gate", "type": "human_review_queue",
             "inputs": [{"id": "src", "schema": {"columns": [
                 {"name": "id", "type": "str", "nullable": True}]}}],
-            "queue": {"filter": "id != ''"},
+            "queue": {"predicate": "pass this step's test", "filter": "id != ''"},
             "output_schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}
 
 

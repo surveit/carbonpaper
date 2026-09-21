@@ -122,7 +122,7 @@ def stage_specs(data: Path) -> list[dict]:
             "id": "funded", "type": "filter_rows", "cache": True,
             "description": "Drops the grants recorded at zero.",
             "inputs": [{"id": "size_band"}],
-            "filter": {
+            "filter": {"predicate": "pass this step's test", 
                 "summary": "Keeps a grant only where the recorded amount is above zero.",
                 "corner_cases": [{"case": "amount is 0", "expected": "the row is dropped"}],
                 "code": 'def should_include(row):\n    return row["amount"] > 0\n',
@@ -145,7 +145,7 @@ def stage_specs(data: Path) -> list[dict]:
             "id": "grants_only", "type": "filter_rows", "cache": True,
             "description": "Keeps the grants, dropping the loans.",
             "inputs": [{"id": "one_row_per_grant"}],
-            "filter": {
+            "filter": {"predicate": "pass this step's test", 
                 "summary": "Keeps a row only where its kind is `grant`.",
                 "corner_cases": [{"case": "kind is `loan`",
                                   "expected": "the row is dropped"}],
@@ -198,7 +198,7 @@ def stage_specs(data: Path) -> list[dict]:
             "id": "over_a_million", "type": "filter_rows", "cache": True,
             "description": "Keeps the grants above a million. None of these are.",
             "inputs": [{"id": "grants_only"}],
-            "filter": {
+            "filter": {"predicate": "pass this step's test", 
                 "summary": "Keeps a grant only where the recorded amount is above a million.",
                 "corner_cases": [{"case": "amount is 400",
                                   "expected": "the row is dropped"}],
@@ -259,7 +259,7 @@ def review_tail() -> list[dict]:
                 "adds": [column("checked_amount", "int"), column("decision", "str"),
                          column("reviewer_id", "str"), column("reviewed_at", "str"),
                          column("review_notes", "str")]},
-            "queue": {"reviewed_columns": {"total_amount": "checked_amount"},
+            "queue": {"predicate": "pass this step's test", "reviewed_columns": {"total_amount": "checked_amount"},
                       "verdict_column": "decision", "reviewer_column": "reviewer_id",
                       "reviewed_at_column": "reviewed_at",
                       "review_notes_column": "review_notes"},

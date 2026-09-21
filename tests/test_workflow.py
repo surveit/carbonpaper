@@ -495,7 +495,7 @@ def _rows_of(stage_id, row_type_id=None, columns=_KN):
 
 def _kept_rows(stage_id, upstream, columns=_KN):
     return S(id=stage_id, type="filter_rows", inputs=[_in(upstream)],
-             filter={"code": "def should_include(row): return True"},
+             filter={"predicate": "pass this step's test", "code": "def should_include(row): return True"},
              signature={"form": "extends",
                         "reads": [{"input": upstream, "columns": columns["columns"]}]})
 

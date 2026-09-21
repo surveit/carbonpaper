@@ -7,7 +7,6 @@ from app.models.branch_analysis import (
     BranchId,
     BranchOption,
     BranchReason,
-    BranchRole,
 )
 from app.models.schema import StageId
 from app.models.workflow_stage import WorkflowStage
@@ -26,7 +25,7 @@ def find_code_branches(stages: dict[StageId, WorkflowStage],
             branch_id = f"{sid}|{branch.id}"
             options[branch_id] = BranchOption(
                 id=branch_id, stage_id=sid, rows_live_in_stage_id=sid,
-                reason=BranchReason.code, role=BranchRole.keeps, label=label,
+                reason=BranchReason.code, label=label,
                 source_code=lines[branch.line - 1].strip(),
                 test_line_number=test_line,
                 first_body_line_number=branch.line,

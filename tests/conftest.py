@@ -216,7 +216,7 @@ def make_run_context(
 
 def queue_columns(source: str = "score", target: str = "human_score") -> dict[str, object]:
     # `source` must name a column present on the frame the stage runs over, or the runtime raises.
-    return {
+    return {"predicate": "pass this step's test", 
         "reviewed_columns": {source: target},
         "verdict_column": "decision",
         "reviewer_column": "reviewer_id",

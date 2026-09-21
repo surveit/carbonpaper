@@ -220,7 +220,7 @@
         "adds": [],
         "rewrites": []
       },
-      "filter": {
+      "filter": {"predicate": "use an AI term in their issue text", 
         "summary": "Keeps the rows the scan marked. Every other row is dropped here and appears nowhere downstream, so no figure below can rest on a filing whose issue text never uses an AI term.",
         "corner_cases": [
           {
@@ -338,7 +338,7 @@
         "adds": [],
         "rewrites": []
       },
-      "filter": {
+      "filter": {"predicate": "a model read as really about AI", 
         "summary": "Keeps the rows judged to be about AI. A row the judgement left blank is dropped: no verdict is not a yes.",
         "corner_cases": [
           {
@@ -903,7 +903,7 @@
         "adds": [],
         "rewrites": []
       },
-      "filter": {
+      "filter": {"predicate": "are one organisation paying another to lobby", 
         "summary": "Keeps only the filings an earlier step labelled `external_paid`. It reads that label and nothing else: it re-checks no names or amounts, and changes no row. In-house lobbying is real spending and is reported separately, not added to this figure.",
         "corner_cases": [
           {
@@ -1020,7 +1020,7 @@
         ],
         "rewrites": []
       },
-      "queue": {
+      "queue": {"predicate": "was signed off in the review queue", 
         "reviewer_instructions": "This client paid an outside firm these dollars, and a model read the filing as being about AI. You are deciding whether that reading holds, because these dollars are the published figure.\n\nApprove where the filing's own issue text says the lobbying was about AI \u2014 its regulation, funding, procurement, or its use in some sector. Overturn it where the AI term is incidental: a passing mention, an unrelated sense of the word, or one clause in a filing about something else.\n\nJudge the text in front of you. The amount is shown because it says how much rests on the decision, not because a large filing deserves a different answer.",
         "reviewed_columns": {
           "is_about_ai": "reviewed_is_about_ai"
@@ -1073,7 +1073,7 @@
         "adds": [],
         "rewrites": []
       },
-      "filter": {
+      "filter": {"predicate": "a reviewer confirmed are about AI", 
         "summary": "Keeps the filings a person confirmed were about AI. A filing the reviewer overturned is dropped and its dollars enter no published figure.",
         "corner_cases": [
           {
@@ -1279,7 +1279,7 @@
         "adds": [],
         "rewrites": []
       },
-      "filter": {
+      "filter": {"predicate": "report an organisation's spending on its own lobbying", 
         "summary": "Keeps the filings labelled `in_house`. These report expenses an organisation states for its own lobbying, which is a different number from money paid to an outside firm and is never added to it.",
         "corner_cases": [
           {

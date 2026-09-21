@@ -115,7 +115,7 @@ def test_modify_records_the_value_the_reviewer_entered_not_the_ai_value():
 
 
 def test_every_declared_pair_lands_under_its_own_target_column():
-    queue = {**queue_columns(), "reviewed_columns": {"score": "checked_score",
+    queue = {"predicate": "pass this step's test", **queue_columns(), "reviewed_columns": {"score": "checked_score",
                                                      "label": "checked_label"}}
     _record(
         "if3", stage=_stage(queue),
@@ -159,7 +159,7 @@ def test_rejects_the_runtime_only_skipped_verdict():
 
 
 def test_rejects_reviewed_values_missing_a_declared_column():
-    queue = {**queue_columns(), "reviewed_columns": {"score": "checked_score",
+    queue = {"predicate": "pass this step's test", **queue_columns(), "reviewed_columns": {"score": "checked_score",
                                                      "label": "checked_label"}}
     with pytest.raises(ReviewValidationError, match="checked_label"):
         _record("if7", stage=_stage(queue), reviewed_values={"checked_score": 2})

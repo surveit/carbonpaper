@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 WarningKind = Literal[
     "undescribed",
+    "unsaid_test",
     "unnamed_rows",
     "unexemplified",
     "examples_failing",
@@ -25,6 +26,7 @@ WarningKind = Literal[
 # Read in this order. Which severity a kind carries: docs/visual-language.md
 SEVERITY: dict[str, UserFacingErrorSeverity] = {
     "undescribed": UserFacingErrorSeverity.warning,
+    "unsaid_test": UserFacingErrorSeverity.warning,
     "unnamed_rows": UserFacingErrorSeverity.error,
     "unexemplified": UserFacingErrorSeverity.warning,
     "examples_failing": UserFacingErrorSeverity.warning,

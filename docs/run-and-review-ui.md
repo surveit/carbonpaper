@@ -294,7 +294,9 @@ The Rows & columns tab fetches its walk when first opened, for the header's
 column. In a review packet the page is a file in a zip with no server to ask,
 so that tab is an empty state and the other two are written in place.
 The standalone scope page (`app/web/routers/scope.py`, `_scope_map.html`,
-`static/scope_map.js`) is what a cut opens, and stays its own page.
+`static/scope_map.js`) draws the same map full-width, and stays its own page. What a
+stage dropped is a count on its column there; those rows took no branch, so there is
+nothing to open.
 
 ## One file (`file_detail.html`, `_file_column.html`)
 

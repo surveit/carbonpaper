@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from app.models.branch_analysis import BranchId, RowOrdinal
+from app.models.branch_analysis import RowOrdinal
 from app.models.schema import StageId
 
 
@@ -21,15 +21,6 @@ class CanvasEdge(BaseModel):
     to_stage: StageId
     # None where the parent is off the walk, so no row count speaks for the wire.
     rows: int | None
-
-
-class CanvasCut(BaseModel):
-    """Rows a stage took out of the workflow, on the figure's route."""
-
-    stage_id: StageId
-    branch: BranchId
-    # The branch's recorded count over the whole run.
-    rows: int
 
 
 class SheetRow(BaseModel):
@@ -65,8 +56,6 @@ class CanvasView(BaseModel):
     steps: list[StageId]
     nodes: list[CanvasNode]
     edges: list[CanvasEdge]
-    # What the sheets' dropped counts were read off; the canvas draws the counts.
-    cuts: list[CanvasCut]
     # Set where the cited column is a `count`, which reads no column.
     counts_rows: bool
     # In the run's stage order, one per stage that wrote a frame.

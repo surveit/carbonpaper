@@ -4,15 +4,6 @@
 
 .scope { max-width: 100%; }
 
-/* Boxed because it only appears while the drawing is a cut and not the figure. */
-.scope-drilled {
-  border-left: 3px solid var(--state-failed);
-  background: var(--sunk);
-  padding: 0.7rem 1rem;
-  margin: 0 0 1rem;
-}
-.scope:not([data-drilled]) .scope-drilled { display: none; }
-
 .scope-controls {
   display: flex;
   align-items: center;
@@ -44,11 +35,10 @@
 #scope-svg .scope-bar-mark { fill: var(--accent-deep); cursor: pointer; }
 #scope-svg text.scope-head, #scope-svg text.scope-out { cursor: help; }
 #scope-svg text.scope-node { cursor: pointer; }
-/* Rows this stage took out of the workflow. An invitation to go and look at them,
-   which is what it shares with .scope-expand — not a fault, so not the failed ink. */
+/* Rows this stage dropped: a count, with nothing to open, because they are in no
+   frame below it. Muted rather than the failed ink — dropping is not a fault. */
 #scope-svg text.scope-out-gone { font-size: 9.5px; font-variant-numeric: tabular-nums;
-  fill: var(--accent); cursor: pointer; text-decoration: underline; }
-#scope-svg text.scope-out-gone:hover { fill: var(--accent-deep); }
+  fill: var(--muted); }
 #scope-svg .scope-bar-mark.is-implied { fill: var(--muted); }
 #scope-svg .scope-bar-mark.is-dim { opacity: 0.3; }
 #scope-svg .scope-leader { stroke: var(--border-strong); stroke-width: 1; fill: none; }

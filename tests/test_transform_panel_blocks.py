@@ -49,7 +49,7 @@ def _seed_project(root: Path) -> None:
         "inputs": [{"id": "all_filings"}],
         "signature": {"form": "extends",
                       "reads": [{"input": "all_filings", "columns": _SCHEMA["columns"]}]},
-        "filter": {"code": _PREDICATE},
+        "filter": {"predicate": "pass this step's test", "code": _PREDICATE},
     })
     add_stage(compiled, {
         "id": "one_filing_per_client", "description": "One filing per client",

@@ -52,7 +52,7 @@ def _v1_stages() -> list[dict[str, Any]]:
         {"id": "gate", "description": "Review", "type": "human_review_queue",
          "inputs": [{"id": "joined", "schema": {
              "columns": [_column("id"), _column("verdict"), _column("extra")]}}],
-         "queue": {"reviewer_instructions": "Confirm each row."},
+         "queue": {"predicate": "pass this step's test", "reviewer_instructions": "Confirm each row."},
          "output_schema": {"columns": [
              _column("id"), _column("verdict"), _column("extra"),
              _column("decision"), _column("reviewer_id"), _column("reviewed_at"),
@@ -73,7 +73,7 @@ def _v2_stages() -> list[dict[str, Any]]:
                   "enrich_with": {"extra": "extra"}}},
         {"id": "gate", "description": "Review", "type": "human_review_queue",
          "inputs": [{"id": "joined"}],
-         "queue": {"reviewer_instructions": "Confirm each row.",
+         "queue": {"predicate": "pass this step's test", "reviewer_instructions": "Confirm each row.",
                    "reviewed_columns": {"verdict": "reviewed_verdict"},
                    "verdict_column": "review_verdict", "reviewer_column": "reviewer",
                    "reviewed_at_column": "reviewed_at"}},

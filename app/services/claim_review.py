@@ -148,7 +148,7 @@ def _read_branches(project_id: ID, run_id: ID) -> list[BranchEvidenceItem]:
     return [
         BranchEvidenceItem(
             branch_id=option.id, stage_id=option.stage_id, reason=option.reason.value,
-            role=option.role.value, label=option.label, source_code=option.source_code,
+            label=option.label, source_code=option.source_code,
             rows_count=run_branches.row_count_per_branch_id[option.id])
         for option in run_branches.branch_options.values()
         if option.reason is not BranchReason.merge

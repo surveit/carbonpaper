@@ -82,7 +82,7 @@ def _seed_workflow(pdir: Path, data_path: Path, routes_path: Path) -> None:
         ("03_keep.json", {
             "id": KEEP_ID, "description": "Keep the small ones", "type": "filter_rows",
             "inputs": [{"id": CLASSIFY_ID}],
-            "filter": {"code": _KEEP_CODE},
+            "filter": {"predicate": "pass this step's test", "code": _KEEP_CODE},
             "signature": {"form": "extends",
                           "reads": reads_of(CLASSIFY_ID, _CLASSIFY_SCHEMA["columns"])},
         }),

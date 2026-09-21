@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from app.core.figure_text import render_figure
 from app.core.errors import StageNotInRun
-from app.models.branch_analysis import BranchId, BranchRole
 from app.models.citations import StageOutputCellCitation
 from app.models.schema import StageId
 from app.services import run as run_service
@@ -13,22 +12,14 @@ from app.services.workspace import resolve_run_dir
 from app.web.loading import MAX_TABLE_ROWS, load_manifest, load_output_rows_at
 from app.web.run_stage_panel import resolve_panel_links
 from app.web.stage_diff import build_stage_diff
-from app.web.scope_payload import (
-    CutRows,
-    ScopeMap,
-    build_scope_map,
-    find_cuts_to_offer,
-)
+from app.web.scope_payload import ScopeMap, build_scope_map
 
 
 def load_scope_map(project_id: str, run_id: str, citation: StageOutputCellCitation,
-                   expand: frozenset[StageId] = frozenset()
-                   ) -> tuple[ScopeMap, dict[BranchId, CutRows]]:
+                   expand: frozenset[StageId] = frozenset()) -> ScopeMap:
     run_branches = read_run_branches(project_id, run_id)
     outputs = resolve_run_dir(project_id, run_id) / "outputs"
-    scope = build_scope_map(run_branches, project_id, run_id, outputs, citation,
-                            expand)
-    return scope, find_cuts_to_offer(run_branches, outputs, scope, expand)
+    return build_scope_map(run_branches, project_id, run_id, outputs, citation, expand)
 
 
 def load_the_rows_that_reached(project_id: str, run_id: str, stage_id: StageId,
@@ -72,11 +63,3 @@ def say_what_no_row_fed(scope: ScopeMap) -> str | None:
                 f"{scope.covers.at_stage}.")
     return (f"The run recorded nothing behind {render_figure(unfed)} of the {render_figure(named)} rows this "
             f"figure names at {scope.covers.at_stage}.")
-
-
-def say_why_rows_left(cut: CutRows, role: BranchRole) -> str:
-    if role is BranchRole.removes:
-        return (f"{render_figure(cut.total)} row{'' if cut.total == 1 else 's'} the run took out "
-                f"here. What they did differently is upstream of this stage.")
-    return (f"{render_figure(cut.total)} row{'' if cut.total == 1 else 's'} still in the frame, "
-            f"merged into a row this figure did not come through.")

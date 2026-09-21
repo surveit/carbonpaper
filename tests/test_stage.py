@@ -233,7 +233,7 @@ def test_human_review_queue_rejects_a_second_input():
         m.parse_stage(S(
             id="q", type="human_review_queue",
             inputs=[{"id": "a"}, {"id": "b"}],
-            queue={"reviewed_columns": {"score": "reviewed_score"}, "verdict_column": "v",
+            queue={"predicate": "pass this step's test", "reviewed_columns": {"score": "reviewed_score"}, "verdict_column": "v",
                    "reviewer_column": "r", "reviewed_at_column": "at"},
             signature={
                 "form": "extends",

@@ -21,7 +21,7 @@ _OUTPUT_COLUMNS = [
     {"name": "reviewer_id", "type": "str", "nullable": True},
     {"name": "reviewed_at", "type": "str", "nullable": True},
 ]
-_QUEUE = {
+_QUEUE = {"predicate": "pass this step's test", 
     "reviewed_columns": {"score": "human_score"},
     "verdict_column": "decision",
     "reviewer_column": "reviewer_id",
@@ -42,7 +42,7 @@ def _stage_spec(*, queue=None, input_columns=None, output_columns=None):
         "signature": {"form": "extends",
                       "reads": reads_of("src", edge),
                       "adds": [c for c in outputs if c["name"] not in flowing]},
-        "queue": {**_QUEUE, **(queue or {})},
+        "queue": {"predicate": "pass this step's test", **_QUEUE, **(queue or {})},
     }
 
 
@@ -169,7 +169,7 @@ def test_an_empty_context_columns_list_is_clean():
 
 
 def test_a_reviewed_source_absent_from_the_input_is_rejected():
-    assert "ghost" in _issues(queue={"reviewed_columns": {"ghost": "human_ghost"}})
+    assert "ghost" in _issues(queue={"predicate": "pass this step's test", "reviewed_columns": {"ghost": "human_ghost"}})
 
 
 def test_a_non_scalar_reviewed_source_is_rejected():
@@ -182,7 +182,7 @@ def test_a_non_scalar_reviewed_source_is_rejected():
         {"name": "human_evidence", "type": "json", "value_type": "str", "nullable": True},
     ]
     assert "evidence" in _issues(
-        queue={"reviewed_columns": {"score": "human_score", "evidence": "human_evidence"}},
+        queue={"predicate": "pass this step's test", "reviewed_columns": {"score": "human_score", "evidence": "human_evidence"}},
         input_columns=input_columns, output_columns=output_columns)
 
 
@@ -190,7 +190,7 @@ def test_a_non_scalar_reviewed_source_is_rejected():
 
 
 def test_a_reviewed_target_missing_from_the_signature_is_rejected():
-    assert "human_verdict_score" in _issues(queue={"reviewed_columns": {"score": "human_verdict_score"}})
+    assert "human_verdict_score" in _issues(queue={"predicate": "pass this step's test", "reviewed_columns": {"score": "human_verdict_score"}})
 
 
 def test_a_reviewed_target_of_the_wrong_type_is_rejected():
@@ -265,7 +265,7 @@ def test_a_non_nullable_verdict_column_is_clean_because_every_row_gets_one():
 
 
 def test_an_added_column_that_the_input_already_declares_is_rejected():
-    assert "already declares" in _issues(queue={"reviewed_columns": {"assertion_text": "claim_id"}})
+    assert "already declares" in _issues(queue={"predicate": "pass this step's test", "reviewed_columns": {"assertion_text": "claim_id"}})
 
 
 def test_a_review_record_column_that_the_input_already_declares_is_rejected():
@@ -277,16 +277,16 @@ def test_a_review_record_column_that_the_input_already_declares_is_rejected():
 
 
 def test_two_sources_mapping_to_the_same_target_are_rejected():
-    assert "named more than once" in _issues(queue={
+    assert "named more than once" in _issues(queue={"predicate": "pass this step's test", 
         "reviewed_columns": {"score": "human_score", "confidence": "human_score"}})
 
 
 def test_a_review_record_name_reused_as_a_reviewed_target_is_rejected():
-    assert "named more than once" in _issues(queue={"reviewed_columns": {"assertion_text": "decision"}})
+    assert "named more than once" in _issues(queue={"predicate": "pass this step's test", "reviewed_columns": {"assertion_text": "decision"}})
 
 
 # ── the config's own shape ───────────────────────────────────────────────────
 
 
 def test_an_empty_reviewed_columns_is_rejected():
-    assert "at least one column" in _issues(queue={"reviewed_columns": {}})
+    assert "at least one column" in _issues(queue={"predicate": "pass this step's test", "reviewed_columns": {}})

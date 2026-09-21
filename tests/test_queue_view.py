@@ -46,7 +46,7 @@ def _queue_stage(
             "id": "review", "description": "Review", "type": "human_review_queue",
             "inputs": inputs,
             "signature": signature,
-            "queue": {
+            "queue": {"predicate": "pass this step's test", 
                 **queue_columns(source=source, target=target),
                 **({} if context_columns is None else {"context_columns": context_columns}),
             },

@@ -24,12 +24,14 @@ _CACHE_DIR = "branches"
 _STAMP_FILE = "built_from.parquet"
 _OPTIONS_FILE = "options.parquet"
 _ROW_COUNTS_FILE = "rows_per_branch.parquet"
+_DROPPED_FILE = "rows_dropped_per_stage.parquet"
 
 _PATH_KEY = "path"
 _ROW_KEY = "row_ordinal"
 _BRANCHES_KEY = "branches"
 _BRANCH_KEY = "branch_id"
 _VERSION_KEY = "pinned_version_id"
+_ANALYSIS_KEY = "analysis_version"
 _STAGE_KEY = "stage_id"
 _COUNT_KEY = "row_count"
 
@@ -37,9 +39,14 @@ _COUNT_KEY = "row_count"
 _PATHS_SCHEMA = pa.schema([(_PATH_KEY, pa.list_(pa.string()))])
 _MERGES_SCHEMA = pa.schema([(_ROW_KEY, pa.int64()), (_BRANCHES_KEY, pa.list_(pa.string()))])
 _ROW_COUNTS_SCHEMA = pa.schema([(_BRANCH_KEY, pa.string()), (_COUNT_KEY, pa.int64())])
+_DROPPED_SCHEMA = pa.schema([(_STAGE_KEY, pa.string()), (_COUNT_KEY, pa.int64())])
 _STAMP_SCHEMA = pa.schema([(_VERSION_KEY, pa.string()),
+                           (_ANALYSIS_KEY, pa.int64()),
                            (_STAGE_KEY, pa.list_(pa.string())),
                            (_COUNT_KEY, pa.list_(pa.int64()))])
+
+# Bumped when the analysis reads different branches out of the same sidecars.
+ANALYSIS_VERSION = 2
 
 _OPTION_FIELDS = tuple(BranchOption.model_fields)
 
@@ -57,6 +64,7 @@ class BranchCacheStamp(BaseModel):
     """What the analysis was read from. Anything else on disk describes a different run."""
 
     pinned_version_id: str
+    analysis_version: int = ANALYSIS_VERSION
     frame_sizes: list[StageFrameSize]
 
     def list_stage_ids(self) -> list[StageId]:
@@ -89,6 +97,7 @@ def write_branch_cache(run_dir: Path, stamp: BranchCacheStamp,
     directory.mkdir(parents=True, exist_ok=True)
     _write_options(directory / _OPTIONS_FILE, run_branches.branch_options)
     _write_row_counts(directory / _ROW_COUNTS_FILE, run_branches.row_count_per_branch_id)
+    _write_rows_dropped(directory / _DROPPED_FILE, run_branches.rows_dropped_per_stage)
     for stage_id, paths in run_branches.branch_paths.items():
         _write_paths(directory, stage_id, paths)
     for stage_id, per_row in run_branches.merges_per_row.items():
@@ -120,6 +129,7 @@ def read_branch_cache(run_dir: Path, stamp: BranchCacheStamp,
         stages=stages,
         ordered_stage_ids=stage_ids,
         row_counts=stamp.index_row_counts_by_stage(),
+        rows_dropped_per_stage=_read_rows_dropped(directory / _DROPPED_FILE),
     )
 
 
@@ -209,6 +219,21 @@ def _write_row_counts(path: Path, counted: Mapping[BranchId, int]) -> None:
                                schema=_ROW_COUNTS_SCHEMA), path)
 
 
+def _write_rows_dropped(path: Path, dropped: Mapping[StageId, int]) -> None:
+    """Its own file: rows a stage dropped hold no branch, so no branch can carry them."""
+    write_frame_table(pa.table({_STAGE_KEY: list(dropped),
+                                _COUNT_KEY: list(dropped.values())},
+                               schema=_DROPPED_SCHEMA), path)
+
+
+def _read_rows_dropped(path: Path) -> dict[StageId, int]:
+    if not path.exists():
+        return {}
+    table = read_frame_table(path)
+    return dict(zip(table.column(_STAGE_KEY).to_pylist(),
+                    table.column(_COUNT_KEY).to_pylist()))
+
+
 def _read_row_counts(path: Path) -> Counter[BranchId]:
     table = read_frame_table(path)
     return Counter(dict(zip(table.column(_BRANCH_KEY).to_pylist(),
@@ -220,6 +245,7 @@ def _write_stamp(path: Path, stamp: BranchCacheStamp) -> None:
     beside = path.with_suffix(".part.parquet")
     write_frame_table(
         pa.table({_VERSION_KEY: [stamp.pinned_version_id],
+                  _ANALYSIS_KEY: [stamp.analysis_version],
                   _STAGE_KEY: [stamp.list_stage_ids()],
                   _COUNT_KEY: [[size.row_count for size in stamp.frame_sizes]]},
                  schema=_STAMP_SCHEMA),
@@ -235,8 +261,11 @@ def _read_stamp(path: Path) -> BranchCacheStamp | None:
         table = read_frame_table(path)
     except (pa.ArrowInvalid, OSError):
         return None
+    if _ANALYSIS_KEY not in table.column_names:
+        return None  # written before the analysis was versioned
     return BranchCacheStamp(
         pinned_version_id=read_native_cell(table, _VERSION_KEY, 0),
+        analysis_version=read_native_cell(table, _ANALYSIS_KEY, 0),
         frame_sizes=[StageFrameSize(stage_id=stage_id, row_count=row_count)
                      for stage_id, row_count in zip(read_native_cell(table, _STAGE_KEY, 0),
                                                     read_native_cell(table, _COUNT_KEY, 0))])
