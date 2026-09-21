@@ -35,19 +35,16 @@ def find_code_branches(stages: dict[StageId, WorkflowStage],
 
 
 def read_stage_code(stage: WorkflowStage | None) -> str:
-    for holder in ("starlark", "function", "filter"):
-        block = getattr(stage.stage, holder, None) if stage else None
-        if block is not None and getattr(block, "code", None):
-            return str(block.code)
-    return ""
+    block = stage.stage.find_authored_code_block() if stage else None
+    return str(block.code) if block is not None and block.code else ""
 
 
 def read_decision_source(stage: WorkflowStage) -> str:
     """The filter's code, the join's key pairs, or the dedupe's keys and tie-break."""
     authored = stage.stage
-    predicate = getattr(authored, "filter", None)
-    if predicate is not None and getattr(predicate, "code", None):
-        return str(predicate.code)
+    code = read_stage_code(stage)
+    if code:
+        return code
     join = getattr(authored, "join", None)
     if join is not None:
         return "\n".join(f"{pair.left} == {pair.right}" for pair in join.keys)
