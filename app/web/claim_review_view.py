@@ -187,7 +187,7 @@ def _build_tokens(text: str, cards: list[ChallengeCard]) -> list[SentenceToken]:
               ((_find_span_of(text, card.phrase), card) for card in cards)
               if span is not None]
     return [_build_token(text[start:end], _worst_over(landed, start, end))
-            for start, end in _cut_at_every_edge(text, [span for span, _ in landed])]
+            for start, end in _build_runs_between_edges(text, [span for span, _ in landed])]
 
 
 def _build_token(text: str, worst: ChallengeCard | None) -> SentenceToken:
@@ -211,7 +211,7 @@ def _find_span(text: str, part: ClaimPart | None) -> tuple[int, int] | None:
     return start, start + len(part.phrase)
 
 
-def _cut_at_every_edge(text: str, spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
+def _build_runs_between_edges(text: str, spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
     edges = sorted({0, len(text), *(edge for span in spans for edge in span)})
     return [(start, end) for start, end in zip(edges, edges[1:]) if end > start]
 
