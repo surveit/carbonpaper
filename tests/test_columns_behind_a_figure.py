@@ -1,6 +1,7 @@
 """The column closure over tests/scope_fixture.py, whose graph every case names."""
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
 from app.models.workflow import parse_workflow
@@ -15,7 +16,7 @@ PORTFOLIO_ROUTE = {"by_portfolio", "one_row_per_grant", "funded", "size_band",
 
 def _stages():
     return parse_workflow(
-        stage_specs(Path("/tmp/scope-fixture"))).index_workflow_stages_by_id()
+        stage_specs(Path(tempfile.gettempdir()) / "scope-fixture")).index_workflow_stages_by_id()
 
 
 def test_a_summed_column_reaches_both_source_files():

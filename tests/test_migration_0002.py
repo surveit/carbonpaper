@@ -8,6 +8,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sqlite3
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,8 @@ from scripts.stage_signatures import add_signature
 
 _ALEMBIC_DIRECTORY = Path(__file__).resolve().parents[1] / "alembic"
 _REVISION = _ALEMBIC_DIRECTORY / "versions/0002_name_queue_and_join_columns.py"
+_SOURCE_PATH = str(Path(tempfile.gettempdir()) / "a.csv")
+_REFERENCE_PATH = str(Path(tempfile.gettempdir()) / "b.csv")
 
 
 def _load_revision() -> Any:
@@ -40,10 +43,10 @@ def _v1_stages() -> list[dict[str, Any]]:
     reference = {"columns": [_column("id"), _column("extra")]}
     return [
         {"id": "src", "description": "Source", "type": "input_data",
-         "connector": {"kind": "file", "params": {"format": "csv", "path": "/tmp/a.csv"}},
+         "connector": {"kind": "file", "params": {"format": "csv", "path": _SOURCE_PATH}},
          "inputs": [], "output_schema": subject},
         {"id": "ref", "description": "Reference", "type": "input_data",
-         "connector": {"kind": "file", "params": {"format": "csv", "path": "/tmp/b.csv"}},
+         "connector": {"kind": "file", "params": {"format": "csv", "path": _REFERENCE_PATH}},
          "inputs": [], "output_schema": reference},
         {"id": "joined", "description": "Join", "type": "enrich",
          "inputs": [{"id": "src", "schema": subject}, {"id": "ref", "schema": reference}],

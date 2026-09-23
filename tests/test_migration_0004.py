@@ -6,6 +6,7 @@ thing standing between a v1 stage spec and a store that no longer loads.
 from __future__ import annotations
 
 import importlib.util
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,7 @@ from scripts.stage_signatures import add_signature
 
 _REVISION = (Path(__file__).resolve().parents[1]
              / "alembic/versions/0004_drop_primary_key_from_stage_schemas.py")
+_SOURCE_PATH = str(Path(tempfile.gettempdir()) / "a.csv")
 
 
 def _load_revision() -> Any:
@@ -33,7 +35,7 @@ def _v1_stages() -> list[dict[str, Any]]:
     schema = {"columns": [_column("id")], "primary_key": ["id"]}
     return [
         {"id": "src", "description": "Source", "type": "input_data",
-         "connector": {"kind": "file", "params": {"format": "csv", "path": "/tmp/a.csv"}},
+         "connector": {"kind": "file", "params": {"format": "csv", "path": _SOURCE_PATH}},
          "inputs": [], "output_schema": dict(schema)},
         {"id": "tag", "description": "Tag", "type": "python_row_function",
          "inputs": [{"id": "src", "schema": dict(schema)}],
