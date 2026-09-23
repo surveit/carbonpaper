@@ -87,7 +87,6 @@ def render_cell(value: Any) -> str:
 def _compare_column(
     name: str, value: Any, parent_row: dict[str, Any], read: frozenset[str]
 ) -> RowColumn:
-    """Compared unformatted, so a grouped number never equals the string beside it."""
     text = render_cell(value)
     if name not in parent_row:
         return RowColumn(name=name, state=CellDiffState.added, text=text, was=None)

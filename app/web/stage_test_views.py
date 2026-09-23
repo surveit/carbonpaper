@@ -116,7 +116,6 @@ def _shape_one_test(
 
 
 def _name_the_section(test: StageTest) -> TestSection:
-    """A case is about the data as it stands, or about data that has not arrived."""
     if test.selections:
         return "from_data"
     # No row to select, so the case turns on what the step does when one appears:
@@ -161,7 +160,6 @@ def _shape_expected(
 def _order_columns(
     rows: list[dict[str, Any]], schema: Optional[TableSchema]
 ) -> list[str]:
-    # Declared order, so a carried-through column stands in the same place in both tables.
     stated = _list_row_columns(rows)
     declared = [column.name for column in schema.columns] if schema else []
     return [name for name in declared if name in stated] + [
