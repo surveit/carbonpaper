@@ -1,7 +1,4 @@
-"""The editing agent's system prompt, assembled in seven sections: role, concepts,
-how it works, the authoring lifecycle, the tightly-constrained-input rule, the stage
-anatomy every type shares, and the per-type catalog. The agent learns which project it
-edits at runtime, so the prompt names no specific project."""
+"""The agent learns which project it edits at runtime, so the prompt names no specific project."""
 
 from __future__ import annotations
 

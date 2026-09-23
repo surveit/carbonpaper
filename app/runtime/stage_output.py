@@ -1,7 +1,3 @@
-"""What a stage handler returns: its rows as an arrow table, plus the two things
-that used to ride the frame's `.attrs`. Arrow is the wire format; pandas is
-materialized only where authored code reads a frame.
-"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace

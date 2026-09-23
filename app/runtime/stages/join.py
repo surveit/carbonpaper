@@ -20,10 +20,7 @@ from ..stage_output import StageOutput
 from ..lineage import merged_inputs_lineage
 from .execution import narrow_stage
 
-# Ordinal carriers for the merge, dropped before the frame is returned. They sit
-# in the reserved `_`-prefixed namespace (app.models.schema.INTERNAL_COLUMN_PREFIX),
-# which a stage may never DECLARE a column in — so collision with real input
-# data is structurally impossible, not merely unlikely.
+# Ordinal carriers for the merge, dropped before return. No stage may DECLARE a `_`-prefixed column.
 JOIN_SUBJECT_ORD_KEY = "_trace_join_subject_ord"
 JOIN_REFERENCE_ORD_KEY = "_trace_join_reference_ord"
 
