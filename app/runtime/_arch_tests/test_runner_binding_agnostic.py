@@ -12,7 +12,8 @@ from pathlib import Path
 from arch import check_no_dict_keys
 from arch._helpers import find_dict_key_uses
 
-_CONNECTOR_PARAM_KEYS = {"path", "format", "file", "list_columns", "parse_dates"}
+_CONNECTOR_PARAM_KEYS = {
+    "path", "paths", "url", "headers", "format", "file", "list_columns", "parse_dates"}
 
 
 def test_runner_never_touches_connector_param_keys() -> None:
