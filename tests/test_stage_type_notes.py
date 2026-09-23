@@ -86,8 +86,13 @@ def test_a_withheld_type_is_named_but_never_offered_as_an_entry():
 
 def test_both_prompts_say_how_a_withheld_type_is_turned_on():
     for prompt in _authoring_prompts():
-        assert "approve_code_execution" in prompt
+        assert "/project/<project_id>/settings" in prompt
         assert "WAIT for their answer" in prompt
+
+
+def test_both_prompts_say_the_model_cannot_turn_it_on_itself():
+    for prompt in _authoring_prompts():
+        assert "No tool turns it on" in prompt
 
 
 def test_no_type_note_still_carries_the_shared_text():

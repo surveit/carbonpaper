@@ -270,6 +270,19 @@ allowed_importers = ["app.agents", "app.mcp"]
 # it and neither reads the other, which is the whole reason it is its own layer.
 
 [[tool.importlinter.contracts]]
+name = "code-execution approval reached only by the settings page and the gate it opens"
+type = "protected"
+protected_modules = ["app.services.code_approval"]
+allowed_importers = ["app.web", "app.services.stage_edit"]
+# Approving unsandboxed Python is a human's answer, so the surfaces a model drives must
+# not be able to give it. app.tools is absent on purpose: approve_code_execution was an
+# MCP tool and an agent tool, its only validation a non-empty `reason` string, and an LLM
+# stage holding Bash called it and approved itself. app.web holds the one door — the
+# project settings page — and app.services.stage_edit READS the answer to decide whether
+# a python stage may be written. Every other package is denied by default, so putting the
+# tool back fails lint-imports rather than review.
+
+[[tool.importlinter.contracts]]
 name = "production run entry points reached only by the run service"
 type = "protected"
 protected_modules = ["app.runtime.runner"]

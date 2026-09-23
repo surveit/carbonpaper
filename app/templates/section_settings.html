@@ -1,0 +1,88 @@
+{% extends "project_shell.html" %}
+{% from "_severity_icon.html" import severity_icon %}
+{#
+  SETTINGS — what this project allows, and who agreed to it.
+
+  Code execution is the only setting here, and it is why the page exists: no tool,
+  agent or MCP surface can turn it on, so the switch has to sit where a person is.
+
+  Context the route passes:
+    state = shell_state(project_id, "settings"); section = "settings"
+    code_execution = the standing CodeExecutionApproval, or None when it is off
+    code_execution_warning = what the owner reads before answering
+    code_execution_types = the stage types the approval unlocks
+#}
+{% block section %}
+<style>
+  .set-block {
+    border: 1px solid var(--border); border-radius: 4px; background: var(--raised);
+    padding: 16px 18px; max-width: 78ch;
+  }
+  .set-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+  .set-head h2 { margin: 0; font-size: 1.05rem; }
+  .set-types { margin: 10px 0 0; padding-left: 20px; font-size: 13px; color: var(--muted); }
+  .set-reason { border-left: 2px solid var(--border-strong); padding-left: 12px; margin: 10px 0 0; }
+  .set-form { margin: 14px 0 0; }
+  .set-form label { display: block; font-size: 13px; margin-bottom: 6px; }
+  /* No global box-sizing reset: a padded, bordered control at width 100% would
+     otherwise measure past the block and scroll it sideways. */
+  .set-form textarea {
+    width: 100%; box-sizing: border-box; font: inherit; font-size: 14px;
+    padding: 6px 8px; border: 1px solid var(--border-strong); border-radius: 3px;
+    background: var(--bg); color: var(--fg); resize: vertical;
+  }
+  .set-form textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .set-form .btn { margin-top: 10px; }
+</style>
+
+<div class="sec-head">
+  <h1>Settings</h1>
+  <p class="lede">What this project allows, and who agreed to it.</p>
+</div>
+
+<div class="set-block">
+  <div class="set-head">
+    <h2>Code execution</h2>
+    {% if code_execution %}
+    <span class="badge warn">on</span>
+    {% else %}
+    <span class="badge pending">off</span>
+    {% endif %}
+  </div>
+
+  {% if code_execution %}
+  <p>On since {{ code_execution.approved_at | friendly_time }}, for this reason:</p>
+  <p class="set-reason">{{ code_execution.reason }}</p>
+  {% else %}
+  <p>Off. An author writing one of these stages is refused, and told what to use
+    instead:</p>
+  <ul class="set-types">
+    {% for stage_type in code_execution_types %}
+    <li>{{ stage_type | label_stage_type }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <p class="banner banner-warn">{{ severity_icon("warning") }}{{ code_execution_warning }}</p>
+
+  {% if code_execution %}
+  <form class="set-form" method="post"
+        action="/project/{{ state.id }}/code-execution/withdraw">
+    <button class="btn danger" type="submit">Turn code execution off</button>
+  </form>
+  <p class="muted">Stages already stored keep running. Turning it off stops new ones
+    being written.</p>
+  {% else %}
+  <form class="set-form" method="post"
+        action="/project/{{ state.id }}/code-execution/approve">
+    <label for="code-execution-reason">What will the Python step do, and why does no
+      declared stage fit? Stored, so whoever turns this off later sees what was
+      agreed to.</label>
+    <textarea id="code-execution-reason" name="reason" rows="3" required
+              placeholder="e.g. diffing two roster snapshots"></textarea>
+    <button class="btn primary" type="submit">Turn code execution on</button>
+  </form>
+  <p class="muted">It stays on for the whole project until someone turns it off here.</p>
+  {% endif %}
+</div>
+{% endblock %}

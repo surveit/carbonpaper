@@ -120,7 +120,7 @@ def test_trigger_run_returns_400_on_invalid_dag(monkeypatch):
 def test_build_nav_lists_the_workflow_runs_and_evals_flat(demo_project):
     from app.web.project_view import build_nav
 
-    overview, workflow, runs, claims, evals, files, documentation = build_nav("demo")
+    overview, workflow, runs, claims, evals, files, documentation, settings = build_nav("demo")
     assert overview.key == "overview" and not overview.children
     assert files.key == "files" and not files.children
     assert [item.label for item in (workflow, runs, claims, evals)] == [
@@ -129,6 +129,7 @@ def test_build_nav_lists_the_workflow_runs_and_evals_flat(demo_project):
     assert not any(item.children for item in (workflow, runs, claims, evals))
     assert documentation.key == "documentation" and not documentation.children
     assert documentation.href == "/project/demo/methodology"
+    assert settings.key == "settings" and settings.href == "/project/demo/settings"
 
 
 def test_the_nav_holds_no_group_headings(demo_project):

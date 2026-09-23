@@ -3,6 +3,8 @@ on write until the project's owner has approved it, and still loading and runnin
 the workflows that already carry one."""
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from app.models import parse_stage
@@ -13,6 +15,7 @@ from app.models.stages.stage_types import (
 )
 from app.services import code_approval, stage_edit
 from app.tools.prompt_fragments import render_type_catalog
+from app.tools.tool_specs import find_tool_names
 
 _FRAME_STAGE = {
     "id": "reshape", "description": "reshape", "type": "python_frame_function",
@@ -22,6 +25,19 @@ _FRAME_STAGE = {
     "function": {"kind": "inline", "summary": "Collapses the register to one row per client.",
                  "code": "def transform(df):\n    return df\n"},
 }
+
+
+# ── no surface a model drives can turn it on ──────────────────────────────────
+def test_no_tool_offers_code_execution_approval():
+    """It was an agent tool validating only a non-empty reason; a stage approved itself."""
+    assert "approve_code_execution" not in find_tool_names()
+
+
+def test_the_mcp_server_registers_no_code_execution_approval():
+    from app.mcp.server import mcp
+
+    assert "approve_code_execution" not in {
+        tool.name for tool in asyncio.run(mcp.list_tools())}
 
 
 # ── withheld from the catalog, but never from the runtime ─────────────────────
@@ -36,8 +52,13 @@ def test_the_catalog_still_says_they_exist_and_how_to_ask():
     catalog = render_type_catalog()
     for name in APPROVAL_REQUIRED_TYPES:
         assert name in catalog, name
-    assert "approve_code_execution" in catalog
     assert "WAIT for their answer" in catalog
+
+
+def test_the_catalog_sends_the_model_to_a_person_and_a_page():
+    catalog = render_type_catalog()
+    assert "No tool turns it on" in catalog
+    assert "/project/<project_id>/settings" in catalog
 
 
 def test_the_catalog_says_the_row_type_is_the_safer_of_the_two():
@@ -65,9 +86,9 @@ def test_a_frame_function_is_refused_without_approval():
 
 def test_the_refusal_says_what_to_try_instead_and_how_to_turn_it_on():
     refusal = stage_edit.find_unapproved_code_issues("some-project", _FRAME_STAGE)[0]
-    for expected in ("explode", "starlark_row_function", "dedupe", "sort_rank",
-                     "approve_code_execution"):
+    for expected in ("explode", "starlark_row_function", "dedupe", "sort_rank"):
         assert expected in refusal, expected
+    assert "You cannot turn it on" in refusal and "Settings page" in refusal
     # The reader is told the two costs, not just that it is blocked.
     assert "network" in refusal and "trace stops at it" in refusal
 
