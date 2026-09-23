@@ -3290,3 +3290,4 @@
 {"run_id":"35848080823","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35848080823","created":"2026-09-23T10:19:39Z","branch":"master","event":"push","contracts_kept":17,"findings":[]}
 {"run_id":"35847871264","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35847871264","created":"2026-09-23T10:20:12Z","branch":"tidy/false-prose-comments","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"35847928635","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35847928635","created":"2026-09-23T10:20:25Z","branch":"tidy/vacuous-tests-claim-page-flag","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"35848249788","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35848249788","created":"2026-09-23T10:21:08Z","branch":"tidy/windows-tests-posix-paths","event":"pull_request","contracts_kept":17,"findings":[]}
