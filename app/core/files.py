@@ -66,6 +66,9 @@ class ProjectFile(PersistedModel):
     completeness: FileCompleteness = FileCompleteness.OPEN
     lineage: str = ""
 
+    # The URL a fetch took these bytes from; None for an upload. Not the person's `lineage`.
+    source_url: str | None = None
+
 
 def files_root() -> Path:
     """Beside the document store and the frames, so pinning the DB path carries it too."""
@@ -81,8 +84,9 @@ def files_quota_bytes() -> int:
     return _read_byte_limit("CARBON_PAPER_FILES_QUOTA_BYTES", _DEFAULT_FILES_QUOTA_BYTES)
 
 
-def save_upload(filename: str, src: BinaryIO, project_id: ID | None = None) -> ProjectFile:
-    """Store an uploaded file and return its record; `project_id` None puts it in no project."""
+def save_upload(filename: str, src: BinaryIO, project_id: ID | None = None, *,
+                source_url: str | None = None) -> ProjectFile:
+    """Store arriving bytes and return their record; `project_id` None puts them in no project."""
     root = files_root()
     # The stream is written to a temp file in the same dir first and moved into
     # <root>/<record id>/<filename> once there is a record to name the directory. The
@@ -93,7 +97,7 @@ def save_upload(filename: str, src: BinaryIO, project_id: ID | None = None) -> P
     staged, digest, byte_count = _write_to_temp_file(root, src, max_upload_bytes())
     _refuse_upload_over_quota(root, staged, byte_count)
     record = ProjectFile(sha256=digest, filename=_safe_filename(filename),
-                        byte_count=byte_count, project_id=project_id)
+                        byte_count=byte_count, project_id=project_id, source_url=source_url)
     (root / record.id).mkdir(parents=True, exist_ok=True)
     staged.replace(resolve_stored_path(record))
     # Saved only once the bytes are in place: a record whose bytes are missing is what

@@ -10,14 +10,21 @@ import hashlib
 from collections.abc import Hashable
 from pathlib import Path, PurePath
 from typing import Any
+from urllib.parse import urlparse
 
 import pandas as pd
 import pyarrow as pa
 
-from app.core.errors import FrameConcatMismatchError
+from app.core.errors import FrameConcatMismatchError, SourceFetchError
+from app.core.fetched_sources import resolve_fetched_path
 from app.core.files import find_stored_file_id
 from app.core.frames import concat_tables, frame_to_table
-from app.core.source_files import FileFormat, read_source_file, text_on_disk_columns
+from app.core.source_files import (
+    FileFormat,
+    read_source_file,
+    resolve_file_format,
+    text_on_disk_columns,
+)
 from app.models import (
     DATE_COLUMN_TYPES,
     TableSchema,
@@ -25,7 +32,7 @@ from app.models import (
 )
 from app.models.run_manifest import ReadFile, StageInputRecord
 from app.models.stage_contribution import StageContribution
-from app.models.stages.input_data import FileConnectorParams, InputDataStage
+from app.models.stages.input_data import ConnectorKind, FileConnectorParams, InputDataStage
 
 from ..context import RunContext
 from ..lineage import RowLineage, RowParent
@@ -45,16 +52,29 @@ def preflight_input_data(
     if not isinstance(stage, InputDataStage):
         raise TypeError(
             f"stage {stage.id}: the input_data preflight got a {type(stage).__name__}")
-    paths = stage.connector.params.paths
+    try:
+        paths = resolve_source_paths(stage)
+    except SourceFetchError as refused:
+        return [f"`{stage.id}`: {refused}"], None
     if not paths:
         return ([f"`{stage.id}`: no file bound — supply a run binding, or author "
                  "an absolute path in the workflow"], None)
-    missing = [path for path in paths if not Path(path).is_file()]
+    missing = [path for path in paths if not path.is_file()]
     if missing:
         return ([f"`{stage.id}`: bound file does not exist or is not a file: {path}"
                  for path in missing], None)
-    read = StageInputRecord(files=[_weigh_file(Path(path)) for path in paths])
+    read = StageInputRecord(files=[_weigh_file(path) for path in paths])
     return [], read.model_dump(mode="json")
+
+
+def resolve_source_paths(stage: InputDataStage) -> list[Path]:
+    """Bound paths win: a run binding may point a fetch stage at a hand-downloaded copy."""
+    params = stage.connector.params
+    if params.paths:
+        return [Path(path) for path in params.paths]
+    if stage.connector.kind == ConnectorKind.fetch:
+        return [resolve_fetched_path(_require_url(stage), headers=params.headers or {})]
+    return []
 
 
 def _weigh_file(path: Path) -> ReadFile:
@@ -68,15 +88,17 @@ def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> StageOutp
     input_stage = narrow_stage(workflow_stage, InputDataStage)
     params = input_stage.connector.params
 
-    paths = params.paths
+    paths = resolve_source_paths(input_stage)
     if not paths:
         raise ValueError(
             f"input stage '{input_stage.id}' has no file bound (connector params carry "
             "no 'paths'); runs bind them at prepare_run — subset/eval runs need the "
             "workflow to author them or a reference override to inject them"
         )
-    frames = [_read_one_file(Path(path), workflow_stage, params) for path in paths]
-    _refuse_files_that_disagree(paths, [list(frame.columns) for frame in frames])
+    fmt = _resolve_format(input_stage)
+    frames = [_read_one_file(path, fmt, workflow_stage, params) for path in paths]
+    _refuse_files_that_disagree(
+        [str(path) for path in paths], [list(frame.columns) for frame in frames])
     # pd.concat pads a missing column with nulls; concat_tables refuses and names it.
     read = concat_tables([frame_to_table(frame) for frame in frames])
     kept, undeclared = _split_off_columns_the_schema_omits(
@@ -85,9 +107,26 @@ def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> StageOutp
         kept,
         contribution=StageContribution(dropped_columns=undeclared),
         lineage=_which_file_each_row_came_from(
-            input_stage.id, [_weigh_file(Path(path)) for path in paths],
+            input_stage.id, [_weigh_file(path) for path in paths],
             [len(frame) for frame in frames]),
     )
+
+
+def _require_url(stage: InputDataStage) -> str:
+    url = stage.connector.params.url
+    if url is None:
+        raise ValueError(f"fetch stage '{stage.id}' carries no params.url")
+    return url
+
+
+def _resolve_format(stage: InputDataStage) -> FileFormat:
+    """A fetch with no declared format reads its URL's extension; the model refuses one with neither."""
+    params = stage.connector.params
+    if params.format is not None:
+        return FileFormat(params.format)
+    if stage.connector.kind == ConnectorKind.fetch:
+        return resolve_file_format(urlparse(_require_url(stage)).path)
+    return FileFormat.csv
 
 
 def _require_produces(stage_id: str, schema: TableSchema | None) -> TableSchema:
@@ -139,9 +178,8 @@ def _which_file_each_row_came_from(
 
 
 def _read_one_file(
-    path: Path, workflow_stage: WorkflowStage, params: FileConnectorParams
+    path: Path, fmt: FileFormat, workflow_stage: WorkflowStage, params: FileConnectorParams
 ) -> pd.DataFrame:
-    fmt = params.format or FileFormat.csv
     schema = workflow_stage.output_schema  # input_data's produces is non-empty by validation
     df = read_source_file(
         path, fmt,

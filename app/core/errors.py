@@ -164,3 +164,7 @@ class StoreOverQuota(Exception):
 
 class EventLoopCannotSpawnSubprocesses(RuntimeError):
     pass
+
+
+class SourceFetchError(RuntimeError):
+    """A fetch connector could not get its bytes. Never softened into an empty frame."""
