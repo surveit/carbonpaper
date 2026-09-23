@@ -29,13 +29,6 @@ class BranchReason(StrEnum):
     merge = "merge"
 
 
-class BranchRole(StrEnum):
-    """What the branch did to the rows that took it."""
-
-    removes = "removes"  # taken out of the frame
-    keeps = "keeps"      # still in the frame, and still downstream
-
-
 class BranchOption(BaseModel):
     """One option a stage offered its rows. How many it had can be data-decided."""
 

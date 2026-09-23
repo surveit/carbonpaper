@@ -16,7 +16,6 @@ from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ExtendsSignature
 
 if TYPE_CHECKING:
-    from app.models.schema import TableSchema
     from app.models.workflow_stage import WorkflowStageInput
 
 
@@ -180,16 +179,6 @@ def find_join_signature_issues(
         )
     return issues
 
-
-def compute_join_output_types(
-    join: "JoinConfig", left: "TableSchema", right: "TableSchema"
-) -> dict[str, str]:
-    right_types = {c.name: c.type for c in right.columns}
-    joined: dict[str, str] = {c.name: c.type for c in left.columns}
-    for src, landed in join.enrich_with.items():
-        if src in right_types and landed not in joined:
-            joined[landed] = right_types[src]
-    return joined
 
 # Both join types share their whole contract except the cardinality they permit,
 # so the shared half is written once and each type states only its own rule.
