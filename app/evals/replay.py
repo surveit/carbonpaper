@@ -1,15 +1,11 @@
-"""Whether a case run is the run the case was labelled against: whole, replayed, same sources."""
+"""Whether a case run is the run the case was labelled against: whole, and replayed."""
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Mapping
-from pathlib import Path
 
 from app.core.run_status import RunStatus
-from app.evals.case import Case
 from app.evals.errors import CaseDidNotReplay
 from app.models import Workflow
-from app.models.stages.input_data import InputDataStage
 from app.models.stages.stage_base import StageType
 from app.runtime.run_log import ROW_OK, SOURCE_CACHED, read_events_since
 from app.services.project import ProjectImportReport
@@ -46,20 +42,6 @@ def validate_imported_cache_is_reachable(report: ProjectImportReport) -> None:
             "workflow can reach, so every stage would recompute rather than replay")
 
 
-def validate_sources_match_capture(case_dir: Path, case: Case, workflow: Workflow) -> None:
-    unlisted = find_unlisted_input_paths(case_dir, case, workflow)
-    if unlisted:
-        raise CaseDidNotReplay(
-            f"the run reads {unlisted}, which this case does not list among its sources, so a "
-            "change to those files would pass unnoticed")
-    drifted = [source.path for source in case.sources
-               if _read_digest_on_disk(case_dir / source.path) != source.sha256]
-    if drifted:
-        raise CaseDidNotReplay(
-            f"source file(s) {sorted(drifted)} are missing or differ from what this case "
-            "captured, so the run would not be the one it was labelled against")
-
-
 def find_model_calling_stages(
     project_id: str, run_id: str, workflow: Workflow
 ) -> list[str]:
@@ -84,22 +66,5 @@ def find_stages_that_replayed_no_row(
     return sorted(_find_model_stage_ids(workflow) - replayed)
 
 
-def find_unlisted_input_paths(case_dir: Path, case: Case, workflow: Workflow) -> list[str]:
-    listed = {(case_dir / source.path).resolve() for source in case.sources}
-    return sorted(str(path) for path in _find_input_paths(workflow) if path not in listed)
-
-
 def _find_model_stage_ids(workflow: Workflow) -> set[str]:
     return {stage.id for stage in workflow.stages if stage.type == StageType.llm_transform}
-
-
-def _find_input_paths(workflow: Workflow) -> list[Path]:
-    return [Path(path).resolve()
-            for stage in workflow.stages if isinstance(stage, InputDataStage)
-            for path in stage.connector.params.paths]
-
-
-def _read_digest_on_disk(path: Path) -> str | None:
-    if not path.is_file():
-        return None
-    return hashlib.sha256(path.read_bytes()).hexdigest()

@@ -1,15 +1,11 @@
-import hashlib
-from pathlib import Path
-
 import pytest
 
 from app.core.run_status import RunStatus
-from app.evals.case import Case, CaseSource
 from app.evals.errors import CaseDidNotReplay
 from app.evals.replay import (
-    find_model_calling_stages, find_stages_that_replayed_no_row, find_unlisted_input_paths,
+    find_model_calling_stages, find_stages_that_replayed_no_row,
     validate_imported_cache_is_reachable, validate_run_called_no_model,
-    validate_run_finished_whole, validate_sources_match_capture)
+    validate_run_finished_whole)
 from app.models import Workflow, parse_stage
 from app.runtime.run_log import ROW_OK, SOURCE_CACHED, SOURCE_COMPUTED, RunLog
 from app.services.project import ProjectImportReport
@@ -42,18 +38,6 @@ def tmp_project():
 @pytest.fixture
 def workflow():
     return Workflow(stages=[_LOAD, _JUDGE])
-
-
-def _reading(*paths: Path) -> Workflow:
-    """The same workflow, with the source stage reading the files named here."""
-    load = parse_stage({
-        "id": "load", "type": "input_data", "description": "rows for load",
-        "connector": {"kind": "file",
-                      "params": {"paths": [str(path) for path in paths], "format": "csv"}},
-        "signature": {"form": "replaces", "produces": [
-            {"name": "text", "type": "str", "nullable": True}]},
-    })
-    return Workflow(stages=[load, _JUDGE])
 
 
 def _log_rows(project_id, run_id, rows):
@@ -125,60 +109,3 @@ def test_an_import_no_stage_can_read_is_refused(reachable):
     with pytest.raises(CaseDidNotReplay) as refusal:
         validate_imported_cache_is_reachable(_report(reachable))
     assert "reachable" in str(refusal.value) or "cache" in str(refusal.value)
-
-
-def _write_source(case_dir, name, text):
-    path = case_dir / name
-    path.parent.mkdir(parents=True, exist_ok=True)
-    data = text.encode("utf-8")
-    path.write_bytes(data)
-    return hashlib.sha256(data).hexdigest()
-
-
-def _case(sources):
-    return Case(output_slug="grant-total", claim_context={}, claim_text="Grants came to 5.",
-                model="claude-sonnet-5", sources=sources, expected_outputs=[])
-
-
-def test_an_unchanged_source_is_accepted(tmp_path):
-    digest = _write_source(tmp_path, "sources/a.csv", "x,y\n1,2\n")
-    validate_sources_match_capture(
-        tmp_path, _case([CaseSource(path="sources/a.csv", sha256=digest)]),
-        _reading(tmp_path / "sources" / "a.csv"))
-
-
-def test_a_changed_source_is_refused_by_name(tmp_path):
-    digest = _write_source(tmp_path, "sources/a.csv", "x,y\n1,2\n")
-    _write_source(tmp_path, "sources/a.csv", "x,y\n9,9\n")
-    with pytest.raises(CaseDidNotReplay) as refusal:
-        validate_sources_match_capture(
-            tmp_path, _case([CaseSource(path="sources/a.csv", sha256=digest)]),
-            _reading(tmp_path / "sources" / "a.csv"))
-    assert "sources/a.csv" in str(refusal.value)
-
-
-def test_a_missing_source_is_refused_by_name(tmp_path):
-    with pytest.raises(CaseDidNotReplay) as refusal:
-        validate_sources_match_capture(
-            tmp_path, _case([CaseSource(path="sources/gone.csv", sha256="abc")]),
-            _reading(tmp_path / "sources" / "gone.csv"))
-    assert "sources/gone.csv" in str(refusal.value)
-
-
-def test_a_file_the_run_reads_but_the_case_never_listed_is_refused(tmp_path):
-    _write_source(tmp_path, "sources/a.csv", "x,y\n1,2\n")
-    workflow = _reading(tmp_path / "sources" / "a.csv")
-    assert find_unlisted_input_paths(tmp_path, _case([]), workflow)
-    with pytest.raises(CaseDidNotReplay) as refusal:
-        validate_sources_match_capture(tmp_path, _case([]), workflow)
-    assert "a.csv" in str(refusal.value)
-
-
-def test_a_case_listing_the_wrong_file_is_refused(tmp_path):
-    _write_source(tmp_path, "sources/a.csv", "x,y\n1,2\n")
-    digest = _write_source(tmp_path, "sources/b.csv", "x,y\n3,4\n")
-    with pytest.raises(CaseDidNotReplay) as refusal:
-        validate_sources_match_capture(
-            tmp_path, _case([CaseSource(path="sources/b.csv", sha256=digest)]),
-            _reading(tmp_path / "sources" / "a.csv"))
-    assert "a.csv" in str(refusal.value)

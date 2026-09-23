@@ -1,4 +1,4 @@
-"""A captured eval case on disk: its claim, the model under test, and its source files."""
+"""A captured eval case on disk: its claim, the model under test, and what it expects."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,18 +13,12 @@ from app.models.schema import _Base
 CASE_FILE = "case.json"
 
 
-class CaseSource(_Base):
-    path: str
-    sha256: str
-
-
 class Case(_Base):
     # What it takes to SUBMIT the claim: an imported archive carries no claims.
     output_slug: str
     claim_context: JsonDict
     claim_text: str
     model: LLMModel
-    sources: list[CaseSource]
     expected_outputs: list[str]
 
 

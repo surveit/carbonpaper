@@ -15,15 +15,13 @@ from app.evals.case import Case, read_case
 from app.evals.errors import CaseDidNotReplay, CaseInvalid
 from app.evals.replay import (
     validate_imported_cache_is_reachable, validate_run_called_no_model,
-    validate_run_finished_whole, validate_sources_match_capture)
-from app.models import Workflow
+    validate_run_finished_whole)
 from app.services.claim_review import load_claim_review
 from app.services.claims import submit_claim
 from app.services.claim_review_run import start_claim_review
 from app.services.errors import ClaimReviewRefused
 from app.services.project import import_project_archive
 from app.services.run import execute, load_run_workflow
-from app.services.versioning import load_version_stages, resolve_version_id
 from app.services.workspace import configure_projects_dir_from_env
 
 ARCHIVE_FILE = "project.zip"
@@ -50,7 +48,6 @@ def main(argv: list[str] | None = None) -> int:
 def _review_one_case(case_dir: Path) -> dict[str, object]:
     case = read_case(case_dir)
     project_id = _import_the_case_archive(case_dir)
-    validate_sources_match_capture(case_dir, case, _load_the_workflow_to_run(project_id))
     manifest = execute(project_id)
     validate_run_finished_whole(manifest)
     run_id = str(manifest["run_id"])
@@ -71,11 +68,6 @@ def _import_the_case_archive(case_dir: Path) -> str:
     report = import_project_archive(raw)
     validate_imported_cache_is_reachable(report)
     return report.project_id
-
-
-def _load_the_workflow_to_run(project_id: str) -> Workflow:
-    return Workflow(
-        stages=load_version_stages(project_id, resolve_version_id(project_id, None)))
 
 
 def _run_the_review(project_id: ID, case: Case, claim_id: ID) -> dict[str, object]:

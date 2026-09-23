@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 from pathlib import Path
 
@@ -67,10 +66,6 @@ def _a_review_that_keeps_running(project_id: str, claim_id: str, *, model: str) 
     return "fake-session"
 
 
-def _digest(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def _declare_the_total_as_an_output(specs: list[dict], shape_id: str) -> list[dict]:
     """The run itself publishes the slug the case claims; a claim needs no seeding."""
     for spec in specs:
@@ -123,8 +118,6 @@ def capture_a_case(tmp_path, projects_root, monkeypatch, *, judged_cache=True, t
     (case_dir / CASE_FILE).write_text(json.dumps({
         "output_slug": _SLUG, "claim_context": {}, "claim_text": TOTAL_TEXT,
         "model": "claude-sonnet-5", "expected_outputs": [_SLUG],
-        "sources": [{"path": f"sources/{name}", "sha256": _digest(sources / name)}
-                    for name in sorted(path.name for path in sources.iterdir())],
     }), encoding="utf-8")
     return case_dir
 
@@ -154,15 +147,6 @@ def test_the_claim_is_submitted_against_the_replayed_run_not_the_captured_one(
     claim = Claim.load(json.loads(capsys.readouterr().out)["claim_id"])
     assert claim.text == TOTAL_TEXT
     assert captured and claim.citation.run_id not in captured
-
-
-def test_a_drifted_source_is_refused_before_anything_runs(capsys, seeded_case_dir):
-    (seeded_case_dir / "sources" / "east.csv").write_bytes(b"x,y\n9,9\n")
-
-    exit_code = main([str(seeded_case_dir)])
-
-    assert exit_code == 1
-    assert "differ from what this case captured" in capsys.readouterr().out
 
 
 def test_a_review_that_stored_nothing_is_refused_rather_than_printed_empty(

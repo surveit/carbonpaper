@@ -14,13 +14,12 @@ def _write_case(case_dir, payload):
 
 def _payload(**overrides):
     return {"output_slug": "grant-total", "claim_context": {}, "claim_text": "Grants came to 5.",
-            "model": "claude-sonnet-5", "sources": [], "expected_outputs": [], **overrides}
+            "model": "claude-sonnet-5", "expected_outputs": [], **overrides}
 
 
 def test_a_case_reads_what_it_takes_to_submit_the_claim(tmp_path):
     _write_case(tmp_path / "c", _payload(
         claim_context={"year": 2024},
-        sources=[{"path": "sources/a.csv", "sha256": "abc"}],
         expected_outputs=["the figure is a share, not a count"]))
 
     case = read_case(tmp_path / "c")
@@ -29,7 +28,7 @@ def test_a_case_reads_what_it_takes_to_submit_the_claim(tmp_path):
     assert case.claim_context == {"year": 2024}
     assert case.claim_text == "Grants came to 5."
     assert case.model == LLMModel.claude_sonnet_5
-    assert [s.path for s in case.sources] == ["sources/a.csv"]
+    assert case.expected_outputs == ["the figure is a share, not a count"]
 
 
 def test_a_case_naming_no_output_to_claim_is_refused(tmp_path):
