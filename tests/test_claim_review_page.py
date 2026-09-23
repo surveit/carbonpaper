@@ -233,7 +233,7 @@ def test_the_page_carries_what_the_run_read_and_what_blocks_it(claim):
     assert page.text == TOTAL_TEXT
     assert page.run_id == claim.citation.run_id
     assert page.status == "submitted"
-    assert page.run_read_everything in (True, False)
+    assert page.run_read_everything is True
 
 
 def test_the_cited_figure_is_linked_the_same_way_wherever_the_page_draws_it(claim):
