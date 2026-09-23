@@ -37,6 +37,7 @@ from app.web.citation_links import render_source_url
 from app.web.claim_review_view import build_claim_review_page
 from claim_review_fixture import (
     PROJECT,
+    TOTAL_SHAPE,
     TOTAL_TEXT,
     claim_the_total,
     publish_the_outputs,
@@ -330,6 +331,35 @@ def test_the_page_draws_a_stored_review(claim, client):
 
 def test_a_claim_this_project_does_not_hold_is_a_404(client, projects_root):
     assert read_the_page(client, "no-such-claim").status_code == 404
+
+
+def test_the_trail_runs_through_claims_to_the_sentence(claim, client):
+    trail = read_the_trail(read_the_page(client, claim.id).text)
+
+    assert f'<a href="/project/{PROJECT}/claims" class="crumb-link">Claims</a>' in trail
+    assert f'<span class="crumb-here" aria-current="page">{TOTAL_TEXT}</span>' in trail
+    assert claim.citation.run_id not in trail
+
+
+def test_the_nav_lights_the_claims_leaf_alone(claim, client):
+    body = read_the_page(client, claim.id).text
+
+    lit = re.findall(r'class="app-nav-item current"\s+href="([^"]+)"', body)
+    assert lit == [f"/project/{PROJECT}/claims"]
+
+
+def test_a_skip_has_no_sentence_so_its_trail_ends_on_the_metric(projects_root, client):
+    run_id = run_the_fixture(projects_root)
+    publish_the_outputs(run_id)
+    skipped = claims_service.decline_output(PROJECT, run_id, "grant-total")
+
+    trail = read_the_trail(read_the_page(client, skipped.id).text)
+
+    assert f'<span class="crumb-here" aria-current="page">{TOTAL_SHAPE.label}</span>' in trail
+
+
+def read_the_trail(body: str) -> str:
+    return body.split('<nav class="crumbs"', 1)[1].split("</nav>", 1)[0]
 
 
 # ── what an agent can do with a claim ─────
