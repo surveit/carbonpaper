@@ -258,7 +258,3 @@ table.kv td.kv-value {
     padding: 5px 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg);
 }
 table.kv tr + tr th, table.kv tr + tr td { border-top: 1px solid var(--border); }
-.pk-flag {
-    font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
-    padding: 1px 5px; border-radius: 3px; background: var(--info-bg); color: var(--info-ink);
-}

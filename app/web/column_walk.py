@@ -77,11 +77,6 @@ class WriterGraph:
     def list_parents(self, stage_id: StageId) -> tuple[WriterEdge, ...]:
         return self.parents.get(stage_id, ())
 
-    def list_stages(self) -> set[StageId]:
-        return set(self.parents) | {
-            edge.from_stage for edges in self.parents.values() for edge in edges
-        }
-
 
 def walk_column_back(stages: WorkflowStagesById, cited: ColumnAt,
                      also: Sequence[ColumnAt] = ()) -> ColumnWalk:

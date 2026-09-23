@@ -91,11 +91,5 @@ window.InputFiles = window.InputFiles || (function () {
     return window.Figures.text(many) + " " + thing + (many === 1 ? "" : "s");
   }
 
-  function escapeText(text) {
-    var box = document.createElement("span");
-    box.textContent = text;
-    return box.innerHTML;
-  }
-
   return { mount: mount };
 })();
