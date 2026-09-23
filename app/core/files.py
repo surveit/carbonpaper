@@ -238,8 +238,8 @@ def _write_to_temp_file(root: Path, src: BinaryIO, ceiling: int) -> tuple[Path, 
         while chunk := src.read(_CHUNK_BYTES):
             byte_count += len(chunk)
             if byte_count > ceiling:
-                # Unlinking an open file is safe here: the fd stays valid until the
-                # `with` closes it, and nothing is left behind to sweep up later.
+                # Closed first: Windows refuses to delete a file that is still open.
+                out.close()
                 temp.unlink()
                 raise FileOverCeiling(ceiling=ceiling)
             digest.update(chunk)
