@@ -11,24 +11,22 @@ from app.core.ids import ID
 # both read by. Ids already on disk carry the older second-resolution form
 # (`20260810T213500`, 15 characters); that form sorts before any id minted later in
 # the same second, so mixing the two keeps the same order they happened in.
-#
-# Microseconds rather than seconds because at second resolution two ids minted in the
-# same second are the SAME id: versions silently overwrote each other, run directories
-# merged, and every test needing two distinct ids had to sleep a whole second to buy
-# one. Microseconds do not make a collision impossible, only far narrower than the work
-# between any two mints.
 _ID_FORMAT = "%Y%m%dT%H%M%S.%f"
 
 
 def mint_timestamp_id() -> ID:
-    return datetime.now().strftime(_ID_FORMAT)
+    return _mint_stamp().strftime(_ID_FORMAT)
+
+
+def now_iso() -> str:
+    return _mint_stamp().isoformat(timespec="microseconds")
 
 
 _stamp_lock = RLock()
 _last_stamp: datetime | None = None
 
 
-def now_iso() -> str:
+def _mint_stamp() -> datetime:
     # Strictly increasing WITHIN a process only — two processes can still tie in one OS tick.
     global _last_stamp
     with _stamp_lock:
@@ -36,7 +34,7 @@ def now_iso() -> str:
         if _last_stamp is not None and now <= _last_stamp:
             now = _last_stamp + timedelta(microseconds=1)
         _last_stamp = now
-    return now.isoformat(timespec="microseconds")
+    return now
 
 
 def read_iso_stamp(value: object) -> datetime | None:
