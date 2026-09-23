@@ -1,4 +1,4 @@
-"""The authored `Stage` plus its input and output schemas. In memory only: never parsed or dumped."""
+"""A `Stage` plus schemas that, in a workflow, depend on the whole graph. Never parsed or dumped."""
 from __future__ import annotations
 
 from dataclasses import dataclass
