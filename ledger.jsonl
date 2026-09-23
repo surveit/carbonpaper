@@ -3284,3 +3284,4 @@
 {"run_id":"35847423659","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35847423659","created":"2026-09-23T10:15:37Z","branch":"tidy/dead-web-unreferenced","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"35847557850","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35847557850","created":"2026-09-23T10:16:38Z","branch":"tidy/ruff-rule-ruf006","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"35847871264","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35847871264","created":"2026-09-23T10:17:29Z","branch":"tidy/false-prose-comments","event":"pull_request","contracts_kept":17,"findings":[]}
+{"run_id":"35847928635","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35847928635","created":"2026-09-23T10:18:01Z","branch":"tidy/vacuous-tests-claim-page-flag","event":"pull_request","contracts_kept":17,"findings":[]}
