@@ -212,7 +212,7 @@ def _index_consumers(stages: Sequence[WorkflowStage] | None) -> dict[str, list[s
 
 
 def _read_stage_id(record: Mapping[str, Any]) -> str:
-    return str(record.get("stage_id") or "")
+    return str(record["stage_id"])
 
 
 def _read_optional_text(value: object) -> str | None:
