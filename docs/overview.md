@@ -22,15 +22,15 @@ number or unsourced claim defeats the purpose. Two rules recur in the code:
 - **workflow** — the executable stage graph it compiles into (the project's newest
   `workflow_version`; a DAG of typed stages whose schemas resolve from the graph).
 
-A project dir also holds `code/`, `data/` and `runs/<id>/` (a run's parquet outputs,
+A project dir also holds `runs/<id>/` (a run's parquet outputs,
 its artifacts and its review queue) — runtime data, not source. Everything else a
 project holds is a document in the store: its methodology, its drafts, its
 versions (`workflow_version`), each run's record and event log, and the review
-decisions (`app.core.stage_cache`).
+decisions (`app.models.records.review_decision`).
 
 ## The three features
 | Feature | Code | Status |
 |---|---|---|
 | **Runner** | `app/runtime/` | On master — executes a workflow (typed `Stage` end-to-end), validates I/O, persists, halts for review, resumes. |
-| **Compiler** | `app/compiler/` | On master — generates the data model and a stage's tests from the methodology document (LLM, re-ask on schema failure). Stages are authored by an MCP client through `app/services/stage_edit.py`, a batch at a time. |
-| **Eval** | `app/models/eval.py` | Data model only — `EvalConfig` + grain-preservation gate; no runner integration yet. |
+| **Compiler** | `app/compiler/` | On master — generates a version's review guide from its stages and the methodology document, and a stage's tests from a finished run's real rows (LLM, re-ask on schema failure). Stages are authored by an MCP client through `app/services/stage_edit.py`, a batch at a time. |
+| **Eval** | `app/evals/`, `app/models/eval.py` | On master — runs an `EvalConfig` against a pinned workflow version and scores it declaratively; a path that is not grain-preserving is recorded as `vetoed`. |
