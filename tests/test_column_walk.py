@@ -1,6 +1,9 @@
 """Tests for app/web/column_walk.py — the backward walk and the writer graph."""
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
+
 import pytest
 
 from app import models as m
@@ -15,6 +18,7 @@ from app.web.column_walk import (
 )
 
 FILING_COLUMNS = ["client", "income", "expenses"]
+FILINGS_DIRECTORY = Path(tempfile.gettempdir()) / "filings"
 
 
 def _column(name, type_="str"):
@@ -24,7 +28,7 @@ def _column(name, type_="str"):
 def _filings(stage_id):
     return m.parse_stage({
         "id": stage_id, "description": stage_id, "type": "input_data",
-        "connector": {"kind": "file", "params": {"paths": [f"/filings/{stage_id}.csv"]}},
+        "connector": {"kind": "file", "params": {"paths": [str(FILINGS_DIRECTORY / f"{stage_id}.csv")]}},
         "signature": {"form": "replaces",
                       "produces": [_column(name) for name in FILING_COLUMNS]},
     })

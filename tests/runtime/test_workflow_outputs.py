@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
+
 import pyarrow as pa
 
 from app.models import Workflow, parse_stage
@@ -12,6 +15,7 @@ from app.runtime.workflow_outputs import (
 )
 
 _RUN = RunIdentity(project="venezuela_lda_lobbying", run_id="20260812T133317.816579")
+_SPEND_PATH = str(Path(tempfile.gettempdir()) / "spend.parquet")
 # The Venezuela client-side figures, as that aggregate really computes them.
 _FIGURES = pa.table({"clients_paying": [24], "external_spend": [4461000.0]})
 _SPEND = WorkflowFigureRule(kind="figure", slug="external-spend",
@@ -28,7 +32,7 @@ def _workflow_stage(outputs):
         "inputs": [],
         "signature": {"form": "replaces", "produces": [
             {"name": "total_income_usd", "type": "float", "nullable": False}]},
-        "connector": {"kind": "file", "params": {"path": "/tmp/spend.parquet"}},
+        "connector": {"kind": "file", "params": {"path": _SPEND_PATH}},
     })
     figures = parse_stage({
         "id": "count_client_figures", "type": "aggregate", "description": "Client figures",

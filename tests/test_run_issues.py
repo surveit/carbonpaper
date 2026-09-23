@@ -6,6 +6,8 @@ different people.
 """
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
 from typing import Any
 
 from app.models import StepRefused, parse_stage
@@ -16,6 +18,7 @@ from app.web.run_issues import StopKind, build_run_issues
 
 PROJECT = "issues"
 RUN = "20260806T090100"
+ROWS_PATH = str(Path(tempfile.gettempdir()) / "rows.csv")
 ENUM_MESSAGE = (
     "12 value(s) outside enum ['A', 'B', 'C'] (e.g. 'venezuela')"
 )
@@ -26,7 +29,7 @@ def _stage(stage_id: str, inputs: list[str]) -> dict[str, Any]:
         return {
             "id": stage_id, "description": stage_id, "type": "input_data",
             "connector": {"kind": "file",
-                          "params": {"path": "/tmp/rows.csv", "format": "csv"}},
+                          "params": {"path": ROWS_PATH, "format": "csv"}},
             "signature": {
                 "form": "replaces",
                 "produces": [{"name": "issue_type", "type": "str", "nullable": False}],
