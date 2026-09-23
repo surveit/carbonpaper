@@ -71,6 +71,7 @@ _SCREEN_POSITION = re.compile(
     r"|at the top|at the bottom|in the rail|in the sidebar)\b",
     re.IGNORECASE,
 )
+_PERSON = re.compile(r"\bperson\b", re.IGNORECASE)
 
 
 def _load_fixture() -> WorkflowFile:
@@ -154,13 +155,13 @@ def test_the_input_stage_carries_no_baked_in_path():
 
 
 def test_the_review_queue_reads_from_the_paid_filings():
-    """The headline figure is the paid total, so that is what a person confirms."""
+    """The headline figure is the paid total, so that is what goes to review."""
     queue_stage = _review_stage()
     assert [i.id for i in queue_stage.inputs] == ["select_external_filings"]
 
 
 def test_the_queue_has_no_filter_every_paid_filing_is_reviewed():
-    """Unlike a narrower queue, nothing here is published on the model's say-so alone."""
+    """Unlike a narrower queue, every paid filing waits for a reviewer's verdict."""
     assert _review_stage().queue.filter is None
 
 
@@ -196,6 +197,32 @@ def test_confirm_ai_spend_drops_a_filing_that_was_not_confirmed():
     stage = _stage(_load_fixture(), "confirm_ai_spend")
     assert [i.id for i in stage.inputs] == ["review_ai_spend"]
     assert f'row["{_REVIEWED_COLUMN}"]' in (stage.filter.code or "")
+
+
+def test_the_review_steps_never_say_a_person_decided():
+    """Who decided is in the run's reviewer column; the tutorial's own words must not claim it."""
+    fixture = json.loads(_FIXTURE_PATH.read_text(encoding="utf-8"))
+    guide = json.loads(_GUIDE_PATH.read_text(encoding="utf-8"))
+    review_stage_ids = {_REVIEW_STAGE, "confirm_ai_spend"}
+
+    texts = _collect_strings([
+        fixture["document"],
+        [stage for stage in fixture["stages"] if stage["id"] in review_stage_ids],
+        [step for step in guide["steps"] if review_stage_ids & set(step["stage_ids"])],
+    ])
+
+    offenders = [text for text in texts if _PERSON.search(text)]
+    assert not offenders, "\n".join(offenders)
+
+
+def _collect_strings(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return _collect_strings(list(value.values()))
+    if isinstance(value, list):
+        return [text for item in value for text in _collect_strings(item)]
+    return []
 
 
 # ── the review guide ─────────────────────────────────────────────────────────

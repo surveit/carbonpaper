@@ -66,20 +66,20 @@
       "data_description": "The paid AI filings, before anyone has confirmed them."
     },
     {
-      "title": "Put every paid filing in front of a person",
-      "prose": "The model's reading is only a proposal: every filing behind the headline figure waits here for a person to confirm or overturn it, under their own name, largest reported spend first.",
+      "title": "Send every paid filing to review",
+      "prose": "The model's reading is only a proposal: every filing behind the headline figure waits here for a reviewer to confirm or overturn it, largest reported spend first. The run records the name each decision was made under.",
       "stage_ids": [
         "review_ai_spend"
       ],
-      "data_description": "The same paid filings, plus the answer a person left on each."
+      "data_description": "The same paid filings, plus the reviewer's answer on each and the name it was made under."
     },
     {
-      "title": "Drop what a person did not confirm",
+      "title": "Drop what a reviewer did not confirm",
       "prose": "A filing the reviewer overturned leaves here; its money enters no published figure.",
       "stage_ids": [
         "confirm_ai_spend"
       ],
-      "data_description": "The paid AI filings a person confirmed."
+      "data_description": "The paid AI filings a reviewer confirmed."
     },
     {
       "title": "Publish the headline figures",

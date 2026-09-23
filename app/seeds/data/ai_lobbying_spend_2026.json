@@ -1,6 +1,6 @@
 {
   "name": "ai_lobbying_spend_2026",
-  "document": "# How much was paid to lobby on artificial intelligence in 2026\n\n## The question\n\nAcross the Senate LDA disclosures for Q1 and Q2 2026, how much did clients pay outside\nlobbying firms to lobby on artificial intelligence?\n\n## The corpus\n\nTwo exports, read exactly as filed: `lda_data_Q1_2026.xlsx` and `lda_data_Q2_2026.xlsx`.\nEvery Senate LDA filing here is real and public record, not a sample. Each\ncarries one row per filing per issue area, so a filing that lobbied on three issue\nareas is three rows stating the same money once each.\n\n## Step 1 - find the rows that mention AI\n\nSearch each row's own `specific_issues` and `issue_codes` for six terms, on word\nboundaries, ignoring case: artificial intelligence, AI, machine learning, large language\nmodel (and LLM), deepfake, algorithmic. This is a net, not a judgement: it catches\nalgorithmic trading and airline codes on purpose, and leaves the deciding to step 2.\n\nEvery row that matches none of the six is dropped and enters no figure. A filing that\nlobbied on AI without using one of these terms is outside what this run can see.\n\n## Step 2 - judge whether the filing is really about AI\n\nAsk a model, one row at a time, whether the filing's own issue text says the lobbying was\nabout artificial intelligence - its regulation, funding, procurement, or its use in some\nsector - or whether the term is incidental. It answers with a verdict and a one-sentence\nbasis quoting the text it decided on. A row with no verdict is dropped: no verdict is not\na yes.\n\n## Step 3 - read the money as filed\n\nRead `income` and `expenses` as plain dollar numbers. Blank counts as zero: the filing is\nreporting it received or spent nothing. Anything else that is not a plain number, and any\nnegative amount, stops the run rather than being interpreted.\n\n## Step 4 - separate paid lobbying from in-house\n\nA filing whose type begins with `Registration` is a registration. A filing whose\nregistrant and client are the same name as filed is in-house. Everything else is one\norganisation paying another. Names are compared exactly as filed; nothing here merges two\nspellings of one organisation.\n\n## Step 5 - one row per filing\n\nCollapse the surviving rows to one per `filing_uuid`. A column the rows of one filing\ndisagree on stops the run rather than being picked from; the per-issue-area fields are\ncarried as lists.\n\n## Step 6 - a person confirms every paid filing\n\nBefore anything is published, every paid filing the model read as being about AI is put\nin front of a person, largest reported spend first. They confirm or overturn the\nmodel's reading; overturning one drops the filing from every figure below.\n\n## The published figures\n\nOver the paid filings a person confirmed: the reported income summed exactly as filed,\nthe filings behind it, and the distinct firms and clients. In-house spending is reported\nseparately, on the model's reading alone, and is never added to it.",
+  "document": "# How much was paid to lobby on artificial intelligence in 2026\n\n## The question\n\nAcross the Senate LDA disclosures for Q1 and Q2 2026, how much did clients pay outside\nlobbying firms to lobby on artificial intelligence?\n\n## The corpus\n\nTwo exports, read exactly as filed: `lda_data_Q1_2026.xlsx` and `lda_data_Q2_2026.xlsx`.\nEvery Senate LDA filing here is real and public record, not a sample. Each\ncarries one row per filing per issue area, so a filing that lobbied on three issue\nareas is three rows stating the same money once each.\n\n## Step 1 - find the rows that mention AI\n\nSearch each row's own `specific_issues` and `issue_codes` for six terms, on word\nboundaries, ignoring case: artificial intelligence, AI, machine learning, large language\nmodel (and LLM), deepfake, algorithmic. This is a net, not a judgement: it catches\nalgorithmic trading and airline codes on purpose, and leaves the deciding to step 2.\n\nEvery row that matches none of the six is dropped and enters no figure. A filing that\nlobbied on AI without using one of these terms is outside what this run can see.\n\n## Step 2 - judge whether the filing is really about AI\n\nAsk a model, one row at a time, whether the filing's own issue text says the lobbying was\nabout artificial intelligence - its regulation, funding, procurement, or its use in some\nsector - or whether the term is incidental. It answers with a verdict and a one-sentence\nbasis quoting the text it decided on. A row with no verdict is dropped: no verdict is not\na yes.\n\n## Step 3 - read the money as filed\n\nRead `income` and `expenses` as plain dollar numbers. Blank counts as zero: the filing is\nreporting it received or spent nothing. Anything else that is not a plain number, and any\nnegative amount, stops the run rather than being interpreted.\n\n## Step 4 - separate paid lobbying from in-house\n\nA filing whose type begins with `Registration` is a registration. A filing whose\nregistrant and client are the same name as filed is in-house. Everything else is one\norganisation paying another. Names are compared exactly as filed; nothing here merges two\nspellings of one organisation.\n\n## Step 5 - one row per filing\n\nCollapse the surviving rows to one per `filing_uuid`. A column the rows of one filing\ndisagree on stops the run rather than being picked from; the per-issue-area fields are\ncarried as lists.\n\n## Step 6 - every paid filing goes to review\n\nBefore anything is published, every paid filing the model read as being about AI goes to\nthe review queue, largest reported spend first. A reviewer confirms or overturns the\nmodel's reading; overturning one drops the filing from every figure below. The run's\n`reviewer` column records the name each decision was made under.\n\n## The published figures\n\nOver the paid filings a reviewer confirmed: the reported income summed exactly as filed,\nthe filings behind it, and the distinct firms and clients. In-house spending is reported\nseparately, on the model's reading alone, and is never added to it.",
   "model": "sonnet",
   "source": "mcp",
   "data_model": {
@@ -921,7 +921,7 @@
     {
       "id": "review_ai_spend",
       "type": "human_review_queue",
-      "description": "Put Every Published Filing in Front of a Person",
+      "description": "Sends every paid AI filing to a reviewer to confirm or overturn the model's reading.",
       "inputs": [
         {
           "id": "select_external_filings"
@@ -929,7 +929,7 @@
       ],
       "cache": true,
       "compiler_notes": [
-        "These are the filings behind the headline figure \u2014 what clients paid outside firms to lobby on AI. Nothing here is published on a model's say-so alone.",
+        "These are the filings behind the headline figure \u2014 what clients paid outside firms to lobby on AI. None counts until the review queue records a verdict on it.",
         "queue.sort is by reported income, descending: a reviewer working from the top decides the largest dollars first.",
         "The reviewer's answer is ADDED as reviewed_is_about_ai; the model's is_about_ai is never overwritten, so the run records both and the figure names which it summed."
       ],
@@ -987,7 +987,7 @@
             "name": "reviewed_is_about_ai",
             "type": "bool",
             "nullable": true,
-            "description": "Whether a person confirmed this filing's lobbying was about AI; the model's own answer stays in `is_about_ai`."
+            "description": "The reviewer's answer to whether this filing's lobbying was about AI; the model's own answer stays in `is_about_ai`."
           },
           {
             "name": "review_verdict",
@@ -1048,7 +1048,7 @@
     {
       "id": "confirm_ai_spend",
       "type": "filter_rows",
-      "description": "Drops the filings a person did not confirm.",
+      "description": "Drops the filings a reviewer did not confirm.",
       "inputs": [
         {
           "id": "review_ai_spend"
@@ -1074,7 +1074,7 @@
         "rewrites": []
       },
       "filter": {"predicate": "a reviewer confirmed are about AI", 
-        "summary": "Keeps the filings a person confirmed were about AI. A filing the reviewer overturned is dropped and its dollars enter no published figure.",
+        "summary": "Keeps the filings a reviewer confirmed were about AI. A filing the reviewer overturned is dropped and its dollars enter no published figure.",
         "corner_cases": [
           {
             "case": "the reviewer overturned the model's reading, or left no answer",
