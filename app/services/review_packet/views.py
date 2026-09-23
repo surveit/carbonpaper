@@ -91,7 +91,7 @@ def _build_stage_view(
     record: dict[str, Any],
     definition_error: str | None,
 ) -> StageView:
-    stage_id = str(record.get("stage_id") or "")
+    stage_id = str(record["stage_id"])
     output_path = _read_optional_str(record, "output_path")
     return StageView(
         record=record,
