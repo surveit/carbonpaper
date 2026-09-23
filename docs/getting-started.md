@@ -54,8 +54,7 @@ every git worktree reads and writes the one store:
 | | |
 |---|---|
 | `app.db` | The document store: projects, workflow versions, runs, chats. |
-| `frames/` | Stage outputs, as parquet. |
-| `examples/` | A project's own files. |
+| `examples/` | A project's own files, including its runs' stage outputs as parquet. |
 | `files/` | Uploaded input data, one directory per record, named by the record's id. |
 
 `./start` runs `alembic upgrade head` on every boot, which is what keeps that
@@ -68,7 +67,7 @@ Nothing authenticates the server, so leave it on `127.0.0.1`.
 ## Your first run needs a data file
 
 A run reads its inputs off the server's disk by absolute path, so a file has to
-get there first. The run form's Browse… posts it and stores it;
+get there first. The run form's Upload file… posts it and stores it;
 [self-hosting.md](self-hosting.md#getting-a-data-file-in) covers the
 plain-multipart endpoint underneath, which any `curl` can post to.
 

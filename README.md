@@ -30,8 +30,8 @@ proves it, and a workflow you can run again when next quarter's file lands.
 - **[Read one worked through, step by step](https://carbonpaper.fly.dev/intro)** — one
   lobbying question, from the filings to the published figure. Served from `intro/` in
   this repo, so a local server has it at `/intro` too.
-- **[Take the guided tour](https://carbonpaper.fly.dev)** — it seeds a seven-stage
-  workflow over real, sourced advocacy records and runs it for real, so the first
+- **[Take the guided tour](https://carbonpaper.fly.dev)** — it seeds a 16-stage
+  workflow over real Senate lobbying disclosures and runs it for real, so the first
   workflow you read is one you watched run.
 
 That instance has no login and anyone can delete anything on it, so treat what you put
@@ -65,11 +65,12 @@ taken it once.
 1. **＋ New project** opens a chat with the editing agent. Tell it how the
    investigation works, or upload the write-up and the data it runs on, and it
    creates the project.
-2. Author the stages by talking to the agent in the same chat. The project's five
-   sections — Overview, Document, Terms, Workflow, Runs — are the left sidebar.
+2. Author the stages by talking to the agent in the same chat. The project's seven
+   sections — Overview, Workflow, Runs, Claims, Evals, Files, Documentation — are the
+   left sidebar.
 3. **Get your data file onto the server.** A run reads its inputs off the server's
-   disk by absolute path, so the run form's Browse… posts the file and hands the path
-   back. [Getting a data file in](docs/self-hosting.md#getting-a-data-file-in) covers
+   disk by absolute path, so the run form's Upload file… posts the file and selects it
+   for that input. [Getting a data file in](docs/self-hosting.md#getting-a-data-file-in) covers
    the endpoint, which takes any caller that can run `curl`.
 4. **▶ Run workflow**, from the Workflow section or a stored version's page. The run
    form is where a version is picked and each input is pointed at its file.
