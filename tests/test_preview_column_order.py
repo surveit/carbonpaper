@@ -60,6 +60,8 @@ def test_a_replaces_stage_keeps_frame_order() -> None:
     ordered = order_columns_by_signature(_replaces_stage(), ["name", "total"])
 
     assert ordered == ["name", "total"]
+    # `name` is also a column it reads, which must not pull it ahead of `total`.
+    assert order_columns_by_signature(_replaces_stage(), ["total", "name"]) == ["total", "name"]
     assert list_written_column_names(_replaces_stage().stage) == []
 
 

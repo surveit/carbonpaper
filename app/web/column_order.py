@@ -10,6 +10,7 @@ from typing import Any, Protocol, TypeVar
 
 from app.models import WorkflowStage
 from app.models.stages.signature import (
+    ReplacesSignature,
     list_read_column_names,
     list_rewritten_column_names,
     list_written_column_names,
@@ -63,6 +64,9 @@ def order_columns_by_signature(
     if workflow_stage is None:
         # No resolvable pinned version: nothing declares what this stage wrote,
         # so the frame's own order stands rather than an invented one.
+        return list(names)
+    if isinstance(workflow_stage.stage.signature, ReplacesSignature):
+        # Nothing flows through a replacing stage, so no output column is one it read.
         return list(names)
     read = list_read_column_names(workflow_stage.stage)
     rewritten = list_rewritten_column_names(workflow_stage.stage)
