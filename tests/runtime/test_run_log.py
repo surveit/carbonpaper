@@ -12,6 +12,7 @@ from typing import Any
 import pandas as pd
 import pytest
 
+from app.models.run_manifest import RunKind
 from app.core.stage_cache import StageCache
 from app.models import parse_stage, Stage, Workflow
 from app.models.stage import StageType
@@ -205,6 +206,7 @@ def test_a_run_writes_its_lifecycle_spine_to_the_run_dir(tmp_path):
         Workflow(stages=[source, _row_stage()]),
         injected_outputs={"src": pd.DataFrame({"x": [1, 2]})},
         stage_ids=["double"], run_dir=run_dir, project_id=run_dir.parent.parent.name,
+        kind=RunKind.production,
     )
 
     events = read_events_since(run_dir.parent.parent.name, run_dir.name, 0)

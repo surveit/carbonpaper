@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from app.core.agent.store import AgentSession
 from app.core.agent.usage import LlmUsage
-from app.models.records.run_manifest import PRODUCTION_RUNS
+from app.models.run_manifest import RunKind
 from app.services.project import list_project_listings
 from app.services.run import RunEntry, list_every_run_entry
 
@@ -170,7 +170,7 @@ def _entries_in_run(run: RunEntry, names: ProjectNames) -> list[SpendEntry]:
             source=SpendSource.run,
             project=_project_label(run.project, names),
             label=f"{run.run_id} · {record.stage_id}",
-            link=f"/runs/{run.run_id}" if run.area == PRODUCTION_RUNS else None,
+            link=f"/runs/{run.run_id}" if run.kind == RunKind.production else None,
             usage=record.llm_usage,
         )
         for record in manifest.stage_records

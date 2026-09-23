@@ -57,6 +57,7 @@ from app.web.run_index import (
 )
 from app.web.run_issues import build_run_issues
 from app.web.run_stage_panel import resolve_panel_links
+from app.models.run_manifest import RunKind
 
 router = APIRouter()
 
@@ -250,7 +251,7 @@ def run_events_page(
 
 @router.get("/project/{project_id}/runs/{run_id}", response_class=HTMLResponse)
 def run_detail(request: Request, project_id: str, run_id: str):
-    run_dir = resolve_run_dir(project_id, run_id)
+    run_dir = resolve_run_dir(project_id, run_id, RunKind.production)
     manifest = load_manifest(project_id, run_id)
     status_by_id = {s["stage_id"]: s.get("status", "") for s in manifest.get("stage_records", [])}
     graph = build_run_graph(project_id, manifest, status_by_id)
@@ -293,7 +294,7 @@ def run_detail(request: Request, project_id: str, run_id: str):
 
 @router.get("/project/{project_id}/runs/{run_id}/artifact/{filename:path}")
 def run_artifact(project_id: str, run_id: str, filename: str):
-    run_dir = resolve_run_dir(project_id, run_id)
+    run_dir = resolve_run_dir(project_id, run_id, RunKind.production)
     candidate = (run_dir / "artifacts" / filename).resolve()
     if not candidate.exists() or not str(candidate).startswith(str(run_dir.resolve())):
         raise HTTPException(status_code=404, detail="Artifact not found")

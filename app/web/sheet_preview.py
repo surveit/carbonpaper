@@ -17,6 +17,7 @@ from app.runtime.manifest import resolve_output_path
 from app.services.workspace import resolve_run_dir
 from app.web.stage_diff import FILTER_TYPES, FilterRowsDiff, build_stage_diff
 from app.web.canvas_payload import CanvasSheet, SheetRow
+from app.models.run_manifest import RunKind
 
 PREVIEW_ROWS = 8
 CELL_CHARS = 60
@@ -31,7 +32,7 @@ def build_canvas_sheets(project_id: str, run_id: str, run_branches: WorkflowRunB
                         reached: dict[StageId, set[RowOrdinal]],
                         stage_records: list[StageRecord],
                         columns_behind: ColumnsBehindByStage) -> list[CanvasSheet]:
-    run_dir = resolve_run_dir(project_id, run_id)
+    run_dir = resolve_run_dir(project_id, run_id, RunKind.production)
     output_by_id: OutputPathByStage = {
         record.stage_id: record.output_path for record in stage_records}
     dropped = run_branches.rows_dropped_per_stage

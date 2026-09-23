@@ -18,6 +18,7 @@ from app.core import files as file_store
 from app.services.frame_profile import read_file_shape
 from app.services.run_manifest_metadata import read_archived_run_ids
 from app.web.file_sizes import describe_bytes
+from app.models.run_manifest import RunKind
 
 
 class Distinction(BaseModel):
@@ -91,7 +92,7 @@ def count_runs_by_file(project_id: str) -> dict[str, list[str]]:
     # recorded — the version it pinned may since have been edited to name another file.
     # A manifest names the BYTES it read, not the record it read them from, so two
     # records holding identical bytes each count every run over either of them.
-    for entry in list_run_entries(project_id):
+    for entry in list_run_entries(project_id, RunKind.production):
         for sha256 in _read_input_hashes(entry.raw):
             runs[sha256].append(entry.run_id)
     return runs

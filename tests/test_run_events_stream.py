@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from app.models.run_manifest import RunKind
 from app.core.run_status import RunStatus
 from app.main import app
 from app.runtime.context import RunContext
@@ -27,7 +28,7 @@ def _seed_run(tmp_path: Path, monkeypatch, events: list[dict]) -> str:
     run_dir.mkdir(parents=True)
     manifest = create_run_manifest(
         [], RunContext(run_dir=run_dir),
-        run_id="r1", project_id=PROJECT, workflow_version=None,
+        run_id="r1", kind=RunKind.production, project_id=PROJECT, workflow_version=None,
         input_bindings={},
     )
     manifest.status = RunStatus.OK

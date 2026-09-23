@@ -30,7 +30,7 @@ BASE = f"/project/{PROJECT}/runs/{RUN}"
 
 def _manifest(status: str, stages: list[tuple[str, str]], **extra: object) -> dict:
     return {
-        "run_id": RUN, "started_at": "2026-07-30T12:04:56", "project": PROJECT,
+        "kind": "runs", "run_id": RUN, "started_at": "2026-07-30T12:04:56", "project": PROJECT,
         "workflow_version": None, "status": status,
         "human_review_queue_stats": {},
         "stage_records": [{"stage_id": sid, "status": st} for sid, st in stages],

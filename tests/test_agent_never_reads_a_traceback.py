@@ -16,7 +16,7 @@ _TRACEBACK = (
 _RUN_ID = "20260818T095116.917487"
 
 _MANIFEST = {
-    "run_id": _RUN_ID,
+    "kind": "runs", "run_id": _RUN_ID,
     "started_at": "2026-08-18T09:51:16",
     "project": "hate_on_activist_pages",
     "workflow_version": "20260812T074851.540189",

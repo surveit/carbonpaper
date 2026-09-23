@@ -22,6 +22,7 @@ from app.services.workspace import resolve_run_dir
 from app.web import input_files_view
 from app.web.config import templates
 from app.web.input_files_view import Basis, InputFileSlice, InputFilesView
+from app.models.run_manifest import RunKind
 
 router = APIRouter()
 
@@ -55,7 +56,7 @@ def input_file_slice(project_id: str, run_id: str, stage: str, row: int,
     slice_ = _find_file(_load(project_id, run_id, stage, row, column), input)
     wanted = _choose_columns(slice_, columns)
     frame = read_frame_table(
-        resolve_run_dir(project_id, run_id) / "outputs" / f"{slice_.stage_id}.parquet")
+        resolve_run_dir(project_id, run_id, RunKind.production) / "outputs" / f"{slice_.stage_id}.parquet")
     return StreamingResponse(
         io.StringIO(_render_as_csv(frame, _choose_rows(slice_, rows), wanted)),
         media_type="text/csv",

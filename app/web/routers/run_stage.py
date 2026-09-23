@@ -36,6 +36,7 @@ from app.web.panel_links import RectangleRequest, read_rectangle_query
 from app.web.run_stage_panel import not_executed_panel, resolve_panel_links
 from app.web.run_stage_view import build_run_stage_panel
 from app.web.stage_diff import StageDiff, build_stage_diff
+from app.models.run_manifest import RunKind
 
 router = APIRouter()
 
@@ -74,7 +75,7 @@ def run_stage_rows(
     ordinals: str | None = None, rows: str | None = None,
     columns: list[str] | None = Query(default=None),
 ):
-    run_dir = resolve_run_dir(project_id, run_id)
+    run_dir = resolve_run_dir(project_id, run_id, RunKind.production)
     manifest = load_manifest(project_id, run_id)
     stage_record = manifest_stage(project_id, run_id, stage_id)
     pinned = run_service.load_pinned_stage_def(project_id, manifest, stage_id)
@@ -168,7 +169,7 @@ def run_stage_rows_csv(
     project_id: str, run_id: str, stage_id: str, rows: str | None = None,
     columns: list[str] | None = Query(default=None),
 ):
-    run_dir = resolve_run_dir(project_id, run_id)
+    run_dir = resolve_run_dir(project_id, run_id, RunKind.production)
     stage_record = manifest_stage(project_id, run_id, stage_id)
     requested = _read_rectangle(None, rows, columns)
     output_path = stage_record.get("output_path")
@@ -191,7 +192,7 @@ def run_stage_rows_csv(
 def run_stage_simulate(
     request: Request, project_id: str, run_id: str, stage_id: str
 ):
-    run_dir = resolve_run_dir(project_id, run_id)
+    run_dir = resolve_run_dir(project_id, run_id, RunKind.production)
     manifest = load_manifest(project_id, run_id)
     # The page executes a stage under this run's name, so it offers only what the
     # run pinned. No resolvable version, or a type the runner cannot preview, and
@@ -243,7 +244,7 @@ def run_stage_simulate(
 async def run_stage_scratch_preview(
     request: Request, project_id: str, run_id: str, stage_id: str
 ):
-    run_dir = resolve_run_dir(project_id, run_id)
+    run_dir = resolve_run_dir(project_id, run_id, RunKind.production)
     manifest = load_manifest(project_id, run_id)
 
     try:

@@ -21,6 +21,7 @@ from app.models.run_manifest import read_run_bindings
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.runtime.cancellation import discard_cancel
 from app.models.records.run_manifest import RunManifest
+from app.models.run_manifest import RunKind
 from app.runtime.manifest import (
     RunEntry as RunEntry,
     list_run_entries as list_run_entries,
@@ -43,14 +44,8 @@ from app.services.workspace import resolve_run_dir, resolve_runs_dir
 
 def list_every_run_entry() -> list[RunEntry]:
     """Every run the store holds. One outlives the project's stages, and so does its cost."""
-    entries = [read_run_entry(*_split_run_key(key)) for key in RunManifest.list_ids()]
-    return sorted(entries, key=lambda entry: (entry.project, entry.area, entry.run_id))
-
-
-def _split_run_key(key: str) -> tuple[str, str, str]:
-    """`RunManifest.compose_id` undone. A run id may hold a slash; the first two segments may not."""
-    project_id, area, run_id = key.split("/", 2)
-    return project_id, area, run_id
+    entries = [read_run_entry(*key.split("/", 1)) for key in RunManifest.list_ids()]
+    return sorted(entries, key=lambda entry: (entry.project, entry.run_id))
 
 
 def start_run(
@@ -107,7 +102,7 @@ def _prepare(
         bust_cache=bust_cache,
     )
     write_run_review_decisions(
-        project_id, resolve_run_dir(project_id, str(prepared["run_id"])), workflow)
+        project_id, resolve_run_dir(project_id, str(prepared["run_id"]), RunKind.production), workflow)
     return prepared
 
 
@@ -122,10 +117,10 @@ def resume(project_id: str, run_id: str) -> None:
     discard_cancel(project_id, run_id)
     workflow = Workflow(stages=load_version_stages(project_id, workflow_version))
     # Re-resolved, so a resume carries what was decided since the halt.
-    write_run_review_decisions(project_id, resolve_run_dir(project_id, run_id), workflow)
+    write_run_review_decisions(project_id, resolve_run_dir(project_id, run_id, RunKind.production), workflow)
     _run_in_background(
         resume_run,
-        resolve_run_dir(project_id, run_id),
+        resolve_run_dir(project_id, run_id, RunKind.production),
         project_id,
         run_id,
         workflow,
@@ -134,7 +129,7 @@ def resume(project_id: str, run_id: str) -> None:
 
 
 def read_pinned_version(project_id: str, run_id: str) -> str:
-    workflow_version = read_run_manifest(project_id, run_id).workflow_version
+    workflow_version = read_run_manifest(project_id, run_id, RunKind.production).workflow_version
     if not workflow_version:
         raise RunVersionUnresolvableError(
             f"Run '{run_id}' of '{project_id}' records no workflow version in its "
@@ -145,22 +140,22 @@ def read_pinned_version(project_id: str, run_id: str) -> str:
 
 
 def read_stage_output(project_id: str, run_id: str, stage_id: str) -> pd.DataFrame:
-    run_dir = resolve_run_dir(project_id, run_id)
+    run_dir = resolve_run_dir(project_id, run_id, RunKind.production)
     _validate_run_exists(project_id, run_id)
-    return read_stage_output_frame(project_id, run_dir, stage_id)
+    return read_stage_output_frame(project_id, run_dir, stage_id, RunKind.production)
 
 
 def read_stage_output_table(project_id: str, run_id: str, stage_id: str) -> pa.Table:
-    run_dir = resolve_run_dir(project_id, run_id)
+    run_dir = resolve_run_dir(project_id, run_id, RunKind.production)
     _validate_run_exists(project_id, run_id)
-    return read_stage_output_frame_table(project_id, run_dir, stage_id)
+    return read_stage_output_frame_table(project_id, run_dir, stage_id, RunKind.production)
 
 
 def read_output_column_counts(project_id: str, manifest: Mapping[str, Any]) -> dict[str, int]:
     run_id = manifest.get("run_id")
     if not run_id:
         return {}
-    run_dir = resolve_run_dir(project_id, str(run_id))
+    run_dir = resolve_run_dir(project_id, str(run_id), RunKind.production)
     # Off the frames the run wrote, never off what the version's signatures promise:
     # most stage types do not trim their output frame to the schema they declared, so
     # the frame may carry columns the promise never named. A frame that cannot be read
@@ -173,12 +168,12 @@ def read_output_column_counts(project_id: str, manifest: Mapping[str, Any]) -> d
 
 
 def read_run_status(project_id: str, run_id: str) -> dict[str, Any]:
-    return read_run_manifest(project_id, run_id).to_dict()
+    return read_run_manifest(project_id, run_id, RunKind.production).to_dict()
 
 
 def read_run_status_without_tracebacks(project_id: str, run_id: str) -> dict[str, Any]:
     """What an agent may read: the run page keeps the traceback, behind its own disclosure."""
-    return read_run_manifest(project_id, run_id).to_dict_without_tracebacks()
+    return read_run_manifest(project_id, run_id, RunKind.production).to_dict_without_tracebacks()
 
 
 def _count_output_columns(run_dir: Path, output_path: str | None) -> int | None:
@@ -195,7 +190,7 @@ def _count_output_columns(run_dir: Path, output_path: str | None) -> int | None:
 
 def _validate_run_exists(project_id: str, run_id: str) -> None:
     """Raises RunNotFoundError unless the project recorded a run of this id."""
-    read_run_manifest(project_id, run_id)
+    read_run_manifest(project_id, run_id, RunKind.production)
 
 
 def resolve_version(project_id: str, version_id: str | None) -> str:

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.persistence import get_store
-from app.models.records.run_manifest import PRODUCTION_RUNS, RunManifest
+from app.models.records.run_manifest import RunManifest
 
 COLLECTION = "run"
 
@@ -48,8 +48,8 @@ def manifest_text(project: str | Path, run_id: str) -> str:
     return json.dumps(read_manifest(project, run_id))
 
 
-def _key(project: str | Path, run_id: str, area: str = PRODUCTION_RUNS) -> str:
-    return RunManifest.compose_id(_name(project), run_id, area)
+def _key(project: str | Path, run_id: str) -> str:
+    return RunManifest.compose_id(_name(project), run_id)
 
 
 def _name(project: str | Path) -> str:

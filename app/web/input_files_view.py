@@ -27,6 +27,7 @@ from app.services.workspace import resolve_run_dir
 from app.web.file_detail_view import ColumnRow, build_column_row
 from app.web.file_sizes import describe_bytes
 from app.web.column_walk import ColumnAt, find_columns_behind
+from app.models.run_manifest import RunKind
 
 # Rows shown beside the relevant ones when a reader widens the preview to the frame.
 OTHER_ROWS_SHOWN = 40
@@ -102,8 +103,8 @@ def load_input_files(project_id: str, run_id: str,
         project_id, run_service.read_pinned_version(project_id, run_id)))
     behind = find_columns_behind(workflow.index_workflow_stages_by_id(), set(reached),
                                  ColumnAt(citation.stage_id, citation.column))
-    outputs = resolve_run_dir(project_id, run_id) / "outputs"
-    manifest = read_run_manifest(project_id, run_id)
+    outputs = resolve_run_dir(project_id, run_id, RunKind.production) / "outputs"
+    manifest = read_run_manifest(project_id, run_id, RunKind.production)
     reading = [placed.id for placed in workflow.list_workflow_stages()
                if isinstance(placed.stage, InputDataStage) and placed.id in reached]
     files = [_build_one_file(outputs, manifest, stage_id, sorted(reached[stage_id]),

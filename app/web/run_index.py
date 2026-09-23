@@ -19,6 +19,7 @@ from app.web.file_sizes import describe_bytes
 from app.web.panel_links import AppPanelLinks
 from app.web.run_header import VersionNote, describe_run_duration, read_version_note
 from app.web.stage_strip import StageStrip, build_stage_strip, describe_stage_counts
+from app.models.run_manifest import RunKind
 
 
 class RunInputCell(BaseModel):
@@ -137,7 +138,7 @@ def build_run_status_choices(rows: list[RunIndexRow]) -> list[RunStatusChoice]:
 def _count_runs_by_view(project_id: str) -> dict[str, int]:
     hidden = read_archived_run_ids(project_id)
     counts = {view: 0 for view in RUN_VIEWS}
-    for entry in list_run_entries(project_id):
+    for entry in list_run_entries(project_id, RunKind.production):
         counts[_run_view(entry, hidden)] += 1
     return counts
 
@@ -190,7 +191,7 @@ class _IndexContext(BaseModel):
 def _build_every_row(project_id: str, view: str | None) -> list[RunIndexRow]:
     hidden = read_archived_run_ids(project_id)
     entries = [
-        entry for entry in reversed(list_run_entries(project_id))
+        entry for entry in reversed(list_run_entries(project_id, RunKind.production))
         if _matches_view(entry, hidden, view)
     ]
     bindings = {entry.run_id: read_input_bindings(entry.raw or {}) for entry in entries}

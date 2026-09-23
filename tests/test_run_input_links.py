@@ -9,7 +9,8 @@ import pytest
 from app.core.files import delete_file, resolve_stored_path, save_upload
 from app.runtime.stages.input_data import _weigh_file
 from app.core.run_status import RunStatus
-from app.models.records.run_manifest import PRODUCTION_RUNS, RunManifest
+from app.models.records.run_manifest import RunManifest
+from app.models.run_manifest import RunKind
 from app.services import workspace
 from app.services.project import create_project
 from app.web.run_index import build_run_index_rows
@@ -31,7 +32,7 @@ def _record_run(project_id, sha256, run_id="20260812T120000", path="/anywhere/po
                 file_id=None):
     """`file_id=None` is every run recorded before the manifest carried one."""
     RunManifest(
-        id=RunManifest.compose_id(project_id, run_id, PRODUCTION_RUNS),
+        id=RunManifest.compose_id(project_id, run_id), kind=RunKind.production,
         run_id=run_id, started_at="2026-08-12T12:00:00", project=project_id,
         workflow_version=None, human_review_queue_stats={},
         status=RunStatus.OK, stage_records=[],

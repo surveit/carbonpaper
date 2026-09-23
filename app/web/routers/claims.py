@@ -12,6 +12,7 @@ from app.models.records.claims import Claim
 from app.services import claim_review_run
 from app.services import claims as claims_service
 from app.services import project as project_service
+from app.models.run_manifest import RunKind
 from app.services import run as run_service
 from app.services.errors import ClaimRefused, ClaimReviewRefused
 from app.web.breadcrumbs import Crumb, build_run_child_crumbs, build_section_crumbs
@@ -152,7 +153,7 @@ def _write_the_rewrite(project_id: str, claim_id: str, text: str) -> Claim:
 def _read_whether_the_run_read_everything(project_id: str, claim_id: str) -> bool:
     run_id = claims_service.load_claim(project_id, claim_id).citation.run_id
     return claims_service.read_whether_the_run_read_everything(
-        run_service.read_run_manifest(project_id, run_id))
+        run_service.read_run_manifest(project_id, run_id, RunKind.production))
 
 
 def _read_model(project_id: str) -> str:

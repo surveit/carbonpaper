@@ -21,6 +21,7 @@ from app.evals.scoring import score_expected_outputs
 from app.models import Workflow, WorkflowStage
 from app.models.records.eval_config import EvalConfig
 from app.models.records.eval_run import EvalRun
+from app.models.run_manifest import RunKind
 from app.core.frames import table_to_frame
 from app.runtime.executor import execute_subset
 from app.evals.compatibility import CompatibilityReport, validate_eval_compatibility
@@ -99,7 +100,8 @@ def _score_run(
         outputs = execute_subset(
             workflow, stage_ids=run.settings.frontier, run_dir=run_dir,
             injected_outputs=_build_injected_outputs(config, override, target, dataset),
-            project_id=project_id, workflow_version=run.workflow_version)
+            project_id=project_id, kind=RunKind.eval,
+            workflow_version=run.workflow_version)
         score = score_expected_outputs(config, override, target, dataset,
                                        table_to_frame(outputs[config.target_stage]))
     except (SubsetRunError, EvalGrainViolationError) as exc:

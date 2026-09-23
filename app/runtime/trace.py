@@ -15,6 +15,7 @@ from app.models.stage import StageType, is_grain_and_order_preserving
 from app.runtime.lineage import EdgeKind, RowLineage, RowParent
 from app.runtime.lineage_sidecar import read_lineage_sidecar
 from app.models.run_manifest import read_input_bindings
+from app.models.run_manifest import RunKind
 from app.runtime.manifest import read_run_manifest, resolve_output_path
 
 
@@ -81,7 +82,8 @@ class Trace:
 
 def _load_manifest(run_dir: Path) -> dict[str, Any]:
     """The run's recorded manifest, found by the (project, run id) its dir names."""
-    return read_run_manifest(run_dir.parent.parent.name, run_dir.name).to_dict()
+    return read_run_manifest(run_dir.parent.parent.name, run_dir.name,
+                             RunKind.production).to_dict()
 
 
 def _count_files_read(manifest: dict[str, Any]) -> Counter[str]:

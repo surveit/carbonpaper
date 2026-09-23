@@ -25,6 +25,7 @@ from app.services.claim_review import load_claim_review
 from app.services.claim_review_run import read_review_state
 from app.services.claim_shapes import load_claim_shape
 from app.services.errors import ClaimRefused
+from app.models.run_manifest import RunKind
 from app.services.run import read_run_manifest
 from app.web.citation_links import render_source_url
 from app.web.claims_view import describe_what_blocks_the_run
@@ -137,7 +138,7 @@ def _build_legend() -> list[LegendRow]:
 
 
 def _read_whether_the_run_read_everything(project_id: ID, claim: Claim) -> bool:
-    manifest = read_run_manifest(project_id, claim.citation.run_id)
+    manifest = read_run_manifest(project_id, claim.citation.run_id, RunKind.production)
     return claims_service.read_whether_the_run_read_everything(manifest)
 
 

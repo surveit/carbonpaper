@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from app.models.run_manifest import RunKind
 from app.core.run_status import RunStatus
 from app.core.timestamp_ids import read_orderable_stamp
 from app.runtime.manifest import list_run_entries
@@ -86,7 +87,7 @@ def read_run_summary(project_id: str) -> RunSummary:
     real = tests = 0
     headline: ProjectStatus | None = None
     starts: list[datetime] = []
-    for entry in reversed(list_run_entries(project_id)):
+    for entry in reversed(list_run_entries(project_id, RunKind.production)):
         # Read off the RAW payload, so a run written before a field was renamed
         # still counts; one that is not even JSON is dropped, not counted
         # 'corrupt' (as the project's own runs summary does), because a card's

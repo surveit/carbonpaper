@@ -11,12 +11,14 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from app.models.run_manifest import RunKind
 from app.core.run_status import RunStatus, StageStatus
 from app.models import parse_stage
 from app.models.stage_contribution import StageContribution
 from app.models.records.run_manifest import RunManifest
 from app.runtime.context import RunContext
-from app.runtime.manifest import create_run_manifest
+from app.core.errors import RunNotFoundError
+from app.runtime.manifest import create_run_manifest, read_run_manifest
 from conftest import place_stage
 
 GOLDENS = Path(__file__).parent / "goldens"
@@ -87,7 +89,7 @@ def test_minted_manifest_omits_the_run_level_optionals():
     manifest = create_run_manifest(
         [place_stage(stage)], RunContext(run_dir=None),
         run_id="r", project_id="p", workflow_version="v",
-        input_bindings={})
+        input_bindings={}, kind=RunKind.production)
     dumped = manifest.to_dict()
 
     assert dumped["status"] == RunStatus.RUNNING
@@ -118,7 +120,7 @@ def test_clear_halt_drops_halted_at_from_serialization():
 def test_recorded_tallies_survive_serialization_on_a_partial_manifest():
     """`exclude_unset` drops an in-place mutation; `record_dropped_columns` marks the field set."""
     manifest = RunManifest(
-        run_id="r", started_at="t", project="p", workflow_version="v",
+        run_id="r", kind=RunKind.production, started_at="t", project="p", workflow_version="v",
         status=RunStatus.RUNNING, human_review_queue_stats={}, stage_records=[])
     # dropped_columns defaulted, NOT in the set-fields yet.
     assert "dropped_columns" not in manifest.to_dict()
@@ -144,3 +146,33 @@ def test_empty_contribution_is_the_default():
     empty = StageContribution()
     assert empty.llm_usage is None and empty.human_review_queue_stats is None
     assert empty.row_errors == [] and empty.dropped_columns == []
+
+
+# ─── A reader is never handed a run of the other kind ────────────────────────
+
+def _store_run_of_kind(kind: RunKind, run_id: str = "r") -> None:
+    RunManifest(
+        id=RunManifest.compose_id("p", run_id), run_id=run_id, kind=kind,
+        started_at="2026-09-21T14:44:12", project="p", workflow_version="v",
+        human_review_queue_stats={}, status=RunStatus.OK, stage_records=[],
+    ).save()
+
+
+def test_asking_for_a_triggered_run_refuses_an_eval_one_of_the_same_id():
+    _store_run_of_kind(RunKind.eval)
+
+    with pytest.raises(RunNotFoundError, match="is a eval_run run"):
+        read_run_manifest("p", "r", RunKind.production)
+
+
+def test_asking_for_an_eval_run_refuses_a_triggered_one_of_the_same_id():
+    _store_run_of_kind(RunKind.production)
+
+    with pytest.raises(RunNotFoundError, match="is a runs run"):
+        read_run_manifest("p", "r", RunKind.eval)
+
+
+def test_the_kind_it_was_recorded_under_reads_back():
+    _store_run_of_kind(RunKind.eval)
+
+    assert read_run_manifest("p", "r", RunKind.eval).kind == RunKind.eval

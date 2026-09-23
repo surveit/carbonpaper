@@ -9,6 +9,7 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 import app.services.run as run_service
+from app.models.run_manifest import RunKind
 from app.core.errors import ContributorNotInFanIn
 from app.models.stage import StageType
 from app.models.workflow import Workflow
@@ -45,13 +46,13 @@ def scoped(projects_root):
     set_stages(PROJECT, stage_specs(data))
     save_version(PROJECT, message="fixture")
     run_id = str(run_service.execute(PROJECT)["run_id"])
-    manifest = read_run_manifest(PROJECT, run_id).to_dict()
+    manifest = read_run_manifest(PROJECT, run_id, RunKind.production).to_dict()
     order = [r["stage_id"] for r in manifest["stage_records"]]
     rows = {r["stage_id"]: r["output_row_count"] for r in manifest["stage_records"]}
     stages = load_version_stages(PROJECT, read_pinned_version(PROJECT, run_id))
     workflow = Workflow(stages=stages)
     placed = {s.id: workflow.find_workflow_stage(s.id) for s in stages}
-    run_dir = resolve_run_dir(PROJECT, run_id)
+    run_dir = resolve_run_dir(PROJECT, run_id, RunKind.production)
     return ScopedRun(run_id, run_dir, rows,
                      reconstruct_run_branches(run_dir, placed, order, rows))
 

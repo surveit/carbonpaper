@@ -106,6 +106,10 @@ So each row inherits its parents' branches and adds its own, walking the run in 
 by stage position then source line so that **two rows that made the same decisions hold the same
 tuple**. That equality is what the drawing is made of: rows on identical paths are one node.
 
+The walk covers the stages a run executed, which for an eval's subset run starts mid-workflow.
+A stage whose input the run did not execute inherits nothing — its rows were injected, and this
+run holds no record of a branch behind them — so its rows start on the empty path.
+
 Sorting is `_rank_branches`. Without it, two rows that took the same decisions in the same order
 could still hold their branches in different orders and never compare equal.
 

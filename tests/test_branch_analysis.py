@@ -7,6 +7,7 @@ import pytest
 import app.services.run as run_service
 from app.models.citations import StageOutputCellCitation
 from app.models.branch_analysis import BranchReason
+from app.models.run_manifest import RunKind
 from app.runtime.manifest import read_run_manifest
 from app.runtime.branch_analysis import (
     find_reference_inputs,
@@ -38,13 +39,13 @@ def scoped(projects_root):
 
 
 def _read(run_id: str):
-    manifest = read_run_manifest(PROJECT, run_id).to_dict()
+    manifest = read_run_manifest(PROJECT, run_id, RunKind.production).to_dict()
     order = [r["stage_id"] for r in manifest["stage_records"]]
     rows = {r["stage_id"]: r["output_row_count"] for r in manifest["stage_records"]}
     stages = load_version_stages(PROJECT, read_pinned_version(PROJECT, run_id))
     workflow = Workflow(stages=stages)
     placed = {s.id: workflow.find_workflow_stage(s.id) for s in stages}
-    return reconstruct_run_branches(resolve_run_dir(PROJECT, run_id), placed, order, rows)
+    return reconstruct_run_branches(resolve_run_dir(PROJECT, run_id, RunKind.production), placed, order, rows)
 
 
 def cite(stage_id: str, column: str, ordinal: int, value) -> StageOutputCellCitation:
@@ -164,3 +165,20 @@ def test_a_filter_nobody_wrote_a_predicate_for_still_names_its_branches():
     ]]).index_workflow_stages_by_id()
 
     assert _name_what_was_kept(stages["paid"]) == "kept by the predicate"
+
+
+def test_a_frontier_starting_mid_workflow_reconstructs_without_its_input(scoped):
+    """An eval's subset run injects its first stage's output rather than executing it."""
+    _, run_id = scoped
+    manifest = read_run_manifest(PROJECT, run_id, RunKind.production).to_dict()
+    rows = {r["stage_id"]: r["output_row_count"] for r in manifest["stage_records"]}
+    stages = load_version_stages(PROJECT, read_pinned_version(PROJECT, run_id))
+    workflow = Workflow(stages=stages)
+    placed = {s.id: workflow.find_workflow_stage(s.id) for s in stages}
+    frontier = ["size_band", "funded"]
+
+    run = reconstruct_run_branches(
+        resolve_run_dir(PROJECT, run_id, RunKind.production), placed, frontier,
+        {sid: rows[sid] for sid in frontier})
+
+    assert len(run.branch_paths["size_band"]) == rows["size_band"]

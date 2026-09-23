@@ -16,6 +16,7 @@ from app.core.frames import table_to_frame
 from app.runtime.stages.input_data import read_input_data
 from app.services.versioning import list_versions, load_version, load_version_stages
 from app.services.workspace import resolve_run_dir
+from app.models.run_manifest import RunKind
 
 
 def run_workflow_test(
@@ -37,7 +38,7 @@ def run_workflow_test(
     injected = _read_source_slices(workflow_stage, executing, limit=limit, offset=offset)
 
     run_id = mint_timestamp_id()
-    run_dir = resolve_run_dir(project_id, run_id)
+    run_dir = resolve_run_dir(project_id, run_id, RunKind.production)
 
     executed_ids = [stage.id for stage in executing]
     limits, offsets = _source_row_windows(executing, limit, offset)
@@ -85,7 +86,8 @@ def _run_frontier(
             run_dir=run_dir,
             params=RunParameters(limits=limits, offsets=offsets,
                                  queue_auto_approve=True, is_test_run=True),
-            project_id=project_id, workflow_version=workflow_version,
+            project_id=project_id,
+            kind=RunKind.production, workflow_version=workflow_version,
             identity=RunIdentity(project=project_id, run_id=run_id))
     except SubsetRunError as exc:
         return False, str(exc)

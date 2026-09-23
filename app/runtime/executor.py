@@ -21,6 +21,7 @@ from app.models.run_manifest import (
     StageRecord,
 )
 from app.models.stage_contribution import RowError, StageContribution
+from app.models.run_manifest import RunKind
 from app.models.run_parameters import RunParameters
 from app.core.run_status import RunStatus, StageStatus
 
@@ -75,6 +76,7 @@ def execute_subset(
     run_dir: Path,
     params: RunParameters = RunParameters(),
     project_id: str,
+    kind: RunKind,
     workflow_version: str | None = None,
     identity: RunIdentity | None = None,
 ) -> dict[str, pd.DataFrame]:
@@ -88,10 +90,7 @@ def execute_subset(
     ctx = _subset_ctx(run_dir, identity, params)
     manifest = create_run_manifest(
         ordered, ctx, run_id=run_dir.name, project_id=project_id,
-        workflow_version=workflow_version, input_bindings={},
-        # The dir the run lives under is what separates a production run from an
-        # eval one; the record keeps that separation.
-        area=run_dir.parent.name)
+        workflow_version=workflow_version, input_bindings={}, kind=kind)
     write_manifest(manifest)
     outputs: dict[str, pa.Table] = {
         sid: frame_to_table(frame) for sid, frame in injected_outputs.items()

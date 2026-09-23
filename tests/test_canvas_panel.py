@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.services.run as run_service
+from app.models.run_manifest import RunKind
 from app.main import app
 from app.services.scope import read_run_branches
 from app.services.workspace import resolve_run_dir
@@ -229,7 +230,7 @@ def _build_filter_diff(run_id, stage_id, at_rows, rows_shown):
     output_by_id = {entry.stage_id: entry.output_path for entry in record.stage_records}
     return build_stage_diff(
         read_run_branches(PROJECT, run_id).stages[stage_id],
-        resolve_run_dir(PROJECT, run_id), output_by_id[stage_id], output_by_id,
+        resolve_run_dir(PROJECT, run_id, RunKind.production), output_by_id[stage_id], output_by_id,
         rows_shown=rows_shown, at_rows=at_rows)
 
 

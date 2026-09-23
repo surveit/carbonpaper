@@ -6,6 +6,7 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
+from app.models.run_manifest import RunKind
 from app.core.json_types import JsonDict
 from app.models import AbstractStage, WorkflowStage
 from app.models.schema import StageId
@@ -105,7 +106,7 @@ def build_run_stage_panel(
     stage_record: JsonDict, scope: TraceScope | None = None,
     whole_frame: bool = False, only_pane: str = "",
 ) -> RunStagePanel:
-    run_dir = resolve_run_dir(project_id, run_id)
+    run_dir = resolve_run_dir(project_id, run_id, RunKind.production)
     pinned = run_service.load_pinned_stage_def(project_id, manifest, stage_id)
     stage_def = None if pinned.workflow_stage is None else pinned.workflow_stage.stage
     output_by_id = {

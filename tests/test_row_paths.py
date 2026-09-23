@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 
 import app.services.run as run_service
+from app.models.run_manifest import RunKind
 from app.models.branch_analysis import BranchReason
 from app.models.workflow import Workflow
 from app.runtime.branch_analysis import reconstruct_run_branches
@@ -28,14 +29,14 @@ def scoped(projects_root):
     set_stages(PROJECT, stage_specs(data))
     save_version(PROJECT, message="fixture")
     run_id = str(run_service.execute(PROJECT)["run_id"])
-    manifest = read_run_manifest(PROJECT, run_id).to_dict()
+    manifest = read_run_manifest(PROJECT, run_id, RunKind.production).to_dict()
     order = [r["stage_id"] for r in manifest["stage_records"]]
     rows = {r["stage_id"]: r["output_row_count"] for r in manifest["stage_records"]}
     stages = load_version_stages(PROJECT, read_pinned_version(PROJECT, run_id))
     workflow = Workflow(stages=stages)
     placed = {s.id: workflow.find_workflow_stage(s.id) for s in stages}
     return reconstruct_run_branches(
-        resolve_run_dir(PROJECT, run_id), placed, order, rows)
+        resolve_run_dir(PROJECT, run_id, RunKind.production), placed, order, rows)
 
 
 def _behind(run, stage: str, row: int, walked: dict[str, int] | None = None):

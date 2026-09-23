@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.services.workspace as workspace
+from app.models.run_manifest import RunKind
 from app.core.agent.usage import LlmUsage
 from app.main import app
 from app.runtime.manifest import read_run_manifest, write_manifest
@@ -116,7 +117,7 @@ def test_a_restarted_pending_run_does_not_claim_cache_replay(project: Path) -> N
 def test_cache_replay_omits_a_percentage_without_output_rows(project: Path) -> None:
     _run(project)
     run_id = _run(project)
-    manifest = read_run_manifest(project.name, run_id)
+    manifest = read_run_manifest(project.name, run_id, RunKind.production)
     record = manifest.find_stage_record("judge")
     assert record is not None
     record.output_row_count = 0

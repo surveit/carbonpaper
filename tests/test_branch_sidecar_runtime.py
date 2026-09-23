@@ -4,6 +4,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from app.models.run_manifest import RunKind
 from app.core.frames import read_frame_table
 from app.models import Stage, Workflow, parse_stage
 from app.runtime.branches import BRANCH_SCHEMA, RowBranches
@@ -68,7 +69,7 @@ def _filter(sid: str, input_id: str, code: str) -> Stage:
 
 def _run(workflow: Workflow, stage_ids: list[str], run_dir):
     execute_subset(workflow, injected_outputs={}, stage_ids=stage_ids,
-                   run_dir=run_dir, project_id=run_dir.parent.parent.name)
+                   run_dir=run_dir, kind=RunKind.production, project_id=run_dir.parent.parent.name)
 
 
 def _sidecar(run_dir, stage_id: str) -> RowBranches:

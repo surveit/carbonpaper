@@ -34,6 +34,7 @@ from app.web.config import render_row_number, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.services.workspace import resolve_run_dir
 from app.web.loading import load_manifest, load_run_record
+from app.models.run_manifest import RunKind
 
 router = APIRouter()
 
@@ -88,7 +89,7 @@ _VIA = Query(
 def _walk_row(project_id: str, run_id: str, stage_id: str, row: int,
               via: list[str] | None) -> Trace:
     """Crosses every fan-in it meets; `via` only says which contributor to take there."""
-    run_dir = resolve_run_dir(project_id, run_id)
+    run_dir = resolve_run_dir(project_id, run_id, RunKind.production)
     try:
         return trace_row(run_dir, stage_id, row, _read_choices(via))
     except StageNotInRun as exc:

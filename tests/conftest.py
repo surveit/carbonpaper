@@ -13,6 +13,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
+from app.models.run_manifest import RunKind
 from app.core.errors import LLMError
 from app.core.stage_cache import ReadOnlyStageCache
 from app.models import Stage, TableSchema, Workflow, WorkflowStage, WorkflowStageInput
@@ -57,7 +58,7 @@ def resume_like_the_app(project_dir: Path, run_id: str) -> tuple[Workflow, str]:
 
 
 def resumed_stages(project_dir: Path, run_id: str) -> tuple[Workflow, str]:
-    workflow_version = read_run_manifest(project_dir.name, run_id).workflow_version
+    workflow_version = read_run_manifest(project_dir.name, run_id, RunKind.production).workflow_version
     assert workflow_version, f"run {run_id} records no workflow_version"
     return _load_version_workflow(project_dir, workflow_version), workflow_version
 

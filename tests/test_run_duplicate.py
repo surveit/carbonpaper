@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.services.run as run_service
+from app.models.run_manifest import RunKind
 from app.core.files import ProjectFile, save_upload
 from app.main import app
 from app.runtime.manifest import read_run_manifest
@@ -71,7 +72,7 @@ def test_duplicate_opens_on_the_copied_runs_file_and_row_limit(project, tmp_path
     assert page.status_code == 200
     assert f'<option value="{file_id}" selected' in page.text
     assert 'placeholder="all"\n             value="3"' in page.text
-    assert f'value="{read_run_manifest("demo", run_id).workflow_version}" selected' in page.text
+    assert f'value="{read_run_manifest("demo", run_id, RunKind.production).workflow_version}" selected' in page.text
 
 
 def test_duplicate_launches_nothing(project):
@@ -87,7 +88,7 @@ def test_duplicate_carries_a_row_cap_no_input_row_holds(project):
     """The form's own fields cap file inputs; every other cap rides hidden."""
     client.post("/project/demo/run", data={"binding__load": ""}, follow_redirects=False)
     run_id = _run_id(project)
-    record = read_run_manifest("demo", run_id).to_dict()
+    record = read_run_manifest("demo", run_id, RunKind.production).to_dict()
     record["parameters"]["limits"] = {"classify": 25}
     store_manifest(project, run_id, record)
 
@@ -96,7 +97,7 @@ def test_duplicate_carries_a_row_cap_no_input_row_holds(project):
     assert ('<input type="hidden" class="js-carried-limit" name="limit__classify" '
             'value="25">') in page.text
     assert build_run_input_choices(
-        "demo", None, read_run_manifest("demo", run_id)).carried_limits == {"classify": 25}
+        "demo", None, read_run_manifest("demo", run_id, RunKind.production)).carried_limits == {"classify": 25}
 
 
 def test_a_cap_an_input_row_holds_is_not_also_carried_hidden(project):
@@ -127,7 +128,7 @@ def test_a_file_this_project_no_longer_holds_leaves_the_row_on_its_authored_path
     client.post("/project/demo/run", data={"binding__load": file_id},
                 follow_redirects=False)
     run_id = _run_id(project)
-    record = read_run_manifest("demo", run_id).to_dict()
+    record = read_run_manifest("demo", run_id, RunKind.production).to_dict()
     record["parameters"]["run_bindings"]["load"] = {"path": "/gone/b.csv", "format": "csv"}
     store_manifest(project, run_id, record)
 
@@ -172,7 +173,7 @@ def test_a_binding_recorded_under_the_old_sha256_directory_still_matches(
     client.post("/project/demo/run", data={"binding__load": file_id},
                 follow_redirects=False)
     run_id = _run_id(project)
-    record = read_run_manifest("demo", run_id).to_dict()
+    record = read_run_manifest("demo", run_id, RunKind.production).to_dict()
     stored = ProjectFile.load(file_id)
     record["parameters"]["run_bindings"]["load"]["path"] = str(
         tmp_path / "files" / stored.sha256 / stored.filename)

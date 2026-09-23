@@ -6,6 +6,7 @@ import shutil
 import pytest
 
 import app.services.run as run_service
+from app.models.run_manifest import RunKind
 from app.models.workflow import Workflow
 from app.runtime.branch_analysis import (
     BranchCacheStamp,
@@ -34,14 +35,14 @@ def run_facts(projects_root):
     set_stages(PROJECT, stage_specs(data))
     save_version(PROJECT, message="fixture")
     run_id = str(run_service.execute(PROJECT)["run_id"])
-    manifest = read_run_manifest(PROJECT, run_id).to_dict()
+    manifest = read_run_manifest(PROJECT, run_id, RunKind.production).to_dict()
     order = [r["stage_id"] for r in manifest["stage_records"]]
     rows = {r["stage_id"]: r["output_row_count"] for r in manifest["stage_records"]}
     version_id = read_pinned_version(PROJECT, run_id)
     stages = load_version_stages(PROJECT, version_id)
     workflow = Workflow(stages=stages)
     placed = {s.id: workflow.find_workflow_stage(s.id) for s in stages}
-    return resolve_run_dir(PROJECT, run_id), placed, order, rows, version_id
+    return resolve_run_dir(PROJECT, run_id, RunKind.production), placed, order, rows, version_id
 
 
 def test_a_second_load_reads_the_cache_and_never_works_it_out_again(run_facts, monkeypatch):
@@ -128,7 +129,7 @@ def test_a_run_still_going_writes_no_cache(run_facts, monkeypatch):
     shutil.rmtree(run_dir / "branches", ignore_errors=True)  # the finished run kept one
     monkeypatch.setattr("app.services.run.read_run_status",
                         lambda project_id, run_id: {
-                            **read_run_manifest(project_id, run_id).to_dict(),
+                            **read_run_manifest(project_id, run_id, RunKind.production).to_dict(),
                             "status": "running"})
     read_run_branches(PROJECT, run_dir.name)
     assert not (run_dir / "branches").exists()
@@ -142,7 +143,7 @@ def test_a_finished_run_leaves_the_analysis_kept(projects_root):
     save_version(PROJECT, message="fixture")
     run_id = str(run_service.execute(PROJECT)["run_id"])
 
-    assert (resolve_run_dir(PROJECT, run_id) / "branches").exists()
+    assert (resolve_run_dir(PROJECT, run_id, RunKind.production) / "branches").exists()
 
 
 def test_the_reader_takes_what_the_run_kept_without_working_it_out(projects_root, monkeypatch):

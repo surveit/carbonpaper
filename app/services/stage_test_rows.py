@@ -14,6 +14,7 @@ from app.models.run_manifest import FINISHED_STAGE_STATUSES, StageRecord
 from app.models.schema import StageId, TableSchema
 from app.services.frame_profile import profile_table
 from app.services.run import RunEntry, list_run_entries, read_stage_output
+from app.models.run_manifest import RunKind
 
 # Values per column in the profile a selector is seeded with. Enough that a categorical
 # column arrives as its real value set rather than a sample of one.
@@ -65,7 +66,7 @@ def _narrow_to_reads(
 
 def _find_newest_run_that_wrote(project_id: str, stage_id: StageId) -> str:
     unreadable: list[str] = []
-    for entry in reversed(list_run_entries(project_id)):  # newest first
+    for entry in reversed(list_run_entries(project_id, RunKind.production)):  # newest first
         if entry.manifest is None:
             # A run recorded in a shape this model rejects. An older run may still hold
             # the rows, so keep looking — but never report it as one that did not finish.

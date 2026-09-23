@@ -6,6 +6,7 @@ import json
 import pandas as pd
 import pytest
 
+from app.models.run_manifest import RunKind
 from app.models import parse_stage
 from app.services import workspace
 from app.models.records.workflow_version import WorkflowVersion
@@ -72,4 +73,4 @@ def test_report_stage_citations_work_in_a_workflow_test(demo):
     # — reachable because the workflow test recorded a real manifest.
     manifest = read_manifest(demo, run_id)
     assert manifest["parameters"]["is_test_run"] is True
-    assert resolve_run_dir("demo", run_id) == demo / "runs" / run_id
+    assert resolve_run_dir("demo", run_id, RunKind.production) == demo / "runs" / run_id
