@@ -71,8 +71,8 @@ loader) renders per-stage issues. Typed `Stage` objects flow end-to-end.
 ## `app/runtime/` — the Runner  → `app/runtime/AGENTS.md`
 `runner.py` — `execute_run`/`prepare_run`/`run_prepared`/`resume_run`, each taking the
 version the run pins as a `Workflow`. The runner reads no versions: the caller resolves one
-(`app/services/versioning.py: resolve_version_id`, defaulting to the newest STORED version,
-published or not — never a draft), loads its frozen stages and
+(`app/services/versioning.py: resolve_version_id`, defaulting to the newest STORED version
+— never a draft), loads its frozen stages and
 hands them in. A run's per-stage connector bindings are merged by
 `Workflow.apply_run_bindings`, which rebuilds the workflow rather than letting the runner
 hold bare stages. `app/services/run.py` is the one place that composes this, and an
@@ -80,8 +80,8 @@ import-linter contract keeps `runner.py` free of `app.services` so the arrow bet
 points one way; `app/cli.py` drives that same seam. Per stage: validate
 inputs, dispatch, validate output, write `outputs/<stage>.parquet`,
 flush the run record mid-run; halt-on-review + resume; per-run `--limit`/`--offset`
-capping the rows a stage READS (cut off its inputs before its handler runs);
-`field_checks`. `stages/` — one module per type. `llm.py`/`options.py` — the agent
+capping the rows a stage READS (cut off its inputs before its handler runs).
+`stages/` — one module per type. `llm.py`/`options.py` — the agent
 backend (no fallback). `preview.py` — scratch re-runs.
 
 **`executor.py` is the shared engine both paths call, and the one that never creates
@@ -95,11 +95,11 @@ alone, so evals and workflow tests structurally cannot reach it and must go thro
 production code from calling `execute_subset` too, it simply doesn't.
 
 Stage handlers register under a *shape* (`app/runtime/stages/execution.py`):
-`RowMapHandler` (the runtime maps a per-row function over the stage's single
+`RowMapTransformHandler` (the runtime maps a per-row function over the stage's single
 input and reassembles results in input order — the function never sees the
 frame), `SourceHandler` (originates rows; no upstream frames),
-`FrameHandler` (whole frames; may reshape), or `RowAlignedFrameHandler`
-(`app/runtime/stages/row_aligned.py` — whole frames like `FrameHandler`, but the
+`FrameTransformHandler` (whole frames; may reshape), or `RowAlignedFrameHandler`
+(`app/runtime/stages/row_aligned.py` — whole frames like `FrameTransformHandler`, but the
 shape then checks the recorded lineage names input[0]'s row *i* at output row *i*,
 and fails the run when it does not). The shape fixes what the runtime hands the
 handler, so grain-and-order preservation is structural rather than declared per
@@ -142,10 +142,10 @@ run holds, which is what a reviewer reads). Only
 Thin `app/main.py` (~40 lines); routes under `/project/{project}/…`. Routers: `project.py`
 (index, workflow graph, stage detail, ER, plus the version-first IA — `/workflow/versions`
 lists every version newest-first, `/workflow/version/{id}` is one immutable version's
-read-only detail with Publish/Run-this-version; the mutable editor stays at `/workflow`),
+read-only detail with Run-this-version; the mutable editor stays at `/workflow`),
 `runs.py` (trigger/list/detail/status-poll, rows + CSV, scratch preview, resume, plus
 running one specific pinned version), `review.py` (review queue), `node.py` (the per-node
-panel + spec editing + publish; a spec edit saves a version through `drafts.save_version`),
+panel + spec editing; a spec edit saves a version through `drafts.save_version`),
 `guide.py` (`POST /workflow/version/{id}/guide` — starts review-guide authoring for one
 version, watched through node.py's generation-session status endpoint).
 `web/{config,loading,diagrams}.py` — paths + Jinja · viewer reads over the loader ·
@@ -165,18 +165,14 @@ unavailable notice while the scratch re-run refuses to execute (409).
 `run.py` (the production run seam — start/execute/resume/status, and the only module that
 drives `app/runtime/runner.py`: it resolves the version and loads its stages before handing
 them to the runner, plus resolves what a run pinned — `resolve_version`,
-`read_pinned_version`, `load_run_workflow`, `load_pinned_stage_def`); `loader.py` (stage loader, above); `compilation.py` (compile persistence for
-`app/compiler`); `versioning.py` (`create_version_from_stages`
-is the ONE write path for a `WorkflowVersion` document, born unpublished; `publish_version`
-is the metadata-only record that a human reviewed a version — a signal about it, which
-`resolve_version_id` does not read); `drafts.py` (disposable, mutable scratch — a `Draft` document
+`read_pinned_version`, `load_run_workflow`, `load_pinned_stage_def`); `loader.py` (stage loader, above);
+`versioning.py` (`create_version_from_stages`
+is the ONE write path for a `WorkflowVersion` document); `drafts.py` (disposable, mutable scratch — a `Draft` document
 that may be invalid mid-edit, edited only through the editing agent's tools; `save_version`
 is its only exit, strict-validating before freezing it into a version via
 `create_version_from_stages`).
 
-## `app/chat/`, `app/core/llm/`, tests
-`chat/` — a reusable PydanticAI chat engine (streaming, tools, file persistence), separate
-from the row-mapped `llm_transform` path; one demo tool, not yet wired in.
+## `app/core/llm/`, tests
 `core/llm/options.py` — the `LLMModel` menu. `tests/` (pytest; `conftest.py` forces
 `agent_available` False so no test can reach a real model); `.github/workflows/ci.yml`
 runs ruff + mypy + pytest on every PR.
