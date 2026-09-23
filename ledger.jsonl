@@ -3337,3 +3337,4 @@
 {"run_id":"35856300832","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35856300832","created":"2026-09-23T11:47:49Z","branch":"fix/drop-tutorial-content-tests","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"35856650286","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35856650286","created":"2026-09-23T11:48:48Z","branch":"master","event":"push","contracts_kept":17,"findings":[]}
 {"run_id":"35856650286","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35856650286","created":"2026-09-23T11:51:24Z","branch":"master","event":"push","contracts_kept":null,"findings":[]}
+{"run_id":"35858007055","run_url":"https://github.com/surveit/carbonpaper/actions/runs/35858007055","created":"2026-09-23T12:02:50Z","branch":"fix/human-only-code-execution-approval","event":"pull_request","contracts_kept":18,"findings":[]}
