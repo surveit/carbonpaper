@@ -49,7 +49,6 @@
 .files-apart-value { overflow-wrap: anywhere; }
 /* An export's name is long and unbroken; it wraps rather than pushing the row wide. */
 .files-name code { overflow-wrap: anywhere; }
-.files-num { text-align: right; }
 .files-act { text-align: right; }
 
 /* A trash icon, not a word: the row is a list of files, and the only verb it offers

@@ -53,20 +53,6 @@
 .demo-gate h2 { font-size: 25px; line-height: 1.25; margin: 0 0 10px; }
 .demo-gate-lede { margin: 0 0 18px; color: var(--muted); }
 
-.demo-gate-kicker {
-    display: inline-block;
-    margin-bottom: 16px;
-    padding: 3px 8px;
-    font-size: 11.5px;
-    font-weight: 600;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--warn-ink);
-    background: var(--warn-bg);
-    border: 1px solid var(--warn-bd);
-    border-radius: 4px;
-}
-
 .demo-facts { list-style: none; margin: 0 0 20px; padding: 0; border-top: 1px solid var(--border); }
 .demo-facts li {
     position: relative;
@@ -100,7 +86,6 @@
 
 .demo-gate-actions { display: flex; align-items: center; gap: 14px; }
 .demo-gate-actions .btn[disabled] { opacity: 0.45; pointer-events: none; }
-.demo-gate-note { margin: 14px 0 0; font-size: 12.5px; color: var(--muted); }
 
 /* Beside the field, where the file actually leaves the reader's machine. */
 .demo-upload-note {

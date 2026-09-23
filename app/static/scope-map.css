@@ -54,8 +54,6 @@
   display: flex; align-items: baseline; gap: 0.7rem; flex-wrap: wrap;
   padding: 0.5rem 0.2rem; font-size: 0.9rem;
 }
-.scope-bar .scope-clear { color: var(--accent); cursor: pointer;
-  text-decoration: underline; font-size: 0.8rem; }
 
 /* The rows are the app's data-preview table; only the click is scope's own. */
 .scope-table { overflow-x: auto; }
@@ -63,7 +61,6 @@
   cursor: pointer; }
 .scope-table td[data-col] { cursor: pointer; }
 .scope-table tbody tr:hover { background: var(--hover); }
-.scope-table tbody tr.is-on { background: var(--info-bg); }
 
 /* .stage-tabs sets display, which would otherwise beat the hidden attribute. */
 #scope-tabs[hidden] { display: none; }

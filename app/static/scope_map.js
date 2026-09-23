@@ -77,16 +77,6 @@
   // payload. Nothing below measures anything: it turns numbers into SVG and binds
   // the clicks. See docs/scope-map.md.
 
-  function branchesOn(path, stageId) {
-    return (D.branch_paths[path] || []).filter(function (b) {
-      return D.branches[b] && D.branches[b].stage_id === stageId;
-    });
-  }
-
-  function nodeKeyForPath(stageId, path) {
-    return stageId + SEP + branchesOn(path, stageId).join(",");
-  }
-
   function drawing() {
     return showAll ? D.drawn_every_stage : D.drawn;
   }
