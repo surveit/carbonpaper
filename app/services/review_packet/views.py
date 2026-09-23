@@ -9,10 +9,6 @@ from pydantic import BaseModel
 
 from app.models.run_manifest import InputBinding, read_input_bindings
 
-# A stage that never executed has no output file; the packet says so rather than
-# writing an empty CSV that would read as "this stage produced nothing".
-MISSING_OUTPUT = "no output file recorded"
-
 
 class IssueView(BaseModel):
     severity: str

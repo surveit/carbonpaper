@@ -1,7 +1,7 @@
 """A project's terms: its words — row types and verbs — and the tables of its data model."""
 from __future__ import annotations
 
-from pydantic import ConfigDict, Field, TypeAdapter, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from app.models.named_schemas import SchemaLibrary
 from app.models.row_types import RowType
@@ -32,14 +32,6 @@ class Terms(_Base):
     def _validate_terms(self) -> "Terms":
         validate_no_word_is_written_twice(self.row_types, self.verbs)
         return self
-
-
-
-_VERB_LIST: TypeAdapter[list[Verb]] = TypeAdapter(list[Verb])
-
-
-def parse_verbs(payload: str) -> list[Verb]:
-    return _VERB_LIST.validate_json(payload)
 
 
 def validate_no_word_is_written_twice(row_types: list[RowType], verbs: list[Verb]) -> None:
