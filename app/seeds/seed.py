@@ -28,9 +28,7 @@ def seed_all(
     imported: list[str] = []
     for wf_path in discover_workflow_files(data_dir):
         wf = WorkflowFile.model_validate_json(wf_path.read_text(encoding="utf-8"))
-        # Importing twice is no longer refused — two projects may share a label — so
-        # the skip is this seeder's own policy: a bundle already SEEDED into this
-        # workspace is left as it stands rather than duplicated beside itself.
+        # Importing twice makes two projects, so a bundle already SEEDED is left as it stands.
         if _find_seeded_copy(wf.name) is not None:
             continue
         imported.append(import_project(wf))

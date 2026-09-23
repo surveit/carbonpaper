@@ -1,8 +1,4 @@
-"""Running a project's authored stage tests, and the warning report that reads their result.
-
-One of the three seams that reach `app.runtime` from `app.services`, which the
-import-linter contract on `app.runtime` names.
-"""
+"""Running a project's authored stage tests, and the warning report that reads their result."""
 from __future__ import annotations
 
 from app.models.compiler_warnings import CompilerWarningReport, find_workflow_compiler_warnings

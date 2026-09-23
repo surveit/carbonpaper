@@ -66,7 +66,6 @@ def build_tutorial_tools(context: BaseModel) -> list[BoundToolSpec]:
             project_id, eval_id, version_id, base_url=context.base_url.rstrip("/")
         )
 
-    # One new tool. Seeding is the only thing the tour does that no other surface does.
     # The row reader and the eval runner are the shared ones, wrapped only because the
     # tour's reader CLICKS what comes back, so the links carry this session's base_url
     # rather than being root-relative.

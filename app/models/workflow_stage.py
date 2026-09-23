@@ -1,8 +1,4 @@
-"""A stage seen in its workflow: the authored `Stage` plus the schemas that are a
-function of the whole graph rather than of the stage alone. In memory only —
-`app.models.workflow.Workflow` is the one thing that builds these, and nothing
-parses or dumps them.
-"""
+"""The authored `Stage` plus its input and output schemas. In memory only: never parsed or dumped."""
 from __future__ import annotations
 
 from dataclasses import dataclass

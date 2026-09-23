@@ -1,6 +1,5 @@
 """Handler for the starlark_row_function stage type: the sandboxed counterpart
-of python_row_function, one compiled Starlark function mapped over the input's
-rows through Task 1's marshalling boundary."""
+of python_row_function."""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
