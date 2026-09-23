@@ -63,15 +63,15 @@ def _aggregate_by_group(
     # group keys, because each `where` picks its own rows.
     ordinals_by_op: list[pd.DataFrame] = []
     for op in aggregations:
-        slice_df = _rows_admitted_by(rows, op)
-        partial = _grouped_value(slice_df, group_by, op, stage_id).reset_index()
+        slice_df = _select_rows_admitted_by(rows, op)
+        partial = _compute_grouped_value(slice_df, group_by, op, stage_id).reset_index()
         results = partial if results is None else results.merge(partial, on=group_by, how="outer")
         ordinals_by_op.append(
             slice_df.groupby(group_by, dropna=False)[ORDINAL_KEY]
             .apply(list).rename(op.output_column).reset_index()
         )
     assert results is not None  # the caller returns before this on no aggregations
-    return results, _contributors_per_group(results, group_by, ordinals_by_op)
+    return results, _collect_contributors_per_group(results, group_by, ordinals_by_op)
 
 
 def _reduce_whole_frame(
@@ -80,27 +80,27 @@ def _reduce_whole_frame(
     columns: dict[str, Any] = {}
     contributors: dict[int, list[str]] = {}
     for op in aggregations:
-        slice_df = _rows_admitted_by(rows, op)
-        columns[op.output_column] = _whole_frame_value(slice_df, op, stage_id)
+        slice_df = _select_rows_admitted_by(rows, op)
+        columns[op.output_column] = _compute_whole_frame_value(slice_df, op, stage_id)
         for ordinal in slice_df[ORDINAL_KEY]:
             contributors.setdefault(int(ordinal), []).append(op.output_column)
     results = pd.DataFrame({name: [value] for name, value in columns.items()})
     return results, [{o: tuple(cols) for o, cols in sorted(contributors.items())}]
 
 
-def _rows_admitted_by(rows: pd.DataFrame, op: AggregationOp) -> pd.DataFrame:
+def _select_rows_admitted_by(rows: pd.DataFrame, op: AggregationOp) -> pd.DataFrame:
     if not op.where:
         return rows
     return rows.query(parse_predicate(op.where, rows.columns).pandas_expr)
 
 
-def _grouped_value(
+def _compute_grouped_value(
     slice_df: pd.DataFrame, group_by: list[str], op: AggregationOp, stage_id: str
 ) -> pd.Series:
     out = op.output_column
     if op.formula == AGG_FORMULA_COUNT:
         return slice_df.groupby(group_by, dropna=False).size().rename(out)
-    grouped = slice_df.groupby(group_by, dropna=False)[_value_column(op)]
+    grouped = slice_df.groupby(group_by, dropna=False)[_require_value_column(op)]
     if op.formula in {"sum", "mean", "min", "max"}:
         return grouped.agg(op.formula).rename(out)
     if op.formula == AGG_FORMULA_FIRST:
@@ -117,7 +117,7 @@ def _grouped_value(
         return grouped.apply(list).rename(out)
     if op.formula == AGG_FORMULA_ONLY:
         return grouped.apply(lambda values: take_the_agreed_value(
-            values.dropna().tolist(), stage_id=stage_id, column=_value_column(op),
+            values.dropna().tolist(), stage_id=stage_id, column=_require_value_column(op),
             subject=_name_the_group(group_by, values.name))).rename(out)
     raise ValueError(f"Unknown aggregation formula: {op.formula}")
 
@@ -127,7 +127,7 @@ def _name_the_group(group_by: list[str], key: Any) -> str:
     return "the group " + ", ".join(f"{c}={v!r}" for c, v in zip(group_by, parts))
 
 
-def _whole_frame_value(slice_df: pd.DataFrame, op: AggregationOp, stage_id: str) -> Any:
+def _compute_whole_frame_value(slice_df: pd.DataFrame, op: AggregationOp, stage_id: str) -> Any:
     if slice_df.empty:
         # 0 is an outcome — it claims something was measured and found to be
         # none. Nothing was measured here, so the honest answer is absence.
@@ -138,11 +138,11 @@ def _whole_frame_value(slice_df: pd.DataFrame, op: AggregationOp, stage_id: str)
         return np.nan
     if op.formula == AGG_FORMULA_COUNT:
         return len(slice_df)
-    values = slice_df[_value_column(op)]
+    values = slice_df[_require_value_column(op)]
     if op.formula in {"sum", "mean", "min", "max"}:
         return getattr(values, op.formula)()
     if op.formula == AGG_FORMULA_FIRST:
-        return _first_present(values)
+        return _take_first_present(values)
     if op.formula == AGG_FORMULA_FIRST_INCLUDING_NULL:
         return values.iloc[0]
     if op.formula == AGG_FORMULA_COUNT_DISTINCT:
@@ -151,25 +151,25 @@ def _whole_frame_value(slice_df: pd.DataFrame, op: AggregationOp, stage_id: str)
         return list(values)
     if op.formula == AGG_FORMULA_ONLY:
         return take_the_agreed_value(
-            values.dropna().tolist(), stage_id=stage_id, column=_value_column(op),
+            values.dropna().tolist(), stage_id=stage_id, column=_require_value_column(op),
             subject="the whole frame")
     raise ValueError(f"Unknown aggregation formula: {op.formula}")
 
 
-def _first_present(values: pd.Series) -> Any:
+def _take_first_present(values: pd.Series) -> Any:
     """Matches groupby.first(): the first NON-null value, not the first value."""
     present = values.dropna()
     return present.iloc[0] if len(present) else np.nan
 
 
-def _value_column(op: AggregationOp) -> str:
+def _require_value_column(op: AggregationOp) -> str:
     if op.value_column is None:
         raise ValueError(
             f"aggregation `{op.output_column}`: formula `{op.formula}` needs value_column")
     return op.value_column
 
 
-def _contributors_per_group(
+def _collect_contributors_per_group(
     results: pd.DataFrame, group_by: list[str], ordinals_by_op: list[pd.DataFrame]
 ) -> list[dict[int, tuple[str, ...]]]:
     contributors: list[dict[int, list[str]]] = [{} for _ in range(len(results))]
