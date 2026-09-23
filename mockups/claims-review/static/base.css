@@ -1,0 +1,212 @@
+/* workflow · v0.2 — the app's stylesheet, cut by surface across app/static/*.css.
+   The link order in app/templates/_stylesheets.html IS the cascade order.
+   Every colour these sheets spend comes from palette.css, which each page loads
+   ahead of them; a literal here fails tests/arch/test_palette_owns_colour.py.
+   No sheet may reference another file or an external resource: the review packet
+   concatenates them all and has to render with no network, which
+   tests/test_review_packet.py enforces by pattern. */
+
+:root {
+    font-family: var(--ui);
+    font-size: 15px;
+    line-height: 1.55;
+
+    --ui: "Avenir Next", Avenir, -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    /* Two ROLES, which may or may not be two faces: --ui is the interface — chrome,
+       labels, tables, buttons, every number — and --prose is running text a person
+       reads at length: a lede, an empty state, a reply in the chat. Splitting the
+       roles is what matters even when both resolve to the same stack, because the
+       prose SIZING below then applies to reading surfaces and nothing else. One face
+       at one size doing both jobs is what made a page of prose read as a console.
+       No web font and no downloaded file: a sheet here may not reference an
+       external resource, because the review packet concatenates these and has to
+       render with no network (tests/test_review_packet.py, which greps the
+       concatenation for the at-rules that would fetch one — comments included, so
+       do not write those spellings here even to say we avoid them). */
+    --prose: var(--ui);
+    --prose-size: 16.5px;
+    --prose-lh: 1.62;
+
+    /* Every fixed-width run in the app — code, an id, a hash, a filename, a JSON
+       payload. One token because four different stacks had drifted across these
+       sheets, and one of them led with `ui-monospace`, which Chromium does not
+       implement: there it falls through to the generic `monospace`, i.e. whatever
+       the reader has set as their browser's fixed-width font, while the sheet next
+       to it named Consolas. Same page, two typefaces, no rule saying which. */
+    --mono: "SFMono-Regular", "Consolas", "Liberation Mono", Menlo, monospace;
+}
+
+body { background: var(--bg); color: var(--fg); margin: 0; padding: 0; }
+
+/* The page chrome, and only it: scoped to body's own child so it cannot reach a
+   <header> an article gives itself (the queue card has one). */
+body > header {
+    border-bottom: 1px solid var(--border);
+    padding: 14px 28px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    background: var(--raised);
+}
+
+.brand { color: var(--fg); text-decoration: none; }
+/* The mark (_wordmark.html): small caps-height, widely tracked, the second half in
+   the transfer ink. It sets its own size and tracking wherever it sits, so the
+   header fallback and the trail's home rung read identically. */
+.wordmark { font-weight: 600; font-size: 12.5px; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--fg); white-space: nowrap; }
+.wordmark-transfer { color: var(--accent); }
+
+.back-link { color: var(--muted); text-decoration: none; font-size: 14px; }
+.back-link:hover { color: var(--accent); }
+/* The header is a flex row of [trail][the right-slot links]; the trail takes the
+   slack so they sit against the right edge whatever the trail's length. Only the
+   FIRST of the group carries this — the header's own gap spaces the rest. */
+.header-right { margin-left: auto; }
+
+/* ═══ The breadcrumb trail — the header's whole left side ═══
+   One component on every page, so the trail is the ONLY way back and there is no
+   second, page-shaped affordance to be inconsistent with. A rung that names a thing
+   the reader might have meant a different one of (the project, the version or run
+   being read) is a .crumb-switch and opens .crumb-pop; a rung naming a section is a
+   plain link. */
+.crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 13px;
+    min-width: 0; }
+.crumb-link { color: var(--muted); text-decoration: none; white-space: nowrap; }
+.crumb-link:hover { color: var(--accent); text-decoration: underline; }
+.crumb-sep { color: var(--border-strong); user-select: none; }
+.crumb-here { color: var(--fg); font-weight: 600; white-space: nowrap; }
+.crumb-here code, .crumb-link code, .crumb-switch code { font-size: 12.5px; }
+
+.crumb-anchor { position: relative; display: inline-block; }
+.crumb-switch { font: inherit; font-size: 13px; color: var(--muted); background: none;
+    border: 1px solid transparent; border-radius: 4px; padding: 2px 6px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.crumb-switch:hover { color: var(--fg); background: var(--hover); border-color: var(--border); }
+.crumb-switch.here { color: var(--fg); font-weight: 600; }
+.crumb-switch[aria-expanded="true"] { background: var(--hover);
+    border-color: var(--border-strong); color: var(--fg); }
+.crumb-switch:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--focus-halo); }
+.crumb-caret { font-size: 11px; line-height: 1; color: var(--muted); }
+
+.crumb-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 60; width: 400px;
+    max-width: calc(100vw - 48px); background: var(--raised);
+    border: 1px solid var(--border-strong); border-radius: 6px; padding: 6px;
+    box-shadow: 0 8px 24px var(--shadow); max-height: 70vh; overflow-y: auto; }
+.crumb-pop[hidden] { display: none; }
+.crumb-pop-head { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--muted); margin: 4px 8px 6px; }
+.crumb-pop-row { display: block; padding: 7px 8px; border-radius: 4px; text-decoration: none; }
+.crumb-pop-row:hover { background: var(--hover); }
+.crumb-pop-row.cur { background: var(--sunk-deep); }
+.crumb-pop-id { display: flex; align-items: center; gap: 8px; }
+.crumb-pop-id code { font-size: 12.5px; color: var(--fg); }
+.crumb-pop-desc { display: block; font-size: 12.5px; color: var(--fg); margin-top: 3px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* One line, like the description above it: a run pinning a version with a long
+   authored message would otherwise wrap to three and treble the row's height. */
+.crumb-pop-meta { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crumb-pop-empty { font-size: 12.5px; color: var(--muted); margin: 4px 8px 8px; }
+/* Sticky: this row is the way out of a capped list, so it must not be the one thing
+   the reader has to scroll the popover to reach. */
+.crumb-pop-all { position: sticky; bottom: -6px; display: block; padding: 8px;
+    margin-top: 4px; background: var(--raised); border-top: 1px solid var(--border);
+    font-size: 12.5px; color: var(--accent); text-decoration: none; }
+.crumb-pop-all:hover { text-decoration: underline; }
+
+main { max-width: 1500px; margin: 0 auto; padding: 24px 28px 64px; }
+
+footer {
+    text-align: center;
+    color: var(--muted);
+    padding: 24px;
+    border-top: 1px solid var(--border);
+    margin-top: 48px;
+}
+
+h1 { font-size: 28px; margin: 0 0 8px; letter-spacing: -0.3px; }
+h2 { font-size: 18px; margin: 32px 0 12px; letter-spacing: -0.1px; }
+h3 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+    margin: 18px 0 6px;
+    font-weight: 600;
+}
+
+/* The one paragraph on a page that is meant to be READ rather than scanned, so it
+   is the first place the prose face earns its keep. Slightly larger than the
+   interface around it and leaded looser: at the sans's 15px/1.55 a lede was the
+   same texture as the table under it. */
+.lede { color: var(--muted); margin-top: 0; margin-bottom: 24px;
+    font-family: var(--prose); font-size: var(--prose-size); line-height: var(--prose-lh); }
+
+.load-issues {
+    border: 1px solid var(--bad-bd);
+    background: var(--bad-bg);
+    border-radius: 6px;
+    padding: 0.6rem 1rem;
+    margin: 0.8rem 0;
+}
+
+code {
+    background: var(--sunk-deep);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.92em;
+    font-family: var(--mono);
+}
+
+pre {
+    background: var(--sunk-deep);
+    padding: 12px 14px;
+    border-radius: 5px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.45;
+    font-family: var(--mono);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+a { color: var(--accent); }
+
+/* The agent mark (_sparkle.html). Sized in em so it tracks whatever it sits in —
+   an 11px uppercase badge and a 15px verdict line both get a mark in proportion —
+   and filled with the transfer ink, which is the point of drawing it rather than
+   spending the ✨ character the font would paint in its own colours. */
+.sparkle { width: 1em; height: 1em; vertical-align: -0.125em; fill: var(--accent); }
+/* The severity shapes (_severity_icon.html). The shape says WHICH, so colour is left
+   to say how loud: the disc keeps the failed ink it has always had, and the triangle
+   goes --muted, because a caution nobody owes an edit for should not be the second
+   most saturated thing on the page. The disc's cross is knocked out in the paper
+   colour rather than drawn, so it stays legible on the tinted row underneath. */
+.sev-ico { width: 11px; height: 11px; vertical-align: -1px; margin-right: 5px; flex: none; }
+.sev-ico-error .disc { fill: var(--state-failed-ink); }
+.sev-ico-error .knockout { fill: none; stroke: var(--raised); stroke-width: 1.5; stroke-linecap: round; }
+.sev-ico-warning { fill: none; stroke: var(--muted); stroke-width: 1.6; }
+.muted { color: var(--muted); }
+.strong { color: var(--fg); font-weight: 500; }
+
+/* Project list */
+.project-list { list-style: none; padding: 0; }
+.project-list li {
+    padding: 12px 16px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    margin-bottom: 8px;
+    background: var(--raised);
+    transition: background 0.1s;
+}
+.project-list li:hover { background: var(--hover); }
+.project-list a { text-decoration: none; font-weight: 500; }
+
+
+/* A published figure that opens the row it was read from. Sized in em so a 30px
+   headline and a 13px claim carry the same weight of line. */
+.lineage-value { color: var(--fg); font-variant-numeric: tabular-nums;
+    text-decoration: underline; text-decoration-color: var(--muted-dim);
+    text-decoration-thickness: 0.08em; text-underline-offset: 0.16em; }
+.lineage-value:hover { color: var(--accent); text-decoration-color: var(--accent); }

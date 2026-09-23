@@ -1,0 +1,52 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Claims review · three options</title>
+<link rel="stylesheet" href="static/palette.css"><link rel="stylesheet" href="static/base.css"><link rel="stylesheet" href="static/mock.css">
+<style>
+main{max-width:980px} .opt{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin:18px 0 28px}
+.opt a{display:block;background:var(--raised);border:1px solid var(--border);border-radius:9px;padding:16px 18px;text-decoration:none;color:var(--fg)}
+.opt a:hover{border-color:var(--accent)} .opt h2{margin:0 0 6px;font-size:17px} .opt p{margin:0;font-size:13.5px;color:var(--muted);line-height:1.5}
+.opt .ax{font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-dim);font-weight:700;margin-bottom:8px}
+table.cmp{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--raised);border:1px solid var(--border)}
+.cmp th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);padding:8px 12px;border-bottom:1px solid var(--border-strong)}
+.cmp td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top;line-height:1.45} .cmp tr:last-child td{border-bottom:0}
+.cmp td:first-child{color:var(--muted);white-space:nowrap}
+ul.src{font-size:13.5px;color:var(--muted);line-height:1.55;padding-left:18px} ul.src code{font-size:12.5px}
+</style></head><body>
+<header><div class="crumbs"><span class="wordmark">Carbon <span class="wordmark-transfer">Paper</span></span><span class="crumb-sep">/</span><span class="crumb-here">Claims review · mock</span></div></header>
+<main>
+<h1>A claim, and every way it could be wrong</h1>
+<p class="lede">Three ways to organise the same challenges against the same three claims. The data is shared; only the organising axis differs. Open one, switch claims at the top, take a challenge onto the claim, then flip to <i>as a reader</i>.</p>
+<div class="opt" style="grid-template-columns:1fr"><a href="sentence.html?claim=doccs-terminated" style="border-color:var(--accent)"><div class="ax">revision 2 · 3 Sep</div><h2>B3 · What this run says</h2><p>The page belongs to a run. It opens with what the run holds, the only evidence the AI reads, then the readings that can be made of it: yours, the AI's, or any text at all. Every phrase lands on a piece of the run or on nothing; severity sits on the underline; approving cites the run and the cell it was read from. On the lobbying run, try the sentence the run cannot back. Single cell claims only; the table claim is parked behind <code>?tables=1</code>.</p></a></div>
+<div class="opt">
+<a href="a.html?claim=doccs-terminated"><div class="ax">axis · consequence</div><h2>A · Ledger</h2><p>One list in three bands: moves the figure, cannot be told yet, checked and quiet. The reader gets qualifiers.</p></a>
+<a href="b.html?claim=compas-fpr"><div class="ax">axis · the words</div><h2>B · The sentence</h2><p>Each phrase of the claim carries its challenges. An alternative claim is the sentence, edited. The reader gets footnotes on the words.</p></a>
+<a href="c.html?claim=doccs-terminated"><div class="ax">axis · the pipeline</div><h2>C · The register</h2><p>Challenges sit on the stage they land on, and a stage behind several claims says so. The reader gets the register of choices.</p></a>
+</div>
+
+<p><a href="plan.html"><b>The plan for the skill and its subagents</b></a> · <a href="claims.html">the Claims list</a></p>
+<h2>What all three share</h2>
+<table class="cmp"><tbody>
+<tr><td>the unit</td><td>One claim at a time. The page is reached from a minted claim, on the run that made it.</td></tr>
+<tr><td>what gets a number</td><td>A challenge a free rerun can price. This mock proposes only; every figure shown was computed in an earlier session, none here.</td></tr>
+<tr><td>the pruning rule</td><td>A challenge that does not move the figure at published precision is folded, with the count. The methodology's own settled choices go there too.</td></tr>
+<tr><td>the two actions</td><td><b>Add to the claim</b> writes a qualifier the reader sees. <b>Dismiss</b> removes it and writes nothing, the way local review does.</td></tr>
+<tr><td>an alternative claim</td><td>Shown as a claim shape, never minted from here. <b>Claim this beside it</b> stands it next to the first, so the page says which reading the author asserts.</td></tr>
+<tr><td>who sees what</td><td>The author sees the list. The reader sees what the author kept. Nothing tells the reader a list existed.</td></tr>
+</tbody></table>
+
+<h2>Where they differ</h2>
+<table class="cmp"><thead><tr><th></th><th>A · Ledger</th><th>B · The sentence</th><th>C · The register</th></tr></thead><tbody>
+<tr><td>what bounds the count</td><td>The published-precision rule alone. The list is as long as what moves the number.</td><td>The phrases in the sentence. Five words, five slots; the rest fold under each.</td><td>The stages behind the figure. A stage with nothing on it is a stage with nothing on it.</td></tr>
+<tr><td>best case</td><td>A claim with one big finding (LDA).</td><td>A claim whose fight is about meaning (COMPAS).</td><td>A project with several claims off one pipeline (DOCCS: four figures share three stages).</td></tr>
+<tr><td>worst case</td><td>Two challenges of equal weight read as a ranking that is not there.</td><td>A challenge that hits no word, or hits all of them (the window).</td><td>A semantic challenge has no stage to sit on; it lands on the last one by default.</td></tr>
+<tr><td>the reader's artefact</td><td>Qualifiers on the claim card.</td><td>Footnotes on the words of the sentence.</td><td>A register of choices: reading taken, alternative, movement.</td></tr>
+<tr><td>swap to the next claim</td><td>A new list.</td><td>A new sentence.</td><td>Most rows are already there.</td></tr>
+</tbody></table>
+
+<h2>Sources</h2>
+<ul class="src">
+<li><b>DOCCS</b> · the methodology document of project <code>doccs_restrained</code>, run <code>20260903T141208.666644</code> on the Fly deploy. Its numbers: 9,806 rows, 725 inmate-abuse records, 9,505 vs 9,543 covered cases, 7.6% vs published 10, 59.5% vs 5.8% terminated, 28% blank, 590 resignations, 23 redactions, 204 of 509,912 cells. The 18 queued dispositions and 0 of 18 reviewed are from the run's review queue as read. The card's 5.8% is the methodology's own count under the PENALTYDIS reading; the run's final figure waits on those 18. Figure 4 (extreme force, 289 AI-flagged) is left out: 0 of 289 were confirmed, so there is no value to challenge yet.</li>
+<li><b>LDA</b> · <code>findings.json</code> from the probe session served at 127.0.0.1:8541, on project <code>20260828T114514.952850</code>, run <code>20260901T103753.789399</code>. The amendment history is from the store's own claim history in the Standing Behind a Figure plan.</li>
+<li><b>COMPAS</b> · the challenges mock served at 127.0.0.1:8632, which reran <code>propublica/compas-analysis</code>. Critics named are the ones who made each argument in public. This is not a project in the store; the stage ids are the mock's.</li>
+<li>Where a challenge has no number (the DOCCS window, the LDA AI rule) the page says so rather than carrying one.</li>
+</ul>
+</main></body></html>

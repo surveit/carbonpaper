@@ -1,0 +1,131 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Attacking a claim · plan</title>
+<link rel="stylesheet" href="static/palette.css"><link rel="stylesheet" href="static/base.css"><link rel="stylesheet" href="static/mock.css?v=4">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+main{max-width:960px} h2{margin-top:36px} p,li{font-family:var(--prose);font-size:15.5px;line-height:1.6;max-width:72ch}
+table.cmp{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--raised);border:1px solid var(--border);margin:10px 0 18px}
+.cmp th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);padding:8px 12px;border-bottom:1px solid var(--border-strong)}
+.cmp td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top;line-height:1.45} .cmp tr:last-child td{border-bottom:0}
+.cmp td:first-child{white-space:nowrap} code{font-size:12.5px}
+pre{background:var(--code-deep);color:var(--code-fg);padding:12px 16px;border-radius:6px;font-size:12.5px;line-height:1.5;overflow-x:auto}
+.mermaid{background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:12px;margin:10px 0 18px}
+.q{border-left:3px solid var(--warn-bd);padding:2px 14px;margin:8px 0}
+</style></head><body>
+<header><div class="crumbs"><span class="wordmark">Carbon <span class="wordmark-transfer">Paper</span></span><span class="crumb-sep">/</span><a class="crumb-link" href="index.html">Claims review mock</a><span class="crumb-sep">/</span><span class="crumb-here">plan</span></div></header>
+<main>
+<h1>Attacking a claim</h1>
+<p class="lede">The skill that reads a submitted claim, one cell of one run's output, against the run it cites and produces the page at <a href="sentence.html?claim=doccs-terminated">What this run says</a>. Written against 🟣 #973 (the claim service) and 🟣 #927 (the submit screen), which this sits after. Scratch document; nothing here is committed.</p>
+
+<h2>One paragraph</h2>
+<p>A claim is a sentence a person proposes to publish, citing one cell of one run's output (<code>StageOutputCellCitation</code>). A claim that cites a table is out of scope here. Attacking it means reading the sentence against everything that run holds and returning, per load-bearing phrase, what it rests on and every way it could be wrong, each weighed. The result is stored once per claim, shown on one page, and closed by one button: Approve, which is <code>approve_claim</code> from #973. Nothing in the attack reruns the workflow.</p>
+
+<h2>Where it sits</h2>
+<pre class="mermaid">
+flowchart LR
+  R["run finishes<br/>WorkflowOutput × n"] --> S["submit_claim<br/>text + citation<br/>(#973)"]
+  S --> J["start_claim_attack<br/>app.services.claim_review"]
+  J --> A1["attackers<br/>six Agent turns, parallel"]
+  A1 --> O["orchestrator turn<br/>ground · merge · weigh · lede"]
+  O --> CR["ClaimReview<br/>one record per claim"]
+  CR --> P["/claims/{id}<br/>the sentence page"]
+  P --> AP["approve_claim<br/>(#973)"]
+  P --> D["decline_claim"]
+</pre>
+<p>Dispatch is code, not a model: <code>start_claim_attack</code> gathers the evidence once, runs the six attackers as <code>app.core.agent.Agent</code> turns with their own <code>target_schema</code>, then runs one orchestrator turn over their answers. The engine passes no <code>agents=</code> to the SDK today, so "subagent" here means an Agent with its own prompt, tools and schema, the way <code>app/compiler/review_guide.py</code> already builds one. Parallelism is <code>asyncio.gather</code> over six coroutines on the server loop, the same loop <code>generation.py</code> requires.</p>
+
+<h2>What every attacker is handed</h2>
+<p>One bundle, built by the service, rendered into each task the way <code>render_guide_task</code> renders stages. It is the evidence pool on the mock page and nothing more; an attacker that wants something else does not have it.</p>
+<table class="cmp"><thead><tr><th>piece</th><th>from</th><th>who reads it</th></tr></thead><tbody>
+<tr><td>the sentence</td><td><code>Claim.text</code></td><td>all</td></tr>
+<tr><td>the run's outputs</td><td><code>read_workflow_run_outputs</code> + each cited cell's value</td><td>all</td></tr>
+<tr><td>the shape and its qualifiers</td><td><code>ClaimShape</code>: label, open/closed, qualifiers, context</td><td>coverage, meaning</td></tr>
+<tr><td>stage specs on the path to the cited stage</td><td>the version's stages, ancestors of <code>citation.stage_id</code> (<code>find_stages_reaching_report</code>)</td><td>choices, defects, meaning</td></tr>
+<tr><td>recorded arms per stage</td><td><code>app.runtime.branch_analysis</code>, through <code>app.services.scope</code> (the one service seam allowed to read a finished run's branches)</td><td>choices, omissions</td></tr>
+<tr><td>input column profiles</td><td><code>file_shape</code> records: kind, fill, distinct, null/zero/real split</td><td>omissions, defects, coverage</td></tr>
+<tr><td>the methodology and terms</td><td><code>read_methodology</code>, <code>terms</code></td><td>meaning, choices (what is already settled)</td></tr>
+</tbody></table>
+
+<h2>The six attackers and the orchestrator</h2>
+<table class="cmp"><thead><tr><th>agent</th><th>reads</th><th>emits</th><th>prompt says its place is</th></tr></thead><tbody>
+<tr><td>Grounding</td><td>the sentence against the pool</td><td>phrases[] with start, end, and an evidence ref or null</td><td>the map every other result hangs on; a phrase landing on nothing is the loudest finding it can make</td></tr>
+<tr><td>Data defects</td><td>input profiles, how each stage reads a column</td><td>challenges of kind <code>data</code></td><td>the only one allowed to say the file is wrong; must name rows or cells</td></tr>
+<tr><td>Choices made</td><td>stage code, the arms actually taken</td><td>kind <code>choice</code>, each with the alternative reading</td><td>every threshold and field is a fork; say which way it went and what the other way is</td></tr>
+<tr><td>Decisions never made</td><td>columns that partition the rows vs the arms</td><td>kind <code>omission</code></td><td>the 8541 detector: a column no branch reads that would move a published digit</td></tr>
+<tr><td>Coverage</td><td>filters' dropped rows, the shape's open/closed word, blanks</td><td>kind <code>coverage</code></td><td>who is in the count, who is not, and what the file does not hold</td></tr>
+<tr><td>Meaning</td><td>the sentence, stage descriptions, terms</td><td>kind <code>semantic</code>, plus up to 2 proposed rewrites, text and why</td><td>the same number read as a different sentence; it never touches arithmetic</td></tr>
+<tr><td>Orchestrator</td><td>the six answers, the pool</td><td>the <code>ClaimReview</code>: merged challenges with severity 0–3, folds, the summary</td><td>it is the only one that sees the whole; it dedupes, refuses any number not in the pool or an attacker's evidence, and writes the summary a journalist reads first</td></tr>
+</tbody></table>
+<p>Attackers never see each other. The orchestrator is told it will be shown beside the sentence to a person deciding whether to approve, that nothing it writes changes the claim, and that a challenge it cannot back with a number goes in at severity 1 or below.</p>
+
+<h2>Severity, and the fold</h2>
+<table class="cmp"><thead><tr><th>weight</th><th>means</th><th>needs</th></tr></thead><tbody>
+<tr><td>3</td><td>the sentence could not stand as written</td><td>a number showing the reversal or the missing footing</td></tr>
+<tr><td>2</td><td>moves the figure at published precision, or turns it into a bound</td><td>the moved value, or the bound</td></tr>
+<tr><td>1</td><td>worth a footnote; cannot be priced from this run</td><td>what would settle it</td></tr>
+<tr><td>0</td><td>checked, does not move it; or settled in the methodology</td><td>the number that shows it does not move</td></tr>
+</tbody></table>
+<p>Weight 0 is folded with a count. The rule that keeps the list short is the same one on the mock: a challenge that does not move the figure at the precision it was printed at is not open.</p>
+
+
+<h2>Records</h2>
+<p>One new record, declared in <code>app/models/records/claim_review.py</code>, <code>PROJECT_READ</code>, immutable. A re-attack is a new claim and a new review; the old pair stays as the audit trail.</p>
+<pre>ClaimReview                          one per claim, written once, nothing on it moves
+  claim_id, run_id
+  grounding: list[Grounding]         span start, end · evidence: EvidenceRef | None
+  challenges: list[Challenge]        attacker, kind, grounding_index, text, evidence,
+                                     backing, severity, moves, cost, raised_by
+  proposed_rewrites: list[Rewrite]   text, why · taking one is submit_claim with new text
+  summary: str                       the orchestrator's two or three sentences, read first
+  session_ids: list[ID]              the seven transcripts, for the "how this was attacked" fold</pre>
+<p><code>EvidenceRef</code> is a discriminated union like <code>PublishedCitation</code>: a run output by slug, an input column, a stage id, a term. Every field is a model; no <code>dict[str, Any]</code> anywhere in it. <code>Challenge.backing</code> is a string the orchestrator must copy from the pool or an attacker's evidence, and a test checks every backing appears somewhere in the bundle the job was handed. That is the fabrication guard.</p>
+<p>The review is information. It changes nothing on the claim: no qualifier is added, no wording corrected. <code>Grounding</code> is kept as its own list because a span landing on nothing is a finding even when no attacker raised a challenge on it, and because the underlines need the offsets. A rewrite is text and a reason; taking one is <code>submit_claim</code> on the new text, which supersedes the first claim and is attacked on its own.</p>
+
+<h2>Services, tools, web</h2>
+<table class="cmp"><thead><tr><th>module</th><th>holds</th></tr></thead><tbody>
+<tr><td><code>app/compiler/claim_attack/</code></td><td>one prompt module and one <code>build_*_attacker</code> per agent, the orchestrator, and <code>start_claim_attack_agents</code>; imported only by services, per the compiler contract</td></tr>
+<tr><td><code>app/services/claim_review.py</code></td><td><code>start_claim_attack(project_id, claim_id, model)</code>, <code>load_claim_review</code>, and the evidence bundle builder; reads branches through <code>app.services.scope</code></td></tr>
+<tr><td><code>app/web/routers/claims.py</code> (#927)</td><td>gains <code>GET /project/{id}/claims</code> (the list), <code>GET /claims/{claim_id}</code> (the page), <code>POST …/attack</code>; approve and decline already exist</td></tr>
+<tr><td><code>app/templates/claim_review.html</code>, <code>claims.html</code></td><td>the mock's markup on the app's classes; the sentence and the grounding table are the new components</td></tr>
+<tr><td><code>app/web/project_view.build_nav</code></td><td>a <code>Claims</code> leaf with the count</td></tr>
+</tbody></table>
+
+<h2>The page, as agreed</h2>
+<ul>
+<li>Top: this run's outputs, nothing else. The attackers live in a fold at the bottom.</li>
+<li>The sentence with severity on the underlines; the grounding table; the list sorted by weight; the folds.</li>
+<li>Approve and Decline, on the claim. No action on a challenge: the review is read, not edited. No author/reader split.</li>
+<li>Rewrite and re-attack: a textarea, or one of the proposed rewrites, and a POST that submits the new text as a new claim superseding the first (what <code>submit_claim</code> already does for a matching context) and attacks it.</li>
+<li>Claims in the nav, reachable from every page: "N to review" while any claim is submitted, else the count made. Mock: <a href="claims.html">claims.html</a>.</li>
+</ul>
+<div class="q"><b>One rule this crosses.</b> <code>project_shell.html</code> says the nav carries no status marks and is a table of contents. A "2 to review" badge is a status mark. Either the rule bends for this one item, or the count sits on the Overview's next-action line instead and the nav item stays plain. Your call before PR 4.</div>
+
+<h2>PRs, in order</h2>
+<table class="cmp"><thead><tr><th>PR</th><th>ships</th><th>done when</th></tr></thead><tbody>
+<tr><td>1 · the record and the bundle</td><td><code>ClaimReview</code>, <code>EvidenceRef</code>, the evidence bundle builder, <code>load_claim_review</code>. No model call.</td><td>a bundle for the lobbying run holds the four figures, the arms, and the column profiles; a fixture review round-trips; a backing not in the bundle is refused</td></tr>
+<tr><td>2 · the attackers</td><td>six prompts and schemas, the orchestrator, <code>start_claim_attack</code></td><td>on the three mock claims the job returns within the fold rule; the apples sentence grounds every phrase to null; no backing fails the guard</td></tr>
+<tr><td>3 · the page</td><td>the sentence page on a stored review; approve and decline wired to #973</td><td>the mock's states are all reachable from the real record</td></tr>
+<tr><td>4 · the list and the nav</td><td><code>/claims</code>, the nav leaf</td><td>the count moves when a claim is approved; the rule question above is decided</td></tr>
+<tr><td>later</td><td>priced challenges (a rerun with one thing changed, through the runner); table claims, whose map is the table rather than a sentence</td><td>not in this plan</td></tr>
+</tbody></table>
+
+<h2>Arch tests that will fire</h2>
+<ul>
+<li><b>fan-out ceiling</b> on <code>app.web.routers</code>: #927 already moved a router behind <code>include_admin_routers</code> to stay under it; the list route goes in the same router, not a new one.</li>
+<li><b>compiler contract</b>: only services import <code>app.compiler</code>, so the web layer starts an attack through <code>app.services.claim_review</code>.</li>
+<li><b>runtime contract</b>: reading a run's branches is allowed from <code>app.services.scope</code> only; the bundle builder calls it rather than <code>app.runtime</code>.</li>
+<li><b>record placement</b>: <code>ClaimReview</code> in <code>app/models/records/</code>, the lifecycle functions in the service.</li>
+<li><b>added-comment length</b> and <b>banned words</b> (<code>canonical</code>, <code>deriv</code>, <code>sorry</code>, <code>unfortunately</code>): the prompts are long prose and go in <code>*_prompt.py</code> modules like the guide's, which is where the size ratchet expects them.</li>
+</ul>
+
+<h2>Cost</h2>
+<p>Seven turns per attack, six of them with a bundle of a few thousand tokens and one structured answer, on Sonnet. The attack runs once per submitted claim and once per re-attack; nothing runs on page load. If that is too much per claim, the four attackers that read code and columns can share one turn and the orchestrator can take the meaning attacker's job; the shape of the record does not change.</p>
+
+<h2>Open</h2>
+<ul>
+<li>Table claims. The record and the page assume a sentence over a cell; a table needs units (columns, rows, the frame) in place of phrases. Deferred on purpose.</li>
+<li>The nav badge against the no-status-marks rule.</li>
+<li>Approve is one click with no sign-in, as #973 left it. The record stores no approver.</li>
+</ul>
+</main>
+<script>mermaid.initialize({startOnLoad:true, theme:"neutral"});</script>
+</body></html>
