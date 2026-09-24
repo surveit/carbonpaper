@@ -1,6 +1,7 @@
 """The claims step against a fake workspace instead of a server."""
 from __future__ import annotations
 
+import itertools
 import json
 import urllib.error
 from typing import Any
@@ -80,6 +81,28 @@ def test_each_figure_becomes_a_reviewed_claim_on_the_graded_run(workspace):
     assert {c["field"] for c in claims} == set(_ANSWER)
     assert all(c["review"] == "done" for c in claims)
     assert all(a["run_id"] == "built" for n, a in fake.calls if n == "submit_claim")
+
+
+def test_submissions_carry_the_exact_quote_the_expected_project_and_slug(workspace):
+    fake = workspace()
+    claims_stage.transform(_row())
+    submitted = {a["slug"]: a for n, a in fake.calls if n == "submit_claim"}
+    assert submitted.keys() == {"total-cases", "share", "peak-year"}
+    for field, quote in _QUOTES.items():
+        submission = submitted[field.replace("_", "-")]
+        assert submission["text"] == quote
+        assert submission["project_id"] == "inner"
+
+
+def test_a_review_still_running_at_the_deadline_times_out(workspace, monkeypatch):
+    # A real clock can tie with itself at this machine's tick resolution; count
+    # up instead so each check is strictly later than the deadline before it.
+    monkeypatch.setattr(claims_stage, "REVIEW_DEADLINE_SECONDS", 0)
+    monkeypatch.setattr(claims_stage.time, "monotonic", itertools.count().__next__)
+    workspace(review_polls=1000)
+    claims = json.loads(claims_stage.transform(_row())["claims_json"])
+    assert all(c["review"] == "timed_out" for c in claims)
+    assert all(c["error"] == "the review was still running at the deadline" for c in claims)
 
 
 def test_our_defects_and_unquoted_figures_are_skipped_with_a_reason(workspace):
