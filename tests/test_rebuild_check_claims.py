@@ -91,6 +91,15 @@ def test_our_defects_and_unquoted_figures_are_skipped_with_a_reason(workspace):
         "share": "ruled our_defect", "peak_year": "no quote recorded"}
 
 
+def test_choose_figures_skips_a_null_value_and_lists_a_quote_missing_from_the_answer():
+    row = {"results_json": json.dumps({"total_cases": 17, "share": None}),
+           "expected_quotes_json": json.dumps(_QUOTES), "diagnosis": "[]"}
+    to_claim, skipped = claims_stage.choose_figures(row)
+    assert to_claim == [("total_cases", _QUOTES["total_cases"])]
+    assert skipped == {"share": "the rebuild wrote no value",
+                       "peak_year": "not in the rebuild's answer"}
+
+
 def test_no_more_than_two_reviews_run_at_once(workspace):
     fake = workspace(review_polls=3)
     claims_stage.transform(_row())

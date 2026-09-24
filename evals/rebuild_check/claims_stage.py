@@ -48,12 +48,16 @@ def choose_figures(row):
                    if r.get("verdict") == "our_defect"}
     to_claim, skipped = [], {}
     for field in sorted(answer):
-        if field in our_defects:
+        if answer[field] is None:
+            skipped[field] = "the rebuild wrote no value"
+        elif field in our_defects:
             skipped[field] = "ruled our_defect"
         elif not quotes.get(field):
             skipped[field] = "no quote recorded"
         else:
             to_claim.append((field, quotes[field]))
+    for field in sorted(set(quotes) - set(answer)):
+        skipped[field] = "not in the rebuild's answer"
     return to_claim, skipped
 
 
