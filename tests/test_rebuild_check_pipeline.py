@@ -100,3 +100,9 @@ def test_the_committed_cases_read_as_the_eval_dataset():
     assert config.table is not None
     frame = read_table_ref(config.table)
     assert set(frame.columns) == {c.name for c in config.table.table_schema.columns}
+
+
+def test_an_eval_run_never_reaches_the_claims_step():
+    report = validate_eval_compatibility(_config(), parse_workflow(build_run_evals.stages()))
+    assert report.settings is not None and "claims" not in report.settings.frontier
+    assert build_run_evals.stages()[-1]["id"] == "claims"

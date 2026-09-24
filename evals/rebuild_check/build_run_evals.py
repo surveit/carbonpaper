@@ -2,8 +2,8 @@
 import json
 
 from evals.rebuild_check.eval_pieces import (
-    BUILD_INSTRUCTIONS, COMPARE_CODE, DATA, DIAGNOSE_INSTRUCTIONS, ITEMS, READ_ANSWER_CODE,
-    VERDICT_CODE, VERIFY_CODE, col, render_resolve_sources_code,
+    BUILD_INSTRUCTIONS, COMPARE_CODE, DATA, DIAGNOSE_INSTRUCTIONS, ITEMS, MCP, READ_ANSWER_CODE,
+    VERDICT_CODE, VERIFY_CODE, col, render_claims_code, render_resolve_sources_code,
 )
 
 ITEM_COLUMNS = [
@@ -145,6 +145,20 @@ def stages():
                     col("citation_holds", "bool", True), col("process_ok", "bool", True),
                     col("diagnosis", "str", True)]}],
                 "adds": [col("passed", "bool", False)], "rewrites": []},
+        },
+        {
+            "id": "claims", "type": "python_row_function", "cache": True,
+            "description": "Claim each rebuilt figure in the page's own words, on the run that "
+                           "was graded, and have the reviewers review it. Outreach runs only.",
+            "inputs": [{"id": "verdict"}],
+            "function": {"kind": "inline", "code": render_claims_code(MCP)},
+            "signature": {"form": "extends", "reads": [
+                {"input": "verdict", "columns": [
+                    col("run_url", "str", True), col("citation_holds", "bool", True),
+                    col("results_json", "str", True), col("expected_quotes_json", "str", True),
+                    col("diagnosis", "str", True)]}],
+                "adds": [col("claims_json", "str", False), col("claims_skipped_json", "str", False)],
+                "rewrites": []},
         },
     ]
 

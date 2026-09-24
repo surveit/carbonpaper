@@ -311,6 +311,12 @@ columns are the field names in the schema,
 each holding the type the schema declares for that field. That row is the deliverable. If the
 run that writes it did not finish, there is no answer, whatever you have in a scratch file.
 
+Publish each figure too. Before you run, write one claim shape per schema field with
+`write_claim_shapes` (label: the field name; universe: "open"; importance: "primary"), then
+give your `answer` stage one `workflow_outputs` rule per field: kind "figure", slug the field
+name with "_" replaced by "-", label the field name, column the field name, shape_id that
+field's shape id. This names what the answer holds; it says nothing about the values.
+
 If you cannot get there, say so. Returning `run_url` as null with `blocked_by` filled in is a
 legitimate outcome and a useful one — a stage type that will not take your data, a column the
 file does not have, a schema field the sources cannot answer. Report the wall you hit. Do not
@@ -545,5 +551,11 @@ Worked example:
     "why": "The rebuild counted rows marked Other as withheld and the page did not; the column does not say which is right."}],
  "next_step": "Theirs: ask which of the two withheld readings they intended, and flag the 89."}
 """
+
+_CLAIMS_SOURCE = Path(__file__).resolve().with_name("claims_stage.py")
+
+
+def render_claims_code(mcp_url: str) -> str:
+    return _CLAIMS_SOURCE.read_text(encoding="utf-8") + f"\nMCP_URL = {mcp_url!r}\n"
 
 
