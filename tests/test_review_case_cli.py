@@ -16,11 +16,11 @@ from app.evals.review_case import ARCHIVE_FILE, POLL_SECONDS, main
 from app.services import run as run_service
 from app.services.claim_shapes import write_claim_shapes
 from app.services.methodology import write_methodology
-from app.services.project import export_project_archive, save_working_copy_as_version
+from app.services.project import export_project_archive
 from claim_review_fixture import PROJECT, TOTAL_SHAPE, TOTAL_TEXT, add_a_sandboxed_filter
 from run_seed import list_run_ids
 from scope_fixture import column, review_tail, stage_specs, write_inputs
-from stage_seed import set_stages
+from stage_seed import save_version, set_stages
 
 _SUMMARY = "the figure is a share, not a count"
 _SLUG = "grant-total"
@@ -30,7 +30,7 @@ def _a_fake_review(project_id: str, claim_id: str, *, model: str) -> str:
     ClaimReview(
         claim_id=claim_id, session_id="fake-session",
         challenges=[Challenge(kind=ChallengeKind.gap, text=_SUMMARY,
-                              justification="the run counts rows", severity=Severity.major)],
+                              justification="the run counts rows", severity=Severity.high)],
     ).save()
     return "fake-session"
 
@@ -110,7 +110,7 @@ def capture_a_case(tmp_path, projects_root, monkeypatch, *, judged_cache=True, t
     set_stages(PROJECT, [*_declare_the_total_as_an_output(
         add_a_sandboxed_filter(stage_specs(sources)), shape.id),
         _a_judging_stage(cache=judged_cache), *tail])
-    save_working_copy_as_version(PROJECT, message="fixture")
+    save_version(PROJECT, message="fixture")
     monkeypatch.setattr("app.runtime.stages.llm_transform.call_llm", _a_stubbed_verdict)
     run_service.execute(PROJECT)
     monkeypatch.undo()
