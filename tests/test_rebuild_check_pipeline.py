@@ -46,32 +46,68 @@ def test_a_value_of_the_wrong_type_is_wrong_type_not_a_difference():
     assert out["comparison"]["count"]["verdict"] == "wrong_type"
 
 
-def _row(rulings: list[dict], *, citation: bool = True, process: bool = True) -> dict:
-    return {"citation_holds": citation, "process_ok": process, "diagnosis": json.dumps(rulings)}
+def _agreement(*fields: str) -> dict:
+    return {field: {"verdict": "agrees"} for field in fields}
 
 
-@pytest.mark.parametrize("rulings, passed", [
-    ([], True),
+def _disagreement(*fields: str) -> dict:
+    return {field: {"verdict": "differs"} for field in fields}
+
+
+def _row(rulings: list[dict], comparison: dict, *,
+        citation: bool = True, process: bool = True, diagnosis: str | None = None) -> dict:
+    return {"citation_holds": citation, "process_ok": process,
+            "diagnosis": json.dumps(rulings) if diagnosis is None else diagnosis,
+            "comparison_json": json.dumps(comparison)}
+
+
+@pytest.mark.parametrize("rulings, comparison, passed", [
+    ([], _agreement("a"), True),
     ([{"field": "a", "verdict": "consistent"}, {"field": "b", "verdict": "their_defect"},
-      {"field": "c", "verdict": "genuine_ambiguity"}], True),
-    ([{"field": "a", "verdict": "consistent"}, {"field": "b", "verdict": "our_defect"}], False),
+      {"field": "c", "verdict": "genuine_ambiguity"}], _disagreement("a", "b", "c"), True),
+    ([{"field": "a", "verdict": "consistent"}, {"field": "b", "verdict": "our_defect"}],
+     _disagreement("a", "b"), False),
 ])
-def test_a_case_passes_unless_a_figure_is_our_defect(rulings, passed):
-    assert _load(VERDICT_CODE)(_row(rulings)) == {"passed": passed}
+def test_a_case_passes_unless_a_figure_is_our_defect(rulings, comparison, passed):
+    assert _load(VERDICT_CODE)(_row(rulings, comparison))["passed"] == passed
 
 
 def test_a_case_fails_when_its_citation_or_process_does_not_hold():
-    assert _load(VERDICT_CODE)(_row([], citation=False)) == {"passed": False}
-    assert _load(VERDICT_CODE)(_row([], process=False)) == {"passed": False}
+    citation_failure = _load(VERDICT_CODE)(_row([], _agreement("a"), citation=False))
+    assert citation_failure == {"passed": False, "verdict_reason": "the citation did not hold"}
+    process_failure = _load(VERDICT_CODE)(_row([], _agreement("a"), process=False))
+    assert process_failure == {
+        "passed": False, "verdict_reason": "the judge did not trust the comparison"}
+
+
+def test_a_figure_the_judge_left_unruled_fails_the_case():
+    out = _load(VERDICT_CODE)(_row([], _disagreement("a", "b")))
+    assert out["passed"] is False
+    assert "a, b" in out["verdict_reason"]
+
+
+def test_a_ruling_on_a_field_the_comparison_does_not_carry_fails_the_case():
+    out = _load(VERDICT_CODE)(
+        _row([{"field": "not_a_field", "verdict": "their_defect"}], _disagreement("a")))
+    assert out["passed"] is False
+    assert "not_a_field" in out["verdict_reason"]
+
+
+def test_a_ruling_with_an_unknown_verdict_value_fails_the_case():
+    out = _load(VERDICT_CODE)(
+        _row([{"field": "a", "verdict": "probably_fine"}], _disagreement("a")))
+    assert out["passed"] is False
+    assert "probably_fine" in out["verdict_reason"]
 
 
 @pytest.mark.parametrize("diagnosis", [
-    json.dumps([{"field": "a", "verdict": "probably_fine"}]),
+    "not json",
     json.dumps({"field": "a", "verdict": "our_defect"}),
 ])
-def test_a_ruling_the_verdict_cannot_read_stops_the_case(diagnosis):
-    with pytest.raises(ValueError):
-        _load(VERDICT_CODE)({"citation_holds": True, "process_ok": True, "diagnosis": diagnosis})
+def test_an_unreadable_diagnosis_fails_the_case(diagnosis):
+    out = _load(VERDICT_CODE)(_row([], _disagreement("a"), diagnosis=diagnosis))
+    assert out == {"passed": False,
+                   "verdict_reason": "the judge's diagnosis could not be read: " + diagnosis}
 
 
 def test_sources_resolve_against_the_checkout_and_a_missing_one_stops_the_case(tmp_path):

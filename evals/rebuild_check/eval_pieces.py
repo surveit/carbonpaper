@@ -476,15 +476,51 @@ VERDICTS = {"our_defect", "their_defect", "genuine_ambiguity", "consistent"}
 
 
 def transform(row):
-    if not row["citation_holds"] or not row["process_ok"]:
-        return {"passed": False}
-    rulings = json.loads(row["diagnosis"] or "[]")
-    if not isinstance(rulings, list):
-        raise ValueError("the diagnosis is not a list of rulings: " + str(row["diagnosis"]))
+    if not row["citation_holds"]:
+        return _fail("the citation did not hold")
+    if not row["process_ok"]:
+        return _fail("the judge did not trust the comparison")
+    rulings = _read_rulings(row["diagnosis"])
+    if rulings is None:
+        return _fail("the judge's diagnosis could not be read: " + str(row["diagnosis"]))
+    comparison = json.loads(row["comparison_json"])
+    bad_ruling = _find_bad_ruling(rulings, comparison)
+    if bad_ruling is not None:
+        return _fail(bad_ruling)
+    unruled = _find_unruled_figures(rulings, comparison)
+    if unruled:
+        return _fail("the judge left these figures unruled: " + ", ".join(unruled))
+    our_defects = sorted(r["field"] for r in rulings if r["verdict"] == "our_defect")
+    if our_defects:
+        return _fail("our defect: " + ", ".join(our_defects))
+    return {"passed": True, "verdict_reason": ""}
+
+
+def _read_rulings(diagnosis):
+    try:
+        rulings = json.loads(diagnosis)
+    except (TypeError, ValueError):
+        return None
+    return rulings if isinstance(rulings, list) else None
+
+
+def _find_bad_ruling(rulings, comparison):
     for ruling in rulings:
         if ruling.get("verdict") not in VERDICTS:
-            raise ValueError("a ruling carries no known verdict: " + json.dumps(ruling))
-    return {"passed": not any(r["verdict"] == "our_defect" for r in rulings)}
+            return "a ruling carries no known verdict: " + json.dumps(ruling)
+        if ruling.get("field") not in comparison:
+            return "a ruling names a field the comparison does not carry: " + json.dumps(ruling)
+    return None
+
+
+def _find_unruled_figures(rulings, comparison):
+    ruled = {r["field"] for r in rulings}
+    return sorted(field for field, c in comparison.items()
+                 if c["verdict"] != "agrees" and field not in ruled)
+
+
+def _fail(reason):
+    return {"passed": False, "verdict_reason": reason}
 '''
 
 

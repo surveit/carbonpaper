@@ -131,8 +131,9 @@ def stages():
         },
         {
             "id": "verdict", "type": "python_row_function", "cache": True,
-            "description": "Pass the case unless the judge ruled a figure our own defect, or "
-                           "the citation or the comparison did not hold.",
+            "description": "Fail the case, with a stated reason, unless the citation holds, "
+                           "the judge trusted the comparison, every disagreeing figure got a "
+                           "valid ruling, and no ruling was our own defect.",
             "inputs": [{"id": "diagnose"}],
             "function": {"kind": "inline", "code": VERDICT_CODE},
             "workflow_outputs": [{
@@ -143,8 +144,9 @@ def stages():
             "signature": {"form": "extends", "reads": [
                 {"input": "diagnose", "columns": [
                     col("citation_holds", "bool", True), col("process_ok", "bool", True),
-                    col("diagnosis", "str", True)]}],
-                "adds": [col("passed", "bool", False)], "rewrites": []},
+                    col("diagnosis", "str", True), col("comparison_json", "str", False)]}],
+                "adds": [col("passed", "bool", False), col("verdict_reason", "str", False)],
+                "rewrites": []},
         },
         {
             "id": "claims", "type": "python_row_function", "cache": True,
