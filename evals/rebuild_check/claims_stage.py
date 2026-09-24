@@ -60,6 +60,11 @@ def submit_one(project, run, field, quote):
     except ToolError as refusal:
         return {"field": field, "slug": slug, "claim_id": None, "claim_url": None,
                 "review": "none", "challenges": [], "error": str(refusal)}
+    except (OSError, ValueError) as failure:
+        return {"field": field, "slug": slug, "claim_id": None, "claim_url": None,
+                "review": "none", "challenges": [],
+                "error": "the call failed in transit; the claim may exist, so it was not "
+                         "resubmitted: " + str(failure)}
     return {"field": field, "slug": slug, "claim_id": made["claim"]["id"],
             "claim_url": made["claim_url"], "review": "running", "challenges": [],
             "error": None, "deadline": time.monotonic() + REVIEW_DEADLINE_SECONDS}
@@ -68,8 +73,13 @@ def submit_one(project, run, field, quote):
 def poll_reviews(project, in_flight):
     still = []
     for claim in in_flight:
-        review = call_tool("read_claim_review",
-                           {"project_id": project, "claim_id": claim["claim_id"]})
+        try:
+            review = call_tool("read_claim_review",
+                               {"project_id": project, "claim_id": claim["claim_id"]})
+        except (OSError, ValueError) as failure:
+            claim.update(review="unknown", error=str(failure))
+            claim.pop("deadline", None)
+            continue
         claim.update(review=review["review"], challenges=review.get("challenges") or [],
                      error=review.get("error"))
         if claim["review"] == "running" and time.monotonic() > claim["deadline"]:
