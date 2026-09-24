@@ -107,8 +107,9 @@ def stages():
         },
         {
             "id": "diagnose", "type": "llm_transform", "cache": True,
-            "description": "Say what went wrong: our defect, their defect, or a question the "
-                           "source does not settle.",
+            "description": "Rule each disagreement one of four ways: our defect, their "
+                           "defect, genuine ambiguity, or a reading consistent with the "
+                           "artifact's own hedged wording.",
             "inputs": [{"id": "compare"}],
             "llm": {"prompt_instructions": DIAGNOSE_INSTRUCTIONS,
                     "prompt_data_template": (

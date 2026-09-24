@@ -1,7 +1,7 @@
 {
   "eval_id": "rebuild_check",
   "name": "Rebuild Check",
-  "description": "Does the outer pipeline rebuild each published figure from the files the artifact cites, blind to the figure? A case passes unless the judge rules a figure our own defect.",
+  "description": "Does the outer pipeline rebuild each published figure from the files the artifact cites, blind to the figure? A case fails if the citation does not hold, the judge does not trust the comparison, a figure is left unruled, or the judge rules a figure our own defect.",
   "override_stage": "items",
   "target_stage": "verdict",
   "expected_outputs": [{"output_column": "passed", "metric": "exact"}],
