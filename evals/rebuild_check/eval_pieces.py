@@ -424,7 +424,11 @@ import json
 
 
 def transform(row):
-    expected = json.loads(row["expected_json"]) if row["expected_json"] else {}
+    if not row["expected_json"]:
+        raise ValueError("expected_json is empty; the case is missing its expected figures")
+    if not row["target_schema"]:
+        raise ValueError("target_schema is empty; the case is missing its answer shape")
+    expected = json.loads(row["expected_json"])
     computed = json.loads(row["results_json"]) if row["results_json"] else {}
     types = read_declared_types(row["target_schema"])
     comparison = {field: compare(expected.get(field), computed.get(field), types.get(field))
@@ -457,12 +461,20 @@ def compare(expected, computed, declared):
 
 def fits(value, declared):
     if declared == "integer":
-        return isinstance(value, int) and not isinstance(value, bool)
+        return is_integral(value)
     if declared == "number":
         return isinstance(value, (int, float)) and not isinstance(value, bool)
     if declared == "string":
         return isinstance(value, str)
     return None
+
+
+def is_integral(value):
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return True
+    return isinstance(value, float) and value.is_integer()
 
 
 def render(value):

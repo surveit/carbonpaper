@@ -48,6 +48,26 @@ def test_a_value_of_the_wrong_type_is_wrong_type_not_a_difference():
     assert out["comparison"]["count"]["verdict"] == "wrong_type"
 
 
+def test_an_integral_float_fits_an_integer_field():
+    out = _compare({"count": 17}, {"count": 17.0})
+    assert out["comparison"]["count"]["verdict"] == "agrees"
+
+
+def test_a_fractional_float_does_not_fit_an_integer_field():
+    out = _compare({"count": 17}, {"count": 17.5})
+    assert out["comparison"]["count"]["verdict"] == "wrong_type"
+
+
+def test_compare_refuses_a_case_with_no_expected_figures():
+    with pytest.raises(ValueError, match="expected_json"):
+        _load(COMPARE_CODE)({"expected_json": "", "results_json": "{}", "target_schema": _SCHEMA})
+
+
+def test_compare_refuses_a_case_with_no_answer_shape():
+    with pytest.raises(ValueError, match="target_schema"):
+        _load(COMPARE_CODE)({"expected_json": "{}", "results_json": "{}", "target_schema": ""})
+
+
 def _agreement(*fields: str) -> dict:
     return {field: {"verdict": "agrees"} for field in fields}
 
