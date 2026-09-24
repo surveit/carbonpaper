@@ -15,5 +15,13 @@ right figure uncomparable. `shape_carries_no_figure` stops the run if a value le
 `fetch_sources` pulls the cited files onto disk and hashes them, so an item names bytes rather
 than a URL that may move under it.
 
+`eval_item` shapes one row per usable artifact: its files, its answer shape, and what it
+expects. `write_items` writes those rows to this run's own output folder as `eval_items.json` —
+never into the committed `items/eval_items.json`, which this generator does not touch.
+
 Nothing here builds or checks anything. Generating items and running evals are separate runs so
 that an item is a fixed thing an eval can be re-run against.
+
+Adding a generated case to the committed eval is a manual step: copy a line from the run's
+output into `items/eval_items.json` by hand, rewrite its `input_files` as paths relative to the
+checkout root, and add the `passed` label the case is expected to score.

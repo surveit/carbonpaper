@@ -33,17 +33,16 @@ import pandas as pd
 COLUMNS = ["item_id", "artifact", "artifact_title", "input_files", "input_digests",
            "target_schema", "expected_json", "expected_locations_json", "expected_quotes_json"]
 NEWLINE = chr(10)
-NEWLINE = chr(10)
 
 
 def transform(df, output_dir):
     items = df[df["usable"]][COLUMNS].to_dict("records")
     refused = df[~df["usable"]][["artifact", "unusable_because"]].to_dict("records")
     body = NEWLINE.join(json.dumps(item) for item in items) + NEWLINE
-    for destination in (pathlib.Path(output_dir), pathlib.Path(ITEMS_DIR)):
-        destination.mkdir(parents=True, exist_ok=True)
-        (destination / "eval_items.json").write_text(body, encoding="utf-8")
-    (pathlib.Path(output_dir) / "refused.json").write_text(
+    destination = pathlib.Path(output_dir)
+    destination.mkdir(parents=True, exist_ok=True)
+    (destination / "eval_items.json").write_text(body, encoding="utf-8")
+    (destination / "refused.json").write_text(
         json.dumps(refused, indent=2), encoding="utf-8")
     return pd.DataFrame({"items_written": [len(items)], "artifacts_refused": [len(refused)]})
 '''
@@ -154,8 +153,7 @@ def stages():
             "description": "Write the item set the eval runner reads.",
             "inputs": [{"id": "eval_item"}],
             "report": {"format": "html_report", "destination": "build/"},
-            "function": {"kind": "inline",
-                         "code": f"ITEMS_DIR = {ITEMS.as_posix()!r}\n" + WRITE_ITEMS_CODE},
+            "function": {"kind": "inline", "code": WRITE_ITEMS_CODE},
             "signature": {"form": "replaces", "reads": [
                 {"input": "eval_item", "columns": [
                     col("item_id", "str", False), col("artifact", "str", False),

@@ -525,20 +525,32 @@ def _fail(reason):
 
 
 def render_resolve_sources_code(root: Path) -> str:
-    return f"import pathlib\nROOT = pathlib.Path({root.as_posix()!r})\n" + _RESOLVE_SOURCES_BODY
+    return (f"import pathlib\nROOT = pathlib.Path({root.as_posix()!r}).resolve()\n"
+            + _RESOLVE_SOURCES_BODY)
 
 
 _RESOLVE_SOURCES_BODY = '''
 
 def transform(row):
+    relatives = [part.strip() for part in (row["input_files"] or "").split(";") if part.strip()]
+    if not relatives:
+        raise ValueError("the case lists no source files")
     paths = []
-    for relative in (row["input_files"] or "").split(";"):
-        path = ROOT / relative.strip()
-        if not path.is_file():
-            raise FileNotFoundError(
-                "source " + relative.strip() + " is not in this checkout at " + path.as_posix())
-        paths.append(path.as_posix())
+    for relative in relatives:
+        paths.append(_resolve_one(relative))
     return {"input_paths": ";".join(paths)}
+
+
+def _resolve_one(relative):
+    if pathlib.Path(relative).is_absolute():
+        raise ValueError("source path is absolute, not checkout-relative: " + relative)
+    resolved = (ROOT / relative).resolve()
+    if not resolved.is_relative_to(ROOT):
+        raise ValueError("source path resolves outside the checkout root: " + relative)
+    if not resolved.is_file():
+        raise FileNotFoundError(
+            "source " + relative + " is not in this checkout at " + resolved.as_posix())
+    return resolved.as_posix()
 '''
 
 DIAGNOSE_INSTRUCTIONS = """You read the whole picture of one rebuild and say what went wrong.

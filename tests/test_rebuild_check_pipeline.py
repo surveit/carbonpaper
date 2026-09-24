@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from app.core.paths import repo_root
 from app.evals.compatibility import validate_eval_compatibility
 from app.evals.dataset import read_table_ref
 from app.models import parse_workflow
@@ -118,6 +120,42 @@ def test_sources_resolve_against_the_checkout_and_a_missing_one_stops_the_case(t
         "input_paths": (tmp_path / "a" / "one.csv").as_posix()}
     with pytest.raises(FileNotFoundError, match="a/gone.csv"):
         transform({"input_files": "a/gone.csv"})
+
+
+def test_a_case_with_no_source_files_is_refused_by_name(tmp_path):
+    transform = _load(render_resolve_sources_code(tmp_path))
+    with pytest.raises(ValueError, match="the case lists no source files"):
+        transform({"input_files": ""})
+    with pytest.raises(ValueError, match="the case lists no source files"):
+        transform({"input_files": None})
+
+
+def test_an_absolute_source_path_is_refused(tmp_path):
+    transform = _load(render_resolve_sources_code(tmp_path))
+    absolute = str(tmp_path / "outside.csv")
+    with pytest.raises(ValueError, match=re.escape(absolute)):
+        transform({"input_files": absolute})
+
+
+def test_a_source_path_that_escapes_the_checkout_root_is_refused(tmp_path):
+    (tmp_path / "a").mkdir()
+    transform = _load(render_resolve_sources_code(tmp_path / "a"))
+    with pytest.raises(ValueError, match="outside the checkout root"):
+        transform({"input_files": "../outside.csv"})
+
+
+def test_every_committed_case_input_files_resolves_inside_the_checkout():
+    root = repo_root()
+    transform = _load(render_resolve_sources_code(root))
+    items_path = root / "evals" / "rebuild_check" / "items" / "eval_items.json"
+    lines = [line for line in items_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert lines
+    for line in lines:
+        item = json.loads(line)
+        result = transform({"input_files": item["input_files"]})
+        for resolved in result["input_paths"].split(";"):
+            assert Path(resolved).is_relative_to(root)
+            assert Path(resolved).is_file()
 
 
 def _config() -> EvalConfig:
