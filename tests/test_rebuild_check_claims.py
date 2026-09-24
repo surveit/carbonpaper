@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import urllib.error
 from typing import Any
 
 import pytest
@@ -20,12 +21,14 @@ class _Workspace:
 
     def __init__(self, *, review_polls: int = 2, refused: frozenset[str] = frozenset(),
                  submit_raises: dict[str, Exception] | None = None,
-                 poll_raises: frozenset[str] = frozenset()):
+                 poll_raises: frozenset[str] = frozenset(),
+                 poll_connection_refused: frozenset[str] = frozenset()):
         self.calls: list[tuple[str, dict]] = []
         self.review_polls = review_polls
         self.refused = refused
         self.submit_raises = submit_raises or {}
         self.poll_raises = poll_raises
+        self.poll_connection_refused = poll_connection_refused
         self.polls: dict[str, int] = {}
         self.most_in_flight = 0
 
@@ -43,6 +46,8 @@ class _Workspace:
             self.most_in_flight = max(self.most_in_flight, running)
             return {"claim": {"id": claim_id}, "claim_url": "/project/inner/claims/" + claim_id}
         claim_id = arguments["claim_id"]
+        if claim_id in self.poll_connection_refused:
+            raise ConnectionRefusedError("the workspace refused the connection")
         if claim_id in self.poll_raises:
             raise OSError("connection reset")
         self.polls[claim_id] += 1
@@ -117,6 +122,24 @@ def test_a_poll_that_fails_in_transit_marks_that_claim_unknown_and_completes(wor
     assert "connection reset" in claims["share"]["error"]
     assert claims["total_cases"]["review"] == "done"
     assert claims["peak_year"]["review"] == "done"
+
+
+def test_a_refused_connection_on_submit_is_not_cached_and_reraises(workspace):
+    workspace(submit_raises={"share": ConnectionRefusedError("refused")})
+    with pytest.raises(ConnectionRefusedError):
+        claims_stage.transform(_row())
+
+
+def test_a_urlerror_wrapping_a_refusal_on_submit_is_not_cached_and_reraises(workspace):
+    workspace(submit_raises={"share": urllib.error.URLError(ConnectionRefusedError("refused"))})
+    with pytest.raises(urllib.error.URLError):
+        claims_stage.transform(_row())
+
+
+def test_a_refused_connection_on_poll_is_not_cached_and_reraises(workspace):
+    workspace(poll_connection_refused=frozenset({"claim-share"}))
+    with pytest.raises(ConnectionRefusedError):
+        claims_stage.transform(_row())
 
 
 def test_a_submit_that_raises_a_non_tool_value_error_is_recorded_not_raised(workspace):

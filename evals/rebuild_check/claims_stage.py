@@ -2,6 +2,7 @@
 import json
 import re
 import time
+import urllib.error
 import urllib.request
 
 # The rendered stage code sets this last; the bare module refuses to call anything.
@@ -65,6 +66,8 @@ def submit_one(project, run, field, quote):
         return {"field": field, "slug": slug, "claim_id": None, "claim_url": None,
                 "review": "none", "challenges": [], "error": str(refusal)}
     except (OSError, ValueError) as failure:
+        if refuses_connection(failure):
+            raise
         return {"field": field, "slug": slug, "claim_id": None, "claim_url": None,
                 "review": "none", "challenges": [],
                 "error": "the call failed in transit; the claim may exist, so it was not "
@@ -74,6 +77,14 @@ def submit_one(project, run, field, quote):
             "error": None, "deadline": time.monotonic() + REVIEW_DEADLINE_SECONDS}
 
 
+def refuses_connection(error):
+    if isinstance(error, ConnectionRefusedError):
+        return True
+    # urlopen wraps a transport-level refusal in URLError, with the refusal as .reason.
+    return isinstance(error, urllib.error.URLError) and isinstance(
+        error.reason, ConnectionRefusedError)
+
+
 def poll_reviews(project, in_flight):
     still = []
     for claim in in_flight:
@@ -81,6 +92,8 @@ def poll_reviews(project, in_flight):
             review = call_tool("read_claim_review",
                                {"project_id": project, "claim_id": claim["claim_id"]})
         except (OSError, ValueError) as failure:
+            if refuses_connection(failure):
+                raise
             claim.update(review="unknown", error=str(failure))
             claim.pop("deadline", None)
             continue
