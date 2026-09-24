@@ -558,4 +558,3 @@ _CLAIMS_SOURCE = Path(__file__).resolve().with_name("claims_stage.py")
 def render_claims_code(mcp_url: str) -> str:
     return _CLAIMS_SOURCE.read_text(encoding="utf-8") + f"\nMCP_URL = {mcp_url!r}\n"
 
-
