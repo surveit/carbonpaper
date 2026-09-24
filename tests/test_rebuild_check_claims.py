@@ -51,8 +51,9 @@ class _Workspace:
                 "challenges": [{"severity": 2}] if done else []}
 
 
-def _row(*, diagnosis=(), quotes=None, citation=True) -> dict:
+def _row(*, diagnosis=(), quotes=None, citation=True, process=True) -> dict:
     return {"item_id": "abc", "run_url": _RUN_URL, "citation_holds": citation,
+            "process_ok": process,
             "results_json": json.dumps(_ANSWER),
             "expected_quotes_json": json.dumps(_QUOTES if quotes is None else quotes),
             "diagnosis": json.dumps(list(diagnosis))}
@@ -130,6 +131,15 @@ def test_a_case_whose_citation_failed_makes_no_calls(workspace):
     fake = workspace()
     claims_stage.transform(_row(citation=False))
     assert fake.calls == []
+
+
+def test_a_case_the_judge_did_not_trust_makes_no_calls_and_skips_every_figure(workspace):
+    fake = workspace()
+    out = claims_stage.transform(_row(process=False))
+    assert fake.calls == []
+    assert json.loads(out["claims_json"]) == []
+    assert json.loads(out["claims_skipped_json"]) == {
+        field: "the judge did not trust the comparison" for field in _ANSWER}
 
 
 def test_the_rendered_stage_code_carries_its_server():

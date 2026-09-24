@@ -18,6 +18,10 @@ class ToolError(ValueError):
 def transform(row):
     if not row["citation_holds"]:
         return {"claims_json": "[]", "claims_skipped_json": "{}"}
+    if not row["process_ok"]:
+        answer = json.loads(row["results_json"] or "{}")
+        skipped = {field: "the judge did not trust the comparison" for field in sorted(answer)}
+        return {"claims_json": "[]", "claims_skipped_json": json.dumps(skipped)}
     match = re.search(r"/project/([^/]+)/runs/([^/?#]+)", str(row["run_url"]))
     if match is None:
         raise ValueError("the run URL names no project and run: " + str(row["run_url"]))

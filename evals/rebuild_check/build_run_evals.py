@@ -157,6 +157,7 @@ def stages():
             "signature": {"form": "extends", "reads": [
                 {"input": "verdict", "columns": [
                     col("run_url", "str", True), col("citation_holds", "bool", True),
+                    col("process_ok", "bool", True),
                     col("results_json", "str", True), col("expected_quotes_json", "str", True),
                     col("diagnosis", "str", True)]}],
                 "adds": [col("claims_json", "str", False), col("claims_skipped_json", "str", False)],
