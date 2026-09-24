@@ -1,0 +1,24 @@
+{
+  "eval_id": "rebuild_check",
+  "name": "Rebuild Check",
+  "description": "Does the outer pipeline rebuild each published figure from the files the artifact cites, blind to the figure? A case passes unless the judge rules a figure our own defect.",
+  "override_stage": "items",
+  "target_stage": "verdict",
+  "expected_outputs": [{"output_column": "passed", "metric": "exact"}],
+  "table": {
+    "path": "evals/rebuild_check/items/eval_items.json",
+    "format": "json",
+    "table_schema": {"columns": [
+      {"name": "item_id", "type": "str", "nullable": false},
+      {"name": "artifact", "type": "str", "nullable": false},
+      {"name": "artifact_title", "type": "str", "nullable": true},
+      {"name": "input_files", "type": "str", "nullable": true},
+      {"name": "input_digests", "type": "str", "nullable": true},
+      {"name": "target_schema", "type": "str", "nullable": true},
+      {"name": "expected_json", "type": "str", "nullable": true},
+      {"name": "expected_locations_json", "type": "str", "nullable": true},
+      {"name": "expected_quotes_json", "type": "str", "nullable": true},
+      {"name": "passed", "type": "bool", "nullable": false}
+    ]}
+  }
+}

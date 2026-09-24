@@ -413,52 +413,43 @@ def read_answer_stage(project, run):
     return body["result"]["structuredContent"]
 '''
 
-FIELD_NAMES_CODE = '''
+COMPARE_CODE = '''
 import json
 
 
 def transform(row):
     expected = json.loads(row["expected_json"]) if row["expected_json"] else {}
     computed = json.loads(row["results_json"]) if row["results_json"] else {}
-    return {"field": sorted(set(expected) | set(computed))}
-'''
-
-FIELD_VERDICT_CODE = '''
-def transform(row):
-    if row["computed_value"] == None:
-        return {"verdict": "not_computed"}
-    if row["expected_value"] == None:
-        return {"verdict": "not_expected"}
-    if row["type_matches"] == False:
-        return {"verdict": "wrong_type"}
-    if row["expected_value"] == row["computed_value"]:
-        return {"verdict": "agrees"}
-    return {"verdict": "differs"}
-'''
-
-FIELD_VALUES_CODE = '''
-import json
+    types = read_declared_types(row["target_schema"])
+    comparison = {field: compare(expected.get(field), computed.get(field), types.get(field))
+                  for field in sorted(set(expected) | set(computed))}
+    lines = ["- " + field + ": expected " + render(c["expected"]) + ", rebuild "
+             + render(c["computed"]) + " -> " + c["verdict"] for field, c in comparison.items()]
+    return {"comparison_json": json.dumps(comparison), "findings_text": chr(10).join(lines),
+            "fields_compared": len(comparison)}
 
 
-def transform(row):
-    field = row["field"]
-    expected = json.loads(row["expected_json"]) if row["expected_json"] else {}
-    computed = json.loads(row["results_json"]) if row["results_json"] else {}
-    declared = declared_type(row["target_schema"], field)
-    return {"expected_value": render(expected.get(field)),
-            "computed_value": render(computed.get(field)),
-            "declared_type": declared,
-            "type_matches": fits(computed.get(field), declared)}
-
-
-def declared_type(schema_text, field):
+def read_declared_types(schema_text):
     schema = json.loads(schema_text) if schema_text else {}
-    return ((schema.get("properties") or {}).get(field) or {}).get("type")
+    return {name: spec.get("type") for name, spec in (schema.get("properties") or {}).items()}
+
+
+def compare(expected, computed, declared):
+    if computed is None:
+        verdict = "not_computed"
+    elif expected is None:
+        verdict = "not_expected"
+    elif fits(computed, declared) is False:
+        verdict = "wrong_type"
+    elif expected == computed:
+        verdict = "agrees"
+    else:
+        verdict = "differs"
+    return {"expected": expected, "computed": computed, "declared_type": declared,
+            "verdict": verdict}
 
 
 def fits(value, declared):
-    if value is None or declared is None:
-        return None
     if declared == "integer":
         return isinstance(value, int) and not isinstance(value, bool)
     if declared == "number":
@@ -469,18 +460,43 @@ def fits(value, declared):
 
 
 def render(value):
-    return None if value is None else json.dumps(value)
+    return "null" if value is None else json.dumps(value)
 '''
 
-RENDER_CODE = '''
+VERDICT_CODE = '''
+import json
+
+VERDICTS = {"our_defect", "their_defect", "genuine_ambiguity", "consistent"}
+
+
 def transform(row):
-    lines = []
-    for i in range(len(row["fields"])):
-        lines.append("- " + row["fields"][i]
-                     + ": expected " + str(row["expected_values"][i])
-                     + ", rebuild " + str(row["computed_values"][i])
-                     + " -> " + row["verdicts"][i])
-    return {"findings_text": chr(10).join(lines)}
+    if not row["citation_holds"] or not row["process_ok"]:
+        return {"passed": False}
+    rulings = json.loads(row["diagnosis"] or "[]")
+    if not isinstance(rulings, list):
+        raise ValueError("the diagnosis is not a list of rulings: " + str(row["diagnosis"]))
+    for ruling in rulings:
+        if ruling.get("verdict") not in VERDICTS:
+            raise ValueError("a ruling carries no known verdict: " + json.dumps(ruling))
+    return {"passed": not any(r["verdict"] == "our_defect" for r in rulings)}
+'''
+
+
+def render_resolve_sources_code(root: Path) -> str:
+    return f"import pathlib\nROOT = pathlib.Path({root.as_posix()!r})\n" + _RESOLVE_SOURCES_BODY
+
+
+_RESOLVE_SOURCES_BODY = '''
+
+def transform(row):
+    paths = []
+    for relative in (row["input_files"] or "").split(";"):
+        path = ROOT / relative.strip()
+        if not path.is_file():
+            raise FileNotFoundError(
+                "source " + relative.strip() + " is not in this checkout at " + path.as_posix())
+        paths.append(path.as_posix())
+    return {"input_paths": ";".join(paths)}
 '''
 
 DIAGNOSE_INSTRUCTIONS = """You read the whole picture of one rebuild and say what went wrong.
@@ -491,11 +507,14 @@ stages compared them and checked whether the run the rebuild cites actually exis
 of it. Nothing downstream re-checks you, and a person reads this to decide whether to contact
 the author — so a wrong call costs someone's attention and possibly their goodwill.
 
-Every disagreement resolves exactly three ways, and you must not prefer one:
+Every disagreement resolves exactly four ways, and you must not prefer one:
 - OUR DEFECT: the rebuild is wrong — misread a column, took a reading the data does not support,
   joined on the wrong key, or did not really run.
 - THEIR DEFECT: the artifact states something its own cited source does not support.
 - GENUINE AMBIGUITY: both readings are defensible and the source does not settle it.
+- CONSISTENT: the page states the figure in hedged words — "nearly", "more than", "almost", a
+  rounded percentage — and the rebuild's exact value satisfies them, e.g. 18,475 for "almost
+  18,500".
 
 Two things to weigh:
 - Read the rebuild's method before judging. A difference whose cause is stated plainly there is
@@ -511,8 +530,8 @@ Return JSON with exactly these fields:
 1. "process_ok": true only if the citation holds and the comparison can be trusted.
 2. "headline": one sentence a person reads first.
 3. "diagnosis": an array, one object per disagreeing field, each with "field", "verdict"
-   (our_defect | their_defect | genuine_ambiguity) and "why" in one sentence. Where process_ok
-   is false, return an empty array.
+   (our_defect | their_defect | genuine_ambiguity | consistent) and "why" in one sentence. Where
+   process_ok is false, return an empty array.
 4. "next_step": what the person should do, in one sentence. Name whether the next move is on our
    side or theirs.
 
