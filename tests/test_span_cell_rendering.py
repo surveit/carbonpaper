@@ -106,13 +106,13 @@ def test_the_lineage_row_view_hands_its_script_each_quote_and_page_link(run_dir)
     assert columns["claim"]["cites"] == []
 
 
-def test_the_packet_stage_page_links_the_page_text_the_packet_writes(run_dir, tmp_path):
+def test_a_packet_stage_page_links_no_page_text_the_packet_does_not_hold(run_dir, tmp_path):
     packet = export_review_packet(PROJECT, RUN, tmp_path / "packets")
 
     page = (packet.root / "stages" / f"{STAGE}.html").read_text(encoding="utf-8")
 
-    assert '<q title="oppose">oppose</q> <a href="../sources/ecf17/pages/14.txt">page 14</a>' in page
-    assert "/project/" not in page
+    assert '<q title="oppose">oppose</q> page 14' in page
+    assert "sources/" not in page and "/project/" not in page
 
 
 def test_a_long_quote_is_cut_short_and_its_title_holds_the_whole():

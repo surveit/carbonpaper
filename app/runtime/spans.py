@@ -76,6 +76,25 @@ def verify_span(
         _require_suffix_at(where, locator, page_text, span.suffix)
 
 
+def find_span_refusal(
+    span: Span, sources: Mapping[str, InputBinding], texts: SourceTextCache
+) -> str | None:
+    """None where the span verifies; otherwise why its file refuses it."""
+    try:
+        verify_span(span, sources, texts)
+    except SPAN_REFUSALS as refusal:
+        return str(refusal)
+    return None
+
+
+def list_column_spans(cell: Any, column: Column) -> list[Span]:
+    """Raises ValidationError where `column` names a span and the cell holds something else."""
+    return [
+        Span.model_validate(one, strict=True)
+        for one in _list_span_cells(cell, column.type, column.fields)
+    ]
+
+
 def require_bound_file(
     source_id: str, source_sha256: str, sources: Mapping[str, InputBinding]
 ) -> InputBinding:
@@ -159,12 +178,10 @@ def _find_refusal(
     cell: Any, sources: Mapping[str, InputBinding], texts: SourceTextCache
 ) -> str | None:
     try:
-        verify_span(Span.model_validate(cell, strict=True), sources, texts)
+        span = Span.model_validate(cell, strict=True)
     except ValidationError as err:
         return f"not a span: {'; '.join(format_errors(err))}"
-    except SPAN_REFUSALS as refusal:
-        return str(refusal)
-    return None
+    return find_span_refusal(span, sources, texts)
 
 
 def _list_span_cells(cell: Any, type_name: str, fields: list[Column] | None) -> Iterator[Any]:

@@ -3,11 +3,15 @@ writers never read raw JSON. See docs/architecture.md for the packet's shape."""
 from __future__ import annotations
 
 from enum import Enum
+from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from pydantic import BaseModel
 
-from app.models.run_manifest import InputBinding, read_input_bindings
+from app.core.ids import ID
+from app.models.run_manifest import InputBinding, read_input_bindings, records_a_test_run
+from app.models.spans import Span
 
 
 class IssueView(BaseModel):
@@ -64,7 +68,7 @@ def build_run_view(
         started_at=str(manifest.get("started_at") or ""),
         finished_at=_read_optional_str(manifest, "finished_at"),
         workflow_version=_read_optional_str(manifest, "workflow_version"),
-        is_test_run=bool(manifest.get("is_test_run", False)),
+        is_test_run=records_a_test_run(manifest),
         bust_cache=bool(manifest.get("bust_cache", False)),
         halted_at=[str(s) for s in manifest.get("halted_at") or []],
         dropped_columns=_read_dropped_columns(manifest),
@@ -194,3 +198,41 @@ class PublishedFigure(BaseModel):
     stage_id: str
     row_ordinal: int
     href: str | None
+
+
+SOURCES_DIR = "sources"
+
+
+def build_source_page_path(source_id: ID, page: int) -> str:
+    return f"{SOURCES_DIR}/{quote(source_id, safe='')}/pages/{page}.txt"
+
+
+class StageJudgments(BaseModel):
+    """What the run log says of one model stage's rows."""
+
+    stage_id: str
+    # Each once, in the order the log names them: one batched call judges several rows.
+    judgment_ids: list[ID]
+    replayed_without_judgment: int
+    computed_without_judgment: int
+
+
+class PublishedSpan(BaseModel):
+    """One span a published table holds, and the verifier's verdict on it."""
+
+    stage_id: str
+    row: int
+    column: str
+    span: Span
+    # None: the quote sits at its address in the file the run read.
+    refusal: str | None
+
+
+class RunArchive(BaseModel):
+    """What the packet's data half writes that only app.web may read off the run."""
+
+    lineage_sidecars: dict[str, Path]
+    judgments: list[StageJudgments]
+    spans: list[PublishedSpan]
+    # Their spans are unknown: which columns hold one is the pinned version's to say.
+    published_stages_without_schema: list[str]

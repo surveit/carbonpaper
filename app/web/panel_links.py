@@ -12,6 +12,7 @@ from app.models.citations import RowsRectangle
 from app.models.locators import PageCharRange
 from app.models.spans import Span
 from app.runtime.citations import build_source_page_url
+from app.services.review_packet.views import build_source_page_path
 
 
 # aggregate makes its single row out of every input row, so a cohort runs to
@@ -128,6 +129,7 @@ class PacketPanelLinks:
     def __init__(
         self, to_root: str = "../", traced: frozenset[tuple[str, int]] | None = None,
         owner: tuple[str, int] | None = None,
+        cited_pages: frozenset[tuple[str, int]] = frozenset(),
     ) -> None:
         self._owner = owner  # a cohort table is named after the row it fed
         self._root = to_root  # "" from index.html, "../" from a page in stages/
@@ -135,6 +137,8 @@ class PacketPanelLinks:
         # is asked about — the lineage pages link each other, and a page is only
         # ever asked for a row whose trace named it.
         self._traced = traced
+        # (source id, page) of each page text the packet holds.
+        self._cited_pages = cited_pages
 
     def stage_anchor(self, stage_id: str) -> str:
         return f"{self._root}stages/{_segment(stage_id)}.html"
@@ -159,10 +163,12 @@ class PacketPanelLinks:
         return None
 
     def source_page(self, span: Span) -> str | None:
-        """The page's text the packet writes; a span naming no page names no such file."""
+        """The page's text where the packet holds it: a page some verified published span quotes."""
         if not isinstance(span.locator, PageCharRange):
             return None
-        return f"{self._root}sources/{_segment(span.source_id)}/pages/{span.locator.page}.txt"
+        if (span.source_id, span.locator.page) not in self._cited_pages:
+            return None
+        return f"{self._root}{build_source_page_path(span.source_id, span.locator.page)}"
 
     def stage_rows_raw(self, stage_id: str) -> None:
         """The uncapped rows are stage_csv's data/<id>.csv, linked beside this."""

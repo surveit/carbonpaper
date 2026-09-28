@@ -473,6 +473,28 @@ Neither host names an agent. What a surface calls one is
 `AgentConfig.display_name`, and `tests/arch/test_chat_rail_names_no_agent.py`
 fails a build where a chat host learns an agent id.
 
+## The review packet (`app/web/review_packet/`, `app/services/review_packet/`)
+
+`export_review_packet` writes one folder per run, every file hashed in `checksums.txt`. The
+pages (`pages.py`, `lineage.py`) are the run's own templates rendered to files. The data half
+(`app/services/review_packet/data.py`) writes what a reader checks them against, and
+`archive.py` hands it what only the web layer may read off the run: each stage's lineage
+sidecar, the judgment ids the run log names, and the verifier's verdict on each published span.
+
+| File | What it holds |
+|---|---|
+| `sources.json` | each file the run read: stored id, sha256, origin URL, fetch time, its copy in `inputs/` |
+| `judgments.jsonl` | each `Judgment` a row of the run names on the log, computed or replayed |
+| `spans.json` | each span a published table holds, and the verifier's refusal, or null where it held |
+| `sources/<id>/pages/<n>.txt` | the text of each page a verified span sits on, newlines as extracted |
+| `methodology.md`, `terms.json` | what the run's version kept |
+| `data/raw/<stage>.lineage.parquet` | each stage's lineage sidecar, beside its raw output |
+
+A file the run owed and the packet could not write is listed on the index with its reason:
+an unpinned version's method, or model rows naming no judgment (a test run, or cache entries
+recorded before judgments were kept). The index prints the CourtListener attribution when a
+file the run read came from `storage.courtlistener.com` or `www.courtlistener.com`.
+
 ## Where to confirm visually
 
 Some states only render during a live run (spinner, yellow in-progress

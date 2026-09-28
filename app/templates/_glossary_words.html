@@ -1,5 +1,5 @@
 {# A project's row types and verbs, one group of cards each. #}
-{% macro glossary_words(row_types, verbs) %}
+{% macro glossary_words(row_types, verbs, none_agreed="None agreed yet.") %}
 <h3 class="dm-group-heading">
   <span class="type-tag">row types</span>
   <span class="muted">— {{ row_types|length }} word{% if row_types|length != 1 %}s{% endif %} for what one row of this project's data is</span>
@@ -17,7 +17,7 @@
   {% endfor %}
 </div>
 {% else %}
-<p class="lede">None agreed yet.</p>
+<p class="lede">{{ none_agreed }}</p>
 {% endif %}
 
 <h3 class="dm-group-heading">
@@ -36,6 +36,6 @@
   {% endfor %}
 </div>
 {% else %}
-<p class="lede">None agreed yet.</p>
+<p class="lede">{{ none_agreed }}</p>
 {% endif %}
 {% endmacro %}
