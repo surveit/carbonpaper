@@ -95,14 +95,14 @@
     {% set row_num %}{% if numbered %}<td class="row-num muted">{{ row.input_ordinal | row_number }}</td>{% endif %}{% endset %}
     {% if row.dropped %}
     <tr class="diff-row-dropped">{{ row_num }}<td class="diff-kept-col">Dropped row</td>
-      {%- for value in row.cells %}{% if not cut or diff.columns[loop.index0] in behind %}{{ data_cell(value, 'aside' if behind and diff.columns[loop.index0] not in behind else '', '', full_rows) }}{% endif %}{% endfor %}</tr>
+      {%- for value in row.cells %}{% if not cut or diff.columns[loop.index0] in behind %}{{ data_cell(value, 'aside' if behind and diff.columns[loop.index0] not in behind else '', '', full_rows, links) }}{% endif %}{% endfor %}</tr>
     {% else %}
     <tr class="{{ 'mine' if traced else ('aside' if reached_rows else '') }}"
       {%- set trace_href = links.row_trace(stage.stage_id, row.output_ordinal) %}{% if trace_href %} data-href="{{ trace_href }}"{% endif %}>{{ row_num }}<td class="diff-kept-col"></td>
       {%- for value in row.cells %}{% if not cut or diff.columns[loop.index0] in behind %}
       {%- set off = 'aside' if behind and diff.columns[loop.index0] not in behind else '' %}
       {%- if value[:4] == 'http' %}<td class="cell-url {{ off }}"><a href="{{ value }}" target="_blank" rel="noopener">{{ value }}</a></td>
-      {%- else %}{{ data_cell(value, off, '', full_rows) }}{% endif %}{% endif %}{% endfor %}</tr>
+      {%- else %}{{ data_cell(value, off, '', full_rows, links) }}{% endif %}{% endif %}{% endfor %}</tr>
     {% endif %}
     {% endfor %}
     </tbody>
@@ -171,7 +171,7 @@
                        'aside' if behind and column.name not in behind else '',
                        'diff-col-cited' if column.name == cited_column and traced else ''] | select | join(' ') %}
       {%- if cell.text[:4] == 'http' and cell.state != 'changed' %}<td class="cell-url {{ klass }}"><a href="{{ cell.text }}" target="_blank" rel="noopener">{{ cell.text }}</a></td>
-      {%- else %}{{ data_cell(cell.text, klass, cell.was, full_rows) }}
+      {%- else %}{{ data_cell(cell.text, klass, cell.was, full_rows, links) }}
       {%- endif %}{% endif %}
       {%- endfor %}
     </tr>

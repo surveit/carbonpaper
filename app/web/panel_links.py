@@ -9,6 +9,9 @@ from pydantic import BaseModel
 
 from app.models.branch_analysis import RowRef
 from app.models.citations import RowsRectangle
+from app.models.locators import PageCharRange
+from app.models.spans import Span
+from app.runtime.citations import build_source_page_url
 
 
 # aggregate makes its single row out of every input row, so a cohort runs to
@@ -26,6 +29,7 @@ CONTRIBUTORS_NAMED = 3
 
 class AppPanelLinks:
     def __init__(self, project_id: str, run_id: str) -> None:
+        self._project_id = project_id
         self._project = f"/project/{_segment(project_id)}"
         self._base = f"{self._project}/runs/{_segment(run_id)}"
 
@@ -93,6 +97,12 @@ class AppPanelLinks:
     def file_page(self, file_id: str) -> str:
         return f"{self._project}/files/{_segment(file_id)}"
 
+    def source_page(self, span: Span) -> str:
+        """A span naming no page opens its file's page at the top."""
+        if not isinstance(span.locator, PageCharRange):
+            return self.file_page(span.source_id)
+        return build_source_page_url(self._project_id, span)
+
     def judgment_page(self, judgment_id: str) -> str:
         return f"{self._project}/judgments/{_segment(judgment_id)}"
 
@@ -147,6 +157,12 @@ class PacketPanelLinks:
     def file_page(self, file_id: str) -> None:
         """A packet is a folder; the file's page is a route only the app serves."""
         return None
+
+    def source_page(self, span: Span) -> str | None:
+        """The page's text the packet writes; a span naming no page names no such file."""
+        if not isinstance(span.locator, PageCharRange):
+            return None
+        return f"{self._root}sources/{_segment(span.source_id)}/pages/{span.locator.page}.txt"
 
     def stage_rows_raw(self, stage_id: str) -> None:
         """The uncapped rows are stage_csv's data/<id>.csv, linked beside this."""

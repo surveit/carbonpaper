@@ -9,6 +9,7 @@
 {% from "_run_log_panel.html" import run_log_panel %}
 {% from "_rows_line.html" import counts_line with context %}
 {% from "_rows_line.html" import frame_counts %}
+{% from "_data_cell.html" import span_cites %}
 
 <div class="run-stage-panel"
      data-project="{{ project }}" data-run="{{ run_id }}" data-stage="{{ stage.stage_id }}">
@@ -221,7 +222,7 @@
           {% for row in ip.preview.preview %}
           {%- set ip_ordinal = ip_ordinals[loop.index0] if ip_ordinals else loop.index0 %}
           <tr class="{{ 'mine' if ip_mine and ip_ordinal in ip_mine else ('aside' if ip_mine else '') }}">
-            {% for c in ip.preview.columns %}{% set v = row[c] | string %}{% set off = 'aside' if ip_behind and c not in ip_behind else '' %}{% if v[:4] == 'http' %}<td class="cell-url {{ off }}"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td{% if off %} class="{{ off }}"{% endif %}>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}
+            {% for c in ip.preview.columns %}{% set v = row[c] | string %}{% set off = 'aside' if ip_behind and c not in ip_behind else '' %}{% if row[c].cites is defined %}<td class="cell-span {{ off }}">{{ span_cites(row[c], links) }}</td>{% elif v[:4] == 'http' %}<td class="cell-url {{ off }}"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td{% if off %} class="{{ off }}"{% endif %}>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}
           </tr>{% endfor %}
           </tbody>
         </table></div>
