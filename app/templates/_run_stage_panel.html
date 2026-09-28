@@ -125,6 +125,9 @@
         <div><dt>model</dt><dd>
             {%- if u and u.model %}<code>{{ u.model }}</code>
             {%- elif u and u.calls %}not recorded
+            {%- elif replayed and replayed.models %}{% for model in replayed.models %}<code>{{ model }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+            {%- elif replayed and replayed.names_a_judgment %}judgment not stored in this workspace
+            {%- elif replayed %}recorded before judgments were kept
             {%- else %}none
             {%- endif %}</dd></div>
         {% if u and u.calls %}

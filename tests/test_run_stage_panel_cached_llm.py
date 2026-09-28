@@ -13,10 +13,11 @@ from fastapi.testclient import TestClient
 import app.services.workspace as workspace
 from app.models.run_manifest import RunKind
 from app.core.agent.usage import LlmUsage
+from app.core.stage_cache import StageCacheEntry
 from app.main import app
 from app.runtime.manifest import read_run_manifest, write_manifest
 from app.runtime.runner import execute_run, prepare_run
-from conftest import pinned_stages
+from conftest import SCRIPTED_MODEL, pinned_stages, script_judgment
 from stage_seed import add_stage, save_version
 
 PROJECT = "cached_llm_panel"
@@ -58,7 +59,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
     def fake_call_llm(stage_id, llm, row, reply_model, usage_out):
         usage_out.append(LlmUsage(input_tokens=10, output_tokens=5, cost_usd=0.25, calls=1))
-        return {"verdict": f"v{row['x']}"}
+        return script_judgment({"verdict": f"v{row['x']}"})
 
     monkeypatch.setattr("app.runtime.stages.llm_transform.call_llm", fake_call_llm)
     save_version(pdir.name, message="v1")
@@ -129,8 +130,19 @@ def test_cache_replay_omits_a_percentage_without_output_rows(project: Path) -> N
     assert "2 of 0 rows (" not in html
 
 
-def test_the_replayed_run_names_the_model_it_did_not_call(project: Path) -> None:
+def test_the_replayed_run_names_the_model_on_its_judgments(project: Path) -> None:
     _run(project)
     replayed = _panel(_run(project))
-    assert "<dt>model</dt>" in replayed
-    assert "<dd>none</dd>" in replayed
+    assert f"<dt>model</dt><dd><code>{SCRIPTED_MODEL}</code></dd>" in replayed
+    assert "<dt>calls</dt><dd>none</dd>" in replayed
+
+
+def test_a_replay_of_entries_older_than_the_ledger_names_no_model(project: Path) -> None:
+    _run(project)
+    for entry in StageCacheEntry.read_only().find_project_entries(PROJECT):
+        entry.model_copy(update={"judgment_id": None}).save()
+
+    replayed = _panel(_run(project))
+
+    assert "<dt>model</dt><dd>recorded before judgments were kept</dd>" in replayed
+    assert SCRIPTED_MODEL not in replayed
