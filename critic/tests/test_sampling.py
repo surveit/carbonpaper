@@ -3,12 +3,12 @@ from __future__ import annotations
 import pytest
 
 from critic.corpus import load_pr_listings
-from critic.labels import group_labels_by_pr, load_silent_test_prs
+from critic.labels import LABEL_DIR, group_labels_by_pr, load_silent_test_prs
 from critic.planning import plan_silent_unit
 from critic.sampling import find_size_bucket, select_silent_sample
 from critic.tests.fixture_data import FIXTURES, PR, REPO, load_labels
 
-SPLIT = FIXTURES / "split.json"
+SPLIT = LABEL_DIR / "split.json"
 
 
 def test_silent_test_prs_are_the_test_side_minus_those_with_human_comments() -> None:

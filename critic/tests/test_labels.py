@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from critic.labels import group_labels_by_pr, load_label_set, select_reviewer_comments
+from critic.labels import LABEL_DIR, group_labels_by_pr, load_label_set, select_reviewer_comments
 from critic.tests.fixture_data import FIXTURES, PR, load_corpus, load_labels, load_reals
 
 FOLLOW_UP = "follows the reviewer's earlier ask in the same thread"
@@ -64,7 +64,7 @@ def test_labels_group_by_pr() -> None:
 
 
 def test_a_theme_the_vocabulary_lacks_is_refused(tmp_path: Path) -> None:
-    taxonomy = json.loads((FIXTURES / "taxonomy-themes.json").read_text(encoding="utf-8"))
+    taxonomy = json.loads((LABEL_DIR / "taxonomy.json").read_text(encoding="utf-8"))
     del taxonomy["themes"]["verbose_prose"]
     themes_path = tmp_path / "taxonomy.json"
     themes_path.write_text(json.dumps(taxonomy), encoding="utf-8")
@@ -75,4 +75,4 @@ def test_a_theme_the_vocabulary_lacks_is_refused(tmp_path: Path) -> None:
 
 def test_a_missing_label_file_fails_loudly(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError, match="labeled-comment file not found"):
-        load_label_set(tmp_path / "corpus.human.jsonl", FIXTURES / "taxonomy-themes.json")
+        load_label_set(tmp_path / "corpus.human.jsonl", LABEL_DIR / "taxonomy.json")

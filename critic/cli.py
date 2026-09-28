@@ -10,7 +10,7 @@ from critic.comparison import compare_runs, read_notes, write_comparison_outputs
 from critic.corpus import fetch_corpus, load_pr_listings
 from critic.diff import fetch_pull_request_diff, load_or_fetch_diff, save_diff
 from critic.evaluation import DEFAULT_PR_RANGE, EvalResult, EvalSettings, run_eval
-from critic.labels import load_silent_test_prs, load_test_split
+from critic.labels import LABEL_DIR, load_silent_test_prs, load_test_split
 from critic.report import write_eval_outputs
 from critic.review import run_review
 from critic.rubric import load_rubric
@@ -165,7 +165,7 @@ def _add_review(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--model", help="claude model alias or id; default: the CLI's own")
     parser.add_argument("--repo", default=DEFAULT_REPO)
     parser.add_argument("--commit", help="review the diff at this commit; default: the PR's head")
-    parser.add_argument("--themes", type=Path, default=LOCAL_ROOT / "labels" / "taxonomy.json")
+    parser.add_argument("--themes", type=Path, default=LABEL_DIR / "taxonomy.json")
     parser.add_argument("--diff-dir", type=Path, default=LOCAL_ROOT / "diffs")
     parser.add_argument("--out", type=Path, help="write the review JSON here; default: stdout")
     parser.set_defaults(command=run_review_command)
@@ -184,8 +184,8 @@ def _add_eval(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--judge-model", help="judge model; default: the CLI's own")
     parser.add_argument("--repo", default=DEFAULT_REPO)
     parser.add_argument("--corpus", type=Path, default=LOCAL_ROOT / "corpus")
-    parser.add_argument("--labels", type=Path, default=LOCAL_ROOT / "labels" / "corpus.human.jsonl")
-    parser.add_argument("--themes", type=Path, default=LOCAL_ROOT / "labels" / "taxonomy.json")
+    parser.add_argument("--labels", type=Path, default=LABEL_DIR / "corpus.human.jsonl")
+    parser.add_argument("--themes", type=Path, default=LABEL_DIR / "taxonomy.json")
     parser.add_argument("--diff-dir", type=Path, default=LOCAL_ROOT / "diffs")
     parser.add_argument("--jobs", type=int, default=1, help="review units run at once")
     parser.add_argument(

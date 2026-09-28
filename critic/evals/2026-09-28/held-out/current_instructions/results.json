@@ -156,7 +156,7 @@
   "rubric_files": [
     {
       "name": "owner-global-CLAUDE.md",
-      "origin": "/Users/shuhan/.claude/CLAUDE.md",
+      "origin": "$CRITIC_OWNER_CLAUDE_MD",
       "sha256": "c73bd2a1536743220e919a533ed399fa412bcfbdb7b71d78964068d695cf682b"
     },
     {

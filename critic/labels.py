@@ -7,6 +7,7 @@ from critic.corpus import CorpusIndex, InlineComment
 from critic.records import CriticRecord, ForeignRecord
 from critic.themes import Theme, find_themes_outside, load_theme_vocabulary
 
+LABEL_DIR = Path(__file__).resolve().with_name("labels")
 HUMAN_AUTHOR = "human"
 INLINE_KIND = "inline"
 ASKING_SPEECH_ACTS = frozenset({"correction", "instruction", "question"})
