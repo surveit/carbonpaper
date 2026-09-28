@@ -9,7 +9,7 @@ import app.runtime.stages.execution as execution
 from app.runtime.cancellation import consume_cancel, request_cancel
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
-from conftest import pinned_stages, resumed_stages
+from conftest import pinned_stages, resumed_stages, script_judgment
 from stage_seed import add_stage, save_version
 from run_seed import read_manifest
 
@@ -152,7 +152,7 @@ def _three_stage_llm_project(root):
 def test_mid_stage_cancel_marks_the_running_stage_cancelled_not_pending(tmp_path, monkeypatch):
     """Only execution.py's cancel is forced — executor.py's stays real, so `score` starts."""
     def fake_call_llm(stage_id, llm_config, row, **kw):
-        return {"score": 1}
+        return script_judgment({"score": 1})
 
     monkeypatch.setattr(lt, "call_llm", fake_call_llm)
     monkeypatch.setattr(execution, "consume_cancel", lambda project, run_id: True)

@@ -14,7 +14,8 @@ import pyarrow as pa
 from pydantic import create_model
 
 from app.core.agent.usage import LlmUsage
-from app.core.errors import StageWideFailure
+from app.core.errors import LLMError, StageWideFailure
+from app.core.judgments import JudgmentDraft
 from app.models import WorkflowStage
 from app.models.schema import Column, TableSchema
 from app.models.stages.llm_transform import LLMTransformStage
@@ -24,6 +25,7 @@ from ..llm import call_llm, call_llm_batch, render_prompt
 
 from .execution import (
     ROW_ERROR_KEY,
+    ROW_JUDGMENT_KEY,
     ROW_USAGE_KEY,
     GroupMapper,
     Row,
@@ -41,7 +43,8 @@ _ROW_NUMBER_FIELD = "row_number"
 class LLMTransformHandler(RowMapTransformHandler):
     def __init__(self, parallelism: int = 1) -> None:
         super().__init__(
-            build_llm_row_mapper, parallelism, trims_output_to_declared=True
+            build_llm_row_mapper, parallelism, trims_output_to_declared=True,
+            records_judgments=True,
         )
 
     def group_size(self, workflow_stage: WorkflowStage) -> int:
@@ -71,7 +74,7 @@ def build_llm_row_mapper(
     def map_row(row: Row, index: int) -> Row:
         usages: list[LlmUsage] = []
         try:
-            reply = call_llm(stage.id, llm, row, reply_model=reply_model, usage_out=usages)
+            judgment = call_llm(stage.id, llm, row, reply_model=reply_model, usage_out=usages)
         except StageWideFailure:
             # Not this row's failure: every remaining row would fail the same
             # way, so it stops the stage instead of tagging 5,000 rows one at a
@@ -86,7 +89,8 @@ def build_llm_row_mapper(
             # failure still reads as a failure rather than an empty-string cell.
             return {**row, ROW_ERROR_KEY: str(exc) or type(exc).__name__,
                     ROW_USAGE_KEY: LlmUsage.summed(usages)}
-        return {**row, **reply, ROW_USAGE_KEY: LlmUsage.summed(usages)}
+        return {**row, **judgment.reply, ROW_USAGE_KEY: LlmUsage.summed(usages),
+                ROW_JUDGMENT_KEY: judgment}
 
     return map_row
 
@@ -123,16 +127,15 @@ def _process_chunk(
     """A confused reply fails EVERY row of the chunk: the answers that matched are not trusted."""
     usages: list[LlmUsage] = []
     try:
-        by_number, problem = _ask_until_reply_rejoins(
+        judgment, by_number = _ask_until_reply_rejoins(
             stage_id, llm, batch_reply_schema, chunk, usages)
     except StageWideFailure:
         raise                       # not this chunk's failure — see map_row's supervisor
     except Exception as exc:  # noqa: BLE001 — the chunk's supervisor, mirroring the
         # per-row one: a backend that never answered fails THESE rows, not the stage.
         return _emit_failed(chunk, usages, str(exc) or type(exc).__name__)
-    if by_number is None:
-        return _emit_failed(chunk, usages, problem)
-    return _emit_matched(chunk, by_number, usages)
+    # One call decided every row of the chunk, so each carries that call's judgment.
+    return [{**row, ROW_JUDGMENT_KEY: judgment} for row in _emit_matched(chunk, by_number, usages)]
 
 
 def _ask_until_reply_rejoins(
@@ -141,7 +144,7 @@ def _ask_until_reply_rejoins(
     batch_reply_schema: type,
     chunk: list[Row],
     usages: list[LlmUsage],
-) -> tuple[dict[int, dict[str, Any]] | None, str]:
+) -> tuple[JudgmentDraft, dict[int, dict[str, Any]]]:
     """Re-asks ONLY a reply the runtime could not rejoin — the one defect no reply schema can state."""
     n = len(chunk)
     problem = "no reply produced"
@@ -151,14 +154,14 @@ def _ask_until_reply_rejoins(
         # A raise propagates: `call_llm_batch` has already retried the backend
         # `max_retries` times, and re-asking here would square that budget while
         # telling the model its reply was rejected — which it never made.
-        reply = call_llm_batch(
+        judgment = call_llm_batch(
             stage_id, llm, instructions=llm.prompt_instructions, task=task,
             reply_schema=batch_reply_schema, usage_out=usages,
         )
-        by_number, problem = _validate_batch_reply(reply.get("results", []), n)
+        by_number, problem = _validate_batch_reply(judgment.reply.get("results", []), n)
         if by_number is not None:
-            return by_number, ""
-    return None, f"batched reply invalid after {attempts} attempt(s): {problem}"
+            return judgment, by_number
+    raise LLMError(f"batched reply invalid after {attempts} attempt(s): {problem}")
 
 
 def _validate_batch_reply(

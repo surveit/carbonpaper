@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pandas as pd
-from conftest import as_inputs, contribution_of, make_run_context, place_stage, rows_of
+from conftest import as_inputs, contribution_of, make_run_context, place_stage, rows_of, script_judgment
 
 from app.models import parse_stage, Stage
 from app.models.stage import StageType
@@ -30,7 +30,7 @@ def _stage(batch_size: int = 3, max_retries: int = 0) -> Stage:
 
 
 def _run(monkeypatch, fake, *, batch_size=3, max_retries=0, src=_SRC):
-    monkeypatch.setattr(lt, "call_llm_batch", fake)
+    monkeypatch.setattr(lt, "call_llm_batch", lambda *a, **k: script_judgment(fake(*a, **k)))
     ctx = make_run_context()
     out = HANDLERS[StageType.llm_transform].execute(
         place_stage(_stage(batch_size, max_retries), load={"columns": [

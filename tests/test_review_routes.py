@@ -30,7 +30,7 @@ from conftest import (
     resume_like_the_app,
     run_like_the_app,
     QUEUE_COLUMNS, pinned_stages, place_stage, queue_added_columns, queue_columns,
-    reads_of,
+    reads_of, script_judgment,
 )
 from stage_seed import add_stage, save_version
 
@@ -143,7 +143,7 @@ def _build_and_halt(tmp_path, monkeypatch, project: str = PROJECT):
     # The returned `input_fingerprints` are POSITIONALLY aligned to the snapshot's rows.
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(
-        lt, "call_llm", lambda stage_id, llm_config, row, **kw: {"score": 1}
+        lt, "call_llm", lambda stage_id, llm_config, row, **kw: script_judgment({"score": 1})
     )
 
     project_dir = tmp_path / project
@@ -1845,7 +1845,7 @@ def _identical_quotes_stage(root):
 
 def test_two_identical_rows_share_one_decision_and_both_carry_it(tmp_path, monkeypatch):
     workspace.set_projects_dir(tmp_path)
-    monkeypatch.setattr(lt, "call_llm", lambda stage_id, llm_config, row, **kw: {"score": 1})
+    monkeypatch.setattr(lt, "call_llm", lambda stage_id, llm_config, row, **kw: script_judgment({"score": 1}))
     project_dir = tmp_path / PROJECT
     _write_stage(project_dir, "01_load.json", _identical_quotes_stage(project_dir))
     _write_stage(project_dir, "02_score.json", _score_stage())
@@ -2039,7 +2039,7 @@ def test_ledger_wins_over_a_stage_cache_entry_recording_a_different_value(
             "human_score": 999, "decision": "modify", "reviewer_id": "impostor",
             "reviewed_at": "2020-01-01T00:00:00", "review_notes": None,
         },
-        branches=None,
+        branches=None, judgment_id=None,
     )
 
     resumed = runner.resume_run(run_dir, PROJECT, run_id, *resume_like_the_app(project_dir, run_id))

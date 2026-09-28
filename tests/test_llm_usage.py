@@ -9,7 +9,7 @@ from app.models import parse_stage, Stage
 from app.models.stage import StageType
 from app.runtime.stages import HANDLERS
 from conftest import (
-    as_inputs, contribution_of, make_run_context, pinned_stages, place_stage, rows_of,
+    as_inputs, contribution_of, make_run_context, pinned_stages, place_stage, rows_of, script_judgment,
 )
 from stage_seed import add_stage, save_version
 
@@ -60,7 +60,7 @@ def _fake_call_llm(reply, per_call_usage: LlmUsage):
     def _call(*_a, usage_out=None, **_k):
         if usage_out is not None:
             usage_out.append(per_call_usage)
-        return dict(reply)
+        return script_judgment(dict(reply))
     return _call
 
 
