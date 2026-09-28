@@ -140,6 +140,32 @@ column reads no file, and a page is read once per run through the run's `SourceT
 production run binds what its input stages read at prepare; `execute_subset` binds each file its
 workflow's input stages name the same way, leaving the manifest's `input_bindings` empty.
 
+## `app/packs/` — what a pack adds to the kernel
+One subpackage per pack, `app/packs/<pack_id>/`, whose `__init__.py` calls `register_pack`
+(`app/models/packs.py`) with a `PackSpec`: today, its connector kinds. `register_pack` runs
+at import and refuses a pack id or connector kind already held, and a metadata column that
+starts with `_` or repeats a source column. Importing `app.packs` registers every pack, and
+only `app.main` and `app.cli` import it (a `protected` contract), so no layer below them
+depends on a pack being loaded. A pack imports only `app.models` and `app.core`
+(`app/packs/_arch_tests/`).
+
+A connector kind (`ConnectorSpec`, `app/models/connectors.py`) names its params model, its
+metadata columns and `acquire(params)`. Every params model extends `ConnectorParams`, so a
+run binds `paths` the same way for every kind. `acquire` yields `AcquiredBytes`: a filename,
+an origin URL, a way to open the bytes, and the metadata. The pack writes no file and no
+record. `prepare_run` calls `acquire_input_data` (registered in `ACQUIRERS`) once every other
+check has passed; a subset run never calls it. It stores each file through `receive_source`
+(`app/core/files.py`), which hashes the bytes and stamps the fetch time. It records a
+`ReadFile` per file and builds the stage's source table: one row per file, `SOURCE_COLUMNS`
+(`source_id`, `source_sha256`, `filename`, `origin_url`, `fetched_at`) and then the metadata.
+Only once every stage has acquired are the tables written, under `runs/<id>/sources/`, so a
+refused run leaves no run directory. The handler reads that table, and each row's lineage
+names the file the run read for it. A workflow test or an eval prepares no run, so it cannot
+read one. Bound `paths` win over acquiring. They must be the project's stored files, and
+their metadata is null, which is why `register_pack` refuses a metadata column that is not
+nullable. A connector that cannot reach a file raises `SourceUnavailable`, and the run is
+refused with the stage and the file named.
+
 ## `app/compiler/` — prose → LLM generation engines
 Two generators, each an `app.core.agent` Agent targeting a model schema:
 `stage_tests.py` (one python-transform stage + the project's terms → its `StageTest`

@@ -195,7 +195,7 @@ allowed_importers = ["app.core.store_config"]
 [[tool.importlinter.contracts]]
 name = "app.core sits below the domain contracts"
 type = "layers"
-layers = ["app.models", "app.core"]
+layers = ["app.packs", "app.models", "app.core"]
 # Position, not a list of things not to import: a module added to app.core inherits the
 # ordering instead of needing an entry somewhere. app.core is generic infrastructure
 # (llm, agent, persistence, errors, frames, utils); the contracts sit above it.
@@ -260,6 +260,15 @@ allowed_importers = ["app.main"]
 # The hydrated editing agent is a top-level interface like app.web / app.mcp:
 # app.main registers it on the shared engine, nothing else imports it. It leans
 # on app.core.agent (the engine) + app.tools (what its tools are).
+
+[[tool.importlinter.contracts]]
+name = "app.packs imported only by the entrypoints"
+type = "protected"
+protected_modules = ["app.packs"]
+allowed_importers = ["app.main", "app.cli"]
+# Importing app.packs registers every pack's connector kinds: a side effect the two
+# composition roots want, as app.main does for the agents, and nothing below them may
+# depend on. What a pack itself may import is app/packs/_arch_tests/'s rule.
 
 [[tool.importlinter.contracts]]
 name = "app.tools imported only by the surfaces that expose a tool"

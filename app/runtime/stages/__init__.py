@@ -12,6 +12,7 @@ from typing import Any, Callable
 from app.models.stage import StageType
 from app.models.workflow_stage import WorkflowStage
 
+from ..context import PrepareScope
 from ..options import DEFAULT_PARALLEL
 from .aggregate import handle_aggregate
 from .execution import (
@@ -25,7 +26,7 @@ from .execution import (
 from .row_aligned import RowAlignedFrameHandler
 from .filter_rows import build_filter_mapper
 from .human_review_queue import build_human_review_mapper
-from .input_data import preflight_input_data, read_input_data
+from .input_data import AcquiredStage, acquire_input_data, preflight_input_data, read_input_data
 from .join import handle_enrich, handle_expand
 from .llm_transform import LLMTransformHandler
 from .report import handle_report
@@ -40,6 +41,13 @@ Preflight = Callable[[WorkflowStage], tuple[list[str], dict[str, Any] | None]]
 
 PREFLIGHTS: dict[StageType, Preflight] = {
     StageType.input_data: preflight_input_data,
+}
+
+# Only prepare_run calls one: it may fetch and store files, which a subset run must not.
+Acquirer = Callable[[WorkflowStage, PrepareScope], AcquiredStage | None]
+
+ACQUIRERS: dict[StageType, Acquirer] = {
+    StageType.input_data: acquire_input_data,
 }
 
 HANDLERS: dict[StageType, StageHandler] = {

@@ -4,14 +4,17 @@ read parameters an xlsx source is read with."""
 from __future__ import annotations
 
 from enum import Enum
-from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal, Optional, Union
 
-from pydantic import AfterValidator, ConfigDict, Field, StrictInt, model_validator
+from pydantic import (
+    ConfigDict, Field, GetPydanticSchema, SerializeAsAny, StrictInt, ValidationInfo,
+    WithJsonSchema, field_validator, model_validator,
+)
 
 from app.core.source_files import FileFormat as FileFormat
 from app.core.source_files import resolve_file_format as resolve_file_format
-from app.models.schema import StageConfig, _Base
+from app.models.connectors import ConnectorParams, find_connector
+from app.models.schema import StageConfig
 from app.models.stages.stage_base import AbstractStage, StageType
 from app.models.stages.stage_type_spec import StageTypeSpec
 from app.models.stages.signature import ReplacesSignature
@@ -21,26 +24,14 @@ from app.models.stages.signature import ReplacesSignature
 LEGACY_SINGLE_PATH_KEY = "path"
 
 
-def _refuse_a_relative_path(path: str) -> str:
-    if not path.strip():
-        raise ValueError("a connector path must be a non-empty string")
-    if not Path(path).is_absolute():
-        raise ValueError(f"a connector path must be ABSOLUTE, got {path!r}")
-    return path
-
-
-AbsolutePath = Annotated[str, AfterValidator(_refuse_a_relative_path)]
-
-
 class ConnectorKind(str, Enum):
     file = "file"
 
 
 # `paths` are read in order and concatenated; a run binds them when the workflow names none.
-class FileConnectorParams(_Base):
+class FileConnectorParams(ConnectorParams):
     model_config = ConfigDict(extra="forbid")
 
-    paths: list[AbsolutePath] = Field(default_factory=list)
     format: Optional[FileFormat] = None
     # What pandas is told to read a column AS, overriding what the schema implies.
     dtype: Optional[dict[str, str]] = None
@@ -76,8 +67,13 @@ class Connector(StageConfig):
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"kind", "params", "refresh", "notes"})
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 
-    kind: ConnectorKind
-    params: FileConnectorParams = Field(
+    # The authoring schema offers the file kind alone; a pack's kind is authored by hand.
+    kind: Annotated[str, WithJsonSchema({"type": "string", "enum": [ConnectorKind.file.value]})]
+    params: Annotated[
+        SerializeAsAny[ConnectorParams],
+        GetPydanticSchema(get_pydantic_json_schema=lambda _core_schema, handler: handler(
+            FileConnectorParams.__pydantic_core_schema__)),
+    ] = Field(
         default_factory=FileConnectorParams,
         description=(
             "Connector parameters. For kind=file: params.paths is the list of ABSOLUTE "
@@ -90,6 +86,27 @@ class Connector(StageConfig):
     )
     refresh: str = "ad_hoc"
     notes: Optional[str] = None
+
+    @field_validator("kind")
+    @classmethod
+    def _kind_is_file_or_registered(cls, kind: str) -> str:
+        _find_params_model(kind)
+        return kind
+
+    @field_validator("params", mode="before")
+    @classmethod
+    def _read_params_as_the_kinds_own(cls, params: Any, info: ValidationInfo) -> ConnectorParams:
+        if "kind" not in info.data:
+            raise ValueError("params are read by their connector kind's model, and no kind is valid")
+        model = _find_params_model(info.data["kind"])
+        # An omitted block is the file kind's empty params, which another kind reads as unset.
+        if isinstance(params, ConnectorParams) and not isinstance(params, model):
+            params = params.model_dump(exclude_unset=True)
+        return model.model_validate(params)
+
+
+def _find_params_model(kind: str) -> type[ConnectorParams]:
+    return FileConnectorParams if kind == ConnectorKind.file else find_connector(kind).params_model
 
 
 class InputDataStage(AbstractStage):

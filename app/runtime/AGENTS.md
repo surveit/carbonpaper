@@ -41,7 +41,8 @@ the output, write `outputs/<stage>.parquet`, append to the run record.
 
 ## `stages/` — one module per stage type (`HANDLERS`)
 `input_data` connector `file` (csv/tsv/parquet/json/geojson; `_read_geojson` flattens a
-FeatureCollection); `python_row_function`/`python_frame_function`
+FeatureCollection), or a pack's connector kind, whose files `prepare_run` acquires and stores
+as Sources and whose handler reads one row per file (docs/architecture.md, `app/packs/`); `python_row_function`/`python_frame_function`
 (`function: {kind: module|inline}`, row variant mapped per row; the frame variant must
 declare the keyword-only `lineage` recorder and account for every row it returns);
 `starlark_row_function` (`starlark_functions.py`, row-mapped; compiles the stage's

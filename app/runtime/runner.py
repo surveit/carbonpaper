@@ -14,7 +14,8 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.lib as pa_lib
 
-from app.core.errors import MissingInputBindingError
+from app.core.errors import MissingInputBindingError, SourceUnavailable
+from app.core.json_types import JsonDict
 from app.core.timestamp_ids import mint_timestamp_id
 from app.core.frames import read_frame_table
 from app.models import StageType, Workflow, WorkflowStage
@@ -24,7 +25,7 @@ from app.core.run_status import StageStatus, is_run_still_going
 
 from app.models.run_manifest import RunKind, index_bound_sources
 from .branch_analysis import load_run_branches
-from .context import RunContext
+from .context import PrepareScope, RunContext
 from .executor import _execute_stages, topological_sort
 from .manifest import (
     RunManifest,
@@ -34,7 +35,7 @@ from .manifest import (
     write_manifest,
 )
 from .errors import MissingLineage, NotALoadStage
-from .stages import PREFLIGHTS
+from .stages import ACQUIRERS, PREFLIGHTS, AcquiredStage
 
 
 def validate_stages_ready(
@@ -53,6 +54,31 @@ def validate_stages_ready(
     if issues:
         raise MissingInputBindingError("; ".join(issues))
     return records
+
+
+def acquire_stage_sources(
+    stages: list[WorkflowStage], param_sources: dict[StageId, str], scope: PrepareScope,
+) -> dict[StageId, JsonDict]:
+    issues: list[str] = []
+    acquired: dict[StageId, AcquiredStage] = {}
+    for workflow_stage in stages:
+        acquirer = ACQUIRERS.get(StageType(workflow_stage.stage.type))
+        if acquirer is None:
+            continue
+        try:
+            acquisition = acquirer(workflow_stage, scope)
+        except SourceUnavailable as unavailable:
+            issues.append(f"`{workflow_stage.id}`: {unavailable}")
+            continue
+        if acquisition is not None:
+            acquired[workflow_stage.id] = acquisition
+    if issues:
+        raise MissingInputBindingError("; ".join(issues))
+    # Written only once every stage has acquired, so a refused run leaves no run dir behind.
+    for acquisition in acquired.values():
+        acquisition.write()
+    return {stage_id: acquisition.record.model_copy(update={"source": param_sources[stage_id]})
+            .model_dump(mode="json") for stage_id, acquisition in acquired.items()}
 
 
 def prepare_run(
@@ -84,6 +110,9 @@ def prepare_run(
 
     run_id = mint_timestamp_id()
     run_dir = runs_dir / run_id
+    # Last of the checks: acquiring may fetch, and a refused run fetches nothing.
+    input_records.update(acquire_stage_sources(
+        workflow_stages, param_sources, PrepareScope(project_id, run_dir)))
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
     (run_dir / "artifacts").mkdir(parents=True, exist_ok=True)
 
