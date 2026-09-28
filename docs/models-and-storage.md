@@ -40,6 +40,11 @@ through `parse_stage`:
 `app/runtime/handlers.py`, `runner.py`, `preview.py`, and the web layer all consume
 the typed `Stage` objects this loader returns.
 
+### Connector kinds
+
+`file` is the kernel's one connector kind. Every other kind is a pack's, registered with
+the code that acquires its files ([packs.md](packs.md)).
+
 ## Storage — two layers, and nothing else
 
 A project's state lives in exactly two places:
@@ -48,13 +53,15 @@ A project's state lives in exactly two places:
   keyed `(collection, id)`. Every stored record is a `PersistedModel`: the
   methodology, each draft, each `workflow_version`, a run's record and its
   chunked event log, the review-queue fingerprints, the review decisions, the
-  terms, and the uploaded-file index.
+  model judgments, the terms, and the stored-file index (uploads and fetched sources).
 - **Frames** (`app/core/frames.py`), the parquet files a run reads and writes.
 
 `tests/arch/test_persistence_is_frames_and_the_store.py` holds this: nothing under
-`app/` writes a file except frames, an export the user downloads, and a file the
-user uploaded. What is left on disk under a project is `code/`, `data/` and
-`runs/<id>/{outputs, artifacts, queue}` — frames and the files around them.
+`app/` writes a file except frames, an export the user downloads (the review packet,
+whose archive is listed in [run-and-review-ui.md](run-and-review-ui.md)), and a file the
+user uploaded or a connector fetched. What is left on disk under a project is `code/`,
+`data/` and `runs/<id>/{outputs, sources, artifacts, queue}` — frames and the files
+around them.
 
 ### Where a record is declared
 

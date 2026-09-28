@@ -10,9 +10,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _INSTRUCTION_FILE_NAME = "AGENTS.md"
 
 _WORD_BUDGETS: dict[str, int] = {
-    "AGENTS.md": 1150,
+    "AGENTS.md": 1166,
     "app/AGENTS.md": 2878,
-    "app/runtime/AGENTS.md": 1952,
+    "app/runtime/AGENTS.md": 1951,
     "app/templates/AGENTS.md": 206,
 }
 

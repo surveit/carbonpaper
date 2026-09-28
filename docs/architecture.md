@@ -49,9 +49,8 @@ runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data
   its input arity), and its own validation helpers. `PythonFunction` and both
   python-transform stage models live in `stages/code.py`; `StarlarkFunction` and
   `StarlarkRowFunctionStage` live in `stages/starlark.py`.
-- `spans.py` — `Span`, a quote and its address in one stored source file, and `narrow_span`,
-  which re-finds a quote inside a span; `locators.py` — the address kinds and `LOCATOR_KINDS`,
-  the registry every kind is parsed and labelled through. `base.py` holds `_Base`.
+- `base.py` holds `_Base`. `spans.py`, `locators.py`, `connectors.py`, `packs.py` and
+  `run_diff.py` are listed under "Sources, spans, judgments and the method" below.
 - `schema.py` — `Column`, `TableSchema`, column-type vocab. `workflow.py` — graph checks
   (unique ids, inputs resolve, cycles) and schema RESOLUTION: a stage's input and output
   schemas are a function of the whole graph, so `Workflow` walks it in dependency order
@@ -140,40 +139,44 @@ column reads no file, and a page is read once per run through the run's `SourceT
 production run binds what its input stages read at prepare; `execute_subset` binds each file its
 workflow's input stages name the same way, leaving the manifest's `input_bindings` empty.
 
-## `app/packs/` — what a pack adds to the kernel
-One subpackage per pack, `app/packs/<pack_id>/`, whose `__init__.py` calls `register_pack`
-(`app/models/packs.py`) with a `PackSpec`: today, its connector kinds. `register_pack` runs
-at import and refuses a pack id or connector kind already held, and a metadata column that
-starts with `_` or repeats a source column. Importing `app.packs` registers every pack, and
-only `app.main` and `app.cli` import it (a `protected` contract), so no layer below them
-depends on a pack being loaded. A pack imports only `app.models` and `app.core`
-(`app/packs/_arch_tests/`).
+## Sources, spans, judgments and the method, module by module
+The words are [overview.md](overview.md)'s: a source is a stored file a run reads, a span
+quotes one, a `Judgment` records a model's answer about a row, and a version's `Method` is
+what it kept of the project's row types, verbs and methodology.
 
-A connector kind (`ConnectorSpec`, `app/models/connectors.py`) names its params model, its
-metadata columns and `acquire(params)`. Every params model extends `ConnectorParams`, so a
-run binds `paths` the same way for every kind. `acquire` yields `AcquiredBytes`: a filename,
-an origin URL, a way to open the bytes, and the metadata. The pack writes no file and no
-record. `prepare_run` calls `acquire_input_data` (registered in `ACQUIRERS`) once every other
-check has passed; a subset run never calls it. It stores each file through `receive_source`
-(`app/core/files.py`), which hashes the bytes and stamps the fetch time. It records a
-`ReadFile` per file and builds the stage's source table: one row per file, `SOURCE_COLUMNS`
-(`source_id`, `source_sha256`, `filename`, `origin_url`, `fetched_at`) and then the metadata.
-Only once every stage has acquired are the tables written, under `runs/<id>/sources/`, so a
-refused run leaves no run directory. The handler reads that table, and each row's lineage
-names the file the run read for it. A workflow test or an eval prepares no run, so it cannot
-read one. Bound `paths` win over acquiring. They must be the project's stored files, and
-their metadata is null, which is why `register_pack` refuses a metadata column that is not
-nullable. A connector that cannot reach a file raises `SourceUnavailable`, and the run is
-refused with the stage and the file named.
-A connector reading a mirror yields `MirroredBytes`, which carry the time and sha256 the mirror
-recorded. The kernel stores them through `receive_mirrored_source`, which refuses bytes that
-hash to anything else.
+| Module | What it holds |
+|---|---|
+| `app/core/files.py` | `ProjectFile`, the record a source is; `receive_source` and `receive_mirrored_source`, the only writers of its `origin_url` and `fetched_at` |
+| `app/core/text_sources.py` | the one reader of a source's page text, so `read_pages`, the verifier, the source view and the packet's page files see the same characters |
+| `app/models/spans.py` | `Span`; `SpanReply`, the quote a model answers a span column with; `narrow_span`, which re-finds a quote inside a span |
+| `app/models/locators.py` | the `Locator` kinds and `LOCATOR_KINDS`, the registry each kind is parsed and labelled through |
+| `app/models/schema.py` | the `span` and `list[span]` column types, and `Column.quoted_from`, the span column a model's quote is found in |
+| `app/models/stages/read_pages.py`, `app/runtime/stages/read_pages.py` | `read_pages`: one row per page of each file its input names, holding `page`, `page_text` and `page_span` |
+| `app/runtime/spans.py` | the verifier: `find_span_issues` over a stage's output, `verify_span` for one span, `SourceTextCache` |
+| `app/runtime/stages/span_replies.py` | mints an `llm_transform` reply's quotes into spans (rule 5 of [llm-transform-output-spec.md](llm-transform-output-spec.md)) |
+| `app/core/judgments.py` | `Judgment`, a model call recorded against the row it decided, and `JudgmentDraft`, the call before it is recorded |
+| `app/runtime/stages/row_judgments.py` | the runtime's one way onto the judgment ledger, and its refusal of a model row that owes a judgment |
+| `app/models/records/workflow_version.py` | `Method`, on `WorkflowVersion.method` ([models-and-storage.md](models-and-storage.md)) |
+| `app/runtime/trace.py` | walks a row back through each stage's lineage to the stored file its input row was read from (`source_id`) |
+| `app/models/run_diff.py`, `app/services/run_diff.py` | the replay check behind the compare page: a stage code computes must give the same rows from the same input |
+| `app/models/connectors.py`, `app/models/packs.py` | `ConnectorSpec` and `SOURCE_COLUMNS`; `PackSpec` and `register_pack` ([packs.md](packs.md)) |
+| `app/services/review_packet/data.py`, `app/web/review_packet/archive.py` | the packet's archive: `sources.json`, `judgments.jsonl`, `spans.json` and the pages its spans quote ([run-and-review-ui.md](run-and-review-ui.md)) |
+| `app/web/source_page_view.py` | what a span's link opens: its page of the file, the quote marked |
+| `app/web/span_cells.py` | the one rendering of a span cell, so every run table and the packet show it alike |
+| `app/web/judgment_view.py`, `app/web/routers/judgments.py` | the judgment page, and each model row's link to it |
+| `app/web/run_diff_view.py`, `app/web/routers/run_diff.py` | the compare page |
+| `app/web/routers/run_routers.py` | where a router under `/project/{p}/runs/` is added, since mount order decides which route `/runs/new` matches |
 
-`app/packs/docket/` registers `recap_docket`: a CourtListener docket's filings, one row per
-PDF, named by ECF number (`"58"`, `"221-1"`). It reads the docket's `type=rd` search pages and
-each filing's PDF on storage.courtlistener.com. A `cache_dir` holding a `manifest.jsonl` of
-fetch records replaces both. A filing the archive lacks, or one the mirror does not record,
-refuses the run. `ATTRIBUTION.md` holds the terms line.
+## `app/packs/` — above the kernel
+A pack is a subpackage `app/packs/<pack_id>/` that registers connector kinds; everything else
+under `app/` is the kernel. Two import contracts place it. The `layers` contract orders
+`app.packs` above `app.models` above `app.core`, so neither kernel layer can import a pack.
+A `protected` contract lets only `app.main`, `app.cli` and `app.seeds.__main__` import
+`app.packs`, since importing it registers every pack; no other layer depends on a pack being
+loaded. A pack imports only `app.models`, `app.core` and itself
+(`app/packs/_arch_tests/`), so it never drives a run, a service or a page. What a pack
+declares, and how a run binds its connector: [packs.md](packs.md). The one pack,
+`app/packs/docket/`, registers `recap_docket`: a CourtListener docket's filings, one row each.
 
 ## `app/compiler/` — prose → LLM generation engines
 Two generators, each an `app.core.agent` Agent targeting a model schema:
@@ -227,6 +230,12 @@ is the ONE write path for a `WorkflowVersion` document); `drafts.py` (disposable
 that may be invalid mid-edit, edited only through the editing agent's tools; `save_version`
 is its only exit, strict-validating before freezing it into a version via
 `create_version_from_stages`).
+
+## `critic/` — a second root package, beside `app/`
+`python -m critic` predicts a pull request's review comments and scores the predictions
+against the real ones; its subcommands are listed by `python -m critic --help`. It reads the
+review record through `gh`, and a `layers` contract keeps `app` and `critic` from importing
+each other.
 
 ## `app/core/llm/`, tests
 `core/llm/options.py` — the `LLMModel` menu. `tests/` (pytest; `conftest.py` forces

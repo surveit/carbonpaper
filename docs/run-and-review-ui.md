@@ -398,6 +398,27 @@ disagrees most across those four exports and every one of them leads with
 `Comment on Valeurs actuelles`, which is a cell that reads the same on every row.
 When no column clears the floor, the page says nothing separates them.
 
+## A span cell (`span_cites` in `_data_cell.html` ← `app/web/span_cells.py`)
+
+A `span` or `list[span]` cell prints as its quotes, each cut to 120 characters with the whole
+quote in its title, then its locator's label (`page 3`) linked to that page of its file with
+the quote's characters marked: the text Source view above (`PanelLinks.source_page`). A span
+naming no page links the top of its file's page. The run page's Data tab, the full rows
+page, the lineage row view and the packet's pages draw it the same way. A packet links
+`sources/<id>/pages/<n>.txt` where it holds that page, one a verified published span sits
+on, and prints the label unlinked otherwise. A stage diff marks a span cell changed when the
+same quote now sits at another address.
+
+## One model judgment (`judgment.html` ← `app/web/routers/judgments.py`)
+
+`GET /project/{p}/judgments/{judgment_id}`: the model, when it answered, its usage, the run,
+stage and row it decided, then the system prompt, the task and the reply. One batched call
+judged several rows, so its page says how many its usage covers. The full rows page links
+each row a model decided to its judgment (`link_row_judgments`), wherever the run log names
+one this project stores. A model stage that made no call in a run, its rows all replayed
+from the cache, names the models its judgments record, or says they are not stored here or
+were recorded before judgments were kept.
+
 ## The node panel + workflow versioning (`_node_panel.html`, `versions.html`)
 
 Reading and editing the *workflow itself*, stage by stage — distinct from

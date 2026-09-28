@@ -5,6 +5,7 @@ Docs are in `docs/`. Index:
 - [getting-started.md](docs/getting-started.md) — `./start`, signing in so the LLM stages run, where state lives.
 - [overview.md](docs/overview.md) — the mission, the locked vocabulary, and the three features.
 - [architecture.md](docs/architecture.md) — the code map: the entrypoints and what each package owns.
+- [packs.md](docs/packs.md) — what a pack may declare, and how a run binds a pack's connector.
 - [models-and-storage.md](docs/models-and-storage.md) — the Pydantic contract and the compiled-stage JSON only the loader reads.
 - [named-schemas.md](docs/named-schemas.md) — the named-schema and eval models, validated but not yet consumed by the runtime.
 - [llm-transform-output-spec.md](docs/llm-transform-output-spec.md) — what an `llm_transform` reply must carry: 1:1, append-only, 1:N as one array column.
