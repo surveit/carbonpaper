@@ -7,8 +7,7 @@ from app.web.routers import run_diff, run_form, run_lineage, run_metadata, run_s
 
 
 def include_run_routers(app: FastAPI) -> None:
-    # Ahead of runs: run_form owns /runs/new, which runs' /runs/{run_id} would
-    # otherwise match with "new" as a run id.
+    # Ahead of runs, whose /runs/{run_id} would otherwise read /runs/new as a run id.
     app.include_router(run_form.router)
     app.include_router(runs.router)
     app.include_router(run_metadata.router)
