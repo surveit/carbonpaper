@@ -20,6 +20,22 @@ All routes live under `/project/{project}/…`.
   the run's own manifest is never touched, and the run page, its outputs and the
   spend it counts toward are unaffected. The runs picker lists the unarchived side.
 
+## Comparing two runs (`run_compare.html`)
+
+`GET /project/{p}/runs/{a}/compare/{b}` (`app/web/routers/run_diff.py`). The runs
+index links each run to the run before it on the same version.
+
+- `app.services.run_diff.compare_runs` refuses two runs pinned to different
+  versions (409, naming both). Otherwise it compares each stage both runs finished
+  three ways: row count, column set, and each row's content at its position, by
+  `compute_row_fingerprint` over the columns both outputs hold.
+- `llm_transform` and `human_review_queue` are listed and not compared: their rows
+  are judgments, which two runs may make differently. A stage that did not finish in
+  both runs is listed with both statuses.
+- Each stage that differs shows its first three differing rows, run A above run B,
+  over the columns they differ in, the differing cells tinted, with links to both
+  runs' full rows pages.
+
 ## Run detail page (`run_detail.html`)
 
 `GET /project/{p}/runs/{run_id}`.

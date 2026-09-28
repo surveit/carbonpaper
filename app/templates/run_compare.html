@@ -1,0 +1,113 @@
+{% extends "project_shell.html" %}
+{#
+  COMPARE — two runs of one workflow version, stage by stage.
+
+  A stage whose rows code computes is measured three ways: its row count, its column set,
+  and each row's content at its position. The table says which stages are identical; each
+  stage that differs then shows its first differing rows, run A above run B, the cells that
+  differ tinted. A model transform or review queue is listed and not compared.
+
+  Context the route passes:
+    state = project_view.shell_state_off_nav(project_id, crumbs); section = "runs"
+    page  = app.web.run_diff_view.build_run_compare_page(project_id, comparison)
+#}
+{% block section %}
+{% set runs_href = "/project/" ~ state.id ~ "/runs/" %}
+{% set version = page.version %}
+<div class="run-compare">
+<div class="sec-head">
+  <h1>Compare two runs</h1>
+  <p class="lede">A step computed by code should give the same rows from the same input, so each
+    one is compared row by row, in order. A model transform or review queue is not: its rows are
+    judgments, which two runs may make differently.</p>
+</div>
+
+<p><strong>Run A</strong>
+  <a href="{{ runs_href }}{{ page.run_a.run_id }}" title="run {{ page.run_a.run_id }}">
+    {%- if page.run_a.name %}{{ page.run_a.name }}{% else %}{{ page.run_a.started_at | friendly_time }}{% endif -%}
+  </a>
+  · <strong>Run B</strong>
+  <a href="{{ runs_href }}{{ page.run_b.run_id }}" title="run {{ page.run_b.run_id }}">
+    {%- if page.run_b.name %}{{ page.run_b.name }}{% else %}{{ page.run_b.started_at | friendly_time }}{% endif -%}
+  </a>
+  · both pinned workflow version
+  {%- if version.error %} <span class="unresolved" title="{{ version.error }}"><code>{{ version.version_id }}</code>, which could not be read</span>
+  {%- else %} <a class="version-msg" href="/project/{{ state.id }}/workflow/version/{{ version.version_id }}">
+    {%- if version.message %}“{{ version.message }}”{% else %}<code>{{ version.version_id }}</code>{% endif -%}
+  </a>{% endif %}</p>
+
+<p>{{ page.stages | length }} stages: {{ page.tally | join(" · ") }}</p>
+
+<table class="stages">
+  <thead>
+    <tr><th>stage</th><th>rows in run A</th><th>rows in run B</th><th>result</th></tr>
+  </thead>
+  <tbody>
+    {% for row in page.stages %}
+    {% set compared = row.stage.output_comparison %}
+    <tr>
+      <td><code>{{ row.stage.stage_id }}</code></td>
+      {% if compared is none %}
+      <td></td><td></td>
+      <td class="muted">not compared: {{ row.not_compared_because }}</td>
+      {% else %}
+      <td>{{ compared.run_a_row_count | figure }}</td>
+      <td>{{ compared.run_b_row_count | figure }}</td>
+      <td>
+        {%- if compared.is_identical %}<span class="muted">identical</span>
+        {%- else %}<a class="verdict verdict-fail" href="#differs-{{ row.stage.stage_id }}">differs</a>
+          {%- if compared.differing_row_count %} {{ compared.differing_row_count | figure }} row{{ '' if compared.differing_row_count == 1 else 's' }}{% endif %}
+        {%- endif %}
+      </td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% for row in page.stages if row.is_differing %}
+{% set compared = row.stage.output_comparison %}
+{% set stage_id = row.stage.stage_id %}
+<section id="differs-{{ stage_id }}">
+  <h2><code>{{ stage_id }}</code></h2>
+  <p>
+    {%- set differing = compared.differing_row_count %}
+    {%- if differing %}{{ differing | figure }} {{ 'row differs' if differing == 1 else 'rows differ' }}
+      {%- if row.row_pairs | length < differing %}; the first {{ row.row_pairs | length }} are below{% endif %}.{% endif %}
+    {%- if compared.columns_only_in_run_a %} Only run A wrote
+      {% for column in compared.columns_only_in_run_a %}<code>{{ column }}</code>{{ ', ' if not loop.last }}{% endfor %}.{% endif %}
+    {%- if compared.columns_only_in_run_b %} Only run B wrote
+      {% for column in compared.columns_only_in_run_b %}<code>{{ column }}</code>{{ ', ' if not loop.last }}{% endfor %}.{% endif %}
+    Every row: <a href="{{ runs_href }}{{ page.run_a.run_id }}/stage/{{ stage_id }}/rows">run A</a>
+    · <a href="{{ runs_href }}{{ page.run_b.run_id }}/stage/{{ stage_id }}/rows">run B</a>
+  </p>
+  {% if row.row_pairs %}
+  <div class="table-scroll">
+  <table class="data-preview">
+    <thead>
+      <tr><th>row</th><th>run</th>{% for column in row.columns %}<th>{{ column }}</th>{% endfor %}</tr>
+    </thead>
+    <tbody>
+      {% for pair in row.row_pairs %}
+      {% for side, cells in [("A", pair.run_a_cells), ("B", pair.run_b_cells)] %}
+      <tr>
+        {% if loop.first %}<td rowspan="2">{{ pair.ordinal | row_number }}</td>{% endif %}
+        <td>{{ side }}</td>
+        {%- if cells is none %}
+        <td class="muted" colspan="{{ row.columns | length }}">run {{ side }} has no row {{ pair.ordinal | row_number }}</td>
+        {%- else %}
+        {%- for cell in cells %}
+        <td{% if cell.differs %} class="cell-mismatch"{% endif %} title="{{ cell.text }}">{{ cell.text }}</td>
+        {%- endfor %}
+        {%- endif %}
+      </tr>
+      {% endfor %}
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
+{% endfor %}
+</div>
+{% endblock %}
