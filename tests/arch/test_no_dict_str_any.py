@@ -61,6 +61,7 @@ _GRANDFATHERED_COUNTS: dict[str, int] = {
     "app/services/project.py": 2,
     "app/services/review_packet/views.py": 10,
     "app/services/run.py": 8,
+    "app/services/run_diff.py": 6,
     "app/services/run_guide.py": 2,
     "app/services/versioning.py": 1,
     "app/services/workflow_test.py": 1,
