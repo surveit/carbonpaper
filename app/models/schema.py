@@ -60,6 +60,7 @@ _LIST_RE = re.compile(r"^list\[(.+)\]$")
 # — as opposed to the scalar/structured *sets* above, which are membership-tested
 # as a whole.
 STR_COLUMN_TYPE = "str"
+INT_COLUMN_TYPE = "int"
 JSON_COLUMN_TYPE = "json"
 LIST_JSON_COLUMN_TYPE = "list[json]"
 SPAN_COLUMN_TYPE = "span"

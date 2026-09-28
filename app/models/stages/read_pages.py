@@ -5,7 +5,13 @@ from typing import TYPE_CHECKING, ClassVar, Literal, Sequence
 
 from pydantic import Field
 
-from app.models.schema import SPAN_COLUMN_TYPE, STR_COLUMN_TYPE, StageConfig, TableSchema
+from app.models.schema import (
+    INT_COLUMN_TYPE,
+    SPAN_COLUMN_TYPE,
+    STR_COLUMN_TYPE,
+    StageConfig,
+    TableSchema,
+)
 from app.models.stages.shared import (
     COLUMN_ISSUE,
     find_declared_vs_computed_issues,
@@ -30,7 +36,7 @@ SOURCE_COLUMN_TYPES: dict[str, str] = {
     SOURCE_SHA256_COLUMN: STR_COLUMN_TYPE,
 }
 PAGE_COLUMN_TYPES: dict[str, str] = {
-    PAGE_COLUMN: "int",
+    PAGE_COLUMN: INT_COLUMN_TYPE,
     PAGE_TEXT_COLUMN: STR_COLUMN_TYPE,
     PAGE_SPAN_COLUMN: SPAN_COLUMN_TYPE,
 }
@@ -183,9 +189,9 @@ STAGE_TYPE_SPECS: dict[str, StageTypeSpec] = {
             "needs.\n"
             "An llm_transform that quotes a page reads `page_span` and names it as the "
             "`quoted_from` of the span column it adds. A page with no text layer, such as "
-            "a scan, gets empty `page_text` and a warning naming the file. A `source_id` "
-            "the project does not hold, or bytes "
-            "that no longer hash to `source_sha256`, stop the run.\n"
+            "a scan, gets empty `page_text` and a warning naming the file. It reads only "
+            "the files this run's input stages read: a row naming any other file, or one "
+            "whose bytes changed since, stops the run.\n"
             "Name what one output row is in `row_type_id`: a page of the input's kind of "
             "document, such as `filing_page`."
         ),
