@@ -3499,3 +3499,4 @@
 {"run_id":"36481160820","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36481160820","created":"2026-09-28T20:43:48Z","branch":"t08-span-cells","event":"pull_request","contracts_kept":18,"findings":[]}
 {"run_id":"36481191888","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36481191888","created":"2026-09-28T20:44:02Z","branch":"r08-distilled-rubric","event":"pull_request","contracts_kept":19,"findings":[]}
 {"run_id":"36481234289","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36481234289","created":"2026-09-28T20:44:16Z","branch":"r09-shrink-agents-md","event":"pull_request","contracts_kept":19,"findings":[]}
+{"run_id":"36480905261","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36480905261","created":"2026-09-28T20:44:36Z","branch":"t08-source-view","event":"pull_request","contracts_kept":null,"findings":[]}
