@@ -36,7 +36,7 @@ def compare_runs(project_id: ID, run_a_id: ID, run_b_id: ID) -> RunComparison:
         version_id=version_id,
         stages=[
             _compare_stage(project_id, run_a_id, run_b_id, record_a, record_b)
-            for record_a, record_b in _pair_stage_records(run_a, run_b)
+            for record_a, record_b in _collect_stage_record_pairs(run_a, run_b)
         ],
     )
 
@@ -63,19 +63,20 @@ def _read_shared_version_id(run_a: RunManifest, run_b: RunManifest) -> ID:
     version_id = run_a.workflow_version
     if version_id is None or version_id != run_b.workflow_version:
         raise RunComparisonRefused(
-            f"run '{run_a.run_id}' pinned {_quote_version(run_a)} and run '{run_b.run_id}' "
-            f"pinned {_quote_version(run_b)}; only runs of one version executed the same stages"
+            f"run '{run_a.run_id}' pinned {_describe_pinned_version(run_a)} and run "
+            f"'{run_b.run_id}' pinned {_describe_pinned_version(run_b)}; only runs of one "
+            "version executed the same stages"
         )
     return version_id
 
 
-def _quote_version(run: RunManifest) -> str:
+def _describe_pinned_version(run: RunManifest) -> str:
     if run.workflow_version is None:
         return "no workflow version"
     return f"workflow version '{run.workflow_version}'"
 
 
-def _pair_stage_records(
+def _collect_stage_record_pairs(
     run_a: RunManifest, run_b: RunManifest
 ) -> list[tuple[StageRecord, StageRecord]]:
     records_b = {record.stage_id: record for record in run_b.stage_records}
