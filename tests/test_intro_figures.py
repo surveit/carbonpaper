@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from html import unescape
 from html.parser import HTMLParser
+from urllib.parse import unquote
 
 from app.models.stages.llm_transform import LLMTransformStage
 from app.services.project import WorkflowFile
@@ -14,10 +15,11 @@ _BODY_ROW = re.compile(r"<tr>((?:<td[^>]*>[^<]*</td>)+)</tr>")
 _CELL = re.compile(r"<td[^>]*>([^<]*)</td>")
 _CARD_ENTRY = re.compile(r"<dt>([^<]*)</dt><dd>([^<]*)</dd>")
 _NUMBER_TOKEN = re.compile(r"[\w.,-]*\d[\w.,-]*")
+_SVG_DATA_URI = "data:image/svg+xml;utf8,"
 
 
 def test_every_number_on_the_intro_is_one_the_tour_fixture_computes():
-    """The intro is static HTML, so this test is the only thing tying its figures to the fixture."""
+    """Reads the page's text and its SVG images; a raster image's numbers go unchecked."""
     figures = compute_intro_figures()
     html = (INTRO_DIR / "index.html").read_text(encoding="utf-8")
     text = read_visible_text(html)
@@ -85,6 +87,9 @@ class _VisibleTextParser(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in ("script", "style"):
             self._hidden_depth += 1
+        source = dict(attrs).get("src") or ""
+        if tag == "img" and source.startswith(_SVG_DATA_URI):
+            self.chunks.append(read_visible_text(unquote(source.removeprefix(_SVG_DATA_URI))))
 
     def handle_endtag(self, tag: str) -> None:
         if tag in ("script", "style"):
