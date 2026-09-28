@@ -244,7 +244,7 @@ ends the conversation.
 
     offer_next_steps(options=[
         {"text": "Open the review queue", "url": "/project/<id>/runs/<id>/queue/<stage>"},
-        {"text": "Trace a published figure back to its row"},
+        {"text": "Trace a result back to its row"},
     ])""",
 )
 

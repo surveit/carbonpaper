@@ -92,7 +92,7 @@ def test_the_prompt_says_the_data_is_real_public_record() -> None:
 
 def test_the_prompt_covers_the_five_requested_beats() -> None:
     # "What Carbon Paper is" is the opening message's job now, not the system prompt's.
-    assert "Carbon Paper exists because" in TUTORIAL_OPENING_MESSAGE
+    assert "Carbon Paper turns your investigation into a workflow" in TUTORIAL_OPENING_MESSAGE
 
     prompt = TUTORIAL_SYSTEM_PROMPT
     assert "Seed it" in prompt

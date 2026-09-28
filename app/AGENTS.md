@@ -83,7 +83,7 @@ statement of what went wrong: ONE list indexing the stages, every entry one line
 and the stage panel names none of them itself. On the run page it stays in the
 work column, not the nav rail: its four-column table needs the width. Drawn with
 `_issue_table.html`, the panel + row macros the **Workflow** page's compiler warnings also use;
-the macros own the heading (`17 warnings, 2 errors`, a severity with none of them left out) and
+the macros own the heading (`2 errors, 17 warnings`, a severity with none of them left out) and
 the CLOSED default, so neither page can word its counts differently or open on a different one.
 The counts are the summary, so a closed panel still says something is wrong.
 - **A stop** — an `error` stage, the run's own end — is the FIRST line, marked `stopped`, its

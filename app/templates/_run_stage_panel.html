@@ -149,9 +149,8 @@
     {% if stage.cached_rows and stage.status in ("ok", "validation_warnings") %}
     {# A positive replay count is this run's evidence that cache rows supplied
        the output; an absent count means no replay conclusion is available. #}
-    <p class="muted"><b>Reused, not recomputed.</b>
-        {{ stage.cached_rows | figure }} of {{ stage.output_row_count or 0 | figure }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}{% if stage.output_row_count and stage.output_row_count > 0 %} ({{ ((stage.cached_rows / stage.output_row_count) * 100) | round(0) | int }}%){% endif %} came back from results an earlier run already produced,
-        so the model was not called for those cached rows and those rows incurred no cost in this run.</p>
+    <p class="muted"><b>Reused from an earlier run:</b>
+        {{ stage.cached_rows | figure }} of {{ stage.output_row_count or 0 | figure }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}{% if stage.output_row_count and stage.output_row_count > 0 %} ({{ ((stage.cached_rows / stage.output_row_count) * 100) | round(0) | int }}%){% endif %}.</p>
     {% endif %}
     {% endif %}
     {# Stage-aware diff (app.web.stage_diff): a row_aligned diff or a

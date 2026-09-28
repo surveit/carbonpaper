@@ -29,8 +29,7 @@ def find_workflow_compiler_warnings(
     warnings = [w for stage in stages
                 for w in find_stage_compiler_warnings(stage, failing.get(stage.id))]
     order = list(SEVERITY)
-    # Every kind is a warning, so SEVERITY's order is the whole sort: the kinds that
-    # leave a stage least reviewable lead.
+    # SEVERITY's order is the whole sort: errors first, then what leaves a stage least reviewable.
     return CompilerWarningReport(warnings=sorted(warnings, key=lambda w: order.index(w.kind)))
 
 
@@ -50,9 +49,8 @@ def _find_unnamed_rows_warning(stage: Stage) -> list[CompilerWarning]:
     if not stage.declares_its_own_row_type or stage.resolve_own_row_type_id():
         return []
     return [warn(stage, "unnamed_rows",
-                 "its rows are a new kind of thing and no `row_type_id` says what one "
-                 "of them is, so nothing written about them — this stage's own "
-                 "description, a review guide, a published figure — can name the thing")]
+                 "its rows are a new kind of thing, and without a `row_type_id` nothing "
+                 "written about them can name it")]
 
 
 def _find_unsaid_test_warning(stage: Stage) -> list[CompilerWarning]:

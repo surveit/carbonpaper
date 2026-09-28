@@ -81,19 +81,20 @@ def test_the_paying_run_still_reports_its_calls_and_cost(project: Path) -> None:
     html = _panel(_run(project))
     assert "stat-strip" in html
     assert "$0.50" in html  # two rows at the stub's $0.25 each
-    assert "Reused, not recomputed" not in html
+    assert "Reused from an earlier run" not in html
 
 
 def test_the_replayed_run_says_so_where_the_cost_would_be(project: Path) -> None:
     _run(project)
     replayed = _panel(_run(project))
     assert "stat-strip" in replayed
-    assert "Reused, not recomputed" in replayed
+    assert "Reused from an earlier run" in replayed
     assert "2 of 2 rows (100%)" in replayed
-    assert "the model was not called for those cached rows" in replayed
 
 
-def test_a_partially_replayed_run_limits_its_no_call_claim_to_cached_rows(project: Path) -> None:
+def test_a_partially_replayed_run_counts_its_cached_rows_beside_the_call_it_made(
+    project: Path,
+) -> None:
     _run(project)
     pd.DataFrame({"x": [1, 2, 3]}).to_csv(project / "rows.csv", index=False)
 
@@ -102,7 +103,6 @@ def test_a_partially_replayed_run_limits_its_no_call_claim_to_cached_rows(projec
     assert "2 of 3 rows (67%)" in html
     assert "<dt>calls</dt><dd>1</dd>" in html
     assert "$0.25" in html
-    assert "the model was not called for those cached rows" in html
     assert "the model was not called in this run" not in html
 
 
@@ -112,7 +112,7 @@ def test_a_restarted_pending_run_does_not_claim_cache_replay(project: Path) -> N
 
     html = _panel(pending["run_id"])
 
-    assert "Reused, not recomputed" not in html
+    assert "Reused from an earlier run" not in html
 
 
 def test_cache_replay_omits_a_percentage_without_output_rows(project: Path) -> None:
@@ -126,7 +126,7 @@ def test_cache_replay_omits_a_percentage_without_output_rows(project: Path) -> N
 
     html = _panel(run_id)
 
-    assert "2 of 0 rows came back" in html
+    assert "2 of 0 rows." in html
     assert "2 of 0 rows (" not in html
 
 
