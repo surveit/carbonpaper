@@ -208,7 +208,7 @@ def _export_demo_lineage(tmp_path):
 
     root = tmp_path / "packet"
     root.mkdir()
-    return write_packet_lineage(root, run_dir, _run_view(2), {}, _DEMO_MANIFEST)
+    return write_packet_lineage(root, run_dir, _run_view(2), {}, _DEMO_MANIFEST, frozenset())
 
 
 # What the run recorded of the one file it read — the Inputs pane's whole source.

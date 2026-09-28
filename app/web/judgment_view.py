@@ -6,11 +6,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.core.ids import ID
+from app.core.json_types import JsonDict
 from app.core.judgments import Judgment
 from app.models import AbstractStage
 from app.models.stages.llm_transform import LLMTransformStage
 from app.runtime.run_log import JUDGMENT_ID, ROW_ERROR, ROW_OK, SOURCE_CACHED, read_events_since
 from app.services import run as run_service
+from app.services.review_packet.views import StageJudgments
 from app.web.loading import load_manifest
 from app.web.panel_links import AppPanelLinks
 
@@ -71,6 +73,23 @@ def read_replayed_judgments(project_id: ID, run_id: ID, stage_id: ID) -> Replaye
     )
 
 
+def list_stage_judgments(events: list[JsonDict], stage_ids: list[str]) -> list[StageJudgments]:
+    return [_read_stage_judgments(_select_row_outcomes(events, stage_id), stage_id)
+            for stage_id in stage_ids]
+
+
+def _read_stage_judgments(outcomes: list[JsonDict], stage_id: str) -> StageJudgments:
+    # A row whose call raised decided nothing, so only a row that came out owes a judgment.
+    unnamed = [e for e in outcomes if e["kind"] == ROW_OK and JUDGMENT_ID not in e]
+    replayed = sum(1 for event in unnamed if event.get("source") == SOURCE_CACHED)
+    return StageJudgments(
+        stage_id=stage_id,
+        judgment_ids=list(dict.fromkeys(str(e[JUDGMENT_ID]) for e in outcomes if JUDGMENT_ID in e)),
+        replayed_without_judgment=replayed,
+        computed_without_judgment=len(unnamed) - replayed,
+    )
+
+
 def _is_stored_in(project_id: ID, judgment_id: object) -> bool:
     if not isinstance(judgment_id, str):
         return False
@@ -89,8 +108,11 @@ def _count_rows_in_call(judgment: Judgment) -> int | None:
 
 
 def _list_row_outcomes(project_id: ID, run_id: ID, stage_id: ID) -> list[dict[str, Any]]:
+    return _select_row_outcomes(read_events_since(project_id, run_id, 0), stage_id)
+
+
+def _select_row_outcomes(events: list[JsonDict], stage_id: str) -> list[JsonDict]:
     return [
-        event
-        for event in read_events_since(project_id, run_id, 0)
+        event for event in events
         if event.get("stage") == stage_id and event.get("kind") in (ROW_OK, ROW_ERROR)
     ]

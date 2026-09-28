@@ -89,7 +89,7 @@
   {% else %}
   <p class="lede">The project had no methodology.</p>
   {% endif %}
-  {{ glossary_words(method.row_types, method.verbs) }}
+  {{ glossary_words(method.row_types, method.verbs, none_agreed="None had been agreed when this version was saved.") }}
 </details>
 {% endif %}
 

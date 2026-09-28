@@ -80,6 +80,18 @@ def test_a_packet_on_an_older_version_says_why_it_holds_no_methodology(projects_
     assert "predates versions keeping the methodology" in omitted.reason
     index = (packet.root / "index.html").read_text(encoding="utf-8")
     assert str(escape(omitted.reason)) in index and _METHODOLOGY not in index
+    assert 'href="methodology.md"' not in index and 'href="terms.json"' not in index
+    assert [o.reason for o in packet.omitted if o.path == "terms.json"] == [omitted.reason]
+
+
+def test_the_packet_writes_the_terms_the_runs_version_kept(projects_root, tmp_path):
+    project_id, run_id = _run_a_project()
+    _rewrite_the_project(project_id)
+
+    packet = export_review_packet(project_id, run_id, tmp_path / "packets")
+
+    kept = Method.model_validate_json((packet.root / "terms.json").read_text(encoding="utf-8"))
+    assert (kept.row_types, kept.verbs) == (_TERMS.row_types, _TERMS.verbs)
 
 
 # ── the claim's evidence bundle ──
@@ -134,6 +146,18 @@ def test_the_version_page_of_an_older_version_says_it_kept_none(projects_root):
 
     assert "Saved before a version kept the methodology and terms" in page
     assert _METHODOLOGY not in page and "One disclosure a firm made." not in page
+
+
+def test_the_version_page_of_a_project_with_no_words_says_none_were_agreed_by_then(
+    projects_root,
+):
+    project_id = create_project("pins", _METHODOLOGY, source="pinning test").id
+    version = _save_version(project_id)
+
+    page = _get_version_page(project_id, version)
+
+    assert page.count("None had been agreed when this version was saved.") == 2
+    assert "None agreed yet." not in page
 
 
 # ── helpers ──

@@ -326,8 +326,8 @@ def test_unreadable_version_is_stated_on_the_stage_page(project_dir, tmp_path, m
 
     page = (packet.root / "stages" / "double.html").read_text(encoding="utf-8")
     assert "no-such-version" in page
-    # The methodology the run pinned lives on that version too.
-    assert [o.path for o in packet.omitted] == ["workflow.json", "methodology.md"]
+    # The methodology and terms the run pinned live on that version too.
+    assert [o.path for o in packet.omitted] == ["workflow.json", "methodology.md", "terms.json"]
 
 
 def test_a_stage_page_never_holds_less_than_a_served_page_would(project_dir, tmp_path):
