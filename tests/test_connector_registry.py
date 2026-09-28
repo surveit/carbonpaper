@@ -19,7 +19,7 @@ from app.models.connectors import (
     CONNECTORS, SOURCE_COLUMNS, AcquiredBytes, ConnectorParams, ConnectorSpec,
 )
 from app.models.packs import PACKS, PackSpec, register_pack
-from app.models.run_manifest import flatten_input_bindings
+from app.models.run_manifest import index_bound_sources
 from app.models.schema import Column
 from app.models.stages.input_data import Connector
 from app.runtime.context import PrepareScope, RunContext
@@ -123,9 +123,10 @@ def test_a_registered_kind_reads_its_params_with_its_own_model(folder_pack) -> N
 def test_register_pack_refuses_a_name_already_held(
     folder_pack, pack_id: str, connector: ConnectorSpec, refusal: str,
 ) -> None:
+    held = (dict(PACKS), dict(CONNECTORS))
     with pytest.raises(ValueError, match=refusal):
         register_pack(PackSpec(pack_id=pack_id, connectors=(connector,)))
-    assert (set(PACKS), set(CONNECTORS)) == ({"letters"}, {_KIND})
+    assert (dict(PACKS), dict(CONNECTORS)) == held
 
 
 def test_importing_app_packs_registers_one_pack_per_directory_named_for_it() -> None:
@@ -161,8 +162,7 @@ def test_each_row_names_the_stored_file_it_came_from(folder_pack, tmp_path) -> N
     scope = PrepareScope(project_id=tmp_path.name, run_dir=tmp_path / "run")
     record = acquire_input_data(workflow_stage, scope)
     assert record is not None
-    bound = {binding.sha256: binding for binding in flatten_input_bindings(
-        {"letters": record.model_dump(mode="json")}) if binding.sha256}
+    bound = index_bound_sources({"letters": record.model_dump(mode="json")})
 
     output = read_input_data(workflow_stage, RunContext.for_workflow_test_run(
         scope.run_dir, scope.project_id, "run", bound_sources=bound))
