@@ -6,9 +6,10 @@ from collections.abc import Callable
 from pathlib import Path
 
 from critic.backend import ClaudeCliBackend
+from critic.comparison import compare_runs, read_notes, write_comparison_outputs
 from critic.corpus import fetch_corpus, load_pr_listings
 from critic.diff import fetch_pull_request_diff, load_or_fetch_diff, save_diff
-from critic.evaluation import DEFAULT_PR_RANGE, EvalSettings, run_eval
+from critic.evaluation import DEFAULT_PR_RANGE, EvalResult, EvalSettings, run_eval
 from critic.labels import load_silent_test_prs, load_test_split
 from critic.report import write_eval_outputs
 from critic.review import run_review
@@ -38,6 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_diff(commands.add_parser("diff", help="fetch and cache one PR's diff"))
     _add_review(commands.add_parser("review", help="predict the reviewer's comments on one PR"))
     _add_eval(commands.add_parser("eval", help="score predictions against labeled real comments"))
+    _add_compare(commands.add_parser("compare", help="set eval results side by side"))
     return parser
 
 
@@ -80,6 +82,14 @@ def run_eval_command(args: argparse.Namespace) -> int:
     for path in write_eval_outputs(result, args.out):
         print(path)
     print(json.dumps({"overall": result.overall.model_dump(), "exact_only": result.exact_only.model_dump()}))
+    return 0
+
+
+def run_compare(args: argparse.Namespace) -> int:
+    runs = {path: EvalResult.model_validate_json(path.read_text(encoding="utf-8")) for path in args.results}
+    comparison = compare_runs(runs, load_pr_listings(args.corpus), read_notes(args.notes), args.out)
+    for path in write_comparison_outputs(comparison, args.out):
+        print(path)
     return 0
 
 
@@ -183,3 +193,10 @@ def _add_eval(parser: argparse.ArgumentParser) -> None:
     )
     parser.set_defaults(command=run_eval_command)
 
+
+def _add_compare(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("results", type=Path, nargs="+", help="results.json files of runs over the same PRs")
+    parser.add_argument("--notes", type=Path, required=True, help="plain text shown above the tables")
+    parser.add_argument("--corpus", type=Path, default=LOCAL_ROOT / "corpus", help="holds prs.json, for PR sizes")
+    parser.add_argument("--out", type=Path, required=True)
+    parser.set_defaults(command=run_compare)
