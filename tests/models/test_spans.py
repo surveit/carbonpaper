@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from app.core.errors import QuoteAmbiguous, QuoteNotInText
 from app.models.locators import CellAt, Locator, PageCharRange
+from app.models.schema import Column, TableSchema
 from app.models.spans import Span, SpanReply, narrow_span
 from locator_kind_fixture import DocketPage, registered_docket_page
 
@@ -117,3 +118,35 @@ def test_a_subclass_keeps_its_added_fields_through_narrowing_and_a_dump() -> Non
         quote = narrow_span(page, "rejected")
         assert quote.locator == DocketPage(page=14, start=10, end=18, entry=58)
         assert Span.model_validate(quote.model_dump(), strict=True) == quote
+
+
+# ── the span column type ─────────────────────────────────────────────────────
+def test_quoted_from_is_refused_off_a_span_column() -> None:
+    with pytest.raises(ValidationError, match="quoted_from is only valid on type 'span'"):
+        Column(name="basis", type="str", nullable=True, quoted_from="page")
+
+
+def test_a_frame_row_holds_a_whole_span() -> None:
+    row_model = TableSchema(columns=[Column(name="basis", type="span", nullable=False)]
+                            ).to_pydantic_model("row")
+    span = narrow_span(_whole_page(), "rejected")
+    row = row_model.model_validate({"basis": span.model_dump()}, strict=True)
+    assert getattr(row, "basis") == span
+    with pytest.raises(ValidationError):
+        row_model.model_validate({"basis": "rejected"}, strict=True)
+
+
+def test_a_reply_holds_words_and_no_address() -> None:
+    reply_model = TableSchema(columns=[Column(name="basis", type="span", nullable=False)]
+                              ).to_reply_model("reply")
+    reply = reply_model.model_validate({"basis": {"quote": "the plea", "suffix": " aloud"}})
+    assert getattr(reply, "basis") == SpanReply(quote="the plea", suffix=" aloud")
+    with pytest.raises(ValidationError, match="source_id"):
+        reply_model.model_validate({"basis": narrow_span(_whole_page(), "rejected").model_dump()})
+
+
+def test_a_reader_of_a_span_column_need_not_repeat_quoted_from() -> None:
+    produced = TableSchema(columns=[
+        Column(name="basis", type="span", nullable=True, quoted_from="page")])
+    read = TableSchema(columns=[Column(name="basis", type="span", nullable=True)])
+    assert read.find_unsatisfied_columns(produced) == []

@@ -10,7 +10,7 @@ from pydantic import AliasChoices, Field, model_validator
 
 from app.core.llm.options import LLMModel
 from app.core.prompt_template import find_template_fields
-from app.models.schema import StageConfig, TableSchema
+from app.models.schema import SPAN_COLUMN_TYPE, StageConfig, TableSchema
 from app.models.stages.stage_base import AbstractStage, StageInput, StageType
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
 from app.models.stages.stage_type_spec import StageTypeSpec
@@ -197,6 +197,29 @@ def find_llm_signature_issues(stage: "LLMTransformStage") -> list[str]:
     if not signature.adds:
         issues.append(f"stage '{stage.id}': the signature adds no columns beyond the "
                       f"input, so the model is asked for nothing")
+    issues.extend(_find_quoted_from_issues(stage))
+    return issues
+
+
+def _find_quoted_from_issues(stage: "LLMTransformStage") -> list[str]:
+    anchor_id = stage.inputs[0].id
+    span_columns_read = {
+        column.name
+        for entry in stage.signature.reads
+        if entry.input == anchor_id
+        for column in entry.columns
+        if column.type == SPAN_COLUMN_TYPE
+    }
+    issues: list[str] = []
+    for column in stage.signature.adds:
+        if column.type != SPAN_COLUMN_TYPE:
+            continue
+        if column.quoted_from is None:
+            issues.append(f"stage '{stage.id}': span column `{column.name}` names no "
+                          f"quoted_from, the input span column whose text it quotes")
+        elif column.quoted_from not in span_columns_read:
+            issues.append(f"stage '{stage.id}': span column `{column.name}` is quoted from "
+                          f"`{column.quoted_from}`, which the signature does not read as a span")
     return issues
 
 

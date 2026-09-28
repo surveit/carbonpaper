@@ -22,7 +22,9 @@ prompt never hand-writes — and never drifts from — an output shape.
    object's shape is described by the same primitives as a table, recursively)
    or `Column.value_type` (an open map: arbitrary string keys whose values are
    one scalar type). Neither, both, or either one on a non-json column is
-   refused by `Column._json_shape`. There is one structured type, `json`.
+   refused by `Column._json_shape`. `json` is the one structured type whose
+   shape an author states; the other, `span`, has a fixed shape
+   (`app/models/spans.py`).
 4. **No revise-in-place.** A stage's output table is the review surface;
    overwriting a column destroys history exactly where review happens (the
    upstream table still exists, but the reviewer of *this* table can no longer
