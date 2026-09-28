@@ -61,7 +61,7 @@ class _RecapDocument(BaseModel):
     entry_number: int | None
     attachment_number: int | None
     entry_date_filed: date | None
-    description: str
+    description: str | None
     page_count: int | None
     pacer_doc_id: str | None
     filepath_local: str | None
@@ -119,7 +119,7 @@ class _Mirror:
         digest = compute_sha256(path)
         if digest != record.sha256:
             raise MirrorDisagrees(
-                f"{path} hashes to {digest}, but its mirror recorded {record.sha256} for {url}")
+                name=str(path), digest=digest, recorded=record.sha256, origin_url=url)
         return path.read_bytes()
 
 
@@ -140,6 +140,10 @@ def _read_listing(docket_id: int, mirror: _Mirror | None) -> list[_RecapDocument
             mirror.read(url) if mirror is not None else _get(url))
         documents.extend(page.results)
         url = page.next
+        if url is not None and not url.startswith(COURTLISTENER_API):
+            raise SourceUnavailable(
+                f"docket {docket_id}'s listing points its next page at {url}, off "
+                f"{COURTLISTENER_API}; it is not followed")
     return documents
 
 

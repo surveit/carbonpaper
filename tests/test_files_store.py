@@ -95,8 +95,19 @@ def test_a_mirrored_source_keeps_the_time_its_mirror_recorded():
         "demo", ORIGIN, "58.pdf", io.BytesIO(BODY), fetched_at="2026-09-28T09:15:16Z",
         expected_sha256=hashlib.sha256(BODY).hexdigest())
     stored = ProjectFile.load(record.id)
-    assert (stored.origin_url, stored.fetched_at) == (ORIGIN, "2026-09-28T09:15:16Z")
+    assert stored.origin_url == ORIGIN and stored.fetched_at is not None
+    fetched = datetime.fromisoformat(stored.fetched_at)
+    assert fetched.tzinfo is None, "stored in now_iso's form: naive local"
+    assert fetched.astimezone() == datetime.fromisoformat("2026-09-28T09:15:16Z")
     assert stored.created_at != stored.fetched_at
+
+
+@pytest.mark.parametrize("fetched_at", ["yesterday", "2026-09-28T09:15:16"])
+def test_a_mirrored_source_needs_a_fetch_time_with_an_offset(fetched_at):
+    with pytest.raises(ValueError, match="ISO 8601 timestamp with an offset"):
+        receive_mirrored_source("demo", ORIGIN, "58.pdf", io.BytesIO(BODY), fetched_at=fetched_at,
+                                expected_sha256=hashlib.sha256(BODY).hexdigest())
+    assert ProjectFile.list() == []
 
 
 def test_mirrored_bytes_off_the_recorded_sha256_are_refused_before_a_record_is_made():

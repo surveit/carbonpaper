@@ -5,7 +5,7 @@ import hashlib
 import json
 import threading
 from collections.abc import Iterator
-from datetime import date
+from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -46,6 +46,7 @@ class _Docket:
         self.files = files
         self.requests: list[tuple[str, str]] = []
         self.base = ""
+        self.next_page = ""
 
     def answer(self, target: str) -> bytes | None:
         parts = urlsplit(target)
@@ -55,7 +56,7 @@ class _Docket:
 
     def _search_page(self, second: bool) -> bytes:
         rows = _LISTING_ROWS[2:] if second else _LISTING_ROWS[:2]
-        following = None if second else f"{self.base}{_SEARCH_PATH}?cursor=2&type=rd"
+        following = None if second else self.next_page
         return json.dumps({"count": len(_LISTING_ROWS), "next": following,
                            "previous": None, "results": rows}).encode("utf-8")
 
@@ -80,6 +81,7 @@ def docket(tmp_path: Path, monkeypatch) -> Iterator[_Docket]:
 
     server = HTTPServer(("127.0.0.1", 0), Handler)
     served.base = f"http://127.0.0.1:{server.server_port}"
+    served.next_page = f"{served.base}{_SEARCH_PATH}?cursor=2&type=rd"
     monkeypatch.setattr(connector, "COURTLISTENER_API", f"{served.base}/api/rest/v4/")
     monkeypatch.setattr(connector, "RECAP_STORAGE", f"{served.base}/")
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -197,6 +199,13 @@ def test_an_entry_the_listing_does_not_hold_is_reported(docket, tmp_path) -> Non
         _run_filings(tmp_path, _params(["999"]))
 
 
+def test_a_next_page_off_courtlistener_is_not_followed(docket, tmp_path) -> None:
+    docket.next_page = f"http://example.org{_SEARCH_PATH}?cursor=2&type=rd"
+    with pytest.raises(MissingInputBindingError, match="next page at http://example.org"):
+        _run_filings(tmp_path, _params(["58"]))
+    assert [urlsplit(path).path for path, _agent in docket.requests] == [_SEARCH_PATH]
+
+
 def test_a_request_that_fails_is_reported_with_its_url(docket, tmp_path) -> None:
     del docket.files[ECF_221_1_PATH]
     with pytest.raises(MissingInputBindingError, match=f"GET {docket.base}/{ECF_221_1_PATH}"):
@@ -221,6 +230,14 @@ def offline(monkeypatch) -> None:
         raise AssertionError("a mirror read reached for the network")
 
     monkeypatch.setattr(connector, "urlopen", refuse)
+
+
+def _read_instant(stored_stamp: str | None) -> datetime:
+    """A stored stamp is naive local, the form now_iso writes."""
+    assert stored_stamp is not None
+    moment = datetime.fromisoformat(stored_stamp)
+    assert moment.tzinfo is None
+    return moment.astimezone()
 
 
 def _write_mirror(root: Path, recorded_sha256: dict[str, str] | None = None) -> Path:
@@ -252,8 +269,8 @@ def test_a_mirror_supplies_the_bytes_and_the_time_they_were_fetched(offline, tmp
 
     assert manifest["status"] == "ok"
     (record,) = list_project_files(tmp_path.name)
-    assert (record.origin_url, record.fetched_at) == (
-        f"https://storage.courtlistener.com/{ECF_58_PATH}", MIRROR_FETCHED_AT)
+    assert record.origin_url == f"https://storage.courtlistener.com/{ECF_58_PATH}"
+    assert _read_instant(record.fetched_at) == datetime.fromisoformat(MIRROR_FETCHED_AT)
     assert record.created_at != record.fetched_at
     _verify_page_spans(manifest, _read_output(tmp_path, manifest, "filing_pages"))
 

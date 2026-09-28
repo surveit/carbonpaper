@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass
-from datetime import datetime
 import hashlib
 import os
 import tempfile
@@ -17,7 +16,7 @@ from app.core.errors import FileNotStoredError, FileOverCeiling, MirrorDisagrees
 from app.core.record import PersistedModel, PersistenceScope
 from app.core.store_config import resolve_db_path
 from app.core.ids import ID
-from app.core.timestamp_ids import now_iso
+from app.core.timestamp_ids import now_iso, read_iso_stamp
 
 # How much of an upload is held in memory at once while it is written and hashed.
 _CHUNK_BYTES = 1024 * 1024
@@ -104,9 +103,8 @@ def receive_mirrored_source(
 ) -> ProjectFile:
     """Store bytes a mirror kept; matching the sha256 it recorded proves they were fetched then."""
     _refuse_origin_that_is_not_http(origin_url)
-    # Foreign data: a stamp that is not a time is refused rather than stored.
-    datetime.fromisoformat(fetched_at)
-    return _save_file(filename, stream, project_id, origin_url=origin_url, fetched_at=fetched_at,
+    return _save_file(filename, stream, project_id, origin_url=origin_url,
+                      fetched_at=_convert_to_local_stamp(fetched_at),
                       expected_sha256=expected_sha256)
 
 
@@ -123,9 +121,8 @@ def _save_file(filename: str, src: BinaryIO, project_id: ID | None, *,
     staged, digest, byte_count = _write_to_temp_file(root, src, max_upload_bytes())
     if expected_sha256 is not None and digest != expected_sha256:
         staged.unlink()
-        raise MirrorDisagrees(
-            f"'{filename}' hashes to {digest}, but its mirror recorded {expected_sha256} "
-            f"for {origin_url}")
+        raise MirrorDisagrees(name=f"'{filename}'", digest=digest, recorded=expected_sha256,
+                              origin_url=str(origin_url))
     _refuse_upload_over_quota(root, staged, byte_count)
     record = ProjectFile(sha256=digest, filename=_safe_filename(filename),
                         byte_count=byte_count, project_id=project_id,
@@ -260,6 +257,16 @@ def _delete_if_empty(directory: Path) -> None:
 
 def _sorted_newest_first(records: list[ProjectFile]) -> list[ProjectFile]:
     return sorted(records, key=lambda record: record.created_at, reverse=True)
+
+
+def _convert_to_local_stamp(fetched_at: str) -> str:
+    """The form now_iso writes, so every stored fetched_at reads one way."""
+    moment = read_iso_stamp(fetched_at)
+    # Without an offset nothing says which clock the mirror read, so no instant can be stored.
+    if moment is None or moment.tzinfo is None:
+        raise ValueError(
+            f"a mirror's fetch time must be an ISO 8601 timestamp with an offset, got {fetched_at!r}")
+    return moment.astimezone().replace(tzinfo=None).isoformat(timespec="microseconds")
 
 
 def _refuse_origin_that_is_not_http(origin_url: str) -> None:
