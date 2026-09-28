@@ -57,6 +57,22 @@ class QuoteAmbiguous(ValueError):
     """A quote to narrow a span to appears more than once in it, so no one address holds it."""
 
 
+class QuoteNotAtAddress(ValueError):
+    """The text at a span's address in its file is not its quote, prefix or suffix."""
+
+
+class SourceNotRead(ValueError):
+    """A span names a file by a sha256 the run never read."""
+
+
+class SourceChanged(ValueError):
+    """A file a run read no longer hashes to the sha256 the run read it at."""
+
+
+class LocatorKindUnreadable(ValueError):
+    """A span's locator kind names no page of a file, so its quote cannot be read back."""
+
+
 class ColumnNotInFrame(ValueError):
     pass
 

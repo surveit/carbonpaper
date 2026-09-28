@@ -200,8 +200,11 @@ class InputBinding(BaseModel):
 
 
 def read_input_bindings(raw: dict[str, Any]) -> list[InputBinding]:
+    return flatten_input_bindings(raw.get("input_bindings") or {})
+
+
+def flatten_input_bindings(recorded: Mapping[str, Any]) -> list[InputBinding]:
     """One entry per FILE, so a stage that read several contributes several."""
-    recorded = raw.get("input_bindings") or {}
     return [
         binding
         for stage_id, record in sorted(recorded.items())

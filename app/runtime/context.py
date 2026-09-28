@@ -7,6 +7,7 @@ A cache-WRITING context may not carry `queue_auto_approve`, and
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -15,6 +16,7 @@ from app.core.stage_cache import ReadOnlyStageCache, StageCache, StageCacheEntry
 
 from .run_log import RunLog
 from .progress import StageProgressReporter
+from .spans import SourceTextCache
 from app.models.run_parameters import RunParameters
 
 
@@ -49,6 +51,10 @@ class RunContext(BaseModel):
     # (every emit site treats that as "don't log"), never a fabricated sink.
     run_log: RunLog | None = None
     stage_progress: StageProgressReporter = Field(default_factory=StageProgressReporter)
+    # sha256 -> path of each file this run's input stages read: the files a span may quote.
+    bound_sources: Mapping[str, Path] = Field(default_factory=dict)
+    # Shared by every copy attach_* makes, so a page is extracted once per run.
+    source_texts: SourceTextCache = Field(default_factory=SourceTextCache)
 
     @model_validator(mode="after")
     def _a_writable_cache_forbids_queue_auto_approve(self) -> RunContext:
@@ -114,12 +120,14 @@ class RunContext(BaseModel):
         project_id: str,
         run_id: str,
         params: RunParameters = RunParameters(),
+        bound_sources: Mapping[str, Path] = {},
     ) -> RunContext:
         return cls(
             run_dir=run_dir,
             identity=RunIdentity(project=project_id, run_id=run_id),
             stage_cache=StageCacheEntry.read_write(),
             params=params,
+            bound_sources=bound_sources,
         )
 
     @classmethod
@@ -129,6 +137,7 @@ class RunContext(BaseModel):
         project_id: str,
         run_id: str,
         params: RunParameters = RunParameters(),
+        bound_sources: Mapping[str, Path] = {},
     ) -> RunContext:
         return cls(
             run_dir=run_dir,
@@ -136,6 +145,7 @@ class RunContext(BaseModel):
             stage_cache=StageCacheEntry.read_only(),
             params=params.model_copy(
                 update={"is_test_run": True, "queue_auto_approve": True}),
+            bound_sources=bound_sources,
         )
 
     @classmethod
