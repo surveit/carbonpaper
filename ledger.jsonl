@@ -3456,3 +3456,4 @@
 {"run_id":"36478012879","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36478012879","created":"2026-09-28T20:17:06Z","branch":"t05-llm-mints-spans","event":"pull_request","contracts_kept":18,"findings":[]}
 {"run_id":"36478012879","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36478012879","created":"2026-09-28T20:19:55Z","branch":"t05-llm-mints-spans","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"36478351821","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36478351821","created":"2026-09-28T20:20:01Z","branch":"t13-packs-connector-seam","event":"pull_request","contracts_kept":19,"findings":[]}
+{"run_id":"36478398548","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36478398548","created":"2026-09-28T20:20:23Z","branch":"r02-banned-words-git-ls-files","event":"pull_request","contracts_kept":18,"findings":[]}
