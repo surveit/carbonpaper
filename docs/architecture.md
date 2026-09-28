@@ -122,6 +122,16 @@ and emits none (`report`). A type is grain-and-order preserving when its effect 
 import if a type is missing it, so a new stage type is classified rather than
 silently taking a default.
 
+A `builds` stage owes the input rows behind every row it writes. `_finalize_stage_output`
+(`app/runtime/executor.py`) refuses one whose handler reported no lineage with
+`MissingLineage`, before its frame is written. Only `builds` is refused; a `creates`,
+`maps`, `selects` or `consumes` stage that reports no lineage is not checked. The declared
+reshapes work their lineage out in the handler. A `python_frame_function` cannot
+be read that way, so it reports its own: it declares a keyword-only `lineage` recorder
+(`LineageRecorder`, `app/runtime/lineage.py`) and names, for each output row, the input row
+it was built from, the rows that contributed to it, or that it `originates` there. A
+function that does not declare the recorder, or leaves a row unaccounted, fails the stage.
+
 ## `app/compiler/` — prose → LLM generation engines
 Two generators, each an `app.core.agent` Agent targeting a model schema:
 `stage_tests.py` (one python-transform stage + the project's terms → its `StageTest`

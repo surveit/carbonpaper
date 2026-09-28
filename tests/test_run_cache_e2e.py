@@ -56,8 +56,10 @@ def _flag_code(probe: Path) -> str:
 
 def _totals_code(probe: Path) -> str:
     return (
-        "def transform(df):\n"
+        "def transform(df, *, lineage):\n"
         + _probe_call(probe, "totals")
+        + "    for row in range(len(df)):\n"
+        + "        lineage.built_from(row, 'flag', row)\n"
         + "    return df.assign(total=df['doubled'].sum())\n"
     )
 

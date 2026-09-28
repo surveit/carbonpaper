@@ -205,8 +205,11 @@ def _two_stage_project(root, rows: list[dict]):
             "reads": [{"input": "load", "columns": _NAME_VAL_SCHEMA["columns"]}],
             "produces": _NAME_VAL_SCHEMA["columns"],
         },
-        "function": {"kind": "inline",
-                     "code": "def transform(df):\n    return df\n"},
+        "function": {"kind": "inline", "code": (
+            "def transform(df, *, lineage):\n"
+            "    for row in range(len(df)):\n"
+            "        lineage.built_from(row, 'load', row)\n"
+            "    return df\n")},
     }
     add_stage(root, load)
     add_stage(root, consume)
@@ -274,7 +277,11 @@ def _output_schema_violation_project(root, transform_code: str):
             "reads": [{"input": "shape", "columns": _NAME_VAL_SCHEMA["columns"]}],
             "produces": _NAME_VAL_SCHEMA["columns"],
         },
-        "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
+        "function": {"kind": "inline", "code": (
+            "def transform(df, *, lineage):\n"
+            "    for row in range(len(df)):\n"
+            "        lineage.built_from(row, 'shape', row)\n"
+            "    return df\n")},
     }
     for filename, stage in (("01_load.json", load), ("02_shape.json", shape),
                             ("03_tail.json", tail)):
@@ -283,8 +290,11 @@ def _output_schema_violation_project(root, transform_code: str):
 
 def test_output_missing_a_declared_column_errors_the_stage_and_blocks_downstream(tmp_path):
     # An error-severity OUTPUT issue is a stage failure: no downstream may consume it.
-    _output_schema_violation_project(
-        tmp_path, "def transform(df):\n    return df[['name']]\n")
+    _output_schema_violation_project(tmp_path, (
+        "def transform(df, *, lineage):\n"
+        "    for row in range(len(df)):\n"
+        "        lineage.built_from(row, 'load', row)\n"
+        "    return df[['name']]\n"))
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
 
@@ -302,8 +312,12 @@ def test_output_missing_a_declared_column_errors_the_stage_and_blocks_downstream
 
 def test_warning_only_output_report_does_not_error_the_stage(tmp_path):
     # An undeclared extra column is warning-severity: every declared column is there.
-    _output_schema_violation_project(
-        tmp_path, "def transform(df):\n    df['extra'] = 1\n    return df\n")
+    _output_schema_violation_project(tmp_path, (
+        "def transform(df, *, lineage):\n"
+        "    for row in range(len(df)):\n"
+        "        lineage.built_from(row, 'load', row)\n"
+        "    df['extra'] = 1\n"
+        "    return df\n"))
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
 
@@ -339,8 +353,12 @@ def test_output_validation_error_other_than_a_missing_column_also_errors_the_sta
                 {"name": "val", "type": "int", "nullable": False},
             ],
         },
-        "function": {"kind": "inline",
-                     "code": "def transform(df):\n    df['val'] = None\n    return df\n"},
+        "function": {"kind": "inline", "code": (
+            "def transform(df, *, lineage):\n"
+            "    for row in range(len(df)):\n"
+            "        lineage.built_from(row, 'load', row)\n"
+            "    df['val'] = None\n"
+            "    return df\n")},
     }
     add_stage(tmp_path, load)
     add_stage(tmp_path, blank)
@@ -373,15 +391,21 @@ def test_value_outside_a_declared_enum_errors_the_stage_and_blocks_downstream(tm
         "id": "label", "description": "Label items", "type": "python_frame_function",
         "inputs": [{"id": "load"}],
         "signature": {"form": "replaces", "produces": labelled_schema["columns"]},
-        "function": {"kind": "inline",
-                     "code": "def transform(df):\n"
-                             "    return df.assign(status='pending')[['name', 'status']]\n"},
+        "function": {"kind": "inline", "code": (
+            "def transform(df, *, lineage):\n"
+            "    for row in range(len(df)):\n"
+            "        lineage.built_from(row, 'load', row)\n"
+            "    return df.assign(status='pending')[['name', 'status']]\n")},
     }
     tail = {
         "id": "tail", "description": "Tail", "type": "python_frame_function",
         "inputs": [{"id": "label"}],
         "signature": {"form": "replaces", "produces": labelled_schema["columns"]},
-        "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
+        "function": {"kind": "inline", "code": (
+            "def transform(df, *, lineage):\n"
+            "    for row in range(len(df)):\n"
+            "        lineage.built_from(row, 'label', row)\n"
+            "    return df\n")},
     }
     for filename, stage in (("01_load.json", load), ("02_label.json", label),
                             ("03_tail.json", tail)):
@@ -704,7 +728,12 @@ def test_the_documented_cli_runs_a_project_with_nothing_configured(
     assert list((project_dir / "runs").iterdir())
 
 
-_FRAME_STAGE_CODE = "def transform(df):\n    return df.assign(double=df['val'] * 2)\n"
+_FRAME_STAGE_CODE = (
+    "def transform(df, *, lineage):\n"
+    "    for row in range(len(df)):\n"
+    "        lineage.built_from(row, 'load', row)\n"
+    "    return df.assign(double=df['val'] * 2)\n"
+)
 
 
 def _add_frame_stage(root):

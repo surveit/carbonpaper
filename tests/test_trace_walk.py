@@ -7,6 +7,7 @@ import pytest
 
 from app.core.errors import RowOutOfRange, StageNotInRun
 from app.runtime.branches import RowBranches
+from app.runtime.lineage import single_parent_lineage
 from app.runtime.trace import trace_row
 from test_trace_helpers import write_run
 
@@ -67,12 +68,17 @@ def test_human_review_queue_traces_positionally(tmp_path):
     assert trace.end.reached_origin is True
 
 
-def test_stop_at_reshaping_stage_points_at_issue_58(tmp_path):
-    run_dir = _chain(tmp_path, "python_frame_function")
-    trace = trace_row(run_dir, "enrich", 0)
-    assert [s.stage_id for s in trace.steps] == ["enrich"]
-    assert trace.end.reached_origin is False
-    assert "#58" in trace.end.message
+def test_a_frame_function_is_crossed_on_the_lineage_it_recorded(tmp_path):
+    seeds = pd.DataFrame({"facility_id": ["a", "b", "c"], "name": ["A", "B", "C"]})
+    run_dir = write_run(tmp_path, [
+        {"id": "seeds", "type": "input_data", "parents": [], "df": seeds},
+        {"id": "ranked", "type": "python_frame_function", "parents": ["seeds"],
+         "df": seeds.iloc[[2, 0]].reset_index(drop=True),
+         "lineage": single_parent_lineage("seeds", [2, 0])},
+    ])
+    trace = trace_row(run_dir, "ranked", 0)
+    assert [(s.stage_id, s.row_ordinal) for s in trace.steps] == [("ranked", 0), ("seeds", 2)]
+    assert trace.end.reached_origin is True
 
 
 def test_rowcount_mismatch_on_preserving_stage_stops_defensively(tmp_path):

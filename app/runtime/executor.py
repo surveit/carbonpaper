@@ -34,7 +34,12 @@ from .manifest import RunManifest, create_run_manifest, write_manifest
 from .run_log import RUN_START, STAGE_DONE, STAGE_START, RunLog
 from .progress import StageProgressReporter
 from .stages import HANDLERS, StageHandler
-from .lineage import RowLineage, concatenated_inputs_lineage, kept_rows_lineage
+from .lineage import (
+    RowLineage,
+    concatenated_inputs_lineage,
+    kept_rows_lineage,
+    refuse_built_rows_with_no_lineage,
+)
 from .lineage_sidecar import write_lineage_sidecar
 from app.models.severity import UserFacingErrorSeverity
 from .key_coverage import find_key_coverage_issues
@@ -380,6 +385,7 @@ def _finalize_stage_output(
         output = StageOutput(pa.table({}))
     row_errors = _merge_stage_contribution(output.contribution, sid, manifest, record)
     lineage = _stage_row_lineage(workflow_stage, output, inputs_for_stage, window)
+    refuse_built_rows_with_no_lineage(workflow_stage, lineage)
     table = output.table
     if not workflow_stage.inputs:
         # A stage with no inputs originates its rows outside the run, so the

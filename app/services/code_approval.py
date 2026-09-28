@@ -16,9 +16,7 @@ from app.models.records.code_approval import CodeExecutionApproval
 CODE_EXECUTION_WARNING = (
     "Carbon Paper is not built for arbitrary code execution. A Python step runs on the "
     "machine hosting this project with its permissions: it can read files, reach the "
-    "network and install packages, and nothing here inspects what it does. It also "
-    "reshapes the table opaquely, so a trace stops at it — a figure published downstream "
-    "cannot be walked back to the rows behind it."
+    "network and install packages, and nothing here inspects what it does."
 )
 
 

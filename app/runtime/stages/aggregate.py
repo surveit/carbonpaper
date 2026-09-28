@@ -47,7 +47,9 @@ def handle_aggregate(
     input_id = workflow_stage.inputs[0].id
     df = table_to_frame(inputs[input_id])
     if not agg_cfg.aggregations:
-        return StageOutput.from_frame(pd.DataFrame(columns=agg_cfg.group_by))
+        return StageOutput.from_frame(
+            pd.DataFrame(columns=agg_cfg.group_by),
+            lineage=grouped_contributions_lineage(input_id, []))
 
     rows = df.copy()
     rows[ORDINAL_KEY] = np.arange(len(df))

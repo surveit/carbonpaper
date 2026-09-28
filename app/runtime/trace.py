@@ -188,9 +188,11 @@ def _advance_positionally(
     return parent_id, r
 
 
-def _summarizes_nothing_message() -> str:
-    return ("this row summarizes its inputs, and the run recorded that no input "
-            "row fed it — an aggregation over an empty group")
+def _describe_a_row_no_input_row_fed(stage_type: str) -> str:
+    if stage_type == StageType.aggregate:
+        return ("this row summarizes its inputs, and the run recorded that no input "
+                "row fed it — an aggregation over an empty group")
+    return "this row originates here — the run recorded that no input row became it"
 
 
 def _find_fan_in(stage_type: str, spine: RowParent | None,
@@ -252,7 +254,7 @@ def _advance(
     if followed is not None:
         return _advance_via_lineage(frames, by_id, sid, followed)
     if fan_in is not None:
-        return TraceEnd(False, sid, _summarizes_nothing_message())
+        return TraceEnd(False, sid, _describe_a_row_no_input_row_fed(stage_type))
     if not parents:
         return TraceEnd(False, sid, "the manifest records no input edge for this stage")
     # Nothing recorded: the ordinal is the only route left, and only from ONE parent.

@@ -217,8 +217,6 @@ def _render_grain_table() -> str:
         "in order. Fixed by type.",
         f"  1:1, order preserved: {_names(one_to_one)}",
         f"  may add, drop or reorder rows: {_names(reshaping)}",
-        "A stage that reshapes breaks row-position provenance: a figure computed in "
-        "one cannot be traced to the rows behind it.",
     ])
 
 
@@ -261,11 +259,10 @@ CODE_EXECUTION_ESCAPE_NOTE = (
     "Three more types exist and are deliberately not listed above, because a project "
     "only gets them once its owner has turned on code execution: "
     + ", ".join(f"`{name}`" for name in APPROVAL_REQUIRED_TYPES) + ". They "
-    "run Python unsandboxed — files, network, installing packages — and the frame one "
-    "also ends the row trace, so a figure downstream of it cannot be walked back. "
+    "run Python unsandboxed — files, network, installing packages. "
     "Everything above beats all three: `starlark_filter_rows` is `filter_rows` "
     "sandboxed, and a `starlark_row_function` does per-row work `python_row_function` "
-    "used to. Between the Python ones, the row one keeps the trace.\n"
+    "used to.\n"
     "Do not assume you may use one, and do not write one to find out. If a step "
     "genuinely needs Python, tell the project's owner in plain words what it will do and "
     "why nothing above fits, ask whether to turn code execution on, and WAIT for their "
