@@ -3459,3 +3459,4 @@
 {"run_id":"36478398548","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36478398548","created":"2026-09-28T20:20:23Z","branch":"r02-banned-words-git-ls-files","event":"pull_request","contracts_kept":18,"findings":[]}
 {"run_id":"36478463661","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36478463661","created":"2026-09-28T20:20:58Z","branch":"t07-lineage-source-record","event":"pull_request","contracts_kept":18,"findings":[]}
 {"run_id":"36478572496","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36478572496","created":"2026-09-28T20:21:52Z","branch":"push-2026-09-28","event":"pull_request","contracts_kept":18,"findings":[]}
+{"run_id":"36478351821","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36478351821","created":"2026-09-28T20:23:04Z","branch":"t13-packs-connector-seam","event":"pull_request","contracts_kept":null,"findings":[]}
