@@ -57,7 +57,10 @@ index links each run to the run before it on the same version.
   detail panel sits below it. Per-state borders via `build_mermaid_graph` status
   strokes: green=complete, yellow=in-progress, red=error, grey=pending,
   blue=awaiting review.
-- **Live polling**: while the manifest says `running`, JS polls
+- **Live polling**: `POST /project/{p}/run` calls `run.start_run`: `prepare_run` writes
+  the initial `running` manifest, the run executes on a background thread, and the route
+  redirects here.
+  While the manifest says `running`, JS polls
   `GET …/runs/{id}/status` every 2s and updates progress + re-renders the graph
   in place, then reloads once on the terminal transition. Terminal runs don't
   poll.
@@ -95,11 +98,13 @@ after injection — without that, the panel's JS (the tab strip, the run log) is
   what each input supplies, then the stage's output — both resolved for the whole
   workflow and handed to the page as a `WorkflowStage` — reached from the `schema`
   link on a table's head and left by `← data`.
-- The **simulator** is its own page, `…/stage/{sid}/simulate`, linked from
-  Transform: the folded transform, the input rows with per-row checkboxes, the
-  controls, then the result. Running it POSTs `…/stage/{sid}/preview`, which
-  executes the handler in memory (real LLM calls for `llm_transform`) and
-  persists nothing.
+- The **simulator** is its own page, `…/stage/{sid}/simulate`
+  (`run_stage_simulate.html`), linked from Transform: the folded transform, the input
+  rows with per-row checkboxes, the controls, then the result, in one column. Running
+  it POSTs `…/stage/{sid}/preview` (`app/runtime/preview.py`), which executes the
+  handler in memory (real LLM calls for `llm_transform`) and persists nothing. Only
+  `PREVIEWABLE_TYPES` run there, the types whose handlers write nothing to disk; the
+  page 404s for any other type and for a stage whose pinned version does not resolve.
 - **Full-table view + CSV**: `…/stage/{sid}/rows` renders the entire stage
   output (not just the first-5 preview) — as the same diff where one exists,
   over `MAX_TABLE_ROWS` rows instead of the panel's five, keeping the page's row
@@ -119,7 +124,9 @@ after injection — without that, the panel's JS (the tab strip, the run log) is
   tinted, so the reason the reader opened the stage is not off the right edge
   behind a horizontal scroll (`app.web.column_order`, over
   `signature.list_written_column_names` — presentation order only, and the frame
-  on disk and the CSV download keep the order the stage wrote). Behind them
+  on disk and the CSV download keep the order the stage wrote; a stage whose pinned
+  version does not resolve declares nothing, so every surface keeps the frame's own
+  order). Behind them
   every input column holds its own relative position: one the stage dropped is
   struck through, carrying the input value it discarded. Each column header carries the colour-free mark for what
   happened to it — `+` on an added column, `−` on a dropped one, where the strike
@@ -143,7 +150,8 @@ after injection — without that, the panel's JS (the tab strip, the run log) is
   columns, so it reports neither — a zero it never counted would be invented.
   Every other stage type keeps the plain output
   view, and any stage whose alignment can't be verified (missing frame,
-  row-count mismatch, no lineage recorded) falls back to it.
+  row-count mismatch, no lineage recorded) falls back to it: `build_stage_diff`
+  returns None for both.
 
 ## Review queue (`queue.html`, `_queue_card.html`)
 
