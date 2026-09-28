@@ -103,8 +103,6 @@
   .out .split { font-family: var(--sans); font-size: .68rem; line-height: 1.7;
                 color: var(--muted); margin: .5rem 0 0; }
   .out .split b { color: var(--ink); font-variant-numeric: tabular-nums; }
-  .out .big.was { font-size: 1.35rem; color: var(--muted); text-decoration: line-through;
-                  text-decoration-thickness: 1px; margin-bottom: .1rem; }
 
   /* middle, step 2 — the cloud */
   .cloud { width: 100%; max-height: 17rem; }
@@ -216,8 +214,6 @@
   .m-card .big { font-size: 2rem; font-weight: 600; margin: 0; line-height: 1.05;
                  font-variant-numeric: tabular-nums; }
   .m-card .big sup { font-size: .5em; vertical-align: super; }
-  .m-card .big.was { font-size: 1.2rem; color: var(--muted); text-decoration: line-through;
-                     text-decoration-thickness: 1px; margin-bottom: .1rem; }
   .m-card .foot { font-family: var(--sans); font-size: .74rem; line-height: 1.5;
                   color: var(--muted); margin: .55rem 0 0; }
   .m-visual .pin { position: static; opacity: 1; visibility: visible; width: 100%; }
@@ -279,7 +275,7 @@
 
   <div class="steps">
     <section class="step" data-step="1"><div class="step-inner">
-      <p class="say">You hand Claude 45,061 lobbying filings and ask what firms spent lobbying
+      <p class="say">You hand Claude 42,918 lobbying filings and ask what firms spent lobbying
       on artificial intelligence.</p>
       <div class="m-visual">
         <div class="ask-card">
@@ -290,20 +286,20 @@
     </div></section>
 
     <section class="step" data-step="2"><div class="step-inner">
-      <p class="say">Claude thought for 7m30s.</p>
+      <p class="say">Claude thinks it over.</p>
       <div class="m-visual">
         <svg class="cloud" viewBox="0 0 620 300" role="img"
              aria-label="A cloud standing for the model's own reasoning, which the reader never sees.">
           <g class="blob"><circle cx="280" cy="140" r="86" fill="#eceef2"/></g>
           <g class="blob"><circle cx="345" cy="168" r="72" fill="#e4e7ee"/></g>
           <g class="blob"><circle cx="244" cy="180" r="62" fill="#eef0f4"/></g>
-          <text class="tick" x="300" y="272" text-anchor="middle">thinking · 7m 30s</text>
+          <text class="tick" x="300" y="272" text-anchor="middle">thinking</text>
         </svg>
       </div>
     </div></section>
 
     <section class="step" data-step="3"><div class="step-inner">
-      <p class="say">The answer is $499 million.<sup>*</sup></p>
+      <p class="say">It answers with a total.<sup>*</sup></p>
     </div></section>
 
     <section class="step" data-step="4"><div class="step-inner reorder">
@@ -311,8 +307,8 @@
       <div class="m-visual">
         <div class="m-card">
           <p class="tag">it answered</p>
-          <p class="big">$499m<sup>*</sup></p>
-          <p class="foot">* Based on ten decisions it made without consulting you.</p>
+          <p class="big">a total<sup>*</sup></p>
+          <p class="foot">* Based on decisions it made without consulting you.</p>
         </div>
       </div>
     </div></section>
@@ -383,9 +379,9 @@
               <th class="new">expenses_<wbr>usd <i>number</i></th>
             </tr></thead>
             <tbody>
-              <tr><td>NETFLIX</td><td>"60000.00"</td><td>—</td><td class="new">60000.0</td><td class="new">0.0</td></tr>
-              <tr><td>AMERICAN LEGION</td><td>—</td><td>"190000.00"</td><td class="new">0.0</td><td class="new">190000.0</td></tr>
-              <tr><td>SEAMUS LITERARY</td><td>—</td><td>—</td><td class="new">0.0</td><td class="new">0.0</td></tr>
+              <tr><td>OPENAI</td><td>"150000.00"</td><td>—</td><td class="new">150000.0</td><td class="new">0.0</td></tr>
+              <tr><td>AFL-CIO</td><td>—</td><td>"880000.00"</td><td class="new">0.0</td><td class="new">880000.0</td></tr>
+              <tr><td>ALARM.COM</td><td>—</td><td>—</td><td class="new">0.0</td><td class="new">0.0</td></tr>
             </tbody>
           </table>
         </div>
@@ -393,7 +389,7 @@
     </div></section>
 
     <section class="step" data-step="8"><div class="step-inner">
-      <p class="say">Only one step needs an AI now. The rest is 100% deterministic.</p>
+      <p class="say">Only one step needs an AI now. The rest is deterministic.</p>
       <div class="m-visual">
         <svg class="pipeline focus" viewBox="0 0 1180 250" role="img"
              aria-label="The pipeline with only the AI step highlighted; every other step is deterministic code.">
@@ -431,13 +427,12 @@
     </div></section>
 
     <section class="step" data-step="9"><div class="step-inner">
-      <p class="say">Same data with different assumptions gives a different number.</p>
+      <p class="say">The run waits for a reviewer before it answers.</p>
       <div class="m-visual">
         <div class="m-card">
-          <p class="tag">the run computed</p>
-          <p class="big was">$499m</p>
-          <p class="big">$42.0m</p>
-          <p class="foot">From a run against the same filings, with its assumptions made explicit.</p>
+          <p class="tag">the run's answer</p>
+          <p class="big">pending</p>
+          <p class="foot">1,295 paid filings the model read as about AI wait for a reviewer.</p>
         </div>
       </div>
     </div></section>
@@ -476,7 +471,7 @@
             <g class="blob"><circle cx="280" cy="140" r="86" fill="#eceef2"/></g>
             <g class="blob"><circle cx="345" cy="168" r="72" fill="#e4e7ee"/></g>
             <g class="blob"><circle cx="244" cy="180" r="62" fill="#eef0f4"/></g>
-            <text class="tick" x="300" y="272" text-anchor="middle">thinking · 7m 30s</text>
+            <text class="tick" x="300" y="272" text-anchor="middle">thinking</text>
           </svg>
         </div>
 
@@ -563,9 +558,9 @@
                   <th class="new">expenses_<wbr>usd <i>number</i></th>
                 </tr></thead>
                 <tbody>
-                  <tr><td>NETFLIX</td><td>"60000.00"</td><td>—</td><td class="new">60000.0</td><td class="new">0.0</td></tr>
-                  <tr><td>AMERICAN LEGION</td><td>—</td><td>"190000.00"</td><td class="new">0.0</td><td class="new">190000.0</td></tr>
-                  <tr><td>SEAMUS LITERARY</td><td>—</td><td>—</td><td class="new">0.0</td><td class="new">0.0</td></tr>
+                  <tr><td>OPENAI</td><td>"150000.00"</td><td>—</td><td class="new">150000.0</td><td class="new">0.0</td></tr>
+                  <tr><td>AFL-CIO</td><td>—</td><td>"880000.00"</td><td class="new">0.0</td><td class="new">880000.0</td></tr>
+                  <tr><td>ALARM.COM</td><td>—</td><td>—</td><td class="new">0.0</td><td class="new">0.0</td></tr>
                 </tbody>
               </table>
             </div>
@@ -640,13 +635,13 @@
       <div class="zone out" id="zone-out">
         <div class="fade" data-fade="said">
           <p class="tag">it answered</p>
-          <p class="big">$499m<sup>*</sup></p>
-          <p class="foot">* Based on ten decisions it made without consulting you.</p>
+          <p class="big">a total<sup>*</sup></p>
+          <p class="foot">* Based on decisions it made without consulting you.</p>
         </div>
         <div class="fade" data-fade="ran">
-          <p class="tag">the run computed</p>
-          <p class="big was">$499m</p>
-          <p class="big">$42.0m</p>
+          <p class="tag">the run's answer</p>
+          <p class="big">pending</p>
+          <p class="foot">1,295 paid filings the model read as about AI wait for a reviewer.</p>
         </div>
       </div>
 
