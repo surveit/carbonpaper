@@ -6,11 +6,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.core.ids import ID
-from app.core.json_types import JsonDict
 from app.core.judgments import Judgment
 from app.models import AbstractStage
 from app.models.stages.llm_transform import LLMTransformStage
 from app.runtime.run_log import JUDGMENT_ID, ROW_ERROR, ROW_OK, SOURCE_CACHED, read_events_since
+from app.services import run as run_service
+from app.web.loading import load_manifest
 from app.web.panel_links import AppPanelLinks
 
 
@@ -39,7 +40,7 @@ def build_judgment_page(judgment: Judgment) -> JudgmentPage:
         judgment=judgment,
         reply_text=json.dumps(judgment.reply, indent=2, ensure_ascii=False),
         row=next((int(e["row"]) for e in events if e.get(JUDGMENT_ID) == judgment.id), None),
-        rows_in_call=_count_batched_results(judgment.reply),
+        rows_in_call=_count_rows_in_call(judgment),
         links=AppPanelLinks(judgment.project_id, judgment.run_id),
     )
 
@@ -77,9 +78,14 @@ def _is_stored_in(project_id: ID, judgment_id: object) -> bool:
     return judgment is not None and judgment.project_id == project_id
 
 
-def _count_batched_results(reply: JsonDict) -> int | None:
-    results = reply.get("results")
-    return len(results) if isinstance(results, list) else None
+def _count_rows_in_call(judgment: Judgment) -> int | None:
+    """Read off the stage its run pinned: only a batched stage's reply lists one result per row."""
+    manifest = load_manifest(judgment.project_id, judgment.run_id)
+    pinned = run_service.load_pinned_stage_def(judgment.project_id, manifest, judgment.stage_id)
+    stage = None if pinned.workflow_stage is None else pinned.workflow_stage.stage
+    if not isinstance(stage, LLMTransformStage) or stage.llm.batch_size == 1:
+        return None
+    return len(judgment.reply["results"])
 
 
 def _list_row_outcomes(project_id: ID, run_id: ID, stage_id: ID) -> list[dict[str, Any]]:
