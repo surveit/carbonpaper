@@ -1,7 +1,7 @@
 """Which input rows each output row came from, held beside a stage's frame and never in it."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Iterable, Iterator, Mapping, Sequence, overload
 
@@ -24,6 +24,7 @@ TRACE_EDGE_KIND_KEY = "_trace_edge_kind"
 TRACE_SOURCE_COLUMNS_KEY = "_trace_source_columns"
 TRACE_SOURCE_FILE_KEY = "_trace_source_file"
 TRACE_SOURCE_SHA_KEY = "_trace_source_sha"
+TRACE_SOURCE_ID_KEY = "_trace_source_id"
 
 # Pinned: left to infer, an empty sidecar types every column `null`.
 LINEAGE_SCHEMA = pa.schema([
@@ -33,6 +34,7 @@ LINEAGE_SCHEMA = pa.schema([
     (TRACE_SOURCE_COLUMNS_KEY, pa.list_(pa.list_(pa.string()))),
     (TRACE_SOURCE_FILE_KEY, pa.list_(pa.string())),
     (TRACE_SOURCE_SHA_KEY, pa.list_(pa.string())),
+    (TRACE_SOURCE_ID_KEY, pa.list_(pa.string())),
 ])
 
 
@@ -55,6 +57,8 @@ class RowParent:
     # The file a source stage read this row from; `row_ordinal` counts within it.
     source_file: str | None = None
     source_file_sha: str | None = None
+    # The ProjectFile holding those bytes; None for a file outside the store.
+    source_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -86,9 +90,7 @@ class RowLineage:
         if offset == 0:
             return self
         return RowLineage([
-            [RowParent(p.stage_id, p.row_ordinal + offset, p.kind, p.columns,
-                       p.source_file, p.source_file_sha)
-             for p in entry]
+            [replace(p, row_ordinal=p.row_ordinal + offset) for p in entry]
             for entry in self.parents
         ])
 
@@ -109,6 +111,8 @@ class RowLineage:
                 [p.source_file or "" for p in entry] for entry in self.parents],
             TRACE_SOURCE_SHA_KEY: [
                 [p.source_file_sha or "" for p in entry] for entry in self.parents],
+            TRACE_SOURCE_ID_KEY: [
+                [p.source_id or "" for p in entry] for entry in self.parents],
         }, schema=LINEAGE_SCHEMA)
 
     @classmethod
@@ -118,7 +122,8 @@ class RowLineage:
 
 
 LINEAGE_KEYS = (TRACE_SOURCE_STAGE_KEY, TRACE_SOURCE_ROW_KEY, TRACE_EDGE_KIND_KEY,
-                TRACE_SOURCE_COLUMNS_KEY, TRACE_SOURCE_FILE_KEY, TRACE_SOURCE_SHA_KEY)
+                TRACE_SOURCE_COLUMNS_KEY, TRACE_SOURCE_FILE_KEY, TRACE_SOURCE_SHA_KEY,
+                TRACE_SOURCE_ID_KEY)
 
 
 class _SidecarParents(Sequence[list[RowParent]]):
@@ -172,19 +177,20 @@ class _SidecarParents(Sequence[list[RowParent]]):
     def _read_every_row(self) -> list[list[RowParent]]:
         # Boxing each column once beats indexing it per row on a whole-sidecar read.
         if self._every_row is None:
-            stages, rows, kinds, columns, files, shas = (
+            stages, rows, kinds, columns, files, shas, ids = (
                 _column_cells(self._table, key) for key in self._KEYS)
             self._every_row = [
-                _read_parents(stages[i], rows[i], kinds[i], columns[i], files[i], shas[i])
+                _read_parents(stages[i], rows[i], kinds[i], columns[i], files[i], shas[i],
+                              ids[i])
                 for i in range(len(self))]
         return self._every_row
 
 
 def _read_parents(stages: Any, rows: Any, kinds: Any, columns: Any,
-                  files: Any = None, shas: Any = None) -> list[RowParent]:
+                  files: Any = None, shas: Any = None, ids: Any = None) -> list[RowParent]:
     stage_ids, row_ordinals = _as_list(stages), _as_list(rows)
     kind_names, column_names = _as_list(kinds), _as_list(columns)
-    filenames, digests = _as_list(files), _as_list(shas)
+    filenames, digests, source_ids = _as_list(files), _as_list(shas), _as_list(ids)
     return [
         RowParent(
             stage_id=str(stage_ids[k]),
@@ -193,6 +199,7 @@ def _read_parents(stages: Any, rows: Any, kinds: Any, columns: Any,
             columns=_columns_or_none(column_names[k]) if k < len(column_names) else None,
             source_file=str(filenames[k]) or None if k < len(filenames) else None,
             source_file_sha=str(digests[k]) or None if k < len(digests) else None,
+            source_id=str(source_ids[k]) or None if k < len(source_ids) else None,
         )
         for k in range(min(len(stage_ids), len(row_ordinals)))
     ]

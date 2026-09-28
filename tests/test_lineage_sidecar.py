@@ -6,7 +6,7 @@ import pytest
 from app.core.frames import write_frame_table
 from app.runtime.branches import RowBranches
 from app.runtime.errors import LineageSidecarLengthMismatch
-from app.runtime.lineage import RowLineage, RowParent
+from app.runtime.lineage import TRACE_SOURCE_ID_KEY, RowLineage, RowParent
 from app.runtime.lineage_sidecar import (
     read_lineage_sidecar,
     resolve_lineage_sidecar_path,
@@ -15,6 +15,8 @@ from app.runtime.lineage_sidecar import (
 
 _KEPT = RowLineage([[RowParent("filings", 2)], [RowParent("filings", 5)]])
 _TAKEN = RowBranches([("should_include/0:if",), ("should_include/0:if",)])
+_READ = RowLineage([[RowParent("filings", 0, source_file="/files/f1/q1.csv",
+                               source_file_sha="a" * 64, source_id="f1")]])
 
 
 def _outputs(tmp_path):
@@ -90,3 +92,24 @@ def test_a_branches_only_stage_of_such_a_run_still_reports_no_lineage(tmp_path) 
     sidecar = read_lineage_sidecar(run_dir, "tier")
     assert sidecar.lineage is None
     assert sidecar.branches is not None and sidecar.branches.taken == _TAKEN.taken
+
+
+def test_a_row_read_from_a_stored_file_names_the_file_record(tmp_path) -> None:
+    run_dir = _outputs(tmp_path)
+    write_lineage_sidecar(run_dir, "filings", _READ, None)
+
+    sidecar = read_lineage_sidecar(run_dir, "filings")
+    assert sidecar.lineage is not None and sidecar.lineage.parents == _READ.parents
+
+
+def test_a_sidecar_written_before_the_source_id_reads_with_none(tmp_path) -> None:
+    run_dir = _outputs(tmp_path)
+    write_frame_table(_READ.to_table().drop_columns([TRACE_SOURCE_ID_KEY]),
+                      resolve_lineage_sidecar_path(run_dir, "filings"))
+
+    lineage = read_lineage_sidecar(run_dir, "filings").lineage
+    assert lineage is not None
+    before = RowParent("filings", 0, source_file="/files/f1/q1.csv", source_file_sha="a" * 64)
+    # Indexing one row and reading every row take separate paths through the sidecar.
+    assert lineage.parents[0] == [before]
+    assert list(lineage.parents) == [[before]]
