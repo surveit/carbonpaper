@@ -3383,3 +3383,4 @@
 {"run_id":"36470141693","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36470141693","created":"2026-09-28T19:11:41Z","branch":"critic-eval-harness","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"36470213102","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36470213102","created":"2026-09-28T19:12:07Z","branch":"t11-builds-owe-lineage","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"36470291418","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36470291418","created":"2026-09-28T19:13:11Z","branch":"t10-pin-method","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"36471038553","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36471038553","created":"2026-09-28T19:16:44Z","branch":"push-2026-09-28","event":"pull_request","contracts_kept":17,"findings":[]}
