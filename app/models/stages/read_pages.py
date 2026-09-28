@@ -1,5 +1,4 @@
-"""read_pages stage: the config block, plus validation that the input names a stored file on
-every row and that `produces` is exactly the carried columns and the five this type writes."""
+"""read_pages stage: the config block, and the checks its input and signature must pass."""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar, Literal, Sequence
