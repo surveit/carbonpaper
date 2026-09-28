@@ -10,7 +10,7 @@ from typing import Any
 from app.core.errors import RunVersionUnresolvableError
 from app.models import Workflow, WorkflowStage
 from app.models.review_guide import ReviewGuideStep
-from app.models.run_manifest import count_rows_pending_review
+from app.models.run_manifest import RowsPendingReview, find_rows_pending_review
 from app.models.workflow import sort_stages_by_dependency
 from app.services.run import load_run_version, read_output_column_counts
 from app.services.versioning import find_latest_review_guide
@@ -36,7 +36,8 @@ class GuideStageView:
     # frame measured and found empty.
     output_row_count: int | None
     column_count: int | None
-    rows_pending_review: int
+    # None where no queue awaiting review holds this stage.
+    rows_pending_review: RowsPendingReview | None
 
 
 @dataclass(frozen=True)
@@ -103,7 +104,7 @@ class _RunMeasurements:
     executed: set[str]
     row_counts: dict[str, int]
     column_counts: dict[str, int]
-    rows_pending_review: dict[str, int]
+    rows_pending_review: dict[str, RowsPendingReview]
 
 
 def _read_run_measurements(
@@ -121,7 +122,7 @@ def _read_run_measurements(
         },
         # Off the written frames themselves, and likewise absent where unreadable.
         column_counts=read_output_column_counts(project_id, manifest),
-        rows_pending_review=count_rows_pending_review(manifest, workflow.stages),
+        rows_pending_review=find_rows_pending_review(manifest, workflow.stages),
     )
 
 
@@ -190,5 +191,5 @@ def _view_stage(
         executed=stage_id in measured.executed,
         output_row_count=measured.row_counts.get(stage_id),
         column_count=measured.column_counts.get(stage_id),
-        rows_pending_review=0 if workflow_stage is None else measured.rows_pending_review[stage_id],
+        rows_pending_review=measured.rows_pending_review.get(stage_id),
     )

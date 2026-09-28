@@ -128,24 +128,38 @@ def read_run_bindings(
     return dict(raw.get("run_bindings") or {})
 
 
-def count_rows_pending_review(raw: Mapping[str, Any], stages: Sequence[Stage]) -> dict[str, int]:
-    """Per stage: the undecided rows of the queues awaiting review at or upstream of it."""
+class RowsPendingReview(BaseModel):
+    # None where a queue holding the stage recorded no pending count.
+    count: int | None
+
+
+def find_rows_pending_review(
+    raw: Mapping[str, Any], stages: Sequence[Stage]
+) -> dict[str, RowsPendingReview]:
+    """Each stage a queue awaiting review holds, at or upstream of it, and the rows it waits on."""
     pending_by_queue = _read_pending_rows_by_queue(raw)
-    counts: dict[str, int] = {}
+    held: dict[str, RowsPendingReview] = {}
     for stage in stages:
         at_or_upstream = {stage.id} | find_stages_upstream_of(stages, stage.id)
-        counts[stage.id] = sum(
-            pending for queue_id, pending in pending_by_queue.items() if queue_id in at_or_upstream
-        )
-    return counts
+        counts = [count for queue_id, count in pending_by_queue.items() if queue_id in at_or_upstream]
+        if counts:
+            held[stage.id] = RowsPendingReview(count=_sum_known_counts(counts))
+    return held
 
 
-def _read_pending_rows_by_queue(raw: Mapping[str, Any]) -> dict[str, int]:
+def _read_pending_rows_by_queue(raw: Mapping[str, Any]) -> dict[str, int | None]:
+    stats = raw.get("human_review_queue_stats") or {}
     return {
-        record["stage_id"]: raw["human_review_queue_stats"][record["stage_id"]]["items_pending"]
+        record["stage_id"]: (stats.get(record["stage_id"]) or {}).get("items_pending")
         for record in raw["stage_records"]
         if record.get("status") == StageStatus.AWAITING_REVIEW
     }
+
+
+def _sum_known_counts(counts: list[int | None]) -> int | None:
+    """One unrecorded count leaves the total unknown rather than short."""
+    known = [count for count in counts if count is not None]
+    return sum(known) if len(known) == len(counts) else None
 
 
 class ReadFile(BaseModel):

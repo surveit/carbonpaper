@@ -45,7 +45,7 @@
    where both halves were measured; with one half it says that half in words, and with
    neither it says so, so nothing here can be misread as a measured 0. #}
 {% macro output_size(s) %}
-{%- if s.rows_pending_review -%}
+{%- if s.rows_pending_review is not none -%}
 {{ pending_review_badge(s.rows_pending_review) }}
 {%- elif s.output_row_count is not none and s.column_count is not none -%}
 {{ s.output_row_count | abbreviate_count }}<span class="guide-output-x">×</span>{{ s.column_count }}
@@ -67,7 +67,7 @@
    did not produce the data at all, which is what the reader needs, while a stage it
    DID execute and measured nothing for is a different fact and says so. #}
 {% macro exact_size_words(s) %}
-{%- if s.rows_pending_review -%}
+{%- if s.rows_pending_review is not none -%}
 {{ pending_review_badge(s.rows_pending_review) | striptags }}
 {%- elif s.output_row_count is none and s.column_count is none -%}
 {% if not s.executed %}This data was not produced in this run{% else %}This run produced this data but recorded neither its rows nor its columns{% endif %}

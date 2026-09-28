@@ -65,7 +65,8 @@ you cannot author or change a stage.
      the `run_id` + `/queue/review_ai_spend`) in one line. Nothing behind the
      queue runs until every queued row is decided, so offer the reader two ways
      to the totals: decide every row, or have you re-run with a row cap
-     (`limits`), whose totals cover only the rows it read.
+     (`limits`), which halts at the same queue with fewer rows to decide; that
+     run's totals cover only the rows it read.
    - **Advanced concepts:**
      - **Lineage** — read_stage_output_rows, then hand over a row's
        `lineage_url`: the trace from a published figure back to its source row.

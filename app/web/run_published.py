@@ -13,7 +13,7 @@ from app.core.json_types import JsonScalar
 from app.core.run_status import StageStatus
 from app.models.citations import StageOutputCellCitation, StageOutputTableCitation
 from app.models.records.workflow_output import WorkflowOutput
-from app.models.run_manifest import count_rows_pending_review
+from app.models.run_manifest import RowsPendingReview, find_rows_pending_review
 from app.services import run as run_service
 from app.web import loading
 from app.core.figure_text import render_figure
@@ -70,7 +70,7 @@ class RunPublished(BaseModel):
 class FigurePendingReview(BaseModel):
     label: str
     primary: bool
-    rows_pending_review: int
+    rows_pending_review: RowsPendingReview
 
 
 def read_published_outputs(
@@ -109,13 +109,13 @@ def list_figures_pending_review(
     except RunVersionUnresolvableError:
         # The run page states this reason in place of the workflow graph.
         return []
-    pending = count_rows_pending_review(manifest, stages)
+    held = find_rows_pending_review(manifest, stages)
     return [
         FigurePendingReview(
-            label=figure.label, primary=figure.primary, rows_pending_review=pending[stage.id]
+            label=figure.label, primary=figure.primary, rows_pending_review=held[stage.id]
         )
         for stage in stages
-        if pending[stage.id]
+        if stage.id in held
         for figure in stage.list_published_figures()
     ]
 

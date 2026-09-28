@@ -11,7 +11,7 @@ from app.evals.store import load_eval_config
 from app.core.files import list_project_files, save_upload
 from app.models import Workflow
 from app.models.review_guide import ReviewGuideDraft
-from app.models.run_manifest import RunKind
+from app.models.run_manifest import RowsPendingReview, RunKind
 from app.services import project, run as run_service, uploads, versioning, workflow_summary
 from app.services.loader import load_workflow
 from app.services.project import WorkflowFile, import_project
@@ -239,11 +239,12 @@ def test_the_figures_behind_the_open_queue_say_how_many_rows_it_holds(projects_r
     guide = build_run_guide_view(project_id, manifest)
 
     by_output = {view.stage_id: view for step in guide.steps for view in step.outputs}
-    assert by_output["ai_spend_totals"].rows_pending_review == pending > 0
-    assert by_output["in_house_ai_totals"].rows_pending_review == 0
+    assert pending > 0
+    assert by_output["ai_spend_totals"].rows_pending_review == RowsPendingReview(count=pending)
+    assert by_output["in_house_ai_totals"].rows_pending_review is None
     declared = versioning.load_version_stages(project_id, manifest["workflow_version"])
     [totals] = [stage for stage in declared if stage.id == "ai_spend_totals"]
-    assert [(f.label, f.rows_pending_review) for f in header.figures_pending_review] == [
+    assert [(f.label, f.rows_pending_review.count) for f in header.figures_pending_review] == [
         (figure.label, pending) for figure in totals.list_published_figures()]
 
     html = templates.get_template("_run_published.html").render(header=header)

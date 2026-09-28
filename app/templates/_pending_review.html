@@ -1,3 +1,4 @@
 {# Stands where a figure or a frame size would be, while a queue upstream still holds rows:
-   the results panel and the walkthrough say it in the same words. #}
-{% macro pending_review_badge(count) %}<span class="badge awaiting">{{ count | figure }} row{% if count != 1 %}s{% endif %} pending review</span>{% endmacro %}
+   the results panel and the walkthrough say it in the same words. A queue that recorded no
+   count gets no number, never a 0. #}
+{% macro pending_review_badge(rows) %}<span class="badge awaiting">{% if rows.count is not none %}{{ rows.count | figure }} row{% if rows.count != 1 %}s{% endif %} {% endif %}pending review</span>{% endmacro %}
