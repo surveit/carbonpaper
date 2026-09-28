@@ -134,8 +134,7 @@ def _which_file_each_row_came_from(
     """`row_ordinal` counts within the file, so it is the row a reader would find there."""
     return RowLineage([
         # No parent stage: what a reader asks here is which FILE, not which step.
-        [RowParent(stage_id, row, source_file=one.path, source_file_sha=one.sha256,
-                   source_id=one.file_id)]
+        [RowParent(stage_id, row, source_file=one.path, source_file_sha=one.sha256)]
         for one, rows in zip(read, rows_per_file)
         for row in range(rows)
     ])

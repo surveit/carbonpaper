@@ -13,7 +13,7 @@ from app.core.frames import table_to_frame
 from app.models import parse_stage
 from app.runtime.branches import RowBranches
 from app.runtime.lineage import single_parent_lineage
-from app.runtime.stages.input_data import read_input_data
+from app.runtime.stages.input_data import preflight_input_data, read_input_data
 from app.runtime.trace import trace_row, trace_to_dict
 from app.web.panel_links import AppPanelLinks, PacketPanelLinks
 from app.web.trace_view import build_trace_view
@@ -165,13 +165,15 @@ def _store_filings(tmp_path) -> ProjectFile:
 def _docket_run(tmp_path) -> tuple[ProjectFile, Path]:
     """Filings read off a stored file, one row per page, and the pages put in date order."""
     record = _store_filings(tmp_path)
-    read = read_input_data(place_stage(parse_stage({
+    filings = place_stage(parse_stage({
         "id": "input_filings", "description": "input_filings", "type": "input_data",
         "connector": {"kind": "file", "params": {
             "paths": [str(resolve_stored_path(record))], "format": "csv"}},
         "signature": {"form": "replaces",
                       "produces": [{"name": "ecf_entry", "type": "int", "nullable": False}]},
-    })), ctx=make_run_context())
+    }))
+    _issues, bound = preflight_input_data(filings)
+    read = read_input_data(filings, ctx=make_run_context())
     pages = pd.DataFrame({"ecf_entry": [17, 17, 58], "page": [1, 2, 1]})
     run_dir = write_run(tmp_path / "runs", [
         {"id": "input_filings", "type": "input_data", "parents": [],
@@ -181,7 +183,7 @@ def _docket_run(tmp_path) -> tuple[ProjectFile, Path]:
         {"id": "chronology", "type": "sort_rank", "parents": ["read_pages"],
          "df": pages.iloc[[2, 0, 1]].reset_index(drop=True),
          "lineage": single_parent_lineage("read_pages", [2, 0, 1])},
-    ])
+    ], input_bindings={"input_filings": bound})
     return record, run_dir
 
 
