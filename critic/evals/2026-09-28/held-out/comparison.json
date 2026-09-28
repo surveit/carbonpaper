@@ -1,15 +1,18 @@
 {
   "repo": "surveit/carbonpaper",
   "notes": [
-    "The distilled rubric beats none on recall at better precision: it caught 7 of 106 reviewer asks against 2, at 5.6% precision against 1.6%. The gap rests on a handful of matches from one run per rubric.",
-    "Read by hand, 6 of the distilled rubric's 7 matches make the reviewer's point. The exact rule also matched #1004's ask to rename a type with a comment on a field name. Of none's 2 matches, only #1072 makes the point; #1045's exact match pairs a question about the grain rule with a complaint about duplicated examples. current_instructions caught only #1072, which all three caught. One reader made these calls: the agent that ran the eval.",
-    "4 of the distilled rubric's 7 matches are prompt or copy asks (verbose_prose, product_copy, llm_contract). The rubric's 10_themes.md tells the critic that held-out PRs are heavy on exactly these themes, so this gain may come from that sentence, not from the rules or the examples. The rubric is not blind to the test side: its theme shares, rule counts and per-size comment rates count the 203 held-out comments. It names no held-out PR by URL (critic/tests/test_rubric_and_themes.py).",
-    "What the distilled rubric still misses: needless_abstraction 0 of 24 asks, naming 1 of 26. Its most frequent wrong theme is weak_types: 23 comments against 1 real ask.",
+    "The numbers favour distilled_clean, the variant whose figures count training PRs only. It caught 8 of 106 reviewer asks at 6.2% precision. distilled, the variant that also carried held-out shares, caught 7 at 5.6%. The gap is inside the noise of one run each. So the rules earned the gain over none, not the leaked shares. distilled_clean's text now sits at critic/rubrics/distilled.",
+    "Both variants beat none (2 caught, 1.6% precision) and current_instructions (1 caught, 0.8%).",
+    "Which text each row read: row distilled is the rubric as first committed, in the first commit of #1130, \"Add the distilled rubric, tested to cite training PRs only\". Row distilled_clean is the text now at critic/rubrics/distilled. Each results.json stamps the sha256 of every rubric file it read.",
+    "Before the distilled_clean run, the bar for holding up was written down: at least 5 of 106 caught, and at least 3.6% precision.",
+    "The leaked shares changed which asks were caught, not how many. 4 of distilled's 7 catches are prompt or copy asks (verbose_prose, product_copy, llm_contract), the themes its drift paragraph named. 2 of distilled_clean's 8 are. distilled_clean instead caught two needless_abstraction asks on #973 and a dict_any ask on #1004.",
+    "Read by hand, 6 of distilled_clean's 8 matches make the reviewer's point. One is loose: on #973, \"What on earth is this thing?\" matched a comment asking for a rename. One does not: on #1004, the exact rule matched an ask to rename a type with a comment on a field name. distilled has the same #1004 match, and its other 6 make the point. Of none's 2 matches, only #1072 makes the point. none's #1045 exact match pairs a question about the grain rule with a complaint about duplicated examples. current_instructions caught only #1072, which all four caught. One reader made these calls: the agent that ran the eval.",
+    "What distilled_clean still misses: needless_abstraction 2 of 24 asks, naming 2 of 26. Its most frequent wrong theme is weak_types: 23 comments against 1 real ask.",
     "Drift between train (PRs below 937) and test (PRs 937-1096). The prompt and copy themes together (prompt_design, product_copy, llm_contract, verbose_prose) are 23.6% of test comments (48 of 203) against 8.5% of train (96 of 1,131). code_placement is 5.4% of test (11 of 203) against 15.6% of train (176 of 1,131). One labeler labeled the whole test side, and the top 5 test PRs hold 70.9% of its comments. Source: merged/stats.json (copy_group, theme_share_by_split, split.test.top5_pr_share) and merged/SUMMARY.md from the label merge.",
-    "Real comments: the first ask in each thread on 24 of the 26 held-out PRs with human comments. #955 and #1001 hold no inline ask. 59 asks were left before a base-branch change, so their diffs cannot be rebuilt; each results.json lists them under excluded_labels.",
-    "Silent PRs: 5 per size bucket, evenly spaced by PR number, from the 87 merged held-out PRs with no human comment (38, 26, 16 and 7 by bucket, smallest first). Every comment returned on them is a false one. On the 20, the distilled rubric returned 44 comments, none 56 and current_instructions 54. The distilled rubric asks for an empty list below 50 changed lines, yet returned a comment on 2 of the 5 such PRs.",
-    "Baseline from #1103: on 8 held-out PRs holding 33 asks, none scored 3.8% precision and 3.0% recall, and current_instructions 0-3.7% and 0-3.0%, across runs on the pre-merge labels; both scored 0.0% in the final committed runs. On those 8 PRs, this run's none and current_instructions caught 0 of 33 asks, and the distilled rubric caught 2, both by the judge (#944, #951). #1103 saw a rubric's catch count move by one between runs of the same set.",
-    "Spend is the CLI's total_cost_usd, at API prices: none $14.05, current_instructions $18.41, distilled $14.11, so $46.57 in all, $0.32 to $0.42 per scored PR. Every review and judge call answered as claude-opus-4-8[1m].",
+    "Real comments: the first ask in each thread on 24 of the 26 held-out PRs with human comments. #955 and #1001 hold no inline ask. 59 asks were left before a base-branch change, so their diffs cannot be rebuilt. Each results.json lists them under excluded_labels.",
+    "Silent PRs: 5 per size bucket, evenly spaced by PR number, from the 87 merged held-out PRs with no human comment (38, 26, 16 and 7 by bucket, smallest first). Every comment returned on them is a false one. On the 20, distilled_clean returned 46 comments, distilled 44, none 56 and current_instructions 54. Both distilled variants ask for an empty list below 50 changed lines. distilled_clean still returned 3 comments on the 5 such PRs, and distilled 2.",
+    "Baseline from #1103: on 8 held-out PRs holding 33 asks, none scored 3.8% precision and 3.0% recall on the pre-merge labels. current_instructions scored 0-3.7% and 0-3.0% across runs. Both scored 0.0% in the final committed runs. On those 8 PRs, this run's none and current_instructions caught 0 of 33 asks. distilled caught 2 (#944, #951) and distilled_clean 2 (both on #973), all by the judge. #1103 saw a rubric's catch count move by one between runs of the same set.",
+    "Spend is the CLI's total_cost_usd, at API prices: none $14.05, current_instructions $18.41, distilled $14.11, distilled_clean $14.32. That is $60.89 in all, $0.32 to $0.42 per scored PR. Every review and judge call answered as claude-opus-4-8[1m].",
     "Theme definitions sit in each results.json under by_theme[].definition. This page leaves them out because three of the labeler's definitions use a word that tests/arch/test_no_banned_words.py bans."
   ],
   "runs": [
@@ -129,6 +132,45 @@
       "unscored_units": 0,
       "review_cost_usd": 13.545413,
       "judge_cost_usd": 0.562153
+    },
+    {
+      "rubric": "distilled_clean",
+      "results_path": "distilled_clean/results.json",
+      "review_model_ids": [
+        "claude-opus-4-8[1m]"
+      ],
+      "overall": {
+        "predicted": 130,
+        "real": 106,
+        "matched_predictions": 8,
+        "matched_reals": 8,
+        "precision": 0.06153846153846154,
+        "recall": 0.07547169811320754,
+        "f1": 0.06779661016949154
+      },
+      "exact_only": {
+        "predicted": 130,
+        "real": 106,
+        "matched_predictions": 4,
+        "matched_reals": 4,
+        "precision": 0.03076923076923077,
+        "recall": 0.03773584905660377,
+        "f1": 0.03389830508474577
+      },
+      "on_commented_prs": {
+        "predicted": 84,
+        "real": 106,
+        "matched_predictions": 8,
+        "matched_reals": 8,
+        "precision": 0.09523809523809523,
+        "recall": 0.07547169811320754,
+        "f1": 0.08421052631578949
+      },
+      "silent_predictions": 46,
+      "scored_units": 44,
+      "unscored_units": 0,
+      "review_cost_usd": 13.714894,
+      "judge_cost_usd": 0.602208
     }
   ],
   "themes": [
@@ -161,6 +203,15 @@
           "precision": 0.06666666666666667,
           "recall": 0.038461538461538464,
           "f1": 0.04878048780487805
+        },
+        {
+          "predicted": 18,
+          "real": 26,
+          "matched_predictions": 2,
+          "matched_reals": 2,
+          "precision": 0.1111111111111111,
+          "recall": 0.07692307692307693,
+          "f1": 0.09090909090909093
         }
       ]
     },
@@ -192,6 +243,15 @@
           "matched_reals": 0,
           "precision": 0.0,
           "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 3,
+          "real": 24,
+          "matched_predictions": 0,
+          "matched_reals": 2,
+          "precision": 0.0,
+          "recall": 0.08333333333333333,
           "f1": 0.0
         }
       ]
@@ -225,6 +285,15 @@
           "precision": 0.0,
           "recall": 0.0625,
           "f1": 0.0
+        },
+        {
+          "predicted": 2,
+          "real": 16,
+          "matched_predictions": 1,
+          "matched_reals": 1,
+          "precision": 0.5,
+          "recall": 0.0625,
+          "f1": 0.1111111111111111
         }
       ]
     },
@@ -257,6 +326,15 @@
           "precision": 0.0,
           "recall": 0.2,
           "f1": 0.0
+        },
+        {
+          "predicted": 1,
+          "real": 15,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
         }
       ]
     },
@@ -280,6 +358,15 @@
           "precision": 0.0,
           "recall": 0.0,
           "f1": 0.0
+        },
+        {
+          "predicted": 0,
+          "real": 11,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null
         },
         {
           "predicted": 0,
@@ -321,6 +408,15 @@
           "precision": 0.0,
           "recall": 0.1,
           "f1": 0.0
+        },
+        {
+          "predicted": 4,
+          "real": 10,
+          "matched_predictions": 0,
+          "matched_reals": 1,
+          "precision": 0.0,
+          "recall": 0.1,
+          "f1": 0.0
         }
       ]
     },
@@ -353,6 +449,15 @@
           "precision": 0.2857142857142857,
           "recall": 0.3333333333333333,
           "f1": 0.30769230769230765
+        },
+        {
+          "predicted": 5,
+          "real": 9,
+          "matched_predictions": 2,
+          "matched_reals": 2,
+          "precision": 0.4,
+          "recall": 0.2222222222222222,
+          "f1": 0.2857142857142857
         }
       ]
     },
@@ -379,6 +484,15 @@
         },
         {
           "predicted": 4,
+          "real": 9,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 3,
           "real": 9,
           "matched_predictions": 0,
           "matched_reals": 0,
@@ -417,6 +531,15 @@
           "precision": 0.0,
           "recall": 0.0,
           "f1": 0.0
+        },
+        {
+          "predicted": 3,
+          "real": 6,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
         }
       ]
     },
@@ -443,6 +566,15 @@
         },
         {
           "predicted": 2,
+          "real": 4,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 5,
           "real": 4,
           "matched_predictions": 0,
           "matched_reals": 0,
@@ -481,6 +613,15 @@
           "precision": null,
           "recall": 0.0,
           "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 4,
+          "matched_predictions": 0,
+          "matched_reals": 1,
+          "precision": null,
+          "recall": 0.25,
+          "f1": null
         }
       ]
     },
@@ -513,6 +654,15 @@
           "precision": null,
           "recall": 0.3333333333333333,
           "f1": null
+        },
+        {
+          "predicted": 1,
+          "real": 3,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
         }
       ]
     },
@@ -539,6 +689,15 @@
         },
         {
           "predicted": 2,
+          "real": 3,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 1,
           "real": 3,
           "matched_predictions": 0,
           "matched_reals": 0,
@@ -577,6 +736,15 @@
           "precision": 0.0,
           "recall": 0.0,
           "f1": 0.0
+        },
+        {
+          "predicted": 2,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
         }
       ]
     },
@@ -603,6 +771,15 @@
         },
         {
           "predicted": 2,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 1,
+          "precision": 0.0,
+          "recall": 0.5,
+          "f1": 0.0
+        },
+        {
+          "predicted": 5,
           "real": 2,
           "matched_predictions": 0,
           "matched_reals": 1,
@@ -641,6 +818,15 @@
           "precision": 0.0,
           "recall": 0.0,
           "f1": 0.0
+        },
+        {
+          "predicted": 1,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
         }
       ]
     },
@@ -673,6 +859,15 @@
           "precision": 0.0,
           "recall": 0.0,
           "f1": 0.0
+        },
+        {
+          "predicted": 5,
+          "real": 2,
+          "matched_predictions": 1,
+          "matched_reals": 1,
+          "precision": 0.2,
+          "recall": 0.5,
+          "f1": 0.28571428571428575
         }
       ]
     },
@@ -705,6 +900,15 @@
           "precision": 0.0,
           "recall": 0.0,
           "f1": 0.0
+        },
+        {
+          "predicted": 10,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
         }
       ]
     },
@@ -728,6 +932,15 @@
           "precision": null,
           "recall": 0.0,
           "f1": null
+        },
+        {
+          "predicted": 5,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
         },
         {
           "predicted": 5,
@@ -769,6 +982,15 @@
           "precision": null,
           "recall": 0.0,
           "f1": null
+        },
+        {
+          "predicted": 1,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
         }
       ]
     },
@@ -801,12 +1023,30 @@
           "precision": 0.14285714285714285,
           "recall": 1.0,
           "f1": 0.25
+        },
+        {
+          "predicted": 7,
+          "real": 1,
+          "matched_predictions": 1,
+          "matched_reals": 1,
+          "precision": 0.14285714285714285,
+          "recall": 1.0,
+          "f1": 0.25
         }
       ]
     },
     {
       "theme": "review_guide",
       "scores": [
+        {
+          "predicted": 0,
+          "real": 1,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null
+        },
         {
           "predicted": 0,
           "real": 1,
@@ -865,6 +1105,15 @@
           "precision": 0.043478260869565216,
           "recall": 0.0,
           "f1": 0.0
+        },
+        {
+          "predicted": 23,
+          "real": 1,
+          "matched_predictions": 1,
+          "matched_reals": 0,
+          "precision": 0.043478260869565216,
+          "recall": 0.0,
+          "f1": 0.0
         }
       ]
     },
@@ -897,6 +1146,15 @@
           "precision": 0.0,
           "recall": null,
           "f1": null
+        },
+        {
+          "predicted": 13,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
         }
       ]
     },
@@ -918,6 +1176,15 @@
           "matched_predictions": 0,
           "matched_reals": 0,
           "precision": null,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 1,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
           "recall": null,
           "f1": null
         },
@@ -961,6 +1228,15 @@
           "precision": null,
           "recall": null,
           "f1": null
+        },
+        {
+          "predicted": 1,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
         }
       ]
     },
@@ -993,6 +1269,15 @@
           "precision": 0.0,
           "recall": null,
           "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": null,
+          "f1": null
         }
       ]
     },
@@ -1014,6 +1299,15 @@
           "matched_predictions": 0,
           "matched_reals": 0,
           "precision": 0.0,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
           "recall": null,
           "f1": null
         },
@@ -1057,6 +1351,15 @@
           "precision": 0.5,
           "recall": null,
           "f1": null
+        },
+        {
+          "predicted": 3,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
         }
       ]
     },
@@ -1083,6 +1386,15 @@
         },
         {
           "predicted": 4,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 7,
           "real": 0,
           "matched_predictions": 0,
           "matched_reals": 0,
@@ -1121,6 +1433,15 @@
           "precision": null,
           "recall": null,
           "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": null,
+          "f1": null
         }
       ]
     },
@@ -1133,6 +1454,15 @@
           "matched_predictions": 0,
           "matched_reals": 0,
           "precision": 0.0,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
           "recall": null,
           "f1": null
         },
@@ -1185,6 +1515,13 @@
           "matched_exact": 0,
           "matched_judge": 1,
           "cost_usd": 0.286881
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.395104
         }
       ]
     },
@@ -1215,6 +1552,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.30855899999999997
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.26466500000000004
         }
       ]
     },
@@ -1245,6 +1589,13 @@
           "matched_exact": 0,
           "matched_judge": 1,
           "cost_usd": 0.24603100000000003
+        },
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.2107535
         }
       ]
     },
@@ -1275,6 +1626,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.24462099999999998
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.28991599999999995
         }
       ]
     },
@@ -1305,6 +1663,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.08685100000000001
+        },
+        {
+          "status": "scored",
+          "predicted": 1,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.0807725
         }
       ]
     },
@@ -1335,6 +1700,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.352386
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.3201025
         }
       ]
     },
@@ -1365,6 +1737,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.48181
+        },
+        {
+          "status": "scored",
+          "predicted": 6,
+          "matched_exact": 0,
+          "matched_judge": 2,
+          "cost_usd": 0.5478765
         }
       ]
     },
@@ -1395,6 +1774,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.136377
+        },
+        {
+          "status": "scored",
+          "predicted": 0,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.09898850000000001
         }
       ]
     },
@@ -1425,6 +1811,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.035072000000000006
+        },
+        {
+          "status": "scored",
+          "predicted": 0,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.034308500000000006
         }
       ]
     },
@@ -1455,6 +1848,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.452961
+        },
+        {
+          "status": "scored",
+          "predicted": 6,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.45052749999999997
         }
       ]
     },
@@ -1485,6 +1885,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.221166
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.2269275
         }
       ]
     },
@@ -1515,6 +1922,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.303811
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.3041025
         }
       ]
     },
@@ -1545,6 +1959,13 @@
           "matched_exact": 1,
           "matched_judge": 0,
           "cost_usd": 0.671531
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 2,
+          "matched_judge": 0,
+          "cost_usd": 0.6700824999999999
         }
       ]
     },
@@ -1575,6 +1996,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.614062
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.5939485
         }
       ]
     },
@@ -1605,6 +2033,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.7468119999999999
+        },
+        {
+          "status": "scored",
+          "predicted": 6,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.7676974999999999
         }
       ]
     },
@@ -1635,6 +2070,13 @@
           "matched_exact": 0,
           "matched_judge": 1,
           "cost_usd": 0.7529159999999999
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 1,
+          "cost_usd": 0.7787575
         }
       ]
     },
@@ -1665,6 +2107,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.229861
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.22640749999999998
         }
       ]
     },
@@ -1695,6 +2144,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.393712
+        },
+        {
+          "status": "scored",
+          "predicted": 5,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.4127075
         }
       ]
     },
@@ -1725,6 +2181,13 @@
           "matched_exact": 1,
           "matched_judge": 1,
           "cost_usd": 0.48327600000000004
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 1,
+          "cost_usd": 0.5243625
         }
       ]
     },
@@ -1755,6 +2218,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.305856
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.2993725
         }
       ]
     },
@@ -1785,6 +2255,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.203837
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.2118485
         }
       ]
     },
@@ -1815,6 +2292,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.168537
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 1,
+          "matched_judge": 0,
+          "cost_usd": 0.16432349999999998
         }
       ]
     },
@@ -1845,6 +2329,13 @@
           "matched_exact": 1,
           "matched_judge": 0,
           "cost_usd": 0.27868099999999996
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 1,
+          "matched_judge": 0,
+          "cost_usd": 0.3507785
         }
       ]
     },
@@ -1875,6 +2366,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.187782
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.2294715
         }
       ]
     },
@@ -1905,6 +2403,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.20274199999999998
+        },
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.1623285
         }
       ]
     },
@@ -1935,6 +2440,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.515957
+        },
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.5142185
         }
       ]
     },
@@ -1965,6 +2477,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.213007
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.1740685
         }
       ]
     },
@@ -1995,6 +2514,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.023822000000000003
+        },
+        {
+          "status": "scored",
+          "predicted": 0,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.0228335
         }
       ]
     },
@@ -2025,6 +2551,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.14413199999999998
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.1305435
         }
       ]
     },
@@ -2055,6 +2588,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.1105255
+        },
+        {
+          "status": "scored",
+          "predicted": 1,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.0735085
         }
       ]
     },
@@ -2085,6 +2625,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.387482
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.38854350000000004
         }
       ]
     },
@@ -2115,6 +2662,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 1.035412
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 1.1204855
         }
       ]
     },
@@ -2145,6 +2699,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.143032
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.1605435
         }
       ]
     },
@@ -2175,6 +2736,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.049017
+        },
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.0773045
         }
       ]
     },
@@ -2205,6 +2773,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.1133345
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.08611350000000001
         }
       ]
     },
@@ -2235,6 +2810,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.451727
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.4490135
         }
       ]
     },
@@ -2265,6 +2847,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.208787
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.2315235
         }
       ]
     },
@@ -2295,6 +2884,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.6821929999999999
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.6310335
         }
       ]
     },
@@ -2325,6 +2921,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.386197
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.3875835
         }
       ]
     },
@@ -2355,6 +2958,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.090722
+        },
+        {
+          "status": "scored",
+          "predicted": 1,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.09335850000000001
         }
       ]
     },
@@ -2385,6 +2995,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.041927
+        },
+        {
+          "status": "scored",
+          "predicted": 1,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.07352500000000001
         }
       ]
     },
@@ -2415,6 +3032,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.982132
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.9546435000000001
         }
       ]
     },
@@ -2445,6 +3069,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.056257
+        },
+        {
+          "status": "scored",
+          "predicted": 0,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.0546185
         }
       ]
     },
@@ -2475,6 +3106,13 @@
           "matched_exact": 0,
           "matched_judge": 0,
           "cost_usd": 0.075772
+        },
+        {
+          "status": "scored",
+          "predicted": 0,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.07750850000000001
         }
       ]
     }
@@ -2486,12 +3124,14 @@
       "scored_prs": [
         5,
         5,
+        5,
         5
       ],
       "predictions": [
         3,
         5,
-        2
+        2,
+        3
       ]
     },
     {
@@ -2500,12 +3140,14 @@
       "scored_prs": [
         5,
         5,
+        5,
         5
       ],
       "predictions": [
         13,
         14,
-        11
+        11,
+        12
       ]
     },
     {
@@ -2514,12 +3156,14 @@
       "scored_prs": [
         5,
         5,
+        5,
         5
       ],
       "predictions": [
         16,
         18,
-        18
+        18,
+        14
       ]
     },
     {
@@ -2528,12 +3172,14 @@
       "scored_prs": [
         5,
         5,
+        5,
         5
       ],
       "predictions": [
         24,
         17,
-        13
+        13,
+        17
       ]
     }
   ]
