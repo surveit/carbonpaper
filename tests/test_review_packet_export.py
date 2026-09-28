@@ -33,6 +33,7 @@ from app.tools.tutorial import TutorialContext, seed_tutorial_project
 from app.web.review_packet import export_review_packet
 from conftest import reads_of, script_judgment
 from pdf_fixture import write_text_pdf
+from run_seed import read_manifest, store_manifest
 
 PROJECT = "docket"
 FIRST_PAGE = "The first page says one thing."
@@ -253,6 +254,19 @@ def test_a_span_whose_file_changed_since_the_run_is_refused_and_quotes_no_page(
     [entry] = _read_json(packet.root / "spans.json")
     assert "motion.pdf now hashes to" in entry["refusal"]
     assert not (packet.root / "sources").exists()
+
+
+def test_a_published_table_the_unreadable_version_gives_no_schema_says_so(quoted_run, tmp_path):
+    manifest = read_manifest(PROJECT, quoted_run)
+    store_manifest(PROJECT, quoted_run, {**manifest, "workflow_version": "no-such-version"})
+
+    packet = export_review_packet(PROJECT, quoted_run, tmp_path / "packets")
+
+    assert not (packet.root / "spans.json").exists()
+    [omitted] = [o for o in packet.omitted if o.path == "spans.json"]
+    assert omitted.reason == (
+        "the version this run pinned names no columns for quote, so which of their "
+        "published cells hold spans is unknown")
 
 
 def test_a_file_from_courtlistener_puts_the_free_law_project_line_on_the_index(
