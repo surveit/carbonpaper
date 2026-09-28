@@ -17,7 +17,7 @@ from app.core.json_types import JsonScalar
 from app.models.branch_analysis import RowOrdinal
 from app.models.citations import StageOutputCellCitation
 from app.models.schema import StageId
-from app.models.stages.input_data import InputDataStage
+from app.models.stages.input_data import FileConnectorParams, InputDataStage
 from app.models.records.run_manifest import RunManifest
 from app.runtime.errors import MissingLineage
 from app.runtime.lineage import RowLineage, RowParent
@@ -207,7 +207,10 @@ def _find_the_binding(stage_id: StageId, files_read: Sequence[InputBinding],
 
 
 def _find_the_stamped_row_column(stage: InputDataStage, frame: pa.Table) -> str | None:
-    column = stage.connector.params.source_row_column
+    params = stage.connector.params
+    if not isinstance(params, FileConnectorParams):
+        return None
+    column = params.source_row_column
     # Only an xlsx read stamps one, and a stage whose schema omits the column drops it.
     return column if column in frame.column_names else None
 

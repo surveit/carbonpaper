@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.core.ids import ID
 from app.core.stage_cache import ReadOnlyStageCache, StageCache, StageCacheEntry
 
 from .run_log import RunLog
@@ -25,6 +26,14 @@ from app.models.run_parameters import RunParameters
 class RunIdentity:
     project: str
     run_id: str
+
+
+@dataclass(frozen=True)
+class PrepareScope:
+    """Where a stage acquiring its files may write while its run is prepared."""
+
+    project_id: ID
+    run_dir: Path
 
 
 class RunContext(BaseModel):

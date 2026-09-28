@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from app.core.frames import list_rows
 from app.core.json_types import JsonDict, JsonScalar
 from app.core.source_files import FileFormat, read_source_file, text_on_disk_columns
-from app.models.stages.input_data import InputDataStage
+from app.models.stages.input_data import FileConnectorParams, InputDataStage
 from app.services.project import WorkflowFile
 from app.services.stage_cache_transfer import read_cache_archive_entries
 from app.tools.tutorial import (
@@ -83,6 +83,8 @@ def compute_intro_figures() -> IntroFigures:
 def read_tour_exports(input_stage: InputDataStage) -> pd.DataFrame:
     """Read as the input step reads them, so each cell is the text the bundle was keyed on."""
     params = input_stage.connector.params
+    if not isinstance(params, FileConnectorParams):
+        raise TypeError(f"the tour's input step '{input_stage.id}' must read files")
     file_format = params.format or FileFormat.csv
     column_types = {column.name: column.type for column in input_stage.signature.produces}
     text_columns: dict[Hashable, Any] = {

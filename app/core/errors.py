@@ -182,6 +182,10 @@ class FileNotStoredError(Exception):
     """A file id the project has no stored bytes for."""
 
 
+class SourceUnavailable(Exception):
+    """A connector cannot reach a file it was asked for. The run is refused, and nothing is guessed."""
+
+
 class FileOverCeiling(Exception):
     """Carries the numbers, not a sentence — a surface writes the sentence."""
 

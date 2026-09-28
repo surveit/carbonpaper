@@ -7,28 +7,37 @@ attaches no meaning of its own."""
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Hashable
+from collections.abc import Hashable, Mapping
 from pathlib import Path, PurePath
-from typing import Any
+from typing import Any, NamedTuple
 
 import pandas as pd
 import pyarrow as pa
 
-from app.core.errors import FrameConcatMismatchError
-from app.core.files import find_stored_file
-from app.core.frames import concat_tables, frame_to_table
+from app.core.errors import FrameConcatMismatchError, SourceUnavailable
+from app.core.files import ProjectFile, find_stored_file, receive_source, resolve_stored_path
+from app.core.frames import (
+    PARQUET_SUFFIX, concat_tables, frame_to_table, read_frame_table, table_from_rows,
+    write_frame_table,
+)
+from app.core.ids import ID
 from app.core.source_files import FileFormat, read_source_file, text_on_disk_columns
 from app.models import (
     DATE_COLUMN_TYPES,
     TableSchema,
     WorkflowStage,
 )
+from app.models.connectors import (
+    SOURCE_ID_COLUMN, SOURCE_SHA256_COLUMN, AcquiredBytes, ConnectorSpec, MetadataValue,
+    find_connector,
+)
 from app.models.run_manifest import ReadFile, StageInputRecord
 from app.models.stage_contribution import StageContribution
 from app.models.stages.input_data import FileConnectorParams, InputDataStage
 
-from ..context import RunContext
+from ..context import PrepareScope, RunContext
 from ..lineage import RowLineage, RowParent
+from ..spans import require_bound_file
 from ..stage_output import StageOutput
 from .execution import narrow_stage
 
@@ -45,6 +54,8 @@ def preflight_input_data(
     if not isinstance(stage, InputDataStage):
         raise TypeError(
             f"stage {stage.id}: the input_data preflight got a {type(stage).__name__}")
+    if not isinstance(stage.connector.params, FileConnectorParams):
+        return [], None
     paths = stage.connector.params.paths
     if not paths:
         return ([f"`{stage.id}`: no file bound — supply a run binding, or author "
@@ -69,6 +80,8 @@ def _weigh_file(path: Path) -> ReadFile:
 def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> StageOutput:
     input_stage = narrow_stage(workflow_stage, InputDataStage)
     params = input_stage.connector.params
+    if not isinstance(params, FileConnectorParams):
+        return _read_source_table(workflow_stage, ctx)
 
     paths = params.paths
     if not paths:
@@ -90,6 +103,101 @@ def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> StageOutp
             input_stage.id, [_weigh_file(Path(path)) for path in paths],
             [len(frame) for frame in frames]),
     )
+
+
+class _Source(NamedTuple):
+    record: ProjectFile
+    metadata: Mapping[str, MetadataValue]
+
+
+def acquire_input_data(
+    workflow_stage: WorkflowStage, scope: PrepareScope,
+) -> StageInputRecord | None:
+    """A pack's kind stores its files as Sources, one row each; the file kind acquires nothing."""
+    stage = narrow_stage(workflow_stage, InputDataStage)
+    if isinstance(stage.connector.params, FileConnectorParams):
+        return None
+    sources = _find_sources(stage, find_connector(stage.connector.kind), scope.project_id)
+    table_path = _resolve_source_table_path(scope.run_dir, stage.id)
+    table_path.parent.mkdir(parents=True, exist_ok=True)
+    write_frame_table(table_from_rows([_build_source_row(source) for source in sources]),
+                      table_path)
+    return StageInputRecord(
+        files=[_weigh_file(resolve_stored_path(source.record)) for source in sources])
+
+
+def _find_sources(
+    stage: InputDataStage, connector: ConnectorSpec[Any], project_id: ID,
+) -> list[_Source]:
+    params = stage.connector.params
+    # Bound files win over acquiring. Nothing records their metadata, so it is null.
+    if params.paths:
+        unknown = dict.fromkeys(column.name for column in connector.metadata_columns)
+        return [_Source(_require_stored(Path(path), project_id), unknown)
+                for path in params.paths]
+    sources = [_receive(acquired, connector, project_id)
+               for acquired in connector.acquire(params)]
+    if not sources:
+        raise SourceUnavailable(f"connector {connector.kind!r} acquired no file")
+    return sources
+
+
+def _receive(acquired: AcquiredBytes, connector: ConnectorSpec[Any], project_id: ID) -> _Source:
+    declared = {column.name for column in connector.metadata_columns}
+    if set(acquired.metadata) != declared:
+        raise ValueError(
+            f"connector {connector.kind!r} gave '{acquired.filename}' metadata "
+            f"{sorted(acquired.metadata)}, but declares {sorted(declared)}")
+    with acquired.open_bytes() as stream:
+        record = receive_source(project_id, acquired.origin_url, acquired.filename, stream)
+    return _Source(record, acquired.metadata)
+
+
+def _require_stored(path: Path, project_id: ID) -> ProjectFile:
+    record = find_stored_file(path) if path.is_file() else None
+    if record is None or record.project_id != project_id:
+        raise SourceUnavailable(
+            f"bound file {path} is not one of this project's stored files, so no source "
+            "row can name it; bind a file from the project's Files instead")
+    return record
+
+
+def _build_source_row(source: _Source) -> dict[str, MetadataValue]:
+    record = source.record
+    return {SOURCE_ID_COLUMN: record.id, SOURCE_SHA256_COLUMN: record.sha256,
+            "filename": record.filename, "origin_url": record.origin_url,
+            "fetched_at": record.fetched_at, **source.metadata}
+
+
+def _read_source_table(workflow_stage: WorkflowStage, ctx: RunContext) -> StageOutput:
+    table_path = _resolve_source_table_path(ctx.require_run_dir(), workflow_stage.id)
+    if not table_path.is_file():
+        raise ValueError(
+            f"input stage '{workflow_stage.id}' has no source table in this run: its "
+            "connector acquires when a run is prepared, and this execution skipped that")
+    table = read_frame_table(table_path)
+    kept, undeclared = _split_off_columns_the_schema_omits(
+        table, _require_produces(workflow_stage.id, workflow_stage.output_schema))
+    return StageOutput(
+        kept,
+        contribution=StageContribution(dropped_columns=undeclared),
+        lineage=_which_source_each_row_came_from(workflow_stage.id, table, ctx),
+    )
+
+
+def _which_source_each_row_came_from(stage_id: str, table: pa.Table, ctx: RunContext) -> RowLineage:
+    """A row IS its file, so its parent is row 0 of the file this run read for it."""
+    read = [require_bound_file(source_id, sha256, ctx.bound_sources)
+            for source_id, sha256 in zip(table.column(SOURCE_ID_COLUMN).to_pylist(),
+                                         table.column(SOURCE_SHA256_COLUMN).to_pylist())]
+    return RowLineage([
+        [RowParent(stage_id, 0, source_file=binding.path, source_file_sha=binding.sha256)]
+        for binding in read
+    ])
+
+
+def _resolve_source_table_path(run_dir: Path, stage_id: str) -> Path:
+    return run_dir / "sources" / f"{stage_id}{PARQUET_SUFFIX}"
 
 
 def _require_produces(stage_id: str, schema: TableSchema | None) -> TableSchema:

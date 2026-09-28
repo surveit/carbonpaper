@@ -11,14 +11,13 @@ from app.core.errors import SourceNotRead
 from app.models import WorkflowStage
 from app.models.locators import PageCharRange
 from app.models.run_manifest import InputBinding
+from app.models.connectors import SOURCE_ID_COLUMN, SOURCE_SHA256_COLUMN
 from app.models.spans import Span
 from app.models.stage_contribution import StageContribution
 from app.models.stages.read_pages import (
     PAGE_COLUMN,
     PAGE_SPAN_COLUMN,
     PAGE_TEXT_COLUMN,
-    SOURCE_ID_COLUMN,
-    SOURCE_SHA256_COLUMN,
     ReadPagesStage,
 )
 

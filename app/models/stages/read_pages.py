@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal, Sequence
 
 from pydantic import Field
 
+from app.models.connectors import SOURCE_ID_COLUMN, SOURCE_SHA256_COLUMN
 from app.models.schema import (
     INT_COLUMN_TYPE,
     SPAN_COLUMN_TYPE,
@@ -24,8 +25,6 @@ from app.models.stages.stage_type_spec import StageTypeSpec
 if TYPE_CHECKING:
     from app.models.workflow_stage import WorkflowStageInput
 
-SOURCE_ID_COLUMN = "source_id"
-SOURCE_SHA256_COLUMN = "source_sha256"
 PAGE_COLUMN = "page"
 PAGE_TEXT_COLUMN = "page_text"
 PAGE_SPAN_COLUMN = "page_span"
