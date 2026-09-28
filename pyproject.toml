@@ -265,10 +265,11 @@ allowed_importers = ["app.main"]
 name = "app.packs imported only by the entrypoints"
 type = "protected"
 protected_modules = ["app.packs"]
-allowed_importers = ["app.main", "app.cli"]
+allowed_importers = ["app.main", "app.cli", "app.seeds.__main__"]
 # Importing app.packs registers every pack's connector kinds: a side effect the two
 # composition roots want, as app.main does for the agents, and nothing below them may
 # depend on. What a pack itself may import is app/packs/_arch_tests/'s rule.
+# app.seeds.__main__: `python -m app.seeds` parses the committed bundles in its own process.
 
 [[tool.importlinter.contracts]]
 name = "app.tools imported only by the surfaces that expose a tool"

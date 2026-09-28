@@ -165,6 +165,15 @@ read one. Bound `paths` win over acquiring. They must be the project's stored fi
 their metadata is null, which is why `register_pack` refuses a metadata column that is not
 nullable. A connector that cannot reach a file raises `SourceUnavailable`, and the run is
 refused with the stage and the file named.
+A connector reading a mirror yields `MirroredBytes`, which carry the time and sha256 the mirror
+recorded. The kernel stores them through `receive_mirrored_source`, which refuses bytes that
+hash to anything else.
+
+`app/packs/docket/` registers `recap_docket`: a CourtListener docket's filings, one row per
+PDF, named by ECF number (`"58"`, `"221-1"`). It reads the docket's `type=rd` search pages and
+each filing's PDF on storage.courtlistener.com. A `cache_dir` holding a `manifest.jsonl` of
+fetch records replaces both. A filing the archive lacks, or one the mirror does not record,
+refuses the run. `ATTRIBUTION.md` holds the terms line.
 
 ## `app/compiler/` — prose → LLM generation engines
 Two generators, each an `app.core.agent` Agent targeting a model schema:

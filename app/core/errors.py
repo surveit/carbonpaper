@@ -194,6 +194,14 @@ class SourceUnavailable(Exception):
     """A connector cannot reach a file it was asked for. The run is refused, and nothing is guessed."""
 
 
+class MirrorDisagrees(SourceUnavailable):
+    """A mirrored file does not hash to what its mirror recorded, so it is not the bytes fetched."""
+
+    def __init__(self, *, name: str, digest: str, recorded: str, origin_url: str) -> None:
+        super().__init__(
+            f"{name} hashes to {digest}, but its mirror recorded {recorded} for {origin_url}")
+
+
 class FileOverCeiling(Exception):
     """Carries the numbers, not a sentence — a surface writes the sentence."""
 

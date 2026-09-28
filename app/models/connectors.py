@@ -45,6 +45,14 @@ class AcquiredBytes:
     metadata: Mapping[str, MetadataValue]
 
 
+@dataclass(frozen=True)
+class MirroredBytes(AcquiredBytes):
+    """Bytes a mirror kept, with the time and sha256 it recorded when it fetched them."""
+
+    fetched_at: str
+    sha256: str
+
+
 KindParams = TypeVar("KindParams", bound=ConnectorParams)
 
 

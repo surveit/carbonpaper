@@ -333,8 +333,10 @@ a head naming the file: what its holder claims about it, its shape, its first ro
 the runs that read it — then the delete, which takes the filename typed back.
 
 The head says how the file arrived: `uploaded` and when, or `fetched` and when, linking
-the URL `receive_source` (`app/core/files.py`) was given. Only it records an origin and a
-fetch time, so a file without them was uploaded. The Files table says the same in its
+the URL `receive_source` (`app/core/files.py`) was given. Only it and
+`receive_mirrored_source` record an origin and a fetch time, so a file without them was
+uploaded. A mirrored file's time is the one its mirror recorded, taken only once the bytes
+hash to the sha256 recorded with it. The Files table says the same in its
 `added` column.
 
 A **text Source** (pdf, txt, md, html) leads with one page of its text
