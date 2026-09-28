@@ -1,0 +1,15 @@
+<h2>What the numbers mean</h2>
+<dl>
+  <dt>Review unit</dt>
+  <dd>One PR. On a PR the reviewer commented on, the critic reads its diff at the commit of the reviewer's first ask whose diff can be rebuilt, and is scored against every ask the reviewer made from then on, on that commit or a later one.</dd>
+  <dt>Silent PR</dt>
+  <dd>A merged PR the reviewer left no comment on. The critic reads its diff at the merged head, and every comment it returns there is a prediction the reviewer did not make.</dd>
+  <dt>Real comment</dt>
+  <dd>An inline comment the labels credit to the reviewer, not the agent posting under their login, whose speech act is a correction, instruction or question, and which is the reviewer's first such comment in its thread.</dd>
+  <dt>Exact match</dt>
+  <dd>Same file, a real comment left on the commit the critic read, lines at most 5 apart, and the predicted theme one of the real comment's themes.</dd>
+  <dt>Judge match</dt>
+  <dd>Same file, on any commit, left unmatched by the exact rule, and a judge model shown both comments with the code under each found they make the same point.</dd>
+  <dt>Precision / recall / F1</dt>
+  <dd>Matched predictions over all predictions; matched real comments over all real comments; their harmonic mean. Matching is one to one. n/a means the denominator is zero.</dd>
+</dl>

@@ -7,7 +7,7 @@ from pathlib import Path
 from critic.backend import ModelBackend
 from critic.corpus import load_corpus_index
 from critic.labels import ExcludedLabel, group_labels_by_pr, load_label_set
-from critic.planning import EvalPlan, SkippedPr, plan_units
+from critic.planning import EvalPlan, SkippedPr, plan_silent_units, plan_units
 from critic.records import CriticRecord
 from critic.rubric import Rubric, RubricStamp, load_rubric, stamp_rubric
 from critic.scoring import EXACT_ROUTE, Score, score_theme_in_unit, score_unit, sum_scores
@@ -21,6 +21,8 @@ class EvalSettings(CriticRecord):
     repo: str
     rubric_dir: str
     pr_numbers: list[int]
+    # Merged PRs the reviewer left no comment on: every prediction on them is a false one.
+    silent_pr_numbers: list[int]
     limit: int | None
     corpus_dir: str
     labels_path: str
@@ -64,9 +66,10 @@ def run_eval(
     label_set = load_label_set(Path(settings.labels_path), Path(settings.themes_path))
     labels_by_pr = group_labels_by_pr(label_set)
     plan = plan_units(settings.repo, settings.pr_numbers, settings.limit, corpus, labels_by_pr, label_set.themes)
+    silent = plan_silent_units(settings.repo, settings.silent_pr_numbers, labels_by_pr, label_set.themes)
     context = UnitContext(settings.repo, Path(settings.diff_dir), rubric, review_backend, judge_backend)
     with ThreadPoolExecutor(max_workers=settings.jobs) as pool:
-        outcomes = list(pool.map(lambda unit: evaluate_unit(unit, context), plan.units))
+        outcomes = list(pool.map(lambda unit: evaluate_unit(unit, context), plan.units + silent))
     return assemble_result(settings, rubric, plan, outcomes, label_set.themes, started_at)
 
 

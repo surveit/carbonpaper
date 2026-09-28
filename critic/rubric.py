@@ -49,11 +49,13 @@ def load_rubric(directory: Path, environ: Mapping[str, str] = os.environ) -> Rub
 
 def read_rubric_file(path: Path, environ: Mapping[str, str]) -> RubricFile:
     if path.suffix == AUTHORED_SUFFIX:
-        return _read_source(path.name, path)
+        return _read_source(path.name, path, _describe_origin(path))
     pointer = path.read_text(encoding="utf-8").strip()
     if path.suffix == FROM_REPO_SUFFIX:
-        return _read_source(path.stem, _resolve_repo_path(path, pointer))
-    return _read_source(path.stem, _resolve_env_path(path, pointer, environ))
+        source = _resolve_repo_path(path, pointer)
+        return _read_source(path.stem, source, _describe_origin(source))
+    # The variable's name, not its value: the value is a path on one machine.
+    return _read_source(path.stem, _resolve_env_path(path, pointer, environ), f"${pointer}")
 
 
 def stamp_rubric(rubric: Rubric) -> list[RubricStamp]:
@@ -81,10 +83,10 @@ def _resolve_env_path(path: Path, variable: str, environ: Mapping[str, str]) -> 
     return Path(environ[variable])
 
 
-def _read_source(name: str, source: Path) -> RubricFile:
+def _read_source(name: str, source: Path, origin: str) -> RubricFile:
     if not source.is_file():
         raise FileNotFoundError(f"rubric file {name} names {source}, which is not a file")
-    return RubricFile(name=name, origin=_describe_origin(source), text=source.read_text(encoding="utf-8"))
+    return RubricFile(name=name, origin=origin, text=source.read_text(encoding="utf-8"))
 
 
 def _describe_origin(source: Path) -> str:

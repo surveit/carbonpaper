@@ -18,7 +18,11 @@ def test_pr_numbers_parse_from_a_list_or_a_range() -> None:
 
 
 def test_a_split_file_yields_its_test_prs_in_order(tmp_path: Path) -> None:
-    split = {"definition": "test = PR numbers 937-1096", "train": {"prs": [1, 2]}, "test": {"prs": [976, 944]}}
+    split = {
+        "definition": "test = PR numbers 937-1096",
+        "train": {"prs": [1, 2]},
+        "test": {"prs": [976, 944], "prs_with_human_comments": [944]},
+    }
     path = tmp_path / "split.json"
     path.write_text(json.dumps(split), encoding="utf-8")
     assert load_test_split(path) == [944, 976]

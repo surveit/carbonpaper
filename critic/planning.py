@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from critic.corpus import CorpusIndex
+from critic.diff import fetch_merged_head
 from critic.labels import (
+    HUMAN_AUTHOR,
     ExcludedLabel,
     LabeledComment,
     ReviewerComment,
@@ -13,7 +15,7 @@ from critic.themes import Theme, select_flag_themes
 
 
 class ReviewUnit(CriticRecord):
-    """One PR, read at the commit of the reviewer's first ask whose diff can be rebuilt."""
+    """One PR, read at the commit of its first rebuildable ask, or at its merged head if it drew none."""
 
     pr: int
     commit_sha: str
@@ -71,6 +73,27 @@ def plan_pr(
         return _skip_pr(pr, "every ask predates a base-branch change, so no diff can be rebuilt", excluded)
     unit = build_unit(readable, select_flag_themes(themes), history)
     return EvalPlan(units=[unit], skipped_prs=[], excluded_labels=excluded)
+
+
+def plan_silent_units(
+    repo: str, pr_numbers: list[int], labels_by_pr: dict[int, list[LabeledComment]], themes: list[Theme]
+) -> list[ReviewUnit]:
+    return [plan_silent_unit(repo, pr, labels_by_pr.get(pr, []), themes) for pr in pr_numbers]
+
+
+def plan_silent_unit(repo: str, pr: int, labels: list[LabeledComment], themes: list[Theme]) -> ReviewUnit:
+    human = [label.html_url for label in labels if label.author == HUMAN_AUTHOR]
+    if human:
+        raise ValueError(f"PR {pr} was sampled as silent, yet the label set holds its human comments {human}")
+    head = fetch_merged_head(repo, pr)
+    return ReviewUnit(
+        pr=pr,
+        commit_sha=head.commit_sha,
+        reviewed_at=head.merged_at,
+        reals=[],
+        themes=select_flag_themes(themes),
+        history=fetch_pr_history(repo, pr),
+    )
 
 
 def build_unit(asks: list[ReviewerComment], themes: list[Theme], history: PrHistory) -> ReviewUnit:
