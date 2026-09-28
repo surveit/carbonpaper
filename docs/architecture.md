@@ -49,6 +49,9 @@ runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data
   its input arity), and its own validation helpers. `PythonFunction` and both
   python-transform stage models live in `stages/code.py`; `StarlarkFunction` and
   `StarlarkRowFunctionStage` live in `stages/starlark.py`.
+- `spans.py` — `Span`, a quote and its address in one stored source file, and `narrow_span`,
+  which re-finds a quote inside a span; `locators.py` — the address kinds and `LOCATOR_KINDS`,
+  the registry every kind is parsed and labelled through. `base.py` holds `_Base`.
 - `schema.py` — `Column`, `TableSchema`, column-type vocab. `workflow.py` — graph checks
   (unique ids, inputs resolve, cycles) and schema RESOLUTION: a stage's input and output
   schemas are a function of the whole graph, so `Workflow` walks it in dependency order

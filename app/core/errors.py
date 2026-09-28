@@ -41,6 +41,14 @@ class CitationMismatch(ValueError):
     """A report stage cited a cell for a value that cell does not hold."""
 
 
+class QuoteNotInText(ValueError):
+    """A quote to narrow a span to is not in the span's own text, exactly as written."""
+
+
+class QuoteAmbiguous(ValueError):
+    """A quote to narrow a span to appears more than once in it, so no one address holds it."""
+
+
 class ColumnNotInFrame(ValueError):
     pass
 
