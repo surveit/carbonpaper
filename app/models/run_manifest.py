@@ -203,6 +203,13 @@ def read_input_bindings(raw: dict[str, Any]) -> list[InputBinding]:
     return flatten_input_bindings(raw.get("input_bindings") or {})
 
 
+def index_bound_sources(recorded: Mapping[str, Any]) -> dict[str, InputBinding]:
+    return {
+        binding.sha256: binding
+        for binding in flatten_input_bindings(recorded) if binding.sha256
+    }
+
+
 def flatten_input_bindings(recorded: Mapping[str, Any]) -> list[InputBinding]:
     """One entry per FILE, so a stage that read several contributes several."""
     return [

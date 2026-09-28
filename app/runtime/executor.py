@@ -17,8 +17,10 @@ from app.core.frames import frame_to_table, write_frame_table_with_csv_fallback
 from app.models import StageType, Workflow, WorkflowStage
 from app.models.run_manifest import (
     SCHEMA_REFUSAL_ERROR_TYPE,
+    InputBinding,
     StageErrorInfo,
     StageRecord,
+    index_bound_sources,
 )
 from app.models.stage_contribution import RowError, StageContribution
 from app.models.run_manifest import RunKind
@@ -33,7 +35,7 @@ from .errors import RunCancelled
 from .manifest import RunManifest, create_run_manifest, write_manifest
 from .run_log import RUN_START, STAGE_DONE, STAGE_START, RunLog
 from .progress import StageProgressReporter
-from .stages import HANDLERS, StageHandler
+from .stages import HANDLERS, PREFLIGHTS, StageHandler
 from .lineage import (
     RowLineage,
     concatenated_inputs_lineage,
@@ -92,7 +94,7 @@ def execute_subset(
         raise SubsetRunError(f"subset names stage(s) not in the workflow: {missing}")
     ordered = topological_sort([by_id[sid] for sid in stage_ids])
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
-    ctx = _subset_ctx(run_dir, identity, params)
+    ctx = _subset_ctx(run_dir, identity, params, _bind_subset_sources(workflow))
     manifest = create_run_manifest(
         ordered, ctx, run_id=run_dir.name, project_id=project_id,
         workflow_version=workflow_version, input_bindings={}, kind=kind)
@@ -107,11 +109,23 @@ def execute_subset(
 
 def _subset_ctx(
     run_dir: Path, identity: RunIdentity | None, params: RunParameters,
+    bound_sources: dict[str, InputBinding],
 ) -> RunContext:
     if identity is not None:
         return RunContext.for_workflow_test_run(
-            run_dir, identity.project, identity.run_id, params, bound_sources={})
-    return RunContext.for_stages_outside_a_run(run_dir, params)
+            run_dir, identity.project, identity.run_id, params, bound_sources=bound_sources)
+    return RunContext.for_stages_outside_a_run(run_dir, params, bound_sources=bound_sources)
+
+
+def _bind_subset_sources(workflow: Workflow) -> dict[str, InputBinding]:
+    """An input stage whose file is missing binds nothing, so a span quoting it is refused."""
+    preflighted = {
+        workflow_stage.id: PREFLIGHTS[StageType(workflow_stage.stage.type)](workflow_stage)
+        for workflow_stage in workflow.list_workflow_stages()
+        if StageType(workflow_stage.stage.type) in PREFLIGHTS
+    }
+    return index_bound_sources({
+        stage_id: record for stage_id, (_, record) in preflighted.items() if record is not None})
 
 
 def _raise_if_run_failed(manifest: RunManifest) -> None:
