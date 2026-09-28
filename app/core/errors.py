@@ -61,6 +61,14 @@ class QuoteNotAtAddress(ValueError):
     """The text at a span's address in its file is not its quote, prefix or suffix."""
 
 
+class QuoteRefused(ValueError):
+    """A model's quote, refused: the message names file and page, `correction` is for the model."""
+
+    def __init__(self, message: str, correction: str) -> None:
+        super().__init__(message)
+        self.correction = correction
+
+
 class SourceNotRead(ValueError):
     """A span or a source row names a file by a sha256 the run never read."""
 

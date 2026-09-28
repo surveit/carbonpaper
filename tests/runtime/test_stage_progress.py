@@ -180,7 +180,7 @@ def test_batched_llm_driver_advances_after_each_completed_chunk(monkeypatch):
     reporter(completed=0, total=3)
     ctx = make_run_context().attach_stage_progress(reporter)
 
-    def process_chunk(stage_id, llm, reply_schema, chunk):
+    def process_chunk(stage_id, llm, reply_schema, chunk, quoted, sources):
         return [{**row, "label": f"item-{row['x']}"} for row in chunk]
 
     monkeypatch.setattr(llm_transform, "_process_chunk", process_chunk)

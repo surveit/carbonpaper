@@ -124,6 +124,9 @@ stays the source of truth for stage status; this log is only ever the drill-down
   `app.core.agent.agent.Agent` whose `target_schema` is the stage's compiled reply model, so
   the reply is validated by construction rather than parsed from prose. Run per row by the
   row driver under bounded parallelism.
+- **A span column is answered with a quote.** `stages/span_replies.py` finds the quote in
+  the column named by `quoted_from` and mints the span; the model never supplies an
+  address. See `docs/llm-transform-output-spec.md` rule 5.
 - **A stage declaring `llm.tools` researches.** The names (from
   `models.stages.llm_transform.GRANTABLE_TOOLS`) are granted to the agent alongside
   `submit_answer`, and the row moves onto the research budget — `RESEARCH_TIMEOUT_S` and

@@ -5,7 +5,13 @@ from pathlib import Path
 import pytest
 
 from app.core.errors import PageOutOfRange, UnsupportedTextFormat
-from app.core.text_sources import count_pages, is_text_layer_empty, normalize_text, read_page_text
+from app.core.text_sources import (
+    count_pages,
+    is_text_layer_empty,
+    normalize_text,
+    normalize_with_offsets,
+    read_page_text,
+)
 from pdf_fixture import write_text_pdf
 
 FIRST_PAGE = "The first page says one thing."
@@ -89,6 +95,24 @@ def test_a_file_with_no_page_reader_is_refused(tmp_path: Path) -> None:
 
 def test_normalize_text_folds_compatibility_forms_soft_hyphens_and_whitespace() -> None:
     assert normalize_text("  eﬃcient\u00a0exam\u00adple\n\t pro-\nceeds  ") == "efficient example pro- ceeds"
+
+
+@pytest.mark.parametrize("raw", [
+    "  eﬃcient exam­ple\n\t pro-\nceeds  ",
+    "café au lait",
+    read_page_text(ECF_58_PAGE_1, 1),
+])
+def test_normalize_with_offsets_reads_as_normalize_text(raw: str) -> None:
+    assert normalize_with_offsets(raw).text == normalize_text(raw)
+
+
+def test_each_normalized_character_maps_back_to_the_raw_characters_it_came_from() -> None:
+    raw = "an eﬃcient\n café"
+    normalized = normalize_with_offsets(raw)
+    raw_sources = [raw[start:end] for start, end in zip(normalized.raw_starts, normalized.raw_ends)]
+    assert normalized.text == "an efficient café"
+    assert raw_sources[4:7] == ["ﬃ"] * 3
+    assert raw_sources[-1] == "é"
 
 
 def test_the_ecf_stamp_reads_off_a_real_docket_page() -> None:

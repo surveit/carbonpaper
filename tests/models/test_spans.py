@@ -145,6 +145,14 @@ def test_a_reply_holds_words_and_no_address() -> None:
         reply_model.model_validate({"basis": narrow_span(_whole_page(), "rejected").model_dump()})
 
 
+def test_a_reply_field_names_the_column_its_quote_comes_from() -> None:
+    reply_model = TableSchema(columns=[
+        Column(name="basis", type="span", nullable=True, quoted_from="page",
+               description="Where the court rules.")]).to_reply_model("reply")
+    assert reply_model.model_fields["basis"].description == (
+        "Where the court rules. A verbatim quote from `page`, never a paraphrase.")
+
+
 def test_a_reader_of_a_span_column_need_not_repeat_quoted_from() -> None:
     produced = TableSchema(columns=[
         Column(name="basis", type="span", nullable=True, quoted_from="page")])

@@ -194,7 +194,7 @@ def test_each_row_of_a_batched_call_is_judged_by_that_call(monkeypatch):
 
 
 def _answer_with_no_judgment(monkeypatch: pytest.MonkeyPatch) -> None:
-    def make_mapper(workflow_stage):
+    def make_mapper(workflow_stage, sources):
         def map_group(indices, rows):
             return [{**row, "verdict": "v"} for row in rows]
         return map_group

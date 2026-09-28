@@ -131,14 +131,12 @@ def test_llm_transform_rejects_output_that_adds_no_columns():
             llm={"prompt_template": "do {id}"}))
 
 
-_PAGE_SPAN_COLUMN = {"name": "page", "type": "span", "nullable": False}
-
-
-def _build_quoting_stage(**basis: object) -> dict[str, object]:
+def _build_quoting_stage(page_type: str = "span", **basis: object) -> dict[str, object]:
     return S(id="extract", type="llm_transform", inputs=[{"id": "pages"}],
              signature={"form": "extends",
                         "reads": [{"input": "pages",
-                                   "columns": [_PAGE_SPAN_COLUMN,
+                                   "columns": [{"name": "page", "type": page_type,
+                                                "nullable": False},
                                                {"name": "text", "type": "str",
                                                 "nullable": False}]}],
                         "adds": [{"name": "basis", "type": "span", "nullable": True,
@@ -146,9 +144,22 @@ def _build_quoting_stage(**basis: object) -> dict[str, object]:
              llm={"prompt_template": "Quote the ruling from {page} ({text})"})
 
 
-def test_llm_transform_accepts_a_span_quoted_from_a_span_it_reads():
-    stage = m.parse_stage(_build_quoting_stage(quoted_from="page"))
+@pytest.mark.parametrize("page_type", ["span", "list[span]"])
+def test_llm_transform_accepts_a_span_quoted_from_a_span_or_spans_it_reads(page_type):
+    stage = m.parse_stage(_build_quoting_stage(page_type, quoted_from="page"))
     assert stage.signature.adds[0].quoted_from == "page"
+
+
+@pytest.mark.parametrize("added", [
+    {"name": "basis", "type": "list[span]", "nullable": True},
+    {"name": "event", "type": "json", "nullable": True, "fields": [
+        {"name": "basis", "type": "span", "nullable": True, "quoted_from": "page"}]},
+])
+def test_llm_transform_refuses_spans_it_would_add_inside_a_list_or_json(added):
+    spec = _build_quoting_stage()
+    spec["signature"]["adds"] = [added]
+    with pytest.raises(ValidationError, match="the runtime mints only a column of type `span`"):
+        m.parse_stage(spec)
 
 
 def test_llm_transform_refuses_a_span_that_names_no_quoted_from():

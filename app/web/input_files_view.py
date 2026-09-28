@@ -10,6 +10,7 @@ import pyarrow as pa
 from pydantic import BaseModel
 
 from app.core.errors import MissingInputBindingError
+from app.core.files import ProjectFile, ProjectFileIndex, index_project_files
 from app.core.figure_text import render_figure
 from app.core.file_shape import VALUES_KEPT, measure_column_shape
 from app.core.frames import read_frame_table, read_native_cell_as_json
@@ -53,6 +54,11 @@ class InputFileSlice(BaseModel):
     stage_id: StageId
     filename: str
     size_label: str
+    # None where no file this project holds hashes to the bytes the run read.
+    file_id: str | None
+    # Both None for an upload, and unless the run named this file by its id.
+    origin_url: str | None
+    fetched_at: str | None
     # None where nothing the run wrote says how many rows the file holds.
     rows_in_file: int | None
     cap: int | None
@@ -112,14 +118,16 @@ def load_input_files(project_id: str, run_id: str,
     behind = find_columns_behind(workflow.index_workflow_stages_by_id(), set(reached),
                                  ColumnAt(citation.stage_id, citation.column))
     outputs = resolve_run_dir(project_id, run_id, RunKind.production) / "outputs"
+    stored_files = index_project_files(project_id)
     reading = {placed.id: placed.stage for placed in workflow.list_workflow_stages()
                if isinstance(placed.stage, InputDataStage) and placed.id in reached}
     files = [one_file
              # The run's order, not the workflow's: the reader met these files in it.
              for stage_id in _in_the_order_the_run_read_them(manifest, list(reading))
              for one_file in _build_each_file(
-                 outputs, manifest, reading[stage_id], branches.lineages.get(stage_id),
-                 sorted(reached[stage_id]), sorted(behind.get(stage_id, ())))]
+                 outputs, manifest, stored_files, reading[stage_id],
+                 branches.lineages.get(stage_id), sorted(reached[stage_id]),
+                 sorted(behind.get(stage_id, ())))]
     return InputFilesView(citation=citation, files=files,
                           value=_read_the_cited_cell(outputs, citation))
 
@@ -131,24 +139,30 @@ def _in_the_order_the_run_read_them(manifest: RunManifest,
                                                    if stage_id in ran else len(ran)))
 
 
-def _build_each_file(outputs: Path, manifest: RunManifest, stage: InputDataStage,
-                     lineage: RowLineage | None, reached: Sequence[RowOrdinal],
+def _build_each_file(outputs: Path, manifest: RunManifest, stored_files: ProjectFileIndex,
+                     stage: InputDataStage, lineage: RowLineage | None,
+                     reached: Sequence[RowOrdinal],
                      relevant: Sequence[str]) -> list[InputFileSlice]:
     """A file none of the figure's rows came from was read but not needed, so it is left out."""
     frame = read_frame_table(outputs / f"{stage.id}.parquet")
     origins = _read_where_each_row_came_from(stage.id, lineage, frame.num_rows)
-    return [_build_one_file(frame, manifest, stage, binding, origin_by_ordinal, reached,
-                            relevant)
+    return [_build_one_file(frame, manifest, stage, binding,
+                            stored_files.find(binding.file_id, binding.sha256),
+                            origin_by_ordinal,
+                            reached, relevant)
             for binding, origin_by_ordinal in _split_the_rows_by_file(manifest, stage.id,
                                                                      origins)
             if not origin_by_ordinal.keys().isdisjoint(reached)]
 
 
 def _build_one_file(frame: pa.Table, manifest: RunManifest, stage: InputDataStage,
-                    binding: InputBinding, origin_by_ordinal: dict[RowOrdinal, RowParent],
+                    binding: InputBinding, stored: ProjectFile | None,
+                    origin_by_ordinal: dict[RowOrdinal, RowParent],
                     reached: Sequence[RowOrdinal], relevant: Sequence[str]) -> InputFileSlice:
     ordinals = [ordinal for ordinal in reached if ordinal in origin_by_ordinal]
     stamped = _find_the_stamped_row_column(stage, frame)
+    # A byte match may be a later send of the same bytes, fetched from somewhere else.
+    recorded = stored if stored is not None and stored.id == binding.file_id else None
     # The cut note counts every file the stage read, so it is this file's count only alone.
     counted = (_read_the_row_count_before_the_cut(manifest, stage.id, frame.num_rows)
                if len(_list_the_files_read(manifest, stage.id)) == 1 else None)
@@ -156,6 +170,9 @@ def _build_one_file(frame: pa.Table, manifest: RunManifest, stage: InputDataStag
         stage_id=stage.id,
         filename=binding.filename,
         size_label=describe_bytes(binding.bytes) if binding.bytes is not None else "",
+        file_id=None if stored is None else stored.id,
+        origin_url=None if recorded is None else recorded.origin_url,
+        fetched_at=None if recorded is None else recorded.fetched_at,
         rows_in_file=counted,
         cap=_read_the_cap(manifest, stage.id),
         columns_relevant=list(relevant),

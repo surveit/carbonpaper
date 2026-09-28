@@ -64,6 +64,7 @@ INT_COLUMN_TYPE = "int"
 JSON_COLUMN_TYPE = "json"
 LIST_JSON_COLUMN_TYPE = "list[json]"
 SPAN_COLUMN_TYPE = "span"
+LIST_SPAN_COLUMN_TYPE = "list[span]"
 
 # The column types holding a python date/datetime, never the ISO string that spells one.
 DATE_COLUMN_TYPES: frozenset[str] = frozenset({"date", "datetime"})
@@ -247,6 +248,14 @@ class Column(_Base):
 
 
 Column.model_rebuild()
+
+
+def holds_spans(column: Column) -> bool:
+    element_type = column.type
+    while (inner := find_list_element_type(element_type)) is not None:
+        element_type = inner
+    return element_type == SPAN_COLUMN_TYPE or any(
+        holds_spans(field) for field in column.fields or [])
 
 
 # ── Column spec-equality ─────────────────────────────────────────────────────
@@ -523,11 +532,19 @@ def _scalar_or_list_annotation(type_name: str, span_annotation: type[BaseModel])
 
 def _field_for(column: Column) -> Any:
     kwargs: dict[str, Any] = {}
-    if column.description:
-        kwargs["description"] = column.description
+    description = _describe_field(column)
+    if description:
+        kwargs["description"] = description
     low, high = column.resolve_numeric_bounds()
     if low is not None:
         kwargs["ge"] = low
     if high is not None:
         kwargs["le"] = high
     return Field(**kwargs)
+
+
+def _describe_field(column: Column) -> str | None:
+    if column.quoted_from is None:
+        return column.description
+    quoted = f"A verbatim quote from `{column.quoted_from}`, never a paraphrase."
+    return f"{column.description} {quoted}" if column.description else quoted

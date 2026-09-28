@@ -169,7 +169,7 @@ def test_the_batched_path_logs_replayed_and_computed_rows_apart(tmp_path, monkey
     handler = HANDLERS[StageType.llm_transform]
     handed: list[list[int]] = []
 
-    def fake_make_batch_mapper(workflow_stage):
+    def fake_make_batch_mapper(workflow_stage, sources):
         def map_group(indices, rows):
             handed.append(list(indices))
             judgment = script_judgment({"results": []})

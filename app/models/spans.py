@@ -78,13 +78,23 @@ def narrow_span(
     )
 
 
+def find_occurrences(text: str, quote: str) -> list[int]:
+    # Each search starts one past the previous start, so "aa" is found twice in "aaa".
+    offsets: list[int] = []
+    offset = text.find(quote)
+    while offset != -1:
+        offsets.append(offset)
+        offset = text.find(quote, offset + 1)
+    return offsets
+
+
 def _find_single_occurrence(
     parent: Span, quote: str, prefix: str | None, suffix: str | None
 ) -> int:
     where = label_locator(parent.locator)
     if not quote:
         raise QuoteNotInText(f"an empty quote names no text in {where}")
-    offsets = _find_occurrences(parent.quote, quote)
+    offsets = find_occurrences(parent.quote, quote)
     if not offsets:
         raise QuoteNotInText(f"quote not found in {where}: {quote!r}")
     framed = [
@@ -102,16 +112,6 @@ def _find_single_occurrence(
             f"apart: {quote!r}"
         )
     return framed[0]
-
-
-def _find_occurrences(text: str, quote: str) -> list[int]:
-    # Each search starts one past the previous start, so "aa" is found twice in "aaa".
-    offsets: list[int] = []
-    offset = text.find(quote)
-    while offset != -1:
-        offsets.append(offset)
-        offset = text.find(quote, offset + 1)
-    return offsets
 
 
 def _is_framed_by(

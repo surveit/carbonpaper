@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass
 from pathlib import PurePath
 from typing import Any
 
+from app.core.files import ProjectFile
 from app.models import WorkflowStage
 from app.models.stages.code import PythonFrameFunctionStage, PythonRowFunctionStage
 from app.models.stages.input_data import InputDataStage
@@ -152,6 +153,7 @@ def _build_node(
         "origin": step["origin"],
         # The name alone; where it sat on disk is the manifest's business.
         "source_file": _source_filename(step),
+        "source_file_href": _find_source_file_page(step.get("source_id"), links),
         "source_row": step.get("source_row"),
         "source_row_number": _render_row_number_or_none(step.get("source_row")),
         "source_file_count": step.get("source_file_count"),
@@ -203,6 +205,13 @@ def _render_row_number_or_none(ordinal: int | None) -> str | None:
 def _source_filename(step: dict[str, Any]) -> str | None:
     read_from = step.get("source_file")
     return PurePath(read_from).name if read_from else None
+
+
+def _find_source_file_page(source_id: str | None, links: PanelLinks) -> str | None:
+    # A deleted file has no page to open.
+    if source_id is None or ProjectFile.load_or_none(source_id) is None:
+        return None
+    return links.file_page(source_id)
 
 
 def _contributions(step: dict[str, Any]) -> list[dict[str, Any]]:

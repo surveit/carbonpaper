@@ -14,7 +14,7 @@ from app.core.frames import convert_row_to_json_cells, read_frame_table, read_na
 from app.models.stage import StageType, is_grain_and_order_preserving
 from app.runtime.lineage import EdgeKind, RowLineage, RowParent
 from app.runtime.lineage_sidecar import read_lineage_sidecar
-from app.models.run_manifest import read_input_bindings
+from app.models.run_manifest import InputBinding, read_input_bindings
 from app.models.run_manifest import RunKind
 from app.runtime.manifest import read_run_manifest, resolve_output_path
 
@@ -58,6 +58,7 @@ class StageTransform:
     # `row_ordinal` counts across the concatenation; `source_row` counts within the file.
     source_file: str | None = None
     source_row: int | None = None
+    source_id: str | None = None
     # How many files the stage read; None where the manifest did not record any binding.
     source_file_count: int | None = None
     # Set where the walk sampled one of the rows summarized into this one.
@@ -88,6 +89,19 @@ def _load_manifest(run_dir: Path) -> dict[str, Any]:
 
 def _count_files_read(manifest: dict[str, Any]) -> Counter[str]:
     return Counter(binding.stage_id for binding in read_input_bindings(manifest))
+
+
+def _index_stored_file_ids(bindings: list[InputBinding]) -> dict[tuple[str, str], str]:
+    """Keyed by (stage id, path); a file read from outside the store has no entry."""
+    return {(binding.stage_id, binding.path): binding.file_id
+            for binding in bindings if binding.file_id}
+
+
+def _find_source_id(stored_file_ids: dict[tuple[str, str], str], stage_id: str,
+                    spine: RowParent | None) -> str | None:
+    if spine is None or spine.source_file is None:
+        return None
+    return stored_file_ids.get((stage_id, spine.source_file))
 
 
 def _stages_by_id(manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -305,6 +319,7 @@ def trace_row_from(frames: RunFrames, stage_id: str, row_ordinal: int,
     manifest = _load_manifest(run_dir)
     by_id = _stages_by_id(manifest)
     files_read = _count_files_read(manifest)
+    stored_file_ids = _index_stored_file_ids(read_input_bindings(manifest))
     if stage_id not in by_id:
         raise StageNotInRun(f"stage {stage_id!r} not in run {run_dir.name}")
 
@@ -346,6 +361,7 @@ def trace_row_from(frames: RunFrames, stage_id: str, row_ordinal: int,
             branches=branches,
             source_file=spine.source_file if spine else None,
             source_row=spine.row_ordinal if spine and spine.source_file else None,
+            source_id=_find_source_id(stored_file_ids, sid, spine),
             source_file_count=files_read.get(sid),
             sampled=_read_row_sample(fan_in, followed),
         ))
@@ -383,6 +399,7 @@ def trace_to_dict(trace: Trace) -> dict[str, Any]:
                 "origin": step.origin,
                 "source_file": step.source_file,
                 "source_row": step.source_row,
+                "source_id": step.source_id,
                 "source_file_count": step.source_file_count,
                 "sampled": None if step.sampled is None else {
                     "place": step.sampled.place,

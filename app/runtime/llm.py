@@ -65,7 +65,9 @@ _LLM_EVENT_KINDS = {
 SYSTEM_PROMPT = (
     "You are executing one transform step of a data pipeline. Work from the "
     "task input you are given. Produce the required output by calling the "
-    "submit_answer tool exactly once; its input schema is the required reply."
+    "submit_answer tool exactly once; its input schema is the required reply. "
+    "A quote is copied verbatim from the text shown, never paraphrased: the runtime looks "
+    "for those exact words there and sends back a reply whose quote it cannot find."
 )
 
 
@@ -87,11 +89,14 @@ def call_llm(
     reply_model: type[BaseModel],
     model: str | None = None,
     usage_out: list[LlmUsage] | None = None,
+    correction: str | None = None,
 ) -> JudgmentDraft:
     """`usage_out` collects EVERY attempt's usage, failed ones included — those tokens were spent."""
     if not llm_config.prompt_data_template:
         raise LLMError(f"stage {stage_id}: llm_transform has no prompt_data_template")
     task = render_prompt(llm_config.prompt_data_template, input_row)
+    if correction is not None:
+        task += f"\n\nYour previous reply was rejected: {correction}"
     model_name = str(model or llm_config.model or DEFAULT_MODEL)
     return _run_agent(
         _compose_system(llm_config.prompt_instructions), task, reply_model, model_name,

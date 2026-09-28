@@ -24,7 +24,7 @@ from app.core.utils import format_errors
 from app.models import SPAN_COLUMN_TYPE, Column, TableSchema
 from app.models.locators import PageCharRange, label_locator
 from app.models.run_manifest import InputBinding
-from app.models.schema import find_list_element_type
+from app.models.schema import find_list_element_type, holds_spans
 from app.models.severity import UserFacingErrorSeverity
 from app.models.spans import Span
 
@@ -49,7 +49,7 @@ def find_span_issues(
     """One error per column holding a refused span; a table with no span column reads no file."""
     span_columns = [
         column for column in schema.columns
-        if column.name in table.column_names and _holds_spans(column)
+        if column.name in table.column_names and holds_spans(column)
     ]
     if not span_columns:
         return []
@@ -165,14 +165,6 @@ def _find_refusal(
     except SPAN_REFUSALS as refusal:
         return str(refusal)
     return None
-
-
-def _holds_spans(column: Column) -> bool:
-    element_type = column.type
-    while (inner := find_list_element_type(element_type)) is not None:
-        element_type = inner
-    return element_type == SPAN_COLUMN_TYPE or any(
-        _holds_spans(field) for field in column.fields or [])
 
 
 def _list_span_cells(cell: Any, type_name: str, fields: list[Column] | None) -> Iterator[Any]:
