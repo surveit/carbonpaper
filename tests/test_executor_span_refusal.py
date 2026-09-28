@@ -1,6 +1,7 @@
 """A stage's span cells are verified against the files its run bound before its output lands."""
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +13,7 @@ from app.core.errors import SubsetRunError
 from app.core.files import ProjectFile, compute_sha256, resolve_stored_path, save_upload
 from app.core.frames import list_table_rows
 from app.core.run_status import StageStatus
-from app.core.text_sources import read_page_text
+from app.core.text_sources import read_every_page_text, read_page_text
 from app.models import Workflow, parse_stage
 from app.models.locators import PageCharRange
 from app.models.run_manifest import QUOTE_REFUSAL_ERROR_TYPE, RunKind, StageRecord
@@ -21,20 +22,33 @@ from app.runtime import spans as spans_module
 from app.runtime.context import RunIdentity
 from app.runtime.executor import execute_subset
 from app.runtime.manifest import read_run_manifest
+from conftest import reads_of
+from pdf_fixture import write_text_pdf
 
 PROJECT = "boeing_docket"
 RUN_ID = "r"
 # https://storage.courtlistener.com/recap/gov.uscourts.txnd.342881/gov.uscourts.txnd.342881.58.0.pdf
 ECF_58_PAGE_1 = Path(__file__).parent / "fixtures" / "us_v_boeing_ecf58_page1.pdf"
 HEADING = "IN VIOLATION OF THE CRIME VICTIMS’ RIGHTS ACT"
+FIRST_PAGE = "The first page says one thing."
+SECOND_PAGE = "The second page says another."
 
-_CLAIM_COLUMNS = [
+_FILE_COLUMNS: list[dict[str, Any]] = [
     {"name": "source_id", "type": "str", "nullable": False},
     {"name": "source_sha256", "type": "str", "nullable": False},
+]
+_CLAIM_COLUMNS = [
+    *_FILE_COLUMNS,
     {"name": "page", "type": "int", "nullable": False},
     {"name": "start", "type": "int", "nullable": False},
     {"name": "end", "type": "int", "nullable": False},
     {"name": "quote", "type": "str", "nullable": False},
+]
+
+_PAGE_COLUMNS = [
+    {"name": "page", "type": "int", "nullable": False},
+    {"name": "page_text", "type": "str", "nullable": False},
+    {"name": "page_span", "type": "span", "nullable": False},
 ]
 
 _WRITES_A_SPAN = """
@@ -70,11 +84,11 @@ def _heading_claim(record: ProjectFile, **moved: int) -> dict[str, Any]:
             "start": start, "end": start + len(HEADING), "quote": HEADING, **moved}
 
 
-def _claims_stage(paths: list[str]) -> dict[str, Any]:
+def _input_stage(stage_id: str, columns: list[dict[str, Any]], paths: list[str]) -> dict[str, Any]:
     return {
-        "id": "claims", "description": "claims", "type": "input_data",
+        "id": stage_id, "description": stage_id, "type": "input_data",
         "connector": {"kind": "file", "params": {"paths": paths}},
-        "signature": {"form": "replaces", "produces": _CLAIM_COLUMNS},
+        "signature": {"form": "replaces", "produces": columns},
     }
 
 
@@ -94,7 +108,7 @@ def _run(
     identity: RunIdentity | None = RunIdentity(project=PROJECT, run_id=RUN_ID),
     kind: RunKind = RunKind.production,
 ) -> dict[str, pa.Table]:
-    workflow = Workflow(stages=[parse_stage(spec) for spec in [_claims_stage(paths), *stages]])
+    workflow = Workflow(stages=[parse_stage(spec) for spec in [_input_stage("claims", _CLAIM_COLUMNS, paths), *stages]])
     return execute_subset(
         workflow, injected_outputs={"claims": pd.DataFrame(claims)},
         stage_ids=[stage["id"] for stage in stages], run_dir=tmp_path / "runs" / RUN_ID,
@@ -166,7 +180,7 @@ def test_a_page_is_read_once_per_run_however_many_stages_quote_it(
          _row_function("quote_heading", _WRITES_A_SPAN, "span"),
          _row_function("quote_it_again", _WRITES_A_SPAN, "span"))
 
-    assert reads == {"pages": [1], "hashes": [ECF_58_PAGE_1.name]}
+    assert reads == {"pages": [1], "whole_files": [], "hashes": [ECF_58_PAGE_1.name]}
 
 
 def test_a_stage_with_no_span_column_reads_no_source(
@@ -177,20 +191,52 @@ def test_a_stage_with_no_span_column_reads_no_source(
          _row_function("copy_heading", _WRITES_TEXT, "str"))
 
     assert _stage_record("copy_heading").status == StageStatus.OK
-    assert reads == {"pages": [], "hashes": []}
+    assert reads == {"pages": [], "whole_files": [], "hashes": []}
+
+
+def test_read_pages_page_spans_verify_from_the_one_extraction_read_pages_made(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pdf = write_text_pdf(tmp_path / "two_pages.pdf", [FIRST_PAGE, SECOND_PAGE])
+    with pdf.open("rb") as stream:
+        record = save_upload(pdf.name, stream, project_id=PROJECT)
+    files = _input_stage("files", _FILE_COLUMNS, _stored_paths(record))
+    pages = {
+        "id": "pages", "description": "Read each file a page at a time", "type": "read_pages",
+        "inputs": [{"id": "files"}], "row_type_id": "file_page", "read_pages": {"carry": []},
+        "signature": {"form": "replaces", "reads": reads_of("files", _FILE_COLUMNS),
+                      "produces": [*_FILE_COLUMNS, *_PAGE_COLUMNS]},
+    }
+    reads = _count_source_reads(monkeypatch)
+    outputs = execute_subset(
+        Workflow(stages=[parse_stage(files), parse_stage(pages)]),
+        injected_outputs={"files": pd.DataFrame(
+            [{"source_id": record.id, "source_sha256": record.sha256}])},
+        stage_ids=["pages"], run_dir=tmp_path / "runs" / RUN_ID, project_id=PROJECT,
+        kind=RunKind.production, identity=RunIdentity(project=PROJECT, run_id=RUN_ID))
+
+    assert _stage_record("pages").status == StageStatus.OK
+    assert [row["page_text"] for row in list_table_rows(outputs["pages"])] == [
+        FIRST_PAGE, SECOND_PAGE]
+    assert reads == {"pages": [], "whole_files": [pdf.name], "hashes": [pdf.name]}
 
 
 def _count_source_reads(monkeypatch: pytest.MonkeyPatch) -> dict[str, list[Any]]:
-    reads: dict[str, list[Any]] = {"pages": [], "hashes": []}
+    reads: dict[str, list[Any]] = {"pages": [], "whole_files": [], "hashes": []}
 
     def read_and_count(path: Path, page: int) -> str:
         reads["pages"].append(page)
         return read_page_text(path, page)
+
+    def read_every_page_and_count(path: Path) -> Iterator[str]:
+        reads["whole_files"].append(path.name)
+        return read_every_page_text(path)
 
     def hash_and_count(path: Path) -> str:
         reads["hashes"].append(path.name)
         return compute_sha256(path)
 
     monkeypatch.setattr(spans_module, "read_page_text", read_and_count)
+    monkeypatch.setattr(spans_module, "read_every_page_text", read_every_page_and_count)
     monkeypatch.setattr(spans_module, "compute_sha256", hash_and_count)
     return reads
