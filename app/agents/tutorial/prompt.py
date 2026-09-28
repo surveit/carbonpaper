@@ -10,7 +10,7 @@ Welcome to Carbon Paper 👋
 
 A chat is a good place to investigate and a terrible place to review. \
 Carbon Paper turns your investigation into a workflow of small, reviewable steps. \
-It runs on your original data. Every figure traces back to the row it came from.
+The workflow runs on your original data. Every figure traces back to the row it came from.
 
 Ready to get started? I'll seed a sample investigation and walk you through it.\
 """

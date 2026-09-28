@@ -73,7 +73,7 @@
 
    Drawn with the issue table the run page indexes ITS issues with: the severity
    word leads, the stage links its panel, the kind rides in the narrow cell a run
-   gives the column name, and the title counts errors and warnings apart. #}
+   gives the column name. #}
 {% if compiler_warnings and compiler_warnings.warnings %}
 {% set error_count = compiler_warnings.warnings | selectattr('severity', 'equalto', 'error') | list | length %}
 
