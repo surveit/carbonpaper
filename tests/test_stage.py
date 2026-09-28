@@ -44,7 +44,7 @@ def _build_enrich_on_k(*, join):
 
 # ── column types ─────────────────────────────────────────────────────────────
 @pytest.mark.parametrize("t", ["str", "int", "float", "bool", "datetime", "date",
-                                "json", "list[str]", "list[list[int]]"])
+                                "json", "span", "list[str]", "list[list[int]]", "list[span]"])
 def test_column_type_valid(t):
     kw = {"name": "c", "type": t, "nullable": True}
     if t == "json":
@@ -129,6 +129,37 @@ def test_llm_transform_rejects_output_that_adds_no_columns():
                 "reads": [{"input": "a", "columns": _PK_ID_SCHEMA["columns"]}],
             },
             llm={"prompt_template": "do {id}"}))
+
+
+_PAGE_SPAN_COLUMN = {"name": "page", "type": "span", "nullable": False}
+
+
+def _build_quoting_stage(**basis: object) -> dict[str, object]:
+    return S(id="extract", type="llm_transform", inputs=[{"id": "pages"}],
+             signature={"form": "extends",
+                        "reads": [{"input": "pages",
+                                   "columns": [_PAGE_SPAN_COLUMN,
+                                               {"name": "text", "type": "str",
+                                                "nullable": False}]}],
+                        "adds": [{"name": "basis", "type": "span", "nullable": True,
+                                  **basis}]},
+             llm={"prompt_template": "Quote the ruling from {page} ({text})"})
+
+
+def test_llm_transform_accepts_a_span_quoted_from_a_span_it_reads():
+    stage = m.parse_stage(_build_quoting_stage(quoted_from="page"))
+    assert stage.signature.adds[0].quoted_from == "page"
+
+
+def test_llm_transform_refuses_a_span_that_names_no_quoted_from():
+    with pytest.raises(ValidationError, match="span column `basis` names no quoted_from"):
+        m.parse_stage(_build_quoting_stage())
+
+
+@pytest.mark.parametrize("quoted_from", ["text", "headline"])
+def test_llm_transform_refuses_a_span_quoted_from_what_it_does_not_read_as_a_span(quoted_from):
+    with pytest.raises(ValidationError, match="does not read as a span"):
+        m.parse_stage(_build_quoting_stage(quoted_from=quoted_from))
 
 
 def test_report_requires_the_function_block_it_actually_runs():

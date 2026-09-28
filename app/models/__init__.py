@@ -15,6 +15,7 @@ from app.models.schema import (
     JSON_COLUMN_TYPE as JSON_COLUMN_TYPE,
     LIST_JSON_COLUMN_TYPE as LIST_JSON_COLUMN_TYPE,
     RANGE_UNBOUNDED_MARKER as RANGE_UNBOUNDED_MARKER,
+    SPAN_COLUMN_TYPE as SPAN_COLUMN_TYPE,
     STR_COLUMN_TYPE as STR_COLUMN_TYPE,
     SourceRef as SourceRef,
     TableSchema as TableSchema,
