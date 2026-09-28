@@ -16,17 +16,37 @@ number or unsourced claim defeats the purpose. Two rules recur in the code:
 - **Expensive or irreversible steps sit behind human review.** `human_review_queue` halts
   the run; decisions are content-hashed so they survive re-runs.
 
-## Vocabulary (locked 2026-07-04)
+## Vocabulary (locked 2026-07-04; source to connector added 2026-09-28)
 - **project** — the container directory holding everything below.
 - **methodology** — the authored prose method (a `methodology` document).
 - **workflow** — the executable stage graph it compiles into (the project's newest
   `workflow_version`; a DAG of typed stages whose schemas resolve from the graph).
+- **source** — a stored file (`ProjectFile`, `app/core/files.py`) as a run reads it, named
+  by `source_id` and `source_sha256`. A fetched one carries `origin_url` and `fetched_at`,
+  which only `receive_source` and `receive_mirrored_source` write; an upload carries
+  neither. The Files pages keep the word "file".
+- **span** — a verbatim `quote` and where it sits in one source (`Span`,
+  `app/models/spans.py`); `span` and `list[span]` are column types.
+- **locator** — a span's address in its source: one `Locator` subclass per kind
+  (`page_char_range`, `char_range`, `cell`; `app/models/locators.py`). Only a
+  `page_char_range` span is read back and verified.
+- **judgment** — a decision code did not compute. A model's is a `Judgment`
+  (`app/core/judgments.py`: system prompt, task, model, reply, usage), which the row's cache entry
+  and run-log event name by `judgment_id`; a reviewer's stays a review decision
+  (`ReviewDecision`).
+- **method** — what a saved version kept of its project's row types, verbs and methodology
+  (`Method`, on `WorkflowVersion.method`). "methodology" stays the prose alone.
+- **pack** — a subpackage `app/packs/<pack_id>/` that registers connector kinds when
+  `app.packs` is imported ([packs.md](packs.md)). Everything else under `app/` is the kernel.
+- **connector** — how an `input_data` stage reaches its files (`Connector`): kind `file`
+  reads the paths it is given; a pack's kind (`ConnectorSpec`, e.g. `recap_docket`)
+  acquires bytes the kernel stores as sources.
 
-A project dir also holds `runs/<id>/` (a run's parquet outputs,
-its artifacts and its review queue) — runtime data, not source. Everything else a
+A project dir also holds `runs/<id>/` (a run's parquet outputs, its source tables,
+its artifacts and its review queue) — runtime data, not authored. Everything else a
 project holds is a document in the store: its methodology, its drafts, its
-versions (`workflow_version`), each run's record and event log, and the review
-decisions (`app.models.records.review_decision`).
+versions (`workflow_version`), each run's record and event log, the review
+decisions (`app.models.records.review_decision`) and the model judgments.
 
 ## The three features
 | Feature | Code | Status |

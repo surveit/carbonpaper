@@ -20,7 +20,8 @@ case: `validate_workflow(stages) -> list[str]` and `validate_stage(stage) -> lis
 **Cut in this change (per review):**
 - Connector kinds reduced to the implemented `file`. The rest
   (`http`/`scrape`/`api`/`manual_upload`/`sql`) were declared but never had a
-  handler — add them back alongside a handler.
+  handler — add them back alongside a handler. Every other kind today is a pack's,
+  registered with the code that acquires its files ([packs.md](packs.md)).
 - Weighted aggregation formulas (`weighted_mean`/`weighted_sum`) — unused in the
   compiled workflows (weighting is done inside `python_frame_function` modules).
 
@@ -48,13 +49,15 @@ A project's state lives in exactly two places:
   keyed `(collection, id)`. Every stored record is a `PersistedModel`: the
   methodology, each draft, each `workflow_version`, a run's record and its
   chunked event log, the review-queue fingerprints, the review decisions, the
-  terms, and the uploaded-file index.
+  model judgments, the terms, and the stored-file index (uploads and fetched sources).
 - **Frames** (`app/core/frames.py`), the parquet files a run reads and writes.
 
 `tests/arch/test_persistence_is_frames_and_the_store.py` holds this: nothing under
-`app/` writes a file except frames, an export the user downloads, and a file the
-user uploaded. What is left on disk under a project is `code/`, `data/` and
-`runs/<id>/{outputs, artifacts, queue}` — frames and the files around them.
+`app/` writes a file except frames, an export the user downloads (the review packet,
+whose archive is listed in [run-and-review-ui.md](run-and-review-ui.md)), and a file the
+user uploaded or a connector fetched. What is left on disk under a project is `code/`,
+`data/` and `runs/<id>/{outputs, sources, artifacts, queue}` — frames and the files
+around them.
 
 ### Where a record is declared
 
