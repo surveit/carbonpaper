@@ -3,9 +3,11 @@
   COMPARE — two runs of one workflow version, stage by stage.
 
   A stage whose rows code computes is measured three ways: its row count, its column set,
-  and each row's content at its position. The table says which stages are identical; each
-  stage that differs then shows its first differing rows, run A above run B, the cells that
-  differ tinted. A model transform or review queue is listed and not compared.
+  and each row's content at its position. What each stage read comes first: a stage that
+  differs although its input was identical is a replay violation, in the fail tint; one
+  whose input differed only differs, in the neutral tint. Each stage that differs shows its
+  first differing rows, run A above run B. A model transform or review queue is listed and
+  not compared.
 
   Context the route passes:
     state = project_view.shell_state_off_nav(project_id, crumbs); section = "runs"
@@ -36,6 +38,21 @@
     {%- if version.message %}“{{ version.message }}”{% else %}<code>{{ version.version_id }}</code>{% endif -%}
   </a>{% endif %}</p>
 
+{% if page.input_differences %}
+<p>The runs read different input, so a stage downstream of it may differ with nothing wrong:</p>
+<table class="stages">
+  <thead><tr><th>stage</th><th>run A read</th><th>run B read</th></tr></thead>
+  <tbody>
+    {% for difference in page.input_differences %}
+    <tr><td><code>{{ difference.stage_id }}</code></td>
+      <td>{{ difference.run_a_read }}</td><td>{{ difference.run_b_read }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>Both runs read the same files, through the same row windows.</p>
+{% endif %}
+
 <p>{{ page.stages | length }} stages: {{ page.tally | join(" · ") }}</p>
 
 <table class="stages">
@@ -55,8 +72,11 @@
       <td>{{ compared.run_b_row_count | figure }}</td>
       <td>
         {%- if compared.is_identical %}<span class="muted">identical</span>
-        {%- else %}<a class="verdict verdict-fail" href="#differs-{{ row.stage.stage_id }}">differs</a>
+        {%- elif row.stage.is_replay_violation %}<a class="verdict verdict-fail" href="#differs-{{ row.stage.stage_id }}">violation</a>
+          {%- if compared.first_differing_rows %} first at row {{ compared.first_differing_rows[0].ordinal | row_number }}{% endif %}
+        {%- else %}<a class="verdict verdict-neutral" href="#differs-{{ row.stage.stage_id }}">differs</a>
           {%- if compared.differing_row_count %} {{ compared.differing_row_count | figure }} row{{ '' if compared.differing_row_count == 1 else 's' }}{% endif %}
+          <span class="muted">· its input differs</span>
         {%- endif %}
       </td>
       {% endif %}
@@ -68,11 +88,15 @@
 {% for row in page.stages if row.is_differing %}
 {% set compared = row.stage.output_comparison %}
 {% set stage_id = row.stage.stage_id %}
+{% set tint = "cell-mismatch" if row.stage.is_replay_violation else "cell-differs" %}
 <section id="differs-{{ stage_id }}">
   <h2><code>{{ stage_id }}</code></h2>
   <p>
+    {%- if row.stage.is_replay_violation %}Replay violation: <code>{{ stage_id }}</code> gave different
+      rows from the same input{% if compared.first_differing_rows %}, first at row {{ compared.first_differing_rows[0].ordinal | row_number }}{% endif %}.
+    {%- else %}Its input differs between the runs.{% endif %}
     {%- set differing = compared.differing_row_count %}
-    {%- if differing %}{{ differing | figure }} {{ 'row differs' if differing == 1 else 'rows differ' }}
+    {%- if differing %} {{ differing | figure }} {{ 'row differs' if differing == 1 else 'rows differ' }}
       {%- if row.row_pairs | length < differing %}; the first {{ row.row_pairs | length }} are below{% endif %}.{% endif %}
     {%- if compared.columns_only_in_run_a %} Only run A wrote
       {% for column in compared.columns_only_in_run_a %}<code>{{ column }}</code>{{ ', ' if not loop.last }}{% endfor %}.{% endif %}
@@ -97,7 +121,7 @@
         <td class="muted" colspan="{{ row.columns | length }}">run {{ side }} has no row {{ pair.ordinal | row_number }}</td>
         {%- else %}
         {%- for cell in cells %}
-        <td{% if cell.differs %} class="cell-mismatch"{% endif %} title="{{ cell.text }}">{{ cell.text }}</td>
+        <td{% if cell.differs %} class="{{ tint }}"{% endif %} title="{{ cell.text }}">{{ cell.text }}</td>
         {%- endfor %}
         {%- endif %}
       </tr>

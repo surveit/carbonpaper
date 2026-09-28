@@ -11,10 +11,14 @@ from app.core.run_status import StageStatus
 from app.models.branch_analysis import RowOrdinal
 from app.models.run_diff import (
     UNCOMPARED_STAGE_TYPES,
+    InputDifference,
     RowDifference,
     RunComparison,
     StageComparison,
+    StageRead,
 )
+from app.models.run_manifest import InputBinding
+from app.models.schema import StageId
 from app.services.run_manifest_metadata import read_run_name
 from app.web.loading import display_cell, load_run_record
 from app.web.run_header import VersionNote, read_version_note
@@ -53,10 +57,18 @@ class StageCompareRow(BaseModel):
         return compared is not None and not compared.is_identical
 
 
+class InputDifferenceRow(BaseModel):
+    stage_id: StageId
+    run_a_read: str
+    run_b_read: str
+
+
 class RunComparePage(BaseModel):
     run_a: ComparedRun
     run_b: ComparedRun
     version: VersionNote
+    # Empty when every stage read the same file hashes through the same row window.
+    input_differences: list[InputDifferenceRow]
     stages: list[StageCompareRow]
     # One entry per outcome at least one stage has, e.g. "8 differ".
     tally: list[str]
@@ -67,6 +79,7 @@ def build_run_compare_page(project_id: ID, comparison: RunComparison) -> RunComp
         run_a=_read_compared_run(project_id, comparison.run_a_id),
         run_b=_read_compared_run(project_id, comparison.run_b_id),
         version=read_version_note(project_id, comparison.version_id),
+        input_differences=[_build_input_row(d) for d in comparison.input_differences],
         stages=[_build_stage_row(stage) for stage in comparison.stages],
         tally=_count_outcomes(comparison.stages),
     )
@@ -78,6 +91,36 @@ def _read_compared_run(project_id: ID, run_id: ID) -> ComparedRun:
         name=read_run_name(project_id, run_id),
         started_at=load_run_record(project_id, run_id).started_at,
     )
+
+
+def _build_input_row(difference: InputDifference) -> InputDifferenceRow:
+    return InputDifferenceRow(
+        stage_id=difference.stage_id,
+        run_a_read=_describe_read(difference.run_a_read),
+        run_b_read=_describe_read(difference.run_b_read),
+    )
+
+
+def _describe_read(read: StageRead) -> str:
+    window = _describe_window(read.limit, read.offset)
+    if not read.files:
+        return window or "every row"
+    files = ", ".join(_describe_file(binding) for binding in read.files)
+    return f"{files}; {window}" if window else files
+
+
+def _describe_file(binding: InputBinding) -> str:
+    if not binding.sha256:
+        return f"{binding.filename} (no hash recorded)"
+    return f"{binding.filename} ({binding.sha256[:8]})"
+
+
+def _describe_window(limit: int | None, offset: int | None) -> str:
+    if offset is None:
+        return "" if limit is None else f"the first {limit} rows"
+    if limit is None:
+        return f"every row after the first {offset}"
+    return f"{limit} rows after the first {offset}"
 
 
 def _build_stage_row(stage: StageComparison) -> StageCompareRow:
@@ -97,8 +140,11 @@ def _build_stage_row(stage: StageComparison) -> StageCompareRow:
 def _describe_why_not_compared(stage: StageComparison) -> str:
     if stage.type in UNCOMPARED_STAGE_TYPES:
         return "its rows are judgments"
-    run_a, run_b = _describe_status(stage.run_a_status), _describe_status(stage.run_b_status)
-    return f"{run_a} in both runs" if run_a == run_b else f"{run_a} in run A, {run_b} in run B"
+    status_a = _describe_status(stage.run_a_status)
+    status_b = _describe_status(stage.run_b_status)
+    if status_a == status_b:
+        return f"{status_a} in both runs"
+    return f"{status_a} in run A, {status_b} in run B"
 
 
 def _describe_status(status: StageStatus) -> str:
@@ -106,13 +152,16 @@ def _describe_status(status: StageStatus) -> str:
 
 
 def _count_outcomes(stages: Sequence[StageComparison]) -> list[str]:
-    compared = [s.output_comparison for s in stages if s.output_comparison is not None]
+    compared = [s for s in stages if s.output_comparison is not None]
+    identical = sum(1 for s in compared if s.output_comparison and s.output_comparison.is_identical)
+    violations = sum(1 for s in compared if s.is_replay_violation)
     counts = (
-        (sum(1 for c in compared if not c.is_identical), "differ"),
-        (sum(1 for c in compared if c.is_identical), "identical"),
-        (len(stages) - len(compared), "not compared"),
+        (violations, "violation", "violations"),
+        (len(compared) - identical - violations, "differs", "differ"),
+        (identical, "identical", "identical"),
+        (len(stages) - len(compared), "not compared", "not compared"),
     )
-    return [f"{count} {outcome}" for count, outcome in counts if count]
+    return [f"{count} {one if count == 1 else many}" for count, one, many in counts if count]
 
 
 def _merge_differing_columns(rows: Sequence[RowDifference]) -> list[str]:

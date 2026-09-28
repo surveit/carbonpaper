@@ -29,12 +29,19 @@ index links each run to the run before it on the same version.
   versions (409, naming both). Otherwise it compares each stage both runs finished
   three ways: row count, column set, and each row's content at its position, by
   `compute_row_fingerprint` over the columns both outputs hold.
+- It first compares what each stage read: its files' sha256 (`read_input_bindings`)
+  and its row window. The page says both runs read the same files, or names each
+  stage whose files or window differ.
+- A stage's input is identical when its window matches and either its files' hashes
+  match (a stage with no upstream) or every upstream output is identical. A stage that
+  differs from identical input is a **replay violation** (fail tint, naming its first
+  differing row). One whose input differed only **differs** (neutral tint): a changed
+  file, a different cap, or a model answer upstream.
 - `llm_transform` and `human_review_queue` are listed and not compared: their rows
   are judgments, which two runs may make differently. A stage that did not finish in
   both runs is listed with both statuses.
 - Each stage that differs shows its first three differing rows, run A above run B,
-  over the columns they differ in, the differing cells tinted, with links to both
-  runs' full rows pages.
+  over the columns they differ in, with links to both runs' full rows pages.
 
 ## Run detail page (`run_detail.html`)
 

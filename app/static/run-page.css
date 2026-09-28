@@ -415,9 +415,13 @@ td.row-num, th.row-num { text-align: right; color: var(--idle-bd); font-variant-
 }
 .verdict-pass { background: var(--verdict-pass-bg); border-color: var(--verdict-pass-bd); color: var(--good-ink); }
 .verdict-fail { background: var(--verdict-fail-bg); border-color: var(--verdict-fail-bd); color: var(--bad-ink); }
-/* Two runs compared (run_compare.html): a cell whose value differs between them. A
-   table holds only the columns that differ, so it takes their width, not the page's. */
+/* Two runs compared (run_compare.html). A differing cell takes the fail tint where the
+   stage's input was identical, and the neutral one where its input differed. A table holds
+   only the columns that differ, so it takes their width, not the page's. */
 .run-compare td.cell-mismatch { background: var(--verdict-fail-bg); }
+.run-compare td.cell-differs { background: var(--verdict-neutral-bg); }
+.run-compare .verdict-neutral { background: var(--verdict-neutral-bg);
+    border-color: var(--verdict-neutral-bd); color: var(--idle-ink); }
 .run-compare table.data-preview { min-width: 0; }
 /* A control, not a link: it sits in .preview-actions, whose other children are. */
 .rows-filter { font-size: .85rem; color: var(--muted); cursor: pointer; }

@@ -9,12 +9,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.files import save_upload
+from app.core.frames import read_frame_table, write_frame_table
 from app.main import app
 from app.models.run_diff import RunComparison, StageComparison
+from app.models.run_manifest import RunKind
 from app.models.stage import stage_to_spec_dict
+from app.runtime.manifest import resolve_output_path
 from app.services import run as run_service, uploads, versioning
 from app.services.errors import RunComparisonRefused
 from app.services.run_diff import compare_output_tables, compare_runs
+from app.services.workspace import resolve_run_dir
 from app.tools.tutorial import TutorialAgentReference, TutorialContext, seed_tutorial_project
 
 _TOUR_DATA = Path(__file__).resolve().parents[1] / "app" / "seeds" / "data"
@@ -41,22 +45,31 @@ _MISSED_BY_THE_EDIT = {"in_house_ai_filings", "in_house_ai_totals", "corpus_tota
 _REACHED_BY_THE_EDIT = _COMPUTED_AND_FINISHED - _MISSED_BY_THE_EDIT
 
 
-def test_two_runs_on_the_same_files_are_identical_wherever_code_computed_the_rows(
-    projects_root,
-):
+def test_runs_on_the_same_files_agree_and_a_changed_output_is_a_replay_violation(projects_root):
     tour = _seed_the_tour()
     first = _run_capped(tour, tour.input_files)
     second = _run_capped(tour, tour.input_files)
 
-    comparison = compare_runs(tour.project.id, first, second)
+    agreeing = compare_runs(tour.project.id, first, second)
+    _overwrite_first_cell(tour, second, "corpus_totals", "total_rows", _CAP + 1)
+    violated = compare_runs(tour.project.id, first, second)
 
-    assert _find_identical(comparison) == _COMPUTED_AND_FINISHED
-    assert _find_uncompared(comparison) == _JUDGED | _PENDING
+    assert agreeing.input_differences == [] and agreeing.find_replay_violations() == []
+    assert _find_identical(agreeing) == _COMPUTED_AND_FINISHED
+    assert _find_uncompared(agreeing) == _JUDGED | _PENDING
+    assert [
+        (stage.stage_id, [row.ordinal for row in stage.output_comparison.first_differing_rows])
+        for stage in violated.find_replay_violations() if stage.output_comparison
+    ] == [("corpus_totals", [0])]
+    page = TestClient(app).get(f"/project/{tour.project.id}/runs/{first}/compare/{second}")
+    assert "Both runs read the same files" in page.text
+    assert 'href="#differs-corpus_totals">violation</a>' in page.text
+    assert f'<td class="cell-mismatch" title="{_CAP + 1}">{_CAP + 1}</td>' in page.text
     runs_page = TestClient(app).get(f"/project/{tour.project.id}/runs")
     assert f"/runs/{second}/compare/{first}" in runs_page.text
 
 
-def test_an_edited_input_file_differs_on_every_stage_its_edited_rows_reach(
+def test_an_edited_input_file_is_named_and_what_it_reaches_differs_without_a_violation(
     projects_root, tmp_path
 ):
     tour = _seed_the_tour()
@@ -66,8 +79,10 @@ def test_an_edited_input_file_differs_on_every_stage_its_edited_rows_reach(
 
     comparison = compare_runs(tour.project.id, before, after)
 
+    assert [difference.stage_id for difference in comparison.input_differences] == [_INPUT_STAGE]
     assert _find_differing(comparison) == _REACHED_BY_THE_EDIT
     assert _find_identical(comparison) == _MISSED_BY_THE_EDIT
+    assert comparison.find_replay_violations() == []
     loaded = _find_stage(comparison, _INPUT_STAGE).output_comparison
     assert loaded is not None and loaded.differing_row_count == len(_EDITED_ORDINALS)
     assert [
@@ -77,8 +92,14 @@ def test_an_edited_input_file_differs_on_every_stage_its_edited_rows_reach(
     page = TestClient(app).get(f"/project/{tour.project.id}/runs/{before}/compare/{after}")
     assert page.status_code == 200
     assert f'<span class="crumb-here" aria-current="page">Compared with {after}</span>' in page.text
-    assert all(f'href="#differs-{stage_id}"' in page.text for stage_id in _REACHED_BY_THE_EDIT)
-    assert f'<td class="cell-mismatch" title="{_EDITED_INCOME}">{_EDITED_INCOME}</td>' in page.text
+    edited_hash = comparison.input_differences[0].run_b_read.files[0].sha256 or ""
+    assert f"{_Q1.name} ({edited_hash[:8]})" in page.text
+    assert all(
+        f'href="#differs-{stage_id}">differs</a>' in page.text for stage_id in _REACHED_BY_THE_EDIT
+    )
+    assert f'<td class="cell-differs" title="{_EDITED_INCOME}">{_EDITED_INCOME}</td>' in page.text
+    assert 'class="verdict verdict-fail"' not in page.text
+    assert 'class="cell-mismatch"' not in page.text
 
 
 def test_runs_pinned_to_different_versions_are_refused_naming_both(projects_root):
@@ -148,6 +169,23 @@ def _write_edited_q1(directory: Path) -> Path:
     path = directory / _Q1.name
     edited.save(path)
     return path
+
+
+def _overwrite_first_cell(
+    tour: TutorialAgentReference, run_id: str, stage_id: str, column: str, value: int
+) -> None:
+    manifest = run_service.read_run_manifest(tour.project.id, run_id, RunKind.production)
+    record = manifest.find_stage_record(stage_id)
+    assert record is not None
+    path = resolve_output_path(
+        resolve_run_dir(tour.project.id, run_id, RunKind.production), record.output_path)
+    assert path is not None
+    table = read_frame_table(path)
+    index = table.column_names.index(column)
+    cells = [value, *table.column(column).to_pylist()[1:]]
+    write_frame_table(
+        table.set_column(index, column, pa.array(cells, type=table.schema.field(column).type)),
+        path)
 
 
 def _upload(tour: TutorialAgentReference, path: Path) -> str:

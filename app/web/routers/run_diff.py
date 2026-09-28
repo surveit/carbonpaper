@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from app.core.errors import RunNotFoundError
+from app.core.errors import RunNotFoundError, RunVersionUnresolvableError
 from app.services.errors import RunComparisonRefused
 from app.services.run_diff import compare_runs
 from app.web.breadcrumbs import build_run_child_crumbs
@@ -24,7 +24,7 @@ def compare_runs_page(request: Request, project_id: str, run_id: str, other_run_
         comparison = compare_runs(project_id, run_id, other_run_id)
     except RunNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except RunComparisonRefused as exc:
+    except (RunComparisonRefused, RunVersionUnresolvableError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     crumbs = build_run_child_crumbs(project_id, run_id, label=f"Compared with {other_run_id}")
     return templates.TemplateResponse(
