@@ -2,16 +2,19 @@
 from __future__ import annotations
 
 import pandas as pd
+from markupsafe import escape
 
 from app.core.persistence import get_store
 from app.models.records.workflow_version import Method, WorkflowVersion
 from app.models.row_types import RowType
 from app.models.terms import Terms, Verb
+from app.services import run as run_service
 from app.services import terms as terms_service
 from app.services.methodology import write_methodology
 from app.services.project import create_project
 from app.services.versioning import create_version_from_stages, load_version
 from app.services.workspace import resolve_project_dir
+from app.web.review_packet import export_review_packet
 
 _METHODOLOGY = "Count the filings each firm made."
 _REWRITTEN = "Count the firms, then their filings."
@@ -49,6 +52,31 @@ def test_a_version_stored_before_versions_kept_a_method_loads_without_one(projec
     assert load_version(project_id, version.version_id).method is None
 
 
+# ── the review packet ──
+
+
+def test_the_packet_writes_the_methodology_the_runs_version_kept(projects_root, tmp_path):
+    project_id, run_id = _run_a_project()
+    _rewrite_the_project(project_id)
+
+    packet = export_review_packet(project_id, run_id, tmp_path / "packets")
+
+    assert (packet.root / "methodology.md").read_text(encoding="utf-8") == _METHODOLOGY
+
+
+def test_a_packet_on_an_older_version_says_why_it_holds_no_methodology(projects_root, tmp_path):
+    project_id, run_id = _run_a_project()
+    _store_as_saved_before_versions_kept_a_method(_load_the_runs_version(project_id, run_id))
+
+    packet = export_review_packet(project_id, run_id, tmp_path / "packets")
+
+    assert not (packet.root / "methodology.md").exists()
+    [omitted] = [o for o in packet.omitted if o.path == "methodology.md"]
+    assert "predates versions keeping the methodology" in omitted.reason
+    index = (packet.root / "index.html").read_text(encoding="utf-8")
+    assert str(escape(omitted.reason)) in index and _METHODOLOGY not in index
+
+
 # ── helpers ──
 
 
@@ -76,6 +104,16 @@ def _save_version(project_id: str) -> WorkflowVersion:
     rows = resolve_project_dir(project_id) / "filings.csv"
     pd.DataFrame({"firm": ["Acme", "Birch"]}).to_csv(rows, index=False)
     return create_version_from_stages(project_id, [_load_stage(rows)], message="v1")
+
+
+def _run_a_project() -> tuple[str, str]:
+    project_id = _create_project()
+    _save_version(project_id)
+    return project_id, str(run_service.execute(project_id)["run_id"])
+
+
+def _load_the_runs_version(project_id: str, run_id: str) -> WorkflowVersion:
+    return load_version(project_id, run_service.read_pinned_version(project_id, run_id))
 
 
 def _store_as_saved_before_versions_kept_a_method(version: WorkflowVersion) -> None:

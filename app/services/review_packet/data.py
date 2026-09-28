@@ -9,7 +9,8 @@ from pydantic import BaseModel
 
 from app.core.frames import read_frame_file, write_frame_file
 from app.core.run_status import StageStatus
-from app.services.methodology import read_methodology
+from app.services.errors import WorkflowLoadError
+from app.services.versioning import load_version
 from app.services.workspace import resolve_project_dir
 from app.services.review_packet.checksums import compute_sha256
 from app.models.run_manifest import InputBinding
@@ -59,7 +60,7 @@ def write_packet_data(
     report = DataReport(written=[], omitted=[], artifacts=[])
     _write_run_records(root, manifest, events, report)
     _write_workflow(root, workflow, view, report)
-    _write_document(root, project_id, report)
+    _write_document(root, project_id, view.workflow_version, report)
     _copy_published_artifacts(root, run_dir, view, report)
     for stage in view.stages:
         # Pre-resolved by the caller: joining a run dir to a recorded output_path is
@@ -93,14 +94,36 @@ def _write_workflow(
     _write_text(root / WORKFLOW_FILE, workflow, WORKFLOW_FILE, report)
 
 
-def _write_document(root: Path, project_id: str, report: DataReport) -> None:
-    document = read_methodology(project_id)
-    if document is None:
-        report.omitted.append(
-            OmittedFile(path=DOCUMENT_FILE, reason="this project has no source document")
-        )
+def _write_document(
+    root: Path, project_id: str, version_id: str | None, report: DataReport
+) -> None:
+    document = _read_pinned_methodology(project_id, version_id)
+    if isinstance(document, OmittedFile):
+        report.omitted.append(document)
         return
     _write_text(root / DOCUMENT_FILE, document, DOCUMENT_FILE, report)
+
+
+def _read_pinned_methodology(project_id: str, version_id: str | None) -> str | OmittedFile:
+    if version_id is None:
+        return _omit_document("this run records no workflow version")
+    try:
+        method = load_version(project_id, version_id).method
+    except (FileNotFoundError, WorkflowLoadError):
+        return _omit_document(
+            f"this run pinned workflow version {version_id!r}, which could not be read")
+    if method is None:
+        return _omit_document(
+            f"this run's workflow version {version_id!r} predates versions keeping the "
+            "methodology; the project's current text may differ, so it is not written here")
+    if method.methodology is None:
+        return _omit_document(
+            f"the project had no methodology when workflow version {version_id!r} was saved")
+    return method.methodology
+
+
+def _omit_document(reason: str) -> OmittedFile:
+    return OmittedFile(path=DOCUMENT_FILE, reason=reason)
 
 
 def _copy_published_artifacts(
