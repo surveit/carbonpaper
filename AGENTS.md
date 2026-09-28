@@ -88,3 +88,6 @@ Also `app/AGENTS.md` (web layer), `app/runtime/AGENTS.md` (the Runner), `README.
   `scripts/check_added_comment_length.py` (`docs/no-long-comments-policy.md`).
 - **Planning docs stay out of the repo.** Keep specs, plans, "rethink" notes and roadmaps in
   scratch or the PR description; committed docs describe what the code does *today*.
+- **Each AGENTS.md and each prompt module has a word budget**
+  (`tests/arch/test_instruction_word_budgets.py`, `tests/arch/test_prompt_word_budgets.py`).
+  Pay for growth with cuts in the same PR; raising a budget is a human decision.
