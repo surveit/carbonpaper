@@ -19,6 +19,17 @@ _SCHEMA = {"columns": [
 
 _MENTIONS = {"name": "mentions", "type": "list[str]", "nullable": True}
 
+_FILINGS = [
+    {"name": "ecf_entry", "type": "int", "nullable": False},
+    {"name": "source_id", "type": "str", "nullable": False},
+    {"name": "source_sha256", "type": "str", "nullable": False},
+]
+_PAGES = [
+    {"name": "page", "type": "int", "nullable": False},
+    {"name": "page_text", "type": "str", "nullable": False},
+    {"name": "page_span", "type": "span", "nullable": False},
+]
+
 _PREDICATE = (
     "def should_include(row):\n"
     "    return row['relevance'] == 'incidental'\n"
@@ -84,6 +95,19 @@ def _seed_project(root: Path) -> None:
                       "rank_column": "rank"},
     })
 
+    add_stage(compiled, {
+        "id": "filings", "description": "Load the filings", "type": "input_data",
+        "connector": {"kind": "file"}, "signature": {"form": "replaces", "produces": _FILINGS},
+    })
+    add_stage(compiled, {
+        "id": "filing_pages", "description": "Read each filing a page at a time",
+        "type": "read_pages", "inputs": [{"id": "filings"}],
+        "signature": {"form": "replaces",
+                      "reads": [{"input": "filings", "columns": _FILINGS}],
+                      "produces": [*_FILINGS, *_PAGES]},
+        "read_pages": {"carry": ["ecf_entry"]},
+    })
+
 
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch) -> TestClient:
@@ -136,3 +160,11 @@ def test_sort_rank_panel_lists_its_keys_in_priority_order(client: TestClient) ->
     assert html.index("<code>relevance</code>") < html.index("<code>client</code>")
     assert "largest first" in html
     assert "<code>rank</code>" in html
+
+
+def test_read_pages_panel_names_what_every_page_row_carries(client: TestClient) -> None:
+    response = client.get("/project/alpha/node/filing_pages/panel")
+    assert response.status_code == 200
+    html = response.text
+    assert "Read pages" in html
+    assert "<code>source_sha256</code>, <code>ecf_entry</code>" in html

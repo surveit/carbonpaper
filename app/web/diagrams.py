@@ -34,6 +34,8 @@ TYPE_CLASS = {
     "explode": "rowset",
     "dedupe": "rowset",
     "sort_rank": "rowset",
+    # Reads stored files into rows, as input_data does.
+    "read_pages": "input",
 }
 
 TYPE_GLYPH = {
@@ -53,6 +55,7 @@ TYPE_GLYPH = {
     "explode": "🌱",
     "dedupe": "🧹",
     "sort_rank": "🔢",
+    "read_pages": "📄",
 }
 
 # What the type tag SAYS. The slug is the id the config, the manifest and the
@@ -77,6 +80,7 @@ TYPE_LABEL = {
     "explode": "explode",
     "dedupe": "dedupe",
     "sort_rank": "sort and rank",
+    "read_pages": "read pages",
 }
 
 

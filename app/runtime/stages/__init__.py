@@ -31,6 +31,7 @@ from .llm_transform import LLMTransformHandler
 from .report import handle_report
 from .reshape import handle_dedupe, handle_explode, handle_sort_rank
 from .python_functions import handle_python_frame_function, build_python_row_mapper
+from .read_pages import handle_read_pages
 from .starlark_filter import make_starlark_filter_mapper
 from .starlark_functions import build_starlark_row_mapper
 from .union import handle_union
@@ -73,6 +74,7 @@ HANDLERS: dict[StageType, StageHandler] = {
     StageType.explode: FrameTransformHandler(handle_explode),
     StageType.dedupe: FrameTransformHandler(handle_dedupe),
     StageType.sort_rank: FrameTransformHandler(handle_sort_rank),
+    StageType.read_pages: FrameTransformHandler(handle_read_pages),
 }
 
 # A mis-shaped registration (e.g. a frame handler for a type the model declares

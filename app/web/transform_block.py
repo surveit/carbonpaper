@@ -29,6 +29,8 @@ def name_transform_block(stage: AbstractStage) -> str:
             return "explode"
         case StageType.sort_rank:
             return "sort_rank"
+        case StageType.read_pages:
+            return "read_pages"
         case (StageType.python_row_function | StageType.python_frame_function
               | StageType.starlark_row_function | StageType.starlark_filter_rows
               | StageType.filter_rows):

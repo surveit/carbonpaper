@@ -401,6 +401,8 @@ def _finalize_stage_output(
     out_rep.issues.extend(
         _find_undeclared_column_issues(workflow_stage, table, inputs_for_stage))
     out_rep.issues.extend(find_dropped_column_issues(output.contribution.dropped_columns))
+    out_rep.issues.extend(
+        Issue("warning", None, warning) for warning in output.contribution.warnings)
     if row_errors:
         out_rep.issues[0:0] = [
             Issue("error", None,
