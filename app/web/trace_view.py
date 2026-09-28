@@ -160,7 +160,7 @@ def _build_node(
         "role": _role_of(i, len(chrono), truncated),
         "columns_new": step["columns_new"],
         "row": step["row"],
-        "row_diff": row_diff_to_dict(diff),
+        "row_diff": row_diff_to_dict(diff, links),
         # What the row was compared against, named so the panel can state it
         # rather than leaving the reader to assume which frame the diff used.
         "base": None if parent is None else {

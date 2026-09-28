@@ -135,7 +135,11 @@ sheet the node wrote opens Data:
   input** where the stage type permits one (below) — then validation **as part of the
   output** (input + output issues from the manifest), then the upstream input previews,
   folded in an `input rows` disclosure — read-only, since picking rows to run on is its own
-  page. URL cells are full clickable links. Compiler notes live on `/compile`, not here.
+  page. URL cells are full clickable links. A span cell is its quote, then the page it
+  sits on linked to that page of its file (`span_cites` in `_data_cell.html`, fed by
+  `app/web/span_cells.py`); the rows page and the lineage row view draw it the same way,
+  and a packet links `sources/<id>/pages/<n>.txt` instead. Compiler notes live on
+  `/compile`, not here.
   The `stat-strip` (model · calls · cost) stays ABOVE the rows — those are facts about the
   run. A **caveat** on the rows (batched judging; an unreadable pinned definition) is a
   `.stage-caveat` `<details>`, closed, its whole warning in the summary line.

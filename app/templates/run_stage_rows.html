@@ -4,6 +4,7 @@
 {% block breadcrumbs %}{% include "_breadcrumbs.html" %}{% endblock %}
 
 {% block content %}
+{% from "_data_cell.html" import span_cites %}
 {# Two views of the same output: the stage diff (app.web.stage_diff → the
    shared _stage_diff.html, rendered with this page's own row numbers and
    click-to-expand cells) and the plain table. The diff leads where one exists,
@@ -73,7 +74,7 @@
     <tr data-href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage_id }}/row/{{ ordinal }}/trace/view">
         <td class="row-num muted">{{ ordinal | row_number }}{% if ordinal in row_judgment_hrefs %}
             <a href="{{ row_judgment_hrefs[ordinal] }}">judgment</a>{% endif %}</td>
-        {% for c in columns %}{% set v = row[c] | string | truncate(4000, True, '… (truncated — download the CSV for the full value)') %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td class="cell-clip" title="{{ v }}">{{ v }}</td>{% endif %}{% endfor %}
+        {% for c in columns %}{% set v = row[c] | string | truncate(4000, True, '… (truncated — download the CSV for the full value)') %}{% if row[c].cites is defined %}<td class="cell-span">{{ span_cites(row[c], links) }}</td>{% elif v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td class="cell-clip" title="{{ v }}">{{ v }}</td>{% endif %}{% endfor %}
     </tr>
     {% endfor %}
     </tbody>
