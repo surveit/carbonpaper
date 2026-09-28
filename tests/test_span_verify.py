@@ -10,6 +10,7 @@ from app.core.errors import (
     PageOutOfRange,
     QuoteNotAtAddress,
     SourceChanged,
+    SourceIdMismatch,
     SourceNotRead,
 )
 from app.core.files import compute_sha256
@@ -17,6 +18,7 @@ from app.core.frames import table_from_rows
 from app.core.text_sources import read_page_text
 from app.models import Column, TableSchema
 from app.models.locators import CellAt, Locator, PageCharRange
+from app.models.run_manifest import InputBinding
 from app.models.spans import Span, narrow_span
 from app.runtime import spans as spans_module
 from app.runtime.spans import SourceTextCache, find_span_issues, verify_span
@@ -24,6 +26,7 @@ from app.runtime.validation import Issue
 from locator_kind_fixture import DocketPage, registered_docket_page
 from pdf_fixture import write_text_pdf
 
+STORED_FILE_ID = "stored_file"
 FIRST_PAGE = "The first page says one thing."
 SECOND_PAGE = "The second page says another."
 
@@ -39,13 +42,18 @@ def two_pages(tmp_path: Path) -> Path:
 def _whole_page(path: Path, page: int, locator: Locator | None = None) -> Span:
     text = read_page_text(path, page)
     return Span(
-        source_id="stored_file", source_sha256=compute_sha256(path),
+        source_id=STORED_FILE_ID, source_sha256=compute_sha256(path),
         locator=locator or PageCharRange(page=page, start=0, end=len(text)), quote=text,
     )
 
 
-def _sources(*paths: Path) -> dict[str, Path]:
-    return {compute_sha256(path): path for path in paths}
+def _sources(*paths: Path, file_id: str | None = STORED_FILE_ID) -> dict[str, InputBinding]:
+    """Each path as a run's input stage records it, stored under `file_id`."""
+    return {
+        (sha256 := compute_sha256(path)): InputBinding(
+            stage_id="load", path=str(path), filename=path.name, sha256=sha256, file_id=file_id)
+        for path in paths
+    }
 
 
 def _verify(span: Span, *paths: Path) -> None:
@@ -95,6 +103,21 @@ def test_a_span_naming_a_file_the_run_never_read_is_refused(
         _verify(_whole_page(two_pages, 1), other)
 
 
+def test_a_span_naming_another_stored_file_for_the_same_bytes_is_refused(two_pages: Path) -> None:
+    span = _whole_page(two_pages, 1).model_copy(update={"source_id": "some_other_file"})
+    with pytest.raises(SourceIdMismatch) as refused:
+        _verify(span, two_pages)
+    assert str(refused.value) == (
+        "the span names stored file 'some_other_file', but this run read two_pages.pdf as "
+        "stored file 'stored_file'")
+
+
+def test_a_span_on_a_file_read_from_outside_the_store_is_refused(two_pages: Path) -> None:
+    with pytest.raises(SourceIdMismatch, match="read two_pages.pdf from outside the file store"):
+        verify_span(_whole_page(two_pages, 1), _sources(two_pages, file_id=None),
+                    SourceTextCache())
+
+
 def test_a_file_whose_bytes_changed_since_the_run_read_it_is_refused(two_pages: Path) -> None:
     span = _whole_page(two_pages, 1)
     sources = _sources(two_pages)
@@ -106,7 +129,7 @@ def test_a_file_whose_bytes_changed_since_the_run_read_it_is_refused(two_pages: 
 def test_a_span_with_no_page_to_read_is_refused(tmp_path: Path) -> None:
     table = tmp_path / "table.csv"
     table.write_text("memo\npaid in full\n", encoding="utf-8")
-    span = Span(source_id="stored_csv", source_sha256=compute_sha256(table),
+    span = Span(source_id=STORED_FILE_ID, source_sha256=compute_sha256(table),
                 locator=CellAt(row=0, column="memo"), quote="paid in full")
     with pytest.raises(LocatorKindUnreadable, match="a 'cell' span names no page"):
         _verify(span, table)
@@ -115,7 +138,7 @@ def test_a_span_with_no_page_to_read_is_refused(tmp_path: Path) -> None:
 def test_whitespace_the_page_breaks_differently_still_verifies(tmp_path: Path) -> None:
     notes = tmp_path / "notes.txt"
     notes.write_text("The first page\nsays one thing.", encoding="utf-8")
-    span = Span(source_id="stored_txt", source_sha256=compute_sha256(notes),
+    span = Span(source_id=STORED_FILE_ID, source_sha256=compute_sha256(notes),
                 locator=PageCharRange(page=1, start=4, end=19), quote="first page says")
     _verify(span, notes)
 

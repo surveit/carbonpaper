@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import quote, urlencode
 
@@ -20,6 +19,7 @@ from app.core.frames import (
 from app.models.citations import CitedValue
 from app.models.citations import StageOutputRowCitation
 from app.models.records.citations import StageCitations
+from app.models.run_manifest import InputBinding
 from app.models.spans import Span
 
 from .spans import SPAN_REFUSALS, SourceTextCache, require_page_locator, verify_span
@@ -42,7 +42,7 @@ def build_row_trace_url(
 
 
 def build_source_page_url(project_id: str, span: Span) -> str:
-    """Root-relative, like the row trace URL: the stored file's page, the quote's range marked."""
+    """Root-relative, like the row trace URL; the query names the quote's page and character range."""
     locator = require_page_locator(span)
     query = urlencode({"page": locator.page, "start": locator.start, "end": locator.end})
     return f"/project/{_path_segment(project_id)}/files/{_path_segment(span.source_id)}?{query}"
@@ -55,7 +55,7 @@ class CitationProvider:
     # The rows this stage may cite, as Arrow: the cell as stored, not as pandas read it.
     tables: Mapping[str, pa.Table]
     # What a cited span is checked against: the files this run read, by sha256, and their pages.
-    sources: Mapping[str, Path] = field(default_factory=dict)
+    sources: Mapping[str, InputBinding] = field(default_factory=dict)
     texts: SourceTextCache = field(default_factory=SourceTextCache)
     # `frozen` stops these being rebound, not written, which is what lets the
     # provider handed to authored code come back carrying what that code said.

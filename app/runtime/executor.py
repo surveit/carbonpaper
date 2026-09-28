@@ -110,7 +110,7 @@ def _subset_ctx(
 ) -> RunContext:
     if identity is not None:
         return RunContext.for_workflow_test_run(
-            run_dir, identity.project, identity.run_id, params)
+            run_dir, identity.project, identity.run_id, params, bound_sources={})
     return RunContext.for_stages_outside_a_run(run_dir, params)
 
 

@@ -22,7 +22,7 @@ from app.models.run_parameters import RunParameters
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.core.run_status import StageStatus, is_run_still_going
 
-from app.models.run_manifest import RunKind, flatten_input_bindings
+from app.models.run_manifest import InputBinding, RunKind, flatten_input_bindings
 from .branch_analysis import load_run_branches
 from .context import RunContext
 from .executor import _execute_stages, topological_sort
@@ -226,8 +226,8 @@ def resume_run(
     return settled.to_dict()
 
 
-def _index_bound_sources(input_bindings: Mapping[str, Any]) -> dict[str, Path]:
+def _index_bound_sources(input_bindings: Mapping[str, Any]) -> dict[str, InputBinding]:
     return {
-        binding.sha256: Path(binding.path)
+        binding.sha256: binding
         for binding in flatten_input_bindings(input_bindings) if binding.sha256
     }

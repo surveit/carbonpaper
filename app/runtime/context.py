@@ -17,6 +17,7 @@ from app.core.stage_cache import ReadOnlyStageCache, StageCache, StageCacheEntry
 from .run_log import RunLog
 from .progress import StageProgressReporter
 from .spans import SourceTextCache
+from app.models.run_manifest import InputBinding
 from app.models.run_parameters import RunParameters
 
 
@@ -51,8 +52,8 @@ class RunContext(BaseModel):
     # (every emit site treats that as "don't log"), never a fabricated sink.
     run_log: RunLog | None = None
     stage_progress: StageProgressReporter = Field(default_factory=StageProgressReporter)
-    # sha256 -> path of each file this run's input stages read: the files a span may quote.
-    bound_sources: Mapping[str, Path] = Field(default_factory=dict)
+    # Each file this run's input stages read, by sha256: the files a span may quote.
+    bound_sources: Mapping[str, InputBinding] = Field(default_factory=dict)
     # Shared by every copy attach_* makes, so a page is extracted once per run.
     source_texts: SourceTextCache = Field(default_factory=SourceTextCache)
 
@@ -120,7 +121,8 @@ class RunContext(BaseModel):
         project_id: str,
         run_id: str,
         params: RunParameters = RunParameters(),
-        bound_sources: Mapping[str, Path] = {},
+        *,
+        bound_sources: Mapping[str, InputBinding],
     ) -> RunContext:
         return cls(
             run_dir=run_dir,
@@ -137,7 +139,8 @@ class RunContext(BaseModel):
         project_id: str,
         run_id: str,
         params: RunParameters = RunParameters(),
-        bound_sources: Mapping[str, Path] = {},
+        *,
+        bound_sources: Mapping[str, InputBinding],
     ) -> RunContext:
         return cls(
             run_dir=run_dir,

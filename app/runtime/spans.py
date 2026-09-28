@@ -13,6 +13,7 @@ from app.core.errors import (
     PageOutOfRange,
     QuoteNotAtAddress,
     SourceChanged,
+    SourceIdMismatch,
     SourceNotRead,
     UnsupportedTextFormat,
 )
@@ -22,6 +23,7 @@ from app.core.text_sources import normalize_text, read_page_text
 from app.core.utils import format_errors
 from app.models import SPAN_COLUMN_TYPE, Column, TableSchema
 from app.models.locators import PageCharRange, label_locator
+from app.models.run_manifest import InputBinding
 from app.models.schema import find_list_element_type
 from app.models.severity import UserFacingErrorSeverity
 from app.models.spans import Span
@@ -34,13 +36,15 @@ SPAN_REFUSALS = (
     PageOutOfRange,
     QuoteNotAtAddress,
     SourceChanged,
+    SourceIdMismatch,
     SourceNotRead,
     UnsupportedTextFormat,
 )
 
 
 def find_span_issues(
-    table: pa.Table, schema: TableSchema, sources: Mapping[str, Path], texts: SourceTextCache
+    table: pa.Table, schema: TableSchema, sources: Mapping[str, InputBinding],
+    texts: SourceTextCache,
 ) -> list[Issue]:
     """One error per column holding a refused span; a table with no span column reads no file."""
     span_columns = [
@@ -56,16 +60,15 @@ def find_span_issues(
     ]
 
 
-def verify_span(span: Span, sources: Mapping[str, Path], texts: SourceTextCache) -> None:
+def verify_span(
+    span: Span, sources: Mapping[str, InputBinding], texts: SourceTextCache
+) -> None:
     """Raises unless the quote, and any prefix and suffix, sit at the span's address."""
-    path = sources.get(span.source_sha256)
-    if path is None:
-        raise SourceNotRead(
-            f"this run read no file with sha256 {span.source_sha256} (source {span.source_id})")
+    binding = _require_bound_file(span, sources)
     locator = require_page_locator(span)
-    page_text = texts.read_page_text(path, span.source_sha256, locator.page)
+    page_text = texts.read_page_text(Path(binding.path), span.source_sha256, locator.page)
     locator.validate_text(page_text)
-    where = f"{label_locator(locator)} of {path.name}"
+    where = f"{label_locator(locator)} of {binding.filename}"
     _require_quote_at(where, locator, page_text, span.quote)
     if span.prefix is not None:
         _require_prefix_at(where, locator, page_text, span.prefix)
@@ -105,8 +108,24 @@ class SourceTextCache:
         self._unchanged.add((path, sha256))
 
 
+def _require_bound_file(span: Span, sources: Mapping[str, InputBinding]) -> InputBinding:
+    binding = sources.get(span.source_sha256)
+    if binding is None:
+        raise SourceNotRead(
+            f"this run read no file with sha256 {span.source_sha256} (source {span.source_id})")
+    if binding.file_id is None:
+        raise SourceIdMismatch(
+            f"the span names stored file {span.source_id!r}, but this run read "
+            f"{binding.filename} from outside the file store")
+    if binding.file_id != span.source_id:
+        raise SourceIdMismatch(
+            f"the span names stored file {span.source_id!r}, but this run read "
+            f"{binding.filename} as stored file {binding.file_id!r}")
+    return binding
+
+
 def _find_column_issues(
-    rows: list[dict[str, Any]], column: Column, sources: Mapping[str, Path],
+    rows: list[dict[str, Any]], column: Column, sources: Mapping[str, InputBinding],
     texts: SourceTextCache,
 ) -> list[Issue]:
     refusals = [
@@ -125,7 +144,9 @@ def _find_column_issues(
     )]
 
 
-def _find_refusal(cell: Any, sources: Mapping[str, Path], texts: SourceTextCache) -> str | None:
+def _find_refusal(
+    cell: Any, sources: Mapping[str, InputBinding], texts: SourceTextCache
+) -> str | None:
     try:
         verify_span(Span.model_validate(cell, strict=True), sources, texts)
     except ValidationError as err:

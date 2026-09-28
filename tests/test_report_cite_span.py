@@ -11,6 +11,7 @@ from app.core.text_sources import read_page_text
 from app.models import parse_stage
 from app.models.citations import CitedValue
 from app.models.locators import PageCharRange
+from app.models.run_manifest import InputBinding
 from app.models.spans import Span, narrow_span
 from app.runtime.citations import CitationProvider
 from app.runtime.context import RunContext
@@ -19,6 +20,7 @@ from app.runtime.stages.report import handle_report
 from conftest import place_stage
 from pdf_fixture import write_text_pdf
 
+STORED_FILE_ID = "stored_pdf"
 FIRST_PAGE = "The first page says one thing."
 SECOND_PAGE = "The second page says another."
 
@@ -30,15 +32,21 @@ def two_pages(tmp_path: Path) -> Path:
 
 def _second_page(path: Path) -> Span:
     text = read_page_text(path, 2)
-    return Span(source_id="stored_pdf", source_sha256=compute_sha256(path),
+    return Span(source_id=STORED_FILE_ID, source_sha256=compute_sha256(path),
                 locator=PageCharRange(page=2, start=0, end=len(text)), quote=text)
+
+
+def _bind(path: Path) -> dict[str, InputBinding]:
+    sha256 = compute_sha256(path)
+    return {sha256: InputBinding(stage_id="load", path=str(path), filename=path.name,
+                                 sha256=sha256, file_id=STORED_FILE_ID)}
 
 
 def _provider(path: Path, spans: list[Span]) -> CitationProvider:
     rows = [{"basis": span.model_dump(), "supporting": [span.model_dump()]} for span in spans]
     return CitationProvider(
         project="docket", run_id="R1", tables={"extract": table_from_rows(rows)},
-        sources={compute_sha256(path): path}, texts=SourceTextCache(),
+        sources=_bind(path), texts=SourceTextCache(),
     )
 
 
@@ -98,7 +106,7 @@ def test_a_report_cites_a_span_against_the_files_its_run_read(
 ) -> None:
     span = narrow_span(_second_page(two_pages), "says another")
     ctx = RunContext.for_workflow_run(
-        tmp_path / "run", "docket", "R1", bound_sources={compute_sha256(two_pages): two_pages})
+        tmp_path / "run", "docket", "R1", bound_sources=_bind(two_pages))
     stage = parse_stage({
         "id": "publish_reply", "type": "report", "description": "Publish the reply",
         "inputs": [{"id": "extract"}],
