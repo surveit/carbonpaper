@@ -4,10 +4,10 @@
   {%- set rest = header.published.figures | rejectattr('primary') | list %}
   {%- set tables = header.published.tables %}
   <section class="wf-outputs">
-    <h2>Results of this run</h2>
+    <h2>Results</h2>
     <p class="wf-note">Each value can be clicked to view how it was computed.</p>
     {%- if leads %}
-    <h3 class="wf-group">Headline claims</h3>
+    <h3 class="wf-group">Headline results</h3>
     <div class="wf-leads{% if leads | length > 2 %} crowded{% endif %}">
       {%- for output in leads %}
       <div class="wf-lead">
@@ -52,7 +52,9 @@
     {%- endfor %}
     {%- endif %}
     {%- if rest %}
-    <h3 class="wf-group">Secondary claims</h3>
+    {%- if leads or tables %}
+    <h3 class="wf-group">Other results</h3>
+    {%- endif %}
     <table class="wf-rest">
       {%- for output in rest %}
       <tr>

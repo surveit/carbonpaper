@@ -104,7 +104,7 @@
       {% set secondary = d.published.figures | rejectattr('primary') | list if d.published else [] %}
       {% if secondary %}
       <details class="ov-more">
-        <summary>{{ secondary | length }} more figure{{ '' if secondary | length == 1 else 's' }}</summary>
+        <summary>{{ secondary | length }} more result{{ '' if secondary | length == 1 else 's' }}</summary>
         <div class="ov-rest-figures">
           {% for figure in secondary %}
           <div><span class="n"><a class="lineage-value" href="{{ figure.href }}"
