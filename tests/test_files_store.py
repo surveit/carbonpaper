@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import io
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -11,6 +12,7 @@ from app.core import timestamp_ids
 from app.core.errors import MirrorDisagrees
 from app.core.files import (
     ProjectFile,
+    find_stored_file,
     files_root,
     receive_mirrored_source,
     receive_source,
@@ -116,3 +118,13 @@ def test_mirrored_bytes_off_the_recorded_sha256_are_refused_before_a_record_is_m
                                 fetched_at="2026-09-28T09:15:16Z", expected_sha256="0" * 64)
     assert ProjectFile.list() == []
     assert not any(files_root().rglob("*.pdf"))
+
+
+def test_a_stored_file_is_found_under_a_files_root_reached_through_a_symlink(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "real").mkdir()
+    (tmp_path / "linked").symlink_to(tmp_path / "real")
+    monkeypatch.setenv("CARBON_PAPER_FILES_ROOT", str(tmp_path / "linked" / "files"))
+    record = save_upload("ecf58.pdf", io.BytesIO(BODY), "demo")
+    assert find_stored_file(resolve_stored_path(record)) == record
