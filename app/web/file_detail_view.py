@@ -73,7 +73,7 @@ class FileDetailView(BaseModel):
     # None for a file no reader here opens — a png someone attached to a conversation.
     contents: FileContents | None
     # None for a file with no pages of text: a table, an image.
-    pages: SourcePage | None
+    page: SourcePage | None
     runs: list[ReadingRun]
 
 
@@ -88,7 +88,7 @@ def build_file_detail_view(
         lineage=record.lineage, origin_url=record.origin_url, fetched_at=record.fetched_at,
         contents=_read_contents(project_id, file_id) if find_file_format(record.filename)
         else None,
-        pages=build_source_page(path, page, marked) if is_text_source(path) else None,
+        page=build_source_page(path, page, marked) if is_text_source(path) else None,
         runs=_find_reading_runs(project_id, record),
     )
 

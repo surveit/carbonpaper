@@ -15,7 +15,7 @@
 
   Context the route passes:
     state = shell_state(...); section = "files"
-    file  = file_detail_view.build_file_detail_view(project, file_id)
+    file  = file_detail_view.build_file_detail_view(project, file_id, page, marked)
 #}
 {% block title %}{{ file.filename }} · files{% endblock %}
 
@@ -34,7 +34,7 @@
     <span class="type-tag">{{ file.format }}</span>
     <span>{{ file.size }}</span>
     {% if file.contents %}<span>{{ file.contents.row_count | figure }} rows × {{ file.contents.column_count }} columns</span>{% endif %}
-    {% if file.pages %}<span>{{ file.pages.page_count }} page{{ "" if file.pages.page_count == 1 else "s" }}</span>{% endif %}
+    {% if file.page %}<span>{{ file.page.page_count }} page{{ "" if file.page.page_count == 1 else "s" }}</span>{% endif %}
     {% if file.origin_url %}
     <span class="file-origin">fetched {{ file.fetched_at | friendly_time }} from
       <a href="{{ file.origin_url }}" target="_blank" rel="noopener">{{ file.origin_url }}</a></span>
@@ -46,7 +46,7 @@
 </div>
 
 {# A reader arriving from a quote came for the page, so it leads. #}
-{% if file.pages %}{% include "_source_page.html" %}{% endif %}
+{% if file.page %}{% include "_source_page.html" %}{% endif %}
 
 <section class="file-card">
   <form class="file-provenance" method="post"
@@ -115,7 +115,7 @@
   </details>
 </section>
 
-{% elif not file.pages %}
+{% elif not file.page %}
 <section class="file-section">
   <p class="file-not-a-table">This file is not a table anything here reads, so it has no
     shape and no rows. It is stored, and a run may still take it as bytes.</p>

@@ -158,3 +158,5 @@ def test_the_bytes_of_a_pdf_open_in_the_browser_and_of_anything_else_download(
     assert opened.headers["content-disposition"].startswith("inline")
     assert opened.content == (tmp_path / "ecf_17.pdf").read_bytes()
     assert downloaded.headers["content-disposition"].startswith("attachment")
+    assert {opened.headers["x-content-type-options"],
+            downloaded.headers["x-content-type-options"]} == {"nosniff"}

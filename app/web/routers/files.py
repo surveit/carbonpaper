@@ -93,6 +93,7 @@ def serve_file_bytes(project_id: str, file_id: str) -> FileResponse:
     return FileResponse(
         path, media_type=media_type or "application/octet-stream", filename=record.filename,
         content_disposition_type="inline" if media_type == _PDF_MEDIA_TYPE else "attachment",
+        headers={"X-Content-Type-Options": "nosniff"},
     )
 
 
