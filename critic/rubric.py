@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 from collections.abc import Mapping
 from pathlib import Path
@@ -28,6 +29,12 @@ class Rubric(CriticRecord):
     files: list[RubricFile]
 
 
+class RubricStamp(CriticRecord):
+    name: str
+    origin: str
+    sha256: str
+
+
 def load_rubric(directory: Path, environ: Mapping[str, str] = os.environ) -> Rubric:
     if not directory.is_dir():
         raise FileNotFoundError(f"rubric directory not found: {directory}")
@@ -44,17 +51,28 @@ def read_rubric_file(path: Path, environ: Mapping[str, str]) -> RubricFile:
         return RubricFile(name=path.name, origin=str(path), text=path.read_text(encoding="utf-8"))
     variable = path.read_text(encoding="utf-8").strip()
     if not environ.get(variable):
-        raise UnsetRubricSourceError(f"rubric file {path.name} reads its path from ${variable}, which is unset")
+        message = f"rubric file {path.name} reads its path from ${variable}, which is unset"
+        raise UnsetRubricSourceError(message)
     source = Path(environ[variable])
     if not source.is_file():
         raise FileNotFoundError(f"${variable} names {source}, which is not a file")
     return RubricFile(name=path.stem, origin=str(source), text=source.read_text(encoding="utf-8"))
 
 
+def stamp_rubric(rubric: Rubric) -> list[RubricStamp]:
+    """Which text each file held, since a file read from outside the repo can change between runs."""
+    return [_stamp_file(file) for file in rubric.files]
+
+
 def render_rubric(rubric: Rubric) -> str:
     if not rubric.files:
         return NO_RUBRIC_TEXT
     return "\n\n".join(f"--- {file.name} ---\n{file.text.strip()}" for file in rubric.files)
+
+
+def _stamp_file(file: RubricFile) -> RubricStamp:
+    digest = hashlib.sha256(file.text.encode("utf-8")).hexdigest()
+    return RubricStamp(name=file.name, origin=file.origin, sha256=digest)
 
 
 def _is_rubric_file(path: Path) -> bool:

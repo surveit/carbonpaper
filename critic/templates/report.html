@@ -23,7 +23,7 @@
 <p class="muted">
   Review model {{ result.review_model_ids | join(", ") or "none answered" }};
   judge model {{ result.judge_model_ids | join(", ") or "none called" }}.
-  Rubric files: {{ result.rubric_files | join(", ") or "none" }}.
+  Rubric files: {% for stamp in result.rubric_files %}{{ stamp.name }} (sha256 <code>{{ stamp.sha256[:12] }}</code>){{ ", " if not loop.last }}{% else %}none{% endfor %}.
   Run {{ result.started_at }} to {{ result.finished_at }}.
   Spend: review {{ result.review_cost_usd | usd }}, judge {{ result.judge_cost_usd | usd }}.
 </p>

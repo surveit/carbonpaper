@@ -9,7 +9,7 @@ from critic.corpus import load_corpus_index
 from critic.labels import ExcludedLabel, group_labels_by_pr, load_label_set
 from critic.planning import EvalPlan, SkippedPr, plan_units
 from critic.records import CriticRecord
-from critic.rubric import Rubric, load_rubric
+from critic.rubric import Rubric, RubricStamp, load_rubric, stamp_rubric
 from critic.scoring import EXACT_ROUTE, Score, score_theme_in_unit, score_unit, sum_scores
 from critic.themes import Theme
 from critic.unit_scoring import ScoredUnit, UnitContext, UnscoredUnit, evaluate_unit
@@ -39,7 +39,7 @@ class ThemeScore(CriticRecord):
 
 class EvalResult(CriticRecord):
     settings: EvalSettings
-    rubric_files: list[str]
+    rubric_files: list[RubricStamp]
     started_at: str
     finished_at: str
     scored: list[ScoredUnit]
@@ -59,11 +59,11 @@ def run_eval(
     settings: EvalSettings, review_backend: ModelBackend, judge_backend: ModelBackend
 ) -> EvalResult:
     started_at = _stamp_now()
+    rubric = load_rubric(Path(settings.rubric_dir))
     corpus = load_corpus_index(Path(settings.corpus_dir))
     label_set = load_label_set(Path(settings.labels_path), Path(settings.themes_path))
     labels_by_pr = group_labels_by_pr(label_set)
     plan = plan_units(settings.repo, settings.pr_numbers, settings.limit, corpus, labels_by_pr, label_set.themes)
-    rubric = load_rubric(Path(settings.rubric_dir))
     context = UnitContext(settings.repo, Path(settings.diff_dir), rubric, review_backend, judge_backend)
     with ThreadPoolExecutor(max_workers=settings.jobs) as pool:
         outcomes = list(pool.map(lambda unit: evaluate_unit(unit, context), plan.units))
@@ -81,7 +81,7 @@ def assemble_result(
     scored = [outcome for outcome in outcomes if isinstance(outcome, ScoredUnit)]
     return EvalResult(
         settings=settings,
-        rubric_files=[file.name for file in rubric.files],
+        rubric_files=stamp_rubric(rubric),
         started_at=started_at,
         finished_at=_stamp_now(),
         scored=scored,

@@ -5,8 +5,9 @@ from pathlib import Path
 from critic.evaluation import EvalResult
 from critic.matching import assemble_matching, match_exactly
 from critic.report import REPORT_FILE, RESULTS_FILE, render_report, write_eval_outputs
+from critic.rubric import load_rubric, stamp_rubric
 from critic.scoring import ALL_ROUTES, score_unit
-from critic.tests.fixture_data import echo_as_prediction, read_fixture_text
+from critic.tests.fixture_data import RUBRICS, STAND_IN_ENVIRON, echo_as_prediction, read_fixture_text
 
 RESULT_FILE = "eval-result-973-976.json"
 
@@ -62,6 +63,13 @@ def test_scores_print_as_percentages_and_an_empty_ratio_as_n_a() -> None:
     assert (result.overall.matched_reals, result.overall.real) == (0, 22)
     assert "0.0%" in html
     assert "n/a" in html
+
+
+def test_the_rubric_files_are_named_with_their_hashes() -> None:
+    stamps = stamp_rubric(load_rubric(RUBRICS / "current_instructions", STAND_IN_ENVIRON))
+    html = render_report(_load_result().model_copy(update={"rubric_files": stamps}))
+    assert f"owner-global-CLAUDE.md (sha256 <code>{stamps[0].sha256[:12]}</code>)" in html
+    assert "Rubric files: none." in render_report(_load_result())
 
 
 def test_comment_text_is_escaped_not_rendered() -> None:

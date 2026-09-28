@@ -16,6 +16,10 @@ from critic.rubric import load_rubric
 from critic.themes import load_theme_vocabulary, select_flag_themes
 
 DEFAULT_REPO = "surveit/carbonpaper"
+RUBRIC_HELP = (
+    "a directory of rubric files; a NAME.from-env file reads NAME from the path in the environment "
+    "variable it names (current_instructions needs CRITIC_OWNER_CLAUDE_MD set to the owner's CLAUDE.md)"
+)
 LOCAL_ROOT = Path(".critic")
 
 
@@ -50,13 +54,14 @@ def run_diff(args: argparse.Namespace) -> int:
 def run_review_command(args: argparse.Namespace) -> int:
     backend = ClaudeCliBackend(model=args.model)
     backend.check_available()
+    rubric = load_rubric(args.rubric)
     diff = (
         fetch_pull_request_diff(args.repo, args.pr, None)
         if args.commit is None
         else load_or_fetch_diff(args.repo, args.pr, args.commit, args.diff_dir)
     )
     themes = None if args.themes is None else select_flag_themes(load_theme_vocabulary(args.themes))
-    review = run_review(diff, load_rubric(args.rubric), themes, backend)
+    review = run_review(diff, rubric, themes, backend)
     text = review.model_dump_json(indent=2)
     if args.out is None:
         print(text)
@@ -133,7 +138,7 @@ def _add_diff(parser: argparse.ArgumentParser) -> None:
 
 def _add_review(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("pr", type=int)
-    parser.add_argument("--rubric", type=Path, required=True)
+    parser.add_argument("--rubric", type=Path, required=True, help=RUBRIC_HELP)
     parser.add_argument("--model", help="claude model alias or id; default: the CLI's own")
     parser.add_argument("--repo", default=DEFAULT_REPO)
     parser.add_argument("--commit", help="review the diff at this commit; default: the PR's head")
@@ -149,7 +154,7 @@ def _add_eval(parser: argparse.ArgumentParser) -> None:
     low, high = DEFAULT_PR_RANGE
     selection.add_argument("--range", type=parse_pr_range, help=f"LO-HI; default {low}-{high}")
     selection.add_argument("--split", type=Path, help="a split.json; its test PRs are evaluated")
-    parser.add_argument("--rubric", type=Path, required=True)
+    parser.add_argument("--rubric", type=Path, required=True, help=RUBRIC_HELP)
     parser.add_argument("--limit", type=int, help="stop after this many PRs with a scorable unit")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--model", help="review model; default: the CLI's own")

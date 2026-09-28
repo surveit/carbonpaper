@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from critic.rubric import (
     UnsetRubricSourceError,
     load_rubric,
     render_rubric,
+    stamp_rubric,
 )
 from critic.tests.fixture_data import FIXTURES, RUBRICS, STAND_IN_ENVIRON, load_labels
 from critic.themes import load_theme_vocabulary, select_flag_themes
@@ -43,6 +45,16 @@ def test_the_owners_file_at_a_wrong_path_fails(tmp_path: Path) -> None:
     missing = {"CRITIC_OWNER_CLAUDE_MD": str(tmp_path / "CLAUDE.md")}
     with pytest.raises(FileNotFoundError, match="is not a file"):
         load_rubric(RUBRICS / "current_instructions", missing)
+
+
+def test_a_stamp_records_where_each_file_came_from_and_its_hash() -> None:
+    rubric = load_rubric(RUBRICS / "current_instructions", STAND_IN_ENVIRON)
+    stamps = stamp_rubric(rubric)
+    stand_in = Path(STAND_IN_ENVIRON["CRITIC_OWNER_CLAUDE_MD"])
+    expected = hashlib.sha256(stand_in.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+    assert (stamps[0].name, stamps[0].origin, stamps[0].sha256) == ("owner-global-CLAUDE.md", str(stand_in), expected)
+    # The stand-in is the repo's AGENTS.md, which the second file snapshots unchanged.
+    assert stamps[1].sha256 == expected
 
 
 def test_the_repo_holds_no_copy_of_the_owners_file() -> None:
