@@ -62,15 +62,18 @@ def _raising_stage(stage_id, input_id, name="Boom", schema=_ID_VAL_SCHEMA):
             "inputs": [{"id": input_id}],
             "signature": {"form": "replaces", "produces": schema["columns"]},
             "function": {"kind": "inline",
-                         "code": "def transform(df):\n    raise ValueError('boom')\n"}}
+                         "code": "def transform(df, *, lineage):\n    raise ValueError('boom')\n"}}
 
 
 def _passthrough_stage(stage_id, input_id, name="Passthrough", schema=_ID_VAL_SCHEMA):
     return {"id": stage_id, "description": name, "type": "python_frame_function",
             "inputs": [{"id": input_id}],
             "signature": {"form": "replaces", "produces": schema["columns"]},
-            "function": {"kind": "inline",
-                         "code": "def transform(df):\n    return df\n"}}
+            "function": {"kind": "inline", "code": (
+                "def transform(df, *, lineage):\n"
+                "    for row in range(len(df)):\n"
+                f"        lineage.built_from(row, {input_id!r}, row)\n"
+                "    return df\n")}}
 
 
 def _score_load_stage(root):

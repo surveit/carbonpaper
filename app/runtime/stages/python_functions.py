@@ -12,7 +12,7 @@ import pandas as pd
 import pyarrow as pa
 
 from app.core.frames import table_to_frame
-from ..errors import AuthoredFrameExpected
+from ..errors import AuthoredFrameExpected, MissingLineage
 from app.models import WorkflowStage
 from app.models.stages.code import (
     PythonFrameFunctionStage,
@@ -23,12 +23,16 @@ from app.models.stages.report import ReportStage
 from ..branches import BranchRecorder
 from ..code import load_function
 from ..context import RunContext
+from ..lineage import LineageRecorder
 from ..stage_output import StageOutput
 from .execution import RecordingRowMapper, Row, RowMapper, narrow_stage
 
 
 # The three types whose behaviour is a `function` block.
 CodeCarryingStage = PythonRowFunctionStage | PythonFrameFunctionStage | ReportStage
+
+# Keyword-only, because every positional slot is an input frame.
+LINEAGE_KWARG = "lineage"
 
 
 def _load_python_function(
@@ -47,10 +51,15 @@ def handle_python_frame_function(
 ) -> StageOutput:
     """Whole-frame transform: the function may reshape (group-by, pivot, dedup, merge)."""
     fn = _load_python_function(narrow_stage(workflow_stage, PythonFrameFunctionStage))
+    _require_lineage_keyword(fn, workflow_stage)
     # Pass dataframes positionally in declared input order.
     args = [table_to_frame(inputs[ref.id]) for ref in workflow_stage.inputs]
-    kwargs = {"progress": ctx.stage_progress} if _accepts_progress(fn) else {}
-    return StageOutput.from_frame(_require_frame(fn(*args, **kwargs), workflow_stage))
+    recorder = LineageRecorder(inputs)
+    kwargs: dict[str, object] = {LINEAGE_KWARG: recorder}
+    if _declares_keyword_only(fn, "progress"):
+        kwargs["progress"] = ctx.stage_progress
+    frame = _require_frame(fn(*args, **kwargs), workflow_stage)
+    return StageOutput.from_frame(frame, lineage=recorder.require_every_row(len(frame)))
 
 
 def build_python_row_mapper(
@@ -84,9 +93,35 @@ def _require_frame(result: Any, workflow_stage: WorkflowStage) -> pd.DataFrame:
     return result
 
 
-def _accepts_progress(fn: Callable[..., Any]) -> bool:
+def _require_lineage_keyword(fn: Callable[..., Any], workflow_stage: WorkflowStage) -> None:
+    if _declares_keyword_only(fn, LINEAGE_KWARG):
+        return
+    input_id = workflow_stage.inputs[0].id
+    raise MissingLineage(
+        f"stage {workflow_stage.id}: a python_frame_function builds its own rows, so it "
+        f"must say which input rows each one came from, and `{fn.__name__}` takes no "
+        f"keyword-only `{LINEAGE_KWARG}`. Declare it: `{_render_def_with_lineage(fn)}`. "
+        f"Then, for every row of the frame it returns, call "
+        f"`{LINEAGE_KWARG}.built_from(row, \"{input_id}\", input_row)` for the input row "
+        f"it was built from, `{LINEAGE_KWARG}.contributed_by(row, \"{input_id}\", "
+        f"input_row, columns=[...])` for another input row that fed it, or "
+        f"`{LINEAGE_KWARG}.originates(row)` where no input row did. Rows count from 0 in "
+        f"the frames the function receives."
+    )
+
+
+def _render_def_with_lineage(fn: Callable[..., Any]) -> str:
+    signature = inspect.signature(fn)
+    kept = [p for p in signature.parameters.values() if p.name != LINEAGE_KWARG]
+    recorder = inspect.Parameter(LINEAGE_KWARG, inspect.Parameter.KEYWORD_ONLY)
+    # Parameter kinds sort into the order a signature must hold them in.
+    ordered = sorted([*kept, recorder], key=lambda parameter: parameter.kind)
+    return f"def {fn.__name__}{signature.replace(parameters=ordered)}"
+
+
+def _declares_keyword_only(fn: Callable[..., Any], name: str) -> bool:
     try:
-        progress = inspect.signature(fn).parameters.get("progress")
+        declared = inspect.signature(fn).parameters.get(name)
     except (TypeError, ValueError):
         return False
-    return progress is not None and progress.kind is inspect.Parameter.KEYWORD_ONLY
+    return declared is not None and declared.kind is inspect.Parameter.KEYWORD_ONLY

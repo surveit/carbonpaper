@@ -52,8 +52,11 @@ def _two_stage_project(root):
                    "reads": [{"input": "load", "columns": _NAME_VAL_SCHEMA["columns"]}],
                    "produces": _NAME_VAL_SCHEMA["columns"],
                },
-               "function": {"kind": "inline",
-                            "code": "def transform(df):\n    return df\n"}}
+               "function": {"kind": "inline", "code": (
+                   "def transform(df, *, lineage):\n"
+                   "    for row in range(len(df)):\n"
+                   "        lineage.built_from(row, 'load', row)\n"
+                   "    return df\n")}}
     add_stage(root, consume)
 
 
@@ -142,7 +145,11 @@ def _three_stage_llm_project(root):
             "reads": [{"input": "score", "columns": _SCORED_SCHEMA["columns"]}],
             "produces": _SCORED_SCHEMA["columns"],
         },
-        "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
+        "function": {"kind": "inline", "code": (
+            "def transform(df, *, lineage):\n"
+            "    for row in range(len(df)):\n"
+            "        lineage.built_from(row, 'score', row)\n"
+            "    return df\n")},
     }
     add_stage(root, load)
     add_stage(root, score)
