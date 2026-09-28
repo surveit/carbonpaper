@@ -274,7 +274,7 @@ def test_a_post_map_mapper_still_gets_its_post_map_step():
 
 
 def _stub_call_llm(monkeypatch, calls: list[dict]) -> None:
-    def fake_call_llm(stage_id, llm, row, reply_model, usage_out):
+    def fake_call_llm(stage_id, llm, row, reply_model, usage_out, correction):
         calls.append(dict(row))
         return script_judgment({"verdict": f"v{row['x']}"})
 
@@ -439,7 +439,7 @@ def test_the_batch_mapper_computes_every_row_it_is_given(monkeypatch):
     _stub_call_llm_batch(monkeypatch, batches)
     stage = _llm_stage(batch_size=2)
 
-    map_group = build_llm_batch_mapper(place_stage(stage))
+    map_group = build_llm_batch_mapper(place_stage(stage), {})
     rows = map_group((0, 1), [{"x": 1}, {"x": 2}])
 
     assert batches == [[1, 2]]
@@ -656,7 +656,7 @@ def test_the_batched_key_matches_the_row_path_key(monkeypatch):
 
 def test_a_group_that_completed_stays_cached_when_a_later_group_crashes(monkeypatch):
     """Incremental durability is not batch-specific code: the record wrapper runs per group."""
-    def make_crashing_mapper(workflow_stage):
+    def make_crashing_mapper(workflow_stage, sources):
         def map_group(indices, rows):
             if 2 in indices:
                 raise RuntimeError("backend went away")
