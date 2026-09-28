@@ -17,6 +17,14 @@ class RowOutOfRange(ValueError):
     pass
 
 
+class PageOutOfRange(ValueError):
+    pass
+
+
+class UnsupportedTextFormat(ValueError):
+    pass
+
+
 class ContributorNotInFanIn(ValueError):
     """A trace was told to follow a contributor the run's lineage does not record."""
 
