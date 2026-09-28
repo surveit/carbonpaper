@@ -272,7 +272,7 @@ def test_the_flagged_section_is_titled_by_its_counts_by_severity():
             "input:score", ("error", "spend", "4 value(s) not of declared type"))]),
     )
 
-    assert "2 warnings, 1 error" in _render(manifest)
+    assert "1 error, 2 warnings" in _render(manifest)
 
 
 def test_a_severity_nothing_raised_is_left_out_of_the_title_not_counted_as_zero():
@@ -295,7 +295,7 @@ def test_a_stop_is_a_line_of_the_same_list_as_the_warnings_it_did_not_cause():
     ))
 
     assert html.count('<table class="issue-table"') == 1
-    assert "1 warning, 1 error" in html
+    assert "1 error, 1 warning" in html
     assert "<code>stopped</code>" in html
 
 
@@ -318,5 +318,5 @@ def test_the_index_opens_closed_with_its_counts_still_on_screen():
     assert "<details class=\"issue-panel" in html
     assert " open>" not in html
     # The fold hides the table, never the fact that there is one to open.
-    assert "1 warning, 1 error" in html
+    assert "1 error, 1 warning" in html
     assert "off range" in html    # present in the markup, behind the disclosure
