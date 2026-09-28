@@ -103,6 +103,29 @@ def receive_source(project_id: ID, origin_url: str, filename: str, stream: Binar
     return _save_file(filename, stream, project_id, origin_url=origin_url, fetched_at=now_iso())
 
 
+def _save_file(filename: str, src: BinaryIO, project_id: ID | None, *,
+               origin_url: str | None = None, fetched_at: str | None = None) -> ProjectFile:
+    root = files_root()
+    # The stream is written to a temp file in the same dir first and moved into
+    # <root>/<record id>/<filename> once there is a record to name the directory. The
+    # record owns the directory rather than the file name, so the name a human chose
+    # survives into every path we show them — the run form's field, and the packet's
+    # "inputs this run read".
+    root.mkdir(parents=True, exist_ok=True)
+    staged, digest, byte_count = _write_to_temp_file(root, src, max_upload_bytes())
+    _refuse_upload_over_quota(root, staged, byte_count)
+    name = _safe_filename(filename)
+    record = ProjectFile(sha256=digest, filename=name, byte_count=byte_count,
+                         project_id=project_id, origin_url=origin_url, fetched_at=fetched_at,
+                         media_type=_find_media_type(name))
+    (root / record.id).mkdir(parents=True, exist_ok=True)
+    staged.replace(resolve_stored_path(record))
+    # Saved only once the bytes are in place: a record whose bytes are missing is what
+    # open_project_file exists to refuse, while bytes no record covers cost only disk.
+    record.save()
+    return record
+
+
 def move_file_to_project(file_id: ID, project_id: ID) -> ProjectFile:
     """Move a file with no project into one. Moves no bytes — the record is the address."""
     record = ProjectFile.load_or_none(file_id)
@@ -225,29 +248,6 @@ def _delete_if_empty(directory: Path) -> None:
 
 def _sorted_newest_first(records: list[ProjectFile]) -> list[ProjectFile]:
     return sorted(records, key=lambda record: record.created_at, reverse=True)
-
-
-def _save_file(filename: str, src: BinaryIO, project_id: ID | None, *,
-               origin_url: str | None = None, fetched_at: str | None = None) -> ProjectFile:
-    root = files_root()
-    # The stream is written to a temp file in the same dir first and moved into
-    # <root>/<record id>/<filename> once there is a record to name the directory. The
-    # record owns the directory rather than the file name, so the name a human chose
-    # survives into every path we show them — the run form's field, and the packet's
-    # "inputs this run read".
-    root.mkdir(parents=True, exist_ok=True)
-    staged, digest, byte_count = _write_to_temp_file(root, src, max_upload_bytes())
-    _refuse_upload_over_quota(root, staged, byte_count)
-    name = _safe_filename(filename)
-    record = ProjectFile(sha256=digest, filename=name, byte_count=byte_count,
-                         project_id=project_id, origin_url=origin_url, fetched_at=fetched_at,
-                         media_type=_find_media_type(name))
-    (root / record.id).mkdir(parents=True, exist_ok=True)
-    staged.replace(resolve_stored_path(record))
-    # Saved only once the bytes are in place: a record whose bytes are missing is what
-    # open_project_file exists to refuse, while bytes no record covers cost only disk.
-    record.save()
-    return record
 
 
 def _refuse_origin_that_is_not_http(origin_url: str) -> None:
