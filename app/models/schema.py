@@ -16,21 +16,11 @@ from pydantic import (
     model_validator,
 )
 from app.core.ids import ID
+from app.models.base import _Base
 from app.models.tool_schema_prompts import (
     SOURCE_REF_DESCRIPTION,
     TABLE_SCHEMA_DESCRIPTION,
 )
-
-
-# ── Base ─────────────────────────────────────────────────────────────────────
-class _Base(BaseModel):
-    """An enum-typed field holds a plain string after validation: compare with `==`, not `is`."""
-    model_config = ConfigDict(
-        extra="forbid",
-        use_enum_values=True,
-        validate_default=True,
-        populate_by_name=True,
-    )
 
 
 class StageConfig(_Base):
