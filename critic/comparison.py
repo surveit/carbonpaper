@@ -24,6 +24,7 @@ class RunSummary(CriticRecord):
     exact_only: Score
     on_commented_prs: Score
     silent_predictions: int
+    scored_units: int
     unscored_units: int
     review_cost_usd: float
     judge_cost_usd: float
@@ -113,6 +114,7 @@ def summarize_run(path: Path, result: EvalResult, out_dir: Path) -> RunSummary:
         exact_only=result.exact_only,
         on_commented_prs=sum_scores([unit.score for unit in commented]),
         silent_predictions=sum(unit.score.predicted for unit in silent),
+        scored_units=len(result.scored),
         unscored_units=len(result.unscored),
         review_cost_usd=result.review_cost_usd,
         judge_cost_usd=result.judge_cost_usd,

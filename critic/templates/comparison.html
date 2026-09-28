@@ -14,9 +14,9 @@
 <h2>Pooled</h2>
 <div class="scroll">
 <table>
-  <tr><th>Rubric</th><th class="num">Predictions</th><th class="num">Real</th><th class="num">Exact</th><th class="num">Judge</th>
+  <tr><th>Rubric</th><th class="num">Predictions</th><th class="num">Real</th><th class="num">Exact matches</th><th class="num">Judge matches</th>
       <th class="num">Precision</th><th class="num">Recall</th><th class="num">F1</th><th class="num">Precision on commented PRs</th>
-      <th class="num">Predictions on silent PRs</th><th class="num">Not scored</th><th class="num">Review</th><th class="num">Judge</th><th>Raw results</th></tr>
+      <th class="num">Predictions on silent PRs</th><th class="num">Scored</th><th class="num">Not scored</th><th class="num">Review spend</th><th class="num">Judge spend</th><th class="num">Spend per scored PR</th><th>Raw results</th></tr>
   {% for run in runs %}
   <tr><td><code>{{ run.rubric }}</code></td><td class="num">{{ run.overall.predicted }}</td><td class="num">{{ run.overall.real }}</td>
       <td class="num">{{ run.exact_only.matched_reals }}</td><td class="num">{{ run.overall.matched_reals - run.exact_only.matched_reals }}</td>
@@ -24,8 +24,9 @@
       <td class="num">{{ ratio(run.overall.matched_reals, run.overall.real, run.overall.recall) }}</td>
       <td class="num">{{ run.overall.f1 | percent }}</td>
       <td class="num">{{ ratio(run.on_commented_prs.matched_predictions, run.on_commented_prs.predicted, run.on_commented_prs.precision) }}</td>
-      <td class="num">{{ run.silent_predictions }}</td><td class="num">{{ run.unscored_units }}</td>
+      <td class="num">{{ run.silent_predictions }}</td><td class="num">{{ run.scored_units }}</td><td class="num">{{ run.unscored_units }}</td>
       <td class="num">{{ run.review_cost_usd | usd }}</td><td class="num">{{ run.judge_cost_usd | usd }}</td>
+      <td class="num">{{ ((run.review_cost_usd + run.judge_cost_usd) / run.scored_units) | usd if run.scored_units else "n/a" }}</td>
       <td><a href="{{ run.results_path }}">{{ run.results_path }}</a> <span class="muted">{{ run.review_model_ids | join(", ") }}</span></td></tr>
   {% endfor %}
 </table>
