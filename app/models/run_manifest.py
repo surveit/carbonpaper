@@ -134,6 +134,8 @@ class ReadFile(BaseModel):
     bytes: int
     # None outside the store, and on every run recorded before this field existed.
     file_id: str | None = None
+    # None for an upload, a file outside the store, and every run recorded before this field.
+    origin_url: str | None = None
 
     @property
     def filename(self) -> str:
@@ -158,6 +160,7 @@ class InputBinding(BaseModel):
     bytes: int | None = None
     source: str | None = None
     file_id: str | None = None
+    origin_url: str | None = None
 
 
 def read_input_bindings(raw: dict[str, Any]) -> list[InputBinding]:
@@ -176,7 +179,8 @@ def _read_one_stages_files(stage_id: ID, record: dict[str, Any]) -> list[InputBi
     return [
         # `source` sits on the stage's record; every file it read was bound the same way.
         InputBinding(stage_id=stage_id, path=f.path, filename=f.filename,
-                     sha256=f.sha256, bytes=f.bytes, source=source, file_id=f.file_id)
+                     sha256=f.sha256, bytes=f.bytes, source=source, file_id=f.file_id,
+                     origin_url=f.origin_url)
         for f in files
     ]
 

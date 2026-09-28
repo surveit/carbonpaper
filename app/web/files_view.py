@@ -41,6 +41,9 @@ class FileRow(BaseModel):
     archived_run_count: int
     completeness: file_store.FileCompleteness
     lineage: str
+    # Both None for an upload.
+    origin_url: str | None
+    fetched_at: str | None
     # None when nothing here shares its columns, or the sharers carry the same values.
     distinction: Distinction | None = None
     # How many files carry these columns, this one included.
@@ -169,6 +172,8 @@ def _build_row(record: file_store.ProjectFile, run_ids: list[str], archived: set
         archived_run_count=sum(1 for run_id in run_ids if run_id in archived),
         completeness=record.completeness,
         lineage=record.lineage,
+        origin_url=record.origin_url,
+        fetched_at=record.fetched_at,
         distinction=distinction,
         shape_group_size=len(group.file_ids) if group else 1,
         shape_key="|".join(group.columns) if group else "",

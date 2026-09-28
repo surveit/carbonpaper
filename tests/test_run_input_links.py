@@ -6,11 +6,11 @@ import io
 
 import pytest
 
-from app.core.files import delete_file, resolve_stored_path, save_upload
+from app.core.files import delete_file, receive_source, resolve_stored_path, save_upload
 from app.runtime.stages.input_data import _weigh_file
 from app.core.run_status import RunStatus
 from app.models.records.run_manifest import RunManifest
-from app.models.run_manifest import RunKind
+from app.models.run_manifest import RunKind, StageInputRecord, read_input_bindings
 from app.services import workspace
 from app.services.project import create_project
 from app.web.run_index import build_run_index_rows
@@ -123,3 +123,17 @@ def test_the_preflight_names_no_id_for_a_file_outside_the_store(project_id, tmp_
     loose = tmp_path / "posts.csv"
     loose.write_bytes(CSV)
     assert _weigh_file(loose).file_id is None
+
+
+def test_the_manifest_names_where_a_fetched_file_came_from(project_id):
+    origin = "https://example.org/filings/posts.csv"
+    record = receive_source(project_id, origin, "posts.csv", io.BytesIO(CSV))
+    read = StageInputRecord(files=[_weigh_file(resolve_stored_path(record))])
+    [binding] = read_input_bindings({"input_bindings": {"load": read.model_dump(mode="json")}})
+    assert binding.origin_url == origin
+
+
+def test_a_run_recorded_before_origins_reads_with_none():
+    [binding] = read_input_bindings({"input_bindings": {"load": {"files": [
+        {"path": "/x/posts.csv", "sha256": CSV_SHA, "bytes": len(CSV), "file_id": None}]}}})
+    assert binding.origin_url is None

@@ -15,7 +15,7 @@ import pandas as pd
 import pyarrow as pa
 
 from app.core.errors import FrameConcatMismatchError
-from app.core.files import find_stored_file_id
+from app.core.files import find_stored_file
 from app.core.frames import concat_tables, frame_to_table
 from app.core.source_files import FileFormat, read_source_file, text_on_disk_columns
 from app.models import (
@@ -60,8 +60,10 @@ def preflight_input_data(
 def _weigh_file(path: Path) -> ReadFile:
     with path.open("rb") as handle:
         digest = hashlib.file_digest(handle, "sha256")
-    return ReadFile(path=str(path), sha256=digest.hexdigest(),
-                    bytes=path.stat().st_size, file_id=find_stored_file_id(path))
+    stored = find_stored_file(path)
+    return ReadFile(path=str(path), sha256=digest.hexdigest(), bytes=path.stat().st_size,
+                    file_id=stored.id if stored else None,
+                    origin_url=stored.origin_url if stored else None)
 
 
 def read_input_data(workflow_stage: WorkflowStage, ctx: RunContext) -> StageOutput:

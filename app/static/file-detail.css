@@ -9,6 +9,8 @@
 .file-head h1 code { font-size: 1.15rem; }
 .file-facts { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center;
     margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+/* A storage URL is long and unbroken; it wraps rather than pushing the page wide. */
+.file-origin { overflow-wrap: anywhere; }
 
 /* The provenance card: the only editable thing on the page, so it sits directly under
    the name and takes a plain Save rather than a dialog. */
