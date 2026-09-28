@@ -5,7 +5,7 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import Any, NamedTuple
 
-from app.core.errors import QuoteAmbiguous, QuoteNotInText
+from app.core.errors import QuoteAmbiguous, QuoteRefused
 from app.core.frames import is_null_form
 from app.core.json_types import JsonDict
 from app.core.text_sources import NormalizedText, normalize_with_offsets
@@ -17,9 +17,6 @@ from app.models.stages.llm_transform import LLMTransformStage
 
 from ..spans import require_bound_file
 from .execution import Row
-
-# The refusals a model can act on, so its reply is sent back with their wording.
-QUOTE_REFUSALS = (QuoteNotInText, QuoteAmbiguous)
 
 
 class QuotedSpanColumn(NamedTuple):
@@ -47,7 +44,7 @@ def complete_spans(
     reply: JsonDict, row: Row, columns: Sequence[QuotedSpanColumn],
     sources: Mapping[str, InputBinding],
 ) -> JsonDict:
-    """Raises one of QUOTE_REFUSALS, worded for the model, when a quote names no one place."""
+    """Raises QuoteRefused, which a re-ask can fix, or QuoteAmbiguous, which it cannot."""
     completed = {
         column.name: _complete_span(
             reply[column.name], row[column.quoted_from.name], column.quoted_from, sources)
@@ -72,8 +69,8 @@ def _complete_span(
         return None
     reply = SpanReply.model_validate(reply_cell)
     if is_null_form(parent_cell):
-        raise QuoteNotInText(
-            f"`{quoted_from.name}` holds no text on this row to quote from: {reply.quote!r}")
+        empty = f"`{quoted_from.name}` holds no text on this row to quote from: {reply.quote!r}"
+        raise QuoteRefused(empty, correction=empty)
     if quoted_from.type == LIST_SPAN_COLUMN_TYPE:
         spans = [Span.model_validate(cell, strict=True) for cell in parent_cell]
         return _pick_listed_span(spans, reply, quoted_from.name).model_dump()
@@ -106,13 +103,14 @@ def _pick_listed_span(spans: list[Span], reply: SpanReply, column_name: str) -> 
         if _normalize(span.quote) == quote and span not in matches:
             matches.append(span)
     if not matches:
-        raise QuoteNotInText(
-            f"quote is none of the {len(spans)} quotes in `{column_name}`; copy one of them "
-            f"whole: {reply.quote!r}")
+        missing = (f"quote is none of the {len(spans)} quotes in `{column_name}`; copy one of "
+                   f"them whole: {reply.quote!r}")
+        raise QuoteRefused(missing, correction=missing)
     if len(matches) > 1:
+        # A listed span is picked by its quote alone, so no re-ask can tell these apart.
         raise QuoteAmbiguous(
-            f"quote matches {len(matches)} spans in `{column_name}` at different places: "
-            f"{reply.quote!r}")
+            f"the {len(matches)} quotes in `{column_name}` reading {reply.quote!r} are "
+            f"indistinguishable: they sit at different places, and a quote cannot pick one")
     return matches[0]
 
 
@@ -134,15 +132,21 @@ def _is_framed_by(text: str, start: int, end: int, prefix: str, suffix: str) -> 
 
 def _require_one_place(found: list[int], framed: list[int], where: str, quote: str) -> None:
     if not found:
-        raise QuoteNotInText(f"quote not found on {where}: {quote!r}")
+        raise _refuse_quote("quote not found", where, quote,
+                            "Copy the words exactly as they appear in the text you were shown.")
     if not framed:
-        raise QuoteNotInText(
-            f"quote appears {len(found)} time(s) on {where}, none with the prefix and suffix "
-            f"given: {quote!r}")
+        raise _refuse_quote(
+            f"the prefix and suffix given frame none of the {len(found)} places the quote "
+            "appears", where, quote,
+            "Copy the prefix and suffix exactly as they appear in the text you were shown.")
     if len(framed) > 1:
-        raise QuoteAmbiguous(
-            f"quote appears {len(framed)} times on {where}; give a prefix or suffix that tells "
-            f"them apart: {quote!r}")
+        raise _refuse_quote(f"quote appears {len(framed)} times", where, quote,
+                            "Give a prefix or suffix, copied exactly, that tells them apart.")
+
+
+def _refuse_quote(finding: str, where: str, quote: str, fix: str) -> QuoteRefused:
+    # The model was never shown a file name or page, so its correction names neither.
+    return QuoteRefused(f"{finding} on {where}: {quote!r}", correction=f"{finding}: {quote!r}. {fix}")
 
 
 def _slice_raw_prefix(raw: str, page: NormalizedText, start: int, prefix: str) -> str | None:

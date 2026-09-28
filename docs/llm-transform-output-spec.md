@@ -39,7 +39,10 @@ prompt never hand-writes — and never drifts from — an output shape.
    that column as its text. The runtime finds the quote there and copies
    `source_id`, `source_sha256` and the page from that span. For a `list[span]`
    column, the quote must be one of the listed quotes whole. A span nested in a
-   list or a `json` column is refused, because nothing mints it.
+   list or a `json` column is refused, because nothing mints it. Normalizing
+   whitespace does not join a word broken across lines with a hard hyphen, so
+   such a word is quoted as printed, hyphen and break included: "pro- ceeds",
+   not "proceeds".
 
 ## Where each rule lives
 
@@ -68,10 +71,14 @@ prompt never hand-writes — and never drifts from — an output shape.
   quoted-from text with whitespace, ligatures and soft hyphens normalized, and
   maps the match back to raw offsets. The stored quote is therefore the page's
   own characters. It then mints the span with `narrow_span`. On the per-row path
-  a quote found nowhere, or at more than one place, is sent back with the
-  refusal's wording up to `max_retries` times, and then the row carries `_error`
-  naming the file, the page and the quote. A batched call is not re-asked for
-  one item: that item's row carries the refusal.
+  a quote found nowhere, or at more than one place, is sent back up to
+  `max_retries` times with what to fix: copy the words exactly as shown, or give
+  a prefix or suffix. The model's correction names no file or page, because the
+  model was shown neither. After the last attempt the row carries `_error`
+  naming the file, the page and the quote. Two listed spans at different places
+  that read the same fail the row at once, because a quote alone cannot pick
+  one. A batched call is not re-asked for one item: that item's row carries the
+  refusal.
   `find_llm_signature_issues` holds `quoted_from` to a read `span` or
   `list[span]` column.
 - **The reply is validated by construction.** `call_llm` runs an

@@ -14,7 +14,13 @@ import pyarrow as pa
 from pydantic import BaseModel, create_model
 
 from app.core.agent.usage import LlmUsage
-from app.core.errors import LLMError, StageWideFailure
+from app.core.errors import (
+    LLMError,
+    QuoteAmbiguous,
+    QuoteNotInText,
+    QuoteRefused,
+    StageWideFailure,
+)
 from app.core.json_types import JsonDict
 from app.core.judgments import JudgmentDraft
 from app.models import WorkflowStage
@@ -37,7 +43,6 @@ from .execution import (
     narrow_stage,
 )
 from .span_replies import (
-    QUOTE_REFUSALS,
     QuotedSpanColumn,
     complete_spans,
     find_quoted_span_columns,
@@ -117,15 +122,16 @@ def _ask_until_quotes_resolve(
     """Re-asks only a reply quoting words the runtime could not find at one place."""
     prompt_row = show_quoted_text(row, quoted)
     correction: str | None = None
+    rejection = ""
     attempts = _count_attempts(stage.llm)
     for _ in range(attempts):
         judgment = call_llm(stage.id, stage.llm, prompt_row, reply_model=reply_model,
                             usage_out=usages, correction=correction)
         try:
             return judgment, complete_spans(judgment.reply, row, quoted, sources)
-        except QUOTE_REFUSALS as refusal:
-            correction = str(refusal)
-    raise LLMError(f"reply rejected after {attempts} attempt(s): {correction}")
+        except QuoteRefused as refusal:
+            correction, rejection = refusal.correction, str(refusal)
+    raise LLMError(f"reply rejected after {attempts} attempt(s): {rejection}")
 
 
 # ── batch_size > 1: batched path (grain + order preserved and VERIFIED) ──
@@ -190,7 +196,7 @@ def _complete_item_spans(
     reply = {k: v for k, v in item.items() if k != _ROW_NUMBER_FIELD}
     try:
         return complete_spans(reply, row, quoted, sources)
-    except (*QUOTE_REFUSALS, *SPAN_REFUSALS) as refusal:
+    except (QuoteRefused, QuoteNotInText, QuoteAmbiguous, *SPAN_REFUSALS) as refusal:
         return {ROW_ERROR_KEY: str(refusal)}
 
 

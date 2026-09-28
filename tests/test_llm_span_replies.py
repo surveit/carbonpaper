@@ -142,10 +142,13 @@ def test_a_quote_not_on_the_page_is_re_asked_then_fails_the_row_naming_file_page
 
     output = _run(_quoting_stage(max_retries=1), [_page_span().model_dump()])
 
-    refusal = "quote not found on page 1 of us_v_boeing_ecf58_page1.pdf: 'the plea was rejected'"
-    assert [call["correction"] for call in calls] == [None, refusal]
+    assert [call["correction"] for call in calls] == [None, (
+        "quote not found: 'the plea was rejected'. Copy the words exactly as they appear in the "
+        "text you were shown.")]
     (error,) = contribution_of(output).row_errors
-    assert error["message"] == f"reply rejected after 2 attempt(s): {refusal}"
+    assert error["message"] == (
+        "reply rejected after 2 attempt(s): quote not found on page 1 of "
+        "us_v_boeing_ecf58_page1.pdf: 'the plea was rejected'")
     assert _minted(output) == [None]
 
 
@@ -168,8 +171,8 @@ def test_a_quote_found_twice_is_re_asked_and_a_prefix_picks_one(monkeypatch):
     output = _run(stage, [_page_span().model_dump()])
 
     assert calls[1]["correction"] == (
-        "quote appears 2 times on page 1 of us_v_boeing_ecf58_page1.pdf; give a prefix or "
-        f"suffix that tells them apart: {CASE_HEADER!r}")
+        f"quote appears 2 times: {CASE_HEADER!r}. Give a prefix or suffix, copied exactly, that "
+        "tells them apart.")
     (span,) = _minted(output)
     assert span is not None and isinstance(span.locator, PageCharRange)
     assert span.locator.start == PAGE_TEXT.rindex("Case 4:21-cr-00005-O")
@@ -256,6 +259,22 @@ def test_a_quote_that_is_no_listed_span_is_re_asked_then_fails_the_row(monkeypat
     assert calls[1]["correction"] == (
         "quote is none of the 2 quotes in `page`; copy one of them whole: 'BOEING'")
     assert len(contribution_of(output).row_errors) == 1
+
+
+def test_listed_spans_that_read_the_same_fail_the_row_without_a_re_ask(monkeypatch):
+    header = "Case 4:21-cr-00005-O"
+    page = _page_span()
+    both_headers = [narrow_span(page, header, prefix="ACT \n \n").model_dump(),
+                    narrow_span(page, header, prefix="PageID 536").model_dump()]
+    calls = _script_replies(monkeypatch, {"quote": header})
+
+    output = _run(_quoting_stage(quoted_type="list[span]", max_retries=1), [both_headers])
+
+    assert len(calls) == 1
+    (error,) = contribution_of(output).row_errors
+    assert error["message"] == (
+        f"the 2 quotes in `page` reading {header!r} are indistinguishable: they sit at different "
+        "places, and a quote cannot pick one")
 
 
 # ── batch_size > 1 ──
