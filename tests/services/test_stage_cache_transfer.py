@@ -31,7 +31,7 @@ def _record(project_id: str, *, stage_fingerprint: str, input_fingerprint: str, 
         input_fingerprint=input_fingerprint,
         input_row={"comment": "Diese Klimakleber sind eine Plage"},
         output_row={"is_abusive": verdict, "category": 9},
-        branches=["classify/0:if"],
+        branches=["classify/0:if"], judgment_id=None,
     )
 
 
@@ -56,7 +56,7 @@ def test_a_row_carrying_a_unicode_line_separator_survives_the_round_trip():
         project_id=_SOURCE, stage_id=_STAGE, stage_fingerprint="fp_a",
         input_fingerprint="row_1",
         input_row={"specific_issues": "Issues related to AI.\u2028Trade promotion."},
-        output_row={"is_abusive": False, "category": 1}, branches=[],
+        output_row={"is_abusive": False, "category": 1}, branches=[], judgment_id=None,
     )
 
     report = import_stage_cache(export_stage_cache(_SOURCE), "destination")
@@ -184,7 +184,7 @@ def test_entries_matching_a_live_stage_definition_count_as_reachable(destination
     StageCacheEntry.read_write().record(
         project_id=_SOURCE, stage_id=stage_id, stage_fingerprint=fingerprint,
         input_fingerprint="row_1", input_row={"x": 1}, output_row={"y": 2},
-        branches=None,
+        branches=None, judgment_id=None,
     )
 
     report = import_stage_cache(export_stage_cache(_SOURCE), destination_project)
@@ -198,7 +198,7 @@ def test_entries_from_an_edited_stage_import_but_are_not_reachable(destination_p
     StageCacheEntry.read_write().record(
         project_id=_SOURCE, stage_id=stage_id, stage_fingerprint="fingerprint_from_an_older_edit",
         input_fingerprint="row_1", input_row={"x": 1}, output_row={"y": 2},
-        branches=None,
+        branches=None, judgment_id=None,
     )
 
     report = import_stage_cache(export_stage_cache(_SOURCE), destination_project)

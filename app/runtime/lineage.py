@@ -1,19 +1,19 @@
-"""Per-row provenance for a stage whose output isn't row-preserving BY POSITION
-(filter_rows, union, join), worked out by the RUNTIME, never reported by the
-authored stage. It is a field on `StageOutput`, never a column on the frame, so
-no runtime machinery can reach a stage's real output. A row may have several
-parents, so the sidecar is list-valued — see `RowLineage`."""
+"""Which input rows each output row came from, held beside a stage's frame and never in it."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, Sequence, overload
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, Mapping, Sequence, overload
 
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 
+from app.core.errors import RowOutOfRange, StageNotInRun
 from app.core.frames import read_native_cell, read_native_column
+from app.models.stage import RowEffect, find_row_effect
+
+from .errors import MissingLineage
 
 if TYPE_CHECKING:
     from app.models.workflow_stage import WorkflowStage
@@ -276,3 +276,76 @@ def grouped_contributions_lineage(
         ]
         for row_contributors in contributors
     ])
+
+
+def refuse_built_rows_with_no_lineage(
+    workflow_stage: "WorkflowStage", lineage: RowLineage | None
+) -> None:
+    """None reads as output row i being input row i, which no `builds` stage's row is."""
+    stage_type = workflow_stage.stage.type
+    if lineage is not None or find_row_effect(stage_type) != RowEffect.builds:
+        return
+    raise MissingLineage(
+        f"stage '{workflow_stage.id}': a {stage_type} builds its own rows, so it owes the "
+        f"input rows behind every one, and its handler reported none — the handler must "
+        f"return them as its output's `lineage`"
+    )
+
+
+@dataclass
+class LineageRecorder:
+    """A frame function's own account of which input rows became each row it returns."""
+
+    inputs: Mapping[str, pa.Table]
+    parents_by_output_row: dict[int, list[RowParent]] = field(default_factory=dict)
+
+    def built_from(self, output_row: int, stage_id: str, input_row: int,
+                   columns: Iterable[str] | None = None) -> None:
+        """Output row `output_row` is this input row, reshaped."""
+        self._record(output_row, stage_id, input_row, EdgeKind.direct.value, columns)
+
+    def contributed_by(self, output_row: int, stage_id: str, input_row: int,
+                       columns: Iterable[str] | None = None) -> None:
+        """This input row fed the output row without being the row it was built from."""
+        self._record(output_row, stage_id, input_row, EdgeKind.contribution.value, columns)
+
+    def originates(self, output_row: int) -> None:
+        """No input row became this one — said, so it is not mistaken for a row left out."""
+        self.parents_by_output_row.setdefault(int(output_row), [])
+
+    def require_every_row(self, row_count: int) -> RowLineage:
+        """Refuses a partial account: a row left out would trace as having come from nowhere."""
+        recorded = self.parents_by_output_row
+        rows_past_the_end = sorted(r for r in recorded if not 0 <= r < row_count)
+        if rows_past_the_end:
+            raise RowOutOfRange(
+                f"lineage was recorded for output row(s) {rows_past_the_end}, but the stage "
+                f"returned {row_count} row(s)"
+            )
+        rows_without_lineage = [r for r in range(row_count) if r not in recorded]
+        if rows_without_lineage:
+            raise MissingLineage(
+                f"lineage was recorded for {len(recorded)} of {row_count} output row(s); no "
+                f"lineage recorded for {len(rows_without_lineage)}, first at "
+                f"{rows_without_lineage[0]}. Every row needs `built_from`, `contributed_by` or "
+                f"`originates` — a row left out would trace as having come from nowhere."
+            )
+        return RowLineage([recorded[r] for r in range(row_count)])
+
+    def _record(self, output_row: int, stage_id: str, input_row: int,
+                kind: str, columns: Iterable[str] | None) -> None:
+        input_table = self.inputs.get(stage_id)
+        if input_table is None:
+            raise StageNotInRun(
+                f"this stage was not given '{stage_id}', so it cannot have read its "
+                f"rows — its inputs are {sorted(self.inputs)}"
+            )
+        if not 0 <= input_row < input_table.num_rows:
+            raise RowOutOfRange(
+                f"row {input_row} out of range for input '{stage_id}' "
+                f"({input_table.num_rows} rows)"
+            )
+        fed_columns = tuple(str(c) for c in columns) if columns else None
+        self.parents_by_output_row.setdefault(int(output_row), []).append(
+            RowParent(stage_id, int(input_row), kind, fed_columns)
+        )

@@ -22,6 +22,8 @@ from app.models.stage import (
 
 from app.core.agent.usage import LlmUsage
 from app.core.frames import collapse_null_forms, is_null_form, list_table_rows
+from app.core.ids import ID
+from app.core.judgments import Judgment
 from app.core.stage_cache import StageCache, StageCacheEntry, compute_row_fingerprint
 from ..branches import BranchesTaken, BranchRecorder
 
@@ -38,6 +40,7 @@ from .row_events import (
     emit_row_raised,
     emit_row_start,
 )
+from .row_judgments import RowJudging, open_row_judging, record_row_judgment
 
 _StageT = TypeVar("_StageT", bound=AbstractStage)
 
@@ -101,6 +104,9 @@ ROW_DEFERRED_KEY = "_deferred"
 # carries the column, so a stage with no hits reports no count rather than a zero.
 ROW_CACHED_KEY = "_cached"
 
+# Internal column carrying the JudgmentDraft of the model call that decided the row.
+ROW_JUDGMENT_KEY = "_judgment"
+
 
 class _InternalRowColumn(NamedTuple):
     column: str
@@ -120,6 +126,7 @@ _INTERNAL_ROW_COLUMNS = (
     _InternalRowColumn(ROW_USAGE_KEY, stripped_from_output=True, blocks_caching=False),
     _InternalRowColumn(ROW_DEFERRED_KEY, stripped_from_output=True, blocks_caching=True),
     _InternalRowColumn(ROW_CACHED_KEY, stripped_from_output=True, blocks_caching=False),
+    _InternalRowColumn(ROW_JUDGMENT_KEY, stripped_from_output=True, blocks_caching=False),
 )
 
 
@@ -157,11 +164,13 @@ class RowMapTransformHandler(StageHandler):
         parallelism: int = 1,
         trims_output_to_declared: bool = False,
         drops_rows: bool = False,
+        records_judgments: bool = False,
     ) -> None:
         self.make_mapper = make_mapper
         self.parallelism = parallelism
         self.trims_output_to_declared = trims_output_to_declared
         self.drops_rows = drops_rows
+        self.records_judgments = records_judgments
 
     def execute(
         self, workflow_stage: WorkflowStage, inputs: dict[str, pa.Table],
@@ -274,6 +283,7 @@ def _run_row_mapper(
         map_group,
         transform_output_schema(stage).to_pydantic_model(f"{stage.id}_written"),
         caching,
+        open_row_judging(stage.id, ctx) if handler.records_judgments else None,
         ctx.run_log,
         stage.id,
         recorder,
@@ -513,7 +523,8 @@ def _open_row_caching(workflow_stage: WorkflowStage, ctx: RunContext) -> _RowCac
 
 
 def _cache_row_output(
-    caching: _RowCaching, input_row: Row, output_row: Row, branches: BranchesTaken
+    caching: _RowCaching, input_row: Row, output_row: Row, branches: BranchesTaken,
+    judgment_id: ID | None,
 ) -> None:
     if caching.writer is None:
         return
@@ -527,6 +538,7 @@ def _cache_row_output(
         input_row=input_row,
         output_row=_without_internal_columns(output_row),
         branches=branches,
+        judgment_id=judgment_id,
     )
 
 
@@ -546,7 +558,7 @@ def _find_cached_rows(
         if entry is None or entry.output_row is None:
             cached_results.append(None)
             continue
-        emit_cached_row(log, stage_id, index)
+        emit_cached_row(log, stage_id, index, entry.judgment_id)
         # The row is replayed whole: its branches are as much its output as its columns.
         if recorder is not None:
             recorder.replay_row(index, entry.branches)
@@ -563,6 +575,7 @@ class _StageExecution(NamedTuple):
     map_group: GroupMapper
     written_model: type[BaseModel]
     caching: _RowCaching | None
+    judging: RowJudging | None
     log: RunLog | None
     stage_id: str
     recorder: BranchRecorder | None
@@ -570,7 +583,7 @@ class _StageExecution(NamedTuple):
     def run_group(
         self, indices: Sequence[int], rows: Sequence[Row]
     ) -> Sequence[Row | None]:
-        """Map, validate, log, record. One function because the ORDER is the content."""
+        """Map, validate, judge, log, record. One function because the ORDER is the content."""
         for index in indices:
             emit_row_start(self.log, self.stage_id, index)
         # Bound here, on the worker thread that makes the call: a pool thread
@@ -592,23 +605,38 @@ class _StageExecution(NamedTuple):
             _validate_row(_assert_row(row, self.stage_id), self.written_model)
             for row in mapped
         ]
-        for index, result in zip(indices, results):
+        judgments = [
+            self.record_judgment(index, row, result)
+            for index, row, result in zip(indices, rows, results)
+        ]
+        judgment_ids = [None if judgment is None else judgment.id for judgment in judgments]
+        for index, result, judgment_id in zip(indices, results, judgment_ids):
             # A dropped row (None) ran to completion — it has no error to report.
             emit_row_outcome(
                 self.log,
                 self.stage_id,
                 index,
                 result.get(ROW_ERROR_KEY) if result else None,
+                judgment_id,
             )
         if self.caching is not None:
-            for index, row, result in zip(indices, rows, results):
+            for index, row, result, judgment_id in zip(indices, rows, results, judgment_ids):
                 # A drop is not a recordable output: the store holds output ROWS,
                 # so a replayed drop would be indistinguishable from a miss. A row
                 # this function just failed carries _error, which also blocks it.
                 if result is not None:
                     _cache_row_output(
-                        self.caching, row, result, self.read_branches_taken(index))
+                        self.caching, row, result, self.read_branches_taken(index),
+                        judgment_id)
         return results
+
+    def record_judgment(self, index: int, row: Row, result: Row | None) -> Judgment | None:
+        if self.judging is None or result is None:
+            return None
+        return record_row_judgment(
+            self.judging, index, row, result.get(ROW_JUDGMENT_KEY),
+            failed=result.get(ROW_ERROR_KEY) is not None,
+        )
 
     def read_branches_taken(self, index: int) -> BranchesTaken:
         """() for a row whose code holds no branch, which is not the None of a row that never ran."""

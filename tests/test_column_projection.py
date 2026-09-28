@@ -8,7 +8,7 @@ from app.runtime.context import RunContext, RunIdentity
 from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform as lt
 from app.core.stage_cache import StageCacheEntry
-from conftest import as_inputs, contribution_of, make_run_context, place_stage, queue_columns, reads_of, rows_of
+from conftest import as_inputs, contribution_of, make_run_context, place_stage, queue_columns, reads_of, rows_of, script_judgment
 
 
 def _place(stage, upstream_id, input_columns):
@@ -36,7 +36,7 @@ def test_llm_transform_drops_undeclared_columns_including_former_hardcoded_ids(m
                         {"name": "score", "type": "int", "nullable": False}],
     )
     monkeypatch.setattr(lt, "call_llm",
-                        lambda *a, **k: {"score": 5, "benchmark_id": "B1", "query_id": "Q5"})
+                        lambda *a, **k: script_judgment({"score": 5, "benchmark_id": "B1", "query_id": "Q5"}))
     ctx = make_run_context()
     out = HANDLERS[StageType.llm_transform].execute(
         _place(stage, "load", [{"name": "id", "type": "str", "nullable": True},
@@ -56,7 +56,7 @@ def test_llm_transform_declared_input_column_rides_through(monkeypatch):
                         {"name": "entity_id", "type": "str", "nullable": True},
                         {"name": "score", "type": "int", "nullable": False}],
     )
-    monkeypatch.setattr(lt, "call_llm", lambda *a, **k: {"score": 5})
+    monkeypatch.setattr(lt, "call_llm", lambda *a, **k: script_judgment({"score": 5}))
     ctx = make_run_context()
     src = pd.DataFrame({"id": ["r1"], "text": ["hi"], "entity_id": ["C:acme"]})
     out = HANDLERS[StageType.llm_transform].execute(

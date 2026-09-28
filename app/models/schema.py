@@ -16,21 +16,12 @@ from pydantic import (
     model_validator,
 )
 from app.core.ids import ID
+from app.models.base import _Base
+from app.models.spans import Span, SpanReply
 from app.models.tool_schema_prompts import (
     SOURCE_REF_DESCRIPTION,
     TABLE_SCHEMA_DESCRIPTION,
 )
-
-
-# ── Base ─────────────────────────────────────────────────────────────────────
-class _Base(BaseModel):
-    """An enum-typed field holds a plain string after validation: compare with `==`, not `is`."""
-    model_config = ConfigDict(
-        extra="forbid",
-        use_enum_values=True,
-        validate_default=True,
-        populate_by_name=True,
-    )
 
 
 class StageConfig(_Base):
@@ -61,7 +52,7 @@ class FunctionKind(str, Enum):
 
 # ── Column-type vocabulary ───────────────────────────────────────────────────
 SCALAR_COLUMN_TYPES: set[str] = {"str", "int", "float", "bool", "datetime", "date"}
-STRUCTURED_COLUMN_TYPES: set[str] = {"json"}
+STRUCTURED_COLUMN_TYPES: set[str] = {"json", "span"}
 _LIST_RE = re.compile(r"^list\[(.+)\]$")
 
 # Named constants for the column-type values compared individually below (by
@@ -69,8 +60,11 @@ _LIST_RE = re.compile(r"^list\[(.+)\]$")
 # — as opposed to the scalar/structured *sets* above, which are membership-tested
 # as a whole.
 STR_COLUMN_TYPE = "str"
+INT_COLUMN_TYPE = "int"
 JSON_COLUMN_TYPE = "json"
 LIST_JSON_COLUMN_TYPE = "list[json]"
+SPAN_COLUMN_TYPE = "span"
+LIST_SPAN_COLUMN_TYPE = "list[span]"
 
 # The column types holding a python date/datetime, never the ISO string that spells one.
 DATE_COLUMN_TYPES: frozenset[str] = frozenset({"date", "datetime"})
@@ -127,7 +121,8 @@ class Column(_Base):
         description=(
             "Column type: a scalar (str, int, float, bool, date, datetime); `json` (a nested "
             "object — give its shape with `fields`, or an open string->scalar map with "
-            "`value_type`); or `list[X]` of any of these (e.g. list[str], list[json])."
+            "`value_type`); `span` (a quote and where it sits in a stored source file); or "
+            "`list[X]` of any of these (e.g. list[str], list[json])."
         ),
     )
     nullable: bool
@@ -156,6 +151,13 @@ class Column(_Base):
         description=(
             "Scalar value type for an open `json` map (string keys -> scalars). "
             "Alternative to `fields`."
+        ),
+    )
+    quoted_from: Optional[str] = Field(
+        default=None,
+        description=(
+            "Only on a `span` column an llm_transform adds: the name of the input `span` "
+            "column holding the text this column quotes from. Required there."
         ),
     )
 
@@ -211,6 +213,15 @@ class Column(_Base):
         return self
 
     @model_validator(mode="after")
+    def _quoted_from_only_on_span(self) -> "Column":
+        if self.quoted_from is not None and self.type != SPAN_COLUMN_TYPE:
+            raise ValueError(
+                f"column {self.name!r}: quoted_from is only valid on type 'span' "
+                f"(got {self.type!r})"
+            )
+        return self
+
+    @model_validator(mode="after")
     def _range_is_numeric_bounds(self) -> "Column":
         if self.range is None:
             return self
@@ -239,6 +250,14 @@ class Column(_Base):
 Column.model_rebuild()
 
 
+def holds_spans(column: Column) -> bool:
+    element_type = column.type
+    while (inner := find_list_element_type(element_type)) is not None:
+        element_type = inner
+    return element_type == SPAN_COLUMN_TYPE or any(
+        holds_spans(field) for field in column.fields or [])
+
+
 # ── Column spec-equality ─────────────────────────────────────────────────────
 # A producer's output column and a consumer's declared copy of it must match on
 # SPEC, but may legitimately differ in prose (description/source). The spec
@@ -246,8 +265,11 @@ Column.model_rebuild()
 # and prose (`description`, `source`) — read off the model, so a newly added
 # capability is compared automatically instead of being silently ignored.
 _PROSE_COLUMN_FIELDS = frozenset({"name", "description", "source"})
+# Read only by the stage that adds the column, so a consumer's copy need not repeat it.
+_PRODUCER_ONLY_COLUMN_FIELDS = frozenset({"quoted_from"})
 _SPEC_COLUMN_FIELDS: tuple[str, ...] = tuple(
-    f for f in Column.model_fields if f not in _PROSE_COLUMN_FIELDS
+    f for f in Column.model_fields
+    if f not in _PROSE_COLUMN_FIELDS and f not in _PRODUCER_ONLY_COLUMN_FIELDS
 )
 
 
@@ -289,6 +311,8 @@ _SCALAR_TYPE_WORDING: dict[str, str] = {
 def _type_wording(t: str) -> str:
     if t in _SCALAR_TYPE_WORDING:
         return _SCALAR_TYPE_WORDING[t]
+    if t == SPAN_COLUMN_TYPE:
+        return f"span object (keys: {', '.join(Span.model_fields)})"
     m = _LIST_RE.match(t)
     if m:
         return f"array of {_type_wording(m.group(1).strip())} values"
@@ -439,7 +463,11 @@ class TableSchema(_Base):
 
     def to_pydantic_model(self, name: str) -> type[BaseModel]:
         """Every column is a REQUIRED field: `nullable` permits a None value, not an absent key."""
-        return _build_row_model(name, self.columns)
+        return _build_row_model(name, self.columns, span_annotation=Span)
+
+    def to_reply_model(self, name: str) -> type[BaseModel]:
+        """What a model is asked for: a span column takes words alone, never an address."""
+        return _build_row_model(name, self.columns, span_annotation=SpanReply)
 
 
 # ── Compiling to a Pydantic model (TableSchema.to_pydantic_model) ───────────
@@ -457,10 +485,12 @@ _SCALAR_PY_TYPES: dict[str, type] = {
 }
 
 
-def _build_row_model(name: str, columns: Sequence[Column]) -> type[BaseModel]:
+def _build_row_model(
+    name: str, columns: Sequence[Column], span_annotation: type[BaseModel]
+) -> type[BaseModel]:
     field_definitions: dict[str, Any] = {}
     for column in columns:
-        annotation = _annotation_for(column, parent_name=name)
+        annotation = _annotation_for(column, name, span_annotation)
         if column.nullable:
             annotation = Optional[annotation]
         field_definitions[column.name] = (annotation, _field_for(column))
@@ -469,11 +499,15 @@ def _build_row_model(name: str, columns: Sequence[Column]) -> type[BaseModel]:
     )
 
 
-def _annotation_for(column: Column, parent_name: str) -> Any:
+def _annotation_for(
+    column: Column, parent_name: str, span_annotation: type[BaseModel]
+) -> Any:
     if column.type in (JSON_COLUMN_TYPE, LIST_JSON_COLUMN_TYPE):
         inner: Any
         if column.fields is not None:
-            inner = _build_row_model(f"{parent_name}__{column.name}", column.fields)
+            inner = _build_row_model(
+                f"{parent_name}__{column.name}", column.fields, span_annotation
+            )
         else:
             assert column.value_type is not None  # Column._json_shape enforces
             scalar_py_type: Any = _SCALAR_PY_TYPES[column.value_type]
@@ -481,26 +515,36 @@ def _annotation_for(column: Column, parent_name: str) -> Any:
         return list[inner] if column.type == LIST_JSON_COLUMN_TYPE else inner
     if column.enum is not None:
         return Literal.__getitem__(tuple(column.enum))
-    return _scalar_or_list_annotation(column.type)
+    return _scalar_or_list_annotation(column.type, span_annotation)
 
 
-def _scalar_or_list_annotation(type_name: str) -> Any:
+def _scalar_or_list_annotation(type_name: str, span_annotation: type[BaseModel]) -> Any:
     if type_name in _SCALAR_PY_TYPES:
         return _SCALAR_PY_TYPES[type_name]
+    if type_name == SPAN_COLUMN_TYPE:
+        return span_annotation
     match = _LIST_RE.match(type_name)
     if match:
-        element_type: Any = _scalar_or_list_annotation(match.group(1).strip())
+        element_type: Any = _scalar_or_list_annotation(match.group(1).strip(), span_annotation)
         return list[element_type]
     raise ValueError(f"unknown column type {type_name!r}")
 
 
 def _field_for(column: Column) -> Any:
     kwargs: dict[str, Any] = {}
-    if column.description:
-        kwargs["description"] = column.description
+    description = _describe_field(column)
+    if description:
+        kwargs["description"] = description
     low, high = column.resolve_numeric_bounds()
     if low is not None:
         kwargs["ge"] = low
     if high is not None:
         kwargs["le"] = high
     return Field(**kwargs)
+
+
+def _describe_field(column: Column) -> str | None:
+    if column.quoted_from is None:
+        return column.description
+    quoted = f"A verbatim quote from `{column.quoted_from}`, never a paraphrase."
+    return f"{column.description} {quoted}" if column.description else quoted

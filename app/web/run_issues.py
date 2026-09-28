@@ -13,13 +13,14 @@ from pydantic import BaseModel
 
 from app.core.run_status import StageStatus
 from app.models import StepRefused, WorkflowStage
-from app.models.run_manifest import SCHEMA_REFUSAL_ERROR_TYPE
+from app.models.run_manifest import QUOTE_REFUSAL_ERROR_TYPE, SCHEMA_REFUSAL_ERROR_TYPE
 from app.models.severity import UserFacingErrorSeverity
 from app.web.stage_strip import read_stage_records
 
 
 class StopKind(str, Enum):
     schema = "schema"    # the output carries values its declared schema forbids
+    quote = "quote"
     refused = "refused"  # authored code raised StepRefused on what it was given
     crash = "crash"      # anything else raised, a per-row generation failure included
 
@@ -27,6 +28,7 @@ class StopKind(str, Enum):
 # The `StageErrorInfo.type` each non-crash kind is recorded under.
 _KIND_BY_ERROR_TYPE = {
     SCHEMA_REFUSAL_ERROR_TYPE: StopKind.schema,
+    QUOTE_REFUSAL_ERROR_TYPE: StopKind.quote,
     StepRefused.__name__: StopKind.refused,
 }
 
@@ -36,7 +38,7 @@ def read_stop_kind(error_type: str) -> StopKind:
 
 
 def read_crash_type(error_type: object) -> str:
-    """Empty for the two stops that say it in words already; a crash's type IS the diagnosis."""
+    """Empty for the stops that say it in words already; a crash's type IS the diagnosis."""
     named = str(error_type or "")
     return named if read_stop_kind(named) == StopKind.crash else ""
 

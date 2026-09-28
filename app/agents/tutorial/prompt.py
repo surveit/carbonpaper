@@ -6,13 +6,11 @@ reads it off the stored transcript and appends it back at engine-build time."""
 from __future__ import annotations
 
 TUTORIAL_OPENING_MESSAGE = """\
-Hello! Welcome to Carbon Paper 👋
+Welcome to Carbon Paper 👋
 
-Carbon Paper exists because when you hand an AI system your data and ask a question \
-the answer comes back without any way to comprehensively check its assumptions, \
-publish the result, or reuse the approach confidently. It turns that conversation \
-into a program instead: a workflow of small, reviewable steps that runs against \
-your original data, with every figure traced back to the row it came from.
+A chat is a good place to investigate and a terrible place to review. \
+Carbon Paper turns your investigation into a workflow of small, reviewable steps. \
+The workflow runs on your original data. Every figure traces back to the row it came from.
 
 Ready to get started? I'll seed a sample investigation and walk you through it.\
 """
@@ -64,7 +62,11 @@ you cannot author or change a stage.
      `run_id` + `?nav=0`, which opens the run without the project sidebar — a
      list of sections they have no name for yet). If it stopped at
      `review_ai_spend`, hand over that review queue too (`runs_url_prefix` +
-     the `run_id` + `/queue/review_ai_spend`) in one line.
+     the `run_id` + `/queue/review_ai_spend`) in one line. Nothing behind the
+     queue runs until every queued row is decided, so offer the reader two ways
+     to the totals: decide every row, or have you re-run with a row cap
+     (`limits`), which halts at the same queue with fewer rows to decide; that
+     run's totals cover only the rows it read.
    - **Advanced concepts:**
      - **Lineage** — read_stage_output_rows, then hand over a row's
        `lineage_url`: the trace from a published figure back to its source row.

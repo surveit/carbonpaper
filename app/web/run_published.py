@@ -8,13 +8,21 @@ from typing import Any, Mapping
 from fastapi import HTTPException
 from pydantic import BaseModel
 
+from app.core.errors import RunVersionUnresolvableError
 from app.core.json_types import JsonScalar
-from app.models.citations import StageOutputCellCitation, StageOutputTableCitation
+from app.core.run_status import StageStatus
+from app.models.citations import (
+    CellCitation,
+    StageOutputSpanCitation,
+    StageOutputTableCitation,
+)
 from app.models.records.workflow_output import WorkflowOutput
+from app.models.run_manifest import RowsPendingReview, find_rows_pending_review
 from app.services import run as run_service
 from app.web import loading
 from app.core.figure_text import render_figure
 from app.web.panel_links import AppPanelLinks
+from app.web.stage_strip import count_stage_status
 
 # Enough to show what the table holds; the full-rows page is where the data lives.
 PUBLISHED_PREVIEW_ROWS = 5
@@ -63,6 +71,12 @@ class RunPublished(BaseModel):
         return bool(self.figures or self.tables)
 
 
+class FigurePendingReview(BaseModel):
+    label: str
+    primary: bool
+    rows_pending_review: RowsPendingReview
+
+
 def read_published_outputs(
     project_id: str, run_id: str, run_dir: Path, manifest: Mapping[str, Any]
 ) -> RunPublished:
@@ -75,7 +89,7 @@ def read_published_outputs(
         figures=[
             _build_figure(output, output.citation, project_id, run_id)
             for output in published
-            if isinstance(output.citation, StageOutputCellCitation)
+            if isinstance(output.citation, CellCitation)
         ],
         tables=sorted(
             (
@@ -88,6 +102,28 @@ def read_published_outputs(
     )
 
 
+def list_figures_pending_review(
+    project_id: str, manifest: Mapping[str, Any]
+) -> list[FigurePendingReview]:
+    """The figures a stage declares and cannot write while a queue upstream awaits review."""
+    if not count_stage_status(manifest, StageStatus.AWAITING_REVIEW):
+        return []
+    try:
+        stages = run_service.load_run_version(project_id, dict(manifest)).stages
+    except RunVersionUnresolvableError:
+        # The run page states this reason in place of the workflow graph.
+        return []
+    held = find_rows_pending_review(manifest, stages)
+    return [
+        FigurePendingReview(
+            label=figure.label, primary=figure.primary, rows_pending_review=held[stage.id]
+        )
+        for stage in stages
+        if stage.id in held
+        for figure in stage.list_published_figures()
+    ]
+
+
 def render_output_value(value: JsonScalar) -> str:
     """A null reads as absent rather than as the word None."""
     return "—" if value is None else render_figure(value)
@@ -95,7 +131,7 @@ def render_output_value(value: JsonScalar) -> str:
 
 def _build_figure(
     output: WorkflowOutput,
-    citation: StageOutputCellCitation,
+    citation: CellCitation,
     project_id: str,
     run_id: str,
 ) -> PublishedFigure:
@@ -103,7 +139,8 @@ def _build_figure(
         slug=output.slug,
         label=output.label,
         primary=output.primary,
-        value=render_output_value(citation.value),
+        value=citation.quote if isinstance(citation, StageOutputSpanCitation)
+        else render_output_value(citation.value),
         href=run_service.build_row_trace_url(
             project_id, run_id, citation.stage_id, citation.row_ordinal,
             column=citation.column,

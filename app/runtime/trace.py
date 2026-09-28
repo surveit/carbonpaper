@@ -10,11 +10,12 @@ from typing import Any, Sequence
 import pyarrow as pa
 
 from app.core.errors import ContributorNotInFanIn, RowOutOfRange, StageNotInRun
-from app.core.frames import convert_row_to_json_cells, read_frame_table, read_native_row
+from app.core.frames import convert_cell_to_json_value, read_frame_table, read_native_row
+from app.models.spans import read_span_cell
 from app.models.stage import StageType, is_grain_and_order_preserving
 from app.runtime.lineage import EdgeKind, RowLineage, RowParent
 from app.runtime.lineage_sidecar import read_lineage_sidecar
-from app.models.run_manifest import read_input_bindings
+from app.models.run_manifest import InputBinding, read_input_bindings
 from app.models.run_manifest import RunKind
 from app.runtime.manifest import read_run_manifest, resolve_output_path
 
@@ -58,6 +59,7 @@ class StageTransform:
     # `row_ordinal` counts across the concatenation; `source_row` counts within the file.
     source_file: str | None = None
     source_row: int | None = None
+    source_id: str | None = None
     # How many files the stage read; None where the manifest did not record any binding.
     source_file_count: int | None = None
     # Set where the walk sampled one of the rows summarized into this one.
@@ -88,6 +90,19 @@ def _load_manifest(run_dir: Path) -> dict[str, Any]:
 
 def _count_files_read(manifest: dict[str, Any]) -> Counter[str]:
     return Counter(binding.stage_id for binding in read_input_bindings(manifest))
+
+
+def _index_stored_file_ids(bindings: list[InputBinding]) -> dict[tuple[str, str], str]:
+    """Keyed by (stage id, path); a file read from outside the store has no entry."""
+    return {(binding.stage_id, binding.path): binding.file_id
+            for binding in bindings if binding.file_id}
+
+
+def _find_source_id(stored_file_ids: dict[tuple[str, str], str], stage_id: str,
+                    spine: RowParent | None) -> str | None:
+    if spine is None or spine.source_file is None:
+        return None
+    return stored_file_ids.get((stage_id, spine.source_file))
 
 
 def _stages_by_id(manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -188,9 +203,11 @@ def _advance_positionally(
     return parent_id, r
 
 
-def _summarizes_nothing_message() -> str:
-    return ("this row summarizes its inputs, and the run recorded that no input "
-            "row fed it — an aggregation over an empty group")
+def _describe_a_row_no_input_row_fed(stage_type: str) -> str:
+    if stage_type == StageType.aggregate:
+        return ("this row summarizes its inputs, and the run recorded that no input "
+                "row fed it — an aggregation over an empty group")
+    return "this row originates here — the run recorded that no input row became it"
 
 
 def _find_fan_in(stage_type: str, spine: RowParent | None,
@@ -252,7 +269,7 @@ def _advance(
     if followed is not None:
         return _advance_via_lineage(frames, by_id, sid, followed)
     if fan_in is not None:
-        return TraceEnd(False, sid, _summarizes_nothing_message())
+        return TraceEnd(False, sid, _describe_a_row_no_input_row_fed(stage_type))
     if not parents:
         return TraceEnd(False, sid, "the manifest records no input edge for this stage")
     # Nothing recorded: the ordinal is the only route left, and only from ONE parent.
@@ -303,6 +320,7 @@ def trace_row_from(frames: RunFrames, stage_id: str, row_ordinal: int,
     manifest = _load_manifest(run_dir)
     by_id = _stages_by_id(manifest)
     files_read = _count_files_read(manifest)
+    stored_file_ids = _index_stored_file_ids(read_input_bindings(manifest))
     if stage_id not in by_id:
         raise StageNotInRun(f"stage {stage_id!r} not in run {run_dir.name}")
 
@@ -344,6 +362,7 @@ def trace_row_from(frames: RunFrames, stage_id: str, row_ordinal: int,
             branches=branches,
             source_file=spine.source_file if spine else None,
             source_row=spine.row_ordinal if spine and spine.source_file else None,
+            source_id=_find_source_id(stored_file_ids, sid, spine),
             source_file_count=files_read.get(sid),
             sampled=_read_row_sample(fan_in, followed),
         ))
@@ -376,11 +395,12 @@ def trace_to_dict(trace: Trace) -> dict[str, Any]:
                 "stage_id": step.stage_id,
                 "stage_type": step.stage_type,
                 "row_ordinal": step.row_ordinal,
-                "row": convert_row_to_json_cells(step.row),
+                "row": _convert_trace_row(step.row),
                 "columns_new": step.columns_new,
                 "origin": step.origin,
                 "source_file": step.source_file,
                 "source_row": step.source_row,
+                "source_id": step.source_id,
                 "source_file_count": step.source_file_count,
                 "sampled": None if step.sampled is None else {
                     "place": step.sampled.place,
@@ -403,4 +423,12 @@ def trace_to_dict(trace: Trace) -> dict[str, Any]:
             "at_stage": trace.end.at_stage,
             "message": trace.end.message,
         },
+    }
+
+
+def _convert_trace_row(row: dict[str, object]) -> dict[str, object]:
+    """A span cell stays the object a page links; every other cell becomes a JSON scalar."""
+    return {
+        name: value if read_span_cell(value) is not None else convert_cell_to_json_value(value)
+        for name, value in row.items()
     }

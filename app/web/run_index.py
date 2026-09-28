@@ -66,6 +66,8 @@ class RunIndexRow(BaseModel):
     # Empty for a run that bound no file — no inputs is not an input set.
     input_key: str = ""
     runs_on_these_inputs: int = 1
+    # The run before this one in its view that pinned the same version; None for the first.
+    previous_run_id_on_version: str | None = None
 
 
 # The runs index's three mutually exclusive buckets. Archived takes priority over
@@ -184,6 +186,7 @@ class _IndexContext(BaseModel):
     ambiguous_filenames: set[str]
     run_counts: Counter[str]
     seen_versions: dict[str, VersionNote] = {}
+    previous_run_ids_on_version: dict[str, str] = {}
     # A run records where it read, which this app may not own; this holds what it does.
     stored: ProjectFileIndex = ProjectFileIndex(by_id={}, by_sha={})
 
@@ -201,8 +204,22 @@ def _build_every_row(project_id: str, view: str | None) -> list[RunIndexRow]:
         ambiguous_filenames=find_ambiguous_filenames(bindings.values()),
         run_counts=Counter(compose_input_key(b) for b in bindings.values()),
         stored=index_project_files(project_id),
+        previous_run_ids_on_version=_find_previous_runs_on_version(entries),
     )
     return [_build_row(entry, bindings[entry.run_id], context) for entry in entries]
+
+
+def _find_previous_runs_on_version(newest_first: list[RunEntry]) -> dict[str, str]:
+    previous: dict[str, str] = {}
+    last_run_by_version: dict[str, str] = {}
+    for entry in reversed(newest_first):
+        version_id = None if entry.manifest is None else entry.manifest.workflow_version
+        if version_id is None:
+            continue
+        if version_id in last_run_by_version:
+            previous[entry.run_id] = last_run_by_version[version_id]
+        last_run_by_version[version_id] = entry.run_id
+    return previous
 
 
 def _matches_view(entry: RunEntry, hidden: set[str], view: str | None) -> bool:
@@ -251,6 +268,7 @@ def _build_row(
         stage_caps=find_unbound_stage_caps(manifest.parameters.limits, bindings),
         input_key=input_key,
         runs_on_these_inputs=context.run_counts[input_key],
+        previous_run_id_on_version=context.previous_run_ids_on_version.get(entry.run_id),
     )
 
 

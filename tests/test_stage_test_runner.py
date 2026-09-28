@@ -172,7 +172,7 @@ def test_failure_case_that_returns_rows_is_mismatch():
 def test_failure_case_returning_a_non_dataframe_is_mismatch_not_crash():
     # The verdict is reached before the return is known to be a frame; no row count exists.
     stage = _frame_stage(
-        "def transform(df):\n    return 7\n",
+        "def transform(df, *, lineage):\n    return 7\n",
         [{"name": "expects_refusal", "inputs": {"load": [{"amount": 2.0}]},
           "expected": None}],
     )
@@ -184,7 +184,7 @@ def test_failure_case_returning_a_non_dataframe_is_mismatch_not_crash():
 def test_failure_case_returning_zero_rows_is_mismatch_not_passed():
     # An EMPTY frame still succeeded, so the returned-a-value verdict precedes any row count.
     stage = _frame_stage(
-        "def transform(df):\n    return df.head(0)\n",
+        "def transform(df, *, lineage):\n    return df.head(0)\n",
         [{"name": "expects_refusal", "inputs": {"load": [{"amount": 2.0}]},
           "expected": None}],
     )
@@ -246,8 +246,11 @@ def _frame_stage(code: str, tests: list[dict]) -> Stage:
 
 def test_frame_function_output_order_does_not_matter():
     stage = _frame_stage(
-        "def transform(df):\n"
-        "    return df.sort_values('amount', ascending=False).reset_index(drop=True)\n",
+        "def transform(df, *, lineage):\n"
+        "    ordered = df.sort_values('amount', ascending=False)\n"
+        "    for row, source_row in enumerate(ordered.index):\n"
+        "        lineage.built_from(row, 'load', source_row)\n"
+        "    return ordered.reset_index(drop=True)\n",
         [{"name": "order_insensitive",
           "inputs": {"load": [{"amount": 1.0}, {"amount": 2.0}]},
           "expected": [{"amount": 1.0}, {"amount": 2.0}]}],
@@ -269,7 +272,9 @@ def test_omitted_column_in_expected_row_claims_none():
             # dtype=object keeps the returned None a real None; pandas' default
             # str dtype would store it as NaN, which is a different value here.
             "import pandas as pd\n"
-            "def transform(df):\n"
+            "def transform(df, *, lineage):\n"
+            "    lineage.originates(0)\n"
+            "    lineage.originates(1)\n"
             "    return pd.DataFrame({\n"
             "        'amount': [1.0, 2.0],\n"
             "        'label': pd.Series(['x', None], dtype=object),\n"
@@ -287,7 +292,10 @@ def test_omitted_column_in_expected_row_claims_none():
 
 def test_frame_function_empty_input_test_runs():
     stage = _frame_stage(
-        "def transform(df):\n    return df\n",
+        "def transform(df, *, lineage):\n"
+        "    for row in range(len(df)):\n"
+        "        lineage.built_from(row, 'load', row)\n"
+        "    return df\n",
         [{"name": "empty_in_empty_out", "inputs": {"load": []}, "expected": []}],
     )
     [result] = run_tests_for_stage(stage)
@@ -296,7 +304,9 @@ def test_frame_function_empty_input_test_runs():
 
 def test_row_count_mismatch_reported():
     stage = _frame_stage(
-        "def transform(df):\n    return df.head(1)\n",
+        "def transform(df, *, lineage):\n"
+        "    lineage.built_from(0, 'load', 0)\n"
+        "    return df.head(1)\n",
         [{"name": "expects_all_rows",
           "inputs": {"load": [{"amount": 1.0}, {"amount": 2.0}]},
           "expected": [{"amount": 1.0}, {"amount": 2.0}]}],
@@ -308,7 +318,7 @@ def test_row_count_mismatch_reported():
 
 def test_frame_function_returning_none_is_error_not_crash():
     stage = _frame_stage(
-        "def transform(df):\n    df.sort_values('amount', inplace=True)\n",
+        "def transform(df, *, lineage):\n    df.sort_values('amount', inplace=True)\n",
         [{"name": "mutates_in_place",
           "inputs": {"load": [{"amount": 1.0}]},
           "expected": [{"amount": 1.0}]}],
@@ -320,7 +330,7 @@ def test_frame_function_returning_none_is_error_not_crash():
 
 def test_frame_function_returning_non_dataframe_is_error_not_crash():
     stage = _frame_stage(
-        "def transform(df):\n    return {'not': 'a frame'}\n",
+        "def transform(df, *, lineage):\n    return {'not': 'a frame'}\n",
         [{"name": "returns_dict",
           "inputs": {"load": [{"amount": 1.0}]},
           "expected": [{"amount": 1.0}]}],
@@ -365,7 +375,16 @@ def _multi_input_frame_stage(code: str, tests: list[dict]) -> Stage:
     })
 
 
-_MERGE = 'def transform(left_df, right_df):\n    return left_df.merge(right_df, on="id")\n'
+_MERGE = (
+    "def transform(left_df, right_df, *, lineage):\n"
+    "    merged = left_df.assign(left_row=range(len(left_df))).merge(\n"
+    "        right_df.assign(right_row=range(len(right_df))), on='id')\n"
+    "    for row, (left_row, right_row) in enumerate(\n"
+    "            zip(merged['left_row'], merged['right_row'])):\n"
+    "        lineage.built_from(row, 'left', left_row)\n"
+    "        lineage.built_from(row, 'right', right_row)\n"
+    "    return merged.drop(columns=['left_row', 'right_row'])\n"
+)
 
 
 def test_multi_input_frame_test_passes():
@@ -391,7 +410,11 @@ def test_multi_input_frame_positional_order_is_declared_order():
             {"id": "right"},
         ],
         "signature": {"form": "replaces", "produces": id_schema["columns"]},
-        "function": {"kind": "inline", "code": "def transform(a, b):\n    return a\n"},
+        "function": {"kind": "inline", "code": (
+            "def transform(a, b, *, lineage):\n"
+            "    for row in range(len(a)):\n"
+            "        lineage.built_from(row, 'left', row)\n"
+            "    return a\n")},
         "tests": [{
             "name": "returns_first_declared_input",
             "inputs": {
@@ -519,7 +542,7 @@ def test_raise_outcome_reads_as_a_verb_phrase():
 
 def test_non_frame_return_is_an_outcome_not_a_row_count():
     stage = _frame_stage(
-        "def transform(df):\n    return 7\n",
+        "def transform(df, *, lineage):\n    return 7\n",
         [{"name": "expects_refusal", "inputs": {"load": [{"amount": 2.0}]},
           "expected": None}],
     )
@@ -540,8 +563,11 @@ def test_a_malformed_case_has_no_outcome_because_nothing_ran():
 
 def test_a_long_output_is_capped_and_says_so_through_the_total():
     stage = _frame_stage(
-        "def transform(df):\n"
-        "    wide = df.loc[df.index.repeat(60)].reset_index(drop=True)\n"
+        "def transform(df, *, lineage):\n"
+        "    repeated = df.index.repeat(60)\n"
+        "    for row, source_row in enumerate(repeated):\n"
+        "        lineage.built_from(row, 'load', source_row)\n"
+        "    wide = df.loc[repeated].reset_index(drop=True)\n"
         "    return wide.assign(doubled=1.0)\n",
         [{"name": "expects_refusal", "inputs": {"load": [{"amount": 2.0}]},
           "expected": None}],

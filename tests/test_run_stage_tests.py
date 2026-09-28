@@ -35,7 +35,11 @@ def _frame_stage(stage_id: str, tests: list[dict]) -> Stage:
             "reads": [{"input": "load", "columns": _IN_SCHEMA["columns"]}],
             "produces": _IN_SCHEMA["columns"],
         },
-        "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
+        "function": {"kind": "inline", "code": (
+            "def transform(df, *, lineage):\n"
+            "    for row in range(len(df)):\n"
+            "        lineage.built_from(row, 'load', row)\n"
+            "    return df\n")},
         "tests": tests,
     })
 

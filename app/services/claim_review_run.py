@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from app.core.agent.store import AgentSession, SessionStore
 from app.core.ids import ID
 from app.models.claim_review import ClaimReviewResult
-from app.models.citations import StageOutputCellCitation
+from app.models.citations import CellCitation
 from app.models.claims import ClaimStatus
 from app.models.records.claim_review import ClaimReview
 from app.models.records.claims import Claim
@@ -39,7 +39,7 @@ class ReviewState(BaseModel):
 def read_review_state(claim: Claim, review: ClaimReview | None) -> ReviewState:
     if review is not None:
         return ReviewState(review=REVIEW_DONE, session_id=review.session_id)
-    if not isinstance(claim.citation, StageOutputCellCitation):
+    if not isinstance(claim.citation, CellCitation):
         return ReviewState(review=REVIEW_REFUSED)
     reviewed = find_review_sessions(claim.id)
     if not reviewed:

@@ -163,8 +163,12 @@ def _workflow_stages(authored_path: str) -> list[dict]:
             "id": "totals", "description": "Total per flag", "type": "python_frame_function",
             "inputs": [{"id": "flag"}],
             "function": {"kind": "inline", "code": (
-                "def transform(df):\n"
-                "    return df.groupby(\"flagged\", as_index=False)[\"val\"].sum()\n"
+                "def transform(df, *, lineage):\n"
+                "    totals = df.groupby(\"flagged\", as_index=False)[\"val\"].sum()\n"
+                "    for row, flagged in enumerate(totals[\"flagged\"]):\n"
+                "        for source_row in df.index[df[\"flagged\"] == flagged]:\n"
+                "            lineage.contributed_by(row, \"flag\", source_row, columns=[\"val\"])\n"
+                "    return totals\n"
             )},
             "signature": {"form": "replaces", "produces": totals_schema["columns"]},
         },

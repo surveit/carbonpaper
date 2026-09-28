@@ -1,7 +1,11 @@
 {# One data cell of a rendered frame. Its own file so a template can `{% from %}`
    it: importing a macro executes the template it sits in, and _stage_diff.html's
    body needs a `diff` to render. #}
-{% macro data_cell(text, klass, was, full) -%}
+{% macro data_cell(text, klass, was, full, links) -%}
+{%- if text.cites is defined %}<td class="cell-span {{ klass }}">
+{%- if was %}<span class="diff-was" title="the input value this stage replaced">{{ was | truncate(120) }}</span>{% endif %}
+{{- span_cites(text, links) }}</td>
+{%- else %}
 {%- set klasses = (('cell-clip ' if full else '') ~ klass) | trim -%}
 {#- The title is the hover: it is what a reader gets instead of expanding a cell,
     so it is written wherever the cell below had to cut the value. -#}
@@ -10,4 +14,13 @@
 {%- if was %}<span class="diff-was" title="the input value this stage replaced">{{ was | truncate(120) }}</span>{% endif %}
 {%- if full %}{{ text | truncate(4000, True, '… (truncated — download the CSV for the full value)') }}
 {%- else %}{{ text | truncate(240) }}{% endif %}</td>
+{%- endif %}
+{%- endmacro %}
+
+{# A span cell (app/web/span_cells.py): each quote, cut short with the whole in its
+   title, then where it sits, linked to that page of its file. #}
+{% macro span_cites(cell, links) -%}
+{%- for cite in cell.cites %}<span class="span-cite"><q title="{{ cite.span.quote }}">{{ cite.span.quote | truncate(120) }}</q>
+{%- set href = links.source_page(cite.span) %} {% if href %}<a href="{{ href }}">{{ cite.label }}</a>{% else %}{{ cite.label }}{% endif %}</span>
+{%- endfor %}
 {%- endmacro %}

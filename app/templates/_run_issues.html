@@ -10,13 +10,13 @@
   href navigate, which is exactly what the packet needs.
 
   A stop — the stage that ENDED the run — is a line of this list like any other,
-  first and marked `stopped`. Its message names WHICH of the three failures it is,
+  first and marked `stopped`. Its message names WHICH of the four failures it is,
   because they route to different people: the stage's output no longer matches what
-  it declares (the data owner's), its authored code refused the input it was handed
-  (the author's), or the code broke (the engineer's). The first links the panel's
-  Data tab, the other two its Transform tab. What only a stop has — the columns it
-  refused, the reason its author wrote, the stages downstream that never ran — is
-  nested under its own line.
+  it declares (the data owner's), a span in its output does not hold in the file it
+  quotes, its authored code refused the input it was handed (the author's), or the
+  code broke (the engineer's). The first two link the panel's Data tab, the other two
+  its Transform tab. What only a stop has — the columns it refused, the reason its
+  author wrote, the stages downstream that never ran — is nested under its own line.
 
   Drawn with the issue table the Workflow page's compiler warnings also use.
 
@@ -33,14 +33,16 @@
   {% call issue_row(
        severity="error", stage_id=stop.stage_id, subject="stopped",
        href=links.stage_anchor(stop.stage_id),
-       tab="data" if stop.kind == 'schema' else "transform",
+       tab="data" if stop.kind in ('schema', 'quote') else "transform",
        message=(
          "the data changed — refused its own output; it does not match the schema this stage declares"
            if stop.kind == 'schema' else
+         "a quote does not hold in its source — each span below says why the file it quotes refuses it"
+           if stop.kind == 'quote' else
          "this stage does not handle this data — either the data is wrong or the stage needs a rule for it"
            if stop.kind == 'refused' else
          "the code broke — raised " ~ stop.error_type ~ " while it ran")) %}
-    {% if stop.kind == 'schema' %}
+    {% if stop.kind in ('schema', 'quote') %}
     <ul>{% for issue in stop.issues %}
       <li>{% if issue.column %}<code>{{ issue.column }}</code> — {% endif %}{{ issue.message }}</li>
     {% endfor %}</ul>

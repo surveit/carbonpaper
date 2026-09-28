@@ -3,17 +3,21 @@ from __future__ import annotations
 
 from app.models.citations import (
     AddressedChallengeCitation,
+    AddressedSourceSpanCitation,
     AddressedStageCitation,
     AddressedStageOutputCellCitation,
     AddressedStageOutputColumnCitation,
     AddressedTermCitation,
 )
+from app.runtime.citations import build_source_page_url
 
 
 def render_source_url(citation: AddressedChallengeCitation) -> str:
     if isinstance(citation, AddressedStageOutputCellCitation):
         return (f"/project/{citation.project_id}/runs/{citation.run_id}"
                 f"/stage/{citation.stage_id}/row/{citation.row_ordinal}/trace")
+    if isinstance(citation, AddressedSourceSpanCitation):
+        return build_source_page_url(citation.project_id, citation.build_span())
     if isinstance(citation, AddressedStageOutputColumnCitation):
         return (f"/project/{citation.project_id}/runs/{citation.run_id}"
                 f"/stage/{citation.stage_id}/rows")

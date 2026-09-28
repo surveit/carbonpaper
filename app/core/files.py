@@ -10,11 +10,13 @@ import os
 import tempfile
 from pathlib import Path
 from typing import BinaryIO, ClassVar
+from urllib.parse import urlsplit
 
-from app.core.errors import FileNotStoredError, FileOverCeiling, StoreOverQuota
+from app.core.errors import FileNotStoredError, FileOverCeiling, MirrorDisagrees, StoreOverQuota
 from app.core.record import PersistedModel, PersistenceScope
 from app.core.store_config import resolve_db_path
 from app.core.ids import ID
+from app.core.timestamp_ids import now_iso, read_iso_stamp
 
 # How much of an upload is held in memory at once while it is written and hashed.
 _CHUNK_BYTES = 1024 * 1024
@@ -65,6 +67,9 @@ class ProjectFile(PersistedModel):
     project_id: ID | None = None
     completeness: FileCompleteness = FileCompleteness.OPEN
     lineage: str = ""
+    # Only receive_source and receive_mirrored_source write these two; an upload carries neither.
+    origin_url: str | None = None
+    fetched_at: str | None = None
 
 
 def files_root() -> Path:
@@ -83,6 +88,29 @@ def files_quota_bytes() -> int:
 
 def save_upload(filename: str, src: BinaryIO, project_id: ID | None = None) -> ProjectFile:
     """Store an uploaded file and return its record; `project_id` None puts it in no project."""
+    return _save_file(filename, src, project_id)
+
+
+def receive_source(project_id: ID, origin_url: str, filename: str, stream: BinaryIO) -> ProjectFile:
+    """Store the bytes read from `origin_url`, stamped with when the read began."""
+    _refuse_origin_that_is_not_http(origin_url)
+    return _save_file(filename, stream, project_id, origin_url=origin_url, fetched_at=now_iso())
+
+
+def receive_mirrored_source(
+    project_id: ID, origin_url: str, filename: str, stream: BinaryIO, *,
+    fetched_at: str, expected_sha256: str,
+) -> ProjectFile:
+    """Store bytes a mirror kept; matching the sha256 it recorded proves they were fetched then."""
+    _refuse_origin_that_is_not_http(origin_url)
+    return _save_file(filename, stream, project_id, origin_url=origin_url,
+                      fetched_at=_convert_to_local_stamp(fetched_at),
+                      expected_sha256=expected_sha256)
+
+
+def _save_file(filename: str, src: BinaryIO, project_id: ID | None, *,
+               origin_url: str | None = None, fetched_at: str | None = None,
+               expected_sha256: str | None = None) -> ProjectFile:
     root = files_root()
     # The stream is written to a temp file in the same dir first and moved into
     # <root>/<record id>/<filename> once there is a record to name the directory. The
@@ -91,9 +119,14 @@ def save_upload(filename: str, src: BinaryIO, project_id: ID | None = None) -> P
     # "inputs this run read".
     root.mkdir(parents=True, exist_ok=True)
     staged, digest, byte_count = _write_to_temp_file(root, src, max_upload_bytes())
+    if expected_sha256 is not None and digest != expected_sha256:
+        staged.unlink()
+        raise MirrorDisagrees(name=f"'{filename}'", digest=digest, recorded=expected_sha256,
+                              origin_url=str(origin_url))
     _refuse_upload_over_quota(root, staged, byte_count)
     record = ProjectFile(sha256=digest, filename=_safe_filename(filename),
-                        byte_count=byte_count, project_id=project_id)
+                        byte_count=byte_count, project_id=project_id,
+                        origin_url=origin_url, fetched_at=fetched_at)
     (root / record.id).mkdir(parents=True, exist_ok=True)
     staged.replace(resolve_stored_path(record))
     # Saved only once the bytes are in place: a record whose bytes are missing is what
@@ -152,12 +185,12 @@ def resolve_stored_path(record: ProjectFile) -> Path:
     return (files_root() / record.id / record.filename).resolve()
 
 
-def find_stored_file_id(path: Path) -> ID | None:
+def find_stored_file(path: Path) -> ProjectFile | None:
     """The record these bytes are stored as, or None for a path the store does not own."""
     if path.parent.parent != files_root():
         return None
     record = ProjectFile.load_or_none(path.parent.name)
-    return None if record is None or record.filename != path.name else record.id
+    return None if record is None or record.filename != path.name else record
 
 
 def compute_sha256(path: Path) -> str:
@@ -224,6 +257,23 @@ def _delete_if_empty(directory: Path) -> None:
 
 def _sorted_newest_first(records: list[ProjectFile]) -> list[ProjectFile]:
     return sorted(records, key=lambda record: record.created_at, reverse=True)
+
+
+def _convert_to_local_stamp(fetched_at: str) -> str:
+    """The form now_iso writes, so every stored fetched_at reads one way."""
+    moment = read_iso_stamp(fetched_at)
+    # Without an offset nothing says which clock the mirror read, so no instant can be stored.
+    if moment is None or moment.tzinfo is None:
+        raise ValueError(
+            f"a mirror's fetch time must be an ISO 8601 timestamp with an offset, got {fetched_at!r}")
+    return moment.astimezone().replace(tzinfo=None).isoformat(timespec="microseconds")
+
+
+def _refuse_origin_that_is_not_http(origin_url: str) -> None:
+    parts = urlsplit(origin_url)
+    # The file page links it, so a `javascript:` origin would run in the reader's browser.
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        raise ValueError(f"a fetched file's origin must be an http(s) URL, got {origin_url!r}")
 
 
 def _write_to_temp_file(root: Path, src: BinaryIO, ceiling: int) -> tuple[Path, str, int]:

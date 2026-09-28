@@ -22,6 +22,7 @@ _DECLARES_ITS_OWN_ROW_TYPE = {
     StageType.explode: True,
     StageType.expand: True,
     StageType.python_frame_function: True,
+    StageType.read_pages: True,
     StageType.report: True,
     StageType.enrich: False,
     StageType.filter_rows: False,

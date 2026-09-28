@@ -7,29 +7,46 @@ runtime does not require to exist or be unique).
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import pyarrow as pa
-from pydantic import create_model
+from pydantic import BaseModel, create_model
 
 from app.core.agent.usage import LlmUsage
-from app.core.errors import StageWideFailure
+from app.core.errors import (
+    LLMError,
+    QuoteAmbiguous,
+    QuoteNotInText,
+    QuoteRefused,
+    StageWideFailure,
+)
+from app.core.json_types import JsonDict
+from app.core.judgments import JudgmentDraft
 from app.models import WorkflowStage
+from app.models.run_manifest import InputBinding
 from app.models.schema import Column, TableSchema
-from app.models.stages.llm_transform import LLMTransformStage
+from app.models.stages.llm_transform import LLMConfig, LLMTransformStage
 
 from ..context import RunContext
 from ..llm import call_llm, call_llm_batch, render_prompt
+from ..spans import SPAN_REFUSALS
 
 from .execution import (
     ROW_ERROR_KEY,
+    ROW_JUDGMENT_KEY,
     ROW_USAGE_KEY,
     GroupMapper,
     Row,
     RowMapper,
     RowMapTransformHandler,
     narrow_stage,
+)
+from .span_replies import (
+    QuotedSpanColumn,
+    complete_spans,
+    find_quoted_span_columns,
+    show_quoted_text,
 )
 
 # The reply field carrying a batched result's item number — the rejoin handle.
@@ -41,7 +58,8 @@ _ROW_NUMBER_FIELD = "row_number"
 class LLMTransformHandler(RowMapTransformHandler):
     def __init__(self, parallelism: int = 1) -> None:
         super().__init__(
-            build_llm_row_mapper, parallelism, trims_output_to_declared=True
+            build_llm_row_mapper, parallelism, trims_output_to_declared=True,
+            records_judgments=True,
         )
 
     def group_size(self, workflow_stage: WorkflowStage) -> int:
@@ -52,7 +70,7 @@ class LLMTransformHandler(RowMapTransformHandler):
     ) -> GroupMapper:
         if self.group_size(workflow_stage) == 1:
             return super().make_group_mapper(workflow_stage, ctx, src)
-        return build_llm_batch_mapper(workflow_stage)
+        return build_llm_batch_mapper(workflow_stage, ctx.bound_sources)
 
 
 # ── batch_size == 1: per-row path (grain + order + independence by construction) ──
@@ -61,17 +79,18 @@ def build_llm_row_mapper(
 ) -> RowMapper:
     """A row's reply depends only on that row: neither the frame nor the row's position is read."""
     stage = narrow_stage(workflow_stage, LLMTransformStage)
-    llm = stage.llm
 
     # What the model is asked for: the columns the signature adds, compiled to the
     # model the agent must satisfy. Its input columns are rejoined by the driver.
     reply_spec = TableSchema(columns=stage.signature.adds)
-    reply_model = reply_spec.to_pydantic_model(f"{stage.id}_reply")
+    reply_model = reply_spec.to_reply_model(f"{stage.id}_reply")
+    quoted = find_quoted_span_columns(stage)
 
     def map_row(row: Row, index: int) -> Row:
         usages: list[LlmUsage] = []
         try:
-            reply = call_llm(stage.id, llm, row, reply_model=reply_model, usage_out=usages)
+            judgment, reply = _ask_until_quotes_resolve(
+                stage, reply_model, quoted, row, ctx.bound_sources, usages)
         except StageWideFailure:
             # Not this row's failure: every remaining row would fail the same
             # way, so it stops the stage instead of tagging 5,000 rows one at a
@@ -86,19 +105,46 @@ def build_llm_row_mapper(
             # failure still reads as a failure rather than an empty-string cell.
             return {**row, ROW_ERROR_KEY: str(exc) or type(exc).__name__,
                     ROW_USAGE_KEY: LlmUsage.summed(usages)}
-        return {**row, **reply, ROW_USAGE_KEY: LlmUsage.summed(usages)}
+        return {**row, **reply, ROW_USAGE_KEY: LlmUsage.summed(usages),
+                ROW_JUDGMENT_KEY: judgment}
 
     return map_row
 
 
+def _ask_until_quotes_resolve(
+    stage: LLMTransformStage,
+    reply_model: type[BaseModel],
+    quoted: Sequence[QuotedSpanColumn],
+    row: Row,
+    sources: Mapping[str, InputBinding],
+    usages: list[LlmUsage],
+) -> tuple[JudgmentDraft, JsonDict]:
+    """Re-asks only a reply quoting words the runtime could not find at one place."""
+    prompt_row = show_quoted_text(row, quoted)
+    correction: str | None = None
+    rejection = ""
+    attempts = _count_attempts(stage.llm)
+    for _ in range(attempts):
+        judgment = call_llm(stage.id, stage.llm, prompt_row, reply_model=reply_model,
+                            usage_out=usages, correction=correction)
+        try:
+            return judgment, complete_spans(judgment.reply, row, quoted, sources)
+        except QuoteRefused as refusal:
+            correction, rejection = refusal.correction, str(refusal)
+    raise LLMError(f"reply rejected after {attempts} attempt(s): {rejection}")
+
+
 # ── batch_size > 1: batched path (grain + order preserved and VERIFIED) ──
-def build_llm_batch_mapper(workflow_stage: WorkflowStage) -> GroupMapper:
+def build_llm_batch_mapper(
+    workflow_stage: WorkflowStage, sources: Mapping[str, InputBinding]
+) -> GroupMapper:
     """One model call per group. The driver owns the grouping, the pool, the cache and the log."""
     stage = narrow_stage(workflow_stage, LLMTransformStage)
     batch_reply_schema = _build_batch_reply_schema(stage)
+    quoted = find_quoted_span_columns(stage)
 
     def map_group(indices: Sequence[int], rows: Sequence[Row]) -> Sequence[Row | None]:
-        return _process_chunk(stage.id, stage.llm, batch_reply_schema, list(rows))
+        return _process_chunk(stage.id, stage.llm, batch_reply_schema, list(rows), quoted, sources)
 
     return map_group
 
@@ -113,26 +159,45 @@ def _build_batch_reply_schema(stage: LLMTransformStage) -> type:
         ),
     )
     item_schema = TableSchema(columns=[number_column, *reply_spec.columns])
-    item_reply = item_schema.to_pydantic_model(f"{stage.id}_batch_item")
+    item_reply = item_schema.to_reply_model(f"{stage.id}_batch_item")
     return create_model(f"{stage.id}_batch", results=(list[item_reply], ...))  # type: ignore[valid-type]
 
 
 def _process_chunk(
-    stage_id: str, llm: Any, batch_reply_schema: type, chunk: list[Row]
+    stage_id: str,
+    llm: Any,
+    batch_reply_schema: type,
+    chunk: list[Row],
+    quoted: Sequence[QuotedSpanColumn],
+    sources: Mapping[str, InputBinding],
 ) -> list[Row]:
     """A confused reply fails EVERY row of the chunk: the answers that matched are not trusted."""
     usages: list[LlmUsage] = []
     try:
-        by_number, problem = _ask_until_reply_rejoins(
-            stage_id, llm, batch_reply_schema, chunk, usages)
+        judgment, by_number = _ask_until_reply_rejoins(
+            stage_id, llm, batch_reply_schema, [show_quoted_text(row, quoted) for row in chunk],
+            usages)
     except StageWideFailure:
         raise                       # not this chunk's failure — see map_row's supervisor
     except Exception as exc:  # noqa: BLE001 — the chunk's supervisor, mirroring the
         # per-row one: a backend that never answered fails THESE rows, not the stage.
         return _emit_failed(chunk, usages, str(exc) or type(exc).__name__)
-    if by_number is None:
-        return _emit_failed(chunk, usages, problem)
-    return _emit_matched(chunk, by_number, usages)
+    replies = [_complete_item_spans(by_number[offset], row, quoted, sources)
+               for offset, row in enumerate(chunk)]
+    # One call decided every row of the chunk, so each carries that call's judgment.
+    return [{**row, ROW_JUDGMENT_KEY: judgment} for row in _emit_matched(chunk, replies, usages)]
+
+
+def _complete_item_spans(
+    item: JsonDict, row: Row, quoted: Sequence[QuotedSpanColumn],
+    sources: Mapping[str, InputBinding],
+) -> Row:
+    """A batch is not re-asked for one item's quote: that item's row carries the refusal instead."""
+    reply = {k: v for k, v in item.items() if k != _ROW_NUMBER_FIELD}
+    try:
+        return complete_spans(reply, row, quoted, sources)
+    except (QuoteRefused, QuoteNotInText, QuoteAmbiguous, *SPAN_REFUSALS) as refusal:
+        return {ROW_ERROR_KEY: str(refusal)}
 
 
 def _ask_until_reply_rejoins(
@@ -141,24 +206,24 @@ def _ask_until_reply_rejoins(
     batch_reply_schema: type,
     chunk: list[Row],
     usages: list[LlmUsage],
-) -> tuple[dict[int, dict[str, Any]] | None, str]:
+) -> tuple[JudgmentDraft, dict[int, dict[str, Any]]]:
     """Re-asks ONLY a reply the runtime could not rejoin — the one defect no reply schema can state."""
     n = len(chunk)
     problem = "no reply produced"
-    attempts = max(1, (llm.max_retries or 0) + 1)
+    attempts = _count_attempts(llm)
     for attempt in range(attempts):
         task = _render_batch_task(llm.prompt_data_template, chunk, correction=problem if attempt else None)
         # A raise propagates: `call_llm_batch` has already retried the backend
         # `max_retries` times, and re-asking here would square that budget while
         # telling the model its reply was rejected — which it never made.
-        reply = call_llm_batch(
+        judgment = call_llm_batch(
             stage_id, llm, instructions=llm.prompt_instructions, task=task,
             reply_schema=batch_reply_schema, usage_out=usages,
         )
-        by_number, problem = _validate_batch_reply(reply.get("results", []), n)
+        by_number, problem = _validate_batch_reply(judgment.reply.get("results", []), n)
         if by_number is not None:
-            return by_number, ""
-    return None, f"batched reply invalid after {attempts} attempt(s): {problem}"
+            return judgment, by_number
+    raise LLMError(f"batched reply invalid after {attempts} attempt(s): {problem}")
 
 
 def _validate_batch_reply(
@@ -179,17 +244,18 @@ def _validate_batch_reply(
     )
 
 
-def _emit_matched(
-    chunk: list[Row], by_number: dict[int, dict[str, Any]], usages: list[LlmUsage]
-) -> list[Row]:
+def _emit_matched(chunk: list[Row], replies: list[Row], usages: list[LlmUsage]) -> list[Row]:
     """Usage is per-call: the whole chunk's usage lands on its first row, the rest carry zero."""
     total = LlmUsage.summed(usages)
     out: list[Row] = []
-    for offset, row in enumerate(chunk):
-        reply_fields = {k: v for k, v in by_number[offset].items() if k != _ROW_NUMBER_FIELD}
+    for offset, (row, reply) in enumerate(zip(chunk, replies)):
         usage = total if offset == 0 else LlmUsage()
-        out.append({**row, **reply_fields, ROW_USAGE_KEY: usage})
+        out.append({**row, **reply, ROW_USAGE_KEY: usage})
     return out
+
+
+def _count_attempts(llm: LLMConfig) -> int:
+    return max(1, (llm.max_retries or 0) + 1)
 
 
 def _emit_failed(chunk: list[Row], usages: list[LlmUsage], message: str) -> list[Row]:

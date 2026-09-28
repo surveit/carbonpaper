@@ -12,6 +12,7 @@ from typing import Any, Callable
 from app.models.stage import StageType
 from app.models.workflow_stage import WorkflowStage
 
+from ..context import PrepareScope
 from ..options import DEFAULT_PARALLEL
 from .aggregate import handle_aggregate
 from .execution import (
@@ -25,12 +26,13 @@ from .execution import (
 from .row_aligned import RowAlignedFrameHandler
 from .filter_rows import build_filter_mapper
 from .human_review_queue import build_human_review_mapper
-from .input_data import preflight_input_data, read_input_data
+from .input_data import AcquiredStage, acquire_input_data, preflight_input_data, read_input_data
 from .join import handle_enrich, handle_expand
 from .llm_transform import LLMTransformHandler
 from .report import handle_report
 from .reshape import handle_dedupe, handle_explode, handle_sort_rank
 from .python_functions import handle_python_frame_function, build_python_row_mapper
+from .read_pages import handle_read_pages
 from .starlark_filter import make_starlark_filter_mapper
 from .starlark_functions import build_starlark_row_mapper
 from .union import handle_union
@@ -39,6 +41,13 @@ Preflight = Callable[[WorkflowStage], tuple[list[str], dict[str, Any] | None]]
 
 PREFLIGHTS: dict[StageType, Preflight] = {
     StageType.input_data: preflight_input_data,
+}
+
+# Only prepare_run calls one: it may fetch and store files, which a subset run must not.
+Acquirer = Callable[[WorkflowStage, PrepareScope], AcquiredStage | None]
+
+ACQUIRERS: dict[StageType, Acquirer] = {
+    StageType.input_data: acquire_input_data,
 }
 
 HANDLERS: dict[StageType, StageHandler] = {
@@ -73,6 +82,7 @@ HANDLERS: dict[StageType, StageHandler] = {
     StageType.explode: FrameTransformHandler(handle_explode),
     StageType.dedupe: FrameTransformHandler(handle_dedupe),
     StageType.sort_rank: FrameTransformHandler(handle_sort_rank),
+    StageType.read_pages: FrameTransformHandler(handle_read_pages),
 }
 
 # A mis-shaped registration (e.g. a frame handler for a type the model declares

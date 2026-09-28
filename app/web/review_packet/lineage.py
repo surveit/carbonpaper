@@ -52,7 +52,7 @@ PACKET_MAX_LINEAGE_PAGES = 1_000
 
 def write_packet_lineage(
     root: Path, run_dir: Path, view: RunView, stages_by_id: dict[str, WorkflowStage],
-    manifest: JsonDict,
+    manifest: JsonDict, cited_pages: frozenset[tuple[str, int]],
 ) -> LineageReport:
     """Traces every row the run PUBLISHED a link to, and the rows feeding those."""
     frames = RunFrames(run_dir)
@@ -69,7 +69,7 @@ def write_packet_lineage(
         path
         for stage_id, row in sorted(reached)
         for path in _write_page(root, frames, branches, view, stages_by_id,
-                                catalog, stage_id, row, traced)
+                                catalog, stage_id, row, traced, cited_pages)
     ]
     stages = _group_by_stage(sorted(reached), published)
     figures = _named_figures(view, reached)
@@ -146,12 +146,13 @@ def _write_page(
     root: Path, frames: RunFrames, branches: WorkflowRunBranches | MissingLineage,
     view: RunView,
     stages_by_id: dict[str, WorkflowStage], catalog: InputCatalog, stage_id: str,
-    row: int, traced: frozenset[tuple[str, int]],
+    row: int, traced: frozenset[tuple[str, int]], cited_pages: frozenset[tuple[str, int]],
 ) -> list[str]:
     trace = trace_to_dict(trace_row_from(frames, stage_id, row))
     relative = packet_lineage_href("", stage_id, row)
     written = _write_contributor_tables(root, frames, view, trace, stage_id, row)
-    links = PacketPanelLinks(to_root="../../", traced=traced, owner=(stage_id, row))
+    links = PacketPanelLinks(
+        to_root="../../", traced=traced, owner=(stage_id, row), cited_pages=cited_pages)
     trace_view = build_trace_view(trace, stages_by_id, links)
     html = templates.env.get_template("lineage.html").render(
         title=f"{stage_id} · row {render_row_number(row)}",

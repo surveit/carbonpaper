@@ -30,10 +30,13 @@ from app.models import (
     LIST_JSON_COLUMN_TYPE,
     RANGE_UNBOUNDED_MARKER,
     SCALAR_COLUMN_TYPES,
+    SPAN_COLUMN_TYPE,
     STR_COLUMN_TYPE,
     TableSchema,
 )
+from app.models.schema import find_list_element_type
 from app.models.severity import UserFacingErrorSeverity
+from app.models.spans import Span
 
 
 # ── Type checking ────────────────────────────────────────────────────────────
@@ -73,7 +76,10 @@ class ValidationReport:
 
     @property
     def ok(self) -> bool:
-        return not any(i.severity == UserFacingErrorSeverity.error for i in self.issues)
+        return not self.list_errors()
+
+    def list_errors(self) -> list[Issue]:
+        return [i for i in self.issues if i.severity == UserFacingErrorSeverity.error]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -115,6 +121,7 @@ def validate_table(
         report.issues.extend(_find_numeric_range_issues(values, col))
         report.issues.extend(_find_enum_issues(values, col))
         report.issues.extend(_find_json_shape_issues(values, col))
+        report.issues.extend(_find_span_shape_issues(values, col))
 
     return report
 
@@ -354,3 +361,45 @@ def _find_open_map_issues(present: dict[str, pa.DataType], col: Column) -> list[
         f"{len(offenders)} field(s) not of declared value_type '{col.value_type}': "
         f"{sorted(offenders)[:8]}",
     )]
+
+
+# Checked cell by cell: whether a locator kind is registered is a fact about values, not types.
+def _find_span_shape_issues(values: pa.ChunkedArray, col: Column) -> list[Issue]:
+    element_type, list_layers = _strip_list_layers(col.type)
+    if element_type != SPAN_COLUMN_TYPE:
+        return []
+    problems = [
+        "; ".join(errors)
+        for cell in _unwrap_list_layers(values.to_pylist(), list_layers)
+        if (errors := _find_span_errors(cell))
+    ]
+    if not problems:
+        return []
+    return [Issue(
+        "error", col.name,
+        f"{len(problems)} value(s) do not read as a span "
+        f"(e.g. {_describe_sample(list(dict.fromkeys(problems)))})",
+    )]
+
+
+def _strip_list_layers(type_name: str) -> tuple[str, int]:
+    element = find_list_element_type(type_name)
+    if element is None:
+        return type_name, 0
+    innermost, list_layers = _strip_list_layers(element)
+    return innermost, list_layers + 1
+
+
+def _unwrap_list_layers(cells: list[Any], list_layers: int) -> list[Any]:
+    for _ in range(list_layers):
+        cells = [element for cell in cells if is_sequence_cell(cell) for element in cell]
+    return [cell for cell in cells if not is_null_form(cell)]
+
+
+def _find_span_errors(cell: Any) -> list[str]:
+    """Not find_row_issues: it keeps only declared keys, so an extra struct field would pass."""
+    try:
+        Span.model_validate(cell, strict=True)
+    except ValidationError as err:
+        return format_errors(err)
+    return []

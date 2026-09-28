@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Iterator
 from io import BytesIO
 import json
 import zipfile
@@ -60,7 +61,7 @@ def export_stage_cache(project_id: str) -> bytes:
 def import_stage_cache(archive: bytes, destination_project_id: str) -> CacheImportReport:
     with zipfile.ZipFile(BytesIO(archive)) as bundle:
         manifest = _read_manifest(bundle)
-        entries = _read_entries(bundle)
+        entries = list(_read_entries(bundle))
         frames_skipped = _count_frame_members(bundle)
     cache = StageCacheEntry.read_write()
     written = sum(cache.copy_entry_into(entry, destination_project_id) for entry in entries)
@@ -72,6 +73,12 @@ def import_stage_cache(archive: bytes, destination_project_id: str) -> CacheImpo
         reachable=_count_reachable(entries, destination_project_id),
         stages=_count_stages(entries, destination_project_id),
     )
+
+
+def read_cache_archive_entries(archive: bytes) -> Iterator[StageCacheEntry]:
+    with zipfile.ZipFile(BytesIO(archive)) as bundle:
+        _read_manifest(bundle)
+        yield from _read_entries(bundle)
 
 
 def validate_cache_archive(archive: bytes) -> None:
@@ -136,14 +143,11 @@ def _read_manifest(bundle: zipfile.ZipFile) -> CacheArchiveManifest:
     return manifest
 
 
-def _read_entries(bundle: zipfile.ZipFile) -> list[StageCacheEntry]:
-    raw = bundle.read(_ENTRIES_FILE).decode("utf-8")
-    # split, not splitlines: json.dumps leaves U+2028 raw, and splitlines breaks on it.
-    return [
-        StageCacheEntry.model_validate(json.loads(line))
-        for line in raw.split("\n")
-        if line.strip()
-    ]
+def _read_entries(bundle: zipfile.ZipFile) -> Iterator[StageCacheEntry]:
+    # Bytes break on b"\n" alone; splitlines would also break on the raw U+2028 json.dumps leaves.
+    for line in BytesIO(bundle.read(_ENTRIES_FILE)):
+        if line.strip():
+            yield StageCacheEntry.model_validate(json.loads(line))
 
 
 def _count_frame_members(bundle: zipfile.ZipFile) -> int:

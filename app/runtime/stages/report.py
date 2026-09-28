@@ -65,6 +65,7 @@ def _resolve_citation_provider(
     return CitationProvider(
         project=ctx.identity.project, run_id=ctx.identity.run_id,
         tables={ref.id: inputs[ref.id] for ref in stage.inputs},
+        sources=ctx.bound_sources, texts=ctx.source_texts,
     )
 
 

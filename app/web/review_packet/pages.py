@@ -6,6 +6,7 @@ import re
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH
 from app.runtime.manifest import resolve_output_path
@@ -13,6 +14,7 @@ from app.services.loader import resolve_function_code
 from app.services.review_packet.checksums import CHECKSUMS_FILE
 from app.services.review_packet.data import DataReport
 from app.models import WorkflowStage
+from app.models.run_manifest import InputBinding
 from app.services.review_packet.views import (
     LINEAGE_DIR,
     LineageReport,
@@ -81,6 +83,9 @@ MERMAID_URL = "https://cdn.jsdelivr.net/npm/mermaid@11.16.0/dist/mermaid.min.js"
 MERMAID_SRI = "sha384-T/0lMUdJpd2S1ZHtRiofG3htU3xPCrFVeAQ1UUE2TJwlEJSV5NUwn30kP28n238E"
 WORKFLOW_DIAGRAM_FILE = "workflow.mmd"
 
+# Its terms bar implying Free Law Project produced, endorsed or verified an analysis of its data.
+COURTLISTENER_HOSTS = frozenset({"storage.courtlistener.com", "www.courtlistener.com"})
+
 
 def write_packet_pages(
     root: Path,
@@ -101,8 +106,9 @@ def write_packet_pages(
     for stage in view.stages:
         written.append(
             _write_stage_page(
-                root, run_dir, view, stage,
-                workflow_stages_by_id.get(stage.stage_id), frozenset(lineage.traced))
+                root, run_dir, view, stage, workflow_stages_by_id.get(stage.stage_id),
+                PacketPanelLinks(traced=frozenset(lineage.traced),
+                                 cited_pages=frozenset(data.cited_pages)))
         )
     return written
 
@@ -157,6 +163,9 @@ def _write_index(
         guide=guide,
         omitted=data.omitted,
         artifacts=data.artifacts,
+        written=frozenset(data.written),
+        holds_cited_pages=bool(data.cited_pages),
+        from_courtlistener=_is_any_file_from_courtlistener(view.inputs),
         assets=[f"{ASSETS_DIR}/{name}" for name in STYLESHEETS],
         icon=f"{ASSETS_DIR}/{FAVICON}",
         static_root=f"{ASSETS_DIR}/",
@@ -174,6 +183,14 @@ def _write_index(
         type_class=TYPE_CLASS,
     )
     return _write(root / "index.html", html, "index.html")
+
+
+def _is_any_file_from_courtlistener(inputs: list[InputBinding]) -> bool:
+    return any(
+        binding.origin_url is not None
+        and urlsplit(binding.origin_url).hostname in COURTLISTENER_HOSTS
+        for binding in inputs
+    )
 
 
 def _write_diagram_source(root: Path, diagram: str) -> str:
@@ -197,8 +214,7 @@ def _write_asset(root: Path, name: str) -> str:
 
 def _write_stage_page(
     root: Path, run_dir: Path, view: RunView, stage: StageView,
-    workflow_stage: WorkflowStage | None,
-    traced: frozenset[tuple[str, int]],
+    workflow_stage: WorkflowStage | None, links: PacketPanelLinks,
 ) -> str:
     relative = f"{STAGES_DIR}/{stage.stage_id}.html"
     html = _render(
@@ -209,14 +225,14 @@ def _write_stage_page(
         static_root=f"../{ASSETS_DIR}/",
         ambient_scripts=ambient_script_hrefs("../"),
         index_href="../index.html",
-        **_build_panel_context(run_dir, view, stage, workflow_stage, traced),
+        **_build_panel_context(run_dir, view, stage, workflow_stage, links),
     )
     return _write(root / relative, html, relative)
 
 
 def _build_panel_context(
     run_dir: Path, view: RunView, stage: StageView,
-    workflow_stage: WorkflowStage | None, traced: frozenset[tuple[str, int]],
+    workflow_stage: WorkflowStage | None, links: PacketPanelLinks,
 ) -> dict[str, Any]:
     # The False/empty entries below are what make the packet's panel inert.
     stage_def = None if workflow_stage is None else workflow_stage.stage
@@ -246,7 +262,7 @@ def _build_panel_context(
         "can_generate_tests": False,
         "certification": None,
         "previewable": False,
-        "links": PacketPanelLinks(traced=traced),
+        "links": links,
         "type_glyph": TYPE_GLYPH,
         "type_class": TYPE_CLASS,
     }

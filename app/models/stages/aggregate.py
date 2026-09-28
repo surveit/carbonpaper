@@ -80,7 +80,7 @@ class AggregateConfig(StageConfig):
 class AggregateStage(AbstractStage):
     type: Literal[StageType.aggregate]
     CACHE_IGNORED_BECAUSE: ClassVar[str] = (
-        "a vectorised aggregation costs less than hashing its own input would"
+        "an aggregation costs less than hashing its own input would"
     )
     aggregate: AggregateConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
@@ -116,6 +116,7 @@ class AggregateStage(AbstractStage):
 # compute_aggregate_output_types below and by the runtime handler
 # (app.runtime.stages.aggregate.handle_aggregate, which executes the same
 # dispatch on real data) — named here so the two sites can't drift apart.
+AGG_FORMULA_SUM = "sum"
 AGG_FORMULA_COUNT = "count"
 AGG_FORMULA_COUNT_DISTINCT = "count_distinct"
 AGG_FORMULA_FIRST = "first"
@@ -215,7 +216,7 @@ def compute_aggregate_output_types(
             computed[op.output_column] = "int"
         elif op.formula == "mean":
             computed[op.output_column] = "float"
-        elif op.formula == "sum":
+        elif op.formula == AGG_FORMULA_SUM:
             # str is in the set because a pandas sum over strings concatenates them.
             computed[op.output_column] = (
                 value_type if value_type in ("int", "float", "str") else None

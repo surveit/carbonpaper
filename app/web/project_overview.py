@@ -24,7 +24,7 @@ _CHAT_PREFIX = "/chat/"
 
 _RUN_NEWEST = "Run the newest version of this workflow."
 _RUN_UNCAPPED = "Re-run this workflow with no row caps."
-_DECLARE_FIGURES = "Declare this workflow's summary figures as workflow outputs, then run it."
+_DECLARE_RESULTS = "Declare this workflow's results as workflow outputs, then run it."
 _WHY_ERRORED = "Why did the last run error?"
 _WRITE_METHODOLOGY = "Write a methodology document for this project from its workflow."
 
@@ -152,7 +152,7 @@ def build_checks(
     found = [
         find_windowed_warning(project_id, row),
         find_incomplete_warning(project_id, row),
-        find_no_figures_warning(project_id, published),
+        find_no_results_warning(project_id, published),
     ]
     warnings = [warning for warning in found if warning is not None]
     return warnings or [
@@ -181,7 +181,7 @@ def find_windowed_warning(project_id: str, row: RunIndexRow) -> OverviewCheck | 
     named = ", ".join(f"{stage} (first {render_figure(cap)} rows)" for stage, cap in sorted(capped))
     return OverviewCheck(
         ok=False, headline="This run was capped.",
-        detail=f"{named} read a window of its input, so every figure counted below it counts "
+        detail=f"{named} read a window of its input, so every result counted below it counts "
                f"a slice.",
         action=ask_the_agent(project_id, "Run it whole", _RUN_UNCAPPED),
     )
@@ -211,14 +211,14 @@ def find_incomplete_warning(project_id: str, row: RunIndexRow) -> OverviewCheck 
     )
 
 
-def find_no_figures_warning(project_id: str, published: RunPublished) -> OverviewCheck | None:
+def find_no_results_warning(project_id: str, published: RunPublished) -> OverviewCheck | None:
     if published:
         return None
     return OverviewCheck(
-        ok=False, headline="This run produced no figures.",
-        detail="A figure is declared on a stage and written while the run executes, so a run "
-               "that did not carry the declaration never wrote the cell.",
-        action=ask_the_agent(project_id, "Declare the figures", _DECLARE_FIGURES),
+        ok=False, headline="This run produced no results.",
+        detail="A result is declared on a stage and written while the run executes, so a run "
+               "that did not carry the declaration never wrote one.",
+        action=ask_the_agent(project_id, "Declare the results", _DECLARE_RESULTS),
     )
 
 
