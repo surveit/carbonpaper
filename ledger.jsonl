@@ -3413,3 +3413,4 @@
 {"run_id":"36473264343","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36473264343","created":"2026-09-28T19:38:11Z","branch":"critic-eval-harness","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"36473352681","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36473352681","created":"2026-09-28T19:38:52Z","branch":"critic-eval-harness","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"36473398964","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36473398964","created":"2026-09-28T19:39:53Z","branch":"t04-span-verifier","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"36473402271","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36473402271","created":"2026-09-28T19:39:54Z","branch":"u06-intro-figures-from-fixture","event":"pull_request","contracts_kept":null,"findings":[]}
