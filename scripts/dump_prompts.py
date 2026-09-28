@@ -55,7 +55,7 @@ _UNUSED_BUNDLE = EvidenceBundle(
     shape=ClaimShapeInput(label="<shape>", universe=DataUniverseRequirement.closed,
                           importance=ClaimImportance.primary),
     run_read_everything=True, outputs=[], cited_slug="<slug>", stages=[], branches=[],
-    input_columns=[], terms="", methodology=None,
+    input_columns=[], method=None,
 )
 
 

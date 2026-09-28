@@ -8,6 +8,8 @@ from app.core.persistence import get_store
 from app.models.records.workflow_version import Method, WorkflowVersion
 from app.models.row_types import RowType
 from app.models.terms import Terms, Verb
+from app.reviewer.evidence import render_evidence_pool
+from app.services import claim_review
 from app.services import run as run_service
 from app.services import terms as terms_service
 from app.services.methodology import write_methodology
@@ -15,6 +17,7 @@ from app.services.project import create_project
 from app.services.versioning import create_version_from_stages, load_version
 from app.services.workspace import resolve_project_dir
 from app.web.review_packet import export_review_packet
+from claim_review_fixture import PROJECT, claim_the_total, run_the_fixture
 
 _METHODOLOGY = "Count the filings each firm made."
 _REWRITTEN = "Count the firms, then their filings."
@@ -77,6 +80,35 @@ def test_a_packet_on_an_older_version_says_why_it_holds_no_methodology(projects_
     assert str(escape(omitted.reason)) in index and _METHODOLOGY not in index
 
 
+# ── the claim's evidence bundle ──
+
+
+def test_the_bundle_reads_what_the_runs_version_kept(projects_root):
+    _write_the_method(PROJECT)
+    claim = claim_the_total(run_the_fixture(projects_root))
+    _rewrite_the_project(PROJECT)
+
+    bundle = claim_review.build_evidence_bundle(PROJECT, claim.id)
+
+    assert bundle.method == _KEPT
+    pool = render_evidence_pool(bundle)
+    assert "- filing — One disclosure a firm made." in pool and _METHODOLOGY in pool
+    assert _REWRITTEN not in pool
+
+
+def test_the_pool_of_a_run_on_an_older_version_calls_both_unknown(projects_root):
+    _write_the_method(PROJECT)
+    run_id = run_the_fixture(projects_root)
+    _store_as_saved_before_versions_kept_a_method(_load_the_runs_version(PROJECT, run_id))
+
+    pool = render_evidence_pool(
+        claim_review.build_evidence_bundle(PROJECT, claim_the_total(run_id).id))
+
+    assert "----- TERMS -----\nunknown:" in pool
+    assert "----- METHODOLOGY -----\nunknown:" in pool
+    assert _METHODOLOGY not in pool and "filing" not in pool
+
+
 # ── helpers ──
 
 
@@ -84,6 +116,11 @@ def _create_project() -> str:
     project_id = create_project("pins", _METHODOLOGY, source="pinning test").id
     terms_service.write_terms(project_id, _TERMS)
     return project_id
+
+
+def _write_the_method(project_id: str) -> None:
+    write_methodology(project_id, _METHODOLOGY)
+    terms_service.write_terms(project_id, _TERMS)
 
 
 def _rewrite_the_project(project_id: str) -> None:
