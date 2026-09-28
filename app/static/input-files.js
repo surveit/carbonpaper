@@ -21,7 +21,7 @@ window.InputFiles = window.InputFiles || (function () {
         pane.classList.toggle("hidden", pane.dataset.file !== picker.value);
       });
       var by = tab.querySelector(".if-stage");
-      if (by) by.textContent = picker.value;
+      if (by) by.textContent = shownPane(tab).dataset.readBy;
       paint(tab);
     });
   }
@@ -76,7 +76,7 @@ window.InputFiles = window.InputFiles || (function () {
   function urlFor(tab, pane, leaf) {
     var query = new URLSearchParams({
       stage: tab.dataset.stage, row: tab.dataset.row, column: tab.dataset.column,
-      input: pane.dataset.file, rows: tab.dataset.rows,
+      file: pane.dataset.file, rows: tab.dataset.rows,
       columns: tab.dataset.columns,
     });
     return "/project/" + encodeURIComponent(tab.dataset.project) + "/runs/" +

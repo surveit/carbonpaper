@@ -43,7 +43,7 @@ def test_the_panel_carries_a_shape_row_for_each_basis(run_id):
 
 
 def test_the_download_carries_the_relevant_rows_and_columns(run_id):
-    answer = TestClient(app).get(_url(run_id, "slice.csv", input="load_east"))
+    answer = TestClient(app).get(_url(run_id, "slice.csv", file=0))
     assert answer.status_code == 200
     rows = list(csv.reader(io.StringIO(answer.text)))
     assert rows[0] == ["agency_code", "amount", "grant_id", "kind"]
@@ -52,14 +52,14 @@ def test_the_download_carries_the_relevant_rows_and_columns(run_id):
 
 def test_the_download_widens_to_every_row_and_column(run_id):
     answer = TestClient(app).get(
-        _url(run_id, "slice.csv", input="load_east", rows="all", columns="all"))
+        _url(run_id, "slice.csv", file=0, rows="all", columns="all"))
     rows = list(csv.reader(io.StringIO(answer.text)))
     assert len(rows) == 7
     assert "region" in rows[0]
 
 
 def test_a_file_this_figure_never_read_is_refused(run_id):
-    answer = TestClient(app).get(_url(run_id, "slice.csv", input="load_nothing"))
+    answer = TestClient(app).get(_url(run_id, "slice.csv", file=9))
     assert answer.status_code == 404
 
 
