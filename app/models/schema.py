@@ -532,11 +532,19 @@ def _scalar_or_list_annotation(type_name: str, span_annotation: type[BaseModel])
 
 def _field_for(column: Column) -> Any:
     kwargs: dict[str, Any] = {}
-    if column.description:
-        kwargs["description"] = column.description
+    description = _describe_field(column)
+    if description:
+        kwargs["description"] = description
     low, high = column.resolve_numeric_bounds()
     if low is not None:
         kwargs["ge"] = low
     if high is not None:
         kwargs["le"] = high
     return Field(**kwargs)
+
+
+def _describe_field(column: Column) -> str | None:
+    if column.quoted_from is None:
+        return column.description
+    quoted = f"A verbatim quote from `{column.quoted_from}`, never a paraphrase."
+    return f"{column.description} {quoted}" if column.description else quoted

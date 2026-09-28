@@ -53,7 +53,7 @@ _GRANDFATHERED_COUNTS: dict[str, int] = {
     "app/runtime/stages/execution.py": 1,
     "app/runtime/stages/filter_rows.py": 1,
     "app/runtime/stages/input_data.py": 1,
-    "app/runtime/stages/llm_transform.py": 4,
+    "app/runtime/stages/llm_transform.py": 3,
     "app/runtime/stages/starlark_marshal.py": 2,
     "app/runtime/starlark_code.py": 1,
     "app/runtime/trace.py": 13,

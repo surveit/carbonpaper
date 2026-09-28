@@ -5,6 +5,7 @@ import unicodedata
 from collections.abc import Callable, Iterator
 from html.parser import HTMLParser
 from pathlib import Path
+from typing import NamedTuple
 
 from pypdf import PdfReader
 
@@ -48,12 +49,51 @@ def normalize_text(text: str) -> str:
     return " ".join(unhyphenated.split())
 
 
+class NormalizedText(NamedTuple):
+    text: str
+    # Where in the raw text each character of `text` came from: raw[raw_starts[i]:raw_ends[i]].
+    raw_starts: list[int]
+    raw_ends: list[int]
+
+
+def normalize_with_offsets(raw: str) -> NormalizedText:
+    """normalize_text, one base character and its combining marks at a time, so offsets map back."""
+    chars: list[str] = []
+    starts: list[int] = []
+    ends: list[int] = []
+    space_pending = False
+    for start, end in _split_combining_clusters(raw):
+        for char in unicodedata.normalize("NFKC", raw[start:end]).replace(_SOFT_HYPHEN, ""):
+            if char.isspace():
+                space_pending = bool(chars)
+                continue
+            if space_pending:
+                chars.append(" ")
+                starts.append(start)
+                ends.append(start)
+                space_pending = False
+            chars.append(char)
+            starts.append(start)
+            ends.append(end)
+    return NormalizedText("".join(chars), starts, ends)
+
+
 def is_text_layer_empty(path: Path) -> bool:
     return not any(text.strip() for text in read_every_page_text(path))
 
 
 def _is_pdf(path: Path) -> bool:
     return path.suffix.lower() == _PDF_SUFFIX
+
+
+def _split_combining_clusters(raw: str) -> Iterator[tuple[int, int]]:
+    start = 0
+    for index in range(1, len(raw)):
+        if not unicodedata.combining(raw[index]):
+            yield start, index
+            start = index
+    if raw:
+        yield start, len(raw)
 
 
 def _require_page_in_range(path: Path, page: int, page_count: int) -> None:
