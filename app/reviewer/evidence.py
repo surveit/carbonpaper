@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 from app.core.column_profile import ValueCount
-from app.models.citations import StageOutputCellCitation, render_citation_value
+from app.core.text_sources import normalize_text
+from app.models.citations import CellCitation, render_citation_value
 from app.models.claim_review import (
     BranchEvidenceItem,
     EvidenceBundle,
@@ -30,6 +31,7 @@ def render_evidence_pool(bundle: EvidenceBundle) -> str:
     return "\n\n".join([
         f"run: {bundle.cited.run_id}",
         _render_outputs(bundle.outputs, bundle.cited_slug),
+        *_render_cited_passage(bundle),
         _render_stages(bundle.stages),
         _render_branches(bundle.branches),
         _render_input_columns(bundle.input_columns),
@@ -66,10 +68,23 @@ def _render_outputs(outputs: list[WorkflowOutput], cited_slug: str) -> str:
 def _render_where(output: WorkflowOutput) -> str:
     # Spelled so a reviewer can copy a cell citation's stage, row and column off the line.
     citation = output.citation
-    if isinstance(citation, StageOutputCellCitation):
+    if isinstance(citation, CellCitation):
         return (f"stage `{citation.stage_id}`, row {citation.row_ordinal}, "
                 f"column `{citation.column}`")
     return f"stage `{citation.stage_id}`"
+
+
+def _render_cited_passage(bundle: EvidenceBundle) -> list[str]:
+    """Absent unless the cited cell holds a span; page text is collapsed onto one line."""
+    passage = bundle.cited_passage
+    if passage is None:
+        return []
+    return [_render_block("CITED QUOTE", [
+        f"quote: «{normalize_text(passage.quote)}» on {passage.locator_label}",
+        f"page text before it: «{normalize_text(passage.before)}»",
+        f"page text after it: «{normalize_text(passage.after)}»",
+        f"cite it as: {bundle.cited.model_dump_json()}",
+    ])]
 
 
 def _render_stages(stages: list[StageEvidenceItem]) -> str:

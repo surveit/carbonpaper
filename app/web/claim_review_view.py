@@ -7,10 +7,13 @@ from app.core.ids import ID
 from app.core.figure_text import render_figure
 from app.models.citations import (
     AddressedChallengeCitation,
+    AddressedSourceSpanCitation,
     AddressedStageOutputCellCitation,
     PublishedCitation,
+    SourceSpanCitation,
     StageOutputCellCitation,
 )
+from app.models.locators import label_locator
 from app.models.records.claim_review import (
     SEVERITY_WORDS,
     Challenge,
@@ -19,7 +22,7 @@ from app.models.records.claim_review import (
     Severity,
 )
 from app.models.records.claims import Claim, ClaimShape
-from app.runtime.citations import build_row_trace_url
+from app.runtime.citations import build_row_trace_url, build_source_page_url
 from app.services import claims as claims_service
 from app.services.claim_review import load_claim_review
 from app.services.claim_review_run import read_review_state
@@ -55,6 +58,14 @@ class CitationLink(BaseModel):
     trail: list[str]
     value: str
     href: str
+    # Empty unless the citation is a span.
+    quote: str
+
+
+class CitedQuote(BaseModel):
+    quote: str
+    locator_label: str
+    href: str
 
 
 class ChallengeCard(BaseModel):
@@ -83,6 +94,8 @@ class ClaimReviewPage(BaseModel):
     text: str
     value: str
     value_href: str
+    # None unless the claim cites a span.
+    cited_quote: CitedQuote | None
     shape_label: str
     universe: str
     run_read_everything: bool
@@ -116,8 +129,9 @@ def _build_page(project_id: ID, claim: Claim, shape: ClaimShape, run: RunIndexRo
         run_id=claim.citation.run_id,
         status=claim.status,
         text=claim.text,
-        value=_read_cited_value(claim),
+        value=_read_output_value(claim.citation),
         value_href=_build_citation_href(project_id, claim.citation),
+        cited_quote=_build_cited_quote(project_id, claim.citation),
         shape_label=shape.label,
         universe=shape.universe,
         run_read_everything=_read_whether_the_run_read_everything(project_id, claim),
@@ -142,9 +156,11 @@ def _read_whether_the_run_read_everything(project_id: ID, claim: Claim) -> bool:
     return claims_service.read_whether_the_run_read_everything(manifest)
 
 
-def _read_cited_value(claim: Claim) -> str:
-    cited = claim.citation
-    return str(cited.value) if isinstance(cited, StageOutputCellCitation) else ""
+def _build_cited_quote(project_id: ID, citation: PublishedCitation) -> CitedQuote | None:
+    if not isinstance(citation, SourceSpanCitation):
+        return None
+    return CitedQuote(quote=citation.quote, locator_label=label_locator(citation.locator),
+                      href=_build_citation_href(project_id, citation))
 
 
 def _build_outputs(project_id: ID, claim: Claim) -> list[OutputRow]:
@@ -159,11 +175,15 @@ def _build_outputs(project_id: ID, claim: Claim) -> list[OutputRow]:
 
 
 def _read_output_value(citation: PublishedCitation) -> str:
+    if isinstance(citation, SourceSpanCitation):
+        return citation.quote
     return str(citation.value) if isinstance(citation, StageOutputCellCitation) else ""
 
 
 def _build_citation_href(project_id: ID, citation: PublishedCitation) -> str:
     """A table output names no row, so its rows page is where its rectangle is read."""
+    if isinstance(citation, SourceSpanCitation):
+        return build_source_page_url(project_id, citation.build_span())
     cell = citation if isinstance(citation, StageOutputCellCitation) else None
     if cell is None:
         return AppPanelLinks(project_id, citation.run_id).stage_rows(citation.stage_id)
@@ -240,6 +260,7 @@ def _build_card(anchor: str, challenge: Challenge) -> ChallengeCard:
 
 CITATION_KIND_WORDS: dict[str, str] = {
     "stage_output_cell": "cell",
+    "source_span": "quote",
     "stage_output_column": "column",
     "stage": "stage",
     "term": "term",
@@ -250,10 +271,14 @@ def _build_citation_link(citation: AddressedChallengeCitation) -> CitationLink:
     return CitationLink(kind_words=CITATION_KIND_WORDS[citation.kind],
                         trail=_build_trail(citation),
                         value=_read_cited_figure(citation),
-                        href=render_source_url(citation))
+                        href=render_source_url(citation),
+                        quote=_read_cited_quote(citation))
 
 
 def _build_trail(citation: AddressedChallengeCitation) -> list[str]:
+    if isinstance(citation, AddressedSourceSpanCitation):
+        return [citation.stage_id, citation.column, f"row {citation.row_ordinal}",
+                label_locator(citation.locator)]
     if citation.kind == "stage_output_cell":
         return [citation.stage_id, citation.column, f"row {citation.row_ordinal}"]
     if citation.kind == "stage_output_column":
@@ -261,6 +286,10 @@ def _build_trail(citation: AddressedChallengeCitation) -> list[str]:
     if citation.kind == "stage":
         return [citation.stage_id]
     return [citation.name]
+
+
+def _read_cited_quote(citation: AddressedChallengeCitation) -> str:
+    return citation.quote if isinstance(citation, AddressedSourceSpanCitation) else ""
 
 
 def _read_cited_figure(citation: AddressedChallengeCitation) -> str:

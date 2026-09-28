@@ -25,6 +25,9 @@ _THE_POOL = (
     "the blocks:\n"
     "  `----- OUTPUTS -----` every figure this run produced: slug, label, value, the "
     "stage that made it, and CITED on the one the sentence cites.\n"
+    "  `----- CITED QUOTE -----` only when the cited cell is a quote from a file the run "
+    "read: the quote and its page, the page text just before and after it, and the "
+    "`source_span` citation that points at it.\n"
     "  `----- STAGES -----` each stage on the path to that figure: its id, type, "
     "description, what it reads, its code, and `feeds the cited stage: true|false`. A "
     "stage marked false is in the run but not behind this figure.\n"
@@ -73,6 +76,7 @@ _THE_CHALLENGE_FIELDS = (
     "or more, of these shapes:\n"
     '    {"kind": "stage_output_cell", "run_id": "...", "stage_id": "...", '
     '"row_ordinal": 0, "column": "...", "value": ...}\n'
+    '    {"kind": "source_span", ...} copied whole off the CITED QUOTE block\n'
     '    {"kind": "stage_output_column", "run_id": "...", "stage_id": "...", '
     '"column": "..."}\n'
     '    {"kind": "stage", "stage_id": "..."}\n'

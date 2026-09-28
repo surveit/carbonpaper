@@ -88,6 +88,12 @@ def parse_locator(fields: Mapping[str, object]) -> Locator:
     return model.model_validate(own_fields, strict=True)
 
 
+def parse_any_locator(value: object) -> object:
+    """A locator or its fields, as its registered kind; any other value is left for pydantic to refuse."""
+    fields = value.model_dump() if isinstance(value, Locator) else value
+    return parse_locator(fields) if isinstance(fields, Mapping) else fields
+
+
 def label_locator(locator: Locator) -> str:
     return _find_kind_spec(locator.kind).label(locator)
 

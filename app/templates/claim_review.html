@@ -2,7 +2,8 @@
 {% from "_sparkle.html" import sparkle %}
 {#
   THE CLAIM PAGE — one sentence, where each of its phrases lands in the run, and every
-  challenge the reviewers raised against it.
+  challenge the reviewers raised against it. A sentence written on a span shows its quote
+  under it, linked to the page of the file it sits on.
 
   The underline under a phrase is its worst open challenge: the legend under the sentence
   names every weight in words, so the marking is never colour alone. A phrase the review
@@ -32,6 +33,10 @@
     {%- endif -%}
   {%- endfor -%}
 </p>
+{% if page.cited_quote %}
+<blockquote class="cited-quote"><q>{{ page.cited_quote.quote }}</q>
+  <a href="{{ page.cited_quote.href }}">{{ page.cited_quote.locator_label }}</a></blockquote>
+{% endif %}
 
   {% if page.status == 'submitted' %}
   <div class="acts">
@@ -143,6 +148,7 @@
         {%- endfor -%}
       </a>
       {% if citation.value %}<span class="cite-value">{{ citation.value }}</span>{% endif %}
+      {% if citation.quote %}<q class="cite-quote">{{ citation.quote }}</q>{% endif %}
     </div>
     {% endfor %}
   </div>

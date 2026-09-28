@@ -3,27 +3,33 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import pyarrow as pa
+
 from app.core.figure_text import render_figure
 from app.core.file_shape import VALUES_KEPT, measure_column_shape
-from app.core.frames import read_native_cell_as_json
+from app.core.frames import list_table_rows, read_native_cell_as_json
 from app.core.ids import ID
 from app.core.json_types import JsonScalar
 from app.models.branch_analysis import BranchReason
 from app.models.citations import (
     address_citation,
+    CellCitation,
     ChallengeCitation,
     PublishedCitation,
+    SourceSpanCitation,
     StageCitation,
     StageOutputCellCitation,
     StageOutputColumnCitation,
 )
 from app.models.claim_review import (
     BranchEvidenceItem,
+    CitedPassage,
     EvidenceBundle,
     InputColumnEvidenceItem,
     StageEvidenceItem,
     find_claim_part_spans,
 )
+from app.models.locators import label_locator
 
 from app.models.records.claim_review import (
     Challenge,
@@ -42,6 +48,9 @@ from app.services import scope as scope_service
 from app.services.errors import ClaimReviewRefused
 from app.services.versioning import load_version
 
+# Either side of a cited quote: about a sentence each way.
+_PASSAGE_CONTEXT_CHARACTERS = 100
+
 
 def build_evidence_bundle(project_id: ID, claim_id: ID) -> EvidenceBundle:
     claim = claims_service.load_claim(project_id, claim_id)
@@ -53,6 +62,7 @@ def build_evidence_bundle(project_id: ID, claim_id: ID) -> EvidenceBundle:
     written = {record.stage_id for record in manifest.stage_records if record.output_path}
     return EvidenceBundle(
         claim_id=claim.id, claim_text=claim.text, claim_context=claim.context, cited=cited,
+        cited_passage=_read_cited_passage(project_id, cited),
         shape=claims_service.load_required_claim_shape(project_id, claim.shape_id).read_input(),
         run_read_everything=claims_service.read_whether_the_run_read_everything(manifest),
         outputs=claims_service.read_every_run_output(run_id),
@@ -123,6 +133,22 @@ def find_citation_issues(project_id: ID, run_id: ID, challenges: list[Challenge]
 # ── what the run holds ──
 
 
+def _read_cited_passage(project_id: ID, cited: CellCitation) -> CitedPassage | None:
+    if not isinstance(cited, SourceSpanCitation):
+        return None
+    span = cited.build_span()
+    try:
+        page_text = run_service.verify_run_span(project_id, cited.run_id, span)
+    except run_service.SPAN_REFUSALS as refusal:
+        raise ClaimReviewRefused(
+            [f"the claim's quote does not hold in its file: {refusal}"]) from refusal
+    locator = cited.locator
+    return CitedPassage(
+        quote=cited.quote, locator_label=label_locator(locator),
+        before=page_text[max(0, locator.start - _PASSAGE_CONTEXT_CHARACTERS):locator.start],
+        after=page_text[locator.end:locator.end + _PASSAGE_CONTEXT_CHARACTERS])
+
+
 def _load_pinned_version(project_id: ID, run_id: ID) -> WorkflowVersion:
     return load_version(project_id, run_service.read_pinned_version(project_id, run_id))
 
@@ -185,8 +211,8 @@ def _read_stage_code(placed: WorkflowStage) -> str:
     return str(block.code) if block is not None else ""
 
 
-def _require_cell_citation(citation: PublishedCitation) -> StageOutputCellCitation:
-    if not isinstance(citation, StageOutputCellCitation):
+def _require_cell_citation(citation: PublishedCitation) -> CellCitation:
+    if not isinstance(citation, CellCitation):
         raise ClaimReviewRefused(
             ["a table claim has no sentence to review; only a cell claim is reviewed"])
     return citation
@@ -196,18 +222,11 @@ def _require_cell_citation(citation: PublishedCitation) -> StageOutputCellCitati
 
 
 @dataclass(frozen=True)
-class _StageOutput:
-    row_count: int
-    columns: frozenset[str]
-    # Only the cited columns, each cell as JSON reads it.
-    cells_by_column: dict[str, list[JsonScalar]]
-
-
-@dataclass(frozen=True)
 class _RunHoldings:
+    project_id: ID
     run_id: ID
-    # Only the cited stages that wrote an output in the run.
-    outputs_by_stage_id: dict[str, _StageOutput]
+    # Only the cited stages that wrote an output in the run, Arrow-native as the run wrote them.
+    outputs_by_stage_id: dict[str, pa.Table]
     stage_ids: set[str]
     term_names: set[str]
 
@@ -220,13 +239,13 @@ def _read_run_holdings(project_id: ID, run_id: ID,
                        citations: list[ChallengeCitation]) -> _RunHoldings:
     manifest = run_service.read_run_manifest(project_id, run_id, RunKind.production)
     written = {record.stage_id for record in manifest.stage_records if record.output_path}
-    wanted = _find_cited_columns_by_stage_id(run_id, citations)
     version = _load_pinned_version(project_id, run_id)
     return _RunHoldings(
+        project_id=project_id,
         run_id=run_id,
         outputs_by_stage_id={
-            stage_id: _read_stage_output_cells(project_id, run_id, stage_id, columns)
-            for stage_id, columns in wanted.items() if stage_id in written},
+            stage_id: run_service.read_stage_output_table(project_id, run_id, stage_id)
+            for stage_id in _find_cited_stage_ids(run_id, citations) if stage_id in written},
         stage_ids={placed.id for placed in _read_workflow_stages(version)},
         term_names=_list_term_names(version),
     )
@@ -240,32 +259,19 @@ def _list_term_names(version: WorkflowVersion) -> set[str]:
             | {verb.name for verb in version.method.verbs})
 
 
-def _find_cited_columns_by_stage_id(run_id: ID,
-                                    citations: list[ChallengeCitation]) -> dict[str, set[str]]:
-    wanted: dict[str, set[str]] = {}
-    for citation in citations:
-        in_this_run = not isinstance(citation, StageOutputCellCitation) or citation.run_id == run_id
-        if isinstance(citation, (StageOutputCellCitation, StageOutputColumnCitation)) and in_this_run:
-            wanted.setdefault(citation.stage_id, set()).add(citation.column)
-    return wanted
-
-
-def _read_stage_output_cells(project_id: ID, run_id: ID, stage_id: str,
-                             columns: set[str]) -> _StageOutput:
-    # Arrow-native, as the run wrote it: an int column holding a null stays int.
-    table = run_service.read_stage_output_table(project_id, run_id, stage_id)
-    held = set(table.column_names)
-    return _StageOutput(
-        row_count=table.num_rows, columns=frozenset(held),
-        cells_by_column={
-            name: [read_native_cell_as_json(table, name, ordinal)
-                   for ordinal in range(table.num_rows)]
-            for name in columns & held})
+def _find_cited_stage_ids(run_id: ID, citations: list[ChallengeCitation]) -> set[str]:
+    # A cell of another run is refused by its run id, so its stage is never read.
+    return {
+        citation.stage_id for citation in citations
+        if isinstance(citation, StageOutputColumnCitation)
+        or (isinstance(citation, CellCitation) and citation.run_id == run_id)}
 
 
 def _find_citation_problem(held: _RunHoldings, citation: ChallengeCitation) -> str | None:
     if isinstance(citation, StageOutputCellCitation):
         return _find_cell_problem(held, citation)
+    if isinstance(citation, SourceSpanCitation):
+        return _find_span_problem(held, citation)
     if isinstance(citation, StageOutputColumnCitation):
         return _find_column_problem(held, citation.stage_id, citation.column)
     if isinstance(citation, StageCitation):
@@ -278,19 +284,47 @@ def _find_citation_problem(held: _RunHoldings, citation: ChallengeCitation) -> s
 
 
 def _find_cell_problem(held: _RunHoldings, citation: StageOutputCellCitation) -> str | None:
+    row_problem = _find_row_problem(held, citation)
+    if row_problem is not None:
+        return row_problem
+    table = held.outputs_by_stage_id[citation.stage_id]
+    cell = read_native_cell_as_json(table, citation.column, citation.row_ordinal)
+    if not _is_the_cell_value(cell, citation.value):
+        return f"gives value {citation.value!r}, but that cell holds {render_figure(cell)!r}"
+    return None
+
+
+def _find_span_problem(held: _RunHoldings, citation: SourceSpanCitation) -> str | None:
+    row_problem = _find_row_problem(held, citation)
+    if row_problem is not None:
+        return row_problem
+    try:
+        run_service.verify_run_span(held.project_id, held.run_id, citation.build_span())
+    except run_service.SPAN_REFUSALS as refusal:
+        return str(refusal)
+    table = held.outputs_by_stage_id[citation.stage_id]
+    if not citation.is_held_in(_read_cell_as_python(table, citation.column, citation.row_ordinal)):
+        return (f"quotes {citation.quote!r} on {label_locator(citation.locator)}, "
+                "which that cell does not hold")
+    return None
+
+
+def _find_row_problem(held: _RunHoldings, citation: CellCitation) -> str | None:
     if citation.run_id != held.run_id:
         return f"names run {citation.run_id!r}, not the claim's run {held.run_id!r}"
     column_problem = _find_column_problem(held, citation.stage_id, citation.column)
     if column_problem is not None:
         return column_problem
-    output = held.outputs_by_stage_id[citation.stage_id]
-    if not 0 <= citation.row_ordinal < output.row_count:
+    row_count = held.outputs_by_stage_id[citation.stage_id].num_rows
+    if not 0 <= citation.row_ordinal < row_count:
         return (f"names row {citation.row_ordinal}, which the output of "
-                f"{citation.stage_id!r} does not hold ({output.row_count} rows)")
-    cell = output.cells_by_column[citation.column][citation.row_ordinal]
-    if not _is_the_cell_value(cell, citation.value):
-        return f"gives value {citation.value!r}, but that cell holds {render_figure(cell)!r}"
+                f"{citation.stage_id!r} does not hold ({row_count} rows)")
     return None
+
+
+def _read_cell_as_python(table: pa.Table, column: str, row_ordinal: int) -> object:
+    # Not as JSON: a struct cell reads as its fields, which JSON conversion stringifies.
+    return list_table_rows(table.select([column]).slice(row_ordinal, 1))[0][column]
 
 
 def _is_the_cell_value(cell: JsonScalar, cited: JsonScalar) -> bool:
@@ -309,9 +343,9 @@ def _read_number(value: JsonScalar) -> float | None:
 
 
 def _find_column_problem(held: _RunHoldings, stage_id: str, column: str) -> str | None:
-    output = held.outputs_by_stage_id.get(stage_id)
-    if output is None:
+    table = held.outputs_by_stage_id.get(stage_id)
+    if table is None:
         return f"names stage {stage_id!r}, which wrote no output in run {held.run_id!r}"
-    if column not in output.columns:
+    if column not in table.column_names:
         return f"names column {column!r}, which the output of {stage_id!r} does not hold"
     return None

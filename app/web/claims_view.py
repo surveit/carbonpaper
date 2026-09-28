@@ -14,6 +14,7 @@ from app.models.claims import (
 )
 from app.models.citations import (
     PublishedCitation,
+    SourceSpanCitation,
     StageOutputCellCitation,
 )
 from app.models.records.claims import Claim, ClaimShape
@@ -152,6 +153,8 @@ def _read_value(cited: PublishedCitation) -> str:
     """A table citation names rows, not one value; the page shows its row count instead."""
     if isinstance(cited, StageOutputCellCitation):
         return render_output_value(cited.value)
+    if isinstance(cited, SourceSpanCitation):
+        return cited.quote
     return f"{cited.rectangle.count_rows():,} rows"
 
 

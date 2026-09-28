@@ -9,7 +9,7 @@ from pydantic import Field, SerializeAsAny, ValidationError, field_validator, mo
 from app.core.errors import QuoteAmbiguous, QuoteNotInText
 from app.core.ids import ID
 from app.models.base import _Base
-from app.models.locators import CharRange, Locator, PageCharRange, label_locator, parse_locator
+from app.models.locators import CharRange, Locator, PageCharRange, label_locator, parse_any_locator
 
 _CHARACTER_RANGES = (PageCharRange, CharRange)
 
@@ -27,8 +27,7 @@ class Span(_Base):
     @field_validator("locator", mode="before")
     @classmethod
     def _parse_locator_by_kind(cls, value: object) -> object:
-        fields = value.model_dump() if isinstance(value, Locator) else value
-        return parse_locator(fields) if isinstance(fields, Mapping) else fields
+        return parse_any_locator(value)
 
     @model_validator(mode="after")
     def _range_is_as_long_as_the_quote(self) -> Self:
