@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import pandas as pd
+from fastapi.testclient import TestClient
 from markupsafe import escape
 
 from app.core.persistence import get_store
+from app.main import app
 from app.models.records.workflow_version import Method, WorkflowVersion
 from app.models.row_types import RowType
 from app.models.terms import Terms, Verb
@@ -109,6 +111,31 @@ def test_the_pool_of_a_run_on_an_older_version_calls_both_unknown(projects_root)
     assert _METHODOLOGY not in pool and "filing" not in pool
 
 
+# ── the version page ──
+
+
+def test_the_version_page_shows_what_the_version_kept(projects_root):
+    project_id = _create_project()
+    version = _save_version(project_id)
+    _rewrite_the_project(project_id)
+
+    page = _get_version_page(project_id, version)
+
+    assert _METHODOLOGY in page and "One disclosure a firm made." in page
+    assert _REWRITTEN not in page
+
+
+def test_the_version_page_of_an_older_version_says_it_kept_none(projects_root):
+    project_id = _create_project()
+    version = _save_version(project_id)
+    _store_as_saved_before_versions_kept_a_method(version)
+
+    page = _get_version_page(project_id, version)
+
+    assert "Saved before a version kept the methodology and terms" in page
+    assert _METHODOLOGY not in page and "One disclosure a firm made." not in page
+
+
 # ── helpers ──
 
 
@@ -158,3 +185,9 @@ def _store_as_saved_before_versions_kept_a_method(version: WorkflowVersion) -> N
     del document["method"]
     get_store().write(WorkflowVersion.collection, version.id, document,
                       schema_version=WorkflowVersion.SCHEMA_VERSION)
+
+
+def _get_version_page(project_id: str, version: WorkflowVersion) -> str:
+    page = TestClient(app).get(f"/project/{project_id}/workflow/version/{version.version_id}")
+    assert page.status_code == 200
+    return page.text
