@@ -2,17 +2,27 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Mapping
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import pandas as pd
 import pyarrow as pa
+from pydantic import ValidationError
 
 from app.core.errors import CitationMismatch, RowOutOfRange, StageNotInRun
-from app.core.frames import convert_cell_to_json_value, read_native_cell
+from app.core.frames import (
+    convert_cell_to_json_value,
+    is_null_form,
+    is_sequence_cell,
+    read_native_cell,
+)
 from app.models.citations import CitedValue
 from app.models.citations import StageOutputRowCitation
 from app.models.records.citations import StageCitations
+from app.models.spans import Span
+
+from .spans import SPAN_REFUSALS, SourceTextCache, require_page_locator, verify_span
 
 
 def build_row_trace_url(
@@ -31,12 +41,22 @@ def build_row_trace_url(
     return path if column is None else f"{path}?column={quote(column, safe='')}"
 
 
+def build_source_page_url(project_id: str, span: Span) -> str:
+    """Root-relative, like the row trace URL: the stored file's page, the quote's range marked."""
+    locator = require_page_locator(span)
+    query = urlencode({"page": locator.page, "start": locator.start, "end": locator.end})
+    return f"/project/{_path_segment(project_id)}/files/{_path_segment(span.source_id)}?{query}"
+
+
 @dataclass(frozen=True)
 class CitationProvider:
     project: str
     run_id: str
     # The rows this stage may cite, as Arrow: the cell as stored, not as pandas read it.
     tables: Mapping[str, pa.Table]
+    # What a cited span is checked against: the files this run read, by sha256, and their pages.
+    sources: Mapping[str, Path] = field(default_factory=dict)
+    texts: SourceTextCache = field(default_factory=SourceTextCache)
     # `frozen` stops these being rebound, not written, which is what lets the
     # provider handed to authored code come back carrying what that code said.
     citations: list[CitedValue] = field(default_factory=list)
@@ -60,6 +80,27 @@ class CitationProvider:
         return build_row_trace_url(
             self.project, self.run_id, stage_id, row_ordinal, column=column
         )
+
+    def cite_span(
+        self, stage_id: str, row_ordinal: int, column: str, span: Span, label: str
+    ) -> str:
+        """Refuses unless that cell holds `span` and the span verifies. Returns its page URL."""
+        cell = self._read_cell(stage_id, row_ordinal, column)
+        if span not in _read_spans(cell):
+            raise CitationMismatch(
+                f"'{label}' cites {stage_id}.{column} row {row_ordinal} for the span quoting "
+                f"{span.quote!r}, but that cell holds {cell!r}"
+            )
+        try:
+            verify_span(span, self.sources, self.texts)
+        except SPAN_REFUSALS as refusal:
+            raise CitationMismatch(
+                f"'{label}' cites a span its file refuses: {refusal}") from refusal
+        self.citations.append(CitedValue(
+            stage_id=stage_id, row_ordinal=row_ordinal, column=column,
+            label=label, value=span.quote,
+        ))
+        return build_source_page_url(self.project, span)
 
     def cite_row(self, stage_id: str, row_ordinal: int) -> str:
         self._require_row(stage_id, row_ordinal)
@@ -102,6 +143,15 @@ def _matches(claimed: Any, cell: Any) -> bool:
         return bool(claimed == cell)
     # A list cell has no scalar equality; compare what either one renders as.
     return str(claimed) == str(cell)
+
+
+def _read_spans(cell: Any) -> list[Span]:
+    """A span cell reads as its span, a list[span] cell as its elements, any other cell as none."""
+    elements = cell if is_sequence_cell(cell) else [cell]
+    try:
+        return [Span.model_validate(one, strict=True) for one in elements if not is_null_form(one)]
+    except ValidationError:
+        return []
 
 
 def _is_null(value: Any) -> bool:
