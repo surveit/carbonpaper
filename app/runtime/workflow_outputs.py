@@ -3,18 +3,22 @@ from __future__ import annotations
 
 import pyarrow as pa
 
-from app.core.frames import read_cell
+from app.core.frames import list_table_rows, read_cell
 from app.core.ids import ID
-from app.models import WorkflowStage
+from app.models import SPAN_COLUMN_TYPE, WorkflowStage
 from app.models.citations import (
+    CellCitation,
     RowsRectangle,
     StageOutputCellCitation,
+    StageOutputSpanCitation,
     StageOutputTableCitation,
 )
+from app.models.spans import Span
 from app.models.records.workflow_output import WorkflowOutput
 from app.models.stages.stage_base import WorkflowFigureRule, WorkflowTableRule
 
 from .context import RunIdentity
+from .spans import require_page_locator
 from .validation import Issue
 
 # A figure is one cell, so the row it reads is the only row there is.
@@ -37,7 +41,7 @@ def save_workflow_outputs(
 ) -> list[WorkflowOutput]:
     stage = workflow_stage.stage
     published = [
-        _publish_figure(figure, workflow_stage.id, table, identity)
+        _publish_figure(figure, workflow_stage, table, identity)
         for figure in stage.list_published_figures()
     ] + [
         _publish_table(declared, workflow_stage.id, table, identity)
@@ -80,16 +84,38 @@ def _find_table_column_issues(
 
 
 def _publish_figure(
-    figure: WorkflowFigureRule, stage_id: ID, table: pa.Table, identity: RunIdentity
+    figure: WorkflowFigureRule, workflow_stage: WorkflowStage, table: pa.Table,
+    identity: RunIdentity,
 ) -> WorkflowOutput:
     return WorkflowOutput(
         slug=figure.slug, label=figure.label, primary=figure.primary, shape_id=figure.shape_id,
-        citation=StageOutputCellCitation(
-            run_id=identity.run_id, stage_id=stage_id,
-            row_ordinal=PUBLISHED_ROW, column=figure.column,
-            value=read_cell(table, figure.column, PUBLISHED_ROW),
-        ),
+        citation=_cite_figure(figure.column, workflow_stage, table, identity),
     )
+
+
+def _cite_figure(
+    column: str, workflow_stage: WorkflowStage, table: pa.Table, identity: RunIdentity
+) -> CellCitation:
+    if _is_a_span_column(workflow_stage, column):
+        cell = list_table_rows(table.select([column]))[PUBLISHED_ROW][column]
+        span = Span.model_validate(cell, strict=True)
+        return StageOutputSpanCitation(
+            run_id=identity.run_id, stage_id=workflow_stage.id,
+            row_ordinal=PUBLISHED_ROW, column=column,
+            source_id=span.source_id, source_sha256=span.source_sha256,
+            locator=require_page_locator(span), quote=span.quote,
+        )
+    return StageOutputCellCitation(
+        run_id=identity.run_id, stage_id=workflow_stage.id,
+        row_ordinal=PUBLISHED_ROW, column=column,
+        value=read_cell(table, column, PUBLISHED_ROW),
+    )
+
+
+def _is_a_span_column(workflow_stage: WorkflowStage, column: str) -> bool:
+    schema = workflow_stage.output_schema
+    declared = schema.column_for_name(column) if schema is not None else None
+    return declared is not None and declared.type == SPAN_COLUMN_TYPE
 
 
 def _publish_table(

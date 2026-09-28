@@ -8,7 +8,7 @@ from pydantic import Field
 from app.core.file_shape import ColumnShape
 from app.core.ids import ID
 from app.core.json_types import JsonDict
-from app.models.citations import StageOutputCellCitation
+from app.models.citations import CellCitation, SourceSpanCitation
 from app.models.claims import ClaimShapeInput
 from app.models.records.claim_review import ClaimPart, DraftChallenge
 from app.models.records.workflow_output import WorkflowOutput
@@ -92,12 +92,22 @@ class InputColumnEvidenceItem(_Base):
     shape: ColumnShape
 
 
+# The page text either side of a cited quote, as the claim's run read the page.
+class CitedPassage(_Base):
+    citation: SourceSpanCitation
+    locator_label: str
+    before: str
+    after: str
+
+
 class EvidenceBundle(_Base):
     claim_id: ID
     claim_text: str
     claim_context: JsonDict
     # The run is the cited cell's run.
-    cited: StageOutputCellCitation
+    cited: CellCitation
+    # None where the cited cell holds a value, not a span.
+    cited_passage: CitedPassage | None
     shape: ClaimShapeInput
     run_read_everything: bool
     outputs: list[WorkflowOutput]

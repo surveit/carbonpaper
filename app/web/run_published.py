@@ -11,7 +11,11 @@ from pydantic import BaseModel
 from app.core.errors import RunVersionUnresolvableError
 from app.core.json_types import JsonScalar
 from app.core.run_status import StageStatus
-from app.models.citations import StageOutputCellCitation, StageOutputTableCitation
+from app.models.citations import (
+    CellCitation,
+    StageOutputSpanCitation,
+    StageOutputTableCitation,
+)
 from app.models.records.workflow_output import WorkflowOutput
 from app.models.run_manifest import RowsPendingReview, find_rows_pending_review
 from app.services import run as run_service
@@ -85,7 +89,7 @@ def read_published_outputs(
         figures=[
             _build_figure(output, output.citation, project_id, run_id)
             for output in published
-            if isinstance(output.citation, StageOutputCellCitation)
+            if isinstance(output.citation, CellCitation)
         ],
         tables=sorted(
             (
@@ -127,7 +131,7 @@ def render_output_value(value: JsonScalar) -> str:
 
 def _build_figure(
     output: WorkflowOutput,
-    citation: StageOutputCellCitation,
+    citation: CellCitation,
     project_id: str,
     run_id: str,
 ) -> PublishedFigure:
@@ -135,7 +139,8 @@ def _build_figure(
         slug=output.slug,
         label=output.label,
         primary=output.primary,
-        value=render_output_value(citation.value),
+        value=citation.quote if isinstance(citation, StageOutputSpanCitation)
+        else render_output_value(citation.value),
         href=run_service.build_row_trace_url(
             project_id, run_id, citation.stage_id, citation.row_ordinal,
             column=citation.column,

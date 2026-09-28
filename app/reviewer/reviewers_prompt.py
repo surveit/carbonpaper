@@ -9,8 +9,8 @@ _SEVERITY_SHOWN = "\n".join(
 _AGENT_CONTEXT = (
     "YOUR PLACE. You are reading ONE sentence proposed for publication. It cites one cell "
     "of one run's output. You are handed what that run holds and nothing else: no web, no "
-    "second dataset, no other claim. Other reviewers read other parts of the same run; you "
-    "never see them and they never see you. What you return is shown beside the sentence "
+    "second dataset, no other claim. Other reviewers read other parts of the same run; "
+    "none of you sees the others. What you return is shown beside the sentence "
     "to a person deciding whether to approve it, and nothing you write changes the claim — "
     "not a word is edited, no qualifier added, no figure recomputed. Put in front of that "
     "reader the strongest thing that can be said against the sentence from inside this "
@@ -20,15 +20,17 @@ _AGENT_CONTEXT = (
 _THE_POOL = (
     "WHAT YOU ARE HANDED. The task below is the evidence pool. It opens with a `CLAIM:` "
     "line carrying the sentence between guillemets, then the cited stage, row and column, "
-    "then the claim's shape — its label, its `universe`, its `importance`, its "
+    "then the claim's shape — its label, `universe`, `importance` and "
     "`qualifiers`, and whether the run read everything it was pointed at. After that come "
     "the blocks:\n"
     "  `----- OUTPUTS -----` every figure this run produced: slug, label, value, the "
     "stage that made it, and CITED on the one the sentence cites.\n"
+    "  `----- CITED QUOTE -----` the quoted cell's page text around the quote, and its "
+    "citation.\n"
     "  `----- STAGES -----` each stage on the path to that figure: its id, type, "
     "description, what it reads, its code, and `feeds the cited stage: true|false`. A "
     "stage marked false is in the run but not behind this figure.\n"
-    "  `----- BRANCHES -----` the arms the code actually took while it ran, each with its "
+    "  `----- BRANCHES -----` the arms the code took while it ran, each with its "
     "stage, its reason and role, and how many rows went down it. A count of 0 is a real "
     "count: an arm no row took.\n"
     "  `----- INPUT COLUMNS -----` per column: the stage reading it, its kind, its row "
@@ -59,12 +61,12 @@ _THE_CHALLENGE_FIELDS = (
     "YOUR ANSWER. `challenges` is a list. An empty list is a real answer and means the "
     "claim survived you; padding it with one you cannot cite costs the reader the ones "
     "that matter. Each entry carries:\n"
-    "  `kind` — always the one kind named in YOUR JOB above. You raise no other.\n"
+    "  `kind` — always the one kind named in YOUR JOB above.\n"
     "  `claim_part` — the phrase of the sentence it lands on: `phrase` copied word for "
     "word from the claim, and `occurrence` when that phrase appears more than once "
     "(1 for the first). Use `null` when the challenge is about the whole sentence.\n"
     "  `text` — the challenge in ONE short sentence. Convey the category of the trouble "
-    "and what it lands on: a reader should come away with a rough sense of what might be "
+    "and what it lands on: a reader should come away knowing roughly what might be "
     "wrong and how big it is. The specifics go in `justification`.\n"
     "  `justification` — what in the run makes it stick. Two sentences at most, and they "
     "are the specific ones: name the column, the branch, the line of code and the counts, "
@@ -73,6 +75,7 @@ _THE_CHALLENGE_FIELDS = (
     "or more, of these shapes:\n"
     '    {"kind": "stage_output_cell", "run_id": "...", "stage_id": "...", '
     '"row_ordinal": 0, "column": "...", "value": ...}\n'
+    '    {"kind": "source_span", ...} from CITED QUOTE\n'
     '    {"kind": "stage_output_column", "run_id": "...", "stage_id": "...", '
     '"column": "..."}\n'
     '    {"kind": "stage", "stage_id": "..."}\n'
@@ -95,11 +98,11 @@ _DATA_DEFECTS_JOB = (
     "an exact-match test run against a column that is not exactly spelled. You are the "
     "only reviewer allowed to say the FILE is wrong. Every challenge you raise has `kind` "
     "`data`, and "
-    "every one of them points at rows or cells the pool actually shows you: a top value "
+    "every one of them points at rows or cells the pool shows you: a top value "
     "and its count, a filled/null/blank split, a distinct count, a line of stage code.\n"
     "WHAT YOU ARE NOT TOLD. You are not told the stage code beyond how it reads a column. "
-    "Whether a threshold is the RIGHT threshold, or a filter the right filter, belongs to "
-    "another reviewer. A decision belongs to another reviewer; yours is the file and the reading of it. "
+    "Whether a threshold, a filter or any other decision is the RIGHT one belongs to "
+    "another reviewer; yours is the file and the reading of it. "
     "How many rows a defect touches is yours to give only when a line of the pool says so; "
     "counting them is not something you can do, so say in `text` what rerun would. A "
     "defect that leaves the cited figure untouched is still yours to raise; weigh it for "
@@ -155,7 +158,7 @@ _DATA_DEFECTS_EXAMPLE = (
 
 _CHOICES_JOB = (
     "YOUR JOB. You read the stage code on the path to the cited figure and the arms the "
-    "code actually took. Every threshold, every field picked over another field, every "
+    "code took. Every threshold, every field picked over another field, every "
     "cut and every filter is a fork. Say which way it went and what the other way is. "
     "Every challenge you raise has `kind` `choice`.\n"
     "WHAT YOU ARE NOT TOLD. You are not told which forks the claim's owner thought about. A "
