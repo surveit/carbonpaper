@@ -314,6 +314,8 @@ header names the stage, the row and the column; three tabs under it:
   — each source file the figure read, sliced to the rows and columns it used.
   A row's file comes from its input's lineage. Its number is the sheet row the
   connector stamped under `source_row_column`, else its place in that file.
+  A file the project holds links its page, and a fetched one says from where and when.
+  A packet shows the run's whole list instead (`_lineage_inputs.html`), with the same origin line.
 
 The Rows & columns tab fetches its walk when first opened, for the header's
 column. In a review packet the page is a file in a zip with no server to ask,

@@ -48,6 +48,15 @@
            data-rows-relevant="{{ file.rows_relevant }}" data-rows-all="{{ file.rows_read }}"
            data-columns-relevant="{{ file.columns_relevant | length }}"
            data-columns-all="{{ file.columns_read | length }}">
+    <p class="if-source">
+      {% if file.file_id %}<a href="/project/{{ project }}/files/{{ file.file_id }}"><code>{{
+        file.filename }}</code> ↗</a>
+      {% else %}<code>{{ file.filename }}</code> <span class="muted">no file this project
+        holds now hashes to the bytes this run read</span>{% endif %}
+      {% if file.origin_url %}· fetched {{ file.fetched_at | friendly_time }} from
+      <a href="{{ file.origin_url }}" target="_blank" rel="noopener">{{ file.origin_url }}</a>
+      {% endif %}
+    </p>
     <div class="if-bars">
       <div class="if-bar" data-axis="rows"><span class="if-bar-lab">rows</span>
         <span class="if-track">

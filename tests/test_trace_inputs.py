@@ -6,6 +6,7 @@ import pandas as pd
 from app.core import files as file_store
 from app.models import Stage, Workflow, parse_stage
 from app.web.panel_links import AppPanelLinks, PacketPanelLinks
+from app.web.config import templates
 from app.web.trace_inputs import build_input_catalog, read_run_inputs
 
 PROJECT = "proj"
@@ -16,6 +17,8 @@ JOINED = pd.DataFrame({"client": ["Acme", "Borealis"], "amount": [500, 1200],
 EAST_SHA = "e" * 64
 REF_SHA = "c" * 64
 EAST_BYTES = 791
+EAST_ORIGIN = "https://example.org/filings/east.csv"
+EAST_FETCHED_AT = "2026-09-28T09:15:00+00:00"
 
 
 def _column(name: str, kind: str = "str", nullable: bool = False) -> dict:
@@ -107,6 +110,28 @@ def test_a_file_whose_bytes_the_project_holds_links_its_page(tmp_path):
     read = _file(_inputs(_manifest(["filings"])), "east.csv")
     stored = file_store.ProjectFile.find(sha256=EAST_SHA)[0]
     assert read.href == f"/project/{PROJECT}/files/{stored.id}"
+
+
+def test_a_fetched_file_says_where_and_when_it_was_fetched_in_the_packet_too(tmp_path):
+    file_store.ProjectFile(sha256=EAST_SHA, filename="east.csv", byte_count=EAST_BYTES,
+                           project_id=PROJECT, origin_url=EAST_ORIGIN,
+                           fetched_at=EAST_FETCHED_AT).save()
+
+    inputs = _inputs(_manifest(["filings"]), links=PacketPanelLinks())
+    html = templates.env.get_template("_lineage_inputs.html").render(
+        inputs=inputs, offline=True)
+
+    read = _file(inputs, "east.csv")
+    assert (read.origin_url, read.fetched_at) == (EAST_ORIGIN, EAST_FETCHED_AT)
+    assert f'href="{EAST_ORIGIN}"' in html and EAST_FETCHED_AT in html
+
+
+def test_an_uploaded_file_names_no_origin(tmp_path):
+    file_store.ProjectFile(sha256=EAST_SHA, filename="east.csv",
+                           byte_count=EAST_BYTES, project_id=PROJECT).save()
+
+    read = _file(_inputs(_manifest(["filings"])), "east.csv")
+    assert (read.origin_url, read.fetched_at) == (None, None)
 
 
 def test_bytes_no_stored_file_holds_are_stated_as_unheld(tmp_path):

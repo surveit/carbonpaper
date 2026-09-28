@@ -16,6 +16,9 @@ class InputFileView(BaseModel):
     path: str
     # None where no file this project holds hashes to the bytes the run read.
     href: str | None
+    # Both None for an upload, and where no stored file matches.
+    origin_url: str | None
+    fetched_at: str | None
     read_by: str
     read_by_href: str | None
     status: str
@@ -89,6 +92,8 @@ def _build_file_view(
         filename=binding.filename,
         path=binding.path,
         href=None if stored is None else links.file_page(stored.id),
+        origin_url=None if stored is None else stored.origin_url,
+        fetched_at=None if stored is None else stored.fetched_at,
         read_by=stage_id,
         read_by_href=links.stage_anchor(stage_id),
         status=str(record.get("status") or ""),
