@@ -102,11 +102,11 @@ def _require_lineage_keyword(fn: Callable[..., Any], workflow_stage: WorkflowSta
         f"must say which input rows each one came from, and `{fn.__name__}` takes no "
         f"keyword-only `{LINEAGE_KWARG}`. Declare it: `{_render_def_with_lineage(fn)}`. "
         f"Then, for every row of the frame it returns, call "
-        f"`{LINEAGE_KWARG}.built_from(row, \"{input_id}\", input_row)` for the input row "
-        f"it was built from, `{LINEAGE_KWARG}.contributed_by(row, \"{input_id}\", "
-        f"input_row, columns=[...])` for another input row that fed it, or "
-        f"`{LINEAGE_KWARG}.originates(row)` where no input row did. Rows count from 0 in "
-        f"the frames the function receives."
+        f"`{LINEAGE_KWARG}.built_from(output_row, \"{input_id}\", input_row)` for the "
+        f"input row it was built from, `{LINEAGE_KWARG}.contributed_by(output_row, "
+        f"\"{input_id}\", input_row, columns=[...])` for another input row that fed it, or "
+        f"`{LINEAGE_KWARG}.originates(output_row)` where no input row did. Rows count from 0 "
+        f"in the frames the function receives."
     )
 
 

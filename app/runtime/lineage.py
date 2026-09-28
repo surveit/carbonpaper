@@ -297,41 +297,42 @@ class LineageRecorder:
     """A frame function's own account of which input rows became each row it returns."""
 
     inputs: Mapping[str, pa.Table]
-    spoken_for: dict[int, list[RowParent]] = field(default_factory=dict)
+    parents_by_output_row: dict[int, list[RowParent]] = field(default_factory=dict)
 
-    def built_from(self, row_ordinal: int, stage_id: str, source_row: int,
+    def built_from(self, output_row: int, stage_id: str, input_row: int,
                    columns: Iterable[str] | None = None) -> None:
-        """Output row `row_ordinal` is this input row, reshaped."""
-        self._record(row_ordinal, stage_id, source_row, EdgeKind.direct.value, columns)
+        """Output row `output_row` is this input row, reshaped."""
+        self._record(output_row, stage_id, input_row, EdgeKind.direct.value, columns)
 
-    def contributed_by(self, row_ordinal: int, stage_id: str, source_row: int,
+    def contributed_by(self, output_row: int, stage_id: str, input_row: int,
                        columns: Iterable[str] | None = None) -> None:
         """This input row fed the output row without being the row it was built from."""
-        self._record(row_ordinal, stage_id, source_row, EdgeKind.contribution.value, columns)
+        self._record(output_row, stage_id, input_row, EdgeKind.contribution.value, columns)
 
-    def originates(self, row_ordinal: int) -> None:
+    def originates(self, output_row: int) -> None:
         """No input row became this one — said, so it is not mistaken for a row left out."""
-        self.spoken_for.setdefault(int(row_ordinal), [])
+        self.parents_by_output_row.setdefault(int(output_row), [])
 
     def require_every_row(self, row_count: int) -> RowLineage:
         """Refuses a partial account: a row left out would trace as having come from nowhere."""
-        rows_past_the_end = sorted(r for r in self.spoken_for if not 0 <= r < row_count)
+        recorded = self.parents_by_output_row
+        rows_past_the_end = sorted(r for r in recorded if not 0 <= r < row_count)
         if rows_past_the_end:
             raise RowOutOfRange(
                 f"lineage was recorded for output row(s) {rows_past_the_end}, but the stage "
                 f"returned {row_count} row(s)"
             )
-        rows_unspoken_for = [r for r in range(row_count) if r not in self.spoken_for]
-        if rows_unspoken_for:
+        rows_without_lineage = [r for r in range(row_count) if r not in recorded]
+        if rows_without_lineage:
             raise MissingLineage(
-                f"lineage was recorded for {len(self.spoken_for)} of {row_count} output "
-                f"row(s); {len(rows_unspoken_for)} were not spoken for, first at "
-                f"{rows_unspoken_for[0]}. Every row needs `built_from`, `contributed_by` or "
+                f"lineage was recorded for {len(recorded)} of {row_count} output row(s); no "
+                f"lineage recorded for {len(rows_without_lineage)}, first at "
+                f"{rows_without_lineage[0]}. Every row needs `built_from`, `contributed_by` or "
                 f"`originates` — a row left out would trace as having come from nowhere."
             )
-        return RowLineage([self.spoken_for[r] for r in range(row_count)])
+        return RowLineage([recorded[r] for r in range(row_count)])
 
-    def _record(self, row_ordinal: int, stage_id: str, source_row: int,
+    def _record(self, output_row: int, stage_id: str, input_row: int,
                 kind: str, columns: Iterable[str] | None) -> None:
         input_table = self.inputs.get(stage_id)
         if input_table is None:
@@ -339,12 +340,12 @@ class LineageRecorder:
                 f"this stage was not given '{stage_id}', so it cannot have read its "
                 f"rows — its inputs are {sorted(self.inputs)}"
             )
-        if not 0 <= source_row < input_table.num_rows:
+        if not 0 <= input_row < input_table.num_rows:
             raise RowOutOfRange(
-                f"row {source_row} out of range for input '{stage_id}' "
+                f"row {input_row} out of range for input '{stage_id}' "
                 f"({input_table.num_rows} rows)"
             )
         fed_columns = tuple(str(c) for c in columns) if columns else None
-        self.spoken_for.setdefault(int(row_ordinal), []).append(
-            RowParent(stage_id, int(source_row), kind, fed_columns)
+        self.parents_by_output_row.setdefault(int(output_row), []).append(
+            RowParent(stage_id, int(input_row), kind, fed_columns)
         )

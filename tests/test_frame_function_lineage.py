@@ -128,7 +128,7 @@ def test_a_function_without_the_recorder_fails_its_run_naming_the_fix(tmp_path):
 
     assert _read_stage_error_type("by_client") == MissingLineage.__name__
     assert "`def transform(filings, *, lineage)`" in str(refused.value)
-    assert "`lineage.originates(row)`" in str(refused.value)
+    assert "`lineage.originates(output_row)`" in str(refused.value)
 
 
 def test_a_partial_account_is_refused(tmp_path):
@@ -137,7 +137,7 @@ def test_a_partial_account_is_refused(tmp_path):
         'if client != "Cascade Freight":\n'
         '            lineage.built_from(out, "filings", ordinals[0])')
 
-    with pytest.raises(SubsetRunError, match="not spoken for, first at 0"):
+    with pytest.raises(SubsetRunError, match="no lineage recorded for 1, first at 0"):
         _run(tmp_path, _frame_stage(code))
     assert _read_stage_error_type("by_client") == MissingLineage.__name__
 
