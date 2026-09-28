@@ -88,7 +88,7 @@ def test_a_file_with_no_page_reader_is_refused(tmp_path: Path) -> None:
 
 
 def test_normalize_text_folds_compatibility_forms_soft_hyphens_and_whitespace() -> None:
-    assert normalize_text("  eﬃcient exam­ple\n\t pro-\nceeds  ") == "efficient example pro- ceeds"
+    assert normalize_text("  eﬃcient\u00a0exam\u00adple\n\t pro-\nceeds  ") == "efficient example pro- ceeds"
 
 
 def test_the_ecf_stamp_reads_off_a_real_docket_page() -> None:
