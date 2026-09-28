@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from app.core.frames import list_table_rows, table_from_rows
 from app.models.locators import (
+    CELL_KIND,
     LOCATOR_KINDS,
     PAGE_CHAR_RANGE_KIND,
     CellAt,
@@ -24,10 +25,26 @@ from locator_kind_fixture import DOCKET_PAGE_KIND, DocketPage, registered_docket
     CharRange(start=0, end=7),
     CellAt(row=0, column="amount"),
 ])
-def test_a_kernel_kind_parses_back_as_its_own_class(locator: Locator) -> None:
+def test_a_locator_parses_back_as_its_own_class(locator: Locator) -> None:
     parsed = parse_locator(locator.model_dump())
     assert type(parsed) is type(locator)
     assert parsed == locator
+
+
+@pytest.mark.parametrize(("range_class", "fields"), [
+    (PageCharRange, {"page": 1, "start": 5, "end": 2}),
+    (CharRange, {"start": 5, "end": 2}),
+])
+def test_a_range_that_ends_before_it_starts_is_refused(
+    range_class: type[Locator], fields: dict[str, int],
+) -> None:
+    with pytest.raises(ValidationError, match="cannot end at 2, before it starts at 5"):
+        range_class.model_validate(fields)
+
+
+def test_a_locator_refuses_another_kinds_name() -> None:
+    with pytest.raises(ValidationError, match="PageCharRange cannot hold kind 'cell'"):
+        PageCharRange(kind=CELL_KIND, page=1, start=0, end=2)
 
 
 def test_an_unregistered_kind_is_refused_by_name() -> None:
@@ -50,7 +67,7 @@ def test_a_model_without_a_kind_default_cannot_register() -> None:
         register_locator_kind(LocatorKindSpec(model=Locator, label=lambda locator: locator.kind))
 
 
-def test_a_pack_kind_parses_back_with_its_own_fields_and_label() -> None:
+def test_a_subclass_with_its_own_kind_parses_back_with_its_fields_and_label() -> None:
     with registered_docket_page():
         parsed = parse_locator({
             "kind": DOCKET_PAGE_KIND, "page": 14, "start": 0, "end": 5, "entry": 58,

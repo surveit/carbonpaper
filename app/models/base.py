@@ -1,4 +1,4 @@
-"""The pydantic config every app.models contract shares; below schema.py so spans.py can extend it."""
+"""`_Base`: the pydantic model every app.models contract extends. It refuses fields it does not name."""
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict

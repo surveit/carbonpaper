@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Self, TypeVar
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.models.base import _Base
 
@@ -13,12 +13,15 @@ CHAR_RANGE_KIND = "char_range"
 CELL_KIND = "cell"
 
 
-# A subclass names its kind as `kind`'s default. A pack kind subclasses a kernel kind.
+# Each subclass names its kind as `kind`'s default, including one that extends another kind.
 class Locator(_Base):
     kind: str
 
-    def validate_text(self, text: str) -> None:
-        """A pack kind overrides this to refuse resolved `text` that is not what the locator names."""
+    @model_validator(mode="after")
+    def _kind_is_the_class_default(self) -> Self:
+        if self.kind != type(self).model_fields["kind"].default:
+            raise ValueError(f"{type(self).__name__} cannot hold kind {self.kind!r}")
+        return self
 
 
 # Offsets here and in CharRange are slice bounds: `text[start:end]` is the quote.
@@ -28,11 +31,21 @@ class PageCharRange(Locator):
     start: int = Field(ge=0)
     end: int = Field(ge=0)
 
+    @model_validator(mode="after")
+    def _end_not_before_start(self) -> Self:
+        _refuse_end_before_start(self.start, self.end)
+        return self
+
 
 class CharRange(Locator):
     kind: str = CHAR_RANGE_KIND
     start: int = Field(ge=0)
     end: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _end_not_before_start(self) -> Self:
+        _refuse_end_before_start(self.start, self.end)
+        return self
 
 
 class CellAt(Locator):
@@ -82,6 +95,11 @@ def _find_kind_spec(kind: object) -> LocatorKindSpec[Any]:
             f"no locator kind {kind!r} is registered; registered kinds: {sorted(LOCATOR_KINDS)}"
         )
     return LOCATOR_KINDS[kind]
+
+
+def _refuse_end_before_start(start: int, end: int) -> None:
+    if end < start:
+        raise ValueError(f"a range cannot end at {end}, before it starts at {start}")
 
 
 def _label_page_char_range(locator: PageCharRange) -> str:

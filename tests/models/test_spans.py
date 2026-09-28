@@ -3,10 +3,11 @@ from __future__ import annotations
 import hashlib
 
 import pytest
+from pydantic import ValidationError
 
 from app.core.errors import QuoteAmbiguous, QuoteNotInText
 from app.models.locators import CellAt, Locator, PageCharRange
-from app.models.spans import Span, narrow_span
+from app.models.spans import Span, SpanReply, narrow_span
 from locator_kind_fixture import DocketPage, registered_docket_page
 
 # "the plea" sits here twice; a double space and a newline separate the sentences.
@@ -99,7 +100,18 @@ def test_a_cell_span_holds_no_offsets_to_narrow() -> None:
         narrow_span(cell, "paid")
 
 
-def test_a_pack_kind_keeps_its_fields_through_narrowing_and_a_dump() -> None:
+def test_a_range_as_long_as_its_quote_is_required() -> None:
+    with pytest.raises(ValidationError, match="covers 8 characters, but the quote has 17"):
+        Span(source_id="stored_file", source_sha256=_whole_page().source_sha256,
+             locator=PageCharRange(page=14, start=10, end=18), quote="rejected the plea")
+
+
+def test_a_reply_quote_cannot_be_empty() -> None:
+    with pytest.raises(ValidationError, match="quote"):
+        SpanReply(quote="")
+
+
+def test_a_subclass_keeps_its_added_fields_through_narrowing_and_a_dump() -> None:
     with registered_docket_page():
         page = _whole_page(DocketPage(page=14, start=0, end=len(_PAGE), entry=58))
         quote = narrow_span(page, "rejected")

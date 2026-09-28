@@ -1,4 +1,4 @@
-"""A pack-style locator kind, registered only inside `registered_docket_page()`."""
+"""A PageCharRange subclass with a field and kind of its own, registered only inside a `with`."""
 from __future__ import annotations
 
 from collections.abc import Iterator

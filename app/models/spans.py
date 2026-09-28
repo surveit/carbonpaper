@@ -2,13 +2,16 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import Self
 
-from pydantic import Field, SerializeAsAny, field_validator
+from pydantic import Field, SerializeAsAny, field_validator, model_validator
 
 from app.core.errors import QuoteAmbiguous, QuoteNotInText
 from app.core.ids import ID
 from app.models.base import _Base
 from app.models.locators import CharRange, Locator, PageCharRange, label_locator, parse_locator
+
+_CHARACTER_RANGES = (PageCharRange, CharRange)
 
 
 # `prefix` and `suffix` are the verbatim text just before and after `quote`, where one was given.
@@ -27,10 +30,21 @@ class Span(_Base):
         fields = value.model_dump() if isinstance(value, Locator) else value
         return parse_locator(fields) if isinstance(fields, Mapping) else fields
 
+    @model_validator(mode="after")
+    def _range_is_as_long_as_the_quote(self) -> Self:
+        locator = self.locator
+        if isinstance(locator, _CHARACTER_RANGES) and locator.end - locator.start != len(self.quote):
+            raise ValueError(
+                f"the {locator.kind} range covers {locator.end - locator.start} characters, "
+                f"but the quote has {len(self.quote)}"
+            )
+        return self
+
 
 # No docstring: an agent reads this class's JSON schema, where a docstring becomes its description.
 class SpanReply(_Base):
     quote: str = Field(
+        min_length=1,
         description="Words copied exactly from the text you were given: same spelling, spacing "
         "and punctuation.",
     )
@@ -51,7 +65,7 @@ def narrow_span(
 ) -> Span:
     """Never fuzzy: the quote and its context must match `parent.quote` exactly, at one place."""
     locator = parent.locator
-    if not isinstance(locator, (PageCharRange, CharRange)):
+    if not isinstance(locator, _CHARACTER_RANGES):
         raise ValueError(f"a {locator.kind!r} span holds no character offsets to narrow")
     start = locator.start + _find_single_occurrence(parent, quote, prefix, suffix)
     return Span(
