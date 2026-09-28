@@ -1,7 +1,9 @@
 """A span cell renders as its quote and the page it sits on, linked, in every table of a run."""
 from __future__ import annotations
 
+import copy
 import json
+import pickle
 import re
 from pathlib import Path
 
@@ -13,10 +15,14 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.models.locators import CellAt, PageCharRange
 from app.models.spans import Span
+from app.models.stage import parse_stage
 from app.web.config import templates
+from app.web.diff_state import CellDiffState
 from app.web.panel_links import AppPanelLinks, PacketPanelLinks
 from app.web.review_packet import export_review_packet
 from app.web.span_cells import SpanCellText
+from app.web.stage_diff import build_stage_diff
+from conftest import place_stage
 from run_seed import store_manifest
 
 PROJECT = "docket"
@@ -139,6 +145,40 @@ def test_a_changed_span_cell_in_a_diff_shows_the_value_it_replaced():
 
     assert '<span class="diff-was" title="the input value this stage replaced">dismiss</span>' in html
     assert OPPOSE_CITE in html
+
+
+def test_a_span_cell_survives_a_deep_copy_and_a_pickle_with_its_spans():
+    cell = SpanCellText([OPPOSE, DISMISS])
+
+    for copied in (copy.deepcopy(cell), pickle.loads(pickle.dumps(cell))):
+        assert copied == cell
+        assert [cite.span for cite in copied.cites] == [OPPOSE, DISMISS]
+
+
+def test_the_same_quote_moved_to_another_page_reads_as_changed_in_the_stage_diff(tmp_path):
+    moved = Span(source_id="ecf17", source_sha256="a" * 64,
+                 locator=PageCharRange(page=3, start=10, end=16), quote="oppose")
+    (tmp_path / "outputs").mkdir()
+    pq.write_table(pa.table({"quote": pa.array([OPPOSE.model_dump()] * 2)}),
+                   tmp_path / "outputs" / "load.parquet")
+    pq.write_table(pa.table({"quote": pa.array([moved.model_dump(), OPPOSE.model_dump()])}),
+                   tmp_path / "outputs" / "move.parquet")
+    stage = place_stage(parse_stage({
+        "id": "move", "description": "Move a quote", "type": "python_row_function",
+        "inputs": [{"id": "load"}],
+        "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
+        "signature": {"form": "extends", "adds": []},
+    }))
+
+    diff = build_stage_diff(stage, tmp_path, "outputs/move.parquet",
+                            {"load": "outputs/load.parquet"})
+
+    assert diff is not None and diff.changed_cells_total == 1
+    moved_cell, kept_cell = (row[0] for row in diff.rows)
+    assert moved_cell.state is CellDiffState.changed
+    assert [cite.label for cite in moved_cell.was.cites] == ["page 14"]
+    assert [cite.label for cite in moved_cell.text.cites] == ["page 3"]
+    assert kept_cell.state is CellDiffState.carried
 
 
 def _read_lineage_view(html: str) -> dict:
