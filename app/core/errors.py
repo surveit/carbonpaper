@@ -194,6 +194,10 @@ class SourceUnavailable(Exception):
     """A connector cannot reach a file it was asked for. The run is refused, and nothing is guessed."""
 
 
+class MirrorDisagrees(SourceUnavailable):
+    """A mirrored file does not hash to what its mirror recorded, so it is not the bytes fetched."""
+
+
 class FileOverCeiling(Exception):
     """Carries the numbers, not a sentence — a surface writes the sentence."""
 

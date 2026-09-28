@@ -27,6 +27,9 @@ from app.tools.tutorial import (
 )
 from app.services import uploads
 
+# Registers every pack's connector kinds, so a stored workflow naming one parses.
+from app import packs as _packs  # noqa: F401
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)

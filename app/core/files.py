@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass
+from datetime import datetime
 import hashlib
 import os
 import tempfile
@@ -12,7 +13,7 @@ from pathlib import Path
 from typing import BinaryIO, ClassVar
 from urllib.parse import urlsplit
 
-from app.core.errors import FileNotStoredError, FileOverCeiling, StoreOverQuota
+from app.core.errors import FileNotStoredError, FileOverCeiling, MirrorDisagrees, StoreOverQuota
 from app.core.record import PersistedModel, PersistenceScope
 from app.core.store_config import resolve_db_path
 from app.core.ids import ID
@@ -67,7 +68,7 @@ class ProjectFile(PersistedModel):
     project_id: ID | None = None
     completeness: FileCompleteness = FileCompleteness.OPEN
     lineage: str = ""
-    # Only receive_source writes these two, so an upload carries neither.
+    # Only receive_source and receive_mirrored_source write these two; an upload carries neither.
     origin_url: str | None = None
     fetched_at: str | None = None
 
@@ -97,8 +98,21 @@ def receive_source(project_id: ID, origin_url: str, filename: str, stream: Binar
     return _save_file(filename, stream, project_id, origin_url=origin_url, fetched_at=now_iso())
 
 
+def receive_mirrored_source(
+    project_id: ID, origin_url: str, filename: str, stream: BinaryIO, *,
+    fetched_at: str, expected_sha256: str,
+) -> ProjectFile:
+    """Store bytes a mirror kept; matching the sha256 it recorded proves they were fetched then."""
+    _refuse_origin_that_is_not_http(origin_url)
+    # Foreign data: a stamp that is not a time is refused rather than stored.
+    datetime.fromisoformat(fetched_at)
+    return _save_file(filename, stream, project_id, origin_url=origin_url, fetched_at=fetched_at,
+                      expected_sha256=expected_sha256)
+
+
 def _save_file(filename: str, src: BinaryIO, project_id: ID | None, *,
-               origin_url: str | None = None, fetched_at: str | None = None) -> ProjectFile:
+               origin_url: str | None = None, fetched_at: str | None = None,
+               expected_sha256: str | None = None) -> ProjectFile:
     root = files_root()
     # The stream is written to a temp file in the same dir first and moved into
     # <root>/<record id>/<filename> once there is a record to name the directory. The
@@ -107,6 +121,11 @@ def _save_file(filename: str, src: BinaryIO, project_id: ID | None, *,
     # "inputs this run read".
     root.mkdir(parents=True, exist_ok=True)
     staged, digest, byte_count = _write_to_temp_file(root, src, max_upload_bytes())
+    if expected_sha256 is not None and digest != expected_sha256:
+        staged.unlink()
+        raise MirrorDisagrees(
+            f"'{filename}' hashes to {digest}, but its mirror recorded {expected_sha256} "
+            f"for {origin_url}")
     _refuse_upload_over_quota(root, staged, byte_count)
     record = ProjectFile(sha256=digest, filename=_safe_filename(filename),
                         byte_count=byte_count, project_id=project_id,

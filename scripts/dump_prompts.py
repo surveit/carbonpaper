@@ -38,6 +38,9 @@ from app.tools.prompt_fragments import render_link_map
 from app.agents.tutorial.config import build_tutorial_tools
 from app.tools.tutorial import TutorialContext
 
+# Registers every pack's connector kinds, so a stored workflow naming one parses.
+from app import packs as _packs  # noqa: F401
+
 # The generation agents put their input in the TASK (the user message), not the system
 # prompt, so any value builds the same prompt and the same submit_answer schema. The
 # task itself is per-run and is not dumped.

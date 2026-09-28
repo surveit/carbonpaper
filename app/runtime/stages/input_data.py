@@ -16,7 +16,9 @@ import pandas as pd
 import pyarrow as pa
 
 from app.core.errors import FrameConcatMismatchError, SourceUnavailable
-from app.core.files import ProjectFile, find_stored_file, receive_source, resolve_stored_path
+from app.core.files import (
+    ProjectFile, find_stored_file, receive_mirrored_source, receive_source, resolve_stored_path,
+)
 from app.core.frames import (
     PARQUET_SUFFIX, concat_tables, frame_to_table, read_frame_table, table_from_rows,
     write_frame_table,
@@ -30,7 +32,7 @@ from app.models import (
 )
 from app.models.connectors import (
     SOURCE_ID_COLUMN, SOURCE_SHA256_COLUMN, AcquiredBytes, ConnectorSpec, MetadataValue,
-    find_connector,
+    MirroredBytes, find_connector,
 )
 from app.models.run_manifest import ReadFile, StageInputRecord
 from app.models.stage_contribution import StageContribution
@@ -163,7 +165,12 @@ def _receive(acquired: AcquiredBytes, connector: ConnectorSpec[Any], project_id:
             f"connector {connector.kind!r} gave '{acquired.filename}' metadata "
             f"{sorted(acquired.metadata)}, but declares {sorted(declared)}")
     with acquired.open_bytes() as stream:
-        record = receive_source(project_id, acquired.origin_url, acquired.filename, stream)
+        record = (
+            receive_mirrored_source(
+                project_id, acquired.origin_url, acquired.filename, stream,
+                fetched_at=acquired.fetched_at, expected_sha256=acquired.sha256)
+            if isinstance(acquired, MirroredBytes)
+            else receive_source(project_id, acquired.origin_url, acquired.filename, stream))
     return _Source(record, acquired.metadata)
 
 

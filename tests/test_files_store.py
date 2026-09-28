@@ -8,9 +8,11 @@ from datetime import datetime, timedelta
 import pytest
 
 from app.core import timestamp_ids
+from app.core.errors import MirrorDisagrees
 from app.core.files import (
     ProjectFile,
     files_root,
+    receive_mirrored_source,
     receive_source,
     resolve_stored_path,
     save_upload,
@@ -87,3 +89,19 @@ def test_an_origin_that_is_not_an_http_url_is_refused_before_a_byte_is_stored(or
     assert ProjectFile.list() == []
     assert not any(files_root().rglob("*"))
 
+
+def test_a_mirrored_source_keeps_the_time_its_mirror_recorded():
+    record = receive_mirrored_source(
+        "demo", ORIGIN, "58.pdf", io.BytesIO(BODY), fetched_at="2026-09-28T09:15:16Z",
+        expected_sha256=hashlib.sha256(BODY).hexdigest())
+    stored = ProjectFile.load(record.id)
+    assert (stored.origin_url, stored.fetched_at) == (ORIGIN, "2026-09-28T09:15:16Z")
+    assert stored.created_at != stored.fetched_at
+
+
+def test_mirrored_bytes_off_the_recorded_sha256_are_refused_before_a_record_is_made():
+    with pytest.raises(MirrorDisagrees, match=f"recorded {'0' * 64} for {ORIGIN}"):
+        receive_mirrored_source("demo", ORIGIN, "58.pdf", io.BytesIO(BODY),
+                                fetched_at="2026-09-28T09:15:16Z", expected_sha256="0" * 64)
+    assert ProjectFile.list() == []
+    assert not any(files_root().rglob("*.pdf"))
