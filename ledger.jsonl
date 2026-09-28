@@ -3364,3 +3364,4 @@
 {"run_id":"36468737158","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36468737158","created":"2026-09-28T18:58:51Z","branch":"t09-judgment-ledger","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"36468648833","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36468648833","created":"2026-09-28T18:59:06Z","branch":"u02-exact-money-figure","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"36468830524","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36468830524","created":"2026-09-28T18:59:29Z","branch":"t03a-text-sources","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"36469092500","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36469092500","created":"2026-09-28T19:00:09Z","branch":"t11-builds-owe-lineage","event":"pull_request","contracts_kept":17,"findings":[]}
