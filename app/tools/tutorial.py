@@ -32,15 +32,15 @@ from app.tools.types import ToolProse
 
 _FIXTURE_STEM = "ai_lobbying_spend_2026"
 _DATA_DIR = Path(__file__).resolve().parents[1] / "seeds" / "data"
-_FIXTURE = _DATA_DIR / f"{_FIXTURE_STEM}.json"
+TUTORIAL_FIXTURE = _DATA_DIR / f"{_FIXTURE_STEM}.json"
 _GUIDE = _DATA_DIR / "review_guides" / f"{_FIXTURE_STEM}.json"
 # The project id is minted at import, so the committed eval names no project and is
 # told which one it belongs to here.
 _EVAL = _DATA_DIR / "evals" / f"{_FIXTURE_STEM}.json"
 # Built by scripts/build_tutorial_cache.py from a run of the fixture beside it.
-TUTORIAL_CACHE_BUNDLE = name_cache_sidecar(_FIXTURE)
+TUTORIAL_CACHE_BUNDLE = name_cache_sidecar(TUTORIAL_FIXTURE)
 # A committed file cannot name where the workspace is, so a run says that.
-_INPUT_FILES_BY_STAGE_ID = {
+TUTORIAL_INPUT_FILES_BY_STAGE_ID = {
     "input_filings": [_DATA_DIR / "lda_data_Q1_2026.xlsx", _DATA_DIR / "lda_data_Q2_2026.xlsx"],
 }
 
@@ -113,16 +113,16 @@ def seed_tutorial_project(ctx: TutorialContext) -> TutorialAgentReference:
 
 def import_tour_fixture() -> str:
     """The committed fixture as a runnable project, before the cache and the tour's extras."""
-    for path in (_FIXTURE, _GUIDE, _EVAL, *_all_input_paths()):
+    for path in (TUTORIAL_FIXTURE, _GUIDE, _EVAL, *_all_input_paths()):
         if not path.is_file():
             raise FileNotFoundError(f"the tutorial fixture needs {path}, which is missing")
     return import_project(
-        WorkflowFile.model_validate_json(_FIXTURE.read_text(encoding="utf-8")),
+        WorkflowFile.model_validate_json(TUTORIAL_FIXTURE.read_text(encoding="utf-8")),
     )
 
 
 def _all_input_paths() -> list[Path]:
-    return [path for paths in _INPUT_FILES_BY_STAGE_ID.values() for path in paths]
+    return [path for paths in TUTORIAL_INPUT_FILES_BY_STAGE_ID.values() for path in paths]
 
 
 def _seed_stage_cache(project_id: str) -> None:
@@ -136,7 +136,7 @@ def _seed_stage_cache(project_id: str) -> None:
     if report.reachable == 0:
         raise CacheArchiveRejected(
             f"{TUTORIAL_CACHE_BUNDLE.name} carries {report.written} entries and the project "
-            f"just seeded from {_FIXTURE.name} can read none of them. The fixture's "
+            f"just seeded from {TUTORIAL_FIXTURE.name} can read none of them. The fixture's "
             "stages have moved since the bundle was built; rebuild it with "
             "`python -m scripts.build_tutorial_cache`."
         )
@@ -166,7 +166,7 @@ def store_tour_files(project_id: str) -> dict[str, list[str]]:
     already_stored = file_store.index_project_files(project_id)
     return {
         stage_id: [_store_tour_file(already_stored, project_id, path) for path in paths]
-        for stage_id, paths in _INPUT_FILES_BY_STAGE_ID.items()
+        for stage_id, paths in TUTORIAL_INPUT_FILES_BY_STAGE_ID.items()
     }
 
 
