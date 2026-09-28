@@ -12,7 +12,7 @@ from critic.rubric import (
     load_rubric,
     render_rubric,
 )
-from critic.tests.fixture_data import FIXTURES, RUBRICS, STAND_IN_ENVIRON, load_range
+from critic.tests.fixture_data import FIXTURES, RUBRICS, STAND_IN_ENVIRON, load_labels
 from critic.themes import load_theme_vocabulary, select_flag_themes
 
 
@@ -57,9 +57,9 @@ def test_a_rubric_file_it_would_not_read_is_refused(tmp_path: Path) -> None:
 
 
 def test_a_nested_theme_file_reads_slug_and_definition() -> None:
-    themes = {theme.slug: theme.definition for theme in load_range().themes}
-    assert themes["naming"].startswith("A name that misdescribes")
-    assert "agent_decision_flag" in themes
+    themes = {theme.slug: theme.definition for theme in load_labels().themes}
+    assert themes["naming"].startswith("A name misdescribes what a value holds")
+    assert len(themes) == 33
 
 
 def test_a_flat_theme_file_reads_and_skips_its_notes() -> None:
@@ -70,9 +70,10 @@ def test_a_flat_theme_file_reads_and_skips_its_notes() -> None:
 
 
 def test_flag_themes_drop_praise_and_the_agents_own() -> None:
-    slugs = [theme.slug for theme in select_flag_themes(load_range().themes)]
-    assert "praise" not in slugs and not [slug for slug in slugs if slug.startswith("agent_")]
-    assert "question_only" in slugs
+    slugs = [theme.slug for theme in select_flag_themes(load_labels().themes)]
+    assert "praise_or_signoff" not in slugs and "question_only" in slugs
+    flat = [theme.slug for theme in select_flag_themes(load_theme_vocabulary(FIXTURES / "themes-range_604_788.json"))]
+    assert flat == ["naming", "layering"]
 
 
 def test_a_theme_without_a_definition_is_refused(tmp_path: Path) -> None:

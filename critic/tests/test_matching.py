@@ -9,7 +9,12 @@ from critic.matching import (
     measure_line_gap,
     pair_same_path,
 )
-from critic.tests.fixture_data import echo_as_prediction, load_reals_at_first_commit
+from critic.tests.fixture_data import (
+    FIRST_REVIEWED_COMMIT,
+    echo_as_prediction,
+    load_reals,
+    load_reals_at_first_commit,
+)
 
 
 def _real_at(line: int) -> ReviewerComment:
@@ -18,7 +23,7 @@ def _real_at(line: int) -> ReviewerComment:
 
 def test_the_reviewers_own_comment_matches_itself_exactly() -> None:
     reals = load_reals_at_first_commit()
-    pairs = match_exactly([echo_as_prediction(real) for real in reals], reals)
+    pairs = match_exactly([echo_as_prediction(real) for real in reals], reals, FIRST_REVIEWED_COMMIT)
     assert [(pair.prediction_index, pair.real_index, pair.line_gap) for pair in pairs] == [
         (index, index, 0) for index in range(len(reals))
     ]
@@ -26,28 +31,28 @@ def test_the_reviewers_own_comment_matches_itself_exactly() -> None:
 
 def test_the_line_window_is_inclusive() -> None:
     real = _real_at(87)
-    assert match_exactly([echo_as_prediction(real, LINE_WINDOW)], [real])
-    assert not match_exactly([echo_as_prediction(real, LINE_WINDOW + 1)], [real])
+    assert match_exactly([echo_as_prediction(real, LINE_WINDOW)], [real], FIRST_REVIEWED_COMMIT)
+    assert not match_exactly([echo_as_prediction(real, LINE_WINDOW + 1)], [real], FIRST_REVIEWED_COMMIT)
 
 
 def test_a_theme_the_real_comment_lacks_blocks_an_exact_match() -> None:
     real = _real_at(87)
     assert real.themes == ["verbose_prose"]
-    assert not match_exactly([echo_as_prediction(real, theme="naming")], [real])
+    assert not match_exactly([echo_as_prediction(real, theme="naming")], [real], FIRST_REVIEWED_COMMIT)
 
 
 def test_a_prediction_takes_the_nearest_real_comment_first() -> None:
     near, far = _real_at(181), _real_at(186)
     prediction = echo_as_prediction(near, theme="verbose_prose", line_shift=1)
     assert "verbose_prose" in far.themes
-    pairs = match_exactly([prediction], [far, near])
+    pairs = match_exactly([prediction], [far, near], FIRST_REVIEWED_COMMIT)
     assert [(pair.real_index, pair.line_gap) for pair in pairs] == [(1, 1)]
 
 
 def test_same_path_pairs_left_by_the_exact_rule_go_to_the_judge() -> None:
     reals = [_real_at(87), _real_at(181)]
     predictions = [echo_as_prediction(reals[0], theme="naming"), echo_as_prediction(reals[1])]
-    exact = match_exactly(predictions, reals)
+    exact = match_exactly(predictions, reals, FIRST_REVIEWED_COMMIT)
     candidates = pair_same_path(predictions, reals, taken=exact)
     assert [(c.prediction_index, c.real_index) for c in candidates] == [(0, 0)]
 
@@ -67,3 +72,11 @@ def test_the_gap_to_a_multi_line_comment_is_measured_to_its_span() -> None:
     assert measure_line_gap(83, real) == 0
     assert measure_line_gap(78, real) == 2
     assert measure_line_gap(90, real) == 3
+
+
+def test_a_real_comment_left_on_another_commit_waits_for_the_judge() -> None:
+    later = next(real for real in load_reals() if real.commit_sha != FIRST_REVIEWED_COMMIT)
+    prediction = echo_as_prediction(later)
+    assert not match_exactly([prediction], [later], FIRST_REVIEWED_COMMIT)
+    assert match_exactly([prediction], [later], later.commit_sha)
+    assert [c.real_index for c in pair_same_path([prediction], [later], taken=[])] == [0]

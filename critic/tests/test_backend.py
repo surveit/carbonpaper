@@ -18,7 +18,7 @@ from critic.rubric import load_rubric
 from critic.tests.fixture_data import (
     RUBRICS,
     load_diff_at_first_commit,
-    load_range,
+    load_labels,
     read_fixture_text,
 )
 from critic.themes import select_flag_themes
@@ -76,7 +76,7 @@ def test_the_command_keeps_every_claude_md_and_every_tool_out(monkeypatch: pytes
 
 def test_a_recorded_reply_becomes_the_reviews_predictions() -> None:
     recorded = RecordedBackend(read_fixture_text("claude-review-976.json"))
-    themes = select_flag_themes(load_range().themes)
+    themes = select_flag_themes(load_labels().themes)
     review = run_review(load_diff_at_first_commit(), load_rubric(RUBRICS / "none"), themes, recorded)
     assert [prediction.theme for prediction in review.predictions] == ["correctness_bug"]
     assert review.rubric == "none"
@@ -85,6 +85,6 @@ def test_a_recorded_reply_becomes_the_reviews_predictions() -> None:
 
 def test_a_theme_outside_the_vocabulary_is_refused() -> None:
     recorded = RecordedBackend(read_fixture_text("claude-review-976.json"))
-    themes = [t for t in select_flag_themes(load_range().themes) if t.slug != "correctness_bug"]
+    themes = [t for t in select_flag_themes(load_labels().themes) if t.slug != "correctness_bug"]
     with pytest.raises(BackendReplyError, match="outside the vocabulary"):
         run_review(load_diff_at_first_commit(), load_rubric(RUBRICS / "none"), themes, recorded)

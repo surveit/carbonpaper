@@ -5,7 +5,7 @@ from pathlib import Path
 
 from critic.corpus import CorpusIndex, load_corpus_index
 from critic.diff import ChangedFile, PullRequestDiff
-from critic.labels import LabeledRange, ReviewerComment, load_labeled_ranges, select_reviewer_comments
+from critic.labels import LabelSet, ReviewerComment, load_label_set, select_reviewer_comments
 from critic.predictions import PredictedComment, Severity
 
 FIXTURES = Path(__file__).with_name("fixtures")
@@ -22,14 +22,17 @@ def load_corpus() -> CorpusIndex:
     return load_corpus_index(FIXTURES / "corpus")
 
 
-def load_range() -> LabeledRange:
-    [labeled_range] = load_labeled_ranges(FIXTURES / "labeled")
-    return labeled_range
+def load_labels() -> LabelSet:
+    return load_label_set(FIXTURES / "labels-1045.jsonl", FIXTURES / "taxonomy-themes.json")
+
+
+def load_reals() -> list[ReviewerComment]:
+    labels = load_labels()
+    return select_reviewer_comments(labels.comments, load_corpus(), labels.themes).comments
 
 
 def load_reals_at_first_commit() -> list[ReviewerComment]:
-    truth = select_reviewer_comments(load_range().comments, load_corpus())
-    return [comment for comment in truth.comments if comment.commit_sha == FIRST_REVIEWED_COMMIT]
+    return [comment for comment in load_reals() if comment.commit_sha == FIRST_REVIEWED_COMMIT]
 
 
 def load_diff_at_first_commit() -> PullRequestDiff:

@@ -6,7 +6,7 @@ from critic.backend import ModelRequest
 from critic.diff import parse_patch
 from critic.prompt import build_review_request
 from critic.rubric import NO_RUBRIC_TEXT, load_rubric
-from critic.tests.fixture_data import RUBRICS, STAND_IN_ENVIRON, load_diff_at_first_commit, load_range
+from critic.tests.fixture_data import RUBRICS, STAND_IN_ENVIRON, load_diff_at_first_commit, load_labels
 from critic.themes import select_flag_themes
 from critic.worked_examples import load_worked_examples
 
@@ -35,10 +35,10 @@ def test_each_worked_example_sits_on_the_last_line_of_its_diff_hunk() -> None:
 def test_the_theme_list_offers_flags_only() -> None:
     request = _build_request("none")
     offered = request.answer_schema["$defs"]["PredictedComment"]["properties"]["theme"]["enum"]
-    assert "naming" in offered and "layering" in offered
-    assert "praise" not in offered
+    assert "naming" in offered and "code_placement" in offered
+    assert "praise_or_signoff" not in offered
     assert not [slug for slug in offered if slug.startswith("agent_")]
-    assert "- naming: A name that misdescribes" in request.system
+    assert "- naming: A name misdescribes what a value holds" in request.system
 
 
 def test_an_empty_rubric_says_so() -> None:
@@ -63,7 +63,7 @@ def test_the_user_prompt_is_the_pull_request_as_the_reviewer_read_it() -> None:
 
 
 def test_a_worked_example_outside_the_theme_vocabulary_is_refused() -> None:
-    themes = [theme for theme in select_flag_themes(load_range().themes) if theme.slug != "layering"]
+    themes = [theme for theme in select_flag_themes(load_labels().themes) if theme.slug != "code_placement"]
     rubric = load_rubric(RUBRICS / "none")
     with pytest.raises(ValueError, match="outside this vocabulary"):
         build_review_request(load_diff_at_first_commit(), rubric, themes, load_worked_examples().review)
@@ -77,6 +77,6 @@ def test_without_a_vocabulary_the_theme_is_left_free() -> None:
 
 
 def _build_request(rubric_name: str) -> ModelRequest:
-    themes = select_flag_themes(load_range().themes)
+    themes = select_flag_themes(load_labels().themes)
     rubric = load_rubric(RUBRICS / rubric_name, STAND_IN_ENVIRON)
     return build_review_request(load_diff_at_first_commit(), rubric, themes, load_worked_examples().review)

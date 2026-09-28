@@ -9,7 +9,7 @@
       "answer": {
         "path": "app/runtime/trace.py",
         "line": 187,
-        "theme": "layering",
+        "theme": "code_placement",
         "rule": "UI message text does not belong in the trace layer",
         "text": "no way this belongs down at this layer, this is UI stuff",
         "severity": "blocking"
@@ -37,12 +37,14 @@
         "html_url": "https://github.com/surveit/carbonpaper/pull/610#discussion_r3773883418",
         "path": "app/models/column_profile.py",
         "line": 38,
+        "diff_hunk": "@@ -33,3 +33,13 @@ class StageOutputProfile(BaseModel):\n     stage_id: str\n     row_count: int\n     columns: list[ColumnProfile]\n+\n+\n+class StoredFileProfile(BaseModel):",
         "body": "yeah this isn't really a model, it's just a type for the return, get it out"
       },
       "other": {
         "html_url": "https://github.com/surveit/carbonpaper/pull/610#discussion_r3773884924",
         "path": "app/models/column_profile.py",
         "line": 45,
+        "diff_hunk": "@@ -33,3 +33,27 @@ class StageOutputProfile(BaseModel):\n     stage_id: str\n     row_count: int\n     columns: list[ColumnProfile]\n+\n+\n+class StoredFileProfile(BaseModel):\n+    sha256: str\n+    filename: str\n+    row_count: int\n+    columns: list[ColumnProfile]\n+\n+\n+class SheetView(BaseModel):",
         "body": "all of this aren't really models"
       },
       "same_point": true,
@@ -53,12 +55,14 @@
         "html_url": "https://github.com/surveit/carbonpaper/pull/610#discussion_r3773213213",
         "path": "app/models/column_profile.py",
         "line": 39,
+        "diff_hunk": "@@ -33,3 +33,13 @@ class StageOutputProfile(BaseModel):\n     stage_id: str\n     row_count: int\n     columns: list[ColumnProfile]\n+\n+\n+class StoredFileProfile(BaseModel):\n+    \"\"\"A file no schema has been declared for yet; csv/json/xlsx values are its characters.\"\"\"",
         "body": "this docstring makes no sense. remove it"
       },
       "other": {
         "html_url": "https://github.com/surveit/carbonpaper/pull/610#discussion_r3773214188",
         "path": "app/models/column_profile.py",
         "line": 38,
+        "diff_hunk": "@@ -33,3 +33,13 @@ class StageOutputProfile(BaseModel):\n     stage_id: str\n     row_count: int\n     columns: list[ColumnProfile]\n+\n+\n+class StoredFileProfile(BaseModel):",
         "body": "I'm unclear why we store this..."
       },
       "same_point": false,

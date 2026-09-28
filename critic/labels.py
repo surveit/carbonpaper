@@ -3,15 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from pydantic import AliasChoices, Field
-
 from critic.corpus import CorpusIndex, InlineComment
 from critic.records import CriticRecord, ForeignRecord
 from critic.themes import Theme, load_theme_vocabulary
 
-LABELED_FILE_NAME = "comments.labeled.jsonl"
-THEMES_FILE_NAME = "themes.json"
-HUMAN_VOICES = frozenset({"human", "user"})
+HUMAN_AUTHOR = "human"
 INLINE_KIND = "inline"
 ASKING_SPEECH_ACTS = frozenset({"correction", "instruction", "question"})
 
@@ -20,17 +16,25 @@ class LabeledComment(ForeignRecord):
     html_url: str
     pr: int
     kind: str
+    # "human" is the reviewer's own words; "agent" is a coding agent posting under their login.
+    author: str
     body: str
     themes: list[str]
     speech_act: str | None
     severity: str | None
     rule: str | None
-    # Each labeler named the field that tells the reviewer's own words from the agent's differently.
-    voice: str = Field(validation_alias=AliasChoices("author", "author_inferred", "voice"))
 
 
-class LabeledRange(CriticRecord):
-    directory: str
+class _SplitSide(ForeignRecord):
+    prs: list[int]
+
+
+class _Split(ForeignRecord):
+    test: _SplitSide
+
+
+class LabelSet(CriticRecord):
+    labels_path: str
     comments: list[LabeledComment]
     themes: list[Theme]
 
@@ -44,6 +48,7 @@ class ReviewerComment(CriticRecord):
     start_line: int | None
     commit_sha: str
     created_at: str
+    diff_hunk: str
     body: str
     themes: list[str]
     speech_act: str
@@ -61,35 +66,33 @@ class GroundTruth(CriticRecord):
     excluded: list[ExcludedLabel]
 
 
-class RangeIndex(CriticRecord):
-    by_pr: dict[int, LabeledRange]
-    conflicts: dict[int, list[str]]
-
-
-def load_labeled_ranges(root: Path) -> list[LabeledRange]:
-    if not root.is_dir():
-        raise FileNotFoundError(f"labeled-comment root not found: {root}")
-    return [_load_range(path.parent) for path in sorted(root.glob(f"*/{LABELED_FILE_NAME}"))]
-
-
-def index_ranges_by_pr(ranges: list[LabeledRange]) -> RangeIndex:
-    ranges_by_pr: dict[int, list[LabeledRange]] = {}
-    for labeled_range in ranges:
-        for pr in sorted({comment.pr for comment in labeled_range.comments}):
-            ranges_by_pr.setdefault(pr, []).append(labeled_range)
-    return RangeIndex(
-        by_pr={pr: found[0] for pr, found in ranges_by_pr.items() if len(found) == 1},
-        conflicts={
-            pr: [found_range.directory for found_range in found]
-            for pr, found in ranges_by_pr.items()
-            if len(found) > 1
-        },
+def load_label_set(labels_path: Path, themes_path: Path) -> LabelSet:
+    if not labels_path.is_file():
+        raise FileNotFoundError(f"labeled-comment file not found: {labels_path}")
+    lines = labels_path.read_text(encoding="utf-8").splitlines()
+    comments = [LabeledComment.model_validate(json.loads(line)) for line in lines if line.strip()]
+    return LabelSet(
+        labels_path=str(labels_path), comments=comments, themes=load_theme_vocabulary(themes_path)
     )
 
 
-def select_reviewer_comments(labeled: list[LabeledComment], corpus: CorpusIndex) -> GroundTruth:
+def load_test_split(split_path: Path) -> list[int]:
+    return sorted(_Split.model_validate_json(split_path.read_text(encoding="utf-8")).test.prs)
+
+
+def group_labels_by_pr(label_set: LabelSet) -> dict[int, list[LabeledComment]]:
+    labels_by_pr: dict[int, list[LabeledComment]] = {}
+    for comment in label_set.comments:
+        labels_by_pr.setdefault(comment.pr, []).append(comment)
+    return labels_by_pr
+
+
+def select_reviewer_comments(
+    labeled: list[LabeledComment], corpus: CorpusIndex, themes: list[Theme]
+) -> GroundTruth:
     outcomes = [_admit_label(label, corpus) for label in labeled]
     admitted = [outcome for outcome in outcomes if isinstance(outcome, ReviewerComment)]
+    check_themes_are_known(admitted, themes)
     openers = find_thread_openers(admitted)
     return GroundTruth(
         comments=openers,
@@ -106,13 +109,20 @@ def find_thread_openers(comments: list[ReviewerComment]) -> list[ReviewerComment
     return list(openers.values())
 
 
+def check_themes_are_known(comments: list[ReviewerComment], themes: list[Theme]) -> None:
+    known = {theme.slug for theme in themes}
+    strays = sorted({slug for comment in comments for slug in comment.themes} - known)
+    if strays:
+        raise ValueError(f"reviewer comments carry themes the vocabulary lacks: {strays}")
+
+
 def _admit_label(label: LabeledComment, corpus: CorpusIndex) -> ReviewerComment | ExcludedLabel:
     speech_act = label.speech_act
     raw = corpus.by_url.get(label.html_url)
     if label.kind != INLINE_KIND:
         return _exclude(label.html_url, f"a {label.kind} comment, not an inline one")
-    if label.voice not in HUMAN_VOICES:
-        return _exclude(label.html_url, f"voice labeled {label.voice}, not the reviewer's own")
+    if label.author != HUMAN_AUTHOR:
+        return _exclude(label.html_url, f"written by the {label.author}, not the reviewer")
     if speech_act is None or speech_act not in ASKING_SPEECH_ACTS:
         return _exclude(label.html_url, f"speech act {speech_act}: asks for nothing")
     if raw is None:
@@ -143,20 +153,10 @@ def _build_reviewer_comment(
         start_line=raw.original_start_line,
         commit_sha=raw.original_commit_id,
         created_at=raw.created_at,
+        diff_hunk=raw.diff_hunk,
         body=raw.body,
         themes=label.themes,
         speech_act=speech_act,
         severity=label.severity,
         rule=label.rule,
-    )
-
-
-def _load_range(directory: Path) -> LabeledRange:
-    themes_path = directory / THEMES_FILE_NAME
-    if not themes_path.is_file():
-        raise FileNotFoundError(f"{directory} has labels but no {THEMES_FILE_NAME}")
-    lines = (directory / LABELED_FILE_NAME).read_text(encoding="utf-8").splitlines()
-    comments = [LabeledComment.model_validate(json.loads(line)) for line in lines if line.strip()]
-    return LabeledRange(
-        directory=str(directory), comments=comments, themes=load_theme_vocabulary(themes_path)
     )

@@ -39,12 +39,14 @@ def measure_line_gap(line: int, real: ReviewerComment) -> int:
 
 
 def match_exactly(
-    predictions: list[PredictedComment], reals: list[ReviewerComment]
+    predictions: list[PredictedComment], reals: list[ReviewerComment], commit_sha: str
 ) -> list[MatchedPair]:
+    """Line numbers only compare within one commit, so a real comment left on another waits for the judge."""
     candidates = [
         candidate
         for candidate in pair_same_path(predictions, reals, taken=[])
-        if candidate.line_gap <= LINE_WINDOW
+        if reals[candidate.real_index].commit_sha == commit_sha
+        and candidate.line_gap <= LINE_WINDOW
         and predictions[candidate.prediction_index].theme in reals[candidate.real_index].themes
     ]
     return accept_greedily(candidates, route="exact", reasons={}, taken=[])

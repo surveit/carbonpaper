@@ -124,6 +124,13 @@ def find_new_side_lines(file: ChangedFile) -> set[int]:
     return {line.new_line for line in parse_patch(file.patch) if line.new_line is not None}
 
 
+def find_lines_ending_at(diff: PullRequestDiff, path: str, line: int, count: int) -> list[PatchLine]:
+    file = next((file for file in diff.files if file.filename == path), None)
+    parsed = [] if file is None or file.patch is None else parse_patch(file.patch)
+    ends = [index for index, patch_line in enumerate(parsed) if patch_line.new_line == line]
+    return [] if not ends else parsed[max(0, ends[0] - count + 1) : ends[0] + 1]
+
+
 def find_unanchored_comments(reals: list[ReviewerComment], diff: PullRequestDiff) -> list[str]:
     lines_by_path = {file.filename: find_new_side_lines(file) for file in diff.files}
     return [real.html_url for real in reals if real.line not in lines_by_path.get(real.path, set())]

@@ -6,7 +6,7 @@ from pathlib import Path
 from critic.records import CriticRecord
 
 AGENT_THEME_PREFIX = "agent_"
-NON_FLAG_THEMES = frozenset({"praise"})
+NON_FLAG_THEMES = frozenset({"praise", "praise_or_signoff"})
 
 
 class Theme(CriticRecord):

@@ -21,6 +21,7 @@ class QuotedComment(CriticRecord):
     html_url: str
     path: str
     line: int
+    diff_hunk: str
     body: str
 
 

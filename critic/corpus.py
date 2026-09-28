@@ -57,9 +57,9 @@ def fetch_corpus(repo: str, out_dir: Path) -> CorpusCounts:
     out_dir.mkdir(parents=True, exist_ok=True)
     prs = read_pr_list(repo, PR_FIELDS, PR_LIST_LIMIT)
     _write_json(out_dir / PRS_FILE, prs)
-    review_comments = read_api_list(_list_path(repo, "pulls/comments"))
+    review_comments = read_api_list(_build_list_path(repo, "pulls/comments"))
     _write_json(out_dir / REVIEW_COMMENTS_FILE, review_comments)
-    issue_comments = read_api_list(_list_path(repo, "issues/comments"))
+    issue_comments = read_api_list(_build_list_path(repo, "issues/comments"))
     _write_json(out_dir / ISSUE_COMMENTS_FILE, issue_comments)
     numbers = [_PullRequestListing.model_validate(pr).number for pr in prs]
     reviews = [review for number in numbers for review in fetch_reviews(repo, number)]
@@ -93,7 +93,7 @@ def load_inline_comments(corpus_dir: Path) -> list[InlineComment]:
     return [InlineComment.model_validate(item) for item in payload]
 
 
-def _list_path(repo: str, collection: str) -> str:
+def _build_list_path(repo: str, collection: str) -> str:
     return f"repos/{repo}/{collection}?per_page=100&sort=created&direction=asc"
 
 
