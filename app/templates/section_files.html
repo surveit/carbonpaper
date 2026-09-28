@@ -73,7 +73,15 @@
         <span class="muted">—</span>
         {% endif %}
       </td>
-      <td>{{ row.added | friendly_time }}</td>
+      <td>
+        {% if row.origin_url %}
+        fetched {{ row.fetched_at | friendly_time }}
+        <a class="files-origin muted" href="{{ row.origin_url }}" target="_blank" rel="noopener"
+           title="{{ row.origin_url }}">{{ row.origin_url }}</a>
+        {% else %}
+        uploaded {{ row.added | friendly_time }}
+        {% endif %}
+      </td>
       <td>
         {% if row.run_count %}
         <a href="/project/{{ state.id }}/runs?file={{ row.sha256 }}">{{ row.run_count }} run{{ "" if row.run_count == 1 else "s" }}</a>

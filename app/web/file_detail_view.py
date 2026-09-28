@@ -64,6 +64,9 @@ class FileDetailView(BaseModel):
     format: str
     completeness: FileCompleteness
     lineage: str
+    # Both None for an upload.
+    origin_url: str | None
+    fetched_at: str | None
     # None for a file no reader here opens — a png someone attached to a conversation.
     contents: FileContents | None
     runs: list[ReadingRun]
@@ -75,7 +78,7 @@ def build_file_detail_view(project_id: str, file_id: str) -> FileDetailView:
         file_id=record.id, filename=record.filename, sha256=record.sha256,
         size=describe_bytes(record.byte_count), added=record.created_at,
         format=_name_format(record), completeness=record.completeness,
-        lineage=record.lineage,
+        lineage=record.lineage, origin_url=record.origin_url, fetched_at=record.fetched_at,
         contents=_read_contents(project_id, file_id) if find_file_format(record.filename)
         else None,
         runs=_find_reading_runs(project_id, record),

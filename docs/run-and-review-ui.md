@@ -304,6 +304,11 @@ nothing to open.
 a head naming the file: what its holder claims about it, its shape, its first rows, and
 the runs that read it — then the delete, which takes the filename typed back.
 
+The head says how the file arrived: `uploaded` and when, or `fetched` and when, linking
+the URL a connector read it from. Only `receive_source` (`app/core/files.py`) records an
+origin and a fetch time, so a file without them was uploaded. The Files table says the
+same in its `added` column.
+
 **Data completeness** is a claim about the rows, not a state of the work. `closed` says
 these rows are all of them, `sampled` says they are a subset and the note beside it says
 how it was drawn (the save refuses a sampled file with an empty note), `open` says
