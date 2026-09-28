@@ -3465,3 +3465,4 @@
 {"run_id":"36478463661","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36478463661","created":"2026-09-28T20:24:06Z","branch":"t07-lineage-source-record","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"36478572496","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36478572496","created":"2026-09-28T20:24:33Z","branch":"push-2026-09-28","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"36478764410","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36478764410","created":"2026-09-28T20:24:52Z","branch":"r10-templates-claude-md","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"36479263342","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36479263342","created":"2026-09-28T20:27:44Z","branch":"t13-packs-connector-seam","event":"pull_request","contracts_kept":19,"findings":[]}
