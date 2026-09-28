@@ -275,6 +275,32 @@ jobs:
           marker: "<!-- vocabulary-report -->"
           body-file: vocabulary-body.md
 
+      # The one report here that is not about words. A body matching one that was
+      # already in the tree is the defect review catches most and remembers least,
+      # because catching it needs someone to recall the existing function.
+      - id: reinvented
+        if: always() && steps.import-graph.conclusion != 'skipped'
+        run: |
+          uv run --frozen python -m scripts.reinvented_functions > head-shapes.json
+          uv run --frozen python -m scripts.reinvented_functions --root base > base-shapes.json
+          uv run --frozen python -m scripts.reinvented_functions --markdown head-shapes.json base-shapes.json \
+            > reinvented-body.md
+      - name: Upload raw shape snapshots
+        if: always() && steps.reinvented.conclusion == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: shape-snapshots
+          path: |
+            head-shapes.json
+            base-shapes.json
+          retention-days: 14
+      - name: Upsert reinvented-functions comment
+        if: always() && steps.reinvented.conclusion == 'success'
+        uses: ./.github/actions/upsert-pr-comment
+        with:
+          marker: "<!-- reinvented-functions -->"
+          body-file: reinvented-body.md
+
       # Not a taste call like the reports above it: an element wearing a class no
       # stylesheet declares renders with no rules, and the suite cannot see it.
       - id: unstyled
