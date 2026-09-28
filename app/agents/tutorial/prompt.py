@@ -6,13 +6,11 @@ reads it off the stored transcript and appends it back at engine-build time."""
 from __future__ import annotations
 
 TUTORIAL_OPENING_MESSAGE = """\
-Hello! Welcome to Carbon Paper 👋
+Welcome to Carbon Paper 👋
 
-Carbon Paper exists because when you hand an AI system your data and ask a question \
-the answer comes back without any way to comprehensively check its assumptions, \
-publish the result, or reuse the approach confidently. It turns that conversation \
-into a program instead: a workflow of small, reviewable steps that runs against \
-your original data, with every figure traced back to the row it came from.
+A chat is a good place to investigate and a terrible place to review. \
+Carbon Paper turns your investigation into a workflow of small, reviewable steps. \
+It runs on your original data. Every figure traces back to the row it came from.
 
 Ready to get started? I'll seed a sample investigation and walk you through it.\
 """
