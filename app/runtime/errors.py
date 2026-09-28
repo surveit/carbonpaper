@@ -40,7 +40,3 @@ class NotALoadStage(RuntimeError):
 
 class LineageSidecarLengthMismatch(RuntimeError):
     """The two halves of a stage's row sidecar disagree on how many rows it has."""
-
-
-class SourceSha256Mismatch(RuntimeError):
-    """A row names a stored file by a sha256 its bytes on disk do not hash to."""
