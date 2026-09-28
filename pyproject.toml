@@ -26,6 +26,7 @@ dependencies = [
     "alembic>=1.18",           # data migrations for the document store (alembic/versions)
     "pydantic>=2",             # stage/schema contract models (app/models)
     "starlark-pyo3==2026.1",   # sandboxed interpreter for starlark_row_function stages
+    "pypdf>=6.19.0",           # PDF page text (app/core/text_sources.py); BSD, where PyMuPDF is AGPL
 ]
 
 # Dev/test-only. `uv sync` installs these by default; the container image passes
