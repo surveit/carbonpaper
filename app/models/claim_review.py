@@ -12,6 +12,7 @@ from app.models.citations import StageOutputCellCitation
 from app.models.claims import ClaimShapeInput
 from app.models.records.claim_review import ClaimPart, DraftChallenge
 from app.models.records.workflow_output import WorkflowOutput
+from app.models.records.workflow_version import Method
 from app.models.schema import StageId, _Base
 
 
@@ -104,5 +105,5 @@ class EvidenceBundle(_Base):
     stages: list[StageEvidenceItem]
     branches: list[BranchEvidenceItem]
     input_columns: list[InputColumnEvidenceItem]
-    terms: str
-    methodology: str | None
+    # None: the run's version was saved before a version kept the project's method.
+    method: Method | None

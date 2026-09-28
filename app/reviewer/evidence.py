@@ -10,9 +10,14 @@ from app.models.claim_review import (
     StageEvidenceItem,
 )
 from app.models.records.workflow_output import WorkflowOutput
+from app.models.records.workflow_version import Method
+from app.models.terms import Terms, render_terms
 
 _FIELD = " · "
 _NOTHING = "none"
+# Not "none": that would say the project had none, which nothing the run holds can tell.
+_NOT_KEPT = ("unknown: the run's workflow version was saved before a version kept its terms "
+             "and methodology")
 
 
 def render_evidence_bundle(bundle: EvidenceBundle) -> str:
@@ -28,8 +33,8 @@ def render_evidence_pool(bundle: EvidenceBundle) -> str:
         _render_stages(bundle.stages),
         _render_branches(bundle.branches),
         _render_input_columns(bundle.input_columns),
-        _render_heading("TERMS") + "\n" + (bundle.terms or _NOTHING),
-        _render_heading("METHODOLOGY") + "\n" + (bundle.methodology or _NOTHING),
+        _render_heading("TERMS") + "\n" + _render_terms(bundle.method),
+        _render_heading("METHODOLOGY") + "\n" + _render_methodology(bundle.method),
     ])
 
 
@@ -104,6 +109,18 @@ def _render_input_columns(columns: list[InputColumnEvidenceItem]) -> str:
 
 def _render_top(top: list[ValueCount]) -> str:
     return ", ".join(f"{seen.value} ({seen.count})" for seen in top) or _NOTHING
+
+
+def _render_terms(method: Method | None) -> str:
+    if method is None:
+        return _NOT_KEPT
+    return render_terms(Terms(row_types=method.row_types, verbs=method.verbs)) or _NOTHING
+
+
+def _render_methodology(method: Method | None) -> str:
+    if method is None:
+        return _NOT_KEPT
+    return method.methodology or _NOTHING
 
 
 def _render_context(bundle: EvidenceBundle) -> str:

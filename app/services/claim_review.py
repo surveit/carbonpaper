@@ -31,18 +31,16 @@ from app.models.records.claim_review import (
     ClaimReview,
     DraftChallenge,
 )
+from app.models.records.workflow_version import WorkflowVersion
 from app.models.stage import StageType
-from app.models.terms import render_terms
 from app.models.workflow import Workflow, find_stages_upstream_of, sort_stages_by_dependency
 from app.models.workflow_stage import WorkflowStage
 from app.services import claims as claims_service
 from app.models.run_manifest import RunKind
 from app.services import run as run_service
 from app.services import scope as scope_service
-from app.services import terms as terms_service
 from app.services.errors import ClaimReviewRefused
-from app.services.methodology import read_methodology
-from app.services.versioning import load_version_stages
+from app.services.versioning import load_version
 
 
 def build_evidence_bundle(project_id: ID, claim_id: ID) -> EvidenceBundle:
@@ -50,7 +48,8 @@ def build_evidence_bundle(project_id: ID, claim_id: ID) -> EvidenceBundle:
     cited = _require_cell_citation(claim.citation)
     run_id = cited.run_id
     manifest = run_service.read_run_manifest(project_id, run_id, RunKind.production)
-    stages = _read_workflow_stages(project_id, run_id)
+    version = _load_pinned_version(project_id, run_id)
+    stages = _read_workflow_stages(version)
     written = {record.stage_id for record in manifest.stage_records if record.output_path}
     return EvidenceBundle(
         claim_id=claim.id, claim_text=claim.text, claim_context=claim.context, cited=cited,
@@ -61,8 +60,7 @@ def build_evidence_bundle(project_id: ID, claim_id: ID) -> EvidenceBundle:
         stages=_read_stages(stages, cited.stage_id),
         branches=_read_branches(project_id, run_id),
         input_columns=_read_input_columns(project_id, run_id, stages, written),
-        terms=render_terms(terms_service.load_terms(project_id)),
-        methodology=read_methodology(project_id),
+        method=version.method,
     )
 
 
@@ -125,9 +123,12 @@ def find_citation_issues(project_id: ID, run_id: ID, challenges: list[Challenge]
 # ── what the run holds ──
 
 
-def _read_workflow_stages(project_id: ID, run_id: ID) -> list[WorkflowStage]:
-    version_id = run_service.read_pinned_version(project_id, run_id)
-    workflow = Workflow(stages=load_version_stages(project_id, version_id))
+def _load_pinned_version(project_id: ID, run_id: ID) -> WorkflowVersion:
+    return load_version(project_id, run_service.read_pinned_version(project_id, run_id))
+
+
+def _read_workflow_stages(version: WorkflowVersion) -> list[WorkflowStage]:
+    workflow = Workflow(stages=version.stages)
     ordered = sort_stages_by_dependency(workflow.stages)
     return [workflow.find_workflow_stage(stage.id) for stage in ordered]
 
@@ -220,17 +221,23 @@ def _read_run_holdings(project_id: ID, run_id: ID,
     manifest = run_service.read_run_manifest(project_id, run_id, RunKind.production)
     written = {record.stage_id for record in manifest.stage_records if record.output_path}
     wanted = _find_cited_columns_by_stage_id(run_id, citations)
-    terms = terms_service.load_terms(project_id)
+    version = _load_pinned_version(project_id, run_id)
     return _RunHoldings(
         run_id=run_id,
         outputs_by_stage_id={
             stage_id: _read_stage_output_cells(project_id, run_id, stage_id, columns)
             for stage_id, columns in wanted.items() if stage_id in written},
-        stage_ids={placed.id for placed in _read_workflow_stages(project_id, run_id)},
-        term_names={row_type.id for row_type in terms.row_types}
-        | {table.name for table in terms.schemas.schemas}
-        | {verb.name for verb in terms.verbs},
+        stage_ids={placed.id for placed in _read_workflow_stages(version)},
+        term_names=_list_term_names(version),
     )
+
+
+def _list_term_names(version: WorkflowVersion) -> set[str]:
+    tables = {table["name"] for table in version.schemas}
+    if version.method is None:
+        return tables
+    return (tables | {row_type.id for row_type in version.method.row_types}
+            | {verb.name for verb in version.method.verbs})
 
 
 def _find_cited_columns_by_stage_id(run_id: ID,
@@ -267,7 +274,7 @@ def _find_citation_problem(held: _RunHoldings, citation: ChallengeCitation) -> s
         return f"names stage {citation.stage_id!r}, which the run's workflow does not hold"
     if citation.name in held.term_names:
         return None
-    return f"names {citation.name!r}, which the project's terms do not define"
+    return f"names {citation.name!r}, which the run's workflow version does not define"
 
 
 def _find_cell_problem(held: _RunHoldings, citation: StageOutputCellCitation) -> str | None:
