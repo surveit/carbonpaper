@@ -27,6 +27,10 @@ class ProjectArchiveRejected(Exception):
     """A project archive this workspace could not read a project out of."""
 
 
+class RunComparisonRefused(ValueError):
+    """Only runs of one workflow version executed the same stages."""
+
+
 class ClaimShapeWriteRefused(ValueError):
     """The WRITE is refused, whole: a bad entry takes the batch with it."""
 
