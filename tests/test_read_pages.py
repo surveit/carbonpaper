@@ -76,7 +76,7 @@ def _run(tmp_path: Path, rows: list[dict[str, Any]]) -> pa.Table:
 
 
 def _read_directly(tmp_path: Path, rows: list[dict[str, Any]]) -> StageOutput:
-    ctx = RunContext.for_workflow_test_run(tmp_path, PROJECT, "r")
+    ctx = RunContext.for_workflow_test_run(tmp_path, PROJECT, "r", bound_sources={})
     stage = place_stage(parse_stage(_read_pages_spec()))
     return handle_read_pages(stage, as_inputs({"filings": pd.DataFrame(rows)}), ctx)
 
