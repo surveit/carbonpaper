@@ -27,7 +27,8 @@
             {%- if usage.calls %}{{ usage.calls | figure }} call{% if usage.calls != 1 %}s{% endif %}
             · {{ usage.input_tokens | figure }} tokens in · {{ usage.output_tokens | figure }} out
             · {{ usage.cost_usd | usd }}
-            {%- else %}not reported{% endif %}</dd>
+            {%- else %}not reported{% endif %}
+            {%- if page.rows_in_call %} <span class="muted">— one call covering {{ page.rows_in_call | figure }} rows, this one among them</span>{% endif %}</dd>
         <dt>run</dt><dd><a href="{{ page.links.run_page() }}"><code>{{ judgment.run_id }}</code></a></dd>
         <dt>stage</dt><dd><a href="{{ page.links.stage_anchor(judgment.stage_id) }}"><code>{{ judgment.stage_id }}</code></a></dd>
         <dt>row</dt><dd>

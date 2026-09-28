@@ -36,12 +36,12 @@ def record_row_judgment(
     judging: RowJudging,
     index: int,
     input_row: Mapping[str, object],
-    draft: object,
+    draft: JudgmentDraft | None,
     *,
     failed: bool,
 ) -> Judgment | None:
     """`failed` excuses a row with no draft: a call that raised decided nothing."""
-    if not isinstance(draft, JudgmentDraft):
+    if draft is None:
         if failed:
             return None
         raise JudgmentUnrecorded(

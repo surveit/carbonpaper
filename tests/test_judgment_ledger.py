@@ -28,6 +28,7 @@ from app.runtime.stage_output import StageOutput
 from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform as lt
 from app.runtime.stages.execution import ROW_JUDGMENT_KEY
+from app.web import judgment_view
 from conftest import as_inputs, make_run_context, pinned_stages, place_stage, rows_of
 from stage_seed import add_stage, save_version
 
@@ -187,6 +188,8 @@ def test_each_row_of_a_batched_call_is_judged_by_that_call(monkeypatch):
     judgments = sorted(_judgments(), key=lambda j: j.frozen_input["x"])
     assert [j.frozen_input for j in judgments] == [{"x": 1}, {"x": 2}]
     assert judgments[0].task == judgments[1].task and "### item 1" in judgments[0].task
+    page = TestClient(app).get(f"/project/{PROJECT}/judgments/{judgments[0].id}").text
+    assert "one call covering 2 rows, this one among them" in page
 
 
 # ── G2: a row a model decided owes a judgment ───────────────────────────────
@@ -300,3 +303,25 @@ def test_the_rows_page_links_each_row_to_its_judgment(project):
 
     for judgment in _judgments():
         assert f'href="/project/{PROJECT}/judgments/{judgment.id}"' in html
+
+
+def test_the_rows_page_links_no_judgment_this_project_does_not_store(project):
+    run_id = _run(project)
+    kept, dropped = _judgments()
+    Judgment.delete(dropped.id)
+
+    html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/stage/judge/rows").text
+
+    assert f"/judgments/{kept.id}" in html and f"/judgments/{dropped.id}" not in html
+
+
+def test_the_rows_page_of_a_stage_no_model_answered_reads_no_log(project, monkeypatch):
+    run_id = _run(project)
+
+    def refuse(*a, **k):
+        raise AssertionError("read the run log for a stage that owes no judgment")
+
+    monkeypatch.setattr(judgment_view, "read_events_since", refuse)
+    response = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/stage/load/rows")
+
+    assert response.status_code == 200, response.text

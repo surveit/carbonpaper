@@ -6,7 +6,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.core.ids import ID
+from app.core.json_types import JsonDict
 from app.core.judgments import Judgment
+from app.models import AbstractStage
+from app.models.stages.llm_transform import LLMTransformStage
 from app.runtime.run_log import JUDGMENT_ID, ROW_ERROR, ROW_OK, SOURCE_CACHED, read_events_since
 from app.web.panel_links import AppPanelLinks
 
@@ -17,6 +20,8 @@ class JudgmentPage:
     reply_text: str
     # The row it decided in its own run; None where that run's log names no row for it.
     row: int | None
+    # Set where one batched call judged several rows, so its usage is theirs together.
+    rows_in_call: int | None
     links: AppPanelLinks
 
 
@@ -29,20 +34,26 @@ class ReplayedJudgments:
 
 
 def build_judgment_page(judgment: Judgment) -> JudgmentPage:
-    rows = read_row_judgment_ids(judgment.project_id, judgment.run_id, judgment.stage_id)
+    events = _list_row_outcomes(judgment.project_id, judgment.run_id, judgment.stage_id)
     return JudgmentPage(
         judgment=judgment,
         reply_text=json.dumps(judgment.reply, indent=2, ensure_ascii=False),
-        row=next((row for row, named in rows.items() if named == judgment.id), None),
+        row=next((int(e["row"]) for e in events if e.get(JUDGMENT_ID) == judgment.id), None),
+        rows_in_call=_count_batched_results(judgment.reply),
         links=AppPanelLinks(judgment.project_id, judgment.run_id),
     )
 
 
-def read_row_judgment_ids(project_id: ID, run_id: ID, stage_id: ID) -> dict[int, ID]:
+def link_row_judgments(
+    links: AppPanelLinks, project_id: ID, run_id: ID, stage_def: AbstractStage | None,
+) -> dict[int, str]:
+    """Row ordinal to judgment page, for each judgment the log names that this project stores."""
+    if not isinstance(stage_def, LLMTransformStage):
+        return {}
     return {
-        int(event["row"]): str(event[JUDGMENT_ID])
-        for event in _list_row_outcomes(project_id, run_id, stage_id)
-        if event.get(JUDGMENT_ID) is not None
+        int(event["row"]): links.judgment_page(str(event[JUDGMENT_ID]))
+        for event in _list_row_outcomes(project_id, run_id, stage_def.id)
+        if _is_stored_in(project_id, event.get(JUDGMENT_ID))
     }
 
 
@@ -57,6 +68,18 @@ def read_replayed_judgments(project_id: ID, run_id: ID, stage_id: ID) -> Replaye
         models=sorted({judgment.model for judgment in stored if judgment is not None}),
         names_a_judgment=bool(named),
     )
+
+
+def _is_stored_in(project_id: ID, judgment_id: object) -> bool:
+    if not isinstance(judgment_id, str):
+        return False
+    judgment = Judgment.read_only().get(judgment_id)
+    return judgment is not None and judgment.project_id == project_id
+
+
+def _count_batched_results(reply: JsonDict) -> int | None:
+    results = reply.get("results")
+    return len(results) if isinstance(results, list) else None
 
 
 def _list_row_outcomes(project_id: ID, run_id: ID, stage_id: ID) -> list[dict[str, Any]]:
