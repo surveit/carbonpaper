@@ -132,6 +132,14 @@ all, and making the field required would fail to load every one of them. `None` 
 not a missing label — it means the project id is still the only name it has, which
 `Project.label()` reports.
 
+`WorkflowVersion.method` is the second. `create_version_from_stages` copies the project's
+row types, verbs and methodology onto each version it saves, so a run's readers get the ones
+it was built from. A version saved before then has no `method`. Each reader of one — the
+review packet, a claim's evidence, the version page — says so, and shows none of the
+project's current text. The three sit in one `Method` because `DUMP_OPTS` drops a `None`: a
+flat `methodology` field could not tell "the project had none" from "the version kept
+nothing".
+
 ## Migrations replay, so every revision must be a no-op at head
 
 `./start` runs `alembic upgrade head` on boot. A store created by
@@ -147,7 +155,7 @@ rewriting it, since a rewrite also re-stamps `schema_version` and walks a record
 backwards to the version that revision wrote.
 
 `tests/test_migration_replay.py` holds it. The store it upgrades is seeded through the
-same service calls the app uses — `create_project`, `add_stages`,
+same service calls the app uses — `create_project`, `write_terms`, `add_stages`,
 `drafts.save_version`, `save_upload` — so the documents under test are whatever
 today's models write, and a model change moves the fixture with it. After
 `upgrade head` every document must be byte-identical, `schema_version` included, the

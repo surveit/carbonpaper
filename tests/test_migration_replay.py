@@ -16,9 +16,12 @@ from app.models.stage import StageDraft
 from app.services import project as project_service
 from app.models.records.draft import Draft
 from app.models.records.methodology import Methodology
+from app.models.records.terms import StoredTerms
 from app.models.records.workflow_version import WorkflowVersion
+from app.models.row_types import RowType
+from app.models.terms import Terms, Verb
 from conftest import queue_added_columns, queue_columns, reads_of
-from app.services import drafts
+from app.services import drafts, terms
 
 _ALEMBIC_DIRECTORY = Path(__file__).resolve().parents[1] / "alembic"
 
@@ -31,6 +34,7 @@ _SOURCE_COLUMNS = [
 _SEEDED_COLLECTIONS = sorted({
     project_service.Project.collection,
     Methodology.collection,
+    StoredTerms.collection,
     Draft.collection,
     WorkflowVersion.collection,
     file_store.ProjectFile.collection,
@@ -63,6 +67,10 @@ def _open_file_backed_store(tmp_path, monkeypatch) -> Path:
 def _seed_store_through_the_app() -> str:
     project_id = project_service.create_project(
         "replay", "Review every row that scored.", source="migration replay test").id
+    # A version keeps these, so the replay also passes over the words one holds.
+    terms.write_terms(project_id, Terms(
+        row_types=[RowType(id="scored_row", title="Scored row", definition="One scored row.")],
+        verbs=[Verb(name="confirm", definition="Check a row by hand.")]))
     upload = file_store.save_upload("rows.csv", io.BytesIO(_CSV), project_id=project_id)
     draft_id = drafts.create_draft(project_id).id
     outcome = project_service.add_stages(project_id, draft_id, _stage_drafts(upload))

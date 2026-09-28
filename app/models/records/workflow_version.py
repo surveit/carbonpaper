@@ -5,10 +5,22 @@ from typing import Any, ClassVar
 from pydantic import Field
 
 from app.core.record import PersistedModel, PersistenceScope
+from app.models.row_types import RowType
+from app.models.schema import _Base
 from app.models.stage import STAGE_SPEC_SCHEMA_VERSION, Stage
+from app.models.terms import Verb
 
 
 MAX_MESSAGE_CHARS = 150
+
+
+class Method(_Base):
+    """The project's row types, verbs and methodology as they stood when the version was saved."""
+
+    row_types: list[RowType]
+    verbs: list[Verb]
+    # None: the project had no methodology.
+    methodology: str | None = None
 
 
 class WorkflowVersion(PersistedModel):
@@ -28,3 +40,5 @@ class WorkflowVersion(PersistedModel):
     )
     stages: list[Stage] = Field(default_factory=list)
     schemas: list[dict[str, Any]] = Field(default_factory=list)
+    # None: saved before a version kept the project's method.
+    method: Method | None = None
