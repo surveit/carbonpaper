@@ -3484,3 +3484,4 @@
 {"run_id":"36480308628","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36480308628","created":"2026-09-28T20:36:25Z","branch":"push-2026-09-28","event":"pull_request","contracts_kept":19,"findings":[]}
 {"run_id":"36480388052","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36480388052","created":"2026-09-28T20:37:02Z","branch":"t08-source-view","event":"pull_request","contracts_kept":18,"findings":[]}
 {"run_id":"36480232127","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36480232127","created":"2026-09-28T20:37:49Z","branch":"t13-packs-connector-seam","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"36480514797","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36480514797","created":"2026-09-28T20:38:07Z","branch":"r03-removal-pr-shrinks","event":"pull_request","contracts_kept":18,"findings":[]}
