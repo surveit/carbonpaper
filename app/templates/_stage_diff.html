@@ -101,7 +101,7 @@
       {%- set trace_href = links.row_trace(stage.stage_id, row.output_ordinal) %}{% if trace_href %} data-href="{{ trace_href }}"{% endif %}>{{ row_num }}<td class="diff-kept-col"></td>
       {%- for value in row.cells %}{% if not cut or diff.columns[loop.index0] in behind %}
       {%- set off = 'aside' if behind and diff.columns[loop.index0] not in behind else '' %}
-      {%- if value[:4] == 'http' %}<td class="cell-url {{ off }}"><a href="{{ value }}" target="_blank" rel="noopener">{{ value }}</a></td>
+      {%- if value[:4] == 'http' and value.cites is not defined %}<td class="cell-url {{ off }}"><a href="{{ value }}" target="_blank" rel="noopener">{{ value }}</a></td>
       {%- else %}{{ data_cell(value, off, '', full_rows, links) }}{% endif %}{% endif %}{% endfor %}</tr>
     {% endif %}
     {% endfor %}
@@ -170,7 +170,7 @@
                        'diff-col-quiet' if column.name in quiet else '',
                        'aside' if behind and column.name not in behind else '',
                        'diff-col-cited' if column.name == cited_column and traced else ''] | select | join(' ') %}
-      {%- if cell.text[:4] == 'http' and cell.state != 'changed' %}<td class="cell-url {{ klass }}"><a href="{{ cell.text }}" target="_blank" rel="noopener">{{ cell.text }}</a></td>
+      {%- if cell.text[:4] == 'http' and cell.state != 'changed' and cell.text.cites is not defined %}<td class="cell-url {{ klass }}"><a href="{{ cell.text }}" target="_blank" rel="noopener">{{ cell.text }}</a></td>
       {%- else %}{{ data_cell(cell.text, klass, cell.was, full_rows, links) }}
       {%- endif %}{% endif %}
       {%- endfor %}

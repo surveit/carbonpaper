@@ -30,8 +30,7 @@ OPPOSE_HREF = f"/project/{PROJECT}/files/ecf17?page=14&amp;start=120&amp;end=126
 DISMISS_HREF = f"/project/{PROJECT}/files/ecf17?page=2&amp;start=4&amp;end=11"
 OPPOSE_CITE = f'<q title="oppose">oppose</q> <a href="{OPPOSE_HREF}">page 14</a>'
 DISMISS_CITE = f'<q title="dismiss">dismiss</q> <a href="{DISMISS_HREF}">page 2</a>'
-# Row 1 holds a null span and a null list: a struct column with a null row is where
-# pandas turns the page and offsets to floats, so these rows are what keep them ints.
+# Row 1's nulls are what make pandas float a struct's ints, which a span must survive.
 CLAIMS = pa.table({
     "claim": ["The families oppose the motion.", "No quote was found."],
     "quote": pa.array([OPPOSE.model_dump(), None]),
@@ -149,5 +148,6 @@ def _read_lineage_view(html: str) -> dict:
 
 
 def _render_span_cell(cell: SpanCellText, links: object, was: str = "") -> str:
-    macro = templates.env.get_template("_data_cell.html").module.data_cell
-    return str(macro(cell, "", was, False, links))
+    return templates.env.from_string(
+        '{% from "_data_cell.html" import data_cell %}{{ data_cell(cell, "", was, false, links) }}'
+    ).render(cell=cell, was=was, links=links)
