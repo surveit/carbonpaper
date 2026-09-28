@@ -27,6 +27,7 @@ class LabeledComment(ForeignRecord):
 
 class _SplitSide(ForeignRecord):
     prs: list[int]
+    prs_with_human_comments: list[int]
 
 
 class _Split(ForeignRecord):
@@ -77,7 +78,12 @@ def load_label_set(labels_path: Path, themes_path: Path) -> LabelSet:
 
 
 def load_test_split(split_path: Path) -> list[int]:
-    return sorted(_Split.model_validate_json(split_path.read_text(encoding="utf-8")).test.prs)
+    return sorted(_read_split(split_path).test.prs)
+
+
+def load_silent_test_prs(split_path: Path) -> list[int]:
+    test = _read_split(split_path).test
+    return sorted(set(test.prs) - set(test.prs_with_human_comments))
 
 
 def group_labels_by_pr(label_set: LabelSet) -> dict[int, list[LabeledComment]]:
@@ -109,6 +115,10 @@ def find_thread_openers(comments: list[ReviewerComment]) -> list[ReviewerComment
     for comment in sorted(comments, key=lambda comment: comment.created_at):
         openers.setdefault(comment.thread_id, comment)
     return list(openers.values())
+
+
+def _read_split(split_path: Path) -> _Split:
+    return _Split.model_validate_json(split_path.read_text(encoding="utf-8"))
 
 
 def _admit_label(label: LabeledComment, corpus: CorpusIndex) -> ReviewerComment | ExcludedLabel:
