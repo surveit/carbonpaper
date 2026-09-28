@@ -3516,3 +3516,4 @@
 {"run_id":"36482202884","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36482202884","created":"2026-09-28T20:52:51Z","branch":"r03-removal-pr-shrinks","event":"pull_request","contracts_kept":19,"findings":[]}
 {"run_id":"36482044059","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36482044059","created":"2026-09-28T20:54:07Z","branch":"t13-docket-pack","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"36482010178","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36482010178","created":"2026-09-28T20:54:15Z","branch":"r09-shrink-agents-md","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"36482040312","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36482040312","created":"2026-09-28T20:54:28Z","branch":"r04-word-budgets","event":"pull_request","contracts_kept":null,"findings":[]}
