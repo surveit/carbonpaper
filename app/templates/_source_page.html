@@ -1,0 +1,23 @@
+{# One page of a text Source as app/core/text_sources.py reads it, the characters every
+   quote is checked against, with the range a span's link names marked. #}
+{% set page = file.pages %}
+{% set here = "/project/" ~ state.id ~ "/files/" ~ file.file_id %}
+<section class="file-section source-page">
+  <div class="source-page-head">
+    <h2>Page {{ page.number }} of {{ page.page_count }}</h2>
+    <nav class="source-page-nav">
+      {% if page.number > 1 %}<a href="{{ here }}?page={{ page.number - 1 }}">← page {{ page.number - 1 }}</a>{% endif %}
+      {% if page.number < page.page_count %}<a href="{{ here }}?page={{ page.number + 1 }}">page {{ page.number + 1 }} →</a>{% endif %}
+      <a href="{{ here }}/bytes#page={{ page.number }}" target="_blank" rel="noopener">the file as stored, at this page</a>
+    </nav>
+  </div>
+  {% if page.range_off_page %}
+  <p class="source-page-off">Characters {{ page.range_off_page.start }}–{{ page.range_off_page.end }}
+    are not on this page, which holds {{ page.character_count }}, so nothing is marked.</p>
+  {% endif %}
+  {% if page.character_count %}
+  <pre class="source-page-text">{{ page.before }}{% if page.marked %}<mark>{{ page.marked }}</mark>{% endif %}{{ page.after }}</pre>
+  {% else %}
+  <p class="source-page-empty">This page has no text layer, so nothing on it can be quoted.</p>
+  {% endif %}
+</section>

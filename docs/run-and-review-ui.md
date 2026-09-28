@@ -337,6 +337,15 @@ the URL `receive_source` (`app/core/files.py`) was given. Only it records an ori
 fetch time, so a file without them was uploaded. The Files table says the same in its
 `added` column.
 
+A **text Source** (pdf, txt, md, html) leads with one page of its text
+(`_source_page.html` ← `app/web/source_page_view.py`), read by `app/core/text_sources.py`:
+the same characters every span's quote is checked against. `?page=N&start=S&end=E` is
+the query `build_source_page_url` writes into a span's link; it opens page N with
+characters S to E marked, and a range the page does not hold says so and marks nothing.
+The page links the pages either side and the stored bytes at `#page=N`
+(`…/files/<file_id>/bytes`: inline for a PDF, a download for anything else, so stored
+HTML never runs).
+
 **Data completeness** is a claim about the rows, not a state of the work. `closed` says
 these rows are all of them, `sampled` says they are a subset and the note beside it says
 how it was drawn (the save refuses a sampled file with an empty note), `open` says

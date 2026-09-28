@@ -153,6 +153,19 @@
 .file-fold .file-section-head { margin-top: 0; }
 .file-rows .table-scroll { margin-top: 10px; }
 
+/* ── One page of a text Source (_source_page.html) ──────────────────────── */
+.source-page-head { display: flex; align-items: baseline; gap: 6px 18px; flex-wrap: wrap;
+    margin-bottom: 8px; }
+.source-page-head h2 { margin: 0; font-size: 1.05rem; }
+.source-page-nav { display: flex; gap: 14px; font-size: 13px; }
+/* Prose, not code: a filing reads as its page did, broken where its lines broke. */
+.source-page-text { font-family: var(--prose); font-size: 14px; line-height: 1.55;
+    max-width: 90ch; background: var(--raised); border: 1px solid var(--border); }
+.source-page-text mark { background: var(--info-bg); color: var(--info-ink);
+    box-shadow: inset 0 -2px var(--info-bd); }
+.source-page-off { font-size: 13px; color: var(--bad-ink); max-width: 74ch; }
+.source-page-empty { font-size: 13px; color: var(--muted); }
+
 /* ── Read by ────────────────────────────────────────────────────────────── */
 .read-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border);
     border-radius: 8px; background: var(--raised); }

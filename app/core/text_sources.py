@@ -82,6 +82,10 @@ def is_text_layer_empty(path: Path) -> bool:
     return not any(text.strip() for text in read_every_page_text(path))
 
 
+def is_text_source(path: Path) -> bool:
+    return _is_pdf(path) or path.suffix.lower() in _ONE_PAGE_READERS
+
+
 def _is_pdf(path: Path) -> bool:
     return path.suffix.lower() == _PDF_SUFFIX
 
