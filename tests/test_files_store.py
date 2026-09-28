@@ -1,0 +1,97 @@
+"""A file's record says where its bytes came from: fetched from an origin, or uploaded."""
+from __future__ import annotations
+
+import gzip
+import hashlib
+import io
+from datetime import datetime, timedelta
+
+import pytest
+
+from app.core import timestamp_ids
+from app.core.files import (
+    ProjectFile,
+    files_root,
+    receive_source,
+    resolve_stored_path,
+    save_upload,
+)
+from app.core.persistence import get_store
+
+ORIGIN = "https://example.org/filings/58.pdf"
+BODY = b"%PDF-1.4\n%%EOF\n"
+
+
+class _Clock:
+    def __init__(self, start: datetime) -> None:
+        self.moment = start
+
+    def now(self) -> datetime:
+        return self.moment
+
+
+class _SlowStream(io.BytesIO):
+    """Each chunk it hands over moves the clock on, the way a download takes time."""
+
+    def __init__(self, body: bytes, clock: _Clock, per_chunk: timedelta) -> None:
+        super().__init__(body)
+        self._clock = clock
+        self._per_chunk = per_chunk
+
+    def read(self, size: int | None = -1) -> bytes:
+        chunk = super().read(size)
+        if chunk:
+            self._clock.moment += self._per_chunk
+        return chunk
+
+
+def test_a_record_stored_before_files_had_an_origin_still_loads():
+    file_id = "3f1c0d2e9a8b4c7d9e0f1a2b3c4d5e6f"
+    # The payload save_upload wrote before the three fields existed, key for key.
+    get_store().write(ProjectFile.collection, file_id, {
+        "id": file_id, "created_at": "2026-09-01T10:00:00.000000",
+        "updated_at": "2026-09-01T10:00:00.000000", "sha256": hashlib.sha256(BODY).hexdigest(),
+        "filename": "posts.csv", "byte_count": len(BODY), "project_id": "demo",
+        "completeness": "open", "lineage": ""})
+    record = ProjectFile.load(file_id)
+    assert (record.origin_url, record.fetched_at, record.media_type) == (None, None, None)
+
+
+def test_receive_source_records_the_bytes_and_where_they_came_from():
+    record = receive_source("demo", ORIGIN, "58.pdf", io.BytesIO(BODY))
+    stored = ProjectFile.load(record.id)
+    assert stored.sha256 == hashlib.sha256(BODY).hexdigest()
+    assert stored.byte_count == len(BODY)
+    assert stored.origin_url == ORIGIN
+    assert stored.media_type == "application/pdf"
+    assert resolve_stored_path(stored).read_bytes() == BODY
+
+
+def test_fetched_at_is_when_the_read_began_not_when_the_record_was_made(monkeypatch):
+    clock = _Clock(datetime(2026, 1, 5, 9, 0, 0))
+    monkeypatch.setattr(timestamp_ids, "datetime", clock)
+    monkeypatch.setattr(timestamp_ids, "_last_stamp", None)
+    stream = _SlowStream(BODY, clock, per_chunk=timedelta(seconds=30))
+    record = receive_source("demo", ORIGIN, "58.pdf", stream)
+    assert record.fetched_at == "2026-01-05T09:00:00.000000"
+    assert record.created_at == "2026-01-05T09:00:30.000000"
+
+
+def test_an_upload_records_no_origin_and_no_fetch_time():
+    record = save_upload("posts.csv", io.BytesIO(b"name,val\nx,1\n"), "demo")
+    assert (record.origin_url, record.fetched_at) == (None, None)
+    assert record.media_type == "text/csv"
+
+
+@pytest.mark.parametrize("origin", ["javascript:alert(1)", "/Users/someone/58.pdf", "https://"])
+def test_an_origin_that_is_not_an_http_url_is_refused_before_a_byte_is_stored(origin):
+    with pytest.raises(ValueError, match="must be an http"):
+        receive_source("demo", origin, "58.pdf", io.BytesIO(BODY))
+    assert ProjectFile.list() == []
+    assert not any(files_root().rglob("*"))
+
+
+def test_a_compressed_file_records_no_media_type():
+    # Its name says csv; its bytes are gzip.
+    record = receive_source("demo", ORIGIN, "rows.csv.gz", io.BytesIO(gzip.compress(b"a,b\n")))
+    assert record.media_type is None

@@ -76,9 +76,10 @@ that already has `parameters` is passed through with the flat keys stripped.
 
 ## `input_bindings` is a result, not a parameter
 
-It records the preflight provenance of each bound input — absolute path, sha256, and a
-byte count streamed at prepare time. It says what the run *found*, not what it was asked
-for, which is why it sits beside `parameters` rather than inside it.
+It records the preflight provenance of each bound input — absolute path, sha256, a
+byte count streamed at prepare time, and the URL a fetched file came from (`origin_url`).
+It says what the run *found*, not what it was asked for, which is why it sits beside
+`parameters` rather than inside it.
 
 ## The queue halt's sidecar
 

@@ -6,21 +6,27 @@ from __future__ import annotations
 import enum
 from dataclasses import dataclass
 import hashlib
+import mimetypes
 import os
 import tempfile
 from pathlib import Path
 from typing import BinaryIO, ClassVar
+from urllib.parse import urlsplit
 
 from app.core.errors import FileNotStoredError, FileOverCeiling, StoreOverQuota
 from app.core.record import PersistedModel, PersistenceScope
 from app.core.store_config import resolve_db_path
 from app.core.ids import ID
+from app.core.timestamp_ids import now_iso
 
 # How much of an upload is held in memory at once while it is written and hashed.
 _CHUNK_BYTES = 1024 * 1024
 
 # The name a file with no usable one of its own is stored under.
 _FALLBACK_FILENAME = "upload.dat"
+
+# Not mimetypes.guess_type, which also reads the host's own tables and so differs by machine.
+_MEDIA_TYPES = mimetypes.MimeTypes()
 
 _KILOBYTE = 1024
 _MEGABYTE = 1024 * _KILOBYTE
@@ -65,6 +71,11 @@ class ProjectFile(PersistedModel):
     project_id: ID | None = None
     completeness: FileCompleteness = FileCompleteness.OPEN
     lineage: str = ""
+    # Read off the filename, not the bytes.
+    media_type: str | None = None
+    # Only receive_source writes these two, so an upload carries neither.
+    origin_url: str | None = None
+    fetched_at: str | None = None
 
 
 def files_root() -> Path:
@@ -83,23 +94,13 @@ def files_quota_bytes() -> int:
 
 def save_upload(filename: str, src: BinaryIO, project_id: ID | None = None) -> ProjectFile:
     """Store an uploaded file and return its record; `project_id` None puts it in no project."""
-    root = files_root()
-    # The stream is written to a temp file in the same dir first and moved into
-    # <root>/<record id>/<filename> once there is a record to name the directory. The
-    # record owns the directory rather than the file name, so the name a human chose
-    # survives into every path we show them — the run form's field, and the packet's
-    # "inputs this run read".
-    root.mkdir(parents=True, exist_ok=True)
-    staged, digest, byte_count = _write_to_temp_file(root, src, max_upload_bytes())
-    _refuse_upload_over_quota(root, staged, byte_count)
-    record = ProjectFile(sha256=digest, filename=_safe_filename(filename),
-                        byte_count=byte_count, project_id=project_id)
-    (root / record.id).mkdir(parents=True, exist_ok=True)
-    staged.replace(resolve_stored_path(record))
-    # Saved only once the bytes are in place: a record whose bytes are missing is what
-    # open_project_file exists to refuse, while bytes no record covers cost only disk.
-    record.save()
-    return record
+    return _save_file(filename, src, project_id)
+
+
+def receive_source(project_id: ID, origin_url: str, filename: str, stream: BinaryIO) -> ProjectFile:
+    """Store the bytes a connector reads from `origin_url`, stamped with when the read began."""
+    _refuse_origin_that_is_not_http(origin_url)
+    return _save_file(filename, stream, project_id, origin_url=origin_url, fetched_at=now_iso())
 
 
 def move_file_to_project(file_id: ID, project_id: ID) -> ProjectFile:
@@ -152,12 +153,12 @@ def resolve_stored_path(record: ProjectFile) -> Path:
     return (files_root() / record.id / record.filename).resolve()
 
 
-def find_stored_file_id(path: Path) -> ID | None:
+def find_stored_file(path: Path) -> ProjectFile | None:
     """The record these bytes are stored as, or None for a path the store does not own."""
     if path.parent.parent != files_root():
         return None
     record = ProjectFile.load_or_none(path.parent.name)
-    return None if record is None or record.filename != path.name else record.id
+    return None if record is None or record.filename != path.name else record
 
 
 def compute_sha256(path: Path) -> str:
@@ -224,6 +225,42 @@ def _delete_if_empty(directory: Path) -> None:
 
 def _sorted_newest_first(records: list[ProjectFile]) -> list[ProjectFile]:
     return sorted(records, key=lambda record: record.created_at, reverse=True)
+
+
+def _save_file(filename: str, src: BinaryIO, project_id: ID | None, *,
+               origin_url: str | None = None, fetched_at: str | None = None) -> ProjectFile:
+    root = files_root()
+    # The stream is written to a temp file in the same dir first and moved into
+    # <root>/<record id>/<filename> once there is a record to name the directory. The
+    # record owns the directory rather than the file name, so the name a human chose
+    # survives into every path we show them — the run form's field, and the packet's
+    # "inputs this run read".
+    root.mkdir(parents=True, exist_ok=True)
+    staged, digest, byte_count = _write_to_temp_file(root, src, max_upload_bytes())
+    _refuse_upload_over_quota(root, staged, byte_count)
+    name = _safe_filename(filename)
+    record = ProjectFile(sha256=digest, filename=name, byte_count=byte_count,
+                         project_id=project_id, origin_url=origin_url, fetched_at=fetched_at,
+                         media_type=_find_media_type(name))
+    (root / record.id).mkdir(parents=True, exist_ok=True)
+    staged.replace(resolve_stored_path(record))
+    # Saved only once the bytes are in place: a record whose bytes are missing is what
+    # open_project_file exists to refuse, while bytes no record covers cost only disk.
+    record.save()
+    return record
+
+
+def _refuse_origin_that_is_not_http(origin_url: str) -> None:
+    parts = urlsplit(origin_url)
+    # The file page links it, so a `javascript:` origin would run in the reader's browser.
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        raise ValueError(f"a fetched file's origin must be an http(s) URL, got {origin_url!r}")
+
+
+def _find_media_type(filename: str) -> str | None:
+    media_type, encoding = _MEDIA_TYPES.guess_type(filename)
+    # `rows.csv.gz` holds gzip bytes, not a csv.
+    return media_type if encoding is None else None
 
 
 def _write_to_temp_file(root: Path, src: BinaryIO, ceiling: int) -> tuple[Path, str, int]:
