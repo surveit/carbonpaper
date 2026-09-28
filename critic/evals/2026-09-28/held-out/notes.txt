@@ -1,0 +1,19 @@
+The distilled rubric beats none on recall at better precision: it caught 7 of 106 reviewer asks against 2, at 5.6% precision against 1.6%. The gap rests on a handful of matches from one run per rubric.
+
+Read by hand, 6 of the distilled rubric's 7 matches make the reviewer's point. The exact rule also matched #1004's ask to rename a type with a comment on a field name. Of none's 2 matches, only #1072 makes the point; #1045's exact match pairs a question about the grain rule with a complaint about duplicated examples. current_instructions caught only #1072, which all three caught. One reader made these calls: the agent that ran the eval.
+
+4 of the distilled rubric's 7 matches are prompt or copy asks (verbose_prose, product_copy, llm_contract). The rubric's 10_themes.md tells the critic that held-out PRs are heavy on exactly these themes, so this gain may come from that sentence, not from the rules or the examples. The rubric is not blind to the test side: its theme shares, rule counts and per-size comment rates count the 203 held-out comments. It names no held-out PR by URL (critic/tests/test_rubric_and_themes.py).
+
+What the distilled rubric still misses: needless_abstraction 0 of 24 asks, naming 1 of 26. Its most frequent wrong theme is weak_types: 23 comments against 1 real ask.
+
+Drift between train (PRs below 937) and test (PRs 937-1096). The prompt and copy themes together (prompt_design, product_copy, llm_contract, verbose_prose) are 23.6% of test comments (48 of 203) against 8.5% of train (96 of 1,131). code_placement is 5.4% of test (11 of 203) against 15.6% of train (176 of 1,131). One labeler labeled the whole test side, and the top 5 test PRs hold 70.9% of its comments. Source: merged/stats.json (copy_group, theme_share_by_split, split.test.top5_pr_share) and merged/SUMMARY.md from the label merge.
+
+Real comments: the first ask in each thread on 24 of the 26 held-out PRs with human comments. #955 and #1001 hold no inline ask. 59 asks were left before a base-branch change, so their diffs cannot be rebuilt; each results.json lists them under excluded_labels.
+
+Silent PRs: 5 per size bucket, evenly spaced by PR number, from the 87 merged held-out PRs with no human comment (38, 26, 16 and 7 by bucket, smallest first). Every comment returned on them is a false one. On the 20, the distilled rubric returned 44 comments, none 56 and current_instructions 54. The distilled rubric asks for an empty list below 50 changed lines, yet returned a comment on 2 of the 5 such PRs.
+
+Baseline from #1103: on 8 held-out PRs holding 33 asks, none scored 3.8% precision and 3.0% recall, and current_instructions 0-3.7% and 0-3.0%, across runs on the pre-merge labels; both scored 0.0% in the final committed runs. On those 8 PRs, this run's none and current_instructions caught 0 of 33 asks, and the distilled rubric caught 2, both by the judge (#944, #951). #1103 saw a rubric's catch count move by one between runs of the same set.
+
+Spend is the CLI's total_cost_usd, at API prices: none $14.05, current_instructions $18.41, distilled $14.11, so $46.57 in all, $0.32 to $0.42 per scored PR. Every review and judge call answered as claude-opus-4-8[1m].
+
+Theme definitions sit in each results.json under by_theme[].definition. This page leaves them out because three of the labeler's definitions use a word that tests/arch/test_no_banned_words.py bans.

@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Critic eval: rubrics compared</title>
+<style>
+  body { font: 14px/1.45 system-ui, sans-serif; margin: 24px auto; max-width: 1200px; padding: 0 16px; color: #1d1d1f; background: #fafaf8; }
+  h1 { font-size: 22px; } h2 { font-size: 18px; margin-top: 32px; } h3 { font-size: 15px; margin-top: 24px; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+  th, td { border: 1px solid #d8d8d4; padding: 4px 8px; text-align: left; vertical-align: top; }
+  th { background: #efefeb; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .text { white-space: pre-wrap; }
+  .muted { color: #6b6b66; }
+  dt { font-weight: 600; } dd { margin: 0 0 6px 16px; }
+  .scroll { overflow-x: auto; }
+</style>
+</head>
+<body>
+
+
+<h1>Critic eval: <code>none</code>, <code>current_instructions</code>, <code>distilled</code></h1>
+<p>The distilled rubric beats none on recall at better precision: it caught 7 of 106 reviewer asks against 2, at 5.6% precision against 1.6%. The gap rests on a handful of matches from one run per rubric.</p><p>Read by hand, 6 of the distilled rubric&#39;s 7 matches make the reviewer&#39;s point. The exact rule also matched #1004&#39;s ask to rename a type with a comment on a field name. Of none&#39;s 2 matches, only #1072 makes the point; #1045&#39;s exact match pairs a question about the grain rule with a complaint about duplicated examples. current_instructions caught only #1072, which all three caught. One reader made these calls: the agent that ran the eval.</p><p>4 of the distilled rubric&#39;s 7 matches are prompt or copy asks (verbose_prose, product_copy, llm_contract). The rubric&#39;s 10_themes.md tells the critic that held-out PRs are heavy on exactly these themes, so this gain may come from that sentence, not from the rules or the examples. The rubric is not blind to the test side: its theme shares, rule counts and per-size comment rates count the 203 held-out comments. It names no held-out PR by URL (critic/tests/test_rubric_and_themes.py).</p><p>What the distilled rubric still misses: needless_abstraction 0 of 24 asks, naming 1 of 26. Its most frequent wrong theme is weak_types: 23 comments against 1 real ask.</p><p>Drift between train (PRs below 937) and test (PRs 937-1096). The prompt and copy themes together (prompt_design, product_copy, llm_contract, verbose_prose) are 23.6% of test comments (48 of 203) against 8.5% of train (96 of 1,131). code_placement is 5.4% of test (11 of 203) against 15.6% of train (176 of 1,131). One labeler labeled the whole test side, and the top 5 test PRs hold 70.9% of its comments. Source: merged/stats.json (copy_group, theme_share_by_split, split.test.top5_pr_share) and merged/SUMMARY.md from the label merge.</p><p>Real comments: the first ask in each thread on 24 of the 26 held-out PRs with human comments. #955 and #1001 hold no inline ask. 59 asks were left before a base-branch change, so their diffs cannot be rebuilt; each results.json lists them under excluded_labels.</p><p>Silent PRs: 5 per size bucket, evenly spaced by PR number, from the 87 merged held-out PRs with no human comment (38, 26, 16 and 7 by bucket, smallest first). Every comment returned on them is a false one. On the 20, the distilled rubric returned 44 comments, none 56 and current_instructions 54. The distilled rubric asks for an empty list below 50 changed lines, yet returned a comment on 2 of the 5 such PRs.</p><p>Baseline from #1103: on 8 held-out PRs holding 33 asks, none scored 3.8% precision and 3.0% recall, and current_instructions 0-3.7% and 0-3.0%, across runs on the pre-merge labels; both scored 0.0% in the final committed runs. On those 8 PRs, this run&#39;s none and current_instructions caught 0 of 33 asks, and the distilled rubric caught 2, both by the judge (#944, #951). #1103 saw a rubric&#39;s catch count move by one between runs of the same set.</p><p>Spend is the CLI&#39;s total_cost_usd, at API prices: none $14.05, current_instructions $18.41, distilled $14.11, so $46.57 in all, $0.32 to $0.42 per scored PR. Every review and judge call answered as claude-opus-4-8[1m].</p><p>Theme definitions sit in each results.json under by_theme[].definition. This page leaves them out because three of the labeler&#39;s definitions use a word that tests/arch/test_no_banned_words.py bans.</p>
+
+<h2>Pooled</h2>
+<div class="scroll">
+<table>
+  <tr><th>Rubric</th><th class="num">Predictions</th><th class="num">Real</th><th class="num">Exact matches</th><th class="num">Judge matches</th>
+      <th class="num">Precision</th><th class="num">Recall</th><th class="num">F1</th><th class="num">Precision on commented PRs</th>
+      <th class="num">Predictions on silent PRs</th><th class="num">Scored</th><th class="num">Not scored</th><th class="num">Review spend</th><th class="num">Judge spend</th><th class="num">Spend per scored PR</th><th>Raw results</th></tr>
+  
+  <tr><td><code>none</code></td><td class="num">128</td><td class="num">106</td>
+      <td class="num">2</td><td class="num">0</td>
+      <td class="num">2/128 <span class="muted">1.6%</span></td>
+      <td class="num">2/106 <span class="muted">1.9%</span></td>
+      <td class="num">1.7%</td>
+      <td class="num">2/72 <span class="muted">2.8%</span></td>
+      <td class="num">56</td><td class="num">44</td><td class="num">0</td>
+      <td class="num">$13.68</td><td class="num">$0.38</td>
+      <td class="num">$0.32</td>
+      <td><a href="none/results.json">none/results.json</a> <span class="muted">claude-opus-4-8[1m]</span></td></tr>
+  
+  <tr><td><code>current_instructions</code></td><td class="num">131</td><td class="num">106</td>
+      <td class="num">1</td><td class="num">0</td>
+      <td class="num">1/131 <span class="muted">0.8%</span></td>
+      <td class="num">1/106 <span class="muted">0.9%</span></td>
+      <td class="num">0.8%</td>
+      <td class="num">1/77 <span class="muted">1.3%</span></td>
+      <td class="num">54</td><td class="num">44</td><td class="num">0</td>
+      <td class="num">$18.00</td><td class="num">$0.41</td>
+      <td class="num">$0.42</td>
+      <td><a href="current_instructions/results.json">current_instructions/results.json</a> <span class="muted">claude-opus-4-8[1m]</span></td></tr>
+  
+  <tr><td><code>distilled</code></td><td class="num">124</td><td class="num">106</td>
+      <td class="num">3</td><td class="num">4</td>
+      <td class="num">7/124 <span class="muted">5.6%</span></td>
+      <td class="num">7/106 <span class="muted">6.6%</span></td>
+      <td class="num">6.1%</td>
+      <td class="num">7/80 <span class="muted">8.8%</span></td>
+      <td class="num">44</td><td class="num">44</td><td class="num">0</td>
+      <td class="num">$13.55</td><td class="num">$0.56</td>
+      <td class="num">$0.32</td>
+      <td><a href="distilled/results.json">distilled/results.json</a> <span class="muted">claude-opus-4-8[1m]</span></td></tr>
+  
+</table>
+</div>
+
+<h2>By theme</h2>
+<p class="muted">Each cell is matched over predicted (precision), then matched over real (recall). A real comment carries up to three themes. Each theme's definition is in the raw results, <code>by_theme[].definition</code>.</p>
+<div class="scroll">
+<table>
+  <tr><th>Theme</th><th class="num">Real</th><th class="num"><code>none</code> precision</th><th class="num">recall</th><th class="num">F1</th><th class="num"><code>current_instructions</code> precision</th><th class="num">recall</th><th class="num">F1</th><th class="num"><code>distilled</code> precision</th><th class="num">recall</th><th class="num">F1</th></tr>
+  
+  <tr><td><code>naming</code></td><td class="num">26</td>
+      <td class="num">0/7 <span class="muted">0.0%</span></td>
+      <td class="num">0/26 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/15 <span class="muted">0.0%</span></td>
+      <td class="num">0/26 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">1/15 <span class="muted">6.7%</span></td>
+      <td class="num">1/26 <span class="muted">3.8%</span></td><td class="num">4.9%</td></tr>
+  
+  <tr><td><code>needless_abstraction</code></td><td class="num">24</td>
+      <td class="num">0/3 <span class="muted">0.0%</span></td>
+      <td class="num">0/24 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/3 <span class="muted">0.0%</span></td>
+      <td class="num">0/24 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/11 <span class="muted">0.0%</span></td>
+      <td class="num">0/24 <span class="muted">0.0%</span></td><td class="num">0.0%</td></tr>
+  
+  <tr><td><code>design_direction</code></td><td class="num">16</td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td>
+      <td class="num">1/16 <span class="muted">6.2%</span></td><td class="num">0.0%</td><td class="num">0/1 <span class="muted">0.0%</span></td>
+      <td class="num">1/16 <span class="muted">6.2%</span></td><td class="num">0.0%</td><td class="num">0/1 <span class="muted">0.0%</span></td>
+      <td class="num">1/16 <span class="muted">6.2%</span></td><td class="num">0.0%</td></tr>
+  
+  <tr><td><code>product_copy</code></td><td class="num">15</td>
+      <td class="num">0/1 <span class="muted">0.0%</span></td>
+      <td class="num">0/15 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/2 <span class="muted">0.0%</span></td>
+      <td class="num">0/15 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/1 <span class="muted">0.0%</span></td>
+      <td class="num">3/15 <span class="muted">20.0%</span></td><td class="num">0.0%</td></tr>
+  
+  <tr><td><code>question_only</code></td><td class="num">11</td>
+      <td class="num">0/1 <span class="muted">0.0%</span></td>
+      <td class="num">1/11 <span class="muted">9.1%</span></td><td class="num">0.0%</td><td class="num">0/1 <span class="muted">0.0%</span></td>
+      <td class="num">0/11 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">0/11 <span class="muted">0.0%</span></td><td class="num">n/a</td></tr>
+  
+  <tr><td><code>data_model</code></td><td class="num">10</td>
+      <td class="num">0/3 <span class="muted">0.0%</span></td>
+      <td class="num">0/10 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/1 <span class="muted">0.0%</span></td>
+      <td class="num">0/10 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/6 <span class="muted">0.0%</span></td>
+      <td class="num">1/10 <span class="muted">10.0%</span></td><td class="num">0.0%</td></tr>
+  
+  <tr><td><code>verbose_prose</code></td><td class="num">9</td>
+      <td class="num">0/3 <span class="muted">0.0%</span></td>
+      <td class="num">0/9 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/4 <span class="muted">0.0%</span></td>
+      <td class="num">0/9 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">2/7 <span class="muted">28.6%</span></td>
+      <td class="num">3/9 <span class="muted">33.3%</span></td><td class="num">30.8%</td></tr>
+  
+  <tr><td><code>vocabulary</code></td><td class="num">9</td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td>
+      <td class="num">0/9 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/5 <span class="muted">0.0%</span></td>
+      <td class="num">0/9 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/4 <span class="muted">0.0%</span></td>
+      <td class="num">0/9 <span class="muted">0.0%</span></td><td class="num">0.0%</td></tr>
+  
+  <tr><td><code>code_placement</code></td><td class="num">6</td>
+      <td class="num">0/4 <span class="muted">0.0%</span></td>
+      <td class="num">0/6 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/1 <span class="muted">0.0%</span></td>
+      <td class="num">0/6 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/2 <span class="muted">0.0%</span></td>
+      <td class="num">0/6 <span class="muted">0.0%</span></td><td class="num">0.0%</td></tr>
+  
+  <tr><td><code>dead_code</code></td><td class="num">4</td>
+      <td class="num">0/7 <span class="muted">0.0%</span></td>
+      <td class="num">0/4 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/7 <span class="muted">0.0%</span></td>
+      <td class="num">0/4 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/2 <span class="muted">0.0%</span></td>
+      <td class="num">0/4 <span class="muted">0.0%</span></td><td class="num">0.0%</td></tr>
+  
+  <tr><td><code>ignored_feedback</code></td><td class="num">4</td>
+      <td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">0/4 <span class="muted">0.0%</span></td><td class="num">n/a</td><td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">0/4 <span class="muted">0.0%</span></td><td class="num">n/a</td><td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">0/4 <span class="muted">0.0%</span></td><td class="num">n/a</td></tr>
+  
+  <tr><td><code>llm_contract</code></td><td class="num">3</td>
+      <td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">0/3 <span class="muted">0.0%</span></td><td class="num">n/a</td><td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">0/3 <span class="muted">0.0%</span></td><td class="num">n/a</td><td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">1/3 <span class="muted">33.3%</span></td><td class="num">n/a</td></tr>
+  
+  <tr><td><code>prose_accuracy</code></td><td class="num">3</td>
+      <td class="num">0/7 <span class="muted">0.0%</span></td>
+      <td class="num">0/3 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/7 <span class="muted">0.0%</span></td>
+      <td class="num">0/3 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/2 <span class="muted">0.0%</span></td>
+      <td class="num">0/3 <span class="muted">0.0%</span></td><td class="num">0.0%</td></tr>
+  
+  <tr><td><code>backcompat</code></td><td class="num">2</td>
+      <td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td><td class="num">n/a</td><td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td><td class="num">n/a</td><td class="num">0/1 <span class="muted">0.0%</span></td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td><td class="num">0.0%</td></tr>
+  
+  <tr><td><code>boundary_validation</code></td><td class="num">2</td>
+      <td class="num">0/5 <span class="muted">0.0%</span></td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/3 <span class="muted">0.0%</span></td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/2 <span class="muted">0.0%</span></td>
+      <td class="num">1/2 <span class="muted">50.0%</span></td><td class="num">0.0%</td></tr>
+  
+  <tr><td><code>correctness_bug</code></td><td class="num">2</td>
+      <td class="num">0/10 <span class="muted">0.0%</span></td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/8 <span class="muted">0.0%</span></td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/2 <span class="muted">0.0%</span></td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td><td class="num">0.0%</td></tr>
+  
+  <tr><td><code>dict_any</code></td><td class="num">2</td>
+      <td class="num">0/1 <span class="muted">0.0%</span></td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/2 <span class="muted">0.0%</span></td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/6 <span class="muted">0.0%</span></td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td><td class="num">0.0%</td></tr>
+  
+  <tr><td><code>one_source_of_truth</code></td><td class="num">2</td>
+      <td class="num">1/22 <span class="muted">4.5%</span></td>
+      <td class="num">1/2 <span class="muted">50.0%</span></td><td class="num">8.3%</td><td class="num">0/15 <span class="muted">0.0%</span></td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/6 <span class="muted">0.0%</span></td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td><td class="num">0.0%</td></tr>
+  
+  <tr><td><code>reinvents_existing</code></td><td class="num">2</td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td><td class="num">n/a</td><td class="num">0/5 <span class="muted">0.0%</span></td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td><td class="num">0.0%</td></tr>
+  
+  <tr><td><code>scope_creep</code></td><td class="num">2</td>
+      <td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td><td class="num">n/a</td><td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td><td class="num">n/a</td><td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td><td class="num">n/a</td></tr>
+  
+  <tr><td><code>fallback_or_fabrication</code></td><td class="num">1</td>
+      <td class="num">1/5 <span class="muted">20.0%</span></td>
+      <td class="num">1/1 <span class="muted">100.0%</span></td><td class="num">33.3%</td><td class="num">1/4 <span class="muted">25.0%</span></td>
+      <td class="num">1/1 <span class="muted">100.0%</span></td><td class="num">40.0%</td><td class="num">1/7 <span class="muted">14.3%</span></td>
+      <td class="num">1/1 <span class="muted">100.0%</span></td><td class="num">25.0%</td></tr>
+  
+  <tr><td><code>review_guide</code></td><td class="num">1</td>
+      <td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">0/1 <span class="muted">0.0%</span></td><td class="num">n/a</td><td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">0/1 <span class="muted">0.0%</span></td><td class="num">n/a</td><td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">0/1 <span class="muted">0.0%</span></td><td class="num">n/a</td></tr>
+  
+  <tr><td><code>weak_types</code></td><td class="num">1</td>
+      <td class="num">0/21 <span class="muted">0.0%</span></td>
+      <td class="num">0/1 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">0/15 <span class="muted">0.0%</span></td>
+      <td class="num">0/1 <span class="muted">0.0%</span></td><td class="num">0.0%</td><td class="num">1/23 <span class="muted">4.3%</span></td>
+      <td class="num">0/1 <span class="muted">0.0%</span></td><td class="num">0.0%</td></tr>
+  
+  <tr><td><code>comments_and_docs</code></td><td class="num">0</td>
+      <td class="num">0/6 <span class="muted">0.0%</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td><td class="num">0/23 <span class="muted">0.0%</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td><td class="num">0/11 <span class="muted">0.0%</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td></tr>
+  
+  <tr><td><code>gates</code></td><td class="num">0</td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td><td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td><td class="num">0/1 <span class="muted">0.0%</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td></tr>
+  
+  <tr><td><code>hardcoded_values</code></td><td class="num">0</td>
+      <td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td><td class="num">0/2 <span class="muted">0.0%</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td><td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td></tr>
+  
+  <tr><td><code>interface_shape</code></td><td class="num">0</td>
+      <td class="num">0/1 <span class="muted">0.0%</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td><td class="num">0/2 <span class="muted">0.0%</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td><td class="num">0/1 <span class="muted">0.0%</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td></tr>
+  
+  <tr><td><code>other</code></td><td class="num">0</td>
+      <td class="num">0/1 <span class="muted">0.0%</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td><td class="num">0/1 <span class="muted">0.0%</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td><td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td></tr>
+  
+  <tr><td><code>prompt_design</code></td><td class="num">0</td>
+      <td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td><td class="num">0/1 <span class="muted">0.0%</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td><td class="num">2/4 <span class="muted">50.0%</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td></tr>
+  
+  <tr><td><code>readability</code></td><td class="num">0</td>
+      <td class="num">0/3 <span class="muted">0.0%</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td><td class="num">0/4 <span class="muted">0.0%</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td><td class="num">0/4 <span class="muted">0.0%</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td></tr>
+  
+  <tr><td><code>tests</code></td><td class="num">0</td>
+      <td class="num">0/7 <span class="muted">0.0%</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td><td class="num">0/4 <span class="muted">0.0%</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td><td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td></tr>
+  
+  <tr><td><code>ux_behavior</code></td><td class="num">0</td>
+      <td class="num">0/2 <span class="muted">0.0%</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td><td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td><td class="num">0/0 <span class="muted">n/a</span></td>
+      <td class="num">0/0 <span class="muted">n/a</span></td><td class="num">n/a</td></tr>
+  
+</table>
+</div>
+
+<h2>Silent PRs by size</h2>
+<p class="muted">Size is the PR's additions plus deletions as GitHub lists them. Each cell is the comments returned per scored silent PR.</p>
+<table>
+  <tr><th>Size bucket</th><th class="num">Silent PRs</th><th class="num"><code>none</code></th><th class="num"><code>current_instructions</code></th><th class="num"><code>distilled</code></th></tr>
+  
+  <tr><td>under 50</td><td class="num">5</td>
+      
+      <td class="num">3/5 <span class="muted">0.6</span></td>
+      <td class="num">5/5 <span class="muted">1.0</span></td>
+      <td class="num">2/5 <span class="muted">0.4</span></td></tr>
+  
+  <tr><td>50-199</td><td class="num">5</td>
+      
+      <td class="num">13/5 <span class="muted">2.6</span></td>
+      <td class="num">14/5 <span class="muted">2.8</span></td>
+      <td class="num">11/5 <span class="muted">2.2</span></td></tr>
+  
+  <tr><td>200-599</td><td class="num">5</td>
+      
+      <td class="num">16/5 <span class="muted">3.2</span></td>
+      <td class="num">18/5 <span class="muted">3.6</span></td>
+      <td class="num">18/5 <span class="muted">3.6</span></td></tr>
+  
+  <tr><td>600+</td><td class="num">5</td>
+      
+      <td class="num">24/5 <span class="muted">4.8</span></td>
+      <td class="num">17/5 <span class="muted">3.4</span></td>
+      <td class="num">13/5 <span class="muted">2.6</span></td></tr>
+  
+</table>
+
+<h2>By PR</h2>
+<p class="muted">Per rubric: comments returned, real comments caught by the exact rule and by the judge, and the review plus judge spend.</p>
+<div class="scroll">
+<table>
+  <tr><th>PR</th><th class="num">Size</th><th class="num">Real</th><th><code>none</code></th><th><code>current_instructions</code></th><th><code>distilled</code></th></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/944">#944</a> at <code>4b53309c3d</code></td>
+      <td class="num">340</td><td class="num">1</td>
+      <td>2 returned, 0 exact, 0 judge, $0.15</td><td>3 returned, 0 exact, 0 judge, $0.29</td><td>4 returned, 0 exact, 1 judge, $0.29</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/950">#950</a> at <code>323848ac44</code></td>
+      <td class="num">115</td><td class="num">1</td>
+      <td>1 returned, 0 exact, 0 judge, $0.05</td><td>3 returned, 0 exact, 0 judge, $0.22</td><td>5 returned, 0 exact, 0 judge, $0.31</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/951">#951</a> at <code>80974fc65a</code></td>
+      <td class="num">217</td><td class="num">1</td>
+      <td>5 returned, 0 exact, 0 judge, $0.18</td><td>4 returned, 0 exact, 0 judge, $0.27</td><td>3 returned, 0 exact, 1 judge, $0.25</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/967">#967</a> at <code>f5c698645a</code></td>
+      <td class="num">328</td><td class="num">3</td>
+      <td>2 returned, 0 exact, 0 judge, $0.09</td><td>3 returned, 0 exact, 0 judge, $0.34</td><td>3 returned, 0 exact, 0 judge, $0.24</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/970">#970</a> at <code>92192812e2</code></td>
+      <td class="num">51</td><td class="num">1</td>
+      <td>2 returned, 0 exact, 0 judge, $0.06</td><td>2 returned, 0 exact, 0 judge, $0.12</td><td>2 returned, 0 exact, 0 judge, $0.09</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/971">#971</a> at <code>300e0037cc</code></td>
+      <td class="num">333</td><td class="num">4</td>
+      <td>2 returned, 0 exact, 0 judge, $0.22</td><td>2 returned, 0 exact, 0 judge, $0.42</td><td>4 returned, 0 exact, 0 judge, $0.35</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/973">#973</a> at <code>d9a1e8a950</code></td>
+      <td class="num">1435</td><td class="num">21</td>
+      <td>6 returned, 0 exact, 0 judge, $0.28</td><td>4 returned, 0 exact, 0 judge, $0.44</td><td>6 returned, 0 exact, 0 judge, $0.48</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/976">#976</a> at <code>b6c6458bc4</code></td>
+      <td class="num">71</td><td class="num">1</td>
+      <td>2 returned, 0 exact, 0 judge, $0.05</td><td>2 returned, 0 exact, 0 judge, $0.23</td><td>0 returned, 0 exact, 0 judge, $0.14</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/977">#977</a> at <code>b8f46bbd5f</code></td>
+      <td class="num">20</td><td class="num">1</td>
+      <td>0 returned, 0 exact, 0 judge, $0.04</td><td>1 returned, 0 exact, 0 judge, $0.10</td><td>0 returned, 0 exact, 0 judge, $0.04</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/983">#983</a> at <code>1fbc3ad027</code></td>
+      <td class="num">746</td><td class="num">18</td>
+      <td>5 returned, 0 exact, 0 judge, $0.45</td><td>5 returned, 0 exact, 0 judge, $0.53</td><td>5 returned, 0 exact, 0 judge, $0.45</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/990">#990</a> at <code>e933c5a40b</code></td>
+      <td class="num">504</td><td class="num">2</td>
+      <td>3 returned, 0 exact, 0 judge, $0.28</td><td>2 returned, 0 exact, 0 judge, $0.33</td><td>3 returned, 0 exact, 0 judge, $0.22</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/1003">#1003</a> at <code>ec43e2f01d</code></td>
+      <td class="num">511</td><td class="num">2</td>
+      <td>3 returned, 0 exact, 0 judge, $0.40</td><td>3 returned, 0 exact, 0 judge, $0.49</td><td>3 returned, 0 exact, 0 judge, $0.30</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/1004">#1004</a> at <code>ceade02eed</code></td>
+      <td class="num">1121</td><td class="num">12</td>
+      <td>3 returned, 0 exact, 0 judge, $0.67</td><td>4 returned, 0 exact, 0 judge, $0.76</td><td>4 returned, 1 exact, 0 judge, $0.67</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/1016">#1016</a> at <code>b54372a4f4</code></td>
+      <td class="num">1854</td><td class="num">7</td>
+      <td>6 returned, 0 exact, 0 judge, $0.68</td><td>4 returned, 0 exact, 0 judge, $0.76</td><td>3 returned, 0 exact, 0 judge, $0.61</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/1018">#1018</a> at <code>13ab78788d</code></td>
+      <td class="num">1552</td><td class="num">1</td>
+      <td>5 returned, 0 exact, 0 judge, $0.88</td><td>4 returned, 0 exact, 0 judge, $1.16</td><td>4 returned, 0 exact, 0 judge, $0.75</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/1031">#1031</a> at <code>2f758f8993</code></td>
+      <td class="num">2141</td><td class="num">8</td>
+      <td>3 returned, 0 exact, 0 judge, $0.81</td><td>4 returned, 0 exact, 0 judge, $1.05</td><td>5 returned, 0 exact, 1 judge, $0.75</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/1034">#1034</a> at <code>f5ee5f3012</code></td>
+      <td class="num">243</td><td class="num">1</td>
+      <td>2 returned, 0 exact, 0 judge, $0.22</td><td>3 returned, 0 exact, 0 judge, $0.36</td><td>2 returned, 0 exact, 0 judge, $0.23</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/1039">#1039</a> at <code>d8d5cd2e78</code></td>
+      <td class="num">1512</td><td class="num">1</td>
+      <td>2 returned, 0 exact, 0 judge, $0.42</td><td>4 returned, 0 exact, 0 judge, $0.69</td><td>3 returned, 0 exact, 0 judge, $0.39</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/1045">#1045</a> at <code>a3e285612f</code></td>
+      <td class="num">857</td><td class="num">10</td>
+      <td>4 returned, 1 exact, 0 judge, $0.48</td><td>3 returned, 0 exact, 0 judge, $0.62</td><td>5 returned, 1 exact, 1 judge, $0.48</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/1047">#1047</a> at <code>d608c9eec7</code></td>
+      <td class="num">437</td><td class="num">2</td>
+      <td>2 returned, 0 exact, 0 judge, $0.33</td><td>3 returned, 0 exact, 0 judge, $0.35</td><td>3 returned, 0 exact, 0 judge, $0.31</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/1061">#1061</a> at <code>2202ea5002</code></td>
+      <td class="num">245</td><td class="num">2</td>
+      <td>2 returned, 0 exact, 0 judge, $0.22</td><td>3 returned, 0 exact, 0 judge, $0.26</td><td>3 returned, 0 exact, 0 judge, $0.20</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/1066">#1066</a> at <code>d2306083d2</code></td>
+      <td class="num">286</td><td class="num">3</td>
+      <td>3 returned, 0 exact, 0 judge, $0.14</td><td>4 returned, 0 exact, 0 judge, $0.18</td><td>3 returned, 0 exact, 0 judge, $0.17</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/1072">#1072</a> at <code>1f3d0c52bf</code></td>
+      <td class="num">733</td><td class="num">2</td>
+      <td>4 returned, 1 exact, 0 judge, $0.31</td><td>3 returned, 1 exact, 0 judge, $0.34</td><td>3 returned, 1 exact, 0 judge, $0.28</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/1074">#1074</a> at <code>921b4ae7a2</code></td>
+      <td class="num">1026</td><td class="num">1</td>
+      <td>3 returned, 0 exact, 0 judge, $0.26</td><td>4 returned, 0 exact, 0 judge, $0.26</td><td>4 returned, 0 exact, 0 judge, $0.19</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/940">#940</a> at <code>fe8ce9d1dc</code> (silent)</td>
+      <td class="num">210</td><td class="num">0</td>
+      <td>3 returned, 0 exact, 0 judge, $0.18</td><td>3 returned, 0 exact, 0 judge, $0.49</td><td>4 returned, 0 exact, 0 judge, $0.20</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/942">#942</a> at <code>5a310c87b5</code> (silent)</td>
+      <td class="num">667</td><td class="num">0</td>
+      <td>5 returned, 0 exact, 0 judge, $0.56</td><td>2 returned, 0 exact, 0 judge, $0.58</td><td>2 returned, 0 exact, 0 judge, $0.52</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/943">#943</a> at <code>ddf6256c9b</code> (silent)</td>
+      <td class="num">189</td><td class="num">0</td>
+      <td>3 returned, 0 exact, 0 judge, $0.20</td><td>3 returned, 0 exact, 0 judge, $0.34</td><td>3 returned, 0 exact, 0 judge, $0.21</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/953">#953</a> at <code>4a995c948d</code> (silent)</td>
+      <td class="num">10</td><td class="num">0</td>
+      <td>0 returned, 0 exact, 0 judge, $0.02</td><td>0 returned, 0 exact, 0 judge, $0.04</td><td>0 returned, 0 exact, 0 judge, $0.02</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/961">#961</a> at <code>2c1ae20dfa</code> (silent)</td>
+      <td class="num">286</td><td class="num">0</td>
+      <td>3 returned, 0 exact, 0 judge, $0.18</td><td>3 returned, 0 exact, 0 judge, $0.27</td><td>4 returned, 0 exact, 0 judge, $0.14</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/980">#980</a> at <code>df8c89966e</code> (silent)</td>
+      <td class="num">59</td><td class="num">0</td>
+      <td>2 returned, 0 exact, 0 judge, $0.10</td><td>1 returned, 0 exact, 0 judge, $0.13</td><td>1 returned, 0 exact, 0 judge, $0.11</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/987">#987</a> at <code>5a842324d1</code> (silent)</td>
+      <td class="num">571</td><td class="num">0</td>
+      <td>3 returned, 0 exact, 0 judge, $0.39</td><td>4 returned, 0 exact, 0 judge, $0.41</td><td>3 returned, 0 exact, 0 judge, $0.39</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/991">#991</a> at <code>e3f0cabbb5</code> (silent)</td>
+      <td class="num">3772</td><td class="num">0</td>
+      <td>4 returned, 0 exact, 0 judge, $1.15</td><td>2 returned, 0 exact, 0 judge, $1.17</td><td>2 returned, 0 exact, 0 judge, $1.04</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/992">#992</a> at <code>56bee3aa6e</code> (silent)</td>
+      <td class="num">106</td><td class="num">0</td>
+      <td>3 returned, 0 exact, 0 judge, $0.18</td><td>4 returned, 0 exact, 0 judge, $0.31</td><td>3 returned, 0 exact, 0 judge, $0.14</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/997">#997</a> at <code>4bcdf5e42e</code> (silent)</td>
+      <td class="num">24</td><td class="num">0</td>
+      <td>1 returned, 0 exact, 0 judge, $0.09</td><td>2 returned, 0 exact, 0 judge, $0.06</td><td>1 returned, 0 exact, 0 judge, $0.05</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/1006">#1006</a> at <code>886d57001e</code> (silent)</td>
+      <td class="num">100</td><td class="num">0</td>
+      <td>3 returned, 0 exact, 0 judge, $0.08</td><td>4 returned, 0 exact, 0 judge, $0.12</td><td>3 returned, 0 exact, 0 judge, $0.11</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/1020">#1020</a> at <code>658ce0e0fc</code> (silent)</td>
+      <td class="num">1300</td><td class="num">0</td>
+      <td>6 returned, 0 exact, 0 judge, $0.47</td><td>5 returned, 0 exact, 0 judge, $0.55</td><td>4 returned, 0 exact, 0 judge, $0.45</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/1021">#1021</a> at <code>ac16a0984c</code> (silent)</td>
+      <td class="num">465</td><td class="num">0</td>
+      <td>3 returned, 0 exact, 0 judge, $0.21</td><td>4 returned, 0 exact, 0 judge, $0.24</td><td>4 returned, 0 exact, 0 judge, $0.21</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/1026">#1026</a> at <code>844b8e6318</code> (silent)</td>
+      <td class="num">1663</td><td class="num">0</td>
+      <td>6 returned, 0 exact, 0 judge, $0.68</td><td>5 returned, 0 exact, 0 judge, $0.96</td><td>3 returned, 0 exact, 0 judge, $0.68</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/1029">#1029</a> at <code>06c2ef23a9</code> (silent)</td>
+      <td class="num">578</td><td class="num">0</td>
+      <td>4 returned, 0 exact, 0 judge, $0.48</td><td>4 returned, 0 exact, 0 judge, $0.50</td><td>3 returned, 0 exact, 0 judge, $0.39</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/1049">#1049</a> at <code>42a8d5ca01</code> (silent)</td>
+      <td class="num">103</td><td class="num">0</td>
+      <td>2 returned, 0 exact, 0 judge, $0.09</td><td>2 returned, 0 exact, 0 judge, $0.17</td><td>1 returned, 0 exact, 0 judge, $0.09</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/1050">#1050</a> at <code>d2de1f23fe</code> (silent)</td>
+      <td class="num">12</td><td class="num">0</td>
+      <td>1 returned, 0 exact, 0 judge, $0.05</td><td>1 returned, 0 exact, 0 judge, $0.12</td><td>1 returned, 0 exact, 0 judge, $0.04</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/1076">#1076</a> at <code>24b096d2d0</code> (silent)</td>
+      <td class="num">1560</td><td class="num">0</td>
+      <td>3 returned, 0 exact, 0 judge, $1.07</td><td>3 returned, 0 exact, 0 judge, $1.07</td><td>2 returned, 0 exact, 0 judge, $0.98</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/1082">#1082</a> at <code>9d140e6d60</code> (silent)</td>
+      <td class="num">30</td><td class="num">0</td>
+      <td>0 returned, 0 exact, 0 judge, $0.06</td><td>1 returned, 0 exact, 0 judge, $0.11</td><td>0 returned, 0 exact, 0 judge, $0.06</td></tr>
+  
+  <tr><td><a href="https://github.com/surveit/carbonpaper/pull/1091">#1091</a> at <code>4bd44217c8</code> (silent)</td>
+      <td class="num">32</td><td class="num">0</td>
+      <td>1 returned, 0 exact, 0 judge, $0.15</td><td>1 returned, 0 exact, 0 judge, $0.20</td><td>0 returned, 0 exact, 0 judge, $0.08</td></tr>
+  
+</table>
+</div>
+
+<h2>What the numbers mean</h2>
+<dl>
+  <dt>Review unit</dt>
+  <dd>One PR. On a PR the reviewer commented on, the critic reads its diff at the commit of the reviewer's first ask whose diff can be rebuilt, and is scored against every ask the reviewer made from then on, on that commit or a later one.</dd>
+  <dt>Silent PR</dt>
+  <dd>A merged PR the reviewer left no comment on. The critic reads its diff at the merged head, and every comment it returns there is a prediction the reviewer did not make.</dd>
+  <dt>Real comment</dt>
+  <dd>An inline comment the labels credit to the reviewer, not the agent posting under their login, whose speech act is a correction, instruction or question, and which is the reviewer's first such comment in its thread.</dd>
+  <dt>Exact match</dt>
+  <dd>Same file, a real comment left on the commit the critic read, lines at most 5 apart, and the predicted theme one of the real comment's themes.</dd>
+  <dt>Judge match</dt>
+  <dd>Same file, on any commit, left unmatched by the exact rule, and a judge model shown both comments with the code under each found they make the same point.</dd>
+  <dt>Precision / recall / F1</dt>
+  <dd>Matched predictions over all predictions; matched real comments over all real comments; their harmonic mean. Matching is one to one. n/a means the denominator is zero.</dd>
+</dl>
+</body>
+</html>
