@@ -38,6 +38,8 @@ Also `app/AGENTS.md` (web layer), `app/runtime/AGENTS.md` (the Runner), `README.
   caller-defined and not yet known: a raw stage-spec dict that may be invalid mid-edit (matching
   `stage_to_spec_dict` / `validate_workflow_draft`), or foreign JSON being parsed — and even
   there, parse into a model at the first point the shape is known.
+  `tests/arch/test_no_dict_str_any.py` holds each file under `app/` to its current count of
+  `dict[str, Any]`, and that count may only fall.
 
   As a follow-up here, try to reuse existing types instead of defining new ones.
 
