@@ -58,6 +58,7 @@ class StageTransform:
     # `row_ordinal` counts across the concatenation; `source_row` counts within the file.
     source_file: str | None = None
     source_row: int | None = None
+    source_id: str | None = None
     # How many files the stage read; None where the manifest did not record any binding.
     source_file_count: int | None = None
     # Set where the walk sampled one of the rows summarized into this one.
@@ -346,6 +347,7 @@ def trace_row_from(frames: RunFrames, stage_id: str, row_ordinal: int,
             branches=branches,
             source_file=spine.source_file if spine else None,
             source_row=spine.row_ordinal if spine and spine.source_file else None,
+            source_id=spine.source_id if spine else None,
             source_file_count=files_read.get(sid),
             sampled=_read_row_sample(fan_in, followed),
         ))
@@ -383,6 +385,7 @@ def trace_to_dict(trace: Trace) -> dict[str, Any]:
                 "origin": step.origin,
                 "source_file": step.source_file,
                 "source_row": step.source_row,
+                "source_id": step.source_id,
                 "source_file_count": step.source_file_count,
                 "sampled": None if step.sampled is None else {
                     "place": step.sampled.place,
