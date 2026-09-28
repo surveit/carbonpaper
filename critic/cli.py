@@ -17,8 +17,9 @@ from critic.themes import load_theme_vocabulary, select_flag_themes
 
 DEFAULT_REPO = "surveit/carbonpaper"
 RUBRIC_HELP = (
-    "a directory of rubric files; a NAME.from-env file reads NAME from the path in the environment "
-    "variable it names (current_instructions needs CRITIC_OWNER_CLAUDE_MD set to the owner's CLAUDE.md)"
+    "a directory of rubric files: NAME.md is read as is, NAME.from-repo reads the repo file it names, "
+    "NAME.from-env reads the path held by the environment variable it names "
+    "(current_instructions needs CRITIC_OWNER_CLAUDE_MD set to the owner's CLAUDE.md)"
 )
 LOCAL_ROOT = Path(".critic")
 
@@ -53,14 +54,14 @@ def run_diff(args: argparse.Namespace) -> int:
 
 def run_review_command(args: argparse.Namespace) -> int:
     backend = ClaudeCliBackend(model=args.model)
-    backend.check_available()
+    backend.validate_available()
     rubric = load_rubric(args.rubric)
     diff = (
         fetch_pull_request_diff(args.repo, args.pr, None)
         if args.commit is None
         else load_or_fetch_diff(args.repo, args.pr, args.commit, args.diff_dir)
     )
-    themes = None if args.themes is None else select_flag_themes(load_theme_vocabulary(args.themes))
+    themes = select_flag_themes(load_theme_vocabulary(args.themes))
     review = run_review(diff, rubric, themes, backend)
     text = review.model_dump_json(indent=2)
     if args.out is None:
@@ -73,7 +74,7 @@ def run_review_command(args: argparse.Namespace) -> int:
 def run_eval_command(args: argparse.Namespace) -> int:
     review_backend = ClaudeCliBackend(model=args.model)
     judge_backend = ClaudeCliBackend(model=args.judge_model)
-    review_backend.check_available()
+    review_backend.validate_available()
     result = run_eval(_read_eval_settings(args), review_backend, judge_backend)
     for path in write_eval_outputs(result, args.out):
         print(path)
@@ -142,7 +143,7 @@ def _add_review(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--model", help="claude model alias or id; default: the CLI's own")
     parser.add_argument("--repo", default=DEFAULT_REPO)
     parser.add_argument("--commit", help="review the diff at this commit; default: the PR's head")
-    parser.add_argument("--themes", type=Path, help="a themes.json the predictions must draw from")
+    parser.add_argument("--themes", type=Path, default=LOCAL_ROOT / "labels" / "taxonomy.json")
     parser.add_argument("--diff-dir", type=Path, default=LOCAL_ROOT / "diffs")
     parser.add_argument("--out", type=Path, help="write the review JSON here; default: stdout")
     parser.set_defaults(command=run_review_command)

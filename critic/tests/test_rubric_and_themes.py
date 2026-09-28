@@ -8,14 +8,18 @@ import pytest
 
 from critic.rubric import (
     FROM_ENV_SUFFIX,
+    FROM_REPO_SUFFIX,
     NO_RUBRIC_TEXT,
+    REPO_ROOT,
     UnsetRubricSourceError,
     load_rubric,
     render_rubric,
     stamp_rubric,
 )
 from critic.tests.fixture_data import FIXTURES, RUBRICS, STAND_IN_ENVIRON, load_labels
-from critic.themes import load_theme_vocabulary, select_flag_themes
+from critic.themes import find_themes_outside, load_theme_vocabulary, select_flag_themes
+
+REPO_CHAIN = ["AGENTS.md", "app/AGENTS.md", "app/runtime/AGENTS.md", "app/templates/AGENTS.md"]
 
 
 def test_the_empty_rubric_holds_no_rules() -> None:
@@ -28,12 +32,25 @@ def test_the_instructions_rubric_leads_with_the_owners_file_then_the_repo_chain(
     files = load_rubric(RUBRICS / "current_instructions", STAND_IN_ENVIRON).files
     assert [file.name for file in files] == [
         "owner-global-CLAUDE.md",
-        "repo-AGENTS.md.2026-09-28.txt",
-        "repo-app-AGENTS.md.2026-09-28.txt",
-        "repo-app-runtime-AGENTS.md.2026-09-28.txt",
-        "repo-app-templates-AGENTS.md.2026-09-28.txt",
+        "repo-AGENTS.md",
+        "repo-app-AGENTS.md",
+        "repo-app-runtime-AGENTS.md",
+        "repo-app-templates-AGENTS.md",
     ]
-    assert files[0].origin == STAND_IN_ENVIRON["CRITIC_OWNER_CLAUDE_MD"]
+    assert [file.origin for file in files[1:]] == REPO_CHAIN
+
+
+def test_the_repo_chain_is_read_live_not_copied() -> None:
+    files = load_rubric(RUBRICS / "current_instructions", STAND_IN_ENVIRON).files[1:]
+    assert [file.text for file in files] == [(REPO_ROOT / path).read_text(encoding="utf-8") for path in REPO_CHAIN]
+    names = [path.name for path in (RUBRICS / "current_instructions").iterdir()]
+    assert all(name.endswith((FROM_ENV_SUFFIX, FROM_REPO_SUFFIX)) for name in names)
+
+
+def test_a_repo_pointer_that_leaves_the_repo_is_refused(tmp_path: Path) -> None:
+    (tmp_path / "outside.md.from-repo").write_text("../../outside.md", encoding="utf-8")
+    with pytest.raises(ValueError, match="points outside the repo"):
+        load_rubric(tmp_path)
 
 
 def test_the_owners_file_unset_fails_naming_its_variable() -> None:
@@ -52,14 +69,15 @@ def test_a_stamp_records_where_each_file_came_from_and_its_hash() -> None:
     stamps = stamp_rubric(rubric)
     stand_in = Path(STAND_IN_ENVIRON["CRITIC_OWNER_CLAUDE_MD"])
     expected = hashlib.sha256(stand_in.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
-    assert (stamps[0].name, stamps[0].origin, stamps[0].sha256) == ("owner-global-CLAUDE.md", str(stand_in), expected)
-    # The stand-in is the repo's AGENTS.md, which the second file snapshots unchanged.
+    assert (stamps[0].name, stamps[0].origin, stamps[0].sha256) == ("owner-global-CLAUDE.md", "AGENTS.md", expected)
+    # The stand-in is the repo's AGENTS.md, which the second file also reads.
     assert stamps[1].sha256 == expected
 
 
-def test_the_repo_holds_no_copy_of_the_owners_file() -> None:
-    names = [path.name for path in (RUBRICS / "current_instructions").iterdir()]
-    assert not [name for name in names if "CLAUDE" in name and not name.endswith(FROM_ENV_SUFFIX)]
+def test_themes_outside_the_vocabulary_are_found_once_each() -> None:
+    vocabulary = load_labels().themes
+    assert find_themes_outside(["naming", "layering", "layering", "praise_or_signoff"], vocabulary) == ["layering"]
+    assert find_themes_outside([], vocabulary) == []
 
 
 def test_a_rubric_file_it_would_not_read_is_refused(tmp_path: Path) -> None:

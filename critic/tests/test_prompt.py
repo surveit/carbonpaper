@@ -46,7 +46,7 @@ def test_an_empty_rubric_says_so() -> None:
     assert f"HOUSE RULES: none\n{NO_RUBRIC_TEXT}" in request.system
 
 
-def test_the_instructions_rubric_carries_each_snapshot_whole() -> None:
+def test_the_instructions_rubric_carries_each_file_whole() -> None:
     request = _build_request("current_instructions")
     rubric = load_rubric(RUBRICS / "current_instructions", STAND_IN_ENVIRON)
     for file in rubric.files:
@@ -67,13 +67,6 @@ def test_a_worked_example_outside_the_theme_vocabulary_is_refused() -> None:
     rubric = load_rubric(RUBRICS / "none")
     with pytest.raises(ValueError, match="outside this vocabulary"):
         build_review_request(load_diff_at_first_commit(), rubric, themes, load_worked_examples().review)
-
-
-def test_without_a_vocabulary_the_theme_is_left_free() -> None:
-    rubric = load_rubric(RUBRICS / "none")
-    request = build_review_request(load_diff_at_first_commit(), rubric, None, load_worked_examples().review)
-    assert "enum" not in request.answer_schema["$defs"]["PredictedComment"]["properties"]["theme"]
-    assert "THEMES\nNone supplied." in request.system
 
 
 def _build_request(rubric_name: str) -> ModelRequest:

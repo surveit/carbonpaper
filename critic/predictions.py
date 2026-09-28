@@ -22,8 +22,7 @@ class ReviewAnswer(CriticRecord):
     comments: list[PredictedComment]
 
 
-def build_answer_schema(theme_slugs: list[str] | None) -> JsonSchemaDocument:
+def build_answer_schema(theme_slugs: list[str]) -> JsonSchemaDocument:
     schema = ReviewAnswer.model_json_schema()
-    if theme_slugs is not None:
-        schema["$defs"]["PredictedComment"]["properties"]["theme"]["enum"] = theme_slugs
+    schema["$defs"]["PredictedComment"]["properties"]["theme"]["enum"] = theme_slugs
     return schema

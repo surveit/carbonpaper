@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from pathlib import Path
 
 from critic.records import CriticRecord
@@ -26,6 +27,11 @@ def load_theme_vocabulary(path: Path) -> list[Theme]:
         for slug, value in entries.items()
         if not slug.startswith("_")
     ]
+
+
+def find_themes_outside(slugs: Iterable[str], vocabulary: list[Theme]) -> list[str]:
+    known = {theme.slug for theme in vocabulary}
+    return sorted(set(slugs) - known)
 
 
 def select_flag_themes(themes: list[Theme]) -> list[Theme]:

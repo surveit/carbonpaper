@@ -82,7 +82,7 @@ def judge_candidates(
         batch = candidates[start : start + JUDGE_BATCH_SIZE]
         reply = backend.ask(build_judge_request(batch, predictions, reals, diff, examples))
         answer = read_judge_answer(reply.answer)
-        check_one_verdict_per_pair(batch, answer.verdicts)
+        validate_one_verdict_per_pair(batch, answer.verdicts)
         verdicts += answer.verdicts
         cost_usd += reply.cost_usd
         model_ids.update(reply.model_ids)
@@ -120,7 +120,7 @@ def read_judge_answer(answer: UncheckedModelAnswer) -> JudgeAnswer:
         raise BackendReplyError(f"the judge answer does not fit its schema: {error}") from error
 
 
-def check_one_verdict_per_pair(batch: list[CandidatePair], verdicts: list[JudgeVerdict]) -> None:
+def validate_one_verdict_per_pair(batch: list[CandidatePair], verdicts: list[JudgeVerdict]) -> None:
     asked = sorted(pair.pair_id for pair in batch)
     answered = sorted(verdict.pair_id for verdict in verdicts)
     if asked != answered:

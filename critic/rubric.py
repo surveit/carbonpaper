@@ -7,10 +7,12 @@ from pathlib import Path
 
 from critic.records import CriticRecord
 
-# .md holds authored rules; .txt holds a verbatim snapshot, which no word rule may rewrite.
-RUBRIC_SUFFIXES = (".md", ".txt")
+AUTHORED_SUFFIX = ".md"
+# A NAME.from-repo file holds a path under the repo root; its text is read live, never copied.
+FROM_REPO_SUFFIX = ".from-repo"
 # A NAME.from-env file holds the name of an environment variable; that variable holds the path.
 FROM_ENV_SUFFIX = ".from-env"
+REPO_ROOT = Path(__file__).resolve().parents[1]
 NO_RUBRIC_TEXT = "None. Review as a strict reviewer who holds no house rules."
 
 
@@ -46,21 +48,16 @@ def load_rubric(directory: Path, environ: Mapping[str, str] = os.environ) -> Rub
 
 
 def read_rubric_file(path: Path, environ: Mapping[str, str]) -> RubricFile:
-    """A file kept outside the repo, such as a person's own instructions, arrives through FROM_ENV_SUFFIX."""
-    if path.suffix != FROM_ENV_SUFFIX:
-        return RubricFile(name=path.name, origin=str(path), text=path.read_text(encoding="utf-8"))
-    variable = path.read_text(encoding="utf-8").strip()
-    if not environ.get(variable):
-        message = f"rubric file {path.name} reads its path from ${variable}, which is unset"
-        raise UnsetRubricSourceError(message)
-    source = Path(environ[variable])
-    if not source.is_file():
-        raise FileNotFoundError(f"${variable} names {source}, which is not a file")
-    return RubricFile(name=path.stem, origin=str(source), text=source.read_text(encoding="utf-8"))
+    if path.suffix == AUTHORED_SUFFIX:
+        return _read_source(path.name, path)
+    pointer = path.read_text(encoding="utf-8").strip()
+    if path.suffix == FROM_REPO_SUFFIX:
+        return _read_source(path.stem, _resolve_repo_path(path, pointer))
+    return _read_source(path.stem, _resolve_env_path(path, pointer, environ))
 
 
 def stamp_rubric(rubric: Rubric) -> list[RubricStamp]:
-    """Which text each file held, since a file read from outside the repo can change between runs."""
+    """Which text each file held: every source is read live, so it can change between runs."""
     return [_stamp_file(file) for file in rubric.files]
 
 
@@ -70,10 +67,36 @@ def render_rubric(rubric: Rubric) -> str:
     return "\n\n".join(f"--- {file.name} ---\n{file.text.strip()}" for file in rubric.files)
 
 
+def _resolve_repo_path(path: Path, pointer: str) -> Path:
+    source = (REPO_ROOT / pointer).resolve()
+    if REPO_ROOT not in source.parents:
+        raise ValueError(f"rubric file {path.name} points outside the repo: {pointer}")
+    return source
+
+
+def _resolve_env_path(path: Path, variable: str, environ: Mapping[str, str]) -> Path:
+    if not environ.get(variable):
+        message = f"rubric file {path.name} reads its path from ${variable}, which is unset"
+        raise UnsetRubricSourceError(message)
+    return Path(environ[variable])
+
+
+def _read_source(name: str, source: Path) -> RubricFile:
+    if not source.is_file():
+        raise FileNotFoundError(f"rubric file {name} names {source}, which is not a file")
+    return RubricFile(name=name, origin=_describe_origin(source), text=source.read_text(encoding="utf-8"))
+
+
+def _describe_origin(source: Path) -> str:
+    """A path under the repo is given relative to it, so `git show COMMIT:PATH` names the same file."""
+    resolved = source.resolve()
+    return str(resolved.relative_to(REPO_ROOT)) if REPO_ROOT in resolved.parents else str(source)
+
+
 def _stamp_file(file: RubricFile) -> RubricStamp:
     digest = hashlib.sha256(file.text.encode("utf-8")).hexdigest()
     return RubricStamp(name=file.name, origin=file.origin, sha256=digest)
 
 
 def _is_rubric_file(path: Path) -> bool:
-    return path.is_file() and path.suffix in (*RUBRIC_SUFFIXES, FROM_ENV_SUFFIX)
+    return path.is_file() and path.suffix in (AUTHORED_SUFFIX, FROM_REPO_SUFFIX, FROM_ENV_SUFFIX)

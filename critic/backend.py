@@ -37,7 +37,7 @@ class ModelReply(CriticRecord):
 
 
 class ModelBackend(Protocol):
-    def check_available(self) -> None: ...
+    def validate_available(self) -> None: ...
 
     def ask(self, request: ModelRequest) -> ModelReply: ...
 
@@ -62,7 +62,7 @@ class ClaudeCliBackend:
         self.model = model
         self.timeout_seconds = timeout_seconds
 
-    def check_available(self) -> None:
+    def validate_available(self) -> None:
         completed = _run([_find_executable(), "auth", "status"], stdin="", cwd=None, timeout=60.0)
         try:
             status = _AuthStatus.model_validate_json(completed.stdout)

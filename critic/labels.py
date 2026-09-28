@@ -5,7 +5,7 @@ from pathlib import Path
 
 from critic.corpus import CorpusIndex, InlineComment
 from critic.records import CriticRecord, ForeignRecord
-from critic.themes import Theme, load_theme_vocabulary
+from critic.themes import Theme, find_themes_outside, load_theme_vocabulary
 
 HUMAN_AUTHOR = "human"
 INLINE_KIND = "inline"
@@ -92,7 +92,9 @@ def select_reviewer_comments(
 ) -> GroundTruth:
     outcomes = [_admit_label(label, corpus) for label in labeled]
     admitted = [outcome for outcome in outcomes if isinstance(outcome, ReviewerComment)]
-    check_themes_are_known(admitted, themes)
+    strays = find_themes_outside((slug for comment in admitted for slug in comment.themes), themes)
+    if strays:
+        raise ValueError(f"reviewer comments carry themes the vocabulary lacks: {strays}")
     openers = find_thread_openers(admitted)
     return GroundTruth(
         comments=openers,
@@ -107,13 +109,6 @@ def find_thread_openers(comments: list[ReviewerComment]) -> list[ReviewerComment
     for comment in sorted(comments, key=lambda comment: comment.created_at):
         openers.setdefault(comment.thread_id, comment)
     return list(openers.values())
-
-
-def check_themes_are_known(comments: list[ReviewerComment], themes: list[Theme]) -> None:
-    known = {theme.slug for theme in themes}
-    strays = sorted({slug for comment in comments for slug in comment.themes} - known)
-    if strays:
-        raise ValueError(f"reviewer comments carry themes the vocabulary lacks: {strays}")
 
 
 def _admit_label(label: LabeledComment, corpus: CorpusIndex) -> ReviewerComment | ExcludedLabel:

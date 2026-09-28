@@ -5,7 +5,7 @@ from critic.diff import PullRequestDiff, parse_patch, render_diff, render_patch_
 from critic.matching import LINE_WINDOW
 from critic.predictions import build_answer_schema
 from critic.rubric import Rubric, render_rubric
-from critic.themes import Theme
+from critic.themes import Theme, find_themes_outside
 from critic.worked_examples import ReviewExample
 
 REVIEWER_LOGIN = "surveit"
@@ -41,56 +41,39 @@ reviewer could leave. An empty list is a valid answer.
 EACH COMMENT
 - path: the file path exactly as its diff header prints it.
 - line: the new-file line number printed left of the line you comment on.
-- theme: {theme_instruction}
+- theme: one slug from THEMES below.
 - rule: the general rule the comment enforces, in twelve words or fewer.
 - text: the comment in the reviewer's own voice, as the examples below show it.
 - severity: blocking (must change before merge), should (a change the reviewer expects), or \
 nit (minor)."""
 
-_THEME_FROM_LIST = "one slug from THEMES below."
-_THEME_FREE = "a short snake_case name for the kind of problem; this run supplies no theme list."
-
-
 def build_review_request(
     diff: PullRequestDiff,
     rubric: Rubric,
-    themes: list[Theme] | None,
+    themes: list[Theme],
     examples: list[ReviewExample],
 ) -> ModelRequest:
-    check_examples_fit_themes(examples, themes)
+    strays = find_themes_outside((example.answer.theme for example in examples), themes)
+    if strays:
+        raise ValueError(f"worked examples carry themes outside this vocabulary: {strays}")
     sections = [
-        render_role(diff.repo, themes),
+        render_role(diff.repo),
         "THEMES\n" + render_themes(themes),
         f"HOUSE RULES: {rubric.name}\n{render_rubric(rubric)}",
         "WORKED EXAMPLES\n" + render_review_examples(examples),
     ]
-    slugs = None if themes is None else [theme.slug for theme in themes]
     return ModelRequest(
         system="\n\n".join(sections),
         user=render_pull_request(diff),
-        answer_schema=build_answer_schema(slugs),
+        answer_schema=build_answer_schema([theme.slug for theme in themes]),
     )
 
 
-def check_examples_fit_themes(examples: list[ReviewExample], themes: list[Theme] | None) -> None:
-    if themes is None:
-        return
-    slugs = {theme.slug for theme in themes}
-    misfits = [example.html_url for example in examples if example.answer.theme not in slugs]
-    if misfits:
-        raise ValueError(f"worked examples carry themes outside this vocabulary: {misfits}")
+def render_role(repo: str) -> str:
+    return _ROLE.format(repo=repo, reviewer=REVIEWER_LOGIN, window=LINE_WINDOW)
 
 
-def render_role(repo: str, themes: list[Theme] | None) -> str:
-    theme_instruction = _THEME_FREE if themes is None else _THEME_FROM_LIST
-    return _ROLE.format(
-        repo=repo, reviewer=REVIEWER_LOGIN, window=LINE_WINDOW, theme_instruction=theme_instruction
-    )
-
-
-def render_themes(themes: list[Theme] | None) -> str:
-    if themes is None:
-        return "None supplied."
+def render_themes(themes: list[Theme]) -> str:
     return "\n".join(f"- {theme.slug}: {theme.definition}" for theme in themes)
 
 

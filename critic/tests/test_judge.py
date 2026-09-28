@@ -7,7 +7,7 @@ from critic.judge import (
     OUTSIDE_THE_DIFF,
     JudgeVerdict,
     build_judge_request,
-    check_one_verdict_per_pair,
+    validate_one_verdict_per_pair,
     read_prediction_side,
     read_real_side,
 )
@@ -73,6 +73,6 @@ def test_the_judges_worked_examples_are_real_comment_pairs() -> None:
 def test_a_verdict_for_every_pair_asked_and_no_other() -> None:
     real = _real_at(87)
     candidates = pair_same_path([echo_as_prediction(real)], [real], taken=[])
-    check_one_verdict_per_pair(candidates, [JudgeVerdict(pair_id=1, same_point=False, reason="Apart.")])
+    validate_one_verdict_per_pair(candidates, [JudgeVerdict(pair_id=1, same_point=False, reason="Apart.")])
     with pytest.raises(BackendReplyError, match="answered pairs"):
-        check_one_verdict_per_pair(candidates, [])
+        validate_one_verdict_per_pair(candidates, [])

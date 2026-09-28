@@ -31,7 +31,7 @@ class RecordedBackend:
         self.stdout = stdout
         self.requests: list[ModelRequest] = []
 
-    def check_available(self) -> None:
+    def validate_available(self) -> None:
         return None
 
     def ask(self, request: ModelRequest) -> ModelReply:
@@ -62,7 +62,7 @@ def test_output_that_is_not_a_result_names_stderr() -> None:
 def test_a_missing_cli_is_unavailable_not_stubbed(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(shutil, "which", lambda name: None)
     with pytest.raises(BackendUnavailableError, match="not on PATH"):
-        ClaudeCliBackend(model=None).check_available()
+        ClaudeCliBackend(model=None).validate_available()
 
 
 def test_the_command_keeps_every_claude_md_and_every_tool_out(monkeypatch: pytest.MonkeyPatch) -> None:
