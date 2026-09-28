@@ -84,8 +84,8 @@ Also `app/AGENTS.md` (web layer), `app/runtime/AGENTS.md` (the Runner), `README.
   row's shape may be written down. `app.runtime` is on it because
   `app/runtime/_arch_tests/test_stages_no_cross_run_disk.py` lets a runtime module call
   `.save()` only while it DECLARES a `PersistenceScope.RUN` record; `app.core` is on it for
-  the three records `app/models` sits above (`ProjectFile`, `StageCacheEntry`,
-  `AgentSession`).
+  the records `app/models` sits above (`ProjectFile`, `StageCacheEntry`, `Judgment`,
+  `AgentSession`, `StoredFileShape`).
 - **Under `app/`, a record class is the only way to reach storage.** A second contract
   protects `app.core.persistence`, so only `app.core.record` (plus the store wiring) may
   hold the handle: no module calls `get_store()` to write a collection nothing models.

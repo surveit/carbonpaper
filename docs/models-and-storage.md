@@ -111,7 +111,8 @@ call `.save()` per writing module rather than per declaration site.
 `app.core` is the other, for records that `app/models` sits above in the layers
 contract, where a declaration in `app/models` would be unreachable from the module that
 needs it: `ProjectFile` (`app/core/files.py`), `StageCacheEntry`
-(`app/core/stage_cache.py`), `AgentSession` (`app/core/agent/store.py`) and
+(`app/core/stage_cache.py`), `Judgment` (`app/core/judgments.py`, written only by
+`StageCache.record_judgment`), `AgentSession` (`app/core/agent/store.py`) and
 `StoredFileShape` (`app/core/file_shape.py`).
 
 ### The stage spec-dict shape

@@ -28,6 +28,7 @@ from app.runtime.stage_output import StageOutput
 from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform as lt
 from app.runtime.stages.execution import ROW_JUDGMENT_KEY
+from app.web import judgment_view
 from conftest import as_inputs, make_run_context, pinned_stages, place_stage, rows_of
 from stage_seed import add_stage, save_version
 
@@ -233,6 +234,10 @@ def test_a_failed_row_owes_no_judgment(monkeypatch):
 
 @pytest.fixture()
 def project(tmp_path: Path, scripted_agent) -> Path:
+    return _seed_project(tmp_path, _judge_spec())
+
+
+def _seed_project(tmp_path: Path, judge_spec: dict[str, Any]) -> Path:
     pdir = tmp_path / PROJECT
     pdir.mkdir(parents=True, exist_ok=True)
     data = pdir / "rows.csv"
@@ -242,7 +247,7 @@ def project(tmp_path: Path, scripted_agent) -> Path:
         "connector": {"kind": "file", "params": {"path": str(data), "format": "csv"}},
         "signature": {"form": "replaces", "produces": _X},
     })
-    add_stage(pdir, _judge_spec())
+    add_stage(pdir, judge_spec)
     workspace.set_projects_dir(tmp_path)
     save_version(pdir.name, message="v1")
     return pdir
@@ -300,3 +305,58 @@ def test_the_rows_page_links_each_row_to_its_judgment(project):
 
     for judgment in _judgments():
         assert f'href="/project/{PROJECT}/judgments/{judgment.id}"' in html
+
+
+def test_the_rows_page_links_no_judgment_this_project_does_not_store(project):
+    run_id = _run(project)
+    kept, dropped = _judgments()
+    Judgment.delete(dropped.id)
+
+    html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/stage/judge/rows").text
+
+    assert f"/judgments/{kept.id}" in html and f"/judgments/{dropped.id}" not in html
+
+
+def test_the_rows_page_of_a_stage_no_model_answered_reads_no_log(project, monkeypatch):
+    run_id = _run(project)
+
+    def refuse(*a, **k):
+        raise AssertionError("read the run log for a stage that owes no judgment")
+
+    monkeypatch.setattr(judgment_view, "read_events_since", refuse)
+    response = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/stage/load/rows")
+
+    assert response.status_code == 200, response.text
+
+
+def _answer_with(monkeypatch: pytest.MonkeyPatch, answer: Any) -> None:
+    class _Answering(_ScriptedAgent):
+        async def run(self, emit: Any = None) -> BaseModel:
+            return self._schema.model_validate(answer(self._task))
+
+    monkeypatch.setattr(runtime_llm, "Agent", _Answering)
+
+
+def _open_a_judgment_page() -> str:
+    return TestClient(app).get(f"/project/{PROJECT}/judgments/{_judgments()[0].id}").text
+
+
+def test_a_batched_judgment_says_its_usage_is_the_whole_calls(tmp_path, scripted_agent, monkeypatch):
+    _answer_with(monkeypatch, lambda task: {"results": [
+        {"row_number": n, "verdict": f"v{n}"} for n in range(task.count("### item "))]})
+    _run(_seed_project(tmp_path, _judge_spec(batch_size=2)))
+
+    assert "one call covering 2 rows, this one among them" in _open_a_judgment_page()
+
+
+def test_a_per_row_reply_holding_a_results_list_is_not_called_a_batch(
+    tmp_path, scripted_agent, monkeypatch,
+):
+    spec = _judge_spec()
+    spec["signature"]["adds"] = [{"name": "results", "type": "list[str]", "nullable": True}]
+    _answer_with(monkeypatch, lambda task: {"results": ["a", "b"]})
+    _run(_seed_project(tmp_path, spec))
+
+    page = _open_a_judgment_page()
+
+    assert "&#34;results&#34;" in page and "one call covering" not in page

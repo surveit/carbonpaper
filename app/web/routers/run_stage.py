@@ -22,7 +22,7 @@ from app.web.breadcrumbs import build_run_child_crumbs
 from app.web.column_order import order_columns_by_signature
 from app.web.config import label_stage_type, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH
-from app.web.judgment_view import read_row_judgment_ids
+from app.web.judgment_view import link_row_judgments
 from app.services.workspace import resolve_run_dir
 from app.web.loading import (
     csv_download_body,
@@ -115,10 +115,9 @@ def run_stage_rows(
             ),
             "raw": raw,
             "links": links,
-            "row_judgment_hrefs": {
-                row: links.judgment_page(judgment_id)
-                for row, judgment_id in read_row_judgment_ids(project_id, run_id, stage_id).items()
-            },
+            "row_judgment_hrefs": link_row_judgments(
+                links, project_id, run_id,
+                None if pinned.workflow_stage is None else pinned.workflow_stage.stage),
             # The page's own treatments (row numbers, click-to-expand cells,
             # sticky-header scroll box) the shared diff partial renders on request.
             "full_rows": True,
