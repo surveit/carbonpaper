@@ -1,4 +1,4 @@
-"""Importing this package registers every pack under it. Only app.main and app.cli import it."""
+"""Importing this registers every pack; only the entrypoints pyproject.toml names import it."""
 from __future__ import annotations
 
 from app.packs import docket as docket

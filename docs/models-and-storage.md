@@ -20,8 +20,7 @@ case: `validate_workflow(stages) -> list[str]` and `validate_stage(stage) -> lis
 **Cut in this change (per review):**
 - Connector kinds reduced to the implemented `file`. The rest
   (`http`/`scrape`/`api`/`manual_upload`/`sql`) were declared but never had a
-  handler — add them back alongside a handler. Every other kind today is a pack's,
-  registered with the code that acquires its files ([packs.md](packs.md)).
+  handler — add them back alongside a handler.
 - Weighted aggregation formulas (`weighted_mean`/`weighted_sum`) — unused in the
   compiled workflows (weighting is done inside `python_frame_function` modules).
 
@@ -40,6 +39,11 @@ through `parse_stage`:
 
 `app/runtime/handlers.py`, `runner.py`, `preview.py`, and the web layer all consume
 the typed `Stage` objects this loader returns.
+
+### Connector kinds
+
+`file` is the kernel's one connector kind. Every other kind is a pack's, registered with
+the code that acquires its files ([packs.md](packs.md)).
 
 ## Storage — two layers, and nothing else
 

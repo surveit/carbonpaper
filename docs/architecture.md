@@ -147,7 +147,7 @@ what it kept of the project's row types, verbs and methodology.
 | Module | What it holds |
 |---|---|
 | `app/core/files.py` | `ProjectFile`, the record a source is; `receive_source` and `receive_mirrored_source`, the only writers of its `origin_url` and `fetched_at` |
-| `app/core/text_sources.py` | a text source's pages: a PDF's through pypdf, a txt, md or html file as one page; `normalize_text`, the form a quote is compared in |
+| `app/core/text_sources.py` | the one reader of a source's page text, so `read_pages`, the verifier, the source view and the packet's page files see the same characters |
 | `app/models/spans.py` | `Span`; `SpanReply`, the quote a model answers a span column with; `narrow_span`, which re-finds a quote inside a span |
 | `app/models/locators.py` | the `Locator` kinds and `LOCATOR_KINDS`, the registry each kind is parsed and labelled through |
 | `app/models/schema.py` | the `span` and `list[span]` column types, and `Column.quoted_from`, the span column a model's quote is found in |
@@ -155,17 +155,17 @@ what it kept of the project's row types, verbs and methodology.
 | `app/runtime/spans.py` | the verifier: `find_span_issues` over a stage's output, `verify_span` for one span, `SourceTextCache` |
 | `app/runtime/stages/span_replies.py` | mints an `llm_transform` reply's quotes into spans (rule 5 of [llm-transform-output-spec.md](llm-transform-output-spec.md)) |
 | `app/core/judgments.py` | `Judgment`, a model call recorded against the row it decided, and `JudgmentDraft`, the call before it is recorded |
-| `app/runtime/stages/row_judgments.py` | records each row's judgment through the stage cache, or stops the stage (`JudgmentUnrecorded`) |
+| `app/runtime/stages/row_judgments.py` | the runtime's one way onto the judgment ledger, and its refusal of a model row that owes a judgment |
 | `app/models/records/workflow_version.py` | `Method`, on `WorkflowVersion.method` ([models-and-storage.md](models-and-storage.md)) |
 | `app/runtime/trace.py` | walks a row back through each stage's lineage to the stored file its input row was read from (`source_id`) |
-| `app/models/run_diff.py`, `app/services/run_diff.py` | `compare_runs`: two runs of one version, compared on every stage whose rows code computes |
+| `app/models/run_diff.py`, `app/services/run_diff.py` | the replay check behind the compare page: a stage code computes must give the same rows from the same input |
 | `app/models/connectors.py`, `app/models/packs.py` | `ConnectorSpec` and `SOURCE_COLUMNS`; `PackSpec` and `register_pack` ([packs.md](packs.md)) |
 | `app/services/review_packet/data.py`, `app/web/review_packet/archive.py` | the packet's archive: `sources.json`, `judgments.jsonl`, `spans.json` and the pages its spans quote ([run-and-review-ui.md](run-and-review-ui.md)) |
-| `app/web/source_page_view.py` | one page of a text source, the characters a span's link names marked |
-| `app/web/span_cells.py` | a span cell as its quotes, each kept to link its page |
+| `app/web/source_page_view.py` | what a span's link opens: its page of the file, the quote marked |
+| `app/web/span_cells.py` | the one rendering of a span cell, so every run table and the packet show it alike |
 | `app/web/judgment_view.py`, `app/web/routers/judgments.py` | the judgment page, and each model row's link to it |
 | `app/web/run_diff_view.py`, `app/web/routers/run_diff.py` | the compare page |
-| `app/web/routers/run_routers.py` | mounts the routers under `/project/{p}/runs/` in the order they match |
+| `app/web/routers/run_routers.py` | where a router under `/project/{p}/runs/` is added, since mount order decides which route `/runs/new` matches |
 
 ## `app/packs/` — above the kernel
 A pack is a subpackage `app/packs/<pack_id>/` that registers connector kinds; everything else
@@ -233,8 +233,9 @@ is its only exit, strict-validating before freezing it into a version via
 
 ## `critic/` — a second root package, beside `app/`
 `python -m critic` predicts a pull request's review comments and scores the predictions
-against the real ones (`fetch`, `diff`, `review`, `eval`). It reads the review record through
-`gh`, and a `layers` contract keeps `app` and `critic` from importing each other.
+against the real ones; its subcommands are listed by `python -m critic --help`. It reads the
+review record through `gh`, and a `layers` contract keeps `app` and `critic` from importing
+each other.
 
 ## `app/core/llm/`, tests
 `core/llm/options.py` — the `LLMModel` menu. `tests/` (pytest; `conftest.py` forces
