@@ -89,7 +89,7 @@ The counts are the summary, so a closed panel still says something is wrong.
 - **A stop** — an `error` stage, the run's own end — is the FIRST line, marked `stopped`, its
   message naming which failure it is, because they route to different people: a schema
   refusal (`OutputSchemaViolation`) says the data changed and links the panel's **Data** tab;
-  a quote refusal (`QuoteRefusal`) says a quote is not in its source and links **Data** too;
+  a quote refusal (`QuoteRefusal`) says a quote does not hold in its source and links **Data** too;
   an authored `StepRefused` says the stage does not handle this data and names the two ways
   out — wrong data, or a stage needing a rule for it — then links its **Transform** tab;
   any other exception is the code's and keeps its type.

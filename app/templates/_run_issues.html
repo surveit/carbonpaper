@@ -12,8 +12,8 @@
   A stop — the stage that ENDED the run — is a line of this list like any other,
   first and marked `stopped`. Its message names WHICH of the four failures it is,
   because they route to different people: the stage's output no longer matches what
-  it declares (the data owner's), a quote in its output is not at the address it
-  cites, its authored code refused the input it was handed (the author's), or the
+  it declares (the data owner's), a span in its output does not hold in the file it
+  quotes, its authored code refused the input it was handed (the author's), or the
   code broke (the engineer's). The first two link the panel's Data tab, the other two
   its Transform tab. What only a stop has — the columns it refused, the reason its
   author wrote, the stages downstream that never ran — is nested under its own line.
@@ -37,7 +37,7 @@
        message=(
          "the data changed — refused its own output; it does not match the schema this stage declares"
            if stop.kind == 'schema' else
-         "a quote is not in its source — the file does not hold this text at the address the stage cites"
+         "a quote does not hold in its source — each span below says why the file it quotes refuses it"
            if stop.kind == 'quote' else
          "this stage does not handle this data — either the data is wrong or the stage needs a rule for it"
            if stop.kind == 'refused' else

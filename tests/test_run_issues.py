@@ -258,7 +258,7 @@ def test_each_stop_story_is_worded_apart_in_the_markup():
             in _render(_manifest(_refused("publish_workbook"))))
     assert "the code broke" in _render(_manifest(_crash("publish_report")))
     quote_stop = _render(_manifest(_quote_refusal("extract_claims")))
-    assert "a quote is not in its source" in quote_stop
+    assert "a quote does not hold in its source" in quote_stop
     assert "the data changed" not in quote_stop
 
 
