@@ -55,6 +55,7 @@ _UNUSED_BUNDLE = EvidenceBundle(
     claim_id="<claim_id>", claim_text=_UNUSED_DOCUMENT, claim_context={},
     cited=StageOutputCellCitation(
         run_id="<run_id>", stage_id="<stage_id>", row_ordinal=0, column="<column>", value=0),
+    cited_passage=None,
     shape=ClaimShapeInput(label="<shape>", universe=DataUniverseRequirement.closed,
                           importance=ClaimImportance.primary),
     run_read_everything=True, outputs=[], cited_slug="<slug>", stages=[], branches=[],

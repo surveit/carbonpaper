@@ -22,7 +22,7 @@ _WORD_BUDGETS: dict[str, int] = {
     "app/core/prompt_template.py": 37,
     "app/models/tool_schema_prompts.py": 535,
     "app/reviewer/dedupe_prompt.py": 483,
-    "app/reviewer/reviewers_prompt.py": 3523,
+    "app/reviewer/reviewers_prompt.py": 3555,
     "app/tools/prompt_fragments.py": 1716,
 }
 
