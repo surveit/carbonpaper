@@ -7,6 +7,7 @@ import json
 
 from app.core.frames import collapse_null_forms, convert_cell_to_json_native
 from app.core.json_types import JsonDict
+from app.core.judgments import Judgment, JudgmentDraft, JudgmentKind
 from app.core.record import PersistedModel, PersistenceScope
 from app.core.utils import compute_short_hash
 from app.core.ids import ID
@@ -27,6 +28,8 @@ class StageCacheEntry(PersistedModel):
     output_row: JsonDict | None
     # None where no code ran or the entry predates the field; [] where code ran and never branched.
     branches: list[str] | None = None
+    # None where no model judged the row, or the entry predates the judgment ledger.
+    judgment_id: ID | None = None
 
     @classmethod
     def read_only(cls) -> "ReadOnlyStageCache":
@@ -113,6 +116,7 @@ class StageCache(ReadOnlyStageCache):
         input_row: Mapping[str, object],
         output_row: Mapping[str, object] | None,
         branches: Sequence[str] | None,
+        judgment_id: ID | None,
     ) -> None:
         StageCacheEntry(
             id=_build_cache_id(project_id, stage_id, stage_fingerprint, input_fingerprint),
@@ -123,7 +127,35 @@ class StageCache(ReadOnlyStageCache):
             frozen_input=to_json_safe_row(input_row),
             output_row=None if output_row is None else to_json_safe_row(output_row),
             branches=None if branches is None else list(branches),
+            judgment_id=judgment_id,
         ).save()
+
+    def record_judgment(
+        self,
+        *,
+        project_id: ID,
+        run_id: ID,
+        stage_id: ID,
+        input_fingerprint: str,
+        input_row: Mapping[str, object],
+        draft: JudgmentDraft,
+    ) -> Judgment:
+        judgment = Judgment(
+            project_id=project_id,
+            run_id=run_id,
+            stage_id=stage_id,
+            kind=JudgmentKind.MODEL,
+            input_fingerprint=input_fingerprint,
+            frozen_input=to_json_safe_row(input_row),
+            system_prompt=draft.system_prompt,
+            task=draft.task,
+            model=draft.model,
+            reply=draft.reply,
+            usage=draft.usage,
+            decided_at=draft.decided_at,
+        )
+        judgment.save()
+        return judgment
 
     def copy_entry_into(self, entry: StageCacheEntry, project_id: ID) -> bool:
         """False means an id already stored — its output may differ from this one, and it wins."""
@@ -141,5 +173,6 @@ class StageCache(ReadOnlyStageCache):
             frozen_input=entry.frozen_input,
             output_row=entry.output_row,
             branches=entry.branches,
+            judgment_id=entry.judgment_id,
         ).save()
         return True

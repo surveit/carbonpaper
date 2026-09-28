@@ -29,6 +29,9 @@ class AppPanelLinks:
         self._project = f"/project/{_segment(project_id)}"
         self._base = f"{self._project}/runs/{_segment(run_id)}"
 
+    def run_page(self) -> str:
+        return self._base
+
     def stage_anchor(self, stage_id: str) -> str:
         return f"{self._base}#{stage_id}"
 
@@ -89,6 +92,9 @@ class AppPanelLinks:
 
     def file_page(self, file_id: str) -> str:
         return f"{self._project}/files/{_segment(file_id)}"
+
+    def judgment_page(self, judgment_id: str) -> str:
+        return f"{self._project}/judgments/{_segment(judgment_id)}"
 
 
 def packet_lineage_href(to_root: str, stage_id: str, row: int) -> str:

@@ -158,7 +158,9 @@
     {%- set traced = ordinal in mine %}
     {%- set trace_href = links.row_trace(stage.stage_id, ordinal) %}
     <tr class="{{ 'mine' if traced else ('aside' if reached_rows else '') }}"
-      {%- if trace_href %} data-href="{{ trace_href }}"{% endif %}>{% if numbered %}<td class="row-num muted">{{ ordinal | row_number }}</td>{% endif %}
+      {%- if trace_href %} data-href="{{ trace_href }}"{% endif %}>{% if numbered %}<td class="row-num muted">{{ ordinal | row_number }}
+      {%- set judgment_href = (row_judgment_hrefs | default({}, true)).get(ordinal) %}
+      {%- if judgment_href %} <a href="{{ judgment_href }}">judgment</a>{% endif %}</td>{% endif %}
       {%- for cell in row %}
       {%- set column = diff.columns[loop.index0] %}{% if not cut or column.name in behind %}
       {# An unchanged cell of a column the stage READ keeps full ink: it is what

@@ -71,7 +71,8 @@
        in the filtered list. #}
     {% set ordinal = row['_row_ordinal'] if '_row_ordinal' in row else loop.index0 %}
     <tr data-href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage_id }}/row/{{ ordinal }}/trace/view">
-        <td class="row-num muted">{{ ordinal | row_number }}</td>
+        <td class="row-num muted">{{ ordinal | row_number }}{% if ordinal in row_judgment_hrefs %}
+            <a href="{{ row_judgment_hrefs[ordinal] }}">judgment</a>{% endif %}</td>
         {% for c in columns %}{% set v = row[c] | string | truncate(4000, True, '… (truncated — download the CSV for the full value)') %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td class="cell-clip" title="{{ v }}">{{ v }}</td>{% endif %}{% endfor %}
     </tr>
     {% endfor %}

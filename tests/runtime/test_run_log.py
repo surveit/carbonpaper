@@ -34,7 +34,8 @@ from app.runtime.run_log import (
 from app.runtime.stage_output import StageOutput
 from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform
-from conftest import as_inputs, make_run_context, place_stage
+from app.runtime.stages.execution import ROW_JUDGMENT_KEY
+from conftest import as_inputs, make_run_context, place_stage, script_judgment
 
 PROJECT = "run-log-tests"
 
@@ -145,8 +146,8 @@ def test_a_batched_chunk_binds_the_input_rows_it_actually_covers(tmp_path, monke
     def fake_call_llm_batch(stage_id, llm_config, *, instructions, task,
                             reply_schema, model=None, usage_out=None):
         emit_llm_detail(LLM_PROMPT, text=task)
-        return {"results": [{"row_number": 0, "verdict": "a"},
-                            {"row_number": 1, "verdict": "b"}]}
+        return script_judgment({"results": [{"row_number": 0, "verdict": "a"},
+                                            {"row_number": 1, "verdict": "b"}]})
 
     monkeypatch.setattr(
         "app.runtime.stages.llm_transform.call_llm_batch", fake_call_llm_batch
@@ -171,7 +172,8 @@ def test_the_batched_path_logs_replayed_and_computed_rows_apart(tmp_path, monkey
     def fake_make_batch_mapper(workflow_stage):
         def map_group(indices, rows):
             handed.append(list(indices))
-            return [{**row, "verdict": f"v{row['x']}"} for row in rows]
+            judgment = script_judgment({"results": []})
+            return [{**row, "verdict": f"v{row['x']}", ROW_JUDGMENT_KEY: judgment} for row in rows]
 
         return map_group
 

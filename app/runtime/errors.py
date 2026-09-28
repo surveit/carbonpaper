@@ -30,6 +30,10 @@ class MissingLineage(RuntimeError):
     """A stage owed a lineage sidecar by its type's contract and wrote none."""
 
 
+class JudgmentUnrecorded(RuntimeError):
+    """A row a model decided came back with no JudgmentDraft for the ledger."""
+
+
 class NotALoadStage(RuntimeError):
     """A stage with no inputs that is not an input_data stage."""
 

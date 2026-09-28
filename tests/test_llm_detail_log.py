@@ -69,7 +69,7 @@ def _call_one_row(run_id: str, *, bind: bool) -> str:
         if token is not None:
             unbind_detail_sink(token)
     log.close()
-    assert reply == {"score": 5}
+    assert reply.reply == {"score": 5}
     return run_id
 
 
