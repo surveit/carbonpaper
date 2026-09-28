@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Critic eval: {{ result.settings.rubric_dir }}</title>
+<style>
+  body { font: 14px/1.45 system-ui, sans-serif; margin: 24px auto; max-width: 1200px; padding: 0 16px; color: #1d1d1f; background: #fafaf8; }
+  h1 { font-size: 22px; } h2 { font-size: 18px; margin-top: 32px; } h3 { font-size: 15px; margin-top: 24px; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+  th, td { border: 1px solid #d8d8d4; padding: 4px 8px; text-align: left; vertical-align: top; }
+  th { background: #efefeb; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .text { white-space: pre-wrap; }
+  .muted { color: #6b6b66; }
+  dt { font-weight: 600; } dd { margin: 0 0 6px 16px; }
+  .scroll { overflow-x: auto; }
+</style>
+</head>
+<body>
+{% set repo = result.settings.repo %}
+{% macro commit_note(real, read_commit) %}{% if real.commit_sha != read_commit %} <span class="muted">(left on <code>{{ real.commit_sha[:10] }}</code>)</span>{% endif %}{% endmacro %}
+<h1>Critic eval: rubric <code>{{ result.settings.rubric_dir }}</code></h1>
+<p class="muted">
+  Review model {{ result.review_model_ids | join(", ") or "none answered" }};
+  judge model {{ result.judge_model_ids | join(", ") or "none called" }}.
+  Rubric files: {{ result.rubric_files | join(", ") or "none" }}.
+  Run {{ result.started_at }} to {{ result.finished_at }}.
+  Spend: review {{ result.review_cost_usd | usd }}, judge {{ result.judge_cost_usd | usd }}.
+</p>
+<p class="muted">
+  PRs asked for: {{ result.settings.pr_numbers | length }} (from #{{ result.settings.pr_numbers | first }}
+  to #{{ result.settings.pr_numbers | last }}), limit {{ result.settings.limit if result.settings.limit is not none else "none" }}.
+  Review units scored: {{ result.scored | length }}; not scored: {{ result.unscored | length }};
+  PRs skipped: {{ result.skipped_prs | length }}.
+</p>
+
+<h2>What the numbers mean</h2>
+<dl>
+  <dt>Review unit</dt>
+  <dd>One PR. The critic reads its diff at the commit of the reviewer's first ask whose diff can be rebuilt, and is scored against every ask the reviewer made from then on, on that commit or a later one.</dd>
+  <dt>Real comment</dt>
+  <dd>An inline comment the labels credit to the reviewer, not the agent posting under their login, whose speech act is a correction, instruction or question, and which is the reviewer's first such comment in its thread.</dd>
+  <dt>Exact match</dt>
+  <dd>Same file, a real comment left on the commit the critic read, lines at most 5 apart, and the predicted theme one of the real comment's themes.</dd>
+  <dt>Judge match</dt>
+  <dd>Same file, on any commit, left unmatched by the exact rule, and a judge model shown both comments with the code under each found they make the same point.</dd>
+  <dt>Precision / recall / F1</dt>
+  <dd>Matched predictions over all predictions; matched real comments over all real comments; their harmonic mean. Matching is one to one. n/a means the denominator is zero.</dd>
+</dl>
+
+<h2>Scores</h2>
+<table>
+  <tr><th>Matching</th><th class="num">Predictions</th><th class="num">Real comments</th><th class="num">Matched</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">F1</th></tr>
+  {% for label, score in [("exact + judge", result.overall), ("exact only", result.exact_only)] %}
+  <tr><td>{{ label }}</td><td class="num">{{ score.predicted }}</td><td class="num">{{ score.real }}</td><td class="num">{{ score.matched_reals }}</td>
+      <td class="num">{{ score.precision | percent }}</td><td class="num">{{ score.recall | percent }}</td><td class="num">{{ score.f1 | percent }}</td></tr>
+  {% endfor %}
+</table>
+
+<h2>By theme</h2>
+<p class="muted">Precision counts predictions carrying the theme; recall counts real comments carrying it (a real comment may carry up to three).</p>
+<div class="scroll">
+<table>
+  <tr><th>Theme</th><th>Definition</th><th class="num">Predicted</th><th class="num">Real</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">F1</th></tr>
+  {% for item in result.by_theme %}
+  <tr><td><code>{{ item.theme }}</code></td><td>{{ item.definition if item.definition is not none else "not in the vocabulary" }}</td>
+      <td class="num">{{ item.score.predicted }}</td><td class="num">{{ item.score.real }}</td>
+      <td class="num">{{ item.score.precision | percent }}</td><td class="num">{{ item.score.recall | percent }}</td><td class="num">{{ item.score.f1 | percent }}</td></tr>
+  {% endfor %}
+</table>
+</div>
+
+<h2>Scored review units</h2>
+{% for unit in result.scored %}
+{% set predictions = unit.review.predictions %}
+<h3><a href="https://github.com/{{ repo }}/pull/{{ unit.pr }}">PR #{{ unit.pr }}</a>
+  at <a href="https://github.com/{{ repo }}/commit/{{ unit.commit_sha }}"><code>{{ unit.commit_sha[:10] }}</code></a></h3>
+<p class="muted">{{ unit.score.predicted }} predicted, {{ unit.score.real }} real, {{ unit.score.matched_reals }} matched;
+  precision {{ unit.score.precision | percent }}, recall {{ unit.score.recall | percent }}.
+  Review {{ unit.review.cost_usd | usd }} in {{ (unit.review.duration_ms / 1000) | round(1) }}s; judge {{ unit.judge_cost_usd | usd }}.</p>
+{% if unit.matching.pairs %}
+<table>
+  <tr><th>Real comment</th><th>Predicted comment</th><th>Route</th></tr>
+  {% for pair in unit.matching.pairs %}
+  {% set real = unit.reals[pair.real_index] %}{% set predicted = predictions[pair.prediction_index] %}
+  <tr><td><a href="{{ real.html_url }}">{{ real.path }}:{{ real.line }}</a> <code>{{ real.themes | join(", ") }}</code>{{ commit_note(real, unit.commit_sha) }}<div class="text">{{ real.body }}</div></td>
+      <td><a href="https://github.com/{{ repo }}/blob/{{ unit.commit_sha }}/{{ predicted.path }}#L{{ predicted.line }}">{{ predicted.path }}:{{ predicted.line }}</a>
+          <code>{{ predicted.theme }}</code> {{ predicted.severity }}<div class="text">{{ predicted.text }}</div></td>
+      <td>{{ pair.route }}, {{ pair.line_gap }} lines apart{% if pair.judge_reason is not none %}<div class="text muted">{{ pair.judge_reason }}</div>{% endif %}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% if unit.matching.unmatched_reals %}
+<p><strong>Missed real comments</strong></p>
+<table>
+  {% for index in unit.matching.unmatched_reals %}{% set real = unit.reals[index] %}
+  <tr><td><a href="{{ real.html_url }}">{{ real.path }}:{{ real.line }}</a> <code>{{ real.themes | join(", ") }}</code> {{ real.speech_act }}, {{ real.severity }}{{ commit_note(real, unit.commit_sha) }}<div class="text">{{ real.body }}</div></td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% if unit.matching.unmatched_predictions %}
+<p><strong>Predictions the reviewer did not make</strong></p>
+<table>
+  {% for index in unit.matching.unmatched_predictions %}{% set predicted = predictions[index] %}
+  <tr><td><a href="https://github.com/{{ repo }}/blob/{{ unit.commit_sha }}/{{ predicted.path }}#L{{ predicted.line }}">{{ predicted.path }}:{{ predicted.line }}</a>
+      <code>{{ predicted.theme }}</code> {{ predicted.severity }}; rule: {{ predicted.rule }}<div class="text">{{ predicted.text }}</div></td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% else %}
+<p>No review unit was scored.</p>
+{% endfor %}
+
+<h2>Review units not scored</h2>
+{% if result.unscored %}
+<table>
+  <tr><th>Unit</th><th>Status</th><th>Reason</th><th>Real comments</th></tr>
+  {% for unit in result.unscored %}
+  <tr><td><a href="https://github.com/{{ repo }}/pull/{{ unit.pr }}">PR #{{ unit.pr }}</a> at <code>{{ unit.commit_sha[:10] }}</code></td>
+      <td>{{ unit.status }}</td><td class="text">{{ unit.reason }}</td>
+      <td>{% for real in unit.reals %}<a href="{{ real.html_url }}">{{ real.path }}:{{ real.line }}</a><br>{% endfor %}</td></tr>
+  {% endfor %}
+</table>
+{% else %}<p>None.</p>{% endif %}
+
+<h2>PRs skipped</h2>
+{% if result.skipped_prs %}
+<details><summary>{{ result.skipped_prs | length }} PRs</summary>
+<table>
+  {% for skipped in result.skipped_prs %}
+  <tr><td><a href="https://github.com/{{ repo }}/pull/{{ skipped.pr }}">PR #{{ skipped.pr }}</a></td><td>{{ skipped.reason }}</td></tr>
+  {% endfor %}
+</table>
+</details>
+{% else %}<p>None.</p>{% endif %}
+
+<h2>Labeled comments left out of the real set</h2>
+{% if result.excluded_labels %}
+<details><summary>{{ result.excluded_labels | length }} comments</summary>
+<table>
+  {% for label in result.excluded_labels %}
+  <tr><td><a href="{{ label.html_url }}">{{ label.html_url }}</a></td><td>{{ label.reason }}</td></tr>
+  {% endfor %}
+</table>
+</details>
+{% else %}<p>None.</p>{% endif %}
+</body>
+</html>
