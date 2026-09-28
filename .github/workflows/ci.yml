@@ -275,9 +275,9 @@ jobs:
           marker: "<!-- vocabulary-report -->"
           body-file: vocabulary-body.md
 
-      # The one report here that is not about words. A body matching one that was
-      # already in the tree is the defect review catches most and remembers least,
-      # because catching it needs someone to recall the existing function.
+      # A body matching one that was already in the tree is the defect review catches
+      # most and remembers least, because catching it needs someone to recall the
+      # existing function.
       - id: reinvented
         if: always() && steps.import-graph.conclusion != 'skipped'
         run: |
