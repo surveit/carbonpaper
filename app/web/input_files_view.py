@@ -56,7 +56,7 @@ class InputFileSlice(BaseModel):
     size_label: str
     # None where no file this project holds hashes to the bytes the run read.
     file_id: str | None
-    # Both None for an upload, and where no stored file matches.
+    # Both None for an upload, and unless the run named this file by its id.
     origin_url: str | None
     fetched_at: str | None
     # None where nothing the run wrote says how many rows the file holds.
@@ -161,6 +161,8 @@ def _build_one_file(frame: pa.Table, manifest: RunManifest, stage: InputDataStag
                     reached: Sequence[RowOrdinal], relevant: Sequence[str]) -> InputFileSlice:
     ordinals = [ordinal for ordinal in reached if ordinal in origin_by_ordinal]
     stamped = _find_the_stamped_row_column(stage, frame)
+    # A byte match may be a later send of the same bytes, fetched from somewhere else.
+    recorded = stored if stored is not None and stored.id == binding.file_id else None
     # The cut note counts every file the stage read, so it is this file's count only alone.
     counted = (_read_the_row_count_before_the_cut(manifest, stage.id, frame.num_rows)
                if len(_list_the_files_read(manifest, stage.id)) == 1 else None)
@@ -169,8 +171,8 @@ def _build_one_file(frame: pa.Table, manifest: RunManifest, stage: InputDataStag
         filename=binding.filename,
         size_label=describe_bytes(binding.bytes) if binding.bytes is not None else "",
         file_id=None if stored is None else stored.id,
-        origin_url=None if stored is None else stored.origin_url,
-        fetched_at=None if stored is None else stored.fetched_at,
+        origin_url=None if recorded is None else recorded.origin_url,
+        fetched_at=None if recorded is None else recorded.fetched_at,
         rows_in_file=counted,
         cap=_read_the_cap(manifest, stage.id),
         columns_relevant=list(relevant),

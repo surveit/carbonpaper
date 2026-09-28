@@ -53,10 +53,12 @@ def _join_workflow() -> dict:
                             join]).index_workflow_stages_by_id()
 
 
-def _manifest(stage_ids: list[str], limits: dict[str, int] | None = None) -> dict:
+def _manifest(stage_ids: list[str], limits: dict[str, int] | None = None,
+              east_file_id: str | None = None) -> dict:
     files = {
         "filings": {"files": [{"path": "/data/east.csv", "sha256": EAST_SHA,
-                               "bytes": EAST_BYTES}], "source": "run"},
+                               "bytes": EAST_BYTES, "file_id": east_file_id}],
+                    "source": "run"},
         "contracts": {"files": [{"path": "/data/contracts.csv", "sha256": REF_SHA,
                                  "bytes": 120}], "source": "workflow"},
     }
@@ -112,12 +114,19 @@ def test_a_file_whose_bytes_the_project_holds_links_its_page(tmp_path):
     assert read.href == f"/project/{PROJECT}/files/{stored.id}"
 
 
-def test_a_fetched_file_says_where_and_when_it_was_fetched_in_the_packet_too(tmp_path):
-    file_store.ProjectFile(sha256=EAST_SHA, filename="east.csv", byte_count=EAST_BYTES,
-                           project_id=PROJECT, origin_url=EAST_ORIGIN,
-                           fetched_at=EAST_FETCHED_AT).save()
+def _save_fetched_east() -> file_store.ProjectFile:
+    fetched = file_store.ProjectFile(sha256=EAST_SHA, filename="east.csv",
+                                     byte_count=EAST_BYTES, project_id=PROJECT,
+                                     origin_url=EAST_ORIGIN, fetched_at=EAST_FETCHED_AT)
+    fetched.save()
+    return fetched
 
-    inputs = _inputs(_manifest(["filings"]), links=PacketPanelLinks())
+
+def test_a_fetched_file_says_where_and_when_it_was_fetched_in_the_packet_too(tmp_path):
+    fetched = _save_fetched_east()
+
+    inputs = _inputs(_manifest(["filings"], east_file_id=fetched.id),
+                     links=PacketPanelLinks())
     html = templates.env.get_template("_lineage_inputs.html").render(
         inputs=inputs, offline=True)
 
@@ -126,11 +135,22 @@ def test_a_fetched_file_says_where_and_when_it_was_fetched_in_the_packet_too(tmp
     assert f'href="{EAST_ORIGIN}"' in html and EAST_FETCHED_AT in html
 
 
-def test_an_uploaded_file_names_no_origin(tmp_path):
-    file_store.ProjectFile(sha256=EAST_SHA, filename="east.csv",
-                           byte_count=EAST_BYTES, project_id=PROJECT).save()
+def test_a_fetch_the_run_only_matches_by_bytes_is_linked_but_names_no_origin(tmp_path):
+    """The run read another copy of these bytes; this fetch may have come after it."""
+    fetched = _save_fetched_east()
 
-    read = _file(_inputs(_manifest(["filings"])), "east.csv")
+    read = _file(_inputs(_manifest(["filings"], east_file_id="an_upload_since_deleted")),
+                 "east.csv")
+    assert read.href == f"/project/{PROJECT}/files/{fetched.id}"
+    assert (read.origin_url, read.fetched_at) == (None, None)
+
+
+def test_an_uploaded_file_names_no_origin(tmp_path):
+    upload = file_store.ProjectFile(sha256=EAST_SHA, filename="east.csv",
+                                    byte_count=EAST_BYTES, project_id=PROJECT)
+    upload.save()
+
+    read = _file(_inputs(_manifest(["filings"], east_file_id=upload.id)), "east.csv")
     assert (read.origin_url, read.fetched_at) == (None, None)
 
 

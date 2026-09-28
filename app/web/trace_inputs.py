@@ -16,7 +16,7 @@ class InputFileView(BaseModel):
     path: str
     # None where no file this project holds hashes to the bytes the run read.
     href: str | None
-    # Both None for an upload, and where no stored file matches.
+    # Both None for an upload, and unless the run named this file by its id.
     origin_url: str | None
     fetched_at: str | None
     read_by: str
@@ -87,13 +87,15 @@ def _build_file_view(
     catalog: InputCatalog, links: PanelLinks, binding: InputBinding, stage_id: str,
 ) -> InputFileView:
     stored = catalog.stored.find(binding.file_id, binding.sha256)
+    # A byte match may be a later send of the same bytes, fetched from somewhere else.
+    recorded = stored if stored is not None and stored.id == binding.file_id else None
     record = catalog.records.get(stage_id) or {}
     return InputFileView(
         filename=binding.filename,
         path=binding.path,
         href=None if stored is None else links.file_page(stored.id),
-        origin_url=None if stored is None else stored.origin_url,
-        fetched_at=None if stored is None else stored.fetched_at,
+        origin_url=None if recorded is None else recorded.origin_url,
+        fetched_at=None if recorded is None else recorded.fetched_at,
         read_by=stage_id,
         read_by_href=links.stage_anchor(stage_id),
         status=str(record.get("status") or ""),

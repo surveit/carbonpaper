@@ -27,16 +27,16 @@ def run_id(projects_root):
     return str(run_service.execute(PROJECT)["run_id"])
 
 
-@pytest.fixture
-def fetched_east(projects_root):
-    """East is read off the copy the store fetched; west off a loose file it never held."""
+def _run_beside_a_fetched_east(projects_root, read_the_fetched_copy: bool):
+    """The store holds a fetched copy of east; west is a loose file it never held."""
     data = projects_root / FETCHED / "data"
     write_inputs(data)
     with (data / "east.csv").open("rb") as stream:
         record = receive_source(FETCHED, EAST_ORIGIN, "east.csv", stream)
     specs = stage_specs(data)
-    east = next(spec for spec in specs if spec["id"] == "load_east")
-    east["connector"]["params"]["paths"] = [str(resolve_stored_path(record))]
+    if read_the_fetched_copy:
+        east = next(spec for spec in specs if spec["id"] == "load_east")
+        east["connector"]["params"]["paths"] = [str(resolve_stored_path(record))]
     set_stages(FETCHED, specs)
     save_version(FETCHED, message="fixture")
     return record, str(run_service.execute(FETCHED)["run_id"])
@@ -83,12 +83,21 @@ def test_a_file_this_figure_never_read_is_refused(run_id):
 
 
 
-def test_a_fetched_file_links_its_page_and_says_where_and_when_it_was_fetched(fetched_east):
-    record, run_id = fetched_east
+def test_a_fetched_file_links_its_page_and_says_where_and_when_it_was_fetched(projects_root):
+    record, run_id = _run_beside_a_fetched_east(projects_root, read_the_fetched_copy=True)
 
     page = TestClient(app).get(_url(run_id, "panel", project=FETCHED)).text
 
     assert f'href="/project/{FETCHED}/files/{record.id}"' in page
     assert f'href="{EAST_ORIGIN}"' in page and f'datetime="{record.fetched_at}"' in page
     # West was read off a file the store never held, so it has no page to link.
-    assert "hashes to the bytes this run read" in page
+    assert "matches the bytes this run read" in page
+
+
+def test_a_fetch_the_run_only_matches_by_bytes_is_linked_but_names_no_origin(projects_root):
+    record, run_id = _run_beside_a_fetched_east(projects_root, read_the_fetched_copy=False)
+
+    page = TestClient(app).get(_url(run_id, "panel", project=FETCHED)).text
+
+    assert f'href="/project/{FETCHED}/files/{record.id}"' in page
+    assert EAST_ORIGIN not in page
