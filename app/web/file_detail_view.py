@@ -6,10 +6,13 @@ from pydantic import BaseModel
 from app.core.file_shape import ColumnKind, ColumnShape
 from app.core.files import FileCompleteness, ProjectFile, open_project_file
 from app.core.source_files import find_file_format
+from app.core.text_sources import is_text_source
+from app.models.locators import CharRange
 from app.services.frame_profile import read_file_shape
 from app.web.file_preview import FilePreview, build_file_preview
 from app.web.file_sizes import describe_bytes
 from app.web.files_view import count_runs_by_file
+from app.web.source_page_view import SourcePage, build_source_page
 from app.runtime.manifest import list_run_entries
 from app.models.run_manifest import RunKind
 
@@ -69,11 +72,15 @@ class FileDetailView(BaseModel):
     fetched_at: str | None
     # None for a file no reader here opens — a png someone attached to a conversation.
     contents: FileContents | None
+    # None for a file with no pages of text: a table, an image.
+    page: SourcePage | None
     runs: list[ReadingRun]
 
 
-def build_file_detail_view(project_id: str, file_id: str) -> FileDetailView:
-    record, _ = open_project_file(project_id, file_id)
+def build_file_detail_view(
+    project_id: str, file_id: str, page: int, marked: CharRange | None
+) -> FileDetailView:
+    record, path = open_project_file(project_id, file_id)
     return FileDetailView(
         file_id=record.id, filename=record.filename, sha256=record.sha256,
         size=describe_bytes(record.byte_count), added=record.created_at,
@@ -81,6 +88,7 @@ def build_file_detail_view(project_id: str, file_id: str) -> FileDetailView:
         lineage=record.lineage, origin_url=record.origin_url, fetched_at=record.fetched_at,
         contents=_read_contents(project_id, file_id) if find_file_format(record.filename)
         else None,
+        page=build_source_page(path, page, marked) if is_text_source(path) else None,
         runs=_find_reading_runs(project_id, record),
     )
 
