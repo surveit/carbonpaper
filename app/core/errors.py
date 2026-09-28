@@ -62,11 +62,11 @@ class QuoteNotAtAddress(ValueError):
 
 
 class SourceNotRead(ValueError):
-    """A span names a file by a sha256 the run never read."""
+    """A span or a source row names a file by a sha256 the run never read."""
 
 
 class SourceIdMismatch(ValueError):
-    """A span names a source_id other than the stored file id its run recorded for that sha256."""
+    """A span or a source row names a source_id other than the file id its run read."""
 
 
 class SourceChanged(ValueError):

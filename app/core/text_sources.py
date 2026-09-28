@@ -35,6 +35,13 @@ def read_page_text(path: Path, page: int) -> str:
     return read_one_page(path)
 
 
+def read_every_page_text(path: Path) -> Iterator[str]:
+    """Page 1 first, from one open of the file."""
+    if _is_pdf(path):
+        return (page.extract_text() for page in PdfReader(path).pages)
+    return iter([_resolve_one_page_reader(path)(path)])
+
+
 def normalize_text(text: str) -> str:
     compatible = unicodedata.normalize("NFKC", text)
     unhyphenated = compatible.replace(_SOFT_HYPHEN, "")
@@ -42,17 +49,11 @@ def normalize_text(text: str) -> str:
 
 
 def is_text_layer_empty(path: Path) -> bool:
-    return not any(text.strip() for text in _read_every_page_text(path))
+    return not any(text.strip() for text in read_every_page_text(path))
 
 
 def _is_pdf(path: Path) -> bool:
     return path.suffix.lower() == _PDF_SUFFIX
-
-
-def _read_every_page_text(path: Path) -> Iterator[str]:
-    if _is_pdf(path):
-        return (page.extract_text() for page in PdfReader(path).pages)
-    return iter([_resolve_one_page_reader(path)(path)])
 
 
 def _require_page_in_range(path: Path, page: int, page_count: int) -> None:

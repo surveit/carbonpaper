@@ -108,7 +108,7 @@ def test_a_span_naming_another_stored_file_for_the_same_bytes_is_refused(two_pag
     with pytest.raises(SourceIdMismatch) as refused:
         _verify(span, two_pages)
     assert str(refused.value) == (
-        "the span names stored file 'some_other_file', but this run read two_pages.pdf as "
+        "source 'some_other_file' is not the file this run read: it read two_pages.pdf as "
         "stored file 'stored_file'")
 
 

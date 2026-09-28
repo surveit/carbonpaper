@@ -19,7 +19,7 @@ from app.core.errors import (
 )
 from app.core.files import compute_sha256
 from app.core.frames import is_null_form, list_table_rows
-from app.core.text_sources import normalize_text, read_page_text
+from app.core.text_sources import normalize_text, read_every_page_text, read_page_text
 from app.core.utils import format_errors
 from app.models import SPAN_COLUMN_TYPE, Column, TableSchema
 from app.models.locators import PageCharRange, label_locator
@@ -64,7 +64,7 @@ def verify_span(
     span: Span, sources: Mapping[str, InputBinding], texts: SourceTextCache
 ) -> None:
     """Raises unless the quote, and any prefix and suffix, sit at the span's address."""
-    binding = _require_bound_file(span, sources)
+    binding = require_bound_file(span.source_id, span.source_sha256, sources)
     locator = require_page_locator(span)
     page_text = texts.read_page_text(Path(binding.path), span.source_sha256, locator.page)
     locator.validate_text(page_text)
@@ -74,6 +74,25 @@ def verify_span(
         _require_prefix_at(where, locator, page_text, span.prefix)
     if span.suffix is not None:
         _require_suffix_at(where, locator, page_text, span.suffix)
+
+
+def require_bound_file(
+    source_id: str, source_sha256: str, sources: Mapping[str, InputBinding]
+) -> InputBinding:
+    """The file this run read at `source_sha256`, which must be stored file `source_id`."""
+    binding = sources.get(source_sha256)
+    if binding is None:
+        raise SourceNotRead(
+            f"this run read no file with sha256 {source_sha256} (source {source_id})")
+    if binding.file_id is None:
+        raise SourceIdMismatch(
+            f"source {source_id!r} is not the file this run read: it read "
+            f"{binding.filename} from outside the file store")
+    if binding.file_id != source_id:
+        raise SourceIdMismatch(
+            f"source {source_id!r} is not the file this run read: it read "
+            f"{binding.filename} as stored file {binding.file_id!r}")
+    return binding
 
 
 def require_page_locator(span: Span) -> PageCharRange:
@@ -98,6 +117,14 @@ class SourceTextCache:
             self._page_texts[key] = read_page_text(path, page)
         return self._page_texts[key]
 
+    def read_every_page_text(self, path: Path, sha256: str) -> list[str]:
+        """Page 1 first, from one open of the file; read_page_text then answers from memory."""
+        self._require_unchanged(path, sha256)
+        texts = list(read_every_page_text(path))
+        for page, text in enumerate(texts, start=1):
+            self._page_texts[(path, sha256, page)] = text
+        return texts
+
     def _require_unchanged(self, path: Path, sha256: str) -> None:
         if (path, sha256) in self._unchanged:
             return
@@ -106,22 +133,6 @@ class SourceTextCache:
             raise SourceChanged(
                 f"{path.name} now hashes to {found}, not the {sha256} this run read it at")
         self._unchanged.add((path, sha256))
-
-
-def _require_bound_file(span: Span, sources: Mapping[str, InputBinding]) -> InputBinding:
-    binding = sources.get(span.source_sha256)
-    if binding is None:
-        raise SourceNotRead(
-            f"this run read no file with sha256 {span.source_sha256} (source {span.source_id})")
-    if binding.file_id is None:
-        raise SourceIdMismatch(
-            f"the span names stored file {span.source_id!r}, but this run read "
-            f"{binding.filename} from outside the file store")
-    if binding.file_id != span.source_id:
-        raise SourceIdMismatch(
-            f"the span names stored file {span.source_id!r}, but this run read "
-            f"{binding.filename} as stored file {binding.file_id!r}")
-    return binding
 
 
 def _find_column_issues(
