@@ -34,7 +34,8 @@ Also `app/AGENTS.md` (web layer), `app/runtime/AGENTS.md` (the Runner), `README.
   keys is a missing model — define a Pydantic model (`PersistedModel` for a stored object) or
   reuse an existing one, and pass *that*. `tests/arch/test_no_dict_str_any.py` holds each file
   under `app/` to a count that may only fall; a module that must spell one is an owner-approved
-  `_BOUNDARY_MODULES` entry there.
+  `_BOUNDARY_MODULES` entry there, and even there, parse into a model at the first point the
+  shape is known.
 
   Where a dynamic bundle is genuinely unavoidable, ALIAS it rather than spelling
   `dict[str, Any]` inline. The alias name says what the bundle is, who supplies it, and that it
