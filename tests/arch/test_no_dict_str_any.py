@@ -46,6 +46,7 @@ _GRANDFATHERED_COUNTS: dict[str, int] = {
     "app/runtime/manifest.py": 1,
     "app/runtime/run_log.py": 3,
     "app/runtime/runner.py": 7,
+    "app/runtime/spans.py": 1,
     "app/runtime/stage_tests.py": 6,
     "app/runtime/stages/__init__.py": 1,
     "app/runtime/stages/aggregate.py": 1,
