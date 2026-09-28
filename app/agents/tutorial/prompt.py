@@ -62,7 +62,11 @@ you cannot author or change a stage.
      `run_id` + `?nav=0`, which opens the run without the project sidebar — a
      list of sections they have no name for yet). If it stopped at
      `review_ai_spend`, hand over that review queue too (`runs_url_prefix` +
-     the `run_id` + `/queue/review_ai_spend`) in one line.
+     the `run_id` + `/queue/review_ai_spend`) in one line. Nothing behind the
+     queue runs until every queued row is decided, so offer the reader two ways
+     to the totals: decide every row, or have you re-run with a row cap
+     (`limits`), which halts at the same queue with fewer rows to decide; that
+     run's totals cover only the rows it read.
    - **Advanced concepts:**
      - **Lineage** — read_stage_output_rows, then hand over a row's
        `lineage_url`: the trace from a published figure back to its source row.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -10,14 +11,19 @@ from app.evals.store import load_eval_config
 from app.core.files import list_project_files, save_upload
 from app.models import Workflow
 from app.models.review_guide import ReviewGuideDraft
+from app.models.run_manifest import RowsPendingReview, RunKind
 from app.services import project, run as run_service, uploads, versioning, workflow_summary
 from app.services.loader import load_workflow
 from app.services.project import WorkflowFile, import_project
+from app.services.run_guide import build_run_guide_view
+from app.services.workspace import resolve_run_dir
 from app.tools.tutorial import (
     TutorialContext,
     read_seed_eval_config,
     seed_tutorial_project,
 )
+from app.web.config import templates
+from app.web.run_header import build_run_header
 from conftest import pinned_stages
 
 _FIXTURE_PATH = (
@@ -221,3 +227,29 @@ def test_the_seeded_cache_leaves_the_queue_open_for_the_reader(projects_root):
     by_stage = {r["stage_id"]: r for r in result["stage_records"]}
     assert by_stage[_REVIEW_STAGE]["status"] == "awaiting_review"
     assert by_stage["confirm_ai_spend"]["status"] == "pending"
+
+
+def test_the_figures_behind_the_open_queue_say_how_many_rows_it_holds(projects_root):
+    seeded = seed_tutorial_project(TutorialContext(base_url=_BASE_URL))
+    manifest = _run_capped(seeded.project.id)
+    project_id, run_id = seeded.project.id, manifest["run_id"]
+    pending = manifest["human_review_queue_stats"][_REVIEW_STAGE]["items_pending"]
+    header = build_run_header(
+        project_id, run_id, resolve_run_dir(project_id, run_id, RunKind.production), manifest)
+    guide = build_run_guide_view(project_id, manifest)
+
+    by_output = {view.stage_id: view for step in guide.steps for view in step.outputs}
+    assert pending > 0
+    assert by_output["ai_spend_totals"].rows_pending_review == RowsPendingReview(count=pending)
+    assert by_output["in_house_ai_totals"].rows_pending_review is None
+    declared = versioning.load_version_stages(project_id, manifest["workflow_version"])
+    [totals] = [stage for stage in declared if stage.id == "ai_spend_totals"]
+    assert [(f.label, f.rows_pending_review.count) for f in header.figures_pending_review] == [
+        (figure.label, pending) for figure in totals.list_published_figures()]
+
+    html = templates.get_template("_run_published.html").render(header=header)
+    [lead] = re.findall(r'<div class="wf-lead">(.*?)</div>', html, re.S)
+    assert f'<span class="badge awaiting">{pending} row' in lead
+    for figure in header.published.figures:
+        [row] = [row for row in re.findall(r"<tr>(.*?)</tr>", html, re.S) if figure.label in row]
+        assert figure.href in row and "pending review" not in row

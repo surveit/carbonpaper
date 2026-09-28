@@ -4,6 +4,7 @@ payload. The manifest itself is a stored record — `app.runtime.manifest`.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from enum import Enum
 from datetime import datetime
 from pathlib import PurePath
@@ -16,6 +17,7 @@ from app.core.run_status import StageStatus
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.models.stage import Stage
 from app.models.stages.stage_base import StageType
+from app.models.workflow import find_stages_upstream_of
 from app.core.ids import ID
 
 
@@ -124,6 +126,40 @@ def read_run_bindings(
     if isinstance(nested, dict) and "run_bindings" in nested:
         return dict(nested["run_bindings"] or {})
     return dict(raw.get("run_bindings") or {})
+
+
+class RowsPendingReview(BaseModel):
+    # None where a queue holding the stage recorded no pending count.
+    count: int | None
+
+
+def find_rows_pending_review(
+    raw: Mapping[str, Any], stages: Sequence[Stage]
+) -> dict[str, RowsPendingReview]:
+    """Each stage a queue awaiting review holds, at or upstream of it, and the rows it waits on."""
+    pending_by_queue = _read_pending_rows_by_queue(raw)
+    held: dict[str, RowsPendingReview] = {}
+    for stage in stages:
+        at_or_upstream = {stage.id} | find_stages_upstream_of(stages, stage.id)
+        counts = [count for queue_id, count in pending_by_queue.items() if queue_id in at_or_upstream]
+        if counts:
+            held[stage.id] = RowsPendingReview(count=_sum_known_counts(counts))
+    return held
+
+
+def _read_pending_rows_by_queue(raw: Mapping[str, Any]) -> dict[str, int | None]:
+    stats = raw.get("human_review_queue_stats") or {}
+    return {
+        record["stage_id"]: (stats.get(record["stage_id"]) or {}).get("items_pending")
+        for record in raw["stage_records"]
+        if record.get("status") == StageStatus.AWAITING_REVIEW
+    }
+
+
+def _sum_known_counts(counts: list[int | None]) -> int | None:
+    """One unrecorded count leaves the total unknown rather than short."""
+    known = [count for count in counts if count is not None]
+    return sum(known) if len(known) == len(counts) else None
 
 
 class ReadFile(BaseModel):
