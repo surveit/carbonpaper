@@ -1,0 +1,23 @@
+name: shrink-intent
+
+# Its own workflow rather than a job in ci.yml: a label or a retitle must re-run this check, and
+# those event types in ci.yml would re-run the whole suite on every label change.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  shrink-intent:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'grows-on-purpose') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Through env, never ${{ }} inside `run`: the title is author text and would execute as shell.
+      - env:
+          TITLE: ${{ github.event.pull_request.title }}
+          ADDITIONS: ${{ github.event.pull_request.additions }}
+          DELETIONS: ${{ github.event.pull_request.deletions }}
+        run: python3 scripts/check_removal_pr_shrinks.py --title="$TITLE" --additions="$ADDITIONS" --deletions="$DELETIONS"
