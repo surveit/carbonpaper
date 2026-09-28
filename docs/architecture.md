@@ -75,13 +75,13 @@ loader) renders per-stage issues. Typed `Stage` objects flow end-to-end.
 `runner.py` — `execute_run`/`prepare_run`/`run_prepared`/`resume_run`, each taking the
 version the run pins as a `Workflow`. The runner reads no versions: the caller resolves one
 (`app/services/versioning.py: resolve_version_id`, defaulting to the newest STORED version
-— never a draft), loads its frozen stages and
+— never a draft), loads its frozen stages (`load_version_stages`) and
 hands them in. A run's per-stage connector bindings are merged by
 `Workflow.apply_run_bindings`, which rebuilds the workflow rather than letting the runner
 hold bare stages. `app/services/run.py` is the one place that composes this, and an
 import-linter contract keeps `runner.py` free of `app.services` so the arrow between the two
-points one way; `app/cli.py` drives that same seam. Per stage: validate
-inputs, dispatch, validate output, write `outputs/<stage>.parquet`,
+points one way; `app/cli.py` drives that same seam. Per stage, in `topological_sort` order
+(`executor.py`): validate inputs, dispatch, validate output, write `outputs/<stage>.parquet`,
 flush the run record mid-run; halt-on-review + resume; per-run `--limit`/`--offset`
 capping the rows a stage READS (cut off its inputs before its handler runs).
 `stages/` — one module per type. `llm.py`/`options.py` — the agent

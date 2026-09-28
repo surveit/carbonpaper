@@ -81,8 +81,8 @@ prompt never hand-writes — and never drifts from — an output shape.
   refusal.
   `find_llm_signature_issues` holds `quoted_from` to a read `span` or
   `list[span]` column.
-- **The reply is validated by construction.** `call_llm` runs an
-  `app.core.agent.agent.Agent` whose `target_schema` is that compiled model, so
+- **The reply is validated by construction.** `call_llm` renders the stage's prompt and
+  runs a headless `app.core.agent.agent.Agent` whose `target_schema` is that compiled model, so
   a schema-invalid reply is re-asked inside the agent's own loop rather than
   parsed out of prose. A row that never yields a valid reply is tagged with the
   `_error` sentinel and surfaces as an error-severity output issue; the row

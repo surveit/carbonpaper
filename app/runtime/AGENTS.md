@@ -1,16 +1,9 @@
 # app/runtime — the Runner (workflow executor)
 
-Executes a workflow and persists the result. Does not import the compiler or the web app.
-**It reads no workflow versions.** A caller resolves which version to pin and loads that
-snapshot (`app/services/versioning.py`: `resolve_version_id` → `load_version_stages`) and
-hands the runner that version as a `Workflow`; `app/services/run.py` is the one place that composes this for
-a production run. An import-linter contract forbids `app/runtime/runner.py` from importing
-`app.services` at all, so the arrow between them points one way only.
+**It reads no workflow versions**; a caller hands it one. Which caller, and the contract
+holding that: the `app/runtime/` section of `docs/architecture.md`.
 
 ## `runner.py` — the executor
-`topological_sort` → `execute_run(project_dir, repo_root, workflow, workflow_version)`. Per
-stage: validate declared inputs (`validation.py`), dispatch to the type's handler, validate
-the output, write `outputs/<stage>.parquet`, append to the run record.
 - **Duplicate input rows are allowed.** A stage decides nothing per row-instance: the
   stage cache and a `human_review_queue` decision are both keyed on row CONTENT, so two
   identical rows share one cached result and one recorded decision — approving the content
@@ -120,10 +113,6 @@ stays the source of truth for stage status; this log is only ever the drill-down
 - `options.py` `require_agent_backend()` raises unless the agent backend can run
   (`claude_agent_sdk` importable and a `claude` CLI located, incl. Windows
   `~/.local/bin/claude.exe`). The agent is the ONLY backend — no fallback of any kind.
-- `llm.py` `call_llm` renders the stage's prompt and runs a headless structured-output
-  `app.core.agent.agent.Agent` whose `target_schema` is the stage's compiled reply model, so
-  the reply is validated by construction rather than parsed from prose. Run per row by the
-  row driver under bounded parallelism.
 - **A span column is answered with a quote.** `stages/span_replies.py` finds the quote in
   the column named by `quoted_from` and mints the span; the model never supplies an
   address. See `docs/llm-transform-output-spec.md` rule 5.

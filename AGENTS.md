@@ -32,16 +32,10 @@ Also `app/AGENTS.md` (web layer), `app/runtime/AGENTS.md` (the Runner), `README.
   worked example of the output.
 - **No `dict[str, Any]` as a stand-in for a structured value.** A dict with a known, fixed set of
   keys is a missing model — define a Pydantic model (`PersistedModel` for a stored object) or
-  reference an existing one, and pass *that*. A function returning `dict[str, Any]`, or a field
-  typed `dict[str, Any]`, for something with named fields is a review-blocking smell — model it.
-  `dict[str, Any]` is allowed only at a genuine dynamic-JSON boundary where the shape is
-  caller-defined and not yet known: a raw stage-spec dict that may be invalid mid-edit (matching
-  `stage_to_spec_dict` / `validate_workflow_draft`), or foreign JSON being parsed — and even
-  there, parse into a model at the first point the shape is known.
-  `tests/arch/test_no_dict_str_any.py` holds each file under `app/` to its current count of
-  `dict[str, Any]`, and that count may only fall.
-
-  As a follow-up here, try to reuse existing types instead of defining new ones.
+  reuse an existing one, and pass *that*. `tests/arch/test_no_dict_str_any.py` holds each file
+  under `app/` to a count that may only fall; a module that must spell one is an owner-approved
+  `_BOUNDARY_MODULES` entry there, and even there, parse into a model at the first point the
+  shape is known.
 
   Where a dynamic bundle is genuinely unavoidable, ALIAS it rather than spelling
   `dict[str, Any]` inline. The alias name says what the bundle is, who supplies it, and that it
@@ -58,11 +52,10 @@ Also `app/AGENTS.md` (web layer), `app/runtime/AGENTS.md` (the Runner), `README.
   layer with less context.
 - **Banned words keep vocabulary limited** `tests/arch/test_no_banned_words.py` fails on any
   word in its `BANNED_WORDS` set across `.py`/`.md`/`.html`/`.js`/`.css` — read that set for the
-  current list and the replacement each word owes you. This exists to reduce the number of nouns and verbs, which confuses both developers and users. Add inaccurate synonyms you find yourself using to the BANNED_WORDS list.
-- **No `__all__`.** Nothing here star-imports, so it is only a second registry of public names
-  to keep in sync. A package hub re-exports with the redundant-alias form
-  `from x import y as y`, which Ruff and mypy both read as explicit. Enforced by
-  `tests/arch/test_no_dunder_all.py`, with an empty allowlist.
+  current list and the replacement each word owes you. This exists to reduce the number of
+  nouns and verbs, which confuses both developers and users.
+- **No `__all__`**; re-export with `from x import y as y`. Held by
+  `tests/arch/test_no_dunder_all.py`.
 - **Never weaken an arch test without human approval.** The import-linter contracts
   (`pyproject.toml`, run as `lint-imports`) and the AST invariant tests (`_arch_tests/`,
   `tests/arch/`) exist to fail on work in progress — that failure is the signal, not an obstacle.
@@ -78,48 +71,20 @@ Also `app/AGENTS.md` (web layer), `app/runtime/AGENTS.md` (the Runner), `README.
   caller. That spends the readability the ceiling exists to protect and leaves the next change
   with even less room. If the split is bigger than the change you are on, say so in the PR and
   let a human decide whether to take it now.
-- **A record is declared in `app/models/records/`, never in a service.** One module per
-  `PersistedModel` subclass, holding the declaration and nothing else; the functions that
-  load, mutate and save it stay in the service that owns its lifecycle and import the
-  class. Held by the import-linter contract protecting `app.core.record`: declaring a
-  record IS importing the base, so the whitelist of importers is the whitelist of places a
-  row's shape may be written down. `app.runtime` is on it because
-  `app/runtime/_arch_tests/test_stages_no_cross_run_disk.py` lets a runtime module call
-  `.save()` only while it DECLARES a `PersistenceScope.RUN` record; `app.core` is on it for
-  the records `app/models` sits above (`ProjectFile`, `StageCacheEntry`, `Judgment`,
-  `AgentSession`, `StoredFileShape`).
-- **Under `app/`, a record class is the only way to reach storage.** A second contract
-  protects `app.core.persistence`, so only `app.core.record` (plus the store wiring) may
-  hold the handle: no module calls `get_store()` to write a collection nothing models.
-  A raw payload a reader must tolerate comes off the record too — `load_raw`,
-  `load_raw_or_none`, `list_raw`. Tests are outside the contract and may still reach the
-  handle to arrange a fixture. `JsonDict`/`JsonScalar` live in `app.core.json_types` and
-  are open to all: naming a payload's shape is not reaching for storage.
-- **A `PersistedModel`'s `id` is opaque and frozen. Never build one out of the record's own data.**
-  A sha256, a filename, a name someone typed, a fingerprint — putting any of them in the id
-  makes the id move when the value does. The record then has two identities that must agree,
-  nothing checks that they do, and re-keying it means deleting and re-writing the row rather
-  than editing a field. Leave `id` alone and let it default to `uuid4().hex`; the real key
-  goes in FIELDS, which is what a lookup filters on — `find()` selects on stored fields, so
-  a scope has no reason to be smuggled into the id. `StageCacheEntry` is the deliberate
-  exception and the only one: a cache entry IS its content hash, so its id is built from the
-  fingerprints it looks up by. `id` carries `frozen=True`, so reassigning it on a loaded
-  record raises rather than silently re-keying the row — a record's identity is settled
-  when it is constructed.
+- **A record is declared in `app/models/records/`, one module per `PersistedModel`, never in a
+  service**; the import-linter contract protecting `app.core.record` holds it.
+- **Under `app/`, a record class is the only way to reach storage**; the contract protecting
+  `app.core.persistence` holds it.
+- **A `PersistedModel`'s `id` is opaque and frozen, never built from the record's own data**,
+  except `StageCacheEntry`, whose id is its content hash;
+  `app/_arch_tests/test_record_ids_are_opaque.py` holds it. `docs/models-and-storage.md` gives
+  the reasons for all three.
 - **When master is red, do not fix it unless that fix is your whole task.** A trunk breakage
   is shared state: parallel sessions each patching it on their own branches fork the same fix
   N ways, and every branch conflicts when the first copy merges. If you hit a red master
   mid-task, keep working on your branch — do not fold a trunk fix into it. The fix belongs to
   one agent dedicated to it, as a single-commit PR off master, merged as soon as checks pass.
-- **A newly added comment or docstring carries at most one short sentence.** CI diffs
-  every push/PR against its base and fails on any *added* comment/docstring over 100
-  characters that isn't a tool directive (`# noqa`, `# type: ignore`, ...) or a bare link
-  to `docs/*.md` or a GitHub issue — see `docs/no-long-comments-policy.md` and
-  `scripts/check_added_comment_length.py`. Diff-scoped on purpose: existing code is never
-  swept, and there is no exception list to grow. The default is still no comment at all;
-  name the thing instead of explaining it.
-- **Planning docs stay out of the repo.** Design specs, implementation/execution plans,
-  brainstorming or "rethink" notes, and refactor/migration roadmaps are ephemeral working
-  artifacts — keep them in scratch or the PR description, never commit them. Committed docs
-  describe what the code does *today* (reference docs like `docs/architecture.md`), not what we
-  plan to do.
+- **A newly added comment or docstring carries at most one short sentence**, held in CI by
+  `scripts/check_added_comment_length.py` (`docs/no-long-comments-policy.md`).
+- **Planning docs stay out of the repo.** Keep specs, plans, "rethink" notes and roadmaps in
+  scratch or the PR description; committed docs describe what the code does *today*.

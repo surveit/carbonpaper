@@ -68,7 +68,7 @@ Three modules, not one, sit under that, and two of them are protected:
 
 | Module | Holds | Who may import it |
 |---|---|---|
-| `app/core/record.py` | `PersistedModel`, `PersistenceScope` | `app.core`, `app.models.records`, `app.runtime` |
+| `app/core/record.py` | `PersistedModel`, `PersistenceScope` | `app.core`, `app.models.records` |
 | `app/core/persistence.py` | `StoreProtocol`, `get_store`, `configure_store` | `app.core.record`, `app.core.store_config`, `app.core.sqlite_store` |
 | `app/core/json_types.py` | `JsonDict`, `JsonScalar` | anyone |
 
@@ -76,8 +76,9 @@ Declaring a record means importing the base, so the first whitelist is the list 
 places a stored row's shape may be written down. Holding the handle means being able to
 write any collection under any id with no record class in the way, so the second
 whitelist closes that off: **under `app/`, a record class is the only way to reach
-storage.** Naming the shape of a payload is neither of those acts, which is why the
-JSON aliases sit apart and stay open.
+storage.** A raw payload a reader must tolerate comes off the record too, through
+`load_raw`, `load_raw_or_none` and `list_raw`. Naming the shape of a payload is neither of
+those acts, which is why the JSON aliases sit apart and stay open.
 
 Tests are outside both contracts — import-linter's root package is `app` — so a test may
 still reach `get_store()` directly to arrange a fixture or assert on the stored bytes.
@@ -114,6 +115,19 @@ needs it: `ProjectFile` (`app/core/files.py`), `StageCacheEntry`
 (`app/core/stage_cache.py`), `Judgment` (`app/core/judgments.py`, written only by
 `StageCache.record_judgment`), `AgentSession` (`app/core/agent/store.py`) and
 `StoredFileShape` (`app/core/file_shape.py`).
+
+### A record's id is opaque and frozen
+
+A `PersistedModel`'s `id` defaults to `uuid4().hex` and is never built from the record's own
+data. A sha256, a filename, a name someone typed or a fingerprint in the id makes the id move
+when the value does: the record then has two identities that must agree, nothing checks that
+they do, and re-keying it means deleting and re-writing the row rather than editing a field.
+The real key goes in a field, which is what a lookup filters on: `find()` selects on stored
+fields, so a scope has no reason to ride in the id. `StageCacheEntry` is the one deliberate
+exception: a cache entry IS its content hash, so its id is built from the fingerprints it is
+looked up by. `id` carries `frozen=True`, so reassigning it on a loaded record raises rather
+than re-keying the row. `app/_arch_tests/test_record_ids_are_opaque.py` holds the construction
+sites; its `_GRANDFATHERED` set names the older ones that still pass an `id`, and may only shrink.
 
 ### The stage spec-dict shape
 
