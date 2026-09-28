@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from decimal import Decimal
 from typing import Any
 
@@ -13,6 +14,7 @@ from pandas.api.types import is_float_dtype
 from app.core.predicate import parse_predicate
 from app.core.frames import table_to_frame
 from app.models import WorkflowStage
+from app.models.errors import StepRefused
 from app.models.stages.aggregate import (
     AGG_FORMULA_COUNT,
     AGG_FORMULA_COUNT_DISTINCT,
@@ -106,8 +108,10 @@ def _compute_grouped_value(
     value_column = _require_value_column(op)
     grouped = slice_df.groupby(group_by, dropna=False)[value_column]
     if op.formula == AGG_FORMULA_SUM and is_float_dtype(slice_df[value_column]):
-        return grouped.agg(lambda values: _sum_as_decimals(values.dropna().tolist())).rename(out)
-    if op.formula in {"sum", "mean", "min", "max"}:
+        return grouped.apply(lambda values: _sum_floats(
+            values.dropna().tolist(), stage_id=stage_id, column=value_column,
+            subject=_name_the_group(group_by, values.name))).rename(out)
+    if op.formula in {AGG_FORMULA_SUM, "mean", "min", "max"}:
         return grouped.agg(op.formula).rename(out)
     if op.formula == AGG_FORMULA_FIRST:
         return grouped.first().rename(out)
@@ -146,8 +150,10 @@ def _compute_whole_frame_value(slice_df: pd.DataFrame, op: AggregationOp, stage_
         return len(slice_df)
     values = slice_df[_require_value_column(op)]
     if op.formula == AGG_FORMULA_SUM and is_float_dtype(values):
-        return _sum_as_decimals(values.dropna().tolist())
-    if op.formula in {"sum", "mean", "min", "max"}:
+        return _sum_floats(
+            values.dropna().tolist(), stage_id=stage_id, column=_require_value_column(op),
+            subject="the whole frame")
+    if op.formula in {AGG_FORMULA_SUM, "mean", "min", "max"}:
         return getattr(values, op.formula)()
     if op.formula == AGG_FORMULA_FIRST:
         return _take_first_present(values)
@@ -170,9 +176,20 @@ def _take_first_present(values: pd.Series) -> Any:
     return present.iloc[0] if len(present) else np.nan
 
 
-def _sum_as_decimals(values: list[float]) -> float:
-    """Adds the decimals the values print as; math.fsum of the floats can still land one ulp off."""
-    return float(sum((Decimal(repr(value)) for value in values), Decimal(0)))
+def _sum_floats(values: list[float], *, stage_id: str, column: str, subject: str) -> float:
+    """math.fsum alone lands one ulp off some sums of short decimals, such as amounts in cents."""
+    if math.inf in values and -math.inf in values:
+        raise StepRefused(
+            f"stage '{stage_id}': {subject} — `{column}` holds both +inf and -inf, "
+            f"which have no sum.")
+    if all(_is_short_decimal(value) for value in values):
+        return float(sum((Decimal(repr(value)) for value in values), Decimal(0)))
+    return math.fsum(values)
+
+
+def _is_short_decimal(value: float) -> bool:
+    """A decimal of 15 or fewer significant digits reads back from its float unchanged."""
+    return float(f"{value:.15g}") == value
 
 
 def _require_value_column(op: AggregationOp) -> str:
