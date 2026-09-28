@@ -64,6 +64,7 @@ INT_COLUMN_TYPE = "int"
 JSON_COLUMN_TYPE = "json"
 LIST_JSON_COLUMN_TYPE = "list[json]"
 SPAN_COLUMN_TYPE = "span"
+LIST_SPAN_COLUMN_TYPE = "list[span]"
 
 # The column types holding a python date/datetime, never the ISO string that spells one.
 DATE_COLUMN_TYPES: frozenset[str] = frozenset({"date", "datetime"})
@@ -247,6 +248,14 @@ class Column(_Base):
 
 
 Column.model_rebuild()
+
+
+def holds_spans(column: Column) -> bool:
+    element_type = column.type
+    while (inner := find_list_element_type(element_type)) is not None:
+        element_type = inner
+    return element_type == SPAN_COLUMN_TYPE or any(
+        holds_spans(field) for field in column.fields or [])
 
 
 # ── Column spec-equality ─────────────────────────────────────────────────────
