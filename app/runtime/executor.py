@@ -359,7 +359,6 @@ def _sliced_input_lineage(
         workflow_stage.inputs[0].id, list(range(window.start, window.start + rows)))
 
 
-
 def _persist_stage_output(output: pa.Table, sid: str, run_dir: Path, record: StageRecord) -> Path:
     """The stage's artifact path, after writing it — the CSV fallback is NOTED on `record`."""
     written = write_frame_table_with_csv_fallback(

@@ -121,8 +121,8 @@ silently taking a default.
 
 A `builds` stage owes the input rows behind every row it writes. `_finalize_stage_output`
 (`app/runtime/executor.py`) refuses one whose handler reported no lineage with
-`MissingLineage`, before its frame is written; `maps` and `creates` report none, since
-output row *i* is input row *i* or is read from a file, and `consumes` writes no rows. The
+`MissingLineage`, before its frame is written. A `maps` stage may report none, since its
+output row *i* is input row *i*, and a `consumes` stage writes no rows to account for. The
 declared reshapes work their lineage out in the handler. A `python_frame_function` cannot
 be read that way, so it reports its own: it declares a keyword-only `lineage` recorder
 (`LineageRecorder`, `app/runtime/lineage.py`) and names, for each output row, the input row
