@@ -1,9 +1,4 @@
-"""The run page's issue index (app/web/run_issues.py + _run_issues.html).
-ONE list: the stop that ended the run is a line of it like any other. The two
-three failures a stop can be reporting — the stage's output, the input its author
-refused, the code — must still read apart at a glance, because they route to
-different people.
-"""
+"""The issue index (run_issues.py, _run_issues.html): one list, each kind of stop worded apart."""
 from __future__ import annotations
 
 import tempfile
@@ -11,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from app.models import StepRefused, parse_stage
-from app.models.run_manifest import SCHEMA_REFUSAL_ERROR_TYPE
+from app.models.run_manifest import QUOTE_REFUSAL_ERROR_TYPE, SCHEMA_REFUSAL_ERROR_TYPE
 from app.web.config import templates
 from app.web.panel_links import AppPanelLinks
 from app.web.run_issues import StopKind, build_run_issues
@@ -84,6 +79,22 @@ def _refusal(stage_id: str) -> dict[str, Any]:
     )
 
 
+QUOTE_MESSAGE = (
+    "1 span(s) do not hold in the file they quote: row 0: quote not at page 2 of "
+    "two_pages.pdf: characters 0–6 hold 'The se', not 'second'"
+)
+
+
+def _quote_refusal(stage_id: str) -> dict[str, Any]:
+    return _record(
+        stage_id, "error",
+        error={"type": QUOTE_REFUSAL_ERROR_TYPE,
+               "message": f"stage '{stage_id}' column 'basis': {QUOTE_MESSAGE}",
+               "traceback": None},
+        output_validation_report=_report("output", ("error", "basis", QUOTE_MESSAGE)),
+    )
+
+
 def _crash(stage_id: str) -> dict[str, Any]:
     return _record(
         stage_id, "error",
@@ -113,6 +124,13 @@ def test_a_data_refusal_reads_as_the_data_question_the_message_already_asks():
     assert stop.kind is StopKind.schema
     # The line is the report's own wording — the panel and the index cannot drift.
     assert [(i.column, i.message) for i in stop.issues] == [("issue_type", ENUM_MESSAGE)]
+
+
+def test_a_quote_refusal_is_a_stop_of_its_own_carrying_the_column_it_refused():
+    stop = build_run_issues(_manifest(_quote_refusal("extract_claims")), None).stopped[0]
+
+    assert stop.kind is StopKind.quote
+    assert [(i.column, i.message) for i in stop.issues] == [("basis", QUOTE_MESSAGE)]
 
 
 def test_a_transform_exception_stays_engineer_facing_in_the_same_section():
@@ -239,6 +257,9 @@ def test_each_stop_story_is_worded_apart_in_the_markup():
     assert ("this stage does not handle this data"
             in _render(_manifest(_refused("publish_workbook"))))
     assert "the code broke" in _render(_manifest(_crash("publish_report")))
+    quote_stop = _render(_manifest(_quote_refusal("extract_claims")))
+    assert "a quote does not hold in its source" in quote_stop
+    assert "the data changed" not in quote_stop
 
 
 def test_a_data_refusal_deep_links_the_panels_data_tab():
@@ -246,6 +267,14 @@ def test_a_data_refusal_deep_links_the_panels_data_tab():
 
     assert 'data-stage-link="classify_issues"' in html
     assert 'data-stage-tab="data"' in html
+
+
+def test_a_quote_refusal_deep_links_the_panels_data_tab_and_lists_what_it_refused():
+    html = _render(_manifest(_quote_refusal("extract_claims")))
+
+    assert 'data-stage-tab="data"' in html
+    assert "<code>basis</code>" in html
+    assert "characters 0–6 hold" in html
 
 
 def test_a_crash_deep_links_the_panels_transform_tab_instead():

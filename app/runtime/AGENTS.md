@@ -138,6 +138,8 @@ stage schemas in `app/models/`. `report` is the one type that resolves none, and
 the report says so rather than checking nothing silently. An error-severity issue in the OUTPUT report (missing column, failed coercion,
 value outside a declared enum, null in a non-nullable column) fails the
 stage: the record is `error` with an `OutputSchemaViolation` and downstream stages are blocked.
+An output that passes is then held to its spans, and a refusal fails the stage as
+`QuoteRefusal` (docs/architecture.md).
 `validation_warnings` means warning-severity issues only. Input-side issues alone still only warn.
 An out-of-`range` number is one of those errors, enforced at every level a number passes: the
 reply an `llm_transform` may submit, the row its mapper returns, and the frame the stage lands.

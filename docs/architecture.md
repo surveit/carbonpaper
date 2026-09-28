@@ -132,6 +132,14 @@ be read that way, so it reports its own: it declares a keyword-only `lineage` re
 it was built from, the rows that contributed to it, or that it `originates` there. A
 function that does not declare the recorder, or leaves a row unaccounted, fails the stage.
 
+Every span a stage writes, in a `span` or `list[span]` column or inside a `json` field, must
+quote text its file holds at its address, in a file the run bound (`RunContext.bound_sources`).
+Once the output passes its schema, `_finalize_stage_output` checks it with `find_span_issues`
+(`app/runtime/spans.py`) and a refusal fails the stage as `QuoteRefusal`. A stage with no span
+column reads no file, and a page is read once per run through the run's `SourceTextCache`. A
+production run binds what its input stages read at prepare; `execute_subset` binds each file its
+workflow's input stages name the same way, leaving the manifest's `input_bindings` empty.
+
 ## `app/compiler/` — prose → LLM generation engines
 Two generators, each an `app.core.agent` Agent targeting a model schema:
 `stage_tests.py` (one python-transform stage + the project's terms → its `StageTest`

@@ -157,6 +157,8 @@ class RunContext(BaseModel):
         run_dir: Path | None,
         params: RunParameters = RunParameters(),
         queue_auto_approve: bool = False,
+        *,
+        bound_sources: Mapping[str, InputBinding] = {},
     ) -> RunContext:
         bypassing = queue_auto_approve or params.queue_auto_approve
         return cls(
@@ -167,4 +169,5 @@ class RunContext(BaseModel):
                 "queue_auto_approve": bypassing,
                 "is_test_run": params.is_test_run or bypassing,
             }),
+            bound_sources=bound_sources,
         )

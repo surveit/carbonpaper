@@ -76,7 +76,10 @@ class ValidationReport:
 
     @property
     def ok(self) -> bool:
-        return not any(i.severity == UserFacingErrorSeverity.error for i in self.issues)
+        return not self.list_errors()
+
+    def list_errors(self) -> list[Issue]:
+        return [i for i in self.issues if i.severity == UserFacingErrorSeverity.error]
 
     def to_dict(self) -> dict[str, Any]:
         return {

@@ -25,6 +25,8 @@ from app.core.ids import ID
 # schema it declares. Nothing was raised: the data is not what the stage says it is,
 # which is the data owner's to fix, not the author of the code's.
 SCHEMA_REFUSAL_ERROR_TYPE = "OutputSchemaViolation"
+# The `StageErrorInfo.type` of a stage whose output carries a span its source refuses.
+QUOTE_REFUSAL_ERROR_TYPE = "QuoteRefusal"
 
 
 class StageErrorInfo(BaseModel):
@@ -201,6 +203,13 @@ class InputBinding(BaseModel):
 
 def read_input_bindings(raw: dict[str, Any]) -> list[InputBinding]:
     return flatten_input_bindings(raw.get("input_bindings") or {})
+
+
+def index_bound_sources(recorded: Mapping[str, Any]) -> dict[str, InputBinding]:
+    return {
+        binding.sha256: binding
+        for binding in flatten_input_bindings(recorded) if binding.sha256
+    }
 
 
 def flatten_input_bindings(recorded: Mapping[str, Any]) -> list[InputBinding]:
