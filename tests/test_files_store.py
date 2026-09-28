@@ -1,7 +1,6 @@
 """A file's record says where its bytes came from: fetched from an origin, or uploaded."""
 from __future__ import annotations
 
-import gzip
 import hashlib
 import io
 from datetime import datetime, timedelta
@@ -47,14 +46,14 @@ class _SlowStream(io.BytesIO):
 
 def test_a_record_stored_before_files_had_an_origin_still_loads():
     file_id = "3f1c0d2e9a8b4c7d9e0f1a2b3c4d5e6f"
-    # The payload save_upload wrote before the three fields existed, key for key.
+    # The payload save_upload wrote before the two fields existed, key for key.
     get_store().write(ProjectFile.collection, file_id, {
         "id": file_id, "created_at": "2026-09-01T10:00:00.000000",
         "updated_at": "2026-09-01T10:00:00.000000", "sha256": hashlib.sha256(BODY).hexdigest(),
         "filename": "posts.csv", "byte_count": len(BODY), "project_id": "demo",
         "completeness": "open", "lineage": ""})
     record = ProjectFile.load(file_id)
-    assert (record.origin_url, record.fetched_at, record.media_type) == (None, None, None)
+    assert (record.origin_url, record.fetched_at) == (None, None)
 
 
 def test_receive_source_records_the_bytes_and_where_they_came_from():
@@ -63,7 +62,6 @@ def test_receive_source_records_the_bytes_and_where_they_came_from():
     assert stored.sha256 == hashlib.sha256(BODY).hexdigest()
     assert stored.byte_count == len(BODY)
     assert stored.origin_url == ORIGIN
-    assert stored.media_type == "application/pdf"
     assert resolve_stored_path(stored).read_bytes() == BODY
 
 
@@ -80,7 +78,6 @@ def test_fetched_at_is_when_the_read_began_not_when_the_record_was_made(monkeypa
 def test_an_upload_records_no_origin_and_no_fetch_time():
     record = save_upload("posts.csv", io.BytesIO(b"name,val\nx,1\n"), "demo")
     assert (record.origin_url, record.fetched_at) == (None, None)
-    assert record.media_type == "text/csv"
 
 
 @pytest.mark.parametrize("origin", ["javascript:alert(1)", "/Users/someone/58.pdf", "https://"])
@@ -90,8 +87,3 @@ def test_an_origin_that_is_not_an_http_url_is_refused_before_a_byte_is_stored(or
     assert ProjectFile.list() == []
     assert not any(files_root().rglob("*"))
 
-
-def test_a_compressed_file_records_no_media_type():
-    # Its name says csv; its bytes are gzip.
-    record = receive_source("demo", ORIGIN, "rows.csv.gz", io.BytesIO(gzip.compress(b"a,b\n")))
-    assert record.media_type is None

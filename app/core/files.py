@@ -6,7 +6,6 @@ from __future__ import annotations
 import enum
 from dataclasses import dataclass
 import hashlib
-import mimetypes
 import os
 import tempfile
 from pathlib import Path
@@ -24,9 +23,6 @@ _CHUNK_BYTES = 1024 * 1024
 
 # The name a file with no usable one of its own is stored under.
 _FALLBACK_FILENAME = "upload.dat"
-
-# Not mimetypes.guess_type, which also reads the host's own tables and so differs by machine.
-_MEDIA_TYPES = mimetypes.MimeTypes()
 
 _KILOBYTE = 1024
 _MEGABYTE = 1024 * _KILOBYTE
@@ -71,8 +67,6 @@ class ProjectFile(PersistedModel):
     project_id: ID | None = None
     completeness: FileCompleteness = FileCompleteness.OPEN
     lineage: str = ""
-    # Read off the filename, not the bytes.
-    media_type: str | None = None
     # Only receive_source writes these two, so an upload carries neither.
     origin_url: str | None = None
     fetched_at: str | None = None
@@ -98,7 +92,7 @@ def save_upload(filename: str, src: BinaryIO, project_id: ID | None = None) -> P
 
 
 def receive_source(project_id: ID, origin_url: str, filename: str, stream: BinaryIO) -> ProjectFile:
-    """Store the bytes a connector reads from `origin_url`, stamped with when the read began."""
+    """Store the bytes read from `origin_url`, stamped with when the read began."""
     _refuse_origin_that_is_not_http(origin_url)
     return _save_file(filename, stream, project_id, origin_url=origin_url, fetched_at=now_iso())
 
@@ -114,10 +108,9 @@ def _save_file(filename: str, src: BinaryIO, project_id: ID | None, *,
     root.mkdir(parents=True, exist_ok=True)
     staged, digest, byte_count = _write_to_temp_file(root, src, max_upload_bytes())
     _refuse_upload_over_quota(root, staged, byte_count)
-    name = _safe_filename(filename)
-    record = ProjectFile(sha256=digest, filename=name, byte_count=byte_count,
-                         project_id=project_id, origin_url=origin_url, fetched_at=fetched_at,
-                         media_type=_find_media_type(name))
+    record = ProjectFile(sha256=digest, filename=_safe_filename(filename),
+                        byte_count=byte_count, project_id=project_id,
+                        origin_url=origin_url, fetched_at=fetched_at)
     (root / record.id).mkdir(parents=True, exist_ok=True)
     staged.replace(resolve_stored_path(record))
     # Saved only once the bytes are in place: a record whose bytes are missing is what
@@ -255,12 +248,6 @@ def _refuse_origin_that_is_not_http(origin_url: str) -> None:
     # The file page links it, so a `javascript:` origin would run in the reader's browser.
     if parts.scheme not in ("http", "https") or not parts.netloc:
         raise ValueError(f"a fetched file's origin must be an http(s) URL, got {origin_url!r}")
-
-
-def _find_media_type(filename: str) -> str | None:
-    media_type, encoding = _MEDIA_TYPES.guess_type(filename)
-    # `rows.csv.gz` holds gzip bytes, not a csv.
-    return media_type if encoding is None else None
 
 
 def _write_to_temp_file(root: Path, src: BinaryIO, ceiling: int) -> tuple[Path, str, int]:

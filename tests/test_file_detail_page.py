@@ -46,6 +46,13 @@ def page(project_id: str, file_id: str) -> str:
     return response.text
 
 
+def read_file_head(project_id: str, file_id: str) -> str:
+    """The page's head alone: the name and the facts line under it."""
+    text = page(project_id, file_id)
+    start = text.index('<div class="sec-head file-head">')
+    return text[start:text.index('<section class="file-card">', start)]
+
+
 def test_the_files_table_links_each_row_to_its_own_page(project_id, file_id):
     listing = client.get(f"/project/{project_id}/files").text
     assert f"/project/{project_id}/files/{file_id}" in listing
@@ -77,14 +84,14 @@ def test_an_empty_string_is_empty_too_and_ranks_among_the_values(project_id, tmp
 
 def test_a_fetched_file_links_its_origin_and_says_when_it_was_fetched(project_id):
     record = receive_source(project_id, ORIGIN, "posts.csv", io.BytesIO(CSV))
-    text = page(project_id, record.id)
+    text = read_file_head(project_id, record.id)
     assert f'fetched <time datetime="{record.fetched_at}"' in text
     assert f'href="{ORIGIN}"' in text
     assert "uploaded" not in text
 
 
 def test_an_upload_says_uploaded_and_names_no_origin(project_id, file_id):
-    text = page(project_id, file_id)
+    text = read_file_head(project_id, file_id)
     assert f'uploaded <time datetime="{ProjectFile.load(file_id).created_at}"' in text
     assert "fetched" not in text
 
