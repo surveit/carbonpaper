@@ -1,0 +1,58 @@
+{
+  "steps": [
+    {
+      "title": "Read the 14 filings",
+      "prose": "Each filing as CourtListener's RECAP archive holds it, with its ECF number, filing date and the docket's description. Check a file's sha256 against SOURCES.md before trusting anything below it.",
+      "stage_ids": ["input_filings"],
+      "data_description": "One row per filing."
+    },
+    {
+      "title": "Read every page",
+      "prose": "The text of each page, as the PDF's text layer holds it. Some words carry a stray space inside them; the quotes below keep it, because they are copied from this text.",
+      "stage_ids": ["read_pages"],
+      "data_description": "One row per page, each with a span over the whole page."
+    },
+    {
+      "title": "List the events on each page",
+      "prose": "A model reads one page at a time and lists up to three events: something that happened, or a position a side takes. Trust this step least for what it left out: a page it listed nothing for is invisible below.",
+      "stage_ids": ["extract_events", "one_row_per_event", "flatten_event"],
+      "data_description": "One row per listed event, with the model's sentence and the words it copied."
+    },
+    {
+      "title": "Date each event and name who said it",
+      "prose": "A model gives each event a date, a speaker and a topic, reading its page. An event the page gives no date for is dropped. Open a few and check the date against the page.",
+      "stage_ids": ["classify_event", "dated_only"],
+      "data_description": "The dated events, each with a speaker and one of eleven topics."
+    },
+    {
+      "title": "Pin each event to its words",
+      "prose": "A model copies the words that state the event, and the runtime finds them on the page before anything is kept. An event no words on its page state is dropped here and counted.",
+      "stage_ids": ["quote_event", "quoted_only", "cite_event"],
+      "data_description": "The events quoted from their pages, each with a pin cite."
+    },
+    {
+      "title": "One row per event, in date order",
+      "prose": "A later filing that quotes an earlier one word for word, on the same date, keeps only the earlier copy. The rest go in date order: this is the published chronology.",
+      "stage_ids": ["one_per_event", "chronology"],
+      "data_description": "The chronology, numbered."
+    },
+    {
+      "title": "Find the disputed facts",
+      "prose": "A model reads each topic's events and says whether one side asserts a fact another denies, picking the strongest quote on each side from the topic's own quotes.",
+      "stage_ids": ["by_topic", "find_disputes"],
+      "data_description": "One row per topic, with the model's reading and two quotes."
+    },
+    {
+      "title": "A reviewer settles each dispute",
+      "prose": "Every topic the model marked disputed waits for a person, who reads both quotes and keeps or corrects the summary. Nothing below runs until they have.",
+      "stage_ids": ["review_disputes", "disputes"],
+      "data_description": "Each topic's dispute status as the reviewer left it: the published disputes."
+    },
+    {
+      "title": "Publish",
+      "prose": "One page listing the chronology and the disputes, each quote linked to its page. The report stops rather than print a quote its page does not hold.",
+      "stage_ids": ["publish"],
+      "data_description": "The published page."
+    }
+  ]
+}

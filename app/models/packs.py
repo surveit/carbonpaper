@@ -1,18 +1,30 @@
 """What a pack registers. `register_pack` runs when the pack is imported and refuses a clash there."""
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from app.models.connectors import CONNECTORS, SOURCE_COLUMNS, ConnectorSpec
+from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.models.stages.input_data import ConnectorKind
 from app.models.stages.shared import INTERNAL_COLUMN_PREFIX
+
+
+@dataclass(frozen=True)
+class TourFixture:
+    """A committed bundle, and what its input stages bind so a run reads the files committed with it."""
+
+    bundle: Path
+    bindings: Mapping[StageId, TypeUnsafeUserStageConfigOverride]
 
 
 @dataclass(frozen=True)
 class PackSpec:
     pack_id: str
     connectors: tuple[ConnectorSpec[Any], ...]
+    tour: TourFixture | None = None
 
 
 PACKS: dict[str, PackSpec] = {}
