@@ -36,6 +36,7 @@
    view's own — there is no second copy of any of them here. #}
 
 {% from "_stage_code.html" import prose_with_column_chips %}
+{% from "_pending_review.html" import pending_review_badge %}
 
 {% macro row_word(n) %}{{ n | figure }} row{% if n != 1 %}s{% endif %}{% endmacro %}
 {% macro column_word(n) %}{{ n }} column{% if n != 1 %}s{% endif %}{% endmacro %}
@@ -44,7 +45,9 @@
    where both halves were measured; with one half it says that half in words, and with
    neither it says so, so nothing here can be misread as a measured 0. #}
 {% macro output_size(s) %}
-{%- if s.output_row_count is not none and s.column_count is not none -%}
+{%- if s.rows_pending_review -%}
+{{ pending_review_badge(s.rows_pending_review) }}
+{%- elif s.output_row_count is not none and s.column_count is not none -%}
 {{ s.output_row_count | abbreviate_count }}<span class="guide-output-x">×</span>{{ s.column_count }}
 {%- elif s.output_row_count is not none -%}
 {{ s.output_row_count | abbreviate_count }} rows
@@ -64,7 +67,9 @@
    did not produce the data at all, which is what the reader needs, while a stage it
    DID execute and measured nothing for is a different fact and says so. #}
 {% macro exact_size_words(s) %}
-{%- if s.output_row_count is none and s.column_count is none -%}
+{%- if s.rows_pending_review -%}
+{{ pending_review_badge(s.rows_pending_review) | striptags }}
+{%- elif s.output_row_count is none and s.column_count is none -%}
 {% if not s.executed %}This data was not produced in this run{% else %}This run produced this data but recorded neither its rows nor its columns{% endif %}
 {%- else -%}
 {% if s.output_row_count is not none %}{{ row_word(s.output_row_count) }}{% else %}row count unknown{% endif %} × {% if s.column_count is not none %}{{ column_word(s.column_count) }}{% else %}column count unknown{% endif %}

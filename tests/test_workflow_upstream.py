@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 
 from app.models import parse_stage
+from app.models.run_manifest import count_rows_pending_review
 from app.models.workflow import find_stages_upstream_of
 
 _ROWS = [{"name": "amount", "type": "float", "nullable": False}]
@@ -33,6 +34,19 @@ def test_the_walk_climbs_every_input_and_stops_at_the_loads():
 
     assert find_stages_upstream_of(stages, "tagged") == {"both", "east"}
     assert find_stages_upstream_of(stages, "east") == set()
+
+
+def test_a_queues_pending_rows_reach_every_stage_behind_it_and_no_other():
+    stages = [parse_stage(s) for s in (
+        _load("east"), _passthrough("review", "east"), _passthrough("totals", "review"),
+        _passthrough("aside", "east"))]
+    manifest = {
+        "stage_records": [{"stage_id": "review", "status": "awaiting_review"}],
+        "human_review_queue_stats": {"review": {"items_pending": 3}},
+    }
+
+    assert count_rows_pending_review(manifest, stages) == {
+        "east": 0, "review": 3, "totals": 3, "aside": 0}
 
 
 def test_an_unknown_stage_is_refused_by_name():

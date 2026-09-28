@@ -26,7 +26,7 @@ def _stage(stage_id: str, description: str) -> Stage:
 
 def _stage_view(
     stage_id: str, description: str, *, rows: int | None, columns: int | None,
-    executed: bool = True,
+    executed: bool = True, rows_pending_review: int = 0,
 ) -> GuideStageView:
     return GuideStageView(
         stage_id=stage_id,
@@ -35,6 +35,7 @@ def _stage_view(
         executed=executed,
         output_row_count=rows,
         column_count=columns,
+        rows_pending_review=rows_pending_review,
     )
 
 
@@ -165,6 +166,16 @@ def test_a_measured_empty_frame_still_reads_as_a_zero() -> None:
     html = _render(_section(_stage_view("s", "S", rows=0, columns=3)))
 
     assert "0 rows × 3 columns" in html
+
+
+def test_a_stage_a_queue_still_holds_names_its_pending_rows_instead_of_a_size() -> None:
+    # A stage blocked behind the queue has a record whose row count of 0 measured nothing.
+    html = _render(_section(_stage_view("s", "S", rows=0, columns=None, rows_pending_review=1294)))
+
+    assert '<span class="badge awaiting">1294 rows pending review</span>' in html
+    [title] = re.findall(r'<a class="guide-output"[^>]*title="([^"]*)"', html)
+    assert title.startswith("1294 rows pending review")
+    assert "0 rows" not in html
 
 
 # ── the output group ─────────────────────────────────────────────────────────

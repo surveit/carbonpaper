@@ -4,6 +4,7 @@ payload. The manifest itself is a stored record — `app.runtime.manifest`.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from enum import Enum
 from datetime import datetime
 from pathlib import PurePath
@@ -16,6 +17,7 @@ from app.core.run_status import StageStatus
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.models.stage import Stage
 from app.models.stages.stage_base import StageType
+from app.models.workflow import find_stages_upstream_of
 from app.core.ids import ID
 
 
@@ -124,6 +126,26 @@ def read_run_bindings(
     if isinstance(nested, dict) and "run_bindings" in nested:
         return dict(nested["run_bindings"] or {})
     return dict(raw.get("run_bindings") or {})
+
+
+def count_rows_pending_review(raw: Mapping[str, Any], stages: Sequence[Stage]) -> dict[str, int]:
+    """Per stage: the undecided rows of the queues awaiting review at or upstream of it."""
+    pending_by_queue = _read_pending_rows_by_queue(raw)
+    counts: dict[str, int] = {}
+    for stage in stages:
+        at_or_upstream = {stage.id} | find_stages_upstream_of(stages, stage.id)
+        counts[stage.id] = sum(
+            pending for queue_id, pending in pending_by_queue.items() if queue_id in at_or_upstream
+        )
+    return counts
+
+
+def _read_pending_rows_by_queue(raw: Mapping[str, Any]) -> dict[str, int]:
+    return {
+        record["stage_id"]: raw["human_review_queue_stats"][record["stage_id"]]["items_pending"]
+        for record in raw["stage_records"]
+        if record.get("status") == StageStatus.AWAITING_REVIEW
+    }
 
 
 class ReadFile(BaseModel):

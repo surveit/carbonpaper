@@ -8,8 +8,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.core.errors import RunVersionUnresolvableError
-from app.models import Workflow, WorkflowStage
+from app.models import Stage, Workflow, WorkflowStage
 from app.models.review_guide import ReviewGuideStep
+from app.models.run_manifest import count_rows_pending_review
 from app.models.workflow import sort_stages_by_dependency
 from app.services.run import load_run_version, read_output_column_counts
 from app.services.versioning import find_latest_review_guide
@@ -35,6 +36,7 @@ class GuideStageView:
     # frame measured and found empty.
     output_row_count: int | None
     column_count: int | None
+    rows_pending_review: int
 
 
 @dataclass(frozen=True)
@@ -71,7 +73,7 @@ def build_run_guide_view(project_id: str, manifest: dict[str, Any]) -> RunGuideV
     if guide is None:
         return None
     by_id = _index_stages_in_execution_order(Workflow(stages=version.stages))
-    measured = _read_run_measurements(project_id, manifest)
+    measured = _read_run_measurements(project_id, manifest, version.stages)
     return RunGuideView(
         steps=[_view_step(step, by_id, measured) for step in guide.steps],
         unnarrated=_view_stages(guide.unnarrated, by_id, measured),
@@ -100,9 +102,12 @@ class _RunMeasurements:
     executed: set[str]
     row_counts: dict[str, int]
     column_counts: dict[str, int]
+    rows_pending_review: dict[str, int]
 
 
-def _read_run_measurements(project_id: str, manifest: dict[str, Any]) -> _RunMeasurements:
+def _read_run_measurements(
+    project_id: str, manifest: dict[str, Any], stages: list[Stage]
+) -> _RunMeasurements:
     records = manifest.get("stage_records", [])
     return _RunMeasurements(
         executed={record["stage_id"] for record in records},
@@ -115,6 +120,7 @@ def _read_run_measurements(project_id: str, manifest: dict[str, Any]) -> _RunMea
         },
         # Off the written frames themselves, and likewise absent where unreadable.
         column_counts=read_output_column_counts(project_id, manifest),
+        rows_pending_review=count_rows_pending_review(manifest, stages),
     )
 
 
@@ -183,4 +189,5 @@ def _view_stage(
         executed=stage_id in measured.executed,
         output_row_count=measured.row_counts.get(stage_id),
         column_count=measured.column_counts.get(stage_id),
+        rows_pending_review=0 if workflow_stage is None else measured.rows_pending_review[stage_id],
     )
