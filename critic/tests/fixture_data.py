@@ -10,6 +10,8 @@ from critic.predictions import PredictedComment, Severity
 
 FIXTURES = Path(__file__).with_name("fixtures")
 RUBRICS = Path(__file__).resolve().parents[1] / "rubrics"
+# The repo's own AGENTS.md stands in for the owner's CLAUDE.md, which the repo never holds.
+STAND_IN_ENVIRON = {"CRITIC_OWNER_CLAUDE_MD": str(Path(__file__).resolve().parents[2] / "AGENTS.md")}
 REPO = "surveit/carbonpaper"
 PR = 1045
 FIRST_REVIEWED_COMMIT = "a3e285612fc8b68f71124a78f793e54c1b688ca0"

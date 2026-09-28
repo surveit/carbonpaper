@@ -1,0 +1,68 @@
+{
+  "review": [
+    {
+      "html_url": "https://github.com/surveit/carbonpaper/pull/788#discussion_r3831585386",
+      "pr": 788,
+      "commit_sha": "96c076bf1f44ef37ca557564523204fbe5391aa0",
+      "lesson": "Judged by where the code sits: text for a reader, written inside the runtime's trace module.",
+      "diff_hunk": "@@ -173,13 +184,22 @@ def _summarizes_message(contributors: int) -> str:\n             \"of them — open the contributors to go further\")\n \n \n+def _originates_message(hops: list[RowParent] | None) -> str:",
+      "answer": {
+        "path": "app/runtime/trace.py",
+        "line": 187,
+        "theme": "layering",
+        "rule": "UI message text does not belong in the trace layer",
+        "text": "no way this belongs down at this layer, this is UI stuff",
+        "severity": "blocking"
+      }
+    },
+    {
+      "html_url": "https://github.com/surveit/carbonpaper/pull/780#discussion_r3829916474",
+      "pr": 780,
+      "commit_sha": "329b8cd638f46987af037e390a9cd9c9739bc806",
+      "lesson": "The comment names its own fix: the field holds a project's id, so its name ends in _id.",
+      "diff_hunk": "@@ -0,0 +1,31 @@\n+\"\"\"What a project intends to claim, declared with the methodology before any stage exists.\"\"\"\n+from __future__ import annotations\n+\n+from enum import Enum\n+from typing import ClassVar\n+\n+from app.core.persistence import PersistedModel, PersistenceScope\n+from app.models.schema import TableSchema\n+\n+\n+class ClaimImportance(str, Enum):\n+    primary = \"primary\"\n+    secondary = \"secondary\"\n+\n+\n+class DataUniverseRequirement(str, Enum):\n+    open = \"open\"\n+    equal_coverage = \"equal_coverage\"\n+    closed = \"closed\"\n+\n+\n+class ClaimShape(PersistedModel):\n+    collection: ClassVar[str] = \"claim_shape\"\n+    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ\n+\n+    project: str",
+      "answer": {
+        "path": "app/models/claims.py",
+        "line": 26,
+        "theme": "naming",
+        "rule": "A field holding an id ends in _id",
+        "text": "project_id, please ensure we refer to IDs with the suffix",
+        "severity": "should"
+      }
+    }
+  ],
+  "judge": [
+    {
+      "reviewer": {
+        "html_url": "https://github.com/surveit/carbonpaper/pull/610#discussion_r3773883418",
+        "path": "app/models/column_profile.py",
+        "line": 38,
+        "body": "yeah this isn't really a model, it's just a type for the return, get it out"
+      },
+      "other": {
+        "html_url": "https://github.com/surveit/carbonpaper/pull/610#discussion_r3773884924",
+        "path": "app/models/column_profile.py",
+        "line": 45,
+        "body": "all of this aren't really models"
+      },
+      "same_point": true,
+      "reason": "Both say the classes in this file are not models and should leave it."
+    },
+    {
+      "reviewer": {
+        "html_url": "https://github.com/surveit/carbonpaper/pull/610#discussion_r3773213213",
+        "path": "app/models/column_profile.py",
+        "line": 39,
+        "body": "this docstring makes no sense. remove it"
+      },
+      "other": {
+        "html_url": "https://github.com/surveit/carbonpaper/pull/610#discussion_r3773214188",
+        "path": "app/models/column_profile.py",
+        "line": 38,
+        "body": "I'm unclear why we store this..."
+      },
+      "same_point": false,
+      "reason": "One asks to delete a docstring; the other asks why a value is stored. Adjacent lines, different points."
+    }
+  ]
+}
