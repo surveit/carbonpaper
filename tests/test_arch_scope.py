@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
 
+from arch import find_banned_words
 from arch.scope import (
     _is_source,
     _resolve_feature_dir,
     find_governed_files,
     find_source_files_under,
     scan_all_source,
+    scan_all_text,
 )
+from arch.test_no_banned_words import BANNED_WORDS
 
 
 def test_resolve_feature_dir_returns_dir_holding_arch_tests() -> None:
@@ -131,3 +135,47 @@ def test_find_source_files_under_raises_when_directory_governs_nothing(
     (tmp_path / "tests" / "only.py").write_text("", encoding="utf-8")  # exempt -> nothing governable
     with pytest.raises(ValueError, match="governs no source files"):
         find_source_files_under(tmp_path)
+
+
+def test_scan_all_text_reads_what_git_would_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import arch.scope as scope
+
+    monkeypatch.setattr(scope, "_REPO_ROOT", tmp_path)
+    banned_word = sorted(BANNED_WORDS)[0]
+    _git(tmp_path, "init", "--quiet")
+    (tmp_path / ".gitignore").write_text("examples/\n", encoding="utf-8")
+    for relative in ("docs/tracked.md", "docs/untracked.md", "examples/ignored.md"):
+        (tmp_path / relative).parent.mkdir(exist_ok=True)
+        (tmp_path / relative).write_text(f"the {banned_word} form\n", encoding="utf-8")
+    _git(tmp_path, "add", "docs/tracked.md")
+
+    offenders = find_banned_words(scan_all_text((".md",)), {banned_word}, exempt=set())
+    assert [line.split("  ")[0] for line in offenders] == [
+        f"{tmp_path}/docs/tracked.md:1",
+        f"{tmp_path}/docs/untracked.md:1",
+    ]
+
+
+def test_scan_all_text_raises_outside_a_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import arch.scope as scope
+
+    monkeypatch.setattr(scope, "_REPO_ROOT", tmp_path)
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path.parent))
+    with pytest.raises(RuntimeError, match="git ls-files` failed"):
+        scan_all_text((".md",))
+
+
+def test_scan_all_text_raises_without_git(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PATH", str(tmp_path))
+    with pytest.raises(RuntimeError, match="not on PATH"):
+        scan_all_text((".md",))
+
+
+def _git(root: Path, *args: str) -> None:
+    subprocess.run(["git", "-C", str(root), *args], check=True)
