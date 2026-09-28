@@ -25,9 +25,9 @@ runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data
   input's rows — `is_grain_and_order_preserving` (1:1 row correspondence in order, read off
   that effect; the eval gate depends on it) and `declares_its_own_row_type` (whether this
   type answers what its output rows are, rather than reading its input's answer down; the
-  types whose effect is `creates`, `builds` or `consumes`). The six that answer —
-  `input_data`, `aggregate`, `explode`, `expand`, `python_frame_function`, `report` — name
-  the project's word for what ONE of those rows is in `row_type_id`.
+  types whose effect is `creates`, `builds` or `consumes`). The seven that answer —
+  `input_data`, `aggregate`, `explode`, `expand`, `python_frame_function`, `read_pages`,
+  `report` — name the project's word for what ONE of those rows is in `row_type_id`.
   `resolve_own_row_type_id` reads that answer back, and an answering type whose answer comes
   back None raises the `unnamed_rows` compiler warning. Two overrides carry the two answers
   nobody writes: a `report` and an `aggregate` with no `group_by` both answer `no_kind`

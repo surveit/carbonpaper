@@ -51,7 +51,10 @@ is driven and a `refuse(...)` call is translated to `StepRefused`); `enrich`/`ex
 non-unique reference, `expand` allows m:n fan-out); `aggregate`;
 `llm_transform` (row-mapped, bounded parallelism);
 `human_review_queue` (row fingerprint → cached decision or halt);
-`report` (a `function` module that writes artifacts).
+`report` (a `function` module that writes artifacts);
+`read_pages` (one row per page of each stored file its input names, read through
+`app/core/text_sources.py`; a `source_id` the project does not hold, or bytes that do not
+hash to the row's `source_sha256`, fail the stage).
 
 **A row-mapped stage sees only what its signature `reads`.**
 
