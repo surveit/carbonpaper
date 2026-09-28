@@ -95,6 +95,7 @@ class StageType(str, Enum):
     explode = "explode"
     dedupe = "dedupe"
     sort_rank = "sort_rank"
+    read_pages = "read_pages"
 
 
 
@@ -124,7 +125,7 @@ def find_row_effect(stage_type: StageType) -> RowEffect:
               | StageType.sort_rank | StageType.dedupe | StageType.union):
             return RowEffect.selects
         # Rows no input row stands behind one-for-one: fanned out, fanned in, reshaped.
-        case (StageType.aggregate | StageType.explode
+        case (StageType.aggregate | StageType.explode | StageType.read_pages
               | StageType.expand | StageType.python_frame_function):
             return RowEffect.builds
         # Reads the rows and emits none.
