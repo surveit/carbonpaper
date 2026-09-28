@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Hashable, Mapping
+from dataclasses import dataclass
 from pathlib import Path, PurePath
 from typing import Any, NamedTuple
 
@@ -110,20 +111,33 @@ class _Source(NamedTuple):
     metadata: Mapping[str, MetadataValue]
 
 
+@dataclass(frozen=True)
+class AcquiredStage:
+    """A stage's stored Sources and its source table, unwritten until every stage has acquired."""
+
+    record: StageInputRecord
+    source_table: pa.Table
+    table_path: Path
+
+    def write(self) -> None:
+        self.table_path.parent.mkdir(parents=True, exist_ok=True)
+        write_frame_table(self.source_table, self.table_path)
+
+
 def acquire_input_data(
     workflow_stage: WorkflowStage, scope: PrepareScope,
-) -> StageInputRecord | None:
+) -> AcquiredStage | None:
     """A pack's kind stores its files as Sources, one row each; the file kind acquires nothing."""
     stage = narrow_stage(workflow_stage, InputDataStage)
     if isinstance(stage.connector.params, FileConnectorParams):
         return None
     sources = _find_sources(stage, find_connector(stage.connector.kind), scope.project_id)
-    table_path = _resolve_source_table_path(scope.run_dir, stage.id)
-    table_path.parent.mkdir(parents=True, exist_ok=True)
-    write_frame_table(table_from_rows([_build_source_row(source) for source in sources]),
-                      table_path)
-    return StageInputRecord(
-        files=[_weigh_file(resolve_stored_path(source.record)) for source in sources])
+    return AcquiredStage(
+        record=StageInputRecord(
+            files=[_weigh_file(resolve_stored_path(source.record)) for source in sources]),
+        source_table=table_from_rows([_build_source_row(source) for source in sources]),
+        table_path=_resolve_source_table_path(scope.run_dir, stage.id),
+    )
 
 
 def _find_sources(
@@ -170,11 +184,12 @@ def _build_source_row(source: _Source) -> dict[str, MetadataValue]:
 
 
 def _read_source_table(workflow_stage: WorkflowStage, ctx: RunContext) -> StageOutput:
-    table_path = _resolve_source_table_path(ctx.require_run_dir(), workflow_stage.id)
-    if not table_path.is_file():
+    table_path = (None if ctx.run_dir is None
+                  else _resolve_source_table_path(ctx.run_dir, workflow_stage.id))
+    if table_path is None or not table_path.is_file():
         raise ValueError(
-            f"input stage '{workflow_stage.id}' has no source table in this run: its "
-            "connector acquires when a run is prepared, and this execution skipped that")
+            f"input stage '{workflow_stage.id}' reads files its connector acquires when a run "
+            "is prepared; a workflow test or an eval cannot read them, so run the workflow")
     table = read_frame_table(table_path)
     kept, undeclared = _split_off_columns_the_schema_omits(
         table, _require_produces(workflow_stage.id, workflow_stage.output_schema))

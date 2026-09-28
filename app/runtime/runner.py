@@ -35,7 +35,7 @@ from .manifest import (
     write_manifest,
 )
 from .errors import MissingLineage, NotALoadStage
-from .stages import ACQUIRERS, PREFLIGHTS
+from .stages import ACQUIRERS, PREFLIGHTS, AcquiredStage
 
 
 def validate_stages_ready(
@@ -60,22 +60,25 @@ def acquire_stage_sources(
     stages: list[WorkflowStage], param_sources: dict[StageId, str], scope: PrepareScope,
 ) -> dict[StageId, JsonDict]:
     issues: list[str] = []
-    records: dict[StageId, JsonDict] = {}
+    acquired: dict[StageId, AcquiredStage] = {}
     for workflow_stage in stages:
         acquirer = ACQUIRERS.get(StageType(workflow_stage.stage.type))
         if acquirer is None:
             continue
         try:
-            record = acquirer(workflow_stage, scope)
+            acquisition = acquirer(workflow_stage, scope)
         except SourceUnavailable as unavailable:
             issues.append(f"`{workflow_stage.id}`: {unavailable}")
             continue
-        if record is not None:
-            records[workflow_stage.id] = record.model_copy(
-                update={"source": param_sources[workflow_stage.id]}).model_dump(mode="json")
+        if acquisition is not None:
+            acquired[workflow_stage.id] = acquisition
     if issues:
         raise MissingInputBindingError("; ".join(issues))
-    return records
+    # Written only once every stage has acquired, so a refused run leaves no run dir behind.
+    for acquisition in acquired.values():
+        acquisition.write()
+    return {stage_id: acquisition.record.model_copy(update={"source": param_sources[stage_id]})
+            .model_dump(mode="json") for stage_id, acquisition in acquired.items()}
 
 
 def prepare_run(

@@ -156,12 +156,15 @@ an origin URL, a way to open the bytes, and the metadata. The pack writes no fil
 record. `prepare_run` calls `acquire_input_data` (registered in `ACQUIRERS`) once every other
 check has passed; a subset run never calls it. It stores each file through `receive_source`
 (`app/core/files.py`), which hashes the bytes and stamps the fetch time. It records a
-`ReadFile` per file and writes the stage's source table under
-`runs/<id>/sources/`: one row per file, `SOURCE_COLUMNS` (`source_id`, `source_sha256`,
-`filename`, `origin_url`, `fetched_at`) and then the metadata. The handler reads that table,
-and each row's lineage names the file the run read for it. Bound `paths` win over acquiring.
-They must be the project's stored files, and their metadata is null. A connector that cannot
-reach a file raises `SourceUnavailable`, and the run is refused with the stage and the file named.
+`ReadFile` per file and builds the stage's source table: one row per file, `SOURCE_COLUMNS`
+(`source_id`, `source_sha256`, `filename`, `origin_url`, `fetched_at`) and then the metadata.
+Only once every stage has acquired are the tables written, under `runs/<id>/sources/`, so a
+refused run leaves no run directory. The handler reads that table, and each row's lineage
+names the file the run read for it. A workflow test or an eval prepares no run, so it cannot
+read one. Bound `paths` win over acquiring. They must be the project's stored files, and
+their metadata is null, which is why `register_pack` refuses a metadata column that is not
+nullable. A connector that cannot reach a file raises `SourceUnavailable`, and the run is
+refused with the stage and the file named.
 
 ## `app/compiler/` — prose → LLM generation engines
 Two generators, each an `app.core.agent` Agent targeting a model schema:

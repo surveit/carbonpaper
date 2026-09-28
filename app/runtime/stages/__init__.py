@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from app.models.run_manifest import StageInputRecord
 from app.models.stage import StageType
 from app.models.workflow_stage import WorkflowStage
 
@@ -27,7 +26,7 @@ from .execution import (
 from .row_aligned import RowAlignedFrameHandler
 from .filter_rows import build_filter_mapper
 from .human_review_queue import build_human_review_mapper
-from .input_data import acquire_input_data, preflight_input_data, read_input_data
+from .input_data import AcquiredStage, acquire_input_data, preflight_input_data, read_input_data
 from .join import handle_enrich, handle_expand
 from .llm_transform import LLMTransformHandler
 from .report import handle_report
@@ -45,7 +44,7 @@ PREFLIGHTS: dict[StageType, Preflight] = {
 }
 
 # Only prepare_run calls one: it may fetch and store files, which a subset run must not.
-Acquirer = Callable[[WorkflowStage, PrepareScope], StageInputRecord | None]
+Acquirer = Callable[[WorkflowStage, PrepareScope], AcquiredStage | None]
 
 ACQUIRERS: dict[StageType, Acquirer] = {
     StageType.input_data: acquire_input_data,

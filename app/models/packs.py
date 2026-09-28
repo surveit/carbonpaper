@@ -21,7 +21,7 @@ PACKS: dict[str, PackSpec] = {}
 def register_pack(spec: PackSpec) -> None:
     _refuse_taken_names(spec)
     for connector in spec.connectors:
-        _refuse_metadata_the_kernel_owns(connector)
+        _validate_metadata_columns(connector)
     PACKS[spec.pack_id] = spec
     CONNECTORS.update((connector.kind, connector) for connector in spec.connectors)
 
@@ -38,9 +38,13 @@ def _refuse_taken_names(spec: PackSpec) -> None:
             "connector already holds")
 
 
-def _refuse_metadata_the_kernel_owns(connector: ConnectorSpec[Any]) -> None:
+def _validate_metadata_columns(connector: ConnectorSpec[Any]) -> None:
     taken = {column.name for column in SOURCE_COLUMNS}
     for column in connector.metadata_columns:
+        if not column.nullable:
+            raise ValueError(
+                f"connector {connector.kind!r} declares metadata column {column.name!r} "
+                "not nullable, but a file a run binds in its place has no metadata")
         if column.name.startswith(INTERNAL_COLUMN_PREFIX) or column.name in taken:
             raise ValueError(
                 f"connector {connector.kind!r} declares metadata column {column.name!r}; a "
