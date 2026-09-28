@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.core.errors import RunVersionUnresolvableError
-from app.models import Stage, Workflow, WorkflowStage
+from app.models import Workflow, WorkflowStage
 from app.models.review_guide import ReviewGuideStep
 from app.models.run_manifest import count_rows_pending_review
 from app.models.workflow import sort_stages_by_dependency
@@ -72,8 +72,9 @@ def build_run_guide_view(project_id: str, manifest: dict[str, Any]) -> RunGuideV
     guide = find_latest_review_guide(project_id, version.version_id)
     if guide is None:
         return None
-    by_id = _index_stages_in_execution_order(Workflow(stages=version.stages))
-    measured = _read_run_measurements(project_id, manifest, version.stages)
+    workflow = Workflow(stages=version.stages)
+    by_id = _index_stages_in_execution_order(workflow)
+    measured = _read_run_measurements(project_id, manifest, workflow)
     return RunGuideView(
         steps=[_view_step(step, by_id, measured) for step in guide.steps],
         unnarrated=_view_stages(guide.unnarrated, by_id, measured),
@@ -106,7 +107,7 @@ class _RunMeasurements:
 
 
 def _read_run_measurements(
-    project_id: str, manifest: dict[str, Any], stages: list[Stage]
+    project_id: str, manifest: dict[str, Any], workflow: Workflow
 ) -> _RunMeasurements:
     records = manifest.get("stage_records", [])
     return _RunMeasurements(
@@ -120,7 +121,7 @@ def _read_run_measurements(
         },
         # Off the written frames themselves, and likewise absent where unreadable.
         column_counts=read_output_column_counts(project_id, manifest),
-        rows_pending_review=count_rows_pending_review(manifest, stages),
+        rows_pending_review=count_rows_pending_review(manifest, workflow.stages),
     )
 
 
