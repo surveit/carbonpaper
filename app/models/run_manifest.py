@@ -25,6 +25,8 @@ from app.core.ids import ID
 # schema it declares. Nothing was raised: the data is not what the stage says it is,
 # which is the data owner's to fix, not the author of the code's.
 SCHEMA_REFUSAL_ERROR_TYPE = "OutputSchemaViolation"
+# The `StageErrorInfo.type` of a stage whose output quotes text its file does not hold there.
+QUOTE_REFUSAL_ERROR_TYPE = "QuoteRefusal"
 
 
 class StageErrorInfo(BaseModel):
