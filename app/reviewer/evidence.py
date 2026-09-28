@@ -80,10 +80,10 @@ def _render_cited_passage(bundle: EvidenceBundle) -> list[str]:
     if passage is None:
         return []
     return [_render_block("CITED QUOTE", [
-        f"quote: «{normalize_text(passage.quote)}» on {passage.locator_label}",
+        f"quote: «{normalize_text(passage.citation.quote)}» on {passage.locator_label}",
         f"page text before it: «{normalize_text(passage.before)}»",
         f"page text after it: «{normalize_text(passage.after)}»",
-        f"cite it as: {bundle.cited.model_dump_json()}",
+        f"cite it as: {passage.citation.model_dump_json()}",
     ])]
 
 

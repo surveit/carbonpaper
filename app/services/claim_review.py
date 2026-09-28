@@ -20,6 +20,7 @@ from app.models.citations import (
     StageCitation,
     StageOutputCellCitation,
     StageOutputColumnCitation,
+    StageOutputSpanCitation,
 )
 from app.models.claim_review import (
     BranchEvidenceItem,
@@ -134,19 +135,29 @@ def find_citation_issues(project_id: ID, run_id: ID, challenges: list[Challenge]
 
 
 def _read_cited_passage(project_id: ID, cited: CellCitation) -> CitedPassage | None:
-    if not isinstance(cited, SourceSpanCitation):
+    if not isinstance(cited, StageOutputSpanCitation):
         return None
-    span = cited.build_span()
+    page_text = _verify_the_claims_span(project_id, cited)
+    locator = cited.locator
+    return CitedPassage(
+        citation=cited.build_source_span_citation(), locator_label=label_locator(locator),
+        before=page_text[max(0, locator.start - _PASSAGE_CONTEXT_CHARACTERS):locator.start],
+        after=page_text[locator.end:locator.end + _PASSAGE_CONTEXT_CHARACTERS])
+
+
+def _verify_the_claims_span(project_id: ID, cited: StageOutputSpanCitation) -> str:
     try:
-        page_text = run_service.verify_run_span(project_id, cited.run_id, span)
+        page_text = run_service.verify_run_span(
+            project_id, cited.run_id, cited.build_span(), run_service.SourceTextCache())
     except run_service.SPAN_REFUSALS as refusal:
         raise ClaimReviewRefused(
             [f"the claim's quote does not hold in its file: {refusal}"]) from refusal
-    locator = cited.locator
-    return CitedPassage(
-        quote=cited.quote, locator_label=label_locator(locator),
-        before=page_text[max(0, locator.start - _PASSAGE_CONTEXT_CHARACTERS):locator.start],
-        after=page_text[locator.end:locator.end + _PASSAGE_CONTEXT_CHARACTERS])
+    table = run_service.read_stage_output_table(project_id, cited.run_id, cited.stage_id)
+    if not cited.is_held_in(_read_cell_as_python(table, cited.column, cited.row_ordinal)):
+        raise ClaimReviewRefused([
+            f"the claim cites {cited.stage_id}.{cited.column} row {cited.row_ordinal} for "
+            f"the quote {cited.quote!r}, which that cell does not hold"])
+    return page_text
 
 
 def _load_pinned_version(project_id: ID, run_id: ID) -> WorkflowVersion:
@@ -229,6 +240,8 @@ class _RunHoldings:
     outputs_by_stage_id: dict[str, pa.Table]
     stage_ids: set[str]
     term_names: set[str]
+    # One per review, so every span citing a file hashes it once.
+    texts: run_service.SourceTextCache
 
 
 def _name_challenge(index: int, challenge: Challenge) -> str:
@@ -248,6 +261,7 @@ def _read_run_holdings(project_id: ID, run_id: ID,
             for stage_id in _find_cited_stage_ids(run_id, citations) if stage_id in written},
         stage_ids={placed.id for placed in _read_workflow_stages(version)},
         term_names=_list_term_names(version),
+        texts=run_service.SourceTextCache(),
     )
 
 
@@ -264,14 +278,14 @@ def _find_cited_stage_ids(run_id: ID, citations: list[ChallengeCitation]) -> set
     return {
         citation.stage_id for citation in citations
         if isinstance(citation, StageOutputColumnCitation)
-        or (isinstance(citation, CellCitation) and citation.run_id == run_id)}
+        or (isinstance(citation, StageOutputCellCitation) and citation.run_id == run_id)}
 
 
 def _find_citation_problem(held: _RunHoldings, citation: ChallengeCitation) -> str | None:
     if isinstance(citation, StageOutputCellCitation):
         return _find_cell_problem(held, citation)
     if isinstance(citation, SourceSpanCitation):
-        return _find_span_problem(held, citation)
+        return _find_source_span_problem(held, citation)
     if isinstance(citation, StageOutputColumnCitation):
         return _find_column_problem(held, citation.stage_id, citation.column)
     if isinstance(citation, StageCitation):
@@ -284,9 +298,9 @@ def _find_citation_problem(held: _RunHoldings, citation: ChallengeCitation) -> s
 
 
 def _find_cell_problem(held: _RunHoldings, citation: StageOutputCellCitation) -> str | None:
-    row_problem = _find_row_problem(held, citation)
-    if row_problem is not None:
-        return row_problem
+    address_problem = _find_address_problem(held, citation)
+    if address_problem is not None:
+        return address_problem
     table = held.outputs_by_stage_id[citation.stage_id]
     cell = read_native_cell_as_json(table, citation.column, citation.row_ordinal)
     if not _is_the_cell_value(cell, citation.value):
@@ -294,24 +308,22 @@ def _find_cell_problem(held: _RunHoldings, citation: StageOutputCellCitation) ->
     return None
 
 
-def _find_span_problem(held: _RunHoldings, citation: SourceSpanCitation) -> str | None:
-    row_problem = _find_row_problem(held, citation)
-    if row_problem is not None:
-        return row_problem
+def _find_source_span_problem(held: _RunHoldings, citation: SourceSpanCitation) -> str | None:
+    run_problem = _find_run_problem(held, citation.run_id)
+    if run_problem is not None:
+        return run_problem
     try:
-        run_service.verify_run_span(held.project_id, held.run_id, citation.build_span())
+        run_service.verify_run_span(held.project_id, held.run_id, citation.build_span(),
+                                    held.texts)
     except run_service.SPAN_REFUSALS as refusal:
         return str(refusal)
-    table = held.outputs_by_stage_id[citation.stage_id]
-    if not citation.is_held_in(_read_cell_as_python(table, citation.column, citation.row_ordinal)):
-        return (f"quotes {citation.quote!r} on {label_locator(citation.locator)}, "
-                "which that cell does not hold")
     return None
 
 
-def _find_row_problem(held: _RunHoldings, citation: CellCitation) -> str | None:
-    if citation.run_id != held.run_id:
-        return f"names run {citation.run_id!r}, not the claim's run {held.run_id!r}"
+def _find_address_problem(held: _RunHoldings, citation: StageOutputCellCitation) -> str | None:
+    run_problem = _find_run_problem(held, citation.run_id)
+    if run_problem is not None:
+        return run_problem
     column_problem = _find_column_problem(held, citation.stage_id, citation.column)
     if column_problem is not None:
         return column_problem
@@ -319,6 +331,12 @@ def _find_row_problem(held: _RunHoldings, citation: CellCitation) -> str | None:
     if not 0 <= citation.row_ordinal < row_count:
         return (f"names row {citation.row_ordinal}, which the output of "
                 f"{citation.stage_id!r} does not hold ({row_count} rows)")
+    return None
+
+
+def _find_run_problem(held: _RunHoldings, run_id: ID) -> str | None:
+    if run_id != held.run_id:
+        return f"names run {run_id!r}, not the claim's run {held.run_id!r}"
     return None
 
 

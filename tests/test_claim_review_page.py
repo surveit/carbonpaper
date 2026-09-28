@@ -172,8 +172,7 @@ def test_a_card_names_its_weight_and_carries_the_rubric_line(claim):
 @pytest.mark.parametrize("citation", [
     StageOutputCellCitation(run_id="r", stage_id="grant_totals", row_ordinal=0,
                             column="total_amount", value=2200),
-    SourceSpanCitation(run_id="r", stage_id="quoted", row_ordinal=0, column="said",
-                       source_id="f", source_sha256="0" * 64,
+    SourceSpanCitation(run_id="r", source_id="f", source_sha256="0" * 64,
                        locator=PageCharRange(page=1, start=0, end=3), quote="The"),
     StageOutputColumnCitation(run_id="r", stage_id="grant_totals", column="grants"),
     StageCitation(stage_id="grant_totals"),

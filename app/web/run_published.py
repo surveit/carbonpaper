@@ -13,7 +13,7 @@ from app.core.json_types import JsonScalar
 from app.core.run_status import StageStatus
 from app.models.citations import (
     CellCitation,
-    SourceSpanCitation,
+    StageOutputSpanCitation,
     StageOutputTableCitation,
 )
 from app.models.records.workflow_output import WorkflowOutput
@@ -139,7 +139,7 @@ def _build_figure(
         slug=output.slug,
         label=output.label,
         primary=output.primary,
-        value=citation.quote if isinstance(citation, SourceSpanCitation)
+        value=citation.quote if isinstance(citation, StageOutputSpanCitation)
         else render_output_value(citation.value),
         href=run_service.build_row_trace_url(
             project_id, run_id, citation.stage_id, citation.row_ordinal,

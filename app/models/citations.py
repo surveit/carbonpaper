@@ -37,18 +37,15 @@ class StageOutputCellCitation(Citation):
     value: JsonScalar = Field(description="The cell's value, copied exactly as the evidence pool prints it.")
 
 
-# A cell holding a span: the cell's address in the run, then where its quote sits in the file.
-class SourceSpanCitation(Citation):
-    kind: Literal["source_span"] = "source_span"
+# A quote in a file a run read, placed by page and characters; subclasses name the kind.
+class SpanCitation(Citation):
     run_id: ID = Field(description="The run, as the evidence pool names it.")
-    stage_id: ID = Field(description="The stage, as the evidence pool names it.")
-    row_ordinal: int = Field(description="The row's position in the stage output, counting from 0.")
-    column: str = Field(description="The column's name, spelled as the evidence pool spells it.")
     source_id: ID = Field(description="The file the quote is from, copied exactly.")
     source_sha256: str = Field(description="The file's sha256, copied exactly.")
     locator: SerializeAsAny[PageCharRange] = Field(
-        description="The page the quote is on and its characters there, copied exactly.")
-    quote: str = Field(description="The quote, copied exactly as the evidence pool prints it.")
+        description="The page the quote is on, and where on that page it starts and ends, "
+        "counting characters from 0.")
+    quote: str = Field(description="The quote, copied exactly from the page.")
 
     @field_validator("locator", mode="before")
     @classmethod
@@ -64,15 +61,32 @@ class SourceSpanCitation(Citation):
         return Span(source_id=self.source_id, source_sha256=self.source_sha256,
                     locator=self.locator, quote=self.quote)
 
+
+class SourceSpanCitation(SpanCitation):
+    kind: Literal["source_span"] = "source_span"
+
+
+# A cell holding a span: the cell's address in the run, then where its quote sits in the file.
+class StageOutputSpanCitation(SpanCitation):
+    kind: Literal["stage_output_span"] = "stage_output_span"
+    stage_id: ID
+    row_ordinal: int
+    column: str
+
     def is_held_in(self, cell: object) -> bool:
-        # A citation carries no prefix or suffix: the locator alone places the quote.
+        # The locator alone places the quote, so the cell's prefix and suffix are not compared.
         span = self.build_span()
         return any(held.model_copy(update={"prefix": None, "suffix": None}) == span
                    for held in read_span_cell(cell) or [])
 
+    def build_source_span_citation(self) -> SourceSpanCitation:
+        return SourceSpanCitation(run_id=self.run_id, source_id=self.source_id,
+                                  source_sha256=self.source_sha256, locator=self.locator,
+                                  quote=self.quote)
+
 
 # A figure: one cell of a run, holding a value or a span.
-CellCitation = StageOutputCellCitation | SourceSpanCitation
+CellCitation = StageOutputCellCitation | StageOutputSpanCitation
 
 
 class RowsRectangle(BaseModel):
@@ -103,7 +117,7 @@ class StageOutputTableCitation(Citation):
 
 
 PublishedCitation = Annotated[
-    Union[StageOutputCellCitation, SourceSpanCitation, StageOutputTableCitation],
+    Union[StageOutputCellCitation, StageOutputSpanCitation, StageOutputTableCitation],
     Field(discriminator="kind"),
 ]
 
@@ -111,7 +125,7 @@ PublishedCitation = Annotated[
 def render_citation_value(citation: PublishedCitation) -> str:
     if isinstance(citation, StageOutputCellCitation):
         return render_figure(citation.value)
-    if isinstance(citation, SourceSpanCitation):
+    if isinstance(citation, StageOutputSpanCitation):
         return citation.quote
     # A table names rows, not one cell; its row count is the fact it carries.
     return f"{citation.rectangle.count_rows():,} rows"

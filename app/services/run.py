@@ -38,7 +38,7 @@ from app.services.review import resolve_review_decisions
 from app.runtime.citations import build_row_trace_url as build_row_trace_url
 from app.runtime.spans import (
     SPAN_REFUSALS as SPAN_REFUSALS,
-    SourceTextCache,
+    SourceTextCache as SourceTextCache,
     require_page_locator,
     verify_span,
 )
@@ -158,11 +158,10 @@ def read_stage_output_table(project_id: str, run_id: str, stage_id: str) -> pa.T
     return read_stage_output_frame_table(project_id, run_dir, stage_id, RunKind.production)
 
 
-def verify_run_span(project_id: str, run_id: str, span: Span) -> str:
+def verify_run_span(project_id: str, run_id: str, span: Span, texts: SourceTextCache) -> str:
     """Raises a SPAN_REFUSALS error unless `span` holds in the file this run read; returns its page text."""
     manifest = read_run_manifest(project_id, run_id, RunKind.production)
     sources = index_bound_sources(manifest.input_bindings)
-    texts = SourceTextCache()
     verify_span(span, sources, texts)
     page = require_page_locator(span).page
     return texts.read_page_text(Path(sources[span.source_sha256].path), span.source_sha256, page)

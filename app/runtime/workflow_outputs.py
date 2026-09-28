@@ -9,8 +9,8 @@ from app.models import SPAN_COLUMN_TYPE, WorkflowStage
 from app.models.citations import (
     CellCitation,
     RowsRectangle,
-    SourceSpanCitation,
     StageOutputCellCitation,
+    StageOutputSpanCitation,
     StageOutputTableCitation,
 )
 from app.models.spans import Span
@@ -99,7 +99,7 @@ def _cite_figure(
     if _is_a_span_column(workflow_stage, column):
         cell = list_table_rows(table.select([column]))[PUBLISHED_ROW][column]
         span = Span.model_validate(cell, strict=True)
-        return SourceSpanCitation(
+        return StageOutputSpanCitation(
             run_id=identity.run_id, stage_id=workflow_stage.id,
             row_ordinal=PUBLISHED_ROW, column=column,
             source_id=span.source_id, source_sha256=span.source_sha256,

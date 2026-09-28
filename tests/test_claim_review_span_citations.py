@@ -12,7 +12,9 @@ from pydantic import ValidationError
 
 from app.core.files import compute_sha256, list_project_files, resolve_stored_path
 from app.main import app
-from app.models.citations import AddressedSourceSpanCitation, SourceSpanCitation
+from app.models.citations import (
+    AddressedSourceSpanCitation, SourceSpanCitation, StageOutputSpanCitation,
+)
 from app.models.claims import ClaimImportance, ClaimShapeInput, DataUniverseRequirement
 from app.models.connectors import (
     CONNECTORS, SOURCE_COLUMNS, AcquiredBytes, ConnectorParams, ConnectorSpec,
@@ -23,6 +25,7 @@ from app.models.records.claim_review import ChallengeKind, ClaimPart, DraftChall
 from app.models.records.claims import Claim
 from app.models.records.workflow_output import WorkflowOutput
 from app.reviewer.evidence import render_evidence_pool
+from app.runtime import spans as spans_module
 from app.services import claim_review, claim_shapes, claims
 from app.services import run as run_service
 from app.services.errors import ClaimReviewRefused
@@ -34,6 +37,7 @@ from stage_seed import save_version, set_stages
 PROJECT = "span_claims"
 PAGE = "The letter says one thing and then another."
 QUOTE = "one thing"
+CONTRARY = "then another"
 START = PAGE.index(QUOTE)
 END = START + len(QUOTE)
 TEXT = "The letter says one thing."
@@ -120,8 +124,8 @@ def _stage_specs(folder: Path, shape_id: str) -> list[dict[str, Any]]:
 
 
 def _cite(claim: Claim, **moved: Any) -> SourceSpanCitation:
-    assert isinstance(claim.citation, SourceSpanCitation)
-    return claim.citation.model_copy(update=moved)
+    assert isinstance(claim.citation, StageOutputSpanCitation)
+    return claim.citation.build_source_span_citation().model_copy(update=moved)
 
 
 def _challenge(*citations: SourceSpanCitation) -> DraftChallenge:
@@ -137,6 +141,11 @@ def _store(claim: Claim, *citations: SourceSpanCitation) -> Any:
         PROJECT, claim.id, challenges=[_challenge(*citations)], session_id="session-review")
 
 
+def _at(quote: str) -> PageCharRange:
+    start = PAGE.index(quote)
+    return PageCharRange(page=1, start=start, end=start + len(quote))
+
+
 # ── what the run publishes ─────
 
 
@@ -144,22 +153,40 @@ def test_a_figure_over_a_span_cell_publishes_its_quote_and_address(claim):
     [letter] = list_project_files(PROJECT)
     [output] = [one for one in WorkflowOutput.list() if one.slug == "what-it-says"]
 
-    assert output.citation == SourceSpanCitation(
+    assert output.citation == StageOutputSpanCitation(
         run_id=claim.citation.run_id, stage_id="quoted", row_ordinal=0, column="said",
-        source_id=letter.id, source_sha256=letter.sha256,
-        locator=PageCharRange(page=1, start=START, end=END), quote=QUOTE)
+        source_id=letter.id, source_sha256=letter.sha256, locator=_at(QUOTE), quote=QUOTE)
     assert claim.citation == output.citation
 
 
 # ── what the store accepts ─────
 
 
-def test_a_challenge_citing_a_span_that_holds_is_stored(claim):
+def test_a_challenge_citing_the_claims_own_quote_is_stored(claim):
     review = _store(claim, _cite(claim))
 
     [cited] = review.challenges[0].citations
     assert isinstance(cited, AddressedSourceSpanCitation) and cited.project_id == PROJECT
     assert cited.quote == QUOTE
+
+
+def test_a_challenge_citing_another_passage_of_a_file_the_run_read_is_stored(claim):
+    review = _store(claim, _cite(claim, locator=_at(CONTRARY), quote=CONTRARY))
+
+    assert review.challenges[0].citations[0].quote == CONTRARY
+
+
+def test_a_review_citing_one_file_twice_hashes_it_once(claim, monkeypatch):
+    hashed: list[str] = []
+
+    def hash_and_count(path: Path) -> str:
+        hashed.append(path.name)
+        return compute_sha256(path)
+
+    monkeypatch.setattr(spans_module, "compute_sha256", hash_and_count)
+    _store(claim, _cite(claim), _cite(claim, locator=_at(CONTRARY), quote=CONTRARY))
+
+    assert hashed == ["letter.pdf"]
 
 
 def test_a_quote_not_at_its_address_is_refused_naming_what_the_page_holds_there(claim):
@@ -177,7 +204,7 @@ def test_a_span_citation_whose_range_is_not_its_quotes_length_does_not_parse(cla
     short = PageCharRange(page=1, start=START, end=START + 3)
 
     with pytest.raises(ValidationError, match="covers 3 characters, but the quote has 9"):
-        SourceSpanCitation.model_validate({**claim.citation.model_dump(), "locator": short})
+        SourceSpanCitation.model_validate({**_cite(claim).model_dump(), "locator": short})
 
 
 def test_a_span_on_a_file_the_run_did_not_read_is_refused(claim):
@@ -187,11 +214,9 @@ def test_a_span_on_a_file_the_run_did_not_read_is_refused(claim):
         _store(claim, _cite(claim, source_sha256=unread))
 
 
-def test_a_span_that_holds_but_is_not_in_the_cited_cell_is_refused(claim):
-    elsewhere = _cite(claim, locator=PageCharRange(page=1, start=0, end=3), quote="The")
-
-    with pytest.raises(ClaimReviewRefused, match="quotes 'The' on page 1, which that cell"):
-        _store(claim, elsewhere)
+def test_a_span_of_another_run_is_refused(claim):
+    with pytest.raises(ClaimReviewRefused, match="names run 'elsewhere', not the claim's run"):
+        _store(claim, _cite(claim, run_id="elsewhere"))
 
 
 # ── what a reviewer reads ─────
@@ -217,10 +242,21 @@ def test_a_claim_whose_file_changed_since_the_run_is_refused_a_review(claim):
         claim_review.build_evidence_bundle(PROJECT, claim.id)
 
 
+def test_a_claim_citing_a_span_its_cell_does_not_hold_is_refused_a_review(claim):
+    assert isinstance(claim.citation, StageOutputSpanCitation)
+    elsewhere = claim.citation.model_copy(update={"locator": _at(CONTRARY), "quote": CONTRARY})
+    WorkflowOutput(slug="elsewhere", label="Another passage", shape_id=claim.shape_id,
+                   citation=elsewhere).save()
+    misplaced = claims.submit_claim(PROJECT, claim.citation.run_id, "elsewhere", {}, TEXT)
+
+    with pytest.raises(ClaimReviewRefused, match=f"the quote {CONTRARY!r}, which that cell"):
+        claim_review.build_evidence_bundle(PROJECT, misplaced.id)
+
+
 # ── the claim page ─────
 
 
-def test_the_claim_page_shows_the_quote_its_page_and_links_the_source_page(claim):
+def test_the_claim_page_shows_the_quote_once_and_links_its_page(claim):
     _store(claim, _cite(claim))
     [letter] = list_project_files(PROJECT)
     source_page = f"/project/{PROJECT}/files/{letter.id}?page=1&start={START}&end={END}"
@@ -228,9 +264,10 @@ def test_the_claim_page_shows_the_quote_its_page_and_links_the_source_page(claim
     with TestClient(app) as client:
         html = client.get(f"/project/{PROJECT}/claims/{claim.id}").text
 
-    assert f'<q>{QUOTE}</q>\n  <a href="{escape(source_page)}">page 1</a>' in html
-    page = build_claim_review_page(PROJECT, claim.id)
-    [cited] = page.challenges[0].citations
+    link = f'<a href="{escape(source_page)}">p. 1 of letter.pdf</a>'
+    assert f"<q>{QUOTE}</q>\n  {link}" in html and html.count(link) == 1
+    assert "approving cites the quote above of run" in html
+    [cited] = build_claim_review_page(PROJECT, claim.id).challenges[0].citations
     assert (cited.kind_words, cited.trail, cited.quote, cited.href) == (
-        "quote", ["quoted", "said", "row 0", "page 1"], QUOTE, source_page)
+        "quote", ["p. 1 of letter.pdf"], QUOTE, source_page)
     assert f'<q class="cite-quote">{QUOTE}</q>' in html
