@@ -1,6 +1,7 @@
 """A span cell renders as its quote and the page it sits on, linked, in every table of a run."""
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -88,6 +89,18 @@ def test_a_list_of_spans_renders_each_span(run_dir):
     assert quotes_cell.index(OPPOSE_CITE) < quotes_cell.index(DISMISS_CITE)
 
 
+def test_the_lineage_row_view_hands_its_script_each_quote_and_page_link(run_dir):
+    view = _read_lineage_view(_get("/row/0/trace/view"))
+
+    columns = {column["name"]: column for column in view["nodes"][-1]["row_diff"]["columns"]}
+    oppose = {"quote": "oppose", "label": "page 14",
+              "href": f"/project/{PROJECT}/files/ecf17?page=14&start=120&end=126"}
+    assert columns["quote"]["cites"] == [oppose]
+    assert [cite["label"] for cite in columns["quotes"]["cites"]] == ["page 14", "page 2"]
+    assert columns["quote"]["text"] == "oppose"
+    assert columns["claim"]["cites"] == []
+
+
 def test_the_packet_stage_page_links_the_page_text_the_packet_writes(run_dir, tmp_path):
     packet = export_review_packet(PROJECT, RUN, tmp_path / "packets")
 
@@ -127,6 +140,12 @@ def test_a_changed_span_cell_in_a_diff_shows_the_value_it_replaced():
 
     assert '<span class="diff-was" title="the input value this stage replaced">dismiss</span>' in html
     assert OPPOSE_CITE in html
+
+
+def _read_lineage_view(html: str) -> dict:
+    start = html.index("const V = ") + len("const V = ")
+    view, _ = json.JSONDecoder().raw_decode(html, start)
+    return view
 
 
 def _render_span_cell(cell: SpanCellText, links: object, was: str = "") -> str:

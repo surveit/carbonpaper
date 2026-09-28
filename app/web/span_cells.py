@@ -1,13 +1,11 @@
 """A span cell as a table prints it: its quotes as the cell's text, each span kept to link."""
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 
-from pydantic import ValidationError
-
 from app.models.locators import label_locator
-from app.models.spans import Span
+from app.models.spans import Span, read_span_cell
 
 
 @dataclass(frozen=True)
@@ -29,19 +27,13 @@ class SpanCellText(str):
 
 def render_span_column(values: Sequence[object], texts: Sequence[str]) -> list[str] | None:
     """`texts` with each span cell's text swapped in; None where no cell holds a span."""
-    span_texts = [_read_span_cell(value) for value in values]
+    span_texts = [render_span_cell(value) for value in values]
     if all(span_text is None for span_text in span_texts):
         return None
     # `is None`, not falsiness: a span quoting a blank page reads as "".
     return [text if span_text is None else span_text for span_text, text in zip(span_texts, texts)]
 
 
-def _read_span_cell(value: object) -> SpanCellText | None:
-    """None unless `value` is a span or a list of them."""
-    elements = value if isinstance(value, list) else [value]
-    if not elements or not all(isinstance(element, Mapping) for element in elements):
-        return None
-    try:
-        return SpanCellText([Span.model_validate(element, strict=True) for element in elements])
-    except ValidationError:
-        return None
+def render_span_cell(value: object) -> SpanCellText | None:
+    spans = read_span_cell(value)
+    return None if spans is None else SpanCellText(spans)

@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Self
 
-from pydantic import Field, SerializeAsAny, field_validator, model_validator
+from pydantic import Field, SerializeAsAny, ValidationError, field_validator, model_validator
 
 from app.core.errors import QuoteAmbiguous, QuoteNotInText
 from app.core.ids import ID
@@ -58,6 +58,17 @@ class SpanReply(_Base):
         description="The text immediately after the quote, copied exactly, including any space "
         "between them. Give it when the quote appears more than once.",
     )
+
+
+def read_span_cell(value: object) -> list[Span] | None:
+    """The spans a span or list[span] cell holds; None for any other cell."""
+    elements = value if isinstance(value, list) else [value]
+    if not elements or not all(isinstance(element, Mapping) for element in elements):
+        return None
+    try:
+        return [Span.model_validate(element, strict=True) for element in elements]
+    except ValidationError:
+        return None
 
 
 def narrow_span(

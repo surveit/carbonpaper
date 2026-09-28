@@ -553,13 +553,20 @@ function fanInOf(n){
 // line stays inert — every other line opens the lineage of the cell it prints.
 function columnRow(f){
   const mark = {added:'+', changed:'~', dropped:'−', carried:''}[f.state];
-  const text = f.text === '' ? '<span class="lin-null">(empty)</span>' : esc(f.text);
+  const text = f.cites.length ? f.cites.map(spanCite).join('')
+    : f.text === '' ? '<span class="lin-null">(empty)</span>' : esc(f.text);
   const was = f.state === 'changed'
     ? `<span class="lin-was">${f.was === '' ? '<em>(empty)</em>' : esc(f.was)}</span>` : '';
   const opens = (OFFLINE || f.state === 'dropped') ? '' : ' lin-opens';
   return `<tr class="${f.state}${f.inert ? ' inert' : ''}${opens}" data-column="${esc(f.name)}">
     <td class="lin-f" title="${esc(f.name)}"><span class="lin-mark">${mark}</span>${esc(f.name)}</td>
     <td class="lin-v"><div class="lin-clip">${text}${was}</div></td></tr>`;
+}
+// A span cell (app/web/span_cells.py): the whole quote, then its page, linked where
+// the page exists here — the app's file page, or the packet's text of that page.
+function spanCite(c){
+  const label = c.href ? `<a href="${esc(c.href)}">${esc(c.label)}</a>` : esc(c.label);
+  return `<span class="span-cite"><q>${esc(c.quote)}</q> ${label}</span>`;
 }
 // What became of THIS row here, where neither the marks below nor `baseLine` say it:
 // a row with no parent to compare against, and a row every cell of which survived.
@@ -687,6 +694,7 @@ document.querySelector('.lin-tabs').addEventListener('click', e => {
   if(e.target.dataset.tab){ tab = e.target.dataset.tab; render(); }
 });
 document.getElementById('pbody').addEventListener('click', e => {
+  if(e.target.closest('a')) return;  // a span cell's page link goes where it points
   // A clipped value hides part of itself, so the click that reveals it is not
   // yet the click that leaves the page.
   const clip = e.target.closest('.lin-clip.is-clipped');

@@ -10,7 +10,8 @@ from typing import Any, Sequence
 import pyarrow as pa
 
 from app.core.errors import ContributorNotInFanIn, RowOutOfRange, StageNotInRun
-from app.core.frames import convert_row_to_json_cells, read_frame_table, read_native_row
+from app.core.frames import convert_cell_to_json_value, read_frame_table, read_native_row
+from app.models.spans import read_span_cell
 from app.models.stage import StageType, is_grain_and_order_preserving
 from app.runtime.lineage import EdgeKind, RowLineage, RowParent
 from app.runtime.lineage_sidecar import read_lineage_sidecar
@@ -394,7 +395,7 @@ def trace_to_dict(trace: Trace) -> dict[str, Any]:
                 "stage_id": step.stage_id,
                 "stage_type": step.stage_type,
                 "row_ordinal": step.row_ordinal,
-                "row": convert_row_to_json_cells(step.row),
+                "row": _convert_trace_row(step.row),
                 "columns_new": step.columns_new,
                 "origin": step.origin,
                 "source_file": step.source_file,
@@ -422,4 +423,12 @@ def trace_to_dict(trace: Trace) -> dict[str, Any]:
             "at_stage": trace.end.at_stage,
             "message": trace.end.message,
         },
+    }
+
+
+def _convert_trace_row(row: dict[str, object]) -> dict[str, object]:
+    """A span cell stays the object a page links; every other cell becomes a JSON scalar."""
+    return {
+        name: value if read_span_cell(value) is not None else convert_cell_to_json_value(value)
+        for name, value in row.items()
     }
