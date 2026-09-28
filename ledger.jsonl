@@ -3367,3 +3367,4 @@
 {"run_id":"36469092500","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36469092500","created":"2026-09-28T19:00:09Z","branch":"t11-builds-owe-lineage","event":"pull_request","contracts_kept":17,"findings":[]}
 {"run_id":"36469173575","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36469173575","created":"2026-09-28T19:00:54Z","branch":"t02-span-locator-models","event":"pull_request","contracts_kept":17,"findings":[]}
 {"run_id":"36469175848","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36469175848","created":"2026-09-28T19:01:02Z","branch":"t02-span-column-type","event":"pull_request","contracts_kept":17,"findings":[]}
+{"run_id":"36468904308","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36468904308","created":"2026-09-28T19:01:31Z","branch":"critic-eval-harness","event":"pull_request","contracts_kept":null,"findings":[]}
