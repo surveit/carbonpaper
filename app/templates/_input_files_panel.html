@@ -24,7 +24,7 @@
     {% call picker("Choose file", hint="The files this run read", size="sm") %}
     <select id="if-file" class="picker-native if-file">
       {%- for file in view.files %}
-      <option value="{{ file.stage_id }}" data-name="{{ file.filename }}"
+      <option value="{{ loop.index0 }}" data-name="{{ file.filename }}"
               data-side="{{ file.size_label }}"
               data-meta="{{ file.stage_id }} · {{ file.rows_relevant | figure }} / {{ file.rows_read | figure }} rows"
               >{{ file.filename }}</option>
@@ -44,7 +44,7 @@
 
   {% for file in view.files %}
   <section class="if-file-pane{% if not loop.first %} hidden{% endif %}"
-           data-file="{{ file.stage_id }}"
+           data-file="{{ loop.index0 }}" data-read-by="{{ file.stage_id }}"
            data-rows-relevant="{{ file.rows_relevant }}" data-rows-all="{{ file.rows_read }}"
            data-columns-relevant="{{ file.columns_relevant | length }}"
            data-columns-all="{{ file.columns_read | length }}">

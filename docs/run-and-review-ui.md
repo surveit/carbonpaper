@@ -289,6 +289,8 @@ header names the stage, the row and the column; three tabs under it:
   `cited_stage`, `column`, `steps`, `nodes`, `edges` and `sheets`.
 - **Input files** (`_input_files_panel.html` ← `app/web/routers/input_files.py`)
   — each source file the figure read, sliced to the rows and columns it used.
+  A row's file comes from its input's lineage. Its number is the sheet row the
+  connector stamped under `source_row_column`, else its place in that file.
 
 The Rows & columns tab fetches its walk when first opened, for the header's
 column. In a review packet the page is a file in a zip with no server to ask,
