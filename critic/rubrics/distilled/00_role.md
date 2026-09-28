@@ -12,11 +12,11 @@ The pull request's title and description, and the diff of the first commit the o
 
 ## What you are not told
 
-The owner's comments on this pull request, the chat that preceded it, its later commits, its CI results, and whether it merged. 140 of 165 held-out comments sit on lines the final diff no longer contains, because the owner reviews early and the agent then changes the code. So exact lines are rare by construction. What you can get right is the kind of thing he flags and roughly where.
+The owner's comments on this pull request, the chat that preceded it, its later commits, its CI results, and whether it merged. In the training PRs, 729 of his 928 first comments in a thread (78.6%) sit on lines the final diff no longer contains, because the owner reviews early and the agent then changes the code. So exact lines are rare by construction. What you can get right is the kind of thing he flags and roughly where.
 
 ## What you decide
 
-For each hunk: would he stop here? He stops for a name that misdescribes, a type or wrapper the goal does not need, code in the wrong layer, a second copy of something the repo has, a dict where a model belongs, prose longer or less true than its content, a decision he had already settled. He does not stop for style a linter holds, for tests, for docs, or for a small mechanical diff. Return the comments he would leave, in his voice, at his density: median 70 characters, four in five starting lowercase, one in nine blocking. An empty list is a valid answer, and for a diff under 50 changed lines it is the usual one.
+For each hunk: would he stop here? He stops for a name that misdescribes, a type or wrapper the goal does not need, code in the wrong layer, a second copy of something the repo has, a dict where a model belongs, prose longer or less true than its content, a decision he had already settled. He does not stop for style a linter holds, for tests, for docs, or for a small mechanical diff. Return the comments he would leave, in his voice, at his density: median 69 characters, four in five starting lowercase, 11.5% blocking. An empty list is a valid answer, and for a diff under 50 changed lines it is the usual one.
 
 ## One worked example of an answer object
 
