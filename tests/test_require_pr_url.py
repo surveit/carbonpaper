@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from scripts.claude_hooks.replay_require_pr_url import StopCounts, count_stops
 from scripts.claude_hooks.require_pr_url import UNKNOWN_PR_URL, find_missing_pr_urls, is_pr_write
 
 HOOK = Path(__file__).resolve().parents[1] / "scripts" / "claude_hooks" / "require_pr_url.py"
@@ -17,6 +18,24 @@ PR_9 = "https://github.com/acme/widgets/pull/9"
 
 def _human(text: str) -> dict[str, Any]:
     return {"type": "user", "origin": {"kind": "human"}, "message": {"role": "user", "content": text}}
+
+
+def _task_notification(text: str) -> dict[str, Any]:
+    return {"type": "user", "origin": {"kind": "task-notification"}, "message": {"role": "user", "content": text}}
+
+
+def _peer_message(text: str) -> dict[str, Any]:
+    peer = {"type": "user", "isMeta": True, "origin": {"kind": "peer"}}
+    return {**peer, "message": {"role": "user", "content": text}}
+
+
+def _human_with_image(text: str) -> dict[str, Any]:
+    content = [{"type": "image", "source": {"type": "base64", "data": ""}}, {"type": "text", "text": text}]
+    return {"type": "user", "origin": {"kind": "human"}, "message": {"role": "user", "content": content}}
+
+
+def _stop_summary() -> dict[str, Any]:
+    return {"type": "system", "subtype": "stop_hook_summary", "isSidechain": False}
 
 
 def _bash(tool_use_id: str, command: str) -> dict[str, Any]:
@@ -120,6 +139,42 @@ def test_a_pr_write_in_an_earlier_turn_or_a_failed_call_does_not_count() -> None
         _say("That PR does not exist."),
     ]
     assert find_missing_pr_urls(turn) == []
+
+
+@pytest.mark.parametrize(
+    "opener",
+    [
+        _stop_summary(),
+        _task_notification("Background task finished"),
+        _peer_message("Review of the PR: approve"),
+        _human_with_image("what is on this screen?"),
+    ],
+)
+def test_a_stop_a_notification_a_peer_message_or_an_image_message_starts_a_new_turn(
+    opener: dict[str, Any],
+) -> None:
+    turn = [*CREATED_PR_7, _say("Opened the PR."), opener, _say("Nothing to change.")]
+    assert find_missing_pr_urls(turn) == []
+
+
+def test_a_pr_named_by_url_or_by_a_trailing_number_asks_for_that_pr() -> None:
+    turn = [
+        _human("merge one, label the other"),
+        _bash("t1", f"gh pr merge {PR_7} --squash"),
+        _result("t1", ""),
+        _bash("t2", "gh pr edit --add-label ready 9 && echo ok"),
+        _result("t2", ""),
+        _say("Done."),
+    ]
+    assert find_missing_pr_urls(turn) == [PR_7, "https://github.com/<org>/<repo>/pull/9"]
+
+
+def test_count_stops_replays_the_hook_at_each_recorded_stop(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    entries = [*CREATED_PR_7, _say("Opened the PR."), _stop_summary(), _say("Anything else?"), _stop_summary()]
+    (project / "session.jsonl").write_text("".join(json.dumps(e) + "\n" for e in entries), encoding="utf-8")
+    assert count_stops(sorted(tmp_path.glob("*/*.jsonl"))) == StopCounts(1, 2, 1, 1)
 
 
 @pytest.mark.parametrize(

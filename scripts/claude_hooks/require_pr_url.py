@@ -10,6 +10,7 @@ from typing import Any
 UncheckedClaudeCodeJson = dict[str, Any]
 
 UNKNOWN_PR_URL = "https://github.com/<org>/<repo>/pull/<n>"
+_TURN_START_ORIGINS = frozenset({"human", "task-notification", "peer"})
 
 _GH_PR_WRITE = re.compile(
     r"\bgh\s+pr\s+(?:create|edit|comment|merge|ready|review|close|reopen)\b(?P<args>[^\n;&|]*)"
@@ -21,14 +22,16 @@ _FIELD_FLAG = re.compile(r"\s(?:-f|-F|--field|--raw-field|--input)[\s=]")
 _PR_URL = re.compile(r"https://github\.com/(?P<owner>[\w.-]+)/(?P<repo>[\w.-]+)/pull/(?P<number>\d+)")
 _PULLS_PATH = re.compile(r"repos/(?P<owner>[\w.-]+)/(?P<repo>[\w.-]+)/pulls/(?P<number>\d+)")
 _PULLS_NUMBER = re.compile(r"pulls/(\d+)")
-_POSITIONAL_NUMBER = re.compile(r"^\s+#?(\d+)\b")
+_LEADING_ARG = re.compile(r"^\s+(\S+)")
+_TRAILING_ARG = re.compile(r"\s(\S+)\s*$")
+_PR_NUMBER_ARG = re.compile(r"#?(\d+)")
 
 
 def main() -> int:
     hook_input = _parse_json_object(sys.stdin.read())
     if hook_input is None or hook_input.get("stop_hook_active"):
         return 0
-    entries = _read_transcript(hook_input.get("transcript_path"))
+    entries = read_transcript(hook_input.get("transcript_path"))
     if entries is None:
         return 0
     missing_urls = find_missing_pr_urls(entries)
@@ -49,21 +52,46 @@ def find_missing_pr_urls(entries: list[UncheckedClaudeCodeJson]) -> list[str]:
     return missing
 
 
+def is_pr_written_in_last_turn(entries: list[UncheckedClaudeCodeJson]) -> bool:
+    return bool(_find_pr_writes(_find_last_turn(entries)))
+
+
 def is_pr_write(command: str) -> bool:
     return bool(_GH_PR_WRITE.search(command) or _find_api_pr_writes(command))
 
 
 def find_pr_refs(command: str, result_text: str) -> list[tuple[int, str]]:
     pr_call_args = [call["args"] for call in _GH_PR_WRITE.finditer(command)]
+    pr_args = [arg for args in pr_call_args for arg in _find_leading_and_trailing_args(args)]
     api_calls = " ".join(_find_api_pr_writes(command))
-    numbers = [match.group(1) for args in pr_call_args if (match := _POSITIONAL_NUMBER.match(args))]
+    numbers = [match.group(1) for arg in pr_args if (match := _PR_NUMBER_ARG.fullmatch(arg))]
     numbers += _PULLS_NUMBER.findall(api_calls)
     # A gh api reply is JSON that can quote other PRs' URLs; a gh pr command prints only its own.
-    located = [*_PULLS_PATH.finditer(api_calls), *(_PR_URL.finditer(result_text) if pr_call_args else [])]
+    located = [
+        *_PULLS_PATH.finditer(api_calls),
+        *(match for arg in pr_args if (match := _PR_URL.fullmatch(arg))),
+        *(_PR_URL.finditer(result_text) if pr_call_args else []),
+    ]
     return [(int(number), _format_pr_url("<org>", "<repo>", number)) for number in numbers] + [
         (int(match["number"]), _format_pr_url(match["owner"], match["repo"], match["number"]))
         for match in located
     ]
+
+
+def is_stop_summary(entry: UncheckedClaudeCodeJson) -> bool:
+    is_summary = entry.get("type") == "system" and entry.get("subtype") == "stop_hook_summary"
+    return is_summary and not entry.get("isSidechain")
+
+
+def read_transcript(path: Any) -> list[UncheckedClaudeCodeJson] | None:
+    if not isinstance(path, str):
+        return None
+    try:
+        with open(path, encoding="utf-8", errors="replace") as transcript:
+            lines = transcript.readlines()
+    except OSError:
+        return None
+    return [entry for entry in map(_parse_json_object, lines) if entry is not None]
 
 
 def _find_pr_writes(turn: list[UncheckedClaudeCodeJson]) -> list[list[tuple[int, str]]]:
@@ -78,6 +106,10 @@ def _find_pr_writes(turn: list[UncheckedClaudeCodeJson]) -> list[list[tuple[int,
         if is_pr_write(command) and not is_error:
             refs_per_write.append(find_pr_refs(command, result_text))
     return refs_per_write
+
+
+def _find_leading_and_trailing_args(args: str) -> list[str]:
+    return [match.group(1) for pattern in (_LEADING_ARG, _TRAILING_ARG) if (match := pattern.search(args))]
 
 
 def _find_api_pr_writes(command: str) -> list[str]:
@@ -103,17 +135,16 @@ def _format_pr_url(owner: str, repo: str, number: str) -> str:
 
 
 def _find_last_turn(entries: list[UncheckedClaudeCodeJson]) -> list[UncheckedClaudeCodeJson]:
-    starts = [index for index, entry in enumerate(entries) if _is_human_message(entry)]
+    starts = [
+        index for index, entry in enumerate(entries) if is_stop_summary(entry) or _is_turn_start_message(entry)
+    ]
     return entries[starts[-1] + 1 :] if starts else entries
 
 
-# An isMeta line is text Claude Code injects, such as a system reminder; it starts no turn.
-def _is_human_message(entry: UncheckedClaudeCodeJson) -> bool:
-    if entry.get("type") != "user" or entry.get("isSidechain") or entry.get("isMeta"):
+def _is_turn_start_message(entry: UncheckedClaudeCodeJson) -> bool:
+    if entry.get("type") != "user" or entry.get("isSidechain"):
         return False
-    if not isinstance((entry.get("message") or {}).get("content"), str):
-        return False
-    return "origin" not in entry or (entry["origin"] or {}).get("kind", "human") == "human"
+    return (entry.get("origin") or {}).get("kind") in _TURN_START_ORIGINS
 
 
 def _collect_tool_results(turn: list[UncheckedClaudeCodeJson]) -> dict[str, tuple[bool, str]]:
@@ -156,17 +187,6 @@ def _read_text(content: Any) -> str:
     if isinstance(content, list):
         return "\n".join(str(part.get("text", "")) for part in content if isinstance(part, dict))
     return ""
-
-
-def _read_transcript(path: Any) -> list[UncheckedClaudeCodeJson] | None:
-    if not isinstance(path, str):
-        return None
-    try:
-        with open(path, encoding="utf-8", errors="replace") as transcript:
-            lines = transcript.readlines()
-    except OSError:
-        return None
-    return [entry for entry in map(_parse_json_object, lines) if entry is not None]
 
 
 def _parse_json_object(raw: str) -> UncheckedClaudeCodeJson | None:
