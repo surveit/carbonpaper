@@ -3487,3 +3487,4 @@
 {"run_id":"36480514797","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36480514797","created":"2026-09-28T20:38:07Z","branch":"r03-removal-pr-shrinks","event":"pull_request","contracts_kept":18,"findings":[]}
 {"run_id":"36480144918","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36480144918","created":"2026-09-28T20:38:09Z","branch":"t08-span-cells","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"36480308628","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36480308628","created":"2026-09-28T20:39:04Z","branch":"push-2026-09-28","event":"pull_request","contracts_kept":null,"findings":[]}
+{"run_id":"36480677848","run_url":"https://github.com/surveit/carbonpaper/actions/runs/36480677848","created":"2026-09-28T20:39:26Z","branch":"t13-docket-pack","event":"pull_request","contracts_kept":19,"findings":[]}
