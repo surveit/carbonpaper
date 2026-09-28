@@ -1,13 +1,17 @@
 name: shrink-intent
 
-# Its own workflow rather than a job in ci.yml: a label or a retitle must re-run this check, and
-# those event types in ci.yml would re-run the whole suite on every label change.
+# Not in ci.yml: a label or retitle re-runs this, and would re-run the whole suite there.
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited, labeled, unlabeled]
 
+concurrency:
+  group: shrink-intent-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   shrink-intent:
@@ -15,9 +19,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: List the PR's files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FILES_PATH: repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files
+        run: gh api --paginate --slurp "$FILES_PATH" > "$RUNNER_TEMP/pr-files.json"
       # Through env, never ${{ }} inside `run`: the title is author text and would execute as shell.
-      - env:
+      - name: Check a removal title shrinks the non-test lines
+        env:
           TITLE: ${{ github.event.pull_request.title }}
-          ADDITIONS: ${{ github.event.pull_request.additions }}
-          DELETIONS: ${{ github.event.pull_request.deletions }}
-        run: python3 scripts/check_removal_pr_shrinks.py --title="$TITLE" --additions="$ADDITIONS" --deletions="$DELETIONS"
+        run: python3 scripts/check_removal_pr_shrinks.py --title="$TITLE" --pr-files="$RUNNER_TEMP/pr-files.json"
