@@ -22,7 +22,7 @@ from app.models.run_parameters import RunParameters
 from app.models.schema import StageId, TypeUnsafeUserStageConfigOverride
 from app.core.run_status import StageStatus, is_run_still_going
 
-from app.models.run_manifest import RunKind
+from app.models.run_manifest import InputBinding, RunKind, flatten_input_bindings
 from .branch_analysis import load_run_branches
 from .context import RunContext
 from .executor import _execute_stages, topological_sort
@@ -98,6 +98,7 @@ def prepare_run(
             bust_cache=bust_cache,
             run_bindings={sid: dict(p) for sid, p in (bindings or {}).items()},
         ),
+        bound_sources=_index_bound_sources(input_records),
     )
     # The manifest's shape and persistence belong to the executor — it mints the
     # initial record here and rewrites the same file as stages run. What prepare
@@ -207,7 +208,8 @@ def resume_run(
     build_context = (RunContext.for_workflow_test_run if manifest.parameters.is_test_run
                      else RunContext.for_workflow_run)
     # Auto-approve is legal only against the read-only cache a test run ran under.
-    ctx = build_context(run_dir, project_id, run_id, manifest.parameters)
+    ctx = build_context(run_dir, project_id, run_id, manifest.parameters,
+                        bound_sources=_index_bound_sources(manifest.input_bindings))
     # The run's telemetry (human_review_queue_stats/dropped_columns) already lives on the
     # loaded manifest, not the context; a resumed run keeps accumulating onto
     # that same manifest via the executor's per-stage merge.
@@ -222,3 +224,10 @@ def resume_run(
     settled = _execute_stages(ordered, ctx, manifest, run_dir, outputs_so_far)
     _build_branch_cache(settled, ordered, run_dir)
     return settled.to_dict()
+
+
+def _index_bound_sources(input_bindings: Mapping[str, Any]) -> dict[str, InputBinding]:
+    return {
+        binding.sha256: binding
+        for binding in flatten_input_bindings(input_bindings) if binding.sha256
+    }

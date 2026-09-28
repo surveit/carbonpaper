@@ -23,6 +23,9 @@ class Locator(_Base):
             raise ValueError(f"{type(self).__name__} cannot hold kind {self.kind!r}")
         return self
 
+    def validate_text(self, text: str) -> None:
+        """A kind that can tell its page by its text overrides this to raise QuoteNotAtAddress."""
+
 
 # Offsets here and in CharRange are slice bounds: `text[start:end]` is the quote.
 class PageCharRange(Locator):

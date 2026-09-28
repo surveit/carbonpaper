@@ -11,7 +11,9 @@ from app.core.errors import NoVersionToRunError, SubsetRunError
 from app.services import run as run_service
 from app.core.run_status import RunStatus
 from app.models import parse_stage, Workflow
-from app.runtime.runner import execute_run, resume_run
+from app.core.files import compute_sha256
+from app.runtime import runner
+from app.runtime.runner import execute_run, prepare_run, resume_run
 from app.runtime.executor import _raise_if_run_failed, execute_subset
 from app.models.records.run_manifest import RunManifest
 from app.runtime.trace import trace_row
@@ -111,6 +113,38 @@ def test_an_ordinary_run_records_bust_cache_false(tmp_path):
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
     assert manifest["parameters"]["bust_cache"] is False
+
+
+def test_prepare_run_binds_each_file_an_input_stage_read_by_its_sha256(tmp_path):
+    _make_project(tmp_path)
+    _seed_version(tmp_path)
+    items = tmp_path / "data" / "items.csv"
+    prepared = prepare_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))
+    assert _read_bound_paths(prepared["ctx"]) == {compute_sha256(items): (str(items), None)}
+
+
+def test_resume_run_binds_the_files_its_manifest_recorded(tmp_path, monkeypatch):
+    _make_project(tmp_path)
+    _seed_version(tmp_path)
+    items = tmp_path / "data" / "items.csv"
+    run_id = execute_run(tmp_path / "runs", tmp_path.name, *pinned_stages(tmp_path))["run_id"]
+    resumed_with = []
+
+    def capture_context(ordered, ctx, manifest, run_dir, outputs_so_far):
+        resumed_with.append(ctx)
+        return manifest
+
+    monkeypatch.setattr(runner, "_execute_stages", capture_context)
+    resume_run(tmp_path / "runs" / run_id, tmp_path.name, run_id,
+               *resumed_stages(tmp_path, run_id))
+    assert [_read_bound_paths(ctx) for ctx in resumed_with] == [
+        {compute_sha256(items): (str(items), None)}]
+
+
+def _read_bound_paths(ctx):
+    """items.csv sits outside the file store, so it carries no stored file id."""
+    return {sha256: (binding.path, binding.file_id)
+            for sha256, binding in ctx.bound_sources.items()}
 
 
 def test_cli_bust_cache_flag_reaches_the_run(monkeypatch):

@@ -11,14 +11,14 @@ from pypdf import PdfReader
 from app.core.errors import PageOutOfRange, UnsupportedTextFormat
 
 _PDF_SUFFIX = ".pdf"
-_SOFT_HYPHEN = "­"
+_SOFT_HYPHEN = "\u00ad"
 _UNRENDERED_HTML_TAGS = frozenset({"script", "style"})
 
 
 def count_pages(path: Path) -> int:
     if _is_pdf(path):
         return len(PdfReader(path).pages)
-    _resolve_one_page_reader(path)
+    _require_one_page_reader(path)
     if not path.is_file():
         raise FileNotFoundError(path)
     return 1
@@ -61,11 +61,14 @@ def _require_page_in_range(path: Path, page: int, page_count: int) -> None:
 
 
 def _resolve_one_page_reader(path: Path) -> Callable[[Path], str]:
-    read_one_page = _ONE_PAGE_READERS.get(path.suffix.lower())
-    if read_one_page is None:
+    _require_one_page_reader(path)
+    return _ONE_PAGE_READERS[path.suffix.lower()]
+
+
+def _require_one_page_reader(path: Path) -> None:
+    if path.suffix.lower() not in _ONE_PAGE_READERS:
         readable = ", ".join(sorted([_PDF_SUFFIX, *_ONE_PAGE_READERS]))
         raise UnsupportedTextFormat(f"{path.name}: page text is read only from {readable}")
-    return read_one_page
 
 
 def _read_utf8_text(path: Path) -> str:

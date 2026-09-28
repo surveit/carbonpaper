@@ -118,7 +118,7 @@ def validate_table(
         report.issues.extend(_find_numeric_range_issues(values, col))
         report.issues.extend(_find_enum_issues(values, col))
         report.issues.extend(_find_json_shape_issues(values, col))
-        report.issues.extend(_find_span_issues(values, col))
+        report.issues.extend(_find_span_shape_issues(values, col))
 
     return report
 
@@ -361,7 +361,7 @@ def _find_open_map_issues(present: dict[str, pa.DataType], col: Column) -> list[
 
 
 # Checked cell by cell: whether a locator kind is registered is a fact about values, not types.
-def _find_span_issues(values: pa.ChunkedArray, col: Column) -> list[Issue]:
+def _find_span_shape_issues(values: pa.ChunkedArray, col: Column) -> list[Issue]:
     element_type, list_layers = _strip_list_layers(col.type)
     if element_type != SPAN_COLUMN_TYPE:
         return []
