@@ -14,7 +14,7 @@ import sqlite3
 
 _TUTORIAL = "ai_lobbying_spend_2026"
 # Every committed bundle, in the order discover_workflow_files sorts them.
-_ALL_BUNDLES = [_TUTORIAL]
+_ALL_BUNDLES = [_TUTORIAL, "boeing_docket_chronology"]
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 

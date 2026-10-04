@@ -9,6 +9,7 @@ from app.core.ids import ID
 from app.core.json_types import JsonDict
 from app.core.judgments import Judgment
 from app.models import AbstractStage
+from app.models.records.run_manifest import RunManifest
 from app.models.stages.llm_transform import LLMTransformStage
 from app.runtime.run_log import JUDGMENT_ID, ROW_ERROR, ROW_OK, SOURCE_CACHED, read_events_since
 from app.services import run as run_service
@@ -26,6 +27,8 @@ class JudgmentPage:
     # Set where one batched call judged several rows, so its usage is theirs together.
     rows_in_call: int | None
     links: AppPanelLinks
+    # True for a judgment an imported cache carried: its run is in the workspace it came from.
+    from_another_workspace: bool
 
 
 @dataclass(frozen=True)
@@ -37,13 +40,18 @@ class ReplayedJudgments:
 
 
 def build_judgment_page(judgment: Judgment) -> JudgmentPage:
+    reply_text = json.dumps(judgment.reply, indent=2, ensure_ascii=False)
+    links = AppPanelLinks(judgment.project_id, judgment.run_id)
+    if not RunManifest.exists(RunManifest.compose_id(judgment.project_id, judgment.run_id)):
+        return JudgmentPage(judgment, reply_text, None, None, links, from_another_workspace=True)
     events = _list_row_outcomes(judgment.project_id, judgment.run_id, judgment.stage_id)
     return JudgmentPage(
         judgment=judgment,
-        reply_text=json.dumps(judgment.reply, indent=2, ensure_ascii=False),
+        reply_text=reply_text,
         row=next((int(e["row"]) for e in events if e.get(JUDGMENT_ID) == judgment.id), None),
         rows_in_call=_count_rows_in_call(judgment),
-        links=AppPanelLinks(judgment.project_id, judgment.run_id),
+        links=links,
+        from_another_workspace=False,
     )
 
 

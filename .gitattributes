@@ -5,3 +5,6 @@
 # Same rule, load-bearing rather than tidy: the container's `/bin/sh` reads this
 # file's shebang literally, so a CRLF checkout makes the image refuse to boot.
 docker-entrypoint.sh text eol=lf
+
+# The Boeing mirror is checked byte for byte against the sha256 its manifest recorded.
+app/seeds/data/boeing/docket/** binary

@@ -1,0 +1,130 @@
+{
+ "eval_id": "boeing_events_hand_checked",
+ "name": "Hand-checked events from ECF 116, 185 and 282",
+ "description": "12 events extract_events listed on pages of the court's opinions of October 2022 and February 2023 and its December 2024 order rejecting the plea agreement. Each date, speaker and topic was read off the page by hand against classify_event's rules, so a disagreement here is a finding about the model. page_span is left empty: an eval run binds no filing, and classify_event reads the page as page_text.",
+ "override_stage": "flatten_event",
+ "target_stage": "classify_event",
+ "expected_outputs": [
+  {
+   "output_column": "date",
+   "metric": "exact"
+  },
+  {
+   "output_column": "speaker",
+   "metric": "exact"
+  },
+  {
+   "output_column": "topic",
+   "metric": "exact"
+  }
+ ],
+ "table": {
+  "path": "app/seeds/data/evals/boeing_docket_events.parquet",
+  "format": "parquet",
+  "table_schema": {
+   "columns": [
+    {
+     "name": "source_id",
+     "type": "str",
+     "nullable": false,
+     "description": "The stored file this row is."
+    },
+    {
+     "name": "source_sha256",
+     "type": "str",
+     "nullable": false,
+     "description": "What the stored file's bytes hash to."
+    },
+    {
+     "name": "ecf_entry",
+     "type": "int",
+     "nullable": true,
+     "description": "The docket entry number the court gave the filing."
+    },
+    {
+     "name": "attachment",
+     "type": "int",
+     "nullable": true,
+     "description": "The attachment number within the entry; null for the main document."
+    },
+    {
+     "name": "date_filed",
+     "type": "date",
+     "nullable": true,
+     "description": "The day the court's docket records the entry as filed."
+    },
+    {
+     "name": "description",
+     "type": "str",
+     "nullable": true,
+     "description": "The docket's own description of the entry."
+    },
+    {
+     "name": "page",
+     "type": "int",
+     "nullable": false,
+     "description": "The page of the file, counting from 1."
+    },
+    {
+     "name": "page_text",
+     "type": "str",
+     "nullable": false,
+     "description": "The page's text as the PDF's text layer holds it."
+    },
+    {
+     "name": "page_span",
+     "type": "span",
+     "nullable": true,
+     "description": "The whole page, as a span a later step narrows to a quote. read_pages always fills it."
+    },
+    {
+     "name": "events",
+     "type": "json",
+     "nullable": false,
+     "fields": [
+      {
+       "name": "statement",
+       "type": "str",
+       "nullable": false
+      },
+      {
+       "name": "quote",
+       "type": "str",
+       "nullable": false
+      }
+     ]
+    },
+    {
+     "name": "statement",
+     "type": "str",
+     "nullable": false,
+     "description": "One sentence saying what happened or who asserted what."
+    },
+    {
+     "name": "quote_draft",
+     "type": "str",
+     "nullable": false,
+     "description": "The words extract_events copied from the page for this event."
+    },
+    {
+     "name": "date",
+     "type": "str",
+     "nullable": true,
+     "description": "The day the event happened, read off its page by hand before the run was scored."
+    },
+    {
+     "name": "speaker",
+     "type": "str",
+     "nullable": false,
+     "description": "Whose act or assertion the event is, read off its page by hand."
+    },
+    {
+     "name": "topic",
+     "type": "str",
+     "nullable": false,
+     "description": "The topic the event is most about, of the eleven classify_event names, chosen by hand."
+    }
+   ]
+  }
+ }
+}

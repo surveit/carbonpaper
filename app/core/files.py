@@ -187,10 +187,11 @@ def resolve_stored_path(record: ProjectFile) -> Path:
 
 def find_stored_file(path: Path) -> ProjectFile | None:
     """The record these bytes are stored as, or None for a path the store does not own."""
-    if path.parent.parent != files_root():
+    stored = path.resolve()  # as resolve_stored_path does, so a symlinked files root still matches
+    if stored.parent.parent != files_root().resolve():
         return None
-    record = ProjectFile.load_or_none(path.parent.name)
-    return None if record is None or record.filename != path.name else record
+    record = ProjectFile.load_or_none(stored.parent.name)
+    return None if record is None or record.filename != stored.name else record
 
 
 def compute_sha256(path: Path) -> str:

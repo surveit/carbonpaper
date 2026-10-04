@@ -29,11 +29,16 @@
             · {{ usage.cost_usd | usd }}
             {%- else %}not reported{% endif %}
             {%- if page.rows_in_call %} <span class="muted">— one call covering {{ page.rows_in_call | figure }} rows, this one among them</span>{% endif %}</dd>
+        {% if page.from_another_workspace %}
+        <dt>run</dt><dd>recorded by run <code>{{ judgment.run_id }}</code> in the workspace the cache came from</dd>
+        <dt>stage</dt><dd><code>{{ judgment.stage_id }}</code></dd>
+        {% else %}
         <dt>run</dt><dd><a href="{{ page.links.run_page() }}"><code>{{ judgment.run_id }}</code></a></dd>
         <dt>stage</dt><dd><a href="{{ page.links.stage_anchor(judgment.stage_id) }}"><code>{{ judgment.stage_id }}</code></a></dd>
         <dt>row</dt><dd>
             {%- if page.row is not none %}<a href="{{ page.links.row_trace(judgment.stage_id, page.row) }}">row {{ page.row | row_number }}</a>
             {%- else %}<span class="muted">the run's log names no row for it</span>{% endif %}</dd>
+        {% endif %}
     </dl>
 </section>
 

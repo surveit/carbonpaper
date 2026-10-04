@@ -28,6 +28,7 @@ from app.runtime.stage_output import StageOutput
 from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform as lt
 from app.runtime.stages.execution import ROW_JUDGMENT_KEY
+from app.services.stage_cache_transfer import export_stage_cache, import_stage_cache
 from app.web import judgment_view
 from conftest import as_inputs, make_run_context, pinned_stages, place_stage, rows_of
 from stage_seed import add_stage, save_version
@@ -296,6 +297,24 @@ def test_the_judgment_page_is_not_served_under_another_project(project):
 
     assert client.get(f"/project/elsewhere/judgments/{judgment.id}").status_code == 404
     assert client.get(f"/project/{PROJECT}/judgments/no-such-judgment").status_code == 404
+
+
+def test_an_imported_judgment_names_the_run_that_recorded_it_without_linking_it():
+    cache = StageCache()
+    recorded = cache.record_judgment(
+        project_id="source", run_id="R_SOURCE", stage_id="judge", input_fingerprint="f1",
+        input_row={"x": 1}, draft=_draft({"verdict": "v1"}))
+    cache.record(project_id="source", stage_id="judge", stage_fingerprint="sf1",
+                 input_fingerprint="f1", input_row={"x": 1}, output_row={"verdict": "v1"},
+                 branches=None, judgment_id=recorded.id)
+    import_stage_cache(export_stage_cache("source"), PROJECT)
+    [judgment] = _judgments()
+
+    response = TestClient(app).get(f"/project/{PROJECT}/judgments/{judgment.id}")
+
+    assert response.status_code == 200, response.text
+    assert "recorded by run <code>R_SOURCE</code> in the workspace the cache came from" in response.text
+    assert "/runs/R_SOURCE" not in response.text
 
 
 def test_the_rows_page_links_each_row_to_its_judgment(project):

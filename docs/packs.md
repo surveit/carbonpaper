@@ -48,5 +48,6 @@ prepares no run, so a stage of a pack's kind fails there.
 `recap_docket` reads a CourtListener docket's filings, one row per PDF; `entries` names each
 by ECF number (`"58"`, `"221-1"`). It reads the docket's `type=rd` search pages and each PDF on
 storage.courtlistener.com; a `cache_dir` whose `manifest.jsonl` records each fetch replaces
-both. A filing the archive or mirror lacks refuses the run. `ATTRIBUTION.md` holds the terms
+both, and a relative `cache_dir` names a directory of the checkout, such as the committed
+`app/seeds/data/boeing`. A filing the archive or mirror lacks refuses the run. `ATTRIBUTION.md` holds the terms
 line.

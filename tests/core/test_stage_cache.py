@@ -35,6 +35,47 @@ def test_compute_row_fingerprint_treats_every_null_form_as_json_null(null_value)
     assert with_none == with_other_null
 
 
+def _span(source_id: str, sha256: str = "a" * 64) -> dict[str, object]:
+    return {"source_id": source_id, "source_sha256": sha256, "quote": "the Court REJECTS",
+            "locator": {"kind": "page_char_range", "page": 2, "start": 0, "end": 17},
+            "prefix": None, "suffix": None}
+
+
+def test_a_span_keys_by_the_bytes_it_quotes_not_by_the_store_copy_holding_them():
+    in_one_store = compute_row_fingerprint({"spans": [_span("file_in_store_a")]})
+    in_another = compute_row_fingerprint({"spans": [_span("file_in_store_b")]})
+    other_bytes = compute_row_fingerprint({"spans": [_span("file_in_store_a", "b" * 64)]})
+    assert in_one_store == in_another != other_bytes
+
+
+def test_a_replayed_span_names_the_copy_this_run_read():
+    cache = StageCache()
+    cache.record(project_id="proj", stage_id="quote", stage_fingerprint="sf1",
+                 input_fingerprint="if1", input_row={"id": "r1"},
+                 output_row={"span": _span("file_in_store_a"),
+                             "spans": [_span("file_in_store_a"), _span("unread", "c" * 64)]},
+                 branches=None, judgment_id=None)
+    found = cache.find_recorded_entries(
+        "proj", "quote", "sf1", columns_only_read=frozenset(),
+        sha256_to_source_ids={"a" * 64: "file_in_store_b"})
+    assert found["if1"].output_row == {
+        "span": _span("file_in_store_b"),
+        "spans": [_span("file_in_store_b"), _span("unread", "c" * 64)]}
+
+
+def test_a_replay_leaves_out_the_columns_the_stage_only_read():
+    # A read date is stored as JSON text; the driver takes it back from the input instead.
+    StageCache().record(project_id="proj", stage_id="classify", stage_fingerprint="sf1",
+                        input_fingerprint="if1", input_row={"date_filed": "2022-10-21"},
+                        output_row={"date_filed": "2022-10-21", "speaker": "court",
+                                    "undeclared": "kept"},
+                        branches=None, judgment_id=None)
+    found = ReadOnlyStageCache().find_recorded_entries(
+        "proj", "classify", "sf1", columns_only_read=frozenset({"date_filed"}),
+        sha256_to_source_ids={})
+    assert found["if1"].output_row == {"speaker": "court", "undeclared": "kept"}
+
+
 def test_compute_row_fingerprint_guards_array_valued_cells():
     # pd.isna is elementwise on an array cell, so a naive null test raises instead.
     assert compute_row_fingerprint({"a": [1, 2, 3]}) == compute_row_fingerprint({"a": [1, 2, 3]})
@@ -146,7 +187,7 @@ def test_find_recorded_entries_keys_every_entry_by_its_input_fingerprint():
     cache.record(project_id="proj", stage_id="review", stage_fingerprint="sf1",
                  input_fingerprint="if2", input_row={"id": "r2"},
                  output_row={"id": "r2", "final_score": 0.9}, branches=None, judgment_id=None)
-    found = cache.find_recorded_entries("proj", "review", "sf1")
+    found = cache.find_recorded_entries("proj", "review", "sf1", columns_only_read=frozenset(), sha256_to_source_ids={})
     assert {key: entry.output_row for key, entry in found.items()} == {
         "if1": {"id": "r1", "final_score": 0.4},
         "if2": {"id": "r2", "final_score": 0.9},
@@ -159,7 +200,7 @@ def test_find_recorded_entries_returns_an_entry_that_recorded_no_output_row():
     cache.record(project_id="proj", stage_id="review", stage_fingerprint="sf1",
                  input_fingerprint="if1", input_row={"id": "r1"}, output_row=None,
                  branches=None, judgment_id=None)
-    found = cache.find_recorded_entries("proj", "review", "sf1")
+    found = cache.find_recorded_entries("proj", "review", "sf1", columns_only_read=frozenset(), sha256_to_source_ids={})
     assert list(found) == ["if1"] and found["if1"].output_row is None
 
 
@@ -174,7 +215,7 @@ def test_find_recorded_entries_is_scoped_to_one_stage_definition():
     cache.record(project_id="other-proj", stage_id="review", stage_fingerprint="sf1",
                  input_fingerprint="if3", input_row={"id": "r3"}, output_row={"v": 3},
                  branches=None, judgment_id=None)
-    found = cache.find_recorded_entries("proj", "review", "sf1")
+    found = cache.find_recorded_entries("proj", "review", "sf1", columns_only_read=frozenset(), sha256_to_source_ids={})
     assert {key: entry.output_row for key, entry in found.items()} == {"if1": {"v": 1}}
 
 
@@ -182,7 +223,7 @@ def test_find_recorded_entries_is_available_on_the_read_only_view():
     StageCache().record(project_id="proj", stage_id="review", stage_fingerprint="sf1",
                         input_fingerprint="if1", input_row={"id": "r1"},
                         output_row={"v": 1}, branches=None, judgment_id=None)
-    found = ReadOnlyStageCache().find_recorded_entries("proj", "review", "sf1")
+    found = ReadOnlyStageCache().find_recorded_entries("proj", "review", "sf1", columns_only_read=frozenset(), sha256_to_source_ids={})
     assert {key: entry.output_row for key, entry in found.items()} == {"if1": {"v": 1}}
 
 

@@ -23,6 +23,10 @@ class CacheArchiveRejected(Exception):
     """A stage-cache export this workspace could not read a single entry of."""
 
 
+class CacheExportRefused(Exception):
+    """A project's stage cache this workspace cannot export whole."""
+
+
 class ProjectArchiveRejected(Exception):
     """A project archive this workspace could not read a project out of."""
 
