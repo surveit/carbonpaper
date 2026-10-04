@@ -2051,6 +2051,10 @@ def test_ledger_wins_over_a_stage_cache_entry_recording_a_different_value(
     assert decided_row["reviewer_id"] == "impostor"   # and its attribution with it
 
 
+def _refuse_a_judgment_copy(judgment_id: str) -> str:
+    raise AssertionError(f"a review decision names no judgment, but this one names {judgment_id}")
+
+
 def test_a_cache_only_decision_from_another_project_still_replays(tmp_path, monkeypatch):
     """`/admin/cache` imports a cache with no ledger row behind it; that transport must still work."""
     source_project = f"{PROJECT}_source"
@@ -2074,7 +2078,7 @@ def test_a_cache_only_decision_from_another_project_still_replays(tmp_path, monk
     ]
     assert review_entries
     for entry in review_entries:
-        assert cache.copy_entry_into(entry, dest_project)
+        assert cache.copy_entry_into(entry, dest_project, _refuse_a_judgment_copy)
     # No ReviewDecision row exists for dest_project at all — only the copied cache.
     assert review.find_latest_decision(
         project_id=dest_project, stage_id="review",

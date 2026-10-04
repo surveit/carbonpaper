@@ -18,6 +18,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.seeds.seed import discover_workflow_files
 from app.services import project
+from app.services.errors import CacheExportRefused
 from app.services.project import (
     CacheImportReport, ProjectArchiveRejected, ProjectImportReport, WorkflowFile,
     export_project, export_project_archive, import_bundle_file, import_project,
@@ -98,9 +99,13 @@ def download_project(project_name: str) -> Response:
 @router.get("/admin/export-with-cache/{project_name}")
 def download_project_with_cache(project_name: str) -> Response:
     project_id = _known_project(project_name)
+    try:
+        archive = export_project_archive(project_id)
+    except CacheExportRefused as exc:
+        return _redirect_to_admin(str(exc))
     # Named by id, as the cache export beside it is: the label rides inside the archive.
     return Response(
-        content=export_project_archive(project_id),
+        content=archive,
         media_type="application/zip",
         headers={"content-disposition": f'attachment; filename="{project_id}.zip"'},
     )

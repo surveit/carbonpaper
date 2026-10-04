@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from app.core.judgments import Judgment
-from app.web.breadcrumbs import build_run_child_crumbs
+from app.web.breadcrumbs import build_run_child_crumbs, build_runs_child_crumbs
 from app.web.config import templates
 from app.web.judgment_view import build_judgment_page
 
@@ -18,11 +18,8 @@ def judgment_page(request: Request, project_id: str, judgment_id: str):
     if judgment is None or judgment.project_id != project_id:
         raise HTTPException(
             status_code=404, detail=f"No judgment '{judgment_id}' in project '{project_id}'")
-    return templates.TemplateResponse(
-        request,
-        "judgment.html",
-        {
-            "crumbs": build_run_child_crumbs(project_id, judgment.run_id, label="judgment"),
-            "page": build_judgment_page(judgment),
-        },
-    )
+    page = build_judgment_page(judgment)
+    crumbs = (build_runs_child_crumbs(project_id, label="judgment")
+              if page.from_another_workspace
+              else build_run_child_crumbs(project_id, judgment.run_id, label="judgment"))
+    return templates.TemplateResponse(request, "judgment.html", {"crumbs": crumbs, "page": page})

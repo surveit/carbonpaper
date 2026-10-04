@@ -1,7 +1,7 @@
 """One cache entry per input ROW, keyed by (stage-definition, input) fingerprints."""
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import ClassVar
 import json
 
@@ -100,15 +100,15 @@ def to_json_safe_row(row: Mapping[str, object]) -> JsonDict:
     return safe
 
 
-def _replay_written_columns(
-    entry: StageCacheEntry, columns_written: frozenset[str],
+def _replay_without_read_columns(
+    entry: StageCacheEntry, columns_only_read: frozenset[str],
     sha256_to_source_ids: Mapping[str, ID],
 ) -> StageCacheEntry:
     """A stored row is JSON, so a date the stage only read would come back as text."""
     if entry.output_row is None:
         return entry
     output_row = {key: _point_spans_at_copies(value, sha256_to_source_ids)
-                  for key, value in entry.output_row.items() if key in columns_written}
+                  for key, value in entry.output_row.items() if key not in columns_only_read}
     return entry.model_copy(update={"output_row": output_row})
 
 
@@ -129,12 +129,12 @@ class ReadOnlyStageCache:
 
     def find_recorded_entries(
         self, project_id: ID, stage_id: ID, stage_fingerprint: str,
-        *, columns_written: frozenset[str], sha256_to_source_ids: Mapping[str, ID],
+        *, columns_only_read: frozenset[str], sha256_to_source_ids: Mapping[str, ID],
     ) -> dict[str, StageCacheEntry]:
         """Keyed by input fingerprint. A column the stage only read comes back typed from its input."""
         return {
-            entry.input_fingerprint: _replay_written_columns(
-                entry, columns_written, sha256_to_source_ids)
+            entry.input_fingerprint: _replay_without_read_columns(
+                entry, columns_only_read, sha256_to_source_ids)
             for entry in self.find_entries(project_id, stage_id, stage_fingerprint)
         }
 
@@ -194,14 +194,16 @@ class StageCache(ReadOnlyStageCache):
         judgment.save()
         return judgment
 
-    def copy_judgment_into(self, judgment: Judgment, project_id: ID) -> bool:
-        """Keeps the id its cache entries name; False means that id is already stored."""
-        if Judgment.exists(judgment.id):
-            return False
-        judgment.model_copy(update={"project_id": project_id}).save()
-        return True
+    def copy_judgment_into(self, judgment: Judgment, project_id: ID) -> ID:
+        """A fresh id per copy, so one archive imported into two projects leaves each its own."""
+        fields = judgment.model_dump(exclude={"id", "created_at", "updated_at"})
+        copied = Judgment.model_validate({**fields, "project_id": project_id})
+        copied.save()
+        return copied.id
 
-    def copy_entry_into(self, entry: StageCacheEntry, project_id: ID) -> bool:
+    def copy_entry_into(
+        self, entry: StageCacheEntry, project_id: ID, copy_judgment: Callable[[ID], ID],
+    ) -> bool:
         """False means an id already stored — its output may differ from this one, and it wins."""
         cache_id = _build_cache_id(
             project_id, entry.stage_id, entry.stage_fingerprint, entry.input_fingerprint
@@ -217,6 +219,6 @@ class StageCache(ReadOnlyStageCache):
             frozen_input=entry.frozen_input,
             output_row=entry.output_row,
             branches=entry.branches,
-            judgment_id=entry.judgment_id,
+            judgment_id=None if entry.judgment_id is None else copy_judgment(entry.judgment_id),
         ).save()
         return True

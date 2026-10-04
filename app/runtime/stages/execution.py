@@ -517,7 +517,8 @@ def _open_row_caching(workflow_stage: WorkflowStage, ctx: RunContext) -> _RowCac
         stage_fingerprint,
         {} if ctx.params.bust_cache else ctx.stage_cache.find_recorded_entries(
             project, stage.id, stage_fingerprint,
-            columns_written=frozenset(column.name for column in transform_output_schema(stage).columns),
+            columns_only_read=stage.anchor_reads() - {
+                column.name for column in transform_output_schema(stage).columns},
             sha256_to_source_ids=ctx.index_stored_file_ids(),
         ),
         ctx.stage_cache if isinstance(ctx.stage_cache, StageCache) else None,
@@ -561,7 +562,7 @@ def _find_cached_rows(
             cached_results.append(None)
             continue
         emit_cached_row(log, stage_id, index, entry.judgment_id)
-        # The row is replayed whole: its branches are as much its output as its columns.
+        # Its branches are as much the row's output as its columns, so they replay too.
         if recorder is not None:
             recorder.replay_row(index, entry.branches)
         cached_results.append({**entry.output_row, ROW_CACHED_KEY: True})
