@@ -7,9 +7,12 @@ from pathlib import Path
 
 import pytest
 
+from app.evals.compatibility import validate_eval_compatibility
+from app.evals.dataset import read_table_ref
 from app.models import TableSchema, Workflow
 from app.models.chronology import DISPUTE_COLUMNS, EVENT_COLUMNS
 from app.models.connectors import MirroredBytes
+from app.models.records.eval_config import EvalConfig
 from app.packs.docket import connector
 from app.packs.docket.connector import RecapDocketParams, acquire_recap_docket
 from app.services import versioning, workflow_summary
@@ -17,6 +20,7 @@ from app.services.project import WorkflowFile, import_project
 
 _SEEDS = Path(__file__).resolve().parents[1] / "app" / "seeds" / "data"
 _BUNDLE = _SEEDS / "boeing_docket_chronology.json"
+_EVAL = _SEEDS / "evals" / "boeing_docket_chronology.json"
 
 
 def _import_bundle() -> str:
@@ -64,3 +68,14 @@ def test_the_bundle_reads_every_filing_it_names_from_the_committed_mirror(
         with file.open_bytes() as stream:
             assert hashlib.sha256(stream.read()).hexdigest() == file.sha256
 
+
+def test_the_committed_eval_scores_classify_event_on_its_twelve_rows() -> None:
+    project_id = _import_bundle()
+    config = EvalConfig.model_validate(
+        {**json.loads(_EVAL.read_text(encoding="utf-8")), "project": project_id})
+    report = validate_eval_compatibility(config, _load_imported_workflow(project_id))
+    assert report.ok, report.problems
+    assert report.settings is not None
+    assert report.settings.frontier == ["classify_event"]
+    assert config.table is not None
+    assert len(read_table_ref(config.table)) == 12
