@@ -13,7 +13,8 @@ from app.core.ids import ID
 from app.core.judgments import Judgment
 from app.core.stage_cache import CACHE_KEY_VERSION, StageCacheEntry
 from app.services import loader
-from app.services.errors import CacheArchiveRejected, CacheExportRefused
+from app.services.errors import CacheArchiveRejected as CacheArchiveRejected
+from app.services.errors import CacheExportRefused as CacheExportRefused
 
 _MANIFEST_FILE = "manifest.json"
 _ENTRIES_FILE = "entries.jsonl"
@@ -68,18 +69,18 @@ def import_stage_cache(archive: bytes, destination_project_id: str) -> CacheImpo
     with zipfile.ZipFile(BytesIO(archive)) as bundle:
         manifest = _read_manifest(bundle)
         entries = list(_read_entries(bundle))
-        judgments = _read_named_judgments(bundle, entries)
+        judgments = _read_judgments_by_id(bundle, entries)
         frames_skipped = _count_frame_members(bundle)
     cache = StageCacheEntry.read_write()
     copied_ids: dict[ID, ID] = {}
 
-    def copy_judgment(judgment_id: ID) -> ID:
+    def copy_judgment_to_id(judgment_id: ID) -> ID:
         if judgment_id not in copied_ids:
             copied_ids[judgment_id] = cache.copy_judgment_into(
-                judgments[judgment_id], destination_project_id)
+                judgments[judgment_id], destination_project_id).id
         return copied_ids[judgment_id]
 
-    written = sum(cache.copy_entry_into(entry, destination_project_id, copy_judgment)
+    written = sum(cache.copy_entry_into(entry, destination_project_id, copy_judgment_to_id)
                   for entry in entries)
     return CacheImportReport(
         source_project=manifest.source_project,
@@ -102,7 +103,7 @@ def validate_cache_archive(archive: bytes) -> None:
     """Raises what import would raise, before a caller writes what a refusal strands."""
     with zipfile.ZipFile(BytesIO(archive)) as bundle:
         _read_manifest(bundle)
-        _read_named_judgments(bundle, list(_read_entries(bundle)))
+        _read_judgments_by_id(bundle, list(_read_entries(bundle)))
 
 
 def count_cached_entries(project_id: str) -> int:
@@ -182,7 +183,7 @@ def _read_entries(bundle: zipfile.ZipFile) -> Iterator[StageCacheEntry]:
             yield StageCacheEntry.model_validate(json.loads(line))
 
 
-def _read_named_judgments(
+def _read_judgments_by_id(
     bundle: zipfile.ZipFile, entries: list[StageCacheEntry]
 ) -> dict[ID, Judgment]:
     """Exactly the judgments the entries name; an export from before judgments travelled names none."""

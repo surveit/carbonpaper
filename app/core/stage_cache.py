@@ -194,15 +194,15 @@ class StageCache(ReadOnlyStageCache):
         judgment.save()
         return judgment
 
-    def copy_judgment_into(self, judgment: Judgment, project_id: ID) -> ID:
+    def copy_judgment_into(self, judgment: Judgment, project_id: ID) -> Judgment:
         """A fresh id per copy, so one archive imported into two projects leaves each its own."""
         fields = judgment.model_dump(exclude={"id", "created_at", "updated_at"})
         copied = Judgment.model_validate({**fields, "project_id": project_id})
         copied.save()
-        return copied.id
+        return copied
 
     def copy_entry_into(
-        self, entry: StageCacheEntry, project_id: ID, copy_judgment: Callable[[ID], ID],
+        self, entry: StageCacheEntry, project_id: ID, copy_judgment_to_id: Callable[[ID], ID],
     ) -> bool:
         """False means an id already stored — its output may differ from this one, and it wins."""
         cache_id = _build_cache_id(
@@ -219,6 +219,6 @@ class StageCache(ReadOnlyStageCache):
             frozen_input=entry.frozen_input,
             output_row=entry.output_row,
             branches=entry.branches,
-            judgment_id=None if entry.judgment_id is None else copy_judgment(entry.judgment_id),
+            judgment_id=None if entry.judgment_id is None else copy_judgment_to_id(entry.judgment_id),
         ).save()
         return True
