@@ -5,7 +5,7 @@ from pathlib import Path
 
 from critic.corpus import CorpusIndex, load_corpus_index
 from critic.diff import ChangedFile, PullRequestDiff
-from critic.labels import LabelSet, ReviewerComment, load_label_set, select_reviewer_comments
+from critic.labels import LABEL_DIR, LabelSet, ReviewerComment, load_label_set, select_reviewer_comments
 from critic.predictions import PredictedComment, Severity
 
 FIXTURES = Path(__file__).with_name("fixtures")
@@ -23,7 +23,7 @@ def load_corpus() -> CorpusIndex:
 
 
 def load_labels() -> LabelSet:
-    return load_label_set(FIXTURES / "labels-1045.jsonl", FIXTURES / "taxonomy-themes.json")
+    return load_label_set(FIXTURES / "labels-1045.jsonl", LABEL_DIR / "taxonomy.json")
 
 
 def load_reals() -> list[ReviewerComment]:

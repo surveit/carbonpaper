@@ -6,6 +6,7 @@
       973,
       976
     ],
+    "silent_pr_numbers": [],
     "limit": null,
     "corpus_dir": "/private/tmp/push-sp/rsi/github/carbonpaper",
     "labels_path": "/private/tmp/push-sp/rsi/github/merged/corpus.human.jsonl",
