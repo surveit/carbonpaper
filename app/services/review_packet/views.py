@@ -50,7 +50,6 @@ class RunView(BaseModel):
     finished_at: str | None
     workflow_version: str | None
     is_test_run: bool
-    bust_cache: bool
     halted_at: list[str]
     dropped_columns: dict[str, list[str]]
     stages: list[StageView]
@@ -69,7 +68,6 @@ def build_run_view(
         finished_at=_read_optional_str(manifest, "finished_at"),
         workflow_version=_read_optional_str(manifest, "workflow_version"),
         is_test_run=records_a_test_run(manifest),
-        bust_cache=bool(manifest.get("bust_cache", False)),
         halted_at=[str(s) for s in manifest.get("halted_at") or []],
         dropped_columns=_read_dropped_columns(manifest),
         stages=_build_stage_views(manifest, definition_error),

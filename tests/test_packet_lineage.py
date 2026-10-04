@@ -105,7 +105,7 @@ def _run_view(rows: int):
 
     return RunView(
         project="p", run_id="r", status="ok", started_at="t", finished_at="t",
-        workflow_version="v", is_test_run=False, bust_cache=False, halted_at=[],
+        workflow_version="v", is_test_run=False, halted_at=[],
         dropped_columns={},
         stages=[
             stage("source", "input_data", 10, []),
