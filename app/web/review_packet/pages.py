@@ -103,12 +103,13 @@ def write_packet_pages(
     written.append(_write_asset(root, FAVICON))
     written.append(_write_diagram_source(root, diagram))
     written.append(_write_index(root, view, data, lineage, guide, diagram, issues))
+    links = PacketPanelLinks(traced=frozenset(lineage.traced),
+                             cited_pages=frozenset(data.cited_pages),
+                             stage_pages=frozenset(stage.stage_id for stage in view.stages))
     for stage in view.stages:
         written.append(
             _write_stage_page(
-                root, run_dir, view, stage, workflow_stages_by_id.get(stage.stage_id),
-                PacketPanelLinks(traced=frozenset(lineage.traced),
-                                 cited_pages=frozenset(data.cited_pages)))
+                root, run_dir, view, stage, workflow_stages_by_id.get(stage.stage_id), links)
         )
     return written
 

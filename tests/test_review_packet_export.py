@@ -25,6 +25,7 @@ from app.runtime.stages import llm_transform as lt
 from app.services import run as run_service
 from app.services import uploads
 from app.services.methodology import write_methodology
+from app.services.review_packet import ReviewPacket
 from app.services.review_packet.checksums import compute_sha256
 from app.services.versioning import create_version_from_stages
 from app.services.workflow_test import run_workflow_test
@@ -289,9 +290,8 @@ def test_a_file_from_courtlistener_puts_the_free_law_project_line_on_the_index(
 _X = [{"name": "x", "type": "int", "nullable": False}]
 
 
-def test_a_test_run_s_model_rows_leave_judgments_jsonl_omitted_with_the_reason(
-    projects_root, monkeypatch, tmp_path,
-):
+@pytest.fixture
+def tested_packet(projects_root, monkeypatch, tmp_path) -> ReviewPacket:
     rows = resolve_project_dir(PROJECT) / "rows.csv"
     rows.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"x": [1, 2]}).to_csv(rows, index=False)
@@ -309,13 +309,25 @@ def test_a_test_run_s_model_rows_leave_judgments_jsonl_omitted_with_the_reason(
         {"verdict": "fine"}))
     tested = run_workflow_test(PROJECT)
     assert tested["ok"], tested["error"]
+    assert tested["stages_run"] == ["judge"], "the test run reads load's rows without running it"
+    return export_review_packet(PROJECT, tested["run_id"], tmp_path / "packets")
 
-    packet = export_review_packet(PROJECT, tested["run_id"], tmp_path / "packets")
 
-    assert not (packet.root / "judgments.jsonl").exists()
-    [omitted] = [o for o in packet.omitted if o.path == "judgments.jsonl"]
+def test_a_test_run_s_model_rows_leave_judgments_jsonl_omitted_with_the_reason(tested_packet):
+    assert not (tested_packet.root / "judgments.jsonl").exists()
+    [omitted] = [o for o in tested_packet.omitted if o.path == "judgments.jsonl"]
     assert omitted.reason == (
         "stage 'judge': 2 row(s) were decided in a test run, which records no judgment")
+
+
+def test_a_stage_page_names_an_input_stage_the_run_did_not_execute_without_a_link(
+    tested_packet,
+):
+    judge = (tested_packet.root / "stages" / "judge.html").read_text(encoding="utf-8")
+
+    assert not (tested_packet.root / "stages" / "load.html").exists()
+    assert "load.html" not in judge
+    assert "<code>load</code>" in judge
 
 
 # ── the tour's capped run: no span column, cached judgments ──────────────────
