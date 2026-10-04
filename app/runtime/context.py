@@ -66,6 +66,11 @@ class RunContext(BaseModel):
     # Shared by every copy attach_* makes, so a page is extracted once per run.
     source_texts: SourceTextCache = Field(default_factory=SourceTextCache)
 
+    def index_stored_file_ids(self) -> dict[str, ID]:
+        """sha256 -> the stored file this run read those bytes as."""
+        return {sha256: binding.file_id for sha256, binding in self.bound_sources.items()
+                if binding.file_id is not None}
+
     @model_validator(mode="after")
     def _a_writable_cache_forbids_queue_auto_approve(self) -> RunContext:
         if isinstance(self.stage_cache, StageCache) and self.params.queue_auto_approve:

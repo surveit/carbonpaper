@@ -61,11 +61,34 @@ def _build_cache_id(project_id: ID, stage_id: ID, stage_fingerprint: str, input_
     return _build_cache_prefix(project_id, stage_id, stage_fingerprint) + input_fingerprint
 
 
+# A span cell names its bytes by sha256 and one store's copy of them by source_id.
+_SPAN_COPY_KEY = "source_id"
+_SPAN_KEYS = frozenset({_SPAN_COPY_KEY, "source_sha256", "locator", "quote"})
+
+
 def compute_row_fingerprint(row: Mapping[str, object]) -> str:
     """Null forms collapse and keys sort, so round-trip drift and column order cannot change a row's id."""
-    normalized = {key: collapse_null_forms(value) for key, value in row.items()}
+    normalized = {key: _forget_span_copies(collapse_null_forms(value)) for key, value in row.items()}
     payload = json.dumps(normalized, sort_keys=True, separators=(",", ":"), default=str)
     return compute_short_hash(payload)
+
+
+def _forget_span_copies(value: object) -> object:
+    """A span keys by the bytes it quotes, so a store holding its own copy of them still replays it."""
+    if isinstance(value, Mapping) and _SPAN_KEYS <= value.keys():
+        return {key: item for key, item in value.items() if key != _SPAN_COPY_KEY}
+    if isinstance(value, list):
+        return [_forget_span_copies(item) for item in value]
+    return value
+
+
+def _point_spans_at_copies(value: object, source_ids_by_sha256: Mapping[str, ID]) -> object:
+    if isinstance(value, Mapping) and _SPAN_KEYS <= value.keys():
+        held = source_ids_by_sha256.get(str(value["source_sha256"]))
+        return dict(value) if held is None else {**value, _SPAN_COPY_KEY: held}
+    if isinstance(value, list):
+        return [_point_spans_at_copies(item, source_ids_by_sha256) for item in value]
+    return value
 
 
 def to_json_safe_row(row: Mapping[str, object]) -> JsonDict:
@@ -75,6 +98,16 @@ def to_json_safe_row(row: Mapping[str, object]) -> JsonDict:
         json.dumps(normalized, default=convert_cell_to_json_native)
     )
     return safe
+
+
+def _point_entry_at_copies(
+    entry: StageCacheEntry, source_ids_by_sha256: Mapping[str, ID]
+) -> StageCacheEntry:
+    if entry.output_row is None:
+        return entry
+    output_row = {key: _point_spans_at_copies(value, source_ids_by_sha256)
+                  for key, value in entry.output_row.items()}
+    return entry.model_copy(update={"output_row": output_row})
 
 
 class ReadOnlyStageCache:
@@ -93,11 +126,12 @@ class ReadOnlyStageCache:
         )
 
     def find_recorded_entries(
-        self, project_id: ID, stage_id: ID, stage_fingerprint: str
+        self, project_id: ID, stage_id: ID, stage_fingerprint: str,
+        *, source_ids_by_sha256: Mapping[str, ID],
     ) -> dict[str, StageCacheEntry]:
-        """Keyed by input fingerprint, which is what a replay looks a row up by."""
+        """Keyed by input fingerprint; a span in an output row names this run's copy of its bytes."""
         return {
-            entry.input_fingerprint: entry
+            entry.input_fingerprint: _point_entry_at_copies(entry, source_ids_by_sha256)
             for entry in self.find_entries(project_id, stage_id, stage_fingerprint)
         }
 
