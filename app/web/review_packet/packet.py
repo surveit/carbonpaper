@@ -21,7 +21,7 @@ from app.services.review_packet.data import write_packet_data
 from app.services.review_packet.views import RunView, build_run_view
 from app.services.run_guide import RunGuideView, build_run_guide_view
 from app.services.workspace import resolve_run_dir
-from app.web.diagrams import build_mermaid_graph
+from app.web.diagrams import DiagramOverlay, build_mermaid_graph
 from app.web.review_packet.archive import read_run_archive
 from app.web.review_packet.lineage import write_packet_lineage
 from app.web.review_packet.pages import write_packet_pages
@@ -96,8 +96,12 @@ def _build_diagram(
     if not workflow_stages:
         return ""
     statuses = {s.stage_id: s.status for s in view.stages}
+    # A click opens the stage's page, which the packet writes only for a stage the run recorded.
+    stage_ids_without_a_page = (
+        {resolved.stage.id for resolved in workflow_stages} - statuses.keys())
     return build_mermaid_graph(
-        [resolved.stage for resolved in workflow_stages], project_id, status_by_id=statuses)
+        [resolved.stage for resolved in workflow_stages], project_id, status_by_id=statuses,
+        overlay=DiagramOverlay(unclickable=stage_ids_without_a_page))
 
 
 def _load_guide(project_id: str, manifest: dict[str, Any]) -> RunGuideView | None:

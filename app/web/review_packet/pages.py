@@ -102,10 +102,11 @@ def write_packet_pages(
     written.extend(_write_vendored_scripts(root))
     written.append(_write_asset(root, FAVICON))
     written.append(_write_diagram_source(root, diagram))
-    written.append(_write_index(root, view, data, lineage, guide, diagram, issues))
+    stage_pages = frozenset(stage.stage_id for stage in view.stages)
+    written.append(
+        _write_index(root, view, data, lineage, guide, diagram, issues, stage_pages))
     links = PacketPanelLinks(traced=frozenset(lineage.traced),
-                             cited_pages=frozenset(data.cited_pages),
-                             stage_pages=frozenset(stage.stage_id for stage in view.stages))
+                             cited_pages=frozenset(data.cited_pages), stage_pages=stage_pages)
     for stage in view.stages:
         written.append(
             _write_stage_page(
@@ -155,6 +156,7 @@ def _write_index(
     guide: RunGuideView | None,
     diagram: str,
     issues: RunIssues,
+    stage_pages: frozenset[str],
 ) -> str:
     html = _render(
         "packet_index.html",
@@ -175,7 +177,7 @@ def _write_index(
         checksums_href=CHECKSUMS_FILE,
         project=view.project,
         issues=issues,
-        links=PacketPanelLinks(to_root=""),
+        links=PacketPanelLinks(to_root="", stage_pages=stage_pages),
         mermaid=diagram,
         mermaid_url=MERMAID_URL,
         mermaid_sri=MERMAID_SRI,
