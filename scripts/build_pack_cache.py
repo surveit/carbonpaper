@@ -1,9 +1,8 @@
 """Build the stage-cache bundle beside a committed bundle whose inputs need no upload.
 
 Runs the bundle as committed until the review queue halts it, then exports the cache the run
-recorded, as scripts/build_tutorial_cache.py does for the tutorial. --project runs a project
-the workspace already holds again, replaying its cache: a resume, or a check that nothing is
-left to compute.
+recorded, as scripts/build_tutorial_cache.py does for the tutorial. --project exports a project
+the workspace already ran instead, so a run that was paid for once is never paid for again.
 
 Usage:  python -m scripts.build_pack_cache app/seeds/data/boeing_docket_chronology.json
             [--workspace DIR [--project ID]]
@@ -28,7 +27,7 @@ def main() -> None:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("bundle", type=Path)
     parser.add_argument("--workspace", type=Path, help="kept after the run; a temporary one if left out")
-    parser.add_argument("--project", help="a project in --workspace to run again")
+    parser.add_argument("--project", help="a project in --workspace whose cache to export, unrun")
     args = parser.parse_args()
     if args.project is not None and args.workspace is None:
         parser.error("--project names a project in a --workspace")
@@ -37,19 +36,19 @@ def main() -> None:
         workspace = args.workspace or Path(scratch)
         workspace.mkdir(parents=True, exist_ok=True)
         configure_throwaway_workspace(workspace)
-        project_id = args.project or import_project(
-            WorkflowFile.model_validate_json(args.bundle.read_text(encoding="utf-8")))
-        run_to_the_review_queue(project_id)
+        project_id = args.project or run_to_the_review_queue(import_project(
+            WorkflowFile.model_validate_json(args.bundle.read_text(encoding="utf-8"))))
         out.write_bytes(export_stage_cache(project_id))
     print(f"wrote {out} ({out.stat().st_size:,} bytes)")
 
 
-def run_to_the_review_queue(project_id: str) -> None:
+def run_to_the_review_queue(project_id: str) -> str:
     manifest = run_service.execute(project_id)
     status = manifest["status"]
     print(f"project {project_id}, run {manifest['run_id']}: {status}", flush=True)
     if status not in ("awaiting_review", "ok"):
         raise RuntimeError(f"the run ended {status}; a cache bundle needs a run that got through")
+    return project_id
 
 
 if __name__ == "__main__":
