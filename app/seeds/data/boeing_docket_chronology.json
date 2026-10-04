@@ -1,6 +1,6 @@
 {
   "name": "boeing_docket_chronology",
-  "document": "# A chronology of United States v. The Boeing Company, every event quoted from its page\n\n## The question\n\nWhat happened in the criminal case over Boeing's deception of the FAA about the 737 MAX, in\nwhat order, who said what, and which facts did one side assert and another deny? Every entry\nmust point at the words on a filing's page that state it.\n\n## The corpus\n\n14 filings from the docket of United States v. The Boeing Company, N.D. Tex. No.\n4:21-cr-00005 (CourtListener docket 29089563), as CourtListener's RECAP archive holds them:\nECF 4, 52, 58, 116, 185, 197, 221-1, 233, 245, 282, 312, 312-1, 334 and 358. They run from the January 2021\ndeferred prosecution agreement, through the crash victims' families' motions under the Crime\nVictims' Rights Act and the court's opinions on them, the 2024 plea agreement and the\norder rejecting it, to the 2025 non-prosecution agreement and the order granting the\ngovernment's motion to dismiss. Hearing transcripts are left out. `app/seeds/data/boeing/SOURCES.md` lists each\nfile's address, hash and fetch time.\n\nA filing that is not among these 14 is outside what this chronology can see.\n\n## Step 1 - read every page\n\nEach filing is read page by page from its PDF's text layer. Each page keeps the filing's ECF\nnumber, attachment number, filing date and docket description.\n\n## Step 2 - list the events on each page\n\nA model reads one page at a time and lists up to three events it states: something that\nhappened, or a position the court or a party takes. For each it writes one sentence and\ncopies the words that state it. It is not shown any other page.\n\n## Step 3 - date each event, and name its speaker and topic\n\nA model reads each event beside its page and gives the day it happened, how precisely the\npage states that day, whose act or assertion it is (court, government, Boeing, the families,\nor other), and one of eleven topics. A filing's own act, such as a ruling or an argument,\ntakes the day it was filed. An event whose page gives no date is dropped.\n\n## Step 4 - pin each event to its words\n\nA model copies the words on the page that state the event. The runtime finds them on the\npage, exactly, and records where they sit; a quote it cannot find is sent back to the model.\nAn event no words on its page state is dropped.\n\n## Step 5 - one row per event, in date order\n\nWhere a later filing quotes an earlier one word for word, with the same date, speaker and\ntopic, the earlier filing's copy is kept. The events are then put in date order, and in\ndocket order within a day. Events stated in different words stay separate rows.\n\n## Step 6 - find the disputed facts\n\nA model reads every event on each topic and says whether one side asserts a fact another\ndenies, with the strongest quote for each side, picked from the topic's own quotes. Every\ntopic it marks disputed goes to a reviewer, who reads both quotes and settles the summary.\n\n## The results\n\nThe chronology: every dated, quoted event, in order, with its pin cite. The disputes: each\ntopic's status as the reviewer left it, with the quotes on each side. A report lists both,\neach quote linked to its page. The filings come from CourtListener's RECAP archive, run by\nFree Law Project; the reading of them is this workflow's, not Free Law Project's.\n",
+  "document": "# A chronology of United States v. The Boeing Company, every event quoted from its page\n\n## The question\n\nWhat happened in the criminal case over Boeing's deception of the FAA about the 737 MAX, in\nwhat order, who said what, and which facts did one side assert and another deny? Every entry\nmust point at the words on a filing's page that state it.\n\n## The corpus\n\nFive filings from the docket of United States v. The Boeing Company, N.D. Tex. No.\n4:21-cr-00005 (CourtListener docket 29089563), as CourtListener's RECAP archive holds them.\nThey are the fight over the crash victims' families' rights under the Crime Victims' Rights\nAct, where each side takes a position the other contests: the families' motion (ECF 52),\nthe government's response (ECF 58), the court's opinion that the families represent crime\nvictims (ECF 116), its opinion on remedies (ECF 185), and its order rejecting the 2024 plea\nagreement (ECF 282). `app/seeds/data/boeing/SOURCES.md` lists each file's address, hash\nand fetch time, and nine more filings the mirror holds.\n\nA filing that is not among these five is outside what this chronology can see.\n\n## Step 1 - read every page\n\nEach filing is read page by page from its PDF's text layer. Each page keeps the filing's ECF\nnumber, attachment number, filing date and docket description.\n\n## Step 2 - list the events on each page\n\nA model reads one page at a time and lists up to three events it states: something that\nhappened, or a position the court or a party takes. For each it writes one sentence and\ncopies the words that state it. It is not shown any other page.\n\n## Step 3 - date each event, and name its speaker and topic\n\nA model reads each event beside its page and gives the day it happened, how precisely the\npage states that day, whose act or assertion it is (court, government, Boeing, the families,\nor other), and one of eleven topics. A filing's own act, such as a ruling or an argument,\ntakes the day it was filed. An event whose page gives no date is dropped.\n\n## Step 4 - pin each event to its words\n\nA model copies the words on the page that state the event. The runtime finds them on the\npage, exactly, and records where they sit; a quote it cannot find is sent back to the model.\nAn event no words on its page state is dropped.\n\n## Step 5 - one row per event, in date order\n\nWhere a later filing quotes an earlier one word for word, with the same date, speaker and\ntopic, the earlier filing's copy is kept. The events are then put in date order, and in\ndocket order within a day. Events stated in different words stay separate rows.\n\n## Step 6 - find the disputed facts\n\nA model reads every event on each topic and says whether one side asserts a fact another\ndenies, with the strongest quote for each side, picked from the topic's own quotes. Every\ntopic it marks disputed goes to a reviewer, who reads both quotes and settles the summary.\n\n## The results\n\nThe chronology: every dated, quoted event, in order, with its pin cite. The disputes: each\ntopic's status as the reviewer left it, with the quotes on each side. A report lists both,\neach quote linked to its page. The filings come from CourtListener's RECAP archive, run by\nFree Law Project; the reading of them is this workflow's, not Free Law Project's.\n",
   "model": "opus",
   "source": "mcp",
   "data_model": {
@@ -41,7 +41,7 @@
       "universe": "closed",
       "importance": "primary",
       "qualifiers": [
-        "Only the 14 filings this workflow reads; an event no one of them states is not here."
+        "Only the five filings this workflow reads; an event no one of them states is not here."
       ],
       "context": [
         {
@@ -71,32 +71,24 @@
       "id": "input_filings",
       "type": "input_data",
       "row_type_id": "filing",
-      "description": "Reads the 14 filings this chronology covers from CourtListener's RECAP archive, one row per file.",
+      "description": "Reads the five filings of the crime-victims fight this chronology covers, one row per file, from the committed RECAP mirror.",
       "inputs": [],
       "cache": false,
       "compiler_notes": [
-        "ECF numbers are as the docket prints them: 221-1 is attachment 1 of entry 221, the proposed plea agreement.",
-        "cache_dir reads the mirror committed under app/seeds/data/boeing, so a run never calls CourtListener; drop it to read the live archive."
+        "The five filings where the families, the government and the court take opposing positions on the families' rights: ECF 52, 58, 116, 185 and 282.",
+        "The mirror under app/seeds/data/boeing holds nine more filings (SOURCES.md); adding an ECF number to entries reads one.",
+        "cache_dir reads that mirror, so a run never calls CourtListener; drop it to read the live archive."
       ],
       "connector": {
         "kind": "recap_docket",
         "params": {
           "docket_id": 29089563,
           "entries": [
-            "4",
             "52",
             "58",
             "116",
             "185",
-            "197",
-            "221-1",
-            "233",
-            "245",
-            "282",
-            "312",
-            "312-1",
-            "334",
-            "358"
+            "282"
           ],
           "court": "txnd",
           "case_number": "4:21-cr-00005",

@@ -1,8 +1,8 @@
 {
   "steps": [
     {
-      "title": "Read the 14 filings",
-      "prose": "Each filing as CourtListener's RECAP archive holds it, with its ECF number, filing date and the docket's description. Check a file's sha256 against SOURCES.md before trusting anything below it.",
+      "title": "Read the five filings",
+      "prose": "The families' motion, the government's response, and the court's three rulings on them, each as CourtListener's RECAP archive holds it, with its ECF number, filing date and the docket's description. Check a file's sha256 against SOURCES.md before trusting anything below it.",
       "stage_ids": ["input_filings"],
       "data_description": "One row per filing."
     },

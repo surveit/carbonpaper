@@ -1,6 +1,6 @@
 # Sources: United States v. The Boeing Company, N.D. Tex. 4:21-cr-00005
 
-A mirror of 14 filings from CourtListener docket 29089563, read by the `recap_docket` connector through the bundle's `cache_dir`, so a run of `boeing_docket_chronology` never calls CourtListener. `manifest.jsonl` is the corpus fetch record for every file here, with paths relative to this directory.
+A mirror of 14 filings from CourtListener docket 29089563, read by the `recap_docket` connector through the bundle's `cache_dir`, so a run of `boeing_docket_chronology` never calls CourtListener. The bundle reads five of them: ECF 52, 58, 116, 185 and 282. Adding an ECF number from the table below to its `entries` reads another. `manifest.jsonl` is the corpus fetch record for every file here, with paths relative to this directory.
 
 ## Terms
 
