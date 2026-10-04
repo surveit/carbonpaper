@@ -33,7 +33,7 @@ def find_quoted_span_columns(stage: LLMTransformStage) -> list[QuotedSpanColumn]
     ]
 
 
-def show_quoted_text(row: Row, columns: Sequence[QuotedSpanColumn]) -> Row:
+def render_quoted_text_in_row(row: Row, columns: Sequence[QuotedSpanColumn]) -> Row:
     """The row a prompt renders: each quoted-from cell shows its text, not the span's fields."""
     column_types = {column.quoted_from.name: column.quoted_from.type for column in columns}
     shown = {name: _render_quoted_text(row[name], type_name) for name, type_name in column_types.items()}
@@ -73,7 +73,7 @@ def _complete_span(
         raise QuoteRefused(empty, correction=empty)
     if quoted_from.type == LIST_SPAN_COLUMN_TYPE:
         spans = [Span.model_validate(cell, strict=True) for cell in parent_cell]
-        return _pick_listed_span(spans, reply, quoted_from.name).model_dump()
+        return _match_listed_span(spans, reply, quoted_from.name).model_dump()
     parent = Span.model_validate(parent_cell, strict=True)
     return _narrow_to_reply(parent, reply, _require_file_name(parent, sources)).model_dump()
 
@@ -91,12 +91,12 @@ def _narrow_to_reply(parent: Span, reply: SpanReply, file_name: str) -> Span:
     start, end = framed[0], framed[0] + len(quote)
     return narrow_span(
         parent, parent.quote[page.raw_starts[start]:page.raw_ends[end - 1]],
-        prefix=_slice_raw_prefix(parent.quote, page, start, prefix),
-        suffix=_slice_raw_suffix(parent.quote, page, end, suffix),
+        prefix=_take_raw_prefix(parent.quote, page, start, prefix),
+        suffix=_take_raw_suffix(parent.quote, page, end, suffix),
     )
 
 
-def _pick_listed_span(spans: list[Span], reply: SpanReply, column_name: str) -> Span:
+def _match_listed_span(spans: list[Span], reply: SpanReply, column_name: str) -> Span:
     quote = _normalize(reply.quote)
     matches: list[Span] = []
     for span in spans:
@@ -149,14 +149,14 @@ def _refuse_quote(finding: str, where: str, quote: str, fix: str) -> QuoteRefuse
     return QuoteRefused(f"{finding} on {where}: {quote!r}", correction=f"{finding}: {quote!r}. {fix}")
 
 
-def _slice_raw_prefix(raw: str, page: NormalizedText, start: int, prefix: str) -> str | None:
+def _take_raw_prefix(raw: str, page: NormalizedText, start: int, prefix: str) -> str | None:
     if not prefix:
         return None
     prefix_end = len(page.text[:start].rstrip())
     return raw[page.raw_starts[prefix_end - len(prefix)]:page.raw_starts[start]]
 
 
-def _slice_raw_suffix(raw: str, page: NormalizedText, end: int, suffix: str) -> str | None:
+def _take_raw_suffix(raw: str, page: NormalizedText, end: int, suffix: str) -> str | None:
     if not suffix:
         return None
     suffix_start = len(page.text) - len(page.text[end:].lstrip())

@@ -18,7 +18,7 @@ class Locator(_Base):
     kind: str
 
     @model_validator(mode="after")
-    def _kind_is_the_class_default(self) -> Self:
+    def _require_the_class_default_kind(self) -> Self:
         if self.kind != type(self).model_fields["kind"].default:
             raise ValueError(f"{type(self).__name__} cannot hold kind {self.kind!r}")
         return self
@@ -35,7 +35,7 @@ class PageCharRange(Locator):
     end: int = Field(ge=0)
 
     @model_validator(mode="after")
-    def _end_not_before_start(self) -> Self:
+    def _require_end_not_before_start(self) -> Self:
         _refuse_end_before_start(self.start, self.end)
         return self
 
@@ -46,7 +46,7 @@ class CharRange(Locator):
     end: int = Field(ge=0)
 
     @model_validator(mode="after")
-    def _end_not_before_start(self) -> Self:
+    def _require_end_not_before_start(self) -> Self:
         _refuse_end_before_start(self.start, self.end)
         return self
 
