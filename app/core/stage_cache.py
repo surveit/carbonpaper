@@ -100,13 +100,15 @@ def to_json_safe_row(row: Mapping[str, object]) -> JsonDict:
     return safe
 
 
-def _point_entry_at_copies(
-    entry: StageCacheEntry, source_ids_by_sha256: Mapping[str, ID]
+def _replay_written_columns(
+    entry: StageCacheEntry, columns_written: frozenset[str],
+    source_ids_by_sha256: Mapping[str, ID],
 ) -> StageCacheEntry:
+    """A stored row is JSON, so a date the stage only read would come back as text."""
     if entry.output_row is None:
         return entry
     output_row = {key: _point_spans_at_copies(value, source_ids_by_sha256)
-                  for key, value in entry.output_row.items()}
+                  for key, value in entry.output_row.items() if key in columns_written}
     return entry.model_copy(update={"output_row": output_row})
 
 
@@ -127,11 +129,12 @@ class ReadOnlyStageCache:
 
     def find_recorded_entries(
         self, project_id: ID, stage_id: ID, stage_fingerprint: str,
-        *, source_ids_by_sha256: Mapping[str, ID],
+        *, columns_written: frozenset[str], source_ids_by_sha256: Mapping[str, ID],
     ) -> dict[str, StageCacheEntry]:
-        """Keyed by input fingerprint; a span in an output row names this run's copy of its bytes."""
+        """Keyed by input fingerprint. A column the stage only read comes back typed from its input."""
         return {
-            entry.input_fingerprint: _point_entry_at_copies(entry, source_ids_by_sha256)
+            entry.input_fingerprint: _replay_written_columns(
+                entry, columns_written, source_ids_by_sha256)
             for entry in self.find_entries(project_id, stage_id, stage_fingerprint)
         }
 
