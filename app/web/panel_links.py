@@ -130,7 +130,7 @@ class PacketPanelLinks:
         self, to_root: str = "../", traced: frozenset[tuple[str, int]] | None = None,
         owner: tuple[str, int] | None = None,
         cited_pages: frozenset[tuple[str, int]] = frozenset(),
-        stage_pages: frozenset[str] | None = None,
+        *, stage_pages: frozenset[str],
     ) -> None:
         self._owner = owner  # a cohort table is named after the row it fed
         self._root = to_root  # "" from index.html, "../" from a page in stages/
@@ -140,11 +140,11 @@ class PacketPanelLinks:
         self._traced = traced
         # (source id, page) of each page text the packet holds.
         self._cited_pages = cited_pages
-        # Which stages the packet holds a page for. None means every stage it is asked about.
+        # Stages with a packet page.
         self._stage_pages = stage_pages
 
     def stage_anchor(self, stage_id: str) -> str | None:
-        if self._stage_pages is not None and stage_id not in self._stage_pages:
+        if stage_id not in self._stage_pages:
             return None
         return f"{self._root}stages/{_segment(stage_id)}.html"
 

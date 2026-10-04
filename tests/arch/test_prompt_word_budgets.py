@@ -1,4 +1,4 @@
-"""Architecture: each ``app/**/*prompt*.py`` module holds a word budget over its str constants."""
+"""Architecture: each ``app/**/*prompt*.py`` module, and each listed extra, holds a word budget."""
 from __future__ import annotations
 
 import ast
