@@ -1,10 +1,10 @@
 """A span cell as a table prints it: its quotes as the cell's text, each span kept to link."""
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from app.models.locators import label_locator
+from app.models.locators import PageCharRange, label_locator
 from app.models.spans import Span, read_span_cell
 
 
@@ -18,15 +18,22 @@ class SpanCellText(str):
     """Its quotes wherever a table prints a cell as text; `cites` is what `span_cites` links."""
 
     cites: tuple[SpanCite, ...]
+    filenames_by_sha256: Mapping[str, str] | None
 
-    def __new__(cls, spans: Sequence[Span]) -> SpanCellText:
+    # Given `filenames_by_sha256`, each label also names the file it quotes.
+    def __new__(cls, spans: Sequence[Span],
+                filenames_by_sha256: Mapping[str, str] | None = None) -> SpanCellText:
         text = super().__new__(cls, "; ".join(span.quote for span in spans))
-        text.cites = tuple(SpanCite(span, label_locator(span.locator)) for span in spans)
+        text.cites = tuple(SpanCite(span, _label_span(span, filenames_by_sha256))
+                           for span in spans)
+        text.filenames_by_sha256 = filenames_by_sha256
         return text
 
     # str's own copy protocol would hand __new__ the quotes; this hands it the spans.
-    def __reduce__(self) -> tuple[type[SpanCellText], tuple[list[Span]]]:
-        return (SpanCellText, ([cite.span for cite in self.cites],))
+    def __reduce__(
+        self,
+    ) -> tuple[type[SpanCellText], tuple[list[Span], Mapping[str, str] | None]]:
+        return (SpanCellText, ([cite.span for cite in self.cites], self.filenames_by_sha256))
 
     # The same quote at another address is another cell, so a stage diff marks it changed.
     def __eq__(self, other: object) -> bool:
@@ -48,6 +55,17 @@ def render_span_column(values: Sequence[object], texts: Sequence[str]) -> list[s
     return [text if span_text is None else span_text for span_text, text in zip(span_texts, texts)]
 
 
-def render_span_cell(value: object) -> SpanCellText | None:
+def render_span_cell(
+    value: object, filenames_by_sha256: Mapping[str, str] | None = None,
+) -> SpanCellText | None:
     spans = read_span_cell(value)
-    return None if spans is None else SpanCellText(spans)
+    return None if spans is None else SpanCellText(spans, filenames_by_sha256)
+
+
+def _label_span(span: Span, filenames_by_sha256: Mapping[str, str] | None) -> str:
+    if filenames_by_sha256 is None:
+        return label_locator(span.locator)
+    filename = filenames_by_sha256[span.source_sha256]
+    if isinstance(span.locator, PageCharRange):
+        return f"p. {span.locator.page} of {filename}"
+    return f"{label_locator(span.locator)} of {filename}"

@@ -155,6 +155,12 @@ def test_a_span_cell_survives_a_deep_copy_and_a_pickle_with_its_spans():
         assert [cite.span for cite in copied.cites] == [OPPOSE, DISMISS]
 
 
+def test_a_span_cell_naming_its_file_keeps_the_name_through_a_copy():
+    cell = SpanCellText([OPPOSE], {OPPOSE.source_sha256: "ecf17.pdf"})
+
+    assert [cite.label for cite in copy.deepcopy(cell).cites] == ["p. 14 of ecf17.pdf"]
+
+
 def test_the_same_quote_moved_to_another_page_reads_as_changed_in_the_stage_diff(tmp_path):
     moved = Span(source_id="ecf17", source_sha256="a" * 64,
                  locator=PageCharRange(page=3, start=10, end=16), quote="oppose")
