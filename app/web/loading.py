@@ -13,7 +13,7 @@ from fastapi import HTTPException
 
 from app.core.errors import RunNotFoundError, NoVersionToRunError, StageOutputMissing
 from app.core.frames import (
-    list_rows, list_table_rows, read_frame_file, read_frame_file_for_display, read_frame_table,
+    list_rows, list_table_rows, read_frame_file_for_display, read_frame_table,
     render_frame_as_csv_text,
 )
 from app.models import (
@@ -436,7 +436,7 @@ def _load_output_slice(
 
 def queue_snapshot(project_id: str, run_id: str, stage_id: str) -> pd.DataFrame | None:
     path = find_queue_snapshot_path(project_id, run_id, stage_id)
-    return None if path is None else read_frame_file(path)
+    return None if path is None else read_frame_file_for_display(path)
 
 
 def queue_snapshot_rows(project_id: str, run_id: str, stage_id: str) -> list[dict[str, Any]] | None:

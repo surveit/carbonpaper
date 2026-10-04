@@ -165,7 +165,9 @@ nothing about the upstream stage or its column names. The queued row itself is
 the material to review: the columns the queue declares as `reviewed_columns`
 sources each render as their own row in the review section, one field decided
 at a time. `queue.context_columns` optionally names the ordered background
-context rendered as a key/value table. When omitted, every other column the
+context rendered as a key/value table; a span value there is its quote, then
+`p. N of <file>` linked to that page (`span_cites`, the file named from the run's
+input bindings). When omitted, every other column the
 stage reads remains visible for compatibility; an empty list renders no context.
 This display choice does not remove columns from the stage output. A context
 column must exist in the input schema, be read by the stage, appear only once,
