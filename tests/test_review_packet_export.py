@@ -6,6 +6,7 @@ import re
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 import pandas as pd
 import pytest
@@ -20,16 +21,19 @@ from app.models.connectors import (
 )
 from app.models.locators import PageCharRange
 from app.models.packs import PACKS, PackSpec, register_pack
+from app.models.review_guide import ReviewGuideDraft, ReviewGuideStep
 from app.models.spans import Span
 from app.runtime.stages import llm_transform as lt
 from app.services import run as run_service
 from app.services import uploads
 from app.services.methodology import write_methodology
+from app.services.project import write_review_guide
+from app.services.review_packet import ReviewPacket
 from app.services.review_packet.checksums import compute_sha256
 from app.services.versioning import create_version_from_stages
 from app.services.workflow_test import run_workflow_test
 from app.services.workspace import resolve_project_dir
-from app.tools.tutorial import TutorialContext, seed_tutorial_project
+from app.tools.tutorial import TutorialAgentReference, TutorialContext, seed_tutorial_project
 from app.web.review_packet import export_review_packet
 from conftest import reads_of, script_judgment
 from pdf_fixture import write_text_pdf
@@ -289,13 +293,12 @@ def test_a_file_from_courtlistener_puts_the_free_law_project_line_on_the_index(
 _X = [{"name": "x", "type": "int", "nullable": False}]
 
 
-def test_a_test_run_s_model_rows_leave_judgments_jsonl_omitted_with_the_reason(
-    projects_root, monkeypatch, tmp_path,
-):
+@pytest.fixture
+def tested_packet(projects_root, monkeypatch, tmp_path) -> ReviewPacket:
     rows = resolve_project_dir(PROJECT) / "rows.csv"
     rows.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"x": [1, 2]}).to_csv(rows, index=False)
-    create_version_from_stages(PROJECT, [
+    version = create_version_from_stages(PROJECT, [
         {"id": "load", "description": "Load rows", "type": "input_data",
          "connector": {"kind": "file", "params": {"path": str(rows), "format": "csv"}},
          "signature": {"form": "replaces", "produces": _X}},
@@ -305,17 +308,42 @@ def test_a_test_run_s_model_rows_leave_judgments_jsonl_omitted_with_the_reason(
                        "adds": [{"name": "verdict", "type": "str", "nullable": True}]},
          "llm": {"prompt_data_template": "Rate: {x}"}},
     ], message="v1")
+    write_review_guide(PROJECT, version.version_id, ReviewGuideDraft(steps=[
+        ReviewGuideStep(title="Load", prose="Reads the rows.", stage_ids=["load"],
+                        data_description="Every row of rows.csv."),
+        ReviewGuideStep(title="Judge", prose="Rates each row.", stage_ids=["judge"],
+                        data_description="Each row with its verdict."),
+    ]))
     monkeypatch.setattr(lt, "call_llm", lambda stage_id, llm_config, row, **kw: script_judgment(
         {"verdict": "fine"}))
     tested = run_workflow_test(PROJECT)
     assert tested["ok"], tested["error"]
+    assert tested["stages_run"] == ["judge"], "the test run reads load's rows without running it"
+    return export_review_packet(PROJECT, tested["run_id"], tmp_path / "packets")
 
-    packet = export_review_packet(PROJECT, tested["run_id"], tmp_path / "packets")
 
-    assert not (packet.root / "judgments.jsonl").exists()
-    [omitted] = [o for o in packet.omitted if o.path == "judgments.jsonl"]
+def test_a_test_run_s_model_rows_leave_judgments_jsonl_omitted_with_the_reason(tested_packet):
+    assert not (tested_packet.root / "judgments.jsonl").exists()
+    [omitted] = [o for o in tested_packet.omitted if o.path == "judgments.jsonl"]
     assert omitted.reason == (
         "stage 'judge': 2 row(s) were decided in a test run, which records no judgment")
+
+
+def test_a_stage_page_names_an_input_stage_the_run_did_not_execute_without_a_link(
+    tested_packet,
+):
+    judge = (tested_packet.root / "stages" / "judge.html").read_text(encoding="utf-8")
+
+    assert not (tested_packet.root / "stages" / "load.html").exists()
+    assert "load.html" not in judge
+    assert "<code>load</code>" in judge
+
+
+def test_the_index_diagram_opens_only_a_stage_the_packet_holds_a_page_for(tested_packet):
+    diagram = (tested_packet.root / "workflow.mmd").read_text(encoding="utf-8")
+
+    assert 'click judge call dvNode("judge")' in diagram
+    assert "click load " not in diagram
 
 
 # ── the tour's capped run: no span column, cached judgments ──────────────────
@@ -324,28 +352,63 @@ def test_a_test_run_s_model_rows_leave_judgments_jsonl_omitted_with_the_reason(
 _TOUR_CAP = 50
 
 
-def test_the_tour_s_capped_run_archives_its_files_and_says_why_it_holds_no_judgment(
-    projects_root, tmp_path,
-):
-    tour = seed_tutorial_project(TutorialContext(base_url="http://127.0.0.1:8788/"))
+@pytest.fixture
+def tour(projects_root) -> TutorialAgentReference:
+    return seed_tutorial_project(TutorialContext(base_url="http://127.0.0.1:8788/"))
+
+
+@pytest.fixture
+def tour_packet(tour, tmp_path) -> ReviewPacket:
     bindings = {stage_id: uploads.resolve_files_binding(tour.project.id, file_ids)
                 for stage_id, file_ids in tour.input_files.items()}
     run_id = str(run_service.execute(
         tour.project.id, bindings=bindings, limits={"input_filings": _TOUR_CAP})["run_id"])
+    return export_review_packet(tour.project.id, run_id, tmp_path / "packets")
 
-    packet = export_review_packet(tour.project.id, run_id, tmp_path / "packets")
 
+def test_the_tour_s_capped_run_archives_its_files_and_says_why_it_holds_no_judgment(
+    tour, tour_packet,
+):
     stored = {record.id: record for record in list_project_files(tour.project.id)}
-    sources = _read_json(packet.root / "sources.json")
+    sources = _read_json(tour_packet.root / "sources.json")
     assert {source["id"] for source in sources} == {
         file_id for file_ids in tour.input_files.values() for file_id in file_ids}
     assert all(source["sha256"] == stored[source["id"]].sha256 for source in sources)
-    assert not (packet.root / "judgments.jsonl").exists()
-    [omitted] = [o for o in packet.omitted if o.path == "judgments.jsonl"]
+    assert not (tour_packet.root / "judgments.jsonl").exists()
+    [omitted] = [o for o in tour_packet.omitted if o.path == "judgments.jsonl"]
     assert omitted.reason.startswith("stage 'judge_ai_substance': ")
     assert omitted.reason.endswith(
         "row(s) were replayed from cache entries recorded before judgments were kept")
-    assert not (packet.root / "spans.json").exists()
-    assert not (packet.root / "sources").exists()
-    assert (packet.root / "data" / "raw" / "input_filings.lineage.parquet").is_file()
-    assert (packet.root / "terms.json").is_file()
+    assert not (tour_packet.root / "spans.json").exists()
+    assert not (tour_packet.root / "sources").exists()
+    assert (tour_packet.root / "data" / "raw" / "input_filings.lineage.parquet").is_file()
+    assert (tour_packet.root / "terms.json").is_file()
+
+
+# ── every packet: each relative link opens a file inside it ──────────────────
+
+
+_RELATIVE_LINK = re.compile(r'(?:href|src)="(?![a-z]+:|#)([^"#?]+)')
+# A script body builds links as JS template strings, which are not hrefs yet.
+_SCRIPT_BODY = re.compile(r"(<script\b[^>]*>).*?</script>", re.S)
+
+
+@pytest.fixture(params=["quoted", "tested", "tour"])
+def packet_root(request) -> Path:
+    if request.param == "quoted":
+        return request.getfixturevalue("quoted_packet").resolve()
+    return request.getfixturevalue(f"{request.param}_packet").root.resolve()
+
+
+def test_every_relative_link_in_a_packet_page_opens_a_file_the_packet_holds(packet_root):
+    followed = [
+        (page, (page.parent / unquote(href)).resolve())
+        for page in packet_root.rglob("*.html")
+        for href in _RELATIVE_LINK.findall(
+            _SCRIPT_BODY.sub(r"\1</script>", page.read_text(encoding="utf-8")))
+    ]
+    broken = [(page.relative_to(packet_root).as_posix(), target.name)
+              for page, target in followed
+              if not (target.is_relative_to(packet_root) and target.is_file())]
+
+    assert followed and not broken, broken[:10]

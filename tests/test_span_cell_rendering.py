@@ -132,7 +132,7 @@ def test_a_span_naming_no_page_links_its_file_in_the_app_and_nothing_in_a_packet
                 locator=CellAt(row=3, column="amount"), quote="12")
 
     served = _render_span_cell(SpanCellText([cell]), AppPanelLinks(PROJECT, RUN))
-    packed = _render_span_cell(SpanCellText([cell]), PacketPanelLinks())
+    packed = _render_span_cell(SpanCellText([cell]), PacketPanelLinks(stage_pages=frozenset()))
 
     assert f'<a href="/project/{PROJECT}/files/ledger">row 4, column amount</a>' in served
     assert "<a" not in packed

@@ -204,7 +204,7 @@ def test_the_lineage_page_links_the_origin_row_to_its_file_page(tmp_path):
     trace = trace_to_dict(trace_row(run_dir, "chronology", 0))
 
     served = build_trace_view(trace, {}, AppPanelLinks("boeing_docket", "T1"))
-    packet = build_trace_view(trace, {}, PacketPanelLinks())
+    packet = build_trace_view(trace, {}, PacketPanelLinks(stage_pages=frozenset()))
 
     assert served["nodes"][0]["source_file_href"] == f"/project/boeing_docket/files/{record.id}"
     # A packet is a folder with no route to serve the page.

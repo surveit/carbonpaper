@@ -152,7 +152,8 @@ def _write_page(
     relative = packet_lineage_href("", stage_id, row)
     written = _write_contributor_tables(root, frames, view, trace, stage_id, row)
     links = PacketPanelLinks(
-        to_root="../../", traced=traced, owner=(stage_id, row), cited_pages=cited_pages)
+        to_root="../../", traced=traced, owner=(stage_id, row), cited_pages=cited_pages,
+        stage_pages=frozenset(s.stage_id for s in view.stages))
     trace_view = build_trace_view(trace, stages_by_id, links)
     html = templates.env.get_template("lineage.html").render(
         title=f"{stage_id} · row {render_row_number(row)}",

@@ -126,7 +126,7 @@ def test_a_fetched_file_says_where_and_when_it_was_fetched_in_the_packet_too(tmp
     fetched = _save_fetched_east()
 
     inputs = _inputs(_manifest(["filings"], east_file_id=fetched.id),
-                     links=PacketPanelLinks())
+                     links=PacketPanelLinks(stage_pages=frozenset()))
     html = templates.env.get_template("_lineage_inputs.html").render(
         inputs=inputs, offline=True)
 
@@ -163,7 +163,8 @@ def test_a_packet_offers_no_file_page(tmp_path):
     file_store.ProjectFile(sha256=EAST_SHA, filename="east.csv",
                            byte_count=EAST_BYTES, project_id=PROJECT).save()
 
-    read = _file(_inputs(_manifest(["filings"]), links=PacketPanelLinks()), "east.csv")
+    links = PacketPanelLinks(stage_pages=frozenset())
+    read = _file(_inputs(_manifest(["filings"]), links=links), "east.csv")
     assert read.href is None
 
 

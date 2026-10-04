@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from typing import get_args
 
 import pytest
 from pydantic import TypeAdapter, ValidationError
@@ -17,6 +18,7 @@ from app.models.citations import (
     TermCitation,
     render_citation_value,
 )
+from app.web.claim_review_view import CITATION_KIND_WORDS
 
 CHALLENGE_CITATION: TypeAdapter[ChallengeCitation] = TypeAdapter(ChallengeCitation)
 
@@ -46,6 +48,14 @@ def test_each_kind_round_trips_through_the_challenge_union_by_its_kind(
 
     assert type(citation) is kind_class
     assert json.loads(CHALLENGE_CITATION.dump_json(citation)) == payload
+
+
+def test_each_kind_a_challenge_may_cite_has_its_words_on_the_review_page() -> None:
+    union, _discriminator = get_args(ChallengeCitation)
+    kinds = {kind for member in get_args(union)
+             for kind in get_args(member.model_fields["kind"].annotation)}
+
+    assert set(CITATION_KIND_WORDS) == kinds
 
 
 def test_an_unknown_kind_is_refused() -> None:

@@ -201,7 +201,7 @@
       {% for ip in input_previews %}
       <div class="preview-block input-preview">
         <div class="preview-head">
-          <a href="{{ links.stage_anchor(ip.id) }}"><code>{{ ip.id }}</code></a>
+          {% set input_href = links.stage_anchor(ip.id) %}{% if input_href %}<a href="{{ input_href }}"><code>{{ ip.id }}</code></a>{% else %}<code>{{ ip.id }}</code>{% endif %}
           {% if ip.preview and ip.preview.preview %}{% set shown = ip.preview.preview | length %}
           <span class="muted">· {{ frame_counts(ip.preview.rows_total, ip.preview.columns | length, 'row',
               ip.reached | length if ip.reached else none, ip.columns_behind | length, shown) }}</span>
@@ -243,7 +243,8 @@
     {% if workflow_stage.inputs %}
       {% for inp in workflow_stage.inputs %}
       <div class="schema-card">
-        <h4>input <a href="{{ links.stage_anchor(inp.id) }}"><code>{{ inp.id }}</code></a> schema</h4>
+        {% set input_href = links.stage_anchor(inp.id) %}
+        <h4>input {% if input_href %}<a href="{{ input_href }}"><code>{{ inp.id }}</code></a>{% else %}<code>{{ inp.id }}</code>{% endif %} schema</h4>
         {{ schema_table(inp.table_schema) }}
       </div>
       {% endfor %}

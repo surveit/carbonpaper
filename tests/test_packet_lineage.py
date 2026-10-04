@@ -54,14 +54,15 @@ def _relative_links(html: str) -> list[str]:
 
 
 def test_a_row_with_no_page_is_offered_no_link():
-    links = PacketPanelLinks(traced=frozenset({("keep_ai_candidates", 4)}))
+    links = PacketPanelLinks(
+        traced=frozenset({("keep_ai_candidates", 4)}), stage_pages=frozenset())
     assert links.row_trace("keep_ai_candidates", 4) == "../lineage/keep_ai_candidates/4.html"
     assert links.row_trace("keep_ai_candidates", 5) is None
     assert links.row_trace("other_stage", 4) is None
 
 
 def test_a_stage_id_carrying_a_slash_cannot_widen_the_path():
-    links = PacketPanelLinks(traced=None)
+    links = PacketPanelLinks(traced=None, stage_pages=frozenset())
     assert links.row_trace("a/../../etc", 0) == "../lineage/a%2F..%2F..%2Fetc/0.html"
 
 
@@ -105,7 +106,7 @@ def _run_view(rows: int):
 
     return RunView(
         project="p", run_id="r", status="ok", started_at="t", finished_at="t",
-        workflow_version="v", is_test_run=False, bust_cache=False, halted_at=[],
+        workflow_version="v", is_test_run=False, halted_at=[],
         dropped_columns={},
         stages=[
             stage("source", "input_data", 10, []),
@@ -257,7 +258,7 @@ def test_a_wide_fan_in_is_reached_through_its_table_on_both_surfaces():
 
     trace = _aggregate_trace(contributors=24)
     packet = build_trace_view(
-        trace, {}, PacketPanelLinks(traced=None, owner=("totals", 0))
+        trace, {}, PacketPanelLinks(traced=None, owner=("totals", 0), stage_pages=frozenset())
     )
     app = build_trace_view(trace, {}, AppPanelLinks("p", "r"))
 

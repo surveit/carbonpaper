@@ -1,4 +1,4 @@
-"""Architecture: each ``app/**/*prompt*.py`` module holds a word budget over its str constants."""
+"""Architecture: each ``app/**/*prompt*.py`` module, and each listed extra, holds a word budget."""
 from __future__ import annotations
 
 import ast
@@ -12,6 +12,8 @@ from arch.word_budgets import HOW_TO_PAY_FOR_GROWTH, find_budget_violations
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _APP_ROOT = _REPO_ROOT / "app"
 _PROMPT_MODULE_PATTERN = "*prompt*.py"
+# llm.py holds SYSTEM_PROMPT, sent with every llm_transform call.
+_PROMPT_MODULES_OUTSIDE_THE_PATTERN = ("app/runtime/llm.py",)
 
 # Docstrings and the literal text of f-strings count: the measure is every str constant.
 _WORD_BUDGETS: dict[str, int] = {
@@ -23,6 +25,7 @@ _WORD_BUDGETS: dict[str, int] = {
     "app/models/tool_schema_prompts.py": 535,
     "app/reviewer/dedupe_prompt.py": 483,
     "app/reviewer/reviewers_prompt.py": 3523,
+    "app/runtime/llm.py": 191,
     "app/tools/prompt_fragments.py": 1716,
 }
 
@@ -30,7 +33,8 @@ _WORD_BUDGETS: dict[str, int] = {
 def test_each_prompt_module_stays_within_its_word_budget() -> None:
     counts = {
         path.relative_to(_REPO_ROOT).as_posix(): count_string_constant_words(parse_module(path))
-        for path in find_prompt_modules(_APP_ROOT)
+        for path in [*find_prompt_modules(_APP_ROOT),
+                     *(_REPO_ROOT / module for module in _PROMPT_MODULES_OUTSIDE_THE_PATTERN)]
     }
     offenders = find_budget_violations(counts, _WORD_BUDGETS)
     assert not offenders, (
