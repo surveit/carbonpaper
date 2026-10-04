@@ -46,7 +46,7 @@ from .span_replies import (
     QuotedSpanColumn,
     complete_spans,
     find_quoted_span_columns,
-    show_quoted_text,
+    render_quoted_text_in_row,
 )
 
 # The reply field carrying a batched result's item number — the rejoin handle.
@@ -120,7 +120,7 @@ def _ask_until_quotes_resolve(
     usages: list[LlmUsage],
 ) -> tuple[JudgmentDraft, JsonDict]:
     """Re-asks only a reply quoting words the runtime could not find at one place."""
-    prompt_row = show_quoted_text(row, quoted)
+    prompt_row = render_quoted_text_in_row(row, quoted)
     correction: str | None = None
     rejection = ""
     attempts = _count_attempts(stage.llm)
@@ -175,7 +175,7 @@ def _process_chunk(
     usages: list[LlmUsage] = []
     try:
         judgment, by_number = _ask_until_reply_rejoins(
-            stage_id, llm, batch_reply_schema, [show_quoted_text(row, quoted) for row in chunk],
+            stage_id, llm, batch_reply_schema, [render_quoted_text_in_row(row, quoted) for row in chunk],
             usages)
     except StageWideFailure:
         raise                       # not this chunk's failure — see map_row's supervisor

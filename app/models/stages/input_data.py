@@ -89,7 +89,7 @@ class Connector(StageConfig):
 
     @field_validator("kind")
     @classmethod
-    def _kind_is_file_or_registered(cls, kind: str) -> str:
+    def _require_a_file_or_registered_kind(cls, kind: str) -> str:
         _find_params_model(kind)
         return kind
 
