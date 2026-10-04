@@ -1,0 +1,1618 @@
+{
+  "name": "boeing_docket_chronology",
+  "document": "# A chronology of United States v. The Boeing Company, every event quoted from its page\n\n## The question\n\nWhat happened in the criminal case over Boeing's deception of the FAA about the 737 MAX, in\nwhat order, who said what, and which facts did one side assert and another deny? Every entry\nmust point at the words on a filing's page that state it.\n\n## The corpus\n\n14 filings from the docket of United States v. The Boeing Company, N.D. Tex. No.\n4:21-cr-00005 (CourtListener docket 29089563), as CourtListener's RECAP archive holds them:\nECF 4, 52, 58, 116, 185, 197, 221-1, 233, 245, 282, 312, 312-1, 334 and 358. They run from the January 2021\ndeferred prosecution agreement, through the crash victims' families' motions under the Crime\nVictims' Rights Act and the court's opinions on them, the 2024 plea agreement and the\norder rejecting it, to the 2025 non-prosecution agreement and the order granting the\ngovernment's motion to dismiss. Hearing transcripts are left out. `app/seeds/data/boeing/SOURCES.md` lists each\nfile's address, hash and fetch time.\n\nA filing that is not among these 14 is outside what this chronology can see.\n\n## Step 1 - read every page\n\nEach filing is read page by page from its PDF's text layer. Each page keeps the filing's ECF\nnumber, attachment number, filing date and docket description.\n\n## Step 2 - list the events on each page\n\nA model reads one page at a time and lists up to three events it states: something that\nhappened, or a position the court or a party takes. For each it writes one sentence and\ncopies the words that state it. It is not shown any other page.\n\n## Step 3 - date each event, and name its speaker and topic\n\nA model reads each event beside its page and gives the day it happened, how precisely the\npage states that day, whose act or assertion it is (court, government, Boeing, the families,\nor other), and one of eleven topics. A filing's own act, such as a ruling or an argument,\ntakes the day it was filed. An event whose page gives no date is dropped.\n\n## Step 4 - pin each event to its words\n\nA model copies the words on the page that state the event. The runtime finds them on the\npage, exactly, and records where they sit; a quote it cannot find is sent back to the model.\nAn event no words on its page state is dropped.\n\n## Step 5 - one row per event, in date order\n\nWhere a later filing quotes an earlier one word for word, with the same date, speaker and\ntopic, the earlier filing's copy is kept. The events are then put in date order, and in\ndocket order within a day. Events stated in different words stay separate rows.\n\n## Step 6 - find the disputed facts\n\nA model reads every event on each topic and says whether one side asserts a fact another\ndenies, with the strongest quote for each side, picked from the topic's own quotes. Every\ntopic it marks disputed goes to a reviewer, who reads both quotes and settles the summary.\n\n## The results\n\nThe chronology: every dated, quoted event, in order, with its pin cite. The disputes: each\ntopic's status as the reviewer left it, with the quotes on each side. A report lists both,\neach quote linked to its page. The filings come from CourtListener's RECAP archive, run by\nFree Law Project; the reading of them is this workflow's, not Free Law Project's.\n",
+  "model": "opus",
+  "source": "mcp",
+  "data_model": {
+    "schemas": []
+  },
+  "row_types": [
+    {
+      "id": "filing",
+      "title": "Filing",
+      "definition": "One document on the docket of US v. Boeing, or one attachment to it, as a stored PDF."
+    },
+    {
+      "id": "filing_page",
+      "title": "Filing page",
+      "definition": "One page of one filing."
+    },
+    {
+      "id": "event",
+      "title": "Event",
+      "definition": "One thing a filing states happened, or one position a party or the court takes, with the date it happened and the words that state it."
+    },
+    {
+      "id": "topic",
+      "title": "Topic",
+      "definition": "One subject of the case, with every dated event about it."
+    },
+    {
+      "id": "disputed_fact",
+      "title": "Disputed fact",
+      "definition": "One topic's fact, with whether one side asserts it and another denies it, and the strongest quote for each side."
+    }
+  ],
+  "verbs": [],
+  "claim_shapes": [
+    {
+      "id": "chronology_event",
+      "label": "An event in US v. Boeing, dated and quoted from a filing on the docket",
+      "universe": "closed",
+      "importance": "primary",
+      "qualifiers": [
+        "Only the 14 filings this workflow reads; an event no one of them states is not here."
+      ],
+      "context": [
+        {
+          "name": "date",
+          "type": "str",
+          "nullable": true,
+          "description": "When the event happened, as YYYY-MM-DD. A month- or year-precision date is its first day."
+        },
+        {
+          "name": "speaker",
+          "type": "str",
+          "nullable": false,
+          "description": "Whose act or assertion the event is: court, government, boeing, families, other."
+        },
+        {
+          "name": "topic",
+          "type": "str",
+          "nullable": false,
+          "description": "What the event is about: crashes, fraud_offense, dpa_terms, crime_victim_status, victims_rights_violation, remedy, dpa_breach, plea_agreement, independent_monitor, npa_and_dismissal, case_procedure."
+        }
+      ],
+      "template": "On {date}, {speaker}: {statement}"
+    }
+  ],
+  "stages": [
+    {
+      "id": "input_filings",
+      "type": "input_data",
+      "row_type_id": "filing",
+      "description": "Reads the 14 filings this chronology covers from CourtListener's RECAP archive, one row per file.",
+      "inputs": [],
+      "cache": false,
+      "compiler_notes": [
+        "ECF numbers are as the docket prints them: 221-1 is attachment 1 of entry 221, the proposed plea agreement.",
+        "cache_dir reads the mirror committed under app/seeds/data/boeing, so a run never calls CourtListener; drop it to read the live archive."
+      ],
+      "connector": {
+        "kind": "recap_docket",
+        "params": {
+          "docket_id": 29089563,
+          "entries": [
+            "4",
+            "52",
+            "58",
+            "116",
+            "185",
+            "197",
+            "221-1",
+            "233",
+            "245",
+            "282",
+            "312",
+            "312-1",
+            "334",
+            "358"
+          ],
+          "court": "txnd",
+          "case_number": "4:21-cr-00005",
+          "cache_dir": "app/seeds/data/boeing"
+        }
+      },
+      "signature": {
+        "form": "replaces",
+        "produces": [
+          {
+            "name": "source_id",
+            "type": "str",
+            "nullable": false,
+            "description": "The stored file this row is."
+          },
+          {
+            "name": "source_sha256",
+            "type": "str",
+            "nullable": false,
+            "description": "What the stored file's bytes hash to."
+          },
+          {
+            "name": "filename",
+            "type": "str",
+            "nullable": false,
+            "description": "The file's name, built from the court, case and ECF number."
+          },
+          {
+            "name": "origin_url",
+            "type": "str",
+            "nullable": true,
+            "description": "Where CourtListener serves the file."
+          },
+          {
+            "name": "fetched_at",
+            "type": "str",
+            "nullable": true,
+            "description": "When the file was fetched from that URL."
+          },
+          {
+            "name": "ecf_entry",
+            "type": "int",
+            "nullable": true,
+            "description": "The docket entry number the court gave the filing."
+          },
+          {
+            "name": "attachment",
+            "type": "int",
+            "nullable": true,
+            "description": "The attachment number within the entry; null for the main document."
+          },
+          {
+            "name": "date_filed",
+            "type": "date",
+            "nullable": true,
+            "description": "The day the court's docket records the entry as filed."
+          },
+          {
+            "name": "description",
+            "type": "str",
+            "nullable": true,
+            "description": "The docket's own description of the entry."
+          },
+          {
+            "name": "page_count",
+            "type": "int",
+            "nullable": true,
+            "description": "Pages, as RECAP counts them."
+          },
+          {
+            "name": "pacer_doc_id",
+            "type": "str",
+            "nullable": true,
+            "description": "PACER's document id."
+          },
+          {
+            "name": "courtlistener_id",
+            "type": "int",
+            "nullable": true,
+            "description": "CourtListener's id for the document."
+          }
+        ]
+      }
+    },
+    {
+      "id": "read_pages",
+      "type": "read_pages",
+      "row_type_id": "filing_page",
+      "description": "Reads every page of every filing, one row per page, each carrying a span over the whole page.",
+      "inputs": [
+        {
+          "id": "input_filings"
+        }
+      ],
+      "cache": false,
+      "compiler_notes": [],
+      "read_pages": {
+        "carry": [
+          "ecf_entry",
+          "attachment",
+          "date_filed",
+          "description"
+        ]
+      },
+      "signature": {
+        "form": "replaces",
+        "reads": [
+          {
+            "input": "input_filings",
+            "columns": [
+              {
+                "name": "source_id",
+                "type": "str",
+                "nullable": false,
+                "description": "The stored file this row is."
+              },
+              {
+                "name": "source_sha256",
+                "type": "str",
+                "nullable": false,
+                "description": "What the stored file's bytes hash to."
+              },
+              {
+                "name": "ecf_entry",
+                "type": "int",
+                "nullable": true,
+                "description": "The docket entry number the court gave the filing."
+              },
+              {
+                "name": "attachment",
+                "type": "int",
+                "nullable": true,
+                "description": "The attachment number within the entry; null for the main document."
+              },
+              {
+                "name": "date_filed",
+                "type": "date",
+                "nullable": true,
+                "description": "The day the court's docket records the entry as filed."
+              },
+              {
+                "name": "description",
+                "type": "str",
+                "nullable": true,
+                "description": "The docket's own description of the entry."
+              }
+            ]
+          }
+        ],
+        "produces": [
+          {
+            "name": "source_id",
+            "type": "str",
+            "nullable": false,
+            "description": "The stored file this row is."
+          },
+          {
+            "name": "source_sha256",
+            "type": "str",
+            "nullable": false,
+            "description": "What the stored file's bytes hash to."
+          },
+          {
+            "name": "ecf_entry",
+            "type": "int",
+            "nullable": true,
+            "description": "The docket entry number the court gave the filing."
+          },
+          {
+            "name": "attachment",
+            "type": "int",
+            "nullable": true,
+            "description": "The attachment number within the entry; null for the main document."
+          },
+          {
+            "name": "date_filed",
+            "type": "date",
+            "nullable": true,
+            "description": "The day the court's docket records the entry as filed."
+          },
+          {
+            "name": "description",
+            "type": "str",
+            "nullable": true,
+            "description": "The docket's own description of the entry."
+          },
+          {
+            "name": "page",
+            "type": "int",
+            "nullable": false,
+            "description": "The page of the file, counting from 1."
+          },
+          {
+            "name": "page_text",
+            "type": "str",
+            "nullable": false,
+            "description": "The page's text as the PDF's text layer holds it."
+          },
+          {
+            "name": "page_span",
+            "type": "span",
+            "nullable": true,
+            "description": "The whole page, as a span a later step narrows to a quote. read_pages always fills it."
+          }
+        ]
+      }
+    },
+    {
+      "id": "extract_events",
+      "type": "llm_transform",
+      "description": "Lists the events each page states, each with the words that state it.",
+      "inputs": [
+        {
+          "id": "read_pages"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "One call per page. The events come back as a list with no span in it: a span inside a json column is refused at authoring, so quote_event pins each event after it is exploded to a row."
+      ],
+      "llm": {
+        "prompt_instructions": "You are reading one page of a filing in United States v. The Boeing Company (N.D. Tex. No. 4:21-cr-00005), the criminal case over Boeing's deception of the FAA about the 737 MAX. The page is one of about 480 across 14 filings, which run from the January 2021 deferred prosecution agreement, through the crash victims' families' fight under the Crime Victims' Rights Act (CVRA), the 2024 plea agreement and the court's rejection of it, to the 2025 non-prosecution agreement and dismissal. A newsroom is building a chronology of the case in which every entry is pinned to the words on a page.\n\nYour job is to list the events on this page that belong on a timeline of the case. An event is one of two things:\n- something that happened: a crash, a meeting, a communication, a payment, a filing, a hearing, an agreement being entered, an order or ruling, a determination, an admission;\n- a position the court or a party takes on a question the case turns on: a holding or finding, an argument, an objection, a request for relief.\n\nThe terms of an agreement or an order are not events one by one. Its being entered is one event, and a headline term such as a penalty, a payment, a length of years or a monitor may be one more; its procedures, definitions, cooperation duties and boilerplate are not events. Leave out the caption, headers and footers, tables of contents, signature blocks and certificates of service; statements of law that are not about this case; background the page recounts only in passing; and anything mentioned only as a citation. List at most three events, the ones a reader of the case's history most needs. Many pages hold one or two, and many hold none: return an empty list for those.\n\nFor each event give:\n1. \"statement\": one sentence in your own words saying who did or asserted what, and when if the page says when. Name the actor: the Court, the government, Boeing, the families, or whoever it is.\n2. \"quote\": the words on this page that state the event, copied exactly. Keep the same spelling, capitals, punctuation and quotation marks, and any odd space the PDF's text layer put inside a word or before a comma. Keep it to one or two sentences, and never join words across a footnote, a page header or a line you skipped.\n\nWhat becomes of your list: each event becomes a row of its own. Another step dates it and names its speaker and topic. A third finds your quote on this page and pins the event to it; an event whose words it cannot find there is dropped. A reviewer reads each event beside its quote, highlighted on the page. You are not shown the other pages, or what anything else in the case says.\n\nWorked example. Part of page 8 of ECF No. 58, the government's response to the families' motions:\n\"A. Boeing’s Illegal Conduct\nOn October 29, 2018, Lion Air Flight 610 took off from Jakarta, Indonesia , and, shortly\nafter takeoff, crashed into the Java Sea.  SOF ¶ 48.  None of the 189 crewmembers and passengers\nsurvived.  Id.  Similarly, on March 10, 2019, Ethiopian Airlines Flight 302 departed Addis Ababa,\nEthiopia, and, shortly after takeoff, crashed.  Id.  ¶ 53.\"\n→\n{\"events\": [\n  {\"statement\": \"Lion Air Flight 610 crashed into the Java Sea shortly after taking off from Jakarta on October 29, 2018.\",\n   \"quote\": \"On October 29, 2018, Lion Air Flight 610 took off from Jakarta, Indonesia , and, shortly after takeoff, crashed into the Java Sea.\"},\n  {\"statement\": \"Ethiopian Airlines Flight 302 crashed shortly after taking off from Addis Ababa on March 10, 2019.\",\n   \"quote\": \"on March 10, 2019, Ethiopian Airlines Flight 302 departed Addis Ababa, Ethiopia, and, shortly after takeoff, crashed.\"}\n]}\nThe quotes keep the page's stray space before a comma, and leave out the citations \"SOF ¶ 48\" and \"Id.\"",
+        "prompt_data_template": "Filing: ECF No. {ecf_entry}, attachment {attachment} (None means the main document), filed {date_filed}.\nThe docket describes it as: {description}\n\nPage {page} of the filing:\n<<<\n{page_text}\n>>>",
+        "model": "claude-opus-5",
+        "temperature": 0.0,
+        "max_retries": 3,
+        "response_format": "json",
+        "batch_size": 1
+      },
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "read_pages",
+            "columns": [
+              {
+                "name": "ecf_entry",
+                "type": "int",
+                "nullable": true,
+                "description": "The docket entry number the court gave the filing."
+              },
+              {
+                "name": "attachment",
+                "type": "int",
+                "nullable": true,
+                "description": "The attachment number within the entry; null for the main document."
+              },
+              {
+                "name": "date_filed",
+                "type": "date",
+                "nullable": true,
+                "description": "The day the court's docket records the entry as filed."
+              },
+              {
+                "name": "description",
+                "type": "str",
+                "nullable": true,
+                "description": "The docket's own description of the entry."
+              },
+              {
+                "name": "page",
+                "type": "int",
+                "nullable": false,
+                "description": "The page of the file, counting from 1."
+              },
+              {
+                "name": "page_text",
+                "type": "str",
+                "nullable": false,
+                "description": "The page's text as the PDF's text layer holds it."
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "events",
+            "type": "list[json]",
+            "nullable": false,
+            "description": "The events this page states, in the order the page states them.",
+            "fields": [
+              {
+                "name": "statement",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "quote",
+                "type": "str",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "rewrites": []
+      }
+    },
+    {
+      "id": "one_row_per_event",
+      "type": "explode",
+      "row_type_id": "event",
+      "description": "Gives each listed event its own row, carrying its page.",
+      "inputs": [
+        {
+          "id": "extract_events"
+        }
+      ],
+      "cache": false,
+      "compiler_notes": [
+        "A page that states no event has an empty list and leaves no row."
+      ],
+      "explode": {
+        "column": "events",
+        "keep_empty": false
+      },
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "extract_events",
+            "columns": [
+              {
+                "name": "events",
+                "type": "list[json]",
+                "nullable": false,
+                "fields": [
+                  {
+                    "name": "statement",
+                    "type": "str",
+                    "nullable": false
+                  },
+                  {
+                    "name": "quote",
+                    "type": "str",
+                    "nullable": false
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "adds": [],
+        "rewrites": [
+          {
+            "name": "events",
+            "type": "json",
+            "nullable": false,
+            "fields": [
+              {
+                "name": "statement",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "quote",
+                "type": "str",
+                "nullable": false
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "flatten_event",
+      "type": "starlark_row_function",
+      "description": "Lifts each event's statement and quote out of its list entry into columns.",
+      "inputs": [
+        {
+          "id": "one_row_per_event"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [],
+      "starlark": {
+        "summary": "Copies the event's `statement` and `quote` into columns of their own; it changes no words.",
+        "corner_cases": [
+          {
+            "case": "the model left the statement or quote empty",
+            "expected": "copied as the empty string; quote_event then finds no words and drops the event"
+          }
+        ],
+        "code": "def transform(row):\n    event = row[\"events\"]\n    return dict(row, statement=event[\"statement\"], quote_draft=event[\"quote\"])\n"
+      },
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "one_row_per_event",
+            "columns": [
+              {
+                "name": "events",
+                "type": "json",
+                "nullable": false,
+                "fields": [
+                  {
+                    "name": "statement",
+                    "type": "str",
+                    "nullable": false
+                  },
+                  {
+                    "name": "quote",
+                    "type": "str",
+                    "nullable": false
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "statement",
+            "type": "str",
+            "nullable": false,
+            "description": "One sentence saying what happened or who asserted what."
+          },
+          {
+            "name": "quote_draft",
+            "type": "str",
+            "nullable": false,
+            "description": "The words extract_events copied from the page for this event."
+          }
+        ],
+        "rewrites": []
+      }
+    },
+    {
+      "id": "classify_event",
+      "type": "llm_transform",
+      "description": "Dates each event from its page, and names who acted or spoke and what it is about.",
+      "inputs": [
+        {
+          "id": "flatten_event"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "Separate from extract_events so each event gets its own judgment, and so an eval can score date, speaker and topic row by row.",
+        "speaker and topic carry no enum: the chronology's shared columns (app/models/chronology.py) are open text, and a column's enum must match them exactly. The vocabulary is in the prompt and the column descriptions."
+      ],
+      "llm": {
+        "prompt_instructions": "You are dating and labelling one event in United States v. The Boeing Company (N.D. Tex. No. 4:21-cr-00005), the criminal case over Boeing's deception of the FAA about the 737 MAX. An earlier step read one page of a filing and listed the events it states; this is one of them, with the words it copied from the page. Your answer places the event in a public chronology of the case, lets a reader filter it by who acted and by topic, and groups it with the other events on its topic, where a later step looks for facts one side asserts and another denies. An event you leave undated is dropped from the chronology. A reviewer sees your date, speaker and topic beside the quote. You are shown this one page and nothing else from the case.\n\nReturn:\n1. \"date\": the day the event happened, as YYYY-MM-DD.\n   - Where the page says when it happened (\"On January 7, 2021, ...\", \"in March 2019\"), that date. For a month or a year alone, give its first day.\n   - Where the event is this filing's own act (the Court holds, finds, orders or rejects in this order; a party argues, moves or objects in this brief), the day the filing was filed, which you are given.\n   - Otherwise null: the page reports something done elsewhere and does not say when. Never work a date out from what you know about the case beyond this page.\n2. \"date_precision\": \"day\", \"month\" or \"year\" for how much of the date the page or the filing date states; \"none\" where date is null.\n3. \"speaker\": whose act or assertion the event is.\n   - \"court\": the district court or the court of appeals.\n   - \"government\": the Department of Justice, its prosecutors, the United States.\n   - \"boeing\": The Boeing Company or its lawyers.\n   - \"families\": the crash victims' families, their representatives and their lawyers.\n   - \"other\": anyone else, such as the FAA, an airline, an amicus or an expert.\n   Where an order reports a party's argument, the speaker is that party. Where the page reports a happening no party performed, such as a crash, the speaker is whoever filed the page, since the event is their account. In a document both parties signed (the deferred prosecution, plea and non-prosecution agreements), the speaker is \"government\" unless the words are Boeing's own admission or undertaking.\n4. \"topic\": the one of these the event is most about, written exactly as named:\n   - \"crashes\": the Lion Air Flight 610 and Ethiopian Airlines Flight 302 crashes and the 346 people who died\n   - \"fraud_offense\": what Boeing did to deceive the FAA about the 737 MAX (MCAS, the Aircraft Evaluation Group), the conspiracy charge, and what Boeing admitted\n   - \"dpa_terms\": the January 2021 deferred prosecution agreement: its terms, payments and obligations, and how it was negotiated\n   - \"crime_victim_status\": whether the crash victims' families are 'crime victims' under the Crime Victims' Rights Act, including whether Boeing's crime directly and proximately caused the deaths\n   - \"victims_rights_violation\": whether the government violated the families' CVRA rights, such as the right to confer, before it reached the agreement\n   - \"remedy\": what the court can or should do about a CVRA violation: rescinding the agreement, arraignment, conditions, supervisory power\n   - \"dpa_breach\": the 2024 determination that Boeing breached the deferred prosecution agreement\n   - \"plea_agreement\": the 2024 plea agreement: the guilty plea, fine, probation, and whether the court should accept it\n   - \"independent_monitor\": the independent compliance monitor: who selects it, who it reports to, and the diversity and inclusion provision\n   - \"npa_and_dismissal\": the 2025 non-prosecution agreement and the government's motion to dismiss the case\n   - \"case_procedure\": hearings, schedules, appeals, mandamus petitions and other steps in how the case was run\n\nWorked example. ECF No. 58, filed 2022-02-08, the government's response to the families' motions. Event: \"The government argues the families are not crime victims under the CVRA.\" Words from the page: \"nor is such relief warranted in any event  because the Movants are not “crime victims” under the CVRA.\" →\n{\"date\": \"2022-02-08\", \"date_precision\": \"day\", \"speaker\": \"government\", \"topic\": \"crime_victim_status\"}\nThe argument is this brief's own act, so it takes the day the brief was filed.\n\nA second event on page 8 of the same filing: \"Lion Air Flight 610 crashed into the Java Sea shortly after taking off from Jakarta on October 29, 2018.\" →\n{\"date\": \"2018-10-29\", \"date_precision\": \"day\", \"speaker\": \"government\", \"topic\": \"crashes\"}\nThe page states the day, and the government is the one giving this account.",
+        "prompt_data_template": "Filing: ECF No. {ecf_entry}, filed {date_filed}. The docket describes it as: {description}\n\nThe event: {statement}\nWords the earlier step copied from the page for it: {quote_draft}\n\nThe page:\n<<<\n{page_text}\n>>>",
+        "model": "claude-opus-5",
+        "temperature": 0.0,
+        "max_retries": 3,
+        "response_format": "json",
+        "batch_size": 1
+      },
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "flatten_event",
+            "columns": [
+              {
+                "name": "ecf_entry",
+                "type": "int",
+                "nullable": true,
+                "description": "The docket entry number the court gave the filing."
+              },
+              {
+                "name": "date_filed",
+                "type": "date",
+                "nullable": true,
+                "description": "The day the court's docket records the entry as filed."
+              },
+              {
+                "name": "description",
+                "type": "str",
+                "nullable": true,
+                "description": "The docket's own description of the entry."
+              },
+              {
+                "name": "page_text",
+                "type": "str",
+                "nullable": false,
+                "description": "The page's text as the PDF's text layer holds it."
+              },
+              {
+                "name": "statement",
+                "type": "str",
+                "nullable": false,
+                "description": "One sentence saying what happened or who asserted what."
+              },
+              {
+                "name": "quote_draft",
+                "type": "str",
+                "nullable": false,
+                "description": "The words extract_events copied from the page for this event."
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "date",
+            "type": "str",
+            "nullable": true,
+            "description": "When the event happened, as YYYY-MM-DD. A month- or year-precision date is its first day."
+          },
+          {
+            "name": "date_precision",
+            "type": "str",
+            "nullable": false,
+            "description": "How much of `date` the page states.",
+            "enum": [
+              "day",
+              "month",
+              "year",
+              "none"
+            ]
+          },
+          {
+            "name": "speaker",
+            "type": "str",
+            "nullable": false,
+            "description": "Whose act or assertion the event is: court, government, boeing, families, other."
+          },
+          {
+            "name": "topic",
+            "type": "str",
+            "nullable": false,
+            "description": "What the event is about: crashes, fraud_offense, dpa_terms, crime_victim_status, victims_rights_violation, remedy, dpa_breach, plea_agreement, independent_monitor, npa_and_dismissal, case_procedure."
+          }
+        ],
+        "rewrites": []
+      }
+    },
+    {
+      "id": "dated_only",
+      "type": "starlark_filter_rows",
+      "description": "Drops the events the page gives no date for.",
+      "inputs": [
+        {
+          "id": "classify_event"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [],
+      "starlark_filter": {
+        "predicate": "have a date their page states, or are the filing's own act on the day it was filed",
+        "summary": "Keeps the events classify_event dated. An undated event is dropped here and appears in no chronology.",
+        "corner_cases": [
+          {
+            "case": "a filing restates an earlier argument without saying when it was made",
+            "expected": "undated, so dropped; the filing that made the argument dates it"
+          },
+          {
+            "case": "a date that is not YYYY-MM-DD, such as `January 7, 2021`",
+            "expected": "the run stops naming it: the chronology sorts dates as text"
+          }
+        ],
+        "code": "def should_include(row):\n    date = row[\"date\"]\n    if date == None:\n        return False\n    parts = date.split(\"-\")\n    shaped = len(parts) == 3 and [len(part) for part in parts] == [4, 2, 2]\n    if not (shaped and \"\".join(parts).isdigit()):\n        refuse(\"classify_event dated this event %r, which is not YYYY-MM-DD\" % date)\n    return True\n"
+      },
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "classify_event",
+            "columns": [
+              {
+                "name": "date",
+                "type": "str",
+                "nullable": true,
+                "description": "When the event happened, as YYYY-MM-DD. A month- or year-precision date is its first day."
+              }
+            ]
+          }
+        ],
+        "adds": [],
+        "rewrites": []
+      }
+    },
+    {
+      "id": "quote_event",
+      "type": "llm_transform",
+      "description": "Pins each dated event to the words on its page that state it, or leaves it unpinned.",
+      "inputs": [
+        {
+          "id": "dated_only"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "The model returns only words; the runtime finds them on the page and mints the span, re-asking up to max_retries times when they are not there.",
+        "span is nullable so the model can say no words on the page state the event; quoted_only drops those rows and counts them."
+      ],
+      "llm": {
+        "prompt_instructions": "You are pinning one event in United States v. The Boeing Company (N.D. Tex. No. 4:21-cr-00005) to the words on its page that state it. An earlier step read the page, wrote the event as a sentence, and copied the words it took to state it; those words may be slightly off. The runtime looks for your quote in the page text below and pins the event there. A reader of the case's chronology clicks the event and sees your quote highlighted on the page, so the quote has to say what the event says. You are shown this one page and nothing else from the case.\n\nReturn \"span\" as {\"quote\": ..., \"prefix\": ..., \"suffix\": ...}:\n- \"quote\": the words that state the event, copied exactly from the page text. Take the earlier step's words where the page holds them as written. Otherwise copy the shortest run of words that states the event: one or two sentences, never joined across a footnote or a page header. Keep the page's spelling, capitals, punctuation and quotation marks, and any odd space the PDF's text layer put inside a word or before a comma. Line breaks may be written as spaces.\n- \"prefix\" and \"suffix\": leave them out, unless the same words appear more than once on the page. Then copy a few words from just before the quote as \"prefix\", or just after it as \"suffix\", so they point to one place.\n\nWhere no words on the page state the event, return \"span\": null. The event is then dropped from the chronology rather than pinned to words that do not say it.\n\nWorked example. Event: \"Lion Air Flight 610 crashed into the Java Sea shortly after taking off from Jakarta on October 29, 2018.\" Earlier step's words: \"On October 29, 2018, Lion Air Flight 610 took off from Jakarta, Indonesia, and shortly after takeoff crashed into the Java Sea.\" The page reads:\n\"On October 29, 2018, Lion Air Flight 610 took off from Jakarta, Indonesia , and, shortly\nafter takeoff, crashed into the Java Sea.\"\nThe earlier step dropped a space and two commas, so copy the page:\n{\"span\": {\"quote\": \"On October 29, 2018, Lion Air Flight 610 took off from Jakarta, Indonesia , and, shortly after takeoff, crashed into the Java Sea.\"}}",
+        "prompt_data_template": "The event: {statement}\nWords the earlier step copied for it: {quote_draft}\n\nThe page text:\n<<<\n{page_span}\n>>>",
+        "model": "claude-opus-5",
+        "temperature": 0.0,
+        "max_retries": 4,
+        "response_format": "json",
+        "batch_size": 1,
+        "thinking": "disabled"
+      },
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "dated_only",
+            "columns": [
+              {
+                "name": "page_span",
+                "type": "span",
+                "nullable": true,
+                "description": "The whole page, as a span a later step narrows to a quote. read_pages always fills it."
+              },
+              {
+                "name": "statement",
+                "type": "str",
+                "nullable": false,
+                "description": "One sentence saying what happened or who asserted what."
+              },
+              {
+                "name": "quote_draft",
+                "type": "str",
+                "nullable": false,
+                "description": "The words extract_events copied from the page for this event."
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "span",
+            "type": "span",
+            "nullable": true,
+            "description": "The words on the page that state the event; null where none do.",
+            "quoted_from": "page_span"
+          }
+        ],
+        "rewrites": []
+      }
+    },
+    {
+      "id": "quoted_only",
+      "type": "starlark_filter_rows",
+      "description": "Drops the events no words on their page state.",
+      "inputs": [
+        {
+          "id": "quote_event"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [],
+      "starlark_filter": {
+        "predicate": "are stated in words a reader can find on their page",
+        "summary": "Keeps the events quote_event pinned to a quote. Every event after this carries words the runtime found on its page.",
+        "corner_cases": [
+          {
+            "case": "extract_events listed an event its page does not state",
+            "expected": "quote_event leaves its span null and the event is dropped here"
+          }
+        ],
+        "code": "def should_include(row):\n    return row[\"span\"] != None\n"
+      },
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "quote_event",
+            "columns": [
+              {
+                "name": "span",
+                "type": "span",
+                "nullable": true,
+                "description": "The words on the page that state the event."
+              }
+            ]
+          }
+        ],
+        "adds": [],
+        "rewrites": []
+      }
+    },
+    {
+      "id": "cite_event",
+      "type": "starlark_row_function",
+      "description": "Writes each event's pin cite, the ECF number and page a brief would cite it by.",
+      "inputs": [
+        {
+          "id": "quoted_only"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "Rewrites `span` as non-null: quoted_only already dropped every null, and the shared chronology columns require one."
+      ],
+      "starlark": {
+        "summary": "Builds `ECF No. <entry> at <page>`, with `-<n>` after the entry for an attachment, and copies the span's words into `quote`.",
+        "corner_cases": [
+          {
+            "case": "the filing was bound from a stored file, so it has no ECF number",
+            "expected": "the run stops: a pin cite without an ECF number would cite nothing"
+          },
+          {
+            "case": "ECF 221-1, page 5",
+            "expected": "`ECF No. 221-1 at 5`"
+          }
+        ],
+        "code": "def transform(row):\n    if row[\"span\"] == None:\n        refuse(\"an event reached cite_event with no span, which quoted_only drops\")\n    if row[\"ecf_entry\"] == None:\n        refuse(\"filing %s carries no ECF number, so no pin cite can name it\" % row[\"source_id\"])\n    entry = str(row[\"ecf_entry\"])\n    if row[\"attachment\"] != None:\n        entry = entry + \"-\" + str(row[\"attachment\"])\n    return dict(row, span=row[\"span\"], quote=row[\"span\"][\"quote\"],\n                pin_cite=\"ECF No. \" + entry + \" at \" + str(row[\"page\"]),\n                source_kind=\"court_filing\")\n"
+      },
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "quoted_only",
+            "columns": [
+              {
+                "name": "source_id",
+                "type": "str",
+                "nullable": false,
+                "description": "The stored file this row is."
+              },
+              {
+                "name": "ecf_entry",
+                "type": "int",
+                "nullable": true,
+                "description": "The docket entry number the court gave the filing."
+              },
+              {
+                "name": "attachment",
+                "type": "int",
+                "nullable": true,
+                "description": "The attachment number within the entry; null for the main document."
+              },
+              {
+                "name": "page",
+                "type": "int",
+                "nullable": false,
+                "description": "The page of the file, counting from 1."
+              },
+              {
+                "name": "span",
+                "type": "span",
+                "nullable": true,
+                "description": "The words on the page that state the event."
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "pin_cite",
+            "type": "str",
+            "nullable": false,
+            "description": "Where the quote sits, as a brief cites it: `ECF No. 282 at 2`."
+          },
+          {
+            "name": "source_kind",
+            "type": "str",
+            "nullable": false,
+            "description": "What kind of record the span quotes: always `court_filing`."
+          },
+          {
+            "name": "quote",
+            "type": "str",
+            "nullable": false,
+            "description": "The span's words, as plain text."
+          }
+        ],
+        "rewrites": [
+          {
+            "name": "span",
+            "type": "span",
+            "nullable": false,
+            "description": "The words on the page that state the event."
+          }
+        ]
+      }
+    },
+    {
+      "id": "one_per_event",
+      "type": "dedupe",
+      "description": "Keeps the first filing's copy of an event later filings quote word for word on the same date.",
+      "inputs": [
+        {
+          "id": "cite_event"
+        }
+      ],
+      "cache": false,
+      "compiler_notes": [
+        "keep: first is the earliest filing, because every step above keeps the docket's order.",
+        "Two events stated in different words stay two rows: nothing here judges that they are the same event."
+      ],
+      "dedupe": {
+        "keys": [
+          "date",
+          "speaker",
+          "topic",
+          "quote"
+        ],
+        "keep": "first"
+      },
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "cite_event",
+            "columns": [
+              {
+                "name": "date",
+                "type": "str",
+                "nullable": true,
+                "description": "When the event happened, as YYYY-MM-DD. A month- or year-precision date is its first day."
+              },
+              {
+                "name": "speaker",
+                "type": "str",
+                "nullable": false,
+                "description": "Whose act or assertion the event is: court, government, boeing, families, other."
+              },
+              {
+                "name": "topic",
+                "type": "str",
+                "nullable": false,
+                "description": "What the event is about: crashes, fraud_offense, dpa_terms, crime_victim_status, victims_rights_violation, remedy, dpa_breach, plea_agreement, independent_monitor, npa_and_dismissal, case_procedure."
+              },
+              {
+                "name": "quote",
+                "type": "str",
+                "nullable": false,
+                "description": "The span's words, as plain text."
+              }
+            ]
+          }
+        ],
+        "adds": [],
+        "rewrites": []
+      }
+    },
+    {
+      "id": "chronology",
+      "type": "sort_rank",
+      "description": "Puts the events in date order and numbers them.",
+      "inputs": [
+        {
+          "id": "one_per_event"
+        }
+      ],
+      "cache": false,
+      "compiler_notes": [
+        "Ties on date keep docket order: ECF number, then page."
+      ],
+      "sort_rank": {
+        "keys": [
+          {
+            "column": "date",
+            "nulls": "last"
+          },
+          {
+            "column": "ecf_entry",
+            "nulls": "last"
+          },
+          {
+            "column": "page"
+          }
+        ],
+        "rank_column": "order"
+      },
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "one_per_event",
+            "columns": [
+              {
+                "name": "date",
+                "type": "str",
+                "nullable": true,
+                "description": "When the event happened, as YYYY-MM-DD. A month- or year-precision date is its first day."
+              },
+              {
+                "name": "ecf_entry",
+                "type": "int",
+                "nullable": true,
+                "description": "The docket entry number the court gave the filing."
+              },
+              {
+                "name": "page",
+                "type": "int",
+                "nullable": false,
+                "description": "The page of the file, counting from 1."
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "order",
+            "type": "int",
+            "nullable": false,
+            "description": "The event's place in the chronology, from 1."
+          }
+        ],
+        "rewrites": []
+      },
+      "workflow_outputs": [
+        {
+          "kind": "table",
+          "slug": "chronology",
+          "primary": true,
+          "shape_id": "chronology_event",
+          "label": "Events in US v. Boeing, in date order, each quoted from its page",
+          "columns": [
+            "order",
+            "date",
+            "date_precision",
+            "speaker",
+            "topic",
+            "statement",
+            "span",
+            "pin_cite",
+            "source_kind",
+            "ecf_entry",
+            "description"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "by_topic",
+      "type": "aggregate",
+      "row_type_id": "topic",
+      "description": "Gathers the dated events of each topic, in date order.",
+      "inputs": [
+        {
+          "id": "chronology"
+        }
+      ],
+      "cache": false,
+      "compiler_notes": [
+        "Each list keeps the chronology's order, so item i of every list is the same event."
+      ],
+      "aggregate": {
+        "group_by": [
+          "topic"
+        ],
+        "aggregations": [
+          {
+            "output_column": "events",
+            "formula": "count"
+          },
+          {
+            "output_column": "dates",
+            "formula": "list",
+            "value_column": "date"
+          },
+          {
+            "output_column": "speakers",
+            "formula": "list",
+            "value_column": "speaker"
+          },
+          {
+            "output_column": "statements",
+            "formula": "list",
+            "value_column": "statement"
+          },
+          {
+            "output_column": "pin_cites",
+            "formula": "list",
+            "value_column": "pin_cite"
+          },
+          {
+            "output_column": "spans",
+            "formula": "list",
+            "value_column": "span"
+          }
+        ]
+      },
+      "signature": {
+        "form": "replaces",
+        "reads": [
+          {
+            "input": "chronology",
+            "columns": [
+              {
+                "name": "topic",
+                "type": "str",
+                "nullable": false,
+                "description": "What the event is about: crashes, fraud_offense, dpa_terms, crime_victim_status, victims_rights_violation, remedy, dpa_breach, plea_agreement, independent_monitor, npa_and_dismissal, case_procedure."
+              },
+              {
+                "name": "date",
+                "type": "str",
+                "nullable": true,
+                "description": "When the event happened, as YYYY-MM-DD. A month- or year-precision date is its first day."
+              },
+              {
+                "name": "speaker",
+                "type": "str",
+                "nullable": false,
+                "description": "Whose act or assertion the event is: court, government, boeing, families, other."
+              },
+              {
+                "name": "statement",
+                "type": "str",
+                "nullable": false,
+                "description": "One sentence saying what happened or who asserted what."
+              },
+              {
+                "name": "pin_cite",
+                "type": "str",
+                "nullable": false,
+                "description": "Where the quote sits, as a brief cites it: `ECF No. 282 at 2`."
+              },
+              {
+                "name": "span",
+                "type": "span",
+                "nullable": false,
+                "description": "The words on the page that state the event."
+              }
+            ]
+          }
+        ],
+        "produces": [
+          {
+            "name": "topic",
+            "type": "str",
+            "nullable": false,
+            "description": "What the event is about: crashes, fraud_offense, dpa_terms, crime_victim_status, victims_rights_violation, remedy, dpa_breach, plea_agreement, independent_monitor, npa_and_dismissal, case_procedure."
+          },
+          {
+            "name": "events",
+            "type": "int",
+            "nullable": false,
+            "description": "How many events carry this topic."
+          },
+          {
+            "name": "dates",
+            "type": "list[str]",
+            "nullable": false,
+            "description": "Each event's date."
+          },
+          {
+            "name": "speakers",
+            "type": "list[str]",
+            "nullable": false,
+            "description": "Each event's speaker."
+          },
+          {
+            "name": "statements",
+            "type": "list[str]",
+            "nullable": false,
+            "description": "Each event's statement."
+          },
+          {
+            "name": "pin_cites",
+            "type": "list[str]",
+            "nullable": false,
+            "description": "Each event's pin cite."
+          },
+          {
+            "name": "spans",
+            "type": "list[span]",
+            "nullable": false,
+            "description": "Each event's quote."
+          }
+        ]
+      }
+    },
+    {
+      "id": "find_disputes",
+      "type": "llm_transform",
+      "description": "Reads each topic's events for a fact one side asserts and another denies, and picks each side's strongest quote.",
+      "inputs": [
+        {
+          "id": "by_topic"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "supporting and contrary are one span each: a list[span] add is refused at authoring, so the model picks one quote per side from `spans`, and the runtime completes it from that list."
+      ],
+      "llm": {
+        "prompt_instructions": "You are reading every dated event on one topic in United States v. The Boeing Company (N.D. Tex. No. 4:21-cr-00005), the criminal case over Boeing's deception of the FAA about the 737 MAX, to find a fact one side asserts and another denies. A newsroom publishes, for each topic, whether its fact is disputed, a short summary, and the strongest quote on each side. A person reviews every topic you mark disputed, with your two quotes side by side, before it is published; a topic you mark undisputed is published without that review. You are shown this topic's events and nothing else from the case.\n\nThe events come as lists in date order: item i of the dates, speakers, statements, pin cites and quotes is one event.\n\nA dispute is a fact, finding or legal conclusion that one speaker asserts and another speaker denies or contests. One speaker changing its position over time is not a dispute between sides, and two speakers describing different parts of the topic do not dispute each other.\n\nReturn:\n1. \"disputed\": true where the events hold such a pair; false otherwise.\n2. \"summary\": one or two sentences. Where disputed, name the fact, who asserts it, who denies it, and where the record leaves it, such as a ruling on it. Where not, state the fact the events agree on.\n3. \"supporting\": the quote that most directly asserts the fact. Copy one item of the quotes list whole: not part of one, and never two joined.\n4. \"contrary\": the quote that most directly denies it, copied the same way; null where the fact is not disputed.\n\nWorked example, from another case, to show the shape. Topic water_safety. The quotes include a city's \"The treated water met every federal standard throughout 2015.\" and a state regulator's \"The city's water exceeded the federal action level for lead in the second half of 2015.\" →\n{\"disputed\": true,\n \"summary\": \"Whether the city's water met federal standards in 2015: the city says it did; the state regulator found it exceeded the lead action level.\",\n \"supporting\": {\"quote\": \"The treated water met every federal standard throughout 2015.\"},\n \"contrary\": {\"quote\": \"The city's water exceeded the federal action level for lead in the second half of 2015.\"}}",
+        "prompt_data_template": "Topic: {topic}\n\nDates: {dates}\n\nSpeakers: {speakers}\n\nStatements: {statements}\n\nPin cites: {pin_cites}\n\nQuotes:\n{spans}",
+        "model": "claude-opus-5",
+        "temperature": 0.0,
+        "max_retries": 3,
+        "response_format": "json",
+        "batch_size": 1
+      },
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "by_topic",
+            "columns": [
+              {
+                "name": "topic",
+                "type": "str",
+                "nullable": false,
+                "description": "What the event is about: crashes, fraud_offense, dpa_terms, crime_victim_status, victims_rights_violation, remedy, dpa_breach, plea_agreement, independent_monitor, npa_and_dismissal, case_procedure."
+              },
+              {
+                "name": "dates",
+                "type": "list[str]",
+                "nullable": false
+              },
+              {
+                "name": "speakers",
+                "type": "list[str]",
+                "nullable": false
+              },
+              {
+                "name": "statements",
+                "type": "list[str]",
+                "nullable": false
+              },
+              {
+                "name": "pin_cites",
+                "type": "list[str]",
+                "nullable": false
+              },
+              {
+                "name": "spans",
+                "type": "list[span]",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "disputed",
+            "type": "bool",
+            "nullable": false,
+            "description": "True where one side asserts a fact on this topic that another side denies."
+          },
+          {
+            "name": "summary",
+            "type": "str",
+            "nullable": false,
+            "description": "The disputed fact and who holds each side, or the settled fact where none is disputed."
+          },
+          {
+            "name": "supporting",
+            "type": "span",
+            "nullable": false,
+            "description": "The strongest quote asserting the fact.",
+            "quoted_from": "spans"
+          },
+          {
+            "name": "contrary",
+            "type": "span",
+            "nullable": true,
+            "description": "The strongest quote denying it; null where nothing on the topic denies it.",
+            "quoted_from": "spans"
+          }
+        ],
+        "rewrites": []
+      }
+    },
+    {
+      "id": "review_disputes",
+      "type": "human_review_queue",
+      "description": "Sends every disputed topic to a reviewer, who reads both quotes and settles the summary.",
+      "inputs": [
+        {
+          "id": "find_disputes"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "Only the topics the model read as disputed are queued; the rest pass through marked skipped."
+      ],
+      "queue": {
+        "filter": "disputed == True",
+        "predicate": "was read against both quotes by a reviewer before it counted",
+        "reviewer_instructions": "A model read every dated event on this topic and found a fact one side asserts and another denies. You are deciding whether that holds before the dispute is published.\n\nRead both quotes against their pages: each names the stored file and the page it sits on. Keep the dispute where the two quotes state opposite positions on the same fact. Mark it not disputed where they talk past each other, or where a quote is not the position the summary says it is. Correct the summary so it names the fact, who asserts it, who denies it, and where the record leaves it.\n\nThe statements, speakers and pin cites beside the quotes are the model's reading of each event on the topic; the quotes are what the pages say.",
+        "reviewed_columns": {
+          "summary": "reviewed_summary",
+          "disputed": "reviewed_disputed"
+        },
+        "context_columns": [
+          "topic",
+          "supporting",
+          "contrary",
+          "statements",
+          "speakers",
+          "pin_cites"
+        ],
+        "verdict_column": "review_verdict",
+        "reviewer_column": "reviewer",
+        "reviewed_at_column": "reviewed_at",
+        "review_notes_column": "review_notes"
+      },
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "find_disputes",
+            "columns": [
+              {
+                "name": "topic",
+                "type": "str",
+                "nullable": false,
+                "description": "What the event is about: crashes, fraud_offense, dpa_terms, crime_victim_status, victims_rights_violation, remedy, dpa_breach, plea_agreement, independent_monitor, npa_and_dismissal, case_procedure."
+              },
+              {
+                "name": "disputed",
+                "type": "bool",
+                "nullable": false
+              },
+              {
+                "name": "summary",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "supporting",
+                "type": "span",
+                "nullable": false
+              },
+              {
+                "name": "contrary",
+                "type": "span",
+                "nullable": true
+              },
+              {
+                "name": "statements",
+                "type": "list[str]",
+                "nullable": false
+              },
+              {
+                "name": "speakers",
+                "type": "list[str]",
+                "nullable": false
+              },
+              {
+                "name": "pin_cites",
+                "type": "list[str]",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "reviewed_summary",
+            "type": "str",
+            "nullable": false,
+            "description": "The summary as the reviewer settled it; the model's stays in `summary`."
+          },
+          {
+            "name": "reviewed_disputed",
+            "type": "bool",
+            "nullable": false,
+            "description": "Whether the reviewer found the fact disputed."
+          },
+          {
+            "name": "review_verdict",
+            "type": "str",
+            "nullable": false,
+            "description": "'approve' where the reviewer kept the model's reading, 'modify' where they changed it, 'skipped' where the topic was not queued.",
+            "enum": [
+              "approve",
+              "modify",
+              "skipped"
+            ]
+          },
+          {
+            "name": "reviewer",
+            "type": "str",
+            "nullable": true,
+            "description": "The name the reviewer decided under."
+          },
+          {
+            "name": "reviewed_at",
+            "type": "str",
+            "nullable": true,
+            "description": "When the reviewer recorded that decision."
+          },
+          {
+            "name": "review_notes",
+            "type": "str",
+            "nullable": true
+          }
+        ],
+        "rewrites": []
+      }
+    },
+    {
+      "id": "disputes",
+      "type": "starlark_row_function",
+      "description": "States each topic's dispute status as the reviewer left it, with each side's quotes.",
+      "inputs": [
+        {
+          "id": "review_disputes"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "summary becomes the reviewer's text; the model's own stays in review_disputes' output."
+      ],
+      "starlark": {
+        "summary": "Marks a topic `disputed` where the reviewer found it so and `undisputed` otherwise, takes the reviewer's summary, and turns each side's quote into a list.",
+        "corner_cases": [
+          {
+            "case": "the model found no dispute, so the topic was not queued",
+            "expected": "`undisputed`, with the model's summary, which skipping copied through"
+          },
+          {
+            "case": "the model found no contrary quote",
+            "expected": "`contrary` is the empty list"
+          }
+        ],
+        "code": "def transform(row):\n    status = \"disputed\" if row[\"reviewed_disputed\"] else \"undisputed\"\n    contrary = [] if row[\"contrary\"] == None else [row[\"contrary\"]]\n    return dict(row, status=status, summary=row[\"reviewed_summary\"],\n                supporting=[row[\"supporting\"]], contrary=contrary)\n"
+      },
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "review_disputes",
+            "columns": [
+              {
+                "name": "reviewed_disputed",
+                "type": "bool",
+                "nullable": false
+              },
+              {
+                "name": "reviewed_summary",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "summary",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "supporting",
+                "type": "span",
+                "nullable": false
+              },
+              {
+                "name": "contrary",
+                "type": "span",
+                "nullable": true
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "status",
+            "type": "str",
+            "nullable": false,
+            "description": "Whether the topic's fact is disputed, as the reviewer left it.",
+            "enum": [
+              "undisputed",
+              "disputed",
+              "unreviewed"
+            ]
+          }
+        ],
+        "rewrites": [
+          {
+            "name": "summary",
+            "type": "str",
+            "nullable": false,
+            "description": "The reviewer's summary of the fact and who holds each side."
+          },
+          {
+            "name": "supporting",
+            "type": "list[span]",
+            "nullable": false,
+            "description": "The quote asserting the fact."
+          },
+          {
+            "name": "contrary",
+            "type": "list[span]",
+            "nullable": false,
+            "description": "The quote denying it; empty where none does."
+          }
+        ]
+      },
+      "workflow_outputs": [
+        {
+          "kind": "table",
+          "slug": "disputes",
+          "primary": true,
+          "label": "Facts in US v. Boeing one side asserts and another denies, as a reviewer settled them",
+          "columns": [
+            "topic",
+            "status",
+            "summary",
+            "supporting",
+            "contrary",
+            "review_verdict",
+            "reviewer"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "publish",
+      "type": "report",
+      "description": "Writes the chronology and the disputes as one page, each quote linked to its page.",
+      "inputs": [
+        {
+          "id": "chronology"
+        },
+        {
+          "id": "disputes"
+        }
+      ],
+      "cache": false,
+      "compiler_notes": [],
+      "report": {
+        "format": "html_report",
+        "destination": "chronology/"
+      },
+      "function": {
+        "kind": "inline",
+        "summary": "Lists every event in date order and every topic's dispute status, each quote linked to the page it sits on through the citation provider, which refuses a quote its page does not hold.",
+        "corner_cases": [
+          {
+            "case": "a quote the citation provider cannot find on its page",
+            "expected": "the report stops; nothing is written"
+          },
+          {
+            "case": "a topic with no contrary quote",
+            "expected": "the page says none was found"
+          }
+        ],
+        "code": "import html\nimport pathlib\n\nimport pandas as pd\n\nfrom app.models.spans import Span\n\nATTRIBUTION = (\n    \"Filings from CourtListener's RECAP archive, run by Free Law Project. The events, dates, \"\n    \"speakers, topics and disputes are a model's reading of them, each pinned to the words it \"\n    \"quotes; Free Law Project did not produce, endorse or verify this reading.\"\n)\n\n\ndef transform(chronology, disputes, output_dir, citation_provider):\n    events = [_list_event(citation_provider, ordinal, row)\n              for ordinal, row in enumerate(chronology.to_dict(\"records\"))]\n    topics = [_list_dispute(citation_provider, ordinal, row)\n              for ordinal, row in enumerate(disputes.to_dict(\"records\"))]\n    path = pathlib.Path(output_dir) / \"index.html\"\n    path.write_text(_write_page(events, topics), encoding=\"utf-8\")\n    return pd.DataFrame({\"path\": [str(path)]})\n\n\ndef _link_quote(citation_provider, stage_id, ordinal, column, cell, label):\n    span = Span.model_validate(cell)\n    url = citation_provider.cite_span(stage_id, ordinal, column, span, label=label)\n    return '<a href=\"' + html.escape(url) + '\">' + html.escape(span.quote) + \"</a>\"\n\n\ndef _list_event(citation_provider, ordinal, row):\n    quote = _link_quote(citation_provider, \"chronology\", ordinal, \"span\", row[\"span\"],\n                        row[\"pin_cite\"])\n    heading = \" · \".join(html.escape(str(row[name])) for name in (\"date\", \"speaker\", \"topic\"))\n    return (\"<li><p><b>\" + heading + \"</b></p><p>\" + html.escape(row[\"statement\"]) + \"</p>\"\n            \"<blockquote>\" + quote + \" (\" + html.escape(row[\"pin_cite\"]) + \")</blockquote></li>\")\n\n\ndef _list_dispute(citation_provider, ordinal, row):\n    sides = []\n    for column in (\"supporting\", \"contrary\"):\n        quotes = [_link_quote(citation_provider, \"disputes\", ordinal, column, cell,\n                              row[\"topic\"] + \", \" + column)\n                  for cell in row[column]]\n        sides.append(\"<p>\" + column + \": \" + (\" / \".join(quotes) or \"none found\") + \"</p>\")\n    return (\"<li><p><b>\" + html.escape(row[\"topic\"]) + \" · \" + html.escape(row[\"status\"])\n            + \"</b></p><p>\" + html.escape(row[\"summary\"]) + \"</p>\" + \"\".join(sides) + \"</li>\")\n\n\ndef _write_page(events, topics):\n    return (\"<!doctype html><meta charset='utf-8'><title>US v. Boeing: chronology</title>\"\n            \"<h1>United States v. The Boeing Company: chronology</h1>\"\n            \"<p>\" + html.escape(ATTRIBUTION) + \"</p>\"\n            \"<h2>Events</h2><ol>\" + \"\".join(events) + \"</ol>\"\n            \"<h2>Facts one side asserts and another denies</h2><ul>\" + \"\".join(topics) + \"</ul>\")\n"
+      },
+      "signature": {
+        "form": "replaces",
+        "reads": [
+          {
+            "input": "chronology",
+            "columns": [
+              {
+                "name": "date",
+                "type": "str",
+                "nullable": true,
+                "description": "When the event happened, as YYYY-MM-DD. A month- or year-precision date is its first day."
+              },
+              {
+                "name": "speaker",
+                "type": "str",
+                "nullable": false,
+                "description": "Whose act or assertion the event is: court, government, boeing, families, other."
+              },
+              {
+                "name": "topic",
+                "type": "str",
+                "nullable": false,
+                "description": "What the event is about: crashes, fraud_offense, dpa_terms, crime_victim_status, victims_rights_violation, remedy, dpa_breach, plea_agreement, independent_monitor, npa_and_dismissal, case_procedure."
+              },
+              {
+                "name": "statement",
+                "type": "str",
+                "nullable": false,
+                "description": "One sentence saying what happened or who asserted what."
+              },
+              {
+                "name": "span",
+                "type": "span",
+                "nullable": false,
+                "description": "The words on the page that state the event."
+              },
+              {
+                "name": "pin_cite",
+                "type": "str",
+                "nullable": false,
+                "description": "Where the quote sits, as a brief cites it: `ECF No. 282 at 2`."
+              }
+            ]
+          },
+          {
+            "input": "disputes",
+            "columns": [
+              {
+                "name": "topic",
+                "type": "str",
+                "nullable": false,
+                "description": "What the event is about: crashes, fraud_offense, dpa_terms, crime_victim_status, victims_rights_violation, remedy, dpa_breach, plea_agreement, independent_monitor, npa_and_dismissal, case_procedure."
+              },
+              {
+                "name": "status",
+                "type": "str",
+                "nullable": false,
+                "enum": [
+                  "undisputed",
+                  "disputed",
+                  "unreviewed"
+                ]
+              },
+              {
+                "name": "summary",
+                "type": "str",
+                "nullable": false
+              },
+              {
+                "name": "supporting",
+                "type": "list[span]",
+                "nullable": false
+              },
+              {
+                "name": "contrary",
+                "type": "list[span]",
+                "nullable": false
+              }
+            ]
+          }
+        ],
+        "produces": []
+      }
+    }
+  ]
+}
