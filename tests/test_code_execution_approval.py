@@ -40,10 +40,6 @@ def test_the_catalog_still_says_they_exist_and_how_to_ask():
     assert "WAIT for their answer" in catalog
 
 
-def test_the_catalog_says_the_row_type_is_the_safer_of_the_two():
-    assert "the row one keeps the trace" in render_type_catalog()
-
-
 def test_the_type_still_exists_so_stored_workflows_keep_loading():
     # Withholding it from authoring must not unmake the type: 492 stored stages carry one.
     assert "python_frame_function" in STAGE_TYPES
@@ -68,22 +64,13 @@ def test_the_refusal_says_what_to_try_instead_and_how_to_turn_it_on():
     for expected in ("explode", "starlark_row_function", "dedupe", "sort_rank",
                      "approve_code_execution"):
         assert expected in refusal, expected
-    # The reader is told the two costs, not just that it is blocked.
-    assert "network" in refusal and "trace stops at it" in refusal
+    # The reader is told the cost, not just that it is blocked.
+    assert "network" in refusal
 
 
 def test_a_python_row_function_is_gated_too():
     row_stage = dict(_FRAME_STAGE, type="python_row_function")
     assert stage_edit.find_unapproved_code_issues("some-project", row_stage) != []
-
-
-def test_only_the_frame_function_is_charged_with_ending_the_trace():
-    """The row function is grain-and-order preserving and the filter records its cuts."""
-    for kept in ("python_row_function", "filter_rows"):
-        refusal = stage_edit.find_unapproved_code_issues(
-            "some-project", dict(_FRAME_STAGE, type=kept))[0]
-        assert "trace" not in refusal, kept
-        assert "network" in refusal, kept
 
 
 def test_a_sandboxed_stage_is_never_gated():

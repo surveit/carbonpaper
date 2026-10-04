@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 from app.models.citations import (
     RowsRectangle,
@@ -8,6 +9,7 @@ from app.models.citations import (
     StageOutputTableCitation,
 )
 from app.models.records.workflow_output import WorkflowOutput
+from app.web.config import templates
 from app.web.run_published import (
     PUBLISHED_PREVIEW_ROWS,
     read_published_outputs,
@@ -103,6 +105,22 @@ def test_a_primary_output_is_marked_so_the_page_can_lead_with_it():
 def test_nothing_is_primary_unless_the_stage_says_so():
     _publish("external-spend", "Paid to outside firms", 4461000.0)
     assert [o.primary for o in _read().figures] == [False]
+
+
+def _render_results_panel() -> str:
+    panel = templates.env.get_template("_run_published.html")
+    return panel.render(header=SimpleNamespace(published=_read()))
+
+
+def test_other_results_is_headed_only_under_a_headline_or_a_table():
+    _publish("corpus-rows", "Rows read", 45061, column="total_rows")
+    alone = _render_results_panel()
+    _publish("external-spend", "Paid to outside firms", 4461000.0, primary=True)
+    under_a_headline = _render_results_panel()
+
+    assert "Other results" not in alone
+    assert "Rows read" in alone
+    assert "Other results" in under_a_headline
 
 
 # ─── Published tables ────────────────────────────────────────────────────────

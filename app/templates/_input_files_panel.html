@@ -24,7 +24,7 @@
     {% call picker("Choose file", hint="The files this run read", size="sm") %}
     <select id="if-file" class="picker-native if-file">
       {%- for file in view.files %}
-      <option value="{{ file.stage_id }}" data-name="{{ file.filename }}"
+      <option value="{{ loop.index0 }}" data-name="{{ file.filename }}"
               data-side="{{ file.size_label }}"
               data-meta="{{ file.stage_id }} · {{ file.rows_relevant | figure }} / {{ file.rows_read | figure }} rows"
               >{{ file.filename }}</option>
@@ -44,10 +44,19 @@
 
   {% for file in view.files %}
   <section class="if-file-pane{% if not loop.first %} hidden{% endif %}"
-           data-file="{{ file.stage_id }}"
+           data-file="{{ loop.index0 }}" data-read-by="{{ file.stage_id }}"
            data-rows-relevant="{{ file.rows_relevant }}" data-rows-all="{{ file.rows_read }}"
            data-columns-relevant="{{ file.columns_relevant | length }}"
            data-columns-all="{{ file.columns_read | length }}">
+    <p class="if-source">
+      {% if file.file_id %}<a href="/project/{{ project }}/files/{{ file.file_id }}"><code>{{
+        file.filename }}</code> ↗</a>
+      {% else %}<code>{{ file.filename }}</code> <span class="muted">no file this project
+        holds matches the bytes this run read</span>{% endif %}
+      {% if file.origin_url %}· fetched {{ file.fetched_at | friendly_time }} from
+      <a href="{{ file.origin_url }}" target="_blank" rel="noopener">{{ file.origin_url }}</a>
+      {% endif %}
+    </p>
     <div class="if-bars">
       <div class="if-bar" data-axis="rows"><span class="if-bar-lab">rows</span>
         <span class="if-track">

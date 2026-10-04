@@ -25,9 +25,9 @@ WarningKind = Literal[
 
 # Read in this order. Which severity a kind carries: docs/visual-language.md
 SEVERITY: dict[str, UserFacingErrorSeverity] = {
+    "unnamed_rows": UserFacingErrorSeverity.error,
     "undescribed": UserFacingErrorSeverity.warning,
     "unsaid_test": UserFacingErrorSeverity.warning,
-    "unnamed_rows": UserFacingErrorSeverity.error,
     "unexemplified": UserFacingErrorSeverity.warning,
     "examples_failing": UserFacingErrorSeverity.warning,
     "nondeterministic": UserFacingErrorSeverity.warning,

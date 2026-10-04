@@ -15,7 +15,7 @@ from app.models.schema import TableSchema
 from app.models.stage import StageType
 from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform as lt
-from conftest import as_inputs, contribution_of, make_run_context, place_stage, rows_of
+from conftest import as_inputs, contribution_of, make_run_context, place_stage, rows_of, script_judgment
 
 
 def _stage():
@@ -50,7 +50,7 @@ def test_reply_model_is_the_subtracted_spec(monkeypatch):
     def fake_call(stage_id, llm_config, row, *, reply_model, **kw):
         captured["fields"] = set(reply_model.model_fields)
         captured["template"] = llm_config.prompt_data_template
-        return {"score": 5}
+        return script_judgment({"score": 5})
 
     monkeypatch.setattr(lt, "call_llm", fake_call)
     _run(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})})
@@ -69,7 +69,7 @@ def test_reply_model_enforces_the_spec():
 
 
 def test_output_rows_carry_reply_columns(monkeypatch):
-    monkeypatch.setattr(lt, "call_llm", lambda *a, **k: {"score": 7})
+    monkeypatch.setattr(lt, "call_llm", lambda *a, **k: script_judgment({"score": 7}))
     out = _run(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})})
     assert rows_of(out).loc[0, "score"] == 7
     assert rows_of(out).loc[0, "id"] == "r1"

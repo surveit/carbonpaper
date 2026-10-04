@@ -16,7 +16,9 @@
               beside each. Two runs on one version are comparable only if they read
               the same bytes, so this sits beside the version rather than on the run
               page alone
-    version   the version this run pinned, linked, labelled by its message
+    version   the version this run pinned, linked, labelled by its message; under it a
+              link comparing this run's stage outputs with the run before it on that
+              version (run_compare.html)
     took      elapsed, and under it what the run spent on model calls
     result    the stage strip (the same partial the run page draws), with the
               run's status in words under it
@@ -185,6 +187,11 @@
           {%- else %}<code>{{ r.version.version_id }}</code> <span class="muted">(no message)</span>{% endif -%}
         </a>
         {%- else %}<span class="unresolved">no workflow version recorded</span>
+        {%- endif %}
+        {%- if r.previous_run_id_on_version %}
+        <a class="run-compare-link"
+           href="/project/{{ state.id }}/runs/{{ r.run_id }}/compare/{{ r.previous_run_id_on_version }}"
+           title="compare this run's stage outputs with the run before it on this version">compare with the run before</a>
         {%- endif %}
       </td>
       <td class="run-took">

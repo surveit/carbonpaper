@@ -26,6 +26,7 @@ dependencies = [
     "alembic>=1.18",           # data migrations for the document store (alembic/versions)
     "pydantic>=2",             # stage/schema contract models (app/models)
     "starlark-pyo3==2026.1",   # sandboxed interpreter for starlark_row_function stages
+    "pypdf>=6.19.0",           # PDF page text (app/core/text_sources.py); BSD, where PyMuPDF is AGPL
 ]
 
 # Dev/test-only. `uv sync` installs these by default; the container image passes
@@ -64,7 +65,7 @@ select = ["E4", "E7", "E9", "F", "BLE", "RUF006"]
 
 [tool.mypy]
 python_version = "3.12"
-files = ["app", "scripts", "tests"]
+files = ["app", "critic", "scripts", "tests"]
 # `tests` is checked directly (in `files`), which also puts its root on mypy's
 # module search path: the colocated arch tests under app/ (in _arch_tests/
 # folders) can `from arch import ...` because tests/arch/ is a package, and the
@@ -96,7 +97,7 @@ ignore_missing_imports = true
 # (app.models, app.core.errors, app.core.llm, app.core.agent) are left open: everything may depend on them.
 # Content-level checks live in tests/arch/.
 [tool.importlinter]
-root_package = "app"
+root_packages = ["app", "critic"]
 
 [[tool.importlinter.contracts]]
 name = "app.web imported only by the entrypoint"
@@ -194,7 +195,7 @@ allowed_importers = ["app.core.store_config"]
 [[tool.importlinter.contracts]]
 name = "app.core sits below the domain contracts"
 type = "layers"
-layers = ["app.models", "app.core"]
+layers = ["app.packs", "app.models", "app.core"]
 # Position, not a list of things not to import: a module added to app.core inherits the
 # ordering instead of needing an entry somewhere. app.core is generic infrastructure
 # (llm, agent, persistence, errors, frames, utils); the contracts sit above it.
@@ -261,6 +262,16 @@ allowed_importers = ["app.main"]
 # on app.core.agent (the engine) + app.tools (what its tools are).
 
 [[tool.importlinter.contracts]]
+name = "app.packs imported only by the entrypoints"
+type = "protected"
+protected_modules = ["app.packs"]
+allowed_importers = ["app.main", "app.cli", "app.seeds.__main__"]
+# Importing app.packs registers every pack's connector kinds: a side effect the two
+# composition roots want, as app.main does for the agents, and nothing below them may
+# depend on. What a pack itself may import is app/packs/_arch_tests/'s rule.
+# app.seeds.__main__: `python -m app.seeds` parses the committed bundles in its own process.
+
+[[tool.importlinter.contracts]]
 name = "app.tools imported only by the surfaces that expose a tool"
 type = "protected"
 protected_modules = ["app.tools"]
@@ -295,6 +306,13 @@ forbidden_modules = ["app.services"]
 # app.services.run composes before calling in. Without this the arrow runs both ways —
 # app.services.run -> app.runtime.runner -> app.services.versioning — and "services sits
 # below the runtime" stops being true of the one module that most needs it to be.
+
+[[tool.importlinter.contracts]]
+name = "app and critic are independent: neither imports the other"
+type = "layers"
+layers = ["app | critic"]
+# One layer holding two independent packages. The critic reads the repo's review record
+# through gh, never the app's code, and the app does not know it is reviewed.
 
 # NB: "app.seeds reaches the store through services" is enforced as an AST allowlist
 # in app/seeds/_arch_tests/test_seed_reaches_store_via_services.py (check_no_import),

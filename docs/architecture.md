@@ -25,9 +25,9 @@ runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data
   input's rows — `is_grain_and_order_preserving` (1:1 row correspondence in order, read off
   that effect; the eval gate depends on it) and `declares_its_own_row_type` (whether this
   type answers what its output rows are, rather than reading its input's answer down; the
-  types whose effect is `creates`, `builds` or `consumes`). The six that answer —
-  `input_data`, `aggregate`, `explode`, `expand`, `python_frame_function`, `report` — name
-  the project's word for what ONE of those rows is in `row_type_id`.
+  types whose effect is `creates`, `builds` or `consumes`). The seven that answer —
+  `input_data`, `aggregate`, `explode`, `expand`, `python_frame_function`, `read_pages`,
+  `report` — name the project's word for what ONE of those rows is in `row_type_id`.
   `resolve_own_row_type_id` reads that answer back, and an answering type whose answer comes
   back None raises the `unnamed_rows` compiler warning. Two overrides carry the two answers
   nobody writes: a `report` and an `aggregate` with no `group_by` both answer `no_kind`
@@ -49,6 +49,8 @@ runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data
   its input arity), and its own validation helpers. `PythonFunction` and both
   python-transform stage models live in `stages/code.py`; `StarlarkFunction` and
   `StarlarkRowFunctionStage` live in `stages/starlark.py`.
+- `base.py` holds `_Base`. `spans.py`, `locators.py`, `connectors.py`, `packs.py` and
+  `run_diff.py` are listed under "Sources, spans, judgments and the method" below.
 - `schema.py` — `Column`, `TableSchema`, column-type vocab. `workflow.py` — graph checks
   (unique ids, inputs resolve, cycles) and schema RESOLUTION: a stage's input and output
   schemas are a function of the whole graph, so `Workflow` walks it in dependency order
@@ -72,13 +74,13 @@ loader) renders per-stage issues. Typed `Stage` objects flow end-to-end.
 `runner.py` — `execute_run`/`prepare_run`/`run_prepared`/`resume_run`, each taking the
 version the run pins as a `Workflow`. The runner reads no versions: the caller resolves one
 (`app/services/versioning.py: resolve_version_id`, defaulting to the newest STORED version
-— never a draft), loads its frozen stages and
+— never a draft), loads its frozen stages (`load_version_stages`) and
 hands them in. A run's per-stage connector bindings are merged by
 `Workflow.apply_run_bindings`, which rebuilds the workflow rather than letting the runner
 hold bare stages. `app/services/run.py` is the one place that composes this, and an
 import-linter contract keeps `runner.py` free of `app.services` so the arrow between the two
-points one way; `app/cli.py` drives that same seam. Per stage: validate
-inputs, dispatch, validate output, write `outputs/<stage>.parquet`,
+points one way; `app/cli.py` drives that same seam. Per stage, in `topological_sort` order
+(`executor.py`): validate inputs, dispatch, validate output, write `outputs/<stage>.parquet`,
 flush the run record mid-run; halt-on-review + resume; per-run `--limit`/`--offset`
 capping the rows a stage READS (cut off its inputs before its handler runs).
 `stages/` — one module per type. `llm.py`/`options.py` — the agent
@@ -118,6 +120,63 @@ and emits none (`report`). A type is grain-and-order preserving when its effect 
 `creates` or `maps`. The map is total over `StageType` and the module raises at
 import if a type is missing it, so a new stage type is classified rather than
 silently taking a default.
+
+A `builds` stage owes the input rows behind every row it writes. `_finalize_stage_output`
+(`app/runtime/executor.py`) refuses one whose handler reported no lineage with
+`MissingLineage`, before its frame is written. Only `builds` is refused; a `creates`,
+`maps`, `selects` or `consumes` stage that reports no lineage is not checked. The declared
+reshapes work their lineage out in the handler. A `python_frame_function` cannot
+be read that way, so it reports its own: it declares a keyword-only `lineage` recorder
+(`LineageRecorder`, `app/runtime/lineage.py`) and names, for each output row, the input row
+it was built from, the rows that contributed to it, or that it `originates` there. A
+function that does not declare the recorder, or leaves a row unaccounted, fails the stage.
+
+Every span a stage writes, in a `span` or `list[span]` column or inside a `json` field, must
+quote text its file holds at its address, in a file the run bound (`RunContext.bound_sources`).
+Once the output passes its schema, `_finalize_stage_output` checks it with `find_span_issues`
+(`app/runtime/spans.py`) and a refusal fails the stage as `QuoteRefusal`. A stage with no span
+column reads no file, and a page is read once per run through the run's `SourceTextCache`. A
+production run binds what its input stages read at prepare; `execute_subset` binds each file its
+workflow's input stages name the same way, leaving the manifest's `input_bindings` empty.
+
+## Sources, spans, judgments and the method, module by module
+The words are [overview.md](overview.md)'s: a source is a stored file a run reads, a span
+quotes one, a `Judgment` records a model's answer about a row, and a version's `Method` is
+what it kept of the project's row types, verbs and methodology.
+
+| Module | What it holds |
+|---|---|
+| `app/core/files.py` | `ProjectFile`, the record a source is; `receive_source` and `receive_mirrored_source`, the only writers of its `origin_url` and `fetched_at` |
+| `app/core/text_sources.py` | the one reader of a source's page text, so `read_pages`, the verifier, the source view and the packet's page files see the same characters |
+| `app/models/spans.py` | `Span`; `SpanReply`, the quote a model answers a span column with; `narrow_span`, which re-finds a quote inside a span |
+| `app/models/locators.py` | the `Locator` kinds and `LOCATOR_KINDS`, the registry each kind is parsed and labelled through |
+| `app/models/schema.py` | the `span` and `list[span]` column types, and `Column.quoted_from`, the span column a model's quote is found in |
+| `app/models/stages/read_pages.py`, `app/runtime/stages/read_pages.py` | `read_pages`: one row per page of each file its input names, holding `page`, `page_text` and `page_span` |
+| `app/runtime/spans.py` | the verifier: `find_span_issues` over a stage's output, `verify_span` for one span, `SourceTextCache` |
+| `app/runtime/stages/span_replies.py` | mints an `llm_transform` reply's quotes into spans (rule 5 of [llm-transform-output-spec.md](llm-transform-output-spec.md)) |
+| `app/core/judgments.py` | `Judgment`, a model call recorded against the row it decided, and `JudgmentDraft`, the call before it is recorded |
+| `app/runtime/stages/row_judgments.py` | the runtime's one way onto the judgment ledger, and its refusal of a model row that owes a judgment |
+| `app/models/records/workflow_version.py` | `Method`, on `WorkflowVersion.method` ([models-and-storage.md](models-and-storage.md)) |
+| `app/runtime/trace.py` | walks a row back through each stage's lineage to the stored file its input row was read from (`source_id`) |
+| `app/models/run_diff.py`, `app/services/run_diff.py` | the replay check behind the compare page: a stage code computes must give the same rows from the same input |
+| `app/models/connectors.py`, `app/models/packs.py` | `ConnectorSpec` and `SOURCE_COLUMNS`; `PackSpec` and `register_pack` ([packs.md](packs.md)) |
+| `app/services/review_packet/data.py`, `app/web/review_packet/archive.py` | the packet's archive: `sources.json`, `judgments.jsonl`, `spans.json` and the pages its spans quote ([run-and-review-ui.md](run-and-review-ui.md)) |
+| `app/web/source_page_view.py` | what a span's link opens: its page of the file, the quote marked |
+| `app/web/span_cells.py` | the one rendering of a span cell, so every run table and the packet show it alike |
+| `app/web/judgment_view.py`, `app/web/routers/judgments.py` | the judgment page, and each model row's link to it |
+| `app/web/run_diff_view.py`, `app/web/routers/run_diff.py` | the compare page |
+| `app/web/routers/run_routers.py` | where a router under `/project/{p}/runs/` is added, since mount order decides which route `/runs/new` matches |
+
+## `app/packs/` — above the kernel
+A pack is a subpackage `app/packs/<pack_id>/` that registers connector kinds; everything else
+under `app/` is the kernel. Two import contracts place it. The `layers` contract orders
+`app.packs` above `app.models` above `app.core`, so neither kernel layer can import a pack.
+A `protected` contract lets only `app.main`, `app.cli` and `app.seeds.__main__` import
+`app.packs`, since importing it registers every pack; no other layer depends on a pack being
+loaded. A pack imports only `app.models`, `app.core` and itself
+(`app/packs/_arch_tests/`), so it never drives a run, a service or a page. What a pack
+declares, and how a run binds its connector: [packs.md](packs.md). The one pack,
+`app/packs/docket/`, registers `recap_docket`: a CourtListener docket's filings, one row each.
 
 ## `app/compiler/` — prose → LLM generation engines
 Two generators, each an `app.core.agent` Agent targeting a model schema:
@@ -171,6 +230,12 @@ is the ONE write path for a `WorkflowVersion` document); `drafts.py` (disposable
 that may be invalid mid-edit, edited only through the editing agent's tools; `save_version`
 is its only exit, strict-validating before freezing it into a version via
 `create_version_from_stages`).
+
+## `critic/` — a second root package, beside `app/`
+`python -m critic` predicts a pull request's review comments and scores the predictions
+against the real ones; its subcommands are listed by `python -m critic --help`. It reads the
+review record through `gh`, and a `layers` contract keeps `app` and `critic` from importing
+each other.
 
 ## `app/core/llm/`, tests
 `core/llm/options.py` — the `LLMModel` menu. `tests/` (pytest; `conftest.py` forces

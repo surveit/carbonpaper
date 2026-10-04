@@ -63,8 +63,8 @@ sections, in this order:
    to a filename was the widest thing on the page.
 3. **Workflow** — the minimap.
 4. **Stage details** — the stage panel. `hidden` until `loadStage()` unhides it: before a
-   stage is picked there is nothing to show, and a heading over an empty box is exactly the
-   kind of always-on furniture this page was cut down to remove.
+   stage is picked there is nothing to show, and a heading over an empty box is always-on
+   furniture.
 
 The **toolbar** (`.run-toolbar`) shares Run overview's heading line (`.run-overview-head`,
 heading left, actions right — neither spends a row of its own): the review-packet export as a
@@ -83,12 +83,13 @@ statement of what went wrong: ONE list indexing the stages, every entry one line
 and the stage panel names none of them itself. On the run page it stays in the
 work column, not the nav rail: its four-column table needs the width. Drawn with
 `_issue_table.html`, the panel + row macros the **Workflow** page's compiler warnings also use;
-the macros own the heading (`17 warnings, 2 errors`, a severity with none of them left out) and
+the macros own the heading (`2 errors, 17 warnings`, a severity with none of them left out) and
 the CLOSED default, so neither page can word its counts differently or open on a different one.
 The counts are the summary, so a closed panel still says something is wrong.
 - **A stop** — an `error` stage, the run's own end — is the FIRST line, marked `stopped`, its
   message naming which failure it is, because they route to different people: a schema
   refusal (`OutputSchemaViolation`) says the data changed and links the panel's **Data** tab;
+  a quote refusal (`QuoteRefusal`) says a quote does not hold in its source and links **Data** too;
   an authored `StepRefused` says the stage does not handle this data and names the two ways
   out — wrong data, or a stage needing a rule for it — then links its **Transform** tab;
   any other exception is the code's and keeps its type.
@@ -134,43 +135,21 @@ sheet the node wrote opens Data:
   input** where the stage type permits one (below) — then validation **as part of the
   output** (input + output issues from the manifest), then the upstream input previews,
   folded in an `input rows` disclosure — read-only, since picking rows to run on is its own
-  page. URL cells are full clickable links. Compiler notes live on `/compile`, not here.
+  page. URL cells are full clickable links. A span cell is its quote, then the page it
+  sits on linked to that page of its file (`span_cites` in `_data_cell.html`, fed by
+  `app/web/span_cells.py`); the rows page and the lineage row view draw it the same way,
+  and a packet links `sources/<id>/pages/<n>.txt` instead. Compiler notes live on
+  `/compile`, not here.
   The `stat-strip` (model · calls · cost) stays ABOVE the rows — those are facts about the
   run. A **caveat** on the rows (batched judging; an unreadable pinned definition) is a
   `.stage-caveat` `<details>`, closed, its whole warning in the summary line.
-- **Schema** — the static contract: the input schemas, then the output schema. No tab of
-  its own: it is a face of the Data pane, reached from the `schema` link on a table's own
-  head and left by the `← data` link, because it says what the columns being read are.
 - **Transform** — the *raw* transform config block (`_stage_executable.html`): llm prompt+model+tools,
   join keys, aggregate ops, connector/queue/report spec — plus the only link to the
-  simulate page below. An authored-code block (`function` / `filter`) reads **description → examples → code**:
+  simulate page (`docs/run-and-review-ui.md`). An authored-code block (`function` / `filter`) reads **description → examples → code**:
   the block's plain-language `summary` leads, the test cases follow, and the source is rendered
   last and folded (`_stage_code.html`), because the reviewer is a journalist, not an engineer.
-- **The diff** (`app.web.stage_diff` → `_stage_diff.html`): a 1:1 stage
-  (`python_row_function`, `llm_transform`, `enrich` — against its subject input) reads as a
-  positional diff over its INPUT frame as the base: the columns its signature declares it
-  REWRITES or ADDS come first, tinted (`app.web.column_order` — the same order the plain output
-  table and the packet's stage page use, so a column the reader came for is not behind a
-  horizontal scroll), then the input frame's own columns in their own order, one the stage
-  dropped struck through carrying the input value, changed
-  cells marked; each header carries a `+` or `−` so both read without colour. A stage whose
-  pinned version does not resolve declares nothing, and every surface keeps frame order.
-  Presentation only: the frame on disk and the CSV download are untouched. `filter_rows` reads
-  as ONE merged table with its dropped input rows in place, tinted, off the verified lineage
-  sidecar. The header is one horizontal axis, the same for either shape — the inputs stacked
-  vertically, a bracket where there is more than one, a rail, then the output, which is a sibling
-  of the stack and so does not move when an input is added. Each unit names its part in words
-  (`base input` / `reference input` / `output`), carries the row count of the frame it names, and
-  links that frame's raw full-rows view (`?raw=1`) + CSV download. A frame the diff did not read
-  (an `enrich`'s reference where the parquet will not open) is listed with no count, never a
-  guessed one. The rail carries `diff.tally` — the list of things the stage did that its own shape
-  MEASURED, in one vocabulary (`+2 cols · −3 cols · 0 cells changed`, `−121 rows`); a filter
-  compares no cells and no columns, so it reports neither rather than a zero it never took.
-  `build_stage_diff`
-  returns None — the plain output view — for every other type and whenever alignment can't be
-  verified. The **full-rows page** (`…/stage/{sid}/rows`) renders the same partial over
-  `MAX_TABLE_ROWS` rows, keeping its row numbers and click-to-expand cells; `?raw=1` forces the
-  plain table, and each view names itself and links the other.
+- **The diff** (`app.web.stage_diff` → `_stage_diff.html`) and the full-rows page: the
+  Stage-aware diff and Full-table view bullets of `docs/run-and-review-ui.md`.
 
 ## The run log (`_run_log_panel.html` → `app/static/run_log.js`)
 One macro, rendered twice per run page: **scoped to the open stage** under the panel's tab
@@ -219,8 +198,7 @@ head — name, status badge, blurb, then a facts line — over ONE tab strip:
 ## How a step was checked — both statements live in Transform
 Beside the thing each one is a verdict on, and never as a section of its own:
 - **`_stage_certification.html`** opens **🧪 Example behavior**, because what it claims is
-  about those examples. It used to sit under the summary, a section above the cases it
-  was talking about.
+  about those examples.
 - **`worked examples (evals)`** (`app.web.eval_coverage` → `_stage_eval_check.html`) is an
   `h3` INSIDE whichever transform block the stage has — a peer of that block's other
   headings, not a fifth `.exec-block` competing with them. An eval may target any stage,
@@ -245,28 +223,11 @@ as current differs by surface: a run panel uses the version THAT RUN pinned (exa
 node panel the latest stored version (the test `eval_status` already applies). A step
 no eval targets renders nothing.
 
-## Live progress + the stage simulator
-`POST /project/<m>/run` → `prepare_run` (initial `running` manifest) → background thread →
-redirect; `run_detail.html` polls `…/status` every 2s and updates the graph in place, reloading
-once on the terminal transition.
-
-An eval run takes the same shape: `POST …/evals/<id>/run` → `start_eval_run` (validated
+## An eval run's live progress
+An eval run starts and polls the way a production run does (the Live polling bullet of
+`docs/run-and-review-ui.md`): `POST …/evals/<id>/run` → `start_eval_run` (validated
 synchronously, so an incompatible eval still answers 400 and an unknown version 404, then an
 initial `running` EvalRun) → daemon thread → redirect. `eval_run.html` polls
 `…/evals/<id>/runs/<run>/status` every 2s **only** while the record reads `running`, moving the
 elapsed figure and reloading once at `terminal` — where the badge, the metrics and the scored
 rows all arrive together.
-
-**The simulator** is its own page — `…/stage/<sid>/simulate` (`run_stage_simulate.html`): the
-folded transform, the input rows with per-row checkboxes, the controls, then the result, one
-column. Picking and reading the answer used to straddle two tabs of the run panel, which moved
-the reader off the rows they had just picked. The panel now links it from **Transform** and
-holds no picker. Running it posts `…/stage/<sid>/preview` (`runtime/preview.py`), which runs the
-handler **in memory** and persists nothing; refused for `report`/`human_review_queue`/
-`input_data` (side effects), and the page 404s for those types and for an unreadable version.
-
-Every stage definition a run page shows or executes (panel, lineage panel, simulator)
-comes from the version the run pinned, via `services.run.load_pinned_stage_def` /
-`load_run_workflow` — never the project's newest.
-Unresolvable version → the panels show a stated reason in place of the definition and the
-in-memory re-run returns 409 rather than executing some other version.

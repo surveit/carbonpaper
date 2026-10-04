@@ -17,6 +17,9 @@ from app.services import run as run_service
 from app.services.errors import WorkflowLoadError
 from app.services.workspace import configure_projects_dir_from_env
 
+# Registers every pack's connector kinds, so a stored workflow naming one loads.
+from app import packs as _packs  # noqa: F401
+
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)

@@ -76,9 +76,14 @@ that already has `parameters` is passed through with the flat keys stripped.
 
 ## `input_bindings` is a result, not a parameter
 
-It records the preflight provenance of each bound input — absolute path, sha256, and a
-byte count streamed at prepare time. It says what the run *found*, not what it was asked
-for, which is why it sits beside `parameters` rather than inside it.
+It records each bound input as preflight weighed it — absolute path, sha256, a byte count
+streamed at prepare time, the stored file's id (`file_id`), and the URL a fetched file came
+from (`origin_url`). It says what the run *found*, not what it was asked for, which is why
+it sits beside `parameters` rather than inside it.
+
+It is also the set of files a span may name. `index_bound_sources` keys it by sha256 into
+`RunContext.bound_sources` at prepare and again at resume, and the verifier refuses a span
+whose sha256 is not there or whose `source_id` is not that file's `file_id`.
 
 ## The queue halt's sidecar
 
@@ -143,3 +148,28 @@ reaches a disagreement — see
 `app.services.review.find_latest_decision` reads the newest row for a match key,
 ordered by the record's own `created_at` — never by `reviewed_at`, which a reviewer's
 client supplies and this code does not control.
+
+## A model's answer: the judgment ledger
+
+A model's answer is not recomputable either: the same prompt may be answered differently.
+On a production run, `_StageExecution.run_group` records each row an `llm_transform` answered
+as a `Judgment` (`app/core/judgments.py`) through `StageCache.record_judgment`, before it
+records the row's cache entry. It holds the system prompt, the task, the model, the reply
+and the usage, with the run, stage and input row it was made for.
+
+- `StageCacheEntry.judgment_id` names it, so a row replayed later names the call it replays.
+- The row's last log event carries the same `judgment_id`, absent where no model decided
+  the row.
+- A row the model answered with no judgment stops the stage (`JudgmentUnrecorded`).
+
+A run whose cache is read-only — a workflow test, an eval — records no judgment, and a
+preview has no run to record one against. A cache entry written before the ledger names
+none.
+
+## What the review packet reads off this record
+
+The packet's archive (the table in [run-and-review-ui.md](run-and-review-ui.md)) takes
+what it lists from the run's own records:
+`sources.json` from `input_bindings`, `judgments.jsonl` from the `judgment_id`s the run
+log names, `spans.json` from each published span checked again against `input_bindings`,
+and `methodology.md`/`terms.json` from the `Method` the pinned `workflow_version` kept.

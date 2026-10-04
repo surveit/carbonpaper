@@ -45,9 +45,8 @@
 <div class="sec-head wf-head">
   <div class="wf-head-title">
     <h1>Workflow</h1>
-    <p class="lede">Typed stages wiring your data model into a pipeline. Click any node
-      to see how that step is modeled — its inputs, transform, and outputs. Editing
-      one saves a version, and a run executes a version.</p>
+    <p class="lede">The stages your data passes through. Click a stage to see its inputs,
+      transform and outputs. Editing one saves a version, and a run executes a version.</p>
   </div>
   <div class="actions wf-actions">
     {% if stages %}
@@ -66,19 +65,20 @@
 {# Compiler warnings — what is wrong with the workflow AS WRITTEN, judged without
    running anything. The same list the authoring agent must clear before it reports
    asked to sign off (the report_compiler_warnings MCP tool), so a reviewer and the
-   agent look at one thing. Blocking entries first: those are the ones someone can
-   fix. A warning does not stop anyone reviewing the workflow — it means their
-   attention is about to be spent on something already known. Whether a step's
-   examples PASS is a different question, answered by running them, and is not here.
+   agent look at one thing. Errors first, in SEVERITY's order
+   (app/models/stages/warnings.py). A warning does not stop anyone reviewing the
+   workflow — it means their attention is about to be spent on something already
+   known. Whether a step's examples PASS is a different question, answered by running
+   them, and is not here.
 
    Drawn with the issue table the run page indexes ITS issues with: the severity
    word leads, the stage links its panel, the kind rides in the narrow cell a run
-   gives the column name. Every compiler note is a warning — none of them refuses
-   anything — so the panel is titled by that one count. #}
+   gives the column name. #}
 {% if compiler_warnings and compiler_warnings.warnings %}
+{% set error_count = compiler_warnings.warnings | selectattr('severity', 'equalto', 'error') | list | length %}
 
 <div class="wf-issue-index">
-{% call issue_panel(0, compiler_warnings.warnings|length) %}
+{% call issue_panel(error_count, compiler_warnings.warnings | length - error_count) %}
   {% for warning in compiler_warnings.warnings %}
   {{ issue_row(severity=warning.severity, stage_id=warning.stage_id,
                subject=warning.kind, message=warning.detail) }}
@@ -108,7 +108,7 @@
           <button type="button" data-zoom="out" title="Zoom out">−</button>
           <button type="button" data-zoom="reset" title="Fit to width">reset</button>
           <button type="button" class="diagram-fs" title="Fullscreen">⛶ fullscreen</button>
-          <span class="muted diagram-hint">drag to pan · ⌘/Ctrl-scroll to zoom · click a node to review · fullscreen to expand</span>
+          <span class="muted diagram-hint">drag to pan · ⌘/Ctrl-scroll to zoom · click a stage to review · fullscreen to expand</span>
         </div>
         <div class="diagram-viewport" data-zoom-floor="0.75">
           <pre class="mermaid">

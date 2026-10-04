@@ -13,7 +13,8 @@ from fastapi import HTTPException
 
 from app.core.errors import RunNotFoundError, NoVersionToRunError, StageOutputMissing
 from app.core.frames import (
-    list_rows, list_table_rows, read_frame_file, read_frame_table, render_frame_as_csv_text,
+    list_rows, list_table_rows, read_frame_file_for_display, read_frame_table,
+    render_frame_as_csv_text,
 )
 from app.models import (
     StageType,
@@ -47,6 +48,7 @@ from app.services.project_record import read_project_edited_at, read_project_nam
 from app.services.terms import count_schemas
 from app.services.workspace import resolve_run_dir
 from app.web.panel_links import RectangleRequest
+from app.web.span_cells import render_span_column
 from app.models.run_manifest import RunKind
 from app.web.project_cards import (
     ProjectCard,
@@ -261,7 +263,7 @@ def read_output_df(run_dir: Path, rel_path: str | None) -> pd.DataFrame:
             status_code=404, detail=f"Output file missing on disk: {rel_path}"
         )
     try:
-        return read_frame_file(path)
+        return read_frame_file_for_display(path)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(
             status_code=500, detail=f"Could not read output file: {exc}"
@@ -270,7 +272,16 @@ def read_output_df(run_dir: Path, rel_path: str | None) -> pd.DataFrame:
 
 def render_frame_as_text(frame: pd.DataFrame) -> pd.DataFrame:
     # fillna("") would raise on Int64/Float64/boolean.
-    return frame.astype(str).where(frame.notna(), "")  # astype first: dtypes self-format
+    text = frame.astype(str).where(frame.notna(), "")  # astype first: dtypes self-format
+    for name in frame.columns:
+        # A span is a struct cell: an arrow struct or list, or a dict pandas holds as object.
+        if not (isinstance(frame[name].dtype, pd.ArrowDtype) or frame[name].dtype == object):
+            continue
+        spans = render_span_column(frame[name].tolist(), text[name].tolist())
+        if spans is not None:
+            # object, or pandas would store each cell as a plain str and drop its spans.
+            text[name] = pd.Series(spans, index=text.index, dtype=object)
+    return text
 
 
 def render_cells_as_text(frame: pd.DataFrame) -> list[dict[str, Any]]:
@@ -368,7 +379,7 @@ def load_output_row(run_dir: Path, rel_path: str | None, row: int) -> dict[str, 
     if path is None or not path.exists():
         return {"error": f"missing on disk: {rel_path}"}
     try:
-        df = read_frame_file(path)
+        df = read_frame_file_for_display(path)
     except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
     if row < 0 or row >= len(df):
@@ -409,7 +420,7 @@ def _load_output_slice(
     if path is None or not path.exists():
         return {"error": f"missing on disk: {rel_path}"}
     try:
-        df = read_frame_file(path)
+        df = read_frame_file_for_display(path)
     except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
     taken = pick(len(df))
@@ -425,7 +436,7 @@ def _load_output_slice(
 
 def queue_snapshot(project_id: str, run_id: str, stage_id: str) -> pd.DataFrame | None:
     path = find_queue_snapshot_path(project_id, run_id, stage_id)
-    return None if path is None else read_frame_file(path)
+    return None if path is None else read_frame_file_for_display(path)
 
 
 def queue_snapshot_rows(project_id: str, run_id: str, stage_id: str) -> list[dict[str, Any]] | None:

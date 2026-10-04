@@ -84,7 +84,7 @@ for, and `dedupe`, `sort_rank`, `aggregate`, `enrich`, `expand` and `union`
 cover the reshapes. Only if none fits, tell the owner plainly what the step
 will do, that Carbon Paper is not built for arbitrary code execution, that
 the step runs on their machine with their permissions and can read files
-and reach the network, and that a trace stops at it. Then ask. Then wait.
+and reach the network. Then ask. Then wait.
 
 If they say yes, call this. If they say no, or say nothing, do not call it
 — say what you cannot build and stop.

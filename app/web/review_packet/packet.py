@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.errors import RunNotFoundError, RunVersionUnresolvableError
+from app.core.json_types import JsonDict
 from app.core.logging_config import log_elapsed
 from app.models import WorkflowStage, stage_to_spec_dict
 from app.runtime.run_log import read_events_since
@@ -20,7 +21,8 @@ from app.services.review_packet.data import write_packet_data
 from app.services.review_packet.views import RunView, build_run_view
 from app.services.run_guide import RunGuideView, build_run_guide_view
 from app.services.workspace import resolve_run_dir
-from app.web.diagrams import build_mermaid_graph
+from app.web.diagrams import DiagramOverlay, build_mermaid_graph
+from app.web.review_packet.archive import read_run_archive
 from app.web.review_packet.lineage import write_packet_lineage
 from app.web.review_packet.pages import write_packet_pages
 from app.models.run_manifest import RunKind
@@ -41,17 +43,21 @@ def export_review_packet(project_id: str, run_id: str, dest_root: Path) -> Revie
     stage_sources = {
         s.stage_id: resolve_output_path(run_dir, s.output_path) for s in view.stages
     }
+    events = read_events_since(project_id, run_id, 0)
+    with log_elapsed(_log, f"{project_id}/{run_id} archive"):
+        archive = read_run_archive(
+            run_dir, view, manifest, events, stage_sources, workflow_stages_by_id)
     with log_elapsed(_log, f"{project_id}/{run_id} data"):
         data = write_packet_data(
             root, run_dir, project_id, view, workflow,
             json.dumps(manifest, indent=2, default=str),
-            _serialize_events(project_id, run_id), stage_sources,
+            _serialize_events(events), stage_sources, archive,
         )
     # Before the pages: a stage table only offers "View lineage" on a row the
     # packet actually holds a page for, so the traced set has to exist first.
     with log_elapsed(_log, f"{project_id}/{run_id} lineage"):
         lineage = write_packet_lineage(
-            root, run_dir, view, workflow_stages_by_id, manifest)
+            root, run_dir, view, workflow_stages_by_id, manifest, frozenset(data.cited_pages))
     with log_elapsed(_log, f"{project_id}/{run_id} pages"):
         pages = write_packet_pages(
             root,
@@ -78,12 +84,9 @@ def export_review_packet(project_id: str, run_id: str, dest_root: Path) -> Revie
     )
 
 
-def _serialize_events(project_id: str, run_id: str) -> str:
+def _serialize_events(events: list[JsonDict]) -> str:
     """As JSON lines: the shape a packet reader's tooling already expects."""
-    return "".join(
-        json.dumps(event, default=str) + "\n"
-        for event in read_events_since(project_id, run_id, 0)
-    )
+    return "".join(json.dumps(event, default=str) + "\n" for event in events)
 
 
 def _build_diagram(
@@ -93,8 +96,12 @@ def _build_diagram(
     if not workflow_stages:
         return ""
     statuses = {s.stage_id: s.status for s in view.stages}
+    # A click opens the stage's page, which the packet writes only for a stage the run recorded.
+    stage_ids_without_a_page = (
+        {resolved.stage.id for resolved in workflow_stages} - statuses.keys())
     return build_mermaid_graph(
-        [resolved.stage for resolved in workflow_stages], project_id, status_by_id=statuses)
+        [resolved.stage for resolved in workflow_stages], project_id, status_by_id=statuses,
+        overlay=DiagramOverlay(unclickable=stage_ids_without_a_page))
 
 
 def _load_guide(project_id: str, manifest: dict[str, Any]) -> RunGuideView | None:

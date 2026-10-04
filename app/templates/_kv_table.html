@@ -10,8 +10,10 @@
 
    A value that is a web address is rendered as a link: this table is what a
    reviewer reads to decide, and a source they cannot open is not a source.
+   A span value renders as `span_cites` draws it, linked through `links`.
    Renders nothing when `columns` is empty. #}
-{% macro kv_table(columns, row) %}
+{% from "_data_cell.html" import span_cites %}
+{% macro kv_table(columns, row, links) %}
 {% if columns %}
 <table class="kv">
     <tbody>
@@ -26,6 +28,7 @@
         </th>
         <td class="kv-value">
             {%- if value is none %}<em>no value</em>
+            {%- elif value.cites is defined %}{{ span_cites(value, links) }}
             {%- elif value == '' %}<em>empty text</em>
             {%- elif value is string and (value.startswith('https://') or value.startswith('http://'))
                 %}<a href="{{ value }}" target="_blank" rel="noopener noreferrer">{{ value }}</a>

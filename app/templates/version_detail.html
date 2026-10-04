@@ -6,6 +6,10 @@
 
   Context: state; section="versions"; version (the versioning.load_version
            WorkflowVersion); mermaid (frozen graph string).
+
+  A version keeps the project's methodology, row types and verbs as they stood when
+  it was saved (`version.method`). One saved before versions kept them says so and
+  shows none: the project's current ones may not be what it was built from.
 #}
 {% block title %}{{ state.meta.display_name }} · Version {{ version.version_id }}{% endblock %}
 
@@ -23,6 +27,7 @@
 {% endblock %}
 
 {% block section %}
+{% from "_glossary_words.html" import glossary_words %}
 <div class="sec-head wf-head">
   <div class="wf-head-title">
     <h1 class="vd-name" id="vd-name">
@@ -72,6 +77,21 @@
   });
 })();
 </script>
+
+{% set method = version.method %}
+{% if method is none %}
+<p class="vd-method-note">Saved before a version kept the methodology and terms it was built from.</p>
+{% else %}
+<details class="vd-method">
+  <summary>Methodology and terms, as they stood when this version was saved</summary>
+  {% if method.methodology %}
+  <div class="doc-prose">{{ method.methodology }}</div>
+  {% else %}
+  <p class="lede">The project had no methodology.</p>
+  {% endif %}
+  {{ glossary_words(method.row_types, method.verbs, none_agreed="None had been agreed when this version was saved.") }}
+</details>
+{% endif %}
 
 <div class="wf-stack"><div class="wf-top">
   <div class="diagram-block">

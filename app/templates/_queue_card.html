@@ -17,7 +17,7 @@
     {% if page.context_columns %}
     <div class="queued-row">
         <p class="review-section-heading">Context for review</p>
-        {{ kv_table(page.context_columns, item.row) }}
+        {{ kv_table(page.context_columns, item.row, links) }}
     </div>
     {% endif %}
 

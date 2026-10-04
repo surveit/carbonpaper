@@ -11,7 +11,12 @@ from typing import Any, Literal, Mapping
 from pydantic import BaseModel
 
 from app.core.errors import RunVersionUnresolvableError
-from app.web.run_published import RunPublished, read_published_outputs
+from app.web.run_published import (
+    FigurePendingReview,
+    RunPublished,
+    list_figures_pending_review,
+    read_published_outputs,
+)
 from app.core.run_status import RunStatus, StageStatus
 from app.core.timestamp_ids import read_iso_stamp
 from app.services import run as run_service
@@ -81,6 +86,7 @@ class RunHeader(BaseModel):
     live: RunLiveView
     restart: RestartOffer
     published: RunPublished
+    figures_pending_review: list[FigurePendingReview]
 
 
 def build_run_header(
@@ -90,6 +96,7 @@ def build_run_header(
     cta = choose_run_cta(project_id, run_id, manifest)
     return RunHeader(
         published=read_published_outputs(project_id, run_id, run_dir, manifest),
+        figures_pending_review=list_figures_pending_review(project_id, manifest),
         run_id=run_id,
         name=read_run_name(project_id, run_id),
         started_at=_read_text(manifest.get("started_at")),

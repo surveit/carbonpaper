@@ -30,7 +30,7 @@ from conftest import (
     resume_like_the_app,
     run_like_the_app,
     QUEUE_COLUMNS, pinned_stages, place_stage, queue_added_columns, queue_columns,
-    reads_of,
+    reads_of, script_judgment,
 )
 from stage_seed import add_stage, save_version
 
@@ -143,7 +143,7 @@ def _build_and_halt(tmp_path, monkeypatch, project: str = PROJECT):
     # The returned `input_fingerprints` are POSITIONALLY aligned to the snapshot's rows.
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(
-        lt, "call_llm", lambda stage_id, llm_config, row, **kw: {"score": 1}
+        lt, "call_llm", lambda stage_id, llm_config, row, **kw: script_judgment({"score": 1})
     )
 
     project_dir = tmp_path / project
@@ -1845,7 +1845,7 @@ def _identical_quotes_stage(root):
 
 def test_two_identical_rows_share_one_decision_and_both_carry_it(tmp_path, monkeypatch):
     workspace.set_projects_dir(tmp_path)
-    monkeypatch.setattr(lt, "call_llm", lambda stage_id, llm_config, row, **kw: {"score": 1})
+    monkeypatch.setattr(lt, "call_llm", lambda stage_id, llm_config, row, **kw: script_judgment({"score": 1}))
     project_dir = tmp_path / PROJECT
     _write_stage(project_dir, "01_load.json", _identical_quotes_stage(project_dir))
     _write_stage(project_dir, "02_score.json", _score_stage())
@@ -2039,7 +2039,7 @@ def test_ledger_wins_over_a_stage_cache_entry_recording_a_different_value(
             "human_score": 999, "decision": "modify", "reviewer_id": "impostor",
             "reviewed_at": "2020-01-01T00:00:00", "review_notes": None,
         },
-        branches=None,
+        branches=None, judgment_id=None,
     )
 
     resumed = runner.resume_run(run_dir, PROJECT, run_id, *resume_like_the_app(project_dir, run_id))
@@ -2049,6 +2049,10 @@ def test_ledger_wins_over_a_stage_cache_entry_recording_a_different_value(
     decided_row = out.loc[out["id"] == first_row["id"]].iloc[0]
     assert decided_row["human_score"] == 999          # the cache's value, not the ledger's
     assert decided_row["reviewer_id"] == "impostor"   # and its attribution with it
+
+
+def _refuse_a_judgment_copy(judgment_id: str) -> str:
+    raise AssertionError(f"a review decision names no judgment, but this one names {judgment_id}")
 
 
 def test_a_cache_only_decision_from_another_project_still_replays(tmp_path, monkeypatch):
@@ -2074,7 +2078,7 @@ def test_a_cache_only_decision_from_another_project_still_replays(tmp_path, monk
     ]
     assert review_entries
     for entry in review_entries:
-        assert cache.copy_entry_into(entry, dest_project)
+        assert cache.copy_entry_into(entry, dest_project, _refuse_a_judgment_copy)
     # No ReviewDecision row exists for dest_project at all — only the copied cache.
     assert review.find_latest_decision(
         project_id=dest_project, stage_id="review",

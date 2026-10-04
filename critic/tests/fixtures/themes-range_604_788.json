@@ -1,0 +1,5 @@
+{
+  "naming": "An identifier (function, class, field, variable, route, enum) misleads, is vague, or reads badly.",
+  "layering": "Code sits in a layer that should not know about the concept (runtime vs core vs web vs UI).",
+  "praise": "Explicit praise."
+}

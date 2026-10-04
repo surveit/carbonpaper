@@ -34,6 +34,9 @@ from app.agents.compiler import config as _editing_agent_config  # noqa: F401
 # build_engine("tutorial", …) resolves.
 from app.agents.tutorial import config as _tutorial_agent_config  # noqa: F401
 
+# Registers every pack's connector kinds, so a stored workflow naming one loads.
+from app import packs as _packs  # noqa: F401
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:

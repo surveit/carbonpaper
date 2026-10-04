@@ -1,18 +1,27 @@
+{% from "_pending_review.html" import pending_review_badge %}
 {# The run's results, above the account of how it ran. #}
-{% if header.published %}
+{% if header.published or header.figures_pending_review %}
   {%- set leads = header.published.figures | selectattr('primary') | list %}
   {%- set rest = header.published.figures | rejectattr('primary') | list %}
+  {%- set leads_pending = header.figures_pending_review | selectattr('primary') | list %}
+  {%- set rest_pending = header.figures_pending_review | rejectattr('primary') | list %}
   {%- set tables = header.published.tables %}
   <section class="wf-outputs">
-    <h2>Results of this run</h2>
+    <h2>Results</h2>
     <p class="wf-note">Each value can be clicked to view how it was computed.</p>
-    {%- if leads %}
-    <h3 class="wf-group">Headline claims</h3>
-    <div class="wf-leads{% if leads | length > 2 %} crowded{% endif %}">
+    {%- if leads or leads_pending %}
+    <h3 class="wf-group">Headline results</h3>
+    <div class="wf-leads{% if (leads + leads_pending) | length > 2 %} crowded{% endif %}">
       {%- for output in leads %}
       <div class="wf-lead">
         <span class="wf-big"><a class="lineage-value" href="{{ output.href }}"
           title="Open the row this value was read from">{{ output.value }}</a></span>
+        <span class="wf-of">{{ output.label | lower }}</span>
+      </div>
+      {%- endfor %}
+      {%- for output in leads_pending %}
+      <div class="wf-lead">
+        {{ pending_review_badge(output.rows_pending_review) }}
         <span class="wf-of">{{ output.label | lower }}</span>
       </div>
       {%- endfor %}
@@ -51,14 +60,22 @@
     </div>
     {%- endfor %}
     {%- endif %}
-    {%- if rest %}
-    <h3 class="wf-group">Secondary claims</h3>
+    {%- if rest or rest_pending %}
+    {%- if leads or leads_pending or tables %}
+    <h3 class="wf-group">Other results</h3>
+    {%- endif %}
     <table class="wf-rest">
       {%- for output in rest %}
       <tr>
         <th scope="row">{{ output.label }}</th>
         <td><a class="wf-value lineage-value" href="{{ output.href }}"
                title="Open the row this value was read from">{{ output.value }}</a></td>
+      </tr>
+      {%- endfor %}
+      {%- for output in rest_pending %}
+      <tr>
+        <th scope="row">{{ output.label }}</th>
+        <td>{{ pending_review_badge(output.rows_pending_review) }}</td>
       </tr>
       {%- endfor %}
     </table>

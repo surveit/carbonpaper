@@ -12,7 +12,7 @@ from app.main import app
 from app.services import workspace
 from app.services.project import create_project
 from app.core.file_shape import StoredFileShape
-from app.core.files import files_root, list_project_files, save_upload
+from app.core.files import files_root, list_project_files, receive_source, save_upload
 from app.services.run_manifest_metadata import archive_run
 from app.web import files_view
 from run_seed import store_manifest
@@ -49,6 +49,16 @@ def test_the_page_lists_what_the_project_holds(project_id):
 def test_a_file_no_run_has_read_says_so(project_id):
     store(project_id)
     assert "never read" in client.get(f"/project/{project_id}/files").text
+
+
+def test_a_fetched_file_links_its_origin_where_an_upload_says_uploaded(project_id):
+    store(project_id)
+    origin = "https://example.org/exports/filings.csv"
+    fetched = receive_source(project_id, origin, "filings.csv", io.BytesIO(CSV))
+    page = client.get(f"/project/{project_id}/files").text
+    assert f'fetched <time datetime="{fetched.fetched_at}"' in page
+    assert f'href="{origin}"' in page
+    assert "uploaded <time" in page
 
 
 def test_the_count_comes_from_the_runs_own_manifests(project_id):

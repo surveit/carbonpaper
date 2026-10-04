@@ -9,6 +9,7 @@
 {% from "_run_log_panel.html" import run_log_panel %}
 {% from "_rows_line.html" import counts_line with context %}
 {% from "_rows_line.html" import frame_counts %}
+{% from "_data_cell.html" import span_cites %}
 
 <div class="run-stage-panel"
      data-project="{{ project }}" data-run="{{ run_id }}" data-stage="{{ stage.stage_id }}">
@@ -125,6 +126,9 @@
         <div><dt>model</dt><dd>
             {%- if u and u.model %}<code>{{ u.model }}</code>
             {%- elif u and u.calls %}not recorded
+            {%- elif replayed and replayed.models %}{% for model in replayed.models %}<code>{{ model }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+            {%- elif replayed and replayed.names_a_judgment %}judgment not stored in this workspace
+            {%- elif replayed %}recorded before judgments were kept
             {%- else %}none
             {%- endif %}</dd></div>
         {% if u and u.calls %}
@@ -146,9 +150,8 @@
     {% if stage.cached_rows and stage.status in ("ok", "validation_warnings") %}
     {# A positive replay count is this run's evidence that cache rows supplied
        the output; an absent count means no replay conclusion is available. #}
-    <p class="muted"><b>Reused, not recomputed.</b>
-        {{ stage.cached_rows | figure }} of {{ stage.output_row_count or 0 | figure }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}{% if stage.output_row_count and stage.output_row_count > 0 %} ({{ ((stage.cached_rows / stage.output_row_count) * 100) | round(0) | int }}%){% endif %} came back from results an earlier run already produced,
-        so the model was not called for those cached rows and those rows incurred no cost in this run.</p>
+    <p class="muted"><b>Reused from an earlier run:</b>
+        {{ stage.cached_rows | figure }} of {{ stage.output_row_count or 0 | figure }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}{% if stage.output_row_count and stage.output_row_count > 0 %} ({{ ((stage.cached_rows / stage.output_row_count) * 100) | round(0) | int }}%){% endif %}.</p>
     {% endif %}
     {% endif %}
     {# Stage-aware diff (app.web.stage_diff): a row_aligned diff or a
@@ -198,7 +201,7 @@
       {% for ip in input_previews %}
       <div class="preview-block input-preview">
         <div class="preview-head">
-          <a href="{{ links.stage_anchor(ip.id) }}"><code>{{ ip.id }}</code></a>
+          {% set input_href = links.stage_anchor(ip.id) %}{% if input_href %}<a href="{{ input_href }}"><code>{{ ip.id }}</code></a>{% else %}<code>{{ ip.id }}</code>{% endif %}
           {% if ip.preview and ip.preview.preview %}{% set shown = ip.preview.preview | length %}
           <span class="muted">· {{ frame_counts(ip.preview.rows_total, ip.preview.columns | length, 'row',
               ip.reached | length if ip.reached else none, ip.columns_behind | length, shown) }}</span>
@@ -219,7 +222,7 @@
           {% for row in ip.preview.preview %}
           {%- set ip_ordinal = ip_ordinals[loop.index0] if ip_ordinals else loop.index0 %}
           <tr class="{{ 'mine' if ip_mine and ip_ordinal in ip_mine else ('aside' if ip_mine else '') }}">
-            {% for c in ip.preview.columns %}{% set v = row[c] | string %}{% set off = 'aside' if ip_behind and c not in ip_behind else '' %}{% if v[:4] == 'http' %}<td class="cell-url {{ off }}"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td{% if off %} class="{{ off }}"{% endif %}>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}
+            {% for c in ip.preview.columns %}{% set v = row[c] | string %}{% set off = 'aside' if ip_behind and c not in ip_behind else '' %}{% if row[c].cites is defined %}<td class="cell-span {{ off }}">{{ span_cites(row[c], links) }}</td>{% elif v[:4] == 'http' %}<td class="cell-url {{ off }}"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td{% if off %} class="{{ off }}"{% endif %}>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}
           </tr>{% endfor %}
           </tbody>
         </table></div>
@@ -240,7 +243,8 @@
     {% if workflow_stage.inputs %}
       {% for inp in workflow_stage.inputs %}
       <div class="schema-card">
-        <h4>input <a href="{{ links.stage_anchor(inp.id) }}"><code>{{ inp.id }}</code></a> schema</h4>
+        {% set input_href = links.stage_anchor(inp.id) %}
+        <h4>input {% if input_href %}<a href="{{ input_href }}"><code>{{ inp.id }}</code></a>{% else %}<code>{{ inp.id }}</code>{% endif %} schema</h4>
         {{ schema_table(inp.table_schema) }}
       </div>
       {% endfor %}

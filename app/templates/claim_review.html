@@ -2,7 +2,8 @@
 {% from "_sparkle.html" import sparkle %}
 {#
   THE CLAIM PAGE — one sentence, where each of its phrases lands in the run, and every
-  challenge the reviewers raised against it.
+  challenge the reviewers raised against it. A sentence written on a span shows its quote
+  under it, linked to the page of the file it sits on.
 
   The underline under a phrase is its worst open challenge: the legend under the sentence
   names every weight in words, so the marking is never colour alone. A phrase the review
@@ -32,6 +33,15 @@
     {%- endif -%}
   {%- endfor -%}
 </p>
+{% if page.cited_quote %}
+<blockquote class="cited-quote"><q>{{ page.cited_quote.quote }}</q>
+  <a href="{{ page.cited_quote.href }}">{{ page.cited_quote.page_label }}</a></blockquote>
+{% endif %}
+{% set cited_value -%}
+  {%- if page.cited_quote %}the quote above{% else -%}
+  <a class="lineage-value" href="{{ page.value_href }}">{{ page.value }}</a>
+  {%- endif -%}
+{%- endset %}
 
   {% if page.status == 'submitted' %}
   <div class="acts">
@@ -42,8 +52,7 @@
     <form method="post" action="{{ base }}/decline">
       <button class="btn" type="submit">Close</button>
     </form>
-    <span class="cite">approving cites <a class="lineage-value" href="{{ page.value_href }}">{{ page.value }}</a>
-      of run {{ page.run_id }}</span>
+    <span class="cite">approving cites {{ cited_value }} of run {{ page.run_id }}</span>
   </div>
   {% if page.review != 'refused' %}
   <form class="editbox" id="edit-claim" method="post" action="{{ base }}/rewrite" hidden>
@@ -57,7 +66,7 @@
   {% endif %}
   {% elif page.status == 'approved' %}
   <div class="acts"><b>Approved.</b>
-    <span class="cite">cites <a class="lineage-value" href="{{ page.value_href }}">{{ page.value }}</a> of run {{ page.run_id }}</span>
+    <span class="cite">cites {{ cited_value }} of run {{ page.run_id }}</span>
   </div>
   {% elif page.status == 'declined' %}
   <div class="acts"><b>Closed.</b>
@@ -116,8 +125,8 @@
 {% elif page.review == 'refused' %}
 <div class="round-note">
   <b>Not reviewed.</b>
-  <span>This is a table claim: it cites a rectangle of rows rather than one figure, and
-    a reviewer reads a sentence written on a single value.</span>
+  <span>This is a table claim: it cites a rectangle of rows, and a reviewer reads a
+    sentence written on a single value.</span>
 </div>
 {% endif %}
 
@@ -143,6 +152,7 @@
         {%- endfor -%}
       </a>
       {% if citation.value %}<span class="cite-value">{{ citation.value }}</span>{% endif %}
+      {% if citation.quote %}<q class="cite-quote">{{ citation.quote }}</q>{% endif %}
     </div>
     {% endfor %}
   </div>
@@ -175,7 +185,7 @@
     </tbody>
   </table>
 </div>
-<p class="note">Every figure of this run a claim may be written on. The shaded row is
+<p class="note">Every result of this run a claim may be written on. The shaded row is
   the one this sentence is read from.</p>
 
 {% if page.review == 'done' %}

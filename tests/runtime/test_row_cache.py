@@ -20,13 +20,14 @@ from app.runtime.stages import llm_transform
 from app.runtime.stages.execution import (
     ROW_CACHED_KEY,
     ROW_ERROR_KEY,
+    ROW_JUDGMENT_KEY,
     ROW_USAGE_KEY,
     Row,
     RowMapTransformHandler,
     _place_group,
 )
 from app.runtime.stages.llm_transform import build_llm_batch_mapper
-from conftest import as_inputs, make_run_context, place_stage, rows_of
+from conftest import as_inputs, make_run_context, place_stage, rows_of, script_judgment
 
 PROJECT = "row-cache-tests"
 
@@ -123,7 +124,7 @@ def test_registered_python_row_function_replays_a_recorded_row_over_its_own_code
         project_id=PROJECT, stage_id=stage.id,
         stage_fingerprint=stage.compute_definition_fingerprint(),
         input_fingerprint=compute_row_fingerprint({"x": 1}),
-        input_row={"x": 1}, output_row={"x": 1, "y": 999}, branches=None,
+        input_row={"x": 1}, output_row={"x": 1, "y": 999}, branches=None, judgment_id=None,
     )
 
     out = _run(stage, _src([1]), _ctx(run_id="run1"))
@@ -273,9 +274,9 @@ def test_a_post_map_mapper_still_gets_its_post_map_step():
 
 
 def _stub_call_llm(monkeypatch, calls: list[dict]) -> None:
-    def fake_call_llm(stage_id, llm, row, reply_model, usage_out):
+    def fake_call_llm(stage_id, llm, row, reply_model, usage_out, correction):
         calls.append(dict(row))
-        return {"verdict": f"v{row['x']}"}
+        return script_judgment({"verdict": f"v{row['x']}"})
 
     monkeypatch.setattr("app.runtime.stages.llm_transform.call_llm", fake_call_llm)
 
@@ -334,10 +335,10 @@ def _stub_call_llm_batch(monkeypatch, batches: list[list[int]]) -> None:
             for block in task.split("### item ")[1:]
         ]
         batches.append(shown)
-        return {"results": [
+        return script_judgment({"results": [
             {"row_number": number, "verdict": f"v{value}"}
             for number, value in enumerate(shown)
-        ]}
+        ]})
 
     monkeypatch.setattr(
         "app.runtime.stages.llm_transform.call_llm_batch", fake_call_llm_batch)
@@ -438,7 +439,7 @@ def test_the_batch_mapper_computes_every_row_it_is_given(monkeypatch):
     _stub_call_llm_batch(monkeypatch, batches)
     stage = _llm_stage(batch_size=2)
 
-    map_group = build_llm_batch_mapper(place_stage(stage))
+    map_group = build_llm_batch_mapper(place_stage(stage), {})
     rows = map_group((0, 1), [{"x": 1}, {"x": 2}])
 
     assert batches == [[1, 2]]
@@ -655,11 +656,12 @@ def test_the_batched_key_matches_the_row_path_key(monkeypatch):
 
 def test_a_group_that_completed_stays_cached_when_a_later_group_crashes(monkeypatch):
     """Incremental durability is not batch-specific code: the record wrapper runs per group."""
-    def make_crashing_mapper(workflow_stage):
+    def make_crashing_mapper(workflow_stage, sources):
         def map_group(indices, rows):
             if 2 in indices:
                 raise RuntimeError("backend went away")
-            return [{**row, "verdict": f"v{row['x']}"} for row in rows]
+            judgment = script_judgment({"results": []})
+            return [{**row, "verdict": f"v{row['x']}", ROW_JUDGMENT_KEY: judgment} for row in rows]
 
         return map_group
 

@@ -180,7 +180,7 @@ def test_batched_llm_driver_advances_after_each_completed_chunk(monkeypatch):
     reporter(completed=0, total=3)
     ctx = make_run_context().attach_stage_progress(reporter)
 
-    def process_chunk(stage_id, llm, reply_schema, chunk):
+    def process_chunk(stage_id, llm, reply_schema, chunk, quoted, sources):
         return [{**row, "label": f"item-{row['x']}"} for row in chunk]
 
     monkeypatch.setattr(llm_transform, "_process_chunk", process_chunk)
@@ -198,9 +198,10 @@ def test_batched_llm_driver_advances_after_each_completed_chunk(monkeypatch):
 
 def test_frame_function_may_report_progress_through_a_keyword_only_callback():
     stage = _frame_stage(
-        "def transform(df, *, progress):\n"
+        "def transform(df, *, progress, lineage):\n"
         "    progress(completed=1, total=2)\n"
         "    progress(completed=2, total=2)\n"
+        "    lineage.built_from(0, 'src', 0)\n"
         "    return df\n"
     )
     record, reporter = _reporter(stage)
@@ -217,7 +218,7 @@ def test_frame_function_may_report_progress_through_a_keyword_only_callback():
 
 def test_frame_progress_transition_failure_fails_the_function_call():
     stage = _frame_stage(
-        "def transform(df, *, progress):\n"
+        "def transform(df, *, progress, lineage):\n"
         "    progress(completed=2, total=2)\n"
         "    progress(completed=1, total=2)\n"
         "    return df\n"

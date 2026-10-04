@@ -75,7 +75,7 @@ def test_resume_starts_a_new_progress_sequence_for_the_rerun(tmp_path):
     _add_source(tmp_path)
     marker = tmp_path / "first-attempt-finished"
     code = (
-        "def transform(df, *, progress):\n"
+        "def transform(df, *, progress, lineage):\n"
         "    from pathlib import Path\n"
         f"    marker = Path({str(marker)!r})\n"
         "    if not marker.exists():\n"
@@ -84,6 +84,8 @@ def test_resume_starts_a_new_progress_sequence_for_the_rerun(tmp_path):
         "        raise RuntimeError('retry me')\n"
         "    progress(completed=0, total=2)\n"
         "    progress(completed=2, total=2)\n"
+        "    for row in range(len(df)):\n"
+        "        lineage.built_from(row, 'load', row)\n"
         "    return df\n"
     )
     add_stage(tmp_path, {
