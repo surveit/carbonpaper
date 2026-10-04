@@ -187,8 +187,7 @@ def resolve_stored_path(record: ProjectFile) -> Path:
 
 def find_stored_file(path: Path) -> ProjectFile | None:
     """The record these bytes are stored as, or None for a path the store does not own."""
-    # Resolved like resolve_stored_path, so a files root reached through a symlink still matches.
-    stored = path.resolve()
+    stored = path.resolve()  # as resolve_stored_path does, so a symlinked files root still matches
     if stored.parent.parent != files_root().resolve():
         return None
     record = ProjectFile.load_or_none(stored.parent.name)

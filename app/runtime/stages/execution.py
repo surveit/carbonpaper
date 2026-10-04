@@ -518,7 +518,7 @@ def _open_row_caching(workflow_stage: WorkflowStage, ctx: RunContext) -> _RowCac
         {} if ctx.params.bust_cache else ctx.stage_cache.find_recorded_entries(
             project, stage.id, stage_fingerprint,
             columns_written=frozenset(column.name for column in transform_output_schema(stage).columns),
-            source_ids_by_sha256=ctx.index_stored_file_ids(),
+            sha256_to_source_ids=ctx.index_stored_file_ids(),
         ),
         ctx.stage_cache if isinstance(ctx.stage_cache, StageCache) else None,
     )

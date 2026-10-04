@@ -82,12 +82,12 @@ def _forget_span_copies(value: object) -> object:
     return value
 
 
-def _point_spans_at_copies(value: object, source_ids_by_sha256: Mapping[str, ID]) -> object:
+def _point_spans_at_copies(value: object, sha256_to_source_ids: Mapping[str, ID]) -> object:
     if isinstance(value, Mapping) and _SPAN_KEYS <= value.keys():
-        held = source_ids_by_sha256.get(str(value["source_sha256"]))
+        held = sha256_to_source_ids.get(str(value["source_sha256"]))
         return dict(value) if held is None else {**value, _SPAN_COPY_KEY: held}
     if isinstance(value, list):
-        return [_point_spans_at_copies(item, source_ids_by_sha256) for item in value]
+        return [_point_spans_at_copies(item, sha256_to_source_ids) for item in value]
     return value
 
 
@@ -102,12 +102,12 @@ def to_json_safe_row(row: Mapping[str, object]) -> JsonDict:
 
 def _replay_written_columns(
     entry: StageCacheEntry, columns_written: frozenset[str],
-    source_ids_by_sha256: Mapping[str, ID],
+    sha256_to_source_ids: Mapping[str, ID],
 ) -> StageCacheEntry:
     """A stored row is JSON, so a date the stage only read would come back as text."""
     if entry.output_row is None:
         return entry
-    output_row = {key: _point_spans_at_copies(value, source_ids_by_sha256)
+    output_row = {key: _point_spans_at_copies(value, sha256_to_source_ids)
                   for key, value in entry.output_row.items() if key in columns_written}
     return entry.model_copy(update={"output_row": output_row})
 
@@ -129,12 +129,12 @@ class ReadOnlyStageCache:
 
     def find_recorded_entries(
         self, project_id: ID, stage_id: ID, stage_fingerprint: str,
-        *, columns_written: frozenset[str], source_ids_by_sha256: Mapping[str, ID],
+        *, columns_written: frozenset[str], sha256_to_source_ids: Mapping[str, ID],
     ) -> dict[str, StageCacheEntry]:
         """Keyed by input fingerprint. A column the stage only read comes back typed from its input."""
         return {
             entry.input_fingerprint: _replay_written_columns(
-                entry, columns_written, source_ids_by_sha256)
+                entry, columns_written, sha256_to_source_ids)
             for entry in self.find_entries(project_id, stage_id, stage_fingerprint)
         }
 
