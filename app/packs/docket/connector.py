@@ -16,8 +16,9 @@ from pydantic import (
 
 from app.core.errors import MirrorDisagrees, SourceUnavailable
 from app.core.files import compute_sha256
+from app.core.paths import repo_root
 from app.models.connectors import (
-    AbsolutePath, AcquiredBytes, ConnectorParams, ConnectorSpec, MetadataValue, MirroredBytes,
+    AcquiredBytes, ConnectorParams, ConnectorSpec, MetadataValue, MirroredBytes,
 )
 from app.models.schema import Column
 
@@ -36,8 +37,8 @@ class RecapDocketParams(ConnectorParams):
     entries: list[EcfNumber] = Field(min_length=1)
     court: Annotated[str, StringConstraints(pattern=r"^[a-z0-9]+$")]
     case_number: Annotated[str, StringConstraints(pattern=r"^[0-9A-Za-z:-]+$")]
-    # A mirror read in place of CourtListener; its manifest.jsonl records every file it holds.
-    cache_dir: AbsolutePath | None = None
+    # A mirror read in place of CourtListener; a relative path is a directory of this checkout.
+    cache_dir: Annotated[str, StringConstraints(min_length=1)] | None = None
 
     @model_validator(mode="after")
     def _names_each_entry_once(self) -> Self:
@@ -48,10 +49,15 @@ class RecapDocketParams(ConnectorParams):
 
 
 def acquire_recap_docket(params: RecapDocketParams) -> Iterator[AcquiredBytes]:
-    mirror = _Mirror.load(Path(params.cache_dir)) if params.cache_dir is not None else None
+    mirror = _Mirror.load(_resolve_mirror_dir(params.cache_dir)) if params.cache_dir else None
     listing = _read_listing(params.docket_id, mirror)
     for number, document in _find_requested_documents(listing, params):
         yield _acquire_document(params, number, document, mirror)
+
+
+def _resolve_mirror_dir(cache_dir: str) -> Path:
+    path = Path(cache_dir)
+    return path if path.is_absolute() else repo_root() / path
 
 
 class _RecapDocument(BaseModel):
