@@ -9,12 +9,15 @@ import zipfile
 
 from pydantic import BaseModel
 
+from app.core.ids import ID
+from app.core.judgments import Judgment
 from app.core.stage_cache import CACHE_KEY_VERSION, StageCacheEntry
 from app.services import loader
 from app.services.errors import CacheArchiveRejected
 
 _MANIFEST_FILE = "manifest.json"
 _ENTRIES_FILE = "entries.jsonl"
+_JUDGMENTS_FILE = "judgments.jsonl"
 _FRAMES_DIR = "frames"
 _FRAME_SUFFIX = ".parquet"
 
@@ -55,6 +58,7 @@ def export_stage_cache(project_id: str) -> bytes:
             ).model_dump_json(indent=2),
         )
         archive.writestr(_ENTRIES_FILE, _pack_entries(entries))
+        archive.writestr(_JUDGMENTS_FILE, _pack_judgments(entries))
     return buffer.getvalue()
 
 
@@ -62,9 +66,12 @@ def import_stage_cache(archive: bytes, destination_project_id: str) -> CacheImpo
     with zipfile.ZipFile(BytesIO(archive)) as bundle:
         manifest = _read_manifest(bundle)
         entries = list(_read_entries(bundle))
+        judgments = list(_read_judgments(bundle))
         frames_skipped = _count_frame_members(bundle)
     cache = StageCacheEntry.read_write()
     written = sum(cache.copy_entry_into(entry, destination_project_id) for entry in entries)
+    for judgment in judgments:
+        cache.copy_judgment_into(judgment, destination_project_id)
     return CacheImportReport(
         source_project=manifest.source_project,
         written=written,
@@ -126,6 +133,19 @@ def _pack_entries(entries: list[StageCacheEntry]) -> str:
     return "\n".join(entry.model_dump_json() for entry in entries)
 
 
+def _pack_judgments(entries: list[StageCacheEntry]) -> str:
+    """What a replayed row names, so its judgment page opens in the store the cache lands in."""
+    named = sorted({entry.judgment_id for entry in entries if entry.judgment_id is not None})
+    return "\n".join(_require_judgment(judgment_id).model_dump_json() for judgment_id in named)
+
+
+def _require_judgment(judgment_id: ID) -> Judgment:
+    judgment = Judgment.read_only().get(judgment_id)
+    if judgment is None:
+        raise ValueError(f"a cache entry names judgment {judgment_id}, which this store does not hold")
+    return judgment
+
+
 def _read_manifest(bundle: zipfile.ZipFile) -> CacheArchiveManifest:
     try:
         raw = bundle.read(_MANIFEST_FILE)
@@ -148,6 +168,15 @@ def _read_entries(bundle: zipfile.ZipFile) -> Iterator[StageCacheEntry]:
     for line in BytesIO(bundle.read(_ENTRIES_FILE)):
         if line.strip():
             yield StageCacheEntry.model_validate(json.loads(line))
+
+
+def _read_judgments(bundle: zipfile.ZipFile) -> Iterator[Judgment]:
+    """An export from before judgments travelled has no such member, and imports none."""
+    if _JUDGMENTS_FILE not in bundle.namelist():
+        return
+    for line in BytesIO(bundle.read(_JUDGMENTS_FILE)):
+        if line.strip():
+            yield Judgment.model_validate_json(line)
 
 
 def _count_frame_members(bundle: zipfile.ZipFile) -> int:

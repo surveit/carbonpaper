@@ -157,6 +157,13 @@ class StageCache(ReadOnlyStageCache):
         judgment.save()
         return judgment
 
+    def copy_judgment_into(self, judgment: Judgment, project_id: ID) -> bool:
+        """Keeps the id its cache entries name; False means that id is already stored."""
+        if Judgment.exists(judgment.id):
+            return False
+        judgment.model_copy(update={"project_id": project_id}).save()
+        return True
+
     def copy_entry_into(self, entry: StageCacheEntry, project_id: ID) -> bool:
         """False means an id already stored — its output may differ from this one, and it wins."""
         cache_id = _build_cache_id(

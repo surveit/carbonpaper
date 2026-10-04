@@ -8,6 +8,8 @@ from io import BytesIO
 
 import pytest
 
+from app.core.agent.usage import LlmUsage
+from app.core.judgments import Judgment, JudgmentDraft
 from app.core.stage_cache import CACHE_KEY_VERSION, StageCacheEntry
 from app.models import Column, StageType
 from app.models.stages.input_data import Connector, ConnectorKind, InputDataStage, FileConnectorParams, FileFormat
@@ -48,6 +50,44 @@ def test_export_then_import_moves_entries_under_the_destination_project():
     assert moved.output_row == {"is_abusive": True, "category": 9}
     assert moved.branches == ["classify/0:if"]
     assert moved.project == "destination"
+
+
+def _record_judged_entry() -> Judgment:
+    cache = StageCacheEntry.read_write()
+    judgment = cache.record_judgment(
+        project_id=_SOURCE, run_id="R1", stage_id=_STAGE, input_fingerprint="row_1",
+        input_row={"comment": "Diese Klimakleber sind eine Plage"},
+        draft=JudgmentDraft(system_prompt="Classify the comment.", task="Diese Klimakleber",
+                            model="claude-opus-5", reply={"is_abusive": True},
+                            usage=LlmUsage(calls=1), decided_at="2026-10-04T10:00:00"))
+    cache.record(
+        project_id=_SOURCE, stage_id=_STAGE, stage_fingerprint="fp_a", input_fingerprint="row_1",
+        input_row={"comment": "Diese Klimakleber sind eine Plage"},
+        output_row={"is_abusive": True}, branches=None, judgment_id=judgment.id)
+    return judgment
+
+
+def test_an_import_carries_the_judgment_an_entry_names_under_its_own_id():
+    judgment = _record_judged_entry()
+    archive = export_stage_cache(_SOURCE)
+    # The store the archive lands in has never held it, as a fresh workspace has not.
+    Judgment.delete(judgment.id)
+
+    import_stage_cache(archive, "destination")
+
+    moved = Judgment.read_only().get(judgment.id)
+    assert moved is not None
+    stamps = {"created_at", "updated_at"}
+    assert moved.model_dump(exclude=stamps) == {
+        **judgment.model_dump(exclude=stamps), "project_id": "destination"}
+
+
+def test_an_export_refuses_an_entry_naming_a_judgment_the_store_lacks():
+    judgment = _record_judged_entry()
+    Judgment.delete(judgment.id)
+
+    with pytest.raises(ValueError, match=f"names judgment {judgment.id}"):
+        export_stage_cache(_SOURCE)
 
 
 def test_a_row_carrying_a_unicode_line_separator_survives_the_round_trip():
