@@ -1,0 +1,98 @@
+[
+  {
+    "cluster_id": 101,
+    "court_id": "ca5",
+    "caseName": "Alder v. Port City Police Department",
+    "dateFiled": "2018-03-14",
+    "docketNumber": "17-10001",
+    "status": "Published",
+    "suitNature": "440 Civil Rights: Other",
+    "absolute_url": "/opinion/101/alder-v-port-city-police-department/",
+    "opinions": [
+      {
+        "id": 1101,
+        "local_path": "pdf/2018/03/14/alder_v._port_city_police_department.pdf",
+        "download_url": "https://ca5.example.test/opinions/17-10001.pdf",
+        "snippet": "synthetic"
+      }
+    ]
+  },
+  {
+    "cluster_id": 102,
+    "court_id": "ca5",
+    "caseName": "Brook v. Lake County Sheriff",
+    "dateFiled": "2018-05-02",
+    "docketNumber": "17-10002",
+    "status": "Unpublished",
+    "suitNature": null,
+    "absolute_url": null,
+    "opinions": [
+      {
+        "id": 1102,
+        "local_path": "pdf/2018/05/02/brook_v._lake_county_sheriff.pdf",
+        "download_url": null,
+        "snippet": "synthetic"
+      }
+    ]
+  },
+  {
+    "cluster_id": 103,
+    "court_id": "ca9",
+    "caseName": "Cole v. Harbor Township",
+    "dateFiled": "2018-07-19",
+    "docketNumber": "17-20003",
+    "status": "Published",
+    "suitNature": "440 Civil Rights: Other",
+    "absolute_url": "/opinion/103/cole-v-harbor-township/",
+    "opinions": [
+      {
+        "id": 1103,
+        "local_path": null,
+        "download_url": "https://ca9.example.test/opinions/17-20003.pdf",
+        "snippet": "synthetic"
+      }
+    ]
+  },
+  {
+    "cluster_id": 104,
+    "court_id": "ca9",
+    "caseName": "Dale v. Ridge Borough",
+    "dateFiled": "2019-01-08",
+    "docketNumber": "18-20004",
+    "status": "Published",
+    "suitNature": "550 Prisoner: Civil Rights",
+    "absolute_url": "/opinion/104/dale-v-ridge-borough/",
+    "opinions": [
+      {
+        "id": 1104,
+        "local_path": "pdf/2019/01/08/dale_v._ridge_borough.pdf",
+        "download_url": null,
+        "snippet": "synthetic"
+      },
+      {
+        "id": 1105,
+        "local_path": "pdf/2019/01/08/dale_v._ridge_borough_dissent.pdf",
+        "download_url": null,
+        "snippet": "synthetic"
+      }
+    ]
+  },
+  {
+    "cluster_id": 101,
+    "court_id": "ca5",
+    "caseName": "Alder v. Port City Police Department",
+    "dateFiled": "2018-03-14",
+    "docketNumber": "17-10001",
+    "status": "Published",
+    "suitNature": "440 Civil Rights: Other",
+    "absolute_url": "/opinion/101/alder-v-port-city-police-department/",
+    "opinions": [
+      {
+        "id": 1101,
+        "local_path": "pdf/2018/03/14/alder_v._port_city_police_department.pdf",
+        "download_url": "https://ca5.example.test/opinions/17-10001.pdf",
+        "snippet": "synthetic"
+      }
+    ]
+  }
+]

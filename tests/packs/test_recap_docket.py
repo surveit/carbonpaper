@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 import pytest
 from pydantic import ValidationError
 
+from app.core import url_fetch
 from app.core.errors import MissingInputBindingError
 from app.core.files import list_project_files
 from app.core.frames import read_frame_table
@@ -229,7 +230,7 @@ def offline(monkeypatch) -> None:
     def refuse(*args: object, **kwargs: object) -> None:
         raise AssertionError("a mirror read reached for the network")
 
-    monkeypatch.setattr(connector, "urlopen", refuse)
+    monkeypatch.setattr(url_fetch, "urlopen", refuse)
 
 
 def _read_instant(stored_stamp: str | None) -> datetime:

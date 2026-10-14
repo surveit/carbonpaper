@@ -175,8 +175,10 @@ A `protected` contract lets only `app.main`, `app.cli` and `app.seeds.__main__` 
 `app.packs`, since importing it registers every pack; no other layer depends on a pack being
 loaded. A pack imports only `app.models`, `app.core` and itself
 (`app/packs/_arch_tests/`), so it never drives a run, a service or a page. What a pack
-declares, and how a run binds its connector: [packs.md](packs.md). The one pack,
-`app/packs/docket/`, registers `recap_docket`: a CourtListener docket's filings, one row each.
+declares, and how a run binds its connector: [packs.md](packs.md). `app/packs/docket/`
+registers `recap_docket`: a CourtListener docket's filings, one row each.
+`app/packs/opinions/` registers `courtlistener_opinions`: the opinions a CourtListener search
+finds, one row per stored PDF.
 
 ## `app/compiler/` — prose → LLM generation engines
 Two generators, each an `app.core.agent` Agent targeting a model schema:
