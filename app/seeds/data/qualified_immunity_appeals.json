@@ -1,6 +1,6 @@
 {
   "name": "qualified_immunity_appeals",
-  "document": "# Qualified immunity in excessive-force appeals, Fifth and Ninth Circuits, 2017–2019\n\n## The question\n\nWhen an officer sued for excessive force asks a federal appeals court for qualified immunity, how often does the court grant it, and does that differ between the Fifth and Ninth Circuits? Every coded opinion points to the sentence where the court states its holding, highlighted on its page.\n\n## The opinions\n\nA CourtListener search for opinions containing both \"qualified immunity\" and \"excessive force\", filed 2017-01-01 to 2019-12-31 in the Fifth and Ninth Circuits, published and unpublished, returned 222 decisions on 2026-10-14. This version reads a seeded random sample of 20, ten per circuit. A keyword match is not a qualified immunity appeal: opinions where no page states a holding on qualified immunity for an excessive-force claim drop out before coding, and the run shows how many.\n\n## How an opinion is coded\n\nEach page is read on its own for the appeals court's own holding (not the district court's, a party's, a dissent's, another case's, or a summary court staff wrote that the opinion says is no part of it). The holdings found are then read together and coded granted, denied or mixed. Granted includes holding there was no constitutional violation or the right was not clearly established. Appeals dismissed for lack of jurisdiction without deciding qualified immunity are not coded.\n\n## What to compare it with\n\nReuters' 2020 investigation \"Shielded\" reviewed 529 federal appeals rulings from 2005 to 2019 and reported that the Fifth Circuit granted police qualified immunity in 64% of them and the Ninth Circuit in 42% (as reported by the ABA Journal: https://www.abajournal.com/news/article/grants-of-qualified-immunity-to-police-vary-widely-by-appeals-court). Reuters' case list and coding rules are not public, its years differ from these, and 20 opinions are a pilot, so the comparison is a sense check, not a replication.\n",
+  "document": "# Qualified immunity in excessive-force appeals, Fifth and Ninth Circuits, 2017–2019\n\n## The question\n\nWhen an officer sued for excessive force asks a federal appeals court for qualified immunity, how often does the court grant it, and does that differ between the Fifth and Ninth Circuits? Every coded opinion points to the sentence where the court states its holding, highlighted on its page.\n\n## The opinions\n\nA CourtListener search for opinions containing both \"qualified immunity\" and \"excessive force\", filed 2017-01-01 to 2019-12-31 in the Fifth and Ninth Circuits, published and unpublished, returned 222 decisions on 2026-10-14, 214 of them with a stored PDF. This version reads a seeded random sample of 20 of those 214, ten per circuit. A keyword match is not a qualified immunity appeal: opinions where no page states a holding on qualified immunity for an excessive-force claim drop out before coding, and the run shows how many.\n\n## How an opinion is coded\n\nEach page is read on its own for the appeals court's own holding (not the district court's, a party's, a dissent's, another case's, or a summary court staff wrote that the opinion says is no part of it). The holdings found are then read together and coded granted, denied or mixed. Granted includes holding there was no constitutional violation or the right was not clearly established. Appeals dismissed for lack of jurisdiction without deciding qualified immunity are not coded.\n\n## What to compare it with\n\nA Reuters investigation of 529 federal appeals rulings since 2005 found that the Fifth Circuit granted 64% of police requests for qualified immunity and the Ninth Circuit 42%, as the ABA Journal reported on Aug. 25, 2020 (https://www.abajournal.com/news/article/grants-of-qualified-immunity-to-police-vary-widely-by-appeals-court). We found no public release of Reuters' case list or coding rules, its years differ from these, and 20 opinions are a pilot, so the comparison is a sense check, not a replication.\n",
   "model": "opus",
   "source": "hand-written",
   "data_model": {
@@ -31,7 +31,7 @@
       "universe": "open",
       "importance": "primary",
       "qualifiers": [
-        "A seeded random sample of 20 of the 222 decisions a CourtListener search returned on 2026-10-14, ten per circuit; not every such opinion.",
+        "A seeded random sample of 20 of the 214 decisions with a stored PDF (of 222 a CourtListener search returned on 2026-10-14), ten per circuit; not every such opinion.",
         "Only opinions where some page states the appeals court's own holding on qualified immunity for an excessive-force claim; the rest drop out before coding."
       ],
       "context": [],
@@ -47,7 +47,7 @@
       "inputs": [],
       "cache": false,
       "compiler_notes": [
-        "On 2026-10-14 the search returned 222 clusters: 100 Fifth Circuit and 114 Ninth Circuit clusters with one stored PDF, and 8 with none. These 20 are a seeded random sample, 10 per circuit (Python `random.Random(20261014).sample`, each circuit's clusters sorted by id).",
+        "On 2026-10-14 the search returned 222 clusters, listed in app/seeds/data/qualified_immunity/sample_frame.json: 100 Fifth Circuit and 114 Ninth Circuit clusters with one stored PDF, and 8 with none. These 20 are a seeded random sample, 10 per circuit, drawn from the 214 with one stored PDF (Python `random.Random(20261014).sample` over each circuit's clusters sorted by cluster_id, Fifth Circuit first).",
         "Every run fetches from CourtListener; there is no committed mirror."
       ],
       "connector": {
@@ -460,11 +460,11 @@
         "summary": "Keeps the pages that state the court's holding; every other page drops here.",
         "corner_cases": [
           {
-            "case": "a page with a `ruling` but no `ruling_quote`, or a `ruling_quote` but no `ruling`",
-            "expected": "the run stops naming the opinion and the page, since the prompt ties the two together"
+            "case": "a page where `ruling`, `ruling_quote` and `claim` are not all set or all null",
+            "expected": "the run stops naming the opinion and the page, since the prompt ties the three together"
           }
         ],
-        "code": "def should_include(row):\n    has_ruling = row[\"ruling\"] != None\n    has_quote = row[\"ruling_quote\"] != None\n    if has_ruling != has_quote:\n        missing = \"ruling_quote\" if has_ruling else \"ruling\"\n        where = \"%s (cluster %s), page %d\" % (row[\"case_name\"], row[\"cluster_id\"], row[\"page\"])\n        refuse(\"%s: %s is null but the other is not, and the prompt ties the two together\"\n               % (where, missing))\n    return has_quote\n"
+        "code": "def should_include(row):\n    names = [\"ruling\", \"ruling_quote\", \"claim\"]\n    missing = [name for name in names if row[name] == None]\n    if missing and len(missing) < len(names):\n        where = \"%s (cluster %s), page %d\" % (row[\"case_name\"], row[\"cluster_id\"], row[\"page\"])\n        refuse(\"%s: %s is null but the others are not, and the prompt ties ruling, ruling_quote and claim together\"\n               % (where, \" and \".join(missing)))\n    return not missing\n"
       },
       "signature": {
         "form": "extends",
@@ -500,6 +500,12 @@
                   "denied",
                   "mixed"
                 ]
+              },
+              {
+                "name": "claim",
+                "type": "str",
+                "nullable": true,
+                "description": "Whose force and what force the holding covers; null where ruling is null."
               },
               {
                 "name": "ruling_quote",
