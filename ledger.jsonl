@@ -3582,3 +3582,4 @@
 {"run_id":"37205004886","run_url":"https://github.com/surveit/carbonpaper/actions/runs/37205004886","created":"2026-10-04T13:20:01Z","branch":"lexicon-verb-names","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"37205024097","run_url":"https://github.com/surveit/carbonpaper/actions/runs/37205024097","created":"2026-10-04T13:20:32Z","branch":"push-2026-09-28","event":"pull_request","contracts_kept":null,"findings":[]}
 {"run_id":"38603789998","run_url":"https://github.com/surveit/carbonpaper/actions/runs/38603789998","created":"2026-10-14T17:07:00Z","branch":"qi-appeals","event":"pull_request","contracts_kept":19,"findings":[]}
+{"run_id":"38603789998","run_url":"https://github.com/surveit/carbonpaper/actions/runs/38603789998","created":"2026-10-14T17:10:42Z","branch":"qi-appeals","event":"pull_request","contracts_kept":null,"findings":[]}
