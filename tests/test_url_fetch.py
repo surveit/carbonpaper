@@ -1,6 +1,7 @@
 """The kernel GET, against a local server that answers from a queue of canned replies."""
 from __future__ import annotations
 
+import re
 import socket
 import threading
 from collections.abc import Iterator
@@ -17,6 +18,8 @@ class _Server:
 
     def __init__(self) -> None:
         self.replies: list[tuple[int, dict[str, str], bytes]] = []
+        self.hang_up_unanswered = False
+        self.content_length_override: int | None = None
         self.user_agents: list[str] = []
         self.base = ""
 
@@ -35,13 +38,18 @@ def server() -> Iterator[_Server]:
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             served.user_agents.append(self.headers.get("User-Agent", ""))
+            if served.hang_up_unanswered:
+                self.close_connection = True
+                return
             status, headers, body = served.replies.pop(0)
             self.send_response(status)
             for name, value in headers.items():
                 self.send_header(name, value)
-            self.send_header("Content-Length", str(len(body)))
+            declared = served.content_length_override
+            self.send_header("Content-Length", str(len(body) if declared is None else declared))
             self.end_headers()
             self.wfile.write(body)
+            self.close_connection = True
 
         def log_message(self, format: str, *args: object) -> None:
             return
@@ -126,3 +134,36 @@ def test_the_user_agent_is_sent(server: _Server, slept: list[float]) -> None:
     server.queue(200, body=b"ok")
     read_url(server.url("/f"), user_agent="carbonpaper-test", timeout_s=5)
     assert server.user_agents == ["carbonpaper-test"]
+
+
+def test_a_server_that_closes_before_answering_refuses_naming_the_url(
+        server: _Server, slept: list[float]) -> None:
+    server.hang_up_unanswered = True
+    url = server.url("/hangup")
+    with pytest.raises(SourceUnavailable, match=re.escape(url)):
+        read_url(url, user_agent="t", timeout_s=5)
+    assert slept == []
+
+
+def test_a_body_shorter_than_its_content_length_refuses_naming_the_url(
+        server: _Server, slept: list[float]) -> None:
+    server.content_length_override = 100
+    server.queue(200, body=b"only part")
+    url = server.url("/short")
+    with pytest.raises(SourceUnavailable, match=re.escape(url)):
+        read_url(url, user_agent="t", timeout_s=5)
+
+
+def test_a_retry_after_equal_to_the_cap_is_waited_out_then_read(
+        server: _Server, slept: list[float]) -> None:
+    server.queue(429, headers={"Retry-After": str(MAX_RETRY_AFTER_S)})
+    server.queue(200, body=b"ok")
+    assert read_url(server.url("/f"), user_agent="t", timeout_s=5) == b"ok"
+    assert slept == [MAX_RETRY_AFTER_S]
+
+
+def test_a_retry_after_in_non_ascii_digits_refuses(server: _Server, slept: list[float]) -> None:
+    server.queue(429, headers={"Retry-After": "²"})
+    with pytest.raises(SourceUnavailable, match="Retry-After"):
+        read_url(server.url("/f"), user_agent="t", timeout_s=5)
+    assert slept == []
