@@ -51,3 +51,13 @@ storage.courtlistener.com; a `cache_dir` whose `manifest.jsonl` records each fet
 both, and a relative `cache_dir` names a directory of the checkout, such as the committed
 `app/seeds/data/boeing`. A filing the archive or mirror lacks refuses the run. `ATTRIBUTION.md` holds the terms
 line.
+
+## The opinions pack
+
+`courtlistener_opinions` reads an anonymous CourtListener opinion search (`type=o`: `query`,
+`courts`, `filed_after`, `filed_before`, `statuses`) and one stored PDF per decision, one row
+each. `cluster_ids` names the decisions, and each must be a cluster the search returns with
+exactly one stored PDF; any that is not refuses the run, naming it, before a PDF is fetched.
+The search is read to its last page first, so a repeat the cursor serves is seen, and a repeat
+naming other PDFs than its first copy refuses the run. A 429 is waited out for as long as its
+`Retry-After` says. There is no mirror: every run fetches. `ATTRIBUTION.md` holds the terms line.
