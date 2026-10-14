@@ -36,7 +36,7 @@ class CourtListenerOpinionsParams(ConnectorParams):
     cluster_ids: list[Annotated[int, Field(gt=0)]] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def _orders_the_dates(self) -> Self:
+    def _refuse_reversed_dates(self) -> Self:
         if self.filed_after > self.filed_before:
             raise ValueError(
                 f"filed_after {self.filed_after} is after filed_before {self.filed_before}")
@@ -107,8 +107,10 @@ def _read_listing(params: CourtListenerOpinionsParams) -> dict[int, _Cluster]:
 
 
 def _build_search_url(params: CourtListenerOpinionsParams) -> str:
+    clusters = " OR ".join(str(cluster_id) for cluster_id in params.cluster_ids)
+    query = f"({params.query}) AND cluster_id:({clusters})"
     return f"{COURTLISTENER_API}search/?" + urlencode([
-        ("type", "o"), ("q", params.query), ("court", " ".join(params.courts)),
+        ("type", "o"), ("q", query), ("court", " ".join(params.courts)),
         ("filed_after", params.filed_after.isoformat()),
         ("filed_before", params.filed_before.isoformat()),
         *[(f"stat_{status}", "on") for status in params.statuses]])
@@ -148,7 +150,8 @@ def _find_requested_clusters(
     for cluster_id in params.cluster_ids:
         cluster = listing.get(cluster_id)
         if cluster is None:
-            problems.append(f"cluster {cluster_id} is not among the search's results")
+            problems.append(f"cluster {cluster_id} is not among the search's results: it does not "
+                            "match the query, courts, dates or statuses")
             continue
         stored = _find_stored_opinions(cluster)
         if len(stored) == 1:

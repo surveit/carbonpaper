@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import threading
 from collections.abc import Iterator
 from datetime import date
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 import pytest
 from pydantic import ValidationError
@@ -30,11 +31,12 @@ from pdf_fixture import write_text_pdf
 from stage_seed import save_version, set_stages
 
 _FIXTURES = Path(__file__).parent.parent / "fixtures"
-# Five synthetic search results: 101 twice (a cursor repeat), 103 with no stored PDF, 104 with two.
+# Five synthetic results: 101 twice (a cursor repeat), 103 with no stored PDF, 104 with two.
 _ROWS = json.loads(
     (_FIXTURES / "courtlistener_opinion_search_rows.json").read_text(encoding="utf-8"))
 _SEARCH_PATH = "/api/rest/v4/search/"
-_FIRST_PAGE_ROWS = 3
+_PAGE_SIZE = 2
+_CLUSTER_CLAUSE = re.compile(r"cluster_id:\(([^)]*)\)")
 
 
 class _Opinions:
@@ -45,6 +47,7 @@ class _Opinions:
         self.files = files
         self.requests: list[tuple[str, str]] = []
         self.base = ""
+        # A link to answer page one's `next` with, in place of a cursor on the local search.
         self.next_page = ""
 
     @property
@@ -65,14 +68,25 @@ class _Opinions:
     def answer(self, target: str) -> bytes | None:
         parts = urlsplit(target)
         if parts.path == _SEARCH_PATH:
-            return self._search_page(second="cursor=2" in parts.query)
+            return self._search_page(parse_qs(parts.query))
         return self.files.get(parts.path.lstrip("/"))
 
-    def _search_page(self, second: bool) -> bytes:
-        rows = self.rows[_FIRST_PAGE_ROWS:] if second else self.rows[:_FIRST_PAGE_ROWS]
-        following = None if second else self.next_page
-        return json.dumps({"count": len(self.rows), "next": following,
-                           "previous": None, "results": rows}).encode("utf-8")
+    def _search_page(self, sent: dict[str, list[str]]) -> bytes:
+        query = sent.get("q", [""])[0]
+        matched = self._find_matches(query)
+        start = int(sent.get("cursor", ["0"])[0])
+        more = start + _PAGE_SIZE < len(matched)
+        cursor = urlencode({"cursor": start + _PAGE_SIZE, "q": query, "type": "o"})
+        following = (self.next_page or f"{self.base}{_SEARCH_PATH}?{cursor}") if more else None
+        return json.dumps({"count": len(matched), "next": following, "previous": None,
+                           "results": matched[start:start + _PAGE_SIZE]}).encode("utf-8")
+
+    def _find_matches(self, query: str) -> list[dict]:
+        clause = _CLUSTER_CLAUSE.search(query)
+        if clause is None:
+            return self.rows
+        wanted = {int(number) for number in re.findall(r"\d+", clause.group(1))}
+        return [row for row in self.rows if row["cluster_id"] in wanted]
 
 
 def _path_of(cluster_id: int) -> str:
@@ -109,7 +123,6 @@ def opinions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[_Opini
 
     server = HTTPServer(("127.0.0.1", 0), Handler)
     served.base = f"http://127.0.0.1:{server.server_port}"
-    served.next_page = f"{served.base}{_SEARCH_PATH}?cursor=2&type=o"
     monkeypatch.setattr(connector, "COURTLISTENER_API", f"{served.base}/api/rest/v4/")
     monkeypatch.setattr(connector, "OPINION_STORAGE", f"{served.base}/")
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -157,8 +170,8 @@ def test_a_cluster_is_described_as_the_search_listed_it(opinions: _Opinions) -> 
 
 
 def test_the_search_is_read_across_its_pages(opinions: _Opinions) -> None:
-    # 102 is on page one; every page is still read, so a repeat on a later page is seen.
-    list(acquire_courtlistener_opinions(_params(cluster_ids=[102])))
+    # Three results at two a page: 101's repeat is on page two, and it is still read.
+    list(acquire_courtlistener_opinions(_params(cluster_ids=[101, 102])))
     assert opinions.search_requests == 2
 
 
@@ -168,17 +181,30 @@ def test_the_search_carries_each_param_and_every_request_names_the_app(
     for acquired in acquire_courtlistener_opinions(_params(cluster_ids=[102])):
         acquired.open_bytes().close()
     raw = _raw_params()
-    assert parse_qs(urlsplit(opinions.requests[0][0]).query) == {
-        "type": ["o"], "q": [raw["query"]], "court": ["ca5 ca9"],
+    sent = parse_qs(urlsplit(opinions.requests[0][0]).query)
+    assert str(raw["query"]) in sent.pop("q")[0]
+    assert sent == {
+        "type": ["o"], "court": ["ca5 ca9"],
         "filed_after": [raw["filed_after"]], "filed_before": [raw["filed_before"]],
         "stat_Published": ["on"], "stat_Unpublished": ["on"]}
     assert {agent for _target, agent in opinions.requests} == {connector.USER_AGENT}
 
 
-def test_only_the_requested_pdfs_are_fetched(opinions: _Opinions) -> None:
-    for acquired in acquire_courtlistener_opinions(_params(cluster_ids=[102])):
+def test_every_search_page_is_narrowed_to_the_requested_clusters(opinions: _Opinions) -> None:
+    list(acquire_courtlistener_opinions(_params(cluster_ids=[102, 101])))
+    queries = [parse_qs(urlsplit(target).query)["q"][0] for target, _agent in opinions.requests
+               if urlsplit(target).path == _SEARCH_PATH]
+    assert len(queries) == 2
+    for query in queries:
+        clause = _CLUSTER_CLAUSE.search(query)
+        assert clause is not None
+        assert {int(number) for number in re.findall(r"\d+", clause.group(1))} == {101, 102}
+
+
+def test_only_the_requested_pdfs_are_fetched_once_each(opinions: _Opinions) -> None:
+    for acquired in acquire_courtlistener_opinions(_params(cluster_ids=[101, 102])):
         acquired.open_bytes().close()
-    assert opinions.pdf_requests == [f"/{_path_of(102)}"]
+    assert opinions.pdf_requests == [f"/{_path_of(101)}", f"/{_path_of(102)}"]
 
 
 # what the connector refuses rather than guesses
@@ -194,16 +220,16 @@ def test_missing_or_unstorable_clusters_refuse_before_any_pdf_is_fetched(
 
 
 def test_a_cluster_repeated_with_a_different_pdf_refuses(opinions: _Opinions) -> None:
-    opinions.alter_repeat(local_path="pdf/other.pdf")
+    opinions.alter_repeat(local_path="pdf/other.pdf")  # the repeat is on page two
     with pytest.raises(SourceUnavailable, match="101"):
-        list(acquire_courtlistener_opinions(_params(cluster_ids=[101])))
+        list(acquire_courtlistener_opinions(_params(cluster_ids=[101, 102])))
 
 
 def test_a_next_link_off_the_api_is_not_followed(opinions: _Opinions) -> None:
     # The off-API target is on the local server, so following it would show in its requests.
     opinions.next_page = f"{opinions.base}/elsewhere{_SEARCH_PATH}?cursor=2"
     with pytest.raises(SourceUnavailable, match="elsewhere.*not followed"):
-        list(acquire_courtlistener_opinions(_params(cluster_ids=[101])))
+        list(acquire_courtlistener_opinions(_params(cluster_ids=[101, 102])))
     assert len(opinions.requests) == 1
 
 
@@ -212,7 +238,7 @@ def test_a_result_missing_a_field_is_refused_naming_the_page_and_the_field(
 ) -> None:
     del opinions.rows[0]["court_id"]
     with pytest.raises(SourceUnavailable) as refused:
-        list(acquire_courtlistener_opinions(_params(cluster_ids=[102])))
+        list(acquire_courtlistener_opinions(_params(cluster_ids=[101])))
     assert f"{opinions.base}{_SEARCH_PATH}" in str(refused.value)
     assert "court_id" in str(refused.value)
 
@@ -221,7 +247,7 @@ def test_a_search_that_fails_is_reported_with_its_url(
     opinions: _Opinions, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(connector, "COURTLISTENER_API", f"{opinions.base}/api/rest/v9/")
-    with pytest.raises(SourceUnavailable, match=f"GET {opinions.base}/api/rest/v9/search/"):
+    with pytest.raises(SourceUnavailable, match=re.escape(f"{opinions.base}/api/rest/v9/search/")):
         list(acquire_courtlistener_opinions(_params()))
 
 
