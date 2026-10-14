@@ -47,7 +47,7 @@
       "inputs": [],
       "cache": false,
       "compiler_notes": [
-        "On 2026-10-14 the search returned 222 clusters, listed in app/seeds/data/qualified_immunity/sample_frame.json: 100 Fifth Circuit and 114 Ninth Circuit clusters with one stored PDF, and 8 with none. These 20 are a seeded random sample, 10 per circuit, drawn from the 214 with one stored PDF (Python `random.Random(20261014).sample` over each circuit's clusters sorted by cluster_id, Fifth Circuit first).",
+        "On 2026-10-14 the search returned 222 clusters, listed in app/seeds/data/qualified_immunity/sample_frame.json: 100 Fifth Circuit and 114 Ninth Circuit clusters with one stored PDF, and 8 with none. These 20 are a seeded random sample, 10 per circuit, drawn from the 214 with one stored PDF (one Python `random.Random(20261014)`, sampling 10 of the Fifth Circuit's clusters and then 10 of the Ninth's, each list sorted by cluster_id).",
         "Every run fetches from CourtListener; there is no committed mirror."
       ],
       "connector": {
