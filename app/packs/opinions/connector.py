@@ -154,13 +154,23 @@ def _find_requested_clusters(
                             "match the query, courts, dates or statuses")
             continue
         stored = _find_stored_opinions(cluster)
+        problems.extend(_find_cluster_problems(cluster, stored))
         if len(stored) == 1:
             found.append((cluster, stored[0]))
-        else:
-            problems.append(_name_stored_problem(cluster_id, stored))
     if problems:
         raise SourceUnavailable("; ".join(problems))
     return found
+
+
+def _find_cluster_problems(cluster: _Cluster, stored: list[_StoredOpinion]) -> list[str]:
+    problems: list[str] = []
+    if len(stored) != 1:
+        problems.append(_name_stored_problem(cluster.cluster_id, stored))
+    link = cluster.absolute_url
+    if link is not None and not link.startswith("/"):
+        problems.append(f"cluster {cluster.cluster_id} has absolute_url {link!r}, which is not "
+                        f"a path on {_COURTLISTENER_SITE}")
+    return problems
 
 
 def _name_stored_problem(cluster_id: int, stored: list[_StoredOpinion]) -> str:

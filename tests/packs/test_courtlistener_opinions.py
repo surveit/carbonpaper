@@ -243,6 +243,16 @@ def test_a_result_missing_a_field_is_refused_naming_the_page_and_the_field(
     assert "court_id" in str(refused.value)
 
 
+@pytest.mark.parametrize("link", ["https://elsewhere.example/opinion/101/", "elsewhere.example/101", ""])
+def test_a_page_link_that_is_not_a_path_on_the_site_refuses_before_any_pdf_is_fetched(
+    opinions: _Opinions, link: str,
+) -> None:
+    opinions.rows[0]["absolute_url"] = link
+    with pytest.raises(SourceUnavailable, match=rf"cluster 101.*{re.escape(repr(link))}"):
+        list(acquire_courtlistener_opinions(_params(cluster_ids=[101, 102])))
+    assert opinions.pdf_requests == []
+
+
 def test_a_search_that_fails_is_reported_with_its_url(
     opinions: _Opinions, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
