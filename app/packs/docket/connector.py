@@ -5,9 +5,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Annotated, BinaryIO, Iterator, Self
-from urllib.error import URLError
-from urllib.request import Request, urlopen
+from typing import Annotated, Iterator, Self
 
 from pydantic import (
     AliasChoices, BaseModel, ConfigDict, Field, StringConstraints, ValidationError,
@@ -17,6 +15,7 @@ from pydantic import (
 from app.core.errors import MirrorDisagrees, SourceUnavailable
 from app.core.files import compute_sha256
 from app.core.paths import repo_root
+from app.core.url_fetch import open_url, read_url
 from app.models.connectors import (
     AcquiredBytes, ConnectorParams, ConnectorSpec, MetadataValue, MirroredBytes,
 )
@@ -143,7 +142,8 @@ def _read_listing(docket_id: int, mirror: _Mirror | None) -> list[_RecapDocument
     documents: list[_RecapDocument] = []
     while url is not None:
         page = _SearchPage.model_validate_json(
-            mirror.read(url) if mirror is not None else _get(url))
+            mirror.read(url) if mirror is not None
+            else read_url(url, user_agent=USER_AGENT, timeout_s=_TIMEOUT_S))
         documents.extend(page.results)
         url = page.next
         if url is not None and not url.startswith(COURTLISTENER_API):
@@ -181,7 +181,9 @@ def _acquire_document(
     filename = _name_file(params, number)
     metadata = _read_metadata(number, document)
     if mirror is None:
-        return AcquiredBytes(filename, origin_url, lambda: _open_url(origin_url), metadata)
+        return AcquiredBytes(
+            filename, origin_url,
+            lambda: open_url(origin_url, user_agent=USER_AGENT, timeout_s=_TIMEOUT_S), metadata)
     path, record = mirror.find(origin_url)
     return MirroredBytes(filename, origin_url, lambda: path.open("rb"), metadata,
                          fetched_at=record.fetched_at, sha256=record.sha256)
@@ -205,20 +207,6 @@ def _read_metadata(number: str, document: _RecapDocument) -> dict[str, MetadataV
 def _parse(number: str) -> tuple[int, int | None]:
     entry, _, attachment = number.partition("-")
     return int(entry), int(attachment) if attachment else None
-
-
-def _get(url: str) -> bytes:
-    with _open_url(url) as response:
-        return response.read()
-
-
-def _open_url(url: str) -> BinaryIO:
-    try:
-        response: BinaryIO = urlopen(
-            Request(url, headers={"User-Agent": USER_AGENT}), timeout=_TIMEOUT_S)
-    except (URLError, TimeoutError) as failure:
-        raise SourceUnavailable(f"GET {url} failed: {failure}") from failure
-    return response
 
 
 _METADATA_COLUMNS = (
