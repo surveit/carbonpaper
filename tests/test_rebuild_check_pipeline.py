@@ -76,7 +76,7 @@ def _disagreement(*fields: str) -> dict:
     return {field: {"verdict": "differs"} for field in fields}
 
 
-def _row(rulings: list[dict], comparison: dict, *,
+def _row(rulings: list[Any], comparison: dict, *,
         citation: bool = True, process: bool = True, diagnosis: str | None = None) -> dict:
     return {"citation_holds": citation, "process_ok": process,
             "diagnosis": json.dumps(rulings) if diagnosis is None else diagnosis,
@@ -120,6 +120,26 @@ def test_a_ruling_with_an_unknown_verdict_value_fails_the_case():
         _row([{"field": "a", "verdict": "probably_fine"}], _disagreement("a")))
     assert out["passed"] is False
     assert "probably_fine" in out["verdict_reason"]
+
+
+@pytest.mark.parametrize("rulings", [
+    ["x"],
+    [None],
+    [1],
+    [True],
+    [[]],
+    [{}],
+    [{"field": "a"}],
+    [{"verdict": "their_defect"}],
+    [{"field": "a", "verdict": ["our_defect"]}],
+    [{"field": "a", "verdict": {"our_defect": 1}}],
+    [{"field": ["a"], "verdict": "their_defect"}],
+    [{"field": {"a": 1}, "verdict": "consistent"}],
+])
+def test_a_malformed_ruling_fails_the_case_naming_it_instead_of_raising(rulings):
+    out = _load(VERDICT_CODE)(_row(rulings, _disagreement("a")))
+    assert out["passed"] is False
+    assert json.dumps(rulings[0]) in out["verdict_reason"]
 
 
 @pytest.mark.parametrize("diagnosis", [

@@ -518,11 +518,25 @@ def _read_rulings(diagnosis):
 
 def _find_bad_ruling(rulings, comparison):
     for ruling in rulings:
-        if ruling.get("verdict") not in VERDICTS:
-            return "a ruling carries no known verdict: " + json.dumps(ruling)
-        if ruling.get("field") not in comparison:
-            return "a ruling names a field the comparison does not carry: " + json.dumps(ruling)
+        problem = _find_problem_with(ruling, comparison)
+        if problem is not None:
+            return problem + ": " + json.dumps(ruling)
     return None
+
+
+def _find_problem_with(ruling, comparison):
+    if not _is_well_formed(ruling):
+        return "a ruling is not an object with a text field and a text verdict"
+    if ruling["verdict"] not in VERDICTS:
+        return "a ruling carries no known verdict"
+    if ruling["field"] not in comparison:
+        return "a ruling names a field the comparison does not carry"
+    return None
+
+
+def _is_well_formed(ruling):
+    return (isinstance(ruling, dict) and isinstance(ruling.get("field"), str)
+            and isinstance(ruling.get("verdict"), str))
 
 
 def _find_unruled_figures(rulings, comparison):
