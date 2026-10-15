@@ -10,6 +10,8 @@ MCP_URL = None
 POLL_SECONDS = 5
 REVIEW_DEADLINE_SECONDS = 900
 MAX_REVIEWS_IN_FLIGHT = 2
+CLAIMABLE_VERDICTS = ("their_defect", "genuine_ambiguity", "consistent")
+RULING_UNREADABLE = "the judge's ruling could not be read"
 
 
 class ToolError(ValueError):
@@ -44,14 +46,15 @@ def transform(row):
 def choose_figures(row):
     answer = json.loads(row["results_json"] or "{}")
     quotes = json.loads(row["expected_quotes_json"] or "{}")
-    our_defects = {r["field"] for r in json.loads(row["diagnosis"] or "[]")
-                   if r.get("verdict") == "our_defect"}
+    comparison = json.loads(row["comparison_json"])
+    rulings = read_rulings(row["diagnosis"])
+    judge_skips = {field: find_judge_skip_reason(field, comparison, rulings) for field in answer}
     to_claim, skipped = [], {}
     for field in sorted(answer):
         if answer[field] is None:
             skipped[field] = "the rebuild wrote no value"
-        elif field in our_defects:
-            skipped[field] = "ruled our_defect"
+        elif judge_skips[field] is not None:
+            skipped[field] = judge_skips[field]
         elif not quotes.get(field):
             skipped[field] = "no quote recorded"
         else:
@@ -59,6 +62,36 @@ def choose_figures(row):
     for field in sorted(set(quotes) - set(answer)):
         skipped[field] = "not in the rebuild's answer"
     return to_claim, skipped
+
+
+def read_rulings(diagnosis):
+    try:
+        rulings = json.loads(diagnosis)
+    except (TypeError, ValueError):
+        return None
+    return rulings if isinstance(rulings, list) else None
+
+
+def find_judge_skip_reason(field, comparison, rulings):
+    if field not in comparison:
+        raise ValueError("comparison_json carries no verdict for " + field)
+    if comparison[field]["verdict"] == "agrees":
+        return None
+    if rulings is None:
+        return RULING_UNREADABLE
+    verdicts = [ruling.get("verdict") for ruling in find_rulings_naming(field, rulings)]
+    if not verdicts:
+        return "the judge left it unruled"
+    if "our_defect" in verdicts:
+        return "ruled our_defect"
+    only = verdicts[0] if len(verdicts) == 1 else None
+    if isinstance(only, str) and only in CLAIMABLE_VERDICTS:
+        return None
+    return RULING_UNREADABLE
+
+
+def find_rulings_naming(field, rulings):
+    return [r for r in rulings if isinstance(r, dict) and r.get("field") == field]
 
 
 def submit_one(project, run, field, quote):

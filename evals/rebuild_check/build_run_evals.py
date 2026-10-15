@@ -151,7 +151,8 @@ def stages():
         },
         {
             "id": "claims", "type": "python_row_function", "cache": True,
-            "description": "Claim each rebuilt figure in the page's own words, on the run that "
+            "description": "Claim each figure that agrees, or that the judge ruled their defect, "
+                           "ambiguous or consistent, in the page's own words, on the run that "
                            "was graded, and have the reviewers review it. Outreach runs only.",
             "inputs": [{"id": "verdict"}],
             "function": {"kind": "inline", "code": render_claims_code(MCP)},
@@ -160,7 +161,7 @@ def stages():
                     col("run_url", "str", True), col("citation_holds", "bool", True),
                     col("process_ok", "bool", True),
                     col("results_json", "str", True), col("expected_quotes_json", "str", True),
-                    col("diagnosis", "str", True)]}],
+                    col("diagnosis", "str", True), col("comparison_json", "str", False)]}],
                 "adds": [col("claims_json", "str", False), col("claims_skipped_json", "str", False)],
                 "rewrites": []},
         },

@@ -57,12 +57,27 @@ class _Workspace:
                 "challenges": [{"severity": 2}] if done else []}
 
 
-def _row(*, diagnosis=(), quotes=None, citation=True, process=True) -> dict:
+def _compared(**verdicts: str) -> dict:
+    return {field: {"verdict": verdicts.get(field, "agrees")} for field in _ANSWER}
+
+
+def _diagnosis_text(diagnosis) -> str | None:
+    if diagnosis is None or isinstance(diagnosis, str):
+        return diagnosis
+    return json.dumps(list(diagnosis))
+
+
+def _row(*, diagnosis=(), quotes=None, citation=True, process=True, compared=None) -> dict:
     return {"item_id": "abc", "run_url": _RUN_URL, "citation_holds": citation,
             "process_ok": process,
             "results_json": json.dumps(_ANSWER),
             "expected_quotes_json": json.dumps(_QUOTES if quotes is None else quotes),
-            "diagnosis": json.dumps(list(diagnosis))}
+            "diagnosis": _diagnosis_text(diagnosis),
+            "comparison_json": json.dumps(_compared() if compared is None else compared)}
+
+
+def _claimed_fields(out: dict) -> set[str]:
+    return {claim["field"] for claim in json.loads(out["claims_json"])}
 
 
 @pytest.fixture
@@ -109,14 +124,106 @@ def test_our_defects_and_unquoted_figures_are_skipped_with_a_reason(workspace):
     workspace()
     out = claims_stage.transform(_row(
         diagnosis=[{"field": "share", "verdict": "our_defect"}],
+        compared=_compared(share="differs"),
         quotes={"total_cases": "Seventeen cases"}))
     assert json.loads(out["claims_skipped_json"]) == {
         "share": "ruled our_defect", "peak_year": "no quote recorded"}
 
 
+def test_an_unruled_figure_that_differs_is_skipped_not_claimed(workspace):
+    fake = workspace()
+    out = claims_stage.transform(_row(compared=_compared(share="differs")))
+    assert json.loads(out["claims_skipped_json"]) == {"share": "the judge left it unruled"}
+    assert _claimed_fields(out) == {"total_cases", "peak_year"}
+    assert "share" not in [a["slug"] for n, a in fake.calls if n == "submit_claim"]
+
+
+def test_a_figure_with_an_unknown_verdict_is_skipped(workspace):
+    workspace()
+    out = claims_stage.transform(_row(
+        diagnosis=[{"field": "share", "verdict": "probably_fine"}],
+        compared=_compared(share="differs")))
+    assert json.loads(out["claims_skipped_json"]) == {
+        "share": "the judge's ruling could not be read"}
+    assert _claimed_fields(out) == {"total_cases", "peak_year"}
+
+
+def test_an_agreeing_figure_is_claimed_even_when_the_diagnosis_is_unreadable(workspace):
+    workspace()
+    out = claims_stage.transform(_row(diagnosis="not json"))
+    assert _claimed_fields(out) == set(_ANSWER)
+    assert json.loads(out["claims_skipped_json"]) == {}
+
+
+@pytest.mark.parametrize("diagnosis", [
+    "not json", json.dumps({"field": "share", "verdict": "their_defect"}), "", None])
+def test_with_an_unreadable_diagnosis_only_agreeing_figures_are_claimed(workspace, diagnosis):
+    workspace()
+    out = claims_stage.transform(_row(diagnosis=diagnosis, compared=_compared(share="differs")))
+    assert _claimed_fields(out) == {"total_cases", "peak_year"}
+    assert json.loads(out["claims_skipped_json"]) == {
+        "share": "the judge's ruling could not be read"}
+
+
+@pytest.mark.parametrize("verdict", ["their_defect", "genuine_ambiguity", "consistent"])
+def test_a_differing_figure_the_judge_did_not_rule_our_defect_is_claimed(workspace, verdict):
+    workspace()
+    out = claims_stage.transform(_row(
+        diagnosis=[{"field": "share", "verdict": verdict}], compared=_compared(share="differs")))
+    assert _claimed_fields(out) == set(_ANSWER)
+    assert json.loads(out["claims_skipped_json"]) == {}
+
+
+def test_a_figure_that_agrees_is_claimed_whatever_the_judge_ruled_on_it(workspace):
+    workspace()
+    out = claims_stage.transform(_row(diagnosis=[{"field": "share", "verdict": "our_defect"}]))
+    assert _claimed_fields(out) == set(_ANSWER)
+
+
+@pytest.mark.parametrize("rulings", [
+    ["x"],
+    [None],
+    [1],
+    [{"field": "share"}],
+    [{"field": "share", "verdict": ["their_defect"]}],
+    [{"field": ["share"], "verdict": "their_defect"}],
+])
+def test_a_malformed_ruling_never_makes_a_differing_figure_claimable(workspace, rulings):
+    workspace()
+    out = claims_stage.transform(_row(diagnosis=rulings, compared=_compared(share="differs")))
+    assert "share" in json.loads(out["claims_skipped_json"])
+    assert "share" not in _claimed_fields(out)
+
+
+def test_two_rulings_on_one_figure_are_not_trusted(workspace):
+    workspace()
+    out = claims_stage.transform(_row(
+        diagnosis=[{"field": "share", "verdict": "their_defect"},
+                   {"field": "share", "verdict": "consistent"}],
+        compared=_compared(share="differs")))
+    assert json.loads(out["claims_skipped_json"]) == {
+        "share": "the judge's ruling could not be read"}
+
+
+def test_an_our_defect_ruling_beside_another_still_skips_the_figure(workspace):
+    workspace()
+    out = claims_stage.transform(_row(
+        diagnosis=[{"field": "share", "verdict": "their_defect"},
+                   {"field": "share", "verdict": "our_defect"}],
+        compared=_compared(share="differs")))
+    assert json.loads(out["claims_skipped_json"]) == {"share": "ruled our_defect"}
+
+
+def test_a_figure_the_comparison_never_graded_stops_the_row_by_name():
+    comparison = {"total_cases": {"verdict": "agrees"}, "peak_year": {"verdict": "agrees"}}
+    with pytest.raises(ValueError, match="share"):
+        claims_stage.choose_figures(_row(compared=comparison))
+
+
 def test_choose_figures_skips_a_null_value_and_lists_a_quote_missing_from_the_answer():
     row = {"results_json": json.dumps({"total_cases": 17, "share": None}),
-           "expected_quotes_json": json.dumps(_QUOTES), "diagnosis": "[]"}
+           "expected_quotes_json": json.dumps(_QUOTES), "diagnosis": "[]",
+           "comparison_json": json.dumps(_compared(share="not_computed"))}
     to_claim, skipped = claims_stage.choose_figures(row)
     assert to_claim == [("total_cases", _QUOTES["total_cases"])]
     assert skipped == {"share": "the rebuild wrote no value",
