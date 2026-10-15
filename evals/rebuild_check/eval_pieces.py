@@ -429,6 +429,8 @@ def transform(row):
     if not row["target_schema"]:
         raise ValueError("target_schema is empty; the case is missing its answer shape")
     expected = json.loads(row["expected_json"])
+    if not expected:
+        raise ValueError("expected_json lists no figures")
     computed = json.loads(row["results_json"]) if row["results_json"] else {}
     types = read_declared_types(row["target_schema"])
     comparison = {field: compare(expected.get(field), computed.get(field), types.get(field))

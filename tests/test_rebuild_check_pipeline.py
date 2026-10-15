@@ -65,7 +65,15 @@ def test_compare_refuses_a_case_with_no_expected_figures():
 
 def test_compare_refuses_a_case_with_no_answer_shape():
     with pytest.raises(ValueError, match="target_schema"):
-        _load(COMPARE_CODE)({"expected_json": "{}", "results_json": "{}", "target_schema": ""})
+        _load(COMPARE_CODE)({"expected_json": json.dumps({"count": 17}),
+                             "results_json": "{}", "target_schema": ""})
+
+
+@pytest.mark.parametrize("computed", [{}, {"count": 17}])
+def test_compare_refuses_a_case_whose_expected_figures_are_an_empty_object(computed):
+    with pytest.raises(ValueError, match="expected_json lists no figures"):
+        _load(COMPARE_CODE)({"expected_json": "{}", "results_json": json.dumps(computed),
+                             "target_schema": _SCHEMA})
 
 
 def _agreement(*fields: str) -> dict:
