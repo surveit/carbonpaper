@@ -224,6 +224,12 @@ def test_the_committed_cases_read_as_the_eval_dataset():
     assert set(frame.columns) == {c.name for c in config.table.table_schema.columns}
 
 
+def test_the_verdict_table_shows_why_a_case_failed():
+    verdict = next(stage for stage in build_run_evals.stages() if stage["id"] == "verdict")
+    columns = verdict["workflow_outputs"][0]["columns"]
+    assert {"passed", "verdict_reason"} <= set(columns)
+
+
 def test_an_eval_run_never_reaches_the_claims_step():
     report = validate_eval_compatibility(_config(), parse_workflow(build_run_evals.stages()))
     assert report.settings is not None and "claims" not in report.settings.frontier

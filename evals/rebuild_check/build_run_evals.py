@@ -141,7 +141,8 @@ def stages():
                 "kind": "table", "slug": "rebuild-verdicts",
                 "label": "Each case's verdict and its per-figure comparison",
                 "primary": True,
-                "columns": ["item_id", "artifact_title", "passed", "comparison_json"]}],
+                "columns": ["item_id", "artifact_title", "passed", "verdict_reason",
+                            "comparison_json"]}],
             "signature": {"form": "extends", "reads": [
                 {"input": "diagnose", "columns": [
                     col("citation_holds", "bool", True), col("process_ok", "bool", True),
