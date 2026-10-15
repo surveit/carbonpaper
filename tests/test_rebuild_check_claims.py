@@ -111,8 +111,7 @@ def test_submissions_carry_the_exact_quote_the_expected_project_and_slug(workspa
 
 def test_a_review_still_running_at_the_deadline_times_out(workspace, monkeypatch):
     monkeypatch.setattr(claims_stage, "REVIEW_DEADLINE_SECONDS", 0)
-    # A real clock can tie with itself at this machine's tick resolution; count
-    # up instead so each check is strictly later than the deadline before it.
+    # Monotonic time is replaced by a counter so each deadline check is strictly later.
     monkeypatch.setattr(claims_stage.time, "monotonic", itertools.count().__next__)
     workspace(review_polls=1000)
     claims = json.loads(claims_stage.transform(_row())["claims_json"])
