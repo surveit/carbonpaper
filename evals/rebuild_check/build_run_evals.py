@@ -152,9 +152,9 @@ def stages():
         },
         {
             "id": "claims", "type": "python_row_function", "cache": True,
-            "description": "Claim each figure that agrees, or that the judge ruled their defect, "
-                           "ambiguous or consistent, in the page's own words, on the run that "
-                           "was graded, and have the reviewers review it. Outreach runs only.",
+            "description": "Claim each figure that agrees unless the judge ruled our defect, or "
+                           "ruled their defect, ambiguous or consistent, in the page's own words, "
+                           "on the graded run, and have it reviewed. Outreach runs only.",
             "inputs": [{"id": "verdict"}],
             "function": {"kind": "inline", "code": render_claims_code(MCP)},
             "signature": {"form": "extends", "reads": [

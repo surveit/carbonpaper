@@ -37,11 +37,12 @@ passes otherwise.
 
 `claims` turns a figure into a claim in the page's own words, on the run that was graded, and
 waits for its review, two at a time. A figure is claimed when the rebuild wrote a value for it,
-the page's words for it are recorded, and either `compare` graded it `agrees` or the diagnosis
-holds exactly one ruling for it that says their defect, genuine ambiguity or consistent. Any
-other figure is skipped, with its reason recorded: ruled our defect, left unruled, a ruling that
-cannot be read (a missing, unknown or non-text verdict, or two rulings on one figure), no
-rebuilt value, no recorded quote, or a quote for a figure the rebuild never answered. If the
-diagnosis as a whole cannot be read as a JSON list, only `agrees` figures are claimed. When the
-citation did not hold or the judge did not trust the comparison, it makes no calls at all. An
+the page's words for it are recorded, no ruling for it says our defect, and either `compare`
+graded it `agrees` or the diagnosis holds exactly one ruling for it that says their defect,
+genuine ambiguity or consistent. Any other figure is skipped, with its reason recorded: ruled our
+defect, left unruled, a ruling that cannot be read (a missing, unknown or non-text verdict, or two
+rulings on one figure), no rebuilt value, no recorded quote, or a quote for a figure the rebuild
+never answered. If the diagnosis as a whole cannot be read as a JSON list, only `agrees` figures
+are claimed. When the citation did not hold or the judge did not trust the comparison, it makes no
+calls at all. An
 eval run never reaches it — previewing or stage-testing it submits real claims.

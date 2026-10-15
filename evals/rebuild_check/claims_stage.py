@@ -75,15 +75,16 @@ def read_rulings(diagnosis):
 def find_judge_skip_reason(field, comparison, rulings):
     if field not in comparison:
         raise ValueError("comparison_json carries no verdict for " + field)
+    field_rulings = [] if rulings is None else find_rulings_naming(field, rulings)
+    if any(ruling.get("verdict") == "our_defect" for ruling in field_rulings):
+        return "ruled our_defect"
     if comparison[field]["verdict"] == "agrees":
         return None
     if rulings is None:
         return RULING_UNREADABLE
-    verdicts = [ruling.get("verdict") for ruling in find_rulings_naming(field, rulings)]
+    verdicts = [ruling.get("verdict") for ruling in field_rulings]
     if not verdicts:
         return "the judge left it unruled"
-    if "our_defect" in verdicts:
-        return "ruled our_defect"
     only = verdicts[0] if len(verdicts) == 1 else None
     if isinstance(only, str) and only in CLAIMABLE_VERDICTS:
         return None

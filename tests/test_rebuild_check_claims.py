@@ -173,10 +173,11 @@ def test_a_differing_figure_the_judge_did_not_rule_our_defect_is_claimed(workspa
     assert json.loads(out["claims_skipped_json"]) == {}
 
 
-def test_a_figure_that_agrees_is_claimed_whatever_the_judge_ruled_on_it(workspace):
-    workspace()
+def test_an_our_defect_ruling_skips_a_figure_even_when_compare_agrees(workspace):
+    fake = workspace()
     out = claims_stage.transform(_row(diagnosis=[{"field": "share", "verdict": "our_defect"}]))
-    assert _claimed_fields(out) == set(_ANSWER)
+    assert json.loads(out["claims_skipped_json"]) == {"share": "ruled our_defect"}
+    assert "share" not in [a["slug"] for n, a in fake.calls if n == "submit_claim"]
 
 
 @pytest.mark.parametrize("rulings", [
