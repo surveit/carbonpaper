@@ -23,16 +23,25 @@ that run's `answer` stage.
 type is graded `wrong_type` rather than compared — an integer field answered with a date is a
 failure of the build, not a disagreement about a number. A wrong-typed figure is not resolved
 here; it is left to the judge like any other disagreement. A value of the right type is then
-checked against what the artifact states.
+checked against what the artifact states. A case whose `expected_json` or `target_schema` is
+empty, or whose `expected_json` lists no figures, raises: it is bad case data, not a case to grade.
 
 `diagnose` rules on each disagreement the comparison found — our defect, their defect, genuine
 ambiguity, or consistent with hedged wording the rebuild's exact value satisfies.
 
 `verdict` fails the case, with a stated reason, at the first of: the citation did not hold; the
-judge did not trust the comparison; its diagnosis could not be read as a JSON list; a ruling
-names a verdict or a field the comparison does not carry; a disagreeing figure got no ruling at
-all; or a ruling is our own defect. It passes otherwise.
+judge did not trust the comparison; its diagnosis could not be read as a JSON list; a ruling is
+not an object with a text field and a text verdict, or names a verdict or a field the comparison
+does not carry; a disagreeing figure got no ruling at all; or a ruling is our own defect. It
+passes otherwise.
 
-`claims` turns each figure the judge did not rule our own defect into a claim in the page's own
-words, on the run that was graded, and waits for its review, two at a time. An eval run never
-reaches it — previewing or stage-testing it submits real claims.
+`claims` turns a figure into a claim in the page's own words, on the run that was graded, and
+waits for its review, two at a time. A figure is claimed when the rebuild wrote a value for it,
+the page's words for it are recorded, and either `compare` graded it `agrees` or the diagnosis
+holds exactly one ruling for it that says their defect, genuine ambiguity or consistent. Any
+other figure is skipped, with its reason recorded: ruled our defect, left unruled, a ruling that
+cannot be read (a missing, unknown or non-text verdict, or two rulings on one figure), no
+rebuilt value, no recorded quote, or a quote for a figure the rebuild never answered. If the
+diagnosis as a whole cannot be read as a JSON list, only `agrees` figures are claimed. When the
+citation did not hold or the judge did not trust the comparison, it makes no calls at all. An
+eval run never reaches it — previewing or stage-testing it submits real claims.

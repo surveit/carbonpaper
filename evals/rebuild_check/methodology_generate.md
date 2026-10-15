@@ -15,9 +15,10 @@ right figure uncomparable. `shape_carries_no_figure` stops the run if a value le
 `fetch_sources` pulls the cited files onto disk and hashes them, so an item names bytes rather
 than a URL that may move under it.
 
-`eval_item` shapes one row per usable artifact: its files, its answer shape, and what it
-expects. `write_items` writes those rows to this run's own output folder as `eval_items.json` —
-never into the committed `items/eval_items.json`, which this generator does not touch.
+`eval_item` shapes one row per artifact — its files, its answer shape, and what it expects — and
+marks it `usable` or not. `write_items` keeps the usable rows and writes them to this run's own
+output folder as `eval_items.json` — never into the committed `items/eval_items.json`, which
+this generator does not touch.
 
 Nothing here builds or checks anything. Generating items and running evals are separate runs so
 that an item is a fixed thing an eval can be re-run against.

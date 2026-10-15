@@ -6,7 +6,6 @@
 # file's shebang literally, so a CRLF checkout makes the image refuse to boot.
 docker-entrypoint.sh text eol=lf
 
-# A rebuild is graded against these bytes' own hash (see input_digests in
-# evals/rebuild_check/items/eval_items.json); a line-ending rewrite on checkout
-# would change what a case's source file hashes to.
+# A line-ending rewrite on checkout would change what a case's source file hashes to; the
+# recorded hash is input_digests in evals/rebuild_check/items/eval_items.json.
 evals/rebuild_check/fetched/** -text
