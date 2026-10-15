@@ -1,0 +1,316 @@
+"""The claims step against a fake workspace instead of a server."""
+from __future__ import annotations
+
+import itertools
+import json
+import urllib.error
+from typing import Any
+
+import pytest
+
+from evals.rebuild_check import claims_stage
+from evals.rebuild_check.eval_pieces import render_claims_code
+
+_RUN_URL = "http://127.0.0.1:9999/project/inner/runs/built"
+_ANSWER = {"total_cases": 17, "share": 31.8, "peak_year": 2011}
+_QUOTES = {"total_cases": "Seventeen cases", "share": "more than 30 percent",
+           "peak_year": "their peak in 2011"}
+
+
+class _Workspace:
+    """Plays submit_claim and read_claim_review, and records every call."""
+
+    def __init__(self, *, review_polls: int = 2, refused: frozenset[str] = frozenset(),
+                 submit_raises: dict[str, Exception] | None = None,
+                 poll_raises: frozenset[str] = frozenset(),
+                 poll_connection_refused: frozenset[str] = frozenset()):
+        self.calls: list[tuple[str, dict]] = []
+        self.review_polls = review_polls
+        self.refused = refused
+        self.submit_raises = submit_raises or {}
+        self.poll_raises = poll_raises
+        self.poll_connection_refused = poll_connection_refused
+        self.polls: dict[str, int] = {}
+        self.most_in_flight = 0
+
+    def __call__(self, name: str, arguments: dict) -> dict:
+        self.calls.append((name, arguments))
+        if name == "submit_claim":
+            slug = arguments["slug"]
+            if slug in self.submit_raises:
+                raise self.submit_raises[slug]
+            if slug in self.refused:
+                raise claims_stage.ToolError("run 'built' published no claimable output")
+            claim_id = "claim-" + slug
+            self.polls[claim_id] = 0
+            running = sum(1 for n in self.polls.values() if n < self.review_polls)
+            self.most_in_flight = max(self.most_in_flight, running)
+            return {"claim": {"id": claim_id}, "claim_url": "/project/inner/claims/" + claim_id}
+        claim_id = arguments["claim_id"]
+        if claim_id in self.poll_connection_refused:
+            raise ConnectionRefusedError("the workspace refused the connection")
+        if claim_id in self.poll_raises:
+            raise OSError("connection reset")
+        self.polls[claim_id] += 1
+        done = self.polls[claim_id] >= self.review_polls
+        return {"review": "done" if done else "running", "error": None,
+                "challenges": [{"severity": 2}] if done else []}
+
+
+def _compared(**verdicts: str) -> dict:
+    return {field: {"verdict": verdicts.get(field, "agrees")} for field in _ANSWER}
+
+
+def _diagnosis_text(diagnosis) -> str | None:
+    if diagnosis is None or isinstance(diagnosis, str):
+        return diagnosis
+    return json.dumps(list(diagnosis))
+
+
+def _row(*, diagnosis=(), quotes=None, citation=True, process=True, compared=None) -> dict:
+    return {"item_id": "abc", "run_url": _RUN_URL, "citation_holds": citation,
+            "process_ok": process,
+            "results_json": json.dumps(_ANSWER),
+            "expected_quotes_json": json.dumps(_QUOTES if quotes is None else quotes),
+            "diagnosis": _diagnosis_text(diagnosis),
+            "comparison_json": json.dumps(_compared() if compared is None else compared)}
+
+
+def _claimed_fields(out: dict) -> set[str]:
+    return {claim["field"] for claim in json.loads(out["claims_json"])}
+
+
+@pytest.fixture
+def workspace(monkeypatch):
+    def install(**kwargs: Any) -> _Workspace:
+        fake = _Workspace(**kwargs)
+        monkeypatch.setattr(claims_stage, "call_tool", fake)
+        monkeypatch.setattr(claims_stage, "POLL_SECONDS", 0)
+        return fake
+    return install
+
+
+def test_each_figure_becomes_a_reviewed_claim_on_the_graded_run(workspace):
+    fake = workspace()
+    claims = json.loads(claims_stage.transform(_row())["claims_json"])
+    assert {c["field"] for c in claims} == set(_ANSWER)
+    assert all(c["review"] == "done" for c in claims)
+    assert all(a["run_id"] == "built" for n, a in fake.calls if n == "submit_claim")
+
+
+def test_submissions_carry_the_exact_quote_the_expected_project_and_slug(workspace):
+    fake = workspace()
+    claims_stage.transform(_row())
+    submitted = {a["slug"]: a for n, a in fake.calls if n == "submit_claim"}
+    assert submitted.keys() == {"total-cases", "share", "peak-year"}
+    for field, quote in _QUOTES.items():
+        submission = submitted[field.replace("_", "-")]
+        assert submission["text"] == quote
+        assert submission["project_id"] == "inner"
+
+
+def test_a_review_still_running_at_the_deadline_times_out(workspace, monkeypatch):
+    monkeypatch.setattr(claims_stage, "REVIEW_DEADLINE_SECONDS", 0)
+    # Monotonic time is replaced by a counter so each deadline check is strictly later.
+    monkeypatch.setattr(claims_stage.time, "monotonic", itertools.count().__next__)
+    workspace(review_polls=1000)
+    claims = json.loads(claims_stage.transform(_row())["claims_json"])
+    assert all(c["review"] == "timed_out" for c in claims)
+    assert all(c["error"] == "the review was still running at the deadline" for c in claims)
+
+
+def test_our_defects_and_unquoted_figures_are_skipped_with_a_reason(workspace):
+    workspace()
+    out = claims_stage.transform(_row(
+        diagnosis=[{"field": "share", "verdict": "our_defect"}],
+        compared=_compared(share="differs"),
+        quotes={"total_cases": "Seventeen cases"}))
+    assert json.loads(out["claims_skipped_json"]) == {
+        "share": "ruled our_defect", "peak_year": "no quote recorded"}
+
+
+def test_an_unruled_figure_that_differs_is_skipped_not_claimed(workspace):
+    fake = workspace()
+    out = claims_stage.transform(_row(compared=_compared(share="differs")))
+    assert json.loads(out["claims_skipped_json"]) == {"share": "the judge left it unruled"}
+    assert _claimed_fields(out) == {"total_cases", "peak_year"}
+    assert "share" not in [a["slug"] for n, a in fake.calls if n == "submit_claim"]
+
+
+def test_a_figure_with_an_unknown_verdict_is_skipped(workspace):
+    workspace()
+    out = claims_stage.transform(_row(
+        diagnosis=[{"field": "share", "verdict": "probably_fine"}],
+        compared=_compared(share="differs")))
+    assert json.loads(out["claims_skipped_json"]) == {
+        "share": "the judge's ruling could not be read"}
+    assert _claimed_fields(out) == {"total_cases", "peak_year"}
+
+
+def test_an_agreeing_figure_is_claimed_even_when_the_diagnosis_is_unreadable(workspace):
+    workspace()
+    out = claims_stage.transform(_row(diagnosis="not json"))
+    assert _claimed_fields(out) == set(_ANSWER)
+    assert json.loads(out["claims_skipped_json"]) == {}
+
+
+@pytest.mark.parametrize("diagnosis", [
+    "not json", json.dumps({"field": "share", "verdict": "their_defect"}), "", None])
+def test_with_an_unreadable_diagnosis_only_agreeing_figures_are_claimed(workspace, diagnosis):
+    workspace()
+    out = claims_stage.transform(_row(diagnosis=diagnosis, compared=_compared(share="differs")))
+    assert _claimed_fields(out) == {"total_cases", "peak_year"}
+    assert json.loads(out["claims_skipped_json"]) == {
+        "share": "the judge's ruling could not be read"}
+
+
+@pytest.mark.parametrize("verdict", ["their_defect", "genuine_ambiguity", "consistent"])
+def test_a_differing_figure_the_judge_did_not_rule_our_defect_is_claimed(workspace, verdict):
+    workspace()
+    out = claims_stage.transform(_row(
+        diagnosis=[{"field": "share", "verdict": verdict}], compared=_compared(share="differs")))
+    assert _claimed_fields(out) == set(_ANSWER)
+    assert json.loads(out["claims_skipped_json"]) == {}
+
+
+def test_an_our_defect_ruling_skips_a_figure_even_when_compare_agrees(workspace):
+    fake = workspace()
+    out = claims_stage.transform(_row(diagnosis=[{"field": "share", "verdict": "our_defect"}]))
+    assert json.loads(out["claims_skipped_json"]) == {"share": "ruled our_defect"}
+    assert "share" not in [a["slug"] for n, a in fake.calls if n == "submit_claim"]
+
+
+@pytest.mark.parametrize("rulings", [
+    ["x"],
+    [None],
+    [1],
+    [{"field": "share"}],
+    [{"field": "share", "verdict": ["their_defect"]}],
+    [{"field": ["share"], "verdict": "their_defect"}],
+])
+def test_a_malformed_ruling_never_makes_a_differing_figure_claimable(workspace, rulings):
+    workspace()
+    out = claims_stage.transform(_row(diagnosis=rulings, compared=_compared(share="differs")))
+    assert "share" in json.loads(out["claims_skipped_json"])
+    assert "share" not in _claimed_fields(out)
+
+
+def test_two_rulings_on_one_figure_are_not_trusted(workspace):
+    workspace()
+    out = claims_stage.transform(_row(
+        diagnosis=[{"field": "share", "verdict": "their_defect"},
+                   {"field": "share", "verdict": "consistent"}],
+        compared=_compared(share="differs")))
+    assert json.loads(out["claims_skipped_json"]) == {
+        "share": "the judge's ruling could not be read"}
+
+
+def test_an_our_defect_ruling_beside_another_still_skips_the_figure(workspace):
+    workspace()
+    out = claims_stage.transform(_row(
+        diagnosis=[{"field": "share", "verdict": "their_defect"},
+                   {"field": "share", "verdict": "our_defect"}],
+        compared=_compared(share="differs")))
+    assert json.loads(out["claims_skipped_json"]) == {"share": "ruled our_defect"}
+
+
+def test_a_figure_the_comparison_never_graded_stops_the_row_by_name():
+    comparison = {"total_cases": {"verdict": "agrees"}, "peak_year": {"verdict": "agrees"}}
+    with pytest.raises(ValueError, match="share"):
+        claims_stage.choose_figures(_row(compared=comparison))
+
+
+def test_choose_figures_skips_a_null_value_and_lists_a_quote_missing_from_the_answer():
+    row = {"results_json": json.dumps({"total_cases": 17, "share": None}),
+           "expected_quotes_json": json.dumps(_QUOTES), "diagnosis": "[]",
+           "comparison_json": json.dumps(_compared(share="not_computed"))}
+    to_claim, skipped = claims_stage.choose_figures(row)
+    assert to_claim == [("total_cases", _QUOTES["total_cases"])]
+    assert skipped == {"share": "the rebuild wrote no value",
+                       "peak_year": "not in the rebuild's answer"}
+
+
+def test_no_more_than_two_reviews_run_at_once(workspace):
+    fake = workspace(review_polls=3)
+    claims_stage.transform(_row())
+    assert fake.most_in_flight <= 2
+
+
+def test_a_refused_submission_is_recorded_and_not_retried(workspace):
+    fake = workspace(refused=frozenset({"share"}))
+    claims = {c["field"]: c for c in json.loads(claims_stage.transform(_row())["claims_json"])}
+    assert "no claimable output" in claims["share"]["error"]
+    assert [a["slug"] for n, a in fake.calls if n == "submit_claim"].count("share") == 1
+
+
+def test_a_submit_that_fails_in_transit_is_recorded_and_not_resubmitted(workspace):
+    fake = workspace(submit_raises={"share": OSError("connection reset")})
+    claims = {c["field"]: c for c in json.loads(claims_stage.transform(_row())["claims_json"])}
+    assert "the call failed in transit" in claims["share"]["error"]
+    assert "connection reset" in claims["share"]["error"]
+    assert claims["share"]["claim_id"] is None
+    assert [a["slug"] for n, a in fake.calls if n == "submit_claim"].count("share") == 1
+    assert claims["total_cases"]["review"] == "done"
+    assert claims["peak_year"]["review"] == "done"
+
+
+def test_a_poll_that_fails_in_transit_marks_that_claim_unknown_and_completes(workspace):
+    workspace(poll_raises=frozenset({"claim-share"}))
+    claims = {c["field"]: c for c in json.loads(claims_stage.transform(_row())["claims_json"])}
+    assert claims["share"]["review"] == "unknown"
+    assert "connection reset" in claims["share"]["error"]
+    assert claims["total_cases"]["review"] == "done"
+    assert claims["peak_year"]["review"] == "done"
+
+
+def test_a_refused_connection_on_submit_is_not_cached_and_reraises(workspace):
+    workspace(submit_raises={"share": ConnectionRefusedError("refused")})
+    with pytest.raises(ConnectionRefusedError):
+        claims_stage.transform(_row())
+
+
+def test_a_urlerror_wrapping_a_refusal_on_submit_is_not_cached_and_reraises(workspace):
+    workspace(submit_raises={"share": urllib.error.URLError(ConnectionRefusedError("refused"))})
+    with pytest.raises(urllib.error.URLError):
+        claims_stage.transform(_row())
+
+
+def test_a_refused_connection_on_poll_is_not_cached_and_reraises(workspace):
+    workspace(poll_connection_refused=frozenset({"claim-share"}))
+    with pytest.raises(ConnectionRefusedError):
+        claims_stage.transform(_row())
+
+
+def test_a_submit_that_raises_a_non_tool_value_error_is_recorded_not_raised(workspace):
+    workspace(submit_raises={"share": ValueError("bad json")})
+    claims = {c["field"]: c for c in json.loads(claims_stage.transform(_row())["claims_json"])}
+    assert "the call failed in transit" in claims["share"]["error"]
+    assert "bad json" in claims["share"]["error"]
+    assert claims["share"]["claim_id"] is None
+
+
+def test_a_case_whose_citation_failed_makes_no_calls(workspace):
+    fake = workspace()
+    claims_stage.transform(_row(citation=False))
+    assert fake.calls == []
+
+
+def test_a_case_the_judge_did_not_trust_makes_no_calls_and_skips_every_figure(workspace):
+    fake = workspace()
+    out = claims_stage.transform(_row(process=False))
+    assert fake.calls == []
+    assert json.loads(out["claims_json"]) == []
+    assert json.loads(out["claims_skipped_json"]) == {
+        field: "the judge did not trust the comparison" for field in _ANSWER}
+
+
+def test_the_rendered_stage_code_carries_its_server():
+    namespace: dict[str, Any] = {}
+    exec(render_claims_code("http://127.0.0.1:9999/mcp"), namespace)
+    assert namespace["MCP_URL"] == "http://127.0.0.1:9999/mcp"
+
+
+def test_the_module_refuses_to_run_without_a_server(monkeypatch):
+    monkeypatch.setattr(claims_stage, "MCP_URL", None)
+    with pytest.raises(ValueError, match="MCP_URL"):
+        claims_stage.call_tool("read_claim_review", {"project_id": "inner", "claim_id": "c"})
