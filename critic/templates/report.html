@@ -3,18 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Critic eval: {{ result.settings.rubric_dir }}</title>
-<style>
-  body { font: 14px/1.45 system-ui, sans-serif; margin: 24px auto; max-width: 1200px; padding: 0 16px; color: #1d1d1f; background: #fafaf8; }
-  h1 { font-size: 22px; } h2 { font-size: 18px; margin-top: 32px; } h3 { font-size: 15px; margin-top: 24px; }
-  table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
-  th, td { border: 1px solid #d8d8d4; padding: 4px 8px; text-align: left; vertical-align: top; }
-  th { background: #efefeb; }
-  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  .text { white-space: pre-wrap; }
-  .muted { color: #6b6b66; }
-  dt { font-weight: 600; } dd { margin: 0 0 6px 16px; }
-  .scroll { overflow-x: auto; }
-</style>
+{% include "_style.html" %}
 </head>
 <body>
 {% set repo = result.settings.repo %}
@@ -29,24 +18,13 @@
 </p>
 <p class="muted">
   PRs asked for: {{ result.settings.pr_numbers | length }} (from #{{ result.settings.pr_numbers | first }}
-  to #{{ result.settings.pr_numbers | last }}), limit {{ result.settings.limit if result.settings.limit is not none else "none" }}.
+  to #{{ result.settings.pr_numbers | last }}), limit {{ result.settings.limit if result.settings.limit is not none else "none" }};
+  silent PRs: {{ result.settings.silent_pr_numbers | length }}.
   Review units scored: {{ result.scored | length }}; not scored: {{ result.unscored | length }};
   PRs skipped: {{ result.skipped_prs | length }}.
 </p>
 
-<h2>What the numbers mean</h2>
-<dl>
-  <dt>Review unit</dt>
-  <dd>One PR. The critic reads its diff at the commit of the reviewer's first ask whose diff can be rebuilt, and is scored against every ask the reviewer made from then on, on that commit or a later one.</dd>
-  <dt>Real comment</dt>
-  <dd>An inline comment the labels credit to the reviewer, not the agent posting under their login, whose speech act is a correction, instruction or question, and which is the reviewer's first such comment in its thread.</dd>
-  <dt>Exact match</dt>
-  <dd>Same file, a real comment left on the commit the critic read, lines at most 5 apart, and the predicted theme one of the real comment's themes.</dd>
-  <dt>Judge match</dt>
-  <dd>Same file, on any commit, left unmatched by the exact rule, and a judge model shown both comments with the code under each found they make the same point.</dd>
-  <dt>Precision / recall / F1</dt>
-  <dd>Matched predictions over all predictions; matched real comments over all real comments; their harmonic mean. Matching is one to one. n/a means the denominator is zero.</dd>
-</dl>
+{% include "_terms.html" %}
 
 <h2>Scores</h2>
 <table>

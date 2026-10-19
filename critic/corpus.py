@@ -49,8 +49,16 @@ class CorpusCounts(CriticRecord):
     reviews: int
 
 
-class _PullRequestListing(ForeignRecord):
+class PullRequestListing(ForeignRecord):
     number: int
+    additions: int
+    deletions: int
+    # None while the PR is open or after it closed unmerged.
+    mergedAt: str | None
+
+    @property
+    def changed_lines(self) -> int:
+        return self.additions + self.deletions
 
 
 def fetch_corpus(repo: str, out_dir: Path) -> CorpusCounts:
@@ -61,7 +69,7 @@ def fetch_corpus(repo: str, out_dir: Path) -> CorpusCounts:
     _write_json(out_dir / REVIEW_COMMENTS_FILE, review_comments)
     issue_comments = read_api_list(_build_list_path(repo, "issues/comments"))
     _write_json(out_dir / ISSUE_COMMENTS_FILE, issue_comments)
-    numbers = [_PullRequestListing.model_validate(pr).number for pr in prs]
+    numbers = [PullRequestListing.model_validate(pr).number for pr in prs]
     reviews = [review for number in numbers for review in fetch_reviews(repo, number)]
     _write_jsonl(out_dir / REVIEWS_FILE, reviews)
     return CorpusCounts(
@@ -83,6 +91,14 @@ def load_corpus_index(corpus_dir: Path) -> CorpusIndex:
         by_url={comment.html_url: comment for comment in comments},
         by_id={comment.id: comment for comment in comments},
     )
+
+
+def load_pr_listings(corpus_dir: Path) -> list[PullRequestListing]:
+    path = corpus_dir / PRS_FILE
+    if not path.is_file():
+        raise FileNotFoundError(f"no {PRS_FILE} in {corpus_dir}: run `fetch` first")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return [PullRequestListing.model_validate(item) for item in payload]
 
 
 def load_inline_comments(corpus_dir: Path) -> list[InlineComment]:

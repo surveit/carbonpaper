@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import pytest
 
+from critic.evaluation import DEFAULT_PR_RANGE
 from critic.rubric import (
     FROM_ENV_SUFFIX,
     FROM_REPO_SUFFIX,
@@ -20,6 +22,9 @@ from critic.tests.fixture_data import FIXTURES, RUBRICS, STAND_IN_ENVIRON, load_
 from critic.themes import find_themes_outside, load_theme_vocabulary, select_flag_themes
 
 REPO_CHAIN = ["AGENTS.md", "app/AGENTS.md", "app/runtime/AGENTS.md", "app/templates/AGENTS.md"]
+DISTILLED = RUBRICS / "distilled"
+PR_URL = re.compile(r"github\.com/surveit/carbonpaper/pull/(\d+)")
+THEME_ROW = re.compile(r"^\| ([a-z_]+) \| [\d.]+% \|", re.MULTILINE)
 
 
 def test_the_empty_rubric_holds_no_rules() -> None:
@@ -47,6 +52,29 @@ def test_the_repo_chain_is_read_live_not_copied() -> None:
     assert all(name.endswith((FROM_ENV_SUFFIX, FROM_REPO_SUFFIX)) for name in names)
 
 
+def test_the_distilled_rubric_renders_its_five_files_in_name_order() -> None:
+    rubric = load_rubric(DISTILLED)
+    names = [file.name for file in rubric.files]
+    assert names == ["00_role.md", "10_themes.md", "20_rules.md", "30_examples.md", "40_not_flagged.md"]
+    rendered = render_rubric(rubric)
+    positions = [rendered.index(f"--- {name} ---") for name in names]
+    assert positions == sorted(positions)
+
+
+def test_the_distilled_examples_name_training_prs_and_no_held_out_one() -> None:
+    held_out_floor, _ = DEFAULT_PR_RANGE
+    examples = (DISTILLED / "30_examples.md").read_text(encoding="utf-8")
+    example_prs = [int(number) for number in PR_URL.findall(examples)]
+    assert len(example_prs) == 48
+    every_pr = [int(number) for file in load_rubric(DISTILLED).files for number in PR_URL.findall(file.text)]
+    assert [pr for pr in every_pr if pr >= held_out_floor] == []
+
+
+def test_the_distilled_theme_table_names_the_label_vocabulary() -> None:
+    table = (DISTILLED / "10_themes.md").read_text(encoding="utf-8")
+    assert set(THEME_ROW.findall(table)) == {theme.slug for theme in load_labels().themes}
+
+
 def test_a_repo_pointer_that_leaves_the_repo_is_refused(tmp_path: Path) -> None:
     (tmp_path / "outside.md.from-repo").write_text("../../outside.md", encoding="utf-8")
     with pytest.raises(ValueError, match="points outside the repo"):
@@ -69,7 +97,8 @@ def test_a_stamp_records_where_each_file_came_from_and_its_hash() -> None:
     stamps = stamp_rubric(rubric)
     stand_in = Path(STAND_IN_ENVIRON["CRITIC_OWNER_CLAUDE_MD"])
     expected = hashlib.sha256(stand_in.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
-    assert (stamps[0].name, stamps[0].origin, stamps[0].sha256) == ("owner-global-CLAUDE.md", "AGENTS.md", expected)
+    owner = ("owner-global-CLAUDE.md", "$CRITIC_OWNER_CLAUDE_MD", expected)
+    assert (stamps[0].name, stamps[0].origin, stamps[0].sha256) == owner
     # The stand-in is the repo's AGENTS.md, which the second file also reads.
     assert stamps[1].sha256 == expected
 

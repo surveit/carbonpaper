@@ -47,6 +47,11 @@ class PatchLine(CriticRecord):
     text: str
 
 
+class MergedHead(CriticRecord):
+    commit_sha: str
+    merged_at: str
+
+
 class _BranchTip(ForeignRecord):
     sha: str
 
@@ -56,6 +61,7 @@ class _PullRequestMeta(ForeignRecord):
     body: str | None
     base: _BranchTip
     head: _BranchTip
+    merged_at: str | None
 
 
 class _Comparison(ForeignRecord):
@@ -77,6 +83,13 @@ def fetch_pull_request_diff(repo: str, number: int, commit_sha: str | None) -> P
         commit_sha=meta.head.sha if commit_sha is None else commit_sha,
         files=files,
     )
+
+
+def fetch_merged_head(repo: str, number: int) -> MergedHead:
+    meta = _PullRequestMeta.model_validate(read_api_object(f"repos/{repo}/pulls/{number}"))
+    if meta.merged_at is None:
+        raise ValueError(f"PR {number} is not merged, so no commit is the one the reviewer let through")
+    return MergedHead(commit_sha=meta.head.sha, merged_at=meta.merged_at)
 
 
 def load_or_fetch_diff(repo: str, number: int, commit_sha: str, cache_dir: Path) -> PullRequestDiff:

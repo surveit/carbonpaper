@@ -1,0 +1,3193 @@
+{
+  "repo": "surveit/carbonpaper",
+  "notes": [
+    "The numbers favour distilled_clean, the variant whose figures count training PRs only. It caught 8 of 106 reviewer asks at 6.2% precision. distilled, the variant that also carried held-out shares, caught 7 at 5.6%. The gap is inside the noise of one run each. So the rules earned the gain over none, not the leaked shares. distilled_clean's text now sits at critic/rubrics/distilled.",
+    "Both variants beat none (2 caught, 1.6% precision) and current_instructions (1 caught, 0.8%).",
+    "Strict precision counts only the matches a reader finds make the reviewer's point, since the greedy match and the model judge are lenient: distilled_clean 6 of 130 (4.6%), distilled 6 of 124 (4.8%), none 1 of 128 (0.8%), current_instructions 1 of 131 (0.8%).",
+    "The clean text was kept for its score on these 44 PRs, so they are no longer a pure hold-out for it. The next claim about this rubric needs PRs it was not chosen on, such as PRs after 1096.",
+    "Which text each row read: row distilled is the rubric as first committed, in the first commit of #1130, \"Add the distilled rubric, tested to cite training PRs only\". Row distilled_clean is the text now at critic/rubrics/distilled. Each results.json stamps the sha256 of every rubric file it read.",
+    "The bar for keeping distilled_clean was at least 5 of 106 caught and at least 3.6% precision. It sits in a local scratch file whose modification time, 20:42:14 UTC, is 67 seconds before the run's recorded start, 20:43:21 UTC. Nothing anyone else can read holds it from before the results.",
+    "The leaked shares changed which asks were caught, not how many. 4 of distilled's 7 catches are prompt or copy asks (verbose_prose, product_copy, llm_contract), the themes its drift paragraph named. 2 of distilled_clean's 8 are. distilled_clean instead caught two needless_abstraction asks on #973 and a dict_any ask on #1004.",
+    "Read by hand, 6 of distilled_clean's 8 matches make the reviewer's point. One is loose: on #973, \"What on earth is this thing?\" matched a comment asking for a rename. One does not: on #1004, the exact rule matched an ask to rename a type with a comment on a field name. distilled has the same #1004 match, and its other 6 make the point. Of none's 2 matches, only #1072 makes the point. none's #1045 exact match pairs a question about the grain rule with a complaint about duplicated examples. current_instructions caught only #1072, which all four caught. One reader made these calls: the agent that ran the eval.",
+    "What distilled_clean still misses: needless_abstraction 2 of 24 asks, naming 2 of 26. Its most frequent wrong theme is weak_types: 23 comments against 1 real ask.",
+    "Drift between train (PRs below 937) and test (PRs 937-1096). The prompt and copy themes together (prompt_design, product_copy, llm_contract, verbose_prose) are 23.6% of test comments (48 of 203) against 8.5% of train (96 of 1,131). code_placement is 5.4% of test (11 of 203) against 15.6% of train (176 of 1,131). One labeler labeled the whole test side, and the top 5 test PRs hold 70.9% of its comments. Source: merged/stats.json (copy_group, theme_share_by_split, split.test.top5_pr_share) and merged/SUMMARY.md from the label merge.",
+    "Real comments: the first ask in each thread on 24 of the 26 held-out PRs with human comments. #955 and #1001 hold no inline ask. 59 asks were left before a base-branch change, so their diffs cannot be rebuilt. Each results.json lists them under excluded_labels.",
+    "Silent PRs: 5 per size bucket, evenly spaced by PR number, from the 87 merged held-out PRs with no human comment (38, 26, 16 and 7 by bucket, smallest first). Every comment returned on them is a false one. On the 20, distilled_clean returned 46 comments, distilled 44, none 56 and current_instructions 54. Both distilled variants ask for an empty list below 50 changed lines. distilled_clean still returned 3 comments on the 5 such PRs, and distilled 2.",
+    "Baseline from #1103: on 8 held-out PRs holding 33 asks, none scored 3.8% precision and 3.0% recall on the pre-merge labels. current_instructions scored 0-3.7% and 0-3.0% across runs. Both scored 0.0% in the final committed runs. On those 8 PRs, this run's none and current_instructions caught 0 of 33 asks. distilled caught 2 (#944, #951) and distilled_clean 2 (both on #973), all by the judge. #1103 saw a rubric's catch count move by one between runs of the same set.",
+    "Spend is the CLI's total_cost_usd, at API prices: none $14.05, current_instructions $18.41, distilled $14.11, distilled_clean $14.32. That is $60.89 in all, $0.32 to $0.42 per scored PR. Every review and judge call answered as claude-opus-4-8[1m].",
+    "Theme definitions sit in each results.json under by_theme[].definition. This page leaves them out because three of the labeler's definitions use a word that tests/arch/test_no_banned_words.py bans.",
+    "To reproduce, from the repo root. Only the eval step calls the model, at about $14 to $18 a rubric.",
+    "1. uv run python -m critic fetch --out .critic/corpus",
+    "2. For each RUBRIC in none, current_instructions, distilled: CRITIC_OWNER_CLAUDE_MD=$HOME/.claude/CLAUDE.md uv run python -m critic eval --rubric critic/rubrics/RUBRIC --split critic/labels/split.json --silent-per-bucket 5 --jobs 2 --out .critic/runs/RUBRIC. Only current_instructions reads the variable. The leaky row read the files of critic/rubrics/distilled in #1130's first commit; fetch them with git fetch origin pull/1130/head.",
+    "3. uv run python -m critic compare .critic/runs/none/results.json .critic/runs/current_instructions/results.json .critic/runs/distilled/results.json --notes critic/evals/2026-09-28/held-out/notes.txt --out .critic/compare",
+    "The eval reads the label set committed at critic/labels/. Its three files carry the sha256 that inputs.sha256 lists for merged/corpus.human.jsonl, merged/taxonomy.json and merged/split.json. A fetch today returns more PRs than the stamped corpus held (1,013 against 974). From a fresh worktree, fetch then eval's free steps planned the same 44 units, 106 asks, 20 silent PRs, skipped PRs and excluded asks as all four committed runs, and compare over the committed results rebuilt this page byte for byte."
+  ],
+  "runs": [
+    {
+      "rubric": "none",
+      "results_path": "none/results.json",
+      "review_model_ids": [
+        "claude-opus-4-8[1m]"
+      ],
+      "overall": {
+        "predicted": 128,
+        "real": 106,
+        "matched_predictions": 2,
+        "matched_reals": 2,
+        "precision": 0.015625,
+        "recall": 0.018867924528301886,
+        "f1": 0.017094017094017096
+      },
+      "exact_only": {
+        "predicted": 128,
+        "real": 106,
+        "matched_predictions": 2,
+        "matched_reals": 2,
+        "precision": 0.015625,
+        "recall": 0.018867924528301886,
+        "f1": 0.017094017094017096
+      },
+      "on_commented_prs": {
+        "predicted": 72,
+        "real": 106,
+        "matched_predictions": 2,
+        "matched_reals": 2,
+        "precision": 0.027777777777777776,
+        "recall": 0.018867924528301886,
+        "f1": 0.02247191011235955
+      },
+      "silent_predictions": 56,
+      "scored_units": 44,
+      "unscored_units": 0,
+      "review_cost_usd": 13.676937,
+      "judge_cost_usd": 0.377036
+    },
+    {
+      "rubric": "current_instructions",
+      "results_path": "current_instructions/results.json",
+      "review_model_ids": [
+        "claude-opus-4-8[1m]"
+      ],
+      "overall": {
+        "predicted": 131,
+        "real": 106,
+        "matched_predictions": 1,
+        "matched_reals": 1,
+        "precision": 0.007633587786259542,
+        "recall": 0.009433962264150943,
+        "f1": 0.008438818565400843
+      },
+      "exact_only": {
+        "predicted": 131,
+        "real": 106,
+        "matched_predictions": 1,
+        "matched_reals": 1,
+        "precision": 0.007633587786259542,
+        "recall": 0.009433962264150943,
+        "f1": 0.008438818565400843
+      },
+      "on_commented_prs": {
+        "predicted": 77,
+        "real": 106,
+        "matched_predictions": 1,
+        "matched_reals": 1,
+        "precision": 0.012987012987012988,
+        "recall": 0.009433962264150943,
+        "f1": 0.010928961748633878
+      },
+      "silent_predictions": 54,
+      "scored_units": 44,
+      "unscored_units": 0,
+      "review_cost_usd": 17.998061500000002,
+      "judge_cost_usd": 0.413231
+    },
+    {
+      "rubric": "distilled",
+      "results_path": "distilled/results.json",
+      "review_model_ids": [
+        "claude-opus-4-8[1m]"
+      ],
+      "overall": {
+        "predicted": 124,
+        "real": 106,
+        "matched_predictions": 7,
+        "matched_reals": 7,
+        "precision": 0.056451612903225805,
+        "recall": 0.0660377358490566,
+        "f1": 0.06086956521739131
+      },
+      "exact_only": {
+        "predicted": 124,
+        "real": 106,
+        "matched_predictions": 3,
+        "matched_reals": 3,
+        "precision": 0.024193548387096774,
+        "recall": 0.02830188679245283,
+        "f1": 0.026086956521739132
+      },
+      "on_commented_prs": {
+        "predicted": 80,
+        "real": 106,
+        "matched_predictions": 7,
+        "matched_reals": 7,
+        "precision": 0.0875,
+        "recall": 0.0660377358490566,
+        "f1": 0.07526881720430106
+      },
+      "silent_predictions": 44,
+      "scored_units": 44,
+      "unscored_units": 0,
+      "review_cost_usd": 13.545413,
+      "judge_cost_usd": 0.562153
+    },
+    {
+      "rubric": "distilled_clean",
+      "results_path": "distilled_clean/results.json",
+      "review_model_ids": [
+        "claude-opus-4-8[1m]"
+      ],
+      "overall": {
+        "predicted": 130,
+        "real": 106,
+        "matched_predictions": 8,
+        "matched_reals": 8,
+        "precision": 0.06153846153846154,
+        "recall": 0.07547169811320754,
+        "f1": 0.06779661016949154
+      },
+      "exact_only": {
+        "predicted": 130,
+        "real": 106,
+        "matched_predictions": 4,
+        "matched_reals": 4,
+        "precision": 0.03076923076923077,
+        "recall": 0.03773584905660377,
+        "f1": 0.03389830508474577
+      },
+      "on_commented_prs": {
+        "predicted": 84,
+        "real": 106,
+        "matched_predictions": 8,
+        "matched_reals": 8,
+        "precision": 0.09523809523809523,
+        "recall": 0.07547169811320754,
+        "f1": 0.08421052631578949
+      },
+      "silent_predictions": 46,
+      "scored_units": 44,
+      "unscored_units": 0,
+      "review_cost_usd": 13.714894,
+      "judge_cost_usd": 0.602208
+    }
+  ],
+  "themes": [
+    {
+      "theme": "naming",
+      "scores": [
+        {
+          "predicted": 7,
+          "real": 26,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 15,
+          "real": 26,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 15,
+          "real": 26,
+          "matched_predictions": 1,
+          "matched_reals": 1,
+          "precision": 0.06666666666666667,
+          "recall": 0.038461538461538464,
+          "f1": 0.04878048780487805
+        },
+        {
+          "predicted": 18,
+          "real": 26,
+          "matched_predictions": 2,
+          "matched_reals": 2,
+          "precision": 0.1111111111111111,
+          "recall": 0.07692307692307693,
+          "f1": 0.09090909090909093
+        }
+      ]
+    },
+    {
+      "theme": "needless_abstraction",
+      "scores": [
+        {
+          "predicted": 3,
+          "real": 24,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 3,
+          "real": 24,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 11,
+          "real": 24,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 3,
+          "real": 24,
+          "matched_predictions": 0,
+          "matched_reals": 2,
+          "precision": 0.0,
+          "recall": 0.08333333333333333,
+          "f1": 0.0
+        }
+      ]
+    },
+    {
+      "theme": "design_direction",
+      "scores": [
+        {
+          "predicted": 2,
+          "real": 16,
+          "matched_predictions": 0,
+          "matched_reals": 1,
+          "precision": 0.0,
+          "recall": 0.0625,
+          "f1": 0.0
+        },
+        {
+          "predicted": 1,
+          "real": 16,
+          "matched_predictions": 0,
+          "matched_reals": 1,
+          "precision": 0.0,
+          "recall": 0.0625,
+          "f1": 0.0
+        },
+        {
+          "predicted": 1,
+          "real": 16,
+          "matched_predictions": 0,
+          "matched_reals": 1,
+          "precision": 0.0,
+          "recall": 0.0625,
+          "f1": 0.0
+        },
+        {
+          "predicted": 2,
+          "real": 16,
+          "matched_predictions": 1,
+          "matched_reals": 1,
+          "precision": 0.5,
+          "recall": 0.0625,
+          "f1": 0.1111111111111111
+        }
+      ]
+    },
+    {
+      "theme": "product_copy",
+      "scores": [
+        {
+          "predicted": 1,
+          "real": 15,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 2,
+          "real": 15,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 1,
+          "real": 15,
+          "matched_predictions": 0,
+          "matched_reals": 3,
+          "precision": 0.0,
+          "recall": 0.2,
+          "f1": 0.0
+        },
+        {
+          "predicted": 1,
+          "real": 15,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        }
+      ]
+    },
+    {
+      "theme": "question_only",
+      "scores": [
+        {
+          "predicted": 1,
+          "real": 11,
+          "matched_predictions": 0,
+          "matched_reals": 1,
+          "precision": 0.0,
+          "recall": 0.09090909090909091,
+          "f1": 0.0
+        },
+        {
+          "predicted": 1,
+          "real": 11,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 0,
+          "real": 11,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 11,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null
+        }
+      ]
+    },
+    {
+      "theme": "data_model",
+      "scores": [
+        {
+          "predicted": 3,
+          "real": 10,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 1,
+          "real": 10,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 6,
+          "real": 10,
+          "matched_predictions": 0,
+          "matched_reals": 1,
+          "precision": 0.0,
+          "recall": 0.1,
+          "f1": 0.0
+        },
+        {
+          "predicted": 4,
+          "real": 10,
+          "matched_predictions": 0,
+          "matched_reals": 1,
+          "precision": 0.0,
+          "recall": 0.1,
+          "f1": 0.0
+        }
+      ]
+    },
+    {
+      "theme": "verbose_prose",
+      "scores": [
+        {
+          "predicted": 3,
+          "real": 9,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 4,
+          "real": 9,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 7,
+          "real": 9,
+          "matched_predictions": 2,
+          "matched_reals": 3,
+          "precision": 0.2857142857142857,
+          "recall": 0.3333333333333333,
+          "f1": 0.30769230769230765
+        },
+        {
+          "predicted": 5,
+          "real": 9,
+          "matched_predictions": 2,
+          "matched_reals": 2,
+          "precision": 0.4,
+          "recall": 0.2222222222222222,
+          "f1": 0.2857142857142857
+        }
+      ]
+    },
+    {
+      "theme": "vocabulary",
+      "scores": [
+        {
+          "predicted": 2,
+          "real": 9,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 5,
+          "real": 9,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 4,
+          "real": 9,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 3,
+          "real": 9,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        }
+      ]
+    },
+    {
+      "theme": "code_placement",
+      "scores": [
+        {
+          "predicted": 4,
+          "real": 6,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 1,
+          "real": 6,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 2,
+          "real": 6,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 3,
+          "real": 6,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        }
+      ]
+    },
+    {
+      "theme": "dead_code",
+      "scores": [
+        {
+          "predicted": 7,
+          "real": 4,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 7,
+          "real": 4,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 2,
+          "real": 4,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 5,
+          "real": 4,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        }
+      ]
+    },
+    {
+      "theme": "ignored_feedback",
+      "scores": [
+        {
+          "predicted": 0,
+          "real": 4,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 4,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 4,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 4,
+          "matched_predictions": 0,
+          "matched_reals": 1,
+          "precision": null,
+          "recall": 0.25,
+          "f1": null
+        }
+      ]
+    },
+    {
+      "theme": "llm_contract",
+      "scores": [
+        {
+          "predicted": 0,
+          "real": 3,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 3,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 3,
+          "matched_predictions": 0,
+          "matched_reals": 1,
+          "precision": null,
+          "recall": 0.3333333333333333,
+          "f1": null
+        },
+        {
+          "predicted": 1,
+          "real": 3,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        }
+      ]
+    },
+    {
+      "theme": "prose_accuracy",
+      "scores": [
+        {
+          "predicted": 7,
+          "real": 3,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 7,
+          "real": 3,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 2,
+          "real": 3,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 1,
+          "real": 3,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        }
+      ]
+    },
+    {
+      "theme": "backcompat",
+      "scores": [
+        {
+          "predicted": 0,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null
+        },
+        {
+          "predicted": 1,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 2,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        }
+      ]
+    },
+    {
+      "theme": "boundary_validation",
+      "scores": [
+        {
+          "predicted": 5,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 3,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 2,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 1,
+          "precision": 0.0,
+          "recall": 0.5,
+          "f1": 0.0
+        },
+        {
+          "predicted": 5,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 1,
+          "precision": 0.0,
+          "recall": 0.5,
+          "f1": 0.0
+        }
+      ]
+    },
+    {
+      "theme": "correctness_bug",
+      "scores": [
+        {
+          "predicted": 10,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 8,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 2,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 1,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        }
+      ]
+    },
+    {
+      "theme": "dict_any",
+      "scores": [
+        {
+          "predicted": 1,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 2,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 6,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 5,
+          "real": 2,
+          "matched_predictions": 1,
+          "matched_reals": 1,
+          "precision": 0.2,
+          "recall": 0.5,
+          "f1": 0.28571428571428575
+        }
+      ]
+    },
+    {
+      "theme": "one_source_of_truth",
+      "scores": [
+        {
+          "predicted": 22,
+          "real": 2,
+          "matched_predictions": 1,
+          "matched_reals": 1,
+          "precision": 0.045454545454545456,
+          "recall": 0.5,
+          "f1": 0.08333333333333334
+        },
+        {
+          "predicted": 15,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 6,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 10,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        }
+      ]
+    },
+    {
+      "theme": "reinvents_existing",
+      "scores": [
+        {
+          "predicted": 2,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 0,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null
+        },
+        {
+          "predicted": 5,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 5,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        }
+      ]
+    },
+    {
+      "theme": "scope_creep",
+      "scores": [
+        {
+          "predicted": 0,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null
+        },
+        {
+          "predicted": 1,
+          "real": 2,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        }
+      ]
+    },
+    {
+      "theme": "fallback_or_fabrication",
+      "scores": [
+        {
+          "predicted": 5,
+          "real": 1,
+          "matched_predictions": 1,
+          "matched_reals": 1,
+          "precision": 0.2,
+          "recall": 1.0,
+          "f1": 0.33333333333333337
+        },
+        {
+          "predicted": 4,
+          "real": 1,
+          "matched_predictions": 1,
+          "matched_reals": 1,
+          "precision": 0.25,
+          "recall": 1.0,
+          "f1": 0.4
+        },
+        {
+          "predicted": 7,
+          "real": 1,
+          "matched_predictions": 1,
+          "matched_reals": 1,
+          "precision": 0.14285714285714285,
+          "recall": 1.0,
+          "f1": 0.25
+        },
+        {
+          "predicted": 7,
+          "real": 1,
+          "matched_predictions": 1,
+          "matched_reals": 1,
+          "precision": 0.14285714285714285,
+          "recall": 1.0,
+          "f1": 0.25
+        }
+      ]
+    },
+    {
+      "theme": "review_guide",
+      "scores": [
+        {
+          "predicted": 0,
+          "real": 1,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 1,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 1,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 1,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null
+        }
+      ]
+    },
+    {
+      "theme": "weak_types",
+      "scores": [
+        {
+          "predicted": 21,
+          "real": 1,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 15,
+          "real": 1,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 23,
+          "real": 1,
+          "matched_predictions": 1,
+          "matched_reals": 0,
+          "precision": 0.043478260869565216,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        {
+          "predicted": 23,
+          "real": 1,
+          "matched_predictions": 1,
+          "matched_reals": 0,
+          "precision": 0.043478260869565216,
+          "recall": 0.0,
+          "f1": 0.0
+        }
+      ]
+    },
+    {
+      "theme": "comments_and_docs",
+      "scores": [
+        {
+          "predicted": 6,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 23,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 11,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 13,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        }
+      ]
+    },
+    {
+      "theme": "gates",
+      "scores": [
+        {
+          "predicted": 2,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 1,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 1,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        }
+      ]
+    },
+    {
+      "theme": "hardcoded_values",
+      "scores": [
+        {
+          "predicted": 0,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 2,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 1,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        }
+      ]
+    },
+    {
+      "theme": "interface_shape",
+      "scores": [
+        {
+          "predicted": 1,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 2,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 1,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": null,
+          "f1": null
+        }
+      ]
+    },
+    {
+      "theme": "other",
+      "scores": [
+        {
+          "predicted": 1,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 1,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": null,
+          "f1": null
+        }
+      ]
+    },
+    {
+      "theme": "prompt_design",
+      "scores": [
+        {
+          "predicted": 0,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 1,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 4,
+          "real": 0,
+          "matched_predictions": 2,
+          "matched_reals": 0,
+          "precision": 0.5,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 3,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        }
+      ]
+    },
+    {
+      "theme": "readability",
+      "scores": [
+        {
+          "predicted": 3,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 4,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 4,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 7,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        }
+      ]
+    },
+    {
+      "theme": "tests",
+      "scores": [
+        {
+          "predicted": 7,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 4,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": null,
+          "f1": null
+        }
+      ]
+    },
+    {
+      "theme": "ux_behavior",
+      "scores": [
+        {
+          "predicted": 2,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": null,
+          "f1": null
+        },
+        {
+          "predicted": 0,
+          "real": 0,
+          "matched_predictions": 0,
+          "matched_reals": 0,
+          "precision": null,
+          "recall": null,
+          "f1": null
+        }
+      ]
+    }
+  ],
+  "prs": [
+    {
+      "pr": 944,
+      "commit_sha": "4b53309c3d6ab2130071892b761e6ade4444f715",
+      "changed_lines": 340,
+      "size_bucket": "200-599",
+      "real": 1,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.14990350000000002
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.2949045
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 1,
+          "cost_usd": 0.286881
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.395104
+        }
+      ]
+    },
+    {
+      "pr": 950,
+      "commit_sha": "323848ac447ecf5a549dc664409b18ae7dd069c1",
+      "changed_lines": 115,
+      "size_bucket": "50-199",
+      "real": 1,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 1,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.045290500000000004
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.215107
+        },
+        {
+          "status": "scored",
+          "predicted": 5,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.30855899999999997
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.26466500000000004
+        }
+      ]
+    },
+    {
+      "pr": 951,
+      "commit_sha": "80974fc65a975783f81377516535f37339db1633",
+      "changed_lines": 217,
+      "size_bucket": "200-599",
+      "real": 1,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 5,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.1756865
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.2723185
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 1,
+          "cost_usd": 0.24603100000000003
+        },
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.2107535
+        }
+      ]
+    },
+    {
+      "pr": 967,
+      "commit_sha": "f5c698645aaa9d22f643796a5d583747e0c31ec2",
+      "changed_lines": 328,
+      "size_bucket": "200-599",
+      "real": 3,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.0900665
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.3415935
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.24462099999999998
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.28991599999999995
+        }
+      ]
+    },
+    {
+      "pr": 970,
+      "commit_sha": "92192812e2b4cb580bb5292a8b7aeea25d2ae480",
+      "changed_lines": 51,
+      "size_bucket": "50-199",
+      "real": 1,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.064151
+        },
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.12347849999999999
+        },
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.08685100000000001
+        },
+        {
+          "status": "scored",
+          "predicted": 1,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.0807725
+        }
+      ]
+    },
+    {
+      "pr": 971,
+      "commit_sha": "300e0037cc7733d19e4f24a97555ee5379df305e",
+      "changed_lines": 333,
+      "size_bucket": "200-599",
+      "real": 4,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.22101600000000002
+        },
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.42476349999999996
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.352386
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.3201025
+        }
+      ]
+    },
+    {
+      "pr": 973,
+      "commit_sha": "d9a1e8a95037c258498888a2bcffd5df12cd0ce9",
+      "changed_lines": 1435,
+      "size_bucket": "600+",
+      "real": 21,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 6,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.27587700000000004
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.44017850000000003
+        },
+        {
+          "status": "scored",
+          "predicted": 6,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.48181
+        },
+        {
+          "status": "scored",
+          "predicted": 6,
+          "matched_exact": 0,
+          "matched_judge": 2,
+          "cost_usd": 0.5478765
+        }
+      ]
+    },
+    {
+      "pr": 976,
+      "commit_sha": "b6c6458bc4c118f923254fe7a85efc42c774f90b",
+      "changed_lines": 71,
+      "size_bucket": "50-199",
+      "real": 1,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.045878
+        },
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.2301495
+        },
+        {
+          "status": "scored",
+          "predicted": 0,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.136377
+        },
+        {
+          "status": "scored",
+          "predicted": 0,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.09898850000000001
+        }
+      ]
+    },
+    {
+      "pr": 977,
+      "commit_sha": "b8f46bbd5f160db915d0e873c21aeaff22537c5d",
+      "changed_lines": 20,
+      "size_bucket": "under 50",
+      "real": 1,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 0,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.0380475
+        },
+        {
+          "status": "scored",
+          "predicted": 1,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.10061800000000001
+        },
+        {
+          "status": "scored",
+          "predicted": 0,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.035072000000000006
+        },
+        {
+          "status": "scored",
+          "predicted": 0,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.034308500000000006
+        }
+      ]
+    },
+    {
+      "pr": 983,
+      "commit_sha": "1fbc3ad0271e9bf2e4957f90d57c39bd28481a4e",
+      "changed_lines": 746,
+      "size_bucket": "600+",
+      "real": 18,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 5,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.4523215
+        },
+        {
+          "status": "scored",
+          "predicted": 5,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.5259434999999999
+        },
+        {
+          "status": "scored",
+          "predicted": 5,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.452961
+        },
+        {
+          "status": "scored",
+          "predicted": 6,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.45052749999999997
+        }
+      ]
+    },
+    {
+      "pr": 990,
+      "commit_sha": "e933c5a40bac28468e77a1e5b510db6472deff06",
+      "changed_lines": 504,
+      "size_bucket": "200-599",
+      "real": 2,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.2803275
+        },
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.33317450000000004
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.221166
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.2269275
+        }
+      ]
+    },
+    {
+      "pr": 1003,
+      "commit_sha": "ec43e2f01dad067300f5c9075eb0b6bf25e4b227",
+      "changed_lines": 511,
+      "size_bucket": "200-599",
+      "real": 2,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.3967915000000001
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.48958349999999995
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.303811
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.3041025
+        }
+      ]
+    },
+    {
+      "pr": 1004,
+      "commit_sha": "ceade02eedb3ff91bb47780cd2c918991c17998c",
+      "changed_lines": 1121,
+      "size_bucket": "600+",
+      "real": 12,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.6747414999999999
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.7631634999999999
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 1,
+          "matched_judge": 0,
+          "cost_usd": 0.671531
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 2,
+          "matched_judge": 0,
+          "cost_usd": 0.6700824999999999
+        }
+      ]
+    },
+    {
+      "pr": 1016,
+      "commit_sha": "b54372a4f4beaa4037747704eecc9e802e2ed80c",
+      "changed_lines": 1854,
+      "size_bucket": "600+",
+      "real": 7,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 6,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.6812125
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.7619985
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.614062
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.5939485
+        }
+      ]
+    },
+    {
+      "pr": 1018,
+      "commit_sha": "13ab78788dc3bbe8e544af8596067ff71f5b1883",
+      "changed_lines": 1552,
+      "size_bucket": "600+",
+      "real": 1,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 5,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.8843365
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 1.163745
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.7468119999999999
+        },
+        {
+          "status": "scored",
+          "predicted": 6,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.7676974999999999
+        }
+      ]
+    },
+    {
+      "pr": 1031,
+      "commit_sha": "2f758f8993e9b59e232c6519739d3654fbdb14a0",
+      "changed_lines": 2141,
+      "size_bucket": "600+",
+      "real": 8,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.8101915
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 1.045842
+        },
+        {
+          "status": "scored",
+          "predicted": 5,
+          "matched_exact": 0,
+          "matched_judge": 1,
+          "cost_usd": 0.7529159999999999
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 1,
+          "cost_usd": 0.7787575
+        }
+      ]
+    },
+    {
+      "pr": 1034,
+      "commit_sha": "f5ee5f3012c9e642350294b944a096dd0395bfce",
+      "changed_lines": 243,
+      "size_bucket": "200-599",
+      "real": 1,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.22300150000000002
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.36257350000000005
+        },
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.229861
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.22640749999999998
+        }
+      ]
+    },
+    {
+      "pr": 1039,
+      "commit_sha": "d8d5cd2e786ad9a70854b77857ee433a3b451508",
+      "changed_lines": 1512,
+      "size_bucket": "600+",
+      "real": 1,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.4221625
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.6929315
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.393712
+        },
+        {
+          "status": "scored",
+          "predicted": 5,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.4127075
+        }
+      ]
+    },
+    {
+      "pr": 1045,
+      "commit_sha": "a3e285612fc8b68f71124a78f793e54c1b688ca0",
+      "changed_lines": 857,
+      "size_bucket": "600+",
+      "real": 10,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 1,
+          "matched_judge": 0,
+          "cost_usd": 0.4782115
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.6183635000000001
+        },
+        {
+          "status": "scored",
+          "predicted": 5,
+          "matched_exact": 1,
+          "matched_judge": 1,
+          "cost_usd": 0.48327600000000004
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 1,
+          "cost_usd": 0.5243625
+        }
+      ]
+    },
+    {
+      "pr": 1047,
+      "commit_sha": "d608c9eec7fcd6eb5582a80f522f1453f71f012b",
+      "changed_lines": 437,
+      "size_bucket": "200-599",
+      "real": 2,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.3250115
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.3542385
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.305856
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.2993725
+        }
+      ]
+    },
+    {
+      "pr": 1061,
+      "commit_sha": "2202ea50022fc9e3d50947c442f3d4c6fe59e709",
+      "changed_lines": 245,
+      "size_bucket": "200-599",
+      "real": 2,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.22083750000000002
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.25623450000000003
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.203837
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.2118485
+        }
+      ]
+    },
+    {
+      "pr": 1066,
+      "commit_sha": "d2306083d2e519246f966d4bd6ec58964f83a13b",
+      "changed_lines": 286,
+      "size_bucket": "200-599",
+      "real": 3,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.1428375
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.1768595
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.168537
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 1,
+          "matched_judge": 0,
+          "cost_usd": 0.16432349999999998
+        }
+      ]
+    },
+    {
+      "pr": 1072,
+      "commit_sha": "1f3d0c52bf0d465aa21c2e3459a31c4a2bebff57",
+      "changed_lines": 733,
+      "size_bucket": "600+",
+      "real": 2,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 1,
+          "matched_judge": 0,
+          "cost_usd": 0.3118415
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 1,
+          "matched_judge": 0,
+          "cost_usd": 0.3429145
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 1,
+          "matched_judge": 0,
+          "cost_usd": 0.27868099999999996
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 1,
+          "matched_judge": 0,
+          "cost_usd": 0.3507785
+        }
+      ]
+    },
+    {
+      "pr": 1074,
+      "commit_sha": "921b4ae7a2bf1fc89ed3c508f28fc146e18af38f",
+      "changed_lines": 1026,
+      "size_bucket": "600+",
+      "real": 1,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.2626145
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.2556545
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.187782
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.2294715
+        }
+      ]
+    },
+    {
+      "pr": 940,
+      "commit_sha": "fe8ce9d1dc8291cd814205d4a7bc2ecb2e3767c0",
+      "changed_lines": 210,
+      "size_bucket": "200-599",
+      "real": 0,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.1810175
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.48916899999999996
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.20274199999999998
+        },
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.1623285
+        }
+      ]
+    },
+    {
+      "pr": 942,
+      "commit_sha": "5a310c87b5485f15e33dbfc57f00479eb0437075",
+      "changed_lines": 667,
+      "size_bucket": "600+",
+      "real": 0,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 5,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.5641575000000001
+        },
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.5774045000000001
+        },
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.515957
+        },
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.5142185
+        }
+      ]
+    },
+    {
+      "pr": 943,
+      "commit_sha": "ddf6256c9b7444f28f429875e19fc93788e625a4",
+      "changed_lines": 189,
+      "size_bucket": "50-199",
+      "real": 0,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.2038325
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.33657950000000003
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.213007
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.1740685
+        }
+      ]
+    },
+    {
+      "pr": 953,
+      "commit_sha": "4a995c948d37aefe65c54487130208ff8226da57",
+      "changed_lines": 10,
+      "size_bucket": "under 50",
+      "real": 0,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 0,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.0180475
+        },
+        {
+          "status": "scored",
+          "predicted": 0,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.0363695
+        },
+        {
+          "status": "scored",
+          "predicted": 0,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.023822000000000003
+        },
+        {
+          "status": "scored",
+          "predicted": 0,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.0228335
+        }
+      ]
+    },
+    {
+      "pr": 961,
+      "commit_sha": "2c1ae20dfa4ef7e096784ea1a5a41627c72cd764",
+      "changed_lines": 286,
+      "size_bucket": "200-599",
+      "real": 0,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.1781075
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.2712795
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.14413199999999998
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.1305435
+        }
+      ]
+    },
+    {
+      "pr": 980,
+      "commit_sha": "df8c89966e139763b0bfbb9fc348403beb35f04f",
+      "changed_lines": 59,
+      "size_bucket": "50-199",
+      "real": 0,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.09779750000000001
+        },
+        {
+          "status": "scored",
+          "predicted": 1,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.12621549999999998
+        },
+        {
+          "status": "scored",
+          "predicted": 1,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.1105255
+        },
+        {
+          "status": "scored",
+          "predicted": 1,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.0735085
+        }
+      ]
+    },
+    {
+      "pr": 987,
+      "commit_sha": "5a842324d1f34719f075755db82c0e200ae3c17d",
+      "changed_lines": 571,
+      "size_bucket": "200-599",
+      "real": 0,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.3878825
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.40662950000000003
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.387482
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.38854350000000004
+        }
+      ]
+    },
+    {
+      "pr": 991,
+      "commit_sha": "e3f0cabbb523ee3eea547bed4b1b939ef764eae6",
+      "changed_lines": 3772,
+      "size_bucket": "600+",
+      "real": 0,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 1.1475875000000002
+        },
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 1.1720345
+        },
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 1.035412
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 1.1204855
+        }
+      ]
+    },
+    {
+      "pr": 992,
+      "commit_sha": "56bee3aa6ecf4cde5ab84ccc013137e6020015ad",
+      "changed_lines": 106,
+      "size_bucket": "50-199",
+      "real": 0,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.1848795
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.3136185
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.143032
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.1605435
+        }
+      ]
+    },
+    {
+      "pr": 997,
+      "commit_sha": "4bcdf5e42e5aa34d4a2bfa174d62556f55f534a2",
+      "changed_lines": 24,
+      "size_bucket": "under 50",
+      "real": 0,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 1,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.0901625
+        },
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.0635645
+        },
+        {
+          "status": "scored",
+          "predicted": 1,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.049017
+        },
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.0773045
+        }
+      ]
+    },
+    {
+      "pr": 1006,
+      "commit_sha": "886d57001ee1faf3bfe04bd535d5869a637721d1",
+      "changed_lines": 100,
+      "size_bucket": "50-199",
+      "real": 0,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.0756025
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.1242495
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.1133345
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.08611350000000001
+        }
+      ]
+    },
+    {
+      "pr": 1020,
+      "commit_sha": "658ce0e0fcc1b7f28f69d9c77eae777390ec9a36",
+      "changed_lines": 1300,
+      "size_bucket": "600+",
+      "real": 0,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 6,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.4678025
+        },
+        {
+          "status": "scored",
+          "predicted": 5,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.5482994999999999
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.451727
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.4490135
+        }
+      ]
+    },
+    {
+      "pr": 1021,
+      "commit_sha": "ac16a0984c5fe6cedc87c916c06a02cb7d7ddbd2",
+      "changed_lines": 465,
+      "size_bucket": "200-599",
+      "real": 0,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.20573750000000002
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.2383345
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.208787
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.2315235
+        }
+      ]
+    },
+    {
+      "pr": 1026,
+      "commit_sha": "844b8e631859300bb0aa6751a9f7106f58aa1a5d",
+      "changed_lines": 1663,
+      "size_bucket": "600+",
+      "real": 0,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 6,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.6821225
+        },
+        {
+          "status": "scored",
+          "predicted": 5,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.9609780000000001
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.6821929999999999
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.6310335
+        }
+      ]
+    },
+    {
+      "pr": 1029,
+      "commit_sha": "06c2ef23a9c39d3b7a31b49d4ccfdd711fcf79ed",
+      "changed_lines": 578,
+      "size_bucket": "200-599",
+      "real": 0,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.47957250000000007
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.4959445
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.386197
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.3875835
+        }
+      ]
+    },
+    {
+      "pr": 1049,
+      "commit_sha": "42a8d5ca01d2cf061d1f2aba601f090deca2bd18",
+      "changed_lines": 103,
+      "size_bucket": "50-199",
+      "real": 0,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.09272250000000001
+        },
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.1656195
+        },
+        {
+          "status": "scored",
+          "predicted": 1,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.090722
+        },
+        {
+          "status": "scored",
+          "predicted": 1,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.09335850000000001
+        }
+      ]
+    },
+    {
+      "pr": 1050,
+      "commit_sha": "d2de1f23fe015236ca375a25262afc33455011ba",
+      "changed_lines": 12,
+      "size_bucket": "under 50",
+      "real": 0,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 1,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.0467775
+        },
+        {
+          "status": "scored",
+          "predicted": 1,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.12279200000000001
+        },
+        {
+          "status": "scored",
+          "predicted": 1,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.041927
+        },
+        {
+          "status": "scored",
+          "predicted": 1,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.07352500000000001
+        }
+      ]
+    },
+    {
+      "pr": 1076,
+      "commit_sha": "24b096d2d0e0b3c1d747ede8aac5c1ebf091a0cf",
+      "changed_lines": 1560,
+      "size_bucket": "600+",
+      "real": 0,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 1.0694325
+        },
+        {
+          "status": "scored",
+          "predicted": 3,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 1.0666795
+        },
+        {
+          "status": "scored",
+          "predicted": 2,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.982132
+        },
+        {
+          "status": "scored",
+          "predicted": 4,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.9546435000000001
+        }
+      ]
+    },
+    {
+      "pr": 1082,
+      "commit_sha": "9d140e6d6024c3a3abe4d6cf90575abc85dc0d98",
+      "changed_lines": 30,
+      "size_bucket": "under 50",
+      "real": 0,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 0,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.0568075
+        },
+        {
+          "status": "scored",
+          "predicted": 1,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.1051045
+        },
+        {
+          "status": "scored",
+          "predicted": 0,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.056257
+        },
+        {
+          "status": "scored",
+          "predicted": 0,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.0546185
+        }
+      ]
+    },
+    {
+      "pr": 1091,
+      "commit_sha": "4bd44217c8b0e5e4a70d050417f717676841c27d",
+      "changed_lines": 32,
+      "size_bucket": "under 50",
+      "real": 0,
+      "cells": [
+        {
+          "status": "scored",
+          "predicted": 1,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.1515665
+        },
+        {
+          "status": "scored",
+          "predicted": 1,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.2040945
+        },
+        {
+          "status": "scored",
+          "predicted": 0,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.075772
+        },
+        {
+          "status": "scored",
+          "predicted": 0,
+          "matched_exact": 0,
+          "matched_judge": 0,
+          "cost_usd": 0.07750850000000001
+        }
+      ]
+    }
+  ],
+  "silent_buckets": [
+    {
+      "size_bucket": "under 50",
+      "silent_prs": 5,
+      "scored_prs": [
+        5,
+        5,
+        5,
+        5
+      ],
+      "predictions": [
+        3,
+        5,
+        2,
+        3
+      ]
+    },
+    {
+      "size_bucket": "50-199",
+      "silent_prs": 5,
+      "scored_prs": [
+        5,
+        5,
+        5,
+        5
+      ],
+      "predictions": [
+        13,
+        14,
+        11,
+        12
+      ]
+    },
+    {
+      "size_bucket": "200-599",
+      "silent_prs": 5,
+      "scored_prs": [
+        5,
+        5,
+        5,
+        5
+      ],
+      "predictions": [
+        16,
+        18,
+        18,
+        14
+      ]
+    },
+    {
+      "size_bucket": "600+",
+      "silent_prs": 5,
+      "scored_prs": [
+        5,
+        5,
+        5,
+        5
+      ],
+      "predictions": [
+        24,
+        17,
+        13,
+        17
+      ]
+    }
+  ]
+}

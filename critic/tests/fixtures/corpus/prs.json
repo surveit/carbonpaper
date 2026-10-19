@@ -1,0 +1,830 @@
+[
+{
+"number": 937,
+"additions": 19,
+"deletions": 2,
+"mergedAt": "2026-09-01T17:56:32Z"
+},
+{
+"number": 938,
+"additions": 23,
+"deletions": 410,
+"mergedAt": "2026-09-01T17:57:02Z"
+},
+{
+"number": 939,
+"additions": 88,
+"deletions": 23,
+"mergedAt": "2026-09-01T20:36:49Z"
+},
+{
+"number": 940,
+"additions": 179,
+"deletions": 31,
+"mergedAt": "2026-09-01T21:03:13Z"
+},
+{
+"number": 941,
+"additions": 59,
+"deletions": 40,
+"mergedAt": "2026-09-01T21:00:20Z"
+},
+{
+"number": 942,
+"additions": 249,
+"deletions": 418,
+"mergedAt": "2026-09-01T22:55:10Z"
+},
+{
+"number": 943,
+"additions": 178,
+"deletions": 11,
+"mergedAt": "2026-09-01T21:35:39Z"
+},
+{
+"number": 944,
+"additions": 279,
+"deletions": 61,
+"mergedAt": "2026-09-02T10:57:06Z"
+},
+{
+"number": 945,
+"additions": 834,
+"deletions": 77,
+"mergedAt": null
+},
+{
+"number": 946,
+"additions": 106,
+"deletions": 53,
+"mergedAt": "2026-09-01T21:25:17Z"
+},
+{
+"number": 947,
+"additions": 806,
+"deletions": 12,
+"mergedAt": null
+},
+{
+"number": 948,
+"additions": 3,
+"deletions": 7,
+"mergedAt": "2026-09-01T22:51:45Z"
+},
+{
+"number": 949,
+"additions": 394,
+"deletions": 4,
+"mergedAt": null
+},
+{
+"number": 950,
+"additions": 99,
+"deletions": 16,
+"mergedAt": "2026-09-02T09:48:36Z"
+},
+{
+"number": 951,
+"additions": 140,
+"deletions": 77,
+"mergedAt": "2026-09-02T13:11:38Z"
+},
+{
+"number": 952,
+"additions": 2,
+"deletions": 5,
+"mergedAt": "2026-09-02T09:49:26Z"
+},
+{
+"number": 953,
+"additions": 1,
+"deletions": 9,
+"mergedAt": "2026-09-02T09:51:47Z"
+},
+{
+"number": 954,
+"additions": 0,
+"deletions": 8,
+"mergedAt": null
+},
+{
+"number": 955,
+"additions": 320,
+"deletions": 88,
+"mergedAt": "2026-09-02T10:59:43Z"
+},
+{
+"number": 956,
+"additions": 41,
+"deletions": 33,
+"mergedAt": "2026-09-02T11:22:21Z"
+},
+{
+"number": 957,
+"additions": 198,
+"deletions": 202,
+"mergedAt": "2026-09-02T14:19:13Z"
+},
+{
+"number": 958,
+"additions": 7,
+"deletions": 7,
+"mergedAt": "2026-09-02T14:56:44Z"
+},
+{
+"number": 959,
+"additions": 6,
+"deletions": 5,
+"mergedAt": "2026-09-02T15:56:57Z"
+},
+{
+"number": 960,
+"additions": 283,
+"deletions": 0,
+"mergedAt": "2026-09-03T10:57:50Z"
+},
+{
+"number": 961,
+"additions": 286,
+"deletions": 0,
+"mergedAt": "2026-09-03T10:58:54Z"
+},
+{
+"number": 962,
+"additions": 238,
+"deletions": 12,
+"mergedAt": "2026-09-03T10:59:21Z"
+},
+{
+"number": 963,
+"additions": 61,
+"deletions": 2,
+"mergedAt": "2026-09-02T16:12:35Z"
+},
+{
+"number": 964,
+"additions": 521,
+"deletions": 3,
+"mergedAt": "2026-09-03T11:04:48Z"
+},
+{
+"number": 965,
+"additions": 11,
+"deletions": 10,
+"mergedAt": null
+},
+{
+"number": 966,
+"additions": 5,
+"deletions": 2,
+"mergedAt": "2026-09-03T09:49:29Z"
+},
+{
+"number": 967,
+"additions": 282,
+"deletions": 46,
+"mergedAt": "2026-09-03T10:54:44Z"
+},
+{
+"number": 968,
+"additions": 354,
+"deletions": 494,
+"mergedAt": "2026-09-03T17:58:45Z"
+},
+{
+"number": 969,
+"additions": 69,
+"deletions": 23,
+"mergedAt": "2026-09-03T12:06:53Z"
+},
+{
+"number": 970,
+"additions": 43,
+"deletions": 8,
+"mergedAt": "2026-09-03T16:22:14Z"
+},
+{
+"number": 971,
+"additions": 227,
+"deletions": 106,
+"mergedAt": null
+},
+{
+"number": 972,
+"additions": 9,
+"deletions": 10,
+"mergedAt": "2026-09-03T12:13:10Z"
+},
+{
+"number": 973,
+"additions": 1391,
+"deletions": 44,
+"mergedAt": "2026-09-03T20:04:03Z"
+},
+{
+"number": 974,
+"additions": 71,
+"deletions": 146,
+"mergedAt": "2026-09-03T13:00:20Z"
+},
+{
+"number": 975,
+"additions": 19,
+"deletions": 1,
+"mergedAt": null
+},
+{
+"number": 976,
+"additions": 59,
+"deletions": 12,
+"mergedAt": "2026-09-03T13:49:05Z"
+},
+{
+"number": 977,
+"additions": 18,
+"deletions": 2,
+"mergedAt": "2026-09-03T13:36:56Z"
+},
+{
+"number": 978,
+"additions": 25,
+"deletions": 1,
+"mergedAt": "2026-09-03T13:44:02Z"
+},
+{
+"number": 979,
+"additions": 10,
+"deletions": 12,
+"mergedAt": "2026-09-03T14:45:03Z"
+},
+{
+"number": 980,
+"additions": 46,
+"deletions": 13,
+"mergedAt": "2026-09-03T16:23:45Z"
+},
+{
+"number": 981,
+"additions": 59,
+"deletions": 1,
+"mergedAt": "2026-09-03T15:13:43Z"
+},
+{
+"number": 982,
+"additions": 28,
+"deletions": 26,
+"mergedAt": "2026-09-03T15:15:13Z"
+},
+{
+"number": 983,
+"additions": 611,
+"deletions": 135,
+"mergedAt": "2026-09-07T10:15:04Z"
+},
+{
+"number": 984,
+"additions": 73,
+"deletions": 45,
+"mergedAt": "2026-09-03T16:25:22Z"
+},
+{
+"number": 985,
+"additions": 161,
+"deletions": 30,
+"mergedAt": "2026-09-07T08:23:23Z"
+},
+{
+"number": 986,
+"additions": 68,
+"deletions": 60,
+"mergedAt": "2026-09-03T17:48:00Z"
+},
+{
+"number": 987,
+"additions": 384,
+"deletions": 187,
+"mergedAt": "2026-09-03T19:02:13Z"
+},
+{
+"number": 988,
+"additions": 538,
+"deletions": 23,
+"mergedAt": null
+},
+{
+"number": 989,
+"additions": 9,
+"deletions": 6,
+"mergedAt": "2026-09-03T17:00:26Z"
+},
+{
+"number": 990,
+"additions": 488,
+"deletions": 16,
+"mergedAt": "2026-09-03T19:59:58Z"
+},
+{
+"number": 991,
+"additions": 1977,
+"deletions": 1795,
+"mergedAt": "2026-09-03T17:46:14Z"
+},
+{
+"number": 992,
+"additions": 98,
+"deletions": 8,
+"mergedAt": "2026-09-03T17:43:04Z"
+},
+{
+"number": 993,
+"additions": 44,
+"deletions": 42,
+"mergedAt": "2026-09-03T18:14:05Z"
+},
+{
+"number": 994,
+"additions": 40,
+"deletions": 12,
+"mergedAt": "2026-09-03T19:28:12Z"
+},
+{
+"number": 995,
+"additions": 46,
+"deletions": 16,
+"mergedAt": "2026-09-03T19:23:10Z"
+},
+{
+"number": 996,
+"additions": 224,
+"deletions": 85,
+"mergedAt": "2026-09-07T08:11:45Z"
+},
+{
+"number": 997,
+"additions": 21,
+"deletions": 3,
+"mergedAt": "2026-09-03T19:20:02Z"
+},
+{
+"number": 1001,
+"additions": 7,
+"deletions": 23282,
+"mergedAt": null
+},
+{
+"number": 1002,
+"additions": 84,
+"deletions": 4,
+"mergedAt": "2026-09-07T09:32:12Z"
+},
+{
+"number": 1003,
+"additions": 351,
+"deletions": 160,
+"mergedAt": null
+},
+{
+"number": 1004,
+"additions": 697,
+"deletions": 424,
+"mergedAt": "2026-09-08T12:33:21Z"
+},
+{
+"number": 1005,
+"additions": 11,
+"deletions": 12,
+"mergedAt": "2026-09-07T12:30:26Z"
+},
+{
+"number": 1006,
+"additions": 99,
+"deletions": 1,
+"mergedAt": "2026-09-07T18:45:35Z"
+},
+{
+"number": 1007,
+"additions": 384,
+"deletions": 260,
+"mergedAt": null
+},
+{
+"number": 1008,
+"additions": 3,
+"deletions": 3,
+"mergedAt": "2026-09-07T15:36:29Z"
+},
+{
+"number": 1009,
+"additions": 169,
+"deletions": 31,
+"mergedAt": "2026-09-10T12:19:45Z"
+},
+{
+"number": 1010,
+"additions": 4,
+"deletions": 2,
+"mergedAt": "2026-09-10T08:23:47Z"
+},
+{
+"number": 1011,
+"additions": 173,
+"deletions": 1,
+"mergedAt": "2026-09-10T10:02:16Z"
+},
+{
+"number": 1013,
+"additions": 146,
+"deletions": 92,
+"mergedAt": null
+},
+{
+"number": 1014,
+"additions": 2071,
+"deletions": 0,
+"mergedAt": null
+},
+{
+"number": 1015,
+"additions": 1074,
+"deletions": 652,
+"mergedAt": null
+},
+{
+"number": 1016,
+"additions": 1754,
+"deletions": 100,
+"mergedAt": "2026-09-17T09:42:09Z"
+},
+{
+"number": 1018,
+"additions": 1504,
+"deletions": 48,
+"mergedAt": "2026-09-17T15:31:34Z"
+},
+{
+"number": 1020,
+"additions": 1280,
+"deletions": 20,
+"mergedAt": "2026-09-21T12:04:54Z"
+},
+{
+"number": 1021,
+"additions": 453,
+"deletions": 12,
+"mergedAt": "2026-09-21T12:25:36Z"
+},
+{
+"number": 1023,
+"additions": 2,
+"deletions": 1,
+"mergedAt": "2026-09-12T13:02:54Z"
+},
+{
+"number": 1024,
+"additions": 36,
+"deletions": 31,
+"mergedAt": "2026-09-12T13:06:45Z"
+},
+{
+"number": 1025,
+"additions": 163,
+"deletions": 42,
+"mergedAt": "2026-09-13T11:52:16Z"
+},
+{
+"number": 1026,
+"additions": 981,
+"deletions": 682,
+"mergedAt": "2026-09-13T12:02:19Z"
+},
+{
+"number": 1027,
+"additions": 416,
+"deletions": 144,
+"mergedAt": "2026-09-13T11:46:13Z"
+},
+{
+"number": 1028,
+"additions": 124,
+"deletions": 1,
+"mergedAt": "2026-09-14T10:14:06Z"
+},
+{
+"number": 1029,
+"additions": 368,
+"deletions": 210,
+"mergedAt": "2026-09-15T09:15:06Z"
+},
+{
+"number": 1030,
+"additions": 21,
+"deletions": 11,
+"mergedAt": "2026-09-15T09:40:40Z"
+},
+{
+"number": 1031,
+"additions": 1483,
+"deletions": 658,
+"mergedAt": "2026-09-17T09:08:03Z"
+},
+{
+"number": 1032,
+"additions": 13,
+"deletions": 1,
+"mergedAt": "2026-09-15T09:40:56Z"
+},
+{
+"number": 1033,
+"additions": 88,
+"deletions": 86,
+"mergedAt": "2026-09-16T14:32:27Z"
+},
+{
+"number": 1034,
+"additions": 242,
+"deletions": 1,
+"mergedAt": "2026-09-17T09:38:05Z"
+},
+{
+"number": 1035,
+"additions": 5055,
+"deletions": 33,
+"mergedAt": null
+},
+{
+"number": 1036,
+"additions": 2595,
+"deletions": 15,
+"mergedAt": null
+},
+{
+"number": 1038,
+"additions": 927,
+"deletions": 33,
+"mergedAt": null
+},
+{
+"number": 1039,
+"additions": 1512,
+"deletions": 0,
+"mergedAt": null
+},
+{
+"number": 1040,
+"additions": 1215,
+"deletions": 0,
+"mergedAt": null
+},
+{
+"number": 1041,
+"additions": 625,
+"deletions": 0,
+"mergedAt": null
+},
+{
+"number": 1042,
+"additions": 776,
+"deletions": 0,
+"mergedAt": null
+},
+{
+"number": 1043,
+"additions": 8,
+"deletions": 3,
+"mergedAt": "2026-09-17T09:44:45Z"
+},
+{
+"number": 1044,
+"additions": 1757,
+"deletions": 103,
+"mergedAt": "2026-09-17T10:02:57Z"
+},
+{
+"number": 1045,
+"additions": 837,
+"deletions": 20,
+"mergedAt": "2026-09-17T15:45:57Z"
+},
+{
+"number": 1047,
+"additions": 356,
+"deletions": 81,
+"mergedAt": "2026-09-17T15:34:49Z"
+},
+{
+"number": 1048,
+"additions": 677,
+"deletions": 0,
+"mergedAt": null
+},
+{
+"number": 1049,
+"additions": 102,
+"deletions": 1,
+"mergedAt": "2026-09-21T14:57:23Z"
+},
+{
+"number": 1050,
+"additions": 8,
+"deletions": 4,
+"mergedAt": "2026-09-17T17:14:19Z"
+},
+{
+"number": 1051,
+"additions": 21,
+"deletions": 0,
+"mergedAt": "2026-09-23T09:59:47Z"
+},
+{
+"number": 1052,
+"additions": 662,
+"deletions": 4,
+"mergedAt": null
+},
+{
+"number": 1053,
+"additions": 22,
+"deletions": 3,
+"mergedAt": null
+},
+{
+"number": 1054,
+"additions": 34,
+"deletions": 4,
+"mergedAt": "2026-09-21T11:55:24Z"
+},
+{
+"number": 1056,
+"additions": 11,
+"deletions": 3,
+"mergedAt": "2026-09-21T15:27:29Z"
+},
+{
+"number": 1061,
+"additions": 229,
+"deletions": 16,
+"mergedAt": "2026-09-21T12:23:26Z"
+},
+{
+"number": 1064,
+"additions": 193,
+"deletions": 9,
+"mergedAt": null
+},
+{
+"number": 1065,
+"additions": 1402,
+"deletions": 20,
+"mergedAt": null
+},
+{
+"number": 1066,
+"additions": 235,
+"deletions": 51,
+"mergedAt": "2026-09-21T14:38:58Z"
+},
+{
+"number": 1068,
+"additions": 280,
+"deletions": 63,
+"mergedAt": null
+},
+{
+"number": 1070,
+"additions": 67,
+"deletions": 14,
+"mergedAt": "2026-09-21T14:43:38Z"
+},
+{
+"number": 1072,
+"additions": 523,
+"deletions": 210,
+"mergedAt": "2026-09-23T10:00:37Z"
+},
+{
+"number": 1074,
+"additions": 517,
+"deletions": 509,
+"mergedAt": "2026-09-21T16:16:11Z"
+},
+{
+"number": 1076,
+"additions": 535,
+"deletions": 1025,
+"mergedAt": "2026-09-21T16:20:00Z"
+},
+{
+"number": 1078,
+"additions": 22,
+"deletions": 0,
+"mergedAt": null
+},
+{
+"number": 1079,
+"additions": 16,
+"deletions": 16,
+"mergedAt": "2026-09-23T10:18:37Z"
+},
+{
+"number": 1080,
+"additions": 0,
+"deletions": 3,
+"mergedAt": "2026-09-23T10:18:55Z"
+},
+{
+"number": 1081,
+"additions": 38,
+"deletions": 2,
+"mergedAt": "2026-09-23T10:19:06Z"
+},
+{
+"number": 1082,
+"additions": 13,
+"deletions": 17,
+"mergedAt": "2026-09-23T10:39:44Z"
+},
+{
+"number": 1083,
+"additions": 2,
+"deletions": 39,
+"mergedAt": "2026-09-23T10:40:03Z"
+},
+{
+"number": 1084,
+"additions": 7,
+"deletions": 30,
+"mergedAt": "2026-09-23T10:40:13Z"
+},
+{
+"number": 1085,
+"additions": 0,
+"deletions": 44,
+"mergedAt": "2026-09-23T10:40:21Z"
+},
+{
+"number": 1086,
+"additions": 2,
+"deletions": 1,
+"mergedAt": "2026-09-23T10:40:57Z"
+},
+{
+"number": 1087,
+"additions": 1,
+"deletions": 1,
+"mergedAt": "2026-09-23T10:44:10Z"
+},
+{
+"number": 1088,
+"additions": 24,
+"deletions": 7,
+"mergedAt": "2026-09-23T10:44:19Z"
+},
+{
+"number": 1089,
+"additions": 43,
+"deletions": 16,
+"mergedAt": "2026-09-23T11:24:01Z"
+},
+{
+"number": 1090,
+"additions": 37,
+"deletions": 6,
+"mergedAt": "2026-09-23T11:31:55Z"
+},
+{
+"number": 1091,
+"additions": 23,
+"deletions": 9,
+"mergedAt": "2026-09-23T11:31:29Z"
+},
+{
+"number": 1092,
+"additions": 13,
+"deletions": 13,
+"mergedAt": "2026-09-23T11:32:12Z"
+},
+{
+"number": 1093,
+"additions": 6,
+"deletions": 0,
+"mergedAt": "2026-09-23T11:32:05Z"
+},
+{
+"number": 1094,
+"additions": 2,
+"deletions": 2,
+"mergedAt": "2026-09-23T11:31:42Z"
+},
+{
+"number": 1095,
+"additions": 6,
+"deletions": 196,
+"mergedAt": "2026-09-23T11:48:06Z"
+},
+{
+"number": 1096,
+"additions": 694,
+"deletions": 2,
+"mergedAt": null
+}
+]

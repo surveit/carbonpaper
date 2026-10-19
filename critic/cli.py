@@ -6,13 +6,15 @@ from collections.abc import Callable
 from pathlib import Path
 
 from critic.backend import ClaudeCliBackend
-from critic.corpus import fetch_corpus
+from critic.comparison import compare_runs, read_notes, write_comparison_outputs
+from critic.corpus import fetch_corpus, load_pr_listings
 from critic.diff import fetch_pull_request_diff, load_or_fetch_diff, save_diff
-from critic.evaluation import DEFAULT_PR_RANGE, EvalSettings, run_eval
-from critic.labels import load_test_split
+from critic.evaluation import DEFAULT_PR_RANGE, EvalResult, EvalSettings, run_eval
+from critic.labels import LABEL_DIR, load_silent_test_prs, load_test_split
 from critic.report import write_eval_outputs
 from critic.review import run_review
 from critic.rubric import load_rubric
+from critic.sampling import select_silent_sample
 from critic.themes import load_theme_vocabulary, select_flag_themes
 
 DEFAULT_REPO = "surveit/carbonpaper"
@@ -37,6 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_diff(commands.add_parser("diff", help="fetch and cache one PR's diff"))
     _add_review(commands.add_parser("review", help="predict the reviewer's comments on one PR"))
     _add_eval(commands.add_parser("eval", help="score predictions against labeled real comments"))
+    _add_compare(commands.add_parser("compare", help="set eval results side by side"))
     return parser
 
 
@@ -82,6 +85,14 @@ def run_eval_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_compare(args: argparse.Namespace) -> int:
+    runs = {path: EvalResult.model_validate_json(path.read_text(encoding="utf-8")) for path in args.results}
+    comparison = compare_runs(runs, load_pr_listings(args.corpus), read_notes(args.notes), args.out)
+    for path in write_comparison_outputs(comparison, args.out):
+        print(path)
+    return 0
+
+
 def parse_pr_list(text: str) -> list[int]:
     return [int(part) for part in text.split(",") if part.strip()]
 
@@ -94,13 +105,15 @@ def parse_pr_range(text: str) -> list[int]:
 
 
 def _read_eval_settings(args: argparse.Namespace) -> EvalSettings:
-    pr_numbers = _read_pr_numbers(args)
+    silent = _read_silent_sample(args)
+    pr_numbers = [pr for pr in _read_pr_numbers(args) if pr not in silent]
     if not pr_numbers:
         raise SystemExit("eval needs at least one PR number")
     return EvalSettings(
         repo=args.repo,
         rubric_dir=str(args.rubric),
         pr_numbers=pr_numbers,
+        silent_pr_numbers=silent,
         limit=args.limit,
         corpus_dir=str(args.corpus),
         labels_path=str(args.labels),
@@ -123,6 +136,15 @@ def _read_pr_numbers(args: argparse.Namespace) -> list[int]:
     return list(range(low, high + 1))
 
 
+def _read_silent_sample(args: argparse.Namespace) -> list[int]:
+    if args.silent_per_bucket is None:
+        return []
+    if args.split is None:
+        raise SystemExit("--silent-per-bucket samples the test PRs of --split, which is missing")
+    silent = load_silent_test_prs(args.split)
+    return select_silent_sample(load_pr_listings(args.corpus), silent, args.silent_per_bucket)
+
+
 def _add_fetch(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--repo", default=DEFAULT_REPO)
     parser.add_argument("--out", type=Path, required=True)
@@ -143,7 +165,7 @@ def _add_review(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--model", help="claude model alias or id; default: the CLI's own")
     parser.add_argument("--repo", default=DEFAULT_REPO)
     parser.add_argument("--commit", help="review the diff at this commit; default: the PR's head")
-    parser.add_argument("--themes", type=Path, default=LOCAL_ROOT / "labels" / "taxonomy.json")
+    parser.add_argument("--themes", type=Path, default=LABEL_DIR / "taxonomy.json")
     parser.add_argument("--diff-dir", type=Path, default=LOCAL_ROOT / "diffs")
     parser.add_argument("--out", type=Path, help="write the review JSON here; default: stdout")
     parser.set_defaults(command=run_review_command)
@@ -162,8 +184,19 @@ def _add_eval(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--judge-model", help="judge model; default: the CLI's own")
     parser.add_argument("--repo", default=DEFAULT_REPO)
     parser.add_argument("--corpus", type=Path, default=LOCAL_ROOT / "corpus")
-    parser.add_argument("--labels", type=Path, default=LOCAL_ROOT / "labels" / "corpus.human.jsonl")
-    parser.add_argument("--themes", type=Path, default=LOCAL_ROOT / "labels" / "taxonomy.json")
+    parser.add_argument("--labels", type=Path, default=LABEL_DIR / "corpus.human.jsonl")
+    parser.add_argument("--themes", type=Path, default=LABEL_DIR / "taxonomy.json")
     parser.add_argument("--diff-dir", type=Path, default=LOCAL_ROOT / "diffs")
     parser.add_argument("--jobs", type=int, default=1, help="review units run at once")
+    parser.add_argument(
+        "--silent-per-bucket", type=int, help="also review this many merged silent PRs of --split per size bucket"
+    )
     parser.set_defaults(command=run_eval_command)
+
+
+def _add_compare(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("results", type=Path, nargs="+", help="results.json files of runs over the same PRs")
+    parser.add_argument("--notes", type=Path, required=True, help="plain text shown above the tables")
+    parser.add_argument("--corpus", type=Path, default=LOCAL_ROOT / "corpus", help="holds prs.json, for PR sizes")
+    parser.add_argument("--out", type=Path, required=True)
+    parser.set_defaults(command=run_compare)

@@ -21,12 +21,16 @@ def write_eval_outputs(result: EvalResult, out_dir: Path) -> list[Path]:
 
 
 def render_report(result: EvalResult) -> str:
+    return render_template(REPORT_FILE, result=result)
+
+
+def render_template(name: str, **context: object) -> str:
     environment = Environment(
         loader=FileSystemLoader(_TEMPLATES), autoescape=True, undefined=StrictUndefined
     )
     environment.filters["percent"] = format_percent
     environment.filters["usd"] = format_usd
-    return environment.get_template(REPORT_FILE).render(result=result)
+    return environment.get_template(name).render(**context)
 
 
 def format_percent(value: float | None) -> str:

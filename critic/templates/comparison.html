@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Critic eval: rubrics compared</title>
+{% include "_style.html" %}
+</head>
+<body>
+{% set runs = comparison.runs %}
+{% macro ratio(numerator, denominator, value) %}{{ numerator }}/{{ denominator }} <span class="muted">{{ value | percent }}</span>{% endmacro %}
+<h1>Critic eval: {% for run in runs %}<code>{{ run.rubric }}</code>{{ ", " if not loop.last }}{% endfor %}</h1>
+{% for note in comparison.notes %}<p>{{ note }}</p>{% endfor %}
+
+<h2>Pooled</h2>
+<div class="scroll">
+<table>
+  <tr><th>Rubric</th><th class="num">Predictions</th><th class="num">Real</th><th class="num">Exact matches</th><th class="num">Judge matches</th>
+      <th class="num">Precision</th><th class="num">Recall</th><th class="num">F1</th><th class="num">Precision on commented PRs</th>
+      <th class="num">Predictions on silent PRs</th><th class="num">Scored</th><th class="num">Not scored</th><th class="num">Review spend</th><th class="num">Judge spend</th><th class="num">Spend per scored PR</th><th>Raw results</th></tr>
+  {% for run in runs %}
+  <tr><td><code>{{ run.rubric }}</code></td><td class="num">{{ run.overall.predicted }}</td><td class="num">{{ run.overall.real }}</td>
+      <td class="num">{{ run.exact_only.matched_reals }}</td><td class="num">{{ run.overall.matched_reals - run.exact_only.matched_reals }}</td>
+      <td class="num">{{ ratio(run.overall.matched_predictions, run.overall.predicted, run.overall.precision) }}</td>
+      <td class="num">{{ ratio(run.overall.matched_reals, run.overall.real, run.overall.recall) }}</td>
+      <td class="num">{{ run.overall.f1 | percent }}</td>
+      <td class="num">{{ ratio(run.on_commented_prs.matched_predictions, run.on_commented_prs.predicted, run.on_commented_prs.precision) }}</td>
+      <td class="num">{{ run.silent_predictions }}</td><td class="num">{{ run.scored_units }}</td><td class="num">{{ run.unscored_units }}</td>
+      <td class="num">{{ run.review_cost_usd | usd }}</td><td class="num">{{ run.judge_cost_usd | usd }}</td>
+      <td class="num">{{ ((run.review_cost_usd + run.judge_cost_usd) / run.scored_units) | usd if run.scored_units else "n/a" }}</td>
+      <td><a href="{{ run.results_path }}">{{ run.results_path }}</a> <span class="muted">{{ run.review_model_ids | join(", ") }}</span></td></tr>
+  {% endfor %}
+</table>
+</div>
+
+<h2>By theme</h2>
+<p class="muted">Each cell is matched over predicted (precision), then matched over real (recall). A real comment carries up to three themes. Each theme's definition is in the raw results, <code>by_theme[].definition</code>.</p>
+<div class="scroll">
+<table>
+  <tr><th>Theme</th><th class="num">Real</th>{% for run in runs %}<th class="num"><code>{{ run.rubric }}</code> precision</th><th class="num">recall</th><th class="num">F1</th>{% endfor %}</tr>
+  {% for row in comparison.themes %}
+  <tr><td><code>{{ row.theme }}</code></td><td class="num">{{ row.scores[0].real }}</td>
+      {% for score in row.scores %}<td class="num">{{ ratio(score.matched_predictions, score.predicted, score.precision) }}</td>
+      <td class="num">{{ ratio(score.matched_reals, score.real, score.recall) }}</td><td class="num">{{ score.f1 | percent }}</td>{% endfor %}</tr>
+  {% endfor %}
+</table>
+</div>
+
+<h2>Silent PRs by size</h2>
+<p class="muted">Size is the PR's additions plus deletions as GitHub lists them. Each cell is the comments returned per scored silent PR.</p>
+<table>
+  <tr><th>Size bucket</th><th class="num">Silent PRs</th>{% for run in runs %}<th class="num"><code>{{ run.rubric }}</code></th>{% endfor %}</tr>
+  {% for bucket in comparison.silent_buckets %}
+  <tr><td>{{ bucket.size_bucket }}</td><td class="num">{{ bucket.silent_prs }}</td>
+      {% for predicted in bucket.predictions %}{% set scored = bucket.scored_prs[loop.index0] %}
+      <td class="num">{{ predicted }}/{{ scored }} <span class="muted">{{ (predicted / scored) | round(2) if scored else "n/a" }}</span></td>{% endfor %}</tr>
+  {% endfor %}
+</table>
+
+<h2>By PR</h2>
+<p class="muted">Per rubric: comments returned, real comments caught by the exact rule and by the judge, and the review plus judge spend.</p>
+<div class="scroll">
+<table>
+  <tr><th>PR</th><th class="num">Size</th><th class="num">Real</th>{% for run in runs %}<th><code>{{ run.rubric }}</code></th>{% endfor %}</tr>
+  {% for row in comparison.prs %}
+  <tr><td><a href="https://github.com/{{ comparison.repo }}/pull/{{ row.pr }}">#{{ row.pr }}</a> at <code>{{ row.commit_sha[:10] }}</code>{{ " (silent)" if row.real == 0 }}</td>
+      <td class="num">{{ row.changed_lines }}</td><td class="num">{{ row.real }}</td>
+      {% for cell in row.cells %}<td>{% if cell.status == "scored" %}{{ cell.predicted }} returned, {{ cell.matched_exact }} exact, {{ cell.matched_judge }} judge, {{ cell.cost_usd | usd }}{% else %}{{ cell.status }}: <span class="muted">{{ cell.reason }}</span>{% endif %}</td>{% endfor %}</tr>
+  {% endfor %}
+</table>
+</div>
+
+{% include "_terms.html" %}
+</body>
+</html>
