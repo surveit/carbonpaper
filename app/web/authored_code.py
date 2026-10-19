@@ -38,7 +38,6 @@ BLOCK_COPY: dict[type[AuthoredCode], CodeBlockCopy] = {
         caption="the predicate behind the summary above",
     ),
     StarlarkReport: CodeBlockCopy(
-        glyph="🛡️📤", heading="Sandboxed report",
         note="Writes files through `emit_file` and `emit_table` and reaches nothing else; "
              "every figure and row it links comes from `cite_value` / `cite_row`.",
         caption="the code behind the summary above",

@@ -195,6 +195,7 @@ def test_the_stage_panel_shows_the_sandboxed_report_and_its_code(tmp_path):
     workspace.set_projects_dir(tmp_path)
 
     html = TestClient(app).get("/project/alpha/node/write_report/panel").text
-    assert "Sandboxed report" in html
+    # The per-block copy, which only resolves if BLOCK_COPY holds this block class.
+    assert "reaches nothing else" in html
     assert "emit_file" in html
     assert "Writes the in-house lobbying spend out as one page." in html
