@@ -64,7 +64,7 @@ select = ["E4", "E7", "E9", "F", "BLE", "RUF006"]
 
 [tool.mypy]
 python_version = "3.12"
-files = ["app", "scripts", "tests"]
+files = ["app", "docket", "scripts", "tests"]
 # `tests` is checked directly (in `files`), which also puts its root on mypy's
 # module search path: the colocated arch tests under app/ (in _arch_tests/
 # folders) can `from arch import ...` because tests/arch/ is a package, and the
@@ -96,7 +96,17 @@ ignore_missing_imports = true
 # (app.models, app.core.errors, app.core.llm, app.core.agent) are left open: everything may depend on them.
 # Content-level checks live in tests/arch/.
 [tool.importlinter]
-root_package = "app"
+root_packages = ["app", "docket"]
+
+[[tool.importlinter.contracts]]
+# `docket` is a standalone research pipeline that happens to live here: it reads public
+# registers and writes its own SQLite warehouse, sharing no runtime with the product.
+# Nothing in the app may reach into it, and an empty allowed_importers denies a package
+# added next year too — which a forbidden list would have let through.
+name = "docket imported by nothing — it is a standalone pipeline"
+type = "protected"
+protected_modules = ["docket"]
+allowed_importers = []
 
 [[tool.importlinter.contracts]]
 name = "app.web imported only by the entrypoint"
