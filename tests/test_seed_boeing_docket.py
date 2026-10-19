@@ -8,12 +8,12 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core import url_fetch
 from app.evals.compatibility import validate_eval_compatibility
 from app.evals.dataset import read_table_ref
 from app.models import Column, TableSchema, Workflow
 from app.models.connectors import MirroredBytes
 from app.models.records.eval_config import EvalConfig
-from app.packs.docket import connector
 from app.packs.docket.connector import RecapDocketParams, acquire_recap_docket
 from app.main import app
 from app.core.stage_cache import StageCacheEntry
@@ -83,7 +83,7 @@ def test_the_bundle_reads_every_filing_it_names_from_the_committed_mirror(
     def refuse(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("a mirror read reached for the network")
 
-    monkeypatch.setattr(connector, "urlopen", refuse)
+    monkeypatch.setattr(url_fetch, "urlopen", refuse)
     params = RecapDocketParams.model_validate(_read_input_params())
     acquired = list(acquire_recap_docket(params))
     assert [file.metadata["ecf_entry"] for file in acquired] == [

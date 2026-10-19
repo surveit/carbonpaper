@@ -1,0 +1,956 @@
+{
+  "name": "qualified_immunity_appeals",
+  "document": "# Qualified immunity in excessive-force appeals, Fifth and Ninth Circuits, 2017–2019\n\n## The question\n\nWhen an officer sued for excessive force asks a federal appeals court for qualified immunity, how often does the court grant it, and does that differ between the Fifth and Ninth Circuits? Every coded opinion points to the sentence where the court states its holding, highlighted on its page.\n\n## The opinions\n\nA CourtListener search for opinions containing both \"qualified immunity\" and \"excessive force\", filed 2017-01-01 to 2019-12-31 in the Fifth and Ninth Circuits, published and unpublished, returned 222 decisions on 2026-10-14, 214 of them with a stored PDF. This version reads a seeded random sample of 20 of those 214, ten per circuit. A keyword match is not a qualified immunity appeal: opinions where no page states a holding on qualified immunity for an excessive-force claim drop out before coding, and the run shows how many.\n\n## How an opinion is coded\n\nEach page is read on its own for the appeals court's own holding (not the district court's, a party's, a dissent's, another case's, or a summary court staff wrote that the opinion says is no part of it). The holdings found are then read together and coded granted, denied or mixed. Granted includes holding there was no constitutional violation or the right was not clearly established. Appeals dismissed for lack of jurisdiction without deciding qualified immunity are not coded.\n\n## What to compare it with\n\nA Reuters investigation of 529 federal appeals rulings since 2005 found that the Fifth Circuit granted 64% of police requests for qualified immunity and the Ninth Circuit 42%, as the ABA Journal reported on Aug. 25, 2020 (https://www.abajournal.com/news/article/grants-of-qualified-immunity-to-police-vary-widely-by-appeals-court). We found no public release of Reuters' case list or coding rules, its years differ from these, and 20 opinions are a pilot, so the comparison is a sense check, not a replication.\n",
+  "model": "opus",
+  "source": "hand-written",
+  "data_model": {
+    "schemas": []
+  },
+  "row_types": [
+    {
+      "id": "opinion",
+      "title": "Opinion",
+      "definition": "One federal court of appeals decision, a CourtListener cluster, read as its one stored PDF."
+    },
+    {
+      "id": "opinion_page",
+      "title": "Opinion page",
+      "definition": "One page of one opinion."
+    },
+    {
+      "id": "circuit_outcome",
+      "title": "Circuit outcome",
+      "definition": "One circuit and one coded outcome, with how many coded opinions have both."
+    }
+  ],
+  "verbs": [],
+  "claim_shapes": [
+    {
+      "id": "coded_opinion",
+      "label": "Fifth and Ninth Circuit appeals opinions, 2017-2019, coded for whether the court granted qualified immunity on an excessive-force claim",
+      "universe": "open",
+      "importance": "primary",
+      "qualifiers": [
+        "A seeded random sample of 20 of the 214 decisions with a stored PDF (of 222 a CourtListener search returned on 2026-10-14), ten per circuit; not every such opinion.",
+        "Only opinions where some page states the appeals court's own holding on qualified immunity for an excessive-force claim; the rest drop out before coding."
+      ],
+      "context": [],
+      "template": "${value} of 20 sampled Fifth and Ninth Circuit opinions, 2017 to 2019, coded for qualified immunity on an excessive-force claim."
+    }
+  ],
+  "stages": [
+    {
+      "id": "input_opinions",
+      "type": "input_data",
+      "row_type_id": "opinion",
+      "description": "Fetches the 20 sampled Fifth and Ninth Circuit opinions from CourtListener, one row per stored PDF.",
+      "inputs": [],
+      "cache": false,
+      "compiler_notes": [
+        "On 2026-10-14 the search returned 222 clusters, listed in app/seeds/data/qualified_immunity/sample_frame.json: 100 Fifth Circuit and 114 Ninth Circuit clusters with one stored PDF, and 8 with none. These 20 are a seeded random sample, 10 per circuit, drawn from the 214 with one stored PDF (one Python `random.Random(20261014)`, sampling 10 of the Fifth Circuit's clusters and then 10 of the Ninth's, each list sorted by cluster_id).",
+        "Every run fetches from CourtListener; there is no committed mirror."
+      ],
+      "connector": {
+        "kind": "courtlistener_opinions",
+        "params": {
+          "query": "\"qualified immunity\" AND \"excessive force\"",
+          "courts": [
+            "ca5",
+            "ca9"
+          ],
+          "filed_after": "2017-01-01",
+          "filed_before": "2019-12-31",
+          "statuses": [
+            "Published",
+            "Unpublished"
+          ],
+          "cluster_ids": [
+            4408052,
+            4411254,
+            4479190,
+            4533435,
+            4537890,
+            4568619,
+            4606696,
+            4646849,
+            4667858,
+            4684131,
+            4398706,
+            4433102,
+            4434153,
+            4436296,
+            4489118,
+            4515712,
+            4520479,
+            4571752,
+            4661262,
+            4662580
+          ]
+        }
+      },
+      "signature": {
+        "form": "replaces",
+        "produces": [
+          {
+            "name": "source_id",
+            "type": "str",
+            "nullable": false,
+            "description": "The stored file this row is."
+          },
+          {
+            "name": "source_sha256",
+            "type": "str",
+            "nullable": false,
+            "description": "What the stored file's bytes hash to."
+          },
+          {
+            "name": "filename",
+            "type": "str",
+            "nullable": false,
+            "description": "The file's name, built from the court id and the cluster id."
+          },
+          {
+            "name": "origin_url",
+            "type": "str",
+            "nullable": true,
+            "description": "Where CourtListener stores the PDF."
+          },
+          {
+            "name": "fetched_at",
+            "type": "str",
+            "nullable": true,
+            "description": "When the file was fetched from that URL."
+          },
+          {
+            "name": "cluster_id",
+            "type": "int",
+            "nullable": true,
+            "description": "CourtListener's id for the decision, which it calls a cluster."
+          },
+          {
+            "name": "opinion_id",
+            "type": "int",
+            "nullable": true,
+            "description": "CourtListener's id for the opinion whose stored PDF this is."
+          },
+          {
+            "name": "court_id",
+            "type": "str",
+            "nullable": true,
+            "description": "CourtListener's id for the court: ca5 for the Fifth Circuit, ca9 for the Ninth."
+          },
+          {
+            "name": "case_name",
+            "type": "str",
+            "nullable": true,
+            "description": "The case's name, as CourtListener gives it."
+          },
+          {
+            "name": "date_filed",
+            "type": "date",
+            "nullable": true,
+            "description": "The day the court filed the decision."
+          },
+          {
+            "name": "precedential_status",
+            "type": "str",
+            "nullable": true,
+            "description": "CourtListener's precedential status for the decision, such as Published or Unpublished."
+          },
+          {
+            "name": "docket_number",
+            "type": "str",
+            "nullable": true,
+            "description": "The court's docket number for the appeal."
+          },
+          {
+            "name": "nature_of_suit",
+            "type": "str",
+            "nullable": true,
+            "description": "CourtListener's nature-of-suit field for the case, where it has one."
+          },
+          {
+            "name": "courtlistener_url",
+            "type": "str",
+            "nullable": true,
+            "description": "The decision's page on CourtListener."
+          }
+        ]
+      }
+    },
+    {
+      "id": "read_pages",
+      "type": "read_pages",
+      "row_type_id": "opinion_page",
+      "description": "Reads every page of every opinion, one row per page, each carrying a span over the whole page.",
+      "inputs": [
+        {
+          "id": "input_opinions"
+        }
+      ],
+      "cache": false,
+      "compiler_notes": [],
+      "read_pages": {
+        "carry": [
+          "cluster_id",
+          "court_id",
+          "case_name",
+          "date_filed",
+          "precedential_status",
+          "docket_number",
+          "nature_of_suit",
+          "courtlistener_url"
+        ]
+      },
+      "signature": {
+        "form": "replaces",
+        "reads": [
+          {
+            "input": "input_opinions",
+            "columns": [
+              {
+                "name": "source_id",
+                "type": "str",
+                "nullable": false,
+                "description": "The stored file this row is."
+              },
+              {
+                "name": "source_sha256",
+                "type": "str",
+                "nullable": false,
+                "description": "What the stored file's bytes hash to."
+              },
+              {
+                "name": "cluster_id",
+                "type": "int",
+                "nullable": true,
+                "description": "CourtListener's id for the decision, which it calls a cluster."
+              },
+              {
+                "name": "court_id",
+                "type": "str",
+                "nullable": true,
+                "description": "CourtListener's id for the court: ca5 for the Fifth Circuit, ca9 for the Ninth."
+              },
+              {
+                "name": "case_name",
+                "type": "str",
+                "nullable": true,
+                "description": "The case's name, as CourtListener gives it."
+              },
+              {
+                "name": "date_filed",
+                "type": "date",
+                "nullable": true,
+                "description": "The day the court filed the decision."
+              },
+              {
+                "name": "precedential_status",
+                "type": "str",
+                "nullable": true,
+                "description": "CourtListener's precedential status for the decision, such as Published or Unpublished."
+              },
+              {
+                "name": "docket_number",
+                "type": "str",
+                "nullable": true,
+                "description": "The court's docket number for the appeal."
+              },
+              {
+                "name": "nature_of_suit",
+                "type": "str",
+                "nullable": true,
+                "description": "CourtListener's nature-of-suit field for the case, where it has one."
+              },
+              {
+                "name": "courtlistener_url",
+                "type": "str",
+                "nullable": true,
+                "description": "The decision's page on CourtListener."
+              }
+            ]
+          }
+        ],
+        "produces": [
+          {
+            "name": "source_id",
+            "type": "str",
+            "nullable": false,
+            "description": "The stored file this row is."
+          },
+          {
+            "name": "source_sha256",
+            "type": "str",
+            "nullable": false,
+            "description": "What the stored file's bytes hash to."
+          },
+          {
+            "name": "cluster_id",
+            "type": "int",
+            "nullable": true,
+            "description": "CourtListener's id for the decision, which it calls a cluster."
+          },
+          {
+            "name": "court_id",
+            "type": "str",
+            "nullable": true,
+            "description": "CourtListener's id for the court: ca5 for the Fifth Circuit, ca9 for the Ninth."
+          },
+          {
+            "name": "case_name",
+            "type": "str",
+            "nullable": true,
+            "description": "The case's name, as CourtListener gives it."
+          },
+          {
+            "name": "date_filed",
+            "type": "date",
+            "nullable": true,
+            "description": "The day the court filed the decision."
+          },
+          {
+            "name": "precedential_status",
+            "type": "str",
+            "nullable": true,
+            "description": "CourtListener's precedential status for the decision, such as Published or Unpublished."
+          },
+          {
+            "name": "docket_number",
+            "type": "str",
+            "nullable": true,
+            "description": "The court's docket number for the appeal."
+          },
+          {
+            "name": "nature_of_suit",
+            "type": "str",
+            "nullable": true,
+            "description": "CourtListener's nature-of-suit field for the case, where it has one."
+          },
+          {
+            "name": "courtlistener_url",
+            "type": "str",
+            "nullable": true,
+            "description": "The decision's page on CourtListener."
+          },
+          {
+            "name": "page",
+            "type": "int",
+            "nullable": false,
+            "description": "The page of the opinion's PDF, counting from 1."
+          },
+          {
+            "name": "page_text",
+            "type": "str",
+            "nullable": false,
+            "description": "The page's text as the PDF's text layer holds it."
+          },
+          {
+            "name": "page_span",
+            "type": "span",
+            "nullable": true,
+            "description": "The whole page, as a span find_ruling_statements narrows to a quote. read_pages always fills it."
+          }
+        ]
+      }
+    },
+    {
+      "id": "find_ruling_statements",
+      "type": "llm_transform",
+      "description": "Finds where each page states the appeals court's own holding on qualified immunity for excessive force, and quotes the words.",
+      "inputs": [
+        {
+          "id": "read_pages"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "One call per page. ruling_quote is quoted from page_span, so the runtime finds the words on that page and narrows the span to them, re-asking up to max_retries times when they are not there."
+      ],
+      "llm": {
+        "prompt_instructions": "You are reading one page of a federal court of appeals opinion. Find where this page states the appeals court's own holding on whether a defendant officer is entitled to qualified immunity on a claim of excessive force.\n\nCount only the appeals court deciding the appeal before it: what it holds, affirms, reverses or concludes. Do not count the district court's ruling as the appeals court describes it, a party's argument, a dissent, the holding of another case the court cites, or a summary or headnote the opinion says is no part of the court's opinion, such as a summary prepared by court staff.\n\nAn excessive-force claim says an official used unconstitutional force on a person: under the Fourth Amendment in an arrest, stop or other seizure, the Eighth Amendment for a prisoner, or the Fourteenth Amendment for a pretrial detainee. False arrest, unlawful entry, denial of medical care and failure to protect are not excessive-force claims, unless the same holding also decides one.\n\nReturn \"ruling\":\n- \"granted\": the officers who raised qualified immunity are entitled to it on the excessive-force claim, so the claim cannot proceed against them. This includes holding there was no constitutional violation, holding the right was not clearly established, affirming a grant of qualified immunity or of summary judgment on that ground, and reversing a denial.\n- \"denied\": no officer who raised it is entitled to qualified immunity on the excessive-force claim at this stage: affirming a denial, or reversing a grant.\n- \"mixed\": entitled for some officers or some uses of force, and not for others.\n- null: the page states no such holding. Also null when the court dismisses the appeal for lack of jurisdiction without deciding qualified immunity.\n\nReturn \"ruling_quote\" as {\"quote\": ...}: the words on this page that state the holding, copied exactly, the shortest run of one or two sentences that states it. Keep the page's spelling, capitals, punctuation and any odd space the PDF's text layer put inside a word. Line breaks may be written as spaces. Give \"prefix\" or \"suffix\" only when the same words appear more than once on the page, copying a few words from just before or after the quote. Return \"ruling_quote\": null when \"ruling\" is null.\n\nReturn \"claim\": whose force and what force the holding covers, in under 20 words, such as \"Officer Lee's taser use during the traffic stop\". Null when \"ruling\" is null.",
+        "prompt_data_template": "Case: {case_name} ({court_id}, filed {date_filed}), page {page}.\n\nThe page text:\n<<<\n{page_span}\n>>>",
+        "model": "claude-opus-5",
+        "temperature": 0.0,
+        "max_retries": 4,
+        "response_format": "json",
+        "batch_size": 1,
+        "thinking": "disabled"
+      },
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "read_pages",
+            "columns": [
+              {
+                "name": "case_name",
+                "type": "str",
+                "nullable": true,
+                "description": "The case's name, as CourtListener gives it."
+              },
+              {
+                "name": "court_id",
+                "type": "str",
+                "nullable": true,
+                "description": "CourtListener's id for the court: ca5 for the Fifth Circuit, ca9 for the Ninth."
+              },
+              {
+                "name": "date_filed",
+                "type": "date",
+                "nullable": true,
+                "description": "The day the court filed the decision."
+              },
+              {
+                "name": "page",
+                "type": "int",
+                "nullable": false,
+                "description": "The page of the opinion's PDF, counting from 1."
+              },
+              {
+                "name": "page_span",
+                "type": "span",
+                "nullable": true,
+                "description": "The whole page, as a span find_ruling_statements narrows to a quote. read_pages always fills it."
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "ruling",
+            "type": "str",
+            "nullable": true,
+            "description": "What this page holds on qualified immunity for the excessive-force claim: granted, denied or mixed; null where it states no such holding.",
+            "enum": [
+              "granted",
+              "denied",
+              "mixed"
+            ]
+          },
+          {
+            "name": "ruling_quote",
+            "type": "span",
+            "nullable": true,
+            "description": "The words on this page that state the holding; null where ruling is null.",
+            "quoted_from": "page_span"
+          },
+          {
+            "name": "claim",
+            "type": "str",
+            "nullable": true,
+            "description": "Whose force and what force the holding covers; null where ruling is null."
+          }
+        ],
+        "rewrites": []
+      }
+    },
+    {
+      "id": "ruling_pages",
+      "type": "starlark_filter_rows",
+      "description": "Keeps only the pages that state the court's holding on qualified immunity for excessive force.",
+      "inputs": [
+        {
+          "id": "find_ruling_statements"
+        }
+      ],
+      "cache": false,
+      "compiler_notes": [],
+      "starlark_filter": {
+        "predicate": "state the appeals court's own holding on qualified immunity for excessive force",
+        "summary": "Keeps the pages that state the court's holding; every other page drops here.",
+        "corner_cases": [
+          {
+            "case": "a page where `ruling`, `ruling_quote` and `claim` are not all set or all null",
+            "expected": "the run stops naming the opinion and the page, since the prompt ties the three together"
+          }
+        ],
+        "code": "def should_include(row):\n    names = [\"ruling\", \"ruling_quote\", \"claim\"]\n    missing = [name for name in names if row[name] == None]\n    if missing and len(missing) < len(names):\n        where = \"%s (cluster %s), page %d\" % (row[\"case_name\"], row[\"cluster_id\"], row[\"page\"])\n        refuse(\"%s: %s is null but the others are not, and the prompt ties ruling, ruling_quote and claim together\"\n               % (where, \" and \".join(missing)))\n    return not missing\n"
+      },
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "find_ruling_statements",
+            "columns": [
+              {
+                "name": "cluster_id",
+                "type": "int",
+                "nullable": true,
+                "description": "CourtListener's id for the decision, which it calls a cluster."
+              },
+              {
+                "name": "case_name",
+                "type": "str",
+                "nullable": true,
+                "description": "The case's name, as CourtListener gives it."
+              },
+              {
+                "name": "page",
+                "type": "int",
+                "nullable": false,
+                "description": "The page of the opinion's PDF, counting from 1."
+              },
+              {
+                "name": "ruling",
+                "type": "str",
+                "nullable": true,
+                "description": "What this page holds on qualified immunity for the excessive-force claim: granted, denied or mixed; null where it states no such holding.",
+                "enum": [
+                  "granted",
+                  "denied",
+                  "mixed"
+                ]
+              },
+              {
+                "name": "claim",
+                "type": "str",
+                "nullable": true,
+                "description": "Whose force and what force the holding covers; null where ruling is null."
+              },
+              {
+                "name": "ruling_quote",
+                "type": "span",
+                "nullable": true,
+                "description": "The words on this page that state the holding; null where ruling is null."
+              }
+            ]
+          }
+        ],
+        "adds": [],
+        "rewrites": []
+      }
+    },
+    {
+      "id": "by_opinion",
+      "type": "aggregate",
+      "row_type_id": "opinion",
+      "description": "Gathers each opinion's holding statements into one row per opinion, in page order.",
+      "inputs": [
+        {
+          "id": "ruling_pages"
+        }
+      ],
+      "cache": false,
+      "compiler_notes": [
+        "Each list keeps page order, so item i of every list is the same page."
+      ],
+      "aggregate": {
+        "group_by": [
+          "cluster_id",
+          "court_id",
+          "case_name",
+          "date_filed",
+          "precedential_status",
+          "docket_number",
+          "nature_of_suit",
+          "courtlistener_url"
+        ],
+        "aggregations": [
+          {
+            "output_column": "rulings",
+            "formula": "list",
+            "value_column": "ruling"
+          },
+          {
+            "output_column": "claims",
+            "formula": "list",
+            "value_column": "claim"
+          },
+          {
+            "output_column": "pages",
+            "formula": "list",
+            "value_column": "page"
+          },
+          {
+            "output_column": "ruling_quotes",
+            "formula": "list",
+            "value_column": "ruling_quote"
+          },
+          {
+            "output_column": "statements",
+            "formula": "count"
+          }
+        ]
+      },
+      "signature": {
+        "form": "replaces",
+        "reads": [
+          {
+            "input": "ruling_pages",
+            "columns": [
+              {
+                "name": "cluster_id",
+                "type": "int",
+                "nullable": true,
+                "description": "CourtListener's id for the decision, which it calls a cluster."
+              },
+              {
+                "name": "court_id",
+                "type": "str",
+                "nullable": true,
+                "description": "CourtListener's id for the court: ca5 for the Fifth Circuit, ca9 for the Ninth."
+              },
+              {
+                "name": "case_name",
+                "type": "str",
+                "nullable": true,
+                "description": "The case's name, as CourtListener gives it."
+              },
+              {
+                "name": "date_filed",
+                "type": "date",
+                "nullable": true,
+                "description": "The day the court filed the decision."
+              },
+              {
+                "name": "precedential_status",
+                "type": "str",
+                "nullable": true,
+                "description": "CourtListener's precedential status for the decision, such as Published or Unpublished."
+              },
+              {
+                "name": "docket_number",
+                "type": "str",
+                "nullable": true,
+                "description": "The court's docket number for the appeal."
+              },
+              {
+                "name": "nature_of_suit",
+                "type": "str",
+                "nullable": true,
+                "description": "CourtListener's nature-of-suit field for the case, where it has one."
+              },
+              {
+                "name": "courtlistener_url",
+                "type": "str",
+                "nullable": true,
+                "description": "The decision's page on CourtListener."
+              },
+              {
+                "name": "page",
+                "type": "int",
+                "nullable": false,
+                "description": "The page of the opinion's PDF, counting from 1."
+              },
+              {
+                "name": "ruling",
+                "type": "str",
+                "nullable": true,
+                "description": "What this page holds on qualified immunity for the excessive-force claim: granted, denied or mixed; null where it states no such holding.",
+                "enum": [
+                  "granted",
+                  "denied",
+                  "mixed"
+                ]
+              },
+              {
+                "name": "claim",
+                "type": "str",
+                "nullable": true,
+                "description": "Whose force and what force the holding covers; null where ruling is null."
+              },
+              {
+                "name": "ruling_quote",
+                "type": "span",
+                "nullable": true,
+                "description": "The words on this page that state the holding; null where ruling is null."
+              }
+            ]
+          }
+        ],
+        "produces": [
+          {
+            "name": "cluster_id",
+            "type": "int",
+            "nullable": true,
+            "description": "CourtListener's id for the decision, which it calls a cluster."
+          },
+          {
+            "name": "court_id",
+            "type": "str",
+            "nullable": true,
+            "description": "CourtListener's id for the court: ca5 for the Fifth Circuit, ca9 for the Ninth."
+          },
+          {
+            "name": "case_name",
+            "type": "str",
+            "nullable": true,
+            "description": "The case's name, as CourtListener gives it."
+          },
+          {
+            "name": "date_filed",
+            "type": "date",
+            "nullable": true,
+            "description": "The day the court filed the decision."
+          },
+          {
+            "name": "precedential_status",
+            "type": "str",
+            "nullable": true,
+            "description": "CourtListener's precedential status for the decision, such as Published or Unpublished."
+          },
+          {
+            "name": "docket_number",
+            "type": "str",
+            "nullable": true,
+            "description": "The court's docket number for the appeal."
+          },
+          {
+            "name": "nature_of_suit",
+            "type": "str",
+            "nullable": true,
+            "description": "CourtListener's nature-of-suit field for the case, where it has one."
+          },
+          {
+            "name": "courtlistener_url",
+            "type": "str",
+            "nullable": true,
+            "description": "The decision's page on CourtListener."
+          },
+          {
+            "name": "rulings",
+            "type": "list[str]",
+            "nullable": false,
+            "description": "Each holding statement's ruling, in page order."
+          },
+          {
+            "name": "claims",
+            "type": "list[str]",
+            "nullable": false,
+            "description": "What each holding statement covers, in page order."
+          },
+          {
+            "name": "pages",
+            "type": "list[int]",
+            "nullable": false,
+            "description": "The page each holding statement sits on, in page order."
+          },
+          {
+            "name": "ruling_quotes",
+            "type": "list[span]",
+            "nullable": false,
+            "description": "Each holding statement's quote, in page order."
+          },
+          {
+            "name": "statements",
+            "type": "int",
+            "nullable": false,
+            "description": "How many pages of the opinion state a holding."
+          }
+        ]
+      }
+    },
+    {
+      "id": "code_opinion",
+      "type": "llm_transform",
+      "description": "Codes each opinion granted, denied or mixed from its holding statements, and picks the quote that states the outcome.",
+      "inputs": [
+        {
+          "id": "by_opinion"
+        }
+      ],
+      "cache": true,
+      "compiler_notes": [
+        "holding is quoted from the list ruling_quotes, so the model copies one listed quote whole and the runtime takes that listed span, page and place included; it does not narrow across the list."
+      ],
+      "llm": {
+        "prompt_instructions": "You are coding one federal court of appeals opinion: did the court grant the officers qualified immunity on the excessive-force claim? An earlier step read each page and listed every statement of the court's own holding on that question, with the words that state it. You see only those statements.\n\nReturn \"outcome\":\n- \"granted\": taken together, the statements hold that every officer who raised qualified immunity on the excessive-force claim is entitled to it.\n- \"denied\": they hold that no such officer is entitled to it at this stage.\n- \"mixed\": entitled for some officers or some uses of force, and not for others.\nWhere the statements disagree, the court's final disposition decides; it is usually stated last, as in \"AFFIRMED\" or \"REVERSED\".\n\nReturn \"holding\" as {\"quote\": ...}: the one quote from the list that best states that outcome, copied whole and exactly as listed.\n\nReturn \"reason\": one sentence, in plain words, saying what the court decided and why.",
+        "prompt_data_template": "Case: {case_name} ({court_id}, filed {date_filed}, docket {docket_number}).\n\nRulings found, in page order: {rulings}\n\nWhat each covers: {claims}\n\nPages: {pages}\n\nQuotes:\n{ruling_quotes}",
+        "model": "claude-opus-5",
+        "temperature": 0.0,
+        "max_retries": 3,
+        "response_format": "json",
+        "batch_size": 1,
+        "thinking": "adaptive"
+      },
+      "signature": {
+        "form": "extends",
+        "reads": [
+          {
+            "input": "by_opinion",
+            "columns": [
+              {
+                "name": "case_name",
+                "type": "str",
+                "nullable": true,
+                "description": "The case's name, as CourtListener gives it."
+              },
+              {
+                "name": "court_id",
+                "type": "str",
+                "nullable": true,
+                "description": "CourtListener's id for the court: ca5 for the Fifth Circuit, ca9 for the Ninth."
+              },
+              {
+                "name": "date_filed",
+                "type": "date",
+                "nullable": true,
+                "description": "The day the court filed the decision."
+              },
+              {
+                "name": "docket_number",
+                "type": "str",
+                "nullable": true,
+                "description": "The court's docket number for the appeal."
+              },
+              {
+                "name": "rulings",
+                "type": "list[str]",
+                "nullable": false,
+                "description": "Each holding statement's ruling, in page order."
+              },
+              {
+                "name": "claims",
+                "type": "list[str]",
+                "nullable": false,
+                "description": "What each holding statement covers, in page order."
+              },
+              {
+                "name": "pages",
+                "type": "list[int]",
+                "nullable": false,
+                "description": "The page each holding statement sits on, in page order."
+              },
+              {
+                "name": "ruling_quotes",
+                "type": "list[span]",
+                "nullable": false,
+                "description": "Each holding statement's quote, in page order."
+              }
+            ]
+          }
+        ],
+        "adds": [
+          {
+            "name": "outcome",
+            "type": "str",
+            "nullable": false,
+            "description": "Whether the court granted the officers qualified immunity on the excessive-force claim: granted, denied or mixed.",
+            "enum": [
+              "granted",
+              "denied",
+              "mixed"
+            ]
+          },
+          {
+            "name": "holding",
+            "type": "span",
+            "nullable": false,
+            "description": "The quote, one of ruling_quotes, that best states the outcome.",
+            "quoted_from": "ruling_quotes"
+          },
+          {
+            "name": "reason",
+            "type": "str",
+            "nullable": false,
+            "description": "One plain sentence saying what the court decided and why."
+          }
+        ],
+        "rewrites": []
+      },
+      "workflow_outputs": [
+        {
+          "kind": "table",
+          "slug": "opinions",
+          "primary": true,
+          "shape_id": "coded_opinion",
+          "label": "Fifth and Ninth Circuit opinions, 2017-2019, coded for qualified immunity on excessive force, each quoted from its holding",
+          "columns": [
+            "case_name",
+            "court_id",
+            "date_filed",
+            "precedential_status",
+            "outcome",
+            "holding",
+            "reason",
+            "courtlistener_url"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "by_circuit",
+      "type": "aggregate",
+      "row_type_id": "circuit_outcome",
+      "description": "Counts the coded opinions per circuit and outcome.",
+      "inputs": [
+        {
+          "id": "code_opinion"
+        }
+      ],
+      "cache": false,
+      "compiler_notes": [],
+      "aggregate": {
+        "group_by": [
+          "court_id",
+          "outcome"
+        ],
+        "aggregations": [
+          {
+            "output_column": "opinions",
+            "formula": "count"
+          }
+        ]
+      },
+      "signature": {
+        "form": "replaces",
+        "reads": [
+          {
+            "input": "code_opinion",
+            "columns": [
+              {
+                "name": "court_id",
+                "type": "str",
+                "nullable": true,
+                "description": "CourtListener's id for the court: ca5 for the Fifth Circuit, ca9 for the Ninth."
+              },
+              {
+                "name": "outcome",
+                "type": "str",
+                "nullable": false,
+                "description": "Whether the court granted the officers qualified immunity on the excessive-force claim: granted, denied or mixed.",
+                "enum": [
+                  "granted",
+                  "denied",
+                  "mixed"
+                ]
+              }
+            ]
+          }
+        ],
+        "produces": [
+          {
+            "name": "court_id",
+            "type": "str",
+            "nullable": true,
+            "description": "CourtListener's id for the court: ca5 for the Fifth Circuit, ca9 for the Ninth."
+          },
+          {
+            "name": "outcome",
+            "type": "str",
+            "nullable": false,
+            "description": "Whether the court granted the officers qualified immunity on the excessive-force claim: granted, denied or mixed.",
+            "enum": [
+              "granted",
+              "denied",
+              "mixed"
+            ]
+          },
+          {
+            "name": "opinions",
+            "type": "int",
+            "nullable": false,
+            "description": "How many coded opinions have this circuit and outcome."
+          }
+        ]
+      },
+      "workflow_outputs": [
+        {
+          "kind": "table",
+          "slug": "outcomes_by_circuit",
+          "label": "Coded opinions per circuit and outcome"
+        }
+      ]
+    }
+  ]
+}

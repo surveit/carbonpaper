@@ -1,0 +1,1556 @@
+[
+ {
+  "cluster_id": 4336488,
+  "court_id": "ca5",
+  "date_filed": "2017-01-06",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4337033,
+  "court_id": "ca5",
+  "date_filed": "2017-01-09",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4338888,
+  "court_id": "ca5",
+  "date_filed": "2017-01-17",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4340019,
+  "court_id": "ca5",
+  "date_filed": "2017-01-19",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4341782,
+  "court_id": "ca5",
+  "date_filed": "2017-01-26",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4344274,
+  "court_id": "ca5",
+  "date_filed": "2017-01-31",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4346685,
+  "court_id": "ca5",
+  "date_filed": "2017-02-07",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4370215,
+  "court_id": "ca5",
+  "date_filed": "2017-02-22",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4375254,
+  "court_id": "ca5",
+  "date_filed": "2017-03-14",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4376131,
+  "court_id": "ca5",
+  "date_filed": "2017-03-16",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4380035,
+  "court_id": "ca5",
+  "date_filed": "2017-03-31",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4380036,
+  "court_id": "ca5",
+  "date_filed": "2017-03-31",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4381121,
+  "court_id": "ca5",
+  "date_filed": "2017-04-05",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4381716,
+  "court_id": "ca5",
+  "date_filed": "2017-04-07",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4384026,
+  "court_id": "ca5",
+  "date_filed": "2017-04-18",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4384027,
+  "court_id": "ca5",
+  "date_filed": "2017-04-18",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4391264,
+  "court_id": "ca5",
+  "date_filed": "2017-05-15",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4401599,
+  "court_id": "ca5",
+  "date_filed": "2017-06-19",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4406731,
+  "court_id": "ca5",
+  "date_filed": "2017-07-06",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4408052,
+  "court_id": "ca5",
+  "date_filed": "2017-07-11",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4408759,
+  "court_id": "ca5",
+  "date_filed": "2017-07-13",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4410836,
+  "court_id": "ca5",
+  "date_filed": "2017-07-20",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4411254,
+  "court_id": "ca5",
+  "date_filed": "2017-07-21",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4417064,
+  "court_id": "ca5",
+  "date_filed": "2017-08-08",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4417303,
+  "court_id": "ca5",
+  "date_filed": "2017-08-09",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4418855,
+  "court_id": "ca5",
+  "date_filed": "2017-08-15",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4420344,
+  "court_id": "ca5",
+  "date_filed": "2017-08-21",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4425091,
+  "court_id": "ca5",
+  "date_filed": "2017-09-08",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4430823,
+  "court_id": "ca5",
+  "date_filed": "2017-09-29",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4432902,
+  "court_id": "ca5",
+  "date_filed": "2017-10-06",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4436797,
+  "court_id": "ca5",
+  "date_filed": "2017-10-23",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4437162,
+  "court_id": "ca5",
+  "date_filed": "2017-10-24",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4439435,
+  "court_id": "ca5",
+  "date_filed": "2017-10-31",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4440530,
+  "court_id": "ca5",
+  "date_filed": "2017-11-03",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4445941,
+  "court_id": "ca5",
+  "date_filed": "2017-11-22",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4448048,
+  "court_id": "ca5",
+  "date_filed": "2017-12-01",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4459222,
+  "court_id": "ca5",
+  "date_filed": "2018-01-12",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4461802,
+  "court_id": "ca5",
+  "date_filed": "2018-01-24",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4461803,
+  "court_id": "ca5",
+  "date_filed": "2018-01-24",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4474538,
+  "court_id": "ca5",
+  "date_filed": "2018-03-05",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4476438,
+  "court_id": "ca5",
+  "date_filed": "2018-03-12",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4476972,
+  "court_id": "ca5",
+  "date_filed": "2018-03-13",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4479190,
+  "court_id": "ca5",
+  "date_filed": "2018-03-20",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4482432,
+  "court_id": "ca5",
+  "date_filed": "2018-03-29",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4486200,
+  "court_id": "ca5",
+  "date_filed": "2018-04-12",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4488341,
+  "court_id": "ca5",
+  "date_filed": "2018-04-19",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4488919,
+  "court_id": "ca5",
+  "date_filed": "2018-04-20",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4493238,
+  "court_id": "ca5",
+  "date_filed": "2018-04-26",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4499558,
+  "court_id": "ca5",
+  "date_filed": "2018-05-18",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4504123,
+  "court_id": "ca5",
+  "date_filed": "2018-06-05",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4504825,
+  "court_id": "ca5",
+  "date_filed": "2018-06-06",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4512435,
+  "court_id": "ca5",
+  "date_filed": "2018-06-28",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4513825,
+  "court_id": "ca5",
+  "date_filed": "2018-07-03",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4516224,
+  "court_id": "ca5",
+  "date_filed": "2018-07-11",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4524069,
+  "court_id": "ca5",
+  "date_filed": "2018-08-06",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4527414,
+  "court_id": "ca5",
+  "date_filed": "2018-08-16",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4527785,
+  "court_id": "ca5",
+  "date_filed": "2018-08-17",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4531715,
+  "court_id": "ca5",
+  "date_filed": "2018-08-30",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4532018,
+  "court_id": "ca5",
+  "date_filed": "2018-08-31",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4532115,
+  "court_id": "ca5",
+  "date_filed": "2018-08-31",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4532652,
+  "court_id": "ca5",
+  "date_filed": "2018-09-05",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4533435,
+  "court_id": "ca5",
+  "date_filed": "2018-09-07",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4534975,
+  "court_id": "ca5",
+  "date_filed": "2018-09-13",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4536900,
+  "court_id": "ca5",
+  "date_filed": "2018-09-20",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4537705,
+  "court_id": "ca5",
+  "date_filed": "2018-09-24",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4537890,
+  "court_id": "ca5",
+  "date_filed": "2018-09-25",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4538063,
+  "court_id": "ca5",
+  "date_filed": "2018-09-25",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4539684,
+  "court_id": "ca5",
+  "date_filed": "2018-09-28",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4567955,
+  "court_id": "ca5",
+  "date_filed": "2018-11-28",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4568619,
+  "court_id": "ca5",
+  "date_filed": "2018-11-29",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4571699,
+  "court_id": "ca5",
+  "date_filed": "2018-12-10",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4580695,
+  "court_id": "ca5",
+  "date_filed": "2019-01-10",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4582028,
+  "court_id": "ca5",
+  "date_filed": "2019-01-16",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4591565,
+  "court_id": "ca5",
+  "date_filed": "2019-02-18",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4601286,
+  "court_id": "ca5",
+  "date_filed": "2019-03-19",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4606696,
+  "court_id": "ca5",
+  "date_filed": "2019-04-03",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4606698,
+  "court_id": "ca5",
+  "date_filed": "2019-04-03",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4610701,
+  "court_id": "ca5",
+  "date_filed": "2019-04-16",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4611455,
+  "court_id": "ca5",
+  "date_filed": "2019-04-18",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4613294,
+  "court_id": "ca5",
+  "date_filed": "2019-04-24",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4614059,
+  "court_id": "ca5",
+  "date_filed": "2019-04-26",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4621114,
+  "court_id": "ca5",
+  "date_filed": "2019-05-17",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4621890,
+  "court_id": "ca5",
+  "date_filed": "2019-05-21",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4636216,
+  "court_id": "ca5",
+  "date_filed": "2019-07-02",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4638662,
+  "court_id": "ca5",
+  "date_filed": "2019-07-11",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4640493,
+  "court_id": "ca5",
+  "date_filed": "2019-07-17",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4646849,
+  "court_id": "ca5",
+  "date_filed": "2019-08-08",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4654098,
+  "court_id": "ca5",
+  "date_filed": "2019-08-20",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4654373,
+  "court_id": "ca5",
+  "date_filed": "2019-08-21",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4654484,
+  "court_id": "ca5",
+  "date_filed": "2019-08-21",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4654642,
+  "court_id": "ca5",
+  "date_filed": "2019-08-21",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4656193,
+  "court_id": "ca5",
+  "date_filed": "2019-08-26",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4662081,
+  "court_id": "ca5",
+  "date_filed": "2019-09-18",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4667858,
+  "court_id": "ca5",
+  "date_filed": "2019-10-08",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4676947,
+  "court_id": "ca5",
+  "date_filed": "2019-11-07",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4678751,
+  "court_id": "ca5",
+  "date_filed": "2019-11-14",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4680288,
+  "court_id": "ca5",
+  "date_filed": "2019-11-20",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4681681,
+  "court_id": "ca5",
+  "date_filed": "2019-11-25",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4684131,
+  "court_id": "ca5",
+  "date_filed": "2019-12-04",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4688701,
+  "court_id": "ca5",
+  "date_filed": "2019-12-19",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 8439846,
+  "court_id": "ca5",
+  "date_filed": "2018-03-20",
+  "precedential_status": "Published",
+  "stored_pdfs": 0
+ },
+ {
+  "cluster_id": 8439881,
+  "court_id": "ca5",
+  "date_filed": "2018-04-17",
+  "precedential_status": "Published",
+  "stored_pdfs": 0
+ },
+ {
+  "cluster_id": 8443910,
+  "court_id": "ca5",
+  "date_filed": "2019-03-08",
+  "precedential_status": "Published",
+  "stored_pdfs": 0
+ },
+ {
+  "cluster_id": 8698804,
+  "court_id": "ca5",
+  "date_filed": "2017-02-14",
+  "precedential_status": "Published",
+  "stored_pdfs": 0
+ },
+ {
+  "cluster_id": 8699239,
+  "court_id": "ca5",
+  "date_filed": "2017-03-31",
+  "precedential_status": "Published",
+  "stored_pdfs": 0
+ },
+ {
+  "cluster_id": 8700471,
+  "court_id": "ca5",
+  "date_filed": "2017-07-13",
+  "precedential_status": "Published",
+  "stored_pdfs": 0
+ },
+ {
+  "cluster_id": 8701186,
+  "court_id": "ca5",
+  "date_filed": "2017-10-25",
+  "precedential_status": "Published",
+  "stored_pdfs": 0
+ },
+ {
+  "cluster_id": 4335594,
+  "court_id": "ca9",
+  "date_filed": "2017-01-03",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4337278,
+  "court_id": "ca9",
+  "date_filed": "2017-01-03",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4338436,
+  "court_id": "ca9",
+  "date_filed": "2017-01-13",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4341686,
+  "court_id": "ca9",
+  "date_filed": "2017-01-26",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4370378,
+  "court_id": "ca9",
+  "date_filed": "2017-02-22",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4373550,
+  "court_id": "ca9",
+  "date_filed": "2017-03-07",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4375747,
+  "court_id": "ca9",
+  "date_filed": "2017-03-15",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4376857,
+  "court_id": "ca9",
+  "date_filed": "2017-03-20",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4377160,
+  "court_id": "ca9",
+  "date_filed": "2017-03-21",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4377169,
+  "court_id": "ca9",
+  "date_filed": "2017-03-21",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4378961,
+  "court_id": "ca9",
+  "date_filed": "2017-03-28",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4379315,
+  "court_id": "ca9",
+  "date_filed": "2017-03-29",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4381095,
+  "court_id": "ca9",
+  "date_filed": "2017-04-05",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4385544,
+  "court_id": "ca9",
+  "date_filed": "2017-04-24",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4389062,
+  "court_id": "ca9",
+  "date_filed": "2017-05-04",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4390905,
+  "court_id": "ca9",
+  "date_filed": "2017-05-12",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4394263,
+  "court_id": "ca9",
+  "date_filed": "2017-05-24",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4395497,
+  "court_id": "ca9",
+  "date_filed": "2017-05-30",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4397460,
+  "court_id": "ca9",
+  "date_filed": "2017-06-06",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4398706,
+  "court_id": "ca9",
+  "date_filed": "2017-06-08",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4399961,
+  "court_id": "ca9",
+  "date_filed": "2017-06-13",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4404047,
+  "court_id": "ca9",
+  "date_filed": "2017-06-27",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4404663,
+  "court_id": "ca9",
+  "date_filed": "2017-06-28",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4405912,
+  "court_id": "ca9",
+  "date_filed": "2017-07-03",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4407291,
+  "court_id": "ca9",
+  "date_filed": "2017-07-07",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4408820,
+  "court_id": "ca9",
+  "date_filed": "2017-07-13",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4413438,
+  "court_id": "ca9",
+  "date_filed": "2017-07-28",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4415866,
+  "court_id": "ca9",
+  "date_filed": "2017-08-03",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4416668,
+  "court_id": "ca9",
+  "date_filed": "2017-08-07",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4418814,
+  "court_id": "ca9",
+  "date_filed": "2017-08-15",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4421065,
+  "court_id": "ca9",
+  "date_filed": "2017-08-23",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4422485,
+  "court_id": "ca9",
+  "date_filed": "2017-08-29",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4423223,
+  "court_id": "ca9",
+  "date_filed": "2017-08-31",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4423941,
+  "court_id": "ca9",
+  "date_filed": "2017-09-05",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4426637,
+  "court_id": "ca9",
+  "date_filed": "2017-09-15",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4427211,
+  "court_id": "ca9",
+  "date_filed": "2017-09-19",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4428262,
+  "court_id": "ca9",
+  "date_filed": "2017-09-22",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4428557,
+  "court_id": "ca9",
+  "date_filed": "2017-09-22",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4431015,
+  "court_id": "ca9",
+  "date_filed": "2017-10-02",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4433102,
+  "court_id": "ca9",
+  "date_filed": "2017-10-10",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4434153,
+  "court_id": "ca9",
+  "date_filed": "2017-10-12",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4434701,
+  "court_id": "ca9",
+  "date_filed": "2017-10-16",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4434966,
+  "court_id": "ca9",
+  "date_filed": "2017-10-16",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4435432,
+  "court_id": "ca9",
+  "date_filed": "2017-10-18",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4436218,
+  "court_id": "ca9",
+  "date_filed": "2017-10-20",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4436296,
+  "court_id": "ca9",
+  "date_filed": "2017-10-20",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4439641,
+  "court_id": "ca9",
+  "date_filed": "2017-11-01",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4471017,
+  "court_id": "ca9",
+  "date_filed": "2018-02-26",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4471901,
+  "court_id": "ca9",
+  "date_filed": "2018-02-28",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4476126,
+  "court_id": "ca9",
+  "date_filed": "2018-03-09",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4476531,
+  "court_id": "ca9",
+  "date_filed": "2018-03-12",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4476790,
+  "court_id": "ca9",
+  "date_filed": "2018-03-13",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4479135,
+  "court_id": "ca9",
+  "date_filed": "2018-03-20",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4482386,
+  "court_id": "ca9",
+  "date_filed": "2018-03-29",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4485901,
+  "court_id": "ca9",
+  "date_filed": "2018-04-11",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4489118,
+  "court_id": "ca9",
+  "date_filed": "2018-04-23",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4493183,
+  "court_id": "ca9",
+  "date_filed": "2018-04-26",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4493836,
+  "court_id": "ca9",
+  "date_filed": "2018-04-30",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4499362,
+  "court_id": "ca9",
+  "date_filed": "2018-05-18",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4500990,
+  "court_id": "ca9",
+  "date_filed": "2018-05-24",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4502306,
+  "court_id": "ca9",
+  "date_filed": "2018-05-30",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4502868,
+  "court_id": "ca9",
+  "date_filed": "2018-05-31",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4502916,
+  "court_id": "ca9",
+  "date_filed": "2018-05-31",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4506067,
+  "court_id": "ca9",
+  "date_filed": "2018-06-11",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4507253,
+  "court_id": "ca9",
+  "date_filed": "2018-06-14",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4508326,
+  "court_id": "ca9",
+  "date_filed": "2018-06-18",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4510215,
+  "court_id": "ca9",
+  "date_filed": "2018-06-22",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4515712,
+  "court_id": "ca9",
+  "date_filed": "2018-07-10",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4517206,
+  "court_id": "ca9",
+  "date_filed": "2018-07-16",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4520479,
+  "court_id": "ca9",
+  "date_filed": "2018-07-25",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4521363,
+  "court_id": "ca9",
+  "date_filed": "2018-07-27",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4524349,
+  "court_id": "ca9",
+  "date_filed": "2018-08-07",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4532058,
+  "court_id": "ca9",
+  "date_filed": "2018-08-31",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4532433,
+  "court_id": "ca9",
+  "date_filed": "2018-09-04",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4533077,
+  "court_id": "ca9",
+  "date_filed": "2018-09-06",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4533490,
+  "court_id": "ca9",
+  "date_filed": "2018-09-07",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4533737,
+  "court_id": "ca9",
+  "date_filed": "2018-09-10",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4534950,
+  "court_id": "ca9",
+  "date_filed": "2018-09-13",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4535336,
+  "court_id": "ca9",
+  "date_filed": "2018-09-13",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4540682,
+  "court_id": "ca9",
+  "date_filed": "2018-10-03",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4565912,
+  "court_id": "ca9",
+  "date_filed": "2018-11-20",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4571752,
+  "court_id": "ca9",
+  "date_filed": "2018-12-10",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4580203,
+  "court_id": "ca9",
+  "date_filed": "2019-01-09",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4580992,
+  "court_id": "ca9",
+  "date_filed": "2019-01-11",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4591338,
+  "court_id": "ca9",
+  "date_filed": "2019-02-15",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4594687,
+  "court_id": "ca9",
+  "date_filed": "2019-02-27",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4595057,
+  "court_id": "ca9",
+  "date_filed": "2019-02-28",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4606533,
+  "court_id": "ca9",
+  "date_filed": "2019-04-03",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4606537,
+  "court_id": "ca9",
+  "date_filed": "2019-04-03",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4613684,
+  "court_id": "ca9",
+  "date_filed": "2019-04-25",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4613760,
+  "court_id": "ca9",
+  "date_filed": "2019-04-25",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4629888,
+  "court_id": "ca9",
+  "date_filed": "2019-06-14",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4629890,
+  "court_id": "ca9",
+  "date_filed": "2019-06-14",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4631562,
+  "court_id": "ca9",
+  "date_filed": "2019-06-20",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4638666,
+  "court_id": "ca9",
+  "date_filed": "2019-07-11",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4640452,
+  "court_id": "ca9",
+  "date_filed": "2019-07-17",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4640880,
+  "court_id": "ca9",
+  "date_filed": "2019-07-18",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4642875,
+  "court_id": "ca9",
+  "date_filed": "2019-07-25",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4654479,
+  "court_id": "ca9",
+  "date_filed": "2019-08-21",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4657806,
+  "court_id": "ca9",
+  "date_filed": "2019-08-30",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4657886,
+  "court_id": "ca9",
+  "date_filed": "2019-08-30",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4661262,
+  "court_id": "ca9",
+  "date_filed": "2019-09-16",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4662528,
+  "court_id": "ca9",
+  "date_filed": "2019-09-19",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4662580,
+  "court_id": "ca9",
+  "date_filed": "2019-09-19",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4663509,
+  "court_id": "ca9",
+  "date_filed": "2019-09-23",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4666077,
+  "court_id": "ca9",
+  "date_filed": "2019-10-01",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4667181,
+  "court_id": "ca9",
+  "date_filed": "2019-10-04",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4673593,
+  "court_id": "ca9",
+  "date_filed": "2019-10-28",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4681238,
+  "court_id": "ca9",
+  "date_filed": "2019-11-22",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4683515,
+  "court_id": "ca9",
+  "date_filed": "2019-12-03",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4683658,
+  "court_id": "ca9",
+  "date_filed": "2019-12-03",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4689904,
+  "court_id": "ca9",
+  "date_filed": "2019-12-23",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4690192,
+  "court_id": "ca9",
+  "date_filed": "2019-12-24",
+  "precedential_status": "Published",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 4690337,
+  "court_id": "ca9",
+  "date_filed": "2019-12-24",
+  "precedential_status": "Unpublished",
+  "stored_pdfs": 1
+ },
+ {
+  "cluster_id": 8443585,
+  "court_id": "ca9",
+  "date_filed": "2017-11-01",
+  "precedential_status": "Published",
+  "stored_pdfs": 0
+ }
+]
